@@ -278,8 +278,12 @@
 		tallesid_txt = "";
 		nombre_modulo = "";
 
+		if (!modulo_id) {
+			return $.Deferred().reject().promise();
+		}
+
 		// Lee talles del modulo
-        $.get(carpetaBase+'/stock/leertalles/'+modulo_id, function(data){
+        return $.get(carpetaBase+'/stock/leertalles/'+modulo_id, function(data){
 			var flEncontro, flHayMedidas;
 
            	var tall = $.map(data, function(value, index){
@@ -465,8 +469,10 @@
 				$(this).parents("tr").find(".medidas").val("");
 			});
 
-			// Con click sobre cantidad abre modal de medidas
-	        $(".cantidad").on('click keydown', function(e) {
+			// Con click sobre cantidad abre modal de medidas.
+			// Delegado: el .off de arriba no lo borra al agregar renglones.
+			$(document).off('click.msMedidas keydown.msMedidas', '#tabla-items-movimientostock .cantidad');
+	        $(document).on('click.msMedidas keydown.msMedidas', '#tabla-items-movimientostock .cantidad', function(e) {
 				if ($(this).hasClass('cantidad-stock')
 					|| $(this).closest('tr').hasClass('ms-linea-simple')) {
 					return;
@@ -474,6 +480,7 @@
 				if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') {
 					return;
 				}
+				e.preventDefault();
 				cantidad = $(this);
 				var $tr = $(this).closest('tr');
 
@@ -483,8 +490,13 @@
 				combinacion_id = $tr.find(".combinacion").val();
 				nombre_combinacion = $tr.find(".combinacion option:selected").text();
 
+				if (!modulo_id) {
+					alert('Elegí el módulo antes de cargar los talles.');
+					return;
+				}
+
 				// Lee tabla de medidas
-				var val_medida = $(this).parents("tr").find(".medidas").val();
+				var val_medida = $tr.find(".medidas").val();
 
 				medidas=[];
 				cantidades=[];
@@ -501,28 +513,46 @@
 					});
 				}
 
-				completarTalles(modulo_id, 0, medidas, cantidades, precios);
-
-	        	setTimeout(() => {
-					$("#medidasModal").modal('show');
-				}, 300);
+				var pedido = completarTalles(modulo_id, 0, medidas, cantidades, precios);
+				if (!pedido || !pedido.done) {
+					return;
+				}
+				pedido.done(function () {
+					if (!talles_txt || talles_txt.indexOf('<th') === -1) {
+						alert('Ese módulo no tiene talles cargados.');
+						return;
+					}
+					msPintarGrillaMedidas();
+					var $modal = $('#medidasModal').first();
+					if (!$modal.hasClass('show')) {
+						$modal.modal('show');
+					}
+				}).fail(function () {
+					alert('No se pudieron leer los talles del módulo.');
+				});
 	        });
 
 			// Controla apertura modal de medidas
-			$('#medidasModal').on('show.bs.modal', function (event) {
-	  			var modal = $(this);
-				modalActivo = "medidasModal";
-
-	  			modal.find('.modal-title').text('Medidas item '+descripcion_articulo+' Combinacion '+nombre_combinacion+' Modulo '+nombre_modulo);
-	  			modal.find('#medidasModal').empty();
-	  			modal.find('#medidasModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
-				sumaPares(modalActivo, 'cantidadesportalles');
-				muestraTotalPares();
+			$('#medidasModal').off('show.bs.modal.msMedidas');
+			$('#medidasModal').on('show.bs.modal.msMedidas', function () {
+				msPintarGrillaMedidas();
 			});
         }
 
-		// Autofocus en modal de medidas
-		$(document).on('shown.bs.modal', '.modal', function() {
+		function msPintarGrillaMedidas() {
+			var $modal = $('#medidasModal').first();
+			modalActivo = "medidasModal";
+			$modal.find('.modal-title').text('Medidas item '+descripcion_articulo+' Combinacion '+nombre_combinacion+' Modulo '+nombre_modulo);
+			var $grilla = $modal.find('.ms-medidas-grilla');
+			$grilla.empty();
+			$grilla.append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
+			sumaPares(modalActivo, 'cantidadesportalles');
+			muestraTotalPares();
+		}
+
+		// Autofocus en modal de medidas (una sola vez, no en cada renglón)
+		$(document).off('shown.bs.modal.msMedidas', '#medidasModal');
+		$(document).on('shown.bs.modal.msMedidas', '#medidasModal', function() {
 		  	// Si es modulo manual hace foco en cantidades 
 		  	if (moduloElegido_id == 30)
   				$(this).find('[autofocus]').focus();
@@ -553,7 +583,7 @@
 							var nueva_cantidad = cantidad_base * parseFloat(cantmodulo);
 						}
 						else	
-							var nueva_cantidad = arseFloat(cantidad)*parseFloat(cantmodulo);
+							var nueva_cantidad = parseFloat(cantidad)*parseFloat(cantmodulo);
 
 				  		$(this).val(nueva_cantidad);
 						sumaPares(modalActivo, 'cantidadesportalles');

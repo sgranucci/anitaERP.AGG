@@ -10,7 +10,7 @@ final class TiendanubeTiendasSupport
     /**
      * Definiciones del config, aunque falte el token.
      *
-     * @return list<array{clave:string,nombre:string,store_id:string,access_token:string}>
+     * @return list<array{clave:string,nombre:string,store_id:string,access_token:string,stock_access_token:string}>
      */
     public static function definidas(): array
     {
@@ -34,6 +34,7 @@ final class TiendanubeTiendasSupport
                 'nombre' => $nombre,
                 'store_id' => $storeId,
                 'access_token' => trim((string) ($row['access_token'] ?? '')),
+                'stock_access_token' => trim((string) ($row['stock_access_token'] ?? '')),
             ];
         }
 
@@ -43,7 +44,7 @@ final class TiendanubeTiendasSupport
     /**
      * Tiendas con store_id y access_token. Listas para llamar a la API.
      *
-     * @return list<array{clave:string,nombre:string,store_id:string,access_token:string}>
+     * @return list<array{clave:string,nombre:string,store_id:string,access_token:string,stock_access_token:string}>
      */
     public static function configuradas(): array
     {
@@ -54,7 +55,7 @@ final class TiendanubeTiendasSupport
     }
 
     /**
-     * @return array{clave:string,nombre:string,store_id:string,access_token:string}|null
+     * @return array{clave:string,nombre:string,store_id:string,access_token:string,stock_access_token:string}|null
      */
     public static function porStoreId(string $storeId): ?array
     {
@@ -69,6 +70,23 @@ final class TiendanubeTiendasSupport
         }
 
         return null;
+    }
+
+    /**
+     * Token para actualizar stock y precios. Si la tienda tiene el de inventario, ese;
+     * si no, el de facturación.
+     */
+    public static function tokenEscrituraProductos(string $storeId): ?string
+    {
+        $tienda = self::porStoreId($storeId);
+        if ($tienda === null) {
+            return null;
+        }
+        if ($tienda['stock_access_token'] !== '') {
+            return $tienda['stock_access_token'];
+        }
+
+        return $tienda['access_token'] !== '' ? $tienda['access_token'] : null;
     }
 
     public static function nombre(?string $storeId): string

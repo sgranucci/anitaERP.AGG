@@ -58,10 +58,22 @@
                     @endif
                 </div>
 
+                <div class="d-flex flex-wrap align-items-center mb-3">
+                    <span class="small text-muted mr-2">Líneas</span>
+                    @foreach ($fichasEstado as $ficha)
+                        <a href="{{ route('ver_tiendanube_stock_subida', array_filter(['id' => $subida->id, 'estado' => $ficha['estado']])) }}"
+                           class="btn btn-sm mr-1 mb-1 {{ $estado === $ficha['estado'] ? 'btn-'.$ficha['clase'] : 'btn-outline-'.$ficha['clase'] }}">
+                            {{ $ficha['label'] }}
+                            <span class="badge badge-light">{{ $ficha['cantidad'] }}</span>
+                        </a>
+                    @endforeach
+                </div>
+
                 <div id="tn-stock-subida-export" class="mb-3">
                     @include('includes.exportar-tabla-id', [
                         'ruta' => 'listar_tiendanube_stock_subida',
                         'id' => $subida->id,
+                        'queryExtra' => $estado !== '' ? ['estado' => $estado] : [],
                     ])
                 </div>
 
@@ -95,7 +107,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="9" class="text-center text-muted">Sin líneas.</td>
+                                    <td colspan="9" class="text-center text-muted">Sin líneas en este estado.</td>
                                 </tr>
                             @endforelse
                         </tbody>

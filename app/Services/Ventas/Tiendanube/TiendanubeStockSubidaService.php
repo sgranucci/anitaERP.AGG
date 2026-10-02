@@ -120,7 +120,7 @@ final class TiendanubeStockSubidaService
             }
 
             $conocidos = TiendanubeStockCatalogoSupport::skusConocidosTienda($ids);
-            $api = TiendanubeApiClient::paraStoreId($tienda['store_id'])->sinRegistrarSalud();
+            $api = TiendanubeApiClient::paraEscrituraProductos($tienda['store_id'])->sinRegistrarSalud();
 
             foreach ($articulos as $articuloId => $articulo) {
                 $this->subirArticulo(
@@ -409,6 +409,9 @@ final class TiendanubeStockSubidaService
         $error = $estado === TiendanubeStockSubidaLinea::ESTADO_OK
             ? null
             : mb_substr((string) ($respuesta['error'] ?? 'Error al actualizar variantes'), 0, 500);
+        if ($error !== null && str_contains($error, 'Missing required scope')) {
+            throw new \RuntimeException($error);
+        }
 
         foreach ($previstas as $prevista) {
             if ($error !== null) {

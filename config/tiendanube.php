@@ -16,6 +16,9 @@ return [
     /*
     | Tiendas del canal. Ferli usa TIENDANUBE_STORE_ID / TIENDANUBE_ACCESS_TOKEN.
     | Cada tienda extra tiene su propio par; no pisa el token de Ferli.
+    | stock_access_token es el de la app de inventario (write_products), el que
+    | usaba el L8 para subir stock. El access_token de facturación no lo tiene.
+    | Vacío = la subida de stock usa el access_token de la tienda.
     | PV, depósito, lista, SKU y gateways se asignan por tienda en
     | Ventas → Configuración Tiendanube. El .env de abajo es el fallback de Ferli.
     */
@@ -25,12 +28,14 @@ return [
             'nombre' => 'Ferli',
             'store_id' => env('TIENDANUBE_STORE_ID', '3796054'),
             'access_token' => env('TIENDANUBE_ACCESS_TOKEN', ''),
+            'stock_access_token' => env('TIENDANUBE_STOCK_ACCESS_TOKEN', ''),
         ],
         [
             'clave' => 'boaonda',
             'nombre' => 'Boaonda',
             'store_id' => env('TIENDANUBE_BOAONDA_STORE_ID', '6250382'),
             'access_token' => env('TIENDANUBE_BOAONDA_ACCESS_TOKEN', ''),
+            'stock_access_token' => env('TIENDANUBE_BOAONDA_STOCK_ACCESS_TOKEN', ''),
         ],
     ],
 

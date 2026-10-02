@@ -31,6 +31,8 @@ class TiendanubeStockSubidaLineaExport implements FromView, WithColumnFormatting
 
     private ?TiendanubeStockSubida $subida = null;
 
+    private string $estadoLinea = '';
+
     private bool $listo = false;
 
     private bool $hayFilaLogos = false;
@@ -46,9 +48,10 @@ class TiendanubeStockSubidaLineaExport implements FromView, WithColumnFormatting
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
-    public function deSubida(TiendanubeStockSubida $subida): self
+    public function deSubida(TiendanubeStockSubida $subida, string $estadoLinea = ''): self
     {
         $this->subida = $subida;
+        $this->estadoLinea = $estadoLinea;
         $this->listo = true;
 
         return $this;
@@ -57,7 +60,7 @@ class TiendanubeStockSubidaLineaExport implements FromView, WithColumnFormatting
     public function view(): View
     {
         $pack = $this->listo && $this->subida !== null
-            ? self::armar($this->subida)
+            ? self::armar($this->subida, $this->estadoLinea)
             : [
                 'lineas' => collect(),
                 'titulo' => 'Previsualización stock y precios Tiendanube',
@@ -83,10 +86,18 @@ class TiendanubeStockSubidaLineaExport implements FromView, WithColumnFormatting
     /**
      * @return array{lineas: Collection, titulo: string, subtitulo: string, rutasLogos: list<string>, logosCabecera: list<array{nombre: string, uri: string, mime: string}>}
      */
-    public static function armar(TiendanubeStockSubida $subida): array
+    public static function armar(TiendanubeStockSubida $subida, string $estadoLinea = ''): array
     {
+        $estadoLinea = in_array($estadoLinea, [
+            TiendanubeStockSubidaLinea::ESTADO_OK,
+            TiendanubeStockSubidaLinea::ESTADO_ERROR,
+            TiendanubeStockSubidaLinea::ESTADO_OMITIDA,
+            TiendanubeStockSubidaLinea::ESTADO_PREVISTA,
+        ], true) ? $estadoLinea : '';
+
         $lineas = TiendanubeStockSubidaLinea::query()
             ->where('subida_id', $subida->id)
+            ->when($estadoLinea !== '', fn ($q) => $q->where('estado', $estadoLinea))
             ->orderBy('id')
             ->get();
 
@@ -97,16 +108,19 @@ class TiendanubeStockSubidaLineaExport implements FromView, WithColumnFormatting
         return [
             'lineas' => $lineas,
             'titulo' => 'Previsualización stock y precios Tiendanube',
-            'subtitulo' => self::subtitulo($subida),
+            'subtitulo' => self::subtitulo($subida, $estadoLinea),
             'rutasLogos' => EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($marca),
             'logosCabecera' => EmpresaLogoArchivo::logosCabeceraDesdeColeccion($marca),
         ];
     }
 
-    public static function subtitulo(TiendanubeStockSubida $subida): string
+    public static function subtitulo(TiendanubeStockSubida $subida, string $estadoLinea = ''): string
     {
         $cuando = optional($subida->inicio_at)->format('d/m/Y H:i');
         $etiquetaOk = $subida->origen === TiendanubeStockSubida::ORIGEN_SIMULACION ? 'A enviar' : 'OK';
+        $filtro = $estadoLinea !== ''
+            ? 'Filtro '.TiendanubeStockSubidaLinea::etiquetaEstado($estadoLinea)
+            : null;
 
         return implode(' · ', array_filter([
             TiendanubeTiendasSupport::nombre($subida->store_id),
@@ -116,6 +130,7 @@ class TiendanubeStockSubidaLineaExport implements FromView, WithColumnFormatting
             $etiquetaOk.' '.(int) $subida->variantes_ok,
             'Error '.(int) $subida->variantes_error,
             'Omitidas '.(int) $subida->variantes_omitidas,
+            $filtro,
             trim((string) $subida->mensaje) !== '' ? trim((string) $subida->mensaje) : null,
         ], fn ($parte) => $parte !== null && $parte !== ''));
     }

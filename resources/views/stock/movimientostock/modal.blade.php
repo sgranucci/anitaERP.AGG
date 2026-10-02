@@ -15,7 +15,7 @@
           </div>
           <div class="form-group">
             <label for="recipient-name" class="col-form-label">Medidas</label>
-            <div id="medidasModal"></div>
+            <div class="ms-medidas-grilla" style="overflow-x:auto;max-width:100%;"></div>
           </div>
           <div class="form-group">
             <label for="recipient-name" class="col-form-label">Total pares</label>

@@ -105,7 +105,9 @@
 
         if (esArticuloVenta) {
             $tr.removeClass('ms-linea-simple');
-            $cant.removeClass('cantidad-stock').prop('readonly', true);
+            $cant.removeClass('cantidad-stock').prop('readonly', true)
+                .css('cursor', 'pointer')
+                .attr('title', 'Clic para cargar los talles');
             $precio.prop('readonly', !pide);
             $comb.prop('disabled', false).css('pointer-events', '').attr('tabindex', null);
             $mod.prop('disabled', false).css('pointer-events', '').attr('tabindex', null);
@@ -120,7 +122,9 @@
             }
         } else {
             $tr.addClass('ms-linea-simple');
-            $cant.addClass('cantidad-stock').prop('readonly', false);
+            $cant.addClass('cantidad-stock').prop('readonly', false)
+                .css('cursor', '')
+                .removeAttr('title');
             $precio.prop('readonly', !pide);
             // No disabled: deben viajar vacíos en el POST (índices de arrays).
             $comb.val('').css('pointer-events', 'none').attr('tabindex', '-1');

@@ -67,28 +67,29 @@ class TiendanubeStockSubidaController extends Controller
         $this->autorizar();
 
         $subida = TiendanubeStockSubida::query()->with('usuario:id,nombre')->findOrFail($id);
-        $estado = trim((string) $request->query('estado', ''));
+        $estado = $this->estadoLineaFiltro($request);
+        $conteos = TiendanubeStockSubidaLinea::query()
+            ->where('subida_id', $subida->id)
+            ->selectRaw('estado, COUNT(*) as c')
+            ->groupBy('estado')
+            ->pluck('c', 'estado');
         $lineas = TiendanubeStockSubidaLinea::query()
             ->where('subida_id', $subida->id)
-            ->when(in_array($estado, [
-                TiendanubeStockSubidaLinea::ESTADO_OK,
-                TiendanubeStockSubidaLinea::ESTADO_ERROR,
-                TiendanubeStockSubidaLinea::ESTADO_OMITIDA,
-                TiendanubeStockSubidaLinea::ESTADO_PREVISTA,
-            ], true), fn ($q) => $q->where('estado', $estado))
+            ->when($estado !== '', fn ($q) => $q->where('estado', $estado))
             ->orderBy('id')
             ->paginate(50)
-            ->appends(['estado' => $estado]);
+            ->appends($estado !== '' ? ['estado' => $estado] : []);
 
         return view('ventas.tiendanube_stock.ver', [
             'subida' => $subida,
             'lineas' => $lineas,
             'estado' => $estado,
+            'fichasEstado' => $this->fichasEstado($subida, $conteos),
             'tiendaNombre' => TiendanubeTiendasSupport::nombre($subida->store_id),
         ]);
     }
 
-    public function exportar(int $id, string $formato)
+    public function exportar(Request $request, int $id, string $formato)
     {
         $this->autorizar();
 
@@ -96,11 +97,12 @@ class TiendanubeStockSubidaController extends Controller
         ini_set('max_execution_time', '0');
 
         $subida = TiendanubeStockSubida::query()->findOrFail($id);
+        $estado = $this->estadoLineaFiltro($request);
         $formato = strtoupper($formato);
         $nombre = 'previsualizacion_tiendanube_'.$subida->id;
 
         if ($formato === 'PDF') {
-            $pack = TiendanubeStockSubidaLineaExport::armar($subida);
+            $pack = TiendanubeStockSubidaLineaExport::armar($subida, $estado);
             $html = view('ventas.tiendanube_stock.listado', [
                 'lineas' => $pack['lineas'],
                 'titulo' => $pack['titulo'],
@@ -121,13 +123,13 @@ class TiendanubeStockSubidaController extends Controller
 
         if ($formato === 'EXCEL') {
             return (new TiendanubeStockSubidaLineaExport)
-                ->deSubida($subida)
+                ->deSubida($subida, $estado)
                 ->download($nombre.'.xlsx');
         }
 
         if ($formato === 'CSV') {
             return (new TiendanubeStockSubidaLineaExport)
-                ->deSubida($subida)
+                ->deSubida($subida, $estado)
                 ->download($nombre.'.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
@@ -222,6 +224,67 @@ class TiendanubeStockSubidaController extends Controller
         return redirect()
             ->route('tiendanube_stock_subidas')
             ->with('mensaje', $mensaje);
+    }
+
+    private function estadoLineaFiltro(Request $request): string
+    {
+        $estado = trim((string) $request->query('estado', ''));
+
+        return in_array($estado, [
+            TiendanubeStockSubidaLinea::ESTADO_OK,
+            TiendanubeStockSubidaLinea::ESTADO_ERROR,
+            TiendanubeStockSubidaLinea::ESTADO_OMITIDA,
+            TiendanubeStockSubidaLinea::ESTADO_PREVISTA,
+        ], true) ? $estado : '';
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<string, int|string>  $conteos
+     * @return list<array{estado:string, label:string, clase:string, cantidad:int}>
+     */
+    private function fichasEstado(TiendanubeStockSubida $subida, $conteos): array
+    {
+        $cantidad = static fn (string $estado): int => (int) ($conteos[$estado] ?? 0);
+        $simulacion = $subida->origen === TiendanubeStockSubida::ORIGEN_SIMULACION;
+        $fichas = [[
+            'estado' => '',
+            'label' => 'Todas',
+            'clase' => 'primary',
+            'cantidad' => $cantidad(TiendanubeStockSubidaLinea::ESTADO_OK)
+                + $cantidad(TiendanubeStockSubidaLinea::ESTADO_ERROR)
+                + $cantidad(TiendanubeStockSubidaLinea::ESTADO_OMITIDA)
+                + $cantidad(TiendanubeStockSubidaLinea::ESTADO_PREVISTA),
+        ]];
+        if ($simulacion || $cantidad(TiendanubeStockSubidaLinea::ESTADO_PREVISTA) > 0) {
+            $fichas[] = [
+                'estado' => TiendanubeStockSubidaLinea::ESTADO_PREVISTA,
+                'label' => 'A enviar',
+                'clase' => 'info',
+                'cantidad' => $cantidad(TiendanubeStockSubidaLinea::ESTADO_PREVISTA),
+            ];
+        }
+        if (! $simulacion || $cantidad(TiendanubeStockSubidaLinea::ESTADO_OK) > 0) {
+            $fichas[] = [
+                'estado' => TiendanubeStockSubidaLinea::ESTADO_OK,
+                'label' => 'OK',
+                'clase' => 'success',
+                'cantidad' => $cantidad(TiendanubeStockSubidaLinea::ESTADO_OK),
+            ];
+        }
+        $fichas[] = [
+            'estado' => TiendanubeStockSubidaLinea::ESTADO_ERROR,
+            'label' => 'Error',
+            'clase' => 'danger',
+            'cantidad' => $cantidad(TiendanubeStockSubidaLinea::ESTADO_ERROR),
+        ];
+        $fichas[] = [
+            'estado' => TiendanubeStockSubidaLinea::ESTADO_OMITIDA,
+            'label' => 'Omitidas',
+            'clase' => 'secondary',
+            'cantidad' => $cantidad(TiendanubeStockSubidaLinea::ESTADO_OMITIDA),
+        ];
+
+        return $fichas;
     }
 
     private function autorizar(): void

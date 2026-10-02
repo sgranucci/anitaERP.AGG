@@ -34,6 +34,20 @@ final class TiendanubeApiClient
         return new self($tienda['store_id'], $tienda['access_token']);
     }
 
+    /** Subida de stock y precios: token de inventario (write_products) si está configurado. */
+    public static function paraEscrituraProductos(string $storeId): self
+    {
+        $tienda = TiendanubeTiendasSupport::porStoreId($storeId);
+        $token = TiendanubeTiendasSupport::tokenEscrituraProductos($storeId);
+        if ($tienda === null || $token === null || $token === '') {
+            throw new RuntimeException(
+                'La tienda Tiendanube '.trim($storeId).' no tiene token de inventario en .env.'
+            );
+        }
+
+        return new self($tienda['store_id'], $token);
+    }
+
     /** Ping de health: no pisa el estado global de la otra tienda en cada request. */
     public function sinRegistrarSalud(): self
     {
