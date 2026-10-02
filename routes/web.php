@@ -1622,6 +1622,7 @@ Route::get('stock/movimientostock/{id}/editar', 'Stock\MovimientoStockController
 Route::match(['get', 'post'], 'stock/movimientostock/preview-asiento', 'Stock\MovimientoStockController@previewAsientoContable')->name('preview_asiento_movimientostock_nuevo');
 Route::match(['get', 'post'], 'stock/movimientostock/preview-conversion-formula', 'Stock\MovimientoStockController@previewConversionFormula')->name('preview_conversion_formula_movimientostock');
 Route::get('stock/movimientostock/api/saldo-articulo', 'Stock\MovimientoStockController@saldoArticuloDeposito')->name('movimientostock_saldo_articulo');
+Route::post('stock/movimientostock/api/aviso-consumo-ot', 'Stock\MovimientoStockController@avisoConsumoOt')->name('movimientostock_aviso_consumo_ot');
 Route::get('stock/movimientostock/api/sugerir-tipo-transferencia-contable', 'Stock\MovimientoStockController@sugerirTipoTransferenciaContable')->name('movimientostock_sugerir_tipo_transferencia_contable');
 Route::get('stock/movimientostock/api/precio-linea', 'Stock\MovimientoStockController@precioLineaArticulo')->name('movimientostock_precio_linea');
 Route::get('stock/movimientostock/api/catalogo-articulos', 'Stock\MovimientoStockController@catalogoArticulosPorDeposito')->name('movimientostock_catalogo_articulos');

@@ -3,7 +3,9 @@
 namespace App\Support\Ventas\Tiendanube;
 
 use App\Models\Configuracion\Provincia;
+use App\Models\Ventas\Cliente;
 use App\Models\Ventas\TiendanubePedido;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalReceptorSupport;
 
 /**
  * Arma receptor fiscal / domicilio / letra A|B para emisión TN.
@@ -50,7 +52,11 @@ final class TiendanubePedidoReceptorSupport
         }
 
         if ($letra === self::LETRA_A) {
-            $clienteId = (int) config('tiendanube.cliente_ri_id', config('tiendanube.cliente_contado_id', 1));
+            $clienteId = (int) config('tiendanube.cliente_ri_id', 0);
+            // El default histórico (id 1) está dado de baja: sin un RI vivo no hay Factura A.
+            if ($clienteId <= 0 || ! Cliente::query()->whereKey($clienteId)->exists()) {
+                $clienteId = FacturacionLocalReceptorSupport::clienteRiId();
+            }
             $tipodoc = 80; // CUIT
             if ($doc === '' || strlen($doc) < 11) {
                 throw new \InvalidArgumentException('Factura A requiere CUIT del comprador (11 dígitos).');

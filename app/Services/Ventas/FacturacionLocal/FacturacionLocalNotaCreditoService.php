@@ -385,18 +385,23 @@ final class FacturacionLocalNotaCreditoService
             $payload['forzar_modofacturacion'] = 'C';
         }
 
-        if (trim((string) ($ventaOrigen->nombre ?? '')) !== ''
-            || trim((string) ($ventaOrigen->numerodocumento ?? '')) !== '') {
+        $docVenta = preg_replace('/\D/', '', (string) ($ventaOrigen->nroinscripcion ?? '')) ?? '';
+        if (trim((string) ($ventaOrigen->nombre ?? '')) !== '' || ($docVenta !== '' && (int) $docVenta > 0)) {
             $payload['venta_receptor'] = [
                 'nombre' => $ventaOrigen->nombre,
-                'numerodocumento' => $ventaOrigen->numerodocumento,
+                'numerodocumento' => $docVenta,
                 'domicilio' => $ventaOrigen->domicilio,
+                'provincia_id' => (int) ($ventaOrigen->provincia_id ?: 0) ?: null,
+                'localidad_id' => (int) ($ventaOrigen->localidad_id ?: 0) ?: null,
             ];
             $payload['arca_receptor'] = array_filter([
                 'nombre' => $ventaOrigen->nombre,
-                'numerodocumento' => $ventaOrigen->numerodocumento,
+                'numerodocumento' => $docVenta,
                 'domicilio' => $ventaOrigen->domicilio,
             ], fn ($v) => $v !== null && $v !== '');
+        }
+        if ((int) ($ventaOrigen->provincia_id ?: 0) > 0) {
+            $payload['provincia_id'] = (int) $ventaOrigen->provincia_id;
         }
 
         return $payload;

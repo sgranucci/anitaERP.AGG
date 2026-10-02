@@ -70,7 +70,7 @@
     'col_label' => $colLabel,
     'col_input' => $colInput,
     'next_focus' => '#desdeempleado_id_codigo',
-    'help' => 'Vac&iacute;o = &uacute;ltima.',
+    'help' => 'Vac&iacute;o = &uacute;ltima. Facturada, Terminada, Pendiente de fabricaci&oacute;n y Terminada stock no se liquidan: son estados de la OT, no tareas a pagar.',
 ])
 
 @include('produccion.partials.campo_consulta_empleado', [

@@ -147,7 +147,9 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             'depmae.nombre',
         ];
         if ($agrupaModulo) {
+            // Una fila por movimiento: el alta y cada picking (pedido) no se netean entre sí.
             $groupBy[] = 'articulo_movimiento.modulo_id';
+            $groupBy[] = 'articulo_movimiento.id';
         }
 
         return $articulo_query

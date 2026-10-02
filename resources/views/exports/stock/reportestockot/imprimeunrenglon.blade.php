@@ -80,4 +80,12 @@
     <td>{{ $lote['situacion'] ?? '' }}</td>
     <td>{{ $lote['lote'] ?? '' }}</td>
     <td>{{ $deposito }}</td>
+    @if (! empty($es_movimientos))
+        <td>{{ $lote['modulo_nombre'] ?? '' }}</td>
+        <td>
+            @if ((int) ($lote['pedido'] ?? 0) > 0)
+                {{ (int) $lote['pedido'] }}
+            @endif
+        </td>
+    @endif
 </tr>

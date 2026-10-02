@@ -82,6 +82,19 @@ function esLineaFacturaMostrador($tr) {
 }
 
 function avisarArticuloSkuNoEncontrado($tr, $skuInput, mensaje) {
+    if ($skuInput && $skuInput.length && $skuInput.data('enter-borrar-si-falta')) {
+        $skuInput.removeData('enter-borrar-si-falta');
+        if ($tr.closest('#tabla-items-movimientostock').length
+            && typeof window.msEliminarRenglonArticuloInexistente === 'function') {
+            window.msEliminarRenglonArticuloInexistente($tr);
+            return;
+        }
+        if ($tr.closest('#itemspedido-table').length
+            && typeof window.facturaEliminarRenglonArticuloInexistente === 'function') {
+            window.facturaEliminarRenglonArticuloInexistente($tr);
+            return;
+        }
+    }
     $tr.find('.articulo_id').val('');
     $tr.find('.descripcionarticulo').val('');
     if (esLineaFacturaMostrador($tr)) {
@@ -390,10 +403,14 @@ function aplicarRespuestaConsultaArticulo(respuesta) {
             meta = null;
         }
     }
+    $("#consultaarticuloModal #datos").html(html || htmlTablaConsultaArticuloMensaje('Sin resultados'));
     if (meta) {
-        actualizarEncabezadoPrecioListaConsulta(meta);
+        try {
+            actualizarEncabezadoPrecioListaConsulta(meta);
+        } catch (e) {
+            // El encabezado de precio no debe impedir ver las filas.
+        }
     }
-    $("#datos").html(html);
 }
 
 function consultaArticuloRequiereSoloFacturable($ctx) {
@@ -404,6 +421,43 @@ function consultaArticuloRequiereSoloFacturable($ctx) {
         return true;
     }
     return false;
+}
+
+function inputConsultaArticuloModal() {
+    var modal = document.getElementById('consultaarticuloModal');
+    if (!modal) {
+        return null;
+    }
+    return modal.querySelector('input#consulta');
+}
+
+function programarBusquedaConsultaArticulo(valorExplicito) {
+    var input = inputConsultaArticuloModal();
+    var valor = valorExplicito != null
+        ? String(valorExplicito)
+        : (input ? String(input.value || '') : '');
+    valor = valor.trim();
+    var minLen = consultaArticuloMinLen(valor);
+    clearTimeout(consultaArticuloTimer);
+    if (valor.length < minLen) {
+        if (consultaArticuloAjax && consultaArticuloAjax.readyState !== 4) {
+            consultaArticuloAjax.abort();
+        }
+        if (valor.length === 0) {
+            $("#consultaarticuloModal #datos").html(htmlTablaConsultaArticuloMensaje(consultaArticuloMensajeMinLen(minLen)));
+        } else {
+            $("#consultaarticuloModal #datos").html(htmlTablaConsultaArticuloMensaje('Ingrese al menos ' + minLen + (minLen === 1 ? ' dígito' : ' caracteres') + ' para buscar.'));
+        }
+        return;
+    }
+    consultaArticuloTimer = setTimeout(function () {
+        var actual = inputConsultaArticuloModal();
+        var vigente = actual ? String(actual.value || '').trim() : valor;
+        if (vigente.length < consultaArticuloMinLen(vigente)) {
+            return;
+        }
+        buscar_datos_articulo(vigente);
+    }, CONSULTA_ARTICULO_DEBOUNCE_MS);
 }
 
 function buscar_datos_articulo(consulta) {
@@ -461,9 +515,16 @@ function buscar_datos_articulo(consulta) {
         aplicarRespuestaConsultaArticulo(respuesta);
     })
     .fail (function(xhr, status) {
-        if (status !== 'abort') {
-            console.log("error");
+        if (status === 'abort') {
+            return;
         }
+        var msg = 'No se pudo consultar art\u00edculos';
+        if (xhr && xhr.status === 403) {
+            msg = 'Sin permiso para consultar art\u00edculos';
+        } else if (xhr && xhr.status === 419) {
+            msg = 'La sesi\u00f3n expir\u00f3. Recargue la p\u00e1gina.';
+        }
+        $("#consultaarticuloModal #datos").html(htmlTablaConsultaArticuloMensaje(msg));
     });
 }
 
@@ -472,6 +533,14 @@ $(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnte
 	var keyCode = e.which;
 	if (keyCode !== 13) {
 		return;
+	}
+	if (this.id === 'consulta' && $(this).closest('#consultaarticuloModal').length) {
+		e.preventDefault();
+		var $elegir = $('#consultaarticuloModal #datos .eligeconsultaarticulo').first();
+		if ($elegir.length) {
+			$elegir.trigger('click');
+		}
+		return false;
 	}
 	// Búsqueda rápida del index (lupa / Enter): no bloquear.
 	if ($(this).is('#filtro_valor, #filtro_valor_panel') || $(this).attr('name') === 'filtro_valor') {
@@ -559,11 +628,16 @@ function activa_eventos_consultaarticulo()
         var $ctxConsulta = consultaArticuloContextoLinea(this);
         ptrarticulo_id = $ctxConsulta.find('.articulo_id').first();
         ptrcodigoarticulo = $ctxConsulta.find('.codigoarticulo').first();
+        var skuLinea = (ptrcodigoarticulo.val() || '').trim();
+        $('#consultaarticuloModal').data('articuloBusquedaInicial', skuLinea);
         ptrnombrearticulo = $ctxConsulta.find('.descripcionarticulo').first();
         ptrunidadmedida = $ctxConsulta.find('.unidadmedida').first();
         ptrcategoria_id = $ctxConsulta.find('.categoria_id').first();
         ptrsubcategoria_id = $ctxConsulta.find('.subcategoria_id').first();
-        // Abre modal de consulta
+        // Fuera de la card/form: si queda adentro, la tabla de resultados se recorta y parece vacía.
+        if (!$('#consultaarticuloModal').parent().is('body')) {
+            $('#consultaarticuloModal').appendTo('body');
+        }
         $("#consultaarticuloModal").modal('show');
     });
 
@@ -574,7 +648,8 @@ function activa_eventos_consultaarticulo()
             mostrar_precio_lista: consultaArticuloMostrarPrecioLista(),
         });
         var prefijo = $('#consultaarticuloModal').data('articuloSkuPrefijoFiltro');
-        var valorInicial = '';
+        var valorInicial = ($('#consultaarticuloModal').data('articuloBusquedaInicial') || '').toString().trim();
+        $('#consultaarticuloModal').removeData('articuloBusquedaInicial');
         if (prefijo) {
             var suf = $('#tr-gastro-linea-articulo .gastro-sku-sufijo').val();
             if (!suf) {
@@ -584,7 +659,10 @@ function activa_eventos_consultaarticulo()
                 valorInicial = String(suf).replace(/\D/g, '');
             }
         }
-        $('#consulta').val(valorInicial);
+        var inputModal = inputConsultaArticuloModal();
+        if (inputModal) {
+            inputModal.value = valorInicial;
+        }
         clearTimeout(consultaArticuloTimer);
         if (consultaArticuloAjax && consultaArticuloAjax.readyState !== 4) {
             consultaArticuloAjax.abort();
@@ -593,7 +671,7 @@ function activa_eventos_consultaarticulo()
         if (valorInicial.length >= minLen) {
             buscar_datos_articulo(valorInicial);
         } else {
-            $("#datos").html(htmlTablaConsultaArticuloMensaje(consultaArticuloMensajeMinLen(minLen)));
+            $("#consultaarticuloModal #datos").html(htmlTablaConsultaArticuloMensaje(consultaArticuloMensajeMinLen(minLen)));
         }
     });
 
@@ -607,28 +685,35 @@ function activa_eventos_consultaarticulo()
     });
 
     $('#consultaarticuloModal').off('shown.bs.modal.consultaArt').on('shown.bs.modal.consultaArt', function () {
-        $(this).find('#consulta').focus();
+        var input = inputConsultaArticuloModal();
+        if (input) {
+            input.focus();
+            if (input.select) {
+                input.select();
+            }
+        }
     });
 
-    $(document).off('input.consultaArtCampo', '#consulta').on('input.consultaArtCampo', '#consulta', function () {
-        var valor = ($(this).val() || '').trim();
-        var minLen = consultaArticuloMinLen(valor);
-        clearTimeout(consultaArticuloTimer);
-        if (valor.length < minLen) {
-            if (consultaArticuloAjax && consultaArticuloAjax.readyState !== 4) {
-                consultaArticuloAjax.abort();
+    if (!window.__consultaArticuloInputCapture) {
+        window.__consultaArticuloInputCapture = true;
+        document.addEventListener('input', function (e) {
+            var t = e.target;
+            if (!t || t.id !== 'consulta' || !t.closest || !t.closest('#consultaarticuloModal')) {
+                return;
             }
-            if (valor.length === 0) {
-                $("#datos").html(htmlTablaConsultaArticuloMensaje(consultaArticuloMensajeMinLen(minLen)));
-            } else {
-                $("#datos").html(htmlTablaConsultaArticuloMensaje('Ingrese al menos ' + minLen + (minLen === 1 ? ' dígito' : ' caracteres') + ' para buscar.'));
+            programarBusquedaConsultaArticulo(t.value);
+        }, true);
+        document.addEventListener('keyup', function (e) {
+            var t = e.target;
+            if (!t || t.id !== 'consulta' || !t.closest || !t.closest('#consultaarticuloModal')) {
+                return;
             }
-            return;
-        }
-        consultaArticuloTimer = setTimeout(function () {
-            buscar_datos_articulo(valor);
-        }, CONSULTA_ARTICULO_DEBOUNCE_MS);
-    });
+            if (e.key === 'Enter' || e.which === 13) {
+                return;
+            }
+            programarBusquedaConsultaArticulo(t.value);
+        }, true);
+    }
 
     $('#aceptaconsultaarticuloModal').on('click', function () {
         $('#consultaarticuloModal').modal('hide');
@@ -836,7 +921,17 @@ function activa_eventos_consultaarticulo()
                 $tr.trigger('req:articulo-linea-cargado', [data]);
             }
 
-            enfocarCantidadLineaArticulo($tr, unidadmedida);
+            var enterNav = $(ptrrenglon).data('enter-borrar-si-falta');
+            $(ptrrenglon).removeData('enter-borrar-si-falta');
+            if (enterNav && $tr.closest('#tabla-items-movimientostock').length
+                && typeof window.msEnfocarSiguienteCampoFila === 'function') {
+                window.msEnfocarSiguienteCampoFila(ptrrenglon);
+            } else if (enterNav && $tr.closest('#itemspedido-table').length
+                && typeof window.facturaEnfocarSiguienteCampoFila === 'function') {
+                window.facturaEnfocarSiguienteCampoFila(ptrrenglon);
+            } else {
+                enfocarCantidadLineaArticulo($tr, unidadmedida);
+            }
         }).fail(function () {
             avisarArticuloSkuNoEncontrado($tr, $(ptrrenglon), 'No se encontró artículo con ese SKU.');
         });

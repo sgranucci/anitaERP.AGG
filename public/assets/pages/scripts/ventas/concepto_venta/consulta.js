@@ -301,6 +301,62 @@ function facturaGrillaSoloConceptos() {
     return hayConcepto && !hayArticulo;
 }
 
+function facturaNumeroCampo(valor) {
+    var s = String(valor == null ? '' : valor).trim().replace(/\s/g, '');
+    if (s.indexOf(',') >= 0 && s.indexOf('.') >= 0) {
+        s = s.replace(/\./g, '').replace(',', '.');
+    } else if (s.indexOf(',') >= 0) {
+        s = s.replace(',', '.');
+    }
+    var n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+}
+
+function facturaLineaSinArticulo($tr) {
+    return $tr && $tr.length && $.trim($tr.find('.articulo_id').val() || '') === '';
+}
+
+function facturaLineaPideIva($tr, soloConPrecio) {
+    if (!facturaLineaSinArticulo($tr)) {
+        return false;
+    }
+    var precio = Math.abs(facturaNumeroCampo($tr.find('.precio').val()));
+    if (soloConPrecio) {
+        return precio > 0.00001;
+    }
+    if (precio > 0.00001) {
+        return true;
+    }
+    if ($.trim($tr.find('.concepto_venta_id').val() || '') !== '') {
+        return true;
+    }
+    return $.trim($tr.find('.descripcionarticulo').val() || '') !== '';
+}
+
+function facturaMarcarLineasPideIva() {
+    $('#tbody-tabla tr.item-factura, #tbody-tabla tr.item-pedido').each(function () {
+        var $tr = $(this);
+        $tr.toggleClass('item-pide-iva', facturaLineaPideIva($tr, false));
+    });
+}
+
+function facturaRenglonesTextoSinIva() {
+    var $faltan = $();
+    $('#tbody-tabla tr.item-factura, #tbody-tabla tr.item-pedido').each(function () {
+        var $tr = $(this);
+        if ($tr.hasClass('nc-linea-excluida')) {
+            return;
+        }
+        if (!facturaLineaPideIva($tr, true)) {
+            return;
+        }
+        if (!$.trim($tr.find('.factura-iva-linea').val() || '')) {
+            $faltan = $faltan.add($tr);
+        }
+    });
+    return $faltan;
+}
+
 function facturaHayLineasConcepto() {
     var hay = false;
     $('#tbody-tabla tr.item-factura, #tbody-tabla tr.item-pedido').each(function () {
@@ -318,8 +374,9 @@ function facturaActualizarColumnasGrilla() {
     if (!$table.length) {
         return;
     }
+    facturaMarcarLineasPideIva();
     $table.toggleClass('factura-grilla-concepto', soloConcepto);
-    $table.toggleClass('factura-grilla-con-iva', facturaHayLineasConcepto());
+    $table.toggleClass('factura-grilla-con-iva', $table.find('tr.item-pide-iva').length > 0);
     var $thKilo = $table.find('thead th.factura-col-kilo');
     if ($thKilo.length) {
         $thKilo.text(soloConcepto ? 'Cantidad' : 'Kilos');
@@ -417,6 +474,9 @@ window.filaEsConceptoVenta = filaEsConceptoVenta;
 window.facturaRefreshLeyendaBadge = facturaRefreshLeyendaBadge;
 window.facturaHayLineasArticulo = facturaHayLineasArticulo;
 window.facturaActualizarColumnasGrilla = facturaActualizarColumnasGrilla;
+window.facturaLineaPideIva = facturaLineaPideIva;
+window.facturaRenglonesTextoSinIva = facturaRenglonesTextoSinIva;
+window.facturaMarcarLineasPideIva = facturaMarcarLineasPideIva;
 window.facturaLineaModoConcepto = facturaLineaModoConcepto;
 
 function aplicarConceptoVentaEnFilaFactura($tr, data) {
@@ -938,7 +998,14 @@ function activa_eventos_consultaconceptoventa() {
         }
     });
 
+    $(document).off('input.facturaIvaTexto').on('input.facturaIvaTexto', '#itemspedido-table .precio, #itemspedido-table .descripcionarticulo, #itemspedido-table .cantidad, #itemspedido-table .kilo', function () {
+        facturaMarcarLineasPideIva();
+        var $table = $('#itemspedido-table');
+        $table.toggleClass('factura-grilla-con-iva', $table.find('tr.item-pide-iva').length > 0);
+    });
+
     $(document).off('change.facturaIvaConcepto').on('change.facturaIvaConcepto', '#itemspedido-table .factura-iva-linea', function () {
+        $(this).removeClass('is-invalid');
         if (typeof calculaFactura === 'function') {
             calculaFactura();
         }

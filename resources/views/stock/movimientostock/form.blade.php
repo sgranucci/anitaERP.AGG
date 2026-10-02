@@ -111,7 +111,31 @@
                 <div class="form-group row mb-2">
                     <label for="lote" class="col-lg-4 col-form-label requerido">Lote de stock</label>
                     <div class="col-lg-8">
-                        <input type="text" name="lote" id="lote" class="form-control" value="{{ old('lote', $movimientostock->articulos_movimiento[0]->lote ?? 'LOTE DE ALTA') }}" required>
+                        @php
+                            $lineaLoteMov = $movimientostock->articulos_movimiento[0] ?? null;
+                            $loteCampo = old('lote');
+                            if ($loteCampo === null) {
+                                $loteGuardado = $lineaLoteMov->lote ?? null;
+                                $codigoOtLote = null;
+                                if ($lineaLoteMov && (int) ($lineaLoteMov->ordentrabajo_id ?? 0) > 0) {
+                                    $codigoOtLote = $lineaLoteMov->ordenestrabajo->codigo ?? null;
+                                }
+                                $loteVacio = $loteGuardado === null || $loteGuardado === '' || (string) $loteGuardado === '0';
+                                if ($loteVacio && $codigoOtLote !== null && (string) $codigoOtLote !== '' && (string) $codigoOtLote !== '0') {
+                                    $loteCampo = $codigoOtLote;
+                                } else {
+                                    $loteCampo = $loteGuardado ?? 'LOTE DE ALTA';
+                                }
+                            }
+                        @endphp
+                        <input type="text" name="lote" id="lote" class="form-control" value="{{ $loteCampo }}" required>
+                        <input type="hidden" name="aplicar_consumo_ot" id="aplicar_consumo_ot" value="{{ old('aplicar_consumo_ot', '0') }}">
+                        @if (! empty($movimientostock->id))
+                            <input type="hidden" name="movimientostock_id" value="{{ (int) $movimientostock->id }}">
+                        @endif
+                        @if ($movimientoStockModoFerli ?? false)
+                            <small class="text-muted d-block mt-1">En un egreso, si este n&uacute;mero es una OT con stock, el sistema avisa antes de dejarlo como lote. Los ingresos se graban como lote.</small>
+                        @endif
                     </div>
                 </div>
                 @include('includes.form-empresa-asignada', [

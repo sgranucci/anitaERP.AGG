@@ -192,7 +192,16 @@ class Tipotransaccion_StockController extends Controller
         $tipo = $query->first();
 
         if (! $tipo) {
-            return response()->json(['error' => 'Tipo de transacción no encontrado'], 404);
+            $abrevUpper = strtoupper(trim($abreviatura));
+            $esComprobanteVenta = \App\Models\Ventas\Tipotransaccion::query()
+                ->whereIn('operacion', ['V', 'U', 'C'])
+                ->whereRaw(SqlDialectSupport::lower('abreviatura').' = ?', [strtolower($abrevUpper)])
+                ->exists();
+            $mensaje = $esComprobanteVenta
+                ? $abrevUpper.' es un comprobante de venta. En movimientos de stock no existe: usá ENT, SAL, TRA u otro tipo de esta pantalla.'
+                : 'Tipo de transacción no encontrado';
+
+            return response()->json(['error' => $mensaje], 404);
         }
 
         return response()->json([

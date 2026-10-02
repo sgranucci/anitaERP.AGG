@@ -230,6 +230,22 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 		return $ordentrabajo_tarea;
 	}
     
+	/**
+	 * Estados de la OT (no son mano de obra). Si el rango numérico los cubre
+	 * —p. ej. grabado 9 a 36 incluye Facturada 33— no se liquidan.
+	 *
+	 * @return list<int>
+	 */
+	private function idsTareasEstadoOt(): array
+	{
+		return array_values(array_filter(array_map('intval', [
+			config('consprod.TAREA_PENDIENTE_FABRICACION'),
+			config('consprod.TAREA_TERMINADA'),
+			config('consprod.TAREA_FACTURADA'),
+			config('consprod.TAREA_TERMINADA_STOCK'),
+		])));
+	}
+
 	// Lee tareas por rangos
     public function findTareaPorRangos($estadoot, $desdefecha, $hastafecha,
                                     $desdetarea_id, $hastatarea_id,
@@ -277,6 +293,11 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 						->orderBy('numerolegajo')
 						->orderBy('tarea_id')
 						->orderBy('numeroot');
+
+		$tareasEstado = $this->idsTareasEstadoOt();
+		if ($tareasEstado !== []) {
+			$data = $data->whereNotIn('ordentrabajo_tarea.tarea_id', $tareasEstado);
+		}
 
 		switch ($estadoot) {
 		case 'CUMPLIDA':

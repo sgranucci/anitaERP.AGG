@@ -607,11 +607,22 @@
 				return false;
 			}
 
-			if (!articulo_id && !codigo && !conceptoVentaId && !conceptoCabecera)
+			var descTexto = $.trim($tr.find('.descripcionarticulo').val() || '');
+			if (!articulo_id && !codigo && !conceptoVentaId && !conceptoCabecera && descTexto === '')
 			{
 				alert('Código de artículo nulo en ítem ' + item);
 				flError = true;
 				return false;
+			}
+
+			if (!articulo_id && typeof window.facturaLineaPideIva === 'function' && window.facturaLineaPideIva($tr, true)) {
+				var ivaLinea = $.trim($tr.find('.factura-iva-linea').val() || '');
+				if (ivaLinea === '') {
+					alert('Indicá la alícuota de IVA del ítem ' + item + ' (Exento, 10,5% o 21%).');
+					$tr.find('.factura-iva-linea').addClass('is-invalid').trigger('focus');
+					flError = true;
+					return false;
+				}
 			}
 
 			var cantidad = $tr.find('.cantidad').val();
@@ -1232,6 +1243,150 @@
 			}
 			$campo.closest('.tm-vendedor-campo, .form-group').find('.consultavendedor').first().trigger('click');
 		});
+
+	if (!window.__facturaF1ArticuloCapture) {
+		window.__facturaF1ArticuloCapture = true;
+		document.addEventListener('keydown', function (e) {
+			if (!esTeclaF1Factura(e)) {
+				return;
+			}
+			var target = e.target;
+			if (!target || !target.classList || !target.classList.contains('codigoarticulo')) {
+				return;
+			}
+			if (!target.closest || !target.closest('#itemspedido-table')) {
+				return;
+			}
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			var fila = target.closest('tr');
+			var boton = fila ? fila.querySelector('.consultaarticulo') : null;
+			if (boton) {
+				boton.click();
+			}
+		}, true);
+	}
+
+	function facturaCampoNavegable(el) {
+		if (!el || el.disabled || el.readOnly) {
+			return false;
+		}
+		if (el.type === 'hidden' || el.type === 'checkbox' || el.type === 'button') {
+			return false;
+		}
+		if (!el.matches || !el.matches('input, select, textarea')) {
+			return false;
+		}
+		if (!el.offsetParent) {
+			return false;
+		}
+		var estilo = window.getComputedStyle(el);
+		if (!estilo || estilo.visibility === 'hidden' || estilo.display === 'none') {
+			return false;
+		}
+		var celda = el.closest('td');
+		if (celda) {
+			var estiloCelda = window.getComputedStyle(celda);
+			if (estiloCelda && (estiloCelda.display === 'none' || estiloCelda.visibility === 'hidden')) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	function facturaCamposNavegablesFila($tr) {
+		return $tr.find('input, select, textarea').filter(function () {
+			return facturaCampoNavegable(this);
+		}).get();
+	}
+
+	window.facturaEliminarRenglonArticuloInexistente = function ($tr) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		var $filas = $('#tbody-tabla tr.item-pedido');
+		if ($filas.length <= 1) {
+			$tr.find('.codigoarticulo').val('').trigger('focus');
+			$tr.find('.articulo_id').val('');
+			$tr.find('.descripcionarticulo').val('');
+			return;
+		}
+		var $siguiente = $tr.nextAll('tr.item-pedido').first();
+		var $previo = $tr.prevAll('tr.item-pedido').first();
+		$tr.remove();
+		if (typeof actualizaRenglones === 'function') {
+			actualizaRenglones();
+		}
+		if (typeof calculaFactura === 'function') {
+			calculaFactura();
+		}
+		if (typeof window.facturaActualizarColumnasGrilla === 'function') {
+			window.facturaActualizarColumnasGrilla();
+		}
+		var $foco = $siguiente.length ? $siguiente : $previo;
+		if ($foco.length) {
+			$foco.find('.codigoarticulo').trigger('focus');
+		}
+	};
+
+	window.facturaEnfocarSiguienteCampoFila = function (actual) {
+		var el = actual && actual.jquery ? actual.get(0) : actual;
+		var $tr = $(el).closest('#itemspedido-table tr.item-pedido');
+		if (!$tr.length) {
+			return;
+		}
+		var campos = facturaCamposNavegablesFila($tr);
+		var indice = campos.indexOf(el);
+		if (indice >= 0 && campos[indice + 1]) {
+			campos[indice + 1].focus();
+			if (campos[indice + 1].select) {
+				campos[indice + 1].select();
+			}
+			return;
+		}
+		if (typeof agregaRenglon === 'function') {
+			agregaRenglon();
+		}
+	};
+
+	if (!window.FL_FACTURA_LAYOUT_PEDIDO && !window.__facturaEnterNavFerli) {
+		window.__facturaEnterNavFerli = true;
+		document.addEventListener('keydown', function (e) {
+			if (e.key !== 'Enter' && e.which !== 13 && e.keyCode !== 13) {
+				return;
+			}
+			var input = e.target;
+			if (!input || !input.closest || !input.closest('#itemspedido-table tr.item-pedido')) {
+				return;
+			}
+			if (input.closest('.modal')) {
+				return;
+			}
+			if (!facturaCampoNavegable(input)) {
+				return;
+			}
+			e.preventDefault();
+			e.stopPropagation();
+			var $tr = $(input).closest('tr.item-pedido');
+			if (input.classList.contains('codigoarticulo')) {
+				var sku = (input.value || '').trim();
+				if (!sku) {
+					window.facturaEliminarRenglonArticuloInexistente($tr);
+					return;
+				}
+				var artId = parseInt($tr.find('.articulo_id').val() || '0', 10) || 0;
+				var concId = parseInt($tr.find('.concepto_venta_id').val() || '0', 10) || 0;
+				if (artId > 0 || concId > 0) {
+					window.facturaEnfocarSiguienteCampoFila(input);
+					return;
+				}
+				$(input).data('enter-borrar-si-falta', 1);
+				$(input).trigger('change');
+				return;
+			}
+			window.facturaEnfocarSiguienteCampoFila(input);
+		}, true);
+	}
 
 	function sincronizarEmpresaDesdePuntoVenta(data, omitirLimpiarDeposito)
 	{
@@ -1975,8 +2130,20 @@
 		}
 
 		opciones = opciones || {};
-		if (window.FL_FACTURA_LAYOUT_PEDIDO && opciones.enfocarArticulo !== false) {
-			$('#itemspedido-table').find('tr').last().find('.codigoarticulo').focus();
+		if (opciones.enfocarArticulo !== false) {
+			var codigoNuevo = $('#itemspedido-table tr.item-pedido').last().find('.codigoarticulo').get(0);
+			if (codigoNuevo) {
+				window.setTimeout(function () {
+					try {
+						codigoNuevo.focus();
+					} catch (e) {
+						return;
+					}
+					if (typeof codigoNuevo.select === 'function') {
+						codigoNuevo.select();
+					}
+				}, 0);
+			}
 		}
     }
 
@@ -2435,9 +2602,28 @@
 			window.sumarCantidadesFacturaBierzo();
 		}
 
+		if (typeof window.facturaActualizarColumnasGrilla === 'function') {
+			window.facturaActualizarColumnasGrilla();
+		}
+
 		var clienteId = parseInt($('#cliente_id').val() || '0', 10);
 		if (!(clienteId > 0)) {
 			return;
+		}
+
+		if (typeof window.facturaRenglonesTextoSinIva === 'function') {
+			var $sinIva = window.facturaRenglonesTextoSinIva();
+			$('#itemspedido-table .factura-iva-linea').removeClass('is-invalid');
+			if ($sinIva.length) {
+				$sinIva.find('.factura-iva-linea').addClass('is-invalid');
+				$('#tbody-tabla-total-factura').empty();
+				$('#montototalfactura').val('');
+				var activo = document.activeElement;
+				if (activo && $(activo).is('.precio, .cantidad, .descuento, .kilo')) {
+					$sinIva.first().find('.factura-iva-linea').trigger('focus');
+				}
+				return;
+			}
 		}
 
 		if (window.FL_FACTURA_LAYOUT_PEDIDO && typeof sincronizarCantidadesItemsFactura === 'function') {

@@ -84,25 +84,37 @@ final class FacturacionLocalEmisionService
             return ['ok' => false, 'error' => $msg, 'errores' => [$msg]];
         }
 
-        // Neto 0 (cambio equivalente): ARCA exige mínimo $0,01.
-        $forzarMinimoArca = ! $esRegalo
-            && abs((float) $split['neto']) < 0.009
-            && $split['fac'] !== [];
-        if ($forzarMinimoArca) {
-            $split = $this->aplicarImporteMinimoArcaEnFac($split);
-        }
+		// Neto 0 (cambio equivalente): ARCA exige mínimo $0,01.
+		$forzarMinimoArca = ! $esRegalo
+			&& abs((float) $split['neto']) < 0.009
+			&& $split['fac'] !== [];
+		if ($forzarMinimoArca) {
+			$split = $this->aplicarImporteMinimoArcaEnFac($split);
+		}
 
-        $totalPagar = $esRegalo
-            ? 0.
-            : ($forzarMinimoArca
-                ? FacturacionLocalAsientoMedioSupport::IMPORTE_MINIMO_ARCA
-                : max(0., (float) $split['neto']));
+		try {
+			$receptorResuelto = FacturacionLocalReceptorSupport::resolver($input);
+		} catch (InvalidArgumentException $e) {
+			return ['ok' => false, 'error' => $e->getMessage(), 'errores' => [$e->getMessage()]];
+		}
 
-        try {
-            $receptorResuelto = FacturacionLocalReceptorSupport::resolver($input);
-        } catch (InvalidArgumentException $e) {
-            return ['ok' => false, 'error' => $e->getMessage(), 'errores' => [$e->getMessage()]];
-        }
+		$totalPagar = $esRegalo
+			? 0.
+			: ($forzarMinimoArca
+				? FacturacionLocalAsientoMedioSupport::IMPORTE_MINIMO_ARCA
+				: max(0., (float) $split['neto']));
+
+		// Factura A: el total a cobrar incluye la percepción IIBB (padrón del CUIT del receptor).
+		if (! $esRegalo && ! $forzarMinimoArca
+			&& empty($receptorResuelto['omitir_percepciones'])
+			&& $split['fac'] !== []
+		) {
+			$fiscal = $this->importesConPercepcion($local, $split, $input, $receptorResuelto);
+			if (! empty($fiscal['error'])) {
+				return ['ok' => false, 'error' => $fiscal['error'], 'errores' => [$fiscal['error']]];
+			}
+			$totalPagar = (float) $fiscal['total_pagar'];
+		}
 
         $errores = $this->preflightService->erroresAntesDeEmitir(
             $local,
@@ -395,14 +407,160 @@ final class FacturacionLocalEmisionService
         return $split;
     }
 
-    /**
-     * @param  list<array<string,mixed>>  $lineas
-     * @param  array<string,mixed>  $input
-     * @param  array<string,mixed>  $receptorResuelto
-     * @param  list<array{cuentacaja_id?:int,monto?:float,cotizacion?:float|null}>  $medios
-     * @return array<string,mixed>
-     */
-    private function armarPayload(
+	/**
+	 * Totales del POS. Factura B/CF: neto del carrito. Factura A: suma percepción IIBB.
+	 * Si el receptor A todavía está incompleto, devuelve el neto del carrito.
+	 *
+	 * @param  array<string,mixed>  $input
+	 * @return array{
+	 *   neto:float,neto_fac:float,neto_nc:float,tiene_nc:bool,
+	 *   total_pagar:float,percepcion:float,
+	 *   percepciones:list<array{concepto:string,tasa:float,importe:float}>
+	 * }
+	 */
+	public function totalesCobro(LocalVenta $local, array $input): array
+	{
+		$split = FacturacionLocalSplitFacNcSupport::partir($input['lineas'] ?? []);
+		$base = [
+			'neto' => (float) $split['neto'],
+			'neto_fac' => (float) $split['neto_fac'],
+			'neto_nc' => (float) $split['neto_nc'],
+			'tiene_nc' => (bool) $split['tiene_nc'],
+			'total_pagar' => max(0., (float) $split['neto']),
+			'percepcion' => 0.,
+			'percepciones' => [],
+		];
+
+		try {
+			$receptor = FacturacionLocalReceptorSupport::resolver($input);
+		} catch (InvalidArgumentException) {
+			return $base;
+		}
+
+		if (! empty($receptor['omitir_percepciones']) || $split['fac'] === []) {
+			return $base;
+		}
+
+		$fiscal = $this->importesConPercepcion($local, $split, $input, $receptor);
+		if (! empty($fiscal['error'])) {
+			return $base;
+		}
+
+		return array_merge($base, [
+			'total_pagar' => (float) $fiscal['total_pagar'],
+			'percepcion' => (float) $fiscal['percepcion'],
+			'percepciones' => $fiscal['percepciones'],
+		]);
+	}
+
+	/**
+	 * @param  array{fac:list<array<string,mixed>>,nc:list<array<string,mixed>>,tiene_nc:bool,neto_fac:float,neto_nc:float,neto:float}  $split
+	 * @param  array<string,mixed>  $input
+	 * @param  array<string,mixed>  $receptor
+	 * @return array{total_pagar:float,percepcion:float,percepciones:list<array{concepto:string,tasa:float,importe:float}>,error?:string}
+	 */
+	private function importesConPercepcion(LocalVenta $local, array $split, array $input, array $receptor): array
+	{
+		$fac = $this->totalFiscal($local, $split['fac'], $input, false, $receptor);
+		if ($fac === null) {
+			return [
+				'total_pagar' => 0.,
+				'percepcion' => 0.,
+				'percepciones' => [],
+				'error' => 'No se pudieron calcular las percepciones de la Factura A.',
+			];
+		}
+
+		$totalNc = 0.;
+		$percNc = 0.;
+		if ($split['tiene_nc'] && $split['nc'] !== []) {
+			$nc = $this->totalFiscal($local, $split['nc'], $input, true, $receptor);
+			if ($nc === null) {
+				return [
+					'total_pagar' => 0.,
+					'percepcion' => 0.,
+					'percepciones' => [],
+					'error' => 'No se pudieron calcular las percepciones de la nota de crédito.',
+				];
+			}
+			$totalNc = $nc['total'];
+			$percNc = $nc['percepcion'];
+		}
+
+		return [
+			'total_pagar' => round(max(0., $fac['total'] - $totalNc), 2),
+			'percepcion' => round($fac['percepcion'] - $percNc, 2),
+			'percepciones' => $fac['percepciones'],
+		];
+	}
+
+	/**
+	 * @param  list<array<string,mixed>>  $lineas
+	 * @param  array<string,mixed>  $input
+	 * @param  array<string,mixed>  $receptor
+	 * @return array{total:float,percepcion:float,percepciones:list<array{concepto:string,tasa:float,importe:float}>}|null
+	 */
+	private function totalFiscal(LocalVenta $local, array $lineas, array $input, bool $esNc, array $receptor): ?array
+	{
+		if ($lineas === []) {
+			return ['total' => 0., 'percepcion' => 0., 'percepciones' => []];
+		}
+
+		try {
+			$payload = $this->armarPayload($local, $lineas, $input, $esNc, false, $receptor, []);
+			$payload['_sin_guardar_preferencia'] = true;
+			$calc = $this->facturacionService->calculaFacturaGeneral($payload);
+		} catch (Throwable $e) {
+			Log::warning('facturacion_local.percepcion', ['error' => $e->getMessage()]);
+
+			return null;
+		}
+
+		if (! is_array($calc) || ! empty($calc['error'])) {
+			Log::warning('facturacion_local.percepcion', [
+				'error' => is_array($calc) ? ($calc['error'] ?? 'calculo') : 'calculo',
+			]);
+
+			return null;
+		}
+
+		$percepciones = [];
+		$suma = 0.;
+		foreach ($calc['conceptostotales'] ?? [] as $concepto) {
+			if (! is_array($concepto)) {
+				continue;
+			}
+			$nombre = (string) ($concepto['concepto'] ?? '');
+			if (! str_starts_with($nombre, 'Perc.')) {
+				continue;
+			}
+			$importe = round((float) ($concepto['importe'] ?? 0), 2);
+			if (abs($importe) < 0.009) {
+				continue;
+			}
+			$percepciones[] = [
+				'concepto' => $nombre,
+				'tasa' => (float) ($concepto['tasa'] ?? 0),
+				'importe' => $importe,
+			];
+			$suma += $importe;
+		}
+
+		return [
+			'total' => round((float) ($calc['totalcomprobante'] ?? 0), 2),
+			'percepcion' => round($suma, 2),
+			'percepciones' => $percepciones,
+		];
+	}
+
+	/**
+	 * @param  list<array<string,mixed>>  $lineas
+	 * @param  array<string,mixed>  $input
+	 * @param  array<string,mixed>  $receptorResuelto
+	 * @param  list<array{cuentacaja_id?:int,monto?:float,cotizacion?:float|null}>  $medios
+	 * @return array<string,mixed>
+	 */
+	private function armarPayload(
         LocalVenta $local,
         array $lineas,
         array $input,

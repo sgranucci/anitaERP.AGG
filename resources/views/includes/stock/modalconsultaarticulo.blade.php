@@ -26,12 +26,14 @@
         {{-- Sin form anidado: el partial va dentro de otros forms; HTML cerraría el padre y el submit fallaría. --}}
         <div class="form-group row">
           <label for="consulta" class="col-form-label">Buscar:</label>
-          <input type="text" name="consulta" id="consulta">
+          <input type="text" name="consulta" id="consulta" class="form-control" autocomplete="off" placeholder="SKU o descripci&oacute;n">
           <input type="hidden" name="consultaarticulo" id="consultaarticulo_id">
         </div>
 
-        <table class="table table-striped table-bordered table-hover" id="tabla-data">
+        <div style="max-height: 60vh; overflow: auto;">
+        <table class="table table-striped table-bordered table-hover" id="consultaarticulo-tabla">
           <thead>
+            <tr>
               <th>ID</th>
               <th>SKU</th>
               <th>Descripción</th>
@@ -39,9 +41,11 @@
               <th>Categoría</th>
               <th id="consultaarticulo-th-precio" class="text-right">Precio</th>
               <th></th>
+            </tr>
           </thead>
           <tbody id="datos"></tbody>
         </table>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" id="cierraconsultaarticuloModal" class="btn btn-secondary" data-dismiss="modal">Cierra</button>

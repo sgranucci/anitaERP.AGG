@@ -39,6 +39,9 @@
                 @if (! empty($item['leyenda']))
                     <br><small>{{ $item['leyenda'] }}</small>
                 @endif
+                @if (! empty($item['despacho']))
+                    <br><small>Despacho {{ $item['despacho'] }}</small>
+                @endif
             </td>
             <td>
                 @if ($medidas !== [])
@@ -124,6 +127,9 @@
                 {{ $detalleFerli }}
                 @if (! empty($item['leyenda']))
                     <br><small>{{ $item['leyenda'] }}</small>
+                @endif
+                @if (! empty($item['despacho']))
+                    <br><small>Despacho {{ $item['despacho'] }}</small>
                 @endif
             </td>
             <td class="text-center">{{ number_format((float) ($item['cantidad'] ?? 0), $decCant) }}</td>

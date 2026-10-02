@@ -1622,11 +1622,12 @@ class ArticuloController extends Controller
         if (count($query) > 0) {
             foreach ($query as $row) {
                 $output['data'] .= '<tr>';
+                $ocultos = '';
                 for ($i = 0; $i < $cont; $i++) {
                     if ($muestraColumnas[$i]) {
-                        $output['data'] .= '<td class="'.$columnsOut[$i].'">'.$row[$columnsOut[$i]].'</td>';
+                        $output['data'] .= '<td class="'.$columnsOut[$i].'">'.e($row[$columnsOut[$i]]).'</td>';
                     } else {
-                        $output['data'] .= '<input type="hidden" class="'.$columnsOut[$i].'" value="'.$row[$columnsOut[$i]].'">';
+                        $ocultos .= '<input type="hidden" class="'.$columnsOut[$i].'" value="'.e($row[$columnsOut[$i]]).'">';
                     }
                 }
                 if ($listaPrecio['mostrar']) {
@@ -1636,6 +1637,7 @@ class ArticuloController extends Controller
                     $output['data'] .= '<td class="preciolista text-right">'.$precioFmt.'</td>';
                 }
                 $output['data'] .= '<td>'
+                    .$ocultos
                     .'<a class="btn btn-warning btn-sm eligeconsultaarticulo">Elegir</a>';
                 if ($puedeConsultarArticulo) {
                     $urlConsulta = ArticuloConsultaDesdeModal::urlEditar((int) $row['articulo_id']);

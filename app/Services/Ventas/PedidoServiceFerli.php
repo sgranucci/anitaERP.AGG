@@ -847,6 +847,12 @@ class PedidoServiceFerli
 			return ['error' => 'Cliente inexistente'];
 		}
 
+		// 350 renglones × ~23 campos queda bajo max_input_vars (10000). Por encima PHP descarta campos y el pedido se graba incompleto.
+		$cantidadItems = is_array($data['articulos_id'] ?? null) ? count($data['articulos_id']) : 0;
+		if ($cantidadItems > 350) {
+			return ['error' => 'No puede generar pedidos con más de 350 ítems'];
+		}
+
 		if ($funcion === 'create') {
 			$errorL8 = FerliL8AltasBloqueadasSupport::errorSiNoPuedeCrearPedido();
 			if ($errorL8 !== null) {

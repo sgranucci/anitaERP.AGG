@@ -23,7 +23,7 @@
 				<input type="hidden" class="categoria_id" name="categoria_ids[]" value="" >
 				<input type="hidden" class="subcategoria_id" name="subcategoria_ids[]" value="" >
 				<input type="hidden" class="articulo_id_previa" name="articulo_id_previa[]" value="" >
-				<button type="button" title="Consulta articulos" class="btn-accion-tabla consultaarticulo tooltipsC" data-solo-facturable="1">
+				<button type="button" title="Consulta art&iacute;culos (F1)" class="btn-accion-tabla consultaarticulo tooltipsC" data-solo-facturable="1">
 						<i class="fa fa-search text-primary"></i>
 				</button>
 				<button type="button" title="Concepto sin artículo (F1). Después complete el detalle y el precio." class="btn-accion-tabla consultaconceptoventa tooltipsC">

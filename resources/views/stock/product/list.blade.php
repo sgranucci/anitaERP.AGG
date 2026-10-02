@@ -30,7 +30,7 @@ Art&iacute;culos
 @endif
 <script>
 function checkState(index){
-  var confirmar = confirm("¿Desea inactivar combinaciones de forma masiva?");
+  var confirmar = confirm("¿Inactivar la fábrica de todas las combinaciones?\n\nFab. on pasa a Fab. off en todas.\nEl local (Loc. on / Loc. off) no se modifica.");
   if(confirmar){
 
     var id = $("#producto_id").val();
@@ -93,7 +93,7 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end" style="gap:.4rem;">
                     <span id="container-button-state">
                         @if (can('cambiar-estado-combinaciones', false))
-                            <button type="button" class="btn btn-outline-light btn-sm" onclick="checkState(0)">Inactivar combinaciones</button>
+                            <button type="button" class="btn btn-outline-light btn-sm" onclick="checkState(0)" title="Pasa todas las combinaciones de Fab. on a Fab. off. El local no se toca.">Inactivar f&aacute;brica (todas)</button>
                         @endif
                     </span>
                     @if (can('crear-articulos-disenio', false))

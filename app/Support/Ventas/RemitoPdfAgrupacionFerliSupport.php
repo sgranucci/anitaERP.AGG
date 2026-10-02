@@ -17,12 +17,14 @@ final class RemitoPdfAgrupacionFerliSupport
         foreach ($items as $item) {
             $articuloId = (int) ($item['articulo_id'] ?? 0);
             $combinacionId = (int) ($item['combinacion_id'] ?? 0);
+            $despacho = trim((string) ($item['despacho'] ?? ''));
             $key = $articuloId > 0
-                ? $articuloId.'|'.$combinacionId
+                ? $articuloId.'|'.$combinacionId.'|'.$despacho
                 : 'line|'.md5(json_encode([
                     $item['sku'] ?? '',
                     $item['detalle'] ?? '',
                     $item['color'] ?? '',
+                    $despacho,
                     $item['id'] ?? uniqid('', true),
                 ]));
 
@@ -34,6 +36,7 @@ final class RemitoPdfAgrupacionFerliSupport
                     'detalle' => (string) ($item['detalle'] ?? ''),
                     'color' => (string) ($item['color'] ?? ''),
                     'leyenda' => (string) ($item['leyenda'] ?? ''),
+                    'despacho' => $despacho,
                     'cantidad' => 0.0,
                     'pieza' => 0.0,
                     'caja' => 0.0,
@@ -104,10 +107,12 @@ final class RemitoPdfAgrupacionFerliSupport
             $precioSin = array_key_exists('preciosindescuento', $item)
                 ? round((float) $item['preciosindescuento'], 2)
                 : $precio;
+            $despacho = trim((string) ($item['despacho'] ?? ''));
             $key = $sku.'|'
                 .$colorKey.'|'
                 .number_format($precio, 2, '.', '').'|'
-                .number_format($precioSin, 2, '.', '');
+                .number_format($precioSin, 2, '.', '').'|'
+                .$despacho;
 
             if (! isset($grupos[$key])) {
                 $grupos[$key] = $item;

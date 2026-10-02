@@ -381,59 +381,135 @@
         return msEnfocarCampoFila($alt);
     }
 
-    function msValidarSkuFilaConEnter(input) {
-        if (!input || !input.classList || !input.classList.contains('codigoarticulo')) {
+    function msCampoNavegableFila(el) {
+        if (!el || el.disabled || el.readOnly) {
             return false;
         }
-        if (!input.closest || !input.closest('#tabla-items-movimientostock')) {
+        if (el.type === 'hidden' || el.type === 'checkbox' || el.type === 'button' || el.type === 'submit') {
             return false;
         }
-
-        var $input = $(input);
-        var $tr = $input.closest('tr');
-        var sku = ($input.val() || '').trim();
-
-        if (!sku) {
-            return true;
+        if (!el.matches || !el.matches('input, select, textarea')) {
+            return false;
         }
-
-        // Ya resuelto: solo pasar el foco a cantidad (no re-disparar change ni borrar cantidad)
-        if (msFilaArticuloId($tr) && msFilaDescripcion($tr)) {
-            msEnfocarCantidadFila($tr);
-            return true;
+        if (!el.offsetParent) {
+            return false;
         }
-
-        $input.trigger('change');
+        var estilo = window.getComputedStyle(el);
+        if (!estilo || estilo.visibility === 'hidden' || estilo.display === 'none') {
+            return false;
+        }
+        var celda = el.closest('td');
+        if (celda) {
+            var estiloCelda = window.getComputedStyle(celda);
+            if (estiloCelda && (estiloCelda.display === 'none' || estiloCelda.visibility === 'hidden')) {
+                return false;
+            }
+        }
         return true;
     }
 
-    function msAvanzarCantidadAAlternativaConEnter(input) {
-        if (!input || !input.classList || !input.classList.contains('cantidad-stock')) {
-            return false;
+    function msCamposNavegablesFila($tr) {
+        return $tr.find('input, select, textarea').filter(function () {
+            return msCampoNavegableFila(this);
+        }).get();
+    }
+
+    function msEliminarRenglonArticuloInexistente($tr) {
+        if (!$tr || !$tr.length) {
+            return;
         }
-        if (!input.closest || !input.closest('#tabla-items-movimientostock')) {
-            return false;
+        var $filas = $('#tbody-tabla tr.item-pedido');
+        if ($filas.length <= 1) {
+            $tr.find('.codigoarticulo').val('').trigger('focus');
+            $tr.find('input.articulo_id[name="articulos_id[]"]').val('');
+            $tr.find('.descripcionarticulo').val('');
+            return;
         }
-        var $tr = $(input).closest('tr');
-        // Ferli no-venta: Enter en cantidad → precio (no hay UM alt.).
-        if (msEsModoFerli()) {
-            if (!msEsLineaSimple($tr)) {
-                return false;
+        var $siguiente = $tr.nextAll('tr.item-pedido').first();
+        var $previo = $tr.prevAll('tr.item-pedido').first();
+        $tr.remove();
+        if (typeof actualizaRenglones === 'function') {
+            actualizaRenglones();
+        }
+        if (typeof TotalParesPedido === 'function') {
+            TotalParesPedido();
+        }
+        var $foco = $siguiente.length ? $siguiente : $previo;
+        if ($foco.length) {
+            $foco.find('.codigoarticulo').trigger('focus');
+        }
+    }
+
+    window.msEliminarRenglonArticuloInexistente = msEliminarRenglonArticuloInexistente;
+
+    function msEnfocarSiguienteCampoFila(actual) {
+        var $tr = $(actual).closest('tr.item-pedido');
+        if (!$tr.length) {
+            return;
+        }
+        var campos = msCamposNavegablesFila($tr);
+        var indice = campos.indexOf(actual);
+        if (indice < 0) {
+            indice = campos.indexOf($(actual).get(0));
+        }
+        if (indice >= 0 && campos[indice + 1]) {
+            campos[indice + 1].focus();
+            if (campos[indice + 1].select) {
+                campos[indice + 1].select();
             }
+            return;
+        }
+        if (typeof agregaRenglon === 'function') {
+            agregaRenglon();
+        }
+    }
+
+    window.msEnfocarSiguienteCampoFila = msEnfocarSiguienteCampoFila;
+
+    function msEnterEnFilaItem(input) {
+        if (!input || !input.closest || !input.closest('#tabla-items-movimientostock tr.item-pedido')) {
+            return false;
+        }
+        if (input.closest('.modal')) {
+            return false;
+        }
+        if (!msCampoNavegableFila(input) && !input.classList.contains('codigoarticulo')) {
+            return false;
+        }
+
+        var $tr = $(input).closest('tr.item-pedido');
+        if (input.classList.contains('codigoarticulo')) {
+            var sku = (input.value || '').trim();
+            if (!sku) {
+                msEliminarRenglonArticuloInexistente($tr);
+                return true;
+            }
+            if (msFilaArticuloId($tr) && msFilaDescripcion($tr)) {
+                msEnfocarSiguienteCampoFila(input);
+                return true;
+            }
+            $(input).data('enter-borrar-si-falta', 1);
+            $(input).trigger('change');
+            return true;
+        }
+
+        if (input.classList.contains('cantidad-stock') && !msEsModoFerli()) {
+            if (typeof window.msRecalcularCantidadesStandard === 'function') {
+                window.msRecalcularCantidadesStandard($tr, 'cantidad');
+            }
+            if (typeof window.movStockProgramarPreviewAsiento === 'function') {
+                window.movStockProgramarPreviewAsiento();
+            }
+        } else if (input.classList.contains('cantidad') || input.classList.contains('precio')) {
             if (typeof TotalParesPedido === 'function') {
                 TotalParesPedido();
             }
             if (typeof window.movStockProgramarPreviewAsiento === 'function') {
                 window.movStockProgramarPreviewAsiento();
             }
-            return msEnfocarCampoFila($tr.find('input.precio').first());
         }
 
-        msRecalcularCantidadesStandard($tr, 'cantidad');
-        if (typeof window.movStockProgramarPreviewAsiento === 'function') {
-            window.movStockProgramarPreviewAsiento();
-        }
-        msEnfocarCantidadAlternativaFila($tr);
+        msEnfocarSiguienteCampoFila(input);
         return true;
     }
 
@@ -447,9 +523,7 @@
             if (e.key !== 'Enter' && e.which !== 13 && e.keyCode !== 13) {
                 return;
             }
-            var handled = msValidarSkuFilaConEnter(e.target)
-                || msAvanzarCantidadAAlternativaConEnter(e.target);
-            if (!handled) {
+            if (!msEnterEnFilaItem(e.target)) {
                 return;
             }
             e.preventDefault();

@@ -61,13 +61,18 @@ final class CambioDevolucionMarketplaceEmisionService
             return ['ok' => false, 'error' => $e->getMessage()];
         }
 
+        $ventaOriginal = $cambio->ventaOriginal;
+        $doc = preg_replace('/\D/', '', (string) ($cambio->receptor_documento ?: $ventaOriginal?->nroinscripcion ?: '')) ?? '';
         $input = [
             'lineas' => $lineas,
             'medios_pago' => $medios,
             'cliente_id' => $cambio->cliente_id,
             'receptor' => [
-                'nombre' => $cambio->receptor_nombre,
-                'nro_documento' => $cambio->receptor_documento,
+                'nombre' => trim((string) ($cambio->receptor_nombre ?: $ventaOriginal?->nombre ?: '')),
+                'nro_documento' => $doc,
+                'domicilio' => (string) ($ventaOriginal?->domicilio ?? ''),
+                'provincia_id' => (int) ($ventaOriginal?->provincia_id ?? 0) ?: null,
+                'localidad_id' => (int) ($ventaOriginal?->localidad_id ?? 0) ?: null,
             ],
         ];
 

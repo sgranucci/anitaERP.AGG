@@ -188,24 +188,27 @@ class CombinacionController extends Controller
 		// Lee la primer combinacion para copiar datos default
         $primer_combinacion = Combinacion::where("articulo_id",$data['articulo_id'])->with("capearts")->with("avioarts")->get()->first();
 
+		$plarmado_id = null;
+		$fondo_id = null;
+		$horma_id = null;
+		$serigrafia_id = null;
+
 		if ($primer_combinacion)
 		{
-        	$plarmado_id = $primer_combinacion->plarmado_id;
-        	$fondo_id = $primer_combinacion->fondo_id;
-        	$horma_id = $primer_combinacion->horma_id;
-        	$serigrafia_id = $primer_combinacion->serigrafia_id;
+        	$plarmado_id = $this->idForaneoONull($primer_combinacion->plarmado_id);
+        	$fondo_id = $this->idForaneoONull($primer_combinacion->fondo_id);
+        	$horma_id = $this->idForaneoONull($primer_combinacion->horma_id);
+        	$serigrafia_id = $this->idForaneoONull($primer_combinacion->serigrafia_id);
 		}
 		else
 		{
 			$articulo = Articulo::where("id",$data['articulo_id'])->first();
 
-        	$plarmado_id = null;
-
 			if ($articulo)
 			{
-				$fondo_id = $articulo->fondo_id;
-				$horma_id = $articulo->horma_id;
-				$serigrafia_id = $articuo->serigrafia_id;
+				$fondo_id = $this->idForaneoONull($articulo->fondo_id);
+				$horma_id = $this->idForaneoONull($articulo->horma_id);
+				$serigrafia_id = $this->idForaneoONull($articulo->serigrafia_id);
 			}
 		}
         if (!array_key_exists('plvista_16_26', $data))
@@ -788,5 +791,17 @@ class CombinacionController extends Controller
         return view('stock.combinacion.catalogo.create', compact('linea_query', 'mventa_query', 'categoria_query',
 								'subcategoria_query', 'precios_enum'));
     }
+
+	/** 0 no es un id: las combinaciones viejas lo tienen cargado y la FK lo rechaza. */
+	private function idForaneoONull(mixed $id): ?int
+	{
+		if ($id === null || $id === '') {
+			return null;
+		}
+
+		$id = (int) $id;
+
+		return $id > 0 ? $id : null;
+	}
 
 }

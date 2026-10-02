@@ -19,6 +19,7 @@ use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
 use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockCanjeSupport;
+use App\Support\Stock\MovimientoStockConsumoOtAvisoSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\MovimientoStockLoteNumeracionSupport;
@@ -237,6 +238,7 @@ class MovimientoStockService
 				$numeropartes = $this->normalizarArrayLineasFormulario($data['numeropartes'] ?? []);
 				$colores = $this->normalizarArrayLineasFormulario($data['colores_id'] ?? []);
 				$talles = $this->normalizarArrayLineasFormulario($data['talles_id'] ?? []);
+				$sentidos = $this->normalizarArrayLineasFormulario($data['sentidos'] ?? []);
 				$fechaPrecio = ! empty($data['fecha']) ? \Carbon\Carbon::parse($data['fecha']) : \Carbon\Carbon::today();
 
 				// Ferli: si hay JSON de medidas, la suma de pares alinea cantidades[] (evita desfase vs talles).
@@ -248,6 +250,44 @@ class MovimientoStockService
 						}
 						$signoCant = (float) ($cantidades[$iLinea] ?? 0);
 						$cantidades[$iLinea] = $signoCant < 0 ? -abs($sumaMed) : abs($sumaMed);
+					}
+				}
+
+				$ordentrabajoIdConsumo = null;
+				$aplicarOtEnEgresos = false;
+				$esCanjeDoc = MovimientoStockCanjeSupport::esTipoCanje($tipotransaccion);
+				if (
+					MovimientoStockFerliSupport::esCalzadosFerli()
+					&& array_key_exists('aplicar_consumo_ot', $data)
+					&& MovimientoStockConsumoOtAvisoSupport::esDocumentoEgreso(
+						$tipotransaccion,
+						is_string($signoCantidadMovimiento) ? $signoCantidadMovimiento : null
+					)
+				) {
+					$loteAviso = trim((string) ($data['lote_consulta_ot'] ?? ''));
+					if ($loteAviso === '') {
+						$loteAviso = (string) ($data['lote'] ?? '');
+					}
+					$avisoOt = MovimientoStockConsumoOtAvisoSupport::avisoSiLoteEsOtConStock(
+						$loteAviso,
+						(int) ($data['deposito_id'] ?? 0),
+						MovimientoStockConsumoOtAvisoSupport::lineasDesdePayload(
+							$articulos,
+							$combinaciones,
+							$cantidades,
+							$medidas,
+							$sentidos,
+							$esCanjeDoc
+						),
+						$funcion === 'update' ? (int) $movimientostock_id : null
+					);
+					if ($avisoOt !== null) {
+						$confirmado = filter_var($data['aplicar_consumo_ot'] ?? false, FILTER_VALIDATE_BOOLEAN);
+						if (! $confirmado || (int) ($avisoOt['ordentrabajo_id'] ?? 0) <= 0) {
+							throw new \Exception((string) $avisoOt['mensaje_bloqueo']);
+						}
+						$ordentrabajoIdConsumo = (int) $avisoOt['ordentrabajo_id'];
+						$aplicarOtEnEgresos = true;
 					}
 				}
 
@@ -339,6 +379,19 @@ class MovimientoStockService
 						}
 					}
 
+					$esLineaEgreso = MovimientoStockConsumoOtAvisoSupport::lineaEsEgreso(
+						$tipotransaccion,
+						is_string($signoCantidadMovimiento) ? $signoCantidadMovimiento : null,
+						(float) ($cantidades[$i] ?? 0),
+						(string) ($sentidos[$i] ?? '')
+					);
+					$loteLinea = $data['lote'];
+					$otLinea = null;
+					if ($aplicarOtEnEgresos && $esLineaEgreso) {
+						$loteLinea = 0;
+						$otLinea = $ordentrabajoIdConsumo;
+					}
+
 					$dataArticuloMovimiento = [
 						'fecha' => $data['fecha'],
 						'fechajornada' => $data['fecha'],
@@ -349,8 +402,8 @@ class MovimientoStockService
 						'bien_uso_id' => ! empty($data['bien_uso_id']) ? (int) $data['bien_uso_id'] : null,
 						'venta_id' => null,
 						'pedido_combinacion_id' => null,
-						'ordentrabajo_id' => null,
-						'lote' => $data['lote'],
+						'ordentrabajo_id' => $otLinea,
+						'lote' => $loteLinea,
 						'articulo_id' => $articulos[$i],
 						'color_id' => (($c = (int) ($colores[$i] ?? 0)) > 0) ? $c : null,
 						'talle_id' => (($t = (int) ($talles[$i] ?? 0)) > 0) ? $t : null,

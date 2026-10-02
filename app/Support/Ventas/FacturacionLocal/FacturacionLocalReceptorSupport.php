@@ -169,10 +169,24 @@ final class FacturacionLocalReceptorSupport
 
         $doc = preg_replace('/\D/', '', (string) ($cliente->numerodocumento ?? '')) ?? '';
         $tipodocExt = (int) ($cliente->tipodocumentos?->codigoexterno ?? 0);
+        $docIngresado = self::documentoDesdeReceptor($receptor);
+        // Factura A eventual (shell sin CUIT): el padrón es el del receptor, no el del maestro.
+        if (strlen($docIngresado) === 11) {
+            $doc = $docIngresado;
+            $tipodocExt = 80;
+        }
         $documentoValido = $doc !== '' && (int) $doc > 0 && $tipodocExt > 0 && $tipodocExt !== 99;
         $letra = strtoupper(trim((string) ($cliente->condicionivas?->letra ?? 'B')));
         if ($letra === '') {
             $letra = 'B';
+        }
+        $provinciaId = (int) ($receptor['provincia_id'] ?? 0);
+        if ($provinciaId <= 0) {
+            $provinciaId = (int) ($cliente->provincia_id ?: 0);
+        }
+        $localidadId = (int) ($receptor['localidad_id'] ?? 0);
+        if ($localidadId <= 0) {
+            $localidadId = (int) ($cliente->localidad_id ?: 0);
         }
 
         $nombre = trim((string) ($receptor['nombre'] ?? $cliente->nombre ?? ''));
@@ -187,8 +201,8 @@ final class FacturacionLocalReceptorSupport
                 'cliente_id' => $clienteId,
                 'letra' => $letra,
                 'tiene_datos_cliente' => true,
-                'provincia_id' => (int) ($cliente->provincia_id ?: 0) ?: null,
-                'localidad_id' => (int) ($cliente->localidad_id ?: 0) ?: null,
+                'provincia_id' => $provinciaId > 0 ? $provinciaId : null,
+                'localidad_id' => $localidadId > 0 ? $localidadId : null,
                 'omitir_percepciones' => $letra === 'B',
                 'arca_receptor' => [
                     'tipodoc' => $tipodocExt,
@@ -200,8 +214,8 @@ final class FacturacionLocalReceptorSupport
                     'nombre' => $nombre,
                     'numerodocumento' => $doc,
                     'domicilio' => $domicilio,
-                    'localidad_id' => (int) ($cliente->localidad_id ?: 0) ?: null,
-                    'provincia_id' => (int) ($cliente->provincia_id ?: 0) ?: null,
+                    'localidad_id' => $localidadId > 0 ? $localidadId : null,
+                    'provincia_id' => $provinciaId > 0 ? $provinciaId : null,
                 ],
             ];
         }
@@ -215,6 +229,21 @@ final class FacturacionLocalReceptorSupport
         $cf['venta_receptor']['domicilio'] = $domicilio;
 
         return $cf;
+    }
+
+    /**
+     * @param  array<string,mixed>  $receptor
+     */
+    private static function documentoDesdeReceptor(array $receptor): string
+    {
+        $raw = $receptor['numerodocumento']
+            ?? $receptor['nro_documento']
+            ?? $receptor['nrodoc']
+            ?? $receptor['documento']
+            ?? $receptor['cuit']
+            ?? '';
+
+        return preg_replace('/\D/', '', (string) $raw) ?? '';
     }
 
     /**

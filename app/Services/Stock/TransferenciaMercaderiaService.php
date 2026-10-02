@@ -665,7 +665,13 @@ class TransferenciaMercaderiaService
                             $payloadSalida,
                             esSalida: true,
                             bienUsoId: $origenBienUso ? $bienUsoOrigenId : null,
-                            empresaId: $empresaId > 0 ? $empresaId : TransferenciaMercaderiaIntercompanySupport::empresaIdDesdeDepositos($depositoEntrada, $depositoSalida)
+                            empresaId: $empresaId > 0 ? $empresaId : TransferenciaMercaderiaIntercompanySupport::empresaIdDesdeDepositos($depositoEntrada, $depositoSalida),
+                            extra: array_key_exists('aplicar_consumo_ot', $cabecera)
+                                ? [
+                                    'aplicar_consumo_ot' => $cabecera['aplicar_consumo_ot'],
+                                    'lote_consulta_ot' => (string) ($cabecera['lote_formulario'] ?? ''),
+                                ]
+                                : []
                         );
                         $transferencia->movimientostock_salida_id = (int) $salida['id'];
                         $transferencia->save();
@@ -1371,7 +1377,8 @@ class TransferenciaMercaderiaService
         bool $esSalida,
         ?int $bienUsoId = null,
         ?int $empresaId = null,
-        bool $omitirValidacionSaldo = false
+        bool $omitirValidacionSaldo = false,
+        array $extra = []
     ): array {
         $data = array_merge($payloadLineas, [
             'tipotransaccion_stock_id' => $tipotransaccionId,
@@ -1398,7 +1405,7 @@ class TransferenciaMercaderiaService
             'empresa' => config('app.empresa'),
             'omitir_asiento_contable' => true,
             'omitir_validacion_saldo' => $omitirValidacionSaldo,
-        ]);
+        ], $esSalida ? $extra : []);
 
         $resultado = $this->movimientoStockService->guardaMovimientoStock($data, 'create');
         if (! is_array($resultado) || empty($resultado['id'])) {

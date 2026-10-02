@@ -13,7 +13,9 @@ use App\Repositories\Ventas\Ordentrabajo_TareaRepositoryInterface;
 use App\Queries\Stock\Articulo_MovimientoQueryInterface;
 use App\Models\Stock\Modulo;
 use App\Models\Stock\Talle;
+use App\Support\Database\DbContencionSupport;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
+use App\Support\Stock\ArticuloMovimientoReferenciasSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -96,8 +98,10 @@ class Articulo_MovimientoService
 				|| $dataMovimiento['listaprecio_id'] === ''
 				|| (int) $dataMovimiento['listaprecio_id'] <= 0)
 				$dataMovimiento['listaprecio_id'] = null;
-			if ($dataMovimiento['moneda_id'] == 'NaN')
-				$dataMovimiento['moneda_id'] = null;
+			$monedaId = $dataMovimiento['moneda_id'] ?? null;
+			if ($monedaId === null || $monedaId === '' || $monedaId === 'NaN' || (int) $monedaId <= 0) {
+				$dataMovimiento['moneda_id'] = 1;
+			}
 			if ($dataMovimiento['incluyeimpuesto'] == 'NaN')
 				$dataMovimiento['incluyeimpuesto'] = null;
 			foreach ([
@@ -119,9 +123,10 @@ class Articulo_MovimientoService
 
 			unset($dataMovimiento['omitir_validacion_saldo']);
 
+			$dataMovimiento = ArticuloMovimientoReferenciasSupport::normalizarLinea($dataMovimiento);
 			$dataMovimiento = $this->filtrarDatosParaTablaArticuloMovimiento($dataMovimiento);
 
-			$articulo_movimiento = $this->articulo_movimientoRepository->create($dataMovimiento);
+			$articulo_movimiento = $this->crearArticuloMovimiento($dataMovimiento);
 
 			if (isset($anita['error']))
 			{
@@ -196,7 +201,7 @@ class Articulo_MovimientoService
 				if (array_key_exists('cantidad', $data) && $data['cantidad'] > 0)
 					$data['cantidad'] = $data['cantidad']*($tipotransaccion->signo == 'S' ? 1 : -1);
 				 
-				$articulo_movimiento_talle = $this->articulo_movimiento_talleRepository->create($data);
+				$articulo_movimiento_talle = $this->crearArticuloMovimientoTalle($data);
 			}
 			else
 				throw new Exception('No encontro movimiento en articulo_movimiento.');
@@ -217,7 +222,7 @@ class Articulo_MovimientoService
 						$data['cantidad'] = -$data['cantidad'];
 				}
 			}
-			$articulo_movimiento_talle = $this->articulo_movimiento_talleRepository->create($data);
+			$articulo_movimiento_talle = $this->crearArticuloMovimientoTalle($data);
 		}
 
 		return $articulo_movimiento_talle;
@@ -352,7 +357,7 @@ class Articulo_MovimientoService
 
 			if (! isset($grupos[$clave])) {
 				$meta = $this->situacionFilaReporteStockOt($movimiento, $situacionesPorOt);
-				[$modulo, $cantidadModulo] = $this->curvaModuloReporteStockOt(
+				[$modulo, $cantidadModulo, $moduloNombre] = $this->curvaModuloReporteStockOt(
 					(int) ($movimiento['modulo_id'] ?? 0),
 					$modulosCache
 				);
@@ -370,6 +375,7 @@ class Articulo_MovimientoService
 					'situacion' => $meta['situacion'],
 					'en_produccion' => $meta['en_produccion'],
 					'modulo_id' => $movimiento['modulo_id'] ?? 0,
+					'modulo_nombre' => $moduloNombre,
 					'cantidadmodulo' => $cantidadModulo,
 					'modulo' => $modulo,
 					'pedido' => $movimiento['pedido'] ?? null,
@@ -388,6 +394,7 @@ class Articulo_MovimientoService
 							$movimiento['ordentrabajo_codigo'] ?? ''
 						),
 						sprintf('%010d', (int) ($movimiento['deposito_id'] ?? 0)),
+						$esMovimientos ? sprintf('%010d', (int) ($movimiento['id'] ?? 0)) : '',
 					]),
 				];
 			}
@@ -442,7 +449,8 @@ class Articulo_MovimientoService
 				$medidas,
 				(int) $grupo['deposito_id'],
 				(string) $grupo['deposito_codigo'],
-				(string) $grupo['deposito_nombre']
+				(string) $grupo['deposito_nombre'],
+				(string) ($grupo['modulo_nombre'] ?? '')
 			);
 		}
 
@@ -777,6 +785,37 @@ class Articulo_MovimientoService
 	}
 
 	/**
+	 * @param  array<string, mixed>  $data
+	 */
+	private function crearArticuloMovimiento(array $data)
+	{
+		try {
+			return $this->articulo_movimientoRepository->create($data);
+		} catch (\Throwable $e) {
+			if (DbContencionSupport::esViolacionClaveForanea($e)) {
+				throw new \RuntimeException(ArticuloMovimientoReferenciasSupport::mensajeClaveForanea($e), 0, $e);
+			}
+			throw $e;
+		}
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 */
+	private function crearArticuloMovimientoTalle(array $data)
+	{
+		$data = ArticuloMovimientoReferenciasSupport::normalizarTalle($data);
+		try {
+			return $this->articulo_movimiento_talleRepository->create($data);
+		} catch (\Throwable $e) {
+			if (DbContencionSupport::esViolacionClaveForanea($e)) {
+				throw new \RuntimeException(ArticuloMovimientoReferenciasSupport::mensajeClaveForanea($e), 0, $e);
+			}
+			throw $e;
+		}
+	}
+
+	/**
 	 * Quita campos legacy (Anita / formulario) que no existen en articulo_movimiento.
 	 *
 	 * @param  array<string, mixed>  $data
@@ -846,13 +885,13 @@ class Articulo_MovimientoService
 	}
 
 	/**
-	 * @param  array<int, array{0: list<array{medida: mixed, cantidad: mixed}>, 1: float|int}>  $modulosCache
-	 * @return array{0: list<array{medida: mixed, cantidad: mixed}>, 1: float|int}
+	 * @param  array<int, array{0: list<array{medida: mixed, cantidad: mixed}>, 1: float|int, 2: string}>  $modulosCache
+	 * @return array{0: list<array{medida: mixed, cantidad: mixed}>, 1: float|int, 2: string}
 	 */
 	private function curvaModuloReporteStockOt(int $moduloId, array &$modulosCache): array
 	{
 		if ($moduloId <= 0) {
-			return [[], 0];
+			return [[], 0, ''];
 		}
 		if (isset($modulosCache[$moduloId])) {
 			return $modulosCache[$moduloId];
@@ -860,20 +899,24 @@ class Articulo_MovimientoService
 
 		$modulo = [];
 		$cantidadModulo = 0;
+		$moduloNombre = '';
 		$moduloTalle = Modulo::where('id', $moduloId)->with('talles')->first();
-		if ($moduloTalle && $moduloTalle->talles) {
-			foreach ($moduloTalle->talles as $unModulo) {
-				$talle = Talle::find($unModulo->pivot->talle_id);
-				if ($talle) {
-					$modulo[] = [
-						'medida' => $unModulo->nombre,
-						'cantidad' => $unModulo->pivot->cantidad,
-					];
-					$cantidadModulo += $unModulo->pivot->cantidad;
+		if ($moduloTalle) {
+			$moduloNombre = trim((string) ($moduloTalle->nombre ?? ''));
+			if ($moduloTalle->talles) {
+				foreach ($moduloTalle->talles as $unModulo) {
+					$talle = Talle::find($unModulo->pivot->talle_id);
+					if ($talle) {
+						$modulo[] = [
+							'medida' => $unModulo->nombre,
+							'cantidad' => $unModulo->pivot->cantidad,
+						];
+						$cantidadModulo += $unModulo->pivot->cantidad;
+					}
 				}
 			}
 		}
-		$modulosCache[$moduloId] = [$modulo, $cantidadModulo];
+		$modulosCache[$moduloId] = [$modulo, $cantidadModulo, $moduloNombre];
 
 		return $modulosCache[$moduloId];
 	}
@@ -901,7 +944,8 @@ class Articulo_MovimientoService
 		array $medidas,
 		int $depositoId = 0,
 		string $depositoCodigo = '',
-		string $depositoNombre = ''
+		string $depositoNombre = '',
+		string $moduloNombre = ''
 	): array {
 		$totalPares = 0.0;
 		foreach ($medidas as $m) {
@@ -923,6 +967,7 @@ class Articulo_MovimientoService
 			'modulo_id' => $modulo_id,
 			'cantidadmodulo' => $cantidadModulo,
 			'modulo' => $modulo,
+			'modulo_nombre' => $moduloNombre,
 			'pedido' => $pedido,
 			'ordencompra' => $ordencompra,
 			'medidas' => $medidas,

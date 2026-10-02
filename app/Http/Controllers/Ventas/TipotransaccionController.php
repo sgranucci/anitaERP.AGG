@@ -7,6 +7,7 @@ use App\Http\Requests\ValidacionTipotransaccion;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
+use App\Support\Database\SqlDialectSupport;
 use App\Services\Arca\ArcaTiposComprobanteCatalogoService;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -357,8 +358,8 @@ class TipotransaccionController extends Controller
             ->with('conceptoVenta:id,codigo,nombre,descripcion,impuesto_id')
             ->whereIn('operacion', ['V', 'U', 'C'])
             ->where(function ($q) use ($abrev) {
-                $q->where('abreviatura', $abrev)
-                    ->orWhere('codigo', $abrev);
+                $q->whereRaw(SqlDialectSupport::lower('abreviatura').' = ?', [strtolower($abrev)])
+                    ->orWhereRaw(SqlDialectSupport::lower('codigo').' = ?', [strtolower($abrev)]);
             })
             ->first();
 

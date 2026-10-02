@@ -53,6 +53,7 @@ use App\Models\Configuracion\Impuesto;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
+use App\Models\Stock\Lote;
 use App\Models\Stock\Linea;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
@@ -2595,7 +2596,9 @@ class FacturacionService
 		VentaNotaCreditoPrecioLiteralSupport::aplicarImpuestosFacturaOrigen($data);
 		\App\Support\Ventas\FacturacionLocal\FacturacionLocalNcPrecioSupport::normalizarPayloadNc($data);
 
-		UsuarioPreferenciaFacturacionSupport::guardar($data);
+		if (empty($data['_sin_guardar_preferencia'])) {
+			UsuarioPreferenciaFacturacionSupport::guardar($data);
+		}
 
 		// Recibe datos para facturar
 		$cliente_id = $data['cliente_id'];
@@ -2949,6 +2952,17 @@ class FacturacionService
 						}
 					}
 				}
+
+				if (! $esPosMostrador && abs($precioLineaPreview) > 0.00001 && $conceptoVentaIdLinea === null) {
+					$impuestoFormTexto = 0;
+					if (is_array($impuestosIdsInput) && isset($impuestosIdsInput[$offItem]) && (string) $impuestosIdsInput[$offItem] !== '') {
+						$impuestoFormTexto = (int) $impuestosIdsInput[$offItem];
+					}
+					if ($impuestoFormTexto <= 0) {
+						return ['error' => 'Indicá la alícuota de IVA del renglón '.($offItem + 1).' (Exento, 10,5% o 21%).'];
+					}
+					$impuesto_id = $impuestoFormTexto;
+				}
 			}
 
 			$listaprecio_id = 1;
@@ -3149,6 +3163,18 @@ class FacturacionService
 		$provinciaPedido = (int) ($data['provincia_id'] ?? 0);
 		if ($provinciaPedido > 0 && empty($datosCliente['omitir_percepciones'])) {
 			$datosCliente['provincia'] = $provinciaPedido;
+		}
+		// Factura A eventual (locales / Tiendanube): el padrón es del CUIT del receptor,
+		// no del cliente shell. El shell no aporta CM05 ni exclusiones.
+		if (empty($datosCliente['omitir_percepciones'])) {
+			$docReceptor = preg_replace('/\D/', '', (string) ($data['venta_receptor']['numerodocumento'] ?? '')) ?? '';
+			if (strlen($docReceptor) === 11) {
+				$docCliente = preg_replace('/\D/', '', (string) ($datosCliente['numerodocumento'] ?? '')) ?? '';
+				$datosCliente['numerodocumento'] = $docReceptor;
+				if ($docCliente !== $docReceptor) {
+					$datosCliente['id'] = null;
+				}
+			}
 		}
 		NotaCreditoPercepcionIibbSupport::anexarOrigenSiCorresponde(
 			$datosCliente,
@@ -9033,6 +9059,24 @@ class FacturacionService
 		$codigoTipoTransaccionPad = $identificacionPdf['codigo_afip_pad'];
 		$tblItem = [];
 		$flConDescuento = false;
+		// Ferli: el despacho de importación vive en el lote (lote.numerodespacho).
+		// L8 lo grababa en Anita como compa_despacho; el PDF lo imprime bajo el color.
+		$despachoPorLote = [];
+		if (EntornoEmpresaSupport::esFerli()) {
+			$loteIds = [];
+			foreach ($venta->venta_emisiones as $ventaItemLote) {
+				$loteId = (int) ($ventaItemLote->loteimportacion_id ?? 0);
+				if ($loteId > 0) {
+					$loteIds[$loteId] = $loteId;
+				}
+			}
+			if ($loteIds !== []) {
+				$despachoPorLote = Lote::query()
+					->whereIn('id', array_values($loteIds))
+					->pluck('numerodespacho', 'id')
+					->all();
+			}
+		}
 		foreach ($venta->venta_emisiones as $ventaItem) {
 			$descuentoLinea = $ventaItem->descuento;
 			$precioSinDescuento = $ventaItem->precio;
@@ -9089,10 +9133,15 @@ class FacturacionService
 					? $talle->codigo
 					: ($talle->nombre ?? '')));
 			}
+			$loteImportacionId = (int) ($ventaItem->loteimportacion_id ?? 0);
+			$despachoItem = $loteImportacionId > 0
+				? trim((string) ($despachoPorLote[$loteImportacionId] ?? ''))
+				: '';
 			$tblItem[] = [
 				'sku' => $sku,
 				'detalle' => $detalle,
 				'leyenda' => $leyendaItem,
+				'despacho' => $despachoItem,
 				'color' => $colorLinea,
 				'cantidad' => $cantidad,
 				'kilodescuento' => $kiloDescuento,

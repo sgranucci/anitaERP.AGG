@@ -31,6 +31,10 @@
             <th>SITUACION</th>
             <th>NUMERO OT</th>
             <th>DEPOSITO</th>
+            @if (! empty($es_movimientos))
+                <th>MODULO</th>
+                <th>PEDIDO</th>
+            @endif
         </tr>
     </thead>
     <tbody>
@@ -62,6 +66,10 @@
             <td></td>
             <td></td>
             <td></td>
+            @if (! empty($es_movimientos))
+                <td></td>
+                <td></td>
+            @endif
         </tr>
     </tbody>
 </table>

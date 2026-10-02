@@ -1419,9 +1419,10 @@ final class IngresoEgresoAnitaTesmovSupport
 
             // pago.c arrastra el concepto de cash-flow del comprobante aplicado (com_concepto
             // -> axp_concepto). Sin esto el EFE pierde el rubro cuando no hay cuenta de gasto.
+            // Un anticipo (OPA) u otra CC sin comprobante deja la relación en null: axp_concepto 0.
             $conceptoCashflow = (int) (
-                $deuda->comprobante_proveedores->conceptogasto_id
-                    ?: ($deuda->proveedores->conceptogasto_id ?? 0)
+                ($deuda->comprobante_proveedores?->conceptogasto_id)
+                    ?: ($deuda->proveedores?->conceptogasto_id ?? 0)
             );
 
             $extra = CobranzaAnitaCheBanEsquemaSupport::sufijoInsertAuxpagEmpresaConceptoCbu(

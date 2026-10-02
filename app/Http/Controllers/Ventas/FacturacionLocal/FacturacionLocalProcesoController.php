@@ -336,14 +336,28 @@ class FacturacionLocalProcesoController extends Controller
         return response()->json($resultado, $status);
     }
 
-    public function apiPreviewTotales(Request $request)
-    {
-        $this->assertFerli();
-        can('usar-facturacion-local', false);
-        $split = FacturacionLocalSplitFacNcSupport::partir($request->input('lineas', []));
+	public function apiPreviewTotales(Request $request)
+	{
+		$this->assertFerli();
+		can('usar-facturacion-local', false);
 
-        return response()->json($split);
-    }
+		$localId = (int) $request->input('local_id', 0);
+		$local = $localId > 0 ? LocalVenta::query()->find($localId) : null;
+		if ($local) {
+			return response()->json($this->emisionService->totalesCobro($local, [
+				'lineas' => $request->input('lineas', []),
+				'cliente_id' => $request->input('cliente_id'),
+				'receptor' => $request->input('receptor', []),
+				'receptor_manual' => $request->input('receptor_manual', []),
+				'descuentopie' => (float) $request->input('descuentopie', 0),
+				'descuentoimportepie' => (float) $request->input('descuentoimportepie', 0),
+			]));
+		}
+
+		$split = FacturacionLocalSplitFacNcSupport::partir($request->input('lineas', []));
+
+		return response()->json($split);
+	}
 
     public function apiVales(Request $request)
     {

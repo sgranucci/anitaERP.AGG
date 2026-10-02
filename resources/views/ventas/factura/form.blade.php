@@ -178,8 +178,11 @@
 	#itemspedido-table:not(.factura-grilla-con-iva) td.factura-col-iva {
 		display: none;
 	}
-	#itemspedido-table tr:not(.item-concepto-venta) td.factura-col-iva .factura-iva-linea {
+	#itemspedido-table tr:not(.item-pide-iva) td.factura-col-iva .factura-iva-linea {
 		visibility: hidden;
+	}
+	#itemspedido-table .factura-iva-linea.is-invalid {
+		border-color: #dc3545;
 	}
 	#itemspedido-table .factura-sku-campo {
 		display: flex;
@@ -545,7 +548,9 @@
 				$grillaSoloConcepto = (bool) $layoutItemsPedido;
 				foreach ($emisionesFactura as $emCheck) {
 					$esConceptoCheck = empty($emCheck->articulo_id) && ! empty($emCheck->concepto_venta_id);
-					if ($esConceptoCheck) {
+					$precioCheck = abs((float) ($emCheck->precio ?? 0));
+					$detalleCheck = trim((string) ($emCheck->detalle ?? ''));
+					if ($esConceptoCheck || (empty($emCheck->articulo_id) && ($precioCheck > 0.00001 || $detalleCheck !== ''))) {
 						$grillaConIva = true;
 					}
 					if ($layoutItemsPedido && (! empty($emCheck->articulo_id) || empty($emCheck->concepto_venta_id))) {
@@ -701,8 +706,13 @@
 							}
 							$trNcClass = (! empty($flGeneraNotaDeCredito) ? ' nc-linea-origen' : '')
 								.((! empty($flGeneraNotaDeCredito) && ! $marcarDevolverNc) ? ' nc-linea-excluida' : '');
+							$pideIvaLinea = empty($item->articulo_id) && (
+								$esLineaConcepto
+								|| abs($precioItemNum) > 0.00001
+								|| trim((string) $textoDetalleMostrar) !== ''
+							);
 						@endphp
-            			<tr class="{{ $layoutItemsPedido ? 'item-pedido' : 'item-factura' }}{{ $esLineaConcepto ? ' item-concepto-venta' : '' }}{{ $trNcClass }}"
+            			<tr class="{{ $layoutItemsPedido ? 'item-pedido' : 'item-factura' }}{{ $esLineaConcepto ? ' item-concepto-venta' : '' }}{{ $pideIvaLinea ? ' item-pide-iva' : '' }}{{ $trNcClass }}"
 							data-articulo-id="{{ (int) ($item->articulo_id ?? 0) }}"
 							data-combinacion-id="{{ (int) ($item->combinacion_id ?? 0) }}"
 							data-modulo-id="{{ (int) ($item->modulo_id ?? 0) }}"
@@ -745,7 +755,7 @@
                                     <input type="hidden" class="articulo_id_previo" name="articulo_id_previo[]" value="{{$item->articulo_id ?? ''}}" >
 									<input type="hidden" class="categoria_id" name="categoria_ids[]" value="{{$item->articulos->categoria_id ?? ''}}" >
 									<input type="hidden" class="subcategoria_id" name="subcategoria_ids[]" value="{{$item->articulos->subcategoria_id ?? ''}}" >
-                                    <button type="button" title="Consulta articulos" class="btn-accion-tabla consultaarticulo tooltipsC" data-solo-facturable="1">
+                                    <button type="button" title="Consulta art&iacute;culos (F1)" class="btn-accion-tabla consultaarticulo tooltipsC" data-solo-facturable="1">
                                             <i class="fa fa-search text-primary"></i>
                                     </button>
                                     <button type="button" title="Concepto sin artículo (F1). Después complete el detalle y el precio." class="btn-accion-tabla consultaconceptoventa tooltipsC">
@@ -854,7 +864,7 @@
 				<i class="fa fa-plus"></i> Agregar rengl&oacute;n
 			</button>
 			<small class="form-text text-muted d-inline-block ml-2">
-				Mercadería: lupa o código. Comentario de la l&iacute;nea: &iacute;cono de p&aacute;rrafo (como en OC). Sin art&iacute;culo: &iacute;cono de documento o F1 (concepto, IVA, detalle y precio).
+				Mercader&iacute;a: lupa o F1 en el c&oacute;digo. Comentario de la l&iacute;nea: &iacute;cono de p&aacute;rrafo (como en OC). Sin art&iacute;culo: en cada rengl&oacute;n con precio eleg&iacute; la al&iacute;cuota (Exento, 10,5% o 21%). El &iacute;cono de documento, o F1 en el detalle, carga un concepto.
 				@if ($layoutItemsPedido && can('entregar-articulo-sin-cargo-pedido-venta', false) && empty($flGeneraNotaDeCredito))
 					Regalo: &iacute;cono de regalo (art&iacute;culo sin cargo, mismo tope que pedidos).
 				@endif

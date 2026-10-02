@@ -9,6 +9,7 @@
     window.msPermiteSaldosNegativos = @json((bool) config('stock.permite_saldos_negativos'));
     window.movimientoStockPreviewConversionFormulaUrl = @json(route('preview_conversion_formula_movimientostock'));
     window.movimientoStockSaldoOrigenUrl = @json(route('movimientostock_saldo_articulo'));
+    window.movimientoStockAvisoConsumoOtUrl = @json(route('movimientostock_aviso_consumo_ot'));
     window.movimientoStockPrecioLineaUrl = @json(route('movimientostock_precio_linea'));
     window.movimientoStockSugerirTipoTransferenciaContableUrl = @json(route('movimientostock_sugerir_tipo_transferencia_contable'));
     window.movimientoStockResolverNpuUrl = @json(route('movimientostock_resolver_npu_baja'));

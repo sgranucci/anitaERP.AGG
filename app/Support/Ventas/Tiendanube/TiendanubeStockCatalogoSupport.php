@@ -6,6 +6,7 @@ use App\Models\Ventas\TiendanubeConfiguracion;
 use App\Models\Ventas\TiendanubeStockSubida;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\PrecioListaVigenteSupport;
+use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -88,6 +89,9 @@ final class TiendanubeStockCatalogoSupport
 
     /**
      * Asignaciones del marketplace, agrupadas por artículo.
+     * Solo artículos operativos del canal Local (solapa Marketplaces): canal LOCAL,
+     * estado local activo y estado del maestro activo. Los viejos de fábrica o
+     * inactivos en local quedan afuera aunque Anita les haya dejado una asignación.
      *
      * @return array<int, array{sku:string, combinaciones:list<string>}>
      */
@@ -97,17 +101,20 @@ final class TiendanubeStockCatalogoSupport
             return [];
         }
 
-        $rows = DB::table('articulo_marketplace as am')
+        $query = DB::table('articulo_marketplace as am')
             ->join('marketplace as m', 'm.id', '=', 'am.marketplace_id')
-            ->join('articulo as a', 'a.id', '=', 'am.articulo_id')
+            ->join('articulo', 'articulo.id', '=', 'am.articulo_id')
             ->leftJoin('combinacion as c', 'c.id', '=', 'am.combinacion_id')
             ->where('m.codigo', $marketplaceCodigo)
-            ->where('m.activo', true)
-            ->orderBy('a.sku')
+            ->where('m.activo', true);
+        ArticuloCanalSupport::scopeArticulosCanalLocal($query);
+
+        $rows = $query
+            ->orderBy('articulo.sku')
             ->orderBy('am.orden')
             ->get([
                 'am.articulo_id',
-                'a.sku',
+                'articulo.sku',
                 'c.codigo as combinacion_codigo',
                 'am.codigo_combinacion',
             ]);

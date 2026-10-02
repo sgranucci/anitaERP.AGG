@@ -315,16 +315,25 @@ class CambioDevolucionMarketplaceController extends Controller
             })
             ->orderByDesc('id')
             ->limit(20)
-            ->get(['id', 'codigo', 'fecha', 'total', 'cliente_id']);
+            ->get(['id', 'codigo', 'fecha', 'total', 'cliente_id', 'nombre', 'nroinscripcion']);
 
         $data = $ventas->map(function (Venta $v) {
+            $docFactura = preg_replace('/\D/', '', (string) ($v->nroinscripcion ?? '')) ?? '';
+            if ($docFactura === '0') {
+                $docFactura = '';
+            }
+            $docCliente = preg_replace('/\D/', '', (string) ($v->clientes->numerodocumento ?? '')) ?? '';
+            if ($docCliente === '0') {
+                $docCliente = '';
+            }
+
             return [
                 'id' => (int) $v->id,
                 'codigo' => (string) $v->codigo,
                 'fecha' => optional($v->fecha)->format('d/m/Y'),
                 'total' => (float) $v->total,
-                'cliente' => trim((string) ($v->clientes->nombre ?? '')),
-                'documento' => trim((string) ($v->clientes->numerodocumento ?? '')),
+                'cliente' => trim((string) ($v->nombre ?: $v->clientes->nombre ?? '')),
+                'documento' => $docFactura !== '' ? $docFactura : $docCliente,
                 'cliente_id' => (int) ($v->cliente_id ?? 0),
             ];
         })->values();

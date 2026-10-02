@@ -269,13 +269,18 @@ function leerTipotransaccionStockPorAbreviatura(abreviatura, ptrrenglon, onDone)
                 onDone(data);
             }
         })
-        .fail(function () {
+        .fail(function (xhr) {
             if ($ctx.length) {
                 $ctx.find('.tipotransaccion_stock_id').val('');
                 $ctx.find('.nombretipotransaccionstock').val('');
                 $ctx.find('.operacion-tipotransaccion-stock').val('');
                 $ctx.find('.abreviaturatipotransaccionstock').val(abrevOriginal);
             }
+            var msg = 'Tipo de transacci\u00f3n no encontrado';
+            if (xhr && xhr.responseJSON && xhr.responseJSON.error) {
+                msg = xhr.responseJSON.error;
+            }
+            alert(msg);
             if (typeof onDone === 'function') {
                 onDone(null);
             }

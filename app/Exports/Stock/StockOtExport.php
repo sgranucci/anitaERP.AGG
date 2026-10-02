@@ -128,10 +128,12 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
 
         $this->filasDatos = is_array($data) ? $data : (method_exists($data, 'all') ? $data->all() : []);
         $this->medidasColumnas = $this->resolverMedidasColumnas($this->filasDatos);
+        $columnasMovimiento = $this->apertura === 'MOVIMIENTOS' ? 2 : 0; // MODULO PEDIDO
         $this->totalColumnas = ($this->imprimeFoto === 'CON_FOTO' ? 1 : 0)
             + 3 // LINEA ART DESCRIPCION
             + count($this->medidasColumnas)
-            + 7; // PS QM N TT PRECIO SITUACION OT DEPOSITO
+            + 7 // PS QM N TT PRECIO SITUACION OT DEPOSITO
+            + $columnasMovimiento;
         $this->colUltima = $this->indiceAColumna($this->totalColumnas);
         $this->filaCabecerasExcel = 2;
         $this->filaPrimeraDatosExcel = 3;
@@ -143,6 +145,7 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
             'titulo' => $this->tituloHoja,
             'medidas_columnas' => $this->medidasColumnas,
             'total_columnas' => $this->totalColumnas,
+            'es_movimientos' => $this->apertura === 'MOVIMIENTOS',
         ]);
     }
 
@@ -205,7 +208,11 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
         $widths[$this->indiceAColumna($col++)] = 10; // PRECIO
         $widths[$this->indiceAColumna($col++)] = 18; // SITUACION
         $widths[$this->indiceAColumna($col++)] = 12; // OT
-        $widths[$this->indiceAColumna($col)] = 10;   // DEPOSITO
+        $widths[$this->indiceAColumna($col++)] = 10; // DEPOSITO
+        if ($this->apertura === 'MOVIMIENTOS') {
+            $widths[$this->indiceAColumna($col++)] = 28; // MODULO
+            $widths[$this->indiceAColumna($col)] = 12;   // PEDIDO
+        }
 
         return $widths;
     }

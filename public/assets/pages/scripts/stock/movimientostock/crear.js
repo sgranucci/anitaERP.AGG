@@ -1101,5 +1101,64 @@
         });
     }
 
+	// CONOT: si el número escrito es una OT con stock, confirmar antes de grabarlo como lote.
+	$(function () {
+		var consumoOtListo = false;
+		var consumoOtEnCurso = false;
+
+		function msEsEgresoMercaderiaFerli() {
+			var op = typeof window.msOperacionTipoTransaccion === 'function'
+				? String(window.msOperacionTipoTransaccion() || '').trim().toUpperCase()
+				: '';
+			return op === 'S' || op === 'T' || op === 'C';
+		}
+
+		$('#formgeneral').on('submit.consumoOt', function (e) {
+			if (consumoOtListo || !window.movimientoStockModoFerli) {
+				return;
+			}
+			if (!msEsEgresoMercaderiaFerli()) {
+				return;
+			}
+			if (String($('#aplicar_consumo_ot').val() || '') === '1') {
+				return;
+			}
+			if (!window.movimientoStockAvisoConsumoOtUrl) {
+				return;
+			}
+
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			if (consumoOtEnCurso) {
+				return;
+			}
+			consumoOtEnCurso = true;
+
+			var $form = $(this);
+			$.ajax({
+				url: window.movimientoStockAvisoConsumoOtUrl,
+				method: 'POST',
+				data: $form.serialize(),
+				headers: { 'Accept': 'application/json' }
+			}).done(function (resp) {
+				consumoOtEnCurso = false;
+				if (resp && resp.requiere_confirmacion) {
+					if (!window.confirm(resp.mensaje)) {
+						return;
+					}
+					$('#aplicar_consumo_ot').val('1');
+				} else if (resp && resp.mensaje) {
+					window.alert(resp.mensaje);
+					return;
+				}
+				consumoOtListo = true;
+				$form.trigger('submit');
+			}).fail(function () {
+				consumoOtEnCurso = false;
+				window.alert('No se pudo verificar si el número es una OT. Reintentá.');
+			});
+		});
+	});
+
 	
 	

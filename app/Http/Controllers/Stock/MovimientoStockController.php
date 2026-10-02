@@ -30,6 +30,7 @@ use App\Support\Stock\ArticuloParteUnicaDisponibilidadSupport;
 use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
 use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
+use App\Support\Stock\MovimientoStockConsumoOtAvisoSupport;
 use App\Support\Stock\MovimientoStockEdicionVentanaSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\MovimientoStockFormLineasSupport;
@@ -578,6 +579,62 @@ class MovimientoStockController extends Controller
         return response()->json($resultado, $status);
     }
 
+    public function avisoConsumoOt(Request $request): JsonResponse
+    {
+        if (! MovimientoSurmarPermisoSupport::puedeCrear(false) && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
+            return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        if (! MovimientoStockFerliSupport::esCalzadosFerli()) {
+            return response()->json(['requiere_confirmacion' => false]);
+        }
+
+        $tipoId = (int) ($request->input('tipotransaccion_stock_id') ?: 0);
+        $tipo = $tipoId > 0 ? Tipotransaccion_Stock::query()->find($tipoId) : null;
+        $operacion = strtoupper(trim((string) ($tipo->operacion ?? '')));
+        $signoPreview = $operacion === 'T' ? 'R' : null;
+        if (! MovimientoStockConsumoOtAvisoSupport::esDocumentoEgreso($tipo, $signoPreview)) {
+            return response()->json(['requiere_confirmacion' => false]);
+        }
+
+        $articulos = array_values((array) $request->input('articulos_id', []));
+        $combinaciones = array_values((array) $request->input('combinaciones_id', []));
+        $cantidades = array_values((array) $request->input('cantidades', []));
+        $medidas = array_values((array) $request->input('medidas', []));
+        $sentidos = array_values((array) $request->input('sentidos', []));
+        $excluirId = (int) $request->input('movimientostock_id', 0);
+        $depositoId = (int) $request->input('deposito_id', 0);
+        if ($operacion === 'T') {
+            $depositoId = (int) ($request->input('deposito_salida_id') ?: $depositoId);
+        }
+
+        $aviso = MovimientoStockConsumoOtAvisoSupport::avisoSiLoteEsOtConStock(
+            (string) $request->input('lote', ''),
+            $depositoId,
+            MovimientoStockConsumoOtAvisoSupport::lineasDesdePayload(
+                $articulos,
+                $combinaciones,
+                $cantidades,
+                $medidas,
+                $sentidos,
+                $operacion === 'C'
+            ),
+            $excluirId > 0 ? $excluirId : null
+        );
+
+        if ($aviso === null || (int) ($aviso['ordentrabajo_id'] ?? 0) <= 0) {
+            return response()->json([
+                'requiere_confirmacion' => false,
+                'mensaje' => (string) ($aviso['mensaje_bloqueo'] ?? ''),
+            ]);
+        }
+
+        return response()->json([
+            'requiere_confirmacion' => true,
+            'mensaje' => (string) $aviso['mensaje_confirm'],
+        ]);
+    }
+
     public function saldoArticuloDeposito(Request $request): JsonResponse
     {
         if (! MovimientoSurmarPermisoSupport::puedeCrear(false) && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
@@ -1114,6 +1171,8 @@ class MovimientoStockController extends Controller
                 'seleccion_automatica_trcont' => true,
                 'enviar_aviso' => $request->has('enviar_aviso') ? $request->input('enviar_aviso') : null,
                 'observacion' => trim((string) $request->input('leyenda', '')),
+                'lote_formulario' => trim((string) $request->input('lote', '')),
+                'aplicar_consumo_ot' => $request->input('aplicar_consumo_ot', '0'),
             ],
             $lineas
         );

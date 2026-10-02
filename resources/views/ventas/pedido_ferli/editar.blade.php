@@ -36,11 +36,15 @@
 			//}
         });
 
-   		// Cuenta los articulos para validar cantidad maxima
-        var cantidadArticulo = 0;
-		$("#tbody-tabla .articulo").each(function(index) {
-			cantidadArticulo = cantidadArticulo + 1;
+        var cantidadArticulo = $("#tbody-tabla .articulo").length;
 
+        if (cantidadArticulo > 350)
+        {
+            alert("No puede generar pedidos con más de 350 ítems");
+            return false;
+        }
+
+		$("#tbody-tabla .articulo").each(function() {
 			let articulo = $(this);
 			let combinacion = $(this).parents("tr").find(".combinacion");
 
@@ -48,11 +52,6 @@
 			combinacion.prop('disabled', false);
 		});
 
-        if (cantidadArticulo > 42)
-        {
-            alert("No puede generar pedidos con mas de 42 ítems");
-            return false;
-        }
         $('#formgeneral').submit();
     }
 

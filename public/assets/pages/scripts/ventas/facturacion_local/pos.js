@@ -213,33 +213,46 @@
         autos[0].value = resto.toFixed(2);
     }
 
-    function preview() {
-        var seq = ++previewSeq;
-        post(CFG.urls.preview, { lineas: cart }).then(function (res) {
-            if (seq !== previewSeq) return;
-            var b = res.body || {};
-            netoActual = Number(b.neto || 0);
-            sincronizarMontosAutomaticos();
-            var el = $('fl-totales');
-            if (el) {
-                var mostrar = netoActual;
-                if (Math.abs(netoActual) < 0.009 && cart.length) {
-                    mostrar = 0.01;
-                }
-                el.childNodes[0].textContent = money(mostrar);
-                var det = $('fl-totales-detalle');
-                if (det) {
-                    var extra = '';
-                    if (netoActual < -0.009) {
-                        extra = ' · Bloqueado (NC completa afuera)';
-                    } else if (Math.abs(netoActual) < 0.009 && (Number(b.neto_fac || 0) > 0 || Number(b.neto_nc || 0) > 0)) {
-                        extra = ' · Mín. ARCA $0,01';
-                    }
-                    det.textContent = 'FAC ' + money(b.neto_fac || 0) + ' · NC ' + money(b.neto_nc || 0) + extra;
-                }
-            }
-        }).catch(function () {});
-    }
+	function preview() {
+		var seq = ++previewSeq;
+		var recManual = armarReceptorManual();
+		post(CFG.urls.preview, {
+			lineas: cart,
+			local_id: CFG.localId,
+			cliente_id: receptorManualActivo()
+				? null
+				: (+(($('cliente_id') && $('cliente_id').value) || 0) || null),
+			receptor_manual: recManual
+		}).then(function (res) {
+			if (seq !== previewSeq) return;
+			var b = res.body || {};
+			netoActual = Number(b.total_pagar != null ? b.total_pagar : (b.neto || 0));
+			sincronizarMontosAutomaticos();
+			var el = $('fl-totales');
+			if (el) {
+				var mostrar = netoActual;
+				if (Math.abs(netoActual) < 0.009 && cart.length) {
+					mostrar = 0.01;
+				}
+				el.childNodes[0].textContent = money(mostrar);
+				var det = $('fl-totales-detalle');
+				if (det) {
+					var extra = '';
+					if (netoActual < -0.009) {
+						extra = ' · Bloqueado (NC completa afuera)';
+					} else if (Math.abs(netoActual) < 0.009 && (Number(b.neto_fac || 0) > 0 || Number(b.neto_nc || 0) > 0)) {
+						extra = ' · Mín. ARCA $0,01';
+					}
+					var perc = '';
+					(b.percepciones || []).forEach(function (p) {
+						if (!p || !p.concepto) return;
+						perc += ' · ' + p.concepto + ' ' + money(p.importe);
+					});
+					det.textContent = 'FAC ' + money(b.neto_fac || 0) + ' · NC ' + money(b.neto_nc || 0) + perc + extra;
+				}
+			}
+		}).catch(function () {});
+	}
 
     /* ——— Cobranza ——— */
     function filaCobranzaDesdeTemplate() {
@@ -1001,11 +1014,12 @@
             if ($('cliente_id')) $('cliente_id').value = cli.id;
             if ($('codigocliente')) $('codigocliente').value = cli.codigo || '';
             if ($('nombrecliente')) $('nombrecliente').value = cli.nombre || '';
-            actualizarLetraBadge(cli);
-            if (cli.letra === 'A' && !cli.numerodocumento) {
-                msg('Cliente RI sin documento: revisá el padrón antes de emitir Factura A', false);
-            }
-        });
+			actualizarLetraBadge(cli);
+			if (cli.letra === 'A' && !cli.numerodocumento) {
+				msg('Cliente RI sin documento: revisá el padrón antes de emitir Factura A', false);
+			}
+			preview();
+		});
     }
 
     window.completaDatosCliente = function () {
@@ -1026,9 +1040,10 @@
         if (btnB) btnB.classList.toggle('active', receptorManualModo === 'b');
         if (btnA) btnA.classList.toggle('active', receptorManualModo === 'a');
         if (camposB) camposB.classList.toggle('d-none', receptorManualModo !== 'b');
-        if (camposA) camposA.classList.toggle('d-none', receptorManualModo !== 'a');
-        actualizarLetraDesdeReceptorManual();
-    }
+		if (camposA) camposA.classList.toggle('d-none', receptorManualModo !== 'a');
+		actualizarLetraDesdeReceptorManual();
+		preview();
+	}
 
     function toggleReceptorManual(activo) {
         var panel = $('fl-receptor-manual');
@@ -1044,11 +1059,12 @@
             if ($('codigocliente')) $('codigocliente').value = '';
             if ($('nombrecliente')) $('nombrecliente').value = '';
             clientePos = null;
-            setReceptorManualModo(receptorManualModo);
-        } else {
-            actualizarLetraBadge(null);
-        }
-    }
+			setReceptorManualModo(receptorManualModo);
+		} else {
+			actualizarLetraBadge(null);
+			preview();
+		}
+	}
 
     function actualizarLetraDesdeReceptorManual() {
         if (!receptorManualActivo()) return;
@@ -1125,10 +1141,24 @@
         if (typeof window.activa_eventos_consultalocalidad === 'function') {
             window.activa_eventos_consultalocalidad();
         }
-        if (typeof window.activa_eventos_consultaprovincia === 'function') {
-            window.activa_eventos_consultaprovincia();
-        }
-    }
+		if (typeof window.activa_eventos_consultaprovincia === 'function') {
+			window.activa_eventos_consultaprovincia();
+		}
+		var panelRec = $('fl-receptor-manual');
+		if (panelRec) {
+			var previewReceptorTimer = null;
+			panelRec.addEventListener('input', function () {
+				clearTimeout(previewReceptorTimer);
+				previewReceptorTimer = setTimeout(preview, 350);
+			});
+			panelRec.addEventListener('change', function () { preview(); });
+		}
+		if (window.jQuery) {
+			window.jQuery(document).on('change', '.fl-rec-provincia .provincia_id, .fl-rec-localidad .localidad_id', function () {
+				preview();
+			});
+		}
+	}
 
     function receptorDesdeCliente() {
         if (!clientePos) return {};

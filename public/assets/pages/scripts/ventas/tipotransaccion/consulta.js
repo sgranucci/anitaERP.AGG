@@ -188,10 +188,56 @@ function buscar_datos_tipotransaccion_venta(consulta) {
         });
 }
 
+function tipoVentaDesdeCatalogoPorTexto(texto) {
+    var buscada = $.trim(texto || '').toUpperCase();
+    if (!buscada) {
+        return null;
+    }
+    var porAbreviatura = null;
+    var porCodigo = null;
+    var porId = null;
+    catalogoTiposTransaccionVentaPagina().some(function (row) {
+        if (!row) {
+            return false;
+        }
+        var abr = String(row.abreviatura || '').trim().toUpperCase();
+        var cod = String(row.codigo || '').trim().toUpperCase();
+        if (!porAbreviatura && abr === buscada) {
+            porAbreviatura = row;
+        }
+        if (!porCodigo && cod === buscada) {
+            porCodigo = row;
+        }
+        if (!porId && String(row.id) === buscada) {
+            porId = row;
+        }
+        return false;
+    });
+    return porAbreviatura || porCodigo || porId;
+}
+
 function resolverTipotransaccionVentaPorAbreviatura(abrev, $ctx, alertar, callback) {
     var a = $.trim(abrev || '');
     if (a === '') {
         limpiarTipotransaccionVentaEnContexto($ctx, false);
+        if (typeof callback === 'function') {
+            callback(null);
+        }
+        return;
+    }
+    var local = tipoVentaDesdeCatalogoPorTexto(a);
+    if (local && local.id) {
+        if (tipotransaccionVentaPermitido(local.id)) {
+            aplicarTipotransaccionVentaEnContexto($ctx, local);
+            if (typeof callback === 'function') {
+                callback(local);
+            }
+            return;
+        }
+        limpiarTipotransaccionVentaEnContexto($ctx, true);
+        if (alertar) {
+            alert('Ese tipo no corresponde a este comprobante');
+        }
         if (typeof callback === 'function') {
             callback(null);
         }
@@ -349,7 +395,7 @@ function idsPermitidosConsultaTipotransaccionVenta() {
 
 function tipotransaccionVentaPermitido(id) {
     var ids = idsPermitidosConsultaTipotransaccionVenta();
-    if (!ids) {
+    if (!ids || !ids.length) {
         return true;
     }
     return ids.indexOf(parseInt(id, 10) || 0) >= 0;
@@ -357,7 +403,7 @@ function tipotransaccionVentaPermitido(id) {
 
 function filtrarFilasConsultaTipotransaccionVenta() {
     var ids = idsPermitidosConsultaTipotransaccionVenta();
-    if (!ids) {
+    if (!ids || !ids.length) {
         return;
     }
     $('#datostipotransaccionventa tr').each(function () {
