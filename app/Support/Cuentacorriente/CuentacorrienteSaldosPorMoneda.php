@@ -257,9 +257,31 @@ final class CuentacorrienteSaldosPorMoneda
             return $local;
         }
 
-        $origen = $abreviatura !== '' ? $abreviatura : 'ME';
+        return self::etiquetaConversion($abreviatura, self::cotizacionDe($fila));
+    }
 
-        return $origen.' → '.$local.' · TC '.number_format(self::cotizacionDe($fila), 2, ',', '.');
+    /**
+     * Moneda de origen expresada en moneda local, con el TC usado en la conversión.
+     */
+    public static function etiquetaConversion(string $abreviatura, float $cotizacion): string
+    {
+        $origen = trim($abreviatura) !== '' ? trim($abreviatura) : 'ME';
+        $tc = $cotizacion > 0 ? $cotizacion : 1.0;
+
+        return $origen.' → '.self::abreviaturaLocal().' · TC '.number_format($tc, 2, ',', '.');
+    }
+
+    /**
+     * La cotización va en una segunda línea para que el PDF no la corte.
+     */
+    public static function etiquetaMonedaHtml(string $etiqueta): string
+    {
+        $segura = e($etiqueta);
+        if (! str_contains($etiqueta, ' · TC ')) {
+            return $segura;
+        }
+
+        return str_replace(' · TC ', '<br>TC ', $segura);
     }
 
     /**

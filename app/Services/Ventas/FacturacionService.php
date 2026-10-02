@@ -157,6 +157,7 @@ use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
 use App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport;
+use App\Support\Ventas\FacturaLineaPrecioImpresionSupport;
 use App\Support\Ventas\VentaImporteDosDecimalesSupport;
 use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
 use Exception;
@@ -9077,6 +9078,14 @@ class FacturacionService
 					->all();
 			}
 		}
+		$netearPrecioImpreso = strtoupper((string) $letra) === 'A';
+		$tasaDetraccionImpresion = $netearPrecioImpreso
+			? FacturaLineaPrecioImpresionSupport::tasaDetraccion(
+				$venta->venta_impuestos,
+				(string) config('facturacion.USA_DETRACCION') === 'S'
+			)
+			: 0.0;
+		$tasasIvaImpresion = [];
 		foreach ($venta->venta_emisiones as $ventaItem) {
 			$descuentoLinea = $ventaItem->descuento;
 			$precioSinDescuento = $ventaItem->precio;
@@ -9087,6 +9096,21 @@ class FacturacionService
 				}
 			}
 			$precioArticulo = $descuentoLinea > 0 ? $precio * (1 - ($descuentoLinea / 100)) : $precio;
+			if ($netearPrecioImpreso) {
+				$impuestoImpresionId = (int) $ventaItem->impuesto_id;
+				if (! array_key_exists($impuestoImpresionId, $tasasIvaImpresion)) {
+					$tasasIvaImpresion[$impuestoImpresionId] = (float) (Impuesto::find($impuestoImpresionId)->valor ?? 0);
+				}
+				$netoImpreso = FacturaLineaPrecioImpresionSupport::netear(
+					(float) $precioArticulo,
+					(float) $precioSinDescuento,
+					$ventaItem->incluyeimpuesto,
+					$tasasIvaImpresion[$impuestoImpresionId],
+					$tasaDetraccionImpresion
+				);
+				$precioArticulo = $netoImpreso['precio'];
+				$precioSinDescuento = $netoImpreso['preciosindescuento'];
+			}
 			$articuloItem = $ventaItem->articulos;
 			$conceptoItem = $ventaItem->conceptoVenta;
 			$leyendaItem = '';

@@ -790,7 +790,7 @@ class ProveedorCuentacorrienteReporteService
             'importe_firmado_pesos' => round($total * $coef, 2),
             'moneda_id' => $monedaId,
             'abreviatura' => $local,
-            'etiqueta_moneda' => ($abrev !== '' ? $abrev : 'ME').' → '.$local.' · TC '.number_format($cotizacion, 4, ',', '.'),
+            'etiqueta_moneda' => CuentacorrienteSaldosPorMoneda::etiquetaConversion($abrev, $cotizacion),
             'cotizacion_usada' => $cotizacion,
             'cotizacion_origen' => $origen,
         ];
@@ -836,7 +836,7 @@ class ProveedorCuentacorrienteReporteService
             'importe' => round($total * $coef, 2),
             'moneda_id' => $monedaId,
             'abreviatura' => $local,
-            'etiqueta_moneda' => ($abrev !== '' ? $abrev : 'ME').' → '.$local,
+            'etiqueta_moneda' => CuentacorrienteSaldosPorMoneda::etiquetaConversion($abrev, $cotizacion),
             'cotizacion_usada' => $cotizacion,
             'cotizacion_origen' => $origen,
         ];

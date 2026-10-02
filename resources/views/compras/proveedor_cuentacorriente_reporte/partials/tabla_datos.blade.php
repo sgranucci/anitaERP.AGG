@@ -106,18 +106,18 @@
 <thead>
     <tr>
         @if ($paraPdf)
-            <th class="col-nowrap" style="width: 5%;">Código</th>
-            <th style="width: {{ $modoDeuda ? '13%' : '16%' }};">Proveedor</th>
-            <th style="width: {{ $modoDeuda ? '10%' : '11%' }};">Empresa</th>
-            <th class="col-nowrap" style="width: {{ $modoDeuda ? '7%' : '8%' }};">Fecha</th>
-            <th class="col-nowrap" style="width: {{ $modoDeuda ? '7%' : '8%' }};">Vencimiento</th>
-            <th style="width: {{ $modoDeuda ? '18%' : '23%' }};">Comprobante</th>
-            <th class="col-nowrap" style="width: 5%;">Moneda</th>
+            <th class="col-nowrap" style="width: 4%;">Código</th>
+            <th style="width: {{ $modoDeuda ? '11%' : '14%' }};">Proveedor</th>
+            <th style="width: {{ $modoDeuda ? '9%' : '10%' }};">Empresa</th>
+            <th class="col-nowrap" style="width: {{ $modoDeuda ? '7%' : '7%' }};">Fecha</th>
+            <th class="col-nowrap" style="width: {{ $modoDeuda ? '7%' : '7%' }};">Vencimiento</th>
+            <th style="width: {{ $modoDeuda ? '16%' : '18%' }};">Comprobante</th>
+            <th class="col-moneda" style="width: 12%;">Moneda</th>
             @if ($modoDeuda)
                 <th class="text-right" style="width: 8%;">Importe</th>
                 <th class="text-right" style="width: 8%;">Aplicado</th>
                 <th class="text-right" style="width: 9%;">Saldo pend.</th>
-                <th class="text-right" style="width: 10%;">Saldo</th>
+                <th class="text-right" style="width: 9%;">Saldo</th>
             @else
                 <th class="text-right" style="width: 8%;">Debe</th>
                 <th class="text-right" style="width: 8%;">Haber</th>
@@ -210,10 +210,10 @@
         <td class="{{ $clsNowrap }}">{{ $fila['fechavencimiento'] ?? '' }}</td>
         <td>
             @if (! $esHeader)
-                {{ $pdfCortar($fila['comprobante'] ?? '', 42) }}
+                {{ $pdfCortar($fila['comprobante'] ?? '', 36) }}
             @endif
         </td>
-        <td class="{{ $clsNowrap }}">{{ $fila['etiqueta_moneda'] ?? ($fila['abreviatura'] ?? '') }}</td>
+        <td class="col-moneda">{!! CuentacorrienteSaldosPorMoneda::etiquetaMonedaHtml((string) ($fila['etiqueta_moneda'] ?? ($fila['abreviatura'] ?? ''))) !!}</td>
         @if ($modoDeuda)
             <td class="text-right">
                 @if ($esTotal)
