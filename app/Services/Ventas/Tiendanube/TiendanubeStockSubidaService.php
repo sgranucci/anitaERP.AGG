@@ -199,17 +199,19 @@ final class TiendanubeStockSubidaService
                 }
                 $alguna = true;
                 $codigoVisible = $asignadas[$combClave];
+                [$stockEnviar, $avisoStock] = self::stockNoNegativo((int) $unidades);
+                $avisoLinea = trim(implode(' ', array_filter([$avisoPrecio, $avisoStock])));
                 $batch[] = $this->filaPrevisualizacion($subida, [
                     'articulo_id' => $articuloId,
                     'sku' => $sku,
                     'variante_sku' => $sku.'-'.$codigoVisible.'-'.$talle,
                     'combinacion_codigo' => $codigoVisible,
                     'talle' => $talle,
-                    'stock' => $unidades,
+                    'stock' => $stockEnviar,
                     'precio' => $precioTxt,
                     'precio_promocional' => $ofertaTxt,
                     'estado' => TiendanubeStockSubidaLinea::ESTADO_PREVISTA,
-                    'mensaje' => $avisoPrecio,
+                    'mensaje' => $avisoLinea !== '' ? $avisoLinea : null,
                 ]);
                 if (count($batch) >= 400) {
                     DB::table('tiendanube_stock_subida_linea')->insert($batch);
@@ -318,7 +320,7 @@ final class TiendanubeStockSubidaService
                 continue;
             }
             $claveStock = TiendanubeStockCatalogoSupport::claveStock($articuloId, $partes['combinacion'], $partes['talle']);
-            $unidades = (int) ($stock[$claveStock] ?? 0);
+            [$unidades, $avisoStock] = self::stockNoNegativo((int) ($stock[$claveStock] ?? 0));
             $cubiertas[$claveStock] = true;
             $item = [
                 'id' => $variantId,
@@ -341,6 +343,9 @@ final class TiendanubeStockSubidaService
             if ($simular) {
                 $hoy = self::textoHoyEnTienda($variante);
                 $aviso = trim($hoy.($aviso !== null ? ' '.$aviso : '').' No se envió.');
+            }
+            if ($avisoStock !== null) {
+                $aviso = trim(($aviso !== null ? $aviso.' ' : '').$avisoStock);
             }
             $payload[] = $item;
             $previstas[] = [
@@ -522,6 +527,20 @@ final class TiendanubeStockSubidaService
         }
 
         return $resp;
+    }
+
+    /**
+     * Tiendanube rechaza el lote del producto si un talle va con stock menor a cero.
+     *
+     * @return array{0:int, 1:?string}
+     */
+    private static function stockNoNegativo(int $unidades): array
+    {
+        if ($unidades >= 0) {
+            return [$unidades, null];
+        }
+
+        return [0, 'Stock negativo; se sube 0.'];
     }
 
     /**
