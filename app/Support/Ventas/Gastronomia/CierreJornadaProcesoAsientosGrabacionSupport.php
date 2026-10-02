@@ -151,12 +151,26 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
                 );
             }
 
-            $cuentacontableId = self::resolverCuentacontableId(
-                $cuentaRefId,
-                $empresaId,
-                $configContable,
-                $cacheCuentas,
-            );
+            // Cuenta contable directa (partidas pendientes). No pasar por cuentacaja:
+            // el id puede coincidir con una cuenta de caja y imputar el medio equivocado.
+            if (! empty($ln['cuenta_es_contable'])) {
+                $cuentacontableId = (int) Cuentacontable::query()
+                    ->where('id', $cuentaRefId)
+                    ->where('empresa_id', $empresaId)
+                    ->value('id');
+                if ($cuentacontableId <= 0) {
+                    throw new InvalidArgumentException(
+                        'Cuenta contable '.$cuentaRefId.' no pertenece a la empresa '.$empresaId.'.',
+                    );
+                }
+            } else {
+                $cuentacontableId = self::resolverCuentacontableId(
+                    $cuentaRefId,
+                    $empresaId,
+                    $configContable,
+                    $cacheCuentas,
+                );
+            }
 
             $cuentacontableIds[] = $cuentacontableId;
             $debes[] = $debe > 0.0001 ? $debe : '';

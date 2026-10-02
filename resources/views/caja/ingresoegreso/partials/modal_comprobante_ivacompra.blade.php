@@ -70,6 +70,7 @@
      data-preview-url="{{ route('ingresoegreso_comprobante_iva_preview_asiento') }}"
      data-pdf-ia-url="{{ route('ingresoegreso_comprobante_iva_pdf_ia_preview') }}"
      data-duplicado-url="{{ route('ingresoegreso_comprobante_iva_validar_duplicado') }}"
+     data-banco-url="{{ route('ingresoegreso_comprobante_iva_banco_cuenta') }}"
      data-descartar-url="{{ route('descartar_ai_decision') }}">
     <div class="modal-dialog modal-xl modal-dialog-scrollable ie-cp-dialog" role="document">
         <div class="modal-content">
@@ -131,12 +132,15 @@
                             </div>
                             <div class="form-group col-md-4 mb-2">
                                 <label class="ie-cp-label">N&uacute;mero</label>
-                                <div class="d-flex flex-nowrap align-items-center" style="gap:4px;">
+                                <div id="ie-cp-numero-manual" class="d-flex flex-nowrap align-items-center" style="gap:4px;">
                                     <input type="text" maxlength="1" class="form-control form-control-sm text-uppercase text-center" id="ie-cp-letra" placeholder="L" title="Letra" autocomplete="off" style="width:2.6rem; flex:0 0 2.6rem;">
                                     <span class="text-muted">#</span>
                                     <input type="number" class="form-control form-control-sm" id="ie-cp-sucursal" placeholder="Pto." title="Punto de venta" autocomplete="off" style="width:5.5rem; flex:0 0 5.5rem;">
                                     <span class="text-muted">#</span>
                                     <input type="number" class="form-control form-control-sm" id="ie-cp-numero" placeholder="Nro" title="N&uacute;mero" autocomplete="off" style="min-width:0; flex:1;">
+                                </div>
+                                <div id="ie-cp-numero-auto" class="d-none">
+                                    <div class="form-control form-control-sm bg-light text-muted" id="ie-cp-numero-auto-texto">El n&uacute;mero se asigna solo al grabar.</div>
                                 </div>
                                 <div id="ie-cp-aviso-sucursal" class="text-danger small d-none mt-1">El punto de venta no puede ser 0.</div>
                             </div>
@@ -185,8 +189,13 @@
                 </div>
 
                 <div class="ie-cp-bloque">
-                    <div class="ie-cp-bloque-head">Proveedor</div>
+                    <div class="ie-cp-bloque-head" id="ie-cp-proveedor-titulo">Proveedor</div>
                     <div class="ie-cp-bloque-body">
+                        <div id="ie-cp-banco-auto" class="d-none mb-0">
+                            <div class="form-control form-control-sm bg-light" id="ie-cp-banco-auto-texto">El banco sale de la cuenta de caja del movimiento.</div>
+                            <select class="form-control form-control-sm d-none mt-2" id="ie-cp-banco-cuenta"></select>
+                            <small class="text-muted d-block mt-1" id="ie-cp-banco-auto-ayuda">No se carga un proveedor: es un egreso, no una orden de pago.</small>
+                        </div>
                         <div class="form-group row align-items-center mb-2 tm-proveedor-campo" id="ie-cp-div-proveedor">
                             <label class="col-lg-2 ie-cp-label mb-0" for="ie-cp-proveedor-codigo">Proveedor</label>
                             <div class="col-lg-10">

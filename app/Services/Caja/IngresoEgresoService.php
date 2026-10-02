@@ -20,11 +20,13 @@ use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Localidad;
 use App\Models\Caja\Caja_Movimiento_Estado;
+use App\Models\Caja\Cuentacaja;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Caja\IngresoEgresoAsientoDescripcionSupport;
 use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
 use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
@@ -126,6 +128,8 @@ class IngresoEgresoService
 		}
 
 		$this->avisarUmbralArbolIeSiCorresponde($data);
+		$data = $this->completarDetalleOperacion($data);
+		$request->merge(['detalle' => $data['detalle'] ?? '']);
 
    		// Crea estado
 	   	$data['fechas'][] = Carbon::now();
@@ -309,6 +313,9 @@ class IngresoEgresoService
 		} catch (InvalidArgumentException $e) {
 			return ['errores' => $e->getMessage()];
 		}
+
+		$data = $this->completarDetalleOperacion($data);
+		$request->merge(['detalle' => $data['detalle'] ?? '']);
 
    		// Crea estado
 	   	$data['fechas'][] = Carbon::now();
@@ -608,7 +615,10 @@ class IngresoEgresoService
 						);
 					}
 
-					return ['mensaje' => 'ok', 'asiento' => $asientoSp];
+					return [
+						'mensaje' => 'ok',
+						'asiento' => $this->aplicarDescripcionEnAsientoGenerado($asientoSp, $data, $datosCaja, $tipotransaccion_caja),
+					];
 				}
 			}
 		}
@@ -797,7 +807,10 @@ class IngresoEgresoService
 			);
 		}
 
-		return ['mensaje' => 'ok', 'asiento' => $asiento];
+		return [
+			'mensaje' => 'ok',
+			'asiento' => $this->aplicarDescripcionEnAsientoGenerado($asiento, $data, $datosCaja, $tipotransaccion_caja),
+		];
 	}
 
 	/** @param  list<array<string, mixed>>  $comprobantes */
@@ -848,7 +861,124 @@ class IngresoEgresoService
 		}
 
 		$comprobantes = $this->decodificarComprobantesIvaJson($json);
+		$comprobantes = $this->comprobanteIvaService->completarGastosBancarios(
+			$comprobantes,
+			$this->lineasCajaParaGastoBanco($request)
+		);
 		$this->comprobanteIvaService->sincronizarDesdeJson($cajaMovimientoId, $empresaId, $comprobantes);
+	}
+
+	/**
+	 * @param  \Illuminate\Http\Request  $request
+	 * @return list<array{cuentacaja_id: int, monto: float}>
+	 */
+	private function lineasCajaParaGastoBanco($request): array
+	{
+		$ids = $request->input('cuentacaja_ids', []);
+		$montos = $request->input('montos', []);
+		if (! is_array($ids)) {
+			return [];
+		}
+
+		$lineas = [];
+		foreach (array_values($ids) as $indice => $id) {
+			$lineas[] = [
+				'cuentacaja_id' => (int) $id,
+				'monto' => (float) (is_array($montos) ? ($montos[$indice] ?? 0) : 0),
+			];
+		}
+
+		return $lineas;
+	}
+
+	/**
+	 * Leyenda que va al mayor: detalle del encabezado, si no los de las cuentas de caja,
+	 * y si tampoco hay, tipo de operación y banco o cuenta.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function completarDetalleOperacion(array $data): array
+	{
+		$ids = [];
+		foreach ((array) ($data['cuentacaja_ids'] ?? []) as $id) {
+			$id = (int) $id;
+			if ($id > 0) {
+				$ids[$id] = $id;
+			}
+		}
+		$observaciones = [];
+		foreach ((array) ($data['observaciones'] ?? []) as $observacion) {
+			$observaciones[] = (string) $observacion;
+		}
+		$tipo = null;
+		$tipoId = (int) ($data['tipotransaccion_caja_id'] ?? 0);
+		if ($tipoId > 0) {
+			$tipo = $this->tipotransaccion_cajaRepository->find($tipoId);
+		}
+		$descripcion = $this->descripcionOperacion($data, $observaciones, $ids, $tipo);
+		$data['descripcion_asiento'] = $descripcion;
+		if (IngresoEgresoAsientoDescripcionSupport::esGenerica((string) ($data['detalle'] ?? ''))) {
+			$data['detalle'] = $descripcion;
+		}
+
+		return $data;
+	}
+
+	/**
+	 * @param  list<array<string, mixed>>  $asiento
+	 * @param  array<string, mixed>  $data
+	 * @param  mixed  $datosCaja
+	 * @return list<array<string, mixed>>
+	 */
+	private function aplicarDescripcionEnAsientoGenerado(array $asiento, array $data, $datosCaja, $tipotransaccion): array
+	{
+		$observaciones = [];
+		$ids = [];
+		$filas = is_array($datosCaja) ? $datosCaja : [];
+		foreach ($filas as $movimiento) {
+			$observaciones[] = (string) ($movimiento->observaciones ?? '');
+			$id = (int) ($movimiento->cuentacaja_ids ?? 0);
+			if ($id > 0) {
+				$ids[$id] = $id;
+			}
+		}
+		$descripcion = $this->descripcionOperacion($data, $observaciones, $ids, $tipotransaccion);
+		foreach ($asiento as $i => $linea) {
+			if (IngresoEgresoAsientoDescripcionSupport::esGenerica((string) ($linea['observacion'] ?? ''))) {
+				$asiento[$i]['observacion'] = $descripcion;
+			}
+		}
+
+		return $asiento;
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 * @param  list<string>  $observaciones
+	 * @param  array<int, int>  $idsCuentacaja
+	 */
+	private function descripcionOperacion(array $data, array $observaciones, array $idsCuentacaja, $tipo): string
+	{
+		$bancos = [];
+		$cuentas = [];
+		if ($idsCuentacaja !== []) {
+			$filas = Cuentacaja::query()->with('bancos')->whereIn('id', array_values($idsCuentacaja))->get();
+			foreach ($filas as $cuenta) {
+				$cuentas[] = (string) ($cuenta->nombre ?? '');
+				$banco = trim((string) ($cuenta->bancos?->nombre ?? ''));
+				if ($banco !== '') {
+					$bancos[] = $banco;
+				}
+			}
+		}
+
+		return IngresoEgresoAsientoDescripcionSupport::resolver(
+			(string) ($data['detalle'] ?? ''),
+			$observaciones,
+			trim((string) ($tipo->nombre ?? '')),
+			$bancos,
+			$cuentas
+		);
 	}
 
 	/** @return list<array<string, mixed>> */
@@ -975,13 +1105,21 @@ class IngresoEgresoService
 		if (! isset($data['observaciones']) || ! is_array($data['observaciones'])) {
 			$data['observaciones'] = [];
 		}
+		$descripcionLineas = trim($detalle);
+		if (IngresoEgresoAsientoDescripcionSupport::esGenerica($descripcionLineas)) {
+			$alternativa = trim((string) ($data['descripcion_asiento'] ?? ''));
+			if (! IngresoEgresoAsientoDescripcionSupport::esGenerica($alternativa)) {
+				$descripcionLineas = $alternativa;
+			}
+		}
 		$qLineas = is_array($data['cuentacontable_ids'] ?? null) ? count($data['cuentacontable_ids']) : count($data['observaciones']);
 		for ($i = 0; $i < $qLineas; $i++) {
 			$obs = $data['observaciones'][$i] ?? null;
-			if ($obs === null || trim((string) $obs) === ''
-				|| ($spId > 0 && IngresoEgresoSolicitudpagoSupport::esDescripcionGenericaPagoSp((string) $obs))
+			$texto = $obs === null ? '' : (string) $obs;
+			if (IngresoEgresoAsientoDescripcionSupport::esGenerica($texto)
+				|| ($spId > 0 && IngresoEgresoSolicitudpagoSupport::esDescripcionGenericaPagoSp($texto))
 			) {
-				$data['observaciones'][$i] = $detalle;
+				$data['observaciones'][$i] = $descripcionLineas;
 			}
 		}
 

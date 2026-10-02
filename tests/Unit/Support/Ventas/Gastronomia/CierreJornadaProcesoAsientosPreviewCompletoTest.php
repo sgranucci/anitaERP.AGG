@@ -187,6 +187,31 @@ final class CierreJornadaProcesoAsientosPreviewCompletoTest extends TestCase
         $this->assertSame(121.0, $refs['total_facturado_totem'] ?? 0);
     }
 
+    public function test_totem_anulado_por_nota_credito_no_toma_el_cobro_waitry(): void
+    {
+        $mov = [
+            'grupo' => CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM,
+            'total' => 5900.0,
+            'venta_id' => 10,
+        ];
+
+        $importe = CierreJornadaProcesoAsientosPreviewSupport::importeContableMovimiento(
+            $mov,
+            [10 => 5900.0],
+            [10 => -5900.0],
+        );
+
+        $this->assertSame(0.0, $importe);
+    }
+
+    public function test_totem_con_nota_credito_parcial_usa_el_neto_facturado(): void
+    {
+        $this->assertSame(
+            22700.0,
+            CierreJornadaProcesoAsientosPreviewSupport::netoFacturaMenosNotasCredito(27800.0, -5100.0, 27800.0),
+        );
+    }
+
     public function test_cuadre_asiento_dos_contra_total_anita_jornada(): void
     {
         $datosAnita = $this->datosAsientoAnitaMock();

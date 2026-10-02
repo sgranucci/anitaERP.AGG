@@ -1329,7 +1329,7 @@ class ArticuloController extends Controller
 
         $articuloPrevio = Articulo::query()
             ->whereKey((int) ($data['articulo_id'] ?? $id))
-            ->first(['id', 'coeficienteconversion', 'usoarticulo_id', 'estado']);
+            ->first(['id', 'coeficienteconversion', 'estado']);
         $coefAnterior = $articuloPrevio !== null
             ? (float) ($articuloPrevio->coeficienteconversion ?? 0)
             : null;
@@ -1341,7 +1341,6 @@ class ArticuloController extends Controller
 
         $arbolSvc = app(\App\Services\Stock\ArticuloArbolIntegracionService::class);
         $antesArbol = [
-            'usoarticulo_id' => (int) ($articuloPrevio->usoarticulo_id ?? 0),
             'cuentas_fp' => $arbolSvc->fingerprintCuentas((int) $id),
         ];
 
@@ -1376,7 +1375,6 @@ class ArticuloController extends Controller
             }
 
             $despuesArbol = [
-                'usoarticulo_id' => (int) ($data['usoarticulo_id'] ?? $antesArbol['usoarticulo_id']),
                 'cuentas_fp' => $arbolSvc->fingerprintCuentas((int) $id),
             ];
             $arbolSvc->evaluarTrasActualizar((int) $id, $antesArbol, $despuesArbol);

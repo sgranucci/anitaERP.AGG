@@ -6,6 +6,7 @@ namespace App\Support\Ventas\Gastronomia;
 
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
+use App\Models\Contable\Cuentacontable;
 use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Repositories\Contable\AsientoRepository;
@@ -18,6 +19,12 @@ use RuntimeException;
 final class CorregirImporteAsientoTotemVsVentaSupport
 {
     private const TOLERANCIA = 0.02;
+
+    /** Puente de cobranzas QR/tótem. No es el medio real del informe Z. */
+    private const CUENTA_PUENTE_TOTEM = '113010010';
+
+    /** Contrapartida del cobro que ya no tiene venta. No es un medio (no entra al auditor). */
+    private const CUENTA_PARTIDAS_PENDIENTES = '211010018';
 
     /** @var list<string> */
     private const CODIGOS = ['totem_ventas_iva', 'totem_puente'];
@@ -62,7 +69,8 @@ final class CorregirImporteAsientoTotemVsVentaSupport
         $datos = CierreJornadaFacturadoAnitaSupport::datosAsientoVentasJornadaSoloTotem($empresaId, $fechaJornada);
         $totalErp = round((float) ($datos['total'] ?? 0), 2);
         $cantidadEmisiones = (int) ($datos['cantidad_emisiones'] ?? 0);
-        // Neto 0 con factura y nota de crédito: el asiento tiene que quedar en cero.
+        // Neto 0 con factura y nota de crédito: el asiento de ventas queda en cero.
+        // El puente conserva el cobro del medio (informe Z) y la diferencia va a partidas pendientes.
         // Sin emisiones no hay base para recuadrar.
         if ($totalErp <= self::TOLERANCIA && $cantidadEmisiones === 0) {
             throw new RuntimeException('No hay facturación TOTEM ERP para recalcular (empresa '.$empresaId.', '.$fechaJornada.').');
@@ -102,6 +110,34 @@ final class CorregirImporteAsientoTotemVsVentaSupport
     /**
      * @return array{asientos:int,lineas_erp:int,ctamov:int,ya_ok:int,errores:list<string>,plan:array<string, mixed>}
      */
+    /**
+     * Después de una nota de crédito: si la jornada ya tiene asientos de tótem, los deja
+     * en el neto facturado. Sin cierre todavía, no hace nada.
+     */
+    public function recuadrarTrasNotaCredito(int $empresaId, string $fechaJornada): void
+    {
+        try {
+            $resultado = $this->ejecutar($empresaId, $fechaJornada, false);
+        } catch (RuntimeException $e) {
+            if (self::omisionEsperadaTrasNotaCredito($e->getMessage())) {
+                return;
+            }
+
+            throw $e;
+        }
+
+        if ($resultado['errores'] !== []) {
+            throw new RuntimeException(implode(' ', $resultado['errores']));
+        }
+    }
+
+    private static function omisionEsperadaTrasNotaCredito(string $mensaje): bool
+    {
+        return str_contains($mensaje, 'No hay snapshot')
+            || str_contains($mensaje, 'No hay jornada')
+            || str_contains($mensaje, 'No hay facturación TOTEM');
+    }
+
     public function ejecutar(int $empresaId, string $fechaJornada, bool $dryRun = true): array
     {
         $plan = $this->planificar($empresaId, $fechaJornada);
@@ -144,8 +180,8 @@ final class CorregirImporteAsientoTotemVsVentaSupport
                     }
                     $resultado['asientos']++;
                     $resultado['lineas_erp'] += $cambios;
-                    $this->validarCuadre((int) $asientoPlan['asiento_id'], (float) $plan['total_venta_erp']);
-                    if (abs((float) $plan['total_venta_erp']) <= self::TOLERANCIA) {
+                    $this->validarCuadre((int) $asientoPlan['asiento_id'], (float) $asientoPlan['total_esperado']);
+                    if (abs((float) $asientoPlan['total_esperado']) <= self::TOLERANCIA) {
                         $this->asientoRepository->eliminarCtamovAnitaPorNumero(
                             (int) $asientoPlan['empresa_id'],
                             (string) $asientoPlan['numeroasiento'],
@@ -155,7 +191,7 @@ final class CorregirImporteAsientoTotemVsVentaSupport
                     }
                     $resultado['ctamov']++;
                 }
-                $this->actualizarTotalesSnapshot((int) $plan['snapshot_id'], (float) $plan['total_venta_erp']);
+                $this->actualizarTotalesSnapshot((int) $plan['snapshot_id'], $plan);
             });
         } catch (RuntimeException $e) {
             $resultado['errores'][] = $e->getMessage();
@@ -173,6 +209,10 @@ final class CorregirImporteAsientoTotemVsVentaSupport
         $asiento = Asiento::query()->with(['asiento_movimientos.cuentacontables'])->find($asientoId);
         if ($asiento === null) {
             throw new RuntimeException('Asiento ERP #'.$asientoId.' no encontrado.');
+        }
+
+        if ($codigo === 'totem_puente') {
+            return $this->planPuente($asiento, $totalErp);
         }
 
         $cambios = [];
@@ -193,18 +233,116 @@ final class CorregirImporteAsientoTotemVsVentaSupport
             ];
         }
 
-        $totales = $this->totalesMovimientos($asientoId);
+        return $this->armarPlanAsiento($asiento, $codigo, $totalErp, $cambios);
+    }
+
+    /**
+     * El débito de Mercado Pago (y el resto de medios reales) queda en el cobro ya contabilizado.
+     * El crédito al puente tótem baja al neto de la venta. La diferencia se acredita a partidas pendientes.
+     *
+     * @return array<string, mixed>
+     */
+    private function planPuente(Asiento $asiento, float $totalErp): array
+    {
+        $partidasId = (int) Cuentacontable::query()
+            ->where('empresa_id', (int) $asiento->empresa_id)
+            ->where('codigo', self::CUENTA_PARTIDAS_PENDIENTES)
+            ->value('id');
+        if ($partidasId <= 0) {
+            throw new RuntimeException(
+                'Falta la cuenta '.self::CUENTA_PARTIDAS_PENDIENTES.' en la empresa '.$asiento->empresa_id.'.',
+            );
+        }
+
+        $cobro = 0.0;
+        $partidasMov = null;
+        $cambios = [];
+        foreach ($asiento->asiento_movimientos as $mov) {
+            $cta = $mov->cuentacontables;
+            $codigoCuenta = trim((string) ($cta->codigo ?? ''));
+            $montoActual = round((float) ($mov->monto ?? 0), 2);
+            $cuentaId = (int) ($mov->cuentacontable_id ?? 0);
+
+            if ($codigoCuenta === self::CUENTA_PARTIDAS_PENDIENTES) {
+                $partidasMov = $mov;
+                continue;
+            }
+
+            if ($codigoCuenta === self::CUENTA_PUENTE_TOTEM) {
+                $esperado = round(-1 * $totalErp, 2);
+                if (abs($montoActual - $esperado) > self::TOLERANCIA) {
+                    $cambios[] = $this->cambioLinea($mov, $esperado);
+                }
+                continue;
+            }
+
+            if ($montoActual > self::TOLERANCIA) {
+                $cobro = round($cobro + $montoActual, 2);
+            }
+        }
+
+        $gap = round($cobro - $totalErp, 2);
+        if ($gap < -self::TOLERANCIA) {
+            throw new RuntimeException(
+                'Asiento puente #'.$asiento->id.' tiene cobro '.$cobro.' menor que la venta neta '.$totalErp.'.',
+            );
+        }
+
+        $esperadoPartidas = round(-1 * max($gap, 0.0), 2);
+        if ($partidasMov !== null) {
+            $actual = round((float) $partidasMov->monto, 2);
+            if (abs($actual - $esperadoPartidas) > self::TOLERANCIA) {
+                $cambios[] = $this->cambioLinea($partidasMov, $esperadoPartidas);
+            }
+        } elseif ($esperadoPartidas < -self::TOLERANCIA) {
+            $cambios[] = [
+                'movimiento_id' => 0,
+                'insertar' => true,
+                'asiento_id' => (int) $asiento->id,
+                'cuentacontable_id' => $partidasId,
+                'cuenta' => self::CUENTA_PARTIDAS_PENDIENTES.' PARTID.PENDIENTES D IMPUTACION',
+                'monto_actual' => 0.0,
+                'monto_esperado' => $esperadoPartidas,
+            ];
+        }
+
+        return $this->armarPlanAsiento($asiento, 'totem_puente', round(max($cobro, 0.0), 2), $cambios);
+    }
+
+    /**
+     * @return array{movimiento_id:int,cuentacontable_id:int,cuenta:string,monto_actual:float,monto_esperado:float}
+     */
+    private function cambioLinea(Asiento_Movimiento $mov, float $esperado): array
+    {
+        $cta = $mov->cuentacontables;
+
+        return [
+            'movimiento_id' => (int) $mov->id,
+            'cuentacontable_id' => (int) ($mov->cuentacontable_id ?? 0),
+            'cuenta' => trim((string) ($cta->codigo ?? '')).' '.trim((string) ($cta->nombre ?? '')),
+            'monto_actual' => round((float) ($mov->monto ?? 0), 2),
+            'monto_esperado' => round($esperado, 2),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $cambios
+     * @return array<string, mixed>
+     */
+    private function armarPlanAsiento(Asiento $asiento, string $codigo, float $totalEsperado, array $cambios): array
+    {
+        $totales = $this->totalesMovimientos((int) $asiento->id);
 
         return [
             'codigo' => $codigo,
-            'asiento_id' => $asientoId,
+            'asiento_id' => (int) $asiento->id,
             'numeroasiento' => (string) $asiento->numeroasiento,
             'anita_nro_asiento' => $asiento->anita_nro_asiento,
             'empresa_id' => (int) $asiento->empresa_id,
             'fecha' => (string) $asiento->fecha,
             'debe_actual' => $totales['debe'],
             'haber_actual' => $totales['haber'],
-            'total_esperado' => $totalErp,
+            'total_esperado' => round($totalEsperado, 2),
             'requiere_cambio' => $cambios !== [],
             'cambios' => $cambios,
         ];
@@ -248,6 +386,18 @@ final class CorregirImporteAsientoTotemVsVentaSupport
     {
         $n = 0;
         foreach ($asientoPlan['cambios'] as $cambio) {
+            if (! empty($cambio['insertar'])) {
+                Asiento_Movimiento::query()->create([
+                    'asiento_id' => (int) $cambio['asiento_id'],
+                    'cuentacontable_id' => (int) $cambio['cuentacontable_id'],
+                    'monto' => round((float) $cambio['monto_esperado'], 2),
+                    'moneda_id' => 1,
+                    'cotizacion' => 1,
+                    'observacion' => 'Venta gastronomia',
+                ]);
+                $n++;
+                continue;
+            }
             $mov = Asiento_Movimiento::query()->find((int) $cambio['movimiento_id']);
             if ($mov === null) {
                 throw new RuntimeException('Movimiento #'.$cambio['movimiento_id'].' no encontrado.');
@@ -270,11 +420,21 @@ final class CorregirImporteAsientoTotemVsVentaSupport
         $this->asientoRepository->sincronizarCtamovAnita($payload);
     }
 
-    private function actualizarTotalesSnapshot(int $snapshotId, float $totalErp): void
+    /**
+     * @param  array<string, mixed>  $plan
+     */
+    private function actualizarTotalesSnapshot(int $snapshotId, array $plan): void
     {
         $snapshot = GastronomiaCierreJornadaProcesoSnapshot::query()->find($snapshotId);
         if ($snapshot === null) {
             return;
+        }
+        $porCodigo = [];
+        foreach ($plan['asientos'] ?? [] as $asientoPlan) {
+            if (! is_array($asientoPlan)) {
+                continue;
+            }
+            $porCodigo[(string) ($asientoPlan['codigo'] ?? '')] = round((float) ($asientoPlan['total_esperado'] ?? 0), 2);
         }
         $payload = is_array($snapshot->payload) ? $snapshot->payload : [];
         $asientos = $payload['asientos_proceso_grabacion']['asientos'] ?? [];
@@ -285,13 +445,15 @@ final class CorregirImporteAsientoTotemVsVentaSupport
             if (! is_array($item)) {
                 continue;
             }
-            if (! in_array((string) ($item['codigo'] ?? ''), self::CODIGOS, true)) {
+            $codigo = (string) ($item['codigo'] ?? '');
+            if (! array_key_exists($codigo, $porCodigo)) {
                 continue;
             }
-            $payload['asientos_proceso_grabacion']['asientos'][$i]['resumen_debe'] = $totalErp;
-            $payload['asientos_proceso_grabacion']['asientos'][$i]['resumen_haber'] = $totalErp;
+            $total = $porCodigo[$codigo];
+            $payload['asientos_proceso_grabacion']['asientos'][$i]['resumen_debe'] = $total;
+            $payload['asientos_proceso_grabacion']['asientos'][$i]['resumen_haber'] = $total;
             if (isset($item['total']) || array_key_exists('total', $item)) {
-                $payload['asientos_proceso_grabacion']['asientos'][$i]['total'] = $totalErp;
+                $payload['asientos_proceso_grabacion']['asientos'][$i]['total'] = $total;
             }
         }
         $snapshot->payload = $payload;

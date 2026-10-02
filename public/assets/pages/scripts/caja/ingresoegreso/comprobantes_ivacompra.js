@@ -22,6 +22,8 @@
     var iaSugerenciaHash = null;
     // true solo mientras la sugerencia IA está en el modal y aún no se aceptó a la grilla
     var iaDecisionPendienteModal = false;
+    var bancoGastoActual = null;
+    var bancoGastoSeq = 0;
 
     function parseJsonEl(id, fallback) {
         try {
@@ -107,6 +109,7 @@
             $abrev.removeData('ultima-valida');
         }
         $('#ie-cp-tipo-nombre').val(nombre);
+        actualizarModoNumeracion();
         if (dispararConceptos) {
             precargarConceptosPorTipo(id);
         }
@@ -179,7 +182,146 @@
         return (parseFloat(n) || 0).toFixed(2);
     }
 
+    var TIPOS_NUMERO_AUTOMATICO = { ICO: true, IDO: true };
+
+    function esNumeracionAutomatica() {
+        return !!TIPOS_NUMERO_AUTOMATICO[abreviaturaTipoActual()];
+    }
+
+    function esGastoBanco() {
+        return String($('#ie-cp-tipo-tesoreria').val() || '') === 'GASTO_BANCO';
+    }
+
+    function parseMontoCaja(val) {
+        var n = parseFloat(String(val || '').replace(/\./g, '').replace(',', '.'));
+        return isNaN(n) ? 0 : n;
+    }
+
+    function lineasCajaDelFormulario() {
+        var lineas = [];
+        $('#tbody-cuenta-table tr.item-cuenta').each(function () {
+            var id = parseInt($(this).find('.cuentacaja_id').val() || '0', 10) || 0;
+            if (id <= 0) {
+                return;
+            }
+            lineas.push({
+                cuentacaja_id: id,
+                monto: parseMontoCaja($(this).find('.monto').val()),
+            });
+        });
+        return lineas;
+    }
+
+    function pintarBancoGasto(data) {
+        bancoGastoActual = data || { ok: false, ambiguo: false, mensaje: 'No se pudo tomar el banco de la cuenta de caja.' };
+        data = bancoGastoActual;
+        var $texto = $('#ie-cp-banco-auto-texto');
+        var $sel = $('#ie-cp-banco-cuenta');
+        var $ayuda = $('#ie-cp-banco-auto-ayuda');
+        if (data.ambiguo && (data.candidatos || []).length) {
+            $texto.text(data.mensaje || 'Elegí la cuenta del banco.');
+            var html = '<option value="">Elegí la cuenta</option>';
+            data.candidatos.forEach(function (c) {
+                var label = $.trim((c.cuenta_codigo ? c.cuenta_codigo + ' · ' : '') + (c.cuenta_nombre || c.banco_nombre || ''));
+                html += '<option value="' + c.cuentacaja_id + '">' + $('<div>').text(label).html() + '</option>';
+            });
+            $sel.removeClass('d-none').html(html);
+            $ayuda.text('Solo las cuentas que ya cargaste en el movimiento.');
+            return;
+        }
+        if (!data.ok) {
+            $sel.addClass('d-none').empty();
+            $texto.text(data.mensaje || 'No se pudo tomar el banco de la cuenta de caja.');
+            $ayuda.text('No se carga un proveedor: es un egreso, no una orden de pago.');
+            return;
+        }
+        if ($sel.find('option').length > 1 && data.cuentacaja_id) {
+            $sel.removeClass('d-none').val(String(data.cuentacaja_id));
+        } else {
+            $sel.addClass('d-none').empty();
+        }
+        $texto.text(data.etiqueta || data.banco_nombre || '');
+        if ((parseInt(data.proveedor_id, 10) || 0) > 0) {
+            $ayuda.text('Queda vinculado el proveedor ' + $.trim((data.proveedor_codigo || '') + ' ' + (data.proveedor_nombre || '')) + ', por el CUIT del banco.');
+        } else {
+            $ayuda.text('El banco no está en el maestro de proveedores. El IVA queda a nombre del banco.');
+        }
+    }
+
+    function resolverBancoGasto(cuentacajaId) {
+        var url = $('#modal-ie-comprobante-iva').data('banco-url');
+        var seq = ++bancoGastoSeq;
+        if (!url) {
+            pintarBancoGasto({ ok: false, ambiguo: false, mensaje: 'No se pudo consultar el banco de la cuenta de caja.' });
+            return;
+        }
+        $.post(url, {
+            _token: $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val(),
+            lineas_json: JSON.stringify(lineasCajaDelFormulario()),
+            cuentacaja_id: cuentacajaId || 0,
+        }).done(function (data) {
+            if (seq !== bancoGastoSeq || !esGastoBanco()) {
+                return;
+            }
+            pintarBancoGasto(data);
+        }).fail(function () {
+            if (seq !== bancoGastoSeq) {
+                return;
+            }
+            pintarBancoGasto({ ok: false, ambiguo: false, mensaje: 'No se pudo consultar el banco de la cuenta de caja.' });
+        });
+    }
+
+    function aplicarModoProveedor() {
+        var gasto = esGastoBanco();
+        $('#ie-cp-banco-auto').toggleClass('d-none', !gasto);
+        $('#ie-cp-div-proveedor, #ie-cp-eventual-bloque').toggleClass('d-none', gasto);
+        $('#ie-cp-proveedor-titulo').text(gasto ? 'Banco' : 'Proveedor');
+        if (!gasto) {
+            bancoGastoActual = null;
+            $('#ie-cp-banco-cuenta').addClass('d-none').empty();
+            return;
+        }
+        var elegida = 0;
+        var idx = parseInt($('#ie-cp-edit-index').val(), 10);
+        if (!isNaN(idx) && comprobantesIva[idx] && comprobantesIva[idx].cuentacaja_id) {
+            elegida = parseInt(comprobantesIva[idx].cuentacaja_id, 10) || 0;
+        }
+        resolverBancoGasto(elegida);
+    }
+
+    function actualizarModoNumeracion() {
+        var auto = esNumeracionAutomatica();
+        $('#ie-cp-numero-manual').toggleClass('d-none', auto);
+        $('#ie-cp-numero-auto').toggleClass('d-none', !auto);
+        if (!auto) {
+            return;
+        }
+        marcarSucursalInvalida(false);
+        var nro = 0;
+        var idx = parseInt($('#ie-cp-edit-index').val(), 10);
+        var previo = (!isNaN(idx) && comprobantesIva[idx]) ? comprobantesIva[idx] : null;
+        var abrevPrevio = previo
+            ? String((tiposCompraMeta[String(previo.tipotransaccion_compra_id || '')] || {}).abreviatura || '').trim().toUpperCase()
+            : '';
+        if (previo && previo.id && abrevPrevio === abreviaturaTipoActual()) {
+            nro = parseInt(previo.numerocomprobante || '0', 10) || 0;
+        }
+        $('#ie-cp-letra').val(nro > 0 ? 'A' : '');
+        $('#ie-cp-sucursal').val(nro > 0 ? '0' : '');
+        $('#ie-cp-numero').val(nro > 0 ? String(nro) : '');
+        $('#ie-cp-numero-auto-texto').text(nro > 0
+            ? ('Número ' + nro + ' (letra A, punto de venta 0).')
+            : 'El número se asigna solo al grabar. No hace falta letra, punto de venta ni número.');
+    }
+
     function etiquetaComprobante(c) {
+        var meta = tiposCompraMeta[String(c.tipotransaccion_compra_id || '')] || {};
+        var abrev = String(meta.abreviatura || '').trim().toUpperCase();
+        if (TIPOS_NUMERO_AUTOMATICO[abrev]) {
+            var nro = parseInt(c.numerocomprobante || '0', 10) || 0;
+            return nro > 0 ? ('A 0-' + nro) : 'Automático';
+        }
         return (c.letra || '') + ' ' + (c.sucursal || '') + '-' + (c.numerocomprobante || '');
     }
 
@@ -609,6 +751,7 @@
             $('#ie-cp-letra').val(c.letra || '');
             $('#ie-cp-sucursal').val(c.sucursal || '');
             $('#ie-cp-numero').val(c.numerocomprobante || '');
+            actualizarModoNumeracion();
             $('#ie-cp-proveedor-id').val(c.proveedor_id || '');
             $('#ie-cp-proveedor-codigo').val(c.proveedor_codigo || '');
             $('#ie-cp-proveedor-nombre').val(c.proveedor_nombre || '');
@@ -650,6 +793,7 @@
             .one('shown.bs.modal.ieCpFocoTipo', function () {
                 focoCampoIe('ie-cp-tipo-abreviatura');
             });
+        aplicarModoProveedor();
         $('#modal-ie-comprobante-iva').modal('show');
         programarPreview();
     }
@@ -1185,21 +1329,31 @@
             });
         });
 
-        var proveedorId = parseInt($('#ie-cp-proveedor-id').val() || '0', 10);
+        var gastoBanco = esGastoBanco() && bancoGastoActual && bancoGastoActual.ok;
+        var proveedorId = gastoBanco
+            ? (parseInt(bancoGastoActual.proveedor_id || '0', 10) || 0)
+            : parseInt($('#ie-cp-proveedor-id').val() || '0', 10);
         var editIdx = parseInt($('#ie-cp-edit-index').val(), 10);
         var previo = (editIdx >= 0 && comprobantesIva[editIdx]) ? comprobantesIva[editIdx] : {};
         return {
             id: previo.id || null,
             tipo_tesoreria: $('#ie-cp-tipo-tesoreria').val(),
             tipotransaccion_compra_id: parseInt($('#ie-cp-tipotransaccion-compra-id').val() || '0', 10),
+            cuentacaja_id: gastoBanco ? (parseInt(bancoGastoActual.cuentacaja_id || '0', 10) || null) : null,
             proveedor_id: proveedorId,
-            proveedor_codigo: $('#ie-cp-proveedor-codigo').val(),
-            proveedor_nombre: $('#ie-cp-proveedor-nombre').val(),
-            proveedor_nombre_eventual: proveedorId > 0 ? '' : $('#ie-cp-eventual-nombre').val(),
-            proveedor_documento_eventual: proveedorId > 0 ? '' : $('#ie-cp-eventual-documento').val(),
-            proveedor_condicioniva_id_eventual: proveedorId > 0 ? null : (parseInt($('#ie-cp-eventual-condicioniva').val() || '0', 10) || null),
-            letra: ($('#ie-cp-letra').val() || 'B').toUpperCase(),
-            sucursal: parseInt($('#ie-cp-sucursal').val() || '0', 10),
+            proveedor_codigo: gastoBanco ? (bancoGastoActual.proveedor_codigo || '') : $('#ie-cp-proveedor-codigo').val(),
+            proveedor_nombre: gastoBanco ? (bancoGastoActual.etiqueta || bancoGastoActual.banco_nombre || '') : $('#ie-cp-proveedor-nombre').val(),
+            proveedor_nombre_eventual: gastoBanco
+                ? (proveedorId > 0 ? '' : (bancoGastoActual.banco_nombre || ''))
+                : (proveedorId > 0 ? '' : $('#ie-cp-eventual-nombre').val()),
+            proveedor_documento_eventual: gastoBanco
+                ? (proveedorId > 0 ? '' : (bancoGastoActual.cuit || ''))
+                : (proveedorId > 0 ? '' : $('#ie-cp-eventual-documento').val()),
+            proveedor_condicioniva_id_eventual: gastoBanco
+                ? (proveedorId > 0 ? null : (parseInt(bancoGastoActual.condicioniva_id || '0', 10) || null))
+                : (proveedorId > 0 ? null : (parseInt($('#ie-cp-eventual-condicioniva').val() || '0', 10) || null)),
+            letra: esNumeracionAutomatica() ? 'A' : ($('#ie-cp-letra').val() || 'B').toUpperCase(),
+            sucursal: esNumeracionAutomatica() ? 0 : parseInt($('#ie-cp-sucursal').val() || '0', 10),
             numerocomprobante: parseInt($('#ie-cp-numero').val() || '0', 10),
             fechacomprobante: $('#ie-cp-fecha-comprobante').val(),
             fechaiva: $('#ie-cp-fecha-iva').val(),
@@ -1274,7 +1428,7 @@
             alert('Seleccione tipo de comprobante.');
             return;
         }
-            if ((parseInt(payload.sucursal, 10) || 0) <= 0) {
+        if (!esNumeracionAutomatica() && (parseInt(payload.sucursal, 10) || 0) <= 0) {
             marcarSucursalInvalida(true);
             focoCampoIe('ie-cp-sucursal');
             return;
@@ -1308,11 +1462,15 @@
             alert(errorGasto);
             return;
         }
-        if (payload.proveedor_id <= 0 && !payload.proveedor_nombre_eventual) {
+        if (esGastoBanco()) {
+            if (!bancoGastoActual || !bancoGastoActual.ok) {
+                alert((bancoGastoActual && bancoGastoActual.mensaje) || 'Falta el banco de la cuenta de caja.');
+                return;
+            }
+        } else if (payload.proveedor_id <= 0 && !payload.proveedor_nombre_eventual) {
             alert('Indique proveedor del maestro o datos de proveedor eventual.');
             return;
-        }
-        if (payload.proveedor_id <= 0 && !payload.proveedor_documento_eventual) {
+        } else if (payload.proveedor_id <= 0 && !payload.proveedor_documento_eventual) {
             alert('El proveedor eventual debe tener CUIT (11 dígitos).');
             return;
         }
@@ -1404,6 +1562,7 @@
             $('#ie-cp-letra').val(cab.letra || 'B');
             $('#ie-cp-sucursal').val(cab.sucursal || '');
             $('#ie-cp-numero').val(cab.numerocomprobante || '');
+            actualizarModoNumeracion();
             $('#ie-cp-fecha-comprobante').val((cab.fechacomprobante || '').slice(0, 10));
             $('#ie-cp-fecha-iva').val((cab.fechaiva || '').slice(0, 10));
             $('#ie-cp-fecha-iva').data(
@@ -1452,6 +1611,14 @@
             agregarFilaConcepto(null);
         });
 
+        $('#ie-cp-tipo-tesoreria').on('change', aplicarModoProveedor);
+        $('#ie-cp-banco-cuenta').on('change', function () {
+            var id = parseInt($(this).val() || '0', 10) || 0;
+            if (id > 0) {
+                resolverBancoGasto(id);
+            }
+        });
+
         $('#ie-cp-tipotransaccion-compra-id').on('change', function () {
             precargarConceptosPorTipo($(this).val());
         });
@@ -1465,6 +1632,7 @@
                 return;
             }
             precargarConceptosPorTipo(tipoId);
+            actualizarModoNumeracion();
         });
 
         window.afterTipotransaccionCompraEnterOk = function (data, target) {
@@ -1472,7 +1640,8 @@
                 return;
             }
             if (data && data.id) {
-                focoCampoIe('ie-cp-letra');
+                actualizarModoNumeracion();
+                focoCampoIe(esNumeracionAutomatica() ? 'ie-cp-fecha-comprobante' : 'ie-cp-letra');
             }
         };
 

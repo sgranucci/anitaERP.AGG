@@ -74,9 +74,10 @@ class ArticuloArbolIntegracionService
     }
 
     /**
-     * Tras editar: reabre si cambió uso o cuentas (o está RECHAZADO y se vuelve a enviar).
+     * Tras editar: vuelve a abrir el circuito solo si cambiaron las cuentas contables.
+     * Uso, descripción y el resto de la ficha no lo disparan.
      *
-     * @param  array<string, mixed>  $antes  snapshot previo (usoarticulo_id, fingerprint cuentas)
+     * @param  array<string, mixed>  $antes  snapshot previo (fingerprint cuentas)
      * @param  array<string, mixed>  $despues
      */
     public function evaluarTrasActualizar(int $articuloId, array $antes, array $despues): int
@@ -90,39 +91,33 @@ class ArticuloArbolIntegracionService
             return 0;
         }
 
-        $estado = strtoupper(trim((string) ($articulo->estado ?? '')));
-        $usoCambio = (int) ($antes['usoarticulo_id'] ?? 0) !== (int) ($despues['usoarticulo_id'] ?? 0);
         $cuentasCambio = (string) ($antes['cuentas_fp'] ?? '') !== (string) ($despues['cuentas_fp'] ?? '');
-        $eraActivo = $estado === ArticuloAprobacionAltaSupport::ESTADO_ACTIVO;
-        $eraRechazado = $estado === ArticuloAprobacionAltaSupport::ESTADO_RECHAZADO;
-        $eraPendiente = $estado === ArticuloAprobacionAltaSupport::ESTADO_PENDIENTE;
-
-        if ($eraRechazado) {
-            $this->anularPendientes($articuloId, 'Reapertura tras rechazo / corrección Compras');
-
-            return $this->iniciarCircuito($articuloId, 'reabrir');
+        if (! $cuentasCambio) {
+            return 0;
         }
 
-        if ($eraActivo && ($usoCambio || $cuentasCambio)) {
-            $this->anularPendientes($articuloId, 'Reapertura por cambio crítico post-ACTIVO');
+        $estado = strtoupper(trim((string) ($articulo->estado ?? '')));
+        $enCircuito = in_array($estado, [
+            ArticuloAprobacionAltaSupport::ESTADO_ACTIVO,
+            ArticuloAprobacionAltaSupport::ESTADO_PENDIENTE,
+            ArticuloAprobacionAltaSupport::ESTADO_RECHAZADO,
+        ], true);
+        if (! $enCircuito) {
+            return 0;
+        }
+
+        $observacion = 'Cambio de cuentas contables: reabre circuito de aprobación';
+        $this->anularPendientes($articuloId, $observacion);
+
+        if ($estado !== ArticuloAprobacionAltaSupport::ESTADO_PENDIENTE) {
             $this->marcarEstado(
                 $articuloId,
                 ArticuloAprobacionAltaSupport::ESTADO_PENDIENTE,
-                $usoCambio
-                    ? 'Cambio de uso: reabre circuito de aprobación'
-                    : 'Cambio de cuentas contables: reabre circuito de aprobación'
+                $observacion
             );
-
-            return $this->iniciarCircuito($articuloId, 'reevaluar');
         }
 
-        if ($eraPendiente && $usoCambio) {
-            $this->anularPendientes($articuloId, 'Cambio de uso: reevalúa árbol');
-
-            return $this->iniciarCircuito($articuloId, 'reevaluar');
-        }
-
-        return 0;
+        return $this->iniciarCircuito($articuloId, 'reevaluar');
     }
 
     public function fingerprintCuentas(int $articuloId): string

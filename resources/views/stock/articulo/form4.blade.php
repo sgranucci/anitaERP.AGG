@@ -45,7 +45,7 @@
                                 Art&iacute;culo TITO (precio promedio 3 &uacute;lt. compras en TRCONT)
                             </label>
                         </div>
-                        <small class="text-muted">Art&iacute;culos TITO: promedio de exactamente 3 recepciones COM en el ERP; si no hay 3, promedio Anita stkm_pre_compra1/2/3. Los dem&aacute;s contabilizables usan &uacute;ltima compra (ERP &rarr; Anita compra3).</small>
+                        <small class="text-muted">Art&iacute;culos TITO: promedio de exactamente 3 recepciones COM en el ERP (no entran las cubiertas por una DEP); si no hay 3, promedio Anita stkm_pre_compra1/2/3. Los dem&aacute;s contabilizables usan &uacute;ltima compra (ERP &rarr; Anita compra3).</small>
                     </div>
                 </div>
             </div>

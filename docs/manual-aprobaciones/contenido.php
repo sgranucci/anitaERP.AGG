@@ -112,7 +112,7 @@ return [
                 'rows' => [
                     ['ACTIVO', 'Liberado para uso operativo (OC, stock, consumo).'],
                     ['PENDIENTE', 'En circuito / esperando firmas.'],
-                    ['RECHAZADO', 'Rechazado; Compras debe corregir y guardar para reabrir.'],
+                    ['RECHAZADO', 'Rechazado. Vuelve al circuito solo si cambian las cuentas contables.'],
                     ['INACTIVO / BAJA', 'Como siempre en el maestro.'],
                 ],
             ],
@@ -120,8 +120,7 @@ return [
                 'Hard block: solo ACTIVO es seleccionable en OC, stock y consumo.',
                 'Paso de dominio (Gastro/Lab/…): puede editar ficha y fórmulas, luego firmar.',
                 'Orden secuencial: dominio → Contaduría.',
-                'Cambio de uso o cuentas en un ACTIVO reabre el circuito completo.',
-                'Cambio de uso en PENDIENTE reevalúa el árbol.',
+                'Después del alta, solo un cambio de cuentas contables vuelve a abrir el circuito. El uso y el resto de la ficha no lo disparan.',
                 'Quién crea: permiso Spatie crear-articulos (asignable a roles).',
             ],
         ],

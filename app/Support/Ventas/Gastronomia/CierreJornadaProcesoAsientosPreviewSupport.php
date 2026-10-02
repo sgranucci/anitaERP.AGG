@@ -5,6 +5,7 @@ namespace App\Support\Ventas\Gastronomia;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Ventas\Venta;
+use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
@@ -46,6 +47,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         $asientos = [];
         $n = 0;
         $totalesVentaPorId = self::totalesVentaErpPorId($movimientos);
+        $notasCreditoPorVentaId = self::notasCreditoPorFacturaId(array_keys($totalesVentaPorId));
 
         foreach ($movimientos as $mov) {
             $grupo = (string) ($mov['grupo'] ?? '');
@@ -57,7 +59,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             }
 
             $totalWaitry = round((float) ($mov['total'] ?? 0), 2);
-            $total = self::importeContableMovimiento($mov, $totalesVentaPorId);
+            $total = self::importeContableMovimiento($mov, $totalesVentaPorId, $notasCreditoPorVentaId);
             if ($total <= 0.0001) {
                 continue;
             }
@@ -501,7 +503,12 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                 $advertencias[] = $adv;
             }
         }
-        foreach (self::asientosConsolidadosTotem($movimientos, $empresaId, $configContable) as $aTotem) {
+        foreach (self::asientosConsolidadosTotem(
+            $movimientos,
+            $empresaId,
+            $configContable,
+            (string) ($contextoCuadro['fecha_jornada'] ?? ''),
+        ) as $aTotem) {
             $asientos[] = $aTotem;
         }
         $aComp = self::asientoConsolidadoCompensacionEfectivoNoFacturado($movimientos, $empresaId, $configContable);
@@ -577,6 +584,11 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             $movimientos,
             CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM,
         );
+        $totalTotem = self::totalTotemNetoFacturado(
+            $totalTotem,
+            (int) ($contextoCuadro['empresa_id'] ?? 0),
+            (string) ($contextoCuadro['fecha_jornada'] ?? ''),
+        );
         $totalAFacturarQr = self::totalQrFacturaProceso($movimientos);
         $totalFacturadoWaitry = round($totalMedioReal + $totalTotem, 2);
 
@@ -604,8 +616,10 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                 'etiqueta' => 'Facturado Anita — cobro TOTEM (tramo Waitry)',
             ],
             'totem_puente' => [
-                'total' => $totalTotem,
-                'etiqueta' => 'Facturado Anita — cobro TOTEM (contrapartida puente)',
+                // El puente puede ser mayor que la venta neta: el cobro del informe Z
+                // queda en el medio y la nota de crédito va a partidas pendientes.
+                'total' => null,
+                'etiqueta' => 'Cobro del medio (informe Z), no la venta neta',
             ],
             'compensacion_efectivo_no_facturado' => [
                 'total' => self::totalEfectivoNoFacturadoProceso($movimientos),
@@ -627,7 +641,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             }
 
             $ref = $mapReferencia[$codigo] ?? null;
-            $refTotal = $ref !== null ? round((float) $ref['total'], 2) : null;
+            $refTotal = ($ref !== null && $ref['total'] !== null) ? round((float) $ref['total'], 2) : null;
             $dif = $refTotal !== null ? round($totalAsiento - $refTotal, 2) : null;
 
             if ($codigo === 'sin_facturar_qr') {
@@ -816,13 +830,16 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         $totalesVenta = $grupo === CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM
             ? self::totalesVentaErpPorId($movimientos)
             : [];
+        $notasCredito = $totalesVenta !== []
+            ? self::notasCreditoPorFacturaId(array_keys($totalesVenta))
+            : [];
         $sum = 0.;
         foreach ($movimientos as $mov) {
             if (($mov['grupo'] ?? '') !== $grupo) {
                 continue;
             }
             $total = $totalesVenta !== []
-                ? self::importeContableMovimiento($mov, $totalesVenta)
+                ? self::importeContableMovimiento($mov, $totalesVenta, $notasCredito)
                 : round((float) ($mov['total'] ?? 0), 2);
             if ($total <= 0.0001) {
                 continue;
@@ -834,34 +851,62 @@ final class CierreJornadaProcesoAsientosPreviewSupport
     }
 
     /**
-     * TOTEM ya facturado: el asiento y los medios siguen el total de la venta ERP, no el cobro Waitry.
+     * TOTEM ya facturado: el asiento sigue el neto de la venta ERP (factura menos notas de crédito),
+     * no el cobro Waitry. Una nota de crédito que anula la factura deja el importe en cero.
      *
      * @param  array<string, mixed>  $mov
      * @param  array<int, float>  $totalesVentaPorId
+     * @param  array<int, float>  $notasCreditoPorVentaId  venta origen => suma de totales de NC (negativo)
      */
-    public static function importeContableMovimiento(array $mov, array $totalesVentaPorId = []): float
-    {
+    public static function importeContableMovimiento(
+        array $mov,
+        array $totalesVentaPorId = [],
+        array $notasCreditoPorVentaId = [],
+    ): float {
         $waitry = round((float) ($mov['total'] ?? 0), 2);
         if ((string) ($mov['grupo'] ?? '') !== CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM) {
             return $waitry;
         }
 
         $ventaId = (int) ($mov['venta_id'] ?? 0);
-        if ($ventaId > 0) {
-            if (isset($totalesVentaPorId[$ventaId])) {
-                $erp = round((float) $totalesVentaPorId[$ventaId], 2);
-                if ($erp > 0.0001) {
-                    return $erp;
-                }
-            } elseif ($totalesVentaPorId === []) {
-                $erp = round((float) Venta::query()->whereKey($ventaId)->value('total'), 2);
-                if ($erp > 0.0001) {
-                    return $erp;
-                }
-            }
+        if ($ventaId <= 0) {
+            return $waitry;
         }
 
-        return $waitry;
+        $nc = round((float) ($notasCreditoPorVentaId[$ventaId] ?? 0), 2);
+        if (isset($totalesVentaPorId[$ventaId])) {
+            return self::netoFacturaMenosNotasCredito((float) $totalesVentaPorId[$ventaId], $nc, $waitry);
+        }
+
+        if ($totalesVentaPorId === [] && $notasCreditoPorVentaId === []) {
+            $erp = round((float) Venta::query()->whereKey($ventaId)->value('total'), 2);
+            $nc = round((float) array_sum(self::notasCreditoPorFacturaId([$ventaId])), 2);
+
+            return self::netoFacturaMenosNotasCredito($erp, $nc, $waitry);
+        }
+
+        return self::netoFacturaMenosNotasCredito(0.0, $nc, $waitry);
+    }
+
+    /**
+     * Con nota de crédito, el importe contable es el neto (o cero si la anula).
+     * Sin nota de crédito se mantiene el total de la factura, o el cobro Waitry si la factura no tiene importe.
+     */
+    public static function netoFacturaMenosNotasCredito(float $totalFactura, float $totalNotasCredito, float $totalWaitry): float
+    {
+        $factura = round($totalFactura, 2);
+        $notas = round($totalNotasCredito, 2);
+        if ($notas < -0.0001) {
+            $neto = round($factura + $notas, 2);
+
+            return $neto > 0.0001 ? $neto : 0.0;
+        }
+
+        if ($factura > 0.0001) {
+            return $factura;
+        }
+
+        return round($totalWaitry, 2);
     }
 
     /**
@@ -886,6 +931,34 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             ->pluck('total', 'id')
             ->map(static fn ($t) => round((float) $t, 2))
             ->all();
+    }
+
+    /**
+     * Suma de notas de crédito gastronomía por factura de origen. El total de la NC es negativo.
+     *
+     * @param  list<int>  $ventaIds
+     * @return array<int, float>
+     */
+    private static function notasCreditoPorFacturaId(array $ventaIds): array
+    {
+        $ventaIds = array_values(array_unique(array_filter(array_map('intval', $ventaIds))));
+        if ($ventaIds === []) {
+            return [];
+        }
+
+        $rows = VentaGastronomiaEmision::query()
+            ->join('venta', 'venta.id', '=', 'venta_gastronomia_emision.venta_id')
+            ->whereIn('venta_gastronomia_emision.venta_factura_origen_id', $ventaIds)
+            ->groupBy('venta_gastronomia_emision.venta_factura_origen_id')
+            ->selectRaw('venta_gastronomia_emision.venta_factura_origen_id as origen_id, SUM(venta.total) as total_nc')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(int) $row->origen_id] = round((float) $row->total_nc, 2);
+        }
+
+        return $out;
     }
 
     /**
@@ -1503,16 +1576,22 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         array $movimientos,
         int $empresaId,
         array $configContable,
+        string $fechaJornada = '',
     ): array {
         $totalesVentaPorId = self::totalesVentaErpPorId($movimientos);
+        $notasCreditoPorVentaId = self::notasCreditoPorFacturaId(array_keys($totalesVentaPorId));
         $movs = array_values(array_filter(
             $movimientos,
-            function (array $m) use ($totalesVentaPorId) {
+            function (array $m) use ($totalesVentaPorId, $notasCreditoPorVentaId) {
                 if (($m['grupo'] ?? '') !== CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM) {
                     return false;
                 }
 
-                return self::importeContableMovimiento($m, $totalesVentaPorId) > 0.0001;
+                // La venta va al neto. El cobro del puente sigue el bruto (informe Z),
+                // aunque la factura haya quedado anulada por nota de crédito.
+                $neto = self::importeContableMovimiento($m, $totalesVentaPorId, $notasCreditoPorVentaId);
+
+                return $neto > 0.0001 || round((float) ($m['total'] ?? 0), 2) > 0.0001;
             },
         ));
         if ($movs === []) {
@@ -1537,37 +1616,40 @@ final class CierreJornadaProcesoAsientosPreviewSupport
 
         foreach ($movs as $mov) {
             $totalWaitry = round((float) ($mov['total'] ?? 0), 2);
-            $total = self::importeContableMovimiento($mov, $totalesVentaPorId);
-            $importeCigarrillos = self::importeCigarrillosDesdeMov($mov, $empresaId);
-            $impuestoInterno = self::impuestoInternoDesdeMov($mov, $empresaId, $importeCigarrillos);
-            $exento = self::exentoDesdeMov($mov, $empresaId);
-            [$impuestoInterno, $importeCigarrillos, $exento] = self::escalarBasesAlImporteContable(
-                $totalWaitry,
-                $total,
-                $impuestoInterno,
-                $importeCigarrillos,
-                $exento,
-            );
-            $desglose = CierreJornadaVentasCigarrillosSupport::desglosarImportesContables(
-                $total,
-                $impuestoInterno,
-                $importeCigarrillos,
-                $exento,
-            );
-            $totalFacturado += $total;
-            $impuestoInternoTotal += $impuestoInterno;
-            if (abs($impuestoInterno) > 0.0001) {
-                $ventasKiosco += $desglose['ventas_kiosco'];
-                $ventasGravadas += $desglose['ventas_gravadas'];
-                $ivaCigarrillos += $desglose['iva_cigarrillos'];
-                $ivaNormal += $desglose['iva_normal'];
-                $conImpuestoInterno++;
-            } else {
-                $ventasGravadas += $desglose['ventas_gravadas'];
-                $ivaNormal += $desglose['iva_normal'];
+            $total = self::importeContableMovimiento($mov, $totalesVentaPorId, $notasCreditoPorVentaId);
+            $brutoCobro = $totalWaitry > 0.0001 ? $totalWaitry : $total;
+            if ($total > 0.0001) {
+                $importeCigarrillos = self::importeCigarrillosDesdeMov($mov, $empresaId);
+                $impuestoInterno = self::impuestoInternoDesdeMov($mov, $empresaId, $importeCigarrillos);
+                $exento = self::exentoDesdeMov($mov, $empresaId);
+                [$impuestoInterno, $importeCigarrillos, $exento] = self::escalarBasesAlImporteContable(
+                    $totalWaitry,
+                    $total,
+                    $impuestoInterno,
+                    $importeCigarrillos,
+                    $exento,
+                );
+                $desglose = CierreJornadaVentasCigarrillosSupport::desglosarImportesContables(
+                    $total,
+                    $impuestoInterno,
+                    $importeCigarrillos,
+                    $exento,
+                );
+                $totalFacturado += $total;
+                $impuestoInternoTotal += $impuestoInterno;
+                if (abs($impuestoInterno) > 0.0001) {
+                    $ventasKiosco += $desglose['ventas_kiosco'];
+                    $ventasGravadas += $desglose['ventas_gravadas'];
+                    $ivaCigarrillos += $desglose['iva_cigarrillos'];
+                    $ivaNormal += $desglose['iva_normal'];
+                    $conImpuestoInterno++;
+                } else {
+                    $ventasGravadas += $desglose['ventas_gravadas'];
+                    $ivaNormal += $desglose['iva_normal'];
+                }
             }
 
-            foreach (self::mediosPuenteTotem($mov, $total, $empresaId) as $medio) {
+            foreach (self::mediosPuenteTotem($mov, $brutoCobro, $empresaId) as $medio) {
                 $cuentaId = (int) ($medio['cuentacaja_id'] ?? 0);
                 $monto = round((float) ($medio['monto'] ?? 0), 2);
                 if ($monto <= 0.0001) {
@@ -1600,35 +1682,285 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             ),
         );
 
+        $totalFacturado = round($totalFacturado, 2);
+        $totalCobro = 0.0;
         $lineasPuente = [];
         foreach ($debePuentePorCuenta as $ln) {
+            $totalCobro += (float) $ln['debe'];
             $lineasPuente[] = self::lineaDebe($ln['concepto'], $ln['cuenta_id'], $ln['debe']);
         }
-        $lineasPuente[] = self::lineaHaber('Contra TOTEM (puente a cero)', $totemId, round($totalFacturado, 2));
+        $totalCobro = round($totalCobro, 2);
+        if ($totalFacturado > 0.02) {
+            $lineasPuente[] = self::lineaHaber('Contra TOTEM (puente a cero)', $totemId, $totalFacturado);
+        }
+        $gapCobro = round($totalCobro - $totalFacturado, 2);
+        if ($gapCobro > 0.02) {
+            $lineasPuente[] = self::lineaHaberContable(
+                'Cobro sin venta (nota de crédito tótem)',
+                self::cuentaPartidasPendientesId($empresaId),
+                $gapCobro,
+            );
+        }
 
         $meta = [
             'cantidad_facturas' => count($movs),
-            'total' => round($totalFacturado, 2),
+            'total' => $totalFacturado,
             'impuesto_interno_total' => round($impuestoInternoTotal, 2),
             'facturas_con_impuesto_interno' => $conImpuestoInterno,
         ];
 
-        return [
-            self::armarAsientoConsolidado(
+        $asientos = [];
+        if ($totalFacturado > 0.02) {
+            $asientos[] = self::armarAsientoConsolidado(
                 0,
                 'totem_ventas_iva',
                 '3 — TOTEM → ventas / IVA / kiosco',
                 $lineasPrincipal,
                 $meta,
-            ),
-            self::armarAsientoConsolidado(
+            );
+        }
+        if ($lineasPuente !== []) {
+            $metaPuente = $meta;
+            $metaPuente['total'] = $totalCobro;
+            $asientos[] = self::armarAsientoConsolidado(
                 0,
                 'totem_puente',
                 '4 — Puente TOTEM (medio real → TOTEM)',
                 $lineasPuente,
-                $meta,
-            ),
+                $metaPuente,
+            );
+        }
+
+        return self::alinearAsientosTotemAlNetoFacturado($asientos, $empresaId, $fechaJornada);
+    }
+
+    /**
+     * La venta de tótem queda en el neto facturado. El débito del medio (Mercado Pago)
+     * queda en el cobro bruto: la diferencia se acredita a partidas pendientes, que no es un medio.
+     * Sin fecha de jornada no hay neto de referencia y se dejan los asientos del movimiento.
+     *
+     * @param  list<array<string, mixed>>  $asientos
+     * @return list<array<string, mixed>>
+     */
+    private static function alinearAsientosTotemAlNetoFacturado(array $asientos, int $empresaId, string $fechaJornada): array
+    {
+        $neto = self::netoFacturadoTotem($empresaId, $fechaJornada);
+        if ($neto === null) {
+            return $asientos;
+        }
+
+        $out = [];
+        foreach ($asientos as $asiento) {
+            $codigo = (string) ($asiento['codigo'] ?? '');
+            if ($codigo === 'totem_ventas_iva') {
+                if ($neto <= 0.02) {
+                    continue;
+                }
+                $actual = round((float) ($asiento['total'] ?? 0), 2);
+                if ($actual > 0.02 && abs($actual - $neto) > 0.02) {
+                    $escalados = self::escalarAsientosAlTotal([$asiento], $neto / $actual, $neto);
+                    $out[] = $escalados[0];
+                } else {
+                    $out[] = $asiento;
+                }
+                continue;
+            }
+            if ($codigo === 'totem_puente') {
+                $out[] = self::rebalancearPuenteAlNeto($asiento, $neto, $empresaId);
+                continue;
+            }
+            $out[] = $asiento;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Mantiene los débitos de medios y acredita (cobro − neto) a partidas pendientes.
+     *
+     * @param  array<string, mixed>  $asiento
+     * @return array<string, mixed>
+     */
+    private static function rebalancearPuenteAlNeto(array $asiento, float $neto, int $empresaId): array
+    {
+        $lineas = [];
+        $debe = 0.0;
+        $indiceHaber = null;
+        foreach ($asiento['lineas'] ?? [] as $ln) {
+            if (! is_array($ln) || ! empty($ln['cuenta_es_contable'])) {
+                continue;
+            }
+            $lineas[] = $ln;
+            $debe += (float) ($ln['debe'] ?? 0);
+            if ((float) ($ln['haber'] ?? 0) > 0.0001) {
+                $indiceHaber = count($lineas) - 1;
+            }
+        }
+        $debe = round($debe, 2);
+        $neto = round(max(0.0, $neto), 2);
+        if ($neto > $debe + 0.02) {
+            $neto = $debe;
+        }
+        if ($neto > 0.02 && $indiceHaber !== null) {
+            $lineas[$indiceHaber]['haber'] = $neto;
+        } elseif ($indiceHaber !== null && $neto <= 0.02) {
+            array_splice($lineas, $indiceHaber, 1);
+        }
+        $gap = round($debe - $neto, 2);
+        if ($gap > 0.02) {
+            $lineas[] = self::lineaHaberContable(
+                'Cobro sin venta (nota de crédito tótem)',
+                self::cuentaPartidasPendientesId($empresaId),
+                $gap,
+            );
+        }
+
+        return self::armarAsientoConsolidado(
+            (int) ($asiento['numero'] ?? 0),
+            (string) ($asiento['codigo'] ?? 'totem_puente'),
+            (string) ($asiento['titulo'] ?? ''),
+            $lineas,
+            [
+                'cantidad_facturas' => $asiento['cantidad_facturas'] ?? 0,
+                'total' => $debe,
+                'impuesto_interno_total' => $asiento['impuesto_interno_total'] ?? 0,
+                'facturas_con_impuesto_interno' => $asiento['facturas_con_impuesto_interno'] ?? 0,
+            ],
+        );
+    }
+
+    private static function cuentaPartidasPendientesId(int $empresaId): int
+    {
+        static $cache = [];
+        if (isset($cache[$empresaId])) {
+            return $cache[$empresaId];
+        }
+
+        $id = (int) Cuentacontable::query()
+            ->where('empresa_id', $empresaId)
+            ->where('codigo', '211010018')
+            ->value('id');
+        if ($id <= 0) {
+            throw new \RuntimeException(
+                'Falta la cuenta 211010018 Partidas pendientes de imputación en la empresa '.$empresaId.'.',
+            );
+        }
+
+        return $cache[$empresaId] = $id;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function lineaHaberContable(string $concepto, int $cuentaId, float $monto): array
+    {
+        return [
+            'concepto' => $concepto,
+            'cuenta_id' => $cuentaId,
+            'debe' => 0.,
+            'haber' => round($monto, 2),
+            'cuenta_es_contable' => true,
         ];
+    }
+
+    /**
+     * null = no hay emisiones de tótem para usar como referencia.
+     */
+    private static function netoFacturadoTotem(int $empresaId, string $fechaJornada): ?float
+    {
+        if ($empresaId <= 0 || $fechaJornada === '') {
+            return null;
+        }
+
+        $datos = CierreJornadaFacturadoAnitaSupport::datosAsientoVentasJornadaSoloTotem($empresaId, $fechaJornada);
+        if ((int) ($datos['cantidad_emisiones'] ?? 0) === 0) {
+            return null;
+        }
+
+        return round((float) ($datos['total'] ?? 0), 2);
+    }
+
+    private static function totalTotemNetoFacturado(float $totalMovimientos, int $empresaId, string $fechaJornada): float
+    {
+        $neto = self::netoFacturadoTotem($empresaId, $fechaJornada);
+
+        return $neto === null ? $totalMovimientos : $neto;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $asientos
+     * @return list<array<string, mixed>>
+     */
+    private static function escalarAsientosAlTotal(array $asientos, float $factor, float $totalObjetivo): array
+    {
+        $out = [];
+        foreach ($asientos as $asiento) {
+            $lineas = [];
+            foreach ($asiento['lineas'] ?? [] as $ln) {
+                if (! is_array($ln)) {
+                    continue;
+                }
+                $copia = [
+                    'concepto' => $ln['concepto'] ?? '',
+                    'cuenta_id' => (int) ($ln['cuenta_id'] ?? 0),
+                    'debe' => round((float) ($ln['debe'] ?? 0) * $factor, 2),
+                    'haber' => round((float) ($ln['haber'] ?? 0) * $factor, 2),
+                ];
+                if (! empty($ln['cuenta_es_contable'])) {
+                    $copia['cuenta_es_contable'] = true;
+                }
+                $lineas[] = $copia;
+            }
+            $lineas = self::cuadrarLineasAlTotal($lineas, $totalObjetivo);
+            $out[] = self::armarAsientoConsolidado(
+                (int) ($asiento['numero'] ?? 0),
+                (string) ($asiento['codigo'] ?? ''),
+                (string) ($asiento['titulo'] ?? ''),
+                $lineas,
+                [
+                    'cantidad_facturas' => $asiento['cantidad_facturas'] ?? 0,
+                    'total' => $totalObjetivo,
+                    'impuesto_interno_total' => round((float) ($asiento['impuesto_interno_total'] ?? 0) * $factor, 2),
+                    'facturas_con_impuesto_interno' => $asiento['facturas_con_impuesto_interno'] ?? 0,
+                ],
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private static function cuadrarLineasAlTotal(array $lineas, float $total): array
+    {
+        $debe = 0.0;
+        $haber = 0.0;
+        foreach ($lineas as $ln) {
+            $debe += (float) ($ln['debe'] ?? 0);
+            $haber += (float) ($ln['haber'] ?? 0);
+        }
+        $difDebe = round($total - $debe, 2);
+        $difHaber = round($total - $haber, 2);
+        if (abs($difDebe) >= 0.01) {
+            foreach ($lineas as $i => $ln) {
+                if ((float) ($ln['debe'] ?? 0) > 0) {
+                    $lineas[$i]['debe'] = round((float) $ln['debe'] + $difDebe, 2);
+                    break;
+                }
+            }
+        }
+        if (abs($difHaber) >= 0.01) {
+            for ($i = count($lineas) - 1; $i >= 0; $i--) {
+                if ((float) ($lineas[$i]['haber'] ?? 0) > 0) {
+                    $lineas[$i]['haber'] = round((float) $lineas[$i]['haber'] + $difHaber, 2);
+                    break;
+                }
+            }
+        }
+
+        return $lineas;
     }
 
     /**

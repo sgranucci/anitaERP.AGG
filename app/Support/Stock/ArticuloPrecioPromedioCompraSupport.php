@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Log;
  * Promedio de las 3 últimas compras (artículos TITO / asiento TRCONT).
  *
  * Orden:
- * 1. ERP: exactamente 3 recepciones COM confirmadas. El precio en pesos se arma
+ * 1. ERP: exactamente 3 recepciones COM confirmadas que no estén cubiertas
+ *    por una DEP. El precio en pesos se arma
  *    con moneda y cotización de Anita recepmov (recv_cod_mon / recv_cotizacion);
  *    si no hay recepmov, se usa la línea ERP.
  * 2. Fallback Anita: promedio de stkmae.stkm_pre_compra1/2/3

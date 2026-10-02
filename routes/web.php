@@ -3467,6 +3467,7 @@ Route::post('caja/ingresoegreso/comprobante-iva/preview-asiento', 'Caja\IngresoE
 Route::post('caja/ingresoegreso/comprobante-iva/pdf-ia-preview', 'Caja\IngresoEgresoController@previewPdfComprobanteIva')->name('ingresoegreso_comprobante_iva_pdf_ia_preview');
 Route::post('caja/ingresoegreso/comprobante-iva/validar-totales', 'Caja\IngresoEgresoController@validarTotalesComprobantesIva')->name('ingresoegreso_comprobante_iva_validar_totales');
 Route::post('caja/ingresoegreso/comprobante-iva/validar-duplicado', 'Caja\IngresoEgresoController@validarDuplicadoComprobanteIva')->name('ingresoegreso_comprobante_iva_validar_duplicado');
+Route::post('caja/ingresoegreso/comprobante-iva/banco-cuenta', 'Caja\IngresoEgresoController@resolverBancoGastoComprobanteIva')->name('ingresoegreso_comprobante_iva_banco_cuenta');
 Route::post('caja/ingresoegreso/buscar-cheque', 'Caja\IngresoEgresoController@buscarCheque')->name('ingresoegreso_buscar_cheque');
 Route::post('caja/ingresoegreso/sugerir-detalle-canje-cheque', 'Caja\IngresoEgresoController@sugerirDetalleCanjeCheque')->name('ingresoegreso_sugerir_detalle_canje_cheque');
 

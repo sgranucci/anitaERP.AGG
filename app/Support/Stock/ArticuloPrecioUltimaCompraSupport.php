@@ -337,6 +337,7 @@ final class ArticuloPrecioUltimaCompraSupport
 
     /**
      * Últimas N recepciones COM confirmadas con precio &gt; 0 (más recientes primero).
+     * No entran las COM cuya cantidad del artículo quedó cubierta por DEP confirmadas.
      * Los precios se devuelven en moneda local (pesos) según moneda ERP de la línea.
      *
      * @param  list<int>  $articuloIds
@@ -366,6 +367,7 @@ final class ArticuloPrecioUltimaCompraSupport
 
     /**
      * Últimas N COM confirmadas (sin convertir). Incluye clave Anita para leer recepmov.
+     * Saltea la COM si una DEP confirmada ya cubrió la cantidad de ese artículo.
      *
      * @param  list<int>  $articuloIds
      * @return array<int, list<array{
@@ -394,6 +396,7 @@ final class ArticuloPrecioUltimaCompraSupport
             'rpa.precio',
             'rpa.moneda_id',
             'rpa.cotizacion',
+            'rp.id as recepcion_id',
             'rp.fecha',
             'rp.numerorecepcion',
             'a.sku',
@@ -423,10 +426,17 @@ final class ArticuloPrecioUltimaCompraSupport
             ->orderByDesc('rpa.id')
             ->get($columnas);
 
+        $cubiertasPorDep = self::clavesRecepcionArticuloCubiertasPorDep(
+            $recepciones->pluck('recepcion_id')->all()
+        );
+
         $out = [];
         foreach ($recepciones as $fila) {
             $articuloId = (int) $fila->articulo_id;
             if ($articuloId <= 0) {
+                continue;
+            }
+            if (isset($cubiertasPorDep[(int) ($fila->recepcion_id ?? 0).'|'.$articuloId])) {
                 continue;
             }
             if (! isset($out[$articuloId])) {
@@ -451,6 +461,61 @@ final class ArticuloPrecioUltimaCompraSupport
                 'anita_sucursal' => (int) ($fila->anita_sucursal ?? 0),
                 'anita_nro' => (int) ($fila->anita_nro ?? 0),
             ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * COM cuya cantidad del artículo quedó cubierta por DEP confirmadas (recepcion_referencia_id).
+     *
+     * @param  list<int|string|null>  $recepcionIds
+     * @return array<string, true> clave "recepcionId|articuloId"
+     */
+    private static function clavesRecepcionArticuloCubiertasPorDep(array $recepcionIds): array
+    {
+        $recepcionIds = array_values(array_unique(array_filter(
+            array_map('intval', $recepcionIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($recepcionIds === []) {
+            return [];
+        }
+
+        $devQuery = DB::table('recepcion_proveedor_articulo as rpa')
+            ->join('recepcion_proveedor as rp', 'rp.id', '=', 'rpa.recepcion_proveedor_id')
+            ->where('rp.tipo', Recepcion_Proveedor::TIPO_DEVOLUCION)
+            ->where('rp.estado', RecepcionProveedorEstados::CONFIRMADA)
+            ->whereIn('rp.recepcion_referencia_id', $recepcionIds)
+            ->groupBy('rp.recepcion_referencia_id', 'rpa.articulo_id')
+            ->selectRaw('rp.recepcion_referencia_id as recepcion_id, rpa.articulo_id, SUM(rpa.cantidad) as cantidad');
+
+        if (Schema::hasColumn('recepcion_proveedor', 'deleted_at')) {
+            $devQuery->whereNull('rp.deleted_at');
+        }
+
+        $devueltas = [];
+        foreach ($devQuery->get() as $fila) {
+            $devueltas[(int) $fila->recepcion_id.'|'.(int) $fila->articulo_id] = (float) $fila->cantidad;
+        }
+        if ($devueltas === []) {
+            return [];
+        }
+
+        $recibidas = DB::table('recepcion_proveedor_articulo')
+            ->whereIn('recepcion_proveedor_id', $recepcionIds)
+            ->groupBy('recepcion_proveedor_id', 'articulo_id')
+            ->selectRaw('recepcion_proveedor_id, articulo_id, SUM(cantidad) as cantidad')
+            ->get();
+
+        $out = [];
+        foreach ($recibidas as $fila) {
+            $clave = (int) $fila->recepcion_proveedor_id.'|'.(int) $fila->articulo_id;
+            $devuelta = $devueltas[$clave] ?? 0.0;
+            $recibida = (float) $fila->cantidad;
+            if ($recibida > 0.000001 && ($devuelta + 0.000001) >= $recibida) {
+                $out[$clave] = true;
+            }
         }
 
         return $out;
@@ -585,12 +650,19 @@ final class ArticuloPrecioUltimaCompraSupport
                 'rp.fecha',
             ]);
 
+        $cubiertasPorDep = self::clavesRecepcionArticuloCubiertasPorDep(
+            $recepciones->pluck('recepcion_id')->all()
+        );
+
         /** @var array<int, array{precio_local: float, moneda_id: int|null, ref_ts: int, recepcion_id: int}> $pendientes */
         $pendientes = [];
         foreach ($recepciones as $fila) {
             $articuloId = (int) $fila->articulo_id;
             $precioRaw = (float) ($fila->precio ?? 0);
             if ($articuloId <= 0 || $precioRaw <= 0) {
+                continue;
+            }
+            if (isset($cubiertasPorDep[(int) ($fila->recepcion_id ?? 0).'|'.$articuloId])) {
                 continue;
             }
 

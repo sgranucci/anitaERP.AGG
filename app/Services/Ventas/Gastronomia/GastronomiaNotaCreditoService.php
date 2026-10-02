@@ -10,7 +10,10 @@ use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Models\Ventas\VentaGastronomiaNcOrigen;
+use App\Support\Ventas\Gastronomia\CierreJornadaFacturadoAnitaSupport;
+use App\Support\Ventas\Gastronomia\CorregirImporteAsientoTotemVsVentaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaColaSupport;
+use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\Gastronomia\GastronomiaFacturaItemsPayloadSupport;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaEmisionProfiler;
@@ -273,6 +276,8 @@ final class GastronomiaNotaCreditoService
             if (! $ajusteFiscal) {
                 $this->completarAnitaDiferidoTrasNotaCredito($resultadoTx, $cfg);
             }
+
+            $this->recuadrarAsientoTotemSiCorresponde($emision);
 
             $resultadoFinal = $resultadoTx;
             if (empty($opciones['omitir_impresion'])) {
@@ -557,11 +562,47 @@ final class GastronomiaNotaCreditoService
                 ];
             });
 
+            $this->recuadrarAsientoTotemSiCorresponde($emision, $fechaJornada);
+
             return $resultadoTx;
         } catch (Throwable $e) {
             Log::error('gastronomia.nc_lote_ajuste.error', ['error' => $e->getMessage()]);
 
             return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Si la factura era de tótem y la jornada ya está cerrada, el asiento queda en el neto
+     * (la nota de crédito resta). Un fallo acá no anula la nota de crédito ya emitida.
+     */
+    private function recuadrarAsientoTotemSiCorresponde(VentaGastronomiaEmision $emisionOrigen, ?string $fechaJornada = null): void
+    {
+        try {
+            $venta = $emisionOrigen->venta;
+            if ($venta === null) {
+                return;
+            }
+            $empresaId = (int) ($venta->puntoventas->empresa_id ?? $emisionOrigen->configuracionPuntoventa->empresa_id ?? 0);
+            $fecha = trim((string) $fechaJornada);
+            if ($fecha === '') {
+                $raw = $venta->fechajornada;
+                $fecha = $raw instanceof \DateTimeInterface ? $raw->format('Y-m-d') : substr((string) $raw, 0, 10);
+            }
+            if ($empresaId <= 0 || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+                return;
+            }
+            $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
+            $totemId = (int) (is_array($totem) ? ($totem['id'] ?? 0) : 0);
+            if (! CierreJornadaFacturadoAnitaSupport::esFacturaCobroTotemPublico($emisionOrigen, $empresaId, $totemId)) {
+                return;
+            }
+            app(CorregirImporteAsientoTotemVsVentaSupport::class)->recuadrarTrasNotaCredito($empresaId, $fecha);
+        } catch (Throwable $e) {
+            Log::warning('gastronomia.nota_credito.totem_asiento', [
+                'venta_factura_id' => (int) $emisionOrigen->venta_id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

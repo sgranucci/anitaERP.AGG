@@ -8,6 +8,7 @@ use App\Models\Stock\Articulo;
  * Precio unitario para el asiento contable de transferencias / mov. stock.
  *
  * - fl_precio_promedio_transferencia (TITO): promedio 3 compras ERP en pesos
+ *   (COM cubiertas por una DEP no entran)
  *   (moneda/cotización Anita recepmov); fallback stkmae compra1/2/3
  * - resto: última compra ERP → Anita stkm_pre_compra3 → costo/PPP artículo
  */

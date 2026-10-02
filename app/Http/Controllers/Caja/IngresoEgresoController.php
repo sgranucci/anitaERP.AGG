@@ -27,6 +27,7 @@ use App\Services\Caja\IngresoEgresoService;
 use App\Services\Caja\IngresoEgresoAnularRevertirService;
 use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
+use App\Support\Caja\IngresoEgresoGastoBancoSupport;
 use App\Support\Caja\IngresoEgresoListadoFiltros;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
@@ -720,6 +721,24 @@ class IngresoEgresoController extends Controller
         }
 
         return response()->json(['mensaje' => 'ok', 'valido' => true]);
+    }
+
+    public function resolverBancoGastoComprobanteIva(Request $request)
+    {
+        can('crear-ingresos-egresos-caja', false);
+        can('editar-ingresos-egresos-caja', false);
+
+        $lineas = json_decode((string) $request->input('lineas_json', '[]'), true);
+        if (! is_array($lineas)) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'JSON de cuentas inválido']);
+        }
+
+        $elegida = (int) $request->input('cuentacaja_id', 0);
+
+        return response()->json(array_merge(
+            ['mensaje' => 'ok'],
+            IngresoEgresoGastoBancoSupport::resolver($lineas, $elegida > 0 ? $elegida : null)
+        ));
     }
 
     /** @return array<string, mixed> */

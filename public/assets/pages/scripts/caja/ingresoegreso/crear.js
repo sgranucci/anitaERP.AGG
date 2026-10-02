@@ -1233,6 +1233,7 @@ var montoPendienteSp = 0;
 			url: url,
 			data: {
 				tipotransaccion_caja_id: tipotransaccion_caja_id,
+				detalle: $('#detalle').val(),
 				conceptogasto_id: conceptogasto_id,
 				empresa_id: empresa_id,
 				fecha: $('#fecha').val(),

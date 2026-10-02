@@ -8,13 +8,16 @@ use App\Models\Compras\Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Comprobante_Proveedor_Debe_Gasto;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Concepto_Ivacompra;
+use App\Models\Compras\Tipotransaccion_Compra;
 use App\Repositories\Compras\Comprobante_Proveedor_ConceptoRepositoryInterface;
 use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Services\Ai\AiDecisionLogger;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAiHashSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
+use App\Support\Caja\IngresoEgresoComprobanteIvaNumeracionSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
+use App\Support\Caja\IngresoEgresoGastoBancoSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
@@ -29,6 +32,9 @@ use RuntimeException;
 
 class IngresoEgresoComprobanteIvaService
 {
+    /** @var array<int, string> */
+    private array $abreviaturaTipoCache = [];
+
     public function __construct(
         private Comprobante_ProveedorRepositoryInterface $comprobanteRepository,
         private Comprobante_Proveedor_ConceptoRepositoryInterface $conceptoRepository,
@@ -80,6 +86,36 @@ class IngresoEgresoComprobanteIvaService
             IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaReferenciaId),
             $conceptoGastoId,
         );
+    }
+
+    /**
+     * Gasto bancario: el emisor sale de la cuenta de caja, no de un proveedor cargado a mano.
+     *
+     * @param  list<array<string, mixed>>  $comprobantes
+     * @param  list<array<string, mixed>>  $lineasCaja
+     * @return list<array<string, mixed>>
+     */
+    public function completarGastosBancarios(array $comprobantes, array $lineasCaja): array
+    {
+        foreach ($comprobantes as $indice => $payload) {
+            if (! is_array($payload) || ! IngresoEgresoGastoBancoSupport::esGastoBanco($payload['tipo_tesoreria'] ?? null)) {
+                continue;
+            }
+
+            $elegida = (int) ($payload['cuentacaja_id'] ?? 0);
+            $resolucion = IngresoEgresoGastoBancoSupport::resolver($lineasCaja, $elegida > 0 ? $elegida : null);
+            if (! ($resolucion['ok'] ?? false)) {
+                if (($resolucion['ambiguo'] ?? false) && IngresoEgresoGastoBancoSupport::payloadYaIdentificaBanco($payload)) {
+                    continue;
+                }
+
+                throw new RuntimeException((string) ($resolucion['mensaje'] ?? 'No se pudo tomar el banco de la cuenta de caja.'));
+            }
+
+            $comprobantes[$indice] = IngresoEgresoGastoBancoSupport::volcarEnPayload($payload, $resolucion);
+        }
+
+        return $comprobantes;
     }
 
     /**
@@ -265,6 +301,7 @@ class IngresoEgresoComprobanteIvaService
      */
     private function crearComprobante(array $payload, int $cajaMovimientoId, int $empresaId): Comprobante_Proveedor
     {
+        $payload = $this->aplicarNumeracion($payload);
         $cabecera = $this->armarCabecera($payload, $cajaMovimientoId, $empresaId);
         $this->assertUnicoComprobante($cabecera, null);
 
@@ -284,6 +321,7 @@ class IngresoEgresoComprobanteIvaService
      */
     private function actualizarComprobante(Comprobante_Proveedor $comprobante, array $payload, int $empresaId): void
     {
+        $payload = $this->aplicarNumeracion($payload, $comprobante);
         $cabecera = $this->armarCabecera($payload, (int) $comprobante->caja_movimiento_id, $empresaId);
         $this->assertUnicoComprobante($cabecera, (int) $comprobante->id);
         unset($cabecera['creousuario_id'], $cabecera['estado']);
@@ -322,9 +360,14 @@ class IngresoEgresoComprobanteIvaService
             throw new RuntimeException('El proveedor eventual debe tener un CUIT válido (11 dígitos).');
         }
 
+        $abreviatura = $this->abreviaturaTipo((int) ($payload['tipotransaccion_compra_id'] ?? 0));
+        $numeracionAutomatica = IngresoEgresoComprobanteIvaNumeracionSupport::esAutomatico($abreviatura);
         $sucursal = (int) ($payload['sucursal'] ?? 0);
-        if ($sucursal <= 0) {
+        if (! $numeracionAutomatica && $sucursal <= 0) {
             throw new RuntimeException('El punto de venta debe ser distinto de 0. ARCA rechaza la sucursal 0.');
+        }
+        if ($numeracionAutomatica && (int) ($payload['numerocomprobante'] ?? 0) <= 0) {
+            throw new RuntimeException('No se pudo asignar el número del comprobante '.$abreviatura.'.');
         }
 
         $cuitNormalizado = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
@@ -340,7 +383,9 @@ class IngresoEgresoComprobanteIvaService
             'identificacion_proveedor_cuit' => $cuitNormalizado,
             'proveedor_condicioniva_id_eventual' => $proveedorId > 0 ? null : ((int) ($payload['proveedor_condicioniva_id_eventual'] ?? 0) ?: null),
             'tipotransaccion_compra_id' => (int) ($payload['tipotransaccion_compra_id'] ?? 0),
-            'letra' => strtoupper(substr((string) ($payload['letra'] ?? 'B'), 0, 1)),
+            'letra' => $numeracionAutomatica
+                ? IngresoEgresoComprobanteIvaNumeracionSupport::LETRA
+                : strtoupper(substr((string) ($payload['letra'] ?? 'B'), 0, 1)),
             'sucursal' => $sucursal,
             'numerocomprobante' => (int) ($payload['numerocomprobante'] ?? 0),
             'fechacomprobante' => $payload['fechacomprobante'] ?? now()->format('Y-m-d'),
@@ -362,6 +407,52 @@ class IngresoEgresoComprobanteIvaService
             'caja_movimiento_id' => $cajaMovimientoId,
             'leyenda' => $payload['leyenda'] ?? null,
         ];
+    }
+
+    /**
+     * ICO/IDO: letra A, sucursal 0 y el próximo número de Anita.
+     * En una edición se conserva el número ya asignado.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function aplicarNumeracion(array $payload, ?Comprobante_Proveedor $existente = null): array
+    {
+        $abreviatura = $this->abreviaturaTipo((int) ($payload['tipotransaccion_compra_id'] ?? 0));
+        if (! IngresoEgresoComprobanteIvaNumeracionSupport::esAutomatico($abreviatura)) {
+            return $payload;
+        }
+
+        $payload['letra'] = IngresoEgresoComprobanteIvaNumeracionSupport::LETRA;
+        $payload['sucursal'] = IngresoEgresoComprobanteIvaNumeracionSupport::SUCURSAL;
+
+        $tipoActual = (int) ($payload['tipotransaccion_compra_id'] ?? 0);
+        $mismoTipo = $existente && (int) $existente->tipotransaccion_compra_id === $tipoActual;
+        $numeroExistente = $mismoTipo ? (int) $existente->numerocomprobante : 0;
+        if ($numeroExistente > 0) {
+            $payload['numerocomprobante'] = $numeroExistente;
+
+            return $payload;
+        }
+
+        $payload['numerocomprobante'] = IngresoEgresoComprobanteIvaNumeracionSupport::siguienteNumero($abreviatura);
+
+        return $payload;
+    }
+
+    private function abreviaturaTipo(int $tipoId): string
+    {
+        if ($tipoId <= 0) {
+            return '';
+        }
+
+        if (! array_key_exists($tipoId, $this->abreviaturaTipoCache)) {
+            $this->abreviaturaTipoCache[$tipoId] = strtoupper(trim((string) Tipotransaccion_Compra::query()
+                ->whereKey($tipoId)
+                ->value('abreviatura')));
+        }
+
+        return $this->abreviaturaTipoCache[$tipoId];
     }
 
     /**
