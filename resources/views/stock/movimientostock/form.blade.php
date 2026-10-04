@@ -641,7 +641,16 @@
         text-overflow: ellipsis;
         white-space: nowrap;
     }
-    #tabla-items-movimientostock .col-saldo-orig { width: 4.75rem; min-width: 4.25rem; white-space: nowrap; }
+    #tabla-items-movimientostock .col-saldo-orig { width: 5.25rem; min-width: 4.75rem; white-space: nowrap; }
+    #tabla-items-movimientostock .ms-saldo-aviso {
+        display: block;
+        margin-top: 1px;
+        font-size: 0.65rem;
+        line-height: 1.05;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        color: #7B241C;
+    }
     #tabla-items-movimientostock .col-comb { min-width: 8rem; }
     #tabla-items-movimientostock .col-mod { min-width: 7rem; }
     #tabla-items-movimientostock .col-umd { width: 3.25rem; }
