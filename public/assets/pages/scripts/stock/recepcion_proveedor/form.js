@@ -2076,6 +2076,25 @@
         return html;
     }
 
+    function textoFechaEntregaLinea(item) {
+        var raw = String((item && item.fechaentrega) || '').trim();
+        var m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!m || raw.indexOf('0000-00-00') === 0) {
+            return '';
+        }
+
+        return m[3] + '/' + m[2] + '/' + m[1];
+    }
+
+    function htmlFechaEntregaLinea(item) {
+        var txt = textoFechaEntregaLinea(item);
+        if (!txt) {
+            return '';
+        }
+
+        return '<small class="item-fecha-entrega d-block" title="Fecha de entrega de la l&iacute;nea">ent. ' + escHtml(txt) + '</small>';
+    }
+
     function formatearCantidadOc(n) {
         var v = parseFloat(n);
         if (isNaN(v)) {
@@ -2209,7 +2228,9 @@
             var html = '<tr class="item-recepcion-linea' + extraClass + ' ' + rowClass + '" data-idx="' + idx + '">';
             html += '<td class="align-middle">' + (idx + 1) + htmlCamposOcultosLinea(item, idx, depId, tipo) + '</td>';
             html += '<td class="align-middle">' + htmlCeldaArticulo(item, idx) + '</td>';
-            html += '<td class="align-middle"><input type="text" class="descripcionarticulo form-control form-control-sm" value="' + escHtml(item.descripcion || '') + '" readonly title="' + escHtml(item.descripcion || '') + '"></td>';
+            html += '<td class="align-middle"><input type="text" class="descripcionarticulo form-control form-control-sm" value="' + escHtml(item.descripcion || '') + '" readonly title="' + escHtml(item.descripcion || '') + '">';
+            html += htmlFechaEntregaLinea(item);
+            html += '</td>';
             html += htmlCeldasColorTalle(item, idx, tipo, soloLecturaOtros);
             html += '<td class="text-right align-middle">';
             if (esModoDevolucion()) {

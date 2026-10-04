@@ -7,6 +7,10 @@
     } else {
         $solicitanteTexto = trim((string) (auth()->user()->nombre ?? ''));
     }
+    $ocSolicitanteModal = \App\Support\Compras\OrdencompraUiConfigSupport::solicitanteEditable();
+    $ocSolicitante = $ocSolicitanteModal
+        ? \App\Support\Compras\OrdencompraSolicitanteSupport::valoresFormulario((isset($data) && $data) ? $data : null)
+        : null;
     $centrocostoDefaultDestino = (int) (
         (isset($data) && $data && $data->centrocosto_id)
             ? $data->centrocosto_id
@@ -126,12 +130,45 @@
                 'col_input' => 'col-lg-8',
             ])
 
-            <div class="form-group row">
-                <label for="solicitante_show" class="col-lg-4 control-label text-right pr-2">Solicitante</label>
-                <div class="col-lg-8">
-                    <input type="text" id="solicitante_show" class="form-control" value="{{ $solicitanteTexto }}" readonly tabindex="-1">
+            @if ($ocSolicitanteModal)
+                <div class="form-group row align-items-center">
+                    <label for="solicitante_usuario_codigo" class="col-lg-4 control-label text-right pr-2 requerido">Solicitante</label>
+                    <div class="col-lg-8">
+                        <div class="tm-usuario-campo d-flex flex-wrap align-items-center">
+                            @if (! $soloLectura)
+                                <input type="hidden" name="solicitante_usuario_id" id="solicitante_usuario_id" class="usuario_id"
+                                    value="{{ $ocSolicitante['id'] }}">
+                                <input type="text" class="usuario_codigo_arbol form-control mr-2" id="solicitante_usuario_codigo"
+                                    value="{{ $ocSolicitante['codigo'] }}" style="width: 8rem;" autocomplete="off"
+                                    title="Código de usuario. Enter resuelve. F1 abre la consulta."
+                                    placeholder="Código">
+                            @endif
+                            <input type="text" class="nombreusuario form-control mr-2" id="solicitante_nombre"
+                                value="{{ $ocSolicitante['nombre'] }}" readonly tabindex="-1"
+                                style="min-width: 8rem; flex: 1;">
+                            @if (! $soloLectura)
+                                <button type="button" title="Consulta usuarios (F1)"
+                                    class="btn-accion-tabla consultausuario tooltipsC flex-shrink-0"
+                                    data-ptrusuario_id="#solicitante_usuario_id"
+                                    data-ptrusuario_codigo="#solicitante_usuario_codigo"
+                                    data-ptrnombre="#solicitante_nombre">
+                                    <i class="fa fa-search text-primary"></i>
+                                </button>
+                            @endif
+                        </div>
+                        @if (! $soloLectura)
+                            <small class="form-text text-muted">Quien pide la compra. La próxima orden de este usuario arranca con el mismo solicitante.</small>
+                        @endif
+                    </div>
                 </div>
-            </div>
+            @else
+                <div class="form-group row">
+                    <label for="solicitante_show" class="col-lg-4 control-label text-right pr-2">Solicitante</label>
+                    <div class="col-lg-8">
+                        <input type="text" id="solicitante_show" class="form-control" value="{{ $solicitanteTexto }}" readonly tabindex="-1">
+                    </div>
+                </div>
+            @endif
 
             <div class="form-group row">
                 <label class="col-lg-4 control-label text-right pr-2">Estado</label>

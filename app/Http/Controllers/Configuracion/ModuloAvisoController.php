@@ -185,6 +185,12 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'compras' && $codigo === 'entrega_dia_sin_recepcion') {
+            return array_merge($comunes, [
+                '{fecha}', '{cantidad}', '{articulos}',
+            ]);
+        }
+
         if ($modulo === 'compras' && $codigo === 'ordencompra_contrato_sin_com') {
             return array_merge($comunes, [
                 '{id}', '{numero}', '{empresa}', '{proveedor}', '{centrocosto}',

@@ -2,6 +2,10 @@
 
 namespace App\Support\Compras;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Configuracion\ParametroSistemaSupport;
+use Illuminate\Support\Facades\Schema;
+
 /**
  * Flags de UI/validación de orden de compra por entorno (.env).
  *
@@ -33,5 +37,26 @@ final class OrdencompraUiConfigSupport
     public static function detalleObligatorio(): bool
     {
         return (bool) config('compras.oc_detalle_obligatorio', true);
+    }
+
+    /**
+     * Solicitante elegible por consulta de usuarios.
+     * Fuera de El Bierzo queda siempre apagado, aunque exista el parámetro.
+     * En El Bierzo lo prende Configuración general → Compras (default activo).
+     */
+    public static function solicitanteEditable(): bool
+    {
+        if (! EntornoEmpresaSupport::esElBierzo()) {
+            return false;
+        }
+
+        if (! Schema::hasTable('ordencompra') || ! Schema::hasColumn('ordencompra', 'solicitante_usuario_id')) {
+            return false;
+        }
+
+        return ParametroSistemaSupport::boolean(
+            ParametroSistemaSupport::CLAVE_OC_SOLICITANTE_EDITABLE,
+            true
+        );
     }
 }

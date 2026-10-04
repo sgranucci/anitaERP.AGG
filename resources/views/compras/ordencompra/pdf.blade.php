@@ -436,6 +436,7 @@
                     @endif
                 </td>
             </tr>
+            @include('compras.ordencompra.partials.pdf_fila_solicitante')
         </tbody>
     </table>
     <p class="pdf-pie-nota muted">Presentación: hoja Legal vertical. Para la versión apaisada use el enlace PDF apaisado o el parámetro de consulta formato=apaisado en la URL de impresión.</p>

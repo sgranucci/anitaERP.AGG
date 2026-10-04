@@ -758,13 +758,26 @@ final class OrdencompraLegajoGastronomiaSupport
         return [
             'numero' => 'OC '.((string) ($oc->numeroordencompra ?? $oc->id)),
             'fecha' => $oc->fecha ? date('d/m/Y', strtotime((string) $oc->fecha)) : null,
-            'solicitante' => (string) (optional($oc->usuarios)->nombre ?? '—'),
+            'solicitante' => self::nombreSolicitanteOc($oc),
             'requisicion' => $reqLabel,
             'detalle' => trim((string) ($oc->detalle ?? '')) !== '' ? (string) $oc->detalle : null,
             'item_resumen' => $itemResumen,
             'subtotal' => $subtotal,
             'url_pdf' => $urlPdfOc,
         ];
+    }
+
+    private static function nombreSolicitanteOc(Ordencompra $oc): string
+    {
+        $nombre = trim((string) (optional($oc->usuarios)->nombre ?? ''));
+        if (OrdencompraUiConfigSupport::solicitanteEditable()) {
+            $elegido = trim((string) (optional($oc->solicitantes)->nombre ?? ''));
+            if ($elegido !== '') {
+                $nombre = $elegido;
+            }
+        }
+
+        return $nombre !== '' ? $nombre : '—';
     }
 
     private static function subtotalItemsOc(Ordencompra $oc): float

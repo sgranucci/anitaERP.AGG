@@ -556,6 +556,13 @@
     #tabla-items-recepcion .descripcionarticulo {
         font-size: 0.78rem;
     }
+    #tabla-items-recepcion .item-fecha-entrega {
+        font-size: 0.68rem;
+        line-height: 1.15;
+        color: #85929e;
+        margin-top: 0.12rem;
+        font-weight: 400;
+    }
     #tabla-items-recepcion .celda-moneda-cot-recepcion select,
     #tabla-items-recepcion .celda-moneda-cot-recepcion .item-cotizacion {
         width: 100%;

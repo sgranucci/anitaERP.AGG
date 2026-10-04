@@ -327,6 +327,12 @@ class OrdencompraListadoFiltros
                 }
             }
 
+            if (OrdencompraUiConfigSupport::solicitanteEditable()) {
+                $q->orWhereIn('ordencompra.solicitante_usuario_id', function ($sub) use ($like) {
+                    $sub->select('id')->from('usuario')->where('nombre', 'like', $like);
+                });
+            }
+
             $fecha = self::parsearFecha($valor);
             if ($fecha) {
                 $q->orWhereDate('ordencompra.fecha', '=', $fecha)
@@ -393,7 +399,42 @@ class OrdencompraListadoFiltros
             return;
         }
 
+        if ($campoKey === 'nombreusuario' && OrdencompraUiConfigSupport::solicitanteEditable() && $operador !== 'vacio') {
+            self::aplicarTextoSolicitante($query, $operador, $valor);
+
+            return;
+        }
+
         self::aplicarTexto($query, (string) $def['column'], $operador, $valor);
+    }
+
+    /**
+     * El nombre que se ve en Solicitante puede ser el elegido, no solo quien cargó.
+     *
+     * @param  Builder<\App\Models\Compras\Ordencompra>  $query
+     */
+    private static function aplicarTextoSolicitante(Builder $query, string $operador, string $valor): void
+    {
+        if ($valor === '') {
+            return;
+        }
+
+        $query->where(function ($q) use ($operador, $valor) {
+            self::aplicarTexto($q, 'usuario.nombre', $operador, $valor);
+            if ($operador === 'distinto') {
+                return;
+            }
+
+            $like = $operador === 'igual' ? self::escapeLike($valor) : self::patronLike($operador, $valor);
+            $q->orWhereIn('ordencompra.solicitante_usuario_id', function ($sub) use ($operador, $valor, $like) {
+                $sub->select('id')->from('usuario');
+                if ($operador === 'igual') {
+                    $sub->where('nombre', '=', $valor);
+                } else {
+                    $sub->where('nombre', 'like', $like);
+                }
+            });
+        });
     }
 
     /**

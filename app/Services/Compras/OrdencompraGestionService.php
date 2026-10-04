@@ -38,6 +38,7 @@ use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
 use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
+use App\Support\Compras\OrdencompraSolicitanteSupport;
 use App\Support\Compras\OrdencompraUiConfigSupport;
 use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\SuscripcionSupport;
@@ -434,6 +435,10 @@ class OrdencompraGestionService
         $uid = Auth::user()->id;
 
         $cab = $this->armaCabeceraDesdeRequest($payload, OrdencompraEstados::PENDIENTE, $sectorId, $uid);
+        [$cab, $errorSolicitante, $recordarSolicitante] = $this->aplicarSolicitanteCabecera($cab, $payload, true, null);
+        if ($errorSolicitante !== null) {
+            return ['mensaje' => 'error', 'errores' => $errorSolicitante];
+        }
 
         if (! empty($cab['requisicion_id'])) {
             try {
@@ -507,6 +512,10 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
+        if ($recordarSolicitante && ! empty($cab['solicitante_usuario_id'])) {
+            OrdencompraSolicitanteSupport::recordar((int) $uid, (int) $cab['solicitante_usuario_id']);
+        }
+
         if ($oc) {
             $this->avisarContratoSinComSiAplica((int) $oc->id);
         }
@@ -569,6 +578,10 @@ class OrdencompraGestionService
 
         $cab = $this->armaCabeceraDesdeRequest($payload, $existente->estadoordencompra, $existente->sector_legajocompra_id, $existente->creousuario_id);
         unset($cab['creousuario_id']);
+        [$cab, $errorSolicitante, $recordarSolicitante] = $this->aplicarSolicitanteCabecera($cab, $payload, false, $existente);
+        if ($errorSolicitante !== null) {
+            return ['mensaje' => 'error', 'errores' => $errorSolicitante];
+        }
 
         try {
             OrdencompraTratamientoMovimientosSupport::assertPuedeCambiarTratamiento(
@@ -653,6 +666,10 @@ class OrdencompraGestionService
         }
 
         $this->avisarContratoSinComSiAplica($id, $contratoAnterior);
+
+        if ($recordarSolicitante && ! empty($cab['solicitante_usuario_id'])) {
+            OrdencompraSolicitanteSupport::recordar((int) Auth::id(), (int) $cab['solicitante_usuario_id']);
+        }
 
         return ['mensaje' => 'ok'];
     }
@@ -1217,6 +1234,38 @@ class OrdencompraGestionService
         );
 
         return $obs !== '' ? $obs : null;
+    }
+
+    /**
+     * Fuera de El Bierzo (o con el parámetro apagado) no toca la cabecera.
+     *
+     * @param  array<string, mixed>  $cab
+     * @param  array<string, mixed>  $payload
+     * @return array{0: array<string, mixed>, 1: ?string, 2: bool}
+     */
+    private function aplicarSolicitanteCabecera(array $cab, array $payload, bool $esAlta, ?Ordencompra $existente): array
+    {
+        unset($cab['solicitante_usuario_id']);
+        if (! OrdencompraUiConfigSupport::solicitanteEditable()) {
+            return [$cab, null, false];
+        }
+
+        $resuelto = OrdencompraSolicitanteSupport::resolverParaGuardar($payload, (int) ($cab['empresa_id'] ?? 0));
+        if ($resuelto['error'] !== null) {
+            return [$cab, $resuelto['error'], false];
+        }
+
+        $cab['solicitante_usuario_id'] = $resuelto['id'];
+        $anterior = $existente ? (int) ($existente->solicitante_usuario_id ?? 0) : 0;
+        $recordar = OrdencompraSolicitanteSupport::debeRecordar(
+            (bool) $resuelto['explicito'],
+            $esAlta,
+            $anterior > 0 ? $anterior : null,
+            (int) $resuelto['id'],
+            (int) ($existente->creousuario_id ?? Auth::id() ?? 0)
+        );
+
+        return [$cab, null, $recordar];
     }
 
     /**

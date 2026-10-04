@@ -13,6 +13,8 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraListadoFiltros;
+use App\Support\Compras\OrdencompraUiConfigSupport;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\PortalProveedorOrdencompraListadoFiltros;
@@ -71,7 +73,7 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
     public function find($id)
     {
         $oc = $this->model->with([
-            'empresas', 'centrocostos', 'proveedores', 'requisiciones', 'usuarios', 'sector_legajocompras',
+            'empresas', 'centrocostos', 'proveedores', 'requisiciones', 'usuarios', 'solicitantes', 'sector_legajocompras',
             'condicioncompras', 'condicionentregas', 'condicionpagos', 'transportes',
             'ordencompra_articulos.articulos.unidadesdemedidasalternativas', 'ordencompra_articulos.monedas', 'ordencompra_articulos.centrocostos_destino',
             'ordencompra_articulos.partidagastos.articulos', 'ordencompra_articulos.capexs',
@@ -249,14 +251,15 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
                 'empresa.nombre as nombreempresa',
                 'centrocosto.nombre as nombrecentrocosto',
                 'proveedor.nombre as nombreproveedor',
-                'usuario.nombre as nombreusuario',
+                $this->expresionNombreSolicitanteListado(),
                 'sector_legajocompra.nombre as nombresector',
             ])
             ->leftJoin('empresa', 'empresa.id', '=', 'ordencompra.empresa_id')
             ->leftJoin('centrocosto', 'centrocosto.id', '=', 'ordencompra.centrocosto_id')
             ->leftJoin('proveedor', 'proveedor.id', '=', 'ordencompra.proveedor_id')
-            ->leftJoin('usuario', 'usuario.id', '=', 'ordencompra.creousuario_id')
-            ->leftJoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'ordencompra.sector_legajocompra_id')
+            ->leftJoin('usuario', 'usuario.id', '=', 'ordencompra.creousuario_id');
+        $this->unirSolicitanteListado($q);
+        $q->leftJoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'ordencompra.sector_legajocompra_id')
             ->leftJoin('condicioncompra', 'condicioncompra.id', '=', 'ordencompra.condicioncompra_id')
             ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id')
             ->orderByDesc('ordencompra.fecha')
@@ -286,7 +289,7 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             'centrocosto.nombre as nombrecentrocosto',
             'proveedor.codigo as codigoproveedor',
             'proveedor.nombre as nombreproveedor',
-            'usuario.nombre as nombreusuario',
+            $this->expresionNombreSolicitanteListado(),
             'sector_legajocompra.nombre as nombresector',
             'condicioncompra.nombre as nombrecondicioncompra',
             'requisicion.numerorequisicion',
@@ -303,8 +306,9 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             ->leftJoin('empresa', 'empresa.id', '=', 'ordencompra.empresa_id')
             ->leftJoin('centrocosto', 'centrocosto.id', '=', 'ordencompra.centrocosto_id')
             ->leftJoin('proveedor', 'proveedor.id', '=', 'ordencompra.proveedor_id')
-            ->leftJoin('usuario', 'usuario.id', '=', 'ordencompra.creousuario_id')
-            ->leftJoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'ordencompra.sector_legajocompra_id')
+            ->leftJoin('usuario', 'usuario.id', '=', 'ordencompra.creousuario_id');
+        $this->unirSolicitanteListado($q);
+        $q->leftJoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'ordencompra.sector_legajocompra_id')
             ->leftJoin('condicioncompra', 'condicioncompra.id', '=', 'ordencompra.condicioncompra_id')
             ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id')
             ->orderByDesc('ordencompra.fecha')
@@ -313,6 +317,33 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         $this->aplicarFiltrosListado($q, $filtros, $sectorUsuarioId);
 
         return $q;
+    }
+
+    /**
+     * En El Bierzo el listado muestra el solicitante elegido; si no hay, quien cargó.
+     * En el resto de instalaciones sigue siendo el usuario de alta.
+     */
+    private function expresionNombreSolicitanteListado(): \Illuminate\Contracts\Database\Query\Expression|string
+    {
+        if (! OrdencompraUiConfigSupport::solicitanteEditable()) {
+            return 'usuario.nombre as nombreusuario';
+        }
+
+        return DB::raw(SqlDialectSupport::coalesce('usuario_solicitante.nombre', 'usuario.nombre').' as nombreusuario');
+    }
+
+    private function unirSolicitanteListado(Builder $query): void
+    {
+        if (! OrdencompraUiConfigSupport::solicitanteEditable()) {
+            return;
+        }
+
+        $query->leftJoin(
+            'usuario as usuario_solicitante',
+            'usuario_solicitante.id',
+            '=',
+            'ordencompra.solicitante_usuario_id'
+        );
     }
 
     /**

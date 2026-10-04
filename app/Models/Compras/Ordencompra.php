@@ -40,7 +40,7 @@ class Ordencompra extends Model
         'fecha', 'fechaentrega', 'empresa_id', 'numeroordencompra', 'requisicion_id', 'centrocosto_id',
         'comentario', 'nota_legajo', 'detalle', 'lugarentrega', 'transporte_id', 'tratamiento', 'proveedor_id',
         'condicioncompra_id', 'condicionentrega_id', 'condicionpago_id', 'descuento', 'descuento_tipo', 'estadoordencompra', 'sector_legajocompra_id',
-        'condiciones_contratacion', 'creousuario_id',
+        'condiciones_contratacion', 'creousuario_id', 'solicitante_usuario_id',
         'es_contrato', 'es_suscripcion', 'suscripcion_nombre', 'suscripcion_proveedor_nombre',
         'suscripcion_periodicidad',
         'suscripcion_monto_periodo', 'suscripcion_tolerancia_pct', 'suscripcion_tarjeta_ult4',
@@ -95,6 +95,12 @@ class Ordencompra extends Model
     public function usuarios()
     {
         return $this->belongsTo(Usuario::class, 'creousuario_id');
+    }
+
+    /** Quien pidió la compra. Distinto de usuarios() (quien cargó) cuando el circuito lo permite. */
+    public function solicitantes()
+    {
+        return $this->belongsTo(Usuario::class, 'solicitante_usuario_id');
     }
 
     public function sector_legajocompras()

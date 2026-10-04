@@ -452,6 +452,7 @@
                     @endif
                 </td>
             </tr>
+            @include('compras.ordencompra.partials.pdf_fila_solicitante')
         </tbody>
     </table>
     <p class="pdf-pie-nota muted">Presentación: hoja Legal apaisada (horizontal).</p>

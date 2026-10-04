@@ -27,6 +27,18 @@ return [
     ],
 
     /*
+    | Aviso diario: artículo con entrega en el día y sin recepción que la cubra
+    | (compras:avisar-entrega-dia-sin-recepcion).
+    | El encendido, la plantilla y los destinatarios viven en Avisos por módulo
+    | (compras / entrega_dia_sin_recepcion). En El Bierzo el aviso nace activo.
+    */
+    'entrega_dia_sin_recepcion' => [
+        'habilitado' => filter_var(env('COMPRAS_ENTREGA_DIA_SIN_RECEPCION_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('COMPRAS_ENTREGA_DIA_SIN_RECEPCION_HORA', '13:00'),
+        'limite' => max(1, (int) env('COMPRAS_ENTREGA_DIA_SIN_RECEPCION_LIMITE', 80)),
+    ],
+
+    /*
     | Aviso de vencimiento de contratos / OC abiertas (compras:alertas-contratos-vencimiento).
     | Destinatarios y plantilla: Configuración → Avisos por módulo
     | (compras / ordencompra_contrato_vencimiento y ordencompra_contrato_vencido).

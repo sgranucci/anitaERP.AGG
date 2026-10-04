@@ -25,6 +25,8 @@ final class ParametroSistemaSupport
 
     public const CLAVE_SUSCRIPCION_COMPROBANTE_DIA_ESCALAMIENTO = 'suscripcion_comprobante_dia_escalamiento';
 
+    public const CLAVE_OC_SOLICITANTE_EDITABLE = 'oc_solicitante_editable';
+
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
     /**
@@ -32,7 +34,7 @@ final class ParametroSistemaSupport
      */
     public static function definiciones(): array
     {
-        return [
+        $defs = [
             self::CLAVE_LIMITE_FCE => [
                 'grupo' => 'Facturación ARCA',
                 'etiqueta' => 'Tope FCE MiPyME',
@@ -70,6 +72,18 @@ final class ParametroSistemaSupport
                 'opciones' => self::opcionesDiaEscalamientoSuscripcion(),
             ],
         ];
+
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            $defs[self::CLAVE_OC_SOLICITANTE_EDITABLE] = [
+                'grupo' => 'Compras',
+                'etiqueta' => 'Solicitante editable en orden de compra',
+                'ayuda' => 'Si está activo, al cargar una OC el solicitante se elige con la consulta de usuarios. Arranca con quien carga la orden, o con el último solicitante que esa persona eligió. Si está inactivo, el solicitante es quien carga y no se puede cambiar.',
+                'tipo' => 'boolean',
+                'orden' => 60,
+            ];
+        }
+
+        return $defs;
     }
 
     /**
@@ -283,6 +297,7 @@ final class ParametroSistemaSupport
                 'compras.suscripcion_comprobantes.dia_escalamiento',
                 'ultimo'
             ),
+            self::CLAVE_OC_SOLICITANTE_EDITABLE => EntornoEmpresaSupport::esElBierzo() ? '1' : '0',
             default => '0',
         };
     }

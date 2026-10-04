@@ -259,6 +259,9 @@ class RecepcionProveedorOrdencompraResolverService
                 'sku' => $articulo->sku ?? '',
                 'descripcion' => $descripcionLinea,
                 'cantidad_oc' => $cantidadOc,
+                'fechaentrega' => ($ocArt->fechaentrega ?? null)
+                    ? substr((string) $ocArt->fechaentrega, 0, 10)
+                    : null,
                 'cantidad_recibida' => $recibido,
                 'cantidad' => $cantidadPendiente,
                 'cantidad_rechazada' => 0,

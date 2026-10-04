@@ -3,6 +3,7 @@
 namespace App\Support\Stock;
 
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Proveedor;
 use App\Models\Stock\Depmae;
@@ -84,6 +85,8 @@ class RecepcionProveedorFormItemsSupport
             ? $depositosQuery->get()->keyBy('id')
             : collect();
 
+        $fechasEntregaOc = self::fechasEntregaPorLineaOc($items);
+
         $enriquecidos = [];
         foreach (array_values($items) as $item) {
             if (! is_array($item)) {
@@ -164,6 +167,7 @@ class RecepcionProveedorFormItemsSupport
                 'cotizacion' => (float) ($item['cotizacion'] ?? 1) ?: 1,
                 'sku' => $item['sku'] ?? ($articulo->sku ?? ''),
                 'descripcion' => $item['descripcion'] ?? ($articulo->descripcion ?? ''),
+                'fechaentrega' => self::fechaEntregaItem($item, $fechasEntregaOc),
                 'deposito_id' => $depositoLineaId > 0 ? $depositoLineaId : ($item['deposito_id'] ?? null),
                 'deposito_nombre' => $item['deposito_nombre'] ?? ($deposito->nombre ?? ''),
                 'depositoentrega_id' => $item['depositoentrega_id'] ?? ($articulo->depositoentrega_id ?? null),
@@ -188,6 +192,77 @@ class RecepcionProveedorFormItemsSupport
         }
 
         return $enriquecidos;
+    }
+
+    /**
+     * Fecha de entrega de la línea de OC (Y-m-d), para mostrarla en la grilla.
+     *
+     * @param  array<string, mixed>  $item
+     * @param  array<int, string>  $fechasPorLineaOc
+     */
+    private static function fechaEntregaItem(array $item, array $fechasPorLineaOc): ?string
+    {
+        $directa = self::normalizarFechaEntrega($item['fechaentrega'] ?? null);
+        if ($directa !== null) {
+            return $directa;
+        }
+
+        $ocArtId = (int) ($item['ordencompra_articulo_id'] ?? 0);
+        if ($ocArtId <= 0) {
+            $ocArtId = (int) ($item['ordencompra_articulo_sustituido_id'] ?? 0);
+        }
+        if ($ocArtId <= 0) {
+            return null;
+        }
+
+        return $fechasPorLineaOc[$ocArtId] ?? null;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>|array<int, array<string, mixed>>  $items
+     * @return array<int, string>
+     */
+    private static function fechasEntregaPorLineaOc(array $items): array
+    {
+        $ids = [];
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            if (self::normalizarFechaEntrega($item['fechaentrega'] ?? null) !== null) {
+                continue;
+            }
+            $ocArtId = (int) ($item['ordencompra_articulo_id'] ?? 0);
+            if ($ocArtId <= 0) {
+                $ocArtId = (int) ($item['ordencompra_articulo_sustituido_id'] ?? 0);
+            }
+            if ($ocArtId > 0) {
+                $ids[$ocArtId] = $ocArtId;
+            }
+        }
+        if ($ids === []) {
+            return [];
+        }
+
+        $fechas = [];
+        foreach (Ordencompra_Articulo::query()->whereIn('id', array_values($ids))->pluck('fechaentrega', 'id') as $id => $fecha) {
+            $ymd = self::normalizarFechaEntrega($fecha);
+            if ($ymd !== null) {
+                $fechas[(int) $id] = $ymd;
+            }
+        }
+
+        return $fechas;
+    }
+
+    private static function normalizarFechaEntrega(mixed $fecha): ?string
+    {
+        $ymd = substr(trim((string) $fecha), 0, 10);
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $ymd) || $ymd === '0000-00-00') {
+            return null;
+        }
+
+        return $ymd;
     }
 
     /** @return array{numero_oc: ?int, proveedor_nombre: ?string, proveedor_id: ?int, empresa_id: ?int, empresa_nombre: ?string, descuento_ordencompra: float} */

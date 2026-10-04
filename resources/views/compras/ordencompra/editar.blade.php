@@ -25,6 +25,19 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 <script src="{{ asset('assets/pages/scripts/compras/form-color-talle.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/arbolaprobacion/panel_ia.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/formulario.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/formulario.js')) ?: time() }}" type="text/javascript"></script>
+@if (\App\Support\Compras\OrdencompraUiConfigSupport::solicitanteEditable() && empty($visualizar))
+<script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/admin/usuario/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script>
+$(function () {
+    if (typeof activa_eventos_consultausuario === 'function') {
+        activa_eventos_consultausuario();
+    }
+    $(document).on('input', '#solicitante_usuario_codigo', function () {
+        $('#solicitante_usuario_id').val('');
+    });
+});
+</script>
+@endif
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/devolver_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/devolver_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>

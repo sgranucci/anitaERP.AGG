@@ -232,6 +232,13 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/compras-oc-alertas-abiertas-schedule.log'))
             ->when(fn () => (bool) config('compras.oc_alertas_abiertas.habilitado', true));
 
+        $schedule->command('compras:avisar-entrega-dia-sin-recepcion')
+            ->dailyAt((string) config('compras.entrega_dia_sin_recepcion.hora', '13:00'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/compras-entrega-dia-sin-recepcion-schedule.log'))
+            ->when(fn () => (bool) config('compras.entrega_dia_sin_recepcion.habilitado', true));
+
         $schedule->command('compras:alertas-contratos-vencimiento')
             ->dailyAt((string) config('compras.contratos_vencimiento.hora', '08:30'))
             ->runInBackground()
