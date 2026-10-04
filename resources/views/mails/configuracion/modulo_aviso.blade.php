@@ -8,8 +8,39 @@
 <body style="font-family: Arial, sans-serif; color:#222; line-height:1.5;">
     <h2 style="margin:0 0 12px 0; color:#333;">{{ $tituloEvento }}</h2>
 
-    @if ($textoCuerpo !== '')
-        <p style="white-space: pre-wrap;">{{ $textoCuerpo }}</p>
+    @php
+        $cuerpoMail = $textoCuerpo;
+        $despuesCuadro = '';
+        $cuadroHtml = '';
+        $marcaInicio = '[[CUADRO_OC_HTML]]';
+        $marcaFin = '[[/CUADRO_OC_HTML]]';
+        $ini = strpos($cuerpoMail, $marcaInicio);
+        $fin = $ini === false ? false : strpos($cuerpoMail, $marcaFin, $ini + strlen($marcaInicio));
+        if ($ini !== false && $fin !== false) {
+            $cuadroHtml = trim(substr(
+                $cuerpoMail,
+                $ini + strlen($marcaInicio),
+                $fin - ($ini + strlen($marcaInicio))
+            ));
+            $despuesCuadro = substr($cuerpoMail, $fin + strlen($marcaFin));
+            $cuerpoMail = substr($cuerpoMail, 0, $ini);
+            if (! str_contains($cuadroHtml, '<table')
+                || preg_match('/<(script|iframe|object|embed|link|meta)\b|on\w+\s*=|javascript:/i', $cuadroHtml)) {
+                $cuadroHtml = '';
+            }
+        }
+    @endphp
+
+    @if (trim($cuerpoMail) !== '')
+        <p style="white-space: pre-wrap;">{{ trim($cuerpoMail) }}</p>
+    @endif
+
+    @if ($cuadroHtml !== '')
+        {!! $cuadroHtml !!}
+    @endif
+
+    @if (trim($despuesCuadro) !== '')
+        <p style="white-space: pre-wrap;">{{ trim($despuesCuadro) }}</p>
     @endif
 
     @if (! empty($linkConsulta))

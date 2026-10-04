@@ -288,26 +288,103 @@ final class PosicionBancariaPrecargaVolcadoSupport
     }
 
     /**
+     * Una fila por precarga y banco, con el detalle del movimiento como nombre.
+     *
+     * @return array<string, array<string, list<array{
+     *   detalle: string, B: ?float, C: ?float, D: ?float, estado: string, tono: string, rubro: string
+     * }>>>
+     */
+    public function lineasPorFechaYHoja(Carbon $desde, Carbon $hasta): array
+    {
+        if (! Schema::hasTable('finanza_movimiento_precarga')) {
+            return [];
+        }
+
+        $precargas = FinanzaMovimientoPrecarga::query()
+            ->with([
+                'empresa:id,nombre',
+                'cuentacaja.bancos',
+                'cuentacajaDesde.bancos',
+                'cuentacajaHasta.bancos',
+                'cajaMovimiento:id,numerotransaccion,caja_movimiento_revertido_por_id',
+            ])
+            ->whereDate('fecha', '>=', $desde->toDateString())
+            ->whereDate('fecha', '<=', $hasta->toDateString())
+            ->orderBy('fecha')
+            ->orderBy('id')
+            ->get();
+
+        $out = [];
+        foreach ($precargas as $precarga) {
+            $fecha = $precarga->fecha?->toDateString() ?? '';
+            if ($fecha === '') {
+                continue;
+            }
+            $grupos = [];
+            foreach ($this->piernas($precarga) as $pierna) {
+                $hoja = (string) $pierna['hoja'];
+                $col = FinanzaPosicionHojaSupport::COLUMNA_POR_EMPRESA[(int) $pierna['empresa_id']] ?? null;
+                if ($col === null) {
+                    continue;
+                }
+                if (! isset($grupos[$hoja])) {
+                    $nombre = trim((string) $pierna['detalle']);
+                    $grupos[$hoja] = [
+                        'detalle' => $nombre !== '' ? $nombre : (string) $pierna['etiqueta'],
+                        'B' => null,
+                        'C' => null,
+                        'D' => null,
+                        'estado' => $precarga->etiquetaEstado(),
+                        'tono' => (string) $pierna['tono'],
+                        'rubro' => (string) $precarga->rubro,
+                    ];
+                }
+                $actual = $grupos[$hoja][$col];
+                $grupos[$hoja][$col] = $actual === null
+                    ? (float) $pierna['importe']
+                    : round((float) $actual + (float) $pierna['importe'], 2);
+            }
+            foreach ($grupos as $hoja => $fila) {
+                $out[$fecha][$hoja][] = $fila;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  list<array{etiqueta: string, empresa_id: int, importe: float, detalle: string, tono: string}>  $impactos
      * @return list<array{etiqueta: string, tono: string, biy: ?float, kan: ?float, reb: ?float, nota: string}>
      */
     private function filasTablero(array $impactos): array
     {
-        $conceptos = array_values(FinanzaMovimientoPrecargaRubro::ETIQUETA_HOJA);
-        $asignadas = $this->asignarAConceptos($conceptos, $impactos);
-        $filas = [];
-        foreach ($conceptos as $i => $etiqueta) {
-            $asig = $asignadas[$i] ?? null;
-            $filas[] = [
-                'etiqueta' => $etiqueta,
-                'tono' => (string) ($asig['tono'] ?? (FinanzaMovimientoPrecargaRubro::rubroPorEtiquetaHoja()[$etiqueta] ?? '')),
-                'biy' => $asig['B'] ?? null,
-                'kan' => $asig['C'] ?? null,
-                'reb' => $asig['D'] ?? null,
-                'nota' => (string) ($asig['nota'] ?? ''),
-            ];
+        $grupos = [];
+        foreach ($impactos as $item) {
+            $nombre = trim((string) ($item['detalle'] ?? ''));
+            if ($nombre === '') {
+                $nombre = (string) ($item['etiqueta'] ?? 'Movimiento');
+            }
+            $clave = $nombre.'|'.(string) ($item['tono'] ?? '');
+            if (! isset($grupos[$clave])) {
+                $grupos[$clave] = [
+                    'etiqueta' => $nombre,
+                    'tono' => (string) ($item['tono'] ?? ''),
+                    'biy' => null,
+                    'kan' => null,
+                    'reb' => null,
+                    'nota' => (string) ($item['etiqueta'] ?? ''),
+                ];
+            }
+            $col = FinanzaPosicionHojaSupport::COLUMNA_POR_EMPRESA[(int) ($item['empresa_id'] ?? 0)] ?? null;
+            if ($col === 'B') {
+                $grupos[$clave]['biy'] = round((float) ($grupos[$clave]['biy'] ?? 0) + (float) $item['importe'], 2);
+            } elseif ($col === 'C') {
+                $grupos[$clave]['kan'] = round((float) ($grupos[$clave]['kan'] ?? 0) + (float) $item['importe'], 2);
+            } elseif ($col === 'D') {
+                $grupos[$clave]['reb'] = round((float) ($grupos[$clave]['reb'] ?? 0) + (float) $item['importe'], 2);
+            }
         }
 
-        return $filas;
+        return array_values($grupos);
     }
 }

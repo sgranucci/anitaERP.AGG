@@ -11,6 +11,7 @@
 <script>
 window.PRECARG_IMPACTO_URL = @json(route('impacto_finanza_movimiento_precarga'));
 window.PRECARG_CUENTA_URL = @json(url('finanzas/movimiento-precarga/cuenta'));
+window.PRECARG_CUENTA_POR_CODIGO_URL = @json(url('caja/cuentacaja/leercuentacajaporcodigo'));
 </script>
 <script src="{{ asset('assets/pages/scripts/finanzas/movimiento_precarga/form.js') }}?v={{ filemtime(public_path('assets/pages/scripts/finanzas/movimiento_precarga/form.js')) }}"></script>
 @endsection
@@ -31,17 +32,19 @@ window.PRECARG_CUENTA_URL = @json(url('finanzas/movimiento-precarga/cuenta'));
         : route('actualizar_finanza_movimiento_precarga', $p->id);
 @endphp
 <div class="card card-primary precarga-shell">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h3 class="card-title mb-0">
+    <div class="card-header">
+        <h3 class="card-title">
             @if (! $esNueva)
                 Precarga #{{ $p->id }}
             @else
                 Nueva precarga de cash flow
             @endif
         </h3>
-        <a href="{{ route('finanza_movimiento_precarga') }}" class="btn btn-outline-info btn-sm">
-            <i class="fa fa-reply-all"></i> Volver al listado
-        </a>
+        <div class="card-tools">
+            <a href="{{ route('finanza_movimiento_precarga') }}" class="btn btn-outline-light btn-sm">
+                <i class="fa fa-fw fa-reply-all"></i> Salir
+            </a>
+        </div>
     </div>
     <div class="card-body">
         @include('includes.form-error')
@@ -62,7 +65,8 @@ window.PRECARG_CUENTA_URL = @json(url('finanzas/movimiento-precarga/cuenta'));
 
         <div class="row">
             <div class="col-xl-5 mb-3">
-                <form id="form-precarga" method="post" action="{{ $accion }}" class="form-horizontal precarga-form {{ $cerrada ? 'pe-none' : '' }}">
+                <div class="precarga-form">
+                <form id="form-precarga" method="post" action="{{ $accion }}" class="form-horizontal {{ $cerrada ? 'pe-none' : '' }}">
                     @csrf
                     @if (! $esNueva)
                         @method('PUT')
@@ -177,20 +181,22 @@ window.PRECARG_CUENTA_URL = @json(url('finanzas/movimiento-precarga/cuenta'));
                             <small class="form-text text-muted">En pesos queda en 1. En moneda extranjera se propone la vigente.</small>
                         </div>
                     </div>
-                    <div id="bloque-contrapartida">
-                        @include('sueldos.partials.campo_consulta_cuentacontable', [
-                            'label' => 'Contrapartida',
-                            'inputName' => 'cuentacontable_contrapartida_id',
-                            'inputId' => 'precarga_cuentacontable_id',
-                            'cuentaId' => old('cuentacontable_contrapartida_id', $p->cuentacontable_contrapartida_id ?? ''),
-                            'codigo' => $contraCodigo ?? '',
-                            'descripcion' => $contraNombre ?? '',
-                            'col_label' => 'col-lg-4 control-label text-right pr-2',
-                            'col_input' => 'col-lg-8',
-                        ])
-                        <p class="text-muted small pl-1">Hace falta solo al contabilizar un ingreso o egreso. La transferencia usa las cuentas contables de las dos cajas.</p>
-                    </div>
                 </form>
+                @if (($puedeGuardar && ! $cerrada) || (! $esNueva && ! $cerrada && can('convertir-finanza-movimiento-precarga', false)))
+                    <div class="d-flex flex-wrap pt-2 pb-2" style="gap:.5rem;">
+                        @if ($puedeGuardar && ! $cerrada)
+                            <button type="submit" form="form-precarga" class="btn btn-primary">
+                                <i class="fa fa-save"></i> Guardar
+                            </button>
+                        @endif
+                        @if (! $esNueva && ! $cerrada && can('convertir-finanza-movimiento-precarga', false))
+                            <a href="{{ route('contabilizar_finanza_movimiento_precarga', $p->id) }}" class="btn btn-success">
+                                <i class="fa fa-check"></i> Contabilizar
+                            </a>
+                        @endif
+                    </div>
+                @endif
+                </div>
             </div>
             <div class="col-xl-7 mb-3">
                 <div class="precarga-board" id="precarga-board">
@@ -212,21 +218,6 @@ window.PRECARG_CUENTA_URL = @json(url('finanzas/movimiento-precarga/cuenta'));
                 </div>
             </div>
         </div>
-    </div>
-    <div class="card-footer d-flex flex-wrap" style="gap:.5rem;">
-        @if ($puedeGuardar && ! $cerrada)
-            <button type="submit" form="form-precarga" class="btn btn-primary">
-                <i class="fa fa-save"></i> Guardar
-            </button>
-        @endif
-        @if (! $esNueva && ! $cerrada && can('convertir-finanza-movimiento-precarga', false))
-            <form action="{{ route('convertir_finanza_movimiento_precarga', $p->id) }}" method="post" class="d-inline" onsubmit="return confirm('Se genera el ingreso/egreso contabilizado y esta precarga se cierra.');">
-                @csrf
-                <button type="submit" class="btn btn-success">
-                    <i class="fa fa-check"></i> Contabilizar
-                </button>
-            </form>
-        @endif
     </div>
 </div>
 @include('includes.caja.modalconsultacuentacaja')

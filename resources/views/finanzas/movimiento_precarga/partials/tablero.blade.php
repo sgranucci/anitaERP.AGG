@@ -15,7 +15,7 @@
         <table class="table table-sm precarga-grid mb-3">
             <thead>
                 <tr>
-                    <th>Concepto</th>
+                    <th>Movimiento</th>
                     <th class="text-right">Biyemas</th>
                     <th class="text-right">Kandiko</th>
                     <th class="text-right">Rebisco</th>
@@ -23,7 +23,7 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach ($hoja['filas'] as $fila)
+                @forelse ($hoja['filas'] as $fila)
                     @php
                         $vacia = $fila['biy'] === null && $fila['kan'] === null && $fila['reb'] === null;
                     @endphp
@@ -34,7 +34,11 @@
                         <td class="text-right">{{ $fila['reb'] === null ? '' : number_format((float) $fila['reb'], 2, ',', '.') }}</td>
                         <td>{{ $fila['nota'] }}</td>
                     </tr>
-                @endforeach
+                @empty
+                    <tr class="fila-vacia">
+                        <td colspan="5">Sin movimientos en este banco.</td>
+                    </tr>
+                @endforelse
             </tbody>
         </table>
     </div>

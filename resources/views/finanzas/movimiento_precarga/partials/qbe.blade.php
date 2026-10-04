@@ -18,7 +18,7 @@
         $etiquetasColumnas[$k] = $m['label'] ?? $k;
     }
 @endphp
-<div class="lw-qbe collapse show" id="lw-qbe-panel"
+<div class="lw-qbe collapse" id="lw-qbe-panel"
      data-ops-texto='@json($opsTexto)'
      data-ops-entero='@json($opsEntero)'
      data-ops-bool='@json($opsBool)'
@@ -36,6 +36,9 @@
             </button>
             <button type="submit" class="btn btn-sm btn-primary">
                 <i class="fa fa-search"></i> Buscar
+            </button>
+            <button type="button" class="btn btn-sm btn-link text-muted" data-toggle="collapse" data-target="#lw-qbe-panel">
+                Ocultar
             </button>
         </div>
     </div>

@@ -179,7 +179,7 @@
             // Prefijos de módulo del ERP (alineado con routes/web.php). Incluye produccion:
             // sin él, en dominio raíz APP_CARPETA stale (/anitaERP/public) rompe los AJAX
             // de modales (ej. consultacliente en liquidación de tareas).
-            var mods = 'ventas|caja|stock|compras|contable|seguridad|presupuesto|ticket|admin|uif|configuracion|sueldos|produccion|sala|graficos|solicitudpago|ordenventa|arca|ayuda|receptivo|notificaciones';
+            var mods = 'ventas|caja|stock|compras|contable|seguridad|presupuesto|ticket|admin|uif|configuracion|sueldos|produccion|sala|graficos|solicitudpago|ordenventa|arca|ayuda|receptivo|notificaciones|finanzas';
             // Preferir el prefijo real de la URL (evita APP_CARPETA stale tipo /anitaERP/public en dominio raíz).
             var mPublic = loc.match(/^(.*\/public)(?:\/|$)/);
             if (mPublic && mPublic[1]) {

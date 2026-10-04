@@ -3242,6 +3242,7 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('finanzas/movimiento-precarga/{id}/editar', 'Finanzas\MovimientoPrecargaController@editar')->name('editar_finanza_movimiento_precarga')->middleware('modo.consulta');
     Route::put('finanzas/movimiento-precarga/{id}', 'Finanzas\MovimientoPrecargaController@actualizar')->name('actualizar_finanza_movimiento_precarga')->middleware('modo.consulta');
     Route::delete('finanzas/movimiento-precarga/{id}', 'Finanzas\MovimientoPrecargaController@eliminar')->name('eliminar_finanza_movimiento_precarga');
+    Route::get('finanzas/movimiento-precarga/{id}/contabilizar', 'Finanzas\MovimientoPrecargaController@contabilizar')->name('contabilizar_finanza_movimiento_precarga');
     Route::post('finanzas/movimiento-precarga/{id}/convertir', 'Finanzas\MovimientoPrecargaController@convertir')->name('convertir_finanza_movimiento_precarga');
 
     Route::get('caja/cotizacion-tesoreria', 'Caja\CotizacionTesoreriaController@index')->name('cotizacion_tesoreria');

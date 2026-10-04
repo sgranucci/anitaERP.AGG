@@ -52,16 +52,22 @@ class FinanzaMovimientoPrecargaService
         return $existente->fresh();
     }
 
-    public function convertir(FinanzaMovimientoPrecarga $precarga): FinanzaMovimientoPrecarga
+    /**
+     * @param  list<array{cuentacontable_id: int, debe: float, haber: float}>  $lineas
+     */
+    public function convertir(FinanzaMovimientoPrecarga $precarga, array $lineas): FinanzaMovimientoPrecarga
     {
         $precarga->load([
-            'cuentacaja.cuentacontables',
-            'cuentacajaDesde.cuentacontables',
-            'cuentacajaHasta.cuentacontables',
+            'cuentacaja',
+            'cuentacajaDesde',
+            'cuentacajaHasta',
             'cajaMovimiento',
         ]);
         if ($precarga->estaCerrada()) {
             throw new InvalidArgumentException('Esta precarga ya tiene un ingreso/egreso vigente.');
+        }
+        if (count($lineas) < 2) {
+            throw new InvalidArgumentException('El asiento necesita al menos dos renglones.');
         }
 
         $tipo = $this->tipoTransaccion($precarga->tipo);
@@ -72,6 +78,7 @@ class FinanzaMovimientoPrecargaService
         }
         $detalle = mb_substr(trim((string) $precarga->detalle), 0, 255);
         $monedaId = (int) $precarga->moneda_id;
+        $payload = $this->payloadBase($precarga, (int) $tipo->id, $detalle);
 
         if ($precarga->tipo === 'transferencia') {
             $desde = $precarga->cuentacajaDesde;
@@ -79,52 +86,31 @@ class FinanzaMovimientoPrecargaService
             if ($desde === null || $hasta === null) {
                 throw new InvalidArgumentException('La transferencia necesita cuenta desde y cuenta hasta.');
             }
-            $ctaDesde = (int) ($desde->cuentacontable_id ?? 0);
-            $ctaHasta = (int) ($hasta->cuentacontable_id ?? 0);
-            if ($ctaDesde <= 0 || $ctaHasta <= 0) {
-                throw new InvalidArgumentException('Las dos cuentas de caja tienen que tener cuenta contable para contabilizar la transferencia.');
-            }
-            $payload = $this->payloadBase($precarga, (int) $tipo->id, $detalle);
             $payload['cuentacaja_ids'] = [(int) $desde->id, (int) $hasta->id];
             $payload['moneda_ids'] = [$monedaId, $monedaId];
             $payload['montos'] = [-1 * $monto, $monto];
             $payload['cotizaciones'] = [$cot, $cot];
             $payload['observaciones'] = [$detalle, $detalle];
-            $payload['cuentacontable_ids'] = [$ctaDesde, $ctaHasta];
-            $payload['monedaasiento_ids'] = [$monedaId, $monedaId];
-            $payload['centrocostoasiento_ids'] = [0, 0];
-            $payload['debeasientos'] = [0, $monto];
-            $payload['haberasientos'] = [$monto, 0];
-            $payload['cotizacionasientos'] = [$cot, $cot];
-            $payload['observacionasientos'] = [$detalle, $detalle];
         } else {
             $cuenta = $precarga->cuentacaja;
             if ($cuenta === null) {
                 throw new InvalidArgumentException('Falta la cuenta de caja.');
             }
-            $ctaCaja = (int) ($cuenta->cuentacontable_id ?? 0);
-            $ctaContra = (int) ($precarga->cuentacontable_contrapartida_id ?? 0);
-            if ($ctaCaja <= 0) {
-                throw new InvalidArgumentException('La cuenta de caja no tiene cuenta contable.');
-            }
-            if ($ctaContra <= 0 || ! Cuentacontable::query()->whereKey($ctaContra)->exists()) {
-                throw new InvalidArgumentException('Indicá la cuenta contable de contrapartida para contabilizar el ingreso o egreso.');
-            }
-            $esEgreso = $precarga->tipo === 'egreso';
-            $payload = $this->payloadBase($precarga, (int) $tipo->id, $detalle);
             $payload['cuentacaja_ids'] = [(int) $cuenta->id];
             $payload['moneda_ids'] = [$monedaId];
             $payload['montos'] = [$monto];
             $payload['cotizaciones'] = [$cot];
             $payload['observaciones'] = [$detalle];
-            $payload['cuentacontable_ids'] = [$ctaCaja, $ctaContra];
-            $payload['monedaasiento_ids'] = [$monedaId, $monedaId];
-            $payload['centrocostoasiento_ids'] = [0, 0];
-            $payload['debeasientos'] = [$esEgreso ? 0 : $monto, $esEgreso ? $monto : 0];
-            $payload['haberasientos'] = [$esEgreso ? $monto : 0, $esEgreso ? 0 : $monto];
-            $payload['cotizacionasientos'] = [$cot, $cot];
-            $payload['observacionasientos'] = [$detalle, $detalle];
         }
+
+        $n = count($lineas);
+        $payload['cuentacontable_ids'] = array_column($lineas, 'cuentacontable_id');
+        $payload['monedaasiento_ids'] = array_fill(0, $n, $monedaId);
+        $payload['centrocostoasiento_ids'] = array_fill(0, $n, 0);
+        $payload['debeasientos'] = array_column($lineas, 'debe');
+        $payload['haberasientos'] = array_column($lineas, 'haber');
+        $payload['cotizacionasientos'] = array_fill(0, $n, $cot);
+        $payload['observacionasientos'] = array_fill(0, $n, $detalle);
 
         $request = Request::create('/finanzas/movimiento-precarga/convertir', 'POST', $payload);
         $resultado = $this->ingresoEgresoService->guardaIngresoEgreso($request);
@@ -142,6 +128,120 @@ class FinanzaMovimientoPrecargaService
         $precarga->save();
 
         return $precarga->fresh(['cajaMovimiento']);
+    }
+
+    /**
+     * Asiento inicial: la pierna de la caja ya imputada y el saldo para completar en la grilla.
+     *
+     * @return list<array{cuentacontable_id: int, codigo: string, nombre: string, debe: float, haber: float}>
+     */
+    public function lineasAsientoPropuestas(FinanzaMovimientoPrecarga $precarga): array
+    {
+        $precarga->loadMissing([
+            'cuentacaja.cuentacontables',
+            'cuentacajaDesde.cuentacontables',
+            'cuentacajaHasta.cuentacontables',
+        ]);
+        $monto = round(abs((float) $precarga->monto), 2);
+        if ($precarga->tipo === 'transferencia') {
+            return [
+                $this->lineaDesdeCaja($precarga->cuentacajaDesde, 0, $monto),
+                $this->lineaDesdeCaja($precarga->cuentacajaHasta, $monto, 0),
+            ];
+        }
+
+        $egreso = $precarga->tipo === 'egreso';
+
+        return [
+            $this->lineaDesdeCaja($precarga->cuentacaja, $egreso ? 0.0 : $monto, $egreso ? $monto : 0.0),
+            $this->lineaVacia($egreso ? $monto : 0.0, $egreso ? 0.0 : $monto),
+        ];
+    }
+
+    /**
+     * @param  list<mixed>|null  $ids
+     * @param  list<mixed>|null  $debes
+     * @param  list<mixed>|null  $haberes
+     * @return list<array{cuentacontable_id: int, codigo: string, nombre: string, debe: float, haber: float}>
+     */
+    public function lineasAsientoParaVista(FinanzaMovimientoPrecarga $precarga, ?array $ids, ?array $debes, ?array $haberes): array
+    {
+        if ($ids === null) {
+            return $this->lineasAsientoPropuestas($precarga);
+        }
+
+        $debes = array_values($debes ?? []);
+        $haberes = array_values($haberes ?? []);
+        $cuentas = Cuentacontable::query()
+            ->whereIn('id', array_filter(array_map('intval', $ids)))
+            ->get()
+            ->keyBy('id');
+        $lineas = [];
+        foreach (array_values($ids) as $i => $id) {
+            $cta = $cuentas->get((int) $id);
+            $lineas[] = [
+                'cuentacontable_id' => (int) $id,
+                'codigo' => (string) ($cta->codigo ?? ''),
+                'nombre' => (string) ($cta->nombre ?? ''),
+                'debe' => round($this->importe($debes[$i] ?? 0), 2),
+                'haber' => round($this->importe($haberes[$i] ?? 0), 2),
+            ];
+        }
+
+        return $lineas === [] ? $this->lineasAsientoPropuestas($precarga) : $lineas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @return list<array{cuentacontable_id: int, debe: float, haber: float}>
+     */
+    public function lineasAsientoDesdeInput(array $input, float $montoObjetivo): array
+    {
+        $ids = array_values((array) ($input['cuentacontable_ids'] ?? []));
+        $debes = array_values((array) ($input['debeasientos'] ?? []));
+        $haberes = array_values((array) ($input['haberasientos'] ?? []));
+        $n = max(count($ids), count($debes), count($haberes));
+        $lineas = [];
+        $sumDebe = 0.0;
+        $sumHaber = 0.0;
+
+        for ($i = 0; $i < $n; $i++) {
+            $id = (int) ($ids[$i] ?? 0);
+            $debe = round($this->importe($debes[$i] ?? 0), 2);
+            $haber = round($this->importe($haberes[$i] ?? 0), 2);
+            if ($id <= 0 && $debe <= 0 && $haber <= 0) {
+                continue;
+            }
+            if ($id <= 0 || ! Cuentacontable::query()->whereKey($id)->exists()) {
+                throw new InvalidArgumentException('Cada renglón con importe tiene que tener una cuenta contable.');
+            }
+            if ($debe > 0 && $haber > 0) {
+                throw new InvalidArgumentException('Un renglón no puede tener debe y haber a la vez.');
+            }
+            if ($debe <= 0 && $haber <= 0) {
+                throw new InvalidArgumentException('Cada renglón del asiento tiene que tener importe.');
+            }
+            $sumDebe += $debe;
+            $sumHaber += $haber;
+            $lineas[] = [
+                'cuentacontable_id' => $id,
+                'debe' => $debe,
+                'haber' => $haber,
+            ];
+        }
+
+        if (count($lineas) < 2) {
+            throw new InvalidArgumentException('El asiento necesita al menos dos renglones.');
+        }
+
+        $objetivo = round(abs($montoObjetivo), 2);
+        if (abs($sumDebe - $sumHaber) > 0.02 || abs($sumDebe - $objetivo) > 0.02) {
+            throw new InvalidArgumentException(
+                'El debe y el haber tienen que sumar '.number_format($objetivo, 2, ',', '.').', el total del movimiento.'
+            );
+        }
+
+        return $lineas;
     }
 
     /**
@@ -260,6 +360,52 @@ class FinanzaMovimientoPrecargaService
         }
 
         return round($vigente, 6);
+    }
+
+    /**
+     * @return array{cuentacontable_id: int, codigo: string, nombre: string, debe: float, haber: float}
+     */
+    private function lineaDesdeCaja(?Cuentacaja $cuenta, float $debe, float $haber): array
+    {
+        $cta = $cuenta?->cuentacontables;
+
+        return [
+            'cuentacontable_id' => (int) ($cta->id ?? 0),
+            'codigo' => (string) ($cta->codigo ?? ''),
+            'nombre' => (string) ($cta->nombre ?? ''),
+            'debe' => $debe,
+            'haber' => $haber,
+        ];
+    }
+
+    /**
+     * @return array{cuentacontable_id: int, codigo: string, nombre: string, debe: float, haber: float}
+     */
+    private function lineaVacia(float $debe, float $haber): array
+    {
+        return [
+            'cuentacontable_id' => 0,
+            'codigo' => '',
+            'nombre' => '',
+            'debe' => $debe,
+            'haber' => $haber,
+        ];
+    }
+
+    private function importe(mixed $valor): float
+    {
+        $texto = trim((string) $valor);
+        if ($texto === '') {
+            return 0.0;
+        }
+        if (str_contains($texto, ',') && str_contains($texto, '.')) {
+            $texto = str_replace('.', '', $texto);
+            $texto = str_replace(',', '.', $texto);
+        } elseif (str_contains($texto, ',')) {
+            $texto = str_replace(',', '.', $texto);
+        }
+
+        return (float) $texto;
     }
 
     private function tipoTransaccion(string $tipo): Tipotransaccion_Caja

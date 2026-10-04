@@ -40,11 +40,14 @@ class PosicionBancariaDiariaController extends Controller
         if ($request->boolean('consultar')) {
             $preview = $this->saldosIb->saldosPorCodigo($fecha);
         }
+        $proyeccion = $this->proyeccionDesdeRequest($request);
 
         return view('caja.posicion_bancaria_diaria.index', [
             'fecha' => $fecha->toDateString(),
             'cotizacion_usd' => $cotizUsd,
             'cotizacion_eur' => $cotizEur,
+            'dias_proyectados' => $proyeccion['dias'],
+            'salto_dias' => $proyeccion['salto'],
             'consultado' => $request->boolean('consultar'),
             'preview' => $preview,
         ]);
@@ -59,9 +62,18 @@ class PosicionBancariaDiariaController extends Controller
         $fecha = $this->resolverFecha($request);
         $cotizUsd = $request->filled('cotizacion_usd') ? (float) $request->input('cotizacion_usd') : null;
         $cotizEur = $request->filled('cotizacion_eur') ? (float) $request->input('cotizacion_eur') : null;
+        $proyeccion = $this->proyeccionDesdeRequest($request);
 
         try {
-            $resultado = $this->generador->generar($fecha, null, $cotizUsd, $cotizEur);
+            $resultado = $this->generador->generar(
+                $fecha,
+                null,
+                $cotizUsd,
+                $cotizEur,
+                null,
+                $proyeccion['dias'],
+                $proyeccion['salto'],
+            );
         } catch (Throwable $e) {
             report($e);
 
@@ -70,6 +82,8 @@ class PosicionBancariaDiariaController extends Controller
                     'fecha' => $fecha->toDateString(),
                     'cotizacion_usd' => $cotizUsd,
                     'cotizacion_eur' => $cotizEur,
+                    'dias_proyectados' => $proyeccion['dias'],
+                    'salto_dias' => $proyeccion['salto'],
                     'consultar' => 1,
                 ])
                 ->with('errores', 'No se pudo generar la posición: '.$e->getMessage());
@@ -83,6 +97,20 @@ class PosicionBancariaDiariaController extends Controller
         }
 
         return $response;
+    }
+
+    /**
+     * @return array{dias: int, salto: int}
+     */
+    private function proyeccionDesdeRequest(Request $request): array
+    {
+        $dias = $request->filled('dias_proyectados') ? (int) $request->input('dias_proyectados') : 5;
+        $salto = $request->filled('salto_dias') ? (int) $request->input('salto_dias') : 1;
+
+        return [
+            'dias' => max(0, min(31, $dias)),
+            'salto' => max(1, min(15, $salto)),
+        ];
     }
 
     private function resolverFecha(Request $request): Carbon

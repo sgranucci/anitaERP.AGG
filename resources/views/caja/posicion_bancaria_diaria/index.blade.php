@@ -28,6 +28,13 @@
     var formExport = document.getElementById('form-posbanc-export');
     if (formExport) {
         formExport.addEventListener('submit', function () {
+            ['fecha', 'cotizacion_usd', 'cotizacion_eur'].forEach(function (nombre) {
+                var origen = document.getElementById(nombre);
+                var destino = formExport.querySelector('input[name="' + nombre + '"]');
+                if (origen && destino) {
+                    destino.value = origen.value;
+                }
+            });
             mostrar('Generando Excel de posición…');
             window.addEventListener('focus', ocultar, { once: true });
         });
@@ -59,7 +66,8 @@
                     Genera el Excel de posición: hoja <strong>Saldos</strong> desde Interbanking (ERP),
                     cheques del portfolio, <strong>Disponible HOY</strong> y hojas de proyección
                     (Macro / BMA / BAPRO / Bi Bank / BIND + Resumen descubierto).
-                    RRHH, SUSS, descubierto, transferencias y otras operaciones salen de las precargas de Finanzas.
+                    Los movimientos del día salen con el detalle de cada precarga y de las solicitudes de pago
+                    por vencimiento (sin las suspendidas). El estado queda en la columna F.
                     @if (can('listar-finanza-movimiento-precarga', false))
                         <a href="{{ route('finanza_movimiento_precarga') }}">Abrir precargas</a>.
                     @endif
@@ -94,11 +102,21 @@
                     </button>
                 </form>
 
-                <form id="form-posbanc-export" method="get" action="{{ route('posicion_bancaria_diaria_exportar') }}" class="mb-4">
+                <form id="form-posbanc-export" method="get" action="{{ route('posicion_bancaria_diaria_exportar') }}" class="form-inline flex-wrap align-items-end mb-4">
                     <input type="hidden" name="fecha" value="{{ $fecha }}">
                     <input type="hidden" name="cotizacion_usd" value="{{ $cotizacion_usd }}">
                     <input type="hidden" name="cotizacion_eur" value="{{ $cotizacion_eur }}">
-                    <button type="submit" class="btn btn-success">
+                    <div class="form-group mr-3 mb-2">
+                        <label for="dias_proyectados" class="mr-2">Días proyectados</label>
+                        <input type="number" min="0" max="31" class="form-control" id="dias_proyectados" name="dias_proyectados"
+                               value="{{ $dias_proyectados ?? 5 }}" style="width:80px" title="Cuántos días hacia adelante, después del día de la posición">
+                    </div>
+                    <div class="form-group mr-3 mb-2">
+                        <label for="salto_dias" class="mr-2">Salto de días</label>
+                        <input type="number" min="1" max="15" class="form-control" id="salto_dias" name="salto_dias"
+                               value="{{ $salto_dias ?? 1 }}" style="width:80px" title="Cada cuántos días se abre un bloque nuevo">
+                    </div>
+                    <button type="submit" class="btn btn-success mb-2">
                         <i class="fas fa-file-excel"></i> Generar y descargar Excel
                     </button>
                 </form>

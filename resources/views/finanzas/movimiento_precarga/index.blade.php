@@ -42,41 +42,27 @@
             de la posición bancaria. No generan asiento hasta contabilizarlos.
         </p>
         <form method="get" action="{{ route('finanza_movimiento_precarga') }}" id="form-precarga-index">
+            @include('finanzas.movimiento_precarga.partials.filtros_externos')
+            @if ((int) ($filtros['empresa_id'] ?? 0) > 0)
+                <input type="hidden" name="empresa_id" value="{{ (int) $filtros['empresa_id'] }}">
+            @endif
+            @if (($filtros['filtro_estado'] ?? 'todos') !== 'todos')
+                <input type="hidden" name="filtro_estado" value="{{ $filtros['filtro_estado'] }}">
+            @endif
             <div class="form-row align-items-end mb-2">
                 <div class="form-group col-md-3">
-                    <label for="empresa_id">Empresa</label>
-                    @if ($empresa_query->count() <= 1)
-                        <input type="hidden" name="empresa_id" id="empresa_id" value="{{ $filtros['empresa_id'] ?: ($empresa_query->first()->id ?? '') }}">
-                        <input type="text" class="form-control" value="{{ $empresa_query->first()->nombre ?? 'Todas' }}" readonly>
-                    @else
-                        <select name="empresa_id" id="empresa_id" class="form-control">
-                            <option value="0">Todas mis empresas</option>
-                            @foreach ($empresa_query as $empresa)
-                                <option value="{{ $empresa->id }}" @if ((int) ($filtros['empresa_id'] ?? 0) === (int) $empresa->id) selected @endif>
-                                    {{ $empresa->nombre }}
-                                </option>
-                            @endforeach
-                        </select>
-                    @endif
-                </div>
-                <div class="form-group col-md-2">
-                    <label for="filtro_estado">Estado</label>
-                    <select name="filtro_estado" id="filtro_estado" class="form-control">
-                        <option value="todos" @if (($filtros['filtro_estado'] ?? 'todos') === 'todos') selected @endif>Todos</option>
-                        <option value="abierto" @if (($filtros['filtro_estado'] ?? '') === 'abierto') selected @endif>Abiertas</option>
-                        <option value="convertido" @if (($filtros['filtro_estado'] ?? '') === 'convertido') selected @endif>Contabilizadas</option>
-                    </select>
-                </div>
-                <div class="form-group col-md-2">
                     <label for="fecha_desde">Fecha desde</label>
                     <input type="date" class="form-control" name="fecha_desde" id="fecha_desde" value="{{ $filtros['fecha_desde'] ?? '' }}">
                 </div>
-                <div class="form-group col-md-2">
+                <div class="form-group col-md-3">
                     <label for="fecha_hasta">Fecha hasta</label>
                     <input type="date" class="form-control" name="fecha_hasta" id="fecha_hasta" value="{{ $filtros['fecha_hasta'] ?? '' }}">
                 </div>
-                <div class="form-group col-md-3">
+                <div class="form-group col-md-6">
                     <button type="submit" class="btn btn-info">Consultar</button>
+                    <button type="button" class="btn btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-qbe-panel" aria-expanded="false" aria-controls="lw-qbe-panel">
+                        <i class="fa fa-filter"></i> QBE
+                    </button>
                     <a href="{{ route('finanza_movimiento_precarga') }}" class="btn btn-outline-secondary">Limpiar</a>
                 </div>
             </div>
@@ -131,12 +117,9 @@
                                     </a>
                                 @endif
                                 @if (can('convertir-finanza-movimiento-precarga', false) && ! $row->estaCerrada())
-                                    <form action="{{ route('convertir_finanza_movimiento_precarga', $row->id) }}" method="post" class="d-inline" onsubmit="return confirm('Se genera el ingreso/egreso contabilizado y la precarga se cierra.');">
-                                        @csrf
-                                        <button type="submit" class="btn-accion-tabla" title="Contabilizar">
-                                            <i class="fa fa-check text-success"></i>
-                                        </button>
-                                    </form>
+                                    <a href="{{ route('contabilizar_finanza_movimiento_precarga', $row->id) }}" class="btn-accion-tabla tooltipsC" title="Contabilizar">
+                                        <i class="fa fa-check text-success"></i>
+                                    </a>
                                 @endif
                                 @if (can('borrar-finanza-movimiento-precarga', false) && ! $row->estaCerrada())
                                     <form action="{{ route('eliminar_finanza_movimiento_precarga', $row->id) }}" method="post" class="d-inline" onsubmit="return confirm('¿Eliminar la precarga?');">

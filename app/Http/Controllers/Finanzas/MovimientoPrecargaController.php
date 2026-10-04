@@ -153,15 +153,38 @@ class MovimientoPrecargaController extends Controller
             ->with('mensaje', 'Precarga eliminada.');
     }
 
-    public function convertir(int $id)
+    public function contabilizar(Request $request, int $id)
     {
         can('convertir-finanza-movimiento-precarga');
-        $precarga = $this->buscar($id);
+        $precarga = $this->precargaParaContabilizar($id);
+        if ($precarga->estaCerrada()) {
+            return redirect()
+                ->route('editar_finanza_movimiento_precarga', $precarga->id)
+                ->with('errores', 'Esta precarga ya está contabilizada.');
+        }
+
+        return view('finanzas.movimiento_precarga.contabilizar', [
+            'precarga' => $precarga,
+            'lineas' => $this->service->lineasAsientoParaVista(
+                $precarga,
+                $request->old('cuentacontable_ids'),
+                $request->old('debeasientos'),
+                $request->old('haberasientos'),
+            ),
+            'monto' => round(abs((float) $precarga->monto), 2),
+        ]);
+    }
+
+    public function convertir(Request $request, int $id)
+    {
+        can('convertir-finanza-movimiento-precarga');
+        $precarga = $this->precargaParaContabilizar($id);
 
         try {
-            $precarga = $this->service->convertir($precarga);
+            $lineas = $this->service->lineasAsientoDesdeInput($request->all(), (float) $precarga->monto);
+            $precarga = $this->service->convertir($precarga, $lineas);
         } catch (InvalidArgumentException $e) {
-            return back()->with('errores', $e->getMessage());
+            return back()->withInput()->with('errores', $e->getMessage());
         }
 
         $numero = (string) ($precarga->cajaMovimiento->numerotransaccion ?? $precarga->caja_movimiento_id);
@@ -239,6 +262,20 @@ class MovimientoPrecargaController extends Controller
             'contraCodigo' => (string) ($contra->codigo ?? ''),
             'contraNombre' => (string) ($contra->nombre ?? ''),
         ];
+    }
+
+    private function precargaParaContabilizar(int $id): FinanzaMovimientoPrecarga
+    {
+        $precarga = $this->buscar($id);
+        $precarga->load([
+            'empresa',
+            'moneda',
+            'cuentacaja.cuentacontables',
+            'cuentacajaDesde.cuentacontables',
+            'cuentacajaHasta.cuentacontables',
+        ]);
+
+        return $precarga;
     }
 
     private function buscar(int $id): FinanzaMovimientoPrecarga
