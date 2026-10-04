@@ -383,6 +383,91 @@ final class ComprobanteProveedorImputacionApSupport
         ];
     }
 
+    /**
+     * Comprobante de ingresos/egresos: no tiene cuenta corriente.
+     * Se compara el total de la factura contra el debe del asiento del movimiento
+     * que le corresponde (líneas vinculadas o mismo código de cuenta + importe).
+     * El ctamov de ese movimiento lo controla el mail de I/E.
+     *
+     * @param  list<array{monto: float, codigo?: string, comprobante_proveedor_id?: int}>  $lineasDebe
+     * @param  list<array{monto: float, codigo?: string}>  $conceptos
+     */
+    public static function importeDebeIngresoEgreso(int $comprobanteId, array $lineasDebe, array $conceptos): float
+    {
+        $suma = 0.0;
+        $usadas = [];
+
+        foreach ($lineasDebe as $i => $linea) {
+            $dueno = (int) ($linea['comprobante_proveedor_id'] ?? 0);
+            if ($comprobanteId > 0 && $dueno === $comprobanteId) {
+                $suma += (float) ($linea['monto'] ?? 0);
+                $usadas[$i] = true;
+            }
+        }
+
+        foreach ($conceptos as $concepto) {
+            $codigo = trim((string) ($concepto['codigo'] ?? ''));
+            $monto = round((float) ($concepto['monto'] ?? 0), 2);
+            if ($codigo === '' || abs($monto) < 0.0001) {
+                continue;
+            }
+
+            foreach ($lineasDebe as $i => $linea) {
+                if (isset($usadas[$i])) {
+                    continue;
+                }
+                if ((int) ($linea['comprobante_proveedor_id'] ?? 0) > 0) {
+                    continue;
+                }
+                if (trim((string) ($linea['codigo'] ?? '')) !== $codigo) {
+                    continue;
+                }
+                if (round((float) ($linea['monto'] ?? 0), 2) !== $monto) {
+                    continue;
+                }
+
+                $suma += (float) ($linea['monto'] ?? 0);
+                $usadas[$i] = true;
+                break;
+            }
+        }
+
+        return round($suma, 2);
+    }
+
+    /**
+     * @return array{
+     *     ok: bool,
+     *     alertas: list<string>,
+     *     diff_cc_asiento: float,
+     *     diff_asiento_ctamov: float,
+     *     diff_cc_ctamov: float,
+     *     diff_cc_factura: float|null
+     * }
+     */
+    public static function evaluarIngresoEgreso(
+        float $facturaArs,
+        float $asientoArs,
+        bool $tieneAsiento,
+        float $tolerancia = self::TOLERANCIA,
+    ): array {
+        $alertas = [];
+        if (! $tieneAsiento) {
+            $alertas[] = 'Sin asiento del I/E';
+        } elseif (self::desvia($asientoArs, $facturaArs, $tolerancia)) {
+            $alertas[] = 'Factura ≠ asiento I/E';
+        }
+
+        return [
+            'ok' => $alertas === [],
+            'alertas' => $alertas,
+            'diff_cc_asiento' => round($asientoArs - $facturaArs, 2),
+            'diff_asiento_ctamov' => 0.0,
+            'diff_cc_ctamov' => 0.0,
+            'diff_cc_factura' => null,
+        ];
+    }
+
     public static function esBorrador(?string $estado): bool
     {
         return strtoupper(trim((string) $estado)) === ComprobanteProveedorEstados::BORRADOR;

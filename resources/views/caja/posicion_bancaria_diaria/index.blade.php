@@ -59,7 +59,11 @@
                     Genera el Excel de posición: hoja <strong>Saldos</strong> desde Interbanking (ERP),
                     cheques del portfolio, <strong>Disponible HOY</strong> y hojas de proyección
                     (Macro / BMA / BAPRO / Bi Bank / BIND + Resumen descubierto).
-                    TRF, RRHH e impuestos se completan a mano en el Excel. No consulta Anita online.
+                    RRHH, SUSS, descubierto, transferencias y otras operaciones salen de las precargas de Finanzas.
+                    @if (can('listar-finanza-movimiento-precarga', false))
+                        <a href="{{ route('finanza_movimiento_precarga') }}">Abrir precargas</a>.
+                    @endif
+                    El resto de impuestos se completa a mano. No consulta Anita online.
                 </p>
 
                 @if (session('errores'))

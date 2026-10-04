@@ -161,8 +161,8 @@ final class PagoproveedorImputacionApDiariaService
             'notas' => [
                 'Cada OP compara la CC ERP (valor libro de las facturas aplicadas) vs el trío AP/anticipo del asiento vs ctamov Anita.',
                 'Promov Anita se controla contra el total de la OP (cabecera), no contra el AP: en cruzada ME la DC va a P&L.',
-                'Solo OP de proveedores (CC / trío AP). Excluye REVERTIDA/BAJA, I/E (SP / ING / EGR / TRA), OPP de tesorería sin AP y cabeceras Anita sin CC/asiento.',
-                'Las cabeceras importadas desde Anita (documento sin cuenta corriente) no se exigen en ERP: la contabilidad vive en Anita.',
+                'Solo OP de proveedores (CC / trío AP). Excluye REVERTIDA/BAJA, I/E (SP / ING / EGR / TRA), OPP de tesorería sin AP y documentos nacidos en Anita.',
+                'Una OP nacida en Anita no entra al cuadre: el stub sin CC, y también el asiento copiado del subdiario (el ctamov de cierre usa otro número; la cabecera pag_trec incluye retenciones y promov es el neto).',
                 'OPP/OPA son crédito (Haber−Debe negativo). AOP invierte el signo.',
                 'El residual a anticipo entra al trío. Se controla aparte vs ctamov.',
                 'Importes en $: CC al TC de la factura; promov al TC del pago. Haber suma, Debe resta.',
@@ -328,32 +328,39 @@ final class PagoproveedorImputacionApDiariaService
                 'OP #'.$pago->id
             );
 
+            $filaAnita = [
+                'id' => (int) $pago->id,
+                'tipo' => $tipo,
+                'tipo_etiqueta' => PagoproveedorImputacionApSupport::etiquetaTipo($tipo),
+                'fecha' => $fecha,
+                'empresa_id' => (int) $pago->empresa_id,
+                'nombreempresa' => (string) ($pago->empresas?->nombre ?? ''),
+                'nombre_proveedor' => (string) ($pago->proveedores?->nombre ?? ''),
+                'etiqueta' => $pago->etiquetaComprobante(),
+                'estado' => (string) ($pago->estado ?? ''),
+                'total_origen' => round((float) ($pago->monto ?? 0), 2),
+                'promov_ars' => $promovArs,
+                'tiene_promov' => $tienePromov,
+            ];
+
             if (PagoproveedorImputacionApSupport::esCabeceraAnitaSinContabilidad(
                 $tieneCc,
                 $tieneAsiento,
                 (string) ($pago->detalle ?? ''),
                 (string) ($obsImportPorPago->get($pago->id) ?? ''),
             )) {
-                $cabecerasAnita[] = [
-                    'id' => (int) $pago->id,
-                    'tipo' => $tipo,
-                    'tipo_etiqueta' => PagoproveedorImputacionApSupport::etiquetaTipo($tipo),
-                    'fecha' => $fecha,
-                    'empresa_id' => (int) $pago->empresa_id,
-                    'nombreempresa' => (string) ($pago->empresas?->nombre ?? ''),
-                    'nombre_proveedor' => (string) ($pago->proveedores?->nombre ?? ''),
-                    'etiqueta' => $pago->etiquetaComprobante(),
-                    'estado' => (string) ($pago->estado ?? ''),
-                    'total_origen' => round((float) ($pago->monto ?? 0), 2),
-                    'promov_ars' => $promovArs,
-                    'tiene_promov' => $tienePromov,
-                ];
+                $cabecerasAnita[] = $filaAnita + ['motivo' => 'Sin CC ni asiento ERP'];
                 continue;
             }
 
             if (PagoproveedorImputacionApSupport::esPagoSinTrioAp($tieneCc, $tieneAsiento, $asientoArs, $tolerancia)) {
                 continue;
             }
+
+            $asientoCopiadoAnita = PagoproveedorImputacionApSupport::asientoCopiadoDeSubdiario(
+                (string) ($asiento?->anita_origen ?? ''),
+                (string) ($asiento?->observacion ?? ''),
+            );
 
             $eval = PagoproveedorImputacionApSupport::evaluarCuatroPatas(
                 $ccArs,
@@ -367,8 +374,14 @@ final class PagoproveedorImputacionApDiariaService
                 $tolerancia,
                 $asientoAnticipoArs,
                 $ctamovAnticipoArs,
-                $esperadoOpArs,
+                $asientoCopiadoAnita ? null : $esperadoOpArs,
+                ! $asientoCopiadoAnita,
             );
+
+            if ($asientoCopiadoAnita && $eval['ok']) {
+                $cabecerasAnita[] = $filaAnita + ['motivo' => 'Asiento copiado del subdiario Anita'];
+                continue;
+            }
 
             $out[] = [
                 'id' => (int) $pago->id,

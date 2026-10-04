@@ -369,7 +369,15 @@ class LibroIvaDigitalComprasGenerador
             $cp->comprobante_proveedor_conceptos,
             $letra,
         );
-        $cuit = preg_replace('/\D+/', '', (string) ($cp->proveedores->nroinscripcion ?? $cp->proveedor_documento_eventual ?? '')) ?? '';
+        $vendedor = LibroIvaDigitalComprasCuitSupport::cuitYNombreVendedorErp(
+            $cp->proveedores?->nroinscripcion,
+            $cp->identificacion_proveedor_cuit,
+            $cp->proveedor_documento_eventual,
+            $cp->proveedores?->nombre,
+            $cp->proveedor_nombre_eventual,
+            (string) ($cp->tipotransaccion_compras->abreviatura ?? ''),
+        );
+        $cuit = $vendedor['cuit'];
         $codigoMoneda = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
             $cp->monedas->codigo ?? null,
             $cp->monedas->nombre ?? null,
@@ -393,7 +401,7 @@ class LibroIvaDigitalComprasGenerador
             'despacho_importacion' => '',
             'codigo_documento' => '80',
             'numero_identificacion' => $cuit !== '' ? $cuit : '0',
-            'nombre_vendedor' => (string) ($cp->proveedores->nombre ?? $cp->proveedor_nombre_eventual ?? ''),
+            'nombre_vendedor' => $vendedor['nombre'],
             'importe_total' => abs((float) $cp->total) * $coeficiente,
             'no_integra_neto' => $totales['no_integra'],
             'operaciones_exentas' => $totales['exento'],

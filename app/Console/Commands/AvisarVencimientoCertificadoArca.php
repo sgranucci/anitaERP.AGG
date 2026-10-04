@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\Arca\ArcaCertificadoCsrService;
 use App\Services\Configuracion\ModuloAvisoService;
+use App\Support\Arca\ArcaCertificadoPantallaSupport;
 use App\Support\Arca\ArcaCertificadoVencimientoAvisoSupport;
 use Illuminate\Console\Command;
 
@@ -20,8 +21,13 @@ class AvisarVencimientoCertificadoArca extends Command
         $cada = max(1, (int) config('arca.certificado_aviso.cada_dias', 2));
         $simular = (bool) $this->option('simular');
 
-        $filas = ArcaCertificadoVencimientoAvisoSupport::seleccionar(
+        $inventario = $certificados->filtrar(
             $certificados->inventariar(),
+            ArcaCertificadoPantallaSupport::serviciosVisibles(),
+            null,
+        );
+        $filas = ArcaCertificadoVencimientoAvisoSupport::seleccionar(
+            $inventario,
             $diasAntes,
             $cada,
         );

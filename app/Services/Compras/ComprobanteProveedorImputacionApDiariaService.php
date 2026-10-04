@@ -3,8 +3,11 @@
 namespace App\Services\Compras;
 
 use App\Mail\Compras\ComprobanteProveedorImputacionApDiaria;
+use App\Models\Compras\Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Configuracion\Empresa;
+use App\Models\Contable\Asiento;
+use App\Models\Contable\Cuentacontable;
 use App\Support\Compras\ComprobanteProveedorImputacionApCuentasSupport;
 use App\Support\Compras\ComprobanteProveedorImputacionApCtamovSupport;
 use App\Support\Compras\ComprobanteProveedorImputacionApSupport;
@@ -78,6 +81,9 @@ final class ComprobanteProveedorImputacionApDiariaService
             'sin_cc' => 0,
             'sin_asiento' => 0,
             'sin_ctamov' => 0,
+            'ie' => 0,
+            'ie_ok' => 0,
+            'ie_desvio' => 0,
             'cc_ars' => 0.0,
             'asiento_ars' => 0.0,
             'ctamov_ars' => 0.0,
@@ -86,7 +92,8 @@ final class ComprobanteProveedorImputacionApDiariaService
             if (in_array('Sin CC', $fila['alertas'] ?? [], true)) {
                 $totales['sin_cc']++;
             }
-            if (in_array('Sin asiento', $fila['alertas'] ?? [], true)) {
+            if (in_array('Sin asiento', $fila['alertas'] ?? [], true)
+                || in_array('Sin asiento del I/E', $fila['alertas'] ?? [], true)) {
                 $totales['sin_asiento']++;
             }
             if (in_array('Sin ctamov Anita', $fila['alertas'] ?? [], true)) {
@@ -94,6 +101,19 @@ final class ComprobanteProveedorImputacionApDiariaService
             }
         }
         foreach ($filas as $fila) {
+            if (! empty($fila['es_ingreso_egreso'])) {
+                if (ComprobanteProveedorImputacionApSupport::esBorrador((string) ($fila['estado'] ?? ''))) {
+                    continue;
+                }
+                $totales['ie']++;
+                if (! empty($fila['ok'])) {
+                    $totales['ie_ok']++;
+                } else {
+                    $totales['ie_desvio']++;
+                }
+
+                continue;
+            }
             $totales['cc_ars'] += (float) ($fila['cc_ars'] ?? 0);
             $totales['asiento_ars'] += (float) ($fila['asiento_ars'] ?? 0);
             $totales['ctamov_ars'] += (float) ($fila['ctamov_ars'] ?? 0);
@@ -130,6 +150,7 @@ final class ComprobanteProveedorImputacionApDiariaService
                 'Solo suma líneas de proveedores MN/ME (códigos de config) y anticipo; ignora gastos/IVA del asiento.',
                 'No usa el saldo neto de CC: ignora aplicaciones/OPP posteriores; exige existencia e importe de la factura en CC.',
                 'Solo facturas de origen ERP (excluye importación desde Anita).',
+                'Los comprobantes de ingresos y egresos no tienen cuenta corriente: se comparan con el debe del asiento del movimiento. Su ctamov lo controla el mail de I/E.',
                 'Los comprobantes en BORRADOR se listan aparte: todavía no se contabilizaron, no son un desvío de cuadre.',
                 'El debe a anticipo de una factura anticipada no se netea contra la CC; se controla aparte vs ctamov.',
                 'Importes en $ con la cotización de la operación. Haber suma, Debe resta.',
@@ -204,10 +225,49 @@ final class ComprobanteProveedorImputacionApDiariaService
             ];
         }
         $ctamovPorAsiento = $this->ctamov->sumarTrioPorAsiento($clavesCtamov, $catalogo);
+        $ingresoEgreso = $this->contextoIngresoEgreso($filas);
 
         $out = [];
         foreach ($filas as $fila) {
             $compId = (int) ($fila['comprobante_id'] ?? 0);
+            $esIngresoEgreso = (string) ($fila['origen_entrada'] ?? '') === ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO;
+            $fila['es_ingreso_egreso'] = $esIngresoEgreso;
+            if ($esIngresoEgreso) {
+                $cajaId = (int) ($fila['caja_movimiento_id'] ?? 0);
+                $asientoIe = $ingresoEgreso['asiento'][$cajaId] ?? null;
+                $tieneAsientoIe = $asientoIe !== null;
+                $facturaIe = round((float) ($fila['total_ars'] ?? 0), 2);
+                $asientoIeArs = $tieneAsientoIe
+                    ? ComprobanteProveedorImputacionApSupport::importeDebeIngresoEgreso(
+                        $compId,
+                        $ingresoEgreso['lineas'][$cajaId] ?? [],
+                        $ingresoEgreso['conceptos'][$compId] ?? [],
+                    )
+                    : 0.0;
+                $evalIe = ComprobanteProveedorImputacionApSupport::evaluarIngresoEgreso(
+                    $facturaIe,
+                    $asientoIeArs,
+                    $tieneAsientoIe,
+                    $tolerancia,
+                );
+                $fila['cc_ars'] = 0.0;
+                $fila['asiento_ars'] = $asientoIeArs;
+                $fila['ctamov_ars'] = 0.0;
+                $fila['factura_ie_ars'] = $facturaIe;
+                $fila['asiento_id'] = (int) ($asientoIe['id'] ?? 0);
+                $fila['numeroasiento'] = (string) ($asientoIe['numero'] ?? '');
+                $fila['ctamov_lineas'] = 0;
+                $fila['diff_cc_asiento'] = $evalIe['diff_cc_asiento'];
+                $fila['diff_asiento_ctamov'] = $evalIe['diff_asiento_ctamov'];
+                $fila['diff_cc_ctamov'] = $evalIe['diff_cc_ctamov'];
+                $fila['diff_cc_factura'] = $evalIe['diff_cc_factura'];
+                $fila['ok'] = $evalIe['ok'];
+                $fila['alertas'] = $evalIe['alertas'];
+                $fila['alertas_texto'] = implode(' · ', $evalIe['alertas']);
+                $out[] = $fila;
+
+                continue;
+            }
             $lineasCc = $ccPorComp->get($compId, collect());
             $ccArs = 0.0;
             $tieneCc = $lineasCc->isNotEmpty();
@@ -263,6 +323,129 @@ final class ComprobanteProveedorImputacionApDiariaService
             $fila['alertas'] = $eval['alertas'];
             $fila['alertas_texto'] = implode(' · ', $eval['alertas']);
             $out[] = $fila;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Asiento del movimiento de caja y conceptos del comprobante, para cruzar
+     * el total del I/E sin usar la cuenta corriente.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return array{
+     *     lineas: array<int, list<array{monto: float, codigo: string, comprobante_proveedor_id: int}>>,
+     *     conceptos: array<int, list<array{monto: float, codigo: string}>>,
+     *     asiento: array<int, array{id: int, numero: string}>
+     * }
+     */
+    private function contextoIngresoEgreso(array $filas): array
+    {
+        $vacio = ['lineas' => [], 'conceptos' => [], 'asiento' => []];
+        $ie = array_values(array_filter(
+            $filas,
+            static fn (array $fila): bool => (string) ($fila['origen_entrada'] ?? '') === ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO
+        ));
+        if ($ie === []) {
+            return $vacio;
+        }
+
+        $cajaIds = [];
+        $compIds = [];
+        $empresaPorComp = [];
+        foreach ($ie as $fila) {
+            $cajaId = (int) ($fila['caja_movimiento_id'] ?? 0);
+            $compId = (int) ($fila['comprobante_id'] ?? 0);
+            if ($cajaId > 0) {
+                $cajaIds[$cajaId] = $cajaId;
+            }
+            if ($compId > 0) {
+                $compIds[$compId] = $compId;
+                $empresaPorComp[$compId] = (int) ($fila['empresa_id'] ?? 0);
+            }
+        }
+
+        $lineas = [];
+        $asiento = [];
+        if ($cajaIds !== []) {
+            $asientos = Asiento::query()
+                ->whereIn('caja_movimiento_id', array_values($cajaIds))
+                ->with(['asiento_movimientos.cuentacontables:id,codigo'])
+                ->orderBy('id')
+                ->get();
+
+            foreach ($asientos as $row) {
+                $cajaId = (int) $row->caja_movimiento_id;
+                $asiento[$cajaId] = [
+                    'id' => (int) $row->id,
+                    'numero' => (string) ($row->numeroasiento ?? ''),
+                ];
+                $lineas[$cajaId] = [];
+                foreach ($row->asiento_movimientos as $mov) {
+                    $monto = round((float) $mov->monto, 2);
+                    if ($monto <= 0) {
+                        continue;
+                    }
+                    $lineas[$cajaId][] = [
+                        'monto' => $monto,
+                        'codigo' => trim((string) ($mov->cuentacontables?->codigo ?? '')),
+                        'comprobante_proveedor_id' => (int) ($mov->comprobante_proveedor_id ?? 0),
+                    ];
+                }
+            }
+        }
+
+        return [
+            'lineas' => $lineas,
+            'conceptos' => $this->conceptosIngresoEgreso(array_values($compIds), $empresaPorComp),
+            'asiento' => $asiento,
+        ];
+    }
+
+    /**
+     * @param  list<int>  $compIds
+     * @param  array<int, int>  $empresaPorComp
+     * @return array<int, list<array{monto: float, codigo: string}>>
+     */
+    private function conceptosIngresoEgreso(array $compIds, array $empresaPorComp): array
+    {
+        if ($compIds === []) {
+            return [];
+        }
+
+        $filas = Comprobante_Proveedor_Concepto::query()
+            ->whereIn('comprobante_proveedor_id', $compIds)
+            ->with(['concepto_ivacompras.concepto_ivacompra_empresas'])
+            ->get();
+
+        $cuentaIds = [];
+        $armados = [];
+        foreach ($filas as $linea) {
+            $compId = (int) $linea->comprobante_proveedor_id;
+            $empresaId = (int) ($empresaPorComp[$compId] ?? 0);
+            $cuentaId = (int) ($linea->cuentacontabledebe_id
+                ?: $linea->concepto_ivacompras?->cuentacontableDebeIdParaEmpresa($empresaId > 0 ? $empresaId : null));
+            if ($cuentaId <= 0) {
+                continue;
+            }
+            $cuentaIds[$cuentaId] = $cuentaId;
+            $armados[] = [
+                'comp' => $compId,
+                'cuenta' => $cuentaId,
+                'monto' => round(abs((float) $linea->monto), 2),
+            ];
+        }
+
+        $codigos = $cuentaIds === []
+            ? collect()
+            : Cuentacontable::query()->whereIn('id', array_values($cuentaIds))->pluck('codigo', 'id');
+
+        $out = [];
+        foreach ($armados as $armado) {
+            $out[$armado['comp']][] = [
+                'monto' => $armado['monto'],
+                'codigo' => trim((string) ($codigos[$armado['cuenta']] ?? '')),
+            ];
         }
 
         return $out;

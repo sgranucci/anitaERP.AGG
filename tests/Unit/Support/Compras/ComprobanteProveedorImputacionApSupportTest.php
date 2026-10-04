@@ -367,6 +367,48 @@ class ComprobanteProveedorImputacionApSupportTest extends TestCase
         $this->assertFalse(ComprobanteProveedorImputacionApSupport::esLineaCcDeudaFactura($opp));
     }
 
+    public function test_ingreso_egreso_no_exige_cuenta_corriente_si_el_debe_cuadra(): void
+    {
+        $lineas = [
+            ['monto' => 100.0, 'codigo' => '114010002', 'comprobante_proveedor_id' => 0],
+            ['monto' => 21.0, 'codigo' => '214010005', 'comprobante_proveedor_id' => 0],
+        ];
+        $conceptos = [
+            ['monto' => 100.0, 'codigo' => '114010002'],
+            ['monto' => 21.0, 'codigo' => '214010005'],
+        ];
+
+        $asiento = ComprobanteProveedorImputacionApSupport::importeDebeIngresoEgreso(9, $lineas, $conceptos);
+        $this->assertSame(121.0, $asiento);
+
+        $eval = ComprobanteProveedorImputacionApSupport::evaluarIngresoEgreso(121.0, $asiento, true);
+        $this->assertTrue($eval['ok']);
+        $this->assertSame([], $eval['alertas']);
+    }
+
+    public function test_ingreso_egreso_no_toma_el_debe_de_otro_comprobante(): void
+    {
+        $lineas = [
+            ['monto' => 80.0, 'codigo' => '114010002', 'comprobante_proveedor_id' => 1],
+            ['monto' => 20.0, 'codigo' => '114010002', 'comprobante_proveedor_id' => 2],
+        ];
+
+        $this->assertSame(80.0, ComprobanteProveedorImputacionApSupport::importeDebeIngresoEgreso(1, $lineas, []));
+        $this->assertSame(20.0, ComprobanteProveedorImputacionApSupport::importeDebeIngresoEgreso(2, $lineas, []));
+
+        $eval = ComprobanteProveedorImputacionApSupport::evaluarIngresoEgreso(80.0, 20.0, true);
+        $this->assertFalse($eval['ok']);
+        $this->assertContains('Factura ≠ asiento I/E', $eval['alertas']);
+        $this->assertNotContains('Sin CC', $eval['alertas']);
+    }
+
+    public function test_ingreso_egreso_sin_asiento_del_movimiento(): void
+    {
+        $eval = ComprobanteProveedorImputacionApSupport::evaluarIngresoEgreso(100.0, 0.0, false);
+        $this->assertFalse($eval['ok']);
+        $this->assertSame(['Sin asiento del I/E'], $eval['alertas']);
+    }
+
     /**
      * @return array{mn: array<int, true>, me: array<int, true>, anticipo: array<int, true>}
      */

@@ -239,7 +239,7 @@ class ComprobanteProveedorImputacionApReporteService
                 (string) ($comp->numerocomprobante ?? '')
             ));
 
-            $filas[] = $this->filaBase(
+            $fila = $this->filaBase(
                 ComprobanteProveedorImputacionApSupport::TIPO_COMPROBANTE,
                 $comp->id,
                 $fecha,
@@ -256,6 +256,9 @@ class ComprobanteProveedorImputacionApReporteService
                 $eval,
                 $cubetaEsperada
             );
+            $fila['origen_entrada'] = (string) ($comp->origen_entrada ?? '');
+            $fila['caja_movimiento_id'] = (int) ($comp->caja_movimiento_id ?? 0);
+            $filas[] = $fila;
         }
 
         return $filas;

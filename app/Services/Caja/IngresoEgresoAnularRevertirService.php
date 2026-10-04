@@ -4,16 +4,19 @@ namespace App\Services\Caja;
 
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Caja_Movimiento_Estado;
+use App\Models\Compras\Pagoproveedor;
 use App\Models\Contable\Asiento;
 use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
 use App\Repositories\Caja\Caja_Movimiento_CuentacajaRepositoryInterface;
 use App\Repositories\Caja\Caja_Movimiento_EstadoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
+use App\Services\Compras\PagoproveedorAnularRevertirService;
 use App\Services\Solicitudpago\SolicitudpagoPagoDesdeCajaService;
 use App\Support\Caja\ChequeOperacionActivaSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport;
 use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
+use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoVisibilidadSupport;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
@@ -35,6 +38,7 @@ class IngresoEgresoAnularRevertirService
         private AsientoRepositoryInterface $asientoRepository,
         private AsientoReversoSupport $asientoReversoSupport,
         private SolicitudpagoPagoDesdeCajaService $solicitudpagoPagoService,
+        private PagoproveedorAnularRevertirService $pagoproveedorAnularRevertirService,
     ) {}
 
     /**
@@ -96,10 +100,17 @@ class IngresoEgresoAnularRevertirService
 
     /**
      * @param  bool  $verificarVisibilidadIe  false = ya validó acceso por SP (permiso revertir/anular pago)
-     * @return array{mensaje: string, caja_movimiento_id: int, caja_movimiento_reverso_id: int, numerotransaccion: string|int, asiento_id?: int}
+     * @param  bool  $delegarOrdenPagoProveedor  true desde Ingresos/Egresos: la OP de proveedores
+     *                                           entra en PagoproveedorAnularRevertirService (AOP).
+     *                                           false desde solicitud de pago, que reabre la SP.
+     * @return array{mensaje: string, caja_movimiento_id?: int, caja_movimiento_reverso_id?: int, numerotransaccion: string|int, asiento_id?: int, pagoproveedor_id?: int, pagoproveedor_reverso_id?: int, aviso?: string}
      */
-    public function revertir(int $id, ?string $fecha = null, bool $verificarVisibilidadIe = true): array
-    {
+    public function revertir(
+        int $id,
+        ?string $fecha = null,
+        bool $verificarVisibilidadIe = true,
+        bool $delegarOrdenPagoProveedor = false,
+    ): array {
         $movimiento = $this->cargarMovimiento($id);
         if ($verificarVisibilidadIe) {
             $this->assertAccesible($movimiento);
@@ -107,6 +118,13 @@ class IngresoEgresoAnularRevertirService
         $this->assertNoEsCompensatorio($movimiento);
         if ((int) ($movimiento->caja_movimiento_revertido_por_id ?? 0) > 0) {
             throw new RuntimeException('El movimiento ya fue revertido.');
+        }
+
+        if ($delegarOrdenPagoProveedor) {
+            $pago = $this->ordenPagoProveedorParaCircuito($movimiento);
+            if ($pago !== null) {
+                return $this->pagoproveedorAnularRevertirService->revertir((int) $pago->id, $fecha);
+            }
         }
 
         $fechaOp = $fecha && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)
@@ -275,6 +293,46 @@ class IngresoEgresoAnularRevertirService
     private function assertAccesible(Caja_Movimiento $movimiento): void
     {
         IngresoEgresoVisibilidadSupport::abortSiNoAccesible((int) $movimiento->id);
+    }
+
+    /**
+     * OP cargada en Pago a proveedores (OPP, anticipo del módulo, retenciones).
+     * El espejo OPA de una solicitud anticipada no entra: ese pago se borra
+     * acá para que la solicitud vuelva a AUTORIZADA.
+     */
+    private function ordenPagoProveedorParaCircuito(Caja_Movimiento $movimiento): ?Pagoproveedor
+    {
+        $pagoId = (int) ($movimiento->pagoproveedor_id ?? 0);
+        $pago = $pagoId > 0 ? Pagoproveedor::query()->find($pagoId) : null;
+        if ($pago === null) {
+            $pago = Pagoproveedor::query()
+                ->where('caja_movimiento_id', (int) $movimiento->id)
+                ->first();
+        }
+        if ($pago === null) {
+            return null;
+        }
+        if ((int) ($pago->pagoproveedor_origen_id ?? 0) > 0) {
+            return null;
+        }
+        if ($this->esOpaEspejoDeSolicitudAnticipada($movimiento, $pago)) {
+            return null;
+        }
+
+        return $pago;
+    }
+
+    private function esOpaEspejoDeSolicitudAnticipada(Caja_Movimiento $movimiento, Pagoproveedor $pago): bool
+    {
+        $movimiento->loadMissing('solicitudpagos');
+        if (! IngresoEgresoSolicitudpagoSupport::esPagoOpa($movimiento->solicitudpagos)) {
+            return false;
+        }
+
+        $tipo = strtoupper(trim((string) ($pago->tipocomprobante ?? '')));
+        $espejo = strtoupper(trim(IngresoEgresoSolicitudpagoSupport::abreviaturaTipoPago($movimiento->solicitudpagos)));
+
+        return $tipo !== '' && $tipo === $espejo;
     }
 
     private function assertNoEsCompensatorio(Caja_Movimiento $movimiento): void

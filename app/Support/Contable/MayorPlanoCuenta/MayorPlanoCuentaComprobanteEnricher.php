@@ -78,6 +78,10 @@ class MayorPlanoCuentaComprobanteEnricher
             if ($cpId > 0) {
                 $cpIds[$cpId] = $cpId;
             }
+            $cpLinea = (int) ($fila['mov_comprobante_proveedor_id'] ?? 0);
+            if ($cpLinea > 0) {
+                $cpIds[$cpLinea] = $cpLinea;
+            }
         }
 
         $numerosRemesa = [];
@@ -105,7 +109,10 @@ class MayorPlanoCuentaComprobanteEnricher
 
             $fks = $this->fksDeFila($fila, $mapa);
 
-            $filas[$idx]['comprobante_proveedor_id'] = (int) ($fks['comprobante_proveedor_id'] ?? 0);
+            $cpCabecera = (int) ($fks['comprobante_proveedor_id'] ?? 0);
+            $cpLinea = (int) ($fila['mov_comprobante_proveedor_id'] ?? 0);
+            $filas[$idx]['comprobante_proveedor_id'] = $cpCabecera > 0 ? $cpCabecera : $cpLinea;
+            $filas[$idx]['comprobante_proveedor_de_linea'] = $cpCabecera <= 0 && $cpLinea > 0;
             $filas[$idx]['venta_id'] = (int) ($fks['venta_id'] ?? 0);
             $remesaId = (int) ($fks['remesa_id'] ?? 0);
             $filas[$idx]['remesa_id'] = $remesaId;
@@ -133,6 +140,7 @@ class MayorPlanoCuentaComprobanteEnricher
             $cpIdFila = (int) ($filas[$idx]['comprobante_proveedor_id'] ?? 0);
             $factura = $facturas[$cpIdFila] ?? null;
             $this->aplicarFacturaProveedor($filas[$idx], $factura);
+            $this->aplicarFacturaDeLineaIe($filas[$idx], $factura);
 
             if (trim((string) ($filas[$idx]['comprobante'] ?? '')) === '') {
                 $filas[$idx]['comprobante'] = $this->etiquetaComprobante($filas[$idx]);
@@ -194,6 +202,38 @@ class MayorPlanoCuentaComprobanteEnricher
 
         $tipo = strtoupper(trim((string) ($factura['tipo'] ?? '')));
         if ($tipo !== '' && trim((string) ($fila['tipo_comp'] ?? '')) === '') {
+            $fila['tipo_comp'] = $tipo;
+        }
+    }
+
+    /**
+     * Línea de un ingreso/egreso asignada a una factura: el comprobante visible
+     * es el ICO y se conserva el número del I/E para el segundo enlace.
+     *
+     * @param  array<string, mixed>  $fila
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}|null  $factura
+     */
+    private function aplicarFacturaDeLineaIe(array &$fila, ?array $factura): void
+    {
+        if (empty($fila['comprobante_proveedor_de_linea']) || (int) ($fila['caja_movimiento_id'] ?? 0) <= 0) {
+            return;
+        }
+        if ($factura === null || (int) ($factura['nro'] ?? 0) <= 0) {
+            return;
+        }
+
+        $fila['comprobante_ie'] = trim(trim((string) ($fila['tipo_comp'] ?? '')).' '.trim((string) ($fila['comprobante'] ?? '')));
+        $formateado = MayorPlanoCuentaSupport::formatearComprobante(
+            (string) ($factura['tipo'] ?? ''),
+            (string) ($factura['letra'] ?? ' '),
+            (int) ($factura['sucursal'] ?? 0),
+            (int) ($factura['nro'] ?? 0),
+        );
+        if ($formateado !== '') {
+            $fila['comprobante'] = $formateado;
+        }
+        $tipo = strtoupper(trim((string) ($factura['tipo'] ?? '')));
+        if ($tipo !== '') {
             $fila['tipo_comp'] = $tipo;
         }
     }

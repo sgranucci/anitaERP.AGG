@@ -42,6 +42,14 @@
         <td align="right"><strong>{{ (int) ($informe['totales']['con_desvio'] ?? 0) }}</strong></td>
     </tr>
     <tr>
+        <td>I/E sin cuenta corriente (ok / desvío)</td>
+        <td align="right">
+            {{ (int) ($informe['totales']['ie_ok'] ?? 0) }}
+            /
+            {{ (int) ($informe['totales']['ie_desvio'] ?? 0) }}
+        </td>
+    </tr>
+    <tr>
         <td>Sin CC / sin asiento / sin ctamov</td>
         <td align="right">
             {{ (int) ($informe['totales']['sin_cc'] ?? 0) }}
@@ -112,11 +120,19 @@
             <tr>
                 <td>{{ $fila['nombreempresa'] ?? '' }}</td>
                 <td>{{ $fila['comprobante_etiqueta'] ?? '' }}</td>
-                <td align="right">{{ number_format((float) ($fila['cc_ars'] ?? 0), 2, ',', '.') }}</td>
-                <td align="right">{{ number_format((float) ($fila['asiento_ars'] ?? 0), 2, ',', '.') }}</td>
-                <td align="right">{{ number_format((float) ($fila['ctamov_ars'] ?? 0), 2, ',', '.') }}</td>
-                <td align="right">{{ number_format(round((float) ($fila['cc_ars'] ?? 0) - (float) ($fila['asiento_ars'] ?? 0), 2), 2, ',', '.') }}</td>
-                <td align="right">{{ number_format(round((float) ($fila['asiento_ars'] ?? 0) - (float) ($fila['ctamov_ars'] ?? 0), 2), 2, ',', '.') }}</td>
+                @if (! empty($fila['es_ingreso_egreso']))
+                    <td align="right">—</td>
+                    <td align="right">{{ number_format((float) ($fila['asiento_ars'] ?? 0), 2, ',', '.') }}</td>
+                    <td align="right">—</td>
+                    <td align="right">{{ number_format(round((float) ($fila['factura_ie_ars'] ?? 0) - (float) ($fila['asiento_ars'] ?? 0), 2), 2, ',', '.') }}</td>
+                    <td align="right">—</td>
+                @else
+                    <td align="right">{{ number_format((float) ($fila['cc_ars'] ?? 0), 2, ',', '.') }}</td>
+                    <td align="right">{{ number_format((float) ($fila['asiento_ars'] ?? 0), 2, ',', '.') }}</td>
+                    <td align="right">{{ number_format((float) ($fila['ctamov_ars'] ?? 0), 2, ',', '.') }}</td>
+                    <td align="right">{{ number_format(round((float) ($fila['cc_ars'] ?? 0) - (float) ($fila['asiento_ars'] ?? 0), 2), 2, ',', '.') }}</td>
+                    <td align="right">{{ number_format(round((float) ($fila['asiento_ars'] ?? 0) - (float) ($fila['ctamov_ars'] ?? 0), 2), 2, ',', '.') }}</td>
+                @endif
                 <td>{{ $fila['alertas_texto'] ?? '' }}</td>
             </tr>
         @endforeach

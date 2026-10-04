@@ -10,6 +10,7 @@ use App\Support\Compras\IvaCompras\IvaComprasColumnasSupport;
 use App\Support\Compras\IvaCompras\IvaComprasDesgloseSupport;
 use App\Support\Compras\IvaComprasListadoFiltros;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasCuitSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
@@ -65,8 +66,8 @@ final class IvaComprasReporteService
             $fila = [
                 'tipo_fila' => 'detalle',
                 'proveedor_id' => (int) ($cp->proveedor_id ?? 0),
-                'proveedor_codigo' => (string) ($proveedor->codigo ?? ''),
-                'proveedor_nombre' => trim((string) ($proveedor->nombre ?? $cp->proveedor_nombre_eventual ?? '')),
+                'proveedor_codigo' => (string) ($proveedor?->codigo ?? ''),
+                'proveedor_nombre' => trim((string) ($proveedor?->nombre ?? $cp->proveedor_nombre_eventual ?? '')),
                 'cuit' => $this->cuitProveedor($cp),
                 'fecha_mov' => $fechaMov !== '' ? date('d/m/Y', strtotime($fechaMov)) : '',
                 'fecha_iva' => $fechaIva !== '' ? date('d/m/Y', strtotime($fechaIva)) : '',
@@ -212,10 +213,14 @@ final class IvaComprasReporteService
 
     private function cuitProveedor(Comprobante_Proveedor $cp): string
     {
-        $cuit = preg_replace('/\D+/', '', (string) ($cp->proveedores->nroinscripcion
-            ?? $cp->identificacion_proveedor_cuit
-            ?? $cp->proveedor_documento_eventual
-            ?? '')) ?? '';
+        $cuit = LibroIvaDigitalComprasCuitSupport::cuitYNombreVendedorErp(
+            $cp->proveedores?->nroinscripcion,
+            $cp->identificacion_proveedor_cuit,
+            $cp->proveedor_documento_eventual,
+            $cp->proveedores?->nombre,
+            $cp->proveedor_nombre_eventual,
+            (string) ($cp->tipotransaccion_compras->abreviatura ?? ''),
+        )['cuit'];
 
         if (strlen($cuit) === 11) {
             return substr($cuit, 0, 2).'-'.substr($cuit, 2, 8).'-'.substr($cuit, 10, 1);

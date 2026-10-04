@@ -30,6 +30,7 @@ use App\Repositories\Uif\Pep_UifRepositoryInterface;
 use App\Repositories\Uif\So_UifRepositoryInterface;
 use App\Services\Uif\ClienteUifFotoDocumento;
 use App\Support\Uif\ClienteUifArchivoStorage;
+use App\Support\Uif\ClienteUifCumplimientoSupport;
 use App\Support\Uif\ClienteUifInformeReportablesSupport;
 use App\Support\Uif\ClienteUifListadoFiltros;
 use App\Support\Uif\ClienteUifOrigenPcSupport;
@@ -130,6 +131,32 @@ class Cliente_UifController extends Controller
             'filtrosQuery' => ClienteUifListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => ClienteUifListadoFiltros::CAMPOS,
             'empresa_query' => ClienteUifOrigenPcSupport::empresasUifAsignadas(),
+        ]);
+    }
+
+    /**
+     * Consulta de firmas y vencimientos UIF. Solo Enc-UIF.
+     */
+    public function controlFirmas(Request $request)
+    {
+        if (! esSupervisorUif()) {
+            abort(403);
+        }
+
+        can('listar-cliente-uif');
+
+        $id = (int) $request->query('id', 0);
+        $cliente = $id > 0 ? $this->queryControlFirmas()->where('id', $id)->first() : null;
+        if ($cliente === null) {
+            return response()->json([
+                'ok' => false,
+                'mensaje' => 'No se encontró el cliente.',
+            ], 404);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'cuadro' => $this->cuadroControlFirmas($cliente),
         ]);
     }
 
@@ -903,6 +930,39 @@ class Cliente_UifController extends Controller
         $zip->close();
 
         return response()->download($zipPath, $zipNombre)->deleteFileAfterSend(true);
+    }
+
+    private function queryControlFirmas()
+    {
+        $query = Cliente_Uif::query()->withCount('cliente_archivos_uif');
+        $permitidos = ClienteUifOrigenPcSupport::contexto()['origenes_permitidos'] ?? [];
+        if (is_array($permitidos) && $permitidos !== []) {
+            $query->whereIn('anita_origen', $permitidos);
+        }
+
+        return $query;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function cuadroControlFirmas(Cliente_Uif $cliente): array
+    {
+        $cantArchivos = (int) ($cliente->cliente_archivos_uif_count ?? 0);
+        $cuadro = ClienteUifCumplimientoSupport::cuadroEncUif($cliente, [
+            'cantidad_archivos' => $cantArchivos,
+            'tiene_archivos' => $cantArchivos > 0,
+        ]);
+        $cuadro['cliente'] = [
+            'id' => (int) $cliente->id,
+            'nombre' => (string) $cliente->nombre,
+            'documento' => (string) $cliente->numerodocumento,
+            'origen' => ClienteUifOrigenPcSupport::labelOrigen((string) ($cliente->anita_origen ?? '')),
+            'url' => route('edita_cliente_uif', ['id' => $cliente->id, 'uif_tab' => 2]),
+        ];
+        $cuadro['nota'] = 'La renovación de firmas e informes es a los 6 meses. Los importes de los premios no generan un cartel de firma.';
+
+        return $cuadro;
     }
 
     /**

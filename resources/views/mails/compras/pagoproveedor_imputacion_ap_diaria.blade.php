@@ -35,7 +35,7 @@
         <td align="right">{{ (int) ($informe['totales']['en_borrador'] ?? 0) }}</td>
     </tr>
     <tr style="background:{{ ((int) ($informe['totales']['cabecera_anita'] ?? 0)) > 0 ? '#e8daef' : '#fff' }};">
-        <td>Solo documento Anita (sin CC/asiento ERP)</td>
+        <td>Documento Anita (fuera del cuadre)</td>
         <td align="right">{{ (int) ($informe['totales']['cabecera_anita'] ?? 0) }}</td>
     </tr>
     <tr style="background:{{ ((int) ($informe['totales']['con_desvio'] ?? 0)) > 0 ? '#fadbd8' : '#d5f5e3' }};">
@@ -101,9 +101,9 @@
 @endif
 
 @if (! empty($informe['cabeceras_anita_mail']))
-    <h3 style="margin:18px 0 6px 0;">Solo documento Anita</h3>
+    <h3 style="margin:18px 0 6px 0;">Documento Anita</h3>
     <p style="margin:0 0 8px 0; color:#555; font-size:12px;">
-        Cabeceras importadas sin cuenta corriente ni asiento ERP. No son desvío: la contabilidad vive en Anita.
+        Nacieron en Anita y se trajeron al ERP. No son desvío: el ctamov de cierre no usa el número del subdiario, y la cabecera incluye las retenciones.
     </p>
     <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
         <tr style="background:#d7bde2; color:#17202A;">
@@ -113,6 +113,7 @@
             <th align="left">Fecha</th>
             <th align="right">Total $</th>
             <th align="right">promov $</th>
+            <th align="left">Motivo</th>
         </tr>
         @foreach ($informe['cabeceras_anita_mail'] as $fila)
             <tr>
@@ -122,6 +123,7 @@
                 <td>{{ $fila['fecha'] ?? '' }}</td>
                 <td align="right">{{ number_format((float) ($fila['total_origen'] ?? 0), 2, ',', '.') }}</td>
                 <td align="right">{{ number_format((float) ($fila['promov_ars'] ?? 0), 2, ',', '.') }}</td>
+                <td>{{ $fila['motivo'] ?? '' }}</td>
             </tr>
         @endforeach
     </table>

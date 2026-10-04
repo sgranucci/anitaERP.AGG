@@ -93,7 +93,8 @@ window.certificadosArcaPrueba = @json(session('prueba_certificado_arca'));
                         <div id="webservices-pantalla-arca" class="collapse">
                         <div class="card-body py-2">
                             <p class="small text-muted mb-2">
-                                Destilde los que no usan en esta instalación para que no aparezcan en el listado.
+                                Destilde los que no usan en esta instalación: dejan de aparecer en el listado
+                                y dejan de entrar en el mail de vencimiento.
                                 El webservice del punto de venta sigue siendo el que tiene cargado ahí.
                             </p>
                             <form method="post" action="{{ route('guardar_webservices_certificado_arca') }}">

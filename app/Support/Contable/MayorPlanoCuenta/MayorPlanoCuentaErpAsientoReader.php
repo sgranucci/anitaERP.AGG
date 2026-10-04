@@ -137,6 +137,7 @@ final class MayorPlanoCuentaErpAsientoReader
                 'am.monto',
                 'am.cotizacion',
                 'am.observacion as mov_obs',
+                'am.comprobante_proveedor_id as mov_comprobante_proveedor_id',
                 'cc.codigo as cuenta_codigo',
                 'cco.codigo as ccosto_codigo',
                 'm.codigo as moneda_codigo',
@@ -356,6 +357,7 @@ final class MayorPlanoCuentaErpAsientoReader
                 'erp_asiento_obs' => $obsAsiento,
                 'erp_asiento_id' => (int) $row->asiento_id,
                 'erp_asiento_fks' => $this->fksDeFila($row, $columnasFk),
+                'erp_mov_comprobante_proveedor_id' => (int) ($row->mov_comprobante_proveedor_id ?? 0),
             ];
             if ($emisorPersistido !== '') {
                 $filaCtamov->erp_emisor_anita = $emisorPersistido;

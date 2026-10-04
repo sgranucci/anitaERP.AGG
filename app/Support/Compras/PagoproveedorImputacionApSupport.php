@@ -2,6 +2,8 @@
 
 namespace App\Support\Compras;
 
+use App\Support\Contable\AsientoAnitaMetadatosSupport;
+
 /**
  * Control OP a OP: CC ERP ↔ asiento ERP (trío AP/anticipo) ↔ promov Anita ↔ ctamov.
  *
@@ -114,6 +116,29 @@ final class PagoproveedorImputacionApSupport
     }
 
     /**
+     * Asiento copiado del subdiario/subhist de Anita (sistema T).
+     * El número de asiento es subd_nro_operacion: el ctamov de cierre usa otro
+     * número y el import lo deja afuera a propósito. No se le exige ctamov.
+     */
+    public static function asientoCopiadoDeSubdiario(?string $anitaOrigen, ?string $observacion = null): bool
+    {
+        $origen = trim((string) $anitaOrigen);
+        if (AsientoAnitaMetadatosSupport::esDetalle($origen)) {
+            return true;
+        }
+        if ($origen !== '') {
+            return false;
+        }
+
+        $obs = strtoupper(trim((string) $observacion));
+
+        return str_starts_with($obs, '[SUBD]')
+            || str_starts_with($obs, '[SUBH]')
+            || str_starts_with($obs, '[SUBDIARIO]')
+            || str_starts_with($obs, '[SUBHIST]');
+    }
+
+    /**
      * @return array{
      *     ok: bool,
      *     alertas: list<string>,
@@ -139,6 +164,7 @@ final class PagoproveedorImputacionApSupport
         float $asientoAnticipoArs = 0.0,
         float $ctamovAnticipoArs = 0.0,
         ?float $esperadoOpArs = null,
+        bool $exigeCtamov = true,
     ): array {
         $alertas = [];
         if (! $tieneCc) {
@@ -150,7 +176,7 @@ final class PagoproveedorImputacionApSupport
         if (! $tienePromov) {
             $alertas[] = 'Sin promov Anita';
         }
-        if (! $tieneCtamov) {
+        if ($exigeCtamov && ! $tieneCtamov) {
             $alertas[] = 'Sin ctamov Anita';
         }
 
@@ -158,11 +184,11 @@ final class PagoproveedorImputacionApSupport
             && ComprobanteProveedorImputacionApSupport::desvia($asientoArs, $ccErpArs, $tolerancia)) {
             $alertas[] = 'CC ≠ asiento';
         }
-        if ($tieneAsiento && $tieneCtamov
+        if ($exigeCtamov && $tieneAsiento && $tieneCtamov
             && ComprobanteProveedorImputacionApSupport::desvia($ctamovArs, $asientoArs, $tolerancia)) {
             $alertas[] = 'Asiento ≠ ctamov';
         }
-        if ($tieneCc && $tieneCtamov
+        if ($exigeCtamov && $tieneCc && $tieneCtamov
             && ComprobanteProveedorImputacionApSupport::desvia($ctamovArs, $ccErpArs, $tolerancia)) {
             $alertas[] = 'CC ≠ ctamov';
         }
@@ -170,7 +196,7 @@ final class PagoproveedorImputacionApSupport
             && ComprobanteProveedorImputacionApSupport::desvia($ccAnitaArs, $esperadoOpArs, $tolerancia)) {
             $alertas[] = 'Promov ≠ OP';
         }
-        if ($tieneAsiento && $tieneCtamov
+        if ($exigeCtamov && $tieneAsiento && $tieneCtamov
             && ComprobanteProveedorImputacionApSupport::desvia($asientoAnticipoArs, $ctamovAnticipoArs, $tolerancia)) {
             $alertas[] = 'Anticipo asiento ≠ ctamov';
         }

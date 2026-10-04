@@ -9,8 +9,9 @@ use Illuminate\Support\Facades\File;
 /**
  * Webservices visibles en la pantalla de certificados ARCA.
  *
- * No cambia el webservice del punto de venta ni el inventario que usan
- * los comandos y el aviso de vencimiento.
+ * Destildar uno lo saca del listado y del mail de vencimiento
+ * (arca:avisar-vencimiento-certificados). No cambia el webservice
+ * del punto de venta ni el CSR / la instalación de certificados.
  */
 final class ArcaCertificadoPantallaSupport
 {

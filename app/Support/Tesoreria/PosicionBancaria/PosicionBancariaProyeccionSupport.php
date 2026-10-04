@@ -21,9 +21,10 @@ final class PosicionBancariaProyeccionSupport
      */
     public function volcarEnSpreadsheet(Spreadsheet $wb, Carbon $fechaPosicion): array
     {
+        $precargas = (new PosicionBancariaPrecargaVolcadoSupport())->impactosPorHoja($fechaPosicion);
         $hojas = 0;
         foreach ($this->definiciones() as $def) {
-            $this->escribirHojaBanco($wb, $def, $fechaPosicion);
+            $this->escribirHojaBanco($wb, $def, $fechaPosicion, $precargas[$def['hoja']] ?? []);
             $hojas++;
         }
         $this->escribirResumenDescubierto($wb);
@@ -305,8 +306,9 @@ final class PosicionBancariaProyeccionSupport
      *   conceptos: list<string>,
      *   descubierto_fila: int|null
      * }  $def
+     * @param  list<array{etiqueta: string, empresa_id: int, importe: float, detalle: string, tono: string}>  $precargasHoja
      */
-    private function escribirHojaBanco(Spreadsheet $wb, array $def, Carbon $fechaPosicion): void
+    private function escribirHojaBanco(Spreadsheet $wb, array $def, Carbon $fechaPosicion, array $precargasHoja = []): void
     {
         $nombre = $def['hoja'];
         if ($wb->sheetNameExists($nombre)) {
@@ -374,8 +376,10 @@ final class PosicionBancariaProyeccionSupport
             $fila++;
         }
 
+        $asignacionPrecarga = (new PosicionBancariaPrecargaVolcadoSupport())
+            ->asignarAConceptos($def['conceptos'], $precargasHoja);
         $filaDescubierto = null;
-        foreach ($def['conceptos'] as $concepto) {
+        foreach ($def['conceptos'] as $indiceConcepto => $concepto) {
             $ws->setCellValue("A{$fila}", $concepto);
             $esSeccion = in_array($concepto, ['MOVIMIENTOS DEL DÍA'], true);
             if ($esSeccion) {
@@ -384,6 +388,7 @@ final class PosicionBancariaProyeccionSupport
             } else {
                 // Totales de fila vacíos suman B:D (editable)
                 $ws->setCellValue("E{$fila}", "=SUM(B{$fila}:D{$fila})");
+                $this->volcarPrecargaEnFila($ws, $fila, $asignacionPrecarga[$indiceConcepto] ?? null);
             }
 
             if ($concepto === 'Pagos proyectados del día Cheque' && $def['cheques_pagos_fila'] !== null) {
@@ -446,7 +451,7 @@ final class PosicionBancariaProyeccionSupport
             }
         }
 
-        $ws->setCellValue('A'.($filaProyectado + 1), 'Completar TRF/RRHH/impuestos a mano. Cheques retenidos se prellenan desde ERP.');
+        $ws->setCellValue('A'.($filaProyectado + 1), 'RRHH, SUSS, descubierto, TRF y otras operaciones salen de las precargas de Finanzas. Cheques retenidos se prellenan desde ERP.');
         $ws->getStyle('A'.($filaProyectado + 1))->getFont()->setItalic(true)->setSize(9);
 
         foreach (range(4, $filaProyectado) as $r) {
@@ -533,6 +538,38 @@ final class PosicionBancariaProyeccionSupport
         $ws->getColumnDimension('B')->setWidth(14);
         foreach (['C', 'D', 'E', 'F'] as $col) {
             $ws->getColumnDimension($col)->setWidth(14);
+        }
+    }
+
+    /**
+     * @param  array{B: ?float, C: ?float, D: ?float, nota: string, tono: string}|null  $filaPrecarga
+     */
+    private function volcarPrecargaEnFila(Worksheet $ws, int $fila, ?array $filaPrecarga): void
+    {
+        if ($filaPrecarga === null) {
+            return;
+        }
+        $color = match ((string) ($filaPrecarga['tono'] ?? '')) {
+            'rrhh', 'suss' => 'F5B7B1',
+            'descubierto' => 'FDEBD0',
+            'trf_otros_bancos' => 'D5F5E3',
+            'trf_intercompany' => 'E8DAEF',
+            'otras_operaciones' => 'D6EAF8',
+            default => 'EAF2F8',
+        };
+        foreach (['B', 'C', 'D'] as $col) {
+            $valor = $filaPrecarga[$col] ?? null;
+            if ($valor === null || $valor === '') {
+                continue;
+            }
+            $ws->setCellValue($col.$fila, (float) $valor);
+            $ws->getStyle($col.$fila)->getFill()
+                ->setFillType(Fill::FILL_SOLID)
+                ->getStartColor()->setRGB($color);
+        }
+        $nota = trim((string) ($filaPrecarga['nota'] ?? ''));
+        if ($nota !== '') {
+            $ws->setCellValue('F'.$fila, mb_substr($nota, 0, 80));
         }
     }
 

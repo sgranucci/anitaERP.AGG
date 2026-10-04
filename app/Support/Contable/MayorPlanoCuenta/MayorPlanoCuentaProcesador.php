@@ -1069,6 +1069,7 @@ class MayorPlanoCuentaProcesador
             // Solo llegan desde el reader ERP; con Anita los resuelven los enrichers.
             'erp_asiento_id' => (int) ($linea->erp_asiento_id ?? 0),
             'erp_asiento_fks' => is_array($linea->erp_asiento_fks ?? null) ? $linea->erp_asiento_fks : null,
+            'erp_mov_comprobante_proveedor_id' => (int) ($linea->erp_mov_comprobante_proveedor_id ?? 0),
             'origen_erp' => (int) ($linea->erp_asiento_id ?? 0) > 0,
             'es_subdiario' => ! empty($linea->erp_origen_subdiario),
             'importe_nativo' => $importe,
@@ -1248,6 +1249,7 @@ class MayorPlanoCuentaProcesador
                 'cuit' => $mov['cuit'] ?? '',
                 'asiento_id' => (int) ($mov['erp_asiento_id'] ?? 0),
                 'asiento_fks' => is_array($mov['erp_asiento_fks'] ?? null) ? $mov['erp_asiento_fks'] : null,
+                'mov_comprobante_proveedor_id' => (int) ($mov['erp_mov_comprobante_proveedor_id'] ?? 0),
                 'descripcion' => $mov['descripcion'] ?? '',
                 'nro_oc' => (int) ($mov['nro_oc'] ?? 0),
                 'moneda_abrev' => $monedaConverter->abreviaturaMoneda($monedaAsientoId),

@@ -142,6 +142,14 @@ use App\Support\Uif\ClienteUifListadoFiltros; ?>
                                     <i class="fa fa-trophy text-warning"></i>
                                 </a>
                        			@endif
+                       			@if (esSupervisorUif())
+                                <a href="#"
+                                   class="btn-accion-tabla tooltipsC js-control-firmas"
+                                   data-id="{{ $data->id }}"
+                                   title="Control de firmas UIF">
+                                    <i class="fa fa-check-square-o"></i>
+                                </a>
+                       			@endif
                        			@if (can('borrar-cliente-uif', false))
                                 <form action="{{route('elimina_cliente_uif', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
@@ -160,4 +168,7 @@ use App\Support\Uif\ClienteUifListadoFiltros; ?>
     </div>
 </div>
 {{ $cliente_uifs->appends($filtrosQuery ?? [])->links() }}
+@if (esSupervisorUif())
+    @include('uif.cliente_uif.partials.control_firmas')
+@endif
 @endsection

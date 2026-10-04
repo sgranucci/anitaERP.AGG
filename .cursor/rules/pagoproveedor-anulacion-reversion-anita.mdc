@@ -1,6 +1,6 @@
 ---
 description: OP proveedores — anulación física y reversión: qué va dentro de la TX local y cómo recuperar un corte a medio camino
-globs: app/Services/Compras/PagoproveedorAnularRevertirService.php,app/Services/Compras/PagoproveedorService.php,app/Services/Compras/ProveedorCuentacorrienteAplicacionAnitaSyncService.php
+globs: app/Services/Compras/PagoproveedorAnularRevertirService.php,app/Services/Compras/PagoproveedorService.php,app/Services/Compras/ProveedorCuentacorrienteAplicacionAnitaSyncService.php,app/Services/Caja/IngresoEgresoAnularRevertirService.php
 alwaysApply: false
 ---
 
@@ -25,6 +25,18 @@ Genera un AOP compensatorio, así que **no es idempotente**: reintentar duplicab
   rastro certificados ya emitidos al proveedor. SICORE, IIBB y SUSS filtran por
   `estado = 'CONFIRMADA'`, de modo que al quedar la OP en `REVERTIDA` esas filas salen solas de las
   presentaciones.
+
+## Desde Ingresos y egresos
+
+`IngresoEgresoController@revertirIngresoEgreso` llama a `revertir(..., delegarOrdenPagoProveedor: true)`.
+Si el movimiento está ligado a una OP de `pagoproveedor` (por `pagoproveedor_id` o `caja_movimiento_id`),
+delega en `PagoproveedorAnularRevertirService::revertir`. No borra la OP ni sus aplicaciones.
+
+Excepción: el espejo OPA que el propio IE crea al pagar una solicitud anticipada sigue en el
+circuito de caja (`eliminarDesdeMovimiento` + solicitud a AUTORIZADA). Revertir el pago desde la
+solicitud de pago no delega: ese botón reabre la solicitud.
+
+La anulación física desde ingresos y egresos no usa este circuito.
 
 ## Anulación física (`anularFisicamente`) — Anita va DENTRO de la TX
 

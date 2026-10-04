@@ -52,7 +52,7 @@ class PagoproveedorImputacionApDiariaCommand extends Command
                 ['OP', (string) ($totales['total_filas'] ?? 0)],
                 ['OK', (string) ($totales['ok'] ?? 0)],
                 ['En pre carga', (string) ($totales['en_borrador'] ?? 0)],
-                ['Solo doc. Anita', (string) ($totales['cabecera_anita'] ?? 0)],
+                ['Doc. Anita', (string) ($totales['cabecera_anita'] ?? 0)],
                 ['Con desvío', (string) ($totales['con_desvio'] ?? 0)],
                 ['Sin CC', (string) ($totales['sin_cc'] ?? 0)],
                 ['Sin asiento', (string) ($totales['sin_asiento'] ?? 0)],

@@ -720,7 +720,7 @@ class IngresoEgresoService
 		$comprobantesIva = $this->decodificarComprobantesIvaJson($data['comprobantes_ivacompra_json'] ?? null);
 
 		if ($comprobantesIva !== []) {
-			$this->agregarLineasDebeComprobantesIva($asiento, $comprobantesIva, $signo);
+			$this->agregarLineasDebeComprobantesIva($asiento, $comprobantesIva, $signo, $empresa_id);
 		}
 
 		if ($conceptogasto_id > 0 && count($datosContables) == 0 && $asiento !== [])
@@ -814,7 +814,7 @@ class IngresoEgresoService
 	}
 
 	/** @param  list<array<string, mixed>>  $comprobantes */
-	private function agregarLineasDebeComprobantesIva(array &$asiento, array $comprobantes, int $signo): void
+	private function agregarLineasDebeComprobantesIva(array &$asiento, array $comprobantes, int $signo, int $empresaId = 0): void
 	{
 		if ($asiento === []) {
 			return;
@@ -824,7 +824,11 @@ class IngresoEgresoService
 		$cotizacion = $asiento[0]['cotizacion'];
 
 		try {
-			$lineasDebe = IngresoEgresoComprobanteIvaAsientoSupport::lineasDebeDesdeComprobantes($comprobantes);
+			$lineasDebe = IngresoEgresoComprobanteIvaAsientoSupport::lineasDebeDesdeComprobantes(
+				$comprobantes,
+				1,
+				$empresaId > 0 ? $empresaId : null,
+			);
 		} catch (\Throwable $e) {
 			throw new Exception($e->getMessage());
 		}

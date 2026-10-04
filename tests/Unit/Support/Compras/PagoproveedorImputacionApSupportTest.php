@@ -194,6 +194,62 @@ class PagoproveedorImputacionApSupportTest extends TestCase
         $this->assertFalse(PagoproveedorImputacionApSupport::marcaImportAnitaSinCc('Importado desde Anita'));
     }
 
+    public function test_asiento_de_subdiario_anita_no_exige_ctamov_ni_cabecera(): void
+    {
+        $this->assertTrue(PagoproveedorImputacionApSupport::asientoCopiadoDeSubdiario('subdiario'));
+        $this->assertTrue(PagoproveedorImputacionApSupport::asientoCopiadoDeSubdiario('subhist'));
+        $this->assertTrue(PagoproveedorImputacionApSupport::asientoCopiadoDeSubdiario(
+            '',
+            '[SUBD] T OPP A 1 125225'
+        ));
+        $this->assertFalse(PagoproveedorImputacionApSupport::asientoCopiadoDeSubdiario(''));
+        $this->assertFalse(PagoproveedorImputacionApSupport::asientoCopiadoDeSubdiario('ctamov'));
+        $this->assertFalse(PagoproveedorImputacionApSupport::asientoCopiadoDeSubdiario(null, 'Pago: MARANSI'));
+
+        $eval = PagoproveedorImputacionApSupport::evaluarCuatroPatas(
+            -2171122.0,
+            -2171122.0,
+            -2171122.0,
+            0.0,
+            true,
+            true,
+            true,
+            false,
+            PagoproveedorImputacionApSupport::TOLERANCIA,
+            0.0,
+            0.0,
+            null,
+            false
+        );
+
+        $this->assertTrue($eval['ok']);
+        $this->assertSame([], $eval['alertas']);
+    }
+
+    public function test_subdiario_con_cc_distinta_del_asiento_sigue_en_desvio(): void
+    {
+        $eval = PagoproveedorImputacionApSupport::evaluarCuatroPatas(
+            -1000.0,
+            -2171122.0,
+            -2171122.0,
+            0.0,
+            true,
+            true,
+            true,
+            false,
+            PagoproveedorImputacionApSupport::TOLERANCIA,
+            0.0,
+            0.0,
+            null,
+            false
+        );
+
+        $this->assertFalse($eval['ok']);
+        $this->assertContains('CC ≠ asiento', $eval['alertas']);
+        $this->assertNotContains('Sin ctamov Anita', $eval['alertas']);
+        $this->assertNotContains('Promov ≠ OP', $eval['alertas']);
+    }
+
     public function test_sin_cc_con_trio_ap_sigue_siendo_desvio(): void
     {
         $eval = PagoproveedorImputacionApSupport::evaluarCuatroPatas(

@@ -164,6 +164,8 @@
                         $puedeVerSp = $puede_ver_solicitudpago ?? false;
                         $hrefComprobante = null;
                         $hrefSolicitudpago = null;
+                        $hrefIngresoEgreso = null;
+                        $textoIngresoEgreso = trim((string) ($fila['comprobante_ie'] ?? ''));
                         if ($puedeVerCp && $cpIdFila > 0) {
                             $hrefComprobante = route('editar_comprobante_proveedor', ['id' => $cpIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
                         } elseif ($puedeVerFactura && $ventaIdFila > 0) {
@@ -201,6 +203,9 @@
                         if ($puedeVerSp && $solicitudpagoIdFila > 0 && $cajaMovIdFila > 0) {
                             $hrefSolicitudpago = route('editar_solicitudpago', ['id' => $solicitudpagoIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
                         }
+                        if ($puedeVerCajaMov && $cajaMovIdFila > 0 && $cpIdFila > 0 && $textoIngresoEgreso !== '') {
+                            $hrefIngresoEgreso = route('editar_ingresoegreso', ['id' => $cajaMovIdFila, 'origen' => 'modal_consulta']);
+                        }
                         if ($textoComprobante === '' && $hrefComprobante) {
                             $textoComprobante = 'Ver origen';
                         }
@@ -212,6 +217,12 @@
                             </a>
                         @else
                             {{ $textoComprobante }}
+                        @endif
+                        @if ($hrefIngresoEgreso)
+                            <span class="text-muted"> · </span>
+                            <a href="{{ $hrefIngresoEgreso }}" target="_blank" rel="noopener" class="text-primary">
+                                I/E {{ $textoIngresoEgreso }}
+                            </a>
                         @endif
                         @if ($hrefSolicitudpago)
                             <span class="text-muted"> · </span>

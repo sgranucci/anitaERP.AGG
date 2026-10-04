@@ -28,6 +28,7 @@ use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasCuitSupport;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -110,15 +111,28 @@ class ComprobanteProveedorImportarDesdeAnitaService
             $this->asegurarTiposBasicos();
         }
 
+        $desdeYmd = $desdeIso ? ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso($desdeIso) : null;
+        $hastaYmd = $hastaIso ? ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso($hastaIso) : null;
+
         $proveedor = $this->resolverProveedor($codigo);
         if ($proveedor === null) {
+            if ($this->esCodigoProveedorGenericoBancario($codigo)) {
+                return $this->importarGastosBancariosProveedorGenerico(
+                    $codigo,
+                    $dryRun,
+                    $desdeYmd,
+                    $hastaYmd,
+                    $empresaCodigo,
+                    $usuarioId,
+                    $limite,
+                    $filtrarPorFechaIva,
+                );
+            }
+
             throw new RuntimeException(
                 'Proveedor '.$codigo.' no está en el ERP. Corra primero proveedor:sincronizar-anita --codigo='.$codigo
             );
         }
-
-        $desdeYmd = $desdeIso ? ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso($desdeIso) : null;
-        $hastaYmd = $hastaIso ? ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso($hastaIso) : null;
 
         $compras = $this->reader->listarCompra($codigo, $desdeYmd, $hastaYmd, $empresaCodigo, $filtrarPorFechaIva);
         // Con solo documentos + filtro IVA no hace falta promov histórico (cuota default desde compra).
@@ -1280,6 +1294,388 @@ class ComprobanteProveedorImportarDesdeAnitaService
         }
 
         return $mapa;
+    }
+
+    /**
+     * ICO/IDO de Anita con proveedor 000000: el CUIT del banco viene en la compra.
+     * Si el banco existe en el maestro se vincula; si no, queda como eventual
+     * con ese CUIT para que IVA digital e IVA simple no salgan sin vendedor.
+     *
+     * @return array<string, mixed>
+     */
+    private function importarGastosBancariosProveedorGenerico(
+        string $codigo,
+        bool $dryRun,
+        ?int $desdeYmd,
+        ?int $hastaYmd,
+        ?int $empresaCodigoFiltro,
+        int $usuarioId,
+        ?int $limite,
+        bool $filtrarPorFechaIva,
+    ): array {
+        $compras = $this->reader->listarCompra($codigo, $desdeYmd, $hastaYmd, $empresaCodigoFiltro, $filtrarPorFechaIva);
+        $nrosInternos = [];
+        foreach ($compras as $compra) {
+            $nro = (int) ($compra['com_nro_interno'] ?? 0);
+            if ($nro > 0) {
+                $nrosInternos[] = $nro;
+            }
+        }
+        $concmov = $this->reader->listarConcmovPorInternos($nrosInternos);
+
+        $stats = $this->statsVacios(0, 'Gastos bancarios '.$codigo);
+        $stats['sin_cuenta_corriente'] = true;
+        $stats['filtrar_por_fecha_iva'] = $filtrarPorFechaIva;
+        $stats['anita_compra'] = count($compras);
+        $stats['anita_concmov'] = array_sum(array_map('count', $concmov));
+
+        $plan = [];
+        foreach ($compras as $compra) {
+            $preparado = $this->prepararGastoBancario($compra, $concmov, $empresaCodigoFiltro);
+            if ($preparado['estado'] === 'omitida') {
+                $stats['omitidas_ya_en_erp']++;
+
+                continue;
+            }
+            if ($preparado['estado'] !== 'ok') {
+                $stats[$preparado['estado']] = ($stats[$preparado['estado']] ?? 0) + 1;
+                if (! empty($preparado['error'])) {
+                    $stats['errores'][] = $preparado['error'];
+                }
+
+                continue;
+            }
+            $plan[] = $preparado;
+            if ($limite !== null && $limite > 0 && count($plan) >= $limite) {
+                break;
+            }
+        }
+
+        $stats['a_crear'] = count($plan);
+        $stats['conceptos'] = array_sum(array_map(static fn (array $i) => count($i['conceptos']), $plan));
+        $stats['muestra'] = array_map(static fn (array $i) => $i['resumen'], array_slice($plan, 0, 20));
+
+        if ($dryRun) {
+            $stats['modo'] = 'dry-run';
+
+            return $stats;
+        }
+
+        DB::transaction(function () use ($plan, &$stats, $usuarioId): void {
+            foreach ($plan as $item) {
+                $this->persistirGastoBancario($item, $usuarioId);
+                $stats['creadas']++;
+            }
+        });
+        $stats['modo'] = 'ejecutar';
+
+        return $stats;
+    }
+
+    /**
+     * @param  array<string, mixed>  $compra
+     * @param  array<int, list<array{concepto: int, importe: float}>>  $concmov
+     * @return array<string, mixed>
+     */
+    private function prepararGastoBancario(array $compra, array $concmov, ?int $empresaCodigoFiltro): array
+    {
+        $tipoAbrev = ComprobanteProveedorAnitaImportClaveSupport::tipo((string) ($compra['com_tipo'] ?? ''));
+        if (! in_array($tipoAbrev, ['ICO', 'IDO'], true)) {
+            return [
+                'estado' => 'sin_tipo',
+                'error' => 'Proveedor genérico bancario con tipo '.$tipoAbrev.' '
+                    .ComprobanteProveedorAnitaImportExistenciaSupport::etiquetaCompra($compra),
+            ];
+        }
+        $tipo = $this->resolverTipo($tipoAbrev, permitirStub: false);
+        if ($tipo === null || (int) $tipo->id <= 0) {
+            return [
+                'estado' => 'sin_tipo',
+                'error' => 'Sin tipotransaccion_compra para '.$tipoAbrev.' '
+                    .ComprobanteProveedorAnitaImportExistenciaSupport::etiquetaCompra($compra),
+            ];
+        }
+
+        $empresaCodigo = (int) ($compra['com_empresa'] ?? 0);
+        if ($empresaCodigoFiltro && $empresaCodigo > 0 && $empresaCodigo !== $empresaCodigoFiltro) {
+            return ['estado' => 'sin_empresa', 'error' => null];
+        }
+        $empresaId = $this->resolverEmpresaId($empresaCodigo);
+        if (! $empresaId) {
+            return [
+                'estado' => 'sin_empresa',
+                'error' => 'Empresa Anita '.$empresaCodigo.' no mapeada. '
+                    .ComprobanteProveedorAnitaImportExistenciaSupport::etiquetaCompra($compra),
+            ];
+        }
+
+        $cuit = LibroIvaDigitalComprasCuitSupport::soloDigitos((string) ($compra['com_cuit_prov'] ?? ''));
+        if (! LibroIvaDigitalComprasCuitSupport::esCuitValido($cuit)) {
+            return [
+                'estado' => 'sin_cuit_banco',
+                'error' => 'ICO/IDO sin CUIT de banco válido. '
+                    .ComprobanteProveedorAnitaImportExistenciaSupport::etiquetaCompra($compra),
+            ];
+        }
+
+        $fecha = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($compra['com_fecha'] ?? '');
+        $fechaIva = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($compra['com_fecha_iva'] ?? '') ?: $fecha;
+        if ($fecha === '') {
+            return [
+                'estado' => 'sin_fecha',
+                'error' => 'Fecha inválida en '.ComprobanteProveedorAnitaImportExistenciaSupport::etiquetaCompra($compra),
+            ];
+        }
+
+        $nroInterno = (int) ($compra['com_nro_interno'] ?? 0);
+        $letra = ComprobanteProveedorAnitaImportClaveSupport::letra((string) ($compra['com_letra'] ?? ''));
+        $sucursal = (int) ($compra['com_sucursal'] ?? 0);
+        $numero = (int) ($compra['com_nro'] ?? 0);
+        if ($this->gastoBancarioYaEnErp($nroInterno, $empresaId, (int) $tipo->id, $letra, $sucursal, $numero, $cuit)) {
+            return ['estado' => 'omitida'];
+        }
+
+        $banco = $this->resolverProveedorPorCuit($cuit);
+        $nombreBanco = LibroIvaDigitalComprasCuitSupport::nombreBancoSinCuenta((string) ($compra['com_nombre_prov'] ?? ''));
+        if ($nombreBanco === '' && $banco !== null) {
+            $nombreBanco = trim((string) $banco->nombre);
+        }
+
+        $conceptos = [];
+        $orden = 1;
+        foreach ($concmov[$nroInterno] ?? [] as $linea) {
+            $conceptoId = $this->resolverConceptoId((int) ($linea['concepto'] ?? 0));
+            if (! $conceptoId) {
+                continue;
+            }
+            $conceptos[] = [
+                'concepto_ivacompra_id' => $conceptoId,
+                'orden' => $orden++,
+                'monto' => (float) ($linea['importe'] ?? 0),
+            ];
+        }
+
+        $monedaId = RecepcionProveedorAnitaImportSupport::monedaIdDesdeCodigoAnita($compra['com_cod_mon'] ?? 1);
+        $cotizacionAnita = (float) ($compra['com_cotizacion'] ?? 1);
+        $cotizacion = ($monedaId <= 1) ? 1.0 : ($cotizacionAnita > 0 ? $cotizacionAnita : 1.0);
+        $total = round((float) ($compra['com_monto'] ?? 0), 4);
+        $vto = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($compra['com_fecha_prox_vto'] ?? '') ?: $fecha;
+
+        return [
+            'estado' => 'ok',
+            'empresa_id' => $empresaId,
+            'proveedor_id' => $banco ? (int) $banco->id : null,
+            'nombre_banco' => $nombreBanco,
+            'cuit' => $cuit,
+            'tipo' => $tipo,
+            'letra' => $letra,
+            'sucursal' => $sucursal,
+            'numero' => $numero,
+            'fecha' => $fecha,
+            'fechaiva' => $fechaIva,
+            'fechavencimiento' => $vto,
+            'total' => $total,
+            'subtotal' => $conceptos !== [] ? round(array_sum(array_column($conceptos, 'monto')), 4) : $total,
+            'moneda_id' => $monedaId,
+            'cotizacion' => $cotizacion,
+            'nro_interno' => $nroInterno,
+            'conceptos' => $conceptos,
+            'condicionpago_id' => $this->resolverCondicionpagoId((int) ($compra['com_condicion_pago'] ?? 0)),
+            'es_fce' => strtoupper(trim((string) ($compra['com_es_fce'] ?? 'N'))) === 'S',
+            'leyenda' => mb_substr(trim((string) ($compra['com_leyenda'] ?? '')), 0, 255) ?: null,
+            'resumen' => [
+                'etiqueta' => ComprobanteProveedorAnitaImportExistenciaSupport::etiquetaCompra($compra),
+                'fecha' => $fechaIva,
+                'total' => $total,
+                'empresa_id' => $empresaId,
+                'cuit' => $cuit,
+                'banco' => $nombreBanco,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function persistirGastoBancario(array $item, int $usuarioId): void
+    {
+        /** @var Tipotransaccion_Compra $tipo */
+        $tipo = $item['tipo'];
+        $proveedorId = (int) ($item['proveedor_id'] ?? 0);
+        $datosCp = [
+            'empresa_id' => $item['empresa_id'],
+            'proveedor_id' => $proveedorId > 0 ? $proveedorId : null,
+            'proveedor_nombre_eventual' => $proveedorId > 0 ? null : ($item['nombre_banco'] !== '' ? $item['nombre_banco'] : null),
+            'proveedor_documento_eventual' => $proveedorId > 0 ? null : $item['cuit'],
+            'identificacion_proveedor_cuit' => $item['cuit'],
+            'proveedor_condicioniva_id_eventual' => $proveedorId > 0 ? null : 1,
+            'tipotransaccion_compra_id' => $tipo->id,
+            'condicionpago_id' => $item['condicionpago_id'],
+            'letra' => $item['letra'],
+            'sucursal' => $item['sucursal'],
+            'numerocomprobante' => $item['numero'],
+            'fechacomprobante' => $item['fecha'],
+            'fechaiva' => $item['fechaiva'],
+            'fechavencimiento' => $item['fechavencimiento'],
+            'subtotal' => $item['subtotal'],
+            'total' => abs((float) $item['total']),
+            'moneda_id' => $item['moneda_id'],
+            'cotizacion' => $item['cotizacion'],
+            'es_fce' => $item['es_fce'],
+            'leyenda' => $item['leyenda'],
+            'modo_carga' => ComprobanteProveedorModoCarga::SIN_RECEPCION,
+            'origen_entrada' => ComprobanteProveedorOrigenEntrada::ANITA_IMPORT,
+            'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
+            'anita_nro_interno' => $item['nro_interno'] > 0 ? $item['nro_interno'] : null,
+            'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::IMPORTADO,
+            'anita_sync_at' => now(),
+            'creousuario_id' => $usuarioId,
+        ];
+        if (Schema::hasColumn('comprobante_proveedor', 'provincia_destino_id')) {
+            $datosCp['provincia_destino_id'] = ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID;
+        }
+
+        $comprobante = Comprobante_Proveedor::query()->create($datosCp);
+        app(ComprobanteProveedorCierrePrecargaLegajoService::class)->cerrarSinFallar($comprobante, $usuarioId);
+
+        foreach ($item['conceptos'] as $concepto) {
+            Comprobante_Proveedor_Concepto::query()->create([
+                'comprobante_proveedor_id' => $comprobante->id,
+                'concepto_ivacompra_id' => $concepto['concepto_ivacompra_id'],
+                'orden' => $concepto['orden'],
+                'monto' => $concepto['monto'],
+            ]);
+        }
+
+        $formapagoId = (int) config('comprobante_proveedor.import_anita.formapago_id', 1);
+        Comprobante_Proveedor_Cuota::query()->create([
+            'comprobante_proveedor_id' => $comprobante->id,
+            'numero_cuota' => 1,
+            'fechavencimiento' => $item['fechavencimiento'],
+            'monto' => abs((float) $item['total']),
+            'moneda_id' => $item['moneda_id'],
+            'cotizacion' => $item['cotizacion'],
+            'formapago_id' => $formapagoId,
+            'total_pagado' => 0,
+        ]);
+
+        Comprobante_Proveedor_Estado::query()->create([
+            'comprobante_proveedor_id' => $comprobante->id,
+            'fecha' => $item['fecha'],
+            'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
+            'usuario_id' => $usuarioId,
+            'observacion' => 'Importado desde Anita (ICO/IDO gasto bancario, CUIT '.$item['cuit'].')',
+        ]);
+    }
+
+    private function gastoBancarioYaEnErp(
+        int $nroInterno,
+        int $empresaId,
+        int $tipoId,
+        string $letra,
+        int $sucursal,
+        int $numero,
+        string $cuit,
+    ): bool {
+        if ($nroInterno > 0 && Comprobante_Proveedor::query()
+            ->where('anita_nro_interno', $nroInterno)
+            ->where(function ($q): void {
+                $q->whereNull('estado')
+                    ->orWhere('estado', '!=', ComprobanteProveedorEstados::ANULADO);
+            })
+            ->exists()) {
+            return true;
+        }
+
+        if (Comprobante_Proveedor::query()
+            ->where('empresa_id', $empresaId)
+            ->where('tipotransaccion_compra_id', $tipoId)
+            ->where('letra', $letra)
+            ->where('sucursal', $sucursal)
+            ->where('numerocomprobante', $numero)
+            ->where(function ($q): void {
+                $q->whereNull('estado')
+                    ->orWhere('estado', '!=', ComprobanteProveedorEstados::ANULADO);
+            })
+            ->exists()) {
+            return true;
+        }
+
+        $codigoAfip = ComprobanteProveedorUnicidadSupport::codigoAfipDesdeTipoId($tipoId);
+
+        return ComprobanteProveedorUnicidadSupport::findDuplicadoPorAfip(
+            $empresaId,
+            $codigoAfip,
+            $letra,
+            $sucursal,
+            $numero,
+            $cuit,
+        ) !== null;
+    }
+
+    private function resolverProveedorPorCuit(string $cuitDigitos): ?Proveedor
+    {
+        $cuitDigitos = LibroIvaDigitalComprasCuitSupport::soloDigitos($cuitDigitos);
+        if (! LibroIvaDigitalComprasCuitSupport::esCuitValido($cuitDigitos)) {
+            return null;
+        }
+        $formateado = substr($cuitDigitos, 0, 2).'-'.substr($cuitDigitos, 2, 8).'-'.substr($cuitDigitos, 10, 1);
+
+        return Proveedor::query()
+            ->where(function ($q) use ($cuitDigitos, $formateado): void {
+                $q->where('nroinscripcion', $cuitDigitos)
+                    ->orWhere('nroinscripcion', $formateado);
+            })
+            ->orderBy('id')
+            ->first();
+    }
+
+    private function esCodigoProveedorGenericoBancario(string $codigo): bool
+    {
+        return ltrim(trim($codigo), '0') === '';
+    }
+
+    /**
+     * Alta de cuenta corriente solo si el comprobante sigue impago y todavía no tiene movimiento.
+     * No pisa una CC existente.
+     */
+    public function crearCuentaCorrienteImpagaSiFalta(int $comprobanteId): int
+    {
+        $cp = Comprobante_Proveedor::query()
+            ->with(['tipotransaccion_compras', 'comprobante_proveedor_cuotas'])
+            ->find($comprobanteId);
+        if ($cp === null || (int) $cp->proveedor_id <= 0) {
+            return 0;
+        }
+        if (Proveedor_Cuentacorriente::query()->where('comprobante_proveedor_id', $cp->id)->exists()) {
+            return 0;
+        }
+
+        $signo = ((string) ($cp->tipotransaccion_compras->signo ?? '')) === 'R' ? -1 : 1;
+        $creadas = 0;
+        foreach ($cp->comprobante_proveedor_cuotas as $cuota) {
+            $pendiente = round(abs((float) $cuota->monto) - abs((float) $cuota->total_pagado), 4);
+            if ($pendiente <= 0.009) {
+                continue;
+            }
+            $montoCc = round($pendiente * $signo, 4);
+            $cc = Proveedor_Cuentacorriente::query()->create([
+                'fecha' => $cp->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d'),
+                'fechavencimiento' => $cuota->fechavencimiento?->format('Y-m-d'),
+                'proveedor_id' => (int) $cp->proveedor_id,
+                'total' => $montoCc,
+                'moneda_id' => (int) $cuota->moneda_id,
+                'cotizacion' => (float) ($cuota->cotizacion ?: 1),
+                'empresa_id' => (int) $cp->empresa_id,
+                'comprobante_proveedor_id' => (int) $cp->id,
+                'comprobante_proveedor_cuota_id' => (int) $cuota->id,
+            ]);
+            $cuota->proveedor_cuentacorriente_id = $cc->id;
+            $cuota->save();
+            $creadas++;
+        }
+
+        return $creadas;
     }
 
     /**

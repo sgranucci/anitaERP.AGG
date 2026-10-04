@@ -61,6 +61,57 @@ final class LibroIvaDigitalComprasCuitSupport
         'PRISMA MEDIOS' => self::CUIT_VISA_PRISMA,
     ];
 
+    /**
+     * CUIT y nombre que van al libro. En ICO/IDO manda el CUIT del banco
+     * grabado en el comprobante (Anita proveedor 000000), no un maestro vacío.
+     *
+     * @return array{cuit: string, nombre: string}
+     */
+    public static function cuitYNombreVendedorErp(
+        ?string $cuitProveedor,
+        ?string $cuitDocumento,
+        ?string $documentoEventual,
+        ?string $nombreProveedor,
+        ?string $nombreEventual,
+        string $abreviaturaTipo,
+    ): array {
+        $tipo = strtoupper(substr(trim($abreviaturaTipo), 0, 3));
+        $delProveedor = self::soloDigitos($cuitProveedor);
+        $delDocumento = self::soloDigitos($cuitDocumento);
+        if (! self::esCuitValido($delDocumento)) {
+            $delDocumento = self::soloDigitos($documentoEventual);
+        }
+        $esGastoBancario = in_array($tipo, ['ICO', 'IDO'], true);
+
+        if ($esGastoBancario && self::esCuitValido($delDocumento)) {
+            $cuit = $delDocumento;
+            $nombre = trim((string) ($nombreEventual !== '' && $nombreEventual !== null ? $nombreEventual : $nombreProveedor));
+        } elseif (self::esCuitValido($delProveedor)) {
+            $cuit = $delProveedor;
+            $nombre = trim((string) ($nombreProveedor !== '' && $nombreProveedor !== null ? $nombreProveedor : $nombreEventual));
+        } else {
+            $cuit = $delDocumento;
+            $nombre = trim((string) ($nombreEventual !== '' && $nombreEventual !== null ? $nombreEventual : $nombreProveedor));
+        }
+
+        if ($esGastoBancario) {
+            $nombre = self::nombreBancoSinCuenta($nombre);
+        }
+
+        return ['cuit' => $cuit, 'nombre' => $nombre];
+    }
+
+    /**
+     * Anita guarda «BANCO X 15185/0»: la cuenta no forma parte de la razón social.
+     */
+    public static function nombreBancoSinCuenta(?string $nombre): string
+    {
+        $texto = trim((string) $nombre);
+        $texto = preg_replace('/\s+\d+\s*\/\s*\d+\s*$/', '', $texto) ?? $texto;
+
+        return trim($texto);
+    }
+
     public static function resolver(?string $cuit, ?string $nombreVendedor): string
     {
         $digits = self::soloDigitos($cuit);

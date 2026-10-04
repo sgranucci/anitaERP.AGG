@@ -265,7 +265,7 @@ class CertificadoArcaController extends Controller
 
         return redirect()
             ->route('certificados_arca')
-            ->with('mensaje', 'Webservices de esta pantalla actualizados. El punto de venta no cambia.');
+            ->with('mensaje', 'Webservices de esta pantalla actualizados. Los destildados dejan de figurar en el listado y en el mail de vencimiento. El punto de venta no cambia.');
     }
 
     public function confirmarReemplazo(Request $request): RedirectResponse

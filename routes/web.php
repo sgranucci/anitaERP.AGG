@@ -3233,6 +3233,17 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/posicion-bancaria-diaria', 'Caja\PosicionBancariaDiariaController@index')->name('posicion_bancaria_diaria');
     Route::get('caja/posicion-bancaria-diaria/exportar', 'Caja\PosicionBancariaDiariaController@exportar')->name('posicion_bancaria_diaria_exportar');
 
+    Route::get('finanzas/movimiento-precarga', 'Finanzas\MovimientoPrecargaController@index')->name('finanza_movimiento_precarga');
+    Route::get('finanzas/lista-movimiento-precarga/{formato}', 'Finanzas\MovimientoPrecargaController@listar')->name('lista_finanza_movimiento_precarga');
+    Route::get('finanzas/movimiento-precarga/crear', 'Finanzas\MovimientoPrecargaController@crear')->name('crear_finanza_movimiento_precarga');
+    Route::post('finanzas/movimiento-precarga', 'Finanzas\MovimientoPrecargaController@guardar')->name('guardar_finanza_movimiento_precarga');
+    Route::get('finanzas/movimiento-precarga/impacto', 'Finanzas\MovimientoPrecargaController@impacto')->name('impacto_finanza_movimiento_precarga');
+    Route::get('finanzas/movimiento-precarga/cuenta/{id}', 'Finanzas\MovimientoPrecargaController@cuenta')->name('cuenta_finanza_movimiento_precarga');
+    Route::get('finanzas/movimiento-precarga/{id}/editar', 'Finanzas\MovimientoPrecargaController@editar')->name('editar_finanza_movimiento_precarga')->middleware('modo.consulta');
+    Route::put('finanzas/movimiento-precarga/{id}', 'Finanzas\MovimientoPrecargaController@actualizar')->name('actualizar_finanza_movimiento_precarga')->middleware('modo.consulta');
+    Route::delete('finanzas/movimiento-precarga/{id}', 'Finanzas\MovimientoPrecargaController@eliminar')->name('eliminar_finanza_movimiento_precarga');
+    Route::post('finanzas/movimiento-precarga/{id}/convertir', 'Finanzas\MovimientoPrecargaController@convertir')->name('convertir_finanza_movimiento_precarga');
+
     Route::get('caja/cotizacion-tesoreria', 'Caja\CotizacionTesoreriaController@index')->name('cotizacion_tesoreria');
     Route::get('caja/lista-cotizacion-tesoreria/{formato?}/{busqueda?}', 'Caja\CotizacionTesoreriaController@listar')->name('lista_cotizacion_tesoreria');
     Route::get('caja/cotizacion-tesoreria/crear', 'Caja\CotizacionTesoreriaController@crear')->name('crear_cotizacion_tesoreria');
@@ -4687,6 +4698,7 @@ Route::delete('uif/estadocivil_uif/{id}', 'Uif\Estadocivil_UifController@elimina
 
 Route::middleware('uif.pc_configurada')->group(function () {
     Route::get('uif/cliente_uif', 'Uif\Cliente_UifController@index')->name('consulta_cliente_uif');
+    Route::get('uif/cliente_uif/control-firmas', 'Uif\Cliente_UifController@controlFirmas')->name('control_firmas_cliente_uif');
     Route::get('uif/cliente_uif/crear', 'Uif\Cliente_UifController@crear')->name('crea_cliente_uif');
     Route::post('uif/cliente_uif', 'Uif\Cliente_UifController@guardar')->name('guarda_cliente_uif');
     Route::get('uif/cliente_uif/{id}/editar', 'Uif\Cliente_UifController@editar')->name('edita_cliente_uif')->middleware('modo.consulta');

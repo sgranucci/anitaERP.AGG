@@ -435,7 +435,14 @@ class IngresoEgresoController extends Controller
         IngresoEgresoVisibilidadSupport::abortSiNoAccesible($id);
 
         try {
-            $resultado = $this->anularRevertirService->revertir($id, $request->input('fecha'));
+            $resultado = $this->anularRevertirService->revertir($id, $request->input('fecha'), true, true);
+            $mensaje = ! empty($resultado['pagoproveedor_reverso_id'])
+                ? 'OP revertida. Compensatoria N° '.$resultado['numerotransaccion'].'.'
+                : 'Movimiento revertido. Anulación N° '.$resultado['numerotransaccion'].'.';
+            if (! empty($resultado['aviso'])) {
+                $mensaje .= ' '.$resultado['aviso'];
+            }
+
             if ($request->ajax()) {
                 return response()->json([
                     'mensaje' => 'ok',
@@ -443,10 +450,7 @@ class IngresoEgresoController extends Controller
                 ]);
             }
 
-            return redirect()->route('ingresoegreso')->with(
-                'mensaje',
-                'Movimiento revertido. Anulación N° '.$resultado['numerotransaccion'].'.'
-            );
+            return redirect()->route('ingresoegreso')->with('mensaje', $mensaje);
         } catch (\Throwable $e) {
             if ($request->ajax()) {
                 return response()->json(['mensaje' => $e->getMessage()], 422);

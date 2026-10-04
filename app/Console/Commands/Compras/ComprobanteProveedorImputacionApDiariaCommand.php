@@ -53,6 +53,8 @@ class ComprobanteProveedorImputacionApDiariaCommand extends Command
                 ['OK', (string) ($totales['ok'] ?? 0)],
                 ['En borrador', (string) ($totales['en_borrador'] ?? 0)],
                 ['Con desvío', (string) ($totales['con_desvio'] ?? 0)],
+                ['I/E ok', (string) ($totales['ie_ok'] ?? 0)],
+                ['I/E desvío', (string) ($totales['ie_desvio'] ?? 0)],
                 ['Sin CC', (string) ($totales['sin_cc'] ?? 0)],
                 ['Sin asiento', (string) ($totales['sin_asiento'] ?? 0)],
                 ['Sin ctamov', (string) ($totales['sin_ctamov'] ?? 0)],

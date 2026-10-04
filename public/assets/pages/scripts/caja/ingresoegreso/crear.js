@@ -144,8 +144,17 @@ var montoPendienteSp = 0;
 						fecha: $('#fechacopia').val()}, function(data)
 						{ 
 							if (data && data.mensaje === 'ok') {
-								var nro = (data.resultado && data.resultado.numerotransaccion) ? data.resultado.numerotransaccion : '';
-								var texto = 'Transacción revertida.' + (nro ? (' Anulación N°: ' + nro + '.') : '');
+								var resultado = data.resultado || {};
+								var nro = resultado.numerotransaccion ? resultado.numerotransaccion : '';
+								var texto = 'Transacción revertida.';
+								if (nro) {
+									texto += resultado.pagoproveedor_reverso_id
+										? (' Compensatoria N°: ' + nro + '.')
+										: (' Anulación N°: ' + nro + '.');
+								}
+								if (resultado.aviso) {
+									texto += ' ' + resultado.aviso;
+								}
 								if (ui && ui.mostrarProcesando) {
 									ui.mostrarProcesando('Listo', texto + ' Actualizando…');
 								}

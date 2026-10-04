@@ -90,9 +90,15 @@
             timeout: 180000,
             success: function (respuesta) {
                 if (respuesta && respuesta.mensaje === 'ok') {
+                    var resultado = respuesta.resultado || {};
                     var texto = okMsg;
-                    if (respuesta.resultado && respuesta.resultado.numerotransaccion) {
-                        texto += ' Anulación N° ' + respuesta.resultado.numerotransaccion + '.';
+                    if (resultado.numerotransaccion) {
+                        texto += resultado.pagoproveedor_reverso_id
+                            ? (' Compensatoria N° ' + resultado.numerotransaccion + '.')
+                            : (' Anulación N° ' + resultado.numerotransaccion + '.');
+                    }
+                    if (resultado.aviso) {
+                        texto += ' ' + resultado.aviso;
                     }
                     // Evitar toast amarillo/verde que “cuelga” mientras recarga: el overlay ya informa.
                     // Anular físico borra el movimiento: no recargar editar (queda 404).
@@ -136,7 +142,7 @@
         var $form = $(this);
         postForm(
             $form,
-            $form.attr('data-confirm') || '¿Revertir esta OP? Se genera compensatorio con asiento y Anita invertidos; la SP vuelve a AUTORIZADA. La OP original no se borra.',
+            $form.attr('data-confirm') || '¿Revertir este movimiento? Si es una orden de pago a proveedores, se genera el AOP compensatorio y la OP queda REVERTIDA. Si es un pago de solicitud, la solicitud vuelve a AUTORIZADA.',
             $form.attr('data-titulo') || 'Revirtiendo OP…',
             $form.attr('data-ok') || 'OP revertida.'
         );
