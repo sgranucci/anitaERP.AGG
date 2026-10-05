@@ -4823,7 +4823,12 @@ class FacturacionService
 				'numeroremito' => 0,
 				'cantidadbulto' => 1,
 				'ordenventa_id' => $ordenventa_id,
-				'venta_origen_id' => $this->ventaOrigenIdAlGrabar($puntoventa, (int) $venta_id, $tipotransaccion, $data),
+				'venta_origen_id' => $this->ventaOrigenIdAlGrabar(
+					$puntoventa,
+					(int) $venta_id,
+					$tipotransaccion,
+					is_array($opcionesEmision) ? $opcionesEmision : null,
+				),
 			];	
 
 			// Graba venta
@@ -6805,10 +6810,11 @@ class FacturacionService
 
 	/**
 	 * NC de mostrador: la factura acreditada. Villafranca división conserva el origen Bierzo.
+	 * POS (gastronomía, estacionamiento, canje, facturación local) no usa este origen.
 	 *
-	 * @param  array<string, mixed>  $data
+	 * @param  array<string, mixed>|null  $opcionesEmision
 	 */
-	private function ventaOrigenIdAlGrabar($puntoventa, int $ventaAplicadaId, $tipotransaccion, array $data): ?int
+	private function ventaOrigenIdAlGrabar($puntoventa, int $ventaAplicadaId, $tipotransaccion, ?array $opcionesEmision = null): ?int
 	{
 		$desdeDivision = $this->ventaOrigenIdParaNcDividida($puntoventa, $ventaAplicadaId);
 		if ($desdeDivision) {
@@ -6817,7 +6823,7 @@ class FacturacionService
 		if ($tipotransaccion
 			&& $tipotransaccion->esNotaCredito()
 			&& $ventaAplicadaId > 0
-			&& ! $this->esEmisionPos($data)) {
+			&& ! $this->esEmisionPos([], $opcionesEmision)) {
 			return $ventaAplicadaId;
 		}
 
