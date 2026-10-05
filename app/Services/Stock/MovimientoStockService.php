@@ -18,6 +18,7 @@ use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
 use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
 use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
+use App\Support\Stock\MovimientoStockCambioDepositoSupport;
 use App\Support\Stock\MovimientoStockCanjeSupport;
 use App\Support\Stock\MovimientoStockConsumoOtAvisoSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
@@ -211,6 +212,13 @@ class MovimientoStockService
 				if ($funcion == 'update')
 				{
 					if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+						$bloqueoDeposito = MovimientoStockCambioDepositoSupport::mensajeSiCambiaDeposito(
+							(int) $movimientostock_id,
+							(int) ($data['deposito_id'] ?? 0)
+						);
+						if ($bloqueoDeposito !== null) {
+							throw new \Exception($bloqueoDeposito);
+						}
 						$curvasNumeracionAntes = MovimientoStockLoteNumeracionSupport::leerCurvasMovimiento((int) $movimientostock_id);
 					}
 					// Surmar: revertir piqueo (consumos/hijas) antes de borrar líneas AM

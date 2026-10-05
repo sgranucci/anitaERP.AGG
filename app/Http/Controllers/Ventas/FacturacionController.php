@@ -37,6 +37,7 @@ use App\Support\Ventas\ComprobanteImpresionSesionUrlSupport;
 use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
 use App\Support\Ventas\ComprobanteReferenciaConsultaSupport;
+use App\Support\Ventas\NotaCreditoCompletaUnicaSupport;
 use App\Support\Ventas\VentaFacturasPorArticuloClienteSupport;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
@@ -127,6 +128,10 @@ class FacturacionController extends Controller
         }
 
 		$ventas = $this->facturacionService->leePaginando($filtros);
+        $idsPagina = [];
+        foreach ($ventas as $filaVenta) {
+            $idsPagina[] = (int) ($filaVenta->id ?? 0);
+        }
         $totalesPorReparto = FacturaListadoFiltros::esOrdenReparto($filtros)
             ? $this->facturacionService->totalesIndexPorReparto($filtros)
             : collect();
@@ -141,6 +146,7 @@ class FacturacionController extends Controller
             'filtrosQuery' => $filtrosQuery,
             'camposFiltro' => FacturaListadoFiltros::camposParaVista(),
             'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'ncCompletaPorFactura' => NotaCreditoCompletaUnicaSupport::codigosCompletasPorFactura($idsPagina),
         ];
 
         return view('ventas.factura.index', $datas);
@@ -507,6 +513,19 @@ class FacturacionController extends Controller
     public function generaNotaDeCredito($id)
     {
         can('generar-nota-de-credito');
+
+        $ventaId = (int) $id;
+        $ncCompleta = NotaCreditoCompletaUnicaSupport::completaExistente($ventaId);
+        if ($ncCompleta !== null) {
+            $factura = Venta::query()->find($ventaId, ['codigo']);
+
+            return redirect()->back()->with('errores', [
+                NotaCreditoCompletaUnicaSupport::mensaje(
+                    (string) ($factura->codigo ?? ''),
+                    $ncCompleta['codigo']
+                ),
+            ]);
+        }
 
         $articuloId = (int) request()->query('articulo_id', 0);
 

@@ -158,9 +158,18 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
 								@endif
                        			@if (can('generar-nota-de-credito', false))
 									@if ($comprobante->total > 0)
+										@php
+											$ncCompletaCodigo = $ncCompletaPorFactura[(int) $comprobante->id] ?? '';
+										@endphp
+										@if ($ncCompletaCodigo !== '')
+											<span class="btn-accion-tabla tooltipsC" title="Ya tiene nota de crédito completa {{ $ncCompletaCodigo }}">
+												<i class="fa fa-undo text-muted"></i>
+											</span>
+										@else
                                 		<a href="{{route('generar_notadecredito', ['id' => $comprobante->id])}}" class="btn-accion-tabla tooltipsC" title="Generar nota de crédito">
                                    		<i class="fa fa-undo text-danger"></i>
                                 		</a>
+										@endif
 									@endif
 								@endif
                        			@if (can('listar-factura', false))

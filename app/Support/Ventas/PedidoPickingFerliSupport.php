@@ -669,7 +669,8 @@ final class PedidoPickingFerliSupport
             $depTxt = self::etiquetaDeposito($depositoId);
             $msg = "El lote/OT {$loteCodigo} no tiene saldo en el depósito {$depTxt}.";
             if ($sugerencias !== '') {
-                $msg .= ' Saldo disponible en: '.$sugerencias.'. Use F1 y Elegir.';
+                $msg .= ' Saldo disponible en: '.$sugerencias.'. Use F1 y Elegir.'
+                    .' No cambie el depósito del alta de producción: si el lote ya fue reubicado, el alta sigue en el depósito original.';
             } else {
                 $msg .= ' No hay saldo pendiente para ese lote/OT.';
             }
@@ -681,9 +682,16 @@ final class PedidoPickingFerliSupport
             $depTxt = self::etiquetaDeposito($depositoId);
             $saldoFmt = number_format($saldoElegido, 0, ',', '.');
             $cantFmt = number_format($cantidadLinea, 0, ',', '.');
+            $saldos = self::saldosNetosLotePorDeposito($articuloId, $combinacionId, $loteCodigo);
+            $sugerencias = self::formatearSugerenciasDepositosConSaldo($saldos);
+            $msg = "Saldo insuficiente del lote/OT {$loteCodigo} en {$depTxt}: hay {$saldoFmt} pares y la línea pide {$cantFmt}.";
+            if ($sugerencias !== '') {
+                $msg .= ' Saldo en: '.$sugerencias.'. Use F1 y Elegir ese depósito.'
+                    .' No cambie el depósito del alta de producción: si el lote ya fue reubicado, el alta sigue en el depósito original.';
+            }
 
             return [
-                'error' => "Saldo insuficiente del lote/OT {$loteCodigo} en {$depTxt}: hay {$saldoFmt} pares y la línea pide {$cantFmt}.",
+                'error' => $msg,
                 'saldo' => $saldoElegido,
                 'deposito_id' => $depositoId,
             ];

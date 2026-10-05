@@ -155,6 +155,7 @@ use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Database\DbContencionSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
+use App\Support\Ventas\NotaCreditoCompletaUnicaSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
 use App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport;
 use App\Support\Ventas\FacturaLineaPrecioImpresionSupport;
@@ -3344,6 +3345,25 @@ class FacturacionService
 			}
 		}
 
+		if ($tipotransaccion->esNotaCredito() && ! $this->esEmisionPos($data)) {
+			$origenNcId = (int) $venta_id;
+			if ($origenNcId <= 0) {
+				$origenNcId = NotaCreditoCompletaUnicaSupport::idFacturaPorCodigo(
+					trim((string) ($data['fce_comprobante_referenciado'] ?? ''))
+				);
+			}
+			if ($origenNcId > 0) {
+				$errorNcCompleta = NotaCreditoCompletaUnicaSupport::errorSiSegundaCompleta(
+					$origenNcId,
+					(float) $totalComprobante,
+					$fceAnulacionSn
+				);
+				if ($errorNcCompleta !== null) {
+					return ['error' => $errorNcCompleta];
+				}
+			}
+		}
+
 		if (isset($data['cotizacion']))
 			$cotizacion = $data['cotizacion'];
 		else
@@ -4803,7 +4823,7 @@ class FacturacionService
 				'numeroremito' => 0,
 				'cantidadbulto' => 1,
 				'ordenventa_id' => $ordenventa_id,
-				'venta_origen_id' => $this->ventaOrigenIdParaNcDividida($puntoventa, (int) $venta_id),
+				'venta_origen_id' => $this->ventaOrigenIdAlGrabar($puntoventa, (int) $venta_id, $tipotransaccion, $data),
 			];	
 
 			// Graba venta
@@ -6781,6 +6801,27 @@ class FacturacionService
 	private function debeUsarNumeradorVillafrancaPropio(): bool
 	{
 		return (bool) $this->usaNumeradorVillafrancaPropio && (bool) $this->flGrabaComprobanteDividido;
+	}
+
+	/**
+	 * NC de mostrador: la factura acreditada. Villafranca división conserva el origen Bierzo.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function ventaOrigenIdAlGrabar($puntoventa, int $ventaAplicadaId, $tipotransaccion, array $data): ?int
+	{
+		$desdeDivision = $this->ventaOrigenIdParaNcDividida($puntoventa, $ventaAplicadaId);
+		if ($desdeDivision) {
+			return $desdeDivision;
+		}
+		if ($tipotransaccion
+			&& $tipotransaccion->esNotaCredito()
+			&& $ventaAplicadaId > 0
+			&& ! $this->esEmisionPos($data)) {
+			return $ventaAplicadaId;
+		}
+
+		return null;
 	}
 
 	private function ventaOrigenIdParaNcDividida($puntoventa, int $ventaAplicadaId): ?int
