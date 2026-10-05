@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Caja;
 
+use App\Exports\Caja\RendicionMaquinaComprobanteExport;
 use App\Exports\Caja\RendicionMaquinaListadoExport;
 use App\Http\Controllers\Controller;
 use App\Models\Caja\RendicionMaquina;
@@ -284,19 +285,7 @@ class RendicionMaquinaController extends Controller
             CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionMaquina(),
         );
 
-        $rendicion = RendicionMaquina::query()
-            ->with([
-                'empresa',
-                'valores.cuentacaja',
-                'gastos.aperturaGasto',
-                'creoUsuario',
-                'supervisorUsuario',
-                'auxiliarUsuario',
-                'cajeroUsuario',
-            ])
-            ->findOrFail($id);
-
-        $this->assertAccesoEmpresa((int) $rendicion->empresa_id);
+        $rendicion = $this->rendicionParaComprobante($id);
 
         $view = view('caja.rendicion_maquina.comprobante', ['rendicion' => $rendicion])->render();
         $pdf = \App::make('dompdf.wrapper');
@@ -310,6 +299,21 @@ class RendicionMaquinaController extends Controller
         }
 
         return $pdf->download($nombre);
+    }
+
+    public function excel(int $id)
+    {
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionMaquina(),
+        );
+
+        $rendicion = $this->rendicionParaComprobante($id);
+        $nombre = 'rendicion_maquina_'.($rendicion->codigo ?: $id).'.xlsx';
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new RendicionMaquinaComprobanteExport($rendicion),
+            $nombre,
+        );
     }
 
     /**
@@ -464,6 +468,25 @@ class RendicionMaquinaController extends Controller
         $first = $empresaQuery->first();
 
         return $first !== null ? (int) $first->id : 0;
+    }
+
+    private function rendicionParaComprobante(int $id): RendicionMaquina
+    {
+        $rendicion = RendicionMaquina::query()
+            ->with([
+                'empresa',
+                'valores.cuentacaja',
+                'gastos.aperturaGasto',
+                'creoUsuario',
+                'supervisorUsuario',
+                'auxiliarUsuario',
+                'cajeroUsuario',
+            ])
+            ->findOrFail($id);
+
+        $this->assertAccesoEmpresa((int) $rendicion->empresa_id);
+
+        return $rendicion;
     }
 
     private function assertAccesoEmpresa(int $empresaId): void

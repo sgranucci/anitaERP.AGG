@@ -10,6 +10,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Support\Caja\ChequePropioImputacionSupport;
 use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Contable\AsientoCentrocostoObligatorioSupport;
+use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
@@ -80,7 +81,10 @@ final class PagoproveedorAsientoArmadoSupport
         if ($datosContables !== []) {
             foreach ($datosContables as $linea) {
                 $linea = self::asObject($linea);
-                $cuentaId = (int) ($linea->cuentacontable_ids ?? 0);
+                $cuentaId = CuentacontableEmpresaHomologacionSupport::idParaEmpresa(
+                    (int) ($linea->cuentacontable_ids ?? 0),
+                    $empresaId,
+                );
                 if ($cuentaId <= 0) {
                     continue;
                 }
@@ -133,7 +137,10 @@ final class PagoproveedorAsientoArmadoSupport
             );
             self::agregaCuenta(
                 $asiento,
-                (int) $cuentacaja->cuentacontable_id,
+                CuentacontableEmpresaHomologacionSupport::idParaEmpresa(
+                    (int) $cuentacaja->cuentacontable_id,
+                    $empresaId,
+                ),
                 $monedaPagoId,
                 self::cotizacionParaLinea($monedaPagoId, $cotizacionPago),
                 'H',
@@ -779,7 +786,9 @@ final class PagoproveedorAsientoArmadoSupport
             $cuenta = $cuentacontableRepository->find($id);
             $dcId = (int) ($cuenta->cuentacontable_difcambio_id ?? 0);
             if ($dcId > 0 && $dcId !== (int) $id) {
-                return $dcId;
+                return $empresaId > 0
+                    ? CuentacontableEmpresaHomologacionSupport::idParaEmpresa($dcId, $empresaId)
+                    : $dcId;
             }
         }
 

@@ -729,6 +729,10 @@ class SumasSaldosProcesador
         $soloMovimiento = ($filtros['filtro_cuentas'] ?? '') === SumasSaldosListadoFiltros::CUENTAS_CON_MOVIMIENTO;
         $consolidar = ! empty($filtros['consolidar_empresas']);
 
+        // Misma empresa y mismo código pueden llegar con dos cuentacontable_id
+        // (asientos imputados al plan de otra empresa). Una sola línea por código.
+        $acumulado = $this->unificarPorEmpresaYCodigo($acumulado);
+
         if ($consolidar) {
             $acumulado = $this->consolidarPorCodigo($acumulado);
         }
@@ -791,6 +795,92 @@ class SumasSaldosProcesador
             'fuente' => $fuente,
             'advertencias' => $advertencias,
         ];
+    }
+
+    /**
+     * Junta importes del mismo código dentro de una empresa y deja el id del plan de esa empresa.
+     *
+     * @param  array<string, array<string, mixed>>  $acumulado
+     * @return array<string, array<string, mixed>>
+     */
+    private function unificarPorEmpresaYCodigo(array $acumulado): array
+    {
+        if ($acumulado === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($acumulado as $item) {
+            $empresaId = (int) ($item['empresa_id'] ?? 0);
+            $codigo = (int) ($item['codigo'] ?? 0);
+            $key = $empresaId.'|'.$codigo;
+            if (! isset($out[$key])) {
+                $out[$key] = $item;
+                $out[$key]['debe'] = (float) ($item['debe'] ?? 0);
+                $out[$key]['haber'] = (float) ($item['haber'] ?? 0);
+                $out[$key]['saldo_periodo'] = (float) ($item['saldo_periodo'] ?? 0);
+                $out[$key]['saldo_mes_anterior'] = (float) ($item['saldo_mes_anterior'] ?? 0);
+                $out[$key]['saldo_ejercicio'] = (float) ($item['saldo_ejercicio'] ?? 0);
+
+                continue;
+            }
+
+            $out[$key]['debe'] += (float) ($item['debe'] ?? 0);
+            $out[$key]['haber'] += (float) ($item['haber'] ?? 0);
+            $out[$key]['saldo_periodo'] += (float) ($item['saldo_periodo'] ?? 0);
+            $out[$key]['saldo_mes_anterior'] += (float) ($item['saldo_mes_anterior'] ?? 0);
+            $out[$key]['saldo_ejercicio'] += (float) ($item['saldo_ejercicio'] ?? 0);
+        }
+
+        $this->preferirCuentaDeLaEmpresa($out);
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $acumulado
+     */
+    private function preferirCuentaDeLaEmpresa(array &$acumulado): void
+    {
+        $empresas = [];
+        $codigos = [];
+        foreach ($acumulado as $item) {
+            $empresaId = (int) ($item['empresa_id'] ?? 0);
+            $codigo = (int) ($item['codigo'] ?? 0);
+            if ($empresaId <= 0 || $codigo <= 0) {
+                continue;
+            }
+            $empresas[$empresaId] = $empresaId;
+            $codigos[$codigo] = $codigo;
+        }
+
+        if ($empresas === [] || $codigos === []) {
+            return;
+        }
+
+        $canon = [];
+        $rows = DB::table('cuentacontable')
+            ->whereIn('empresa_id', array_values($empresas))
+            ->whereIn('codigo', array_values($codigos))
+            ->where('tipocuenta', 1)
+            ->orderBy('id')
+            ->get(['id', 'empresa_id', 'codigo', 'nombre']);
+
+        foreach ($rows as $row) {
+            $key = ((int) $row->empresa_id).'|'.((int) $row->codigo);
+            if (! isset($canon[$key])) {
+                $canon[$key] = $row;
+            }
+        }
+
+        foreach ($acumulado as $key => &$item) {
+            if (! isset($canon[$key])) {
+                continue;
+            }
+            $item['cuentacontable_id'] = (int) $canon[$key]->id;
+            $item['nombre'] = (string) $canon[$key]->nombre;
+        }
+        unset($item);
     }
 
     /**

@@ -56,12 +56,54 @@
         border-bottom: 1px solid #eee;
         padding: 0.45rem 0;
         font-size: 0.9rem;
+        cursor: pointer;
     }
     .ac-lista-pendientes .ac-item.ac-actual {
         background: #eaf6f8;
         margin: 0 -0.5rem;
         padding-left: 0.5rem;
         padding-right: 0.5rem;
+    }
+    .ac-buscar { position: relative; }
+    .ac-buscar label,
+    .ac-abm label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-bottom: 0.15rem;
+        color: #495057;
+    }
+    .ac-buscar-resultados {
+        position: absolute;
+        z-index: 20;
+        left: 0;
+        right: 0;
+        top: 100%;
+        max-height: 240px;
+        overflow-y: auto;
+        background: #fff;
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+        box-shadow: 0 0.4rem 1rem rgba(0, 0, 0, 0.12);
+    }
+    .ac-buscar-resultados button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        border: 0;
+        border-bottom: 1px solid #f1f3f5;
+        background: #fff;
+        padding: 0.45rem 0.65rem;
+        font-size: 0.9rem;
+    }
+    .ac-buscar-resultados button:hover,
+    .ac-buscar-resultados button:focus {
+        background: #eaf6f8;
+        outline: none;
+    }
+    .ac-buscar-resultados .ac-buscar-vacio {
+        padding: 0.55rem 0.65rem;
+        color: #6c757d;
+        font-size: 0.85rem;
     }
     .ac-vacio { text-align: center; color: #6c757d; padding: 2rem 1rem; }
     .tm-camara-overlay {
@@ -146,12 +188,15 @@
 <script>
     window.AC_URLS = {
         pendientes: @json(urlAppDesdeRoute('asignacion_codigobarra_pendientes')),
+        catalogoCom: @json(urlAppDesdeRoute('asignacion_codigobarra_catalogo_com')),
+        traerAbm: @json(urlAppDesdeRoute('asignacion_codigobarra_traer_abm')),
         proveedores: @json(urlAppDesdeRoute('asignacion_codigobarra_proveedores')),
         guardar: @json(urlAppDesdeRoute('asignacion_codigobarra_guardar')),
         decodificarFoto: @json(urlAppDesdeRoute('asignacion_codigobarra_decodificar_foto')),
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/depmae/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/vendor/html5-qrcode.min.js') }}?v={{ @filemtime(public_path('assets/vendor/html5-qrcode.min.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/asignacion_codigobarra/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/asignacion_codigobarra/index.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/asignacion_codigobarra/pickeo-camara.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/asignacion_codigobarra/pickeo-camara.js')) ?: time() }}" type="text/javascript"></script>
@@ -184,6 +229,27 @@
                     <button type="button" id="ac_btn_cargar" class="btn btn-info btn-block mt-2">
                         <i class="fa fa-refresh"></i> Cargar art&iacute;culos con stock
                     </button>
+                    <div class="ac-buscar mt-3">
+                        <label for="ac_buscar_articulo">Buscar art&iacute;culo recibido por COM</label>
+                        <input type="search" id="ac_buscar_articulo" class="form-control"
+                            placeholder="SKU o descripci&oacute;n" autocomplete="off"
+                            autocorrect="off" autocapitalize="off" spellcheck="false">
+                        <small id="ac_buscar_ayuda" class="text-muted d-block mt-1">Cargando art&iacute;culos de COM del dep&oacute;sito 1…</small>
+                        <div id="ac_buscar_resultados" class="ac-buscar-resultados" style="display:none;"></div>
+                    </div>
+                    <div class="tm-articulo-campo ac-abm mt-3" id="ac_abm_wrap">
+                        <label for="ac_abm_sku">Traer desde el ABM de art&iacute;culos</label>
+                        <div class="d-flex align-items-stretch" style="gap: 0.4rem;">
+                            <input type="hidden" id="articulo_ac_id" class="articulo_id" value="">
+                            <button type="button" class="btn btn-outline-primary consultaarticulo flex-shrink-0" title="Consulta de art&iacute;culos">
+                                <i class="fa fa-search"></i> ABM
+                            </button>
+                            <input type="text" id="ac_abm_sku" class="form-control codigoarticulo" placeholder="SKU y Enter"
+                                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                        </div>
+                        <input type="text" id="ac_abm_desc" class="form-control descripcionarticulo mt-1" readonly placeholder="Descripci&oacute;n">
+                        <small class="text-muted d-block mt-1">Si no est&aacute; en la b&uacute;squeda de COM, traelo desde el maestro.</small>
+                    </div>
                 </div>
 
                 <div id="ac_panel_trabajo" style="display:none;">
@@ -232,6 +298,13 @@
                         <small class="text-muted d-block mt-1">
                             C&aacute;mara en vivo (HTTPS). El c&oacute;digo se graba en el art&iacute;culo proveedor de la compra elegida.
                         </small>
+                        <div id="ac_reemplazo_panel" class="alert alert-warning mt-2 mb-0" style="display:none;">
+                            <div>Ya cargado: <strong id="ac_reemplazo_actual_inline"></strong></div>
+                            <div>Le&iacute;do: <strong id="ac_reemplazo_nuevo_inline"></strong></div>
+                            <button type="button" id="ac_btn_reemplazar" class="btn btn-warning btn-block mt-2">
+                                Reemplazar c&oacute;digo
+                            </button>
+                        </div>
                     </div>
 
                     <div id="ac_estado" class="text-muted small mb-2"></div>
@@ -297,4 +370,5 @@
 </div>
 
 @include('includes.stock.modalconsultadeposito')
+@include('includes.stock.modalconsultaarticulo')
 @endsection

@@ -19,6 +19,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Models\Presupuesto\Partidagasto_Estado;
+use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
@@ -243,7 +244,10 @@ class PartidagastoService
 					// Arma el asiento contable
 					$arrayAsiento['fecha'] = $partida->periodo.'-01';
 					$arrayAsiento['observacion'] = $partida->nombrepresupuesto;
-					$arrayAsiento['cuentacontable_ids'][0] = $partida->cuentacontable_id;
+					$arrayAsiento['cuentacontable_ids'][0] = CuentacontableEmpresaHomologacionSupport::idParaEmpresa(
+						(int) $partida->cuentacontable_id,
+						(int) $empresa_id,
+					);
 					$arrayAsiento['moneda_ids'][0] = $partida->moneda_id;
 					$arrayAsiento['centrocosto_ids'][0] = $partida->centrocosto_id;
 					$arrayAsiento['debes'][0] = $arrayAsiento['haberes'][0] = 0;

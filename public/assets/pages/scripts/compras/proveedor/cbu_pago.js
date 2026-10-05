@@ -9,6 +9,7 @@
     var urlCbusTpl = null;
     var cacheCbus = {};
     var abriendoModal = false;
+    var solicitudSeq = 0;
 
     function urlCbus(proveedorId) {
         if (!urlCbusTpl) {
@@ -102,19 +103,27 @@
 
     function cargarCbusProveedor(proveedorId, forzarModal) {
         proveedorId = parseInt(proveedorId || '0', 10);
+        var seq = ++solicitudSeq;
+        function vigente() {
+            return seq === solicitudSeq
+                && parseInt($('#proveedor_id').val() || '0', 10) === proveedorId;
+        }
         if (proveedorId <= 0) {
             limpiarCbu();
             return;
         }
         if (!forzarModal && cacheCbus[proveedorId]) {
+            if (!vigente()) return;
             aplicarLista(proveedorId, { cbus: cacheCbus[proveedorId] }, forzarModal);
             return;
         }
         $.getJSON(urlCbus(proveedorId))
             .done(function (data) {
+                if (!vigente()) return;
                 aplicarLista(proveedorId, data || {}, !!forzarModal);
             })
             .fail(function () {
+                if (!vigente()) return;
                 mostrarAviso('No se pudieron leer los CBU del proveedor.');
             });
     }

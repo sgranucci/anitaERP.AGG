@@ -1,6 +1,6 @@
 <footer class="main-footer anita-footer-taskbar">
     <div class="anita-footer-inner">
-        <a href="{{ config('app.empresa_link') }}" class="anita-footer-brand" title="{{ config('app.empresa') }}">
+        <a href="{{ urlAppDesdeRoute('inicio') }}" class="anita-footer-brand" title="{{ config('app.empresa') }}">
             @if (config('app.empresa') == 'AGG')
                 <img src="{{ asset('storage/imagenes/logos/AGG.png') }}" alt="AGG" class="anita-footer-logo">
             @elseif (config('app.empresa') == 'EL BIERZO')

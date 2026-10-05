@@ -111,7 +111,7 @@
                 <p class="small text-muted px-3 pt-2 mb-0">
                     Un cierre diario por <strong>empresa + fecha jornada</strong>.
                     Genera FSL exenta en ventas ERP (PV por empresa) y asientos MAQ → ctamov Anita.
-                    Use <i class="fa fa-chevron-down"></i> para consultar las rendiciones del d&iacute;a (PDF).
+                    Use <i class="fa fa-chevron-down"></i> para consultar las rendiciones del d&iacute;a (PDF o Excel).
                 </p>
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">

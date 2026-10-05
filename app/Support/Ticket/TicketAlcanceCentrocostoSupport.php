@@ -6,10 +6,14 @@ use App\Models\Seguridad\Usuario;
 use App\Models\Ticket\Ticket;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Alcance de Carga de Tickets por mismo centro de costo del emisor
  * (permiso admin-ticket-sector).
+ *
+ * enc-SEGURIDAD comparte el centro de costo SEGURIDAD entre salas.
+ * En ese rol el listado queda además en los emisores del mismo establecimiento.
  */
 class TicketAlcanceCentrocostoSupport
 {
@@ -36,12 +40,42 @@ class TicketAlcanceCentrocostoSupport
 
         if ($ccId > 0) {
             $tickets->where('usuario.centrocosto_id', $ccId);
+            self::aplicarFiltroEstablecimientoEmisor($tickets, $viewer);
 
             return;
         }
 
         $viewerId = (int) ($viewer->id ?? 0);
         $tickets->where('ticket.usuario_id', $viewerId > 0 ? $viewerId : -1);
+    }
+
+    /**
+     * @param  Builder|\Illuminate\Database\Query\Builder  $tickets
+     */
+    public static function aplicarFiltroEstablecimientoEmisor($tickets, ?Usuario $viewer = null): void
+    {
+        if (! self::restringePorEstablecimiento()) {
+            return;
+        }
+
+        $viewer = $viewer ?? Auth::user();
+        $empresaIds = self::empresaIdsViewer($viewer);
+        if ($empresaIds === []) {
+            return;
+        }
+
+        $viewerId = (int) ($viewer->id ?? 0);
+        $tickets->where(function ($query) use ($empresaIds, $viewerId) {
+            $query->whereExists(function ($sub) use ($empresaIds) {
+                $sub->select(DB::raw(1))
+                    ->from('usuario_empresa as ue_emisor')
+                    ->whereColumn('ue_emisor.usuario_id', 'usuario.id')
+                    ->whereIn('ue_emisor.empresa_id', $empresaIds);
+            });
+            if ($viewerId > 0) {
+                $query->orWhere('ticket.usuario_id', $viewerId);
+            }
+        });
     }
 
     public static function emisorMismoCentrocosto(Ticket $ticket, ?Usuario $viewer = null): bool
@@ -68,7 +102,68 @@ class TicketAlcanceCentrocostoSupport
             return false;
         }
 
-        return (int) ($emisor->centrocosto_id ?? 0) === $ccViewer;
+        if ((int) ($emisor->centrocosto_id ?? 0) !== $ccViewer) {
+            return false;
+        }
+
+        if (! self::restringePorEstablecimiento()) {
+            return true;
+        }
+
+        return self::emisorComparteEstablecimiento((int) $emisor->id, $viewer);
+    }
+
+    public static function restringePorEstablecimiento(): bool
+    {
+        return (string) session('rol_nombre') === 'enc-SEGURIDAD';
+    }
+
+    /**
+     * @return list<int>
+     */
+    public static function empresaIdsViewer(?Usuario $viewer = null): array
+    {
+        $desdeSesion = collect(session('usuario_empresas', []))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($desdeSesion !== []) {
+            return $desdeSesion;
+        }
+
+        $viewer = $viewer ?? Auth::user();
+        $viewerId = (int) ($viewer->id ?? 0);
+        if ($viewerId <= 0) {
+            return [];
+        }
+
+        return DB::table('usuario_empresa')
+            ->where('usuario_id', $viewerId)
+            ->pluck('empresa_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private static function emisorComparteEstablecimiento(int $emisorId, ?Usuario $viewer): bool
+    {
+        $empresaIds = self::empresaIdsViewer($viewer);
+        if ($empresaIds === []) {
+            return true;
+        }
+        if ($emisorId <= 0) {
+            return false;
+        }
+
+        return DB::table('usuario_empresa')
+            ->where('usuario_id', $emisorId)
+            ->whereIn('empresa_id', $empresaIds)
+            ->exists();
     }
 
     public static function puedeAccederTicketCarga(Ticket $ticket, ?Usuario $viewer = null): bool

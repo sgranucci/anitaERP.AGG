@@ -30,15 +30,15 @@ final class CuentaAutomaticaResolver
 
         $override = self::overrideModulo($empresaId, $clave);
         if ($override !== null) {
-            return $override;
+            return self::homologarEmpresa($empresaId, $override);
         }
 
         $central = self::central($empresaId, $clave);
         if ($central !== null) {
-            return $central;
+            return self::homologarEmpresa($empresaId, $central);
         }
 
-        return self::envFallback($clave);
+        return self::homologarEmpresa($empresaId, self::envFallback($clave));
     }
 
     /**
@@ -62,7 +62,7 @@ final class CuentaAutomaticaResolver
             // Compatibilidad: si aún no corrió la migración, usa la fila simple.
             $legacy = self::central($empresaId, $clave);
 
-            return $legacy !== null ? [$legacy] : [];
+            return $legacy !== null ? self::homologarLista($empresaId, [$legacy]) : [];
         }
 
         $ids = DB::table(self::TABLA_DETALLE)
@@ -77,13 +77,13 @@ final class CuentaAutomaticaResolver
             ->all();
 
         if ($ids !== []) {
-            return $ids;
+            return self::homologarLista($empresaId, $ids);
         }
 
         // Fallback: fila simple del catálogo (pre-migración o sin detalle).
         $legacy = self::central($empresaId, $clave);
 
-        return $legacy !== null ? [$legacy] : [];
+        return $legacy !== null ? self::homologarLista($empresaId, [$legacy]) : [];
     }
 
     public static function resolverIdObligatorio(int $empresaId, string $clave, string $mensaje): int
@@ -175,6 +175,34 @@ final class CuentaAutomaticaResolver
         }
 
         return self::intOrNull(config($envConfig));
+    }
+
+    private static function homologarEmpresa(int $empresaId, ?int $cuentacontableId): ?int
+    {
+        if ($cuentacontableId === null || $cuentacontableId <= 0 || $empresaId <= 0) {
+            return $cuentacontableId;
+        }
+
+        $destino = CuentacontableEmpresaHomologacionSupport::idParaEmpresa($cuentacontableId, $empresaId);
+
+        return $destino > 0 ? $destino : $cuentacontableId;
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    private static function homologarLista(int $empresaId, array $ids): array
+    {
+        $out = [];
+        foreach ($ids as $id) {
+            $destino = self::homologarEmpresa($empresaId, (int) $id);
+            if ($destino !== null && $destino > 0) {
+                $out[$destino] = $destino;
+            }
+        }
+
+        return array_values($out);
     }
 
     private static function intOrNull(mixed $valor): ?int

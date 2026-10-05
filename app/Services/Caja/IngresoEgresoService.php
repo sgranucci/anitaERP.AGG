@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Caja\IngresoEgresoAsientoDescripcionSupport;
 use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
@@ -629,10 +630,14 @@ class IngresoEgresoService
 		{
 			foreach($datosContables as $imputacionContable)
 			{
-				$cuentacontable = $this->cuentacontableRepository->find($imputacionContable->cuentacontable_ids);
+				$cuentaImputacionId = CuentacontableEmpresaHomologacionSupport::idParaEmpresa(
+					(int) $imputacionContable->cuentacontable_ids,
+					$empresa_id,
+				);
+				$cuentacontable = $this->cuentacontableRepository->find($cuentaImputacionId);
 
 				if ($cuentacontable)
-					$asiento[] = [ 'cuentacontable_id' => $imputacionContable->cuentacontable_ids,
+					$asiento[] = [ 'cuentacontable_id' => $cuentaImputacionId,
 							'codigo' => $cuentacontable->codigo,
 							'nombre' => $cuentacontable->nombre,
 							'moneda_id' => $imputacionContable->monedaasiento_ids,
@@ -671,19 +676,23 @@ class IngresoEgresoService
 						$haber = round(abs($importeFirmado), 2);
 					}
 
+					$cuentaCajaId = CuentacontableEmpresaHomologacionSupport::idParaEmpresa(
+						(int) $cuentacaja->cuentacontable_id,
+						$empresa_id,
+					);
 					for ($i = 0, $flExiste = false; $i < count($asiento) && !$flExiste; $i++)
 					{
-						if ($asiento[$i]['cuentacontable_id'] == $cuentacaja->cuentacontable_id &&
+						if ($asiento[$i]['cuentacontable_id'] == $cuentaCajaId &&
 							$asiento[$i]['moneda_id'] == $movimiento->moneda_ids &&
 							$asiento[$i]['cotizacion'] == $movimiento->cotizaciones)
 							$flExiste = true;
 					}
 					if (!$flExiste)
 					{
-						$cuentacontable = $this->cuentacontableRepository->find($cuentacaja->cuentacontable_id);
+						$cuentacontable = $this->cuentacontableRepository->find($cuentaCajaId);
 
 						if ($cuentacontable)
-							$asiento[] = [ 'cuentacontable_id' => $cuentacaja->cuentacontable_id,
+							$asiento[] = [ 'cuentacontable_id' => $cuentaCajaId,
 											'codigo' => $cuentacontable->codigo,
 											'nombre' => $cuentacontable->nombre,
 											'moneda_id' => $movimiento->moneda_ids,

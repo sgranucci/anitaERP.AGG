@@ -144,7 +144,8 @@ class TicketQuery implements TicketQueryInterface
         $count = count($columns);
 
         // Carga de Tickets — prioridad:
-        // supervisor (sin filtro) > admin-ticket-sector (mismo CC del emisor)
+        // supervisor (sin filtro) > admin-ticket-sector (mismo CC del emisor;
+        // enc-SEGURIDAD además mismo establecimiento)
         // > usuario-ticket (propios) > encargado / tecnico por área.
         if ($flSupervisor) {
             // sin filtro de alcance

@@ -15,6 +15,7 @@ final class IngresoProveedorAutorizacionSupport
     public static function autorizar(int $ticketId): IngresoProveedor
     {
         $ticket = IngresoProveedor::query()->findOrFail($ticketId);
+        self::assertEstablecimientoDelUsuario($ticket);
         if (! IngresoProveedorEstados::puedeAutorizarORechazar((string) $ticket->estado)) {
             throw new RuntimeException(
                 'Solo se puede autorizar un ticket Pendiente. Estado actual: '
@@ -39,6 +40,7 @@ final class IngresoProveedorAutorizacionSupport
         }
 
         $ticket = IngresoProveedor::query()->findOrFail($ticketId);
+        self::assertEstablecimientoDelUsuario($ticket);
         if (! IngresoProveedorEstados::puedeAutorizarORechazar((string) $ticket->estado)) {
             throw new RuntimeException(
                 'Solo se puede rechazar un ticket Pendiente. Estado actual: '
@@ -63,5 +65,14 @@ final class IngresoProveedorAutorizacionSupport
         );
 
         return $ticket->fresh(['usuarios', 'usuarioAutorizo', 'proveedores', 'personas']);
+    }
+
+    private static function assertEstablecimientoDelUsuario(IngresoProveedor $ticket): void
+    {
+        if (IngresoProveedorVisibilidadSupport::puedeOperarEmpresa((int) ($ticket->empresa_id ?? 0))) {
+            return;
+        }
+
+        throw new RuntimeException('Este ticket corresponde a otro establecimiento.');
     }
 }

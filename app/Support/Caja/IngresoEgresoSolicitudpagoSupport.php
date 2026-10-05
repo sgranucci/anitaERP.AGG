@@ -10,6 +10,7 @@ use App\Models\Solicitudpago\Solicitudpago;
 use App\Support\Compras\ProveedorAnticipoCuentaContableSupport;
 use App\Support\Contable\AsientoCentrocostoObligatorioSupport;
 use App\Support\Contable\CuentacajaCuentacontableResolverSupport;
+use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
@@ -542,7 +543,10 @@ class IngresoEgresoSolicitudpagoSupport
 
             $cuentaId = (int) (CuentacajaCuentacontableResolverSupport::resolverIdParaEmpresa($caja, $empresaId) ?? 0);
             if ($cuentaId <= 0) {
-                $cuentaId = (int) ($caja->cuentacontable_id ?? 0);
+                $cuentaId = CuentacontableEmpresaHomologacionSupport::idParaEmpresa(
+                    (int) ($caja->cuentacontable_id ?? 0),
+                    $empresaId,
+                );
             }
             if ($cuentaId <= 0) {
                 continue;

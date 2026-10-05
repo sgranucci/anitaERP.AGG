@@ -4,6 +4,8 @@ namespace App\Support\Ventas\Gastronomia;
 
 use App\Models\Caja\Cuentacaja;
 use App\Models\Contable\Cuentacontable;
+use App\Support\Contable\CuentacajaCuentacontableResolverSupport;
+use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\JornadaGastronomia;
 use InvalidArgumentException;
@@ -210,9 +212,10 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
         foreach (['cuenta_ventas', 'cuenta_iva', 'cuenta_ventas_kiosco', 'cuenta_fondo_fijo_maquinas', 'cuenta_diferencia_caja'] as $base) {
             $cfgId = (int) ($configContable[$base.'_id'] ?? 0);
             if ($cfgId > 0 && $cfgId === $cuentaRefId) {
-                $cache[$cuentaRefId] = $cfgId;
+                $id = CuentacontableEmpresaHomologacionSupport::idParaEmpresa($cfgId, $empresaId);
+                $cache[$cuentaRefId] = $id;
 
-                return $cfgId;
+                return $id;
             }
         }
 
@@ -222,7 +225,7 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
             ->find($cuentaRefId);
 
         if ($caja !== null) {
-            $cuentacontableId = (int) ($caja->cuentacontables?->id ?? $caja->cuentacontable_id ?? 0);
+            $cuentacontableId = (int) (CuentacajaCuentacontableResolverSupport::resolverIdParaEmpresa($caja, $empresaId) ?? 0);
             if ($cuentacontableId <= 0) {
                 throw new InvalidArgumentException(
                     'No se pudo resolver cuenta contable para cuenta caja id '.$cuentaRefId.'.',
@@ -238,8 +241,9 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
             return $cuentacontableId;
         }
 
+        $homologada = CuentacontableEmpresaHomologacionSupport::idParaEmpresa($cuentaRefId, $empresaId);
         $contable = Cuentacontable::query()
-            ->where('id', $cuentaRefId)
+            ->where('id', $homologada)
             ->where('empresa_id', $empresaId)
             ->value('id');
 

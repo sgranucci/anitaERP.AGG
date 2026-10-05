@@ -105,47 +105,57 @@ final class ProveedorCbuPagoSupport
      */
     public static function resolverDesdeRequest(int $proveedorId, mixed $formapagoId, mixed $cbuPago): ?array
     {
-        $cbu = CbuSupport::normalizar((string) $cbuPago);
-        $fpId = (int) $formapagoId;
+        return self::resolverEnLista(
+            (int) $formapagoId,
+            (string) $cbuPago,
+            self::listarCbusValidos($proveedorId)
+        );
+    }
 
-        if ($fpId > 0) {
-            $fp = Proveedor_Formapago::query()
-                ->whereKey($fpId)
-                ->where('proveedor_id', $proveedorId)
-                ->first();
-            if ($fp) {
-                $val = CbuSupport::validarConMensaje((string) ($cbu !== '' ? $cbu : $fp->cbu));
-                if ($val['ok']) {
+    /**
+     * Solo acepta un CBU de las formas de pago de este proveedor.
+     * Un CBU válido de otro proveedor (respuesta atrasada al cambiar de proveedor) se rechaza.
+     *
+     * @param  list<array{id:int,cbu:string}>  $lista
+     * @return array{proveedor_formapago_id:?int,cbu_pago:?string}|null
+     */
+    public static function resolverEnLista(int $formapagoId, string $cbuPago, array $lista): ?array
+    {
+        if ($formapagoId > 0) {
+            foreach ($lista as $row) {
+                if ((int) $row['id'] === $formapagoId) {
                     return [
-                        'proveedor_formapago_id' => (int) $fp->id,
-                        'cbu_pago' => $val['cbu'],
+                        'proveedor_formapago_id' => (int) $row['id'],
+                        'cbu_pago' => (string) $row['cbu'],
                     ];
                 }
             }
         }
 
+        $cbu = CbuSupport::normalizar($cbuPago);
         if ($cbu !== '') {
             $val = CbuSupport::validarConMensaje($cbu);
             if (! $val['ok']) {
                 return null;
             }
-            $fp = Proveedor_Formapago::query()
-                ->where('proveedor_id', $proveedorId)
-                ->where('cbu', $val['cbu'])
-                ->orderBy('id')
-                ->first();
+            foreach ($lista as $row) {
+                if ((string) $row['cbu'] === $val['cbu']) {
+                    return [
+                        'proveedor_formapago_id' => (int) $row['id'],
+                        'cbu_pago' => $val['cbu'],
+                    ];
+                }
+            }
 
-            return [
-                'proveedor_formapago_id' => $fp ? (int) $fp->id : null,
-                'cbu_pago' => $val['cbu'],
-            ];
+            throw new \InvalidArgumentException(
+                'El CBU '.$val['cbu'].' no está cargado en las formas de pago de este proveedor.'
+            );
         }
 
-        $lista = self::listarCbusValidos($proveedorId);
         if (count($lista) === 1) {
             return [
-                'proveedor_formapago_id' => $lista[0]['id'],
-                'cbu_pago' => $lista[0]['cbu'],
+                'proveedor_formapago_id' => (int) $lista[0]['id'],
+                'cbu_pago' => (string) $lista[0]['cbu'],
             ];
         }
 

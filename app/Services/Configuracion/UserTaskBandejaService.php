@@ -12,6 +12,7 @@ use App\Services\Stock\PrestamoService;
 use App\Services\Stock\TransferenciaMercaderiaService;
 use App\Services\Sueldos\SolicitudPrendaService;
 use App\Support\Seguridad\IngresoProveedorEstados;
+use App\Support\Seguridad\IngresoProveedorVisibilidadSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -540,7 +541,7 @@ class UserTaskBandejaService
             if (in_array(self::FUENTE_INGRESO_PROVEEDOR, $fuentes, true)
                 && ($fuenteFiltro === '' || $fuenteFiltro === self::FUENTE_INGRESO_PROVEEDOR)
             ) {
-                $items = $items->merge($this->listarIngresoProveedor());
+                $items = $items->merge($this->listarIngresoProveedor($usuarioId));
             }
         }
 
@@ -883,17 +884,20 @@ class UserTaskBandejaService
     }
 
     /**
-     * Cola Seguridad: todos los tickets PENDIENTE si el usuario puede autorizar.
+     * Cola Seguridad: tickets PENDIENTE del establecimiento asignado al usuario.
      *
      * @return Collection<int, array<string, mixed>>
      */
-    private function listarIngresoProveedor(): Collection
+    private function listarIngresoProveedor(int $usuarioId): Collection
     {
         $puede = $this->puedeSlug('autorizar-ingreso-proveedor');
 
-        return IngresoProveedor::query()
+        $query = IngresoProveedor::query()
             ->with(['proveedores:id,nombre', 'empresas:id,nombre'])
-            ->where('estado', IngresoProveedorEstados::PENDIENTE)
+            ->where('estado', IngresoProveedorEstados::PENDIENTE);
+        IngresoProveedorVisibilidadSupport::aplicarFiltroEmpresaDelUsuario($query, $usuarioId);
+
+        return $query
             ->orderByDesc('fecha')
             ->orderByDesc('id')
             ->limit(100)

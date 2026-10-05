@@ -43,6 +43,46 @@ class AsignacionCodigobarraController extends Controller
         ]);
     }
 
+    public function catalogoCom(): JsonResponse
+    {
+        can('asignar-codigobarra-articulo');
+
+        try {
+            $catalogo = $this->service->catalogoComDeposito();
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'deposito_id' => $catalogo['deposito_id'],
+            'deposito_nombre' => $catalogo['deposito_nombre'],
+            'total' => count($catalogo['filas']),
+            'filas' => $catalogo['filas'],
+        ]);
+    }
+
+    public function traerAbm(Request $request): JsonResponse
+    {
+        can('asignar-codigobarra-articulo');
+
+        $articuloId = (int) $request->input('articulo_id', 0);
+        if ($articuloId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Seleccione un artículo.'], 422);
+        }
+
+        try {
+            $fila = $this->service->filaDesdeArticulo($articuloId);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'fila' => $fila,
+        ]);
+    }
+
     public function proveedores(Request $request): JsonResponse
     {
         can('asignar-codigobarra-articulo');
@@ -62,9 +102,10 @@ class AsignacionCodigobarraController extends Controller
         $articuloId = (int) $request->input('articulo_id', 0);
         $codigobarra = (string) $request->input('codigobarra', '');
         $proveedorId = $request->filled('proveedor_id') ? (int) $request->input('proveedor_id') : null;
+        $reemplazar = $request->boolean('reemplazar');
 
         try {
-            $resultado = $this->service->guardar($articuloId, $codigobarra, $proveedorId);
+            $resultado = $this->service->guardar($articuloId, $codigobarra, $proveedorId, $reemplazar);
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
         }

@@ -16,6 +16,9 @@ use Illuminate\Support\Facades\Schema;
 
 class AsignacionCodigobarraService
 {
+    /** Recepción COM confirmada que alimenta el buscador de la pantalla. */
+    public const DEPOSITO_BUSQUEDA_COM = 1;
+
     private const COMPRAS_RECIENTES = 5;
 
     /**
@@ -114,6 +117,146 @@ class AsignacionCodigobarraService
     }
 
     /**
+     * Artículos que entraron por una recepción COM confirmada al depósito 1.
+     * La búsqueda de la pantalla usa esta lista, aparte de la cola de pickeo.
+     *
+     * @return array{deposito_id: int, deposito_nombre: string, filas: list<array<string, mixed>>}
+     */
+    public function catalogoComDeposito(): array
+    {
+        $depositoId = self::DEPOSITO_BUSQUEDA_COM;
+        $this->assertDepositoAutorizado($depositoId);
+
+        $deposito = Depmae::query()->find($depositoId, ['id', 'codigo', 'nombre']);
+        $nombre = $deposito
+            ? Depmae::etiquetaDesdePartes((string) ($deposito->codigo ?? ''), (string) ($deposito->nombre ?? ''), $depositoId)
+            : 'Depósito '.$depositoId;
+
+        $articulos = DB::table('recepcion_proveedor as rp')
+            ->join('recepcion_proveedor_articulo as rpa', 'rpa.recepcion_proveedor_id', '=', 'rp.id')
+            ->join('articulo as a', 'a.id', '=', 'rpa.articulo_id')
+            ->where('rp.deposito_id', $depositoId)
+            ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION)
+            ->where('rp.estado', Recepcion_Proveedor::ESTADO_CONFIRMADA)
+            ->where('rp.anita_tipo', 'COM')
+            ->where('a.estado', ArticuloSeleccionOperativaSupport::ESTADO_ACTIVO)
+            ->whereNotNull('a.sku')
+            ->whereRaw("TRIM(a.sku) <> ''")
+            ->where(function ($q) {
+                $q->whereNull('a.tipoarticulo_id')
+                    ->orWhereNotIn('a.tipoarticulo_id', [10, 11, 12]);
+            })
+            ->groupBy('a.id', 'a.sku', 'a.descripcion')
+            ->orderBy('a.descripcion')
+            ->get([
+                'a.id as articulo_id',
+                'a.sku',
+                'a.descripcion',
+            ]);
+
+        if ($articulos->isEmpty()) {
+            return [
+                'deposito_id' => $depositoId,
+                'deposito_nombre' => $nombre,
+                'filas' => [],
+            ];
+        }
+
+        $ids = $articulos->pluck('articulo_id')->map(static fn ($id): int => (int) $id)->all();
+        $saldos = DB::table('articulo_saldo_deposito')
+            ->where('deposito_id', $depositoId)
+            ->whereIn('articulo_id', $ids)
+            ->groupBy('articulo_id')
+            ->select('articulo_id', DB::raw('SUM(cantidad) as saldo'))
+            ->pluck('saldo', 'articulo_id');
+        $comprasPorArticulo = $this->comprasRecientesPorArticulo($ids);
+        $vinculos = Articulo_Proveedor::query()
+            ->with('proveedores:id,codigo,nombre')
+            ->whereIn('articulo_id', $ids)
+            ->orderByDesc('activo')
+            ->orderByDesc('preferido')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('articulo_id');
+
+        $filas = [];
+        foreach ($articulos as $row) {
+            $id = (int) $row->articulo_id;
+            $armada = $this->armarPendiente(
+                [
+                    'articulo_id' => $id,
+                    'sku' => trim((string) $row->sku),
+                    'descripcion' => (string) ($row->descripcion ?? ''),
+                    'saldo' => (float) ($saldos[$id] ?? 0),
+                ],
+                $comprasPorArticulo[$id] ?? [],
+                $vinculos->get($id),
+                true
+            );
+            if ($armada !== null) {
+                $filas[] = $armada;
+            }
+        }
+
+        return [
+            'deposito_id' => $depositoId,
+            'deposito_nombre' => $nombre,
+            'filas' => $filas,
+        ];
+    }
+
+    /**
+     * Arma la ficha de pickeo de un artículo elegido en el ABM, aunque no tenga COM ni saldo.
+     *
+     * @return array<string, mixed>
+     */
+    public function filaDesdeArticulo(int $articuloId): array
+    {
+        if ($articuloId <= 0) {
+            throw new \InvalidArgumentException('Artículo inválido.');
+        }
+
+        $articulo = Articulo::query()->find($articuloId);
+        if ($articulo === null || ! ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
+            throw new \InvalidArgumentException('Artículo no encontrado o inactivo.');
+        }
+
+        $sku = trim((string) ($articulo->sku ?? ''));
+        if ($sku === '') {
+            throw new \InvalidArgumentException('El artículo no tiene SKU.');
+        }
+
+        $saldo = (float) DB::table('articulo_saldo_deposito')
+            ->where('articulo_id', $articuloId)
+            ->sum('cantidad');
+        $compras = $this->comprasRecientesPorArticulo([$articuloId]);
+        $vinculos = Articulo_Proveedor::query()
+            ->with('proveedores:id,codigo,nombre')
+            ->where('articulo_id', $articuloId)
+            ->orderByDesc('activo')
+            ->orderByDesc('preferido')
+            ->orderBy('id')
+            ->get();
+
+        $armada = $this->armarPendiente(
+            [
+                'articulo_id' => $articuloId,
+                'sku' => $sku,
+                'descripcion' => (string) ($articulo->descripcion ?? ''),
+                'saldo' => $saldo,
+            ],
+            $compras[$articuloId] ?? [],
+            $vinculos,
+            true
+        );
+        if ($armada === null) {
+            throw new \InvalidArgumentException('No se pudo preparar el artículo.');
+        }
+
+        return $armada;
+    }
+
+    /**
      * @return list<array{id: int, codigo: string, nombre: string, etiqueta: string}>
      */
     public function opcionesProveedor(?string $busqueda = null, int $limite = 80): array
@@ -163,7 +306,7 @@ class AsignacionCodigobarraService
      *   proveedor_id?: int|null
      * }
      */
-    public function guardar(int $articuloId, string $codigobarra, ?int $proveedorId = null): array
+    public function guardar(int $articuloId, string $codigobarra, ?int $proveedorId = null, bool $reemplazar = false): array
     {
         $codigo = self::normalizarCodigo($codigobarra);
         if ($codigo === null) {
@@ -178,11 +321,6 @@ class AsignacionCodigobarraService
             return ['ok' => false, 'mensaje' => 'Artículo no encontrado o inactivo.'];
         }
 
-        $conflicto = $this->conflictoCodigo($codigo, $articuloId);
-        if ($conflicto !== null) {
-            return ['ok' => false, 'mensaje' => $conflicto];
-        }
-
         $vinculo = $this->resolverVinculoProveedor($articuloId, $proveedorId);
         if ($vinculo['necesita_proveedor'] ?? false) {
             return [
@@ -194,31 +332,58 @@ class AsignacionCodigobarraService
         }
 
         $existente = $vinculo['codigobarra_existente'] ?? null;
-        if (is_string($existente) && $existente !== '' && strcasecmp($existente, $codigo) !== 0) {
+        if (is_string($existente) && $existente !== '' && strcasecmp($existente, $codigo) === 0) {
             return [
                 'ok' => false,
-                'mensaje' => 'Ese proveedor ya tiene el código '.$existente.'. Elegí otra compra.',
+                'ya_cargado' => true,
+                'mensaje' => 'Ya está cargado el código '.$existente.' para este proveedor.',
+                'articulo_id' => $articuloId,
+                'sku' => (string) ($articulo->sku ?? ''),
+                'codigobarra' => $existente,
+                'proveedor_id' => (int) ($vinculo['fila']->proveedor_id ?? 0) ?: null,
             ];
         }
 
-        if ($existente === null || $existente === '') {
-            DB::transaction(function () use ($codigo, $vinculo) {
-                /** @var Articulo_Proveedor $fila */
-                $fila = $vinculo['fila'];
-                if (! $fila->activo) {
-                    $fila->activo = true;
-                }
-                $fila->codigobarra = substr($codigo, 0, 50);
-                $fila->save();
-            });
+        $proveedorDestino = (int) ($vinculo['fila']->proveedor_id ?? 0);
+        $conflicto = $this->conflictoCodigo($codigo, $articuloId, $proveedorDestino);
+        if ($conflicto !== null) {
+            return ['ok' => false, 'mensaje' => $conflicto];
         }
+
+        $reemplaza = is_string($existente) && $existente !== '';
+        if ($reemplaza && ! $reemplazar) {
+            return [
+                'ok' => false,
+                'puede_reemplazar' => true,
+                'mensaje' => 'Este proveedor ya tiene el código '.$existente.'.',
+                'articulo_id' => $articuloId,
+                'sku' => (string) ($articulo->sku ?? ''),
+                'codigobarra_actual' => $existente,
+                'codigobarra' => $codigo,
+                'proveedor_id' => (int) ($vinculo['fila']->proveedor_id ?? 0) ?: null,
+            ];
+        }
+
+        DB::transaction(function () use ($codigo, $vinculo) {
+            /** @var Articulo_Proveedor $fila */
+            $fila = $vinculo['fila'];
+            if (! $fila->activo) {
+                $fila->activo = true;
+            }
+            $fila->codigobarra = substr($codigo, 0, 50);
+            $fila->save();
+        });
 
         return [
             'ok' => true,
-            'mensaje' => 'Código de barras guardado.',
+            'reemplazado' => $reemplaza,
+            'mensaje' => $reemplaza
+                ? 'Código reemplazado. Antes estaba '.$existente.'.'
+                : 'Código de barras guardado.',
             'articulo_id' => $articuloId,
             'sku' => (string) ($articulo->sku ?? ''),
             'codigobarra' => $codigo,
+            'codigobarra_anterior' => $reemplaza ? $existente : null,
             'proveedor_id' => (int) ($vinculo['fila']->proveedor_id ?? 0) ?: null,
         ];
     }
@@ -402,7 +567,7 @@ class AsignacionCodigobarraService
      * }>  $compras
      * @return array<string, mixed>|null
      */
-    private function armarPendiente(array $fila, array $compras, ?Collection $vinculos): ?array
+    private function armarPendiente(array $fila, array $compras, ?Collection $vinculos, bool $conservarConCodigo = false): ?array
     {
         $barraPorProveedor = $this->barraPorProveedor($vinculos);
         $comprasOut = [];
@@ -438,7 +603,11 @@ class AsignacionCodigobarraService
 
         if ($comprasOut !== []) {
             if ($elegida === null) {
-                return null;
+                if (! $conservarConCodigo) {
+                    return null;
+                }
+                $comprasOut[0]['seleccionada'] = true;
+                $elegida = $comprasOut[0];
             }
 
             $fila['compras'] = $comprasOut;
@@ -456,7 +625,10 @@ class AsignacionCodigobarraService
         });
 
         if ($activos->isNotEmpty() && $sinCodigo->isEmpty()) {
-            return null;
+            if (! $conservarConCodigo) {
+                return null;
+            }
+            $sinCodigo = $activos;
         }
 
         $elegido = $sinCodigo->first(static fn ($v) => (bool) $v->preferido) ?? $sinCodigo->first();
@@ -543,30 +715,23 @@ class AsignacionCodigobarraService
         return $ts ? date('d/m/Y', $ts) : $fecha;
     }
 
-    private function conflictoCodigo(string $codigo, int $articuloId): ?string
+    private function conflictoCodigo(string $codigo, int $articuloId, int $proveedorId): ?string
     {
         $variantes = TransferenciaMercaderiaPickeoSupport::variantesCodigo($codigo);
         if ($variantes === []) {
             return 'Código de barras inválido.';
         }
 
-        $otroArt = Articulo::query()
-            ->where(function ($q) use ($variantes) {
-                $q->whereIn('codigobarra', $variantes);
-                foreach ($variantes as $v) {
-                    $q->orWhereRaw('UPPER(TRIM(codigobarra)) = ?', [strtoupper($v)]);
-                }
-            })
-            ->where('id', '<>', $articuloId)
-            ->first(['id', 'sku', 'descripcion']);
-
-        if ($otroArt !== null) {
-            return 'El código ya está en el artículo '.$otroArt->sku.' ('.$otroArt->descripcion.').';
+        if ($proveedorId <= 0) {
+            return null;
         }
 
+        // El EAN del envase se repite entre proveedores. Solo choca si el mismo
+        // proveedor ya lo tiene en otro artículo: la recepción busca por proveedor + código.
         $otroProv = Articulo_Proveedor::query()
             ->with('articulos:id,sku,descripcion')
             ->where('activo', true)
+            ->where('proveedor_id', $proveedorId)
             ->where('articulo_id', '<>', $articuloId)
             ->where(function ($q) use ($variantes) {
                 $q->whereIn('codigobarra', $variantes);
@@ -579,7 +744,7 @@ class AsignacionCodigobarraService
         if ($otroProv !== null) {
             $sku = (string) ($otroProv->articulos->sku ?? '#'.$otroProv->articulo_id);
 
-            return 'El código ya está en el catálogo proveedor del artículo '.$sku.'.';
+            return 'Este proveedor ya tiene el código en el artículo '.$sku.'.';
         }
 
         return null;

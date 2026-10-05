@@ -35,6 +35,7 @@ use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
 use App\Support\Caja\ChequePropioInstrumentoSupport;
 use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
 use App\Support\Configuracion\EntornoEmpresaSupport;
@@ -780,7 +781,14 @@ class CobranzaService
 					else
 						$d_h = 'H';
 
-					Self::agregaCuenta($asiento, $cuentacaja->cuentacontable_id, $movimiento->moneda_ids, $movimiento->cotizaciones, $d_h, $movimiento->montos);
+					Self::agregaCuenta(
+						$asiento,
+						CuentacontableEmpresaHomologacionSupport::idParaEmpresa((int) $cuentacaja->cuentacontable_id, $empresa_id),
+						$movimiento->moneda_ids,
+						$movimiento->cotizaciones,
+						$d_h,
+						$movimiento->montos
+					);
 				}
 			}
 

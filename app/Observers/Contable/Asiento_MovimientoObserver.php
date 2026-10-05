@@ -2,7 +2,9 @@
 
 namespace App\Observers\Contable;
 
+use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
+use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 
 /**
@@ -24,6 +26,25 @@ use App\Support\Contable\CuentacontableSaldoMesSupport;
  */
 class Asiento_MovimientoObserver
 {
+    public function saving(Asiento_Movimiento $movimiento): void
+    {
+        $cuentaId = (int) ($movimiento->cuentacontable_id ?? 0);
+        $asientoId = (int) ($movimiento->asiento_id ?? 0);
+        if ($cuentaId <= 0 || $asientoId <= 0) {
+            return;
+        }
+
+        $empresaId = (int) (Asiento::query()->whereKey($asientoId)->value('empresa_id') ?? 0);
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        $destino = CuentacontableEmpresaHomologacionSupport::idParaEmpresa($cuentaId, $empresaId);
+        if ($destino > 0 && $destino !== $cuentaId) {
+            $movimiento->cuentacontable_id = $destino;
+        }
+    }
+
     public function created(Asiento_Movimiento $movimiento): void
     {
         if (! CuentacontableSaldoMesSupport::observerHabilitado()) {

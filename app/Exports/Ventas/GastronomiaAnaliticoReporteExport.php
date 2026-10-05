@@ -4,6 +4,7 @@ namespace App\Exports\Ventas;
 
 use App\Services\Ventas\GastronomiaAnaliticoReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Ventas\GastronomiaDescuentoReporteExcelLayout;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
@@ -12,10 +13,8 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
-use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /**
@@ -55,9 +54,15 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
     /** @var list<int> */
     private array $filasHeaderEmpresaExcel = [];
 
+    private int $filaSubtituloExcel = 0;
+
+    private GastronomiaDescuentoReporteExcelLayout $layout;
+
     public function __construct(
         private readonly GastronomiaAnaliticoReporteService $reporteService,
-    ) {}
+    ) {
+        $this->layout = new GastronomiaDescuentoReporteExcelLayout(false, 2);
+    }
 
     /**
      * @param  array<string, mixed>  $filtros
@@ -99,18 +104,18 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($coleccionLogo);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
 
-        $filasMeta = 2; // título + generado
-        if (trim($this->subtitulo) !== '') {
-            $filasMeta++;
-        }
-
-        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-        $this->filaCabecerasExcel = $this->filaTituloExcel + $filasMeta;
-        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+        $filasMeta = GastronomiaDescuentoReporteExcelLayout::contarFilasMeta($this->subtitulo, false, false);
+        $this->layout = new GastronomiaDescuentoReporteExcelLayout($this->hayFilaLogos, $filasMeta);
+        $this->filaTituloExcel = $this->layout->filaInicioMeta();
+        $this->filaCabecerasExcel = $this->layout->filaCabecerasExcel();
+        $this->filaPrimeraDatosExcel = $this->layout->filaPrimeraDatosExcel();
+        $this->filaSubtituloExcel = trim($this->subtitulo) !== ''
+            ? $this->layout->filaInicioMeta() + 2
+            : 0;
 
         $rows = [];
         if ($this->hayFilaLogos) {
-            $rows[] = $this->filaVacia();
+            $rows[] = $this->filaLogo();
         }
         $rows[] = $this->celdaUnica($this->titulo);
         $rows[] = $this->celdaUnica('Generado '.date('d/m/Y H:i'));
@@ -190,6 +195,21 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
     }
 
     /**
+     * Fila que reserva el alto del logo. A1 no puede quedar vacía: Laravel Excel
+     * escribe en bloques de 1000 filas y decide dónde continuar según exista A1;
+     * si no existe, cada bloque vuelve a empezar en la fila 1 y pisa al anterior.
+     *
+     * @return list<string>
+     */
+    private function filaLogo(): array
+    {
+        $row = $this->filaVacia();
+        $row[0] = ' ';
+
+        return $row;
+    }
+
+    /**
      * @return list<string>
      */
     private function celdaUnica(string $texto): array
@@ -231,20 +251,7 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
 
     public function styles(Worksheet $sheet)
     {
-        return [
-            $this->filaCabecerasExcel => [
-                'font' => [
-                    'bold' => true,
-                    'color' => ['rgb' => '17202A'],
-                    'size' => 10,
-                    'name' => 'Arial',
-                ],
-                'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
-                    'color' => ['rgb' => '85C1E9'],
-                ],
-            ],
-        ];
+        return [];
     }
 
     public function registerEvents(): array
@@ -254,40 +261,14 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
                 $sheet = $event->sheet->getDelegate();
                 $colUltima = self::COL_ULTIMA;
 
-                if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
-                    $sheet->getRowDimension(1)->setRowHeight(54);
-                    $offsetXp = 6;
-                    foreach ($this->rutasLogosExcel as $idx => $ruta) {
-                        if (! is_string($ruta) || ! is_readable($ruta)) {
-                            continue;
-                        }
-                        $drawing = new Drawing;
-                        $drawing->setPath($ruta);
-                        $drawing->setResizeProportional(true);
-                        $drawing->setHeight(46);
-                        $drawing->setCoordinates('A1');
-                        $drawing->setOffsetX($offsetXp + $idx * 160);
-                        $drawing->setOffsetY(4);
-                        $drawing->setWorksheet($sheet);
-                    }
-                }
-
-                $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.$colUltima.$filaTit);
-                $sheet->getStyle('A'.$filaTit.':'.$colUltima.$filaTit)->applyFromArray([
-                    'font' => ['bold' => true, 'size' => 14, 'name' => 'Arial', 'color' => ['rgb' => '17202A']],
-                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
-                ]);
-
-                if (trim($this->subtitulo) !== '') {
-                    $filaSub = $filaTit + 1;
-                    $sheet->mergeCells('A'.$filaSub.':'.$colUltima.$filaSub);
-                }
+                $this->layout->aplicarLogos($sheet, $this->rutasLogosExcel);
+                $this->layout->aplicarMetaEncabezado($sheet, $colUltima, $this->filaSubtituloExcel);
+                $this->layout->aplicarEstiloThead($sheet, $colUltima);
 
                 foreach ($this->filasHeaderEmpresaExcel as $filaHeader) {
                     $sheet->mergeCells('A'.$filaHeader.':'.$colUltima.$filaHeader);
                     $sheet->getStyle('A'.$filaHeader.':'.$colUltima.$filaHeader)->applyFromArray([
-                        'font' => ['bold' => true, 'name' => 'Arial'],
+                        'font' => ['bold' => true, 'name' => 'Arial', 'color' => ['rgb' => '1B4F72']],
                         'fill' => [
                             'fillType' => Fill::FILL_SOLID,
                             'color' => ['rgb' => 'D6EAF8'],
@@ -295,7 +276,7 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
                     ]);
                 }
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $this->layout->congelarDebajoThead($sheet);
             },
         ];
     }

@@ -62,8 +62,8 @@ final class GastronomiaAnaliticoReporteQuery
                 ->orderBy('e.id');
         }
 
-        $query->orderByDesc('v.fechajornada')
-            ->orderByDesc('v.id')
+        $query->orderBy('v.fechajornada')
+            ->orderBy('v.id')
             ->orderBy('ve.id');
 
         if ($paginar) {

@@ -49,6 +49,10 @@
                                class="btn-accion-tabla tooltipsC" title="PDF rendici&oacute;n" target="_blank" rel="noopener">
                                 <i class="fa fa-file-pdf-o text-danger"></i>
                             </a>
+                            <a href="{{ route('excel_rendicion_maquina', ['id' => $row->id]) }}"
+                               class="btn-accion-tabla tooltipsC" title="Excel rendici&oacute;n">
+                                <i class="fa fa-file-excel-o text-success"></i>
+                            </a>
                         @endif
                     </td>
                 </tr>

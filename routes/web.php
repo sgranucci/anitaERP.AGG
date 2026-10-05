@@ -19,9 +19,12 @@ Route::get('password/reset/{token}', 'Auth\ResetPasswordController@showResetForm
 Route::post('password/reset', 'Auth\ResetPasswordController@reset')->name('password.update');
 
 Route::get('/', 'InicioController@index')->name('inicio');
+Route::get('home', function () {
+    return redirect()->route('inicio');
+});
 Route::get('seguridad/login', 'Seguridad\LoginController@index')->name('login');
-Route::get('seguridad/cambia_password', 'Seguridad\HomeController@cambiaPassword')->name('cambia_password');
-Route::post('seguridad/graba_password', 'Seguridad\HomeController@grabaPassword')->name('graba_password');
+Route::get('seguridad/cambia_password', 'Seguridad\HomeController@cambiaPassword')->middleware('auth')->name('cambia_password');
+Route::post('seguridad/graba_password', 'Seguridad\HomeController@grabaPassword')->middleware('auth')->name('graba_password');
 Route::post('seguridad/login', 'Seguridad\LoginController@login')->name('login_post');
 Route::get('seguridad/logout', 'Seguridad\LoginController@logout')->name('logout');
 Route::post('ajax-sesion', 'AjaxController@setSession')->name('ajax')->middleware('auth');
@@ -1678,6 +1681,8 @@ Route::get('stock/transferencia-mercaderia/publico/{token}/ver', 'Stock\Transfer
  */
 Route::get('stock/asignacion-codigobarra', 'Stock\AsignacionCodigobarraController@index')->name('asignacion_codigobarra');
 Route::get('stock/asignacion-codigobarra/pendientes', 'Stock\AsignacionCodigobarraController@pendientes')->name('asignacion_codigobarra_pendientes');
+Route::get('stock/asignacion-codigobarra/catalogo-com', 'Stock\AsignacionCodigobarraController@catalogoCom')->name('asignacion_codigobarra_catalogo_com');
+Route::get('stock/asignacion-codigobarra/traer-abm', 'Stock\AsignacionCodigobarraController@traerAbm')->name('asignacion_codigobarra_traer_abm');
 Route::get('stock/asignacion-codigobarra/proveedores', 'Stock\AsignacionCodigobarraController@proveedores')->name('asignacion_codigobarra_proveedores');
 Route::post('stock/asignacion-codigobarra/guardar', 'Stock\AsignacionCodigobarraController@guardar')->name('asignacion_codigobarra_guardar');
 Route::post('stock/asignacion-codigobarra/decodificar-foto', 'Stock\AsignacionCodigobarraController@decodificarFoto')->name('asignacion_codigobarra_decodificar_foto');
@@ -3215,6 +3220,7 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/lista-rendicion-maquina/{formato?}/{busqueda?}', 'Caja\RendicionMaquinaController@listar')->name('lista_rendicion_maquina');
     Route::get('caja/rendicion-maquina/crear', 'Caja\RendicionMaquinaController@crear')->name('crear_rendicion_maquina');
     Route::get('caja/rendicion-maquina/{id}/imprimir', 'Caja\RendicionMaquinaController@imprimir')->name('imprimir_rendicion_maquina');
+    Route::get('caja/rendicion-maquina/{id}/excel', 'Caja\RendicionMaquinaController@excel')->name('excel_rendicion_maquina');
     Route::get('caja/rendicion-maquina/{id}/editar', 'Caja\RendicionMaquinaController@editar')->name('editar_rendicion_maquina')->middleware('modo.consulta');
     Route::post('caja/rendicion-maquina/api/calcular', 'Caja\RendicionMaquinaController@apiCalcular')->name('rendicion_maquina_api_calcular');
     Route::post('caja/rendicion-maquina/api/guardar', 'Caja\RendicionMaquinaController@apiGuardar')->name('rendicion_maquina_api_guardar');

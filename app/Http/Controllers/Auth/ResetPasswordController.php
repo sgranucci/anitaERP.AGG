@@ -4,7 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Foundation\Auth\ResetsPasswords;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 
 class ResetPasswordController extends Controller
@@ -22,23 +23,6 @@ class ResetPasswordController extends Controller
 
     use ResetsPasswords;
 
-    /**
-     * Where to redirect users after resetting their password.
-     *
-     * @var string
-     */
-    protected $redirectTo = '/seguridad/login';
-
-    /**
-     * Create a new controller instance.
-     *
-     * @return void
-     */
-    public function __construct()
-    {
-        $this->middleware('guest');
-    }
-
     protected function resetPassword($user, $password)
     {
         $this->setUserPassword($user, $password);
@@ -50,6 +34,24 @@ class ResetPasswordController extends Controller
 
     protected function setUserPassword($user, $password)
     {
+        // Usuario hashea la clave en setPasswordAttribute.
         $user->password = $password;
+    }
+
+    /**
+     * Tras restablecer, cerrar la sesión y volver al login.
+     * El middleware guest redirigía a /home, una ruta que no existe.
+     */
+    protected function sendResetResponse(Request $request, $response)
+    {
+        if ($request->wantsJson()) {
+            return response()->json(['message' => trans($response)]);
+        }
+
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login')->with('status', trans($response));
     }
 }

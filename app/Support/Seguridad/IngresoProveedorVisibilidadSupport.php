@@ -8,6 +8,7 @@ use App\Support\Cache\PermisoCacheSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Alcance del listado y acceso a tickets de ingreso.
@@ -34,8 +35,66 @@ final class IngresoProveedorVisibilidadSupport
     }
 
     /**
-     * @param  Builder<\App\Models\Seguridad\IngresoProveedor>  $query
+     * Empresas asignadas al usuario (usuario_empresa).
+     * Sin filas: el ERP trata al usuario como acceso a todas las empresas.
+     *
+     * @return list<int>
      */
+    public static function empresaIdsAsignadasDe(int $usuarioId): array
+    {
+        if ($usuarioId <= 0) {
+            return [];
+        }
+
+        return DB::table('usuario_empresa')
+            ->where('usuario_id', $usuarioId)
+            ->pluck('empresa_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Recorta un listado al establecimiento del usuario.
+     * Lista vacía = sin recorte (acceso total).
+     *
+     * @param  Builder<\App\Models\Seguridad\IngresoProveedor>|\Illuminate\Database\Query\Builder  $query
+     * @param  list<int>  $empresaIds
+     */
+    public static function aplicarEmpresas($query, array $empresaIds, string $column = 'empresa_id'): void
+    {
+        $empresaIds = array_values(array_unique(array_filter(
+            array_map('intval', $empresaIds),
+            fn (int $id) => $id > 0
+        )));
+        if ($empresaIds === []) {
+            return;
+        }
+
+        $query->whereIn($column, $empresaIds);
+    }
+
+    /**
+     * @param  Builder<\App\Models\Seguridad\IngresoProveedor>|\Illuminate\Database\Query\Builder  $query
+     */
+    public static function aplicarFiltroEmpresaDelUsuario($query, int $usuarioId, string $column = 'empresa_id'): void
+    {
+        self::aplicarEmpresas($query, self::empresaIdsAsignadasDe($usuarioId), $column);
+    }
+
+    public static function puedeOperarEmpresa(int $empresaId, ?int $usuarioId = null): bool
+    {
+        $usuarioId = $usuarioId ?? (int) (Auth::id() ?? 0);
+        $ids = self::empresaIdsAsignadasDe($usuarioId);
+        if ($ids === []) {
+            return true;
+        }
+
+        return $empresaId > 0 && in_array($empresaId, $ids, true);
+    }
+
     public static function aplicarFiltroAlcance(Builder $query, string $alias = 'ingreso_proveedor'): void
     {
         if (self::puedeVerTodos()) {
