@@ -132,7 +132,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
         array $refFac,
         int $documentoId = 0,
     ): array {
-        return self::insert([
+        return self::insert(RecepcionProveedorAnitaEsquemaSupport::filtrarEscritura([
             'recm_proveedor' => self::proveedorSql($codigoProveedor),
             'recm_tipo' => self::textoSql($clave['tipo'], 3),
             'recm_letra' => self::textoSql($clave['letra'], 1),
@@ -158,7 +158,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
             'recm_ref_sucursal' => self::enteroSql((int) $refFac['sucursal']),
             'recm_ref_nro' => self::enteroSql((int) $refFac['nro']),
             'recm_documentoid' => self::enteroSql($documentoId),
-        ]);
+        ], RecepcionProveedorAnitaEsquemaSupport::columnasRecepmaeAusentes()));
     }
 
     /**
@@ -175,7 +175,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
         array $refFac,
         int $documentoId = 0,
     ): string {
-        return self::updateSet([
+        return self::updateSet(RecepcionProveedorAnitaEsquemaSupport::filtrarEscritura([
             'recm_fecha' => self::enteroSql($fechaAnita),
             'recm_estado' => self::textoSql($estado, 1),
             'recm_usuario' => self::textoSql($usuario, 8),
@@ -191,7 +191,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
             'recm_ref_sucursal' => self::enteroSql((int) $refFac['sucursal']),
             'recm_ref_nro' => self::enteroSql((int) $refFac['nro']),
             'recm_documentoid' => self::enteroSql($documentoId),
-        ]);
+        ], RecepcionProveedorAnitaEsquemaSupport::columnasRecepmaeAusentes()));
     }
 
     public static function recepmaeAnularSet(string $estadoAnulada): string
@@ -220,7 +220,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
         float $cantidad,
         int $penvpNroInterno,
     ): array {
-        return self::insert([
+        return self::insert(RecepcionProveedorAnitaEsquemaSupport::filtrarEscritura([
             'aplp_proveedor' => self::proveedorSql($codigoProveedor),
             'aplp_tipo' => self::textoSql($claveCom['tipo'], 3),
             'aplp_letra' => self::textoSql($claveCom['letra'], 1),
@@ -236,7 +236,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
             'aplp_cantentr' => self::decimalSql($cantidad),
             'aplp_nro_interno' => self::enteroSql($penvpNroInterno),
             'aplp_cantfact' => self::decimalSql(0),
-        ]);
+        ], RecepcionProveedorAnitaEsquemaSupport::columnasAplicpedAusentes()));
     }
 
     /**
@@ -257,7 +257,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
         float $cantidadFacturada,
         int $comNroInterno,
     ): array {
-        return self::insert([
+        return self::insert(RecepcionProveedorAnitaEsquemaSupport::filtrarEscritura([
             'aplp_proveedor' => self::proveedorSql($codigoProveedor),
             'aplp_tipo' => self::textoSql($claveFactura['tipo'], 3),
             'aplp_letra' => self::textoSql($claveFactura['letra'], 1),
@@ -273,7 +273,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
             'aplp_cantentr' => self::decimalSql(0),
             'aplp_nro_interno' => self::enteroSql($comNroInterno),
             'aplp_cantfact' => self::decimalSql($cantidadFacturada),
-        ]);
+        ], RecepcionProveedorAnitaEsquemaSupport::columnasAplicpedAusentes()));
     }
 
     /**
@@ -291,7 +291,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
         array $ocFac,
         int $comNroInterno,
     ): array {
-        return self::insert([
+        return self::insert(RecepcionProveedorAnitaEsquemaSupport::filtrarEscritura([
             'aplp_proveedor' => self::proveedorSql($codigoProveedor),
             'aplp_tipo' => self::textoSql($claveFactura['tipo'], 3),
             'aplp_letra' => self::textoSql($claveFactura['letra'], 1),
@@ -307,7 +307,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
             'aplp_cantentr' => self::decimalSql(0),
             'aplp_nro_interno' => self::enteroSql($comNroInterno),
             'aplp_cantfact' => self::decimalSql(0),
-        ]);
+        ], RecepcionProveedorAnitaEsquemaSupport::columnasAplicpedAusentes()));
     }
 
     /**

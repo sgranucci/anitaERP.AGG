@@ -12,6 +12,7 @@ use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
 use App\Support\Stock\RecepcionProveedorAsientoAnitaCtamovSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
+use App\Support\Stock\RecepcionProveedorAnitaEsquemaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaReferenciaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
@@ -340,7 +341,7 @@ class RecepcionProveedorAnitaBridgeService
                 'acc' => 'list',
                 'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
                 'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
-                'campos' => 'recm_proveedor, recm_tipo, recm_letra, recm_sucursal, recm_nro, recm_estado, recm_documentoid, recm_terminal',
+                'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae('recm_proveedor, recm_tipo, recm_letra, recm_sucursal, recm_nro, recm_estado, recm_documentoid, recm_terminal'),
                 'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaePorClave($clave),
                 'limit' => 'FIRST 20',
             ]);
@@ -363,7 +364,7 @@ class RecepcionProveedorAnitaBridgeService
             'acc' => 'list',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
-            'campos' => 'recm_proveedor, recm_tipo, recm_letra, recm_sucursal, recm_nro, recm_estado, recm_documentoid, recm_terminal',
+            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae('recm_proveedor, recm_tipo, recm_letra, recm_sucursal, recm_nro, recm_estado, recm_documentoid, recm_terminal'),
             'whereArmado' => $soloErp
                 ? RecepcionProveedorAnitaWhereSupport::recepmaeDocumentoErp($documentoId)
                 : RecepcionProveedorAnitaWhereSupport::recepmaeDocumentoErpORef($documentoId),
@@ -1009,7 +1010,7 @@ class RecepcionProveedorAnitaBridgeService
             'acc' => 'list',
             'sistema' => $cfg['sistema_compras'],
             'tabla' => $cfg['tablas']['recepcion_cabecera'],
-            'campos' => 'recm_estado,recm_documentoid,recm_terminal',
+            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae('recm_estado,recm_documentoid,recm_terminal'),
             'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmae($codigoProveedor, $clave),
             'limit' => 'FIRST 1',
         ]);

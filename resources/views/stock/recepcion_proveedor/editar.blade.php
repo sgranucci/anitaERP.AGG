@@ -68,12 +68,6 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                         <i class="fa fa-sitemap"></i> Documentos
                     </button>
                     @endif
-                    @if($recepcion->estado === 'BORRADOR' && empty($soloConsulta) && can('confirmar-recepcion-proveedor', false) && ($validacionAbonoCompleta ?? true))
-                    <button type="submit" class="btn btn-success btn-sm mr-2" form="form-recepcion-confirmar"
-                            id="btn-confirmar-recepcion-proveedor">
-                        <i class="fa fa-check"></i> Confirmar
-                    </button>
-                    @endif
                     @if (can('crear-ingreso-proveedor', false) && !empty($mostrar_solapa_ingresos))
                     <button type="button" class="btn btn-outline-light btn-sm mr-2 js-ingreso-ticket-nuevo" title="Solicitar ticket de ingreso a planta">
                         <i class="fa fa-id-badge"></i> Ticket de ingreso
@@ -111,9 +105,6 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                         'asientoPreview' => $asientoPreview ?? ['activo' => false],
                     ])
                 </div>
-            </form>
-            <form action="{{ route('confirmar_recepcion_proveedor', ['id' => $recepcion->id] + ($filtrosQuery ?? [])) }}" id="form-recepcion-confirmar" method="POST" class="d-none" aria-hidden="true">
-                @csrf
             </form>
             <form action="{{ route('eliminar_recepcion_proveedor', ['id' => $recepcion->id]) }}" id="form-recepcion-eliminar" method="POST" class="d-none" aria-hidden="true">
                 @csrf

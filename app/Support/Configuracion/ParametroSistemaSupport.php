@@ -27,6 +27,8 @@ final class ParametroSistemaSupport
 
     public const CLAVE_OC_SOLICITANTE_EDITABLE = 'oc_solicitante_editable';
 
+    public const CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD = 'recepcion_no_precargar_cantidad';
+
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
     /**
@@ -70,6 +72,13 @@ final class ParametroSistemaSupport
                 'tipo' => 'select',
                 'orden' => 50,
                 'opciones' => self::opcionesDiaEscalamientoSuscripcion(),
+            ],
+            self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => [
+                'grupo' => 'Recepción de proveedor',
+                'etiqueta' => 'No precargar cantidad recibida',
+                'ayuda' => 'Activo: al traer la orden de compra, la cantidad recibida arranca en 0 y hay que cargarla. Inactivo: se completa con el pendiente de la orden.',
+                'tipo' => 'boolean',
+                'orden' => 70,
             ],
         ];
 
@@ -163,6 +172,15 @@ final class ParametroSistemaSupport
         }
 
         return trim((string) $valor);
+    }
+
+    /**
+     * Activo: la precarga de la OC deja la cantidad recibida en 0.
+     * Inactivo: se completa con el pendiente.
+     */
+    public static function noPrecargarCantidadRecibida(): bool
+    {
+        return self::boolean(self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD, false);
     }
 
     /**
@@ -298,6 +316,7 @@ final class ParametroSistemaSupport
                 'ultimo'
             ),
             self::CLAVE_OC_SOLICITANTE_EDITABLE => EntornoEmpresaSupport::esElBierzo() ? '1' : '0',
+            self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => '0',
             default => '0',
         };
     }

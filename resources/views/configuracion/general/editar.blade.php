@@ -24,7 +24,7 @@ Configuración general del sistema
                 <div class="card-body">
                     <div class="alert alert-info py-2">
                         Estos valores mandan sobre los defaults de <code>config/</code> y <code>.env</code>.
-                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos y umbrales de Compras / Suscripciones.
+                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos, umbrales de Compras / Suscripciones y la cantidad recibida de la recepción de proveedor.
                     </div>
 
                     @foreach ($grupos as $nombreGrupo => $parametros)

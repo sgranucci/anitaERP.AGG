@@ -179,7 +179,7 @@ final class RecepcionProveedorAnitaColisionSupport
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_compras'],
             'tabla' => (string) $cfg['tablas']['recepcion_cabecera'],
-            'campos' => 'recm_proveedor, recm_fecha, recm_tipo_fac, recm_letra_fac, recm_sucursal_fac, recm_nro_fac, recm_estado, recm_documentoid, recm_terminal',
+            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae('recm_proveedor, recm_fecha, recm_tipo_fac, recm_letra_fac, recm_sucursal_fac, recm_nro_fac, recm_estado, recm_documentoid, recm_terminal'),
             'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmae($codigoProveedor, $clave),
             'limit' => 'FIRST 1',
         ]));
@@ -501,7 +501,7 @@ final class RecepcionProveedorAnitaColisionSupport
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_compras'],
             'tabla' => (string) $cfg['tablas']['recepcion_cabecera'],
-            'campos' => 'recm_proveedor, recm_tipo_fac, recm_letra_fac, recm_sucursal_fac, recm_nro_fac, recm_estado, recm_documentoid',
+            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae('recm_proveedor, recm_tipo_fac, recm_letra_fac, recm_sucursal_fac, recm_nro_fac, recm_estado, recm_documentoid'),
             'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaeSoloErp($codigoProveedor, $clave),
             'limit' => 'FIRST 1',
         ]));
@@ -520,7 +520,7 @@ final class RecepcionProveedorAnitaColisionSupport
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_compras'],
             'tabla' => (string) $cfg['tablas']['recepcion_cabecera'],
-            'campos' => 'recm_proveedor, recm_tipo_fac, recm_letra_fac, recm_sucursal_fac, recm_nro_fac, recm_estado, recm_documentoid',
+            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae('recm_proveedor, recm_tipo_fac, recm_letra_fac, recm_sucursal_fac, recm_nro_fac, recm_estado, recm_documentoid'),
             'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaePorClave($clave),
             'limit' => 'FIRST 1',
         ]));

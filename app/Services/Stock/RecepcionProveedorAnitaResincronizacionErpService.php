@@ -4,6 +4,7 @@ namespace App\Services\Stock;
 
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
+use App\Support\Stock\RecepcionProveedorAnitaEsquemaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
 use Illuminate\Database\Eloquent\Builder;
@@ -214,6 +215,15 @@ class RecepcionProveedorAnitaResincronizacionErpService
 
         if ($recepcion->origen_carga === 'ANITA_IMPORT') {
             return false;
+        }
+
+        // El Bierzo no tiene recm_documentoid: la cabecera se reconoce por la clave COM.
+        if (RecepcionProveedorAnitaEsquemaSupport::esquemaReducido()) {
+            if ($recepcion->estado !== RecepcionProveedorEstados::CONFIRMADA) {
+                return false;
+            }
+
+            return $this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion) === [];
         }
 
         $cabecerasErp = $this->anitaBridge->listarRecepmaeErpPorDocumento((int) $recepcion->id);

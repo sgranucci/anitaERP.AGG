@@ -8,6 +8,7 @@ use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Services\Compras\OrdencompraAnitaSyncService;
 use App\Services\Compras\OrdencompraRecepcionCumplimientoService;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Stock\RecepcionProveedorAccionLineaOc;
@@ -221,6 +222,10 @@ class RecepcionProveedorOrdencompraResolverService
                 continue;
             }
 
+            $cantidadInicial = ParametroSistemaSupport::noPrecargarCantidadRecibida()
+                ? 0.0
+                : $cantidadPendiente;
+
             $penvpOrden = (int) ($ocArt->penvp_orden ?? 0);
             $penvpNroInterno = (int) ($ocArt->penvp_nro_interno ?? 0);
 
@@ -263,13 +268,13 @@ class RecepcionProveedorOrdencompraResolverService
                     ? substr((string) $ocArt->fechaentrega, 0, 10)
                     : null,
                 'cantidad_recibida' => $recibido,
-                'cantidad' => $cantidadPendiente,
+                'cantidad' => $cantidadInicial,
                 'cantidad_rechazada' => 0,
                 'accion_linea_oc' => RecepcionProveedorAccionLineaOc::RECIBIR,
                 'fl_cerrar_linea_oc' => false,
                 'comentario_diferencia' => '',
                 'motivorechazo' => '',
-                'cantidad_stock' => RecepcionProveedorConversionSupport::cantidadStock($cantidadPendiente, $coefEfectivo),
+                'cantidad_stock' => RecepcionProveedorConversionSupport::cantidadStock($cantidadInicial, $coefEfectivo),
                 'coeficienteconversion' => $coefEfectivo,
                 'coeficiente_proveedor' => $coefProveedor,
                 'coeficiente_articulo' => $coefArticulo > 0 ? $coefArticulo : 1,

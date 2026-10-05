@@ -114,9 +114,9 @@ return [
             'permiso' => 'Según permiso de edición/consulta',
         ],
         [
-            'herramienta' => 'Guardar / Confirmar / Eliminar',
+            'herramienta' => 'Guardar / Guardar y confirmar / Eliminar',
             'ubicacion' => $footerForm,
-            'accion' => 'Guardar borrador; Confirmar impacta stock; Eliminar solo borrador.',
+            'accion' => 'Guardar deja el borrador. Guardar y confirmar graba la pantalla y genera stock y asiento. Eliminar solo el borrador.',
             'permiso' => 'actualizar-recepcion-proveedor / confirmar-recepcion-proveedor',
         ],
     ],

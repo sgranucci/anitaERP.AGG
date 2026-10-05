@@ -112,7 +112,7 @@ return [
             ],
             'captura_id' => 'recepcion_form',
             'parrafos' => [
-                'Flujo recomendado: Nuevo registro → indicar Nº OC (Enter, Tab o lupa) → completar fecha, número de factura/remito, depósito de entrada → cargar cantidades recibidas y rechazadas → Guardar → revisar solapa Asiento contable → Confirmar recepción.',
+                'Flujo recomendado: Nuevo registro → indicar Nº OC (Enter, Tab o lupa) → completar fecha, número de factura/remito, depósito de entrada → cargar cantidades recibidas y rechazadas → Guardar (sigue en borrador) o Guardar y confirmar (graba lo de pantalla y genera stock y asiento).',
                 'Nº OC: escriba el número y presione Enter, use la lupa para buscar OC pendientes o el enlace Ver OC para abrir la orden en otra pestaña.',
                 'Proveedor y empresa vienen de la OC (solo lectura). Fecha no puede ser posterior a hoy.',
                 'Nº factura remito: acepta formatos como 265, 1-265, FAC 1-265, REM 999, ND, NC.',
@@ -133,14 +133,14 @@ return [
             'titulo' => '6. Confirmación y estados',
             'captura_id' => 'circuito_recepcion',
             'parrafos' => [
-                'Al confirmar, el sistema pregunta: «¿Confirmar recepción? Generará movimiento de stock y asiento contable.» Acepte solo si revisó cantidades, depósitos y diferencias.',
+                'Guardar y confirmar pregunta: «¿Guardar y confirmar la recepción? Se generará movimiento de stock y asiento contable.» Graba lo que está en pantalla y recién después confirma. Desde el listado, el check confirma el borrador ya grabado.',
                 'Estados de cabecera: BORRADOR (editable), CONFIRMADA (stock ingresado), ANULADA (revertida). Tipos: RECEPCION (ingreso normal) y DEVOLUCION (salida contra recepción previa).',
             ],
             'tabla' => [
                 'caption' => 'Estados y acciones',
                 'headers' => ['Estado', 'Qué puede hacer'],
                 'rows' => [
-                    ['BORRADOR', 'Guardar, Confirmar, Eliminar borrador, Cambiar OC, Emitir PDF borrador.'],
+                    ['BORRADOR', 'Guardar, Guardar y confirmar, Eliminar borrador, Cambiar OC, Emitir PDF borrador. Desde el listado también se puede confirmar el borrador ya grabado.'],
                     ['CONFIRMADA', 'Consultar, PDF COM, Devolución a proveedor, Anular recepción.'],
                     ['ANULADA', 'Solo consulta e impresión histórica.'],
                 ],
