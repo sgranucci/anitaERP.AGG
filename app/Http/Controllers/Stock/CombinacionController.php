@@ -769,6 +769,7 @@ class CombinacionController extends Controller
 
         		$pdf = App::make('dompdf.wrapper');
         		$pdf->setPaper('legal','portrait');
+				$this->permitirFotosCatalogoEnDompdf($pdf);
 				$archivoLinea = $path.'/'.$nombre_pdf.'.pdf';
         		$pdf->loadHTML($view)->save($archivoLinea);
 
@@ -792,6 +793,23 @@ class CombinacionController extends Controller
         return view('stock.combinacion.catalogo.create', compact('linea_query', 'mventa_query', 'categoria_query',
 								'subcategoria_query', 'precios_enum'));
     }
+
+	/**
+	 * Las fotos viven en un disco montado fuera del proyecto. DomPDF solo lee
+	 * archivos bajo su chroot y, si no, dibuja la cruz de imagen rota.
+	 */
+	private function permitirFotosCatalogoEnDompdf($pdf): void
+	{
+		$raizFotos = realpath(storage_path('app/public/imagenes'));
+		if ($raizFotos === false) {
+			return;
+		}
+
+		$opciones = $pdf->getDomPDF()->getOptions();
+		$chroot = $opciones->getChroot();
+		$chroot[] = $raizFotos;
+		$opciones->setChroot($chroot);
+	}
 
 	/** 0 no es un id: las combinaciones viejas lo tienen cargado y la FK lo rechaza. */
 	private function idForaneoONull(mixed $id): ?int
