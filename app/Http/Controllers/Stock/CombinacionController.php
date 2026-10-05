@@ -29,11 +29,12 @@ use App\Http\Requests\ValidacionCombinacionTecnica;
 use App\Http\Requests\ValidacionCatalogo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Controller;
 use App\Support\Stock\CombinacionEstadoCanalSupport;
-use LynX39\LaraPdfMerger\Facades\PdfMerger;
+use Jurosh\PDFMerge\PDFMerger;
 use Carbon\Carbon;
 use App;
 use PDF;
@@ -697,7 +698,9 @@ class CombinacionController extends Controller
 
 		if (count($combinacion) > 0)
 		{
-		  	$pdfMerger = PDFMerger::init();
+		  	$pdfMerger = new PDFMerger;
+			$path = storage_path('pdf/catalogo');
+			File::ensureDirectoryExists($path);
 
 		  	foreach ($combinacion as $linea)
 			{
@@ -763,17 +766,15 @@ class CombinacionController extends Controller
 
 				$view =  \View::make('exports.stock.catalogo', compact('items', 'modulos', 'flPrecio'))
 				    ->render();
-				$path = storage_path('pdf/catalogo');
 
         		$pdf = App::make('dompdf.wrapper');
         		$pdf->setPaper('legal','portrait');
-        		$pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
-        		$pdf->download($nombre_pdf.'.pdf');
+				$archivoLinea = $path.'/'.$nombre_pdf.'.pdf';
+        		$pdf->loadHTML($view)->save($archivoLinea);
 
-				$pdfMerger->addPDF($path.'/'.$nombre_pdf.'.pdf', 'all');
+				$pdfMerger->addPDF($archivoLinea, 'all');
 			}
-			$pdfMerger->merge();
-			$pdfMerger->save($path.'/catalogo.pdf', "file");
+			$pdfMerger->merge('file', $path.'/catalogo.pdf');
 			return response()->download($path.'/catalogo.pdf');
 		}
 
