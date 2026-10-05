@@ -8,6 +8,7 @@ use App\ApiAnita;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Contable\Iibb_Presentacion_Config;
 use App\Models\Configuracion\Provincia;
+use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
@@ -67,9 +68,15 @@ final class IngresosBrutosRetencionesDatosService
         Iibb_Presentacion_Config $config,
         Provincia $provincia,
     ): array {
+        $tieneProvincia = AnitaRetencionEsquemaSupport::retibrmovTieneProvincia();
         $codigosProv = IngresosBrutosProvinciaAnitaSupport::codigosAnita($provincia);
-        if ($codigosProv === []) {
+        if ($tieneProvincia && $codigosProv === []) {
             $this->ultimaAdvertencia = 'La provincia seleccionada no tiene códigos Anita (codigoexterno/jurisdicción) para filtrar retibrmov.';
+
+            return [];
+        }
+        if (! $tieneProvincia && ! IngresosBrutosProvinciaAnitaSupport::esCaba($provincia)) {
+            $this->ultimaAdvertencia = 'En esta instalación retibrmov no distingue provincia. Solo se listan las retenciones de CABA.';
 
             return [];
         }
@@ -78,24 +85,35 @@ final class IngresosBrutosRetencionesDatosService
         $desdeAnita = (int) str_replace('-', '', $fechaDesde);
         $hastaAnita = (int) str_replace('-', '', $fechaHasta);
         $provIn = implode(',', array_map('intval', $codigosProv));
+        $tieneEmpresa = AnitaRetencionEsquemaSupport::movimientosTienenColumnaEmpresa();
 
         // Columnas reales Informix (retibrmov.sql): retibr_nro_ret / retibr_porc_ret
         // (el C usa alias retibr_nro_retencion / retibr_porc_retencion vía .def).
         // Alias largos hacen que el bridge responda [] sin mensaje de error.
+        // Ferli no tiene retibr_empresa ni retibr_provincia.
+        $campos = [
+            'retibr_proveedor', 'retibr_tipo', 'retibr_letra', 'retibr_sucursal', 'retibr_nro',
+            'retibr_fecha', 'retibr_sujeto', 'retibr_retencion', 'retibr_porc_ret',
+            'retibr_nro_ret',
+        ];
+        $where = ' WHERE retibr_fecha >= '.$desdeAnita
+            .' AND retibr_fecha <= '.$hastaAnita
+            .' AND retibr_retencion <> 0';
+        if ($tieneProvincia) {
+            $campos[] = 'retibr_provincia';
+            $where .= ' AND retibr_provincia IN ('.$provIn.')';
+        }
+        if ($tieneEmpresa) {
+            $campos[] = 'retibr_empresa';
+            $where .= ' AND retibr_empresa = '.$empresaAnita;
+        }
+
         $payload = [
             'acc' => 'list',
             'sistema' => 'compras',
             'tabla' => 'retibrmov',
-            'campos' => implode(', ', [
-                'retibr_proveedor', 'retibr_tipo', 'retibr_letra', 'retibr_sucursal', 'retibr_nro',
-                'retibr_fecha', 'retibr_sujeto', 'retibr_retencion', 'retibr_porc_ret',
-                'retibr_nro_ret', 'retibr_provincia', 'retibr_empresa',
-            ]),
-            'whereArmado' => ' WHERE retibr_fecha >= '.$desdeAnita
-                .' AND retibr_fecha <= '.$hastaAnita
-                .' AND retibr_empresa = '.$empresaAnita
-                .' AND retibr_retencion <> 0'
-                .' AND retibr_provincia IN ('.$provIn.')',
+            'campos' => implode(', ', $campos),
+            'whereArmado' => $where,
             'orderBy' => 'retibr_fecha, retibr_nro_ret, retibr_proveedor',
         ];
 

@@ -8,6 +8,7 @@ use App\ApiAnita;
 use App\Models\Contable\Iibb_Presentacion_Config;
 use App\Models\Configuracion\Provincia;
 use App\Models\Ventas\Venta;
+use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
@@ -58,27 +59,36 @@ final class IngresosBrutosPercepcionesDatosService
         $desdeAnita = (int) str_replace('-', '', $fechaDesde);
         $hastaAnita = (int) str_replace('-', '', $fechaHasta);
         $provIn = implode(',', array_map('intval', $codigosProv));
+        $filtraEmpresa = AnitaRetencionEsquemaSupport::ventaTieneColumnaEmpresa();
+
+        $campos = [
+            'ven_fecha', 'ven_tipo', 'ven_letra', 'ven_sucursal', 'ven_nro',
+            'ven_cliente', 'ven_gravado', 'ven_gravado_ot',
+            'ven_cod_mon', 'ven_cotizacion',
+            'clim_nombre', 'clim_cuit',
+            'veni_provincia', 'veni_porcentaje', 'veni_importe',
+        ];
+        if ($filtraEmpresa) {
+            $campos[] = 'ven_empresa';
+        }
+        $where = ' WHERE ven_cliente=clim_cliente'
+            .' AND veni_tipo=ven_tipo AND veni_letra=ven_letra'
+            .' AND veni_sucursal=ven_sucursal AND veni_nro=ven_nro'
+            .' AND ven_fecha >= '.$desdeAnita
+            .' AND ven_fecha <= '.$hastaAnita
+            .' AND veni_provincia IN ('.$provIn.')'
+            .' AND veni_importe <> 0';
+        if ($filtraEmpresa) {
+            $where .= ' AND ven_empresa = '.$empresaAnita;
+        }
 
         $api = new ApiAnita();
         $filas = ApiAnita::decodificarListaFilas($api->apiCall([
             'acc' => 'list',
             'sistema' => 'ventas',
-            'tabla' => 'venta, climae, venibr',
-            'campos' => implode(', ', [
-                'ven_fecha', 'ven_tipo', 'ven_letra', 'ven_sucursal', 'ven_nro',
-                'ven_cliente', 'ven_empresa', 'ven_gravado', 'ven_gravado_ot',
-                'ven_cod_mon', 'ven_cotizacion',
-                'clim_nombre', 'clim_cuit',
-                'veni_provincia', 'veni_porcentaje', 'veni_importe',
-            ]),
-            'whereArmado' => ' WHERE ven_cliente=clim_cliente'
-                .' AND veni_tipo=ven_tipo AND veni_letra=ven_letra'
-                .' AND veni_sucursal=ven_sucursal AND veni_nro=ven_nro'
-                .' AND ven_fecha >= '.$desdeAnita
-                .' AND ven_fecha <= '.$hastaAnita
-                .' AND ven_empresa = '.$empresaAnita
-                .' AND veni_provincia IN ('.$provIn.')'
-                .' AND veni_importe <> 0',
+            'tabla' => 'venta, outer climae, venibr',
+            'campos' => implode(', ', $campos),
+            'whereArmado' => $where,
             'orderBy' => 'ven_fecha, ven_sucursal, ven_nro',
         ]));
 

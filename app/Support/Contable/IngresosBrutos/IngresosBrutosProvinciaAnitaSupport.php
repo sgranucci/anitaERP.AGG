@@ -8,7 +8,7 @@ use App\Models\Configuracion\Provincia;
 
 /**
  * Códigos Anita (zonamult / venibr / retibrmov) asociados a una provincia ERP.
- * Buenos Aires: codigoexterno 2 y jurisdicción 902 (mismo criterio que PercepcioniibbExport).
+ * Buenos Aires: 2 y 902. CABA: 1 y 901 (mismo criterio que PercepcioniibbExport).
  */
 final class IngresosBrutosProvinciaAnitaSupport
 {
@@ -26,6 +26,17 @@ final class IngresosBrutosProvinciaAnitaSupport
             if ($c > 0) {
                 $codigos[$c] = $c;
             }
+        }
+
+        // Anita guarda la jurisdicción corta y la AFIP. Ferli no carga codigoexterno:
+        // CABA queda solo en 901 y se pierden las filas venibr con provincia 1.
+        if (self::esCaba($provincia)) {
+            $codigos[1] = 1;
+            $codigos[901] = 901;
+        }
+        if (self::esBuenosAires($provincia)) {
+            $codigos[2] = 2;
+            $codigos[902] = 902;
         }
 
         return array_values($codigos);

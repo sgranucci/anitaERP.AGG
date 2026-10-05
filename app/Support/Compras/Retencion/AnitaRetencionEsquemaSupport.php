@@ -36,4 +36,21 @@ final class AnitaRetencionEsquemaSupport
     {
         return ! EntornoEmpresaSupport::esFerli();
     }
+
+    /**
+     * Ferli: `retibrmov` no tiene `retibr_provincia`. El agente es solo CABA,
+     * así que las filas de esa tabla son de esa jurisdicción.
+     */
+    public static function retibrmovTieneProvincia(): bool
+    {
+        return ! EntornoEmpresaSupport::esFerli();
+    }
+
+    /**
+     * Ferli: `venta` no tiene `ven_empresa` (una sola compañía en Anita).
+     */
+    public static function ventaTieneColumnaEmpresa(): bool
+    {
+        return ! EntornoEmpresaSupport::esFerli();
+    }
 }

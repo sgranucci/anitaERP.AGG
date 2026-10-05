@@ -236,6 +236,6 @@ final class IngresosBrutosListadoFiltros
      */
     public static function claveCacheResultado(array $filtros): string
     {
-        return generaKey('ingresos_brutos_resultado_v7_'.self::firma($filtros));
+        return generaKey('ingresos_brutos_resultado_v8_'.self::firma($filtros));
     }
 }
