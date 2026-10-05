@@ -15,6 +15,7 @@ use App\Support\Ventas\FacturacionLocal\FacturacionLocalReceptorSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalSplitFacNcSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use App\Support\Ventas\TipotransaccionOperacionStockSupport;
+use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -310,6 +311,9 @@ final class FacturacionLocalEmisionService
         } catch (InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage(), 'errores' => [$e->getMessage()]];
         } catch (Throwable $e) {
+            $msg = VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e)
+                ? 'Ya existe un comprobante con ese punto de venta, tipo AFIP y número. Reintente el cobro.'
+                : $e->getMessage();
             Log::error('facturacion_local.emitir.fallo', [
                 'msg' => $e->getMessage(),
                 'local_id' => $local->id,
@@ -317,7 +321,7 @@ final class FacturacionLocalEmisionService
                 'file' => $e->getFile().':'.$e->getLine(),
             ]);
 
-            return ['ok' => false, 'error' => $e->getMessage(), 'errores' => [$e->getMessage()]];
+            return ['ok' => false, 'error' => $msg, 'errores' => [$msg]];
         }
     }
 

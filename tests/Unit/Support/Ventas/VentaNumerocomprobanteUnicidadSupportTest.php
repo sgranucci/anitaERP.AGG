@@ -47,4 +47,26 @@ final class VentaNumerocomprobanteUnicidadSupportTest extends TestCase
 
         $this->assertTrue(VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e));
     }
+
+    public function test_reconoce_espejo_anita_de_consulta(): void
+    {
+        $this->assertTrue(VentaNumerocomprobanteUnicidadSupport::esPayloadVinculoConsulta([
+            'origen' => 'anita_local',
+            'vinculo_consulta' => true,
+        ]));
+        $this->assertFalse(VentaNumerocomprobanteUnicidadSupport::esPayloadVinculoConsulta(['origen' => 'anita_local']));
+        $this->assertFalse(VentaNumerocomprobanteUnicidadSupport::esPayloadVinculoConsulta(null));
+    }
+
+    public function test_marca_codigo_de_espejo_anita_sin_pisar_el_fiscal(): void
+    {
+        $marcado = VentaNumerocomprobanteUnicidadSupport::codigoMarcadoEspejoAnita('NCD B-00017-00002463');
+
+        $this->assertSame('NCD B-00017-00002463 · Anita sin CAE', $marcado);
+        $this->assertSame(
+            $marcado,
+            VentaNumerocomprobanteUnicidadSupport::codigoMarcadoEspejoAnita($marcado),
+        );
+        $this->assertLessThanOrEqual(100, mb_strlen($marcado));
+    }
 }

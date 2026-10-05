@@ -1399,6 +1399,12 @@ class FacturacionService
 						),
 					];	
 
+					$this->cederNumeroArcaSiLoOcupaEspejoAnita(
+						$puntoventa,
+						(string) $codigoTipoTransaccion,
+						(int) $numero,
+					);
+
 					// Graba venta (reintento si otra emisión concurrente tomó el mismo número CAEA/manual Bierzo)
 					$intentoCreateVenta = 0;
 					$maxReintentosNumeracion = EntornoEmpresaSupport::esElBierzo() ? 3 : 1;
@@ -4886,6 +4892,12 @@ class FacturacionService
 				),
 			];	
 
+			$this->cederNumeroArcaSiLoOcupaEspejoAnita(
+				$puntoventa,
+				(string) $codigoTipoTransaccion,
+				(int) $numero,
+			);
+
 			// Graba venta
 			$intentoCreateVenta = 0;
 			$maxReintentosNumeracion = EntornoEmpresaSupport::esElBierzo() ? 3 : 1;
@@ -7575,6 +7587,25 @@ class FacturacionService
 		);
 
 		return $mensaje !== null ? ['error' => $mensaje] : null;
+	}
+
+	/**
+	 * CAE (modos C/E): el número lo fija ARCA. Si ese número lo ocupa un espejo
+	 * Anita de consulta sin CAE, lo suelta dentro de la transacción de emisión.
+	 */
+	private function cederNumeroArcaSiLoOcupaEspejoAnita(object $puntoventa, string $codigoTipoTransaccion, int $numero): void
+	{
+		$modo = (string) ($puntoventa->modofacturacion ?? '');
+		if (! in_array($modo, ['C', 'E'], true) || $numero <= 0) {
+			return;
+		}
+
+		$codigoAfip = (int) preg_replace('/\D+/', '', $codigoTipoTransaccion);
+		VentaNumerocomprobanteUnicidadSupport::cederNumeroFiscalSiEspejoAnitaSinCae(
+			(int) ($puntoventa->id ?? 0),
+			$codigoAfip,
+			$numero,
+		);
 	}
 
 	/**
