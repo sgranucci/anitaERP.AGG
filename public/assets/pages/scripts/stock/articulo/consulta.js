@@ -576,6 +576,9 @@ $(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnte
     if ($(this).closest('#cp-articulo-table').length && $(this).hasClass('codigoarticulo')) {
         return;
     }
+    if ($(this).closest('#cdm-lineas-table').length) {
+        return;
+    }
 	// Resto del form OC (fuera de la grilla de artículos): no bloquear Enter.
 	if ($(this).closest('#form-ordencompra-general').length) {
 		return;

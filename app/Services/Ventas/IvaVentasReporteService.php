@@ -56,6 +56,7 @@ final class IvaVentasReporteService
         $clasificarHost = IvaVentasFeaturesSupport::clasificarPorHost()
             && ! empty($filtros['clasificar_por_host']);
         $cortarJurisdiccion = ! empty($filtros['cortar_por_jurisdiccion']);
+        $cortarSucursalTipo = ! empty($filtros['cortar_por_sucursal_tipo']);
         $provinciaFiltroId = (int) ($filtros['provincia_id'] ?? 0);
         $vendingPvIds = IvaVentasUnidadNegocioSupport::vendingPuntoventaIds((int) ($filtros['empresa_id'] ?? 0));
         $excluidasPre = 0;
@@ -183,16 +184,17 @@ final class IvaVentasReporteService
 
         $this->enriquecerProvinciasFilas($filas);
 
-        $filas = $this->ordenarFilas($filas, $filtros, $clasificarHost, $cortarJurisdiccion);
+        $filas = $this->ordenarFilas($filas, $filtros, $clasificarHost, $cortarJurisdiccion, $cortarSucursalTipo);
         $totalesPorPvLista = $this->ordenarTotalesPv(array_values($totalesPorPv));
         $totalesPorJurisdiccion = $cortarJurisdiccion
             ? $this->armarTotalesPorJurisdiccion($filas)
             : [];
+        $totalesPorSucursalTipo = $this->armarTotalesPorSucursalTipo($filas);
 
         // Vista del listado: opcionalmente colapsa las Facturas B en un resumen por día + PV + tipo.
         // El detalle completo ($filas) se conserva para conciliación y auditoría de correlatividad.
         $filasDisplay = ! empty($filtros['agrupar_b_por_dia'])
-            ? $this->agruparFacturasBPorDia($filas, $filtros, $clasificarHost, $cortarJurisdiccion)
+            ? $this->agruparFacturasBPorDia($filas, $filtros, $clasificarHost, $cortarJurisdiccion, $cortarSucursalTipo)
             : $filas;
 
         foreach ($totalesGeneral as $k => $v) {
@@ -212,7 +214,9 @@ final class IvaVentasReporteService
             'filas_display' => $filasDisplay,
             'agrupado_b_por_dia' => ! empty($filtros['agrupar_b_por_dia']),
             'cortar_por_jurisdiccion' => $cortarJurisdiccion,
+            'cortar_por_sucursal_tipo' => $cortarSucursalTipo,
             'totales_por_puntoventa' => $totalesPorPvLista,
+            'totales_por_sucursal_tipo' => $totalesPorSucursalTipo,
             'totales_por_jurisdiccion' => $totalesPorJurisdiccion,
             'totales_general' => $totalesGeneral,
             'stats' => [
@@ -269,8 +273,10 @@ final class IvaVentasReporteService
             : 'fechajornada';
 
         $filtraIvaVentas = Schema::hasColumn('puntoventa', 'iva_ventas');
+        $puntoventaId = (int) ($filtros['puntoventa_id'] ?? 0);
+        $tipotransaccionId = (int) ($filtros['tipotransaccion_id'] ?? 0);
 
-        return Venta::query()
+        $query = Venta::query()
             ->whereHas('puntoventas', function (Builder $q) use ($empresaId, $filtraIvaVentas) {
                 $q->where('empresa_id', $empresaId);
                 if ($filtraIvaVentas) {
@@ -278,7 +284,16 @@ final class IvaVentasReporteService
                 }
             })
             ->whereDate($campoFecha, '>=', $filtros['fecha_desde'])
-            ->whereDate($campoFecha, '<=', $filtros['fecha_hasta'])
+            ->whereDate($campoFecha, '<=', $filtros['fecha_hasta']);
+
+        if ($puntoventaId > 0) {
+            $query->where('puntoventa_id', $puntoventaId);
+        }
+        if ($tipotransaccionId > 0) {
+            $query->where('tipotransaccion_id', $tipotransaccionId);
+        }
+
+        return $query
             ->with([
                 'venta_impuestos',
                 'tipotransacciones',
@@ -497,6 +512,11 @@ final class IvaVentasReporteService
             ->where('abreviatura', MaquinaFslTipoSupport::ABREVIATURA)
             ->whereNull('deleted_at')
             ->value('id') ?? 0);
+        $tipoFiltro = (int) ($filtros['tipotransaccion_id'] ?? 0);
+        $pvFiltro = (int) ($filtros['puntoventa_id'] ?? 0);
+        if ($tipoFiltro > 0 && $tipoFiltro !== $tipoFslId) {
+            return 0;
+        }
 
         $conteo = 0;
         foreach ($this->fslAnitaBridgeReader->listarPeriodo($empresaId, $desde, $hasta, $porFechaJornada) as $filaAnita) {
@@ -519,6 +539,9 @@ final class IvaVentasReporteService
             ];
             $pv['tipotransaccion_id'] = $tipoFslId;
             $pv['sucursal'] = $sucursal;
+            if ($pvFiltro > 0 && (int) ($pv['puntoventa_id'] ?? 0) !== $pvFiltro) {
+                continue;
+            }
 
             $fila = IvaVentasFslAnitaArmadoSupport::filaReporte($filaAnita, $pv, $filtros);
             if ($fila === null) {
@@ -676,9 +699,14 @@ final class IvaVentasReporteService
      * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
      */
-    private function ordenarFilas(array $filas, array $filtros, bool $clasificarHost, bool $cortarJurisdiccion = false): array
-    {
-        usort($filas, function (array $a, array $b) use ($clasificarHost, $cortarJurisdiccion): int {
+    private function ordenarFilas(
+        array $filas,
+        array $filtros,
+        bool $clasificarHost,
+        bool $cortarJurisdiccion = false,
+        bool $cortarSucursalTipo = false,
+    ): array {
+        usort($filas, function (array $a, array $b) use ($clasificarHost, $cortarJurisdiccion, $cortarSucursalTipo): int {
             if ($cortarJurisdiccion) {
                 $ja = (string) ($a['provincia_orden'] ?? '');
                 $jb = (string) ($b['provincia_orden'] ?? '');
@@ -687,14 +715,28 @@ final class IvaVentasReporteService
                 }
             }
 
+            if ($cortarSucursalTipo) {
+                $pa = (string) ($a['puntoventa_codigo'] ?? '');
+                $pb = (string) ($b['puntoventa_codigo'] ?? '');
+                if ($pa !== $pb) {
+                    return strcmp($pa, $pb);
+                }
+
+                $ta = (string) ($a['tipo'] ?? '');
+                $tb = (string) ($b['tipo'] ?? '');
+                if ($ta !== $tb) {
+                    return strcmp($ta, $tb);
+                }
+            }
+
             $secOrder = ['operacion' => 0, 'administracion' => 1];
             $sa = $secOrder[$a['seccion'] ?? ''] ?? 9;
             $sb = $secOrder[$b['seccion'] ?? ''] ?? 9;
-            if ($sa !== $sb) {
+            if (! $cortarSucursalTipo && $sa !== $sb) {
                 return $sa <=> $sb;
             }
 
-            if ($clasificarHost) {
+            if ($clasificarHost && ! $cortarSucursalTipo) {
                 $ha = (string) ($a['host'] ?? '');
                 $hb = (string) ($b['host'] ?? '');
                 if ($ha !== $hb) {
@@ -754,6 +796,7 @@ final class IvaVentasReporteService
         array $filtros,
         bool $clasificarHost,
         bool $cortarJurisdiccion = false,
+        bool $cortarSucursalTipo = false,
     ): array {
         $grupos = [];
         $otras = [];
@@ -831,6 +874,62 @@ final class IvaVentasReporteService
             ]);
         }
 
-        return $this->ordenarFilas(array_merge($otras, $resumenes), $filtros, $clasificarHost, $cortarJurisdiccion);
+        return $this->ordenarFilas(
+            array_merge($otras, $resumenes),
+            $filtros,
+            $clasificarHost,
+            $cortarJurisdiccion,
+            $cortarSucursalTipo,
+        );
+    }
+
+    /**
+     * Una fila por punto de venta y tipo de comprobante, sobre el detalle completo del filtro.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function armarTotalesPorSucursalTipo(array $filas): array
+    {
+        $totales = [];
+        foreach ($filas as $fila) {
+            $pvId = (int) ($fila['puntoventa_id'] ?? 0);
+            $tipoId = (int) ($fila['tipotransaccion_id'] ?? 0);
+            $tipo = (string) ($fila['tipo'] ?? '');
+            $clave = $pvId.'|'.$tipoId.'|'.$tipo;
+            if (! isset($totales[$clave])) {
+                $totales[$clave] = [
+                    'puntoventa_id' => $pvId,
+                    'puntoventa_codigo' => (string) ($fila['puntoventa_codigo'] ?? ''),
+                    'puntoventa_nombre' => (string) ($fila['puntoventa_nombre'] ?? ''),
+                    'sucursal' => (int) ($fila['sucursal'] ?? 0),
+                    'tipotransaccion_id' => $tipoId,
+                    'tipo' => $tipo,
+                    'cantidad' => 0,
+                    'columnas' => IvaVentasColumnasSupport::montosVacios(),
+                ];
+            }
+            $totales[$clave]['cantidad']++;
+            IvaVentasColumnasSupport::acumular($totales[$clave]['columnas'], $fila['columnas'] ?? []);
+        }
+
+        $lista = array_values($totales);
+        usort($lista, static function (array $a, array $b): int {
+            $cmp = strcmp((string) ($a['puntoventa_codigo'] ?? ''), (string) ($b['puntoventa_codigo'] ?? ''));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+
+            return strcmp((string) ($a['tipo'] ?? ''), (string) ($b['tipo'] ?? ''));
+        });
+
+        foreach ($lista as &$tot) {
+            foreach ($tot['columnas'] as $k => $v) {
+                $tot['columnas'][$k] = round((float) $v, 2);
+            }
+        }
+        unset($tot);
+
+        return $lista;
     }
 }

@@ -18,7 +18,9 @@
     $columnasFijas = empty($clasificar_por_host) ? 7 : 8;
     $colspanTotal = $columnasFijas + count($resultado['columnas'] ?? []);
     $cortarJurisdiccion = ! empty($cortar_por_jurisdiccion);
+    $cortarSucursalTipo = ! empty($cortar_por_sucursal_tipo);
     $jurisdiccionAnterior = null;
+    $sucursalTipoAnterior = null;
 @endphp
 <table>
     @if ($filaLogo)
@@ -53,6 +55,7 @@
         @php
             $jurClave = (string) ((int) ($fila['provincia_id'] ?? 0));
             $jurLabel = (string) ($fila['provincia_label'] ?? 'Sin jurisdicción');
+            $sucursalTipoClave = ((int) ($fila['puntoventa_id'] ?? 0)).'|'.((int) ($fila['tipotransaccion_id'] ?? 0)).'|'.(string) ($fila['tipo'] ?? '');
         @endphp
         @if ($cortarJurisdiccion && $jurClave !== $jurisdiccionAnterior)
             <tr>
@@ -60,7 +63,19 @@
                     Jurisdicción: {{ $jurLabel }}
                 </td>
             </tr>
-            @php $jurisdiccionAnterior = $jurClave; @endphp
+            @php
+                $jurisdiccionAnterior = $jurClave;
+                $sucursalTipoAnterior = null;
+            @endphp
+        @endif
+        @if ($cortarSucursalTipo && $sucursalTipoClave !== $sucursalTipoAnterior)
+            <tr>
+                <td colspan="{{ $colspanTotal }}" style="font-weight: bold; background-color: #d5f5e3;">
+                    Sucursal {{ $fila['puntoventa_codigo'] ?? '' }} {{ $fila['puntoventa_nombre'] ?? '' }}
+                    · {{ $fila['tipo'] ?? '' }}
+                </td>
+            </tr>
+            @php $sucursalTipoAnterior = $sucursalTipoClave; @endphp
         @endif
         <tr>
             <td>{{ $fila['cliente_codigo'] ?? '' }}</td>

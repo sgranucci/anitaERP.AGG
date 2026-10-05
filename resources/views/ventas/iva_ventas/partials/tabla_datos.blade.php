@@ -7,6 +7,7 @@
     $paraPdf = $para_pdf ?? false;
     $clasificarHost = $clasificar_por_host ?? false;
     $cortarJurisdiccion = $cortar_por_jurisdiccion ?? false;
+    $cortarSucursalTipo = $cortar_por_sucursal_tipo ?? false;
     $mostrarSecciones = $mostrar_secciones ?? true;
     $queryConsulta = ['origen' => 'modal_consulta', 'vista' => 'consulta'];
     $columnas = $resultado['columnas'] ?? \App\Support\Ventas\IvaVentas\IvaVentasColumnasSupport::COLUMNAS;
@@ -14,6 +15,7 @@
     $seccionAnterior = null;
     $hostAnterior = null;
     $jurisdiccionAnterior = null;
+    $sucursalTipoAnterior = null;
     $claseFila = static function (array $fila): string {
         $clases = [];
         if ($fila['anulada'] ?? false) {
@@ -53,6 +55,7 @@
             $clienteId = (int) ($fila['cliente_id'] ?? 0);
             $pvId = (int) ($fila['puntoventa_id'] ?? 0);
             $tipoId = (int) ($fila['tipotransaccion_id'] ?? 0);
+            $sucursalTipoClave = $pvId.'|'.$tipoId.'|'.(string) ($fila['tipo'] ?? '');
         @endphp
         @if ($mostrarSecciones && $cortarJurisdiccion && $jurClave !== $jurisdiccionAnterior)
             <tr class="font-weight-bold" style="background-color: #fdebd0;">
@@ -62,15 +65,29 @@
                 $jurisdiccionAnterior = $jurClave;
                 $seccionAnterior = null;
                 $hostAnterior = null;
+                $sucursalTipoAnterior = null;
             @endphp
         @endif
-        @if ($mostrarSecciones && $seccion !== $seccionAnterior)
+        @if ($mostrarSecciones && $cortarSucursalTipo && $sucursalTipoClave !== $sucursalTipoAnterior)
+            <tr class="font-weight-bold" style="background-color: #d5f5e3;">
+                <td colspan="{{ $colSpan }}">
+                    Sucursal {{ $fila['puntoventa_codigo'] ?? '' }} {{ $fila['puntoventa_nombre'] ?? '' }}
+                    · {{ $fila['tipo'] ?? '' }}
+                </td>
+            </tr>
+            @php
+                $sucursalTipoAnterior = $sucursalTipoClave;
+                $seccionAnterior = $seccion;
+                $hostAnterior = $host;
+            @endphp
+        @endif
+        @if ($mostrarSecciones && ! $cortarSucursalTipo && $seccion !== $seccionAnterior)
             <tr class="font-weight-bold" style="background-color: #d6eaf8;">
                 <td colspan="{{ $colSpan }}">{{ $fila['seccion_label'] ?? $seccion }}</td>
             </tr>
             @php $seccionAnterior = $seccion; $hostAnterior = null; @endphp
         @endif
-        @if ($mostrarSecciones && $clasificarHost && $host !== $hostAnterior)
+        @if ($mostrarSecciones && ! $cortarSucursalTipo && $clasificarHost && $host !== $hostAnterior)
             <tr class="font-weight-bold" style="background-color: #e9ecef;">
                 <td colspan="{{ $colSpan }}">Host: {{ $host }}</td>
             </tr>

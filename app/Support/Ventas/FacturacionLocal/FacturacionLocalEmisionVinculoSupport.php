@@ -7,6 +7,7 @@ namespace App\Support\Ventas\FacturacionLocal;
 use App\Models\Ventas\FacturacionLocalEmision;
 use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\Venta;
+use App\Support\Ventas\TipotransaccionOperacionStockSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -60,6 +61,35 @@ final class FacturacionLocalEmisionVinculoSupport
         }
 
         return $ids;
+    }
+
+    /**
+     * Punto de venta de un local: la factura sale del depósito y la nota de crédito entra.
+     * El FAC de fábrica sigue en sin operación (el stock sale en el picking).
+     */
+    public static function operacionStockForzada(int $puntoventaId, object $tipotransaccion): ?string
+    {
+        if ($puntoventaId <= 0 || ! isset(self::mapaLocalPorPuntoventa()[$puntoventaId])) {
+            return null;
+        }
+
+        $esNc = method_exists($tipotransaccion, 'esNotaCredito')
+            ? $tipotransaccion->esNotaCredito()
+            : (($tipotransaccion->operacion ?? '') === 'C');
+
+        return $esNc
+            ? TipotransaccionOperacionStockSupport::ENTRADA
+            : TipotransaccionOperacionStockSupport::SALIDA;
+    }
+
+    public static function depositoIdPorPuntoventa(int $puntoventaId): int
+    {
+        $localId = self::mapaLocalPorPuntoventa()[$puntoventaId] ?? 0;
+        if ($localId <= 0) {
+            return 0;
+        }
+
+        return (int) (LocalVenta::query()->whereKey($localId)->value('deposito_id') ?: 0);
     }
 
     public static function vincularVenta(int $ventaId, string $origen): ?FacturacionLocalEmision

@@ -4,10 +4,7 @@
 @endsection
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
-<script>
-window.cdmBuscarVentaUrl = @json(route('api_buscar_venta_cambio_devolucion_marketplace'));
-</script>
-<script src="{{ asset('assets/pages/scripts/ventas/facturacion_local/cambio_devolucion/form.js') }}" type="text/javascript"></script>
+@include('ventas.facturacion_local.cambio_devolucion.partials.scripts_form', ['editable' => true])
 @endsection
 
 @section('contenido')

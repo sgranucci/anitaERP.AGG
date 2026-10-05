@@ -869,6 +869,7 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('ventas/facturacion-local/listar-cambios-devolucion/{formato}', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@listar')->name('lista_cambio_devolucion_marketplace');
     Route::get('ventas/facturacion-local/cambios-devolucion/crear', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@crear')->name('crear_cambio_devolucion_marketplace');
     Route::get('ventas/facturacion-local/cambios-devolucion/api/buscar-venta', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@apiBuscarVenta')->name('api_buscar_venta_cambio_devolucion_marketplace');
+    Route::get('ventas/facturacion-local/cambios-devolucion/api/variantes/{articuloId}', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@apiVariantesArticulo')->name('api_variantes_cambio_devolucion_marketplace');
     Route::post('ventas/facturacion-local/cambios-devolucion', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@guardar')->name('guardar_cambio_devolucion_marketplace');
     Route::get('ventas/facturacion-local/cambios-devolucion/{id}/editar', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@editar')->name('editar_cambio_devolucion_marketplace')->middleware('modo.consulta');
     Route::put('ventas/facturacion-local/cambios-devolucion/{id}', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@actualizar')->name('actualizar_cambio_devolucion_marketplace');
@@ -2688,6 +2689,7 @@ Route::get('ventas/impresion-sesion/cot/{id}', 'Ventas\ComprobanteImpresionSesio
 Route::post('ventas/impresion-sesion/ejecutar', 'Ventas\ComprobanteImpresionSesionController@ejecutar')->name('ejecutar_impresion_sesion');
 Route::get('ventas/impresion-sesion/descargar', 'Ventas\ComprobanteImpresionSesionController@descargar')->name('descargar_impresion_sesion');
 Route::get('ventas/factura/generanotadecredito/{id}', 'Ventas\FacturacionController@generaNotaDeCredito')->name('generar_notadecredito');
+Route::get('ventas/factura/generanotadebito/{id}', 'Ventas\FacturacionController@generaNotaDeDebito')->name('generar_notadebito');
 Route::post('ventas/factura/consulta-referencia', 'Ventas\FacturacionController@consultaComprobanteReferencia')->name('consulta_factura_referencia');
 Route::get('ventas/factura/resolver-referencia', 'Ventas\FacturacionController@resolverComprobanteReferencia')->name('resolver_factura_referencia');
 Route::post('ventas/factura/consulta-facturas-por-articulo', 'Ventas\FacturacionController@consultaFacturasPorArticulo')->name('consulta_facturas_por_articulo');

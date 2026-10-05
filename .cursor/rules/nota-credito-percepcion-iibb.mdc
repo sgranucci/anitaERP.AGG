@@ -1,6 +1,6 @@
 ---
 description: NC mostrador admin — percepciones IIBB se prorratean desde la factura origen
-globs: app/Services/Configuracion/ImpuestoService.php,app/Services/Configuracion/IIBBService.php,app/Services/Ventas/FacturacionService.php,app/Support/Ventas/NotaCreditoPercepcionIibbSupport.php,app/Services/Caja/CobranzaDescuentoNotaCreditoService.php,app/Support/Caja/CobranzaDescuentoConfigSupport.php,config/cobranza.php
+globs: app/Services/Configuracion/ImpuestoService.php,app/Services/Configuracion/IIBBService.php,app/Services/Ventas/FacturacionService.php,app/Support/Ventas/NotaCreditoPercepcionIibbSupport.php,app/Support/Ventas/NotaDebitoReversionNotaCreditoSupport.php,app/Services/Caja/CobranzaDescuentoNotaCreditoService.php,app/Support/Caja/CobranzaDescuentoConfigSupport.php,config/cobranza.php
 alwaysApply: false
 ---
 
@@ -19,7 +19,8 @@ NC se detecta por `tipotransaccion.operacion = C` (NCG/NCE en AGG pueden tener `
 | Mostrador admin (`ventas/factura`) | **Sí** (AGG incluido) |
 | NCP cobranza (`COBRANZA_NC_PERCEPCION_IIBB`) | Configurable. **El Bierzo = false** (sin IIBB) |
 | POS gastronomía / estacionamiento / canje | **No** (`esEmisionPos`) |
-| Factura / ND | **No** |
+| Factura / ND común | **No** |
+| ND que revierte una NC de mostrador | **Copia** las percepciones de la NC (vacío si la NC no percibió). Punto único: `NotaDebitoReversionNotaCreditoSupport`. No corre en POS |
 
 ## Qué manda
 

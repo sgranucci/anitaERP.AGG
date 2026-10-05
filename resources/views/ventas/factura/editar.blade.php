@@ -107,7 +107,9 @@
         @include('includes.mensaje')
         <div class="card card-primary">
             <div class="card-header">
-                @if (isset($flGeneraNotaDeCredito))
+                @if (! empty($flGeneraNotaDeDebito))
+                    <h3 class="card-title">Generar nota de d&eacute;bito</h3>
+                @elseif (isset($flGeneraNotaDeCredito))
                     <h3 class="card-title">Generar nota de cr&eacute;dito</h3>
                 @else
                     <h3 class="card-title">Editar comprobante de venta</h3>
@@ -140,7 +142,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('grabar_comprobante')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="{{ isset($flGeneraNotaDeCredito) ? 'nc' : 'factura' }}" data-sin-bloqueo-grabacion="1" data-factura-redirect="{{ route('factura') }}" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
+            <form action="{{route('grabar_comprobante')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="{{ ! empty($flGeneraNotaDeDebito) ? 'nd' : (isset($flGeneraNotaDeCredito) ? 'nc' : 'factura') }}" data-sin-bloqueo-grabacion="1" data-factura-redirect="{{ route('factura') }}" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
                 @csrf @method("put")
                 @include('includes.tabs-activas-estilos')
                 <div class="tabs-activas px-3 pt-2">
@@ -165,7 +167,12 @@
                     @include('includes.contable.formasientoexterno')
                 </div>
                 <div class="card-footer">
-                    @if (isset($flGeneraNotaDeCredito))
+                    @if (! empty($flGeneraNotaDeDebito))
+                        <button type="button" onclick="sub()" class="btn btn-success factura-carga-bloqueable" data-padron-accion-factura="1">
+                            <i class="fa fa-plus"></i> Generar nota de d&eacute;bito
+                        </button>
+                        <span class="text-muted small ml-2">Copia total de la nota de cr&eacute;dito. Si no tiene percepci&oacute;n, la nota de d&eacute;bito sale igual.</span>
+                    @elseif (isset($flGeneraNotaDeCredito))
                         <button type="button" onclick="sub()" class="btn btn-success factura-carga-bloqueable" data-padron-accion-factura="1">
                             <i class="fa fa-undo"></i> Generar nota de cr&eacute;dito
                         </button>

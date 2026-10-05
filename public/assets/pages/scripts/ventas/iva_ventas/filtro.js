@@ -14,6 +14,28 @@
         }
     });
 
+    var empresa = document.getElementById('empresa_id');
+    if (empresa && empresa.tagName === 'SELECT') {
+        empresa.addEventListener('change', function () {
+            var campo = document.getElementById('tm_puntoventa_iva_ventas');
+            if (!campo) {
+                return;
+            }
+            var hidden = campo.querySelector('.puntoventa_id');
+            var codigo = campo.querySelector('.codigopuntoventa');
+            var nombre = campo.querySelector('.descripcionpuntoventa');
+            if (hidden) {
+                hidden.value = '';
+            }
+            if (codigo) {
+                codigo.value = '';
+            }
+            if (nombre) {
+                nombre.value = '';
+            }
+        });
+    }
+
     // Los toggles marcados como .js-auto-consultar reenvían la consulta al cambiar,
     // pero solo si ya hay un resultado en pantalla (para que funcionen como botón).
     var yaConsultado = document.getElementById('tabla-paginada') !== null;

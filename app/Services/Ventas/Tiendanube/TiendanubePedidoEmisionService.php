@@ -18,6 +18,7 @@ use App\Support\Ventas\Tiendanube\TiendanubePedidoListoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoMaestrosSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoReceptorSupport;
+use App\Support\Ventas\TipotransaccionOperacionStockSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -434,6 +435,8 @@ final class TiendanubePedidoEmisionService
             'arca_receptor' => $fiscal['arca_receptor'],
             'opciones_emision' => [
                 'omitir_movimiento_stock' => false,
+                // El FAC de Ferli está en «sin operación». Tiendanube igual descuenta el depósito.
+                'forzar_operacion_stock' => TipotransaccionOperacionStockSupport::SALIDA,
                 'permitir_caea' => false,
                 'origen_tiendanube' => true,
                 'omitir_solicitud_arca_cae' => false,

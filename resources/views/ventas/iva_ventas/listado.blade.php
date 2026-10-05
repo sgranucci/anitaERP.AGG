@@ -15,6 +15,10 @@
     if (! empty($filtros['cortar_por_jurisdiccion'])) {
         $subtitulo .= ' · Corte por jurisdicción';
     }
+    $corteTexto = \App\Support\Ventas\IvaVentasListadoFiltros::formatearCorteTexto($filtros ?? []);
+    if ($corteTexto !== '') {
+        $subtitulo .= ' · '.$corteTexto;
+    }
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -159,6 +163,37 @@
         </table>
     @endif
 
+    @if (! empty($resultado['totales_por_sucursal_tipo']))
+        <h3 class="seccion">Por sucursal y tipo de comprobante</h3>
+        @php $columnasCorte = $resultado['columnas'] ?? []; @endphp
+        <table class="data" style="margin-bottom: 10px;">
+            <thead>
+                <tr>
+                    <th>Sucursal</th>
+                    <th>Nombre</th>
+                    <th>Tipo</th>
+                    <th class="text-right">Comp.</th>
+                    @foreach ($columnasCorte as $col)
+                        <th class="text-right">{{ $col['label'] }}</th>
+                    @endforeach
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($resultado['totales_por_sucursal_tipo'] as $tot)
+                    <tr>
+                        <td>{{ $tot['puntoventa_codigo'] ?? '' }}</td>
+                        <td>{{ $tot['puntoventa_nombre'] ?? '' }}</td>
+                        <td>{{ $tot['tipo'] ?? '' }}</td>
+                        <td class="text-right">{{ (int) ($tot['cantidad'] ?? 0) }}</td>
+                        @foreach ($columnasCorte as $col)
+                            <td class="text-right">{{ number_format((float) ($tot['columnas'][$col['key']] ?? 0), 2, ',', '.') }}</td>
+                        @endforeach
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
+
     @if (! empty($resultado['totales_por_puntoventa']))
         <h3 class="seccion">Totales por punto de venta</h3>
         @php $columnas = $resultado['columnas'] ?? []; @endphp
@@ -196,6 +231,7 @@
             'filas' => $filas,
             'clasificar_por_host' => ! empty($filtros['clasificar_por_host']),
             'cortar_por_jurisdiccion' => ! empty($filtros['cortar_por_jurisdiccion']),
+            'cortar_por_sucursal_tipo' => ! empty($filtros['cortar_por_sucursal_tipo']),
             'para_pdf' => true,
             'puede_ver_venta' => false,
             'mostrar_secciones' => true,

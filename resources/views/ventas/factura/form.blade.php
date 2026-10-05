@@ -7,6 +7,9 @@
 			$tipotransaccionSeleccionada = $primeroNcTipo->id;
 		}
 	}
+	if (! empty($flGeneraNotaDeDebito) && ! old('tipotransaccion_id') && ! empty($tipoNd)) {
+		$tipotransaccionSeleccionada = $tipoNd->id;
+	}
 	$unidadmedida_query = $unidadmedida_query ?? [];
 	$impuesto_query = $impuesto_query ?? collect();
 	$descuentoventa_query = $descuentoventa_query ?? collect();
@@ -261,6 +264,7 @@
 			'inputName' => 'tipotransaccion_id',
 			'inputId' => 'tipotransaccion_id',
 			'required' => true,
+			'solo_lectura' => ! empty($flGeneraNotaDeDebito),
 			'col_label' => 'col-lg-3 control-label text-right pr-2',
 			'col_input' => 'col-lg-8',
 			'aviso_id' => 'aviso-tipo-fce',
@@ -302,7 +306,10 @@
 			$fceComprobanteReferenciado = old('fce_comprobante_referenciado', $fceComprobanteReferenciado ?? '');
 			$fceAnulacion = old('fce_anulacion', $fceAnulacion ?? '');
 		@endphp
-		<div id="fce-nc-mostrador-wrap" class="{{ ($ncOrigenEsFce || ! empty($modoNc) || ! empty($flGeneraNotaDeCredito)) ? '' : 'd-none' }}"
+		@if (! empty($flGeneraNotaDeDebito))
+			<input type="hidden" name="reversion_nota_credito" value="1">
+		@endif
+		<div id="fce-nc-mostrador-wrap" class="{{ ($ncOrigenEsFce || ! empty($modoNc) || ! empty($flGeneraNotaDeCredito) || ! empty($flGeneraNotaDeDebito)) ? '' : 'd-none' }}"
 			data-nc-origen-fce="{{ $ncOrigenEsFce ? '1' : '0' }}"
 			data-limite-fce="{{ \App\Support\Configuracion\ParametroSistemaSupport::limiteFce() }}">
 			<div class="form-group row tm-fce-referencia-campo">
@@ -317,11 +324,14 @@
 							value="{{ $fceComprobanteReferenciado }}"
 							placeholder="FCE A-00008-00001234"
 							title="NCE: FCE obligatoria. NC: opcional (vac&iacute;o = per&iacute;odo ARCA)."
-							autocomplete="off">
+							autocomplete="off"
+							@if (! empty($flGeneraNotaDeDebito)) readonly @endif>
 					</div>
 				</div>
 			</div>
-			@include('ventas.factura.partials.panel_devolucion_nc')
+			@if (empty($flGeneraNotaDeDebito))
+				@include('ventas.factura.partials.panel_devolucion_nc')
+			@endif
 			<div class="form-group row" id="fce-anulacion-wrap">
 				<label for="fce_anulacion" class="col-lg-3 control-label text-right pr-2" id="fce_anulacion_label" title="Obligatorio si asocia FCE o emite NCE (opcional ARCA 22).">Anulaci&oacute;n FCE</label>
 				<select name="fce_anulacion" id="fce_anulacion" class="col-lg-8 form-control" data-fouc>
@@ -464,7 +474,7 @@
 			</div>
 			<label for="descuentopie" class="col-lg-3 control-label text-right pr-2">Dto. pie</label>
 			<div class="col-lg-3">
-				<input type="number" id="descuentopie" name="descuentopie" class="form-control" value="{{$data->descuento ?? ''}}">
+				<input type="number" id="descuentopie" name="descuentopie" class="form-control" value="{{$data->descuento ?? ''}}" @if (! empty($flGeneraNotaDeDebito)) readonly @endif>
 				<input type="hidden" id="descuentoimportepie" name="descuentoimportepie" value="">
 			</div>
 		</div>
@@ -636,6 +646,11 @@
 
 								return (float) $valor;
 							};
+							if (! empty($flGeneraNotaDeDebito)) {
+								$kiloItem = abs((float) $kiloItem);
+								$cajaItem = abs((float) $cajaItem);
+								$piezaItem = abs((float) $piezaItem);
+							}
 							$idxItem = (int) $loop->index;
 							$conceptoItem = $item->conceptoVenta;
 							$esLineaConcepto = empty($item->articulo_id) && ! empty($item->concepto_venta_id);
@@ -796,13 +811,13 @@
 								<input type="hidden" name="unidadmedidas[]" class="form-control unidadmedida" value="{{ $unidadMedidaAbrevItem }}" />
 							</td>
 							<td class="factura-col-caja">
-								<input type="text" name="cajas[]" class="form-control caja" value="{{ number_format((float) $cajaItem, 2, '.', '') }}" @if($esLineaConcepto) readonly @endif />
+								<input type="text" name="cajas[]" class="form-control caja" value="{{ number_format((float) $cajaItem, 2, '.', '') }}" @if($esLineaConcepto || ! empty($flGeneraNotaDeDebito)) readonly @endif />
 							</td>
 							<td class="factura-col-pieza">
-								<input type="text" name="piezas[]" class="form-control pieza" value="{{ number_format((float) $piezaItem, 2, '.', '') }}" @if($esLineaConcepto) readonly @endif />
+								<input type="text" name="piezas[]" class="form-control pieza" value="{{ number_format((float) $piezaItem, 2, '.', '') }}" @if($esLineaConcepto || ! empty($flGeneraNotaDeDebito)) readonly @endif />
 							</td>
 							<td class="factura-col-kilo">
-								<input type="text" name="kilos[]" class="form-control kilo" value="{{ number_format((float) $kiloItem, 2, '.', '') }}" @if($esLineaConcepto) title="Cantidad" placeholder="Cant." @endif />
+								<input type="text" name="kilos[]" class="form-control kilo" value="{{ number_format((float) $kiloItem, 2, '.', '') }}" @if($esLineaConcepto) title="Cantidad" placeholder="Cant." @endif @if(! empty($flGeneraNotaDeDebito)) readonly @endif />
 							</td>
 							<td class="factura-col-descuento">
 								<select name="descuentoventa_ids[]" data-placeholder="Descuento" class="descuentoventa_id form-control" data-fouc>
@@ -819,10 +834,16 @@
 							</td>
 							@else
 							<td class="factura-col-cantidad">
-								<input type="text" name="cantidades[]" class="form-control cantidad" value="{{ number_format($numeroOldIndice('cantidades', $idxItem, optional($item)->cantidad ?? 0), 2) }}" />
+								@php
+									$cantidadLinea = $numeroOldIndice('cantidades', $idxItem, optional($item)->cantidad ?? 0);
+									if (! empty($flGeneraNotaDeDebito)) {
+										$cantidadLinea = abs($cantidadLinea);
+									}
+								@endphp
+								<input type="text" name="cantidades[]" class="form-control cantidad" value="{{ number_format($cantidadLinea, 2) }}" @if(! empty($flGeneraNotaDeDebito)) readonly @endif />
                 			</td>		
 							<td class="factura-col-descuento">
-								<input type="text" name="descuentos[]" class="form-control descuento" value="{{ number_format($numeroOldIndice('descuentos', $idxItem, optional($item)->descuento ?? 0), 2) }}" />
+								<input type="text" name="descuentos[]" class="form-control descuento" value="{{ number_format($numeroOldIndice('descuentos', $idxItem, optional($item)->descuento ?? 0), 2) }}" @if(! empty($flGeneraNotaDeDebito)) readonly @endif />
                 			</td>
 							@endif								
                 			<td class="factura-col-precio">
@@ -832,9 +853,11 @@
 								<button type="button" title="Leyenda / comentario de la l&iacute;nea" class="btn-accion-tabla factura-abrir-leyenda-linea tooltipsC{{ $leyendaLineaItem !== '' ? ' tiene-leyenda' : '' }}">
 									<i class="fa fa-align-left"></i>
 								</button>
+								@if (empty($flGeneraNotaDeDebito))
 								<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
                             		<i class="fa fa-times-circle text-danger"></i>
 								</button>
+								@endif
 								@if ($layoutItemsPedido && can('entregar-articulo-sin-cargo-pedido-venta', false) && empty($flGeneraNotaDeCredito) && ! $esLineaConcepto)
 									<button type="button" title="Art&iacute;culo sin cargo" style="padding:0;" class="btn-accion-tabla botonsincargo tooltipsC">
 										<i class="fa fa-gift {{ $sinCargoItem === 'S' ? 'text-success' : 'text-primary' }}"></i>
@@ -860,9 +883,11 @@
 			@include('ventas.factura.template')
 		@endif
 	    <div class="mb-3">
+			@if (empty($flGeneraNotaDeDebito))
         	<button type="button" id="agrega_renglon" class="btn btn-outline-primary btn-sm factura-carga-bloqueable">
 				<i class="fa fa-plus"></i> Agregar rengl&oacute;n
 			</button>
+			@endif
 			<small class="form-text text-muted d-inline-block ml-2">
 				Mercader&iacute;a: lupa o F1 en el c&oacute;digo. Comentario de la l&iacute;nea: &iacute;cono de p&aacute;rrafo (como en OC). Sin art&iacute;culo: en cada rengl&oacute;n con precio eleg&iacute; la al&iacute;cuota (Exento, 10,5% o 21%). El &iacute;cono de documento, o F1 en el detalle, carga un concepto.
 				@if ($layoutItemsPedido && can('entregar-articulo-sin-cargo-pedido-venta', false) && empty($flGeneraNotaDeCredito))

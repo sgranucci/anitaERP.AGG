@@ -87,7 +87,11 @@ class ArticuloConsultaDesdeModal
             || can('facturar', false)
             || can('generar-nota-de-credito', false)
             || can('editar-configuracion-tiendanube', false)
-            || can('actualizar-configuracion-tiendanube', false);
+            || can('actualizar-configuracion-tiendanube', false)
+            || can('crear-cambio-devolucion-marketplace-facturacion-local', false)
+            || can('actualizar-cambio-devolucion-marketplace-facturacion-local', false)
+            || can('ver-cambio-devolucion-marketplace-facturacion-local', false)
+            || can('listar-cambio-devolucion-marketplace-facturacion-local', false);
     }
 
     public static function urlEditar(int $id): string

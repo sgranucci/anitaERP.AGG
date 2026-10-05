@@ -5,9 +5,11 @@
 
 @section('scripts')
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<script src="{{ asset('assets/pages/scripts/ventas/iva_ventas/filtro.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/iva_ventas/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/iva_ventas/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/provincia/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/puntoventa/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/puntoventa/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/tipotransaccion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tipotransaccion/consulta.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -114,6 +116,35 @@
                         </div>
                     </div>
 
+                    @include('ventas.partials.campo_consulta_puntoventa', [
+                        'prefix' => 'iva_ventas',
+                        'layout' => 'form_row',
+                        'label' => 'Sucursal',
+                        'inputName' => 'puntoventa_id',
+                        'inputId' => 'puntoventa_id',
+                        'puntoventaId' => (int) ($filtros['puntoventa_id'] ?? 0) ?: '',
+                        'codigo' => $puntoventa->codigo ?? '',
+                        'nombre' => $puntoventa->nombre ?? '',
+                        'required' => false,
+                        'col_label' => $colLabel,
+                        'col_input' => $colInput,
+                    ])
+
+                    @include('ventas.partials.campo_consulta_tipotransaccion', [
+                        'prefix' => 'iva_ventas',
+                        'layout' => 'form_row',
+                        'label' => 'Tipo de comprobante',
+                        'inputName' => 'tipotransaccion_id',
+                        'inputId' => 'tipotransaccion_id',
+                        'tipoId' => (int) ($filtros['tipotransaccion_id'] ?? 0),
+                        'abreviatura' => $tipotransaccion->abreviatura ?? '',
+                        'nombre' => $tipotransaccion->nombre ?? '',
+                        'required' => false,
+                        'col_label' => $colLabel,
+                        'col_input' => $colInput,
+                        'ayuda' => 'Vacío = todos los tipos que van al IVA ventas.',
+                    ])
+
                     @include('configuracion.partials.campo_consulta_provincia', [
                         'inputName' => 'provincia_id',
                         'inputId' => 'provincia_id',
@@ -161,6 +192,11 @@
                             @else
                                 <input type="hidden" name="clasificar_por_host" value="0">
                             @endif
+                            <div class="form-check mb-1">
+                                <input class="form-check-input js-auto-consultar" type="checkbox" name="cortar_por_sucursal_tipo" id="cortar_por_sucursal_tipo" value="1"
+                                    @checked(! empty($filtros['cortar_por_sucursal_tipo']))>
+                                <label class="form-check-label" for="cortar_por_sucursal_tipo">Separar el listado por sucursal y tipo de comprobante</label>
+                            </div>
                             <div class="form-check">
                                 <input class="form-check-input js-auto-consultar" type="checkbox" name="agrupar_b_por_dia" id="agrupar_b_por_dia" value="1"
                                     @checked(! empty($filtros['agrupar_b_por_dia']))>
@@ -223,6 +259,9 @@
                             @endif
                             @if (! empty($filtros['clasificar_por_host']))
                                 · <strong>Host:</strong> clasificado
+                            @endif
+                            @if (($corte_texto ?? '') !== '')
+                                · {{ $corte_texto }}
                             @endif
                         </p>
                     </div>
@@ -314,6 +353,12 @@
                         #tabla-paginada thead th { font-weight: 600; border-color: #7fb3d5; }
                         #tabla-paginada tbody tr.iva-ventas-resumen-b { background-color: #fef9e7; font-weight: 600; }
                     </style>
+                    @include('ventas.iva_ventas.partials.totales_sucursal_tipo', [
+                        'resultado' => $resultado,
+                        'puede_ver_puntoventa' => $puede_ver_puntoventa ?? false,
+                        'puede_ver_tipotransaccion' => $puede_ver_tipotransaccion ?? false,
+                    ])
+
                     <div class="table-responsive border-top">
                         <table id="tabla-paginada" class="table table-striped table-bordered table-hover table-sm mb-0" style="font-size: 0.78rem;">
                             @include('ventas.iva_ventas.partials.tabla_datos', [
@@ -321,6 +366,7 @@
                                 'filas' => $filasVista ?? [],
                                 'clasificar_por_host' => ! empty($filtros['clasificar_por_host']),
                                 'cortar_por_jurisdiccion' => ! empty($filtros['cortar_por_jurisdiccion']),
+                                'cortar_por_sucursal_tipo' => ! empty($filtros['cortar_por_sucursal_tipo']),
                                 'mostrar_secciones' => true,
                                 'puede_ver_venta' => $puede_ver_venta ?? false,
                                 'puede_ver_cliente' => $puede_ver_cliente ?? false,
@@ -394,6 +440,8 @@
 </div>
 
 @include('includes.configuracion.modalconsultaprovincia')
+@include('includes.ventas.modalconsultapuntoventa')
+@include('includes.ventas.modalconsultatipotransaccion')
 @include('includes.proceso_overlay_aviso', [
     'overlayId' => 'iva-ventas-procesando-overlay',
     'tituloId' => 'iva-ventas-procesando-titulo',

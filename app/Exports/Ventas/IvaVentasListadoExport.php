@@ -100,6 +100,10 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
         if (! empty($this->filtros['cortar_por_jurisdiccion'])) {
             $subtitulo .= ' · Corte por jurisdicción';
         }
+        $corteTexto = IvaVentasListadoFiltros::formatearCorteTexto($this->filtros);
+        if ($corteTexto !== '') {
+            $subtitulo .= ' · '.$corteTexto;
+        }
 
         return view('exports.ventas.iva_ventasindex', [
             'resultado' => $resultado,
@@ -110,6 +114,7 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'clasificar_por_host' => $clasificarHost,
             'cortar_por_jurisdiccion' => ! empty($this->filtros['cortar_por_jurisdiccion']),
+            'cortar_por_sucursal_tipo' => ! empty($this->filtros['cortar_por_sucursal_tipo']),
             'para_pdf' => true,
             'esExcel' => true,
             'formatoNumero' => $this->formatoNumeroEfectivo(),

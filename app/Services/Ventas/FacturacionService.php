@@ -102,6 +102,7 @@ use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
 use App\Support\Ventas\FacturaAsientoDescuentoPieSupport;
 use App\Support\Ventas\FacturaBTotalesImpresionSupport;
 use App\Support\Ventas\FacturaPdfIdentificacionSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
 use App\Support\Ventas\ElBierzoFacturacionCaeaSaltoSupport;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Material;
@@ -157,6 +158,7 @@ use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
 use App\Support\Ventas\NotaCreditoCompletaUnicaSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
+use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
 use App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport;
 use App\Support\Ventas\FacturaLineaPrecioImpresionSupport;
 use App\Support\Ventas\VentaImporteDosDecimalesSupport;
@@ -2593,6 +2595,10 @@ class FacturacionService
 
 	public function calculaFacturaGeneral($data)
 	{
+		if ($this->esEmisionPos($data)) {
+			unset($data[NotaDebitoReversionNotaCreditoSupport::FLAG]);
+		}
+
 		$data = $this->normalizaItemsFacturaGeneralDesdePedido($data);
 		VentaNotaCreditoPrecioLiteralSupport::aplicarPreciosFacturaOrigen($data);
 		VentaNotaCreditoPrecioLiteralSupport::aplicarImpuestosFacturaOrigen($data);
@@ -3183,6 +3189,20 @@ class FacturacionService
 			$data,
 			! $this->esEmisionPos($data)
 		);
+		if (! $this->esEmisionPos($data) && NotaDebitoReversionNotaCreditoSupport::payloadEsReversion($data)) {
+			$errorReversion = NotaDebitoReversionNotaCreditoSupport::errorAlEmitir(
+				(int) ($data['venta_id'] ?? 0),
+				(int) ($data['tipotransaccion_id'] ?? 0),
+				$data
+			);
+			if ($errorReversion !== null) {
+				return ['error' => $errorReversion];
+			}
+			NotaDebitoReversionNotaCreditoSupport::anexarEnDatosCliente(
+				$datosCliente,
+				(int) ($data['venta_id'] ?? 0)
+			);
+		}
 		// POS gastro/estacionamiento/locales: dto pie queda en neto (no a-comprob sobre bruto).
 		if ($this->esEmisionPos($data)) {
 			$datosCliente[AnitaComprobDescuentoSupport::FLAG_OMITIR_CIRCUITO_POS] = true;
@@ -3216,6 +3236,10 @@ class FacturacionService
 			);
 		}
 		unset($data[ElBierzoFacturacionCaeaSaltoSupport::FLAG_INTERNO]);
+
+		if ($this->esEmisionPos($data)) {
+			unset($data[NotaDebitoReversionNotaCreditoSupport::FLAG]);
+		}
 
 		$data = $this->normalizaItemsFacturaGeneralDesdePedido($data);
 
@@ -3307,7 +3331,19 @@ class FacturacionService
 		// Solo facturación mostrador (no POS gastronomía/estacionamiento AGG).
 		// NCG/NCE en AGG pueden tener signo S; manda operacion=C.
 		// NCE/NDE: FCE asociada obligatoria. NC/ND FE: asociación optativa (vacío → período).
-		$esMostradorNcFce = $tipotransaccion->esNotaCredito() && ! $this->esEmisionPos($data);
+		$esReversionNd = NotaDebitoReversionNotaCreditoSupport::payloadEsReversion($data)
+			&& $tipotransaccion->esNotaDebito()
+			&& ! $this->esEmisionPos($data);
+		if ($esReversionNd && (int) $venta_id > 0) {
+			$factura = Self::leeFactura($venta_id);
+			if ($factura) {
+				$referenciaFactura = $factura->codigo;
+			}
+			$opRev = is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : [];
+			$opRev[NotaDebitoReversionNotaCreditoSupport::FLAG] = true;
+			$data['opciones_emision'] = $opRev;
+		}
+		$esMostradorNcFce = ($tipotransaccion->esNotaCredito() || $esReversionNd) && ! $this->esEmisionPos($data);
 		$forzarNcNdFce = false;
 		$fceAnulacionSn = null;
 		$comprobantesAsociadosMostrador = null;
@@ -3538,7 +3574,7 @@ class FacturacionService
 			if ($numero != -1)
 			{
 				// Arma asiento. NC: invertir el de la FAC origen (operacion=C; no solo signo R/S).
-				if ($tipotransaccion->esNotaCredito() && isset($factura))
+				if (($tipotransaccion->esNotaCredito() || $esReversionNd) && isset($factura))
 				{
 					$factura->loadMissing(['asientos.asiento_movimientos']);
 					$asientoFactura = $factura->asientos;
@@ -3724,6 +3760,9 @@ class FacturacionService
 		$this->prepararSesionFacturaOt($data);
 
 		// Recibe datos para facturar
+		if (! isset($data['pedido_combinacion_id']) || ! is_array($data['pedido_combinacion_id']) || $data['pedido_combinacion_id'] === []) {
+			return ['error' => 'Seleccione al menos una línea de pedido para facturar.'];
+		}
 		$pedidos_combinacion_id = $data['pedido_combinacion_id'];
 		$ordenestrabajo_id = $data['ordentrabajo_id'];
 
@@ -4717,6 +4756,7 @@ class FacturacionService
 									$dataCAE, $venta_id, $referenciaFactura, $actividad_arca_id, $opcionesEmision = null)
 	{
 		$depositoIdEmision = (int) (is_array($opcionesEmision) ? ($opcionesEmision['deposito_id'] ?? 0) : 0);
+		$puntoventaIdEmision = (int) ($puntoventa->id ?? 0);
 		$transporteIdEmision = (int) (is_array($opcionesEmision) ? ($opcionesEmision['transporte_id'] ?? 0) : 0);
 		if ($transporteIdEmision <= 0) {
 			$transporteIdEmision = (int) ($cliente->transporte_id ?? 0);
@@ -4732,7 +4772,22 @@ class FacturacionService
 				$forzarOperacionStock = $forzar;
 			}
 		}
-		$omitirMovimientoStock = (is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_movimiento_stock']))
+		$omitirStockExplicito = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_movimiento_stock']);
+		// Local (POS, Tiendanube, Facturante, Mercado Libre): el PV del local mueve stock
+		// aunque el tipo FAC esté en sin operación. Un omitir explícito sigue ganando.
+		if ($forzarOperacionStock === null && ! $omitirStockExplicito && is_object($tipotransaccion)) {
+			$forzarOperacionStock = FacturacionLocalEmisionVinculoSupport::operacionStockForzada(
+				$puntoventaIdEmision,
+				$tipotransaccion
+			);
+		}
+		if ($depositoIdEmision <= 0 && $forzarOperacionStock !== null && ! $omitirStockExplicito) {
+			$depositoLocal = FacturacionLocalEmisionVinculoSupport::depositoIdPorPuntoventa($puntoventaIdEmision);
+			if ($depositoLocal > 0) {
+				$depositoIdEmision = $depositoLocal;
+			}
+		}
+		$omitirMovimientoStock = $omitirStockExplicito
 			|| (
 				$forzarOperacionStock === null
 				&& ! \App\Support\Ventas\TipotransaccionOperacionStockSupport::afectaStock(
@@ -6820,10 +6875,15 @@ class FacturacionService
 		if ($desdeDivision) {
 			return $desdeDivision;
 		}
+		$reversionNd = is_array($opcionesEmision)
+			&& ! empty($opcionesEmision[NotaDebitoReversionNotaCreditoSupport::FLAG]);
 		if ($tipotransaccion
-			&& $tipotransaccion->esNotaCredito()
 			&& $ventaAplicadaId > 0
-			&& ! $this->esEmisionPos([], $opcionesEmision)) {
+			&& ! $this->esEmisionPos([], $opcionesEmision)
+			&& (
+				$tipotransaccion->esNotaCredito()
+				|| ($reversionNd && $tipotransaccion->esNotaDebito())
+			)) {
 			return $ventaAplicadaId;
 		}
 
@@ -9499,13 +9559,23 @@ class FacturacionService
 		$fpdi->Output($destino, 'F');
 	}
 
-	public function editaUnaFactura($id, $flGeneraNotaDeCredito = null, int $articuloNcFiltro = 0)
+	public function editaUnaFactura($id, $flGeneraNotaDeCredito = null, int $articuloNcFiltro = 0, bool $flGeneraNotaDeDebito = false)
 	{
 	   	$data = Self::leeFactura($id);
 
 		if (isset($flGeneraNotaDeCredito)) {
 			$data->fecha = Carbon::now();
 			\App\Support\Ventas\FacturacionLocal\FacturacionLocalNcPrecioSupport::normalizarEmisionesVistaParaNc($data);
+		}
+		$tipoNd = null;
+		if ($flGeneraNotaDeDebito) {
+			$data->fecha = Carbon::now();
+			$tipoNd = NotaDebitoReversionNotaCreditoSupport::tipoNotaDebitoPara($data);
+			$prefijoNd = 'Reversión total de '.trim((string) ($data->codigo ?? '')).'.';
+			$leyendaNc = trim((string) ($data->leyenda ?? ''));
+			if ($leyendaNc === '' || ! str_contains($leyendaNc, $prefijoNd)) {
+				$data->leyenda = $leyendaNc === '' ? $prefijoNd : $prefijoNd."\n".$leyendaNc;
+			}
 		}
 
 		$this->armarTablasVista($deposito_query, $cliente_query,
@@ -9520,8 +9590,11 @@ class FacturacionService
 		$tipotransacciondefault_id = $prefsFacturacion['tipotransaccion_id'];
         $puntoventadefault_id = $prefsFacturacion['puntoventa_id'];
         $puntoventaremitodefault_id = $prefsFacturacion['puntoventaremito_id'];
-		if (isset($flGeneraNotaDeCredito) && (int) ($data->puntoventa_id ?? 0) > 0) {
+		if ((isset($flGeneraNotaDeCredito) || $flGeneraNotaDeDebito) && (int) ($data->puntoventa_id ?? 0) > 0) {
 			$puntoventadefault_id = (int) $data->puntoventa_id;
+		}
+		if ($flGeneraNotaDeDebito && $tipoNd !== null) {
+			$tipotransacciondefault_id = (int) $tipoNd->id;
 		}
 
         $urlOrigen = request()->headers->get('referer');
@@ -9566,6 +9639,9 @@ class FacturacionService
 				$fceComprobanteReferenciado = trim((string) ($data->codigo ?? ''));
 			}
 		}
+		if ($flGeneraNotaDeDebito && $fceComprobanteReferenciado === '') {
+			$fceComprobanteReferenciado = trim((string) ($data->codigo ?? ''));
+		}
 
         return view('ventas.factura.editar', compact('data', 
 			'mventa_query', 'modulo_query', 
@@ -9577,7 +9653,8 @@ class FacturacionService
 			'actividad_arca_query', 'urlOrigen', 'consultaFacturasDia',
 			'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query', 'impuesto_query',
 			'ncOrigenEsFce', 'fceComprobanteReferenciado', 'fceAnulacion',
-			'ncPendientesPorEmision', 'articuloNcFiltro', 'articuloNcCodigo', 'articuloNcDescripcion')); 
+			'ncPendientesPorEmision', 'articuloNcFiltro', 'articuloNcCodigo', 'articuloNcDescripcion',
+			'flGeneraNotaDeDebito', 'tipoNd')); 
 	}
 
 	/*

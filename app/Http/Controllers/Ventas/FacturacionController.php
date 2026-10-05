@@ -38,6 +38,7 @@ use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
 use App\Support\Ventas\ComprobanteReferenciaConsultaSupport;
 use App\Support\Ventas\NotaCreditoCompletaUnicaSupport;
+use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
 use App\Support\Ventas\VentaFacturasPorArticuloClienteSupport;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
@@ -147,6 +148,8 @@ class FacturacionController extends Controller
             'camposFiltro' => FacturaListadoFiltros::camposParaVista(),
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'ncCompletaPorFactura' => NotaCreditoCompletaUnicaSupport::codigosCompletasPorFactura($idsPagina),
+            'ndPorNotaCredito' => NotaDebitoReversionNotaCreditoSupport::codigosNdPorNotaCredito($idsPagina),
+            'idsNcPos' => NotaDebitoReversionNotaCreditoSupport::idsEmisionPos($idsPagina),
         ];
 
         return view('ventas.factura.index', $datas);
@@ -290,10 +293,9 @@ class FacturacionController extends Controller
                 return $bloqueo;
             }
 
-            if (config('app.empresa') === 'Calzados Ferli')
-                $data = $this->facturacionService->generaFacturaPorItemOt($request->all());
-            else
-                $data = $this->facturacionService->generaComprobanteGeneral($request->all());
+            // Mostrador (FAC/ND/NC con o sin artículo). La facturación por OT/picking
+            // entra por facturarItemOt, que sí manda pedido_combinacion_id.
+            $data = $this->facturacionService->generaComprobanteGeneral($request->all());
 
 			if (is_array($data) && ! empty($data['error'])) {
 				return $this->responderComprobanteMostrador($request, false, $data['error']);
@@ -530,6 +532,21 @@ class FacturacionController extends Controller
         $articuloId = (int) request()->query('articulo_id', 0);
 
         return $this->facturacionService->editaUnaFactura($id, true, $articuloId);
+    }
+
+    public function generaNotaDeDebito($id)
+    {
+        can('generar-nota-de-credito');
+
+        $venta = Venta::query()
+            ->with(['tipotransacciones', 'gastronomiaEmision', 'estacionamientoEmision'])
+            ->find((int) $id);
+        $error = NotaDebitoReversionNotaCreditoSupport::errorAlAbrir($venta);
+        if ($error !== null) {
+            return redirect()->route('factura')->with('errores', [$error]);
+        }
+
+        return $this->facturacionService->editaUnaFactura((int) $id, null, 0, true);
     }
 
     public function calculaFacturaGeneral(Request $request)

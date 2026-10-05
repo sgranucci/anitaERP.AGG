@@ -1,9 +1,18 @@
 @php
     use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceEstadosSupport;
     use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceLiquidacionSupport;
+    use App\Support\Ventas\Tiendanube\TiendanubeTiendasSupport;
+    $codigoMaestro = static function ($modelo): string {
+        if ($modelo === null) {
+            return '';
+        }
+        $codigo = trim((string) ($modelo->codigo ?? ''));
+
+        return $codigo !== '' ? $codigo : trim((string) ($modelo->nombre ?? ''));
+    };
     $lineasExistentes = old('lineas');
     if (! is_array($lineasExistentes)) {
-        $lineasExistentes = ($data->lineas ?? collect())->map(function ($l) {
+        $lineasExistentes = ($data->lineas ?? collect())->map(function ($l) use ($codigoMaestro) {
             return [
                 'tipo' => $l->tipo,
                 'articulo_id' => $l->articulo_id,
@@ -11,12 +20,22 @@
                 'descripcion' => $l->descripcion ?: ($l->articulo->descripcion ?? ''),
                 'cantidad' => $l->cantidad,
                 'precio_unitario' => $l->precio_unitario,
+                'venta_emision_id' => $l->venta_emision_id,
                 'talle_id' => $l->talle_id,
+                'talle_codigo' => $codigoMaestro($l->talle),
+                'talle_nombre' => $l->talle->nombre ?? '',
                 'color_id' => $l->color_id,
+                'color_codigo' => $codigoMaestro($l->color),
+                'color_nombre' => $l->color->nombre ?? '',
                 'combinacion_id' => $l->combinacion_id,
+                'combinacion_codigo' => $l->combinacion->codigo ?? '',
+                'combinacion_nombre' => $l->combinacion->nombre ?? '',
             ];
         })->values()->all();
     }
+    $pedidoTn = $data->relationLoaded('tiendanubePedido') ? $data->tiendanubePedido : ($data->tiendanubePedido ?? null);
+    $pedidoNumero = old('pedido_numero', $pedidoTn->order_number ?? '');
+    $tiendaNombre = old('tienda_nombre', $pedidoTn ? TiendanubeTiendasSupport::nombre($pedidoTn->store_id) : '');
     if ($lineasExistentes === []) {
         $lineasExistentes = [
             ['tipo' => 'devolver', 'articulo_id' => '', 'articulo_codigo' => '', 'descripcion' => '', 'cantidad' => 1, 'precio_unitario' => 0],
@@ -129,11 +148,20 @@
         </div>
 
         <div class="form-group row">
-            <label class="col-lg-4 control-label text-right pr-2">Pedido Tienda Nube (ID)</label>
+            <label class="col-lg-4 control-label text-right pr-2">Tienda</label>
+            <div class="col-lg-6">
+                <input type="hidden" name="tiendanube_pedido_id" id="tiendanube_pedido_id"
+                       value="{{ old('tiendanube_pedido_id', $data->tiendanube_pedido_id) }}">
+                <input type="hidden" name="pedido_numero" id="pedido_numero_hidden" value="{{ $pedidoNumero }}">
+                <input type="hidden" name="tienda_nombre" id="tienda_nombre_hidden" value="{{ $tiendaNombre }}">
+                <input type="text" id="tienda_nombre" class="form-control" value="{{ $tiendaNombre }}" readonly tabindex="-1" placeholder="Se completa al elegir la factura">
+            </div>
+        </div>
+
+        <div class="form-group row">
+            <label class="col-lg-4 control-label text-right pr-2">Nº pedido de la tienda</label>
             <div class="col-lg-4">
-                <input type="number" name="tiendanube_pedido_id" class="form-control"
-                       value="{{ old('tiendanube_pedido_id', $data->tiendanube_pedido_id) }}"
-                       {{ $ro ? 'readonly' : '' }}>
+                <input type="text" id="pedido_numero" class="form-control" value="{{ $pedidoNumero }}" readonly tabindex="-1" placeholder="Se completa al elegir la factura">
             </div>
         </div>
 
@@ -209,16 +237,19 @@
 
     <div class="tab-pane fade" id="tab-lineas" role="tabpanel">
         <p class="text-muted small">
-            Líneas <strong>a devolver</strong> (referencia) y de <strong>reemplazo</strong> (se facturan al emitir FAC).
-            Indique ID de artículo (SKU/código en descripción).
+            Al elegir la factura se cargan las líneas a devolver con el artículo, el talle y el color o la combinación.
+            El reemplazo se elige con lupa o F1. Enter en el SKU lo resuelve.
+            El calzado pide talle y, según el artículo, color o combinación. Si no maneja variante, esos campos quedan en «No aplica».
         </p>
         <div class="table-responsive">
             <table class="table table-sm table-bordered" id="cdm-lineas-table">
                 <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
                         <th style="width:120px">Tipo</th>
-                        <th style="width:100px">Art. ID</th>
-                        <th>Descripción</th>
+                        <th>Artículo</th>
+                        <th>Combinación</th>
+                        <th>Color</th>
+                        <th>Talle</th>
                         <th style="width:90px">Cant.</th>
                         <th style="width:110px">Precio</th>
                         @if (! $ro)
@@ -228,41 +259,11 @@
                 </thead>
                 <tbody id="cdm-lineas-tbody">
                     @foreach ($lineasExistentes as $idx => $linea)
-                    <tr class="cdm-linea-row">
-                        <td>
-                            <select name="lineas[{{ $idx }}][tipo]" class="form-control form-control-sm" {{ $ro ? 'disabled' : '' }}>
-                                @foreach ($tiposLinea as $tKey => $tLabel)
-                                    <option value="{{ $tKey }}" {{ ($linea['tipo'] ?? '') === $tKey ? 'selected' : '' }}>{{ $tLabel }}</option>
-                                @endforeach
-                            </select>
-                            @if ($ro)
-                                <input type="hidden" name="lineas[{{ $idx }}][tipo]" value="{{ $linea['tipo'] ?? '' }}">
-                            @endif
-                        </td>
-                        <td>
-                            <input type="number" name="lineas[{{ $idx }}][articulo_id]" class="form-control form-control-sm"
-                                   value="{{ $linea['articulo_id'] ?? '' }}" {{ $ro ? 'readonly' : '' }}>
-                        </td>
-                        <td>
-                            <input type="text" name="lineas[{{ $idx }}][descripcion]" class="form-control form-control-sm"
-                                   value="{{ $linea['descripcion'] ?? '' }}" {{ $ro ? 'readonly' : '' }}>
-                        </td>
-                        <td>
-                            <input type="number" step="0.0001" name="lineas[{{ $idx }}][cantidad]" class="form-control form-control-sm"
-                                   value="{{ $linea['cantidad'] ?? 1 }}" {{ $ro ? 'readonly' : '' }}>
-                        </td>
-                        <td>
-                            <input type="number" step="0.01" name="lineas[{{ $idx }}][precio_unitario]" class="form-control form-control-sm"
-                                   value="{{ $linea['precio_unitario'] ?? 0 }}" {{ $ro ? 'readonly' : '' }}>
-                        </td>
-                        @if (! $ro)
-                            <td class="text-center">
-                                <button type="button" class="btn-accion-tabla cdm-quitar-linea" title="Quitar">
-                                    <i class="fa fa-times-circle text-danger"></i>
-                                </button>
-                            </td>
-                        @endif
-                    </tr>
+                        @include('ventas.facturacion_local.cambio_devolucion.partials.fila_linea', [
+                            'idx' => $idx,
+                            'linea' => $linea,
+                            'ro' => $ro,
+                        ])
                     @endforeach
                 </tbody>
             </table>
@@ -287,31 +288,57 @@
     </div>
 </div>
 
+@if (! $ro)
+<div class="modal fade" id="cdm-modal-ventas" tabindex="-1" role="dialog" aria-labelledby="cdm-modal-ventas-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cdm-modal-ventas-titulo">Facturas encontradas</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">Elegí la factura. Enter toma la primera fila.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-hover mb-0">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr>
+                                <th>Código</th>
+                                <th>Fecha</th>
+                                <th>Cliente</th>
+                                <th class="text-right">Total</th>
+                                <th>Pedido</th>
+                                <th>Tienda</th>
+                                <th style="width:90px">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cdm-modal-ventas-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cierra</button>
+            </div>
+        </div>
+    </div>
+</div>
+@include('includes.stock.modalconsultaarticulo')
+@include('includes.stock.modalconsultatalle')
+@include('includes.stock.modalconsultacolor')
+@include('includes.stock.modalconsultacombinacion')
 <template id="cdm-template-linea">
-    <tr class="cdm-linea-row">
-        <td>
-            <select name="lineas[__IDX__][tipo]" class="form-control form-control-sm">
-                @foreach ($tiposLinea as $tKey => $tLabel)
-                    <option value="{{ $tKey }}">{{ $tLabel }}</option>
-                @endforeach
-            </select>
-        </td>
-        <td>
-            <input type="number" name="lineas[__IDX__][articulo_id]" class="form-control form-control-sm" value="">
-        </td>
-        <td>
-            <input type="text" name="lineas[__IDX__][descripcion]" class="form-control form-control-sm" value="">
-        </td>
-        <td>
-            <input type="number" step="0.0001" name="lineas[__IDX__][cantidad]" class="form-control form-control-sm" value="1">
-        </td>
-        <td>
-            <input type="number" step="0.01" name="lineas[__IDX__][precio_unitario]" class="form-control form-control-sm" value="0">
-        </td>
-        <td class="text-center">
-            <button type="button" class="btn-accion-tabla cdm-quitar-linea" title="Quitar">
-                <i class="fa fa-times-circle text-danger"></i>
-            </button>
-        </td>
-    </tr>
+    @include('ventas.facturacion_local.cambio_devolucion.partials.fila_linea', [
+        'idx' => '__IDX__',
+        'linea' => [
+            'tipo' => 'reemplazo',
+            'articulo_id' => '',
+            'articulo_codigo' => '',
+            'descripcion' => '',
+            'cantidad' => 1,
+            'precio_unitario' => 0,
+        ],
+        'ro' => false,
+    ])
 </template>
+@endif

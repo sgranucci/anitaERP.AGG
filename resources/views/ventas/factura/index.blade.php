@@ -156,6 +156,22 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
                                    	<i class="fa fa-edit"></i>
                                 	</a>
 								@endif
+                       			@if (can('generar-nota-de-credito', false)
+									&& \App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport::esNotaCreditoReversible($comprobante)
+									&& empty($idsNcPos[(int) $comprobante->id]))
+									@php
+										$ndReversionCodigo = $ndPorNotaCredito[(int) $comprobante->id] ?? '';
+									@endphp
+									@if ($ndReversionCodigo !== '')
+										<span class="btn-accion-tabla tooltipsC" title="Ya revertida por {{ $ndReversionCodigo }}">
+											<i class="fa fa-plus text-muted"></i>
+										</span>
+									@else
+										<a href="{{ route('generar_notadebito', ['id' => $comprobante->id]) }}" class="btn-accion-tabla tooltipsC" title="Generar nota de débito (reversión total)">
+											<i class="fa fa-plus text-primary"></i>
+										</a>
+									@endif
+								@endif
                        			@if (can('generar-nota-de-credito', false))
 									@if ($comprobante->total > 0)
 										@php

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Support\Ventas;
 
+use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\Tipotransaccion;
 use App\Support\Ventas\IvaVentas\IvaVentasFeaturesSupport;
 use Illuminate\Http\Request;
 
@@ -48,6 +50,8 @@ final class IvaVentasListadoFiltros
         $empresaId = (int) $request->input('empresa_id', 0);
         $monedaId = (int) $request->input('moneda_id', 1);
         $provinciaId = max(0, (int) $request->input('provincia_id', 0));
+        $puntoventaId = max(0, (int) $request->input('puntoventa_id', 0));
+        $tipotransaccionId = max(0, (int) $request->input('tipotransaccion_id', 0));
 
         $features = IvaVentasFeaturesSupport::all();
         $consultando = $request->boolean('consultar');
@@ -71,7 +75,10 @@ final class IvaVentasListadoFiltros
             'orden_fecha' => $orden,
             'subdiario' => $subdiario,
             'provincia_id' => $provinciaId,
+            'puntoventa_id' => $puntoventaId,
+            'tipotransaccion_id' => $tipotransaccionId,
             'cortar_por_jurisdiccion' => $request->boolean('cortar_por_jurisdiccion'),
+            'cortar_por_sucursal_tipo' => $request->boolean('cortar_por_sucursal_tipo'),
             'clasificar_por_host' => $clasificarHost,
             'agrupar_b_por_dia' => $request->boolean('agrupar_b_por_dia'),
             'auditar_ctamov' => $request->boolean('auditar_ctamov'),
@@ -113,8 +120,22 @@ final class IvaVentasListadoFiltros
             $out['provincia_id'] = $provinciaId;
         }
 
+        $puntoventaId = (int) ($filtros['puntoventa_id'] ?? 0);
+        if ($puntoventaId > 0) {
+            $out['puntoventa_id'] = $puntoventaId;
+        }
+
+        $tipotransaccionId = (int) ($filtros['tipotransaccion_id'] ?? 0);
+        if ($tipotransaccionId > 0) {
+            $out['tipotransaccion_id'] = $tipotransaccionId;
+        }
+
         if (! empty($filtros['cortar_por_jurisdiccion'])) {
             $out['cortar_por_jurisdiccion'] = 1;
+        }
+
+        if (! empty($filtros['cortar_por_sucursal_tipo'])) {
+            $out['cortar_por_sucursal_tipo'] = 1;
         }
 
         if (! empty($filtros['clasificar_por_host'])) {
@@ -160,6 +181,33 @@ final class IvaVentasListadoFiltros
         $sub = $filtros['subdiario'] ?? self::SUBDIARIO_VENTAS_B;
 
         return self::SUBDIARIOS[$sub] ?? $sub;
+    }
+
+    /**
+     * Sucursal y tipo activos, para el subtítulo de pantalla y export.
+     */
+    public static function formatearCorteTexto(array $filtros): string
+    {
+        $partes = [];
+        $puntoventaId = (int) ($filtros['puntoventa_id'] ?? 0);
+        if ($puntoventaId > 0) {
+            $pv = Puntoventa::query()->find($puntoventaId, ['id', 'codigo', 'nombre']);
+            $etiqueta = trim((string) (($pv->codigo ?? '').' '.($pv->nombre ?? '')));
+            $partes[] = 'Sucursal: '.($etiqueta !== '' ? $etiqueta : '#'.$puntoventaId);
+        }
+
+        $tipoId = (int) ($filtros['tipotransaccion_id'] ?? 0);
+        if ($tipoId > 0) {
+            $tipo = Tipotransaccion::query()->find($tipoId, ['id', 'abreviatura', 'nombre']);
+            $etiqueta = trim((string) (($tipo->abreviatura ?? '').' '.($tipo->nombre ?? '')));
+            $partes[] = 'Tipo: '.($etiqueta !== '' ? $etiqueta : '#'.$tipoId);
+        }
+
+        if (! empty($filtros['cortar_por_sucursal_tipo'])) {
+            $partes[] = 'Listado separado por sucursal y tipo';
+        }
+
+        return implode(' · ', $partes);
     }
 
     public static function firma(array $filtros): string

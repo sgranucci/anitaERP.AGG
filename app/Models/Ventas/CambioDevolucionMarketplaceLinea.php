@@ -3,6 +3,9 @@
 namespace App\Models\Ventas;
 
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Color;
+use App\Models\Stock\Combinacion;
+use App\Models\Stock\Talle;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -44,5 +47,20 @@ class CambioDevolucionMarketplaceLinea extends Model implements Auditable
     public function articulo()
     {
         return $this->belongsTo(Articulo::class, 'articulo_id');
+    }
+
+    public function talle()
+    {
+        return $this->belongsTo(Talle::class, 'talle_id');
+    }
+
+    public function color()
+    {
+        return $this->belongsTo(Color::class, 'color_id');
+    }
+
+    public function combinacion()
+    {
+        return $this->belongsTo(Combinacion::class, 'combinacion_id');
     }
 }

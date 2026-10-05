@@ -22,6 +22,7 @@ use App\Support\Ventas\AnitaComprobDescuentoSupport;
 use App\Support\Ventas\AnitaVengravCodigoTasaSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
+use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
 use App\Support\Ventas\AbastoBierzoSupport;
 use App\Support\Ventas\LogisticaBierzoSupport;
 use App\Support\Ventas\VentaImporteDosDecimalesSupport;
@@ -95,8 +96,9 @@ class ImpuestoService extends FacturacionService
 		}
 
 		$omitirPercepciones = ! empty($dataCliente['omitir_percepciones']);
-		$aplicarPercNoCategorizado = ! $omitirPercepciones
-			|| ! empty($dataCliente['aplicar_percepcion_no_categorizado']);
+		$aplicarPercNoCategorizado = ! NotaDebitoReversionNotaCreditoSupport::activa($dataCliente)
+			&& (! $omitirPercepciones
+			|| ! empty($dataCliente['aplicar_percepcion_no_categorizado']));
 
 		// Asigna datos cliente
 		$nroInscripcion = $dataCliente['numerodocumento'];
@@ -172,7 +174,9 @@ class ImpuestoService extends FacturacionService
 		$tasaPercepcionIva = (float) $paramPiva['tasa'];
 		$minimoBasePiva = (float) $paramPiva['minimo_base'];
 		$minimoImportePiva = (float) $paramPiva['minimo_importe'];
-		$aplicaPercepcionIva = ! $omitirPercepciones
+		$reversionNd = NotaDebitoReversionNotaCreditoSupport::activa($dataCliente);
+		$aplicaPercepcionIva = ! $reversionNd
+			&& ! $omitirPercepciones
 			&& $paramPiva['habilitado']
 			&& $retieneIva != 'S'
 			&& PercepcionIvaSujetoSupport::correspondePercepcionIva($condicioniva);
@@ -577,6 +581,13 @@ class ImpuestoService extends FacturacionService
 		}
 
 		// RG 2126 art. 5 / a-comprob.c: sobre tot_fact (neto + IVA + otros, ya con descuento).
+		if (NotaDebitoReversionNotaCreditoSupport::activa($dataCliente)) {
+			foreach (NotaDebitoReversionNotaCreditoSupport::filasPercepcionNacional($dataCliente) as $filaNacional) {
+				$conceptosTotales[] = $filaNacional;
+				$totalFinal += (float) $filaNacional['importe'];
+			}
+		}
+
 		if ($aplicarPercNoCategorizado && ! $flGrabaComprobanteDividido
 			&& PercepcionNoCategorizadoSupport::habilitada()
 			&& PercepcionNoCategorizadoSupport::corresponde($condicioniva)) {
@@ -775,6 +786,10 @@ class ImpuestoService extends FacturacionService
 	): array {
 		if ($flGrabaComprobanteDividido) {
 			return [];
+		}
+
+		if (NotaDebitoReversionNotaCreditoSupport::activa($dataCliente)) {
+			return NotaDebitoReversionNotaCreditoSupport::filasIibb($dataCliente);
 		}
 
 		$desdeNc = NotaCreditoPercepcionIibbSupport::paraNotaCredito($dataCliente, (float) $baseNeto);

@@ -586,7 +586,8 @@ class PuntoventaController extends Controller
             || can('crear-local-venta', false)
             || can('editar-local-venta', false)
             || can('actualizar-local-venta', false)
-            || can('usar-facturacion-local', false);
+            || can('usar-facturacion-local', false)
+            || can('listar-iva-ventas', false);
     }
 
     /**

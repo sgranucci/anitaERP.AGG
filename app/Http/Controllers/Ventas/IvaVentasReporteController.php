@@ -7,6 +7,8 @@ namespace App\Http\Controllers\Ventas;
 use App\Exports\Ventas\IvaVentasListadoExport;
 use App\Http\Controllers\Controller;
 use App\Models\Configuracion\Provincia;
+use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\Tipotransaccion;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Ventas\IvaVentasReporteService;
@@ -103,6 +105,9 @@ class IvaVentasReporteController extends Controller
             'periodo_texto' => IvaVentasListadoFiltros::formatearPeriodoTexto($filtros),
             'orden_texto' => IvaVentasListadoFiltros::formatearOrdenTexto($filtros),
             'subdiario_texto' => IvaVentasListadoFiltros::formatearSubdiarioTexto($filtros),
+            'corte_texto' => IvaVentasListadoFiltros::formatearCorteTexto($filtros),
+            'puntoventa' => $this->puntoventaFiltro($filtros),
+            'tipotransaccion' => $this->tipotransaccionFiltro($filtros),
             'subdiario_ajustado' => $subdiarioAjustado,
             'puede_ver_venta' => can('editar-factura', false) || can('listar-factura', false),
             'puede_ver_cliente' => can('editar-clientes', false) || can('listar-clientes', false),
@@ -168,6 +173,20 @@ class IvaVentasReporteController extends Controller
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>
      */
+    private function puntoventaFiltro(array $filtros): ?Puntoventa
+    {
+        $id = (int) ($filtros['puntoventa_id'] ?? 0);
+
+        return $id > 0 ? Puntoventa::query()->find($id) : null;
+    }
+
+    private function tipotransaccionFiltro(array $filtros): ?Tipotransaccion
+    {
+        $id = (int) ($filtros['tipotransaccion_id'] ?? 0);
+
+        return $id > 0 ? Tipotransaccion::query()->find($id) : null;
+    }
+
     private function aplicarPreferenciasEmpresa(Request $request, array $filtros, $empresaQuery): array
     {
         if ((int) ($filtros['empresa_id'] ?? 0) <= 0) {

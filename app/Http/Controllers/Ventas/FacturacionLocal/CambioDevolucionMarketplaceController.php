@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Ventas\FacturacionLocal;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionCambioDevolucionMarketplace;
+use App\Models\Stock\Articulo;
 use App\Models\Ventas\CambioDevolucionMarketplace;
 use App\Models\Ventas\LocalVenta;
-use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturacionLocal\CambioDevolucionMarketplaceService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceCatalogoSupport;
@@ -14,6 +14,7 @@ use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceEstadosSuppor
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceListadoFiltros;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceLiquidacionSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePuenteSupport;
+use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceVentaConsultaSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\View;
@@ -119,6 +120,9 @@ class CambioDevolucionMarketplaceController extends Controller
         $data = CambioDevolucionMarketplace::query()
             ->with([
                 'lineas.articulo',
+                'lineas.talle',
+                'lineas.color',
+                'lineas.combinacion',
                 'estados.usuario',
                 'archivos',
                 'localVenta',
@@ -303,42 +307,24 @@ class CambioDevolucionMarketplaceController extends Controller
         }
 
         $q = trim((string) $request->input('q', ''));
-        if (strlen($q) < 2) {
-            return response()->json(['data' => []]);
+
+        return response()->json([
+            'data' => CambioDevolucionMarketplaceVentaConsultaSupport::buscar($q),
+        ]);
+    }
+
+    public function apiVariantesArticulo(int $articuloId)
+    {
+        $this->assertFerli();
+        if (! can('crear-cambio-devolucion-marketplace-facturacion-local', false)
+            && ! can('actualizar-cambio-devolucion-marketplace-facturacion-local', false)
+            && ! can('ver-cambio-devolucion-marketplace-facturacion-local', false)) {
+            abort(403);
         }
 
-        $ventas = Venta::query()
-            ->with(['clientes:id,nombre,numerodocumento'])
-            ->where(function ($builder) use ($q) {
-                $builder->where('codigo', 'like', '%'.$q.'%')
-                    ->orWhere('id', ctype_digit($q) ? (int) $q : 0);
-            })
-            ->orderByDesc('id')
-            ->limit(20)
-            ->get(['id', 'codigo', 'fecha', 'total', 'cliente_id', 'nombre', 'nroinscripcion']);
+        Articulo::query()->findOrFail($articuloId);
 
-        $data = $ventas->map(function (Venta $v) {
-            $docFactura = preg_replace('/\D/', '', (string) ($v->nroinscripcion ?? '')) ?? '';
-            if ($docFactura === '0') {
-                $docFactura = '';
-            }
-            $docCliente = preg_replace('/\D/', '', (string) ($v->clientes->numerodocumento ?? '')) ?? '';
-            if ($docCliente === '0') {
-                $docCliente = '';
-            }
-
-            return [
-                'id' => (int) $v->id,
-                'codigo' => (string) $v->codigo,
-                'fecha' => optional($v->fecha)->format('d/m/Y'),
-                'total' => (float) $v->total,
-                'cliente' => trim((string) ($v->nombre ?: $v->clientes->nombre ?? '')),
-                'documento' => $docFactura !== '' ? $docFactura : $docCliente,
-                'cliente_id' => (int) ($v->cliente_id ?? 0),
-            ];
-        })->values();
-
-        return response()->json(['data' => $data]);
+        return response()->json(CambioDevolucionMarketplaceVentaConsultaSupport::variantes($articuloId));
     }
 
     /**

@@ -35,7 +35,8 @@ final class VentaNotaCreditoPrecioLiteralSupport
     {
         $ventaId = (int) ($data['venta_id'] ?? 0);
         $tipoId = (int) ($data['tipotransaccion_id'] ?? 0);
-        if ($ventaId <= 0 || ! self::esNotaCreditoTipotransaccionId($tipoId)) {
+        $reversionNd = NotaDebitoReversionNotaCreditoSupport::payloadEsReversion($data);
+        if ($ventaId <= 0 || (! $reversionNd && ! self::esNotaCreditoTipotransaccionId($tipoId))) {
             return;
         }
         // Canje POS (+1/−1): el renglón que entra ya trae su precio. La NC total sigue copiando la FAC.
@@ -61,7 +62,11 @@ final class VentaNotaCreditoPrecioLiteralSupport
                 continue;
             }
 
-            $data['precios'][$i] = self::formatLiteral($em->precio);
+            $precio = $em->precio;
+            if ($reversionNd) {
+                $precio = abs((float) $precio);
+            }
+            $data['precios'][$i] = self::formatLiteral($precio);
         }
     }
 
@@ -76,7 +81,8 @@ final class VentaNotaCreditoPrecioLiteralSupport
     {
         $ventaId = (int) ($data['venta_id'] ?? 0);
         $tipoId = (int) ($data['tipotransaccion_id'] ?? 0);
-        if ($ventaId <= 0 || ! self::esNotaCreditoTipotransaccionId($tipoId)) {
+        $reversionNd = NotaDebitoReversionNotaCreditoSupport::payloadEsReversion($data);
+        if ($ventaId <= 0 || (! $reversionNd && ! self::esNotaCreditoTipotransaccionId($tipoId))) {
             return;
         }
         $opciones = is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : [];
