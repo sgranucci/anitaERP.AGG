@@ -540,7 +540,7 @@
                 return;
             }
             var tipoI = String(meta.tipoconcepto || '').toUpperCase();
-            if (tipoI !== 'I' && tipoI !== 'G' && tipoI !== 'E' && tipoI !== 'T' && tipoI !== 'P' && tipoI !== 'B' && tipoI !== 'M' && tipoI !== 'S' && tipoI !== 'A') {
+            if (tipoI !== 'I' && tipoI !== 'G' && tipoI !== 'E' && tipoI !== 'T' && tipoI !== 'P' && tipoI !== 'B' && tipoI !== 'M' && tipoI !== 'S' && tipoI !== 'A' && tipoI !== 'V') {
                 meta.tipoconcepto = 'I';
             }
             if (!(parseFloat(meta.impuesto_tasa || 0) > 0)) {

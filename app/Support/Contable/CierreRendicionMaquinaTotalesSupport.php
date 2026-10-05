@@ -92,6 +92,18 @@ final class CierreRendicionMaquinaTotalesSupport
             );
         }
 
+        foreach ($tot['valores_cuenta'] as &$valorCuenta) {
+            $origen = (float) ($valorCuenta['monto_origen'] ?? 0);
+            if ($origen > 0.0001 && ! empty($valorCuenta['cotizacion_mixta'])) {
+                $valorCuenta['cotizacion'] = round((float) $valorCuenta['monto'] / $origen, 6);
+            }
+            if ((float) ($valorCuenta['cotizacion'] ?? 0) <= 0) {
+                $valorCuenta['cotizacion'] = 1.0;
+            }
+            unset($valorCuenta['cotizacion_mixta']);
+        }
+        unset($valorCuenta);
+
         $tot['valores_cuenta'] = array_values($tot['valores_cuenta']);
 
         return $tot;
@@ -316,18 +328,37 @@ final class CierreRendicionMaquinaTotalesSupport
                 $cuentaId = (int) (CuentacajaCuentacontableResolverSupport::resolverIdParaEmpresa($caja, $empresaId) ?? 0);
             }
             if ($cuentaId > 0) {
-                $key = (string) $cuentaId;
+                $esMe = RendicionMaquinaValoresCuentacajaSupport::esMonedaExtranjera($monedaId);
+                $cotLinea = $esMe && $cotizacion > 1.0001 ? round($cotizacion, 6) : 1.0;
+                $key = $cuentaId.'|'.($esMe ? $monedaId : 1);
                 if (! isset($tot['valores_cuenta'][$key])) {
                     $tot['valores_cuenta'][$key] = [
                         'cuentacontable_id' => $cuentaId,
                         'concepto' => trim((string) ($caja?->etiquetaOperaciones() ?? 'Valor cuenta')),
                         'monto' => 0.0,
+                        'moneda_id' => $esMe ? $monedaId : 1,
+                        'cotizacion' => $cotLinea,
+                        'monto_origen' => 0.0,
                     ];
                 }
                 $tot['valores_cuenta'][$key]['monto'] = round(
                     $tot['valores_cuenta'][$key]['monto'] + $montoPesos,
                     2,
                 );
+                if ($esMe) {
+                    $tot['valores_cuenta'][$key]['monto_origen'] = round(
+                        (float) $tot['valores_cuenta'][$key]['monto_origen'] + $monto,
+                        2,
+                    );
+                    $monedaPrevia = (int) ($tot['valores_cuenta'][$key]['moneda_id'] ?? 1);
+                    $cotPrevia = (float) ($tot['valores_cuenta'][$key]['cotizacion'] ?? 1);
+                    if ($monedaPrevia <= 1) {
+                        $tot['valores_cuenta'][$key]['moneda_id'] = $monedaId;
+                        $tot['valores_cuenta'][$key]['cotizacion'] = $cotLinea;
+                    } elseif ($monedaPrevia !== $monedaId || abs($cotPrevia - $cotLinea) > 0.0001) {
+                        $tot['valores_cuenta'][$key]['cotizacion_mixta'] = true;
+                    }
+                }
             }
 
             // Buckets informativos (listado / diagnóstico); el asiento no los postea.

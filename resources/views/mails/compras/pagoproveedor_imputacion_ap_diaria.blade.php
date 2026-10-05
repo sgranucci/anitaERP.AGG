@@ -103,7 +103,7 @@
 @if (! empty($informe['cabeceras_anita_mail']))
     <h3 style="margin:18px 0 6px 0;">Documento Anita</h3>
     <p style="margin:0 0 8px 0; color:#555; font-size:12px;">
-        Nacieron en Anita y se trajeron al ERP. No son desvío: el ctamov de cierre no usa el número del subdiario, y la cabecera incluye las retenciones.
+        Cabecera traída de Anita sin cuenta corriente ni asiento en el ERP. No es desvío: la contabilidad quedó en Anita.
     </p>
     <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
         <tr style="background:#d7bde2; color:#17202A;">

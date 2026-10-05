@@ -23,7 +23,7 @@ class CapexReporteService
     private const CHUNK_SUBDIARIO = 15;
 
     /** tipoconcepto distinto de N/G/E → IVA, percepciones, retenciones, etc. */
-    private const TIPOS_CONCEPTO_IVACOMPRA_EXCLUIDOS = ['I', 'P', 'B', 'M', 'T', 'S', 'A'];
+    private const TIPOS_CONCEPTO_IVACOMPRA_EXCLUIDOS = ['I', 'P', 'B', 'M', 'T', 'S', 'A', 'V'];
 
     /** @var list<int>|null */
     private ?array $codigosCuentasImpuestosExcluidas = null;

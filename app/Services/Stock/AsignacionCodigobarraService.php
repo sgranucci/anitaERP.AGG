@@ -6,25 +6,43 @@ use App\Models\Compras\Proveedor;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Proveedor;
 use App\Models\Stock\Depmae;
+use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\TransferenciaMercaderiaPickeoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class AsignacionCodigobarraService
 {
+    private const COMPRAS_RECIENTES = 5;
+
     /**
-     * Artículos con saldo > 0 en el depósito y sin código de barras en el maestro.
+     * Artículos con saldo > 0 en el depósito cuyo código de proveedor todavía no está cargado.
+     * El proveedor sugerido sale de la última recepción confirmada sin código.
      *
      * @return list<array{
      *   articulo_id: int,
      *   sku: string,
      *   descripcion: string,
      *   saldo: float,
-     *   codigobarra: string,
      *   necesita_proveedor: bool,
      *   proveedor_id: int|null,
-     *   proveedor_nombre: string|null
+     *   proveedor_nombre: string|null,
+     *   recepcion_id: int|null,
+     *   compras: list<array{
+     *     recepcion_id: int,
+     *     fecha: string,
+     *     numerorecepcion: string,
+     *     numerofactura: string,
+     *     proveedor_id: int,
+     *     proveedor_nombre: string,
+     *     etiqueta: string,
+     *     codigobarra: string,
+     *     tiene_codigo: bool,
+     *     seleccionada: bool
+     *   }>
      * }>
      */
     public function pendientesDeposito(int $depositoId): array
@@ -38,10 +56,6 @@ class AsignacionCodigobarraService
             ->where('a.estado', ArticuloSeleccionOperativaSupport::ESTADO_ACTIVO)
             ->whereNotNull('a.sku')
             ->whereRaw("TRIM(a.sku) <> ''")
-            ->where(function ($q) {
-                $q->whereNull('a.codigobarra')
-                    ->orWhereRaw("TRIM(a.codigobarra) = ''");
-            })
             // No tiene sentido etiquetar servicios / cuentas contables / impuestos.
             ->where(function ($q) {
                 $q->whereNull('a.tipoarticulo_id')
@@ -70,15 +84,15 @@ class AsignacionCodigobarraService
                 'sku' => trim((string) $row->sku),
                 'descripcion' => (string) ($row->descripcion ?? ''),
                 'saldo' => (float) $row->saldo,
-                'codigobarra' => '',
             ];
         }
 
         $ids = array_keys($porArticulo);
+        $comprasPorArticulo = $this->comprasRecientesPorArticulo($ids);
         $vinculos = Articulo_Proveedor::query()
             ->with('proveedores:id,codigo,nombre')
             ->whereIn('articulo_id', $ids)
-            ->where('activo', true)
+            ->orderByDesc('activo')
             ->orderByDesc('preferido')
             ->orderBy('id')
             ->get()
@@ -86,22 +100,16 @@ class AsignacionCodigobarraService
 
         $out = [];
         foreach ($porArticulo as $id => $fila) {
-            $grupo = $vinculos->get($id);
-            $elegido = null;
-            if ($grupo !== null && $grupo->isNotEmpty()) {
-                $elegido = $grupo->first(static fn ($v) => (bool) $v->preferido) ?? $grupo->first();
+            $armada = $this->armarPendiente(
+                $fila,
+                $comprasPorArticulo[$id] ?? [],
+                $vinculos->get($id)
+            );
+            if ($armada !== null) {
+                $out[] = $armada;
             }
-
-            $necesita = $elegido === null;
-            $fila['necesita_proveedor'] = $necesita;
-            $fila['proveedor_id'] = $elegido ? (int) $elegido->proveedor_id : null;
-            $fila['proveedor_nombre'] = $elegido && $elegido->proveedores
-                ? trim((string) ($elegido->proveedores->codigo ?? '').' '.(string) ($elegido->proveedores->nombre ?? ''))
-                : null;
-            $out[] = $fila;
         }
 
-        // Ya viene ordenado por saldo DESC desde SQL.
         return array_values($out);
     }
 
@@ -185,21 +193,25 @@ class AsignacionCodigobarraService
             ];
         }
 
-        DB::transaction(function () use ($articulo, $codigo, $vinculo) {
-            $barraActual = self::normalizarCodigo((string) ($articulo->codigobarra ?? ''));
-            if ($barraActual === null) {
-                $articulo->codigobarra = substr($codigo, 0, 50);
-                $articulo->save();
-            }
+        $existente = $vinculo['codigobarra_existente'] ?? null;
+        if (is_string($existente) && $existente !== '' && strcasecmp($existente, $codigo) !== 0) {
+            return [
+                'ok' => false,
+                'mensaje' => 'Ese proveedor ya tiene el código '.$existente.'. Elegí otra compra.',
+            ];
+        }
 
-            /** @var Articulo_Proveedor $fila */
-            $fila = $vinculo['fila'];
-            $barraProv = self::normalizarCodigo((string) ($fila->codigobarra ?? ''));
-            if ($barraProv === null) {
+        if ($existente === null || $existente === '') {
+            DB::transaction(function () use ($codigo, $vinculo) {
+                /** @var Articulo_Proveedor $fila */
+                $fila = $vinculo['fila'];
+                if (! $fila->activo) {
+                    $fila->activo = true;
+                }
                 $fila->codigobarra = substr($codigo, 0, 50);
                 $fila->save();
-            }
-        });
+            });
+        }
 
         return [
             'ok' => true,
@@ -225,20 +237,31 @@ class AsignacionCodigobarraService
     }
 
     /**
-     * @return array{necesita_proveedor?: bool, fila?: Articulo_Proveedor}
+     * @return array{necesita_proveedor?: bool, fila?: Articulo_Proveedor, codigobarra_existente?: string|null}
      */
     private function resolverVinculoProveedor(int $articuloId, ?int $proveedorId): array
     {
         if ($proveedorId !== null && $proveedorId > 0) {
-            if (! $this->proveedorOperativo($proveedorId)) {
-                throw new \InvalidArgumentException('Proveedor inválido o no operativo.');
+            if (! Proveedor::query()->whereKey($proveedorId)->exists()) {
+                throw new \InvalidArgumentException('Proveedor inválido.');
             }
 
-            $fila = Articulo_Proveedor::query()
+            $filas = Articulo_Proveedor::query()
                 ->where('articulo_id', $articuloId)
                 ->where('proveedor_id', $proveedorId)
-                ->first();
+                ->orderByDesc('activo')
+                ->orderByDesc('preferido')
+                ->orderBy('id')
+                ->get();
 
+            foreach ($filas as $fila) {
+                $barra = self::normalizarCodigo((string) ($fila->codigobarra ?? ''));
+                if ($barra !== null) {
+                    return ['fila' => $fila, 'codigobarra_existente' => $barra];
+                }
+            }
+
+            $fila = $filas->first();
             if ($fila === null) {
                 $fila = Articulo_Proveedor::query()->create([
                     'articulo_id' => $articuloId,
@@ -251,7 +274,7 @@ class AsignacionCodigobarraService
                 ]);
             }
 
-            return ['fila' => $fila];
+            return ['fila' => $fila, 'codigobarra_existente' => null];
         }
 
         $existentes = Articulo_Proveedor::query()
@@ -267,15 +290,257 @@ class AsignacionCodigobarraService
 
         $preferido = $existentes->first(static fn ($v) => (bool) $v->preferido);
 
-        return ['fila' => $preferido ?? $existentes->first()];
+        $elegida = $preferido ?? $existentes->first();
+        $barra = self::normalizarCodigo((string) ($elegida->codigobarra ?? ''));
+
+        return ['fila' => $elegida, 'codigobarra_existente' => $barra];
     }
 
-    private function proveedorOperativo(int $proveedorId): bool
+    /**
+     * @param  list<int>  $articuloIds
+     * @return array<int, list<array{
+     *   recepcion_id: int,
+     *   fecha: string,
+     *   numerorecepcion: string,
+     *   numerofactura: string,
+     *   proveedor_id: int,
+     *   proveedor_codigo: string,
+     *   proveedor_nombre: string
+     * }>>
+     */
+    private function comprasRecientesPorArticulo(array $articuloIds): array
     {
-        return Proveedor::query()
-            ->whereKey($proveedorId)
-            ->whereIn('estado', ['0', 'Activo', '3', 'Regularizado'])
-            ->exists();
+        $articuloIds = array_values(array_unique(array_filter(
+            array_map('intval', $articuloIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($articuloIds === []) {
+            return [];
+        }
+
+        $filtroBorrado = Schema::hasColumn('recepcion_proveedor', 'deleted_at')
+            ? ' AND rp.deleted_at IS NULL'
+            : '';
+
+        $out = [];
+        foreach (array_chunk($articuloIds, 400) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+            $sql = "
+                SELECT articulo_id, recepcion_id, fecha, numerorecepcion, numerofactura,
+                       proveedor_id, proveedor_codigo, proveedor_nombre
+                FROM (
+                    SELECT
+                        base.articulo_id,
+                        base.recepcion_id,
+                        base.fecha,
+                        base.numerorecepcion,
+                        base.numerofactura,
+                        base.proveedor_id,
+                        base.proveedor_codigo,
+                        base.proveedor_nombre,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY base.articulo_id
+                            ORDER BY base.fecha DESC, base.recepcion_id DESC
+                        ) AS rn
+                    FROM (
+                        SELECT
+                            rpa.articulo_id,
+                            rp.id AS recepcion_id,
+                            rp.fecha,
+                            rp.numerorecepcion,
+                            rp.numerofactura,
+                            rp.proveedor_id,
+                            p.codigo AS proveedor_codigo,
+                            p.nombre AS proveedor_nombre
+                        FROM recepcion_proveedor_articulo rpa
+                        INNER JOIN recepcion_proveedor rp ON rp.id = rpa.recepcion_proveedor_id
+                        INNER JOIN proveedor p ON p.id = rp.proveedor_id
+                        WHERE rpa.articulo_id IN ($placeholders)
+                          AND rp.estado = ?
+                          AND rp.tipo = ?
+                          AND rp.proveedor_id IS NOT NULL
+                          $filtroBorrado
+                        GROUP BY rpa.articulo_id, rp.id, rp.fecha, rp.numerorecepcion, rp.numerofactura,
+                                 rp.proveedor_id, p.codigo, p.nombre
+                    ) base
+                ) ranked
+                WHERE rn <= ?
+                ORDER BY articulo_id, rn
+            ";
+
+            $bindings = array_merge(
+                $chunk,
+                [Recepcion_Proveedor::ESTADO_CONFIRMADA, Recepcion_Proveedor::TIPO_RECEPCION, self::COMPRAS_RECIENTES]
+            );
+            foreach (DB::select($sql, $bindings) as $row) {
+                $articuloId = (int) $row->articulo_id;
+                $out[$articuloId][] = [
+                    'recepcion_id' => (int) $row->recepcion_id,
+                    'fecha' => (string) ($row->fecha ?? ''),
+                    'numerorecepcion' => trim((string) ($row->numerorecepcion ?? '')),
+                    'numerofactura' => trim((string) ($row->numerofactura ?? '')),
+                    'proveedor_id' => (int) $row->proveedor_id,
+                    'proveedor_codigo' => trim((string) ($row->proveedor_codigo ?? '')),
+                    'proveedor_nombre' => trim((string) ($row->proveedor_nombre ?? '')),
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array{articulo_id: int, sku: string, descripcion: string, saldo: float}  $fila
+     * @param  list<array{
+     *   recepcion_id: int,
+     *   fecha: string,
+     *   numerorecepcion: string,
+     *   numerofactura: string,
+     *   proveedor_id: int,
+     *   proveedor_codigo: string,
+     *   proveedor_nombre: string
+     * }>  $compras
+     * @return array<string, mixed>|null
+     */
+    private function armarPendiente(array $fila, array $compras, ?Collection $vinculos): ?array
+    {
+        $barraPorProveedor = $this->barraPorProveedor($vinculos);
+        $comprasOut = [];
+        $elegida = null;
+
+        foreach ($compras as $compra) {
+            $proveedorId = (int) $compra['proveedor_id'];
+            if ($proveedorId <= 0) {
+                continue;
+            }
+            $barra = $barraPorProveedor[$proveedorId] ?? null;
+            $item = [
+                'recepcion_id' => (int) $compra['recepcion_id'],
+                'fecha' => $this->formatearFecha((string) $compra['fecha']),
+                'numerorecepcion' => (string) $compra['numerorecepcion'],
+                'numerofactura' => (string) $compra['numerofactura'],
+                'proveedor_id' => $proveedorId,
+                'proveedor_nombre' => $this->etiquetaProveedor(
+                    (string) $compra['proveedor_codigo'],
+                    (string) $compra['proveedor_nombre']
+                ),
+                'codigobarra' => $barra ?? '',
+                'tiene_codigo' => $barra !== null,
+                'seleccionada' => false,
+            ];
+            $item['etiqueta'] = $this->etiquetaCompra($item);
+            if ($elegida === null && $barra === null) {
+                $item['seleccionada'] = true;
+                $elegida = $item;
+            }
+            $comprasOut[] = $item;
+        }
+
+        if ($comprasOut !== []) {
+            if ($elegida === null) {
+                return null;
+            }
+
+            $fila['compras'] = $comprasOut;
+            $fila['recepcion_id'] = (int) $elegida['recepcion_id'];
+            $fila['proveedor_id'] = (int) $elegida['proveedor_id'];
+            $fila['proveedor_nombre'] = (string) $elegida['proveedor_nombre'];
+            $fila['necesita_proveedor'] = false;
+
+            return $fila;
+        }
+
+        $activos = $vinculos?->filter(static fn ($v) => (bool) $v->activo) ?? collect();
+        $sinCodigo = $activos->filter(function ($v): bool {
+            return self::normalizarCodigo((string) ($v->codigobarra ?? '')) === null;
+        });
+
+        if ($activos->isNotEmpty() && $sinCodigo->isEmpty()) {
+            return null;
+        }
+
+        $elegido = $sinCodigo->first(static fn ($v) => (bool) $v->preferido) ?? $sinCodigo->first();
+        $fila['compras'] = [];
+        $fila['recepcion_id'] = null;
+        $fila['necesita_proveedor'] = $elegido === null;
+        $fila['proveedor_id'] = $elegido ? (int) $elegido->proveedor_id : null;
+        $fila['proveedor_nombre'] = $elegido
+            ? $this->etiquetaProveedor(
+                (string) ($elegido->proveedores->codigo ?? ''),
+                (string) ($elegido->proveedores->nombre ?? '')
+            )
+            : null;
+
+        return $fila;
+    }
+
+    /**
+     * @return array<int, string|null>
+     */
+    private function barraPorProveedor(?Collection $vinculos): array
+    {
+        $map = [];
+        if ($vinculos === null) {
+            return $map;
+        }
+
+        foreach ($vinculos as $vinculo) {
+            $proveedorId = (int) $vinculo->proveedor_id;
+            if ($proveedorId <= 0) {
+                continue;
+            }
+            $barra = self::normalizarCodigo((string) ($vinculo->codigobarra ?? ''));
+            if ($barra !== null) {
+                $map[$proveedorId] = $barra;
+            } elseif (! array_key_exists($proveedorId, $map)) {
+                $map[$proveedorId] = null;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  array{
+     *   fecha: string,
+     *   numerorecepcion: string,
+     *   numerofactura: string,
+     *   proveedor_nombre: string
+     * }  $compra
+     */
+    private function etiquetaCompra(array $compra): string
+    {
+        $partes = [];
+        if ($compra['fecha'] !== '') {
+            $partes[] = $compra['fecha'];
+        }
+        if ($compra['numerorecepcion'] !== '') {
+            $partes[] = 'Recepción '.$compra['numerorecepcion'];
+        }
+        if ($compra['numerofactura'] !== '') {
+            $partes[] = 'Fact. '.$compra['numerofactura'];
+        }
+        if ($compra['proveedor_nombre'] !== '') {
+            $partes[] = $compra['proveedor_nombre'];
+        }
+
+        return $partes !== [] ? implode(' · ', $partes) : 'Compra';
+    }
+
+    private function etiquetaProveedor(string $codigo, string $nombre): string
+    {
+        return trim(trim($codigo).' '.trim($nombre));
+    }
+
+    private function formatearFecha(string $fecha): string
+    {
+        $fecha = trim($fecha);
+        if ($fecha === '') {
+            return '';
+        }
+        $ts = strtotime($fecha);
+
+        return $ts ? date('d/m/Y', $ts) : $fecha;
     }
 
     private function conflictoCodigo(string $codigo, int $articuloId): ?string

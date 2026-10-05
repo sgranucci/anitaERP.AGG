@@ -120,6 +120,41 @@ class IngresoEgresoImputacionDiariaSupportTest extends TestCase
         $this->assertSame([], $eval['alertas']);
     }
 
+    public function test_egr_dolares_pasa_a_pesos_caja_asiento_tesmov_y_ctamov(): void
+    {
+        $caja = IngresoEgresoImputacionDiariaSupport::aPesos(63.43, 2, 1490);
+        $this->assertSame(94510.7, $caja);
+
+        $balance = IngresoEgresoImputacionDiariaSupport::balanceAsientoEnPesos([
+            (object) ['monto' => -63.43, 'moneda_id' => 2, 'cotizacion' => 1490],
+            (object) ['monto' => 0.98, 'moneda_id' => 2, 'cotizacion' => 1490],
+            (object) ['monto' => 62.45, 'moneda_id' => 2, 'cotizacion' => 1490],
+        ]);
+        $this->assertTrue($balance['balanceado']);
+        $this->assertSame(94510.7, $balance['total_debe']);
+        $this->assertSame(94510.7, $balance['total_haber']);
+
+        $pesosSinCotizacion = IngresoEgresoImputacionDiariaSupport::balanceAsientoEnPesos([
+            (object) ['monto' => 1000, 'moneda_id' => 1, 'cotizacion' => 1490],
+            (object) ['monto' => -1000, 'moneda_id' => 1, 'cotizacion' => 1490],
+        ]);
+        $this->assertSame(1000.0, $pesosSinCotizacion['total_debe']);
+
+        $tesmov = IngresoEgresoImputacionDiariaSupport::tesmovImporteEnPesos((object) [
+            'tesv_importe' => 63.43,
+            'tesv_cod_mon' => 2,
+            'tesv_cotizacion' => 1490,
+        ]);
+        $this->assertSame(94510.7, $tesmov);
+
+        $ctamov = IngresoEgresoImputacionDiariaSupport::totalesCtamovEnPesos([
+            (object) ['ctav_d_h' => 'H', 'ctav_importe' => 63.43, 'ctav_cod_mon' => '2', 'ctav_cotizacion' => 1490],
+            (object) ['ctav_d_h' => 'D', 'ctav_importe' => 63.43, 'ctav_cod_mon' => '2', 'ctav_cotizacion' => 1490],
+        ]);
+        $this->assertSame(94510.7, $ctamov['total_debe']);
+        $this->assertSame(94510.7, $ctamov['total_haber']);
+    }
+
     public function test_egr_desvio_caja_asiento_y_tesmov(): void
     {
         $eval = IngresoEgresoImputacionDiariaSupport::evaluar(

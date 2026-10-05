@@ -164,7 +164,11 @@ final class CierreRendicionMaquinaAsientoSupport
             if (abs($monto) <= 0.0001 || $cuentaId <= 0) {
                 continue;
             }
-            self::agregarLineaSigned($lineas1, $monto, 'Venta maquinas — '.$concepto, $cuentaId);
+            $cotizacion = (float) ($valorCuenta['cotizacion'] ?? 1);
+            if ($cotizacion <= 1.0001) {
+                $cotizacion = 1.0;
+            }
+            self::agregarLineaSigned($lineas1, $monto, 'Venta maquinas — '.$concepto, $cuentaId, $cotizacion);
         }
 
         $totalcoin = round((float) ($tot['totalcoin'] ?? 0), 2);
@@ -364,7 +368,11 @@ final class CierreRendicionMaquinaAsientoSupport
             $monedaIds[] = 1;
             $cc = (int) ($ln['centrocosto_id'] ?? 0);
             $centrocostoIds[] = $cc > 0 ? $cc : null;
-            $cotizaciones[] = 1.;
+            // El importe queda en pesos (el asiento cuadra en pesos). La cotización
+            // de tesorería viaja solo en las líneas de moneda extranjera para que
+            // el mayor pueda mostrar el equivalente (pesos / cotización).
+            $cotizacion = (float) ($ln['cotizacion'] ?? 1);
+            $cotizaciones[] = $cotizacion > 0 ? $cotizacion : 1.;
             $observaciones[] = $leyenda;
         }
 
@@ -403,21 +411,33 @@ final class CierreRendicionMaquinaAsientoSupport
     /**
      * @param  list<array<string, mixed>>  $lineas
      */
-    private static function agregarLineaSigned(array &$lineas, float $monto, string $concepto, int $cuentaId): void
-    {
+    private static function agregarLineaSigned(
+        array &$lineas,
+        float $monto,
+        string $concepto,
+        int $cuentaId,
+        float $cotizacion = 1.0,
+    ): void {
         if (abs($monto) <= 0.0001) {
             return;
         }
-        $lineas[] = self::linea($monto > 0 ? 'D' : 'H', $concepto, $cuentaId, abs($monto));
+        $lineas[] = self::linea($monto > 0 ? 'D' : 'H', $concepto, $cuentaId, abs($monto), 0, $cotizacion);
     }
 
     /**
      * @return array<string, mixed>
      */
-    private static function linea(string $dh, string $concepto, int $cuentaId, float $monto, int $centrocostoId = 0): array
-    {
+    private static function linea(
+        string $dh,
+        string $concepto,
+        int $cuentaId,
+        float $monto,
+        int $centrocostoId = 0,
+        float $cotizacion = 1.0,
+    ): array {
         $monto = round($monto, 2);
         $cc = CierreRendicionMaquinaCentrocostoSupport::resolverParaCuenta($cuentaId, $centrocostoId);
+        $cotizacion = $cotizacion > 0 ? round($cotizacion, 6) : 1.0;
 
         return [
             'concepto' => $concepto,
@@ -425,6 +445,7 @@ final class CierreRendicionMaquinaAsientoSupport
             'centrocosto_id' => $cc,
             'debe' => $dh === 'D' ? $monto : 0.0,
             'haber' => $dh === 'H' ? $monto : 0.0,
+            'cotizacion' => $cotizacion,
         ];
     }
 

@@ -9,7 +9,6 @@ use App\Models\Contable\Asiento;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoImputacionDiariaAnitaReader;
 use App\Support\Caja\IngresoEgresoImputacionDiariaSupport as Ie;
-use App\Support\Compras\PagoproveedorAnitaAuditoriaCompareSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -143,6 +142,7 @@ final class IngresoEgresoImputacionDiariaService
                 'No incluye cobranzas ni las OP de proveedores con facturas/anticipo (esas van al control AP).',
                 'Caja + cheques ERP se cruza con tesmov Anita. El asiento ERP se cruza con ctamov.',
                 'En ING/EGR/TRA además se exige que caja+cheques cuadre con el total del asiento.',
+                'Dólares y otras monedas se comparan en pesos con la cotización de cada línea (caja, asiento, tesmov y ctamov).',
                 'OPP/OPA de I/E no exigen caja = asiento (el asiento incluye AP/retenciones).',
                 'Compensatorios OPP/OPA se cruzan en Anita como AOP del nro original (no del nro ERP del reverso).',
             ],
@@ -266,7 +266,7 @@ final class IngresoEgresoImputacionDiariaService
             $asiento = $this->asientoDeMovimiento($mov);
             $tieneAsiento = $asiento !== null && (int) ($asiento->id ?? 0) > 0;
             $balance = $tieneAsiento
-                ? PagoproveedorAnitaAuditoriaCompareSupport::balanceDesdeAsientoMovimientos($asiento->asiento_movimientos ?? [])
+                ? Ie::balanceAsientoEnPesos($asiento->asiento_movimientos ?? [])
                 : ['total_debe' => 0.0, 'total_haber' => 0.0, 'lineas_con_importe' => 0, 'balanceado' => true];
             $asientoArs = round(max((float) $balance['total_debe'], (float) $balance['total_haber']), 2);
 

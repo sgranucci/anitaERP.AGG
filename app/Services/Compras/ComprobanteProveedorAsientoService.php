@@ -314,7 +314,7 @@ class ComprobanteProveedorAsientoService
             // Inferencia G/I ya aplicada sobre la colección al inicio de armarPreview.
 
             // Reparto multi-cuenta en Asiento: el neto no arma Debe 1:1 (lo reemplaza debe_gasto).
-            // Criterio: con reparto, solo los impuestos/percepciones (I/P/B/M/S/A) siguen 1:1.
+            // Criterio: con reparto, solo los impuestos/percepciones/retenciones (I/P/B/M/S/A/V) siguen 1:1.
             // N/G/E, EXENTO codigo 1, impuesto interno y tipoconcepto vacío no se postean aparte:
             // el II es neto y entra en la cuenta de gasto.
             // Solo corre con $hayRepartoDebeGasto (sin COM/FAR/OC artículos/anticipo/contrato).

@@ -4,7 +4,6 @@ namespace App\Support\Caja;
 
 use App\ApiAnita;
 use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
-use App\Support\Compras\PagoproveedorAnitaAuditoriaCompareSupport;
 
 /**
  * Lecturas Anita (pago / tesmov / ctamov / cpromae) para el control diario de I/E.
@@ -47,7 +46,7 @@ final class IngresoEgresoImputacionDiariaAnitaReader
                 foreach ($this->listar(
                     IngresoEgresoAnitaTesmovSupport::sistema(),
                     'tesmov',
-                    'tesv_tipo,tesv_nro,tesv_cuenta,tesv_importe,tesv_cotizacion',
+                    $this->camposTesmov('tesv_tipo,tesv_nro,tesv_cuenta'),
                     ' WHERE tesv_tipo = '.$this->esc($tipo)
                         .' AND tesv_nro IN ('.implode(',', $lote).')'
                         .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresa)
@@ -57,7 +56,10 @@ final class IngresoEgresoImputacionDiariaAnitaReader
                     if (! isset($out[$key])) {
                         continue;
                     }
-                    $out[$key]['ars'] = round($out[$key]['ars'] + abs((float) ($fila->tesv_importe ?? 0)), 2);
+                    $out[$key]['ars'] = round(
+                        $out[$key]['ars'] + IngresoEgresoImputacionDiariaSupport::tesmovImporteEnPesos($fila),
+                        2
+                    );
                     $out[$key]['lineas']++;
                     $out[$key]['encontrado'] = true;
                 }
@@ -143,7 +145,7 @@ final class IngresoEgresoImputacionDiariaAnitaReader
                 $filas = $this->listar(
                     'contab',
                     'ctamov',
-                    'ctav_empresa,ctav_nro_asiento,ctav_d_h,ctav_importe',
+                    'ctav_empresa,ctav_nro_asiento,ctav_d_h,ctav_importe,ctav_cotizacion,ctav_cod_mon',
                     ' WHERE ctav_empresa = '.$empresa
                         .' AND ctav_nro_asiento IN ('.implode(',', $lote).')'
                 );
@@ -157,7 +159,7 @@ final class IngresoEgresoImputacionDiariaAnitaReader
                     if (! isset($out[$key])) {
                         continue;
                     }
-                    $totales = PagoproveedorAnitaAuditoriaCompareSupport::totalesDesdeCtamov($lineas);
+                    $totales = IngresoEgresoImputacionDiariaSupport::totalesCtamovEnPesos($lineas);
                     $out[$key] = array_merge($totales, ['encontrado' => $totales['lineas_con_importe'] > 0]);
                 }
             }
@@ -265,13 +267,16 @@ final class IngresoEgresoImputacionDiariaAnitaReader
                         $tes = $this->listar(
                             IngresoEgresoAnitaTesmovSupport::sistema(),
                             'tesmov',
-                            'tesv_tipo,tesv_nro,tesv_cuenta,tesv_importe',
+                            $this->camposTesmov('tesv_tipo,tesv_nro,tesv_cuenta'),
                             ' WHERE tesv_tipo = '.$this->esc($tipoTes)
                                 .' AND tesv_nro = '.(int) $leg['nro']
                                 .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresa)
                         );
                         foreach (IngresoEgresoImputacionDiariaSupport::elegirFilasTesmovPierna($tes, (string) $leg['cuenta']) as $fila) {
-                            $out[$key]['ars'] = round($out[$key]['ars'] + abs((float) ($fila->tesv_importe ?? 0)), 2);
+                            $out[$key]['ars'] = round(
+                                $out[$key]['ars'] + IngresoEgresoImputacionDiariaSupport::tesmovImporteEnPesos($fila),
+                                2
+                            );
                             $out[$key]['lineas']++;
                             $out[$key]['encontrado'] = true;
                         }
@@ -282,7 +287,7 @@ final class IngresoEgresoImputacionDiariaAnitaReader
             $directo = $this->listar(
                 IngresoEgresoAnitaTesmovSupport::sistema(),
                 'tesmov',
-                'tesv_tipo,tesv_nro,tesv_importe',
+                $this->camposTesmov('tesv_tipo,tesv_nro'),
                 " WHERE tesv_tipo = 'TRA' AND tesv_nro IN (".implode(',', $lote).')'
                     .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresa)
             );
@@ -291,11 +296,24 @@ final class IngresoEgresoImputacionDiariaAnitaReader
                 if (! isset($out[$key]) || $out[$key]['encontrado']) {
                     continue;
                 }
-                $out[$key]['ars'] = round($out[$key]['ars'] + abs((float) ($fila->tesv_importe ?? 0)), 2);
+                $out[$key]['ars'] = round(
+                    $out[$key]['ars'] + IngresoEgresoImputacionDiariaSupport::tesmovImporteEnPesos($fila),
+                    2
+                );
                 $out[$key]['lineas']++;
                 $out[$key]['encontrado'] = true;
             }
         }
+    }
+
+    private function camposTesmov(string $extra): string
+    {
+        $campos = $extra.',tesv_importe,tesv_cotizacion';
+        if (! CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()) {
+            $campos .= ',tesv_cod_mon';
+        }
+
+        return $campos;
     }
 
     /**

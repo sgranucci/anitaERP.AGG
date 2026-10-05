@@ -11,7 +11,7 @@ use App\Support\Contable\CuentaCentrocostoAsignadosSupport;
 /**
  * Arma líneas DEBE de asiento desde conceptos IVA compra (ingreso/egreso).
  *
- * Impuestos y percepciones van 1:1 a la cuenta del concepto.
+ * Impuestos, percepciones y retenciones (tipo V) van 1:1 a la cuenta del concepto.
  * El neto (sin COM) es gasto abierto: una línea por concepto, o el reparto
  * `debitos_gasto` si el usuario agregó más débitos en la vista previa.
  * El haber sigue siendo las cuentas de caja del movimiento.

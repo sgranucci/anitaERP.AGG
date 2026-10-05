@@ -2,9 +2,13 @@
 
 namespace App\Support\Caja;
 
+use App\Support\Configuracion\MonedaAnitaCodigoSupport;
+use App\Support\Contable\AsientoBalanceSupport;
+
 /**
  * Control I/E: tesorería ERP (caja + cheques) ↔ tesmov Anita;
  * asiento ERP ↔ ctamov Anita. ING/EGR/TRA también exigen caja ↔ asiento.
+ * Los importes en moneda extranjera se comparan en pesos con la cotización de cada línea.
  */
 final class IngresoEgresoImputacionDiariaSupport
 {
@@ -138,6 +142,85 @@ final class IngresoEgresoImputacionDiariaSupport
         }
 
         return round($importe, 2);
+    }
+
+    /**
+     * Asiento ERP en pesos. El monto de la línea está en su moneda; la cotización
+     * solo se aplica si la moneda no es pesos (igual que la caja).
+     *
+     * @param  iterable<mixed>  $movimientos
+     * @return array{total_debe: float, total_haber: float, diferencia: float, lineas_con_importe: int, balanceado: bool}
+     */
+    public static function balanceAsientoEnPesos(iterable $movimientos): array
+    {
+        $debes = [];
+        $haberes = [];
+        foreach ($movimientos as $mov) {
+            $monto = is_array($mov)
+                ? (float) ($mov['monto'] ?? 0)
+                : (float) ($mov->monto ?? 0);
+            if (abs($monto) < 0.0001) {
+                continue;
+            }
+            $monedaId = is_array($mov)
+                ? (int) ($mov['moneda_id'] ?? 1)
+                : (int) ($mov->moneda_id ?: 1);
+            $cotizacion = is_array($mov)
+                ? ($mov['cotizacion'] ?? 1)
+                : ($mov->cotizacion ?? 1);
+            $pesos = self::aPesos($monto, $monedaId > 0 ? $monedaId : 1, $cotizacion);
+            $debes[] = $pesos > 0 ? $pesos : 0.0;
+            $haberes[] = $pesos < 0 ? abs($pesos) : 0.0;
+        }
+
+        return AsientoBalanceSupport::totalesDesdeDebeHaber($debes, $haberes);
+    }
+
+    /**
+     * tesmov guarda el importe en la moneda del movimiento (tesv_cod_mon) y la cotización aparte.
+     *
+     * @param  object|array<string, mixed>  $fila
+     */
+    public static function tesmovImporteEnPesos(object|array $fila): float
+    {
+        $row = is_array($fila) ? $fila : get_object_vars($fila);
+        $moneda = (int) MonedaAnitaCodigoSupport::normalizar($row['tesv_cod_mon'] ?? 1);
+
+        return abs(self::aPesos(
+            (float) ($row['tesv_importe'] ?? 0),
+            $moneda > 0 ? $moneda : 1,
+            $row['tesv_cotizacion'] ?? 1
+        ));
+    }
+
+    /**
+     * ctamov guarda ctav_importe en la moneda de la línea (ctav_cod_mon).
+     *
+     * @param  iterable<mixed>  $filas
+     * @return array{total_debe: float, total_haber: float, diferencia: float, lineas_con_importe: int, balanceado: bool}
+     */
+    public static function totalesCtamovEnPesos(iterable $filas): array
+    {
+        $debes = [];
+        $haberes = [];
+        foreach ($filas as $fila) {
+            $row = is_array($fila) ? $fila : get_object_vars($fila);
+            $importe = abs((float) ($row['ctav_importe'] ?? 0));
+            if ($importe < 0.0001) {
+                continue;
+            }
+            $moneda = (int) MonedaAnitaCodigoSupport::normalizar($row['ctav_cod_mon'] ?? 1);
+            $pesos = self::aPesos($importe, $moneda > 0 ? $moneda : 1, $row['ctav_cotizacion'] ?? 1);
+            if (strtoupper(trim((string) ($row['ctav_d_h'] ?? 'D'))) === 'H') {
+                $debes[] = 0.0;
+                $haberes[] = $pesos;
+            } else {
+                $debes[] = $pesos;
+                $haberes[] = 0.0;
+            }
+        }
+
+        return AsientoBalanceSupport::totalesDesdeDebeHaber($debes, $haberes);
     }
 
     /**

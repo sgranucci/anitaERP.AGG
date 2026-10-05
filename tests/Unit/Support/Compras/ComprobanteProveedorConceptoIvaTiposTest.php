@@ -46,4 +46,12 @@ class ComprobanteProveedorConceptoIvaTiposTest extends TestCase
         $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto('G', '50'));
         $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto('I', '503'));
     }
+
+    public function test_retencion_tipo_v_es_impuesto_y_no_gasto(): void
+    {
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esImpuesto('V'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto('V', '151'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno('V', '151'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esExento('V', '151'));
+    }
 }

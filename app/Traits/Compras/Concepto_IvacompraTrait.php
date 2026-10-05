@@ -17,6 +17,7 @@ trait Concepto_IvacompraTrait {
 		['id' => '8', 'valor' => 'T', 'nombre'  => 'Importe impuesto interno'],
 		['id' => '9', 'valor' => 'S', 'nombre'  => 'Importe percepciones SIRCREB'],
 		['id' => '10', 'valor' => 'A', 'nombre'  => 'Importe percepciones aduana'],
+		['id' => '11', 'valor' => 'V', 'nombre'  => 'Importe retenciones'],
 			];
 
 	public static $enumRetiene = [

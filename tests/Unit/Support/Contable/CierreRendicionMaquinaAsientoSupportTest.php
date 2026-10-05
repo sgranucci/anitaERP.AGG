@@ -94,6 +94,100 @@ class CierreRendicionMaquinaAsientoSupportTest extends TestCase
         $this->assertLinea($lineas, 337, 9673308.09, 0.0);
     }
 
+    public function test_linea_de_caja_dolar_guarda_cotizacion_de_tesoreria_y_el_importe_sigue_en_pesos(): void
+    {
+        $config = [
+            'cuenta_caja_pesos_id' => 5,
+            'cuenta_totalcoin_id' => 1,
+            'cuenta_impuesto_esp_id' => 1,
+            'cuenta_gastos_id' => 1,
+            'cuenta_ticket_gastro_id' => 1,
+            'cuenta_pago24_id' => 1,
+            'cuenta_ticket_prom_debe_id' => 1,
+            'cuenta_ticket_prom_haber_id' => 1,
+            'cuenta_caja_transitoria_id' => 1,
+            'cuenta_ff_maquina_id' => 1,
+            'cuenta_ventas_id' => 10,
+            'cuenta_ventas_ruleta_id' => 11,
+            'cuenta_poder_publico_id' => 1,
+            'cuenta_diferencia_caja_id' => 1,
+            'cuenta_partida_pendiente_id' => 1,
+            'cuenta_canon_loteria_id' => 20,
+            'cuenta_cont_canon_loteria_id' => 21,
+            'cuenta_canon_hospital_id' => 22,
+            'cuenta_cont_canon_hospital_id' => 23,
+        ];
+
+        $tot = [
+            'valores_cuenta' => [
+                ['cuentacontable_id' => 5, 'concepto' => 'Caja pesos', 'monto' => 1000.0, 'cotizacion' => 1],
+                [
+                    'cuentacontable_id' => 9,
+                    'concepto' => 'Caja dolar',
+                    'monto' => 3090000.0,
+                    'moneda_id' => 2,
+                    'cotizacion' => 1480.5,
+                    'monto_origen' => 2087.13,
+                ],
+            ],
+            'totalcoin' => 0.0,
+            'impuesto_esp' => 0.0,
+            'vales' => 0.0,
+            'reintegros' => 0.0,
+            'gastos_apertura' => [],
+            'ticket_gastro' => 0.0,
+            'vta_ant_gastro' => 0.0,
+            'ticket_prom' => 0.0,
+            'variacion_ff' => 0.0,
+            'tot_caja_trans' => 0.0,
+            'maquinas_online' => 3091000.0,
+            'ruletas_online' => 0.0,
+            'maquinas_real' => 0.0,
+            'ruletas_real' => 0.0,
+            'pago_diferido' => 0.0,
+        ];
+
+        $asientos = CierreRendicionMaquinaAsientoSupport::armarAsientos($tot, $config);
+        $lineas = $asientos[0]['lineas'];
+        $dolar = null;
+        $pesos = null;
+        foreach ($lineas as $ln) {
+            if ((int) ($ln['cuenta_id'] ?? 0) === 9) {
+                $dolar = $ln;
+            }
+            if ((int) ($ln['cuenta_id'] ?? 0) === 5) {
+                $pesos = $ln;
+            }
+        }
+
+        $this->assertNotNull($dolar);
+        $this->assertEqualsWithDelta(3090000.0, (float) $dolar['debe'], 0.01);
+        $this->assertEqualsWithDelta(1480.5, (float) $dolar['cotizacion'], 0.0001);
+        $this->assertNotNull($pesos);
+        $this->assertEqualsWithDelta(1.0, (float) $pesos['cotizacion'], 0.0001);
+
+        $payload = CierreRendicionMaquinaAsientoSupport::armarPayloadAsiento(
+            [
+                $dolar,
+                [
+                    'cuenta_id' => 10,
+                    'concepto' => 'Contrapartida',
+                    'debe' => 0.0,
+                    'haber' => 3090000.0,
+                    'cotizacion' => 1,
+                ],
+            ],
+            1,
+            '2026-09-07',
+            'Cierre rendición máquinas',
+        );
+        $idxDolar = array_search(9, $payload['cuentacontable_ids'], true);
+        $this->assertNotFalse($idxDolar);
+        $this->assertSame(1, $payload['moneda_ids'][$idxDolar]);
+        $this->assertEqualsWithDelta(1480.5, (float) $payload['cotizaciones'][$idxDolar], 0.0001);
+        $this->assertEqualsWithDelta(3090000.0, (float) $payload['debes'][$idxDolar], 0.01);
+    }
+
     /**
      * @param  list<array<string, mixed>>  $lineas
      */

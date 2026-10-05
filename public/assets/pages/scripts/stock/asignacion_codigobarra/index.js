@@ -58,17 +58,95 @@
             maximumFractionDigits: 3,
         }));
 
+        renderCompras(item);
+        renderProveedor(item);
+
+        $('#ac_pickeo_codigo').val('').focus();
+        renderLista();
+    }
+
+    function compraSeleccionada(item) {
+        item = item || actual();
+        var compras = (item && item.compras) || [];
+        if (!compras.length) {
+            return null;
+        }
+        var id = parseInt($('#ac_compra_select').val(), 10) || 0;
+        for (var i = 0; i < compras.length; i++) {
+            if (parseInt(compras[i].recepcion_id, 10) === id) {
+                return compras[i];
+            }
+        }
+        for (var j = 0; j < compras.length; j++) {
+            if (compras[j].seleccionada) {
+                return compras[j];
+            }
+        }
+        return compras[0];
+    }
+
+    function renderCompras(item) {
+        var $wrap = $('#ac_compra_wrap');
+        var $sel = $('#ac_compra_select').empty();
+        var compras = (item && item.compras) || [];
+        if (!compras.length) {
+            $wrap.hide();
+            return;
+        }
+        var seleccionId = 0;
+        compras.forEach(function (compra) {
+            var texto = compra.etiqueta || compra.proveedor_nombre || ('Recepción ' + compra.recepcion_id);
+            if (compra.tiene_codigo) {
+                texto += ' — ya tiene código';
+            }
+            if (compra.seleccionada && !seleccionId) {
+                seleccionId = compra.recepcion_id;
+            }
+            $('<option/>')
+                .val(compra.recepcion_id)
+                .text(texto)
+                .appendTo($sel);
+        });
+        if (!seleccionId && compras.length) {
+            seleccionId = compras[0].recepcion_id;
+        }
+        $sel.val(String(seleccionId));
+        $wrap.show();
+    }
+
+    function renderProveedor(item) {
         var $prov = $('#ac_actual_proveedor_wrap');
+        var compra = compraSeleccionada(item);
+        if (compra) {
+            var nombre = compra.proveedor_nombre || '';
+            if (compra.tiene_codigo) {
+                $prov.html(
+                    '<span class="text-warning">Proveedor: ' + $('<div/>').text(nombre).html() +
+                    '. Ya tiene código ' + $('<div/>').text(compra.codigobarra || '').html() + '.</span>'
+                );
+            } else {
+                $prov.text('Proveedor de la compra: ' + nombre);
+            }
+            return;
+        }
         if (item.necesita_proveedor) {
-            $prov.html('<span class="text-warning"><i class="fa fa-exclamation-triangle"></i> Sin vínculo proveedor: se pedirá al guardar.</span>');
+            $prov.html('<span class="text-warning"><i class="fa fa-exclamation-triangle"></i> Sin compras ni vínculo proveedor: se pedirá al guardar.</span>');
         } else if (item.proveedor_nombre) {
             $prov.text('Proveedor: ' + item.proveedor_nombre);
         } else {
             $prov.text('');
         }
+    }
 
-        $('#ac_pickeo_codigo').val('').focus();
-        renderLista();
+    function proveedorParaGuardar(item, proveedorId) {
+        if (proveedorId > 0) {
+            return proveedorId;
+        }
+        var compra = compraSeleccionada(item);
+        if (compra && parseInt(compra.proveedor_id, 10) > 0) {
+            return parseInt(compra.proveedor_id, 10);
+        }
+        return parseInt(item && item.proveedor_id, 10) || 0;
     }
 
     function cargarPendientes() {
@@ -102,8 +180,8 @@
             $('#ac_resumen_carga')
                 .show()
                 .html(
-                    '<strong>' + cola.length + '</strong> artículo(s) sin código de barras y con saldo. ' +
-                    'Vas de a uno: grabá o tocá <em>Siguiente sin grabar</em>. ' +
+                    '<strong>' + cola.length + '</strong> artículo(s) con saldo y sin código de proveedor. ' +
+                    'Vas de a uno: elegí la compra si hay varias, grabá o tocá <em>Siguiente sin grabar</em>. ' +
                     'Abrí <em>Ver cola pendiente</em> para ver el listado completo.'
                 );
             setEstado(cola.length + ' artículo(s) pendientes.', false);
@@ -166,6 +244,13 @@
         codigo = String(codigo || '').replace(/\s+/g, '').trim();
         if (!codigo) {
             setEstado('Leé o ingresá un código de barras.', true);
+            return;
+        }
+
+        proveedorId = proveedorParaGuardar(item, proveedorId);
+        var compra = compraSeleccionada(item);
+        if (compra && compra.tiene_codigo) {
+            setEstado('Esa compra ya tiene código de proveedor (' + (compra.codigobarra || '') + '). Elegí otra.', true);
             return;
         }
 
@@ -261,6 +346,21 @@
                     llenarSelectProveedores((resp && resp.opciones) || []);
                 });
             }, 280);
+        });
+
+        $('#ac_compra_select').on('change', function () {
+            var item = actual();
+            if (!item) {
+                return;
+            }
+            var compra = compraSeleccionada(item);
+            if (compra) {
+                item.proveedor_id = parseInt(compra.proveedor_id, 10) || null;
+                item.proveedor_nombre = compra.proveedor_nombre || '';
+                item.recepcion_id = parseInt(compra.recepcion_id, 10) || null;
+                item.necesita_proveedor = false;
+            }
+            renderProveedor(item);
         });
 
         $('#ac_prov_confirmar').on('click', function () {

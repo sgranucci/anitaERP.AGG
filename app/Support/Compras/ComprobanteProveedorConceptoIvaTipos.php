@@ -12,8 +12,12 @@ final class ComprobanteProveedorConceptoIvaTipos
     /** Neto / gravado / exento → reversan provisión en modo ASIGNA_RECEPCION. */
     public const NETO = ['N', 'G', 'E'];
 
-    /** Impuestos y percepciones → deben por cuenta del concepto. */
-    public const IMPUESTO = ['I', 'P', 'B', 'M', 'T', 'S', 'A'];
+    /**
+     * Impuestos, percepciones y retenciones → deben por cuenta del concepto.
+     * V = retención (Anita concc_tipo_conc; Libro IVA: percepción nacional),
+     * p. ej. «Retencion Iva» en gastos bancarios de tesorería.
+     */
+    public const IMPUESTO = ['I', 'P', 'B', 'M', 'T', 'S', 'A', 'V'];
 
     /** Impuesto interno / I.T.C. (enum valor T). */
     public const IMPUESTO_INTERNO = 'T';

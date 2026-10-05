@@ -182,7 +182,7 @@
                         'inputId' => 'deposito_ac_id',
                     ])
                     <button type="button" id="ac_btn_cargar" class="btn btn-info btn-block mt-2">
-                        <i class="fa fa-refresh"></i> Cargar art&iacute;culos sin c&oacute;digo de barras
+                        <i class="fa fa-refresh"></i> Cargar art&iacute;culos con stock
                     </button>
                 </div>
 
@@ -201,6 +201,15 @@
                         <div class="ac-meta">
                             Saldo: <strong id="ac_actual_saldo"></strong>
                             <span id="ac_actual_proveedor_wrap" class="d-block mt-1"></span>
+                        </div>
+                        <div id="ac_compra_wrap" class="mt-2" style="display:none;">
+                            <label for="ac_compra_select" class="d-block mb-1" style="font-size:0.75rem;font-weight:600;color:#495057;">
+                                Compra para el proveedor
+                            </label>
+                            <select id="ac_compra_select" class="form-control"></select>
+                            <small class="text-muted d-block mt-1">
+                                Queda elegida la &uacute;ltima compra que todav&iacute;a no tiene c&oacute;digo. Si hay varias, eleg&iacute; la del proveedor correcto.
+                            </small>
                         </div>
                     </div>
 
@@ -221,7 +230,7 @@
                             </button>
                         </div>
                         <small class="text-muted d-block mt-1">
-                            C&aacute;mara en vivo (HTTPS). Si no hay v&iacute;nculo proveedor, te pedir&aacute; elegirlo al grabar.
+                            C&aacute;mara en vivo (HTTPS). El c&oacute;digo se graba en el art&iacute;culo proveedor de la compra elegida.
                         </small>
                     </div>
 
@@ -234,7 +243,7 @@
                 </div>
 
                 <div id="ac_vacio" class="ac-vacio" style="display:none;">
-                    No hay art&iacute;culos con saldo y sin c&oacute;digo de barras en este dep&oacute;sito.
+                    No hay art&iacute;culos con saldo pendientes de c&oacute;digo de proveedor en este dep&oacute;sito.
                 </div>
             </div>
         </div>
@@ -274,7 +283,7 @@
             </div>
             <div class="modal-body">
                 <p class="small text-muted mb-2">
-                    Este art&iacute;culo no tiene v&iacute;nculo en art&iacute;culo proveedor. Eleg&iacute; uno para grabar el c&oacute;digo.
+                    Este art&iacute;culo no tiene compras recientes ni v&iacute;nculo en art&iacute;culo proveedor. Eleg&iacute; un proveedor para grabar el c&oacute;digo.
                 </p>
                 <input type="search" id="ac_prov_buscar" class="form-control mb-2" placeholder="Buscar proveedor…" autocomplete="off">
                 <select id="ac_prov_select" class="form-control" size="8"></select>
