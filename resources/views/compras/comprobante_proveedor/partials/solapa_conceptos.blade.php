@@ -23,9 +23,9 @@
         <p class="text-muted small mb-3">
             Agregue uno o más renglones. Código + Enter o <kbd>F1</kbd>/lupa para consultar.
             En tipos normales se precarga la plantilla con <strong>todos</strong> los conceptos
-            asignados al tipo de comprobante. En prorrateadas multi-CC (FPB/CPB/…) no hay plantilla:
-            se usan los renglones de la precarga (unión ya armada). El modal F1, en esos tipos,
-            lista la unión de los finos de la OC (sin duplicar).
+            asignados al tipo de comprobante. En prorrateadas multi-CC (FPB/CPB/…) la plantilla
+            es la unión de los finos de la OC (en $0 si la precarga no trajo montos). Si la
+            precarga ya armó esos renglones, se conservan. El modal F1 lista la misma unión.
             En el monto, <kbd>Enter</kbd> valida coherencia y actualiza la vista previa del asiento.
             La cuenta contable no se carga acá: el neto con OC toma las cuentas de los artículos;
             en ND/NC (sin COM) se cambia en la solapa <strong>Asiento contable</strong>.

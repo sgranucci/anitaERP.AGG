@@ -2947,29 +2947,13 @@ $(function () {
         return String($('#numeroordencompra').val() || $('input[name="numeroordencompra"]').val() || '').trim();
     }
 
-    function esTipoProrrateadoComprobante() {
-        var abrev = String(
-            $('#tipotransaccion_compra_id_abreviatura').val()
-            || $('.abreviaturatipotransaccioncompra').first().val()
-            || ''
-        ).toUpperCase().trim();
-        if (abrev.length < 3) {
-            return false;
-        }
-        return abrev.charAt(1) === 'P'
-            && ['F', 'C', 'D'].indexOf(abrev.charAt(0)) >= 0
-            && ['B', 'S', 'L', 'U'].indexOf(abrev.charAt(2)) >= 0;
-    }
-
     function precargarConceptosPorTipo(tipoId, forzar) {
         var id = parseInt(tipoId || '0', 10) || 0;
         if (id <= 0 || contabilizado) {
             return;
         }
-        // FPB/CPB/…: no armar plantilla; los renglones vienen de la precarga (unión).
-        if (esTipoProrrateadoComprobante()) {
-            return;
-        }
+        // FPB/CPB/… con grilla vacía: la plantilla es la unión de finos de la OC.
+        // Si la precarga ya trajo renglones, hayConceptosCargados() corta más abajo.
         var hayMontos = false;
         $('#tbody-concepto-table tr.item-concepto').each(function () {
             var monto = parseMonto($(this).find('.monto').val() || '0');
@@ -2996,10 +2980,8 @@ $(function () {
         var totalCabeceraAntes = parseMonto($('#total').val() || '0');
         $.getJSON(base + '/compras/tipotransaccion_compra/' + id + '/conceptos-iva', params)
             .done(function (res) {
-                if (res && res.prorrateo_multi_cc) {
-                    return;
-                }
                 var lista = (res && res.conceptos) || [];
+                var esProrrateo = !!(res && res.prorrateo_multi_cc);
                 limpiarFilasConceptos();
                 if (!lista.length) {
                     agregarFilaConcepto({}, '');
@@ -3029,7 +3011,9 @@ $(function () {
                     });
                     enriquecerMetaGravadosDesdeFormulas();
                     if ($aviso.length) {
-                        var msgOk = 'Conceptos del tipo de comprobante. Complete los montos.';
+                        var msgOk = esProrrateo
+                            ? 'Conceptos de la OC (unión de centros). Complete los montos que correspondan y quite el resto.'
+                            : 'Conceptos del tipo de comprobante. Complete los montos.';
                         $aviso.removeClass('d-none').html(
                             '<i class="fa fa-check-circle"></i> ' + msgOk
                             + (agregados ? ' (' + agregados + ')' : '')

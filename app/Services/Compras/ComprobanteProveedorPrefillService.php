@@ -219,8 +219,8 @@ class ComprobanteProveedorPrefillService
             ]);
         });
 
-        // Tipo normal sin renglones de precarga: plantilla = conceptos asignados al tipo.
-        // Prorrateo (FPB/…): no inventar plantilla; van los de la precarga (unión ya armada).
+        // Sin renglones de precarga: plantilla del tipo (en FPB/CPB, unión de los finos de la OC).
+        // Si la precarga ya trajo la unión con montos, esos renglones se conservan.
         if ($conceptos->isEmpty() && (int) ($data->tipotransaccion_compra_id ?? 0) > 0) {
             $numeroOc = (string) (
                 $ordencompra?->numeroordencompra
