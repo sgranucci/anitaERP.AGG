@@ -1379,21 +1379,23 @@ class ArticuloController extends Controller
             ];
             $arbolSvc->evaluarTrasActualizar((int) $id, $antesArbol, $despuesArbol);
 
-            // Lee nuevo precio con relaciones para interface Anita
-            $producto = Articulo::with('categorias')->with('subcategorias')->with('lineas')->with('mventas')->with('impuestos')
-                ->with('unidadesdemedidas')->with('unidadesdemedidasalternativas')->with('cuentascontablesventas')
-                ->with('cuentascontablescompras')->with('cuentascontablesimpinternos')->with('usoarticulos')
-                ->with('materiales')->with('tipocortes')->with('punteras')->with('contrafuertes')
-                ->with('tipocorteforros')->with('forros')->with('compfondos')->with('articulos_caja')->
-                                where('id', $request->id)->get()->first();
+            if (! EntornoEmpresaSupport::esFerli()) {
+                // Lee nuevo precio con relaciones para interface Anita
+                $producto = Articulo::with('categorias')->with('subcategorias')->with('lineas')->with('mventas')->with('impuestos')
+                    ->with('unidadesdemedidas')->with('unidadesdemedidasalternativas')->with('cuentascontablesventas')
+                    ->with('cuentascontablescompras')->with('cuentascontablesimpinternos')->with('usoarticulos')
+                    ->with('materiales')->with('tipocortes')->with('punteras')->with('contrafuertes')
+                    ->with('tipocorteforros')->with('forros')->with('compfondos')->with('articulos_caja')->
+                                    where('id', $request->id)->get()->first();
 
-            // Actualiza anita
-            $Articulo = new Articulo;
-            $anita = $Articulo->actualizarAnita($producto, $producto->sku);
+                // Actualiza anita
+                $Articulo = new Articulo;
+                $anita = $Articulo->actualizarAnita($producto, $producto->sku);
 
-            if (isset($anita['error'])) {
-                if (str_contains($anita['error'], 'Error')) {
-                    throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+                if (isset($anita['error'])) {
+                    if (str_contains($anita['error'], 'Error')) {
+                        throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+                    }
                 }
             }
 

@@ -870,18 +870,6 @@ class ArticuloFerliController extends Controller
                 ->with('errores', [$e->getMessage()]);
         }
 
-        // Lee nuevo precio con relaciones para interface Anita
-        $producto = Articulo::with('categorias')->with('subcategorias')->with('lineas')->with('mventas')->with('impuestos')
-            ->with('unidadesdemedidas')->with('unidadesdemedidasalternativas')->with('cuentascontablesventas')
-            ->with('cuentascontablescompras')->with('cuentascontablesimpinternos')->with('usoarticulos')
-            ->with('materiales')->with('tipocortes')->with('punteras')->with('contrafuertes')
-            ->with('tipocorteforros')->with('forros')->with('compfondos')->with('articulos_caja')->
-                            where('id', $request->id)->get()->first();
-
-        // Actualiza anita
-        $Articulo = new Articulo;
-        $Articulo->actualizarAnita($producto, $producto->sku);
-
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloFerliListadoFiltros::class);
 
         return redirect()->route('products.index', $filtrosQuery)->with('status', 'Articulo actualizado con exito');
@@ -925,17 +913,6 @@ class ArticuloFerliController extends Controller
 
             return $e->getMessage();
         }
-
-        // Lee nuevo precio con relaciones para interface Anita
-        $producto = Articulo::with('categorias')->with('subcategorias')->with('lineas')->with('mventas')->with('impuestos')
-            ->with('unidadesdemedidas')->with('unidadesdemedidasalternativas')->with('cuentascontablesventas')
-            ->with('cuentascontablescompras')->with('cuentascontablesimpinternos')->with('usoarticulos')
-            ->with('materiales')->with('tipocortes')->with('punteras')->with('contrafuertes')
-            ->with('tipocorteforros')->with('forros')->with('compfondos')->with('articulos_caja')->
-                            where('id', $request->id)->get()->first();
-        // Actualiza anita
-        $Articulo = new Articulo;
-        $Articulo->actualizarAnita($producto, $producto->sku);
 
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloFerliListadoFiltros::class);
 
@@ -990,17 +967,6 @@ class ArticuloFerliController extends Controller
                 ->withInput()
                 ->with('mensaje_error', 'No se pudo actualizar el artículo: '.$e->getMessage());
         }
-
-        // Lee nuevo precio con relaciones para interface Anita
-        $producto = Articulo::with('categorias')->with('subcategorias')->with('lineas')->with('mventas')->with('impuestos')
-            ->with('unidadesdemedidas')->with('unidadesdemedidasalternativas')->with('cuentascontablesventas')
-            ->with('cuentascontablescompras')->with('cuentascontablesimpinternos')->with('usoarticulos')
-            ->with('materiales')->with('tipocortes')->with('punteras')->with('contrafuertes')
-            ->with('tipocorteforros')->with('forros')->with('compfondos')->where('id', $id)->get()->first();
-
-        // Actualiza anita
-        $Articulo = new Articulo;
-        $Articulo->actualizarAnita($producto, $producto->sku);
 
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloFerliListadoFiltros::class);
 

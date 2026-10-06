@@ -4,6 +4,7 @@ namespace App\Models\Stock;
 
 use App\ApiAnita;
 use App\Models\Configuracion\Empresa;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\ArticuloCuentacontableEmpresasSupport;
 use App\Support\Stock\ArticuloImpuestoAnitaSupport;
 use App\Support\Stock\ArticuloStkmaeAnitaBridgeSupport;
@@ -2022,6 +2023,10 @@ class Articulo extends Model implements Auditable
 
     public function actualizarAnita($request, $id)
     {
+        if (EntornoEmpresaSupport::esFerli()) {
+            return ['Success'];
+        }
+
         $this->condicionentregaRepository = App::make(\App\Repositories\Compras\CondicionentregaRepositoryInterface::class);
 
         $apiAnita = new ApiAnita;
