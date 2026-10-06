@@ -3,6 +3,7 @@
 namespace App\Services\Caja;
 
 use App\Models\Ai\AiDecision;
+use App\Models\Caja\Caja_Movimiento_Cuentacaja;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Comprobante_Proveedor_Debe_Gasto;
@@ -19,6 +20,7 @@ use App\Support\Caja\IngresoEgresoComprobanteIvaNumeracionSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Caja\IngresoEgresoGastoBancoSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
+use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
@@ -337,6 +339,29 @@ class IngresoEgresoComprobanteIvaService
     }
 
     /**
+     * En dólares el comprobante tiene que llevar la cotización del movimiento.
+     * Un 1 no es cotización: la contabilidad queda en pesos con la tasa del asiento.
+     */
+    private function cotizacionParaCabecera(int $cajaMovimientoId, int $monedaId, float $cotizacionPayload): float
+    {
+        if (! ComprobanteProveedorMonedaMotor::esMonedaExtranjera($monedaId)) {
+            return $cotizacionPayload > 0 ? $cotizacionPayload : 1.0;
+        }
+        if ($cotizacionPayload > ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA) {
+            return $cotizacionPayload;
+        }
+
+        $cotizacion = Caja_Movimiento_Cuentacaja::query()
+            ->where('caja_movimiento_id', $cajaMovimientoId)
+            ->where('moneda_id', $monedaId)
+            ->where('cotizacion', '>', ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA)
+            ->orderByDesc('id')
+            ->value('cotizacion');
+
+        return $cotizacion !== null ? (float) $cotizacion : $cotizacionPayload;
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
@@ -393,7 +418,11 @@ class IngresoEgresoComprobanteIvaService
             'subtotal' => (float) ($payload['subtotal'] ?? $payload['total'] ?? 0),
             'total' => (float) ($payload['total'] ?? 0),
             'moneda_id' => (int) ($payload['moneda_id'] ?? 1),
-            'cotizacion' => (float) ($payload['cotizacion'] ?? 1),
+            'cotizacion' => $this->cotizacionParaCabecera(
+                $cajaMovimientoId,
+                (int) ($payload['moneda_id'] ?? 1),
+                (float) ($payload['cotizacion'] ?? 1),
+            ),
             'numerocae' => $payload['numerocae'] ?? null,
             'tipo_autorizacion' => ComprobanteProveedorTipoAutorizacion::normalizar(
                 $payload['tipo_autorizacion'] ?? null

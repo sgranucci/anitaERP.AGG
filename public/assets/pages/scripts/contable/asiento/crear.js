@@ -1177,9 +1177,45 @@
 					alert("Error de grabacion");
 			},
 			error: function (r) {
-				alert("Error del servidor");
+				var msg = mensajeErrorAjaxAsiento(r);
+				alert(msg || "Error del servidor");
 			}
 		});
+	}
+
+	function mensajeErrorAjaxAsiento(r) {
+		var body = r && r.responseJSON ? r.responseJSON : null;
+		if (!body && r && r.responseText) {
+			try {
+				body = JSON.parse(r.responseText);
+			} catch (e) {
+				body = null;
+			}
+		}
+		if (!body) {
+			return '';
+		}
+		if (body.errores) {
+			return String(body.errores);
+		}
+		if (body.errors) {
+			var partes = [];
+			Object.keys(body.errors).forEach(function (k) {
+				var v = body.errors[k];
+				if (Array.isArray(v)) {
+					partes = partes.concat(v);
+				} else if (v) {
+					partes.push(String(v));
+				}
+			});
+			if (partes.length) {
+				return partes.join(' ');
+			}
+		}
+		if (body.message && body.message !== 'The given data was invalid.') {
+			return String(body.message);
+		}
+		return '';
 	}
 
 	function mostrarModalAprobacionCuentas(cuentas) {

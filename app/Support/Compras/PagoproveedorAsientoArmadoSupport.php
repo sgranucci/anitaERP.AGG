@@ -316,8 +316,18 @@ final class PagoproveedorAsientoArmadoSupport
 
             $cotDeuda = (float) ($comp->cotizaciones ?? $comp->cotizacion ?? 1);
             $cotApl = (float) ($comp->cotizacion_aplicadas ?? $comp->cotizacion_aplicada ?? 0);
-            if ($cotApl <= 0) {
-                $cotApl = $cotizacionPago;
+            // Con moneda extranjera en juego el 1 no es cotización: el backfill de aplicaciones
+            // importadas de Anita lo dejó grabado y le gana a la del documento. Primero la del
+            // pago; si tampoco sirve, la de la deuda, que liquida sin diferencia de cambio en
+            // lugar de inventar una del orden de la cotización.
+            $cotMinima = max($monedaDeudaId, $monedaPagoId) > $monedaLocal
+                ? CotizacionVigenteSupport::COTIZACION_MINIMA_EXTRANJERA
+                : 0.0;
+            if ($cotApl <= $cotMinima) {
+                $cotApl = (float) $cotizacionPago;
+            }
+            if ($cotApl <= $cotMinima) {
+                $cotApl = $cotDeuda;
             }
             $liq = PagoproveedorLiquidacionSupport::calcular(
                 $monto,

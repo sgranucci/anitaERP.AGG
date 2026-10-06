@@ -1309,6 +1309,34 @@
         return null;
     }
 
+    function parseMontoCajaIe(val) {
+        if (window.AsientoMontosFormato && typeof AsientoMontosFormato.parseDecimal === 'function') {
+            return AsientoMontosFormato.parseDecimal(val);
+        }
+        var n = parseFloat(String(val || '').replace(/\./g, '').replace(',', '.'));
+        return isNaN(n) ? 0 : n;
+    }
+
+    function cotizacionComprobanteDesdeCaja() {
+        var monedaId = parseInt($('#ie-cp-moneda-id').val() || '1', 10) || 1;
+        if (monedaId <= 1) {
+            return 1;
+        }
+        var cot = 0;
+        $('#tbody-cuenta-table .item-cuenta').each(function () {
+            var monedaLinea = parseInt($(this).find('.moneda').val() || '1', 10) || 1;
+            if (monedaLinea !== monedaId) {
+                return;
+            }
+            var n = parseMontoCajaIe($(this).find('.cotizacion').val());
+            if (n > 1.0001) {
+                cot = n;
+                return false;
+            }
+        });
+        return cot > 1.0001 ? cot : 1;
+    }
+
     function serializarModal() {
         var conceptos = [];
         $('#ie-cp-tbody-conceptos .ie-cp-fila-concepto').each(function () {
@@ -1359,7 +1387,7 @@
             fechaiva: $('#ie-cp-fecha-iva').val(),
             total: parseFloat($('#ie-cp-total').val() || '0'),
             moneda_id: parseInt($('#ie-cp-moneda-id').val() || '1', 10),
-            cotizacion: 1,
+            cotizacion: cotizacionComprobanteDesdeCaja(),
             numerocae: $('#ie-cp-cae').val() || null,
             tipo_autorizacion: $('#ie-cp-tipo-autorizacion').val() || null,
             pdf_temp_id: ($('#ie-cp-pdf-temp-id').val() || '').trim() || null,
@@ -1973,14 +2001,6 @@
             .on('hidden.bs.modal.ieCpApilar', function () {
                 alCerrarModalHijoSobreComprobanteIva(this);
             });
-
-        function parseMontoCajaIe(val) {
-            if (window.AsientoMontosFormato && typeof AsientoMontosFormato.parseDecimal === 'function') {
-                return AsientoMontosFormato.parseDecimal(val);
-            }
-            var n = parseFloat(String(val || '').replace(/\./g, '').replace(',', '.'));
-            return isNaN(n) ? 0 : n;
-        }
 
         window.obtenerComprobantesIvaIngresoEgreso = function () {
             return comprobantesIva;

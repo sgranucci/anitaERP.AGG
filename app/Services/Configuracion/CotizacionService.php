@@ -50,7 +50,15 @@ class CotizacionService
 		}
 
 		if ($cotizacionVenta == 0)
+		{
+			// En moneda extranjera el 1 no es un fallback: facturaría los dólares como pesos.
+			if ((int) $moneda_id > CotizacionVigenteSupport::MONEDA_LOCAL_ID)
+				throw new \RuntimeException(
+					'No hay ninguna cotización cargada para la moneda '.$moneda_id.'. Cargue la cotización antes de facturar en moneda extranjera.'
+				);
+
 			$cotizacionVenta = 1.;
+		}
 
 		return $cotizacionVenta;
 	}

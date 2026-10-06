@@ -35,12 +35,12 @@
         $textoOc = $nroOcLinea > 0 ? (string) $nroOcLinea : '';
     }
 @endphp
-<td class="text-nowrap">
+<td class="asiento-doc-celda">
     <input type="text" name="comprobante_linea[]" class="form-control form-control-sm comprobante-linea"
            value="{{ $textoComp }}" placeholder="FC A0001-123" autocomplete="off"
            title="Tipo, letra y número. Ejemplo: FC A0001-123">
 </td>
-<td class="text-nowrap">
+<td class="asiento-doc-celda">
     <input type="text" name="ordencompra_linea[]" class="form-control form-control-sm ordencompra-linea"
            value="{{ $textoOc }}" placeholder="Nº" autocomplete="off"
            title="Número de orden de compra">

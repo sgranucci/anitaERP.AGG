@@ -29,10 +29,10 @@
                 <h3 class="card-title">Proyecci&oacute;n de pagos a proveedores</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.compras.boton-manual-propuesta-pago')
-                    <button type="button" class="btn btn-outline-primary btn-sm mr-1 ml-1" data-toggle="modal"
+                    <button type="button" class="btn btn-outline-light btn-sm mr-1 ml-1" data-toggle="modal"
                         data-target="#modalColumnasProyeccion" title="Elegir, ordenar y guardar columnas">
                         <i class="fa fa-table"></i> Columnas
-                        <span class="badge badge-primary ml-1" id="proy-columnas-contador">{{ count($columnas ?? []) }}</span>
+                        <span class="badge badge-light text-dark ml-1" id="proy-columnas-contador">{{ count($columnas ?? []) }}</span>
                     </button>
                     <a href="{{ route('reporte_proyeccion_pagos') }}" class="btn btn-outline-secondary btn-sm"
                         title="Limpiar filtros">

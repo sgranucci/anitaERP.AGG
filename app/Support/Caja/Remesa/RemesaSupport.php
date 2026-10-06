@@ -4,11 +4,29 @@ declare(strict_types=1);
 
 namespace App\Support\Caja\Remesa;
 
+use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
+
 /**
  * Constantes de negocio del módulo Remesas.
  */
 final class RemesaSupport
 {
+    public const MONEDA_DEFAULT = 1;
+
+    /**
+     * Cotización de la remesa. La usan el movimiento de caja y el asiento: si cada uno la
+     * resolviera por su lado, la línea de caja podría quedar en 1 contra un asiento en dólares
+     * y el listado mostraría el importe sin convertir.
+     */
+    public static function cotizacionMoneda(string $fecha, int $monedaId, int $empresaId): float
+    {
+        if ($monedaId <= self::MONEDA_DEFAULT) {
+            return 1.0;
+        }
+
+        return CotizacionTesoreriaConsultaSupport::calculaVenta($fecha, $monedaId, $empresaId);
+    }
+
     public const USO_DESTINO = 'Remesas destino';
 
     /** Haber / origen de remesa externa: cajas efectivo por moneda de la empresa. */

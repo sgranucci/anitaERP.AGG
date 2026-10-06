@@ -82,6 +82,30 @@
         mostrarPanelHoja(true);
     }
 
+    function tablaPreviewFilas(filas, listas) {
+        var html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
+        html += '<thead style="background-color:#85C1E9;color:#17202A;"><tr>';
+        html += '<th>Fila</th><th>Cuenta</th><th>Nombre</th><th>CC</th><th>Mon.</th>';
+        html += '<th class="text-right">Debe</th><th class="text-right">Haber</th><th>Detalle</th><th>Resultado</th>';
+        html += '</tr></thead><tbody>';
+        filas.forEach(function (fila) {
+            var cls = listas ? 'table-success' : 'table-warning';
+            html += '<tr class="' + cls + '">';
+            html += '<td>' + escHtml(fila.fila_excel) + '</td>';
+            html += '<td>' + escHtml(fila.codigo_cuenta) + '</td>';
+            html += '<td><small>' + escHtml(fila.cuenta_nombre || '—') + '</small></td>';
+            html += '<td><small>' + escHtml(fila.codigo_centrocosto || '—') + '</small></td>';
+            html += '<td>' + escHtml(fila.moneda_abreviatura || '') + '</td>';
+            html += '<td class="text-right">' + escHtml(fila.debe_texto || '') + '</td>';
+            html += '<td class="text-right">' + escHtml(fila.haber_texto || '') + '</td>';
+            html += '<td><small>' + escHtml(fila.detalle || '') + '</small></td>';
+            html += '<td><small>' + escHtml(fila.mensaje) + '</small></td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        return html;
+    }
+
     function renderPreview(data) {
         var $panel = $('#panel-preview-import-asiento');
         var $contenido = $('#preview-import-asiento-contenido');
@@ -98,8 +122,11 @@
             return;
         }
 
+        var hayErroresFila = data.filas_error && data.filas_error.length;
         if (data.ok) {
             $estado.removeClass().addClass('badge badge-success').text('Listo para importar');
+        } else if (hayErroresFila) {
+            $estado.removeClass().addClass('badge badge-danger').text('Errores en filas');
         } else {
             $estado.removeClass().addClass('badge badge-warning').text('Revisar configuración');
         }
@@ -148,42 +175,36 @@
             html += '<p class="small mb-2">';
             html += 'Filas de datos: <strong>' + data.resumen.total_filas_datos + '</strong> · ';
             html += 'Importables: <strong class="text-success">' + data.resumen.importables + '</strong> · ';
-            html += 'Omitidas: <strong class="text-muted">' + data.resumen.omitidas + '</strong>';
+            html += 'Omitidas: <strong class="' + (data.resumen.omitidas > 0 ? 'text-danger' : 'text-muted') + '">' + data.resumen.omitidas + '</strong>';
             html += '</p>';
             html += '<p class="small mb-2">';
             html += 'Total Debe: <strong>' + escHtml(data.resumen.total_debe_texto) + '</strong> · ';
             html += 'Total Haber: <strong>' + escHtml(data.resumen.total_haber_texto) + '</strong>';
             if (data.resumen.balanceado) {
                 html += ' · <span class="badge badge-success">Balanceado</span>';
+            } else if (data.resumen.desbalance_por_filas_omitidas) {
+                html += ' · <span class="badge badge-danger">Desbalance ' + escHtml(data.resumen.diferencia_texto) + '</span>';
+                html += ' <span class="text-danger">igual a las filas que no entran</span>';
             } else {
                 html += ' · <span class="badge badge-danger">Desbalance ' + escHtml(data.resumen.diferencia_texto) + '</span>';
             }
             html += '</p>';
         }
 
+        if (hayErroresFila) {
+            html += '<p class="small mb-1 text-danger"><strong>Filas que no entran (' + data.filas_error.length + ')</strong></p>';
+            html += tablaPreviewFilas(data.filas_error, false);
+        }
+
         if (data.filas && data.filas.length) {
-            html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
-            html += '<thead style="background-color:#85C1E9;color:#17202A;"><tr>';
-            html += '<th>Fila</th><th>Cuenta</th><th>Nombre</th><th>CC</th><th>Mon.</th>';
-            html += '<th class="text-right">Debe</th><th class="text-right">Haber</th><th>Detalle</th><th>Resultado</th>';
-            html += '</tr></thead><tbody>';
-            data.filas.forEach(function (fila) {
-                var cls = fila.estado === 'ok' ? 'table-success' : '';
-                html += '<tr class="' + cls + '">';
-                html += '<td>' + escHtml(fila.fila_excel) + '</td>';
-                html += '<td>' + escHtml(fila.codigo_cuenta) + '</td>';
-                html += '<td><small>' + escHtml(fila.cuenta_nombre || '—') + '</small></td>';
-                html += '<td><small>' + escHtml(fila.codigo_centrocosto || '—') + '</small></td>';
-                html += '<td>' + escHtml(fila.moneda_abreviatura || '') + '</td>';
-                html += '<td class="text-right">' + escHtml(fila.debe_texto || '') + '</td>';
-                html += '<td class="text-right">' + escHtml(fila.haber_texto || '') + '</td>';
-                html += '<td><small>' + escHtml(fila.detalle || '') + '</small></td>';
-                html += '<td><small>' + escHtml(fila.mensaje) + '</small></td>';
-                html += '</tr>';
-            });
-            html += '</tbody></table></div>';
+            html += '<p class="small mb-1 mt-2"><strong>Muestra de filas listas para cargar</strong></p>';
+            html += tablaPreviewFilas(data.filas, true);
             if (data.hay_mas_filas) {
-                html += '<p class="text-muted small mt-2 mb-0">Mostrando las primeras ' + data.filas.length + ' filas de datos.</p>';
+                var totalOk = data.resumen && data.resumen.importables != null
+                    ? data.resumen.importables
+                    : data.filas.length;
+                html += '<p class="text-muted small mt-2 mb-0">Mostrando las primeras ' + data.filas.length
+                    + ' filas listas de ' + totalOk + '.</p>';
             }
         }
 

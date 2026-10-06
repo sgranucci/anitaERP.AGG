@@ -103,13 +103,23 @@
             vertical-align: middle;
         }
         .asiento-cuentas-scroll {
-            overflow-x: auto;
+            overflow-x: hidden;
             max-width: 100%;
         }
         #cuenta-table {
-            width: max-content;
-            min-width: 100%;
+            width: 100%;
+            table-layout: fixed;
             margin-bottom: 0;
+        }
+        #cuenta-table th,
+        #cuenta-table td {
+            overflow: hidden;
+        }
+        #cuenta-table thead th {
+            white-space: normal;
+            font-size: 0.78rem;
+            line-height: 1.15;
+            vertical-align: bottom;
         }
         #cuenta-table tfoot.asiento-totales-pie .asiento-total-celda {
             background-color: #e9ecef !important;
@@ -118,51 +128,87 @@
             box-shadow: none;
             font-weight: 700;
         }
+        #cuenta-table .form-control,
+        #cuenta-table .form-control-sm,
+        #cuenta-table select.form-control {
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+        }
         #cuenta-table .debe,
         #cuenta-table .haber,
         #cuenta-table .asiento-total-celda {
             font-variant-numeric: tabular-nums;
-            font-size: 0.95rem;
+            font-size: 0.85rem;
             font-weight: 600;
             letter-spacing: 0;
             width: 100%;
-            min-width: calc(17ch + 1rem);
-            padding-left: 0.4rem;
-            padding-right: 0.45rem;
+            min-width: 0;
+            padding-left: 0.25rem;
+            padding-right: 0.3rem;
         }
         #cuenta-table .asiento-total-celda {
             font-weight: 700;
         }
         #cuenta-table .cotizacion {
             font-variant-numeric: tabular-nums;
-            font-size: 0.95rem;
-            min-width: 7.5rem;
-            padding-left: 0.35rem;
-            padding-right: 0.4rem;
+            font-size: 0.85rem;
+            min-width: 0;
+            width: 100%;
+            padding-left: 0.25rem;
+            padding-right: 0.3rem;
         }
         #cuenta-table th.asiento-monto-col,
         #cuenta-table td.asiento-monto-celda {
-            min-width: calc(17ch + 1.35rem);
-            width: 14%;
+            width: 11%;
+            min-width: 0;
+        }
+        #cuenta-table .asiento-codigo-wrap {
+            min-width: 0;
+        }
+        #cuenta-table .btn-accion-tabla {
+            min-width: 1.2rem;
+            padding: 0;
+        }
+        #cuenta-table .codigocuentacontable {
+            flex: 1 1 0;
+            width: 1%;
+            min-width: 0;
+            max-width: none;
+            height: 34px;
+            padding-left: 0.15rem;
+            padding-right: 0.1rem;
+            font-size: 0.8rem;
         }
         #cuenta-table .nombrecuentacontable {
-            width: 15.5rem;
-            max-width: 18rem;
-            height: 38px;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            height: 34px;
+            padding-left: 0.35rem;
+            padding-right: 0.35rem;
         }
         #cuenta-table .asiento-detalle-celda {
-            max-width: 11rem;
             vertical-align: middle;
         }
         #cuenta-table .asiento-detalle-preview {
             display: block;
-            max-width: 8.5rem;
+            flex: 1 1 auto;
+            min-width: 0;
+            max-width: 100%;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             font-size: 0.75rem;
             line-height: 1.2;
             color: #495057;
+        }
+        #cuenta-table .comprobante-linea,
+        #cuenta-table .ordencompra-linea {
+            height: 34px;
+            padding-left: 0.3rem;
+            padding-right: 0.3rem;
+            font-size: 0.8rem;
         }
         #cuenta-table .asiento-detalle-preview.is-empty {
             color: #adb5bd;
@@ -187,17 +233,17 @@
         <table class="table table-sm table-bordered" id="cuenta-table">
             <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
-                    <th style="width: 12%;">C&oacute;digo</th>
-                    <th style="width: 16%;">Descripci&oacute;n</th>
-                    <th style="width: 11%;">Centro de costo</th>
+                    <th style="width: 11%;">C&oacute;digo</th>
+                    <th style="width: 12%;">Descripci&oacute;n</th>
+                    <th style="width: 10%;">Centro de costo</th>
                     <th style="width: 6%;">Moneda</th>
-                    <th style="width: 9%;" class="text-right">Cotizaci&oacute;n</th>
+                    <th style="width: 8.5%;" class="text-right">Cotizaci&oacute;n</th>
                     <th class="text-right asiento-monto-col">Debe</th>
                     <th class="text-right asiento-monto-col">Haber</th>
-                    <th style="width: 12%;">Detalle</th>
-                    <th style="width: 11%;">Comprobante</th>
+                    <th style="width: 7%;">Detalle</th>
+                    <th style="width: 12.5%;">Comprobante</th>
                     <th style="width: 8%;">O.Compra</th>
-                    <th style="width: 4%;"></th>
+                    <th style="width: 3%;"></th>
                 </tr>
             </thead>
             <tbody id="tbody-cuenta-table">
@@ -208,7 +254,7 @@
                             @php
                                 $ctaIdLinea = (int) ($cuenta->cuentacontable_id ?? 0);
                             @endphp
-                            <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;" id="cuenta">
+                            <div class="d-flex flex-nowrap align-items-center asiento-codigo-wrap" style="gap: 2px;" id="cuenta">
                                 <input type="hidden" name="cuenta[]" class="form-control iicuenta" readonly value="{{ $loop->index+1 }}" />
                                 <input type="hidden" class="cuentacontable_id" name="cuentacontable_ids[]" value="{{$cuenta->cuentacontable_id ?? ''}}" >
                                 <input type="hidden" class="cuentacontable_id_previa" name="cuentacontable_id_previa[]" value="{{$cuenta->cuentacontable_id ?? ''}}" >
@@ -224,7 +270,7 @@
                                         <i class="fa fa-edit"></i>
                                     </a>
                                 @endif
-                                <input type="text" style="flex: 0 0 100px; width: 100px; height: 38px;"
+                                <input type="text"
                                        class="codigocuentacontable form-control" name="codigos[]"
                                        value="{{$cuenta->cuentacontables->codigo ?? ''}}"
                                        placeholder="C&oacute;d." autocomplete="off">

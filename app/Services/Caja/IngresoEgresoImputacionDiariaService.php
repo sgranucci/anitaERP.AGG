@@ -9,6 +9,7 @@ use App\Models\Contable\Asiento;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoImputacionDiariaAnitaReader;
 use App\Support\Caja\IngresoEgresoImputacionDiariaSupport as Ie;
+use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -215,13 +216,27 @@ final class IngresoEgresoImputacionDiariaService
             $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita((int) $mov->empresa_id);
             $nro = (int) $mov->numerotransaccion;
 
+            $asiento = $this->asientoDeMovimiento($mov);
+            $tieneAsiento = $asiento !== null && (int) ($asiento->id ?? 0) > 0;
+
+            // La caja se compara contra el asiento: ambos lados tienen que convertirse con la
+            // misma tasa, así que la del asiento sirve de respaldo para la línea que quedó sin.
+            $cotizacionesMov = CotizacionVigenteSupport::cotizacionesDeclaradas(
+                $mov->caja_movimiento_cuentacajas ?? [],
+                $mov->cheques ?? [],
+                $asiento->asiento_movimientos ?? [],
+            );
+
             $cajaDebe = 0.0;
             $cajaHaber = 0.0;
             foreach ($mov->caja_movimiento_cuentacajas ?? [] as $linea) {
+                $monedaLinea = (int) ($linea->moneda_id ?: 1);
                 $ars = Ie::aPesos(
                     (float) ($linea->monto ?? 0),
-                    (int) ($linea->moneda_id ?: 1),
-                    $linea->cotizacion ?? 1
+                    $monedaLinea,
+                    $linea->cotizacion ?? 1,
+                    $mov->fecha ?? null,
+                    $cotizacionesMov[$monedaLinea] ?? null,
                 );
                 if ($ars >= 0) {
                     $cajaDebe += $ars;
@@ -239,10 +254,13 @@ final class IngresoEgresoImputacionDiariaService
             $sinTesmovChp = 0;
             foreach ($mov->cheques ?? [] as $cheque) {
                 $origen = strtoupper((string) ($cheque->origen ?? ''));
+                $monedaCheque = (int) ($cheque->moneda_id ?: 1);
                 $montoCh = abs(Ie::aPesos(
                     (float) ($cheque->monto ?? 0),
-                    (int) ($cheque->moneda_id ?: 1),
-                    $cheque->cotizacion ?? 1
+                    $monedaCheque,
+                    $cheque->cotizacion ?? 1,
+                    $mov->fecha ?? null,
+                    $cotizacionesMov[$monedaCheque] ?? null,
                 ));
                 if ($origen === 'E') {
                     $chequesArs += $montoCh;
@@ -263,10 +281,8 @@ final class IngresoEgresoImputacionDiariaService
             }
             $chequesArs = round($chequesArs, 2);
 
-            $asiento = $this->asientoDeMovimiento($mov);
-            $tieneAsiento = $asiento !== null && (int) ($asiento->id ?? 0) > 0;
             $balance = $tieneAsiento
-                ? Ie::balanceAsientoEnPesos($asiento->asiento_movimientos ?? [])
+                ? Ie::balanceAsientoEnPesos($asiento->asiento_movimientos ?? [], $asiento->fecha ?? $mov->fecha ?? null)
                 : ['total_debe' => 0.0, 'total_haber' => 0.0, 'lineas_con_importe' => 0, 'balanceado' => true];
             $asientoArs = round(max((float) $balance['total_debe'], (float) $balance['total_haber']), 2);
 

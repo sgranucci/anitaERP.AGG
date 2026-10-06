@@ -20,6 +20,12 @@ class CotizacionVigenteSupport
 {
     public const MONEDA_LOCAL_ID = 1;
 
+    /**
+     * Piso para aceptar una cotización grabada en moneda extranjera. Un 0 o un 1 no es una
+     * cotización: es el default del formulario o una fila sin novedad.
+     */
+    public const COTIZACION_MINIMA_EXTRANJERA = 1.0001;
+
     /** @var array<string, array{valor: float, fecha: string|null, exacta: bool, hacia_adelante: bool}> */
     private static array $cache = [];
 
@@ -59,6 +65,65 @@ class CotizacionVigenteSupport
         $valor = self::ventaValor($fecha, $monedaId);
 
         return $valor > 0 ? $valor : 1.0;
+    }
+
+    /**
+     * Cotización con la que llevar una línea a pesos.
+     *
+     * Manda la grabada en el documento: primero la de la propia línea y después la del resto
+     * del comprobante (otra línea de la misma moneda), para que un asiento siga balanceando.
+     * Recién si ninguna es real se resuelve la vigente de la fecha.
+     */
+    public static function ventaEfectiva(
+        mixed $cotizacionLinea,
+        int $monedaId,
+        string|Carbon|null $fecha = null,
+        mixed $cotizacionDocumento = null,
+    ): float {
+        if ($monedaId <= self::MONEDA_LOCAL_ID) {
+            return 1.0;
+        }
+
+        foreach ([$cotizacionLinea, $cotizacionDocumento] as $candidata) {
+            if ((float) ($candidata ?: 0) > self::COTIZACION_MINIMA_EXTRANJERA) {
+                return (float) $candidata;
+            }
+        }
+
+        return self::ventaValorOUno($fecha, $monedaId);
+    }
+
+    /**
+     * Cotizaciones reales que declaró un documento, por moneda. Es el fallback para sus
+     * propias líneas: si una quedó en 1 y otra tiene la tasa, manda la del documento.
+     *
+     * @param  iterable<mixed>  ...$grupos  líneas (objeto o array) con moneda_id y cotizacion
+     * @return array<int, float>
+     */
+    public static function cotizacionesDeclaradas(iterable ...$grupos): array
+    {
+        $cotizaciones = [];
+
+        foreach ($grupos as $grupo) {
+            foreach ($grupo as $linea) {
+                // Eloquent no expone sus atributos como propiedades públicas: leerlos con
+                // get_object_vars() desde afuera devuelve vacío y se pierde la cotización.
+                $monedaId = is_array($linea)
+                    ? (int) ($linea['moneda_id'] ?? self::MONEDA_LOCAL_ID)
+                    : (int) ($linea->moneda_id ?? self::MONEDA_LOCAL_ID);
+                if ($monedaId <= self::MONEDA_LOCAL_ID || isset($cotizaciones[$monedaId])) {
+                    continue;
+                }
+                $cotizacion = is_array($linea)
+                    ? (float) ($linea['cotizacion'] ?? 0)
+                    : (float) ($linea->cotizacion ?? 0);
+                if ($cotizacion > self::COTIZACION_MINIMA_EXTRANJERA) {
+                    $cotizaciones[$monedaId] = $cotizacion;
+                }
+            }
+        }
+
+        return $cotizaciones;
     }
 
     public static function limpiarCache(): void

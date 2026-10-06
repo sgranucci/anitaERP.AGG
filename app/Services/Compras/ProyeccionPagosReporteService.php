@@ -367,6 +367,7 @@ class ProyeccionPagosReporteService
     {
         $query = $this->queryBase($filtros, $fechaBase)
             ->whereNotNull('cc.comprobante_proveedor_id')
+            ->whereNull('cc.pagoproveedor_id')
             ->leftJoin('comprobante_proveedor as comp', 'comp.id', '=', 'cc.comprobante_proveedor_id')
             ->leftJoin('tipotransaccion_compra as tt', 'tt.id', '=', 'comp.tipotransaccion_compra_id')
             ->leftJoin('comprobante_proveedor_cuota as cuo', 'cuo.id', '=', 'cc.comprobante_proveedor_cuota_id')
@@ -501,6 +502,10 @@ class ProyeccionPagosReporteService
             ->whereNull('cc.comprobante_proveedor_id')
             ->whereNotNull('cc.pagoproveedor_id')
             ->leftJoin('pagoproveedor as pp', 'pp.id', '=', 'cc.pagoproveedor_id')
+            // Anita arma la columna Adelantos solo con OPA. OPP, AOP, NCJ, EGR e IEV
+            // con saldo abierto no son anticipos: meterlos restaba miles de millones de más.
+            ->where('pp.tipocomprobante', 'OPA')
+            ->where('cc.total', '<', 0)
             ->leftJoin('caja_movimiento as cm', 'cm.id', '=', 'pp.caja_movimiento_id')
             ->addSelect([
                 'cc.pagoproveedor_id as pagoproveedor_id',
@@ -549,7 +554,13 @@ class ProyeccionPagosReporteService
                 DB::raw(SqlDialectSupport::coalesce('apl.aplicado', '0').' as aplicado'),
             ])
             ->where('cc.fecha', '<=', $fechaBase)
-            ->whereRaw('abs(cc.total + '.SqlDialectSupport::coalesce('apl.aplicado', '0').') > 0.009');
+            // Mismo criterio que la deuda de proveedores, no el saldo de la ficha.
+            // La ficha suma total + aplicaciones y deja abierto un documento ya cubierto
+            // (OPA de $ 0,01 con una aplicación de $ 665.499,99). La deuda lo da por
+            // cancelado cuando lo aplicado ya alcanza el importe del documento.
+            ->whereRaw(
+                'ABS('.SqlDialectSupport::coalesce('apl.aplicado', '0').') < ABS(cc.total)'
+            );
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'cc.empresa_id');
 
@@ -717,7 +728,7 @@ class ProyeccionPagosReporteService
     }
 
     /**
-     * Pagos a cuenta y diferencias de cambio sin comprobante: restan del total adeudado.
+     * Anticipo OPA sin aplicar: resta del total adeudado.
      *
      * @param  array<string, mixed>|null  $concepto  Concepto de cash flow resuelto
      * @return array<string, mixed>

@@ -236,11 +236,18 @@ final class ComprobanteProveedorImputacionApDiariaService
                 $cajaId = (int) ($fila['caja_movimiento_id'] ?? 0);
                 $asientoIe = $ingresoEgreso['asiento'][$cajaId] ?? null;
                 $tieneAsientoIe = $asientoIe !== null;
-                $facturaIe = round((float) ($fila['total_ars'] ?? 0), 2);
+                $lineasIe = $ingresoEgreso['lineas'][$cajaId] ?? [];
+                $facturaIe = ComprobanteProveedorImputacionApSupport::facturaIngresoEgresoEnPesos(
+                    (float) ($fila['total_origen'] ?? 0),
+                    (float) ($fila['total_ars'] ?? 0),
+                    (int) ($fila['moneda_id'] ?? 1),
+                    $lineasIe,
+                    $compId,
+                );
                 $asientoIeArs = $tieneAsientoIe
                     ? ComprobanteProveedorImputacionApSupport::importeDebeIngresoEgreso(
                         $compId,
-                        $ingresoEgreso['lineas'][$cajaId] ?? [],
+                        $lineasIe,
                         $ingresoEgreso['conceptos'][$compId] ?? [],
                     )
                     : 0.0;
@@ -334,7 +341,7 @@ final class ComprobanteProveedorImputacionApDiariaService
      *
      * @param  list<array<string, mixed>>  $filas
      * @return array{
-     *     lineas: array<int, list<array{monto: float, codigo: string, comprobante_proveedor_id: int}>>,
+     *     lineas: array<int, list<array{monto: float, codigo: string, comprobante_proveedor_id: int, moneda_id: int, cotizacion: mixed, fecha: mixed}>>,
      *     conceptos: array<int, list<array{monto: float, codigo: string}>>,
      *     asiento: array<int, array{id: int, numero: string}>
      * }
@@ -390,6 +397,9 @@ final class ComprobanteProveedorImputacionApDiariaService
                         'monto' => $monto,
                         'codigo' => trim((string) ($mov->cuentacontables?->codigo ?? '')),
                         'comprobante_proveedor_id' => (int) ($mov->comprobante_proveedor_id ?? 0),
+                        'moneda_id' => (int) ($mov->moneda_id ?: 1),
+                        'cotizacion' => $mov->cotizacion,
+                        'fecha' => $row->fecha,
                     ];
                 }
             }

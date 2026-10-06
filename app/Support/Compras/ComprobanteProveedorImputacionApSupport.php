@@ -389,7 +389,10 @@ final class ComprobanteProveedorImputacionApSupport
      * que le corresponde (líneas vinculadas o mismo código de cuenta + importe).
      * El ctamov de ese movimiento lo controla el mail de I/E.
      *
-     * @param  list<array{monto: float, codigo?: string, comprobante_proveedor_id?: int}>  $lineasDebe
+     * El cruce por código e importe es en la moneda del renglón. La suma vuelve en pesos:
+     * si el asiento está en dólares, cada debe se multiplica por su cotización.
+     *
+     * @param  list<array{monto: float, codigo?: string, comprobante_proveedor_id?: int, moneda_id?: int, cotizacion?: mixed, fecha?: string|null}>  $lineasDebe
      * @param  list<array{monto: float, codigo?: string}>  $conceptos
      */
     public static function importeDebeIngresoEgreso(int $comprobanteId, array $lineasDebe, array $conceptos): float
@@ -400,7 +403,7 @@ final class ComprobanteProveedorImputacionApSupport
         foreach ($lineasDebe as $i => $linea) {
             $dueno = (int) ($linea['comprobante_proveedor_id'] ?? 0);
             if ($comprobanteId > 0 && $dueno === $comprobanteId) {
-                $suma += (float) ($linea['monto'] ?? 0);
+                $suma += self::lineaIngresoEgresoEnPesos($linea);
                 $usadas[$i] = true;
             }
         }
@@ -426,13 +429,78 @@ final class ComprobanteProveedorImputacionApSupport
                     continue;
                 }
 
-                $suma += (float) ($linea['monto'] ?? 0);
+                $suma += self::lineaIngresoEgresoEnPesos($linea);
                 $usadas[$i] = true;
                 break;
             }
         }
 
         return round($suma, 2);
+    }
+
+    /**
+     * Pesos del I/E. Si el asiento está en moneda extranjera, manda su cotización
+     * (la de la operación), no la del día que reemplaza un 1 guardado en la factura.
+     *
+     * @param  list<array{monto?: float, moneda_id?: int, cotizacion?: mixed, comprobante_proveedor_id?: int}>  $lineasDebe
+     */
+    public static function facturaIngresoEgresoEnPesos(
+        float $totalOrigen,
+        float $totalArs,
+        int $monedaId,
+        array $lineasDebe,
+        int $comprobanteId,
+    ): float {
+        $cotizacion = self::cotizacionAsientoEnMoneda($lineasDebe, $comprobanteId, $monedaId);
+        if ($cotizacion === null) {
+            return round($totalArs, 2);
+        }
+
+        return round(abs($totalOrigen) * $cotizacion, 2);
+    }
+
+    /**
+     * @param  list<array{moneda_id?: int, cotizacion?: mixed, comprobante_proveedor_id?: int}>  $lineasDebe
+     */
+    public static function cotizacionAsientoEnMoneda(array $lineasDebe, int $comprobanteId, int $monedaId): ?float
+    {
+        if (! ComprobanteProveedorMonedaMotor::esMonedaExtranjera($monedaId)) {
+            return null;
+        }
+
+        $propia = null;
+        $comun = null;
+        foreach ($lineasDebe as $linea) {
+            if ((int) ($linea['moneda_id'] ?? 1) !== $monedaId) {
+                continue;
+            }
+            $tasa = (float) ($linea['cotizacion'] ?? 0);
+            if ($tasa <= ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA) {
+                continue;
+            }
+            $dueno = (int) ($linea['comprobante_proveedor_id'] ?? 0);
+            if ($comprobanteId > 0 && $dueno === $comprobanteId) {
+                $propia = $tasa;
+            } elseif ($dueno <= 0) {
+                $comun = $tasa;
+            }
+        }
+
+        return $propia ?? $comun;
+    }
+
+    /**
+     * @param  array{monto?: float, moneda_id?: int, cotizacion?: mixed, fecha?: string|null}  $linea
+     */
+    private static function lineaIngresoEgresoEnPesos(array $linea): float
+    {
+        return self::aPesosTolerante(
+            (float) ($linea['monto'] ?? 0),
+            (int) ($linea['moneda_id'] ?? 1),
+            $linea['cotizacion'] ?? 1,
+            $linea['fecha'] ?? null,
+            'asiento ingreso/egreso',
+        );
     }
 
     /**

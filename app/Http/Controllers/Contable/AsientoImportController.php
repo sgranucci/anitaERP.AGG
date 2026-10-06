@@ -136,6 +136,16 @@ class AsientoImportController extends Controller
                 $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null,
                 $request->boolean('confirmar_pendiente_aprobacion')
             );
+        } catch (\InvalidArgumentException $e) {
+            $lineas = array_values(array_filter(
+                preg_split("/\r\n|\n/", $e->getMessage()) ?: [],
+                static fn ($linea) => trim((string) $linea) !== ''
+            ));
+
+            return redirect()
+                ->route('crear_importacion_asiento')
+                ->withInput($request->except(['file']))
+                ->with('mensaje-error', $lineas !== [] ? $lineas : $e->getMessage());
         } catch (Throwable $e) {
             return redirect()
                 ->route('crear_importacion_asiento')

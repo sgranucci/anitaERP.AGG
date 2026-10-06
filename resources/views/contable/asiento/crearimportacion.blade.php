@@ -8,7 +8,7 @@
 <script>
     window.asientoImportPreviewUrl = @json(route('asiento_import_preview'));
 </script>
-<script src="{{ asset('assets/pages/scripts/contable/asiento/importar.js') }}?v=20260803a" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/asiento/importar.js') }}?v=20261006b" type="text/javascript"></script>
 @if (session('asiento_import_resultado'))
 <script>
     document.addEventListener('DOMContentLoaded', function () {

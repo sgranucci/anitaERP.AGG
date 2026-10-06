@@ -2,6 +2,7 @@
 
 namespace App\Support\Caja;
 
+use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Configuracion\MonedaAnitaCodigoSupport;
 use App\Support\Contable\AsientoBalanceSupport;
 
@@ -132,16 +133,37 @@ final class IngresoEgresoImputacionDiariaSupport
         return self::normalizarCuentaTesmov($raw);
     }
 
-    public static function aPesos(float $importe, int $monedaId, mixed $cotizacion): float
-    {
-        $importe = (float) $importe;
-        if ((int) $monedaId > 1) {
-            $cot = (float) ($cotizacion ?: 0);
+    /**
+     * Una cotización en 1 sobre moneda extranjera compara dólares contra pesos y el control
+     * marca un desvío del orden de la cotización. Se resuelve con la del resto del documento
+     * y, si no hay, con la vigente de la fecha.
+     */
+    public static function aPesos(
+        float $importe,
+        int $monedaId,
+        mixed $cotizacion,
+        mixed $fecha = null,
+        mixed $cotizacionDocumento = null,
+    ): float {
+        $coeficiente = CotizacionVigenteSupport::ventaEfectiva(
+            $cotizacion,
+            (int) $monedaId,
+            self::fechaYmd($fecha),
+            $cotizacionDocumento,
+        );
 
-            return round($importe * ($cot > 1.0001 ? $cot : 1), 2);
+        return round((float) $importe * $coeficiente, 2);
+    }
+
+    private static function fechaYmd(mixed $fecha): ?string
+    {
+        if ($fecha instanceof \DateTimeInterface) {
+            return $fecha->format('Y-m-d');
         }
 
-        return round($importe, 2);
+        $fecha = trim((string) $fecha);
+
+        return $fecha !== '' ? $fecha : null;
     }
 
     /**
@@ -151,10 +173,9 @@ final class IngresoEgresoImputacionDiariaSupport
      * @param  iterable<mixed>  $movimientos
      * @return array{total_debe: float, total_haber: float, diferencia: float, lineas_con_importe: int, balanceado: bool}
      */
-    public static function balanceAsientoEnPesos(iterable $movimientos): array
+    public static function balanceAsientoEnPesos(iterable $movimientos, mixed $fecha = null): array
     {
-        $debes = [];
-        $haberes = [];
+        $lineas = [];
         foreach ($movimientos as $mov) {
             $monto = is_array($mov)
                 ? (float) ($mov['monto'] ?? 0)
@@ -165,10 +186,27 @@ final class IngresoEgresoImputacionDiariaSupport
             $monedaId = is_array($mov)
                 ? (int) ($mov['moneda_id'] ?? 1)
                 : (int) ($mov->moneda_id ?: 1);
-            $cotizacion = is_array($mov)
-                ? ($mov['cotizacion'] ?? 1)
-                : ($mov->cotizacion ?? 1);
-            $pesos = self::aPesos($monto, $monedaId > 0 ? $monedaId : 1, $cotizacion);
+            $lineas[] = [
+                'monto' => $monto,
+                'moneda_id' => $monedaId > 0 ? $monedaId : 1,
+                'cotizacion' => is_array($mov) ? ($mov['cotizacion'] ?? 1) : ($mov->cotizacion ?? 1),
+            ];
+        }
+
+        // Todas las líneas se convierten con la misma tasa por moneda: si una quedó sin
+        // cotización, tomar otra del asiento evita desbalancearlo al pasarlo a pesos.
+        $cotizacionesAsiento = CotizacionVigenteSupport::cotizacionesDeclaradas($lineas);
+
+        $debes = [];
+        $haberes = [];
+        foreach ($lineas as $linea) {
+            $pesos = self::aPesos(
+                $linea['monto'],
+                $linea['moneda_id'],
+                $linea['cotizacion'],
+                $fecha,
+                $cotizacionesAsiento[$linea['moneda_id']] ?? null,
+            );
             $debes[] = $pesos > 0 ? $pesos : 0.0;
             $haberes[] = $pesos < 0 ? abs($pesos) : 0.0;
         }
@@ -189,7 +227,8 @@ final class IngresoEgresoImputacionDiariaSupport
         return abs(self::aPesos(
             (float) ($row['tesv_importe'] ?? 0),
             $moneda > 0 ? $moneda : 1,
-            $row['tesv_cotizacion'] ?? 1
+            $row['tesv_cotizacion'] ?? 1,
+            $row['tesv_fecha'] ?? null,
         ));
     }
 
@@ -210,7 +249,12 @@ final class IngresoEgresoImputacionDiariaSupport
                 continue;
             }
             $moneda = (int) MonedaAnitaCodigoSupport::normalizar($row['ctav_cod_mon'] ?? 1);
-            $pesos = self::aPesos($importe, $moneda > 0 ? $moneda : 1, $row['ctav_cotizacion'] ?? 1);
+            $pesos = self::aPesos(
+                $importe,
+                $moneda > 0 ? $moneda : 1,
+                $row['ctav_cotizacion'] ?? 1,
+                $row['ctav_fecha'] ?? null,
+            );
             if (strtoupper(trim((string) ($row['ctav_d_h'] ?? 'D'))) === 'H') {
                 $debes[] = 0.0;
                 $haberes[] = $pesos;

@@ -24,6 +24,7 @@ use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Database\DbContencionSupport;
@@ -281,6 +282,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                             'id' => (int) $res['cc_id'],
                             'saldo' => abs((float) $item['total']),
                             'moneda_id' => (int) $item['moneda_id'],
+                            'cotizacion' => (float) ($item['cotizacion'] ?? 0),
                             'empresa_id' => (int) $item['empresa_id'],
                             'comprobante_id' => null,
                         ];
@@ -956,7 +958,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
 
     /**
      * @param  array<string, mixed>  $item
-     * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
+     * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
      * @return array{cp_creado:bool,cc_creada:bool,saldo_alineado:bool,errores:list<string>}
      */
     private function persistirItem(array $item, int $usuarioId, array &$ccPorClave): array
@@ -1086,6 +1088,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                 'id' => $ccId,
                 'saldo' => abs((float) $item['total']),
                 'moneda_id' => (int) $item['moneda_id'],
+                'cotizacion' => (float) ($item['cotizacion'] ?? 0),
                 'empresa_id' => (int) $item['empresa_id'],
                 'comprobante_id' => $cpId,
             ];
@@ -1293,7 +1296,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
     }
 
     /**
-     * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
+     * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
      * @param  list<array<string, mixed>>  $pares
      */
     private function enriquecerCcPorClaveDesdeErp(array &$ccPorClave, array $pares): void
@@ -1342,6 +1345,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                             'id' => (int) $cc->id,
                             'saldo' => $saldoLibre > 0.0001 ? $saldoLibre : abs((float) $cc->total),
                             'moneda_id' => (int) $cc->moneda_id,
+                            'cotizacion' => (float) $cc->cotizacion,
                             'empresa_id' => (int) $cc->empresa_id,
                             'comprobante_id' => (int) $cp->id,
                         ];
@@ -1371,6 +1375,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                         'id' => (int) $cc->id,
                         'saldo' => $saldoLibre > 0.0001 ? $saldoLibre : abs((float) $cc->total),
                         'moneda_id' => (int) $cc->moneda_id,
+                        'cotizacion' => (float) $cc->cotizacion,
                         'empresa_id' => (int) $cc->empresa_id,
                         'comprobante_id' => null,
                     ];
@@ -1381,7 +1386,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
 
     /**
      * @param  list<array<string, mixed>>  $pares
-     * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
+     * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
      * @return array{creadas:int,pagos_sinteticos:int,omitidas:int,errores:list<string>}
      */
     private function persistirAplicaciones(array $pares, array &$ccPorClave): array
@@ -1426,6 +1431,8 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             }
 
             $credito = $this->peekCc($ccPorClave, $par['credito']['clave'], $monto);
+            $montoDeuda = $monto;
+            $montoCredito = $monto;
             if ($credito === null && ($par['credito_es_pago'] ?? false)) {
                 $claveCredito = (string) $par['credito']['clave'];
                 $montoCc = $montoPorCreditoPago[$claveCredito] ?? $monto;
@@ -1450,22 +1457,40 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                 continue;
             }
 
-            if ($this->aplicacionYaExiste((int) $deuda['id'], (int) $credito['id'], $monto)) {
+            $cotizacionDeuda = $this->cotizacionCc(
+                (int) $deuda['moneda_id'],
+                (float) ($deuda['cotizacion'] ?? 0),
+                0.0,
+                (string) $par['fecha'],
+            );
+            $cotizacionCredito = $this->cotizacionCc(
+                (int) $credito['moneda_id'],
+                (float) ($credito['cotizacion'] ?? 0),
+                0.0,
+                (string) $par['fecha'],
+            );
+            $montoDesdeCredito = ($par['monto_lado'] ?? 'deuda') === 'credito';
+            $monedaOrigen = (int) ($montoDesdeCredito ? $credito['moneda_id'] : $deuda['moneda_id']);
+            $cotizacionOrigen = $montoDesdeCredito ? $cotizacionCredito : $cotizacionDeuda;
+            $montoDeuda = $this->convertirMonto($monto, $monedaOrigen, $cotizacionOrigen, (int) $deuda['moneda_id'], $cotizacionDeuda);
+            $montoCredito = $this->convertirMonto($monto, $monedaOrigen, $cotizacionOrigen, (int) $credito['moneda_id'], $cotizacionCredito);
+
+            if ($this->aplicacionYaExiste((int) $deuda['id'], (int) $credito['id'], $montoDeuda, $monto)) {
                 $omitidas++;
 
                 continue;
             }
 
-            $this->consumirCc($ccPorClave, $par['deuda']['clave'], (int) ($deuda['_idx'] ?? 0), $monto);
+            $this->consumirCc($ccPorClave, $par['deuda']['clave'], (int) ($deuda['_idx'] ?? 0), $montoDeuda);
             if (isset($credito['_idx'])) {
-                $this->consumirCc($ccPorClave, $par['credito']['clave'], (int) $credito['_idx'], $monto);
+                $this->consumirCc($ccPorClave, $par['credito']['clave'], (int) $credito['_idx'], $montoCredito);
             }
             Proveedor_Cuentacorriente_Aplicacion::query()->create([
                 'fecha' => $par['fecha'],
                 'proveedor_cuentacorriente_id' => $deuda['id'],
-                'total' => -$monto,
+                'total' => -$montoDeuda,
                 'moneda_id' => $deuda['moneda_id'],
-                'cotizacion' => 1,
+                'cotizacion' => $cotizacionDeuda,
                 'comprobanteaplicado' => $par['etiqueta_credito'],
                 'comprobante_proveedor_aplicado_id' => $credito['comprobante_id'],
                 'empresa_id' => $deuda['empresa_id'],
@@ -1474,9 +1499,9 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             Proveedor_Cuentacorriente_Aplicacion::query()->create([
                 'fecha' => $par['fecha'],
                 'proveedor_cuentacorriente_id' => $credito['id'],
-                'total' => $monto,
+                'total' => $montoCredito,
                 'moneda_id' => $credito['moneda_id'],
-                'cotizacion' => 1,
+                'cotizacion' => $cotizacionCredito,
                 'comprobanteaplicado' => $par['etiqueta_deuda'],
                 'comprobante_proveedor_aplicado_id' => $deuda['comprobante_id'],
                 'empresa_id' => $credito['empresa_id'],
@@ -1494,8 +1519,8 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
     }
 
     /**
-     * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
-     * @return array{id:int,saldo:float,moneda_id:int,empresa_id:int,comprobante_id:?int,_idx:int}|null
+     * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
+     * @return array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int,_idx:int}|null
      */
     private function peekCc(array $ccPorClave, string $clave, float $monto): ?array
     {
@@ -1516,7 +1541,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
     }
 
     /**
-     * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
+     * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
      */
     private function consumirCc(array &$ccPorClave, string $clave, int $idx, float $monto): void
     {
@@ -1528,8 +1553,8 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
 
     /**
      * @param  array<string, mixed>  $par
-     * @param  array{id:int,saldo:float,moneda_id:int,empresa_id:int,comprobante_id:?int}  $deuda
-     * @return array{id:int,saldo:float,moneda_id:int,empresa_id:int,comprobante_id:?int}
+     * @param  array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}  $deuda
+     * @return array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}
      */
     private function crearCcPagoSintetico(array $par, array $deuda, int $proveedorId, float $montoTotalCredito): array
     {
@@ -1552,6 +1577,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                     'id' => (int) $existente->id,
                     'saldo' => $saldoLibre > 0.0001 ? $saldoLibre : $saldo,
                     'moneda_id' => (int) $existente->moneda_id,
+                    'cotizacion' => (float) $existente->cotizacion,
                     'empresa_id' => (int) $existente->empresa_id,
                     'comprobante_id' => null,
                 ];
@@ -1566,7 +1592,12 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'proveedor_id' => $proveedorId,
             'total' => -$monto,
             'moneda_id' => $deuda['moneda_id'],
-            'cotizacion' => $pago !== null ? ((float) $pago->cotizacion ?: 1) : 1,
+            'cotizacion' => $this->cotizacionCc(
+                (int) $deuda['moneda_id'],
+                $pago !== null ? (float) $pago->cotizacion : 0.0,
+                (float) ($deuda['cotizacion'] ?? 0),
+                (string) $par['fecha'],
+            ),
             'empresa_id' => $pago !== null ? (int) $pago->empresa_id : $deuda['empresa_id'],
             'pagoproveedor_id' => $pago !== null ? (int) $pago->id : null,
         ]);
@@ -1575,6 +1606,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'id' => (int) $cc->id,
             'saldo' => $monto,
             'moneda_id' => (int) $cc->moneda_id,
+            'cotizacion' => (float) $cc->cotizacion,
             'empresa_id' => (int) $cc->empresa_id,
             'comprobante_id' => null,
         ];
@@ -1601,13 +1633,51 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             ->first();
     }
 
-    private function aplicacionYaExiste(int $deudaId, int $creditoId, float $monto): bool
+    private function aplicacionYaExiste(int $deudaId, int $creditoId, float ...$montos): bool
     {
         return Proveedor_Cuentacorriente_Aplicacion::query()
             ->where('proveedor_cuentacorriente_id', $deudaId)
             ->where('proveedor_cuentacorriente_aplicado_id', $creditoId)
-            ->whereRaw('ABS(total) BETWEEN ? AND ?', [round($monto - 0.01, 4), round($monto + 0.01, 4)])
+            ->where(function ($q) use ($montos) {
+                foreach (array_unique(array_map(static fn (float $m) => round($m, 4), $montos)) as $monto) {
+                    $q->orWhereRaw('ABS(total) BETWEEN ? AND ?', [round($monto - 0.01, 4), round($monto + 0.01, 4)]);
+                }
+            })
             ->exists();
+    }
+
+    /**
+     * La cotización de la aplicación es la de su propia cuenta corriente: el saldo suma
+     * aplicaciones contra el total de la CC sin convertir. Un 1 en moneda extranjera además
+     * gana el COALESCE del backfill de pagos y arrastra a la diferencia de cambio.
+     */
+    private function cotizacionCc(int $monedaId, float $preferida, float $alternativa, string $fecha): float
+    {
+        return CotizacionVigenteSupport::ventaEfectiva($preferida, $monedaId, $fecha, $alternativa);
+    }
+
+    /**
+     * aplvp_monto viene en la moneda de uno de los dos documentos. La pata que cae en una CC
+     * de otra moneda tiene que expresarse en la suya, si no el saldo mezcla pesos con dólares.
+     */
+    private function convertirMonto(
+        float $monto,
+        int $monedaOrigen,
+        float $cotizacionOrigen,
+        int $monedaDestino,
+        float $cotizacionDestino,
+    ): float {
+        if ($monedaOrigen === $monedaDestino || abs($monto) < 0.0001) {
+            return round($monto, 4);
+        }
+
+        $pesos = $monedaOrigen <= CotizacionVigenteSupport::MONEDA_LOCAL_ID
+            ? $monto
+            : $monto * $cotizacionOrigen;
+
+        return $monedaDestino <= CotizacionVigenteSupport::MONEDA_LOCAL_ID
+            ? round($pesos, 4)
+            : round($pesos / $cotizacionDestino, 4);
     }
 
     /**

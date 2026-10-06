@@ -1,7 +1,7 @@
 <template id="template-renglon-cuenta">
     <tr class="item-cuenta">
         <td>
-            <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;" id="cuenta">
+            <div class="d-flex flex-nowrap align-items-center asiento-codigo-wrap" style="gap: 2px;" id="cuenta">
                 <input type="hidden" name="cuenta[]" class="form-control iicuenta" readonly value="1" />
                 <input type="hidden" class="cuentacontable_id" name="cuentacontable_ids[]" value="" >
                 <input type="hidden" class="cuentacontable_id_previa" name="cuentacontable_id_previa[]" value="" >
@@ -17,7 +17,7 @@
                         <i class="fa fa-edit"></i>
                     </a>
                 @endif
-                <input type="text" style="flex: 0 0 100px; width: 100px; height: 38px;"
+                <input type="text"
                        class="codigocuentacontable form-control" name="codigos[]" value=""
                        placeholder="C&oacute;d." autocomplete="off">
                 <input type="hidden" class="codigo_previo" name="codigo_previos[]" value="" >

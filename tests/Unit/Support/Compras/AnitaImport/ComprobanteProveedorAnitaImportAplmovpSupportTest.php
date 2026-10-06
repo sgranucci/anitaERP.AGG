@@ -37,7 +37,8 @@ class ComprobanteProveedorAnitaImportAplmovpSupportTest extends TestCase
 
         $this->assertNotNull($par);
         $this->assertTrue($par['credito_es_pago']);
-        $this->assertSame('003593|OPP|X|1|88', $par['credito']['clave']);
+        // La orden de pago se identifica por tipo + sucursal + número: la letra va en blanco.
+        $this->assertSame('003593|OPP| |1|88', $par['credito']['clave']);
         $this->assertSame('003593|FAC|A|1|100', $par['deuda']['clave']);
         $this->assertSame(1500.5, $par['monto']);
         $this->assertSame('2026-01-15', $par['fecha']);
@@ -86,6 +87,28 @@ class ComprobanteProveedorAnitaImportAplmovpSupportTest extends TestCase
         $this->assertSame('004374|CGA|A|1|60256', $par['credito']['clave']);
         $this->assertSame('004374|OPP| |1|124063', $par['deuda']['clave']);
         $this->assertSame(24382.27, $par['monto']);
+        // El monto viene en la moneda de la CGA, que quedó del lado crédito.
+        $this->assertSame('credito', $par['monto_lado']);
+    }
+
+    public function test_monto_lado_sigue_al_documento_aplvp(): void
+    {
+        $par = ComprobanteProveedorAnitaImportAplmovpSupport::parDesdeFila([
+            'aplvp_proveedor' => '3593',
+            'aplvp_tipo' => 'FAC',
+            'aplvp_letra' => 'A',
+            'aplvp_sucursal' => 1,
+            'aplvp_nro' => 100,
+            'aplvp_fecha' => 20260115,
+            'aplvp_monto' => 1500.5,
+            'aplvp_tipo_cob' => 'OPP',
+            'aplvp_letra_cob' => 'X',
+            'aplvp_sucursal_cob' => 1,
+            'aplvp_nro_cob' => 88,
+        ], ['FAC' => 'S']);
+
+        $this->assertNotNull($par);
+        $this->assertSame('deuda', $par['monto_lado']);
     }
 
     public function test_omite_monto_cero_y_deduplica(): void

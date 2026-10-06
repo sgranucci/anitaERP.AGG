@@ -13,6 +13,7 @@ namespace App\Support\Compras\AnitaImport;
  *   credito: Lado,
  *   deuda: Lado,
  *   credito_es_pago: bool,
+ *   monto_lado: string,
  *   etiqueta_credito: string,
  *   etiqueta_deuda: string
  * }
@@ -135,6 +136,9 @@ final class ComprobanteProveedorAnitaImportAplmovpSupport
             'credito' => $credito,
             'deuda' => $deuda,
             'credito_es_pago' => self::esTipoPago($credito['tipo']),
+            // aplvp_monto está en la moneda del documento aplvp_* (aplvp_*_cob es la contraparte).
+            // Según el signo, ese documento quedó del lado deuda o del lado crédito.
+            'monto_lado' => $bEsCredito ? 'deuda' : 'credito',
             'etiqueta_credito' => ComprobanteProveedorAnitaImportClaveSupport::etiqueta(
                 $credito['tipo'],
                 $credito['letra'],

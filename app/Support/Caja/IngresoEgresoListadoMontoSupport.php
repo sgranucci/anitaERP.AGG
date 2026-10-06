@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Support\Caja;
 
+use App\Support\Configuracion\CotizacionVigenteSupport;
+
 /**
  * Monto y leyendas del index/export IE: cuentas de caja + cheques.
  * Sin cheques el listado quedaba en 0 cuando el pago era solo CHP.
@@ -21,9 +23,14 @@ final class IngresoEgresoListadoMontoSupport
         $egreso = 0.0;
         $lineas = [];
         $chequesReemplazo = [];
+        $fecha = self::fechaMovimiento($movimiento);
+        $cotizacionesMovimiento = CotizacionVigenteSupport::cotizacionesDeclaradas(
+            $movimiento->caja_movimiento_cuentacajas ?? [],
+            $movimiento->cheques ?? [],
+        );
 
         foreach ($movimiento->caja_movimiento_cuentacajas ?? [] as $linea) {
-            $coef = self::coeficiente($linea->moneda_id ?? 1, $linea->cotizacion ?? 1);
+            $coef = self::coeficiente($linea->moneda_id ?? 1, $linea->cotizacion ?? 1, $fecha, $cotizacionesMovimiento);
             $monto = (float) ($linea->monto ?? 0);
             if ($monto > 0) {
                 $ingreso += $monto * $coef;
@@ -40,7 +47,7 @@ final class IngresoEgresoListadoMontoSupport
                 continue;
             }
             $origen = strtoupper(trim((string) ($cheque->origen ?? '')));
-            $coef = self::coeficiente($cheque->moneda_id ?? 1, $cheque->cotizacion ?? 1);
+            $coef = self::coeficiente($cheque->moneda_id ?? 1, $cheque->cotizacion ?? 1, $fecha, $cotizacionesMovimiento);
             $montoAbs = abs((float) ($cheque->monto ?? 0));
             if ($montoAbs < 0.000001) {
                 continue;
@@ -59,7 +66,7 @@ final class IngresoEgresoListadoMontoSupport
         // Canje: sin caja ni cheques “normales”; una pata = monto del cheque nuevo.
         if (abs($ingreso) < 0.000001 && abs($egreso) < 0.000001 && $chequesReemplazo !== []) {
             foreach ($chequesReemplazo as $cheque) {
-                $coef = self::coeficiente($cheque->moneda_id ?? 1, $cheque->cotizacion ?? 1);
+                $coef = self::coeficiente($cheque->moneda_id ?? 1, $cheque->cotizacion ?? 1, $fecha, $cotizacionesMovimiento);
                 $montoAbs = abs((float) ($cheque->monto ?? 0));
                 if ($montoAbs < 0.000001) {
                     continue;
@@ -94,15 +101,35 @@ final class IngresoEgresoListadoMontoSupport
         ];
     }
 
-    private static function coeficiente(mixed $monedaId, mixed $cotizacion): float
-    {
-        if ((int) $monedaId > 1) {
-            $cot = (float) $cotizacion;
+    /**
+     * @param  array<int, float>  $cotizacionesMovimiento
+     */
+    private static function coeficiente(
+        mixed $monedaId,
+        mixed $cotizacion,
+        ?string $fecha,
+        array $cotizacionesMovimiento,
+    ): float {
+        $monedaId = (int) $monedaId;
 
-            return $cot > 0 ? $cot : 1.0;
+        return CotizacionVigenteSupport::ventaEfectiva(
+            $cotizacion,
+            $monedaId > 0 ? $monedaId : 1,
+            $fecha,
+            $cotizacionesMovimiento[$monedaId] ?? null,
+        );
+    }
+
+    private static function fechaMovimiento(object $movimiento): ?string
+    {
+        $fecha = $movimiento->fecha ?? null;
+        if ($fecha instanceof \DateTimeInterface) {
+            return $fecha->format('Y-m-d');
         }
 
-        return 1.0;
+        $fecha = trim((string) $fecha);
+
+        return $fecha !== '' ? $fecha : null;
     }
 
     private static function fmt(float $monto): string

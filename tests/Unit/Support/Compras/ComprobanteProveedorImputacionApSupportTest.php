@@ -402,6 +402,25 @@ class ComprobanteProveedorImputacionApSupportTest extends TestCase
         $this->assertNotContains('Sin CC', $eval['alertas']);
     }
 
+    public function test_ingreso_egreso_en_dolares_expresa_factura_y_asiento_en_pesos(): void
+    {
+        $lineas = [
+            ['monto' => 24.0, 'codigo' => '532040001', 'comprobante_proveedor_id' => 9, 'moneda_id' => 2, 'cotizacion' => 1490],
+            ['monto' => 6.01, 'codigo' => '114010002', 'comprobante_proveedor_id' => 9, 'moneda_id' => 2, 'cotizacion' => 1490],
+            ['monto' => -30.01, 'codigo' => '111050010', 'comprobante_proveedor_id' => 0, 'moneda_id' => 2, 'cotizacion' => 1490],
+        ];
+
+        $asiento = ComprobanteProveedorImputacionApSupport::importeDebeIngresoEgreso(9, $lineas, []);
+        $factura = ComprobanteProveedorImputacionApSupport::facturaIngresoEgresoEnPesos(30.01, 46365.45, 2, $lineas, 9);
+
+        $this->assertEqualsWithDelta(44714.90, $asiento, 0.001);
+        $this->assertEqualsWithDelta(44714.90, $factura, 0.001);
+
+        $eval = ComprobanteProveedorImputacionApSupport::evaluarIngresoEgreso($factura, $asiento, true);
+        $this->assertTrue($eval['ok']);
+        $this->assertSame([], $eval['alertas']);
+    }
+
     public function test_ingreso_egreso_sin_asiento_del_movimiento(): void
     {
         $eval = ComprobanteProveedorImputacionApSupport::evaluarIngresoEgreso(100.0, 0.0, false);

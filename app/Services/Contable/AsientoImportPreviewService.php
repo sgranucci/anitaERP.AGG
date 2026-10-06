@@ -154,6 +154,7 @@ class AsientoImportPreviewService
             'cuentas_no_autorizadas' => 0,
         ];
         $filasMuestra = [];
+        $filasOmitidas = [];
         $cuentasIdsImportables = [];
 
         $cacheCuentas = [];
@@ -195,12 +196,12 @@ class AsientoImportPreviewService
                     $resumen['total_debe'] += (float) $evaluacion['debe'];
                     $resumen['total_haber'] += (float) $evaluacion['haber'];
                     $cuentasIdsImportables[] = (int) $evaluacion['cuentacontable_id'];
+                    if (count($filasMuestra) < self::MAX_FILAS_MUESTRA) {
+                        $filasMuestra[] = $evaluacion;
+                    }
                 } else {
                     $resumen['omitidas']++;
-                }
-
-                if (count($filasMuestra) < self::MAX_FILAS_MUESTRA) {
-                    $filasMuestra[] = $evaluacion;
+                    $filasOmitidas[] = $evaluacion;
                 }
             }
         }
@@ -218,14 +219,33 @@ class AsientoImportPreviewService
                 .' cuenta(s) fuera de su lista autorizada. El asiento quedará pendiente de aprobación.';
         }
 
+        $resumenOmitidas = $this->resumirFilasOmitidas($filasOmitidas);
+        $desbalancePorOmitidas = $columnasOk
+            && ! $resumen['balanceado']
+            && $this->desbalanceExplicadoPorOmitidas($resumen['diferencia'], $resumenOmitidas);
+
+        if ($filasOmitidas !== []) {
+            $advertencias[] = $resumenOmitidas['resumen'];
+        }
+
         if ($columnasOk && $resumen['importables'] > 0 && ! $resumen['balanceado']) {
-            $advertencias[] = 'El asiento no balancea: Debe '
-                .AsientoImportColumnasSupport::formatearImporte($resumen['total_debe'])
-                .' vs Haber '
-                .AsientoImportColumnasSupport::formatearImporte($resumen['total_haber'])
-                .' (diferencia '
-                .AsientoImportColumnasSupport::formatearImporte(abs($resumen['diferencia']))
-                .').';
+            if ($desbalancePorOmitidas) {
+                $advertencias[] = 'El Excel puede estar balanceado: la diferencia '
+                    .AsientoImportColumnasSupport::formatearImporte(abs($resumen['diferencia']))
+                    .' coincide con el neto de las filas que no entran (Debe '
+                    .$resumenOmitidas['debe_texto']
+                    .' menos Haber '
+                    .$resumenOmitidas['haber_texto']
+                    .').';
+            } else {
+                $advertencias[] = 'El asiento no balancea: Debe '
+                    .AsientoImportColumnasSupport::formatearImporte($resumen['total_debe'])
+                    .' vs Haber '
+                    .AsientoImportColumnasSupport::formatearImporte($resumen['total_haber'])
+                    .' (diferencia '
+                    .AsientoImportColumnasSupport::formatearImporte(abs($resumen['diferencia']))
+                    .').';
+            }
         }
 
         if ($columnasOk && $resumen['importables'] < 2 && $resumen['importables'] > 0) {
@@ -267,12 +287,17 @@ class AsientoImportPreviewService
                 'diferencia' => $resumen['diferencia'],
                 'diferencia_texto' => AsientoImportColumnasSupport::formatearImporte(abs($resumen['diferencia'])),
                 'balanceado' => $resumen['balanceado'],
+                'desbalance_por_filas_omitidas' => $desbalancePorOmitidas,
+                'omitido_debe_texto' => $resumenOmitidas['debe_texto'],
+                'omitido_haber_texto' => $resumenOmitidas['haber_texto'],
                 'cuentas_no_autorizadas' => $resumen['cuentas_no_autorizadas'],
             ],
             'requiere_aprobacion' => $requiereAprobacion,
             'cuentas_no_autorizadas_detalle' => AsientoCuentaUsuarioSupport::detalleCuentas($noAutorizadas),
             'filas' => $filasMuestra,
-            'hay_mas_filas' => $resumen['total_filas_datos'] > count($filasMuestra),
+            'filas_error' => $filasOmitidas,
+            'filas_omitidas' => count($filasOmitidas),
+            'hay_mas_filas' => $resumen['importables'] > count($filasMuestra),
             'advertencias' => $advertencias,
             'mensaje' => $ok
                 ? null
@@ -280,7 +305,9 @@ class AsientoImportPreviewService
                     ? ($resumen['importables'] < 2
                         ? 'Se necesitan al menos dos movimientos válidos para armar el asiento.'
                         : (! $resumen['balanceado']
-                            ? 'Corrija el desbalance Debe/Haber antes de importar.'
+                            ? ($desbalancePorOmitidas
+                                ? 'Hay filas que no entran al asiento. El desbalance coincide con esos importes.'
+                                : 'Corrija el desbalance Debe/Haber antes de importar.')
                             : 'No hay filas importables con la configuración actual.'))
                     : 'Configure empresa, columna de cuenta y Debe/Haber antes de importar.'),
         ], $hojas, $hojaSeleccionada);
@@ -433,6 +460,95 @@ class AsientoImportPreviewService
         $base['mensaje'] = 'Listo para cargar';
 
         return $base;
+    }
+
+    /**
+     * Texto de cada fila que no entra al asiento, con cuenta, centro de costo e importe.
+     *
+     * @param  list<array<string, mixed>>  $filasOmitidas
+     * @return array{
+     *     cantidad: int,
+     *     debe: float,
+     *     haber: float,
+     *     debe_texto: string,
+     *     haber_texto: string,
+     *     resumen: string,
+     *     lineas: list<string>
+     * }
+     */
+    public function resumirFilasOmitidas(array $filasOmitidas): array
+    {
+        $sumaDebe = 0.0;
+        $sumaHaber = 0.0;
+        $lineas = [];
+        foreach ($filasOmitidas as $fila) {
+            $debe = (float) ($fila['debe'] ?? 0);
+            $haber = (float) ($fila['haber'] ?? 0);
+            $sumaDebe += $debe;
+            $sumaHaber += $haber;
+            $lineas[] = $this->lineaErrorFila($fila, $debe, $haber);
+        }
+
+        $debeTexto = AsientoImportColumnasSupport::formatearImporte($sumaDebe);
+        $haberTexto = AsientoImportColumnasSupport::formatearImporte($sumaHaber);
+        $cantidad = count($filasOmitidas);
+
+        return [
+            'cantidad' => $cantidad,
+            'debe' => round($sumaDebe, 4),
+            'haber' => round($sumaHaber, 4),
+            'debe_texto' => $debeTexto,
+            'haber_texto' => $haberTexto,
+            'resumen' => $cantidad === 0
+                ? ''
+                : 'Hay '.$cantidad.' fila(s) que no entran al asiento'
+                    .' (Debe omitido '.$debeTexto.', Haber omitido '.$haberTexto.').',
+            'lineas' => $lineas,
+        ];
+    }
+
+    /**
+     * El Debe/Haber importable difiere justo en el neto de las filas omitidas:
+     * el Excel cierra y el sistema deja afuera esos importes.
+     *
+     * @param  array{debe: float, haber: float, cantidad: int}  $resumenOmitidas
+     */
+    public function desbalanceExplicadoPorOmitidas(float $diferenciaImportable, array $resumenOmitidas): bool
+    {
+        if (($resumenOmitidas['cantidad'] ?? 0) < 1) {
+            return false;
+        }
+
+        $netoOmitido = round((float) $resumenOmitidas['haber'] - (float) $resumenOmitidas['debe'], 4);
+
+        return abs(round($diferenciaImportable, 4) - $netoOmitido) <= self::TOLERANCIA_BALANCE;
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     */
+    public function lineaErrorFila(array $fila, ?float $debe = null, ?float $haber = null): string
+    {
+        $debe = $debe ?? (float) ($fila['debe'] ?? 0);
+        $haber = $haber ?? (float) ($fila['haber'] ?? 0);
+        $texto = 'Fila '.(int) ($fila['fila_excel'] ?? 0);
+        $cuenta = trim((string) ($fila['codigo_cuenta'] ?? ''));
+        if ($cuenta !== '') {
+            $texto .= ', cuenta '.$cuenta;
+        }
+        $cc = trim((string) ($fila['codigo_centrocosto'] ?? ''));
+        if ($cc !== '') {
+            $texto .= ', centro de costo '.$cc;
+        }
+        $texto .= ': '.((string) ($fila['mensaje'] ?? 'omitida'));
+        if ($debe > 0) {
+            $texto .= ' (Debe '.AsientoImportColumnasSupport::formatearImporte($debe).')';
+        }
+        if ($haber > 0) {
+            $texto .= ' (Haber '.AsientoImportColumnasSupport::formatearImporte($haber).')';
+        }
+
+        return $texto;
     }
 
     /**

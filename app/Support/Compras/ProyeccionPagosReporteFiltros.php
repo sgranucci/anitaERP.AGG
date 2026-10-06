@@ -296,9 +296,9 @@ final class ProyeccionPagosReporteFiltros
             $query['abre_anterior'] = 1;
         }
 
-        if (empty($filtros['incluir_adelantos'])) {
-            $query['incluir_adelantos'] = 0;
-        }
+        // Si el tilde está activo hay que mandarlo igual. Si falta el parámetro y la URL
+        // trae consultar=1, el export lo lee como apagado y el Excel sale «Sin adelantos».
+        $query['incluir_adelantos'] = empty($filtros['incluir_adelantos']) ? 0 : 1;
 
         return $query;
     }

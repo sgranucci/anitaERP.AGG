@@ -155,6 +155,21 @@ class IngresoEgresoImputacionDiariaSupportTest extends TestCase
         $this->assertSame(94510.7, $ctamov['total_haber']);
     }
 
+    public function test_linea_en_dolares_sin_cotizacion_toma_la_del_resto_del_asiento(): void
+    {
+        // Una línea quedó en 1: si se la convierte como peso el asiento deja de balancear
+        // y el control informa un desvío del orden de la cotización.
+        $balance = IngresoEgresoImputacionDiariaSupport::balanceAsientoEnPesos([
+            (object) ['monto' => -63.43, 'moneda_id' => 2, 'cotizacion' => 1490],
+            (object) ['monto' => 0.98, 'moneda_id' => 2, 'cotizacion' => 1],
+            (object) ['monto' => 62.45, 'moneda_id' => 2, 'cotizacion' => 1490],
+        ], '2026-09-30');
+
+        $this->assertTrue($balance['balanceado']);
+        $this->assertSame(94510.7, $balance['total_debe']);
+        $this->assertSame(94510.7, $balance['total_haber']);
+    }
+
     public function test_egr_desvio_caja_asiento_y_tesmov(): void
     {
         $eval = IngresoEgresoImputacionDiariaSupport::evaluar(

@@ -44,7 +44,30 @@
         refrescarResumenCompacto();
     }
 
+    function referenciaIncompleta() {
+        var tipo = tipoActual();
+        var oc = parseInt($('#ordencompra_id').val(), 10) || 0;
+        var cp = parseInt($('#comprobante_proveedor_id').val(), 10) || 0;
+        var venta = parseInt($('#venta_id').val(), 10) || 0;
+        if (tipo === TIPO_OC) {
+            return oc <= 0;
+        }
+        if (tipo === TIPO_CP) {
+            return cp <= 0;
+        }
+        if (tipo === TIPO_VENTA) {
+            return venta <= 0;
+        }
+        if (tipo === TIPO_OC_CP) {
+            return oc <= 0 || cp <= 0;
+        }
+        return false;
+    }
+
     function colapsarEditor() {
+        if (referenciaIncompleta()) {
+            setTipo(TIPO_NINGUNA);
+        }
         var $card = $('#asiento-referencias');
         $card.removeClass('is-expanded').addClass('is-collapsed').attr('data-collapsed', '1');
         $('#asiento-ref-editor').prop('hidden', true);
@@ -87,7 +110,13 @@
         $('#asiento-ref-pill-venta').text(ventaTxt).toggleClass('d-none', !(ventaId > 0 && ventaTxt));
 
         var hayPills = ocId > 0 || cpId > 0 || ventaId > 0;
-        $('#asiento-ref-compact-hint').toggleClass('d-none', hayPills);
+        var $hint = $('#asiento-ref-compact-hint');
+        if (!hayPills && tipo !== TIPO_NINGUNA) {
+            $hint.text('Falta elegir el comprobante. Si cerrás el panel, el asiento se graba sin referencia.');
+        } else if (!hayPills) {
+            $hint.text('Sin enganche a OC ni factura — aparece como link en el mayor si la cargás');
+        }
+        $hint.toggleClass('d-none', hayPills);
 
         if (!estaExpandido()) {
             var label = hayPills || tipo !== TIPO_NINGUNA ? 'Cambiar' : 'Agregar';

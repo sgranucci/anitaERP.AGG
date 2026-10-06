@@ -161,6 +161,7 @@ class AsientoImportService
         $cacheCc = [];
         $cacheMonedas = [];
         $erroresFila = [];
+        $filasOmitidas = [];
 
         for ($i = $indiceEncabezado + 1; $i < count($hoja); $i++) {
             $fila = $hoja[$i] ?? [];
@@ -191,8 +192,9 @@ class AsientoImportService
 
             if ($evaluacion['estado'] !== 'ok') {
                 $omitidas++;
-                if (count($erroresFila) < 15) {
-                    $erroresFila[] = 'Fila '.$evaluacion['fila_excel'].': '.$evaluacion['mensaje'];
+                $filasOmitidas[] = $evaluacion;
+                if (count($erroresFila) < 30) {
+                    $erroresFila[] = $this->previewService->lineaErrorFila($evaluacion);
                 }
 
                 continue;
@@ -204,23 +206,22 @@ class AsientoImportService
         }
 
         if (count($movimientos) < 2) {
-            $detalle = $erroresFila !== [] ? ' '.implode(' | ', $erroresFila) : '';
-            throw new \InvalidArgumentException(
-                'Se necesitan al menos dos movimientos válidos para armar el asiento.'.$detalle
-            );
+            $lineas = ['Se necesitan al menos dos movimientos válidos para armar el asiento.'];
+            foreach ($erroresFila as $linea) {
+                $lineas[] = $linea;
+            }
+            throw new \InvalidArgumentException(implode("\n", $lineas));
         }
 
         $diferencia = round($totalDebe - $totalHaber, 4);
         if (abs($diferencia) > self::TOLERANCIA_BALANCE) {
-            throw new \InvalidArgumentException(
-                'El asiento no balancea: Debe '
-                .AsientoImportColumnasSupport::formatearImporte($totalDebe)
-                .' vs Haber '
-                .AsientoImportColumnasSupport::formatearImporte($totalHaber)
-                .' (diferencia '
-                .AsientoImportColumnasSupport::formatearImporte(abs($diferencia))
-                .').'
-            );
+            throw new \InvalidArgumentException(implode("\n", $this->lineasDesbalance(
+                $totalDebe,
+                $totalHaber,
+                $diferencia,
+                $filasOmitidas,
+                $erroresFila
+            )));
         }
 
         $cuentacontableIds = array_map(static fn ($m) => (int) $m['cuentacontable_id'], $movimientos);
@@ -324,6 +325,60 @@ class AsientoImportService
             'pendiente_aprobacion' => $evaluacionCuentas['requiere_aprobacion'],
             'errores_muestra' => $erroresFila,
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filasOmitidas
+     * @param  list<string>  $erroresFila
+     * @return list<string>
+     */
+    private function lineasDesbalance(
+        float $totalDebe,
+        float $totalHaber,
+        float $diferencia,
+        array $filasOmitidas,
+        array $erroresFila
+    ): array {
+        $resumenOmitidas = $this->previewService->resumirFilasOmitidas($filasOmitidas);
+        $explicado = $this->previewService->desbalanceExplicadoPorOmitidas($diferencia, $resumenOmitidas);
+
+        if ($explicado) {
+            $lineas = [
+                'El Excel puede estar balanceado, pero '
+                .$resumenOmitidas['cantidad']
+                .' fila(s) no entran y el asiento queda desbalanceado en '
+                .AsientoImportColumnasSupport::formatearImporte(abs($diferencia))
+                .' (Debe importable '
+                .AsientoImportColumnasSupport::formatearImporte($totalDebe)
+                .' vs Haber '
+                .AsientoImportColumnasSupport::formatearImporte($totalHaber)
+                .').',
+            ];
+        } else {
+            $lineas = [
+                'El asiento no balancea: Debe '
+                .AsientoImportColumnasSupport::formatearImporte($totalDebe)
+                .' vs Haber '
+                .AsientoImportColumnasSupport::formatearImporte($totalHaber)
+                .' (diferencia '
+                .AsientoImportColumnasSupport::formatearImporte(abs($diferencia))
+                .').',
+            ];
+            if ($resumenOmitidas['resumen'] !== '') {
+                $lineas[] = $resumenOmitidas['resumen'];
+            }
+        }
+
+        foreach ($erroresFila as $linea) {
+            $lineas[] = $linea;
+        }
+
+        $resto = count($filasOmitidas) - count($erroresFila);
+        if ($resto > 0) {
+            $lineas[] = 'Hay '.$resto.' fila(s) más con el mismo tipo de error.';
+        }
+
+        return $lineas;
     }
 
     private function nombreColumna(?string $valor, string $default): string

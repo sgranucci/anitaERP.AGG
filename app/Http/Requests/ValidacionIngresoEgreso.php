@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
+use App\Support\Caja\IngresoEgresoCotizacionMonedaSupport;
 use App\Support\Caja\IngresoEgresoCuadreCajaAsientoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
@@ -75,6 +76,15 @@ class ValidacionIngresoEgreso extends FormRequest
                 IngresoEgresoCanjeChequeSupport::assertTieneReemplazos($this->all());
             } catch (InvalidArgumentException $e) {
                 $validator->errors()->add('cheque_anulado_ids', $e->getMessage());
+            }
+
+            try {
+                IngresoEgresoCotizacionMonedaSupport::assertCotizacionEnMonedaExtranjera($this->all());
+            } catch (InvalidArgumentException $e) {
+                $validator->errors()->add(
+                    IngresoEgresoCotizacionMonedaSupport::campoConError($this->all()),
+                    $e->getMessage()
+                );
             }
 
             try {

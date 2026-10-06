@@ -88,7 +88,7 @@ final class RemesaCajaMovimientoService
                 'fecha' => $fecha,
                 'monto' => $montoFirmado,
                 'moneda_id' => $monedaId,
-                'cotizacion' => 1,
+                'cotizacion' => RemesaSupport::cotizacionMoneda($fecha, $monedaId, (int) $remesa->empresa_id),
                 'observacion' => $detalle,
             ]);
         }
