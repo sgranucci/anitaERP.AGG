@@ -58,8 +58,8 @@ final class SicoreLiquidacionService
             'fecha_hasta' => $sueldosHasta,
         ]);
 
-        $resCompras = $this->reporteService->generarOCache($filtrosCompras);
-        $resSueldos = $this->reporteService->generarOCache($filtrosSueldos);
+        $resCompras = $this->reporteService->generar($filtrosCompras);
+        $resSueldos = $this->reporteService->generar($filtrosSueldos);
 
         $regsCompras = $resCompras['registros'] ?? [];
         $regsSueldos = $resSueldos['registros'] ?? [];

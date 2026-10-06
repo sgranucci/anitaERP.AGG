@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support\Compras\IvaCompras;
 
+use App\Models\Caja\Caja_Movimiento_Cuentacaja;
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Configuracion\CotizacionVigenteSupport;
 
 /**
@@ -88,8 +90,11 @@ final class IvaComprasDesgloseSupport
     }
 
     /**
-     * Coeficiente a moneda de reporte (misma filosofía que IVA ventas).
-     * Con solo_moneda_origen: convierte ME con cotización del comprobante; sin cotización válida excluye.
+     * Coeficiente para expresar el nominal del comprobante en la moneda del listado.
+     *
+     * Una cotización 0 ó 1 en moneda extranjera no convierte: se usa la del movimiento
+     * de caja y, si no hay, la vigente. En la misma moneda el coeficiente es 1
+     * (el listado en dólares no multiplica el nominal por el tipo de cambio).
      */
     public static function coeficienteMoneda(
         Comprobante_Proveedor $cp,
@@ -97,25 +102,79 @@ final class IvaComprasDesgloseSupport
         bool $soloMonedaOrigen,
     ): ?float {
         $monedaDoc = (int) ($cp->moneda_id ?? 1);
-        $cotDoc = (float) ($cp->cotizacion ?? 0);
-
-        if ($soloMonedaOrigen && $monedaDoc !== $monedaReporteId) {
-            return $cotDoc > 0.01 ? $cotDoc : null;
-        }
-
         if ($monedaDoc === $monedaReporteId) {
             return 1.0;
         }
 
-        if ($cotDoc > 0.01) {
-            return $cotDoc;
+        $tasa = self::tasaParaConversion($cp, $soloMonedaOrigen);
+        if ($tasa === null || $tasa <= 0) {
+            return null;
+        }
+
+        $coef = calculaCoeficienteMoneda($monedaReporteId, $monedaDoc, $tasa);
+
+        return $coef > 0 ? (float) $coef : null;
+    }
+
+    /**
+     * Pesos por unidad de moneda extranjera. Null si hay que excluir el comprobante.
+     */
+    private static function tasaParaConversion(Comprobante_Proveedor $cp, bool $exigirValida): ?float
+    {
+        $monedaDoc = (int) ($cp->moneda_id ?? 1);
+        if (! ComprobanteProveedorMonedaMotor::esMonedaExtranjera($monedaDoc)) {
+            return 1.0;
+        }
+
+        $cot = (float) ($cp->cotizacion ?? 0);
+        if ($cot > ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA) {
+            return $cot;
+        }
+
+        $deCaja = self::cotizacionMovimientoCaja($cp, $monedaDoc);
+        if ($deCaja > ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA) {
+            return $deCaja;
         }
 
         $fecha = $cp->fechaiva?->format('Y-m-d')
             ?? $cp->fechacomprobante?->format('Y-m-d')
             ?? date('Y-m-d');
+        $vigente = CotizacionVigenteSupport::ventaValor($fecha, $monedaDoc);
+        if ($vigente > ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA) {
+            return $vigente;
+        }
 
-        return CotizacionVigenteSupport::ventaValorOUno($fecha, $monedaDoc);
+        if ($exigirValida) {
+            return null;
+        }
+
+        $fallback = CotizacionVigenteSupport::ventaValorOUno($fecha, $monedaDoc);
+
+        return $fallback > 0 ? $fallback : null;
+    }
+
+    /** @var array<string, float> */
+    private static array $cotizacionCajaCache = [];
+
+    private static function cotizacionMovimientoCaja(Comprobante_Proveedor $cp, int $monedaId): float
+    {
+        $cajaId = (int) ($cp->caja_movimiento_id ?? 0);
+        if ($cajaId <= 0 || $monedaId <= 0) {
+            return 0.0;
+        }
+
+        $clave = $cajaId.':'.$monedaId;
+        if (! array_key_exists($clave, self::$cotizacionCajaCache)) {
+            $valor = Caja_Movimiento_Cuentacaja::query()
+                ->where('caja_movimiento_id', $cajaId)
+                ->where('moneda_id', $monedaId)
+                ->where('cotizacion', '>', ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA)
+                ->orderByDesc('id')
+                ->value('cotizacion');
+            self::$cotizacionCajaCache[$clave] = $valor !== null ? (float) $valor : 0.0;
+        }
+
+        return self::$cotizacionCajaCache[$clave];
     }
 
     /**

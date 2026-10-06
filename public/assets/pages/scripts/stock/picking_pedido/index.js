@@ -5,6 +5,7 @@
     var ordentrabajo_ids = [];
     var filasFacturaPicking = [];
     var nombrecliente = '';
+    var clienteFacturaId = 0;
     var descuentoCliente = 0;
     var descuentoLineaCliente = '';
     var offFactura = 0;
@@ -216,6 +217,7 @@
                     ordentrabajo_ids = data.ordentrabajo_ids || [];
                     filasFacturaPicking = data.filas || [];
                     nombrecliente = data.nombrecliente || '';
+                    clienteFacturaId = parseInt(data.cliente_id, 10) || 0;
                     descuentoCliente = (data.descuentopie != null && data.descuentopie !== '') ? data.descuentopie : 0;
                     descuentoLineaCliente = (data.descuentolinea != null && data.descuentolinea !== '') ? data.descuentolinea : '';
                     offFactura = pedido_combinacion_ids.length;
@@ -233,6 +235,9 @@
             modal.find('#fechafactura').val(hoy.toISOString().substring(0, 10));
             modal.find('#nombrecliente').val(nombrecliente);
             modal.find('.modal-title').text('Factura PICKING — ' + nombrecliente);
+            if (typeof window.prefijarClienteFacturaOt === 'function') {
+                window.prefijarClienteFacturaOt(clienteFacturaId);
+            }
             modal.find('#descuentopie').val(descuentoCliente);
             modal.find('#descuentolinea').val(descuentoLineaCliente);
             cargarSelectsModal(modal);
@@ -266,6 +271,14 @@
                 return false;
             }
 
+            if (typeof window.validarClienteFacturaOt === 'function' && !window.validarClienteFacturaOt()) {
+                return false;
+            }
+
+            var clienteFacturaElegido = (typeof window.clienteIdFacturaOt === 'function')
+                ? window.clienteIdFacturaOt()
+                : String(clienteFacturaId || '');
+
             $('#facturarOrdenTrabajoModal').modal('hide');
             mostrarOverlay('Emitiendo factura…');
 
@@ -287,6 +300,7 @@
                 mercaderia: mercaderia,
                 leyendaexportacion: leyendaexportacion,
                 transporte_id: transporte_id,
+                cliente_id: clienteFacturaElegido,
                 retorno_index: pathRetornoPicking(),
                 con_envios: $('#con_envios').is(':checked') ? 1 : 0,
                 _token: token
@@ -327,6 +341,16 @@
 
         $('#puntoventa_id').on('change', function () {
             leePuntoVenta($(this).val());
+        });
+
+        $(document).on('clienteFacturaOtElegido', function (_event, data) {
+            if (!$('#facturarOrdenTrabajoModal').hasClass('show')) {
+                return;
+            }
+            var nombre = (data && data.nombre) ? String(data.nombre) : '';
+            if (nombre !== '') {
+                $('#facturarOrdenTrabajoModal .modal-title').text('Factura PICKING — ' + nombre);
+            }
         });
 
         function tokenCsrf() {

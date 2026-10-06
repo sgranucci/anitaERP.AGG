@@ -57,7 +57,7 @@ class IngresosBrutosReporteController extends Controller
                 (string) ($filtros['tipo'] ?? ''),
             );
 
-            $resultado = $this->reporteService->generarOCache($filtros);
+            $resultado = $this->reporteService->generar($filtros);
             $consultado = true;
         }
 
@@ -103,7 +103,7 @@ class IngresosBrutosReporteController extends Controller
             return redirect()->route('ingresos_brutos');
         }
 
-        $resultado = $this->reporteService->generarOCache($filtros);
+        $resultado = $this->reporteService->generar($filtros);
         $nombre = (string) ($resultado['nombre_archivo'] ?? 'iibb.txt');
         $principal = (string) ($resultado['archivo_arba'] ?? '');
         $notas = (string) ($resultado['archivo_nc'] ?? '');
@@ -135,7 +135,7 @@ class IngresosBrutosReporteController extends Controller
             return redirect()->route('ingresos_brutos');
         }
 
-        $resultado = $this->reporteService->generarOCache($filtros);
+        $resultado = $this->reporteService->generar($filtros);
         $registros = $resultado['registros'] ?? [];
         $totales = $resultado['totales'] ?? [];
         $conciliacion = $resultado['conciliacion'] ?? [];

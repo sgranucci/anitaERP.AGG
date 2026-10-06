@@ -1317,8 +1317,8 @@
         return isNaN(n) ? 0 : n;
     }
 
-    function cotizacionComprobanteDesdeCaja() {
-        var monedaId = parseInt($('#ie-cp-moneda-id').val() || '1', 10) || 1;
+    function cotizacionDeCajaParaMoneda(monedaId) {
+        monedaId = parseInt(monedaId || '1', 10) || 1;
         if (monedaId <= 1) {
             return 1;
         }
@@ -1335,6 +1335,26 @@
             }
         });
         return cot > 1.0001 ? cot : 1;
+    }
+
+    function cotizacionComprobanteDesdeCaja() {
+        return cotizacionDeCajaParaMoneda($('#ie-cp-moneda-id').val());
+    }
+
+    function refrescarCotizacionesIvaDesdeCaja() {
+        comprobantesIva.forEach(function (c) {
+            if (!c) {
+                return;
+            }
+            var monedaId = parseInt(c.moneda_id || '1', 10) || 1;
+            if (monedaId <= 1) {
+                return;
+            }
+            var cot = cotizacionDeCajaParaMoneda(monedaId);
+            if (cot > 1.0001) {
+                c.cotizacion = cot;
+            }
+        });
     }
 
     function serializarModal() {
@@ -2003,6 +2023,8 @@
             });
 
         window.obtenerComprobantesIvaIngresoEgreso = function () {
+            refrescarCotizacionesIvaDesdeCaja();
+            syncHidden();
             return comprobantesIva;
         };
 

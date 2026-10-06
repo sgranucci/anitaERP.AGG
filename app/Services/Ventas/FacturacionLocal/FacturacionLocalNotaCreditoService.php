@@ -37,8 +37,11 @@ final class FacturacionLocalNotaCreditoService
     /**
      * @param  array{
      *   medios_forzados?:list<array{cuentacaja_id:int,moneda_id?:int,monto:float}>,
-     *   local_venta_id?:int
+     *   local_venta_id?:int,
+     *   venta_emision_ids?:list<int>,
+     *   cantidades_por_emision?:array<int,float>
      * }|null  $opciones  Solo Facturación Local / marketplace Ferli (no gastronomía).
+     *   venta_emision_ids limita la NC a esos ítems (cambio: solo lo devuelto).
      * @return array{ok:bool,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string,warn?:string,error?:string}
      */
     public function generarDesdeFactura(
@@ -142,8 +145,18 @@ final class FacturacionLocalNotaCreditoService
             return ['ok' => false, 'error' => 'El tipo de transacción de NC del local debe tener signo Resta.'];
         }
 
+        $idsNc = self::idsEmisionOpcion($opciones['venta_emision_ids'] ?? null);
+        $cantidadesNc = self::cantidadesPorEmisionOpcion($opciones['cantidades_por_emision'] ?? null);
+
         try {
-            $payload = $this->armarPayloadNotaCredito($ventaOrigen, $local, $tipoNcId, $leyendaUsuario);
+            $payload = $this->armarPayloadNotaCredito(
+                $ventaOrigen,
+                $local,
+                $tipoNcId,
+                $leyendaUsuario,
+                $idsNc,
+                $cantidadesNc,
+            );
         } catch (InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -157,6 +170,9 @@ final class FacturacionLocalNotaCreditoService
         $mediosPago = is_array($mediosForzados) && $mediosForzados !== []
             ? $mediosForzados
             : $this->cobranzaService->mediosDesdeVentaFac($ventaFacturaId);
+        if (is_array($mediosForzados) && $mediosForzados !== []) {
+            $payload['opciones_emision']['asiento_medios_pago'] = $mediosForzados;
+        }
 
         try {
             $resultadoTx = DB::transaction(function () use (
@@ -169,6 +185,7 @@ final class FacturacionLocalNotaCreditoService
                 $turno,
                 $motivoDevolucion,
                 $registrarHistorial,
+                $idsNc,
             ) {
                 $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
 
@@ -180,7 +197,7 @@ final class FacturacionLocalNotaCreditoService
 
                 $ventaNc = $this->resolverVentaEmitida($ventaOrigen, $resultado);
 
-                $lineasStock = $this->lineasStockDesdeEmisiones($ventaOrigen);
+                $lineasStock = $this->lineasStockDesdeEmisiones($ventaOrigen, $idsNc);
                 if ($registrarHistorial) {
                     app(DevolucionHistorialService::class)->registrarNotaCredito(
                         $local,
@@ -249,6 +266,8 @@ final class FacturacionLocalNotaCreditoService
     }
 
     /**
+     * @param  list<int>|null  $idsFiltro
+     * @param  array<int, float>|null  $cantidadesPorEmision
      * @return array<string, mixed>
      */
     private function armarPayloadNotaCredito(
@@ -256,8 +275,11 @@ final class FacturacionLocalNotaCreditoService
         LocalVenta $local,
         int $tipoNcId,
         string $leyendaUsuario = '',
+        ?array $idsFiltro = null,
+        ?array $cantidadesPorEmision = null,
     ): array {
         $ventaOrigen->loadMissing(['venta_emisiones.articulos']);
+        $esParcial = $idsFiltro !== null;
 
         $articuloIds = [];
         $cantidades = [];
@@ -270,13 +292,34 @@ final class FacturacionLocalNotaCreditoService
         $impuestoIds = [];
         $incluyeImpuestos = [];
 
+        $brutoTodos = 0.;
+        $brutoSeleccionado = 0.;
+        $idsVistos = [];
         foreach ($ventaOrigen->venta_emisiones->sortBy('numeroitem') as $em) {
-            $cantidad = (float) ($em->cantidad ?? 0);
+            $cantidadFacturada = (float) ($em->cantidad ?? 0);
             $precio = (float) ($em->precio ?? 0);
             $articuloId = (int) ($em->articulo_id ?? 0);
-            if ($articuloId <= 0 || ($cantidad <= 0 && abs($precio) < 0.00001)) {
+            $emisionId = (int) $em->id;
+            if ($articuloId <= 0 || ($cantidadFacturada <= 0 && abs($precio) < 0.00001)) {
                 continue;
             }
+            $brutoLinea = round($cantidadFacturada * $precio, 2);
+            $brutoTodos = round($brutoTodos + $brutoLinea, 2);
+            if ($esParcial && ! in_array($emisionId, $idsFiltro, true)) {
+                continue;
+            }
+
+            $cantidad = $cantidadFacturada;
+            if ($cantidadesPorEmision !== null && array_key_exists($emisionId, $cantidadesPorEmision)) {
+                $cantidad = (float) $cantidadesPorEmision[$emisionId];
+                if ($cantidad <= 0) {
+                    throw new InvalidArgumentException('La cantidad a devolver del ítem '.$emisionId.' debe ser mayor a cero.');
+                }
+                if ($cantidad - $cantidadFacturada > 0.0001) {
+                    throw new InvalidArgumentException('La cantidad a devolver supera la facturada en el ítem '.$emisionId.'.');
+                }
+            }
+            $idsVistos[] = $emisionId;
 
             $detalle = trim((string) ($em->detalle ?? ''));
             if ($detalle === '') {
@@ -297,10 +340,22 @@ final class FacturacionLocalNotaCreditoService
                 : (int) ($em->articulos?->impuesto_id ?: 3);
             $incl = (string) ($em->incluyeimpuesto ?? '1');
             $incluyeImpuestos[] = in_array($incl, ['S', '1', 'Y'], true) ? '1' : 'N';
+            $brutoSeleccionado = round($brutoSeleccionado + round($cantidad * $precio, 2), 2);
         }
 
         if ($articuloIds === []) {
             throw new InvalidArgumentException('La factura no tiene ítems para revertir.');
+        }
+        if ($esParcial) {
+            $faltan = array_values(array_diff($idsFiltro, $idsVistos));
+            if ($faltan !== []) {
+                throw new InvalidArgumentException('Hay líneas a devolver que no están en la factura original.');
+            }
+        }
+
+        $descuentoPie = (float) ($ventaOrigen->descuento ?? 0);
+        if ($esParcial && $descuentoPie > 0.004 && $brutoTodos > 0.004) {
+            $descuentoPie = round($descuentoPie * ($brutoSeleccionado / $brutoTodos), 2);
         }
 
         $letra = $this->resolverLetraComprobante($ventaOrigen);
@@ -357,7 +412,7 @@ final class FacturacionLocalNotaCreditoService
             'combinacion_ids' => $combinacionIds,
             'talle_ids' => $talleIds,
             'color_ids' => $colorIds,
-            'descuentopie' => (float) ($ventaOrigen->descuento ?? 0),
+            'descuentopie' => $descuentoPie,
             'descuentoimportepie' => 0.,
             'vendedor_id' => Auth::id(),
             'leyendafactura' => $leyendaNc,
@@ -419,14 +474,18 @@ final class FacturacionLocalNotaCreditoService
     }
 
     /**
+     * @param  list<int>|null  $idsFiltro
      * @return list<array<string,mixed>>
      */
-    private function lineasStockDesdeEmisiones(Venta $ventaOrigen): array
+    private function lineasStockDesdeEmisiones(Venta $ventaOrigen, ?array $idsFiltro = null): array
     {
         $lineas = [];
         foreach ($ventaOrigen->venta_emisiones->sortBy('numeroitem') as $em) {
             $articuloId = (int) ($em->articulo_id ?? 0);
             if ($articuloId <= 0) {
+                continue;
+            }
+            if ($idsFiltro !== null && ! in_array((int) $em->id, $idsFiltro, true)) {
                 continue;
             }
             $lineas[] = [
@@ -499,5 +558,37 @@ final class FacturacionLocalNotaCreditoService
         }
 
         return array_filter($respuesta, fn ($v) => $v !== null && $v !== '');
+    }
+
+    /**
+     * @return list<int>|null
+     */
+    private static function idsEmisionOpcion(mixed $ids): ?array
+    {
+        if (! is_array($ids)) {
+            return null;
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    }
+
+    /**
+     * @return array<int, float>|null
+     */
+    private static function cantidadesPorEmisionOpcion(mixed $cantidades): ?array
+    {
+        if (! is_array($cantidades)) {
+            return null;
+        }
+
+        $out = [];
+        foreach ($cantidades as $id => $cantidad) {
+            $emisionId = (int) $id;
+            if ($emisionId > 0) {
+                $out[$emisionId] = (float) $cantidad;
+            }
+        }
+
+        return $out;
     }
 }

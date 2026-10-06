@@ -51,7 +51,7 @@ class SicoreReporteController extends Controller
                 (string) ($filtros['criterio'] ?? ''),
             );
 
-            $resultado = $this->reporteService->generarOCache($filtros);
+            $resultado = $this->reporteService->generar($filtros);
             $consultado = true;
         }
 
@@ -83,7 +83,7 @@ class SicoreReporteController extends Controller
             return redirect()->route('sicore');
         }
 
-        $resultado = $this->reporteService->generarOCache($filtros);
+        $resultado = $this->reporteService->generar($filtros);
         $proceso = (string) ($filtros['criterio'] ?? 'sicore');
         $nombre = match ($proceso) {
             SicoreCriteriosSupport::VENTAS => 'vsicore.dat',
@@ -109,7 +109,7 @@ class SicoreReporteController extends Controller
             return redirect()->route('sicore');
         }
 
-        $resultado = $this->reporteService->generarOCache($filtros);
+        $resultado = $this->reporteService->generar($filtros);
         $registros = $resultado['registros'] ?? [];
         $totales = $resultado['totales'] ?? [];
         $conciliacion = $resultado['conciliacion'] ?? [];

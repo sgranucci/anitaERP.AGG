@@ -275,12 +275,12 @@ class PickingPedidoFerliExport implements FromView, ShouldAutoSize, WithColumnFo
                 }
             }
 
-            $t = (float) ($fila['total'] ?? 0);
-            $tamModulo = (float) ($fila['cantidadmodulo'] ?? 0);
-            $qm = ($tamModulo > 0 && $t > 0) ? round($t / $tamModulo, 2) : 1.0;
+            $t = (float) ($fila['pares_modulo'] ?? $fila['total'] ?? 0);
+            $qm = (float) ($fila['cantidad_modulos'] ?? 1);
+            $tt = (float) ($fila['total'] ?? 0);
             $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++).$excelRow, $t);
             $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++).$excelRow, $qm);
-            $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++).$excelRow, $t);
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++).$excelRow, $tt);
             $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++).$excelRow, (float) ($fila['precio'] ?? 0));
             $this->celdaTexto($sheet, $c++, $excelRow, (string) ($fila['situacion'] ?? 'ENTREGA INMEDIATA'));
             $this->celdaTexto($sheet, $c++, $excelRow, (string) ($fila['numero_ot'] ?? ''));
@@ -288,6 +288,24 @@ class PickingPedidoFerliExport implements FromView, ShouldAutoSize, WithColumnFo
             $this->celdaTexto($sheet, $c++, $excelRow, trim((string) ($fila['observacion'] ?? '')));
             $this->celdaTexto($sheet, $c++, $excelRow, '');
         }
+
+        if ($this->filas === []) {
+            return;
+        }
+
+        $sumaModulos = 0.0;
+        $sumaPares = 0.0;
+        foreach ($this->filas as $fila) {
+            $sumaModulos += (float) ($fila['cantidad_modulos'] ?? 1);
+            $sumaPares += (float) ($fila['total'] ?? 0);
+        }
+        $filaTotal = $this->filaPrimeraDatosExcel + count($this->filas);
+        $colQm = 1 + ($this->conFoto ? 1 : 0) + 5 + ($hasta - $desde + 1) + 1;
+        $colTt = $colQm + 1;
+        $sheet->setCellValue(Coordinate::stringFromColumnIndex($colQm).$filaTotal, $sumaModulos);
+        $sheet->setCellValue(Coordinate::stringFromColumnIndex($colTt).$filaTotal, $sumaPares);
+        $sheet->getStyle(Coordinate::stringFromColumnIndex($colQm).$filaTotal.':'.Coordinate::stringFromColumnIndex($colTt).$filaTotal)
+            ->getFont()->setBold(true);
     }
 
     private function celdaTexto(Worksheet $sheet, int $columna, int $fila, string $valor): void

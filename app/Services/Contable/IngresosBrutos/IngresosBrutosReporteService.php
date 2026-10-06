@@ -14,80 +14,12 @@ use Illuminate\Support\Facades\Cache;
 
 final class IngresosBrutosReporteService
 {
-    private const CACHE_TTL = 2700;
-
     public function __construct(
         private readonly Iibb_Presentacion_ConfigRepositoryInterface $configRepository,
         private readonly IngresosBrutosRetencionesDatosService $retencionesDatosService,
         private readonly IngresosBrutosPercepcionesDatosService $percepcionesDatosService,
         private readonly IngresosBrutosConciliacionContableService $conciliacionService,
     ) {
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     * @return array<string, mixed>
-     */
-    public function generarOCache(array $filtros): array
-    {
-        $cached = $this->leerCache($filtros);
-        if ($cached !== null) {
-            return $this->hidratarResultadoCacheado($cached, $filtros);
-        }
-
-        $resultado = $this->generar($filtros);
-        $this->guardarCache($filtros, $resultado);
-
-        return $resultado;
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     * @return array<string, mixed>|null
-     */
-    public function leerCache(array $filtros): ?array
-    {
-        if (! IngresosBrutosListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            return null;
-        }
-        $pack = Cache::get(IngresosBrutosListadoFiltros::claveCacheResultado($filtros));
-        if (! is_array($pack) || ($pack['firma'] ?? '') !== IngresosBrutosListadoFiltros::firma($filtros)) {
-            return null;
-        }
-        if (! isset($pack['registros'], $pack['totales'], $pack['conciliacion'])) {
-            return null;
-        }
-
-        return $pack;
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     * @param  array<string, mixed>  $resultado
-     */
-    public function guardarCache(array $filtros, array $resultado): void
-    {
-        if (! IngresosBrutosListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            return;
-        }
-        // No cachear vacío: evita que un fallo puntual (timeout / columnas) deje la UI en 0.
-        if ((int) ($resultado['totales']['registros'] ?? 0) <= 0 && empty($resultado['mensaje_config'])) {
-            return;
-        }
-        Cache::put(
-            IngresosBrutosListadoFiltros::claveCacheResultado($filtros),
-            [
-                'firma' => IngresosBrutosListadoFiltros::firma($filtros),
-                'registros' => $resultado['registros'] ?? [],
-                'totales' => $resultado['totales'] ?? [],
-                'conciliacion' => $resultado['conciliacion'] ?? [],
-                'nombre_archivo' => $resultado['nombre_archivo'] ?? '',
-                'nombre_archivo_nc' => $resultado['nombre_archivo_nc'] ?? '',
-                'mensaje_config' => $resultado['mensaje_config'] ?? null,
-                'advertencia_datos' => $resultado['advertencia_datos'] ?? null,
-            ],
-            self::CACHE_TTL,
-        );
     }
 
     /**
@@ -119,7 +51,6 @@ final class IngresosBrutosReporteService
                 'nombre_archivo_nc' => '',
                 'mensaje_config' => 'No hay configuración activa para la provincia y tipo seleccionados. Cargue Configuración IIBB.',
                 'advertencia_datos' => null,
-                'desde_cache' => false,
             ];
         }
 
@@ -135,7 +66,6 @@ final class IngresosBrutosReporteService
                 'nombre_archivo_nc' => '',
                 'mensaje_config' => 'Provincia no encontrada.',
                 'advertencia_datos' => null,
-                'desde_cache' => false,
             ];
         }
 
@@ -216,34 +146,6 @@ final class IngresosBrutosReporteService
             'nombre_archivo_nc' => $nombreNc,
             'mensaje_config' => null,
             'advertencia_datos' => $advertenciaDatos,
-            'desde_cache' => false,
-        ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $pack
-     * @param  array<string, mixed>  $filtros
-     * @return array<string, mixed>
-     */
-    private function hidratarResultadoCacheado(array $pack, array $filtros): array
-    {
-        $registros = $pack['registros'] ?? [];
-        $tipo = (string) ($filtros['tipo'] ?? IngresosBrutosListadoFiltros::TIPO_RETENCIONES);
-        $esRetencion = IngresosBrutosListadoFiltros::esRetencion($tipo);
-        $archivos = $this->armarArchivos($registros, $tipo, $esRetencion);
-
-        return [
-            'registros' => $registros,
-            'totales' => $pack['totales'] ?? [],
-            'config' => null,
-            'conciliacion' => $pack['conciliacion'] ?? [],
-            'archivo_arba' => $archivos['principal'],
-            'archivo_nc' => $archivos['notas_credito'],
-            'nombre_archivo' => (string) ($pack['nombre_archivo'] ?? 'iibb.txt'),
-            'nombre_archivo_nc' => (string) ($pack['nombre_archivo_nc'] ?? ''),
-            'mensaje_config' => $pack['mensaje_config'] ?? null,
-            'advertencia_datos' => $pack['advertencia_datos'] ?? null,
-            'desde_cache' => true,
         ];
     }
 

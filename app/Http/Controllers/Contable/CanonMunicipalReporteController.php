@@ -73,7 +73,7 @@ class CanonMunicipalReporteController extends Controller
                 'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             ]);
 
-            $resultado = $this->reporteService->generarOCache($filtros);
+            $resultado = $this->reporteService->generar($filtros);
             $consultado = true;
         }
 
@@ -125,7 +125,7 @@ class CanonMunicipalReporteController extends Controller
             return redirect()->route('canon_municipal');
         }
 
-        $resultado = $this->reporteService->generarOCache($filtros);
+        $resultado = $this->reporteService->generar($filtros);
         if (empty($resultado['puede_emitir_nota'])) {
             return redirect()
                 ->route('canon_municipal', array_merge(
@@ -182,7 +182,7 @@ class CanonMunicipalReporteController extends Controller
             return redirect()->route('canon_municipal');
         }
 
-        $resultado = $this->reporteService->generarOCache($filtros);
+        $resultado = $this->reporteService->generar($filtros);
         $ficha = $resultado['ficha'] ?? [];
         $nombreEmpresa = (string) ($ficha['nombre'] ?? '');
         $filasParaLogo = [(object) ['nombreempresa' => $nombreEmpresa]];

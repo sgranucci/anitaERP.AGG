@@ -30,37 +30,17 @@ class LibroIvaDigitalController extends Controller
 
         if ($request->boolean('consultar') && $filtros['empresa_id'] && $filtros['periodo']) {
             $this->persistirPreferencias($filtros);
-            $this->prepararRuntime(false);
-            ignore_user_abort(true);
-            $this->libroIvaDigitalService->generarYCachear(
-                (int) $filtros['empresa_id'],
-                (int) $filtros['anio'],
-                (int) $filtros['mes'],
-                $this->opcionesDesdeFiltros($filtros),
-            );
-
-            return redirect()
-                ->route('libro_iva_digital', $this->queryFiltros($filtros, true))
-                ->with('mensaje', 'Libro IVA Digital listo. El ZIP usa este mismo resultado (no vuelve a generar).');
         }
 
-        if ($request->boolean('mostrado') && $filtros['empresa_id'] && $filtros['periodo']) {
+        if (($request->boolean('consultar') || $request->boolean('mostrado')) && $filtros['empresa_id'] && $filtros['periodo']) {
             $this->prepararRuntime(false);
-            $resultado = $this->libroIvaDigitalService->leerCache(
+            ignore_user_abort(true);
+            $resultado = $this->libroIvaDigitalService->generarYCachear(
                 (int) $filtros['empresa_id'],
                 (int) $filtros['anio'],
                 (int) $filtros['mes'],
                 $this->opcionesDesdeFiltros($filtros),
             );
-            if ($resultado === null) {
-                ignore_user_abort(true);
-                $resultado = $this->libroIvaDigitalService->generarYCachear(
-                    (int) $filtros['empresa_id'],
-                    (int) $filtros['anio'],
-                    (int) $filtros['mes'],
-                    $this->opcionesDesdeFiltros($filtros),
-                );
-            }
             $consultado = true;
         }
 

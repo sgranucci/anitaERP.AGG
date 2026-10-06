@@ -67,6 +67,7 @@ final class IngresosBrutosPercepcionesDatosService
             'ven_cod_mon', 'ven_cotizacion',
             'clim_nombre', 'clim_cuit',
             'veni_provincia', 'veni_porcentaje', 'veni_importe',
+            'ven_cuit_cli', 'ven_nombre_cliente',
         ];
         if ($filtraEmpresa) {
             $campos[] = 'ven_empresa';
@@ -133,9 +134,15 @@ final class IngresosBrutosPercepcionesDatosService
                 'base_calculo' => abs($base),
                 'importe' => $importe,
                 'alicuota' => round((float) ($fila['veni_porcentaje'] ?? 0), 2),
-                'nro_documento' => IngresosBrutosFormatoArbaSupport::normalizarCuit((string) ($fila['clim_cuit'] ?? '')),
+                'nro_documento' => $this->cuitInformado(
+                    (string) ($fila['clim_cuit'] ?? ''),
+                    (string) ($fila['ven_cuit_cli'] ?? ''),
+                ),
                 'codigo_proveedor' => trim((string) ($fila['ven_cliente'] ?? '')),
-                'razon_social' => substr(trim((string) ($fila['clim_nombre'] ?? '')), 0, 30),
+                'razon_social' => $this->razonSocialInformada(
+                    (string) ($fila['clim_nombre'] ?? ''),
+                    (string) ($fila['ven_nombre_cliente'] ?? ''),
+                ),
                 'referencia' => sprintf(
                     'Perc.IIBB Anita %s %s %s-%08d',
                     $tipo,
@@ -251,6 +258,40 @@ final class IngresosBrutosPercepcionesDatosService
         }
 
         return stripos($concepto, 'IIBB') !== false || stripos($concepto, 'Ing. Bruto') !== false;
+    }
+
+    /**
+     * El maestro (climae) manda. Si la factura no tiene cliente en el ABM,
+     * el CUIT queda en la cabecera (ven_cuit_cli).
+     */
+    private function cuitInformado(string $maestro, string $comprobante): string
+    {
+        if ($this->cuitUtil($maestro)) {
+            return IngresosBrutosFormatoArbaSupport::normalizarCuit($maestro);
+        }
+        if ($this->cuitUtil($comprobante)) {
+            return IngresosBrutosFormatoArbaSupport::normalizarCuit($comprobante);
+        }
+
+        return IngresosBrutosFormatoArbaSupport::normalizarCuit($maestro);
+    }
+
+    private function cuitUtil(string $cuit): bool
+    {
+        $digits = preg_replace('/\D/', '', $cuit) ?? '';
+
+        return strlen($digits) === 11 && $digits !== '00000000000';
+    }
+
+    /**
+     * Misma prioridad que el CUIT: ficha del cliente y, si no hay, el nombre de la factura.
+     */
+    private function razonSocialInformada(string $maestro, string $comprobante): string
+    {
+        $maestro = trim($maestro);
+        $nombre = $maestro !== '' ? $maestro : trim($comprobante);
+
+        return substr($nombre, 0, 30);
     }
 
     private function tipoDocumentoArba(string $tipoCompAnita): string

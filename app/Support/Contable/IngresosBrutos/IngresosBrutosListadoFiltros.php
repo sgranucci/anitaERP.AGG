@@ -213,29 +213,4 @@ final class IngresosBrutosListadoFiltros
 
         return $etiqueta !== '' ? $etiqueta.' ('.$rango.')' : $rango;
     }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     */
-    public static function firma(array $filtros): string
-    {
-        return md5(json_encode([
-            // v4: excluye pago liquidación ARBA + saldo col. O/P mayor plano.
-            'v' => 4,
-            'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
-            'provincia_id' => (int) ($filtros['provincia_id'] ?? 0),
-            'tipo' => (string) ($filtros['tipo'] ?? ''),
-            'fecha_desde' => (string) ($filtros['fecha_desde'] ?? ''),
-            'fecha_hasta' => (string) ($filtros['fecha_hasta'] ?? ''),
-            'conciliar_contable' => ! empty($filtros['conciliar_contable']) ? 1 : 0,
-        ], JSON_UNESCAPED_UNICODE));
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     */
-    public static function claveCacheResultado(array $filtros): string
-    {
-        return generaKey('ingresos_brutos_resultado_v8_'.self::firma($filtros));
-    }
 }

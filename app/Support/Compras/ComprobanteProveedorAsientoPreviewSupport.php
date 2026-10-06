@@ -44,7 +44,10 @@ final class ComprobanteProveedorAsientoPreviewSupport
             'sucursal' => (int) $request->input('sucursal', $base->sucursal ?? 0),
             'numerocomprobante' => (int) $request->input('numerocomprobante', $base->numerocomprobante ?? 0),
             'fechacomprobante' => $request->input('fechacomprobante', $base->fechacomprobante ?? now()->format('Y-m-d')),
-            'fechaiva' => ComprobanteProveedorFechaContableSupport::inmodificableEnCarga($base),
+            'fechaiva' => ComprobanteProveedorFechaContableSupport::resolverEnCarga(
+                $request->input('fechaiva'),
+                $base
+            ),
             'moneda_id' => (int) $request->input('moneda_id', $base->moneda_id ?? 1),
             'cotizacion' => MontoEsArSupport::parse($request->input('cotizacion', $base->cotizacion ?? 1)),
             'subtotal' => MontoEsArSupport::parse($request->input('subtotal', $base->subtotal ?? 0)),

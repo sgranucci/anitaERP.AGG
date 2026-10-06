@@ -19,6 +19,7 @@ use App\Repositories\Ventas\Pedido_Combinacion_TalleRepositoryInterface;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\ArticuloCombinacionFotoSupport;
+use App\Support\Stock\CurvaModuloPresentacionSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
@@ -1995,12 +1996,10 @@ final class PedidoPickingFerliSupport
 
         foreach ($lineas as $linea) {
             $medidas = [];
-            $total = 0.0;
             foreach ($linea->pedido_combinacion_talles as $talle) {
                 $nombre = (string) ($talle->talles->nombre ?? $talle->talle_id);
                 $cant = (float) $talle->cantidad;
                 $medidas[$nombre] = ($medidas[$nombre] ?? 0) + $cant;
-                $total += $cant;
             }
 
             $depositoTxt = '';
@@ -2023,6 +2022,7 @@ final class PedidoPickingFerliSupport
             $codigoComb = (string) ($linea->combinaciones->codigo ?? '');
             $fotoNombre = (string) ($linea->combinaciones->foto ?? '');
             $fechaPicking = $linea->pickingCabecera?->fecha?->format('d/m/Y') ?? '';
+            $presentacion = CurvaModuloPresentacionSupport::presentar($medidas);
 
             $filas[] = [
                 'pedido_combinacion_id' => $linea->id,
@@ -2032,9 +2032,11 @@ final class PedidoPickingFerliSupport
                 'nombrelinea' => $linea->articulos->lineas->nombre ?? '',
                 'sku' => $sku,
                 'descripcion' => $linea->combinaciones->nombre ?? ($linea->articulos->descripcion ?? ''),
-                'medidas' => $medidas,
-                'total' => $total,
-                'cantidadmodulo' => (float) ($linea->modulos->cantidad ?? 0),
+                'medidas' => $presentacion['medidas'],
+                'total' => $presentacion['total'],
+                'pares_modulo' => $presentacion['pares_modulo'],
+                'cantidad_modulos' => $presentacion['modulos'],
+                'cantidadmodulo' => $presentacion['pares_modulo'],
                 'precio' => self::precioUnitarioLinea($linea),
                 'situacion' => 'ENTREGA INMEDIATA',
                 'numero_ot' => $loteTxt,

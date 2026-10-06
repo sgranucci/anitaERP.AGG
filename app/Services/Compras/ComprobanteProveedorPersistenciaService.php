@@ -110,6 +110,23 @@ class ComprobanteProveedorPersistenciaService
     }
 
     /**
+     * Tope: hoy en el alta, la fecha ya grabada en la edición. Hacia atrás sí; hacia adelante no.
+     * El cierre de período se controla aparte, con la fecha ya resuelta.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function fijarFechaContabilizacion(array $payload, ?Comprobante_Proveedor $existente): array
+    {
+        $payload['fechaiva'] = ComprobanteProveedorFechaContableSupport::resolverEnCarga(
+            $payload['fechaiva'] ?? null,
+            $existente
+        );
+
+        return $payload;
+    }
+
+    /**
      * Un contabilizado se descontabiliza y se vuelve a asentar. Sin un concepto con monto
      * esa segunda pasada falla, después de haber borrado asiento y Anita.
      */
@@ -157,8 +174,7 @@ class ComprobanteProveedorPersistenciaService
     public function crearDesdeRequest(Request $request): Comprobante_Proveedor
     {
         $this->vencimientoEdicionPrevio = null;
-        $payload = $this->armarPayloadCabecera($request);
-        $payload['fechaiva'] = ComprobanteProveedorFechaContableSupport::inmodificableEnCarga(null);
+        $payload = $this->fijarFechaContabilizacion($this->armarPayloadCabecera($request), null);
         $payload['creousuario_id'] = Auth::id();
         $payload['estado'] = ComprobanteProveedorEstados::BORRADOR;
 
@@ -287,12 +303,14 @@ class ComprobanteProveedorPersistenciaService
 
         ComprobanteProveedorPagoSupport::assertSinPagosAplicados($id, 'actualizar');
 
+        $payloadPeriodo = $this->fijarFechaContabilizacion(
+            $this->armarPayloadCabecera($request),
+            $comprobante
+        );
         $this->assertPeriodoContablePermitido([
             'empresa_id' => $comprobante->empresa_id,
             'fechaiva' => ComprobanteProveedorFechaContableSupport::fechaYmd($comprobante),
         ]);
-        $payloadPeriodo = $this->armarPayloadCabecera($request);
-        $payloadPeriodo['fechaiva'] = ComprobanteProveedorFechaContableSupport::inmodificableEnCarga($comprobante);
         $this->assertPeriodoContablePermitido($payloadPeriodo);
         $this->assertFechaComprobanteCarga($payloadPeriodo);
 
@@ -327,7 +345,7 @@ class ComprobanteProveedorPersistenciaService
         }
 
         $payload = $this->armarPayloadCabecera($request);
-        $payload['fechaiva'] = ComprobanteProveedorFechaContableSupport::inmodificableEnCarga($comprobante);
+        $payload['fechaiva'] = $payloadPeriodo['fechaiva'];
         ComprobanteProveedorUnicidadSupport::assertUnico(
             (int) $payload['empresa_id'],
             (int) $payload['tipotransaccion_compra_id'],
@@ -458,7 +476,7 @@ class ComprobanteProveedorPersistenciaService
         );
         $payload['creousuario_id'] = Auth::id();
         $payload['estado'] = ComprobanteProveedorEstados::BORRADOR;
-        $payload['fechaiva'] = ComprobanteProveedorFechaContableSupport::inmodificableEnCarga(null);
+        $payload['fechaiva'] = ComprobanteProveedorFechaContableSupport::fechaTopeEnCarga(null);
 
         $this->assertPeriodoContablePermitido($payload);
         $this->assertFechaComprobanteCarga($payload);

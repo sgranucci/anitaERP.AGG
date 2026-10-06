@@ -13,6 +13,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\AsientoAlcanceCierreSupport;
 use App\Support\Ventas\PedidoFacturacionProfiler;
+use App\Support\Configuracion\MonedaAnitaCodigoSupport;
 use App\Support\Contable\Anita\AsientoAnitaFerliSupport;
 use App\Support\Contable\Anita\AsientoAnitaInterformingSupport;
 use App\Support\Contable\AsientoAnitaNumeracionLock;
@@ -831,10 +832,14 @@ class AsientoRepository implements AsientoRepositoryInterface
 				}
 
 				$moneda = $this->monedaRepository->findPorCodigo($moneda_ids[$i_movimiento] ?? null);
-				if ($moneda)
-					$codigoMoneda = $moneda->codigo;
-				else
+				if ($moneda) {
+					// Ferli: ctav_cod_mon es numérico (1 pesos, 2 dólares). PES/DOL queda truncado y el mayor lee pesos.
+					$codigoMoneda = AsientoAnitaFerliSupport::aplica()
+						? MonedaAnitaCodigoSupport::desdeMoneda($moneda)
+						: $moneda->codigo;
+				} else {
 					$codigoMoneda = '1';
+				}
 
 				$esquemaCtamovReducido = strtoupper(config('app.empresa')) == 'EL BIERZO'
 					|| AsientoAnitaFerliSupport::usaEsquemaCtamovReducido()

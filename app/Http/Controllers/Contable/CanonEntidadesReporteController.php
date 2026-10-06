@@ -42,7 +42,7 @@ class CanonEntidadesReporteController extends Controller
                 'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             ]);
 
-            $resultado = $this->reporteService->generarOCache($filtros);
+            $resultado = $this->reporteService->generar($filtros);
             $consultado = true;
         }
 
@@ -73,7 +73,7 @@ class CanonEntidadesReporteController extends Controller
             return redirect()->route('canon_entidades');
         }
 
-        $resultado = $this->reporteService->generarOCache($filtros);
+        $resultado = $this->reporteService->generar($filtros);
         $identidad = $resultado['identidad'] ?? [];
         $nombreEmpresa = (string) ($identidad['nombre'] ?? '');
         $filasParaLogo = [(object) ['nombreempresa' => $nombreEmpresa]];
@@ -136,7 +136,7 @@ class CanonEntidadesReporteController extends Controller
             return redirect()->route('canon_entidades');
         }
 
-        $resultado = $this->reporteService->generarOCache($filtros);
+        $resultado = $this->reporteService->generar($filtros);
         $identidad = $resultado['identidad'] ?? [];
         $slug = preg_replace('/\W+/', '_', (string) ($identidad['nombre'] ?? 'canon')) ?: 'canon';
         $periodo = (string) ($filtros['periodo'] ?? date('Ym'));

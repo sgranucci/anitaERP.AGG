@@ -77,9 +77,14 @@ final class RetencionGananciasCalculoSupport
             && $regimen->tieneEscalaUtil()
             && $regimen->porcentajeInscripto <= 0.0;
 
+        $tramoDesde = null;
+        $tramoHasta = null;
         if ($usaEscala) {
-            $retencionPeriodo = $this->calcularPorEscala($baseRetenible, $regimen->escalas);
-            $alicuota = 0.0;
+            $escala = $this->calcularPorEscala($baseRetenible, $regimen->escalas);
+            $retencionPeriodo = $escala['importe'];
+            $alicuota = $escala['alicuota'];
+            $tramoDesde = $escala['desde'];
+            $tramoHasta = $escala['hasta'];
             $modo = 'escala';
         } else {
             $alicuota = $input->inscripto
@@ -127,6 +132,8 @@ final class RetencionGananciasCalculoSupport
                 'neto_acumulado_previo' => $regimen->tomaAcumulados()
                     ? $this->redondear($input->netoAcumuladoPeriodo)
                     : 0.0,
+                'tramo_desde' => $tramoDesde,
+                'tramo_hasta' => $tramoHasta,
             ],
         );
     }
@@ -241,9 +248,11 @@ final class RetencionGananciasCalculoSupport
 
     /**
      * @param  list<RetencionGananciasEscalaFila>  $escalas
+     * @return array{importe: float, alicuota: float, desde: float, hasta: float}
      */
-    private function calcularPorEscala(float $base, array $escalas): float
+    private function calcularPorEscala(float $base, array $escalas): array
     {
+        $vacio = ['importe' => 0.0, 'alicuota' => 0.0, 'desde' => 0.0, 'hasta' => 0.0];
         $filas = $escalas;
         usort($filas, static fn (RetencionGananciasEscalaFila $a, RetencionGananciasEscalaFila $b): int =>
             $a->desdeMonto <=> $b->desdeMonto);
@@ -264,13 +273,19 @@ final class RetencionGananciasCalculoSupport
         }
 
         if ($elegida === null) {
-            return 0.0;
+            return $vacio;
         }
 
         // AFIP Anexo VIII: fijo del tramo + % sobre (base − desde del tramo).
         $exceso = max(0.0, $base - $elegida->desdeMonto);
+        $hastaTramo = $elegida->hastaMonto > 0 ? $elegida->hastaMonto : 0.0;
 
-        return $this->redondear($elegida->montoRetencion + ($exceso * $elegida->porcentajeRetencion / 100.0));
+        return [
+            'importe' => $this->redondear($elegida->montoRetencion + ($exceso * $elegida->porcentajeRetencion / 100.0)),
+            'alicuota' => $elegida->porcentajeRetencion,
+            'desde' => $elegida->desdeMonto,
+            'hasta' => $hastaTramo,
+        ];
     }
 
     /**

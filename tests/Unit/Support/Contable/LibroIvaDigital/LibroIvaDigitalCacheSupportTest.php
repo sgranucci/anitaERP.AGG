@@ -37,32 +37,6 @@ class LibroIvaDigitalCacheSupportTest extends TestCase
         $this->assertSame('csv', $compacto['iva_simple']['debito_fiscal']);
     }
 
-    public function test_firma_cambia_con_empresa_y_opciones(): void
-    {
-        $base = LibroIvaDigitalCacheSupport::firma(2, 2026, 8, [
-            'por_fecha_jornada' => true,
-            'prorrateo_cf_global' => true,
-        ]);
-        $otraEmpresa = LibroIvaDigitalCacheSupport::firma(1, 2026, 8, [
-            'por_fecha_jornada' => true,
-            'prorrateo_cf_global' => true,
-        ]);
-        $sinJornada = LibroIvaDigitalCacheSupport::firma(2, 2026, 8, [
-            'por_fecha_jornada' => false,
-            'prorrateo_cf_global' => true,
-        ]);
-
-        $this->assertNotSame($base, $otraEmpresa);
-        $this->assertNotSame($base, $sinJornada);
-        $this->assertSame(
-            $base,
-            LibroIvaDigitalCacheSupport::firma(2, 2026, 8, [
-                'por_fecha_jornada' => true,
-                'prorrateo_cf_global' => true,
-            ]),
-        );
-    }
-
     public function test_columna_fecha_jornada_usa_fechajornada(): void
     {
         $this->assertSame('venta.fechajornada', LibroIvaDigitalVentasPeriodoSupport::columnaFecha(true));

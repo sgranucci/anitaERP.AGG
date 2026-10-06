@@ -25,6 +25,9 @@
                     {{ CambioDevolucionMarketplaceEstadosSupport::etiqueta($estado) }}
                 </h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end">
+                    <a href="{{ route('manual_cambio_devolucion_marketplace') }}" class="btn btn-outline-light btn-sm mr-1" target="_blank" rel="noopener" title="Circuito de cambios y devoluciones">
+                        <i class="fas fa-book-open"></i> Guía del circuito
+                    </a>
                     <a href="{{ route('facturacion_local_cambios_devolucion') }}" class="btn btn-outline-light btn-sm">
                         <i class="fa fa-reply-all"></i> Volver al listado
                     </a>
@@ -80,9 +83,9 @@
 
                 @if ($estado === CambioDevolucionMarketplaceEstadosSupport::RECIBIDO && can('emitir-nc-cambio-devolucion-marketplace-facturacion-local', false))
                     <form method="POST" action="{{ route('emitir_nc_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1"
-                          onsubmit="return confirm('¿Emitir NC de la factura original? El motivo del legajo define si el par ingresa al stock.');">
+                          onsubmit="return confirm('¿Emitir la nota de crédito solo por las líneas A devolver, al precio de la factura? El motivo define si ese par ingresa al stock.');">
                         @csrf
-                        <button type="submit" class="btn btn-danger">Emitir NC original (NCD)</button>
+                        <button type="submit" class="btn btn-danger">Emitir NC de lo devuelto (NCD)</button>
                     </form>
                 @endif
 

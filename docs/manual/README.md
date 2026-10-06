@@ -35,6 +35,7 @@ Los diagramas (`flujo-*`, `circuito-*`, etc.) se conservan en SVG y **no** se so
 | Gastronomía | `config/manual_gastronomia.php` | `public/docs/manual-gastronomia/img/` | `manual:generar-mockups gastronomia` |
 | Ventas (pedidos) | `config/manual_ventas.php` | `public/docs/manual-ventas/img/` | `manual:generar-mockups ventas` |
 | Canjes marketing | `config/manual_canjes_marketing.php` | `public/docs/manual-canjes-marketing/img/` | `manual:generar-mockups canjes-marketing` |
+| Facturación Local (cambios e-commerce) | `config/manual_facturacion_local.php` | `public/docs/manual-facturacion-local/img/` | sin mockups (texto y tablas) |
 | Vending | `config/manual_vending.php` | `public/docs/manual-vending/img/` | `manual:generar-mockups vending` |
 | Caja (Flash, posición, máquinas, bingo) | `config/manual_caja.php` | `public/docs/manual-caja/img/` | `manual:generar-mockups caja` |
 | Sueldos (sanciones) | `config/manual_sueldos.php` | `public/docs/manual-sueldos/img/` | (diagrama SVG; sin mockup de pantallas) |

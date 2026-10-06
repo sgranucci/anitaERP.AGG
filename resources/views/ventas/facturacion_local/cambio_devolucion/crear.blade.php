@@ -16,6 +16,9 @@
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between">
                 <h3 class="card-title mb-0">Nuevo legajo cambio / devolución marketplace</h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end">
+                    <a href="{{ route('manual_cambio_devolucion_marketplace') }}" class="btn btn-outline-light btn-sm mr-1" target="_blank" rel="noopener" title="Circuito de cambios y devoluciones">
+                        <i class="fas fa-book-open"></i> Guía del circuito
+                    </a>
                     <a href="{{ route('facturacion_local_cambios_devolucion') }}" class="btn btn-outline-light btn-sm">
                         <i class="fa fa-reply-all"></i> Volver al listado
                     </a>

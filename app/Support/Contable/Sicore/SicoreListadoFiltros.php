@@ -84,30 +84,4 @@ final class SicoreListadoFiltros
 
         return $fmt($desde).' — '.$fmt($hasta);
     }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     */
-    public static function firma(array $filtros): string
-    {
-        return md5(json_encode([
-            // v6: ganancias de pagos sin fila en sicore_config usa la cuenta RGP
-            'v' => 6,
-            'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
-            'fecha_desde' => (string) ($filtros['fecha_desde'] ?? ''),
-            'fecha_hasta' => (string) ($filtros['fecha_hasta'] ?? ''),
-            'criterio' => (string) ($filtros['criterio'] ?? ''),
-            'conciliar_contable' => ! empty($filtros['conciliar_contable']) ? 1 : 0,
-        ], JSON_UNESCAPED_UNICODE));
-    }
-
-    /**
-     * Clave de cache por usuario (via generaKey) + firma de filtros.
-     *
-     * @param  array<string, mixed>  $filtros
-     */
-    public static function claveCacheResultado(array $filtros): string
-    {
-        return generaKey('sicore_resultado_'.self::firma($filtros));
-    }
 }

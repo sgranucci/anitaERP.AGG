@@ -53,12 +53,22 @@
         ?: optional($movimiento->usuarios)->nombre
         ?: '';
 
-    $esTra = \App\Support\Caja\IngresoEgresoTransferenciaSupport::esTransferencia(
-        $movimiento->tipotransaccioncajas ?? null
-    );
-    $tituloDoc = $esTra
-        ? mb_strtoupper(\App\Support\Caja\IngresoEgresoTransferenciaSupport::NOMBRE, 'UTF-8')
-        : trim('Orden de pago '.$tipo);
+    $tipoCaja = $movimiento->tipotransaccioncajas ?? null;
+    $esTra = \App\Support\Caja\IngresoEgresoTransferenciaSupport::esTransferencia($tipoCaja);
+    $esCanje = \App\Support\Caja\IngresoEgresoCanjeChequeSupport::esCanje($tipoCaja);
+    $abrevTipo = strtoupper(trim((string) ($tipoCaja->abreviatura ?? $tipo)));
+    $abrev3 = \App\Support\Caja\IngresoEgresoImputacionDiariaSupport::tipoDesdeAbreviatura($abrevTipo);
+    $esOrdenPago = \App\Support\Caja\IngresoEgresoImputacionDiariaSupport::esTipoOppIe($abrev3);
+    $nombreTipo = trim((string) ($tipoCaja->nombre ?? ''));
+    if ($esTra) {
+        $tituloDoc = mb_strtoupper(\App\Support\Caja\IngresoEgresoTransferenciaSupport::NOMBRE, 'UTF-8');
+    } elseif ($esCanje) {
+        $tituloDoc = \App\Support\Caja\IngresoEgresoCanjeChequeSupport::NOMBRE;
+    } elseif ($esOrdenPago) {
+        $tituloDoc = trim('Orden de pago '.$abrevTipo);
+    } else {
+        $tituloDoc = $nombreTipo !== '' ? $nombreTipo : ($abrevTipo !== '' ? $abrevTipo : 'Ingreso / Egreso');
+    }
 
     $totalAbs = 0.0;
     $cotizacionMostrada = null;

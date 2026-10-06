@@ -101,6 +101,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
         bool $sinCuentaCorriente = false,
         bool $filtrarPorFechaIva = false,
         bool $completarConceptos = true,
+        ?int $nroInterno = null,
     ): array {
         $codigo = trim($codigoProveedor);
         if ($codigo === '') {
@@ -142,6 +143,18 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $aplmovps = $sinCuentaCorriente
             ? []
             : $this->reader->listarAplmovp($codigo, $desdeYmd, $hastaYmd);
+        if ($nroInterno !== null && $nroInterno > 0) {
+            $compras = array_values(array_filter(
+                $compras,
+                static fn (array $compra) => (int) ($compra['com_nro_interno'] ?? 0) === $nroInterno,
+            ));
+            $promovs = array_values(array_filter(
+                $promovs,
+                static fn (array $promov) => (int) ($promov['prov_nro_interno'] ?? 0) === $nroInterno,
+            ));
+            // Un interno no arrastra aplicaciones ni adelantos de otros comprobantes del rango.
+            $aplmovps = [];
+        }
 
         $nrosInternos = [];
         foreach ($compras as $compra) {

@@ -102,25 +102,4 @@ final class CanonEntidadesListadoFiltros
 
         return trim($etiqueta).' ('.$fmt($desde).' — '.$fmt($hasta).')';
     }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     */
-    public static function firma(array $filtros): string
-    {
-        return md5(json_encode([
-            'v' => 1,
-            'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
-            'fecha_desde' => (string) ($filtros['fecha_desde'] ?? ''),
-            'fecha_hasta' => (string) ($filtros['fecha_hasta'] ?? ''),
-        ], JSON_UNESCAPED_UNICODE));
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     */
-    public static function claveCacheResultado(array $filtros): string
-    {
-        return generaKey('canon_entidades_resultado_v1_'.self::firma($filtros));
-    }
 }

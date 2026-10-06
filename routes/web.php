@@ -4162,6 +4162,15 @@ Route::get('ayuda/manual-aprobaciones/descargar-pdf', 'Configuracion\ManualAprob
 Route::get('ayuda/manual-aprobaciones/descargar-word', 'Configuracion\ManualAprobacionesController@descargarWord')
     ->middleware('auth')
     ->name('manual_aprobaciones_word');
+Route::get('ayuda/manual-cambios-devolucion', 'Ventas\FacturacionLocal\ManualCambioDevolucionController@index')
+    ->middleware('auth')
+    ->name('manual_cambio_devolucion_marketplace');
+Route::get('ayuda/manual-cambios-devolucion/descargar-pdf', 'Ventas\FacturacionLocal\ManualCambioDevolucionController@descargarPdf')
+    ->middleware('auth')
+    ->name('manual_cambio_devolucion_marketplace_pdf');
+Route::get('ayuda/manual-cambios-devolucion/descargar-word', 'Ventas\FacturacionLocal\ManualCambioDevolucionController@descargarWord')
+    ->middleware('auth')
+    ->name('manual_cambio_devolucion_marketplace_word');
 
 /*
  * Guías paso a paso (HTML interactivo; archivos en docs/guias/)

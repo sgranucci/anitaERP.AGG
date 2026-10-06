@@ -48,6 +48,37 @@ class ComprobanteProveedorFechaContableSupportTest extends TestCase
         $this->assertTrue(true);
     }
 
+    public function test_fecha_contabilizacion_hacia_atras_pasa(): void
+    {
+        $this->assertSame(
+            '2026-09-30',
+            ComprobanteProveedorFechaContableSupport::fechaNoPosterior('2026-09-30', '2026-10-01')
+        );
+    }
+
+    public function test_fecha_contabilizacion_igual_al_tope_pasa(): void
+    {
+        $this->assertSame(
+            '2026-10-01',
+            ComprobanteProveedorFechaContableSupport::fechaNoPosterior('2026-10-01', '2026-10-01')
+        );
+    }
+
+    public function test_fecha_contabilizacion_vacia_queda_en_el_tope(): void
+    {
+        $this->assertSame(
+            '2026-10-05',
+            ComprobanteProveedorFechaContableSupport::fechaNoPosterior(null, '2026-10-05')
+        );
+    }
+
+    public function test_fecha_contabilizacion_hacia_adelante_corta(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('no puede ser posterior');
+        ComprobanteProveedorFechaContableSupport::fechaNoPosterior('2026-10-06', '2026-10-05');
+    }
+
     public function test_fecha_comprobante_muy_a_futuro_corta(): void
     {
         $this->expectException(\RuntimeException::class);

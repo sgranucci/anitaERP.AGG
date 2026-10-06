@@ -53,14 +53,19 @@
         </tr>
     </thead>
     <tbody>
+        @php
+            $sumaModulos = 0;
+            $sumaPares = 0;
+        @endphp
         @foreach ($filas as $fila)
             @php
-                // Las cantidades de talle ya son el total del pedido (no un módulo unitario).
-                $t = (float) ($fila['total'] ?? 0);
-                $tamModulo = (float) ($fila['cantidadmodulo'] ?? 0);
-                $qm = ($tamModulo > 0 && $t > 0) ? round($t / $tamModulo, 2) : 1;
-                $tt = $t;
+                // Talles = curva de un módulo. Q M = cuántos módulos. TT = pares totales.
                 $medidas = $fila['medidas'] ?? [];
+                $t = $fila['pares_modulo'] ?? ($fila['total'] ?? 0);
+                $qm = $fila['cantidad_modulos'] ?? 1;
+                $tt = $fila['total'] ?? 0;
+                $sumaModulos += (float) $qm;
+                $sumaPares += (float) $tt;
             @endphp
             <tr>
                 @if ($conFoto)
@@ -92,5 +97,27 @@
                 <td>&#160;</td>
             </tr>
         @endforeach
+        <tr>
+            @if ($conFoto)
+                <td>&#160;</td>
+            @endif
+            <td>&#160;</td>
+            <td>&#160;</td>
+            <td>&#160;</td>
+            <td>&#160;</td>
+            <td>&#160;</td>
+            @for ($ii = $desdeMedida; $ii <= $hastaMedida; $ii++)
+                <td>&#160;</td>
+            @endfor
+            <td>&#160;</td>
+            <td><strong>{{ $sumaModulos }}</strong></td>
+            <td><strong>{{ $sumaPares }}</strong></td>
+            <td>&#160;</td>
+            <td>&#160;</td>
+            <td>&#160;</td>
+            <td>&#160;</td>
+            <td>&#160;</td>
+            <td>&#160;</td>
+        </tr>
     </tbody>
 </table>

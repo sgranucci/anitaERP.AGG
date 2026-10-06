@@ -4,6 +4,12 @@
 @endsection
 
 @section('scripts')
+@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'factura'])
+<script>
+    var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";
+</script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/ordentrabajo/factura_cliente.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/ordentrabajo/factura_cliente.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/picking_pedido/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/picking_pedido/index.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
@@ -307,6 +313,7 @@
     </div>
 </div>
 @include('ventas.ordentrabajo_ferli.modalfacturaordentrabajo')
+@include('includes.ventas.modalconsultacliente')
 @include('includes.proceso_overlay_aviso', [
     'overlayId' => 'picking-factura-overlay',
     'tituloId' => 'picking-factura-titulo',

@@ -69,6 +69,7 @@
         pintar(data);
         aplicaDescuentoSiCambia(data);
         habilitarGenerar(true);
+        $(document).trigger('clienteFacturaOtElegido', [data]);
         return true;
     }
 

@@ -202,7 +202,7 @@ final class CambioDevolucionMarketplaceService
         $this->registrarEstado(
             $cambio,
             CambioDevolucionMarketplaceEstadosSupport::NC_ORIGINAL,
-            'NC original '.$resultado['factura'].' (medio puente NCD)'
+            'NC de lo devuelto '.$resultado['factura'].' (medio puente NCD)'
         );
 
         CambioDevolucionMarketplaceLiquidacionSupport::aplicarALegajo($cambio);

@@ -2,44 +2,14 @@
     $conFoto = ($imprimefoto ?? '') === 'CON_FOTO';
     $medidasCols = $medidas_columnas ?? [];
 
-    // Cantidades reales del stock (por talle).
-    $cantReales = [];
-    $tt = (float) ($lote['total_pares'] ?? 0);
-    foreach (($lote['medidas'] ?? []) as $m) {
-        $cantReales[(int) ($m['medida'] ?? 0)] = (float) ($m['cantidad'] ?? 0);
-    }
-
-    // Curva unitaria del módulo (solo si divide limpio el total: PS × N = TT).
-    // Si no (EVO 9 pares con módulo 12, BALI 44 con módulo 12), mostrar talles reales.
-    $sumaModulo = 0.0;
-    $curvaModulo = [];
-    foreach (($lote['modulo'] ?? []) as $m) {
-        $cant = (float) ($m['cantidad'] ?? 0);
-        if (abs($cant) > 0.0001) {
-            $curvaModulo[(int) ($m['medida'] ?? 0)] = $cant;
-            $sumaModulo += $cant;
-        }
-    }
-    $usarCurvaModulo = false;
-    $nModulos = 1;
-    $ps = $tt;
-    if ($sumaModulo > 0.0001 && abs($tt) > 0.0001) {
-        $nCalc = (int) round($tt / $sumaModulo);
-        if ($nCalc >= 1 && abs($tt - ($nCalc * $sumaModulo)) < 0.051) {
-            $usarCurvaModulo = true;
-            $ps = $sumaModulo;
-            $nModulos = $nCalc;
-        }
-    }
-    $cantPorMedida = $usarCurvaModulo ? $curvaModulo : $cantReales;
-    if (! $usarCurvaModulo) {
-        $ps = 0.0;
-        foreach ($medidasCols as $medida) {
-            $ps += (float) ($cantPorMedida[(int) $medida] ?? 0);
-        }
-        if (abs($ps) < 0.0001) {
-            $ps = $tt;
-        }
+    // Curva de un módulo del catálogo y cuántos hay en stock (PS x N = TT).
+    // Si la numeración no es múltiplo de ningún módulo, se muestran los talles reales y N = 1.
+    $presentacion = \App\Support\Stock\CurvaModuloPresentacionSupport::presentarDesdeLista($lote['medidas'] ?? []);
+    $cantPorMedida = $presentacion['medidas'];
+    $ps = (float) $presentacion['pares_modulo'];
+    $nModulos = (int) $presentacion['modulos'];
+    $tt = (float) ($lote['total_pares'] ?? $presentacion['total']);
+    if ($nModulos < 1) {
         $nModulos = 1;
     }
 

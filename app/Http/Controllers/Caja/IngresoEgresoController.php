@@ -27,7 +27,9 @@ use App\Services\Caja\IngresoEgresoService;
 use App\Services\Compras\PagoproveedorComprobantePdfService;
 use App\Services\Caja\IngresoEgresoAnularRevertirService;
 use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
+use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
+use App\Support\Caja\IngresoEgresoImputacionDiariaSupport;
 use App\Support\Caja\IngresoEgresoGastoBancoSupport;
 use App\Support\Caja\IngresoEgresoListadoFiltros;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
@@ -518,10 +520,19 @@ class IngresoEgresoController extends Controller
         $path = $dir.'/op_'.$movimiento->id.'.pdf';
         $pdf->save($path);
 
-        $esTra = IngresoEgresoTransferenciaSupport::esTransferencia($movimiento->tipotransaccioncajas ?? null);
-        $nombreArchivo = $esTra
-            ? 'transferencia_'.$movimiento->numerotransaccion.'.pdf'
-            : 'orden_pago_'.$movimiento->numerotransaccion.'.pdf';
+        $tipoCaja = $movimiento->tipotransaccioncajas ?? null;
+        $abrevArchivo = strtoupper(trim((string) ($tipoCaja->abreviatura ?? '')));
+        $abrev3 = IngresoEgresoImputacionDiariaSupport::tipoDesdeAbreviatura($abrevArchivo);
+        if (IngresoEgresoTransferenciaSupport::esTransferencia($tipoCaja)) {
+            $nombreArchivo = 'transferencia_'.$movimiento->numerotransaccion.'.pdf';
+        } elseif (IngresoEgresoCanjeChequeSupport::esCanje($tipoCaja)) {
+            $nombreArchivo = 'canje_'.$movimiento->numerotransaccion.'.pdf';
+        } elseif (IngresoEgresoImputacionDiariaSupport::esTipoOppIe($abrev3)) {
+            $nombreArchivo = 'orden_pago_'.$movimiento->numerotransaccion.'.pdf';
+        } else {
+            $slug = $abrevArchivo !== '' ? strtolower($abrevArchivo) : 'ingreso_egreso';
+            $nombreArchivo = $slug.'_'.$movimiento->numerotransaccion.'.pdf';
+        }
 
         return response()->file($path, [
             'Content-Type' => 'application/pdf',

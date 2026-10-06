@@ -153,7 +153,10 @@ class RetencionGananciasCalculoSupportTest extends TestCase
         $this->assertTrue($r->aplica);
         $this->assertEqualsWithDelta(40000.0, $r->baseRetenible, 0.01);
         $this->assertEqualsWithDelta(2000.0, $r->importeRetencion, 0.01);
+        $this->assertEqualsWithDelta(5.0, $r->alicuotaAplicada, 0.01);
         $this->assertSame('escala', $r->detalle['modo']);
+        $this->assertEqualsWithDelta(0.0, $r->detalle['tramo_desde'], 0.01);
+        $this->assertEqualsWithDelta(71000.0, $r->detalle['tramo_hasta'], 0.01);
     }
 
     public function test_escala_profesionales_segundo_tramo(): void
@@ -169,6 +172,23 @@ class RetencionGananciasCalculoSupportTest extends TestCase
         $this->assertTrue($r->aplica);
         $this->assertEqualsWithDelta(90000.0, $r->baseRetenible, 0.01);
         $this->assertEqualsWithDelta(5260.0, $r->importeRetencion, 0.01);
+        $this->assertEqualsWithDelta(9.0, $r->alicuotaAplicada, 0.01);
+        $this->assertEqualsWithDelta(71000.0, $r->detalle['tramo_desde'], 0.01);
+    }
+
+    public function test_escala_profesionales_bajo_minimo_no_sujeto(): void
+    {
+        // Neto 145.310 < MNSR 160.000 → no retiene.
+        $r = $this->support->calcular(new RetencionGananciasInput(
+            $this->regimenProfesionales(),
+            145310.0,
+            true,
+            true,
+        ));
+
+        $this->assertFalse($r->aplica);
+        $this->assertSame(RetencionGananciasResultado::MOTIVO_BAJO_MINIMO_NO_SUJETO, $r->motivo);
+        $this->assertSame(0.0, $r->importeRetencion);
     }
 
     public function test_manual_requiere_importe(): void

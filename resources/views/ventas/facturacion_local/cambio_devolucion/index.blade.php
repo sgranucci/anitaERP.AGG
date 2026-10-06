@@ -23,6 +23,9 @@
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between">
                 <h3 class="card-title mb-0">Cambios / devoluciones marketplace</h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end">
+                    <a href="{{ route('manual_cambio_devolucion_marketplace') }}" class="btn btn-outline-light btn-sm mr-1" target="_blank" rel="noopener" title="Circuito de cambios y devoluciones">
+                        <i class="fas fa-book-open"></i> Guía del circuito
+                    </a>
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-cdm',
                         'filtroValor' => $filtros['valor'] ?? '',

@@ -348,23 +348,34 @@
             </div>
         </div>
         <div class="form-group row">
-            <label for="fechaiva" class="{{ $cpColLabel }}">Fecha IVA / contabilizaci&oacute;n</label>
-            <div class="col-lg-7">
+            <label for="fechaiva" class="{{ $cpColLabel }} requerido">Fecha IVA / contabilizaci&oacute;n</label>
+            <div class="col-lg-5">
                 @php
-                    $fechaIvaCarga = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::inmodificableEnCarga(
+                    $fechaIvaTope = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaTopeEnCarga(
                         ($esEdicion ?? false) ? $data : null
                     );
-                    $fechaIvaCargaTxt = \Carbon\Carbon::parse($fechaIvaCarga)->format('d/m/Y');
+                    $fechaIvaMin = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaMinimaOperable(
+                        (int) ($data->empresa_id ?? 0)
+                    );
+                    if ($fechaIvaMin !== null && $fechaIvaMin > $fechaIvaTope) {
+                        $fechaIvaMin = null;
+                    }
+                    $fechaIvaValor = old('fechaiva', $fechaIvaTope);
+                    $fechaIvaTopeTxt = \Carbon\Carbon::parse($fechaIvaTope)->format('d/m/Y');
+                    $fechaIvaCierreTxt = $fechaIvaMin
+                        ? \Carbon\Carbon::parse($fechaIvaMin)->subDay()->format('d/m/Y')
+                        : '';
                 @endphp
-                <input type="hidden" name="fechaiva" id="fechaiva" value="{{ $fechaIvaCarga }}">
-                <p class="form-control-plaintext mb-1">
-                    <span class="badge badge-info">{{ $fechaIvaCargaTxt }}</span>
-                    <span class="badge badge-primary ml-1">Contabilizaci&oacute;n</span>
-                    <span class="badge badge-secondary ml-1">IVA compras</span>
-                </p>
+                <input type="date" name="fechaiva" id="fechaiva" class="form-control" required
+                    max="{{ $fechaIvaTope }}"
+                    @if ($fechaIvaMin) min="{{ $fechaIvaMin }}" @endif
+                    value="{{ $fechaIvaValor }}">
                 <small class="form-text text-muted">
-                    D&iacute;a de carga: entra al asiento, al per&iacute;odo contable y al libro IVA compras.
-                    No se puede modificar.
+                    Entra al asiento, al per&iacute;odo y al libro IVA compras.
+                    Se puede correr hacia atr&aacute;s, nunca despu&eacute;s del {{ $fechaIvaTopeTxt }}.
+                    @if ($fechaIvaCierreTxt !== '')
+                        Cuentas a pagar est&aacute; cerrado hasta el {{ $fechaIvaCierreTxt }}.
+                    @endif
                 </small>
             </div>
         </div>

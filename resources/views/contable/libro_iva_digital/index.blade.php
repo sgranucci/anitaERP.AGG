@@ -626,7 +626,7 @@
                 descargarConOverlay(
                     btnZip.getAttribute('href'),
                     'Armando ZIP de Libro IVA Digital…',
-                    'Si ya consultó, sale del resultado en cache. Pulse Esc para cerrar este aviso.'
+                    'Vuelve a leer ventas, compras y Anita. Puede demorar. Pulse Esc para cerrar este aviso.'
                 );
             });
         }
@@ -638,7 +638,7 @@
                 descargarConOverlay(
                     btnIvaSimple.getAttribute('href'),
                     'Armando ZIP de IVA Simple…',
-                    'Si ya consultó, sale del resultado en cache. Pulse Esc para cerrar este aviso.'
+                    'Vuelve a leer ventas, compras y Anita. Puede demorar. Pulse Esc para cerrar este aviso.'
                 );
             });
         }

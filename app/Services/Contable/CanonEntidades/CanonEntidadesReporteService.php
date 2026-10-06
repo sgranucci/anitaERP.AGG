@@ -11,32 +11,12 @@ use App\Support\Contable\CanonEntidades\CanonEntidadesListadoFiltros;
 use App\Support\Contable\CanonEntidades\CanonEntidadesReglasSupport;
 use App\Support\Contable\FlashContableReporteSupport;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Cache;
 
 final class CanonEntidadesReporteService
 {
-    private const CACHE_TTL = 2700;
-
     public function __construct(
         private readonly CanonEntidadesConciliacionService $conciliacionService,
     ) {
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     * @return array<string, mixed>
-     */
-    public function generarOCache(array $filtros): array
-    {
-        $cached = $this->leerCache($filtros);
-        if ($cached !== null) {
-            return $cached;
-        }
-
-        $resultado = $this->generar($filtros);
-        $this->guardarCache($filtros, $resultado);
-
-        return $resultado;
     }
 
     /**
@@ -110,43 +90,5 @@ final class CanonEntidadesReporteService
             'fecha_desde' => $desde,
             'fecha_hasta' => $hasta,
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     * @return array<string, mixed>|null
-     */
-    public function leerCache(array $filtros): ?array
-    {
-        if (! CanonEntidadesListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            return null;
-        }
-        $pack = Cache::get(CanonEntidadesListadoFiltros::claveCacheResultado($filtros));
-        if (! is_array($pack) || ($pack['firma'] ?? '') !== CanonEntidadesListadoFiltros::firma($filtros)) {
-            return null;
-        }
-        if (! isset($pack['filas'], $pack['totales'], $pack['conciliacion'])) {
-            return null;
-        }
-
-        return $pack;
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     * @param  array<string, mixed>  $resultado
-     */
-    public function guardarCache(array $filtros, array $resultado): void
-    {
-        if (! CanonEntidadesListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            return;
-        }
-        Cache::put(
-            CanonEntidadesListadoFiltros::claveCacheResultado($filtros),
-            array_merge($resultado, [
-                'firma' => CanonEntidadesListadoFiltros::firma($filtros),
-            ]),
-            self::CACHE_TTL
-        );
     }
 }

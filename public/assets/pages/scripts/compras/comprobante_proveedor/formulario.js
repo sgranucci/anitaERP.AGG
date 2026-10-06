@@ -3337,11 +3337,24 @@ $(function () {
 
         /** Enter en fechas type=date: Chromium no deja mover tramos por JS. */
         function avanzarParteFechaOSiguienteCampo(target) {
-            if (!target || (target.id !== 'fechacomprobante' && target.id !== 'fechavencimiento')) {
+            if (!target || (target.id !== 'fechacomprobante' && target.id !== 'fechaiva' && target.id !== 'fechavencimiento')) {
                 return false;
             }
             var id = target.id;
             if (id === 'fechacomprobante') {
+                var iva = document.getElementById('fechaiva');
+                if (iva && !iva.disabled && $(iva).is(':visible')) {
+                    setTimeout(function () {
+                        try {
+                            iva.focus();
+                        } catch (errIva) {
+                            // ignore
+                        }
+                    }, 0);
+                    return true;
+                }
+            }
+            if (id === 'fechacomprobante' || id === 'fechaiva') {
                 var venc = document.getElementById('fechavencimiento');
                 if (venc && !venc.disabled && $(venc).is(':visible')) {
                     setTimeout(function () {
@@ -3385,7 +3398,7 @@ $(function () {
                     return;
                 }
             }
-            if (id === 'fechacomprobante' || id === 'fechavencimiento') {
+            if (id === 'fechacomprobante' || id === 'fechaiva' || id === 'fechavencimiento') {
                 if (avanzarParteFechaOSiguienteCampo(target)) {
                     return;
                 }
@@ -3759,6 +3772,12 @@ $(function () {
             cotizacionManual = false;
             $cot.attr('data-cotizacion-factura', '');
             refrescarCotizacionDia({ forzarCampo: true });
+            if (!contabilizado) {
+                programarPreviewAsiento();
+            }
+        });
+
+        $('#fechaiva').on('change', function () {
             if (!contabilizado) {
                 programarPreviewAsiento();
             }

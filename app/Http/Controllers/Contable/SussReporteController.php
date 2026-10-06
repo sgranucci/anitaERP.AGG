@@ -43,7 +43,7 @@ class SussReporteController extends Controller
                 'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             ]);
 
-            $resultado = $this->reporteService->generarOCache($filtros);
+            $resultado = $this->reporteService->generar($filtros);
             $consultado = true;
         }
 
@@ -75,7 +75,7 @@ class SussReporteController extends Controller
             return redirect()->route('suss');
         }
 
-        $resultado = $this->reporteService->generarOCache($filtros);
+        $resultado = $this->reporteService->generar($filtros);
         $nombre = (string) ($resultado['nombre_archivo'] ?? 'F2004.txt');
 
         return Response::make($resultado['archivo_f2004'] ?? '', 200, [
@@ -96,7 +96,7 @@ class SussReporteController extends Controller
             return redirect()->route('suss');
         }
 
-        $resultado = $this->reporteService->generarOCache($filtros);
+        $resultado = $this->reporteService->generar($filtros);
         $registros = $resultado['registros'] ?? [];
         $totales = $resultado['totales'] ?? [];
         $conciliacion = $resultado['conciliacion'] ?? [];

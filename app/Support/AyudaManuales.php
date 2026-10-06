@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
+
 class AyudaManuales
 {
     /**
@@ -11,7 +13,7 @@ class AyudaManuales
      */
     public static function catalogo(): array
     {
-        return [
+        $manuales = [
             [
                 'modulo' => 'Mis aprobaciones y circuitos',
                 'bajada' => 'Bandeja unificada, dual channel (mail + campanita), digest, artículos (tipo AR), usos y configuración admin.',
@@ -177,6 +179,18 @@ class AyudaManuales
                 'disponible' => true,
             ],
         ];
+
+        if (EntornoEmpresaSupport::esFerli()) {
+            $manuales[] = [
+                'modulo' => 'Facturación Local — Cambios y devoluciones de e-commerce',
+                'bajada' => 'Legajo de cambio de tienda: confirmar, factura solo del par que se lleva, recepción, nota de crédito solo de lo devuelto y diferencia a compensar.',
+                'url' => route('manual_cambio_devolucion_marketplace'),
+                'icono' => 'fa-exchange-alt',
+                'disponible' => true,
+            ];
+        }
+
+        return $manuales;
     }
 
     /**

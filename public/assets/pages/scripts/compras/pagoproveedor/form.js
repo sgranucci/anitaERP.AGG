@@ -862,7 +862,14 @@
             html += filaDetalle('Neto del período', fmt(gd.neto_periodo != null ? gd.neto_periodo : r.base_periodo));
             html += filaDetalle('Mínimo no sujeto (excedente)', fmt(gd.monto_excedente));
             html += filaDetalle('Base retenible', fmt(gd.base_retenible != null ? gd.base_retenible : r.base_retenible));
-            html += filaDetalle('Alícuota %', fmt(r.alicuota));
+            html += filaDetalle(
+                gd.modo === 'escala' ? 'Alícuota del tramo %' : 'Alícuota %',
+                fmt(r.alicuota)
+            );
+            if (gd.modo === 'escala' && gd.tramo_hasta != null) {
+                var hastaTxt = Number(gd.tramo_hasta) > 0 ? fmt(gd.tramo_hasta) : 'en adelante';
+                html += filaDetalle('Tramo', fmt(gd.tramo_desde) + ' a ' + hastaTxt);
+            }
             html += filaDetalle('Retención del período', fmt(gd.retencion_periodo));
             html += filaDetalle('Ya retenido (previo)', fmt(gd.retenido_previo));
             html += filaDetalle('Mínimo retención', fmt(gd.minimo_retencion));

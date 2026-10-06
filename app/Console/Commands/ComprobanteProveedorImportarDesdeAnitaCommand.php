@@ -18,6 +18,7 @@ class ComprobanteProveedorImportarDesdeAnitaCommand extends Command
                             {--hasta= : Fecha ISO hasta, inclusive}
                             {--fecha-iva : Filtra por com_fecha_iva (IVA compras) en vez de com_fecha}
                             {--limite= : Máximo de comprobantes nuevos a crear (por proveedor)}
+                            {--nro-interno= : Solo este com_nro_interno de Anita}
                             {--usuario-id=1 : usuario_id de auditoría}
                             {--sin-cuenta-corriente : Solo documentos (CP + conceptos); no crea CC ni aplicaciones}
                             {--sin-completar-conceptos : No completa concmov en CP ya existentes sin conceptos}
@@ -57,13 +58,20 @@ class ComprobanteProveedorImportarDesdeAnitaCommand extends Command
         $empresaCodigo = ($empresaOpt !== null && $empresaOpt !== '') ? (int) $empresaOpt : null;
         $limiteOpt = $this->option('limite');
         $limite = ($limiteOpt !== null && $limiteOpt !== '') ? (int) $limiteOpt : null;
+        $nroInternoOpt = $this->option('nro-interno');
+        $nroInterno = ($nroInternoOpt !== null && $nroInternoOpt !== '') ? (int) $nroInternoOpt : null;
+        if ($nroInterno !== null && $nroInterno <= 0) {
+            $this->error('--nro-interno debe ser un entero mayor a 0.');
+
+            return self::FAILURE;
+        }
         $desde = $this->option('desde') ? (string) $this->option('desde') : null;
         $hasta = $this->option('hasta') ? (string) $this->option('hasta') : null;
         $usuarioId = max(1, (int) $this->option('usuario-id'));
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
-            'Entorno %s | empresa_col=%s | %s | %s → %s | eje %s | %s%s',
+            'Entorno %s | empresa_col=%s | %s | %s → %s | eje %s | %s%s%s',
             $perfil['entorno'],
             $perfil['tiene_empresa'] ? 'sí' : 'no',
             $todos ? 'Proveedores: TODOS' : 'Proveedor '.$codigo,
@@ -72,6 +80,7 @@ class ComprobanteProveedorImportarDesdeAnitaCommand extends Command
             $filtrarIva ? 'com_fecha_iva' : 'com_fecha',
             $dryRun ? 'DRY-RUN' : 'EJECUTAR',
             $sinCc ? ' | SIN cuenta corriente' : '',
+            ($nroInterno !== null && $nroInterno > 0) ? ' | nro interno '.$nroInterno : '',
         ));
         $this->line('Fuente Anita: compra + concmov'
             .($sinCc ? ' (sin promov/aplmovp CC)' : ' + promov + aplmovp')
@@ -124,6 +133,7 @@ class ComprobanteProveedorImportarDesdeAnitaCommand extends Command
                     $sinCc,
                     $filtrarIva,
                     $completarConceptos,
+                    $nroInterno,
                 );
             } catch (\Throwable $e) {
                 $totales['proveedores_error']++;
