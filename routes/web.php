@@ -2262,6 +2262,16 @@ Route::get('ventas/gastronomia/canjes/cliente-vip/{id}/editar', 'Ventas\ClienteV
 Route::put('ventas/gastronomia/canjes/cliente-vip/{id}', 'Ventas\ClienteVipGastronomiaController@actualizar')->name('actualizar_cliente_vip_gastronomia');
 Route::delete('ventas/gastronomia/canjes/cliente-vip/{id}', 'Ventas\ClienteVipGastronomiaController@eliminar')->name('eliminar_cliente_vip_gastronomia');
 
+Route::get('ventas/gastronomia/canjes/cliente-vip-emita/{modo}', 'Ventas\ClienteVipEmitaConsultaController@index')
+    ->where('modo', 'nombre|alias')
+    ->name('consultar_cliente_vip_emita');
+Route::get('ventas/gastronomia/canjes/lista-cliente-vip-emita-nombre/{formato}', 'Ventas\ClienteVipEmitaConsultaController@exportar')
+    ->defaults('modo', 'nombre')
+    ->name('lista_cliente_vip_emita_nombre');
+Route::get('ventas/gastronomia/canjes/lista-cliente-vip-emita-alias/{formato}', 'Ventas\ClienteVipEmitaConsultaController@exportar')
+    ->defaults('modo', 'alias')
+    ->name('lista_cliente_vip_emita_alias');
+
 Route::get('ventas/gastronomia/canjes/listado-marketing', 'Ventas\CanjeMarketingListadoController@index')->name('canje_marketing_listado')->middleware('modo.consulta');
 Route::get('ventas/lista-canje-marketing-gastronomia/{formato}', 'Ventas\CanjeMarketingListadoController@exportar')->name('lista_canje_marketing_gastronomia');
 
@@ -2288,6 +2298,8 @@ Route::prefix('ventas/gastronomia/canjes/api')->group(function () {
     Route::get('mozo/leer-codigo/{codigo}', 'Ventas\CanjeMarketingProcesoFacturacionController@apiMozoPorCodigo')->name('canje_marketing_api_mozo_codigo');
     Route::get('mozo/leer-id/{id}', 'Ventas\CanjeMarketingProcesoFacturacionController@apiMozoPorId')->name('canje_marketing_api_mozo_id');
     Route::post('consulta-cliente-vip', 'Ventas\CanjeMarketingProcesoFacturacionController@apiConsultaClienteVip')->name('canje_marketing_api_consulta_cliente_vip');
+    Route::post('consulta-cliente-vip-emita', 'Ventas\CanjeMarketingProcesoFacturacionController@apiConsultaClienteVipEmita')->name('canje_marketing_api_consulta_cliente_vip_emita');
+    Route::post('cliente-vip/desde-emita', 'Ventas\CanjeMarketingProcesoFacturacionController@apiElegirClienteVipEmita')->name('canje_marketing_api_cliente_vip_desde_emita');
     Route::get('cliente-vip/leer/{codigo}', 'Ventas\CanjeMarketingProcesoFacturacionController@apiClienteVipPorCodigo')->name('canje_marketing_api_cliente_vip_codigo');
     Route::post('cliente-vip/wigos', 'Ventas\CanjeMarketingProcesoFacturacionController@apiClienteVipWigos')->name('canje_marketing_api_cliente_vip_wigos');
 });

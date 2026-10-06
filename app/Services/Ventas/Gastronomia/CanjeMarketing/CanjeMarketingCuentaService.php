@@ -294,6 +294,103 @@ final class CanjeMarketingCuentaService
         ];
     }
 
+    /**
+     * El cliente elegido en Emita pasa a ser el VIP del descuento.
+     * Si no está en el padrón del ERP, se da de alta con los datos de Emita.
+     *
+     * @param  array{sala?: string, origen?: string, cuenta_wigos?: string, nombre_apellido?: string, documento?: string, alias?: string}  $fila
+     * @return array{cliente_vip: ClienteVipGastronomia, creado: bool}
+     */
+    public function resolverClienteVipDesdeEmita(int $empresaId, array $fila): array
+    {
+        $alias = trim((string) ($fila['alias'] ?? ''));
+        $titular = trim((string) ($fila['nombre_apellido'] ?? ''));
+        $sala = trim((string) ($fila['sala'] ?? ''));
+        $documento = $this->documentoEmita((string) ($fila['documento'] ?? ''));
+        $partes = $this->partirNombreEmita($titular, $alias);
+
+        if ($partes['apellido'] === '' && $alias === '' && $documento === null) {
+            throw new InvalidArgumentException('La fila de Emita no tiene nombre, alias ni documento.');
+        }
+
+        $vip = null;
+        if ($documento !== null) {
+            $vip = $this->clienteVipRepository->findPorDocumento($empresaId, $documento);
+        }
+        if (! $vip && $alias !== '') {
+            $vip = ClienteVipGastronomia::query()
+                ->where('empresa_id', $empresaId)
+                ->where('nickname', mb_substr($alias, 0, 30))
+                ->when($sala !== '', fn ($q) => $q->where('localidad', mb_substr($sala, 0, 15)))
+                ->when($documento === null, fn ($q) => $q->where(function ($q) {
+                    $q->whereNull('nrodocumento')->orWhere('nrodocumento', '');
+                }))
+                ->orderByDesc('id')
+                ->first();
+        }
+        if (! $vip && $partes['apellido'] !== '') {
+            $vip = ClienteVipGastronomia::query()
+                ->where('empresa_id', $empresaId)
+                ->where('apellido', $partes['apellido'])
+                ->where('nombre', $partes['nombre'])
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        if ($vip) {
+            return ['cliente_vip' => $vip, 'creado' => false];
+        }
+
+        $vip = $this->clienteVipRepository->create([
+            'empresa_id' => $empresaId,
+            'nrodocumento' => $documento,
+            'apellido' => $partes['apellido'] !== '' ? $partes['apellido'] : mb_substr($alias, 0, 40),
+            'nombre' => $partes['nombre'],
+            'nickname' => $alias !== '' ? mb_substr($alias, 0, 30) : null,
+            'localidad' => $sala !== '' ? mb_substr($sala, 0, 15) : null,
+        ]);
+
+        return ['cliente_vip' => $vip, 'creado' => true];
+    }
+
+    private function documentoEmita(string $documento): ?string
+    {
+        $digitos = preg_replace('/\D+/', '', $documento) ?? '';
+        if (strlen($digitos) < 6 || strlen($digitos) > 20) {
+            return null;
+        }
+
+        return $digitos;
+    }
+
+    /**
+     * @return array{apellido: string, nombre: string}
+     */
+    private function partirNombreEmita(string $titular, string $alias): array
+    {
+        $titular = trim($titular);
+        if ($titular === '') {
+            return [
+                'apellido' => mb_substr($alias, 0, 40),
+                'nombre' => '',
+            ];
+        }
+        if (mb_strlen($titular) <= 40) {
+            return ['apellido' => $titular, 'nombre' => ''];
+        }
+
+        $cabeza = mb_substr($titular, 0, 40);
+        $corte = mb_strrpos($cabeza, ' ');
+        if ($corte === false || $corte < 8) {
+            $corte = 40;
+        }
+
+        return [
+            'apellido' => trim(mb_substr($titular, 0, $corte)),
+            'nombre' => trim(mb_substr(mb_substr($titular, $corte), 0, 40)),
+        ];
+    }
+
     public function crearClienteVipMinimo(int $empresaId, string $documento, string $apellido, string $nombre): ClienteVipGastronomia
     {
         $apellido = mb_substr(trim($apellido) !== '' ? trim($apellido) : 'SIN', 0, 40);

@@ -105,6 +105,10 @@
     .cm-panel-descuento-vip .btn-accion-tabla,
     .cm-panel-descuento-vip .btn { flex: 0 0 auto; }
     .cm-panel-descuento-vip .cm-fila-wigos {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem;
         padding-left: 86px;
         margin-top: 0.35rem;
     }
@@ -507,11 +511,13 @@
                             </div>
                         </div>
                         <div id="cm-vip-aviso" class="alert alert-warning py-1 px-2 small d-none mb-0 mt-1" role="alert"></div>
-                        @if ($wigos_account_info_habilitado)
                         <div class="cm-fila-wigos">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="cm-btn-vip-emita-nombre" title="Consultar clientes VIP de Emita por nombre y apellido"><i class="fa fa-user"></i> Por nombre</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="cm-btn-vip-emita-alias" title="Consultar clientes VIP de Emita por alias"><i class="fa fa-id-badge"></i> Por alias</button>
+                            @if ($wigos_account_info_habilitado)
                             <button type="button" class="btn btn-sm btn-outline-info" id="cm-btn-abrir-wigos" title="Leer tarjeta Wigos"><i class="fa fa-credit-card"></i> Tarjeta Wigos</button>
+                            @endif
                         </div>
-                        @endif
                         </div>
                     </div>
                 </div>
@@ -737,6 +743,50 @@
 </div>
 @endif
 
+<div class="modal fade" id="modal-cm-vip-emita" tabindex="-1" role="dialog" aria-labelledby="modal-cm-vip-emita-title" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modal-cm-vip-emita-title">Clientes VIP Emita</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="small text-muted mb-2">Consulta la base de Emita. La lupa de Cliente VIP sigue buscando el padrón del ERP.</p>
+                <div class="form-inline mb-2">
+                    <label class="small mr-2 mb-0" for="cm-vip-emita-texto" id="cm-vip-emita-label">Nombre y apellido</label>
+                    <input type="text" class="form-control form-control-sm mr-2" id="cm-vip-emita-texto" maxlength="80" autocomplete="off" placeholder="Al menos 3 caracteres">
+                    <button type="button" class="btn btn-sm btn-primary" id="cm-vip-emita-buscar"><i class="fa fa-search"></i> Consultar</button>
+                </div>
+                <div id="cm-vip-emita-aviso" class="alert alert-warning py-1 px-2 small d-none" role="alert"></div>
+                <div class="table-responsive" style="max-height: 360px;">
+                    <table class="table table-sm table-striped table-bordered mb-0">
+                        <thead>
+                            <tr style="background:#85C1E9;color:#17202A;">
+                                <th>Sala</th>
+                                <th>Origen</th>
+                                <th>Cuenta</th>
+                                <th>Nombre y apellido</th>
+                                <th>Documento</th>
+                                <th>Alias</th>
+                                <th>Nivel</th>
+                                <th>VIP</th>
+                                <th>Última visita</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="cm-vip-emita-tbody">
+                            <tr><td colspan="10" class="text-muted text-center">Indique un texto y consulte.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @include('includes.ventas.modalconsultaclientevip')
 @include('includes.stock.modalconsultamozo')
 @include('includes.stock.modalconsultaarticulo')
@@ -808,5 +858,6 @@ window.CANJE_MARKETING = {
 <script src="{{ asset('assets/pages/scripts/ventas/mozo_gastronomia/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/canjes/cliente_vip/consulta_pos.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/gastronomia/canjes/cliente_vip_emita/pos.js') }}?v={{ filemtime(public_path('assets/pages/scripts/ventas/gastronomia/canjes/cliente_vip_emita/pos.js')) }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/canjes/proceso_facturacion.js') }}"></script>
 @endsection

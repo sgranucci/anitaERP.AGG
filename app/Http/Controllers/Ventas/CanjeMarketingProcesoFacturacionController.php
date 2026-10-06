@@ -18,6 +18,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\GastronomiaFormulaOpcionalesService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Ventas\Emita\EmitaClienteVipConsulta;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -32,6 +33,7 @@ class CanjeMarketingProcesoFacturacionController extends Controller
         private readonly GastronomiaJornadaService $jornadaService,
         private readonly ClienteVipGastronomiaRepositoryInterface $clienteVipRepository,
         private readonly MozoGastronomiaRepositoryInterface $mozoGastronomiaRepository,
+        private readonly EmitaClienteVipConsulta $emitaClienteVipConsulta,
     ) {
     }
 
@@ -499,6 +501,31 @@ class CanjeMarketingProcesoFacturacionController extends Controller
         return response()->json(is_array($payload) ? $payload : ['data' => '']);
     }
 
+    public function apiConsultaClienteVipEmita(Request $request)
+    {
+        can('usar-facturador-canje-marketing');
+
+        $modo = (string) $request->input('modo', '');
+        $texto = trim((string) $request->input('texto', ''));
+        if (! in_array($modo, [EmitaClienteVipConsulta::MODO_NOMBRE, EmitaClienteVipConsulta::MODO_ALIAS], true)) {
+            return response()->json(['error' => 'Modo de consulta inválido.'], 422);
+        }
+        if (! EmitaClienteVipConsulta::textoValido($texto)) {
+            return response()->json(['error' => 'Indique al menos '.EmitaClienteVipConsulta::LONGITUD_MINIMA.' caracteres.'], 422);
+        }
+
+        try {
+            $resultado = $this->emitaClienteVipConsulta->pagina($modo, $texto, 1, 30);
+        } catch (\RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'total' => $resultado['total'],
+            'filas' => $resultado['filas'],
+        ]);
+    }
+
     public function apiClienteVipPorCodigo(Request $request, string $codigo)
     {
         can('usar-facturador-canje-marketing');
@@ -557,6 +584,40 @@ class CanjeMarketingProcesoFacturacionController extends Controller
             'creado' => $resultado['creado'],
             'cliente_vip' => $this->canjeMarketingCuentaService->serializarClienteVip($resultado['cliente_vip']),
             'wigos' => $resultado['wigos'],
+        ]);
+    }
+
+    public function apiElegirClienteVipEmita(Request $request)
+    {
+        can('usar-facturador-canje-marketing');
+
+        $request->validate([
+            'sala' => 'nullable|string|max:80',
+            'origen' => 'nullable|string|max:40',
+            'cuenta_wigos' => 'nullable|string|max:40',
+            'nombre_apellido' => 'nullable|string|max:120',
+            'documento' => 'nullable|string|max:40',
+            'alias' => 'nullable|string|max:120',
+        ]);
+
+        $cfg = $this->requireCfgPv($request);
+        if ($cfg instanceof \Illuminate\Http\JsonResponse) {
+            return $cfg;
+        }
+
+        try {
+            $resultado = $this->canjeMarketingCuentaService->resolverClienteVipDesdeEmita(
+                (int) $cfg->empresa_id,
+                $request->only(['sala', 'origen', 'cuenta_wigos', 'nombre_apellido', 'documento', 'alias']),
+            );
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'creado' => $resultado['creado'],
+            'cliente_vip' => $this->canjeMarketingCuentaService->serializarClienteVip($resultado['cliente_vip']),
         ]);
     }
 
