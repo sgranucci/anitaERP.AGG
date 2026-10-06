@@ -28,6 +28,14 @@ final class ArcaFceNcMostradorSupport
     public const TIPOS_NC_ND_FCE = [202, 203, 207, 208, 212, 213];
 
     /**
+     * NC/ND de FE común que, sin CbteAsoc, deben informar PeriodoAsoc (obs. 10197).
+     * NCE/NDE MiPyME no admiten período (obs. 159).
+     *
+     * @var list<int>
+     */
+    public const TIPOS_NC_ND_PERIODO_ASOC = [2, 3, 7, 8, 12, 13, 52, 53];
+
+    /**
      * Tope MiPyME para emitir FCE (FAC→FCE). No decide NCE vs NC sobre una FCE.
      */
     public static function correspondeEmitirNcNdFce(float $totalComprobante): bool
@@ -65,6 +73,14 @@ final class ArcaFceNcMostradorSupport
     public static function exigeAsociacionFce(int $codigoTipoAfip): bool
     {
         return self::esTipoNcNdFce($codigoTipoAfip);
+    }
+
+    /**
+     * ND/NC FE sin comprobante puntual: ARCA exige PeriodoAsoc (10197).
+     */
+    public static function admitePeriodoAsoc(int $cbteTipo): bool
+    {
+        return in_array($cbteTipo, self::TIPOS_NC_ND_PERIODO_ASOC, true);
     }
 
     /**

@@ -2,6 +2,8 @@
 // Constantes de produccion
 
 return [
+	"TAREA_APARADO" => "6",
+	"TAREA_APARADO_ANOTADO" => "42",
 	"TAREA_ARMADO" => "30",
 	"TAREA_EMPAQUE" => "34",
 	"TAREA_PENDIENTE_FABRICACION" => "31",

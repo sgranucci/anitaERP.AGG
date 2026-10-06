@@ -873,6 +873,7 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('ventas/facturacion-local/cambios-devolucion/crear', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@crear')->name('crear_cambio_devolucion_marketplace');
     Route::get('ventas/facturacion-local/cambios-devolucion/api/buscar-venta', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@apiBuscarVenta')->name('api_buscar_venta_cambio_devolucion_marketplace');
     Route::get('ventas/facturacion-local/cambios-devolucion/api/variantes/{articuloId}', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@apiVariantesArticulo')->name('api_variantes_cambio_devolucion_marketplace');
+    Route::get('ventas/facturacion-local/cambios-devolucion/api/precio', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@apiPrecio')->name('api_precio_cambio_devolucion_marketplace');
     Route::post('ventas/facturacion-local/cambios-devolucion', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@guardar')->name('guardar_cambio_devolucion_marketplace');
     Route::get('ventas/facturacion-local/cambios-devolucion/{id}/editar', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@editar')->name('editar_cambio_devolucion_marketplace')->middleware('modo.consulta');
     Route::put('ventas/facturacion-local/cambios-devolucion/{id}', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@actualizar')->name('actualizar_cambio_devolucion_marketplace');

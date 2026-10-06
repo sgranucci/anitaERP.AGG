@@ -149,6 +149,42 @@
         if (descEl) {
             descEl.value = hallada.nombre || '';
         }
+        traerPrecioFila(row);
+    }
+
+    function traerPrecioFila(row) {
+        if (!row || !window.cdmPrecioUrl || !window.cdmEditable) {
+            return;
+        }
+        var tipo = row.querySelector('.cdm-tipo');
+        if (!tipo || tipo.value !== 'reemplazo') {
+            return;
+        }
+        var artEl = row.querySelector('.articulo_id');
+        var artId = artEl ? String(artEl.value || '').trim() : '';
+        if (artId === '') {
+            return;
+        }
+        var localSel = document.getElementById('local_venta_id');
+        var combEl = row.querySelector('.combinacion_id');
+        var talleEl = row.querySelector('.talle_id');
+        var token = String(Date.now()) + Math.random();
+        row.dataset.precioToken = token;
+        var qs = 'articulo_id=' + encodeURIComponent(artId)
+            + '&combinacion_id=' + encodeURIComponent((combEl && combEl.value) || '0')
+            + '&talle_id=' + encodeURIComponent((talleEl && talleEl.value) || '0')
+            + '&local_id=' + encodeURIComponent((localSel && localSel.value) || '');
+        fetch(window.cdmPrecioUrl + '?' + qs, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        }).then(function (r) {
+            return r.json();
+        }).then(function (json) {
+            if (!row.isConnected || row.dataset.precioToken !== token || tipo.value !== 'reemplazo') {
+                return;
+            }
+            poner(row, '.cdm-precio', json && json.precio != null ? json.precio : 0);
+        }).catch(function () {});
     }
 
     function cargarVariantes(row) {
@@ -296,7 +332,26 @@
                 row.dataset.articuloPrevio = String(data.id);
             }
             cargarVariantes(row);
+            traerPrecioFila(row);
         };
+
+        if (tbody) {
+            tbody.addEventListener('change', function (ev) {
+                var t = ev.target;
+                if (t && t.classList && t.classList.contains('cdm-tipo')) {
+                    traerPrecioFila(t.closest('tr'));
+                }
+            });
+        }
+
+        if (window.jQuery) {
+            window.jQuery(document).on('talle:seleccionado.cdmPrecio', '#cdm-lineas-table .tm-talle-campo', function () {
+                traerPrecioFila(this.closest('tr'));
+            });
+            window.jQuery(document).on('combinacion:seleccionada.cdmPrecio', '#cdm-lineas-table .tm-combinacion-campo', function () {
+                traerPrecioFila(this.closest('tr'));
+            });
+        }
 
         function filaCombinacionDesde(el) {
             return el && el.closest ? el.closest('#cdm-lineas-table tr') : null;
@@ -437,6 +492,9 @@
             localSel.addEventListener('change', function () {
                 var opt = localSel.options[localSel.selectedIndex];
                 empresaHidden.value = opt ? (opt.getAttribute('data-empresa') || '') : '';
+                document.querySelectorAll('#cdm-lineas-tbody .cdm-linea-row').forEach(function (row) {
+                    traerPrecioFila(row);
+                });
             });
         }
 

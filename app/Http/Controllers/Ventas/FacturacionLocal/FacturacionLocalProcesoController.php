@@ -9,7 +9,6 @@ use App\Models\Stock\Talle;
 use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\Cliente;
 use App\Repositories\Ventas\TurnoLocalRepositoryInterface;
-use App\Services\Stock\PrecioServiceFerli;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalEmisionService;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalTurnoService;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalValeService;
@@ -18,7 +17,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalMedioPresentacionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
-use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioIvaSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalSplitFacNcSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalUsoCuentacajaSupport;
@@ -256,46 +255,12 @@ class FacturacionLocalProcesoController extends Controller
         $this->assertFerli();
         can('usar-facturacion-local', false);
 
-        $articuloId = (int) $request->input('articulo_id');
-        $combinacionId = (int) $request->input('combinacion_id', 0);
-        $talleId = (int) $request->input('talle_id', 0);
-        $localId = (int) $request->input('local_id', 0);
-        $local = LocalVenta::query()->find($localId);
-        $listaId = (int) ($local?->listaprecio_id ?? 0);
-        $precio = 0.;
-        $listaUsada = $listaId;
-        try {
-            $svc = app(PrecioServiceFerli::class);
-            $fecha = now()->format('Y-m-d');
-            $comb = $combinacionId > 0 ? $combinacionId : null;
-
-            // Lista del local (Lugano/Web/etc.) manda en POS Local.
-            if ($articuloId > 0 && $listaId > 0) {
-                $precio = $svc->precioVigente($articuloId, $listaId, $comb, $fecha);
-            }
-
-            // Fallback: lista por rango de talle (ABM Ferli clásico).
-            if ($precio <= 0 && $articuloId > 0 && $talleId > 0) {
-                $filas = $svc->asignaPrecio($articuloId, $comb, $talleId, $fecha);
-                $precio = PrecioServiceFerli::primerPrecioNumerico($filas);
-                if (is_array($filas[0] ?? null) && (int) ($filas[0]['listaprecio_id'] ?? 0) > 0) {
-                    $listaUsada = (int) $filas[0]['listaprecio_id'];
-                }
-            }
-        } catch (\Throwable $e) {
-            $precio = 0.;
-        }
-
-        // POS muestra/cobra precio final de lista (locales = IVA incluido siempre).
-        $flagLista = FacturacionLocalPrecioIvaSupport::flagLista($listaUsada > 0 ? $listaUsada : $listaId);
-        $precioMostrar = FacturacionLocalPrecioIvaSupport::precioParaPos($precio, $listaUsada > 0 ? $listaUsada : $listaId);
-
-        return response()->json([
-            'precio' => $precioMostrar,
-            'precio_lista' => $precio,
-            'incluyeimpuesto_lista' => $flagLista,
-            'listaprecio_id' => $listaUsada > 0 ? $listaUsada : ($local?->listaprecio_id),
-        ]);
+        return response()->json(FacturacionLocalPrecioArticuloSupport::paraLocal(
+            (int) $request->input('local_id', 0),
+            (int) $request->input('articulo_id'),
+            (int) $request->input('combinacion_id', 0),
+            (int) $request->input('talle_id', 0),
+        ));
     }
 
     public function apiEmitir(Request $request)

@@ -11,6 +11,7 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\ArcaCaeaCbteFchHsGenSupport;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
+use App\Support\Ventas\ArcaFceNcMostradorSupport;
 use App\Support\Ventas\ArcaMtxcaComprobanteTotalesSupport;
 use App\Support\Ventas\ConceptoVentaMostradorSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
@@ -1024,7 +1025,7 @@ class ArcaMtxcaFacturaElectronicaService
         if ($desde <= 0 || count($asoc) > 0) {
             return null;
         }
-        if (! in_array($cbteTipo, [2, 3, 7, 8, 52, 53], true)) {
+        if (! ArcaFceNcMostradorSupport::admitePeriodoAsoc($cbteTipo)) {
             return null;
         }
 

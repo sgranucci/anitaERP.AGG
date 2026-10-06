@@ -17,6 +17,7 @@ use App\Services\Arca\ArcaMtxcaFacturaElectronicaService;
 use App\Services\Arca\ArcaWsfeCaeaService;
 use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
 use App\Services\Arca\ArcaWsfexFacturaElectronicaService;
+use App\Support\Ventas\ArcaFceNcMostradorSupport;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 use App\Support\Ventas\ArcaMtxcaComprobanteTotalesSupport;
@@ -493,7 +494,7 @@ class FacturaElectronicaService
 				$req['detalle']['cond_iva_receptor_id'] = $condicionIvaReceptor_id;
 
 			if ($datos['fechaasignaciondesde'] > 0 && count($datos['comprobantesasociados']) == 0 &&
-				($tipotransaccion == 3 || $tipotransaccion == 8 || $tipotransaccion == 203 || $tipotransaccion == 53))
+				ArcaFceNcMostradorSupport::admitePeriodoAsoc((int) $tipotransaccion))
 			{
 				$req['detalle']['fchdesde'] = $datos['fechaasignaciondesde'];
 				$req['detalle']['fchhasta'] = $datos['fechaasignacionhasta'];

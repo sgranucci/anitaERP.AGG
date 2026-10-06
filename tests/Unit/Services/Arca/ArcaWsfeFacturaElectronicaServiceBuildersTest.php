@@ -132,6 +132,70 @@ class ArcaWsfeFacturaElectronicaServiceBuildersTest extends TestCase
         self::assertNull($this->invoke('buildCbtesAsoc', []));
     }
 
+    public function test_periodo_asoc_en_nota_de_debito_y_credito_sin_comprobante(): void
+    {
+        foreach ([2, 3, 7, 8, 12, 13, 52, 53] as $tipo) {
+            $out = $this->invoke('buildPeriodoAsocIfApplies', $tipo, [
+                'fechaasignaciondesde' => '20261001',
+                'fechaasignacionhasta' => '20261006',
+                'comprobantesasociados' => [],
+            ]);
+
+            self::assertSame([
+                'FchDesde' => '20261001',
+                'FchHasta' => '20261006',
+            ], $out, "tipo {$tipo}");
+        }
+    }
+
+    public function test_periodo_asoc_no_aplica_con_cbte_asoc_ni_en_factura_ni_en_nce(): void
+    {
+        self::assertNull($this->invoke('buildPeriodoAsocIfApplies', 2, [
+            'fechaasignaciondesde' => '20261001',
+            'fechaasignacionhasta' => '20261006',
+            'comprobantesasociados' => [['tipo' => 1, 'ptovta' => 1, 'nro' => 1]],
+        ]));
+        self::assertNull($this->invoke('buildPeriodoAsocIfApplies', 1, [
+            'fechaasignaciondesde' => '20261001',
+            'fechaasignacionhasta' => '20261006',
+            'comprobantesasociados' => [],
+        ]));
+        self::assertNull($this->invoke('buildPeriodoAsocIfApplies', 203, [
+            'fechaasignaciondesde' => '20261001',
+            'fechaasignacionhasta' => '20261006',
+            'comprobantesasociados' => [],
+        ]));
+    }
+
+    public function test_detalle_nd_sin_asociado_incluye_periodo_asoc(): void
+    {
+        $out = $this->invoke('buildFecaDetRequest', 2, 8, [
+            'fechacomprobante' => '20261006',
+            'tipodoc' => 80,
+            'numerodocumento' => '30712345678',
+            'numerocomprobante' => 10,
+            'total' => 121,
+            'nogravado' => 0,
+            'gravado' => 100,
+            'exento' => 0,
+            'tributo' => 0,
+            'iva' => 21,
+            'moneda' => 'PES',
+            'cotizacion' => 1,
+            'condicioniva_id' => 1,
+            'comprobantesasociados' => [],
+            'fechaasignaciondesde' => '20261001',
+            'fechaasignacionhasta' => '20261006',
+            'impuestos' => [],
+            'tributos' => [],
+        ], 0);
+
+        self::assertArrayHasKey('PeriodoAsoc', $out);
+        self::assertSame('20261001', $out['PeriodoAsoc']['FchDesde']);
+        self::assertSame('20261006', $out['PeriodoAsoc']['FchHasta']);
+        self::assertArrayNotHasKey('CbtesAsoc', $out);
+    }
+
     public function test_build_fe_caea_det_request_incluye_cbte_fch_hs_gen(): void
     {
         $out = $this->invoke('buildFeCaeaDetRequest', 6, 3, [

@@ -10,6 +10,7 @@ use App\Models\Ventas\LocalVenta;
 use App\Services\Ventas\FacturacionLocal\CambioDevolucionMarketplaceService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceCatalogoSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceEstadosSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceListadoFiltros;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceLiquidacionSupport;
@@ -325,6 +326,23 @@ class CambioDevolucionMarketplaceController extends Controller
         Articulo::query()->findOrFail($articuloId);
 
         return response()->json(CambioDevolucionMarketplaceVentaConsultaSupport::variantes($articuloId));
+    }
+
+    public function apiPrecio(Request $request)
+    {
+        $this->assertFerli();
+        if (! can('crear-cambio-devolucion-marketplace-facturacion-local', false)
+            && ! can('actualizar-cambio-devolucion-marketplace-facturacion-local', false)
+            && ! can('ver-cambio-devolucion-marketplace-facturacion-local', false)) {
+            abort(403);
+        }
+
+        return response()->json(FacturacionLocalPrecioArticuloSupport::paraLocal(
+            (int) $request->input('local_id', 0),
+            (int) $request->input('articulo_id'),
+            (int) $request->input('combinacion_id', 0),
+            (int) $request->input('talle_id', 0),
+        ));
     }
 
     /**

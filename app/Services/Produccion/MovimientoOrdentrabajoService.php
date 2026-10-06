@@ -228,6 +228,15 @@ class MovimientoOrdentrabajoService
 					else
 						$accion = 'update';
 
+					$esInicio = ($tipooperacionEnum[$operacion->tipooperacion] ?? '') === 'Inicio';
+					$esAparado = (int) ($data['tarea_id'] ?? 0) === (int) config('consprod.TAREA_APARADO');
+					if ($accion !== '' && $esInicio && $esAparado
+						&& ! $this->tieneAparadoAnotado((int) $ordentrabajo->id)) {
+						throw new ModelNotFoundException(
+							'No puede iniciar APARADO: la OT '.$codigos_ot[$i].' no tiene APARADO ANOTADO'
+						);
+					}
+
 					if ($accion != '')
 					{
 						if ($flBoletaJunta)
@@ -269,33 +278,9 @@ class MovimientoOrdentrabajoService
 
 								if ($item_tarea)
 									$dataTarea['ordentrabajo_tarea_id'] = $item_tarea->id;
-
-								// Si carga aparado busca aparado anotado y pone el fin
-								if ($data['tarea_id'] === Config::get("consprod.TAREA_APARADO"))
-								{
-									$ordentrabajo_tarea_anotado = $this->ordentrabajo_tareaRepository
-																	->findPorOrdentrabajoId($ordentrabajo->id, 
-																	Config::get("consprod.TAREA_APARADO_ANOTADO"));
-									if ($ordentrabajo_tarea_anotado)
-									{
-										$item_tarea = $this->ordentrabajo_tareaRepository->update([
-																					'hastafecha' => $dataTarea['desdefecha']
-																								], 
-																					$ordentrabajo_tarea_anotado[0]->id);
-
-										// Crea el movimiento de OT de cierre de aparado anotado
-										$dataTarea['tarea_id'] = Config::get("consprod.TAREA_APARADO_ANOTADO");
-
-										$movimientoordentrabajo = $this->movimientoordentrabajoRepository
-																		->create($dataTarea);
-
-										$dataTarea['tarea_id'] = Config::get("consprod.TAREA_APARADO");
-									}
-								}
 							}
 							else // Actualiza la tarea
 							{
-								$esInicio = ($tipooperacionEnum[$operacion->tipooperacion] ?? '') === 'Inicio';
 								if ($esInicio)
 								{
 									// Inicio sobre una tarea sin fecha de inicio (0000-00-00).
@@ -335,6 +320,11 @@ class MovimientoOrdentrabajoService
 
 								if ($item_tarea)
 									$dataTarea['ordentrabajo_tarea_id'] = $ordentrabajo_tarea_filtrada[0]->id;
+							}
+
+							// El inicio de APARADO cierra el APARADO ANOTADO.
+							if ($esInicio && $esAparado) {
+								$this->cierraAparadoAnotado((int) $ordentrabajo->id, $dataTarea);
 							}
 
 							// Crea el movimiento de OT
@@ -701,6 +691,48 @@ class MovimientoOrdentrabajoService
 		} finally {
 			Storage::disk('local')->delete($nombreRelativo);
 		}
+	}
+
+	/**
+	 * APARADO ANOTADO cargado en la OT (con fecha de inicio real).
+	 */
+	private function tieneAparadoAnotado(int $ordentrabajoId): bool
+	{
+		$tareaId = (int) config('consprod.TAREA_APARADO_ANOTADO');
+		if ($tareaId <= 0) {
+			return false;
+		}
+
+		$filas = $this->ordentrabajo_tareaRepository->findPorOrdentrabajoId($ordentrabajoId, $tareaId);
+		foreach ($filas as $fila) {
+			if (OrdentrabajoTareaFechaSupport::tieneValor($fila->desdefecha)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Al iniciar APARADO, pone fin al APARADO ANOTADO y deja el movimiento de ese cierre.
+	 *
+	 * @param  array<string, mixed>  $dataTarea
+	 */
+	private function cierraAparadoAnotado(int $ordentrabajoId, array $dataTarea): void
+	{
+		$tareaId = (int) config('consprod.TAREA_APARADO_ANOTADO');
+		$filas = $this->ordentrabajo_tareaRepository->findPorOrdentrabajoId($ordentrabajoId, $tareaId);
+		if (count($filas) === 0) {
+			return;
+		}
+
+		$this->ordentrabajo_tareaRepository->update(
+			['hastafecha' => $dataTarea['desdefecha']],
+			$filas[0]->id
+		);
+
+		$dataTarea['tarea_id'] = $tareaId;
+		$this->movimientoordentrabajoRepository->create($dataTarea);
 	}
 
 	/**

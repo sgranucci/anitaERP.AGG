@@ -7,6 +7,7 @@ use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Ventas\ArcaCaeaCbteFchHsGenSupport;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
+use App\Support\Ventas\ArcaFceNcMostradorSupport;
 use App\Support\Ventas\ArcaMtxcaComprobanteTotalesSupport;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 use Exception;
@@ -914,7 +915,8 @@ class ArcaWsfeFacturaElectronicaService
         if ($desde <= 0 || count($asoc) > 0) {
             return null;
         }
-        if (! in_array($cbteTipo, [3, 8, 52, 53], true)) {
+        // ND A/B/C (2/7/12) y NC A/B/C (3/8/13), más M (52/53). Sin esto ARCA responde 10197.
+        if (! ArcaFceNcMostradorSupport::admitePeriodoAsoc($cbteTipo)) {
             return null;
         }
 
