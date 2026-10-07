@@ -2911,6 +2911,7 @@ Route::post('caja/cheque/{id}/echeq-sync', 'Caja\ChequeController@echeqSync')->n
 Route::get('caja/cheque/importar', 'Caja\ChequeController@formImportar')->name('importar_cheque');
 Route::post('caja/cheque/importar/preview', 'Caja\ChequeController@previewImportacion')->name('preview_importar_cheque');
 Route::post('caja/cheque/importar', 'Caja\ChequeController@importar')->name('guardar_importar_cheque');
+Route::post('caja/cheque/traer-anita', 'Caja\ChequeController@traerDesdeAnita')->name('traer_cheque_anita');
 Route::get('caja/cheque/crear', 'Caja\ChequeController@crear')->name('crear_cheque');
 Route::post('caja/cheque', 'Caja\ChequeController@guardar')->name('guardar_cheque');
 Route::post('caja/cheque/consulta-cartera', 'Caja\ChequeController@consultaCartera')->name('consulta_cheque_cartera');

@@ -99,6 +99,26 @@ final class ChequeAnitaSyncSupport
     }
 
     /**
+     * Un CHT por interno, con baja incluida (el sync masivo descarta cter_fecha_baja distinta de 0).
+     */
+    public static function leerCtermaePorNroInterno(int $nroInterno): ?object
+    {
+        if ($nroInterno <= 0) {
+            return null;
+        }
+
+        $filas = self::listarCtermaeConCampos(' WHERE cter_nro_interno = '.$nroInterno.' ');
+        foreach ($filas as $fila) {
+            $nro = (int) preg_replace('/\D/', '', (string) ($fila->cter_nro_interno ?? '0'));
+            if ($nro === $nroInterno) {
+                return $fila;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Solo nro interno + instrumento (backfill negociable / e-cheq).
      *
      * @return list<object>

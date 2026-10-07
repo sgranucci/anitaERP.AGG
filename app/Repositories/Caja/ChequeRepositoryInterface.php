@@ -28,6 +28,13 @@ interface ChequeRepositoryInterface extends RepositoryInterface
     public function sincronizarCpromaeConAnita(?int $fechaDesdeYmd = null, ?array $estados = null): array;
 
     public function sincronizarCtermaeConAnita(bool $soloCartera = false): void;
+
+    /**
+     * Trae un cheque de terceros de Anita por cter_nro_interno, con el estado actual (incluye dados de baja).
+     *
+     * @return array{cheque: \App\Models\Caja\Cheque, ya_existia: bool, estado_conservado: bool}
+     */
+    public function traerCtermaePorNroInterno(int $nroInterno): array;
     public function traerRegistroDeAnita($key1, $key2, $key3);
 	public function guardarAnita($request);
 	public function actualizarAnita($request, $id);

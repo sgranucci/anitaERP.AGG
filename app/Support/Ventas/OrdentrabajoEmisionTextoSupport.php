@@ -28,6 +28,16 @@ final class OrdentrabajoEmisionTextoSupport
 
     public const PREFIJO_FORRO = 'FORRO: ';
 
+    /**
+     * Avíos: una sola fila, arranca en x=31.75 y no comparte el renglón.
+     * El tope de 120 mm cortaba a mitad de palabra (p. ej. "FOAM NI").
+     * Hasta el margen del A4 entran ~168 mm; lo que sobre se corta en
+     * espacio o barra, no en el medio de la palabra.
+     */
+    public const ANCHO_EMPAQUE_MM = 168.0;
+
+    public const PREFIJO_EMPAQUE = 'AVIOS DE EMPAQUE: ';
+
     private const TAMANO_PT = 9.0;
 
     /**
@@ -62,6 +72,17 @@ final class OrdentrabajoEmisionTextoSupport
         $anchoCuerpo = self::ANCHO_FORRO_LINEA1_MM - self::anchoMm(self::PREFIJO_FORRO);
 
         return self::partirConAnchos($texto, [$anchoCuerpo, self::ANCHO_FORRO_LINEA2_MM]);
+    }
+
+    /**
+     * Cuerpo del renglón de avíos (sin el prefijo), ya cortado al ancho útil.
+     */
+    public static function cuerpoEmpaque(string $texto): string
+    {
+        $anchoCuerpo = self::ANCHO_EMPAQUE_MM - self::anchoMm(self::PREFIJO_EMPAQUE);
+        $lineas = self::partirConAnchos($texto, [max(1.0, $anchoCuerpo)]);
+
+        return $lineas[0] ?? '';
     }
 
     /**

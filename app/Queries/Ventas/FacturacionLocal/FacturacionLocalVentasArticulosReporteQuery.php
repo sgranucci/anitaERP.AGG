@@ -9,13 +9,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Ventas netas (FAC − NC) de Facturación Local por artículo / combinación-color / talle.
- * Incluye el POS del local y los comprobantes grabados desde Facturante.
+ * Ventas (FAC − NC) del punto de venta local por artículo / combinación-color / talle.
+ * Mismo universo que Facturas Local: mostrador, Facturante y Tiendanube.
+ * El importe de línea es el precio grabado en la factura (ya con IVA).
+ * Gravado, exento e IVA viven en venta_impuesto, igual para letra A y B.
  */
 final class FacturacionLocalVentasArticulosReporteQuery
 {
-    /** Leyenda que deja FacturanteService al grabar la venta en el ERP. */
-    private const LEYENDA_FACTURANTE = 'Facturante';
     private static function cantidadExpr(): string
     {
         return GastronomiaVentaComprobanteSignoSupport::sqlCantidadLineaVenta();
@@ -27,7 +27,7 @@ final class FacturacionLocalVentasArticulosReporteQuery
     }
 
     /**
-     * Bruto de lista: ve.precio ya es el unitario neto y ve.descuento el porcentaje de línea.
+     * Bruto de lista: ve.precio es el unitario grabado y ve.descuento el porcentaje de línea.
      * Importe venta = cantidad firmada × precio. Bruto = ese importe / (1 − dto/100).
      */
     private static function importeBrutoExpr(): string
@@ -159,18 +159,7 @@ final class FacturacionLocalVentasArticulosReporteQuery
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
             ->leftJoin('combinacion as c', 'c.id', '=', 've.combinacion_id')
             ->leftJoin('talle as t', 't.id', '=', 've.talle_id')
-            ->whereNotNull('ve.articulo_id')
-            ->where(function ($origen) {
-                $origen->where('v.leyenda', self::LEYENDA_FACTURANTE)
-                    ->orWhereExists(function ($sub) {
-                        $sub->select(DB::raw(1))
-                            ->from('facturacion_local_emision as fle')
-                            ->where(function ($w) {
-                                $w->whereColumn('fle.venta_id', 'v.id')
-                                    ->orWhereColumn('fle.venta_nc_id', 'v.id');
-                            });
-                    });
-            });
+            ->whereNotNull('ve.articulo_id');
 
         $puntoventaIds = FacturacionLocalVentasArticulosReporteFiltros::idsPuntoventa($filtros);
         if ($puntoventaIds === []) {

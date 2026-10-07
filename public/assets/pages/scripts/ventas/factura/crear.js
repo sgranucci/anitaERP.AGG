@@ -494,9 +494,38 @@
 			});
 	}
 
+	function bultosFacturaFerliOk() {
+		var $bultos = $('#cantidadbulto');
+		if (!$bultos.length || $bultos.attr('type') === 'hidden') {
+			return true;
+		}
+		if ($('#formgeneral').attr('data-factura-proceso') !== 'factura') {
+			return true;
+		}
+		var cantidadbulto = typeof normalizarCantidadBulto === 'function'
+			? normalizarCantidadBulto($bultos.val())
+			: (parseInt($bultos.val(), 10) || 0);
+		if (cantidadbulto < 1 || cantidadbulto > 999999) {
+			alert('No permite facturar sin cargar bultos');
+			$bultos.trigger('focus');
+			return false;
+		}
+		$bultos.val(cantidadbulto);
+		var pvRemito = parseInt($('#puntoventaremito_id').val() || '0', 10) || 0;
+		if (!(pvRemito > 0)) {
+			alert('Elegí el punto de venta de remito.');
+			$('#puntoventaremito_id').trigger('focus');
+			return false;
+		}
+		return true;
+	}
+
 	window.validarSubmitFacturaConOverlay = function (event) {
 		if (event && typeof event.preventDefault === 'function') {
 			event.preventDefault();
+		}
+		if (!bultosFacturaFerliOk()) {
+			return false;
 		}
 		// false = bloqueado o re-disparo async con omitir; no detener overlay acá
 		// (el re-disparo anidado puede estar iniciando el AJAX en el mismo tick).
@@ -2671,9 +2700,7 @@
 		$.ajaxSetup({
 			headers: {
 				'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-			},
-			processData: false,  
-    		contentType: false, 
+			}
 		});
 		
 		let url = carpetaBase+"/ventas/calcula_factura_general";

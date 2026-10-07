@@ -20,7 +20,8 @@
                     <h5 class="mb-2">Armar o enviar</h5>
                     <p class="mb-3">
                         El stock sale de los depósitos configurados y los precios de las dos listas.
-                        A la hora configurada se envía solo. Estos botones son para hacerlo a mano.
+                        A la hora configurada se envía sola, de lunes a viernes. Los sábados, domingos y feriados no se envía sola.
+                        Estos botones son para hacerlo a mano.
                     </p>
                     <div class="d-flex flex-wrap align-items-center" style="gap:.75rem 1rem;">
                         @if ($enCurso)

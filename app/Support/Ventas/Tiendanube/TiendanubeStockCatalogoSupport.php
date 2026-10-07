@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas\Tiendanube;
 
+use App\Models\Configuracion\Feriado;
 use App\Models\Ventas\TiendanubeConfiguracion;
 use App\Models\Ventas\TiendanubeStockSubida;
 use App\Support\Configuracion\EntornoEmpresaSupport;
@@ -9,6 +10,7 @@ use App\Support\Stock\PrecioListaVigenteSupport;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -36,14 +38,10 @@ final class TiendanubeStockCatalogoSupport
             return [];
         }
 
-        $hora = Carbon::now()->format('H:i');
         $query = TiendanubeConfiguracion::query()->where('sube_stock', true);
         $storeId = trim((string) $storeId);
         if ($storeId !== '') {
             $query->where('store_id', $storeId);
-        }
-        if ($soloHoraActual) {
-            $query->where('hora_subida', $hora);
         }
 
         $out = [];
@@ -56,23 +54,98 @@ final class TiendanubeStockCatalogoSupport
                 'store_id' => $id,
                 'nombre' => TiendanubeTiendasSupport::nombre($id),
                 'marketplace_codigo' => (int) ($cfg->marketplace_codigo ?: 2),
-                'hora_subida' => trim((string) ($cfg->hora_subida ?: '14:00')),
+                'hora_subida' => self::normalizarHora((string) ($cfg->hora_subida ?: '14:00')) ?? '14:00',
                 'deposito_ids' => TiendanubeConfiguracionSupport::depositoIdsStock($id),
                 'listaprecio_precio_id' => (int) ($cfg->listaprecio_precio_id ?? 0),
                 'listaprecio_oferta_id' => (int) ($cfg->listaprecio_oferta_id ?? 0),
             ];
         }
 
+        if ($soloHoraActual) {
+            $out = array_values(array_filter(
+                $out,
+                static fn (array $tienda): bool => self::horaYaAlcanzada($tienda['hora_subida'])
+            ));
+        }
+
         return $out;
+    }
+
+    /**
+     * Lunes a viernes que no estén cargados en la tabla feriado.
+     * La subida manual no usa este corte.
+     */
+    public static function esDiaHabilSubidaAutomatica(?CarbonInterface $fecha = null): bool
+    {
+        $fecha = $fecha ?? Carbon::now();
+        if ($fecha->isWeekend()) {
+            return false;
+        }
+        if (! Schema::hasTable('feriado')) {
+            return true;
+        }
+
+        return ! Feriado::query()
+            ->where('fecha', $fecha->toDateString())
+            ->exists();
+    }
+
+    /** La hora configurada ya pasó (o es este minuto). Sirve para no perder el día si el cron no pega el minuto exacto. */
+    public static function horaYaAlcanzada(string $horaProgramada, ?CarbonInterface $ahora = null): bool
+    {
+        $hora = self::normalizarHora($horaProgramada);
+        if ($hora === null) {
+            return false;
+        }
+        $ahora = $ahora ?? Carbon::now();
+
+        return $ahora->format('H:i') >= $hora;
+    }
+
+    public static function cronYaCorrioHoy(string $storeId, string $horaProgramada, ?CarbonInterface $fecha = null): bool
+    {
+        if (! Schema::hasTable('tiendanube_stock_subida')) {
+            return false;
+        }
+        $dia = ($fecha ?? Carbon::now())->toDateString();
+
+        return TiendanubeStockSubida::query()
+            ->where('store_id', $storeId)
+            ->where('origen', TiendanubeStockSubida::ORIGEN_CRON)
+            ->where('hora_programada', self::normalizarHora($horaProgramada) ?? $horaProgramada)
+            ->where('inicio_at', '>=', $dia.' 00:00:00')
+            ->where('inicio_at', '<=', $dia.' 23:59:59')
+            ->exists();
     }
 
     public static function debeDispararCron(): bool
     {
-        if (! EntornoEmpresaSupport::esFerli()) {
+        if (! EntornoEmpresaSupport::esFerli() || ! self::esDiaHabilSubidaAutomatica()) {
             return false;
         }
 
-        return self::tiendasParaSubir(null, true) !== [];
+        foreach (self::tiendasParaSubir(null, true) as $tienda) {
+            if (! self::cronYaCorrioHoy($tienda['store_id'], $tienda['hora_subida'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function normalizarHora(string $hora): ?string
+    {
+        $hora = trim($hora);
+        if (preg_match('/^(\d{1,2}):(\d{2})/', $hora, $m) !== 1) {
+            return null;
+        }
+        $hh = (int) $m[1];
+        $mm = (int) $m[2];
+        if ($hh > 23 || $mm > 59) {
+            return null;
+        }
+
+        return sprintf('%02d:%02d', $hh, $mm);
     }
 
     public static function haySubidaEnCurso(): bool

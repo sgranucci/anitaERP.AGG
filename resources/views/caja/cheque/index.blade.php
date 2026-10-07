@@ -149,6 +149,11 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                     <small class="ml-2" style="opacity:.85;font-weight:400;">Workbench · consulta multi-campo</small>
                 </h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end" style="gap:.4rem;">
+                    @if ($puede_traer_cheque_anita ?? false)
+                    <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalTraerChequeAnita" title="Traer un cheque de terceros desde Anita por número interno">
+                        <i class="fa fa-download"></i> Traer de Anita
+                    </button>
+                    @endif
                     @if (can('crear-cheque', false))
                     <a href="{{ route('importar_cheque') }}" class="btn btn-outline-light btn-sm" title="Ingreso masivo">
                         <i class="fa fa-upload"></i> Importar
@@ -448,6 +453,9 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
     </div>
 </div>
 {{ $datas->appends($filtrosQuery ?? [])->links() }}
+@if ($puede_traer_cheque_anita ?? false)
+    @include('caja.cheque.modal_traer_anita')
+@endif
 @if ($puede_nd_cheque ?? false)
     @include('caja.cheque.modal_rechazo_nd')
 @endif

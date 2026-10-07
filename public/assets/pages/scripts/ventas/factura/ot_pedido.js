@@ -77,8 +77,23 @@
 		}
 	}
 
+	function clienteFacturaId() {
+		return parseInt($('#cliente_id').val() || '0', 10) || 0;
+	}
+
+	function consultarOt(params) {
+		return $.ajax({
+			url: cfg.consulta,
+			method: 'GET',
+			data: params,
+			dataType: 'json',
+			processData: true,
+			contentType: 'application/x-www-form-urlencoded; charset=UTF-8'
+		});
+	}
+
 	function elegir(fila) {
-		var clienteId = parseInt($('#cliente_id').val() || '0', 10);
+		var clienteId = clienteFacturaId();
 		var $tr = $filaDestino();
 		if (!$tr.length) {
 			return;
@@ -89,7 +104,7 @@
 			ordentrabajo_id: fila.ordentrabajo_id,
 			fecha: $('#fechafactura').val() || ''
 		};
-		$.get(cfg.consulta, params).done(function (data) {
+		consultarOt(params).done(function (data) {
 			if (data && data.error) {
 				alert(data.error);
 				return;
@@ -154,14 +169,14 @@
 	}
 
 	function buscar() {
-		var clienteId = parseInt($('#cliente_id').val() || '0', 10);
+		var clienteId = clienteFacturaId();
 		if (!(clienteId > 0)) {
 			return;
 		}
 		if (xhrBuscar && xhrBuscar.readyState !== 4) {
 			xhrBuscar.abort();
 		}
-		xhrBuscar = $.get(cfg.consulta, {
+		xhrBuscar = consultarOt({
 			cliente_id: clienteId,
 			q: $('#factura_ot_pedido_buscar').val() || ''
 		}).done(function (data) {
@@ -177,7 +192,7 @@
 	}
 
 	$(document).on('click', '.factura-abrir-ot-pedido', function () {
-		var clienteId = parseInt($('#cliente_id').val() || '0', 10);
+		var clienteId = clienteFacturaId();
 		if (!(clienteId > 0)) {
 			alert('Elegí el cliente de la factura.');
 			return;

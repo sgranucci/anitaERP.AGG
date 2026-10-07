@@ -173,6 +173,7 @@ class ChequeController extends Controller
         $puede_nd_cheque = can('generar-nota-de-debito-cheque', false)
             && ChequeNdConfigSupport::habilitado();
         $puede_depositar_cheque = can('editar-cheque', false) || can('actualizar-cheque', false);
+        $puede_traer_cheque_anita = $this->puedeTraerChequeAnita();
 
         return view('caja.cheque.index', [
             'datas' => $datas,
@@ -182,6 +183,7 @@ class ChequeController extends Controller
             'puede_nd_cheque' => $puede_nd_cheque,
             'puede_depositar_cheque' => $puede_depositar_cheque,
             'puede_caucionar_cheque' => $puede_depositar_cheque,
+            'puede_traer_cheque_anita' => $puede_traer_cheque_anita,
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
             'camposFiltro' => $camposFiltro,
@@ -766,6 +768,56 @@ class ChequeController extends Controller
         }
 
         return redirect()->route('cheque')->with('mensaje', $msg);
+    }
+
+    /**
+     * Trae un cheque de terceros desde Anita por número interno, con su estado actual.
+     */
+    public function traerDesdeAnita(Request $request)
+    {
+        if (! $this->puedeTraerChequeAnita()) {
+            abort(403);
+        }
+
+        $nro = (int) preg_replace('/\D/', '', (string) $request->input('nro_interno', ''));
+        if ($nro <= 0) {
+            return redirect()->route('cheque')->with('mensaje-error', 'Ingresá el número interno de Anita.');
+        }
+
+        try {
+            $resultado = $this->repository->traerCtermaePorNroInterno($nro);
+        } catch (InvalidArgumentException $e) {
+            return redirect()->route('cheque')->with('mensaje-error', $e->getMessage());
+        } catch (Exception $e) {
+            return redirect()->route('cheque')->with('mensaje-error', 'No se pudo traer el cheque: '.$e->getMessage());
+        }
+
+        $cheque = $resultado['cheque'];
+        $estado = (string) ($cheque->estado ?? ' ');
+        $estadoMeta = collect(Cheque::$enumEstado)->firstWhere('valor', $estado);
+        $estadoNombre = is_array($estadoMeta) ? (string) ($estadoMeta['nombre'] ?? '') : trim($estado);
+        if ($estadoNombre === '') {
+            $estadoNombre = 'DIFERIDO';
+        }
+        $monto = number_format((float) $cheque->monto, 2, ',', '.');
+        $ref = 'cheque '.($cheque->numerocheque ?: 's/n').' (interno '.$nro.', id '.$cheque->id.')';
+
+        if (! empty($resultado['ya_existia'])) {
+            $msg = 'El '.$ref.' ya estaba en el ERP y quedó con el estado actual de Anita: '.$estadoNombre.'. Monto '.$monto.'.';
+            if (! empty($resultado['estado_conservado'])) {
+                $msg .= ' El estado no se modificó porque el cheque ya tiene nota de débito.';
+            }
+        } else {
+            $msg = 'Se trajo desde Anita el '.$ref.' con estado '.$estadoNombre.'. Monto '.$monto.'.';
+        }
+
+        return redirect()->route('cheque', [
+            'filtro_modo' => 'campo',
+            'filtro_campo' => 'nro_interno_anita',
+            'filtro_operador' => 'igual',
+            'filtro_valor' => (string) $nro,
+            'empresa_id' => (int) $cheque->empresa_id,
+        ])->with('mensaje', $msg);
     }
 
     /**
@@ -1354,6 +1406,14 @@ class ChequeController extends Controller
             $busquedaRuta,
             $empresaDefault ? (int) $empresaDefault : null
         );
+    }
+
+    private function puedeTraerChequeAnita(): bool
+    {
+        return can('crear-cheque', false)
+            || can('editar-cheque', false)
+            || can('actualizar-cheque', false)
+            || can('generar-nota-de-debito-cheque', false);
     }
 
     private function disponiblesDesdeChequera(?Chequera $chequera): string

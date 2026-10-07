@@ -3787,6 +3787,8 @@ class FacturacionService
 					if (empty($opcionesEmision['transporte_id'])) {
 						$opcionesEmision['transporte_id'] = TransporteDepositoSupport::transporteIdDesdeFactura($data, $clienteGraba);
 					}
+					$opcionesEmision['cantidadbulto'] = $this->normalizarCantidadBulto($data['cantidadbulto'] ?? 0);
+					$opcionesEmision['puntoventaremito_id'] = (int) ($data['puntoventaremito_id'] ?? 0);
 				} elseif (! empty($opcionesEmision['origen_facturacion_local']) && empty($opcionesEmision['deposito_id'])) {
 					$depositoLocal = (int) ($data['deposito_id'] ?? 0);
 					if ($depositoLocal > 0) {
@@ -4876,6 +4878,19 @@ class FacturacionService
 		}
 		$transaccionExterna = DB::transactionLevel() > 0;
 
+		$remitoMostrador = $this->resolverRemitoMostrador(
+			$tipotransaccion,
+			$puntoventa,
+			(int) $numero,
+			is_array($opcionesEmision) ? $opcionesEmision : []
+		);
+		if (! empty($remitoMostrador['error'])) {
+			return ['error' => $remitoMostrador['error']];
+		}
+		$emiteRemitoMostrador = ! empty($remitoMostrador['emite']);
+		$codigoPuntoventaRemito = $emiteRemitoMostrador ? (int) ($remitoMostrador['puntoventa']->codigo ?? 0) : 0;
+		$numeroRemitoGrabado = $emiteRemitoMostrador ? (int) $remitoMostrador['numero'] : 0;
+
 		$numeroOrdenventa = 0;
 
 		// Graba la factura (participa en transacción externa si ya hay una abierta, ej. gastronomía).
@@ -4929,9 +4944,9 @@ class FacturacionService
 				'telefono' => $cliente->telefono,
 				'nroinscripcion' => $cliente->numerodocumento ?? $cliente->nroinscripcion ?? null,
 				'condicioniva_id' => $cliente->condicioniva_id,
-				'puntoventaremito_id' => null,
-				'numeroremito' => 0,
-				'cantidadbulto' => 1,
+				'puntoventaremito_id' => $emiteRemitoMostrador ? (int) $remitoMostrador['puntoventa']->id : null,
+				'numeroremito' => $numeroRemitoGrabado,
+				'cantidadbulto' => (int) ($remitoMostrador['cantidadbulto'] ?? 1),
 				'ordenventa_id' => $ordenventa_id,
 				'venta_origen_id' => $this->ventaOrigenIdAlGrabar(
 					$puntoventa,
@@ -5202,6 +5217,24 @@ class FacturacionService
 					(int) $depositoIdEmision
 				);
 			}
+			if ($emiteRemitoMostrador) {
+				$persistRemito = app(\App\Services\Ventas\RemitoService::class)->persistirDesdeFactura([
+					'venta' => $vta,
+					'pedido' => null,
+					'puntoventa_id' => (int) $remitoMostrador['puntoventa']->id,
+					'numero' => $numeroRemitoGrabado,
+					'items' => $dataFactura,
+					'origen' => 'factura',
+					'estadoremito' => \App\Support\Ventas\RemitoEstadosSupport::ESTADOREMITO_FACTURADO,
+					'estado' => 'F',
+					'venta_id' => $vta->id,
+					'pedido_id' => null,
+					'sin_transaction' => true,
+				]);
+				if (! empty($persistRemito['error'])) {
+					throw new \Exception('Error grabando remito ERP: '.$persistRemito['error']);
+				}
+			}
 			// Graba contabilidad
 			if (! $omitirContabilidad) {
 			$omitirAnitaAsientoMostrador = $omitirSincronizacionAnita
@@ -5220,6 +5253,7 @@ class FacturacionService
 				'factura' => substr($venta['codigo'], 0, 3).' '.$letra.' '.$puntoventa->codigo.'-'.$venta['numerocomprobante'],
 				'error' => '',
 				'venta_id' => $vta->id,
+				'remito_id' => $emiteRemitoMostrador ? (int) ($vta->fresh()->remito_id ?? 0) : 0,
 			];
 
 			if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido)
@@ -5240,8 +5274,8 @@ class FacturacionService
 						$ret['anita_pendiente'] = [
 							'puntoventa_codigo' => $puntoventa->codigo,
 							'letra' => $letra,
-							'puntoventaremito_codigo' => 0,
-							'numeroremito' => 0,
+							'puntoventaremito_codigo' => $codigoPuntoventaRemito,
+							'numeroremito' => $numeroRemitoGrabado,
 							'venta' => $venta,
 							'data_cae' => $dataCAE,
 							'conceptos_totales' => $conceptosTotales,
@@ -5265,7 +5299,7 @@ class FacturacionService
 						$replicacionAnitaIntentada = true;
 						PedidoFacturacionProfiler::etapa('anita_graba_inicio');
 						// Graba anita
-						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, 0, 0,
+						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $codigoPuntoventaRemito, $numeroRemitoGrabado,
 									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
 									$codigoTipoTransaccion, null,
 									true, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura,
@@ -8684,6 +8718,54 @@ class FacturacionService
 	{
 		return $tipotransaccion instanceof Tipotransaccion
 			&& $tipotransaccion->correspondeRemito();
+	}
+
+	/**
+	 * Remito del mostrador Ferli (no POS). Misma regla que facturar un pedido:
+	 * FAC/FCE y punto de venta de remito. El número del remito es el de la factura.
+	 *
+	 * @param  array<string, mixed>  $opcionesEmision
+	 * @return array{emite: bool, puntoventa: mixed, numero: int, cantidadbulto: int, error?: string}
+	 */
+	private function resolverRemitoMostrador($tipotransaccion, $puntoventa, int $numeroFactura, array $opcionesEmision): array
+	{
+		$bultos = array_key_exists('cantidadbulto', $opcionesEmision)
+			? $this->normalizarCantidadBulto($opcionesEmision['cantidadbulto'])
+			: 1;
+		$sinRemito = [
+			'emite' => false,
+			'puntoventa' => null,
+			'numero' => 0,
+			'cantidadbulto' => $bultos > 0 ? $bultos : 1,
+		];
+
+		if ($this->esEmisionPos([], $opcionesEmision) || ! EntornoEmpresaSupport::esFerli()) {
+			return $sinRemito;
+		}
+		if (! $this->tipoEmiteRemito($tipotransaccion) || FerliRinNumeracionSupport::aplica($tipotransaccion)) {
+			return $sinRemito;
+		}
+		if (! array_key_exists('puntoventaremito_id', $opcionesEmision)) {
+			return $sinRemito;
+		}
+
+		$pvRemitoId = (int) ($opcionesEmision['puntoventaremito_id'] ?? 0);
+		$puntoventaremito = $pvRemitoId > 0 ? $this->puntoventaRepository->find($pvRemitoId) : null;
+		if (! $puntoventaremito) {
+			return ['error' => 'Debe elegir el punto de venta de remito.'];
+		}
+
+		$numeroremito = $this->aplicarPoliticaNumeroRemitoFerli(true, $numeroFactura, 0);
+		if ((int) $numeroremito <= 0) {
+			return ['error' => 'No se pudo numerar el remito.'];
+		}
+
+		return [
+			'emite' => true,
+			'puntoventa' => $puntoventaremito,
+			'numero' => (int) $numeroremito,
+			'cantidadbulto' => $bultos,
+		];
 	}
 
 	/**

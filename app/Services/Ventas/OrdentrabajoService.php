@@ -1685,7 +1685,10 @@ class OrdentrabajoService
 			'puntera' => $this->prefijoCampoOt('PUNTERA: ', substr((string) ($doc['puntera'] ?? ''), 0, 30)),
 			'contrafuerte' => $this->prefijoCampoOt('CONTRAFUERTE: ', substr((string) ($doc['contrafuerte'] ?? ''), 0, 30)),
 			'empaque' => substr((string) ($doc['empaque'] ?? ''), 0, 60),
-			'empaque_fmt' => $this->prefijoCampoOt('AVIOS DE EMPAQUE: ', substr((string) ($doc['empaque'] ?? ''), 0, 60)),
+			'empaque_fmt' => $this->prefijoCampoOt(
+				OrdentrabajoEmisionTextoSupport::PREFIJO_EMPAQUE,
+				OrdentrabajoEmisionTextoSupport::cuerpoEmpaque((string) ($doc['empaque'] ?? '')),
+			),
 			'forrado_base_fmt' => $this->prefijoCampoOt('FORRADO BASE: ', substr($forradoBase, 0, 60)),
 			'forrado_fondo1' => $this->prefijoCampoOt(OrdentrabajoEmisionTextoSupport::PREFIJO_FORRO, $lineasForro[0]),
 			'forrado_fondo2' => $lineasForro[1],
@@ -1779,6 +1782,7 @@ class OrdentrabajoService
 			str_starts_with($k, 'cliente'), str_starts_with($k, 'material'), str_starts_with($k, 'aplique') => 160.0,
 			$k === 'forrado_fondo1' => OrdentrabajoEmisionTextoSupport::ANCHO_FORRO_LINEA1_MM,
 			$k === 'forrado_fondo2' => OrdentrabajoEmisionTextoSupport::ANCHO_FORRO_LINEA2_MM,
+			$k === 'empaque_fmt' => OrdentrabajoEmisionTextoSupport::ANCHO_EMPAQUE_MM,
 			default => 120.0,
 		};
 	}

@@ -24,6 +24,15 @@ final class TiendanubeStockSubidaService
     {
         $this->cerrarCorridasColgadas();
 
+        if ($origen === TiendanubeStockSubida::ORIGEN_CRON
+            && ! TiendanubeStockCatalogoSupport::esDiaHabilSubidaAutomatica()) {
+            return [
+                'ok' => true,
+                'mensaje' => 'Sábado, domingo o feriado: no se sube stock automáticamente.',
+                'subidas' => [],
+            ];
+        }
+
         $tiendas = TiendanubeStockCatalogoSupport::tiendasParaSubir($storeId, $soloHoraActual);
         if ($tiendas === []) {
             return [
@@ -642,12 +651,10 @@ final class TiendanubeStockSubidaService
      */
     private function cronYaCorrioHoy(array $tienda): bool
     {
-        return TiendanubeStockSubida::query()
-            ->where('store_id', $tienda['store_id'])
-            ->where('origen', TiendanubeStockSubida::ORIGEN_CRON)
-            ->where('hora_programada', $tienda['hora_subida'])
-            ->whereDate('inicio_at', Carbon::today())
-            ->exists();
+        return TiendanubeStockCatalogoSupport::cronYaCorrioHoy(
+            $tienda['store_id'],
+            $tienda['hora_subida']
+        );
     }
 
     private function cerrarCorridasColgadas(): void

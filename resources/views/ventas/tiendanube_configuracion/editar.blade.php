@@ -265,7 +265,7 @@ Configuraci&oacute;n Tiendanube
                     <div class="card card-outline card-info mb-3">
                         <div class="card-header py-2">
                             <strong><i class="fa fa-cloud-upload"></i> Subida diaria de stock y precios</strong>
-                            <span class="tn-cfg-hint ml-2">Una vez por d&iacute;a, a la hora indicada, para esta tienda.</span>
+                            <span class="tn-cfg-hint ml-2">Una vez por d&iacute;a h&aacute;bil, a la hora indicada. No corre s&aacute;bados, domingos ni feriados.</span>
                         </div>
                         <div class="card-body pb-2">
                             <div class="form-group row">

@@ -669,6 +669,8 @@ class Kernel extends ConsoleKernel
             ->when(fn () => EntornoEmpresaSupport::esFerli()
                 && (bool) config('tiendanube.sync_cron_habilitado', true));
 
+        // Una vez por día hábil, desde la hora configurada. Si ese minuto se pierde, reintenta
+        // el resto del día. Sábados, domingos y feriados no disparan.
         $schedule->command('tiendanube:subir-stock')
             ->everyMinute()
             ->runInBackground()

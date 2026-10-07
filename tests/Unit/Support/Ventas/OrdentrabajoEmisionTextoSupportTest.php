@@ -61,6 +61,35 @@ class OrdentrabajoEmisionTextoSupportTest extends TestCase
         );
     }
 
+    public function test_el_empaque_de_la_ot_31282_entra_entero(): void
+    {
+        $texto = 'ART.A35 1.20 NEGRO 22.00/MEMORY FOAM NEGRO 0.00';
+        $cuerpo = OrdentrabajoEmisionTextoSupport::cuerpoEmpaque($texto);
+        $linea = OrdentrabajoEmisionTextoSupport::PREFIJO_EMPAQUE.$cuerpo;
+
+        self::assertSame($texto, $cuerpo);
+        self::assertLessThanOrEqual(
+            OrdentrabajoEmisionTextoSupport::ANCHO_EMPAQUE_MM,
+            OrdentrabajoEmisionTextoSupport::anchoMm($linea)
+        );
+    }
+
+    public function test_un_empaque_largo_corta_en_el_espacio_y_no_a_media_palabra(): void
+    {
+        $texto = 'ART.A35 1.20 NEGRO 22.00/MEMORY FOAM NEGRO 0.00/'.str_repeat('CINTA LARGA ', 30);
+        $cuerpo = OrdentrabajoEmisionTextoSupport::cuerpoEmpaque($texto);
+        $linea = OrdentrabajoEmisionTextoSupport::PREFIJO_EMPAQUE.$cuerpo;
+
+        self::assertNotSame($texto, $cuerpo);
+        $resto = substr($texto, strlen($cuerpo));
+        self::assertNotSame('', $resto);
+        self::assertContains($resto[0], [' ', '/']);
+        self::assertLessThanOrEqual(
+            OrdentrabajoEmisionTextoSupport::ANCHO_EMPAQUE_MM,
+            OrdentrabajoEmisionTextoSupport::anchoMm($linea)
+        );
+    }
+
     public function test_sin_barra_de_material_corta_en_el_espacio(): void
     {
         $texto = str_repeat('PALABRA ', 40);

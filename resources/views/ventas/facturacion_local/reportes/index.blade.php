@@ -40,10 +40,11 @@
             <form method="get" action="{{ route('facturacion_local_reportes') }}" id="form-fl-ventas-articulos" class="mb-0">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        Ventas netas del local y de Facturante (facturas menos notas de crédito) por artículo,
-                        combinación/color y talle. Elija uno o varios puntos de venta, el rango de fechas y si abre por talle
-                        o cierra por artículo/combinación. Importe bruto es el precio de lista; Descuento, el de la línea;
-                        Importe venta, el neto cobrado. El tilde de costo agrega P.Vta., P.Costo e importe al costo
+                        Ventas del punto de venta (facturas menos notas de crédito: mostrador, Facturante y Tiendanube)
+                        por artículo, combinación/color y talle. Elija uno o varios puntos de venta, el rango de fechas y si
+                        abre por talle o cierra por artículo/combinación. Importe bruto es el precio de lista; Descuento, el
+                        de la línea; Importe venta, el precio grabado en la factura (con IVA). Gravado e IVA quedan en el
+                        comprobante, igual en letra A y en letra B. El tilde de costo agrega P.Vta., P.Costo e importe al costo
                         ({{ \App\Support\Ventas\FacturacionLocal\FacturacionLocalCostoFabricaSupport::etiquetaFormula() }}).
                         @if (can('editar-facturacion-local-parametro', false))
                             ·

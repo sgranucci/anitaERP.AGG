@@ -31,6 +31,7 @@ use App\ApiAnita;
 use DB;
 use Carbon\Carbon;
 use Exception;
+use InvalidArgumentException;
 
 class ChequeRepository implements ChequeRepositoryInterface
 {
@@ -1171,9 +1172,38 @@ class ChequeRepository implements ChequeRepositoryInterface
     }
 
     /**
+     * Alta o actualización de un CHT con el estado que tiene ahora en Anita.
+     *
+     * @return array{cheque: Cheque, ya_existia: bool, estado_conservado: bool}
+     */
+    public function traerCtermaePorNroInterno(int $nroInterno): array
+    {
+        if ($nroInterno <= 0) {
+            throw new InvalidArgumentException('El número interno tiene que ser mayor a cero.');
+        }
+
+        $fila = ChequeAnitaSyncSupport::leerCtermaePorNroInterno($nroInterno);
+        if ($fila === null) {
+            throw new InvalidArgumentException(
+                'No hay un cheque de terceros con interno '.$nroInterno.' en Anita.'
+            );
+        }
+
+        $previo = $this->findPorNroInternoAnita($nroInterno);
+        $estadoConservado = $previo !== null && (int) ($previo->venta_nd_id ?? 0) > 0;
+        $cheque = $this->importarFilaCtermae($fila);
+
+        return [
+            'cheque' => $cheque,
+            'ya_existia' => $previo !== null,
+            'estado_conservado' => $estadoConservado,
+        ];
+    }
+
+    /**
      * @param  object  $data
      */
-    private function importarFilaCtermae($data): void
+    private function importarFilaCtermae($data): Cheque
     {
         $nroInterno = (int) preg_replace('/\D/', '', (string) ($data->cter_nro_interno ?? '0'));
         if ($nroInterno <= 0) {
@@ -1230,10 +1260,10 @@ class ChequeRepository implements ChequeRepositoryInterface
             $existente->fill($attrs);
             $existente->save();
 
-            return;
+            return $existente;
         }
 
-        $this->model->create($attrs);
+        return $this->model->create($attrs);
     }
 
     public function findPorNroInternoAnita(int $nroInterno): ?Cheque

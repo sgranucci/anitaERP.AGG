@@ -385,9 +385,9 @@ class Pedido_CombinacionRepository implements Pedido_CombinacionRepositoryInterf
 					"incluyeimpuesto" => $incluyeimpuesto,
 					"moneda_id" => $moneda_id,
 					"descuento" => $descuento,
-					"categoria_id" => $categoria_id,
-					"subcategoria_id" => $subcategoria_id,
-					"linea_id" => $linea_id,
+					"categoria_id" => Pedido_Combinacion::idForaneoOpcional($categoria_id),
+					"subcategoria_id" => Pedido_Combinacion::idForaneoOpcional($subcategoria_id),
+					"linea_id" => Pedido_Combinacion::idForaneoOpcional($linea_id),
 					"ot_id" => $ot_id,
 					"observacion" => $observacion,
 					"codigo" => $codigo

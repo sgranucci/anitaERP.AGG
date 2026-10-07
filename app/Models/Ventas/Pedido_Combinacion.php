@@ -123,5 +123,35 @@ class Pedido_Combinacion extends Model implements Auditable
 			$value = 30;
         return ($value);
     }
+
+	public function setCategoriaIdAttribute($value): void
+	{
+		$this->attributes['categoria_id'] = self::idForaneoOpcional($value);
+	}
+
+	public function setSubcategoriaIdAttribute($value): void
+	{
+		$this->attributes['subcategoria_id'] = self::idForaneoOpcional($value);
+	}
+
+	public function setLineaIdAttribute($value): void
+	{
+		$this->attributes['linea_id'] = self::idForaneoOpcional($value);
+	}
+
+	/**
+	 * Anita deja categoría, subcategoría y línea en 0 cuando el artículo no tiene una.
+	 * Esas columnas son claves foráneas que aceptan vacío: el 0 no existe y corta el pedido.
+	 */
+	public static function idForaneoOpcional($value): ?int
+	{
+		if ($value === null || $value === '') {
+			return null;
+		}
+
+		$id = (int) $value;
+
+		return $id > 0 ? $id : null;
+	}
 }
 

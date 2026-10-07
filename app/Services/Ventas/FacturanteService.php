@@ -24,6 +24,7 @@ use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\ApiAnita;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
+use App\Support\Ventas\FacturanteLineaIvaSupport;
 use App\Support\Ventas\TipotransaccionOperacionStockSupport;
 use Exception;
 use SoapClient;
@@ -1182,6 +1183,9 @@ class FacturanteService
 			->value('id') ?? 0);
 
 		$dataFactura = $this->normalizarRenglonesErp($dataFactura, $cuentaVentaId);
+		$totalAbs = abs((float) ($venta['total'] ?? 0));
+		$dataFactura = FacturanteLineaIvaSupport::precioUnitarioConIva($dataFactura, $totalAbs);
+		$conceptosTotales = FacturanteLineaIvaSupport::conceptosComoEmisionLocal($dataFactura, $conceptosTotales);
 		$fecha = Carbon::parse($venta['fecha'])->format('Y-m-d');
 		$asiento = $this->facturacionService->armaContabilidad(
 			$this->renglonesNetosParaAsiento($dataFactura),

@@ -517,7 +517,9 @@
 			<select name="puntoventaremito_id" id="puntoventaremito_id" data-placeholder="Punto de venta del remito" class="col-lg-8 form-control required" data-fouc>
 			</select>
 		</div>
-		<input type="hidden" id="cantidadbulto" name="cantidadbulto" value="0"></input>
+		@if (! \App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
+		<input type="hidden" id="cantidadbulto" name="cantidadbulto" value="0">
+		@endif
 		@php
 			$depositoIdDefault = (int) config('facturacion.DEPOSITO_VENTA_ID', 1);
 			$depositoIdDesdeEmision = null;
@@ -938,6 +940,19 @@
 		@endif
 		<div class="row">
 			<div class="col-sm-6">
+				@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
+					@php
+						$cantidadBultoMostrada = old('cantidadbulto', $data->cantidadbulto ?? '');
+						if ($cantidadBultoMostrada === 0 || $cantidadBultoMostrada === '0') {
+							$cantidadBultoMostrada = '';
+						}
+					@endphp
+					<div class="form-group mb-2 d-flex align-items-center">
+						<label for="cantidadbulto" class="mb-0 mr-2 font-weight-bold">Cantidad de bultos</label>
+						<input type="number" id="cantidadbulto" name="cantidadbulto" class="form-control form-control-sm"
+							style="max-width:6rem;" value="{{ $cantidadBultoMostrada }}" min="0" step="1" inputmode="numeric">
+					</div>
+				@endif
                	<!-- textarea -->
 			   <div class="form-group" id="div_leyendafacturacion">
 	                <label>Leyendas</label>
