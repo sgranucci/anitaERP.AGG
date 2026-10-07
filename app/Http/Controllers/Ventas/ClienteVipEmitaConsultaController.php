@@ -92,7 +92,7 @@ class ClienteVipEmitaConsultaController extends Controller
         }
 
         $titulo = $this->titulo($modo);
-        $subtitulo = ($modo === EmitaClienteVipConsulta::MODO_ALIAS ? 'Alias' : 'Nombre').': '.$texto;
+        $subtitulo = ($modo === EmitaClienteVipConsulta::MODO_ALIAS ? 'Alias' : 'Nombre o alias').': '.$texto;
         if ($resultado['truncado']) {
             $subtitulo .= ' (se exportan los primeros '.EmitaClienteVipConsulta::TOPE_EXPORTACION.' de '.$resultado['total'].')';
         }

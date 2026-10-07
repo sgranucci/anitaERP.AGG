@@ -32,21 +32,37 @@ function abrirConsultaCuentaChequeEmitido($tr) {
     $('#consultacuentacajaModal').modal('show');
 }
 
+function chequeraTipoCoincide(ch, preferirDiferido) {
+    if (!ch) {
+        return false;
+    }
+    return preferirDiferido ? String(ch.tipocheque) === 'D' : String(ch.tipocheque) !== 'D';
+}
+
 function chequeraDesdeLista(lista, idActual, preferirDiferido) {
     lista = lista || [];
     if (!lista.length) {
         return null;
     }
     var actual = lista.find(function (c) { return String(c.id) === String(idActual || ''); });
-    if (actual) {
+    if (actual && chequeraTipoCoincide(actual, preferirDiferido)) {
         return actual;
     }
-    var preferidas = lista.filter(function (c) {
-        return preferirDiferido ? String(c.tipocheque) === 'D' : String(c.tipocheque) !== 'D';
-    });
-    var pool = preferidas.length ? preferidas : lista;
-    pool.sort(function (a, b) { return ((b.preferida ? 1 : 0) - (a.preferida ? 1 : 0)); });
-    return pool[0] || null;
+    var preferidas = lista.filter(function (c) { return chequeraTipoCoincide(c, preferirDiferido); });
+    if (preferidas.length) {
+        return preferidas[0];
+    }
+    return actual || lista[0] || null;
+}
+
+function aplicarNumeroSugeridoCheque($tr, $nro, data, forzarNumero) {
+    var auto = $nro.data('auto') === 1 || !$nro.val();
+    if (data.proximo_numero && (forzarNumero || auto)) {
+        $nro.val(data.proximo_numero).data('auto', 1);
+    } else if ((forzarNumero || auto) && data.aviso && !data.proximo_numero) {
+        $nro.val('').data('auto', 1);
+    }
+    sincronizarNroEcheqEmitido($tr);
 }
 
 function pintarChequeraEmitido($tr, ch) {
@@ -168,10 +184,7 @@ function aplicarCuentaChequeEmitido($tr, data, forzarNumero) {
         }
     }
     var $nro = $tr.find('.numerocheque_emitido');
-    var auto = $nro.data('auto') === 1 || !$nro.val();
-    if (data.proximo_numero && (forzarNumero || auto)) {
-        $nro.val(data.proximo_numero).data('auto', 1);
-    }
+    aplicarNumeroSugeridoCheque($tr, $nro, data, forzarNumero);
     var titulo = data.fuente_numero === 'chequera'
         ? 'Próximo de la chequera (talonario ERP)'
         : 'Numerador Anita';
@@ -204,7 +217,11 @@ function aplicarCuentaChequeEmitido($tr, data, forzarNumero) {
     } else if (data.aviso) {
         lbl = data.aviso;
     }
-    $tr.find('.tctes_emitido_lbl').text(lbl);
+    var $lblEmitido = $tr.find('.tctes_emitido_lbl');
+    $lblEmitido.text(lbl);
+    var agotada = !!(data.aviso && !data.proximo_numero);
+    $lblEmitido.toggleClass('text-danger', agotada);
+    $lblEmitido.toggleClass('text-muted', !agotada);
     if (typeof flModificaAsiento !== 'undefined') {
         flModificaAsiento = true;
     }
@@ -344,10 +361,7 @@ function aplicarCuentaChequeReemplazo($tr, data, forzarNumero) {
         }
     }
     var $nro = $tr.find('.numerocheque_reemplazo');
-    var auto = $nro.data('auto') === 1 || !$nro.val();
-    if (data.proximo_numero && (forzarNumero || auto)) {
-        $nro.val(data.proximo_numero).data('auto', 1);
-    }
+    aplicarNumeroSugeridoCheque($tr, $nro, data, forzarNumero);
     var titulo = data.fuente_numero === 'chequera'
         ? 'Próximo de la chequera (talonario ERP)'
         : 'Numerador Anita';
@@ -371,7 +385,11 @@ function aplicarCuentaChequeReemplazo($tr, data, forzarNumero) {
     } else if (data.aviso) {
         lbl = data.aviso;
     }
-    $tr.find('.tctes_reemplazo_lbl').text(lbl);
+    var $lblReemplazo = $tr.find('.tctes_reemplazo_lbl');
+    $lblReemplazo.text(lbl);
+    var agotadaReemplazo = !!(data.aviso && !data.proximo_numero);
+    $lblReemplazo.toggleClass('text-danger', agotadaReemplazo);
+    $lblReemplazo.toggleClass('text-muted', !agotadaReemplazo);
     if (typeof flModificaAsiento !== 'undefined') {
         flModificaAsiento = true;
     }
@@ -602,6 +620,14 @@ function activaEventosChequesIngresoEgreso() {
     $(document).on('change', '.fechapago_emitido', function () {
         var $tr = $(this).closest('tr');
         if (parseInt($tr.find('.cuentacaja_emitido_id').val() || '0', 10) > 0) {
+            var fechaPago = String($tr.find('.fechapago_emitido').val() || '');
+            var fechaEmi = String($('#fecha').val() || '');
+            var diferido = fechaPago !== '' && fechaEmi !== '' && fechaPago > fechaEmi;
+            var tipo = String($tr.find('.chequera_emitido_tipo').val() || '').toUpperCase();
+            var tipoOk = tipo !== '' && (diferido ? tipo === 'D' : tipo !== 'D');
+            if (!tipoOk) {
+                $tr.find('.chequera_emitido_id').val('');
+            }
             cargarEmisionChequeEmitido($tr, { forzarNumero: $tr.find('.numerocheque_emitido').data('auto') === 1 });
         }
     });

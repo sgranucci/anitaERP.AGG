@@ -305,7 +305,11 @@ final class CanjeMarketingCuentaService
     {
         $alias = trim((string) ($fila['alias'] ?? ''));
         $titular = trim((string) ($fila['nombre_apellido'] ?? ''));
+        $cuenta = trim((string) ($fila['cuenta_wigos'] ?? ''));
         $sala = trim((string) ($fila['sala'] ?? ''));
+        if ($titular === '' || $cuenta === '') {
+            throw new InvalidArgumentException('Este alias no tiene cliente Wigos creado. No se puede elegir.');
+        }
         $documento = $this->documentoEmita((string) ($fila['documento'] ?? ''));
         $partes = $this->partirNombreEmita($titular, $alias);
 

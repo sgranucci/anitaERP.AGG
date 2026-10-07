@@ -216,6 +216,15 @@ class AsientoRepository implements AsientoRepositoryInterface
 		$data['usuario_id'] = Auth::user()->id;
 
 		$asientoExistente = $this->model->find($id);
+		if (
+			$asientoExistente
+			&& array_key_exists('empresa_id', $data)
+			&& (int) $data['empresa_id'] !== (int) $asientoExistente->empresa_id
+		) {
+			throw new \InvalidArgumentException(
+				'No se puede cambiar la empresa de un asiento ya cargado.'
+			);
+		}
 		if ($asientoExistente) {
 			$dataParaValidar = array_merge($asientoExistente->toArray(), $data);
 			// Corregir un asiento ya grabado depende del cierre de Contable,

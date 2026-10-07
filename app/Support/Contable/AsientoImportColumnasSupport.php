@@ -67,6 +67,7 @@ final class AsientoImportColumnasSupport
         'cc',
         'ccos',
         'ccosto',
+        'c_costo',
         'codigo_cc',
         'cod_cc',
     ];

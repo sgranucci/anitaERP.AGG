@@ -40,9 +40,11 @@ $(function () {
             if (idx > 0) {
                 html += '<hr class="my-1">';
             }
-            var label = prefijo
-                ? (prefijo + ' ' + (c.numero || c.etiqueta || ''))
-                : (c.etiqueta || c.numero || '');
+            var label = (c.usar_etiqueta && c.etiqueta)
+                ? c.etiqueta
+                : (prefijo
+                    ? (prefijo + ' ' + (c.numero || c.etiqueta || ''))
+                    : (c.etiqueta || c.numero || ''));
             html += btnGrupo(c, label);
         });
         return html;
@@ -77,7 +79,7 @@ $(function () {
                     if (origen === 'requisicion' && (r.ordencompra || (r.coms && r.coms.length) || r.factura || (r.ops && r.ops.length))) return true;
                     if (origen === 'ordencompra' && (r.requisicion || (r.coms && r.coms.length) || r.factura || (r.ops && r.ops.length))) return true;
                     if (origen === 'recepcion' && (r.requisicion || r.ordencompra || r.factura || (r.ops && r.ops.length))) return true;
-                    if (origen === 'factura' && (r.requisicion || r.ordencompra || (r.coms && r.coms.length) || (r.ops && r.ops.length))) return true;
+                    if (origen === 'factura' && r.factura) return true;
                     return false;
                 }
 

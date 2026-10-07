@@ -31,7 +31,7 @@
 <table class="data">
     <thead>
         <tr>
-            <th>Nº</th><th>Fecha</th><th>Tipo</th><th>OC</th><th>Proveedor</th><th>Empresa</th><th>Estado</th><th>Diff.</th>
+            <th>Nº</th><th>Fecha</th><th>Tipo</th><th>COM origen</th><th>OC</th><th>Proveedor</th><th>Empresa</th><th>Estado</th><th>Diff.</th>
         </tr>
     </thead>
     <tbody>
@@ -40,6 +40,7 @@
             <td>{{ $row->numerorecepcion }}</td>
             <td>{{ $row->fecha ? date('d/m/Y', strtotime($row->fecha)) : '' }}</td>
             <td>{{ $row->tipo }}</td>
+            <td>{{ ($row->tipo ?? '') === 'DEVOLUCION' ? ($row->numerorecepcion_origen ?? '') : '' }}</td>
             <td>{{ $row->numeroordencompra }}</td>
             <td>{{ $row->nombreproveedor }}</td>
             <td>{{ $row->nombreempresa }}</td>

@@ -1,6 +1,10 @@
 @extends("theme.$theme.layout")
 @section('titulo')
+@if(($recepcion->tipo ?? '') === 'DEVOLUCION')
+Devolución {{ $recepcion->numerorecepcion }}
+@else
 Recepción {{ $recepcion->numerorecepcion }}
+@endif
 @endsection
 
 @section("scripts")
@@ -38,7 +42,14 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
             <div class="card-header">
                 <h3 class="card-title">
                     <i class="fa fa-truck"></i>
-                    Recepción {{ $recepcion->numerorecepcion }}
+                    @if(($recepcion->tipo ?? '') === 'DEVOLUCION')
+                        Devolución {{ $recepcion->numerorecepcion }}
+                        @if(! empty($recepcion->recepcion_referencia_id) && optional($recepcion->recepcion_referencia)->numerorecepcion)
+                            <span class="ml-2 font-weight-normal">COM origen {{ $recepcion->recepcion_referencia->numerorecepcion }}</span>
+                        @endif
+                    @else
+                        Recepción {{ $recepcion->numerorecepcion }}
+                    @endif
                     @if($recepcion->estado === 'BORRADOR')
                         <span class="badge badge-secondary ml-2">BORRADOR</span>
                     @elseif($recepcion->estado === 'CONFIRMADA')

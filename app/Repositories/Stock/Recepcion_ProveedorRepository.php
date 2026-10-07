@@ -57,6 +57,7 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
             'recepcion_proveedor_estados.usuarios',
             'recepcion_proveedor_archivos',
             'creousuarios',
+            'recepcion_referencia',
         ])->find($id);
 
         if (! $row) {
@@ -74,11 +75,13 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
                 'empresa.nombre as nombreempresa',
                 'proveedor.nombre as nombreproveedor',
                 'ordencompra.numeroordencompra',
+                'rp_origen.numerorecepcion as numerorecepcion_origen',
             ])
             ->selectRaw(RecepcionProveedorIntercompanySupport::selectEsIntercompanySql().' as es_intercompany')
             ->join('empresa', 'empresa.id', '=', 'recepcion_proveedor.empresa_id')
             ->join('proveedor', 'proveedor.id', '=', 'recepcion_proveedor.proveedor_id')
             ->join('ordencompra', 'ordencompra.id', '=', 'recepcion_proveedor.ordencompra_id')
+            ->leftJoin('recepcion_proveedor as rp_origen', 'rp_origen.id', '=', 'recepcion_proveedor.recepcion_referencia_id')
             ->orderByDesc('recepcion_proveedor.id');
 
         if (is_string($filtros)) {

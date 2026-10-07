@@ -85,6 +85,10 @@ use App\Support\Listado\QueryRetornoListado;
                         </tr>
                     </thead>
                     <tbody>
+                        @php
+                            $puedeVerComprobante = can('editar-comprobante-proveedor', false)
+                                || can('listar-comprobante-proveedor', false);
+                        @endphp
                         @foreach ($datas as $row)
                         @php
                             $numeroOc = $row->ordencompras->numeroordencompra ?? null;
@@ -94,13 +98,35 @@ use App\Support\Listado\QueryRetornoListado;
                             $badgeError = $errorAnita
                                 ? \App\Support\Compras\ComprobanteProveedorEstados::badge(null, true)
                                 : null;
+                            $tienePdfFactura = ($row->comprobante_proveedor_archivos ?? collect())->contains(
+                                fn ($a) => in_array($a->tipo ?? '', [
+                                    \App\Support\Compras\ComprobanteProveedorArchivoTipos::ORIGEN_IA,
+                                    \App\Support\Compras\ComprobanteProveedorArchivoTipos::FACTURA,
+                                ], true)
+                            );
                         @endphp
                         <tr>
-                            <td>{{ $row->id }}</td>
+                            <td class="text-nowrap">
+                                @if ($puedeVerComprobante)
+                                <a href="{{ route('editar_comprobante_proveedor', ['id' => $row->id] + $retornoListadoQuery) }}"
+                                   class="text-primary" title="Ver comprobante">{{ $row->id }}</a>
+                                @else
+                                {{ $row->id }}
+                                @endif
+                            </td>
                             <td><small>{{ $row->empresas->nombre ?? '' }}</small></td>
                             <td><small>{{ $row->proveedores->nombre ?? '' }}</small></td>
                             <td><small>{{ trim(($row->tipotransaccion_compras->abreviatura ?? '').' '.($row->tipotransaccion_compras->nombre ?? '')) }}</small></td>
-                            <td><small>{{ $row->letra }}{{ $row->sucursal }}-{{ $row->numerocomprobante }}</small></td>
+                            <td class="text-nowrap">
+                                <small>{{ $row->letra }}{{ $row->sucursal }}-{{ $row->numerocomprobante }}</small>
+                                @if ($puedeVerComprobante && $tienePdfFactura)
+                                <a href="{{ route('comprobante_proveedor_factura_pdf', ['id' => $row->id, 'inline' => 1]) }}"
+                                   class="btn-accion-tabla text-danger ml-1" target="_blank" rel="noopener"
+                                   title="Ver PDF de la factura">
+                                    <i class="fa fa-file-pdf-o"></i>
+                                </a>
+                                @endif
+                            </td>
                             <td>
                                 @if ($numeroOc !== null && $numeroOc !== '')
                                     @if ($ordencompraId > 0 && can('editar-ordencompra', false))

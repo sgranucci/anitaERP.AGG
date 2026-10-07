@@ -191,20 +191,28 @@
                 <strong class="mb-0"><i class="fa fa-calculator"></i> Preview asiento</strong>
                 <div class="d-flex flex-wrap align-items-center" style="gap:4px;">
                     <span id="cp-preview-asiento-status" class="small text-muted mr-1" aria-live="polite"></span>
+                    @if (empty($bloqueado_edicion))
                     <button type="button" class="btn btn-outline-secondary btn-sm" id="cp-refrescar-preview-conceptos" title="Recalcular">
                         <i class="fa fa-refresh"></i>
                     </button>
+                    @endif
                     <button type="button" class="btn btn-outline-info btn-sm" id="cp-ir-solapa-asiento" title="Abrir solapa completa">
                         <i class="fa fa-expand"></i> Completo
                     </button>
                 </div>
             </div>
             <div class="card-body p-2" style="max-height:70vh;overflow:auto;">
+                @if (! empty($bloqueado_edicion))
+                <p class="small text-muted mb-2">
+                    Asiento del comprobante. En esta consulta las cuentas no se modifican.
+                </p>
+                @else
                 <p class="small text-muted mb-2">
                     Vista previa: se actualiza al cambiar conceptos o montos.
                     Con OC el neto usa las cuentas de los artículos; sin OC/COM puede completar la cuenta
                     del neto en las líneas editables (al contabilizar se graba el asiento definitivo).
                 </p>
+                @endif
                 <div id="cp-asiento-preview-conceptos" class="cp-asiento-preview-target">
                     @include('compras.comprobante_proveedor.partials.solapa_asiento_contable_body', [
                         'asientoPreview' => $asientoPreview ?? ['activo' => false, 'es_preview' => true],

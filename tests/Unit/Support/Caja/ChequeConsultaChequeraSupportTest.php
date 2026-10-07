@@ -23,4 +23,22 @@ class ChequeConsultaChequeraSupportTest extends TestCase
         $this->assertSame(0, ChequeConsultaChequeraSupport::disponibles(43358605, 43357606, 43358605));
         $this->assertSame(10, ChequeConsultaChequeraSupport::disponibles(null, 1, 10));
     }
+
+    public function test_ultimo_dentro_de_rango_ignora_numeros_de_otra_chequera(): void
+    {
+        $numeros = [79179784, 79179791, 41561956];
+
+        $this->assertSame(79179784, ChequeConsultaChequeraSupport::ultimoDentroDeRango($numeros, 79179385, 79179784));
+        $this->assertSame(41561956, ChequeConsultaChequeraSupport::ultimoDentroDeRango($numeros, 41561956, 41562455));
+        $this->assertSame(0, ChequeConsultaChequeraSupport::ultimoDentroDeRango($numeros, 82020249, 82020648));
+    }
+
+    public function test_proximo_avisa_cuando_la_chequera_se_termina(): void
+    {
+        $this->assertSame('79179385', ChequeConsultaChequeraSupport::proximoNumeroEnRango(79179385, 79179784, 79179384, '148'));
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('La chequera 148 (79179385-79179784) no tiene más números');
+        ChequeConsultaChequeraSupport::proximoNumeroEnRango(79179385, 79179784, 79179784, '148');
+    }
 }

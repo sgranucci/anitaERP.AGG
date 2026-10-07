@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Contable\MayorPlanoCuenta;
 
 use App\Models\Caja\Cuentacaja;
+use App\Support\Caja\IngresoEgresoAsientoDescripcionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasCuitSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -108,7 +109,9 @@ class MayorPlanoCuentaEmisorEnricher
             $filas[$idx] = $this->aplicarEmisor($fila, $entidad, $codigo, $registro);
         }
 
-        return $this->completarCuitGastoBancario($filas);
+        return $this->completarEmisorYDescripcionIngresoEgreso(
+            $this->completarCuitGastoBancario($filas)
+        );
     }
 
     /**
@@ -162,6 +165,154 @@ class MayorPlanoCuentaEmisorEnricher
         }
 
         return $filas;
+    }
+
+    /**
+     * El ingreso/egreso guarda el texto en el detalle y la cuenta de caja en el
+     * medio de pago. El mayor de las cuentas de impuesto (214010.005, 532050.001)
+     * y de Mercado Pago mostraba el nombre del concepto IVA («Ley s/credito 33%»)
+     * y el código de emisor vacío: ctamov no tiene emisor y la línea del asiento
+     * se queda con el nombre del concepto.
+     *
+     * Acá el código es el de la cuenta de caja del movimiento y la descripción
+     * es el detalle que escribieron en el ERP.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function completarEmisorYDescripcionIngresoEgreso(array $filas): array
+    {
+        $ids = [];
+        foreach ($filas as $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+            $cajaId = (int) ($fila['caja_movimiento_id'] ?? 0);
+            if ($cajaId > 0) {
+                $ids[$cajaId] = $cajaId;
+            }
+        }
+
+        if ($ids === []
+            || ! Schema::hasTable('caja_movimiento')
+            || ! Schema::hasTable('caja_movimiento_cuentacaja')
+            || ! Schema::hasTable('cuentacaja')) {
+            return $filas;
+        }
+
+        $porMovimiento = $this->cuentasCajaDeMovimientos(array_values($ids));
+
+        foreach ($filas as $idx => $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+            $info = $porMovimiento[(int) ($fila['caja_movimiento_id'] ?? 0)] ?? null;
+            if ($info === null) {
+                continue;
+            }
+
+            $codigoActual = trim((string) ($fila['emisor'] ?? ''));
+            $cuenta = $this->cuentaCajaParaLinea($info['cuentas'], $codigoActual === '' && $this->esLineaGastoBancario($fila));
+            if ($codigoActual === '' && $cuenta !== null && $cuenta['codigo'] !== '') {
+                $codigoActual = $cuenta['codigo'];
+                $filas[$idx]['emisor'] = $cuenta['codigo'];
+                $filas[$idx]['emisor_entidad'] = MayorPlanoCuentaEmisorSupport::ENTIDAD_CUENTACAJA;
+                $filas[$idx]['cuentacaja_id'] = $cuenta['id'];
+                $filas[$idx]['emisor_deducido'] = false;
+                if (trim((string) ($filas[$idx]['emisor_nombre'] ?? '')) === '') {
+                    $filas[$idx]['emisor_nombre'] = $cuenta['nombre'];
+                }
+            }
+
+            $nombre = trim((string) ($filas[$idx]['emisor_nombre'] ?? ''));
+            if ($codigoActual !== '') {
+                $filas[$idx]['emisor_fmt'] = $nombre !== ''
+                    ? $codigoActual.' — '.$nombre
+                    : $codigoActual;
+            }
+
+            $detalle = trim((string) ($info['detalle'] ?? ''));
+            if ($this->esLineaGastoBancario($fila)
+                && ! IngresoEgresoAsientoDescripcionSupport::esGenerica($detalle)) {
+                $filas[$idx]['descripcion'] = $detalle;
+            }
+        }
+
+        return $filas;
+    }
+
+    /**
+     * @param  list<int>  $movimientoIds
+     * @return array<int, array{detalle: string, cuentas: list<array{id: int, codigo: string, nombre: string, banco_id: int, monto: float}>}>
+     */
+    private function cuentasCajaDeMovimientos(array $movimientoIds): array
+    {
+        $filas = DB::table('caja_movimiento as cm')
+            ->join('caja_movimiento_cuentacaja as cmc', 'cmc.caja_movimiento_id', '=', 'cm.id')
+            ->join('cuentacaja as cc', 'cc.id', '=', 'cmc.cuentacaja_id')
+            ->whereIn('cm.id', $movimientoIds)
+            ->get([
+                'cm.id',
+                'cm.detalle',
+                'cc.id as cuentacaja_id',
+                'cc.codigo',
+                'cc.nombre',
+                'cc.banco_id',
+                'cmc.monto',
+            ]);
+
+        $out = [];
+        foreach ($filas as $row) {
+            $id = (int) $row->id;
+            if (! isset($out[$id])) {
+                $out[$id] = [
+                    'detalle' => trim((string) ($row->detalle ?? '')),
+                    'cuentas' => [],
+                ];
+            }
+            $codigo = trim((string) ($row->codigo ?? ''));
+            if ($codigo === '') {
+                continue;
+            }
+            $out[$id]['cuentas'][] = [
+                'id' => (int) $row->cuentacaja_id,
+                'codigo' => $codigo,
+                'nombre' => trim((string) ($row->nombre ?? '')),
+                'banco_id' => (int) ($row->banco_id ?? 0),
+                'monto' => (float) ($row->monto ?? 0),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Una sola cuenta de caja: es el emisor del movimiento (Mercado Pago, un banco).
+     * Si hay varias, el gasto bancario usa la cuenta del banco por la que salió el dinero.
+     *
+     * @param  list<array{id: int, codigo: string, nombre: string, banco_id: int, monto: float}>  $cuentas
+     * @return array{id: int, codigo: string, nombre: string, banco_id: int, monto: float}|null
+     */
+    private function cuentaCajaParaLinea(array $cuentas, bool $gastoBancario): ?array
+    {
+        if ($cuentas === []) {
+            return null;
+        }
+        if (count($cuentas) === 1) {
+            return $cuentas[0];
+        }
+        if (! $gastoBancario) {
+            return null;
+        }
+
+        $conBanco = array_values(array_filter(
+            $cuentas,
+            static fn (array $cuenta): bool => (int) $cuenta['banco_id'] > 0
+        ));
+        $candidatas = $conBanco !== [] ? $conBanco : $cuentas;
+        usort($candidatas, static fn (array $a, array $b): int => $a['monto'] <=> $b['monto']);
+
+        return $candidatas[0];
     }
 
     /**

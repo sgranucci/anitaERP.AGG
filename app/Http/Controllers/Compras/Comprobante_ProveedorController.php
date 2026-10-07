@@ -288,7 +288,10 @@ class Comprobante_ProveedorController extends Controller
 
     public function editar(Request $request, int $id)
     {
-        can('editar-comprobante-proveedor');
+        // Listar alcanza para consultar (Control de Gestión, circuito). Actualizar sigue exigiendo su permiso.
+        if (! can('editar-comprobante-proveedor', false) && ! can('listar-comprobante-proveedor', false)) {
+            can('editar-comprobante-proveedor');
+        }
 
         $comprobante = $this->comprobanteRepository->find($id);
         if (! $comprobante) {
@@ -1178,6 +1181,34 @@ class Comprobante_ProveedorController extends Controller
         return ComprobanteProveedorUnicidadSupport::mensajeParaErrorPersistencia($prefijo, $e);
     }
 
+    /**
+     * Consulta sin actualizar: se ven las líneas del asiento, sin cuentas ni importes editables.
+     *
+     * @param  array<string, mixed>  $preview
+     * @return array<string, mixed>
+     */
+    private function asientoPreviewSoloLectura(array $preview): array
+    {
+        $preview['permite_reparto_gasto'] = false;
+        $preview['permite_editar_cuentas'] = false;
+        $lineas = $preview['lineas'] ?? [];
+        if (! is_array($lineas)) {
+            return $preview;
+        }
+
+        foreach ($lineas as $i => $linea) {
+            if (! is_array($linea)) {
+                continue;
+            }
+            $linea['editable_cuenta'] = false;
+            $linea['editable_importe'] = false;
+            $lineas[$i] = $linea;
+        }
+        $preview['lineas'] = $lineas;
+
+        return $preview;
+    }
+
     private function datosFormulario(array $prefill): array
     {
         $data = $prefill['data'] ?? null;
@@ -1210,7 +1241,8 @@ class Comprobante_ProveedorController extends Controller
         $puedeActualizar = (bool) $comprobanteId
             && ! $bloqueadoEdicion
             && can('actualizar-comprobante-proveedor', false);
-        $asientoPreview = ['activo' => ! $bloqueadoEdicion, 'es_preview' => true, 'lineas' => []];
+        // La solapa de asiento se muestra siempre. En solo lectura no se editan cuentas.
+        $asientoPreview = ['activo' => true, 'es_preview' => true, 'lineas' => []];
 
         $monedaFacturaId = (int) ($data->moneda_id ?? 1);
         $cotizacionFactura = (float) ($data->cotizacion ?? 0);
@@ -1273,6 +1305,8 @@ class Comprobante_ProveedorController extends Controller
                     $this->asientoPreviewSupport->avisosFaltantes($data),
                     $asientoPreview['error'] ?? null
                 );
+            } else {
+                $asientoPreview = $this->asientoPreviewSoloLectura($asientoPreview);
             }
         }
 
@@ -1492,7 +1526,7 @@ class Comprobante_ProveedorController extends Controller
             'url_devolver_compras' => $urlDevolverCompras,
             'com_resolucion' => $prefill['com_resolucion'] ?? $this->resolverComResolucionFormulario($data, $recepcionesSeleccionadas),
             'asientoPreview' => $asientoPreview,
-            'mostrarSolapaAsiento' => ! $bloqueadoEdicion,
+            'mostrarSolapaAsiento' => true,
             'tiene_pagos' => $tienePagos,
             'bloqueado_edicion' => $bloqueadoEdicion,
             'puede_actualizar' => $puedeActualizar,

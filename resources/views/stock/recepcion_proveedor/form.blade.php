@@ -185,6 +185,32 @@
 </div>
 
 <div id="rp-solapa-principal" class="rp-solapa">
+@php
+    $comOrigenDevolucion = null;
+    if (($recepcion->tipo ?? '') === 'DEVOLUCION' && ! empty($recepcion->recepcion_referencia_id)) {
+        $comOrigenDevolucion = $recepcion->recepcion_referencia;
+    }
+    $urlComOrigenDevolucion = $comOrigenDevolucion
+        ? route('editar_recepcion_proveedor', [
+            'id' => $comOrigenDevolucion->id,
+            'origen' => 'modal_consulta',
+            'vista' => 'consulta',
+        ])
+        : null;
+@endphp
+@if ($comOrigenDevolucion)
+<div class="alert alert-info py-2">
+    Esta devolución proviene del COM
+    <a href="{{ $urlComOrigenDevolucion }}" class="font-weight-bold text-primary" target="_blank" rel="noopener">
+        {{ $comOrigenDevolucion->numerorecepcion }}
+    </a>
+    @if (optional($comOrigenDevolucion->fecha)->format('d/m/Y'))
+        ({{ $comOrigenDevolucion->fecha->format('d/m/Y') }}).
+    @else
+        .
+    @endif
+</div>
+@endif
 <div class="form-group row">
     <label class="col-lg-2 col-form-label text-right">
         Nº OC

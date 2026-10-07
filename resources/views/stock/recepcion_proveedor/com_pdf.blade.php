@@ -66,12 +66,22 @@
     <tr>
         <td><strong>Estado:</strong> {{ $recepcion->estado }}</td>
         <td><strong>Tipo:</strong> {{ $recepcion->tipo }}</td>
-        <td><strong>Usuario:</strong> {{ optional($recepcion->creousuarios)->nombre ?? '—' }}</td>
+        <td>
+            @if($esDevolucionPdf && optional($recepcion->recepcion_referencia)->numerorecepcion)
+                <strong>COM origen:</strong> {{ $recepcion->recepcion_referencia->numerorecepcion }}
+            @else
+                <strong>Usuario:</strong> {{ optional($recepcion->creousuarios)->nombre ?? '—' }}
+            @endif
+        </td>
     </tr>
     <tr>
         <td><strong>Moneda:</strong> {{ $monedaPdf }}</td>
         <td><strong>Cotización:</strong> {{ $cotizacionFmt }}</td>
-        <td></td>
+        <td>
+            @if($esDevolucionPdf && optional($recepcion->recepcion_referencia)->numerorecepcion)
+                <strong>Usuario:</strong> {{ optional($recepcion->creousuarios)->nombre ?? '—' }}
+            @endif
+        </td>
     </tr>
 </table>
 

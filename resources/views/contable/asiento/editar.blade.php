@@ -25,6 +25,14 @@
             return;
         }
 
+        if (typeof window.asientoMensajeCentroCostoFaltante === 'function') {
+            var mensajeCentroCosto = window.asientoMensajeCentroCostoFaltante();
+            if (mensajeCentroCosto) {
+                alert(mensajeCentroCosto);
+                return;
+            }
+        }
+
         let flError = false;
 
         $("#tbody-cuenta-table .moneda").each(function() {

@@ -4,6 +4,7 @@ namespace App\Repositories\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorListadoFiltros;
 
 class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepositoryInterface
@@ -79,7 +80,19 @@ class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepository
             ->leftJoin('proveedor', 'proveedor.id', '=', 'comprobante_proveedor.proveedor_id')
             ->leftJoin('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'comprobante_proveedor.tipotransaccion_compra_id')
             ->leftJoin('ordencompra', 'ordencompra.id', '=', 'comprobante_proveedor.ordencompra_id')
-            ->with(['empresas', 'proveedores', 'tipotransaccion_compras', 'ordencompras:id,numeroordencompra'])
+            ->with([
+                'empresas',
+                'proveedores',
+                'tipotransaccion_compras',
+                'ordencompras:id,numeroordencompra',
+                'comprobante_proveedor_archivos' => static function ($q) {
+                    $q->select('id', 'comprobante_proveedor_id', 'tipo')
+                        ->whereIn('tipo', [
+                            ComprobanteProveedorArchivoTipos::ORIGEN_IA,
+                            ComprobanteProveedorArchivoTipos::FACTURA,
+                        ]);
+                },
+            ])
             // Más nuevo a más viejo por fecha de contabilización (IVA). El histórico
             // Anita tiene ids altos y fechas viejas, así que el id solo desempata.
             ->orderByDesc('comprobante_proveedor.fechaiva')

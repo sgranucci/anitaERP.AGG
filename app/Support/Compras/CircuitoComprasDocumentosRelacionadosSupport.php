@@ -61,7 +61,7 @@ final class CircuitoComprasDocumentosRelacionadosSupport
      */
     public static function armarDesdeRecepcion(Recepcion_Proveedor $rec): array
     {
-        $rec->loadMissing('ordencompras.requisiciones');
+        $rec->loadMissing(['ordencompras.requisiciones', 'recepcion_referencia']);
         $oc = $rec->ordencompras instanceof Ordencompra ? $rec->ordencompras : null;
         $req = $oc?->requisiciones instanceof Requisicion ? $oc->requisiciones : null;
 
@@ -70,12 +70,13 @@ final class CircuitoComprasDocumentosRelacionadosSupport
         $bloqueReq = $req ? self::bloqueRequisicion($req) : null;
         $bloqueOc = $oc ? self::bloqueOrdencompra($oc) : null;
         $bloqueCom = self::bloqueCom($rec);
+        $comsCircuito = self::comsConOrigenDevolucion($rec, $bloqueCom);
 
         if ($facturas->isEmpty()) {
             $filas = [[
                 'requisicion' => $bloqueReq,
                 'ordencompra' => $bloqueOc,
-                'coms' => [$bloqueCom],
+                'coms' => $comsCircuito,
                 'factura' => null,
                 'ops' => [],
             ]];
@@ -87,7 +88,7 @@ final class CircuitoComprasDocumentosRelacionadosSupport
                     'ordencompra' => $bloqueOc ?? ($fact->ordencompras instanceof Ordencompra
                         ? self::bloqueOrdencompra($fact->ordencompras)
                         : null),
-                    'coms' => [$bloqueCom],
+                    'coms' => $comsCircuito,
                     'factura' => self::bloqueFactura($fact),
                     'ops' => self::bloquesOpParaComprobante((int) $fact->id),
                 ];
@@ -293,6 +294,26 @@ final class CircuitoComprasDocumentosRelacionadosSupport
         }
 
         return $bloque;
+    }
+
+    /**
+     * En una devolución, el circuito muestra primero el COM del que sale.
+     *
+     * @param  array<string, mixed>  $bloquePropio
+     * @return list<array<string, mixed>>
+     */
+    private static function comsConOrigenDevolucion(Recepcion_Proveedor $rec, array $bloquePropio): array
+    {
+        $origen = $rec->recepcion_referencia;
+        if ($rec->tipo !== Recepcion_Proveedor::TIPO_DEVOLUCION || ! $origen instanceof Recepcion_Proveedor) {
+            return [$bloquePropio];
+        }
+
+        $bloqueOrigen = self::bloqueCom($origen);
+        $bloqueOrigen['etiqueta'] = 'COM origen '.((string) ($origen->numerorecepcion ?? $origen->id));
+        $bloqueOrigen['usar_etiqueta'] = true;
+
+        return [$bloqueOrigen, $bloquePropio];
     }
 
     /**

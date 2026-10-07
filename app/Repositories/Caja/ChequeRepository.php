@@ -8,6 +8,7 @@ use App\Models\Caja\Estadocheque_Banco;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
 use App\Support\Caja\ChequeAnitaSyncSupport;
+use App\Support\Caja\ChequeConsultaChequeraSupport;
 use App\Support\Caja\ChequeListadoColumnas;
 use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Caja\ChequePropioAnitaNumeracionSupport;
@@ -561,6 +562,9 @@ class ChequeRepository implements ChequeRepositoryInterface
             $fechaPago = (string) ($fechasPago[$i] ?? $fechaOperacion);
             $chequeraId = ($chequeraIds[$i] ?? '') !== '' ? (int) $chequeraIds[$i] : null;
             $chequera = $chequeraId ? $this->chequeraRepository->find($chequeraId) : null;
+            if ($chequera) {
+                ChequeConsultaChequeraSupport::assertNumeroDentroDeChequera($chequera, $numero);
+            }
             $negociable = ChequePropioInstrumentoSupport::negociable(
                 (string) ($negociables[$i] ?? ''),
                 (string) ($chequera->tipochequera
@@ -780,6 +784,9 @@ class ChequeRepository implements ChequeRepositoryInterface
                 }
                 $chequeraId = ($chequeraReemplazo[$i] ?? '') !== '' ? (int) $chequeraReemplazo[$i] : $anulado->chequera_id;
                 $chequera = $chequeraId ? $this->chequeraRepository->find($chequeraId) : null;
+                if ($chequera) {
+                    ChequeConsultaChequeraSupport::assertNumeroDentroDeChequera($chequera, (string) $numeroReemplazo);
+                }
                 $negociable = ChequePropioInstrumentoSupport::negociable(
                     (string) ($anulado->negociable ?? ''),
                     (string) ($chequera->tipochequera

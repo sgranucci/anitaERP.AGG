@@ -26,9 +26,9 @@ use Illuminate\Support\Facades\DB;
  * Exportación pagos Banco Macro (diskette).
  *
  * Filtra OP como p-enviamacro.c:
- * - Anita: auxpag con axp_banco = cuenta elegida y tipo TMR/TMK/TMB (transf) o CHP/CPC (cheque)
- * - ERP: movimientos/cheques de la cuentacaja Macro seleccionada
- *   (incluye canje/reemplazo CANJE como IEV: el cheque nuevo con cheque_reemplaza_id)
+ * - Transferencias: Anita (auxpag TMR/TMK/TMB) y, si la OP no está ahí, el ERP.
+ * - Cheques: siempre el ERP (cheque.numerocheque de la cuenta). Anita ya no
+ *   aporta el número: auxpag/cpromae queda desactualizado cuando se renumera.
  * - Excluye revertidas/anuladas: AOP en Anita (mismo nro), cpro_fecha_anula, estado ERP
  *
  * Canal: config macro.canal (archivo hoy; webservice después).
@@ -421,49 +421,10 @@ class MacroArchivoPagoService
                 }
 
                 if (in_array($tAp, $tiposCheque, true)) {
-                    $nroCh = (int) ($axp->axp_nro ?? 0);
-                    $fechaCh = (int) ($axp->axp_fecha_co ?? 0);
-                    $cheque = $this->anitaReader->leerCheque($cuentaAnita, $nroCh, $fechaCh, $errores);
-                    if (MacroArchivoPagoAnitaReader::chequeAnuladoEnCpromae($cheque)) {
-                        continue;
-                    }
-                    if ($cheque === null) {
-                        // Sin cpromae: igual exporta con datos de auxpag (importe/fecha)
-                        $impCh = $imp;
-                        $emi = (string) $fechaCh;
-                        $fechChStr = (string) $fechaCh;
-                        $paraDep = ' ';
-                    } else {
-                        $impCh = round(abs((float) ($cheque->cpro_importe ?? $imp)), 2);
-                        $emi = (string) ($cheque->cpro_fecha_emision ?? $fechaCh);
-                        $fechChStr = (string) ($cheque->cpro_fecha_cheque ?? $fechaCh);
-                        $paraDep = strtoupper(substr(trim((string) ($cheque->cpro_para_dep ?? '')), 0, 1));
-                    }
-                    $modalidad = MacroArchivoPagoFormatoSupport::modalidadCheque($emi, $fechChStr);
-                    $orden = MacroArchivoPagoFormatoSupport::ordenPagoCheque($tipo, $suc, $rec, $nroCh);
-                    $ordenPagoRtn = $orden;
-                    $filas[] = [
-                        'origen' => 'Anita',
-                        'medio' => 'cheque',
-                        'proveedor_codigo' => $proCod,
-                        'proveedor_nombre' => $nombre,
-                        'cuit' => $cuit,
-                        'tipo' => $tipo,
-                        'sucursal' => $suc,
-                        'numero' => $rec,
-                        'fecha' => $fechaPag,
-                        'fecha_cheque' => self::fechaYmd($fechChStr),
-                        'cbu' => '',
-                        'importe' => $impCh,
-                        'orden_pago' => $orden,
-                        'cuenta_debito' => $cuentaDebito,
-                        'referencia_cbu_o_cheque' => (string) $nroCh,
-                        'modalidad' => $modalidad,
-                        'flag_entrega' => $paraDep === 'E' ? 1 : 2,
-                        'sucursal_banco' => $sucursalBanco,
-                    ];
-                    $envioOp = true;
-                } else {
+                    // El número vigente está en cheque.numerocheque. Lo agrega recolectarErp.
+                    continue;
+                }
+
                     $cbuAux = CbuSupport::normalizar((string) ($axp->axp_cbu ?? ''));
                     $cbuProp = CbuSupport::normalizar((string) ($prop?->prop_cbu ?? ''));
                     $cbu = $cbuAux !== '' ? $cbuAux : $cbuProp;
@@ -496,7 +457,6 @@ class MacroArchivoPagoService
                         'sucursal_banco' => $sucursalBanco,
                     ];
                     $envioOp = true;
-                }
             }
 
             if ($envioOp && $cuit !== '') {
@@ -652,9 +612,8 @@ class MacroArchivoPagoService
 
         foreach ($ops as $op) {
             $claveOp = $this->claveOp((string) $op->tipocomprobante, (int) $op->numerotransaccion);
-            if (isset($opsAnita[$claveOp])) {
-                continue;
-            }
+            // Anita puede tener la misma OP (transferencia). El cheque igual sale del ERP.
+            $yaEnAnita = isset($opsAnita[$claveOp]);
 
             $prov = $op->proveedores;
             $cuit = MacroArchivoPagoFormatoSupport::cuit11((string) ($prov->nroinscripcion ?? ''));
@@ -711,7 +670,7 @@ class MacroArchivoPagoService
                 }
             }
 
-            if ($incluirTransf) {
+            if ($incluirTransf && ! $yaEnAnita) {
                 $usaCuenta = false;
                 foreach ($op->caja_movimientos as $mov) {
                     foreach ($mov->caja_movimiento_cuentacajas as $cmc) {
@@ -773,7 +732,7 @@ class MacroArchivoPagoService
                 }
             }
 
-            if ($agrego && $cuit !== '') {
+            if ($agrego && $cuit !== '' && ! $yaEnAnita) {
                 $beneficiarios[$cuit] = $this->beneficiarioDesdeProveedorErp($prov, $cuit, $codigo, $nombre);
                 $compsErp = $this->comprobantesDesdePagoproveedor($op);
                 if ($compsErp !== []) {

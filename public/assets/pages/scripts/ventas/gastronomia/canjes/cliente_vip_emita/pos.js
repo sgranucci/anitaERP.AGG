@@ -26,6 +26,9 @@
         modo = nuevoModo === 'alias' ? 'alias' : 'nombre';
         $('#modal-cm-vip-emita-title').text(modo === 'alias' ? 'Clientes VIP Emita por alias' : 'Clientes VIP Emita por nombre');
         $('#cm-vip-emita-label').text(modo === 'alias' ? 'Alias' : 'Nombre y apellido');
+        $('#cm-vip-emita-ayuda').text(modo === 'alias'
+            ? 'Los alias sin cliente Wigos se ven al final y no se pueden elegir. La lupa de Cliente VIP sigue buscando el padrón del ERP.'
+            : 'Busca el nombre de Wigos o el alias de una cuenta con nombre Wigos. La lupa de Cliente VIP sigue buscando el padrón del ERP.');
         $('#cm-vip-emita-texto').val('');
         aviso('');
         $('#cm-vip-emita-tbody').html('<tr><td colspan="10" class="text-muted text-center">Indique un texto y consulte.</td></tr>');
@@ -39,13 +42,16 @@
         }
         let html = '';
         filas.forEach(function (fila) {
-            const elegir = '<button type="button" class="btn btn-warning btn-sm cm-emita-elegir"'
-                + ' data-sala="' + escapar(fila.sala) + '"'
-                + ' data-origen="' + escapar(fila.origen) + '"'
-                + ' data-cuenta="' + escapar(fila.cuenta_wigos) + '"'
-                + ' data-nombre="' + escapar(fila.nombre_apellido) + '"'
-                + ' data-documento="' + escapar(fila.documento) + '"'
-                + ' data-alias="' + escapar(fila.alias) + '">Elegir</button>';
+            const conWigos = String(fila.cuenta_wigos || '').trim() !== '' && String(fila.nombre_apellido || '').trim() !== '';
+            const elegir = conWigos
+                ? '<button type="button" class="btn btn-warning btn-sm cm-emita-elegir"'
+                    + ' data-sala="' + escapar(fila.sala) + '"'
+                    + ' data-origen="' + escapar(fila.origen) + '"'
+                    + ' data-cuenta="' + escapar(fila.cuenta_wigos) + '"'
+                    + ' data-nombre="' + escapar(fila.nombre_apellido) + '"'
+                    + ' data-documento="' + escapar(fila.documento) + '"'
+                    + ' data-alias="' + escapar(fila.alias) + '">Elegir</button>'
+                : '<span class="text-muted small">Sin cliente Wigos</span>';
             html += '<tr>'
                 + '<td>' + escapar(fila.sala) + '</td>'
                 + '<td>' + escapar(fila.origen) + '</td>'

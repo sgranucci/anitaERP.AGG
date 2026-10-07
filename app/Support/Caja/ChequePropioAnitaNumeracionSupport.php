@@ -57,12 +57,14 @@ final class ChequePropioAnitaNumeracionSupport
                 $tctes = self::listarTctesCheque((string) $cuenta->codigo);
                 $elegido = self::elegirTctes($tctes, $diferido);
                 if ($elegido !== null) {
-                    if ($proximo === null) {
+                    // Si la chequera elegida se terminó, no seguir por el numerador
+                    // Anita: ese contador no conoce el fin del talonario y fue lo que
+                    // emitió números fuera de la chequera activa sin avisar.
+                    if ($proximo === null && $aviso === null) {
                         $proximo = self::leerProximoNumero((int) $elegido['numero']);
                         $fuenteNumero = 'anita';
-                        $aviso = null;
                     }
-                } elseif ($proximo === null) {
+                } elseif ($proximo === null && $aviso === null) {
                     $aviso = 'La cuenta no tiene tipo de comprobante Anita con numerador de cheques (tctes).';
                 }
             } catch (\Throwable $e) {
@@ -70,7 +72,7 @@ final class ChequePropioAnitaNumeracionSupport
                     'cuentacaja_id' => $cuenta->id,
                     'error' => $e->getMessage(),
                 ]);
-                if ($proximo === null) {
+                if ($proximo === null && $aviso === null) {
                     $aviso = 'No se pudo leer el numerador Anita: '.$e->getMessage();
                 }
             }

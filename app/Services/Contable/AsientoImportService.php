@@ -205,6 +205,8 @@ class AsientoImportService
             $totalHaber += (float) $evaluacion['haber'];
         }
 
+        $this->abortarSiFaltaCentrocostoObligatorio($filasOmitidas);
+
         if (count($movimientos) < 2) {
             $lineas = ['Se necesitan al menos dos movimientos válidos para armar el asiento.'];
             foreach ($erroresFila as $linea) {
@@ -325,6 +327,40 @@ class AsientoImportService
             'pendiente_aprobacion' => $evaluacionCuentas['requiere_aprobacion'],
             'errores_muestra' => $erroresFila,
         ];
+    }
+
+    /**
+     * No graba un asiento parcial si alguna línea exige centro de costo y el Excel no lo trae.
+     *
+     * @param  list<array<string, mixed>>  $filasOmitidas
+     */
+    private function abortarSiFaltaCentrocostoObligatorio(array $filasOmitidas): void
+    {
+        $sinCentro = [];
+        foreach ($filasOmitidas as $fila) {
+            if (($fila['motivo'] ?? '') === 'centrocosto_obligatorio') {
+                $sinCentro[] = $fila;
+            }
+        }
+
+        if ($sinCentro === []) {
+            return;
+        }
+
+        $lineas = [
+            'No se importó el asiento: hay cuentas que manejan centro de costo y el Excel no lo informa.',
+        ];
+        $muestra = array_slice($sinCentro, 0, 30);
+        foreach ($muestra as $fila) {
+            $lineas[] = $this->previewService->lineaErrorFila($fila);
+        }
+
+        $resto = count($sinCentro) - count($muestra);
+        if ($resto > 0) {
+            $lineas[] = 'Hay '.$resto.' fila(s) más sin centro de costo.';
+        }
+
+        throw new \InvalidArgumentException(implode("\n", $lineas));
     }
 
     /**

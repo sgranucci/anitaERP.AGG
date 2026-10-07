@@ -7,6 +7,7 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
 use App\Support\Archivo\TextoUtf8Support;
+use App\Support\Contable\AsientoCentrocostoObligatorioSupport;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
 use App\Support\Contable\AsientoImportColumnasSupport;
 use Illuminate\Http\UploadedFile;
@@ -223,6 +224,17 @@ class AsientoImportPreviewService
         $desbalancePorOmitidas = $columnasOk
             && ! $resumen['balanceado']
             && $this->desbalanceExplicadoPorOmitidas($resumen['diferencia'], $resumenOmitidas);
+        $sinCentrocostoObligatorio = 0;
+        foreach ($filasOmitidas as $filaOmitida) {
+            if (($filaOmitida['motivo'] ?? '') === 'centrocosto_obligatorio') {
+                $sinCentrocostoObligatorio++;
+            }
+        }
+
+        if ($sinCentrocostoObligatorio > 0) {
+            $advertencias[] = 'Hay '.$sinCentrocostoObligatorio
+                .' fila(s) de cuentas que manejan centro de costo y el Excel no lo informa. Esas imputaciones no se cargan.';
+        }
 
         if ($filasOmitidas !== []) {
             $advertencias[] = $resumenOmitidas['resumen'];
@@ -253,6 +265,7 @@ class AsientoImportPreviewService
         }
 
         $ok = $columnasOk
+            && $sinCentrocostoObligatorio === 0
             && $resumen['importables'] >= 2
             && $resumen['balanceado'];
 
@@ -301,15 +314,17 @@ class AsientoImportPreviewService
             'advertencias' => $advertencias,
             'mensaje' => $ok
                 ? null
-                : ($columnasOk
-                    ? ($resumen['importables'] < 2
-                        ? 'Se necesitan al menos dos movimientos válidos para armar el asiento.'
-                        : (! $resumen['balanceado']
-                            ? ($desbalancePorOmitidas
-                                ? 'Hay filas que no entran al asiento. El desbalance coincide con esos importes.'
-                                : 'Corrija el desbalance Debe/Haber antes de importar.')
-                            : 'No hay filas importables con la configuración actual.'))
-                    : 'Configure empresa, columna de cuenta y Debe/Haber antes de importar.'),
+                : ($sinCentrocostoObligatorio > 0
+                    ? 'Complete el centro de costo en las cuentas que lo manejan antes de importar.'
+                    : ($columnasOk
+                        ? ($resumen['importables'] < 2
+                            ? 'Se necesitan al menos dos movimientos válidos para armar el asiento.'
+                            : (! $resumen['balanceado']
+                                ? ($desbalancePorOmitidas
+                                    ? 'Hay filas que no entran al asiento. El desbalance coincide con esos importes.'
+                                    : 'Corrija el desbalance Debe/Haber antes de importar.')
+                                : 'No hay filas importables con la configuración actual.'))
+                        : 'Configure empresa, columna de cuenta y Debe/Haber antes de importar.')),
         ], $hojas, $hojaSeleccionada);
     }
 
@@ -443,6 +458,11 @@ class AsientoImportPreviewService
             }
             $base['centrocosto_id'] = (int) $cc->id;
             $base['centrocosto_nombre'] = (string) $cc->nombre;
+        } elseif (AsientoCentrocostoObligatorioSupport::maneja($cuenta->manejaccosto ?? null)) {
+            $base['mensaje'] = 'La cuenta maneja centro de costo y el Excel no lo informa';
+            $base['motivo'] = 'centrocosto_obligatorio';
+
+            return $base;
         }
 
         if ($monedaTexto !== '') {

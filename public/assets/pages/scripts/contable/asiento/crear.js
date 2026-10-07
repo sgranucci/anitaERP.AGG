@@ -1049,6 +1049,38 @@
 		return { ok: true };
 	}
 
+	function cuentaManejaCentroCosto($tr) {
+		var flag = String($tr.attr('data-manejaccosto') || '');
+		if (flag === 'S' || flag === '1') {
+			return true;
+		}
+		if (flag === 'N') {
+			return false;
+		}
+
+		var empresaId = parseInt($('#empresa_id').val(), 10) || 0;
+		var codigo = $.trim($tr.find('.codigocuentacontable').first().val() || '');
+		if (!empresaId || !codigo) {
+			return false;
+		}
+
+		var maneja = false;
+		$.ajax({
+			url: carpetaBase + '/contable/cuentacontable/leercuentacontableporcodigo/'
+				+ empresaId + '/' + encodeURIComponent(codigo),
+			type: 'GET',
+			async: false,
+			success: function (data) {
+				maneja = !!(data && (data.manejaccosto === 'S' || data.manejaccosto === '1' || data.manejaccosto === 1));
+				if (data && data.manejaccosto !== undefined) {
+					$tr.attr('data-manejaccosto', maneja ? 'S' : 'N');
+				}
+			}
+		});
+
+		return maneja;
+	}
+
 	function validarCentrosCostoObligatorios() {
 		var mensaje = null;
 		$('#tbody-cuenta-table tr.item-cuenta').each(function () {
@@ -1062,23 +1094,24 @@
 				return;
 			}
 			var cuentaId = parseInt($tr.find('.cuentacontable_id').first().val(), 10) || 0;
-			if (cuentaId <= 0) {
+			var codigo = $.trim($tr.find('.codigocuentacontable').first().val() || '');
+			if (cuentaId <= 0 && !codigo) {
 				return;
 			}
-			var flag = String($tr.attr('data-manejaccosto') || '');
-			if (flag !== 'S' && flag !== '1') {
+			if (!cuentaManejaCentroCosto($tr)) {
 				return;
 			}
-			var cc = parseInt($tr.find('.centrocosto').val() || $tr.find('.centrocosto_id_previo').val() || '0', 10) || 0;
+			var cc = parseInt($tr.find('.centrocosto').val() || '0', 10) || 0;
 			if (cc > 0) {
 				return;
 			}
-			var codigo = $.trim($tr.find('.codigocuentacontable').first().val() || '');
 			mensaje = 'Indique el centro de costo de la cuenta ' + (codigo || cuentaId) + '.';
 			$tr.find('.centrocosto').trigger('focus');
 		});
 		return mensaje;
 	}
+
+	window.asientoMensajeCentroCostoFaltante = validarCentrosCostoObligatorios;
 
 	function enviarFormularioAsiento(confirmarPendiente) {
 		var resolucionCuentas = asegurarCuentasContablesResueltasAntesDeEnviar();

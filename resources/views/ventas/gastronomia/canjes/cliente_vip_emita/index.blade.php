@@ -36,7 +36,11 @@
                 <input type="hidden" name="consultar" value="1">
                 <div class="card-body">
                     <p class="text-muted mb-3">
-                        Consulta la base de clientes VIP de Emita (cuenta Wigos con alias, o alias sin cuenta) que tienen última visita.
+                        @if ($modo === 'alias')
+                            Consulta la base de clientes VIP de Emita (cuenta Wigos con alias, o alias sin cuenta) que tienen última visita.
+                        @else
+                            Busca cuentas Wigos con última visita. El texto puede estar en el nombre y apellido de Wigos o en el alias, siempre que esa cuenta tenga un nombre Wigos asociado. Los alias sin cuenta se consultan en Por alias.
+                        @endif
                         La consulta de clientes VIP del ERP sigue en el menú Clientes VIP.
                     </p>
                     <div class="form-group row mb-0">

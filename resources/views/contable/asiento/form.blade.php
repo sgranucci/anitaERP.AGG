@@ -12,9 +12,18 @@
                     'empresa_query' => $empresa_query,
                     'empresa_id' => $data->empresa_id ?? session('empresa_id'),
                     'mostrar_id' => true,
+                    'solo_lectura' => isset($data) && ! empty($data->id),
                     'col_label' => 'col-lg-4 text-right pr-2',
                     'col_input' => 'col-lg-7',
                 ])
+                @if (isset($data) && ! empty($data->id))
+                    <div class="form-group row" style="margin-top:-0.75rem;">
+                        <div class="col-lg-4"></div>
+                        <div class="col-lg-7">
+                            <small class="form-text text-muted mb-0">La empresa no se puede cambiar en un asiento ya cargado.</small>
+                        </div>
+                    </div>
+                @endif
                 <div class="form-group row">
                     <label for="tipoasiento_id" class="col-lg-4 control-label text-right pr-2">Tipo de asiento</label>
                     <div class="col-lg-7">
@@ -249,7 +258,14 @@
             <tbody id="tbody-cuenta-table">
             @if ($data->asiento_movimientos ?? '') 
                 @foreach (old('cuenta', $data->asiento_movimientos->count() ? $data->asiento_movimientos : ['']) as $cuenta)
-                    <tr class="item-cuenta">
+                    @php
+                        $manejaCcLinea = 'N';
+                        if (is_object($cuenta) && ! empty($cuenta->cuentacontables)) {
+                            $flagCc = (string) ($cuenta->cuentacontables->manejaccosto ?? 'N');
+                            $manejaCcLinea = in_array($flagCc, ['S', 's', '1'], true) ? 'S' : 'N';
+                        }
+                    @endphp
+                    <tr class="item-cuenta" data-manejaccosto="{{ $manejaCcLinea }}">
                         <td>
                             @php
                                 $ctaIdLinea = (int) ($cuenta->cuentacontable_id ?? 0);

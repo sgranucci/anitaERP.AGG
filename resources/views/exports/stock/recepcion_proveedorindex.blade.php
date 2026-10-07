@@ -1,12 +1,13 @@
 <table>
     <thead>
         <tr>
-            <th colspan="10" style="font-size:14px;font-weight:bold;text-align:center;">Listado de recepciones de proveedores</th>
+            <th colspan="11" style="font-size:14px;font-weight:bold;text-align:center;">Listado de recepciones de proveedores</th>
         </tr>
         <tr>
             <th>Nº recepción</th>
             <th>Fecha</th>
             <th>Tipo</th>
+            <th>COM origen</th>
             <th>Nº OC</th>
             <th>Estado</th>
             <th>Proveedor</th>
@@ -22,6 +23,7 @@
             <td>{{ $row->numerorecepcion }}</td>
             <td>{{ $row->fecha ? date('d/m/Y', strtotime($row->fecha)) : '' }}</td>
             <td>{{ $row->tipo }}</td>
+            <td>{{ ($row->tipo ?? '') === 'DEVOLUCION' ? ($row->numerorecepcion_origen ?? '') : '' }}</td>
             <td>{{ $row->numeroordencompra }}</td>
             <td>{{ $row->estado }}</td>
             <td>{{ $row->nombreproveedor }}</td>

@@ -65,6 +65,7 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                             <th>Nº recepción</th>
                             <th>Fecha</th>
                             <th>Tipo</th>
+                            <th>COM origen</th>
                             <th>OC</th>
                             <th>Proveedor</th>
                             <th>Empresa</th>
@@ -90,6 +91,16 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                             </td>
                             <td>{{ $row->fecha ? date('d/m/Y', strtotime($row->fecha)) : '' }}</td>
                             <td>{{ $row->tipo }}</td>
+                            <td>
+                                @if(($row->tipo ?? '') === 'DEVOLUCION' && ! empty($row->recepcion_referencia_id) && ! empty($row->numerorecepcion_origen))
+                                <a href="{{ route('editar_recepcion_proveedor', ['id' => $row->recepcion_referencia_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                   class="text-primary" target="_blank" rel="noopener" title="Abrir el COM del que sale esta devolución">
+                                    {{ $row->numerorecepcion_origen }}
+                                </a>
+                                @else
+                                —
+                                @endif
+                            </td>
                             <td>
                                 @if($row->ordencompra_id && (can('editar-ordencompra', false) || can('listar-ordencompra', false)))
                                 <a href="{{ route('editar_ordencompra', ['id' => $row->ordencompra_id]) }}"

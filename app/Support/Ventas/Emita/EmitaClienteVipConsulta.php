@@ -8,8 +8,9 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Clientes VIP de Emita: misma base (Wigos con alias + alias sin cuenta) con última visita.
- * El texto se filtra en SQL (nombre y apellido, o alias).
+ * Clientes VIP de Emita con última visita.
+ * Por nombre: titular de Wigos o el alias mostrado, y siempre con nombre Wigos.
+ * Por alias: alias de la cuenta Wigos o alias sin cuenta.
  */
 final class EmitaClienteVipConsulta
 {
@@ -36,7 +37,7 @@ final class EmitaClienteVipConsulta
 
         $pdo = EmitaSqlServer::conectar();
         $total = $this->contar($pdo, $modo, $like);
-        $sql = $this->sql($modo, false).' ORDER BY sala, origen, alias OFFSET '.(int) $offset.' ROWS FETCH NEXT '.(int) $porPagina.' ROWS ONLY';
+        $sql = $this->sql($modo, false).$this->orden().' OFFSET '.(int) $offset.' ROWS FETCH NEXT '.(int) $porPagina.' ROWS ONLY';
 
         return [
             'filas' => $this->ejecutar($pdo, $sql, $modo, $like),
@@ -55,7 +56,7 @@ final class EmitaClienteVipConsulta
         $pdo = EmitaSqlServer::conectar();
         $total = $this->contar($pdo, $modo, $like);
         $tope = self::TOPE_EXPORTACION;
-        $sql = $this->sql($modo, false).' ORDER BY sala, origen, alias OFFSET 0 ROWS FETCH NEXT '.$tope.' ROWS ONLY';
+        $sql = $this->sql($modo, false).$this->orden().' OFFSET 0 ROWS FETCH NEXT '.$tope.' ROWS ONLY';
 
         return [
             'filas' => $this->ejecutar($pdo, $sql, $modo, $like),
@@ -138,7 +139,22 @@ final class EmitaClienteVipConsulta
      */
     private function parametros(string $modo, string $like): array
     {
-        return $modo === self::MODO_ALIAS ? [$like, $like, $like] : [$like];
+        if ($modo === self::MODO_ALIAS) {
+            return [$like, $like, $like];
+        }
+
+        return [$like, $like, $like, $like, $like];
+    }
+
+    /**
+     * Cuentas con nombre y número Wigos primero. Alias sin cliente Wigos al final.
+     */
+    private function orden(): string
+    {
+        return " ORDER BY CASE"
+            ." WHEN NULLIF(LTRIM(RTRIM(nombre_apellido)), '') IS NOT NULL"
+            ." AND NULLIF(LTRIM(RTRIM(CONVERT(varchar(40), cuenta_wigos))), '') IS NOT NULL THEN 0"
+            ." ELSE 1 END, sala, alias";
     }
 
     private function sql(string $modo, bool $contar): string
@@ -168,10 +184,21 @@ SELECT
 SQL;
 
         return <<<SQL
-WITH candidatos AS (
+WITH alias_hit AS (
+    SELECT ta.cliente_id
+    FROM dbo.tracking_manual_alias ta
+    WHERE ta.cliente_id IS NOT NULL
+      AND ta.alias COLLATE Latin1_General_CI_AI LIKE ?
+),
+candidatos AS (
     SELECT c.id
     FROM dbo.clientes c
-    WHERE c.titular COLLATE Latin1_General_CI_AI LIKE ?
+    WHERE NULLIF(LTRIM(RTRIM(c.titular)), '') IS NOT NULL
+      AND (
+          c.titular COLLATE Latin1_General_CI_AI LIKE ?
+          OR ISNULL(c.alias, '') COLLATE Latin1_General_CI_AI LIKE ?
+          OR c.id IN (SELECT cliente_id FROM alias_hit)
+      )
 ),
 kpi_vigente AS (
     SELECT
@@ -207,6 +234,10 @@ LEFT JOIN alias_vinculado av ON av.cliente_id = c.id AND av.rn = 1
 LEFT JOIN kpi_vigente kv ON kv.cliente_id = c.id AND kv.rn = 1
 WHERE (NULLIF(LTRIM(RTRIM(c.alias)), '') IS NOT NULL OR av.cliente_id IS NOT NULL)
   AND kv.ultima_visita IS NOT NULL
+  AND (
+      c.titular COLLATE Latin1_General_CI_AI LIKE ?
+      OR COALESCE(NULLIF(LTRIM(RTRIM(c.alias)), ''), av.alias) COLLATE Latin1_General_CI_AI LIKE ?
+  )
 SQL;
     }
 

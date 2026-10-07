@@ -93,10 +93,77 @@ final class ChequeConsultaChequeraSupport
     }
 
     /**
+     * Mayor número ya emitido que cae dentro del rango (aunque el cheque
+     * haya quedado asociado a otra chequera de la misma cuenta).
+     *
+     * @param  list<int>  $numeros
+     */
+    public static function ultimoDentroDeRango(array $numeros, int $desde, int $hasta): int
+    {
+        $ultimo = 0;
+        foreach ($numeros as $n) {
+            $n = (int) $n;
+            if ($n >= $desde && $n <= $hasta && $n > $ultimo) {
+                $ultimo = $n;
+            }
+        }
+
+        return $ultimo;
+    }
+
+    /**
+     * @throws \RuntimeException
+     */
+    public static function proximoNumeroEnRango(int $desde, int $hasta, int $ultimo, string $codigoChequera = ''): string
+    {
+        if ($desde <= 0) {
+            $desde = 1;
+        }
+        if ($hasta <= 0) {
+            $hasta = 99999999;
+        }
+        $sig = max($desde, $ultimo + 1);
+        if ($sig > $hasta) {
+            $codigo = trim($codigoChequera) !== '' ? trim($codigoChequera) : 's/n';
+            $ultimoTxt = $ultimo > 0 ? (string) $ultimo : 'ninguno';
+
+            throw new \RuntimeException(
+                'La chequera '.$codigo.' ('.$desde.'-'.$hasta.') no tiene más números. '
+                .'El último usado es '.$ultimoTxt.'. '
+                .'Hay que dar de alta la chequera nueva antes de emitir otro eCheq.'
+            );
+        }
+
+        return (string) $sig;
+    }
+
+    /**
+     * Corta la grabación si el número no entra en la chequera elegida.
+     *
+     * @throws \RuntimeException
+     */
+    public static function assertNumeroDentroDeChequera(Chequera $chequera, string $numero): void
+    {
+        $n = (int) preg_replace('/\D/', '', $numero);
+        $desde = (int) preg_replace('/\D/', '', (string) ($chequera->desdenumerocheque ?? ''));
+        $hasta = (int) preg_replace('/\D/', '', (string) ($chequera->hastanumerocheque ?? ''));
+        if ($desde <= 0 || $hasta <= 0 || $n < $desde || $n > $hasta) {
+            $codigo = trim((string) ($chequera->codigo ?? '')) ?: ('#'.$chequera->id);
+
+            throw new \RuntimeException(
+                'El eCheq '.$n.' está fuera de la chequera '.$codigo
+                .' ('.$desde.'-'.$hasta.'). '
+                .'Ese número no se puede emitir: la chequera activa se terminó o el talonario elegido es otro.'
+            );
+        }
+    }
+
+    /**
      * Próximo número del talonario ERP (mismo criterio que OP por propuesta).
      *
-     * `numerocheque` es varchar: hay que castear (MAX textual: '9' gana a '10').
-     * Con `$lock` serializa dos emisiones concurrentes sobre la misma chequera.
+     * Cuenta los números ya emitidos en la cuenta de tesorería que caen dentro
+     * del rango. Un número cargado en otra chequera igual consume este talonario.
+     * Un número fuera de rango no agota la chequera ni habilita seguir por Anita.
      *
      * @throws \InvalidArgumentException|\RuntimeException
      */
@@ -125,21 +192,32 @@ final class ChequeConsultaChequeraSupport
             $hasta = 99999999;
         }
 
-        $cast = SqlDialectSupport::castEntero('numerocheque');
-        $ultimo = (int) (Cheque::query()
-            ->where('chequera_id', $chequeraId)
-            ->where('origen', 'E')
-            ->selectRaw('MAX('.$cast.') as ultimo')
-            ->value('ultimo') ?: ($desde - 1));
+        $numeros = self::numerosEmitidosCuenta((int) $chequera->cuentacaja_id);
+        $ultimoEnRango = self::ultimoDentroDeRango($numeros, $desde, $hasta);
+        $ultimo = $ultimoEnRango > 0 ? $ultimoEnRango : ($desde - 1);
 
-        $sig = max($desde, $ultimo + 1);
-        if ($sig > $hasta) {
-            throw new \RuntimeException(
-                'Chequera #'.$chequeraId.' sin números disponibles (rango '.$desde.'-'.$hasta.').'
-            );
+        return self::proximoNumeroEnRango($desde, $hasta, $ultimo, (string) ($chequera->codigo ?? ''));
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function numerosEmitidosCuenta(int $cuentacajaId): array
+    {
+        if ($cuentacajaId <= 0) {
+            return [];
         }
 
-        return (string) $sig;
+        $cast = SqlDialectSupport::castEntero('numerocheque');
+
+        return Cheque::query()
+            ->where('origen', 'E')
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->whereRaw($cast.' > 0')
+            ->selectRaw($cast.' as nro')
+            ->pluck('nro')
+            ->map(static fn ($n) => (int) $n)
+            ->all();
     }
 
     /**
@@ -192,6 +270,13 @@ final class ChequeConsultaChequeraSupport
             if ($cmp !== 0) {
                 return $cmp;
             }
+            // La que se está usando (último número más alto) queda primera,
+            // aunque esté agotada: así el aviso de "se terminó" no se saltea
+            // eligiendo otro talonario viejo que todavía tenga números.
+            $cmp = ((int) ($b['ultimo'] ?? 0)) <=> ((int) ($a['ultimo'] ?? 0));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
 
             return strcmp((string) $a['codigo'], (string) $b['codigo']);
         });
@@ -210,16 +295,29 @@ final class ChequeConsultaChequeraSupport
             return [];
         }
 
-        $cast = SqlDialectSupport::castEntero('numerocheque');
+        $chequeras = Chequera::query()
+            ->whereIn('id', $ids)
+            ->get(['id', 'cuentacaja_id', 'desdenumerocheque', 'hastanumerocheque']);
+        if ($chequeras->isEmpty()) {
+            return [];
+        }
 
-        return Cheque::query()
-            ->whereIn('chequera_id', $ids)
-            ->where('origen', 'E')
-            ->selectRaw('chequera_id, MAX('.$cast.') as ultimo')
-            ->groupBy('chequera_id')
-            ->pluck('ultimo', 'chequera_id')
-            ->map(static fn ($v) => (int) $v)
-            ->all();
+        $numerosPorCuenta = [];
+        $out = [];
+        foreach ($chequeras as $ch) {
+            $cuentaId = (int) $ch->cuentacaja_id;
+            if (! array_key_exists($cuentaId, $numerosPorCuenta)) {
+                $numerosPorCuenta[$cuentaId] = self::numerosEmitidosCuenta($cuentaId);
+            }
+            $desde = (int) preg_replace('/\D/', '', (string) ($ch->desdenumerocheque ?? ''));
+            $hasta = (int) preg_replace('/\D/', '', (string) ($ch->hastanumerocheque ?? ''));
+            $ultimo = self::ultimoDentroDeRango($numerosPorCuenta[$cuentaId], $desde, $hasta);
+            if ($ultimo > 0) {
+                $out[(int) $ch->id] = $ultimo;
+            }
+        }
+
+        return $out;
     }
 
     /**
