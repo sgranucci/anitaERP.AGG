@@ -706,6 +706,11 @@ class RecepcionProveedorService
         ?int $depositoCabeceraId = null,
         bool $esDevolucion = false
     ): array {
+        $items = array_values(array_filter(
+            $items,
+            static fn ($item): bool => is_array($item) && ! RecepcionProveedorArticuloExtraSupport::itemExtraVacio($item)
+        ));
+
         if ($items === []) {
             throw new \RuntimeException('Debe cargar al menos un ítem.');
         }

@@ -223,7 +223,7 @@ class RecepcionProveedorOrdencompraResolverService
             }
 
             $cantidadInicial = ParametroSistemaSupport::noPrecargarCantidadRecibida()
-                ? 0.0
+                ? null
                 : $cantidadPendiente;
 
             $penvpOrden = (int) ($ocArt->penvp_orden ?? 0);
@@ -274,7 +274,7 @@ class RecepcionProveedorOrdencompraResolverService
                 'fl_cerrar_linea_oc' => false,
                 'comentario_diferencia' => '',
                 'motivorechazo' => '',
-                'cantidad_stock' => RecepcionProveedorConversionSupport::cantidadStock($cantidadInicial, $coefEfectivo),
+                'cantidad_stock' => RecepcionProveedorConversionSupport::cantidadStock((float) ($cantidadInicial ?? 0), $coefEfectivo),
                 'coeficienteconversion' => $coefEfectivo,
                 'coeficiente_proveedor' => $coefProveedor,
                 'coeficiente_articulo' => $coefArticulo > 0 ? $coefArticulo : 1,
