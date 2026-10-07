@@ -53,6 +53,11 @@ class ValidacionRecepcionProveedor extends FormRequest
             }
         }
 
+        $items = array_values(array_filter(
+            $items,
+            static fn ($item): bool => is_array($item) && ! RecepcionProveedorArticuloExtraSupport::itemExtraVacio($item)
+        ));
+
         $this->merge(['items' => $items]);
     }
 

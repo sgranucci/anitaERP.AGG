@@ -442,7 +442,8 @@
 <div class="d-flex justify-content-between align-items-center mb-2">
     <h5 class="mb-0">Ítems</h5>
     @if(!$soloLectura && !($modoDevolucion ?? false) && $puedeAgregarArticuloExtra)
-    <button type="button" class="btn btn-sm btn-outline-primary" id="btn-agregar-extra">
+    <button type="button" class="btn btn-sm btn-outline-primary" id="btn-agregar-extra"
+            title="Agrega un renglón que no está en la OC. Puede ir sin cargo (precio 0) y se puede sumar otro sin guardar.">
         <i class="fa fa-plus"></i> Agregar artículo extra (no pedido en OC)
     </button>
     @endif
@@ -737,6 +738,7 @@
     window.recepcionProveedorPuedeConsultarOc = @json($puedeConsultarOc);
     window.recepcionProveedorPuedeModificarPrecio = @json($puedeModificarPrecio);
     window.recepcionProveedorPuedeAgregarArticuloExtra = @json($puedeAgregarArticuloExtra);
+    window.recepcionProveedorNoPrecargarCantidad = @json(\App\Support\Configuracion\ParametroSistemaSupport::noPrecargarCantidadRecibida());
     window.recepcionProveedorPuedeIntercompany = @json($puedeIntercompanyRecepcion);
     window.recepcionProveedorEmpresaNombreOc = @json($empresaNombreOc);
     window.recepcionProveedorDepositoCabeceraEmpresaNombre = @json($empresaDepositoNombre);

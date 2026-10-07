@@ -76,7 +76,7 @@ final class ParametroSistemaSupport
             self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => [
                 'grupo' => 'Recepción de proveedor',
                 'etiqueta' => 'No precargar cantidad recibida',
-                'ayuda' => 'Activo: al traer la orden de compra, la cantidad recibida arranca en 0 y hay que cargarla. Inactivo: se completa con el pendiente de la orden.',
+                'ayuda' => 'Activo: al traer la orden de compra, la cantidad recibida arranca en blanco y hay que cargarla. Inactivo: se completa con el pendiente de la orden.',
                 'tipo' => 'boolean',
                 'orden' => 70,
             ],
@@ -175,7 +175,7 @@ final class ParametroSistemaSupport
     }
 
     /**
-     * Activo: la precarga de la OC deja la cantidad recibida en 0.
+     * Activo: la precarga de la OC deja la cantidad recibida en blanco.
      * Inactivo: se completa con el pendiente.
      */
     public static function noPrecargarCantidadRecibida(): bool

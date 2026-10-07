@@ -158,10 +158,11 @@
 
     function htmlCeldaConversion(item, cant, coef) {
         coef = coef > 0 ? coef : 1;
+        var vacia = cantidadRecibidaVacia(cant);
         cant = parseFloat(cant) || 0;
         var umC = escHtml(umCompraLinea(item));
         var umS = escHtml(umStockLinea(item));
-        var stock = formatearCantidadStock(cant * coef);
+        var stock = vacia ? '' : formatearCantidadStock(cant * coef);
         var title = 'Cantidades en ' + umCompraLinea(item) + ' (remito). Al confirmar: stock = cantidad × '
             + coef + ' → ' + umStockLinea(item);
         var html = '<div class="celda-conversion-recepcion text-right" title="' + escHtml(title) + '">';
@@ -178,6 +179,42 @@
         html += '<div class="input-group-append"><span class="input-group-text um-compra-suffix">' + escHtml(um) + '</span></div>';
         html += '</div>';
         return html;
+    }
+
+    function noPrecargarCantidadRecibida() {
+        return !!window.recepcionProveedorNoPrecargarCantidad && !esModoDevolucion();
+    }
+
+    function cantidadRecibidaVacia(valor) {
+        if (!noPrecargarCantidadRecibida()) {
+            return false;
+        }
+        if (valor === null || valor === undefined || valor === '') {
+            return true;
+        }
+        var n = parseFloat(valor);
+
+        return !isFinite(n) || Math.abs(n) < 0.0000001;
+    }
+
+    function textoInputCantidadRecibida(valor) {
+        if (cantidadRecibidaVacia(valor)) {
+            return '';
+        }
+        if (valor === null || valor === undefined || valor === '') {
+            return 0;
+        }
+
+        return valor;
+    }
+
+    function leerCantidadInput(raw) {
+        var s = raw === null || raw === undefined ? '' : String(raw).trim();
+        if (s === '' || !isFinite(parseFloat(s))) {
+            return noPrecargarCantidadRecibida() ? null : 0;
+        }
+
+        return parseFloat(s);
     }
 
     function cantidadTotalRecibida(item) {
@@ -723,7 +760,7 @@
             if (!item) {
                 return;
             }
-            item.cantidad = parseFloat($(this).find('.item-cantidad').val()) || 0;
+            item.cantidad = leerCantidadInput($(this).find('.item-cantidad').val());
             item.cantidad_rechazada = parseFloat($(this).find('.item-cant-rechazada').val()) || 0;
             item.motivorechazo = $.trim($(this).closest('tbody').find('tr.item-recepcion-motivo-rechazo[data-idx="' + idx + '"] .item-motivo-rechazo').val() || '');
             item.comentario_diferencia = $.trim($comentarioDiferenciaPorIdx(idx).find('.item-comentario-diferencia').val() || '');
@@ -1408,13 +1445,17 @@
     }
 
     function recalcularLinea($tr, item) {
-        var cant = parseFloat($tr.find('.item-cantidad').val()) || 0;
+        var rawCant = $tr.find('.item-cantidad').val();
+        var cant = parseFloat(rawCant) || 0;
+        var stockTxt = (noPrecargarCantidadRecibida() && String(rawCant || '').trim() === '')
+            ? ''
+            : formatearCantidadStock(cant * coefEfectivo(item));
         var coef = coefEfectivo(item);
         $tr.find('[name*="[coeficienteconversion]"]').val(coef);
         $tr.find('.conv-coef').text('×' + coef);
         $tr.find('.conv-compra-um').text(umCompraLinea(item));
         $tr.find('.conv-stock-um').text(umStockLinea(item));
-        $tr.find('.item-cant-stock').text(formatearCantidadStock(cant * coef));
+        $tr.find('.item-cant-stock').text(stockTxt);
         $tr.find('.um-compra-suffix').text(umCompraLinea(item));
         $tr.find('.input-qty-um-recepcion').attr('title', 'Unidad del remito: ' + umCompraLinea(item));
         $tr.find('.celda-conversion-recepcion').attr('title',
@@ -1706,7 +1747,7 @@
             item.comentario_precio = comentarioPrecio;
         }
 
-        $tr.find('.item-cantidad').val(item.cantidad);
+        $tr.find('.item-cantidad').val(textoInputCantidadRecibida(item.cantidad));
         $tr.find('.item-precio').val(item.precio);
         $tr.find('.item-precio-solicitado').val(
             item.precio_solicitado != null && item.precio_solicitado !== '' ? item.precio_solicitado : ''
@@ -2241,7 +2282,7 @@
             }
             html += '</td>';
             html += '<td class="align-middle">';
-            html += htmlInputCantidadConUm('item-cantidad input-qty-recepcion', 'items[' + idx + '][cantidad]', (item.cantidad || 0), umCompra, soloLecturaCantidad);
+            html += htmlInputCantidadConUm('item-cantidad input-qty-recepcion', 'items[' + idx + '][cantidad]', textoInputCantidadRecibida(item.cantidad), umCompra, soloLecturaCantidad);
             if (esModoDevolucion() && maxDevolucion > 0) {
                 html += '<small class="text-muted d-block">m&aacute;x. ' + maxDevolucion + '</small>';
             }
@@ -2249,7 +2290,7 @@
             if (!esModoDevolucion()) {
                 html += '<td class="align-middle">' + htmlInputCantidadConUm('item-cant-rechazada input-qty-rech-recepcion', 'items[' + idx + '][cantidad_rechazada]', (item.cantidad_rechazada || 0), umCompra, soloLectura) + '</td>';
             }
-            html += '<td class="align-middle">' + htmlCeldaConversion(item, item.cantidad || 0, coef) + '</td>';
+            html += '<td class="align-middle">' + htmlCeldaConversion(item, item.cantidad, coef) + '</td>';
             html += '<td class="align-middle">' + htmlCeldaPrecioUnitario(item, idx, soloLecturaOtros) + '</td>';
             html += '<td class="align-middle">' + htmlCeldaImporteLinea(item, idx, soloLecturaOtros) + '</td>';
             html += '<td class="align-middle">' + htmlMonedaCotizacion(item, idx) + '</td>';
@@ -2504,12 +2545,13 @@
             alert('Cargue primero una orden de compra.');
             return;
         }
+        syncItemsDesdeDom();
         itemsActuales.push({
             tipo_linea: 'EXTRA',
             articulo_id: null,
             sku: '',
             descripcion: '',
-            cantidad: 1,
+            cantidad: noPrecargarCantidadRecibida() ? null : 1,
             cantidad_rechazada: 0,
             accion_linea_oc: '',
             fl_cerrar_linea_oc: false,
@@ -2839,7 +2881,7 @@
                 item.cantidad_rechazada = parseFloat($(this).val()) || 0;
                 actualizarMotivoRechazoFila(idx);
             } else if ($(this).hasClass('item-cantidad')) {
-                item.cantidad = parseFloat($(this).val()) || 0;
+                item.cantidad = leerCantidadInput($(this).val());
             } else if ($(this).hasClass('item-precio')) {
                 item.precio = parseFloat($(this).val()) || 0;
                 actualizarPrecioSolicitadoEnFila($tr, item);
@@ -2922,7 +2964,7 @@
             if (!item) {
                 return;
             }
-            item.cantidad = parseFloat($tr.find('.item-cantidad').val()) || 0;
+            item.cantidad = leerCantidadInput($tr.find('.item-cantidad').val());
             var importe = parseFloat($(this).val()) || 0;
             sincronizarPrecioDesdeImporte(item, importe, item.cantidad);
             $tr.find('.item-precio').val(item.precio);

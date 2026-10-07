@@ -327,15 +327,25 @@ final class RecepcionProveedorOcPendienteSupport
             $yaRecibida = (float) ($recibidos[$ocArtId] ?? 0);
             $total = $yaRecibida + $enRemito;
 
-            if ($total > $pedida + 0.000001
-                && ! RecepcionProveedorToleranciaSupport::cantidadDentroTolerancia($pedida, $total, $tolEmpresa)) {
-                $sku = optional($ocArt->articulos)->sku ?? (string) $ocArtId;
-
-                throw new \RuntimeException(
-                    "Línea {$sku}: la cantidad del remito ({$enRemito}) más lo ya recepcionado ({$yaRecibida}) "
-                    ."supera lo pedido en la OC ({$pedida})."
-                );
+            if ($total <= $pedida + 0.000001) {
+                continue;
             }
+
+            // El Bierzo confirma aunque el remito supere la OC (ej. una unidad sin cargo).
+            if (EntornoEmpresaSupport::esElBierzo()) {
+                continue;
+            }
+
+            if (RecepcionProveedorToleranciaSupport::cantidadDentroTolerancia($pedida, $total, $tolEmpresa)) {
+                continue;
+            }
+
+            $sku = optional($ocArt->articulos)->sku ?? (string) $ocArtId;
+
+            throw new \RuntimeException(
+                "Línea {$sku}: la cantidad del remito ({$enRemito}) más lo ya recepcionado ({$yaRecibida}) "
+                ."supera lo pedido en la OC ({$pedida})."
+            );
         }
     }
 

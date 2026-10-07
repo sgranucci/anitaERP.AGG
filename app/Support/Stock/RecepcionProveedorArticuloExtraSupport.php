@@ -2,6 +2,7 @@
 
 namespace App\Support\Stock;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\RecepcionProveedorAccionLineaOc;
 
 /**
@@ -13,7 +14,36 @@ final class RecepcionProveedorArticuloExtraSupport
 
     public static function puedeAgregar(): bool
     {
-        return can(self::PERMISO, false);
+        if (can(self::PERMISO, false)) {
+            return true;
+        }
+
+        if (! EntornoEmpresaSupport::esElBierzo()) {
+            return false;
+        }
+
+        return can('crear-recepcion-proveedor', false)
+            || can('editar-recepcion-proveedor', false)
+            || can('actualizar-recepcion-proveedor', false);
+    }
+
+    /**
+     * Renglón extra recién agregado, sin artículo ni cantidad: no se persiste.
+     *
+     * @param  array<string, mixed>  $item
+     */
+    public static function itemExtraVacio(array $item): bool
+    {
+        $tipoLinea = (string) ($item['tipo_linea'] ?? RecepcionProveedorDiferenciaSupport::TIPO_OC);
+        if ($tipoLinea !== RecepcionProveedorDiferenciaSupport::TIPO_EXTRA) {
+            return false;
+        }
+
+        $articuloId = (int) ($item['articulo_id'] ?? 0);
+        $cantidad = (float) ($item['cantidad'] ?? 0);
+        $rechazada = (float) ($item['cantidad_rechazada'] ?? 0);
+
+        return $articuloId <= 0 && $cantidad <= 0.000001 && $rechazada <= 0.000001;
     }
 
     /**
