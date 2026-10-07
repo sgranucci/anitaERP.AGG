@@ -65,7 +65,7 @@ class AyudaManuales
             ],
             [
                 'modulo' => 'Canjes Marketing',
-                'bajada' => 'Clientes VIP, facturador de canjes en sala y listado de entregas para Marketing.',
+                'bajada' => 'Para quien empieza: entregar un producto a un cliente VIP, facturarlo con descuento y consultar en Emita por nombre o por alias.',
                 'url' => route('manual_canjes_marketing'),
                 'icono' => 'fa-gift',
                 'disponible' => true,

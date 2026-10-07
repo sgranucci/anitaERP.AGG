@@ -50,8 +50,8 @@
                     </span>
                 </div>
                 <div class="mc-nota-agg">
-                    Manual orientado al equipo de <strong>Marketing</strong>.
-                    Jornada, turnos y facturación de salón se documentan en el
+                    Guía para quien empieza en <strong>Marketing</strong>: cómo entregar un canje y cómo buscar un cliente VIP en Emita.
+                    La jornada, los turnos y la facturación de salón están en el
                     <a href="{{ route('manual_gastronomia') }}" style="color:var(--mc-accent)">manual de Gastronomía</a>.
                 </div>
             </section>

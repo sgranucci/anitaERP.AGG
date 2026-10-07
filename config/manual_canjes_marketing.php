@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.0',
+    'version' => '1.1',
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Canjes Marketing (Gastronomía)',
 
@@ -38,7 +38,7 @@ return [
         'listado_marketing' => [
             'archivo' => 'listado-marketing.png',
             'titulo' => 'Listado de canjes marketing',
-            'seccion' => '10. Listado canjes marketing',
+            'seccion' => '12. Listado canjes marketing',
         ],
     ],
 ];
