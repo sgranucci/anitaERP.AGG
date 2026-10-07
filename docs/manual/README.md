@@ -34,6 +34,7 @@ Los diagramas (`flujo-*`, `circuito-*`, etc.) se conservan en SVG y **no** se so
 | Stock (gastronomía / fórmulas / insumos) | `config/manual_stock_gastronomia.php` | `public/docs/manual-stock-gastronomia/img/` | `manual:generar-mockups stock-gastronomia` |
 | Gastronomía | `config/manual_gastronomia.php` | `public/docs/manual-gastronomia/img/` | `manual:generar-mockups gastronomia` |
 | Ventas (pedidos) | `config/manual_ventas.php` | `public/docs/manual-ventas/img/` | `manual:generar-mockups ventas` |
+| Ventas El Bierzo (facturación, remitos, COT, SENASA) | `config/manual_facturacion_bierzo.php` | `public/docs/manual-facturacion-bierzo/img/` | sin mockups (texto y tablas). El ejemplar con división Villafranca se genera aparte hacia `/NAS/bierzo/manuales` |
 | Canjes marketing | `config/manual_canjes_marketing.php` | `public/docs/manual-canjes-marketing/img/` | `manual:generar-mockups canjes-marketing` |
 | Facturación Local (cambios e-commerce) | `config/manual_facturacion_local.php` | `public/docs/manual-facturacion-local/img/` | sin mockups (texto y tablas) |
 | Vending | `config/manual_vending.php` | `public/docs/manual-vending/img/` | `manual:generar-mockups vending` |
@@ -64,6 +65,8 @@ php docs/manual-stock/generar.php
 php docs/manual-recepcion-movstock/generar.php
 php docs/manual-stock-gastronomia/generar.php
 php docs/manual-ventas/generar.php
+php docs/manual-facturacion-bierzo/generar.php
+php docs/interno-division-villafranca/generar.php
 php docs/manual-canjes-marketing/generar.php
 php docs/manual-vending/generar.php
 php docs/manual-caja/generar.php

@@ -4180,6 +4180,15 @@ Route::get('ayuda/manual-aprobaciones/descargar-pdf', 'Configuracion\ManualAprob
 Route::get('ayuda/manual-aprobaciones/descargar-word', 'Configuracion\ManualAprobacionesController@descargarWord')
     ->middleware('auth')
     ->name('manual_aprobaciones_word');
+Route::get('ventas/manual-facturacion', 'Ventas\ManualFacturacionBierzoController@index')
+    ->middleware('auth')
+    ->name('manual_facturacion_bierzo');
+Route::get('ventas/manual-facturacion/descargar-pdf', 'Ventas\ManualFacturacionBierzoController@descargarPdf')
+    ->middleware('auth')
+    ->name('manual_facturacion_bierzo_pdf');
+Route::get('ventas/manual-facturacion/descargar-word', 'Ventas\ManualFacturacionBierzoController@descargarWord')
+    ->middleware('auth')
+    ->name('manual_facturacion_bierzo_word');
 Route::get('ayuda/manual-cambios-devolucion', 'Ventas\FacturacionLocal\ManualCambioDevolucionController@index')
     ->middleware('auth')
     ->name('manual_cambio_devolucion_marketplace');

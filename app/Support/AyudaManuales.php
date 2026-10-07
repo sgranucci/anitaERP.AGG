@@ -190,6 +190,16 @@ class AyudaManuales
             ];
         }
 
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            $manuales[] = [
+                'modulo' => 'Ventas — Facturación, remitos, COT y certificados',
+                'bajada' => 'Factura a mano, factura desde pedido o remito, remito Z, asignación de remitos, COT de ARBA y certificado sanitario SENASA. Solo El Bierzo.',
+                'url' => route('manual_facturacion_bierzo'),
+                'icono' => 'fa-file-invoice-dollar',
+                'disponible' => true,
+            ];
+        }
+
         if (EntornoEmpresaSupport::esFerli()) {
             $manuales[] = [
                 'modulo' => 'Facturación Local — Cambios y devoluciones de e-commerce',

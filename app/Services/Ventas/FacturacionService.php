@@ -2536,7 +2536,12 @@ class FacturacionService
 			return $data;
 		}
 
-		$descuentoventaIds = $data['descuentoventa_ids'] ?? [];
+		// El select queda disabled al aplicar el descuento (igual que el pedido) y no viaja en el POST.
+		if (isset($data['descuentoventaanterior_ids']) && is_array($data['descuentoventaanterior_ids'])) {
+			$descuentoventaIds = $data['descuentoventaanterior_ids'];
+		} else {
+			$descuentoventaIds = $data['descuentoventa_ids'] ?? [];
+		}
 		$descuentosPct = $data['descuentos'] ?? [];
 		$dtoCabeceraLinea = (float) str_replace(',', '.', (string) ($data['descuentolinea'] ?? 0));
 		$cantidades = [];
@@ -3031,10 +3036,15 @@ class FacturacionService
 				$precioUnitario = $precioCatalogo;
 			}
 
-			if ($this->descuentoLinea != 0)
+			if ($this->descuentoLinea != 0) {
 				$precioConDescuento = $precioUnitario * (1. - ($this->descuentoLinea / 100.));
-			else
+				// Mismo redondeo que al facturar un pedido (El Bierzo).
+				if (strtoupper((string) config('app.empresa')) === 'EL BIERZO') {
+					$precioConDescuento = round((float) $precioConDescuento, 2);
+				}
+			} else {
 				$precioConDescuento = $precioUnitario;
+			}
 
 			// Calcula coeficiente de impuesto interno aplicable al renglón (cigarrillos):
 			// expande fórmula respetando los opcionales elegidos y suma los coeficientes de
@@ -3082,8 +3092,8 @@ class FacturacionService
 			// Sin esta clave, ImpuestoService toma la cantidad plena y el % no mueve el total.
 			$kiloDescuento = $cantidadLinea;
 			if (strtoupper((string) config('app.empresa')) === 'EL BIERZO' && (float) $this->descuentoLinea != 0.0) {
-				$decimalesKilo = (int) config('facturacion.DECIMAL_KILO', 2);
-				$kiloDescuento = round($cantidadLinea * (1. - ($this->descuentoLinea / 100.)), $decimalesKilo);
+				// a-comprob / factura de pedido: un decimal en el kilo bonificado, no DECIMAL_KILO.
+				$kiloDescuento = round($cantidadLinea * (1. - ($this->descuentoLinea / 100.)), 1);
 			}
 
 			$combinacionIdLinea = (int) ($combinacionIdsInput[$offItem] ?? 0);

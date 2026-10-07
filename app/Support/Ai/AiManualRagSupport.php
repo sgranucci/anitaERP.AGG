@@ -309,6 +309,7 @@ final class AiManualRagSupport
             'manual-stock-gastronomia' => 'manual_stock_gastronomia',
             'manual-gastronomia' => 'manual_gastronomia',
             'manual-ventas' => 'manual_ventas',
+            'manual-facturacion-bierzo' => 'manual_facturacion_bierzo',
             'manual-vending' => 'manual_vending',
             'manual-canjes-marketing' => 'manual_canjes_marketing',
             'manual-solicitudpago' => 'manual_solicitudpago',

@@ -126,21 +126,6 @@
 		}
 	};
 
-	function unidadMedidaCajaFactura(unidadmedida) {
-		var um = (unidadmedida || '').toString().trim().toUpperCase();
-		return um === 'CAJ' || um === 'CJ' || um === 'C';
-	}
-
-	function opcionCantidadSegunUnidadFactura(unidadmedida) {
-		if (unidadMedidaCajaFactura(unidadmedida)) {
-			return 1;
-		}
-		if (typeof unidadMedidaEsKilos === 'function' && unidadMedidaEsKilos(unidadmedida)) {
-			return 3;
-		}
-		return 2;
-	}
-
 	function marcarCambioCantidadFactura($el) {
 		$el.data('facturaCambioLock', Date.now());
 		setTimeout(function () {
@@ -157,7 +142,20 @@
 		$(el).trigger('change');
 	}
 
-	function redondeaCajaFactura(ptr, opcion) {
+	function reseteaDescuentoFilaFactura($tr) {
+		$tr.find('.descuentoventa_id').val('').prop('disabled', false);
+		$tr.find('.descuentoventaanterior_id').val('');
+	}
+
+	function marcaDescuentoFactura() {
+		$('#tbody-tabla .descuentoventa_id').each(function () {
+			if (parseInt($(this).val(), 10) > 0) {
+				$(this).prop('disabled', true);
+			}
+		});
+	}
+
+	function redondeaCajaFactura(ptr, opcion, comoPedido) {
 		var caja = $(ptr).parents('tr').find('.caja').val();
 		var pieza = $(ptr).parents('tr').find('.pieza').val();
 		var kilo = $(ptr).parents('tr').find('.kilo').val();
@@ -187,7 +185,11 @@
 		}
 
 		if (opcion > 0 && articulo_id > 0) {
-			var url = carpetaBase + '/stock/redondeacaja/' + articulo_id + '/' + encodeURIComponent(unidadmedida || 'KG') + '/' + caja + '/' + pieza + '/' + kilo + '/' + descuentoventa_id + '/' + opcion + '?sin_redondeo_caja=1';
+			var url = carpetaBase + '/stock/redondeacaja/' + articulo_id + '/' + encodeURIComponent(unidadmedida || 'KG') + '/' + caja + '/' + pieza + '/' + kilo + '/' + descuentoventa_id + '/' + opcion;
+			// El pedido, al elegir el descuento, redondea a caja. El resto de la factura mostrador no.
+			if (!comoPedido) {
+				url += '?sin_redondeo_caja=1';
+			}
 
 			$.get(url, function (data) {
 				var cajaR = typeof data.caja !== 'string' ? redondearDecimales(data.caja, 2) : data.caja;
@@ -314,16 +316,17 @@
 				$trCodigo.find('.caja').val('');
 				$trCodigo.find('.pieza').val('');
 				$trCodigo.find('.kilo').val('');
-				$trCodigo.find('.descuentoventa_id').val('');
+				reseteaDescuentoFilaFactura($trCodigo);
 				$trCodigo.find('.articulo_id_previa').val(articulo_nuevo);
 			}
 		});
 
 		$('.unidadmedida_id').on('change.facturaBierzo', function () {
-			$(this).parents('tr').find('.caja').val('');
-			$(this).parents('tr').find('.pieza').val('');
-			$(this).parents('tr').find('.kilo').val('');
-			$(this).parents('tr').find('.descuentoventa_id').val('');
+			var $trUm = $(this).parents('tr');
+			$trUm.find('.caja').val('');
+			$trUm.find('.pieza').val('');
+			$trUm.find('.kilo').val('');
+			reseteaDescuentoFilaFactura($trUm);
 
 			var unidadmedida = $(this).find('option:selected').text();
 			$(this).parents('tr').find('.unidadmedida').val(unidadmedida);
@@ -379,12 +382,14 @@
 				parseFloat(pieza) < parseFloat(cantidadDescuento)) {
 				flAgregarRenglonTrasDescuentoFactura = false;
 				alert('No puede usar descuento mayor a las piezas pedidas. Descuento Piezas ' + cantidadDescuento + ' Piezas ' + pieza);
-				$(this).parents('tr').find('.descuentoventa_id').val('');
+				reseteaDescuentoFilaFactura($(this).parents('tr'));
 				return;
 			}
 
 			$(this).parents('tr').find('.descuentoventaanterior_id').val($(this).val());
-			redondeaCajaFactura(this, opcionCantidadSegunUnidadFactura($(this).parents('tr').find('.unidadmedida').val()));
+			$(this).prop('disabled', true);
+			// Igual que el pedido: el bonus se calcula por pieza y, si la unidad es caja, completa cajas.
+			redondeaCajaFactura(this, 2, true);
 		});
 
 		$(document).on('change.facturaBierzo', '#itemspedido-table .precio', function () {
@@ -442,6 +447,8 @@
 				guardarPreferenciasFactura();
 			}
 		});
+
+		marcaDescuentoFactura();
 	};
 
 	window.enfocarPrimerCampoItemsFactura = function () {
