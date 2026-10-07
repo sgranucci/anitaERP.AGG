@@ -2,6 +2,7 @@
 
 namespace App\Support\Caja;
 
+use App\Models\Configuracion\Actividad_Arca;
 use App\Models\Ventas\Concepto_Venta;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
@@ -41,6 +42,48 @@ final class ChequeNdConfigSupport
         }
 
         return $id;
+    }
+
+    /**
+     * Punto de venta de la ND: el elegido en el rechazo, o el default de la empresa.
+     */
+    public static function puntoventaParaNotaDebito(int $empresaId, ?int $puntoventaId = null): Puntoventa
+    {
+        $id = ($puntoventaId !== null && $puntoventaId > 0)
+            ? $puntoventaId
+            : self::puntoventaIdParaEmpresa($empresaId);
+
+        $pv = Puntoventa::query()->find($id);
+        if (! $pv || (int) $pv->empresa_id !== $empresaId) {
+            throw new InvalidArgumentException(
+                'El punto de venta id '.$id.' no existe o no pertenece a la empresa '.$empresaId.'.'
+            );
+        }
+        if (strtoupper(trim((string) ($pv->estado ?? 'A'))) === 'I') {
+            throw new InvalidArgumentException('El punto de venta '.$pv->codigo.' está inactivo.');
+        }
+
+        return $pv;
+    }
+
+    /**
+     * Actividad ARCA del punto de venta de la ND. El id 1 no existe en todas las instalaciones.
+     */
+    public static function actividadArcaIdParaPuntoventa(int $puntoventaId): int
+    {
+        $desdePv = (int) (Puntoventa::query()->whereKey($puntoventaId)->value('actividad_arca_id') ?? 0);
+        if ($desdePv > 0 && Actividad_Arca::query()->whereKey($desdePv)->exists()) {
+            return $desdePv;
+        }
+
+        $primera = (int) (Actividad_Arca::query()->orderBy('id')->value('id') ?? 0);
+        if ($primera > 0) {
+            return $primera;
+        }
+
+        throw new InvalidArgumentException(
+            'El punto de venta id '.$puntoventaId.' no tiene una actividad ARCA válida para la nota de débito.'
+        );
     }
 
     public static function tipotransaccionNotaDebitoId(?string $letraCliente = null): int

@@ -65,6 +65,17 @@
         sincronizarPuntoventaDefault();
     }
 
+    function agregarFilaUsuario() {
+        var tpl = document.getElementById('template-local-usuario-row');
+        if (!tpl) {
+            return;
+        }
+        $('#tbody-local-usuario').append($(tpl.content.cloneNode(true)));
+        if (typeof activa_eventos_consultausuario === 'function') {
+            activa_eventos_consultausuario();
+        }
+    }
+
     function agregarFilaCc() {
         var tpl = document.getElementById('template-local-cc-row');
         if (!tpl) {
@@ -212,6 +223,23 @@
         }
 
         sincronizarPuntoventaDefault();
+
+        $('#local-usuario-agregar').on('click', function () {
+            agregarFilaUsuario();
+        });
+        $('#tbody-local-usuario').on('click', '.local-usuario-quitar', function () {
+            var $body = $('#tbody-local-usuario');
+            if ($body.find('tr.local-usuario-row').length <= 1) {
+                var $campo = $(this).closest('tr').find('.tm-usuario-campo');
+                $campo.find('.usuario_id, .usuario_codigo_arbol, .nombreusuario').val('');
+                $(this).closest('tr').find('.local-usuario-tambien').remove();
+                return;
+            }
+            $(this).closest('tr').remove();
+        });
+        if (typeof activa_eventos_consultausuario === 'function') {
+            activa_eventos_consultausuario();
+        }
 
         $('#local-pv-agregar').on('click', function () {
             agregarFilaPv();
@@ -397,6 +425,12 @@
                 var id = parseInt(String($(this).find('.cuentacaja_id').val() || '0'), 10);
                 if (id <= 0) {
                     $(this).find('.cuentacaja_id').prop('disabled', true);
+                }
+            });
+            $('#tbody-local-usuario tr.local-usuario-row').each(function () {
+                var id = parseInt(String($(this).find('.usuario_id').val() || '0'), 10);
+                if (id <= 0) {
+                    $(this).find('.usuario_id').prop('disabled', true);
                 }
             });
         });

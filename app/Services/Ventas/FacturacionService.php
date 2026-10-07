@@ -1830,41 +1830,11 @@ class FacturacionService
 		}
 
 		$retornoIndex = is_array($dataOrigen) ? (string) ($dataOrigen['retorno_index'] ?? '') : '';
-		$conEnvios = is_array($dataOrigen) && filter_var($dataOrigen['con_envios'] ?? false, FILTER_VALIDATE_BOOLEAN);
-		if ($conEnvios) {
-			$venta = $ventaId > 0
-				? Venta::query()->with(['puntoventas', 'transportes'])->find($ventaId)
-				: null;
-			$programa = $venta
-				? (ComprobanteImpresionResolverSupport::contextoDesdeVenta($venta, true)['programa'] ?? null)
-				: null;
-			if (! $programa) {
-				foreach ($items as $i => $item) {
-					if (! is_array($item) || ! empty($item['error']) || ! empty($item['ocultar_mensaje'])) {
-						continue;
-					}
-					$items[$i]['aviso_impresion'] = 'La factura quedó grabada, pero no hay un programa marcado como plan con envíos (con el comprobante Envío en la ruta).';
-					break;
-				}
-
-				return array_is_list($retorno) ? $items : $items[0];
-			}
-			$autoEnviar = (bool) $programa->enviar_automatico_al_facturar;
-			$url = ComprobanteImpresionSesionUrlSupport::postFacturacion(
-				$ventaId,
-				$remitoId,
-				$pedidoId,
-				$retornoIndex,
-				$autoEnviar,
-				true
-			);
-		} else {
-			if (! ComprobanteImpresionResolverSupport::dispararProcesoImpresionAlFacturar($ventaId, $remitoId, $pedidoId)) {
-				return $retorno;
-			}
-			$autoEnviar = ComprobanteImpresionResolverSupport::enviarAutomaticoAlFacturar($ventaId, $remitoId, $pedidoId);
-			$url = ComprobanteImpresionSesionUrlSupport::postFacturacion($ventaId, $remitoId, $pedidoId, $retornoIndex, $autoEnviar);
+		if (! ComprobanteImpresionResolverSupport::dispararProcesoImpresionAlFacturar($ventaId, $remitoId, $pedidoId)) {
+			return $retorno;
 		}
+		$autoEnviar = ComprobanteImpresionResolverSupport::enviarAutomaticoAlFacturar($ventaId, $remitoId, $pedidoId);
+		$url = ComprobanteImpresionSesionUrlSupport::postFacturacion($ventaId, $remitoId, $pedidoId, $retornoIndex, $autoEnviar);
 		if ($url === null) {
 			return $retorno;
 		}
@@ -2729,6 +2699,8 @@ class FacturacionService
 		$listaspreciosIds = $data['listasprecios_id'] ?? null;
 		$incluyeimpuestosInput = $data['incluyeimpuestos'] ?? null;
 		$impuestosIdsInput = $data['impuesto_ids'] ?? null;
+		$tratamientosFiscalesInput = $data['tratamientos_fiscales'] ?? null;
+		$cuentasLineaInput = $data['cuentacontable_ids_linea'] ?? null;
 		$leyendasLineaInput = $data['leyendas_linea'] ?? [];
 		if (! is_array($leyendasLineaInput)) {
 			$leyendasLineaInput = [];
@@ -2882,6 +2854,9 @@ class FacturacionService
 						}
 						if ($resueltoConcepto['cuentacontable_id']) {
 							$cuentaContable_id = $resueltoConcepto['cuentacontable_id'];
+						}
+						if (is_array($cuentasLineaInput) && (int) ($cuentasLineaInput[$offItem] ?? 0) > 0) {
+							$cuentaContable_id = (int) $cuentasLineaInput[$offItem];
 						}
 						$codigoMtxLinea = $resueltoConcepto['codigo_gtin'];
 						$unidadesMtxLinea = $resueltoConcepto['unidades_mtx'];
@@ -3139,6 +3114,14 @@ class FacturacionService
 				$pedidoCombinacionIdLinea = (int) $otLineaMostrador['pedido_combinacion_id'];
 			}
 
+			$tratamientoFiscal = '';
+			if (is_array($tratamientosFiscalesInput) && isset($tratamientosFiscalesInput[$offItem])) {
+				$tratamiento = strtolower(trim((string) $tratamientosFiscalesInput[$offItem]));
+				if ($tratamiento === 'nogravado') {
+					$tratamientoFiscal = 'nogravado';
+				}
+			}
+
 			$dataFactura[] = ["cantidad" => $cantidadLinea,
 				"kilodescuento" => $kiloDescuento,
 				"pieza" => $piezaLinea,
@@ -3150,6 +3133,7 @@ class FacturacionService
 				"descuentofinal" => $this->descuentoPie,
 				"descuentointegradofinal" => '',
 				"incluyeimpuesto" => $incluyeImpuesto,
+				"tratamiento_fiscal" => $tratamientoFiscal,
 				"impuesto_id" => $impuesto_id,
 				"articulo_id" => $articulo_id,
 				"sku" => $sku,
@@ -3798,7 +3782,10 @@ class FacturacionService
 						$opcionesEmision['transporte_id'] = TransporteDepositoSupport::transporteIdDesdeFactura($data, $clienteGraba);
 					}
 					$opcionesEmision['cantidadbulto'] = $this->normalizarCantidadBulto($data['cantidadbulto'] ?? 0);
-					$opcionesEmision['puntoventaremito_id'] = (int) ($data['puntoventaremito_id'] ?? 0);
+					// Remito solo en el mostrador admin. Tiendanube no elige punto de venta de remito.
+					if (empty($opcionesEmision['origen_tiendanube'])) {
+						$opcionesEmision['puntoventaremito_id'] = (int) ($data['puntoventaremito_id'] ?? 0);
+					}
 				} elseif (! empty($opcionesEmision['origen_facturacion_local']) && empty($opcionesEmision['deposito_id'])) {
 					$depositoLocal = (int) ($data['deposito_id'] ?? 0);
 					if ($depositoLocal > 0) {
@@ -8731,8 +8718,9 @@ class FacturacionService
 	}
 
 	/**
-	 * Remito del mostrador Ferli (no POS). Misma regla que facturar un pedido:
-	 * FAC/FCE y punto de venta de remito. El número del remito es el de la factura.
+	 * Remito del mostrador admin de Ferli (pedido / factura). FAC/FCE y punto de venta de remito.
+	 * El número del remito es el de la factura.
+	 * Tiendanube y los locales no emiten remito.
 	 *
 	 * @param  array<string, mixed>  $opcionesEmision
 	 * @return array{emite: bool, puntoventa: mixed, numero: int, cantidadbulto: int, error?: string}
@@ -8749,7 +8737,11 @@ class FacturacionService
 			'cantidadbulto' => $bultos > 0 ? $bultos : 1,
 		];
 
-		if ($this->esEmisionPos([], $opcionesEmision) || ! EntornoEmpresaSupport::esFerli()) {
+		if ($this->esEmisionPos([], $opcionesEmision)
+			|| ! empty($opcionesEmision['origen_tiendanube'])
+			|| ! empty($opcionesEmision['origen_facturacion_local'])
+			|| ! EntornoEmpresaSupport::esFerli()
+		) {
 			return $sinRemito;
 		}
 		if (! $this->tipoEmiteRemito($tipotransaccion) || FerliRinNumeracionSupport::aplica($tipotransaccion)) {

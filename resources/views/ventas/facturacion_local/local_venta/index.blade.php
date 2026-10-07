@@ -60,6 +60,8 @@
                             <th>PV</th>
                             <th>Depósito</th>
                             <th>Lista</th>
+                            <th>Usuarios</th>
+                            <th>Turnos</th>
                             <th>Activo</th>
                             <th></th>
                         </tr>
@@ -78,6 +80,20 @@
                             <td>{{ $pvsLabel }}</td>
                             <td>{{ trim(($data->deposito->codigo ?? '').' '.($data->deposito->nombre ?? '')) }}</td>
                             <td>{{ $data->listaprecio->nombre ?? '' }}</td>
+                            <td>
+                                @forelse ($data->usuarios as $usuarioLocal)
+                                    <span class="badge badge-light border">{{ $usuarioLocal->nombre }}</span>
+                                @empty
+                                    <span class="text-muted">Sin asignar</span>
+                                @endforelse
+                            </td>
+                            <td>
+                                @forelse ($data->turnosMaestro as $turnoLocal)
+                                    <span class="badge badge-light border">{{ $turnoLocal->nombre }}</span>
+                                @empty
+                                    <span class="text-muted">Todos</span>
+                                @endforelse
+                            </td>
                             <td>{{ $data->activo ? 'Sí' : 'No' }}</td>
                             <td class="text-nowrap">
                                 @if (can('editar-local-venta', false))

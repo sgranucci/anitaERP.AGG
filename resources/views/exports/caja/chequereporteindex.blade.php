@@ -1,7 +1,7 @@
 @php
 	use App\Support\Caja\ChequeDepositoComprobanteSupport;
 	use App\Support\Caja\ChequeReporteSupport;
-	$colspan = 13;
+	$colspan = 14;
 	$esRecibido = (($tipo ?? 'E') === 'R');
 	$textoCero = static function ($valor): string {
 		$t = trim((string) ($valor ?? ''));
@@ -45,6 +45,7 @@
 			<th>Cliente</th>
 			<th>Destino</th>
 			<th>Nro. cheque</th>
+			<th>Tipo</th>
 			<th>{{ $esRecibido ? 'Banco' : 'Cuenta' }}</th>
 			<th>Suc</th>
 			<th>Cta.libr.</th>
@@ -65,6 +66,7 @@
 					<td>{{ ChequeReporteSupport::nombreCliente($data) }}</td>
 					<td>{{ ChequeReporteSupport::destino($data) }}</td>
 					<td>{{ $data->numerocheque }}</td>
+					<td>{{ ChequeReporteSupport::etiquetaInstrumento($data) }}</td>
 					<td>{{ ChequeReporteSupport::bancoOCuenta($data) }}</td>
 					<td>{{ $textoCero($data->sucursalpago) }}</td>
 					<td>{{ $textoCero($data->cuentalibradora) }}</td>
@@ -86,6 +88,7 @@
 					<td></td>
 					<td></td>
 					<td></td>
+					<td></td>
 				</tr>
 			@elseif (($fila['tipo'] ?? '') === 'total_general')
 				<tr>
@@ -95,6 +98,7 @@
 					<td>{{ $importeExcel($fila['monto'] ?? 0) }}</td>
 					<td></td>
 					<td>{{ (int) ($fila['cantidad'] ?? 0) }} cheq.</td>
+					<td></td>
 					<td></td>
 					<td></td>
 					<td></td>

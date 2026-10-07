@@ -5,6 +5,7 @@ namespace App\Models\Ventas;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Cuentacontable;
+use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Listaprecio;
 use Illuminate\Database\Eloquent\Model;
@@ -128,6 +129,29 @@ class LocalVenta extends Model implements Auditable
     public function turnos(): HasMany
     {
         return $this->hasMany(TurnoOperativoLocal::class, 'local_venta_id');
+    }
+
+    /**
+     * Usuarios que pueden operar este local en el POS.
+     * Sin filas, el usuario sigue viendo todos los locales (administración).
+     */
+    public function usuarios(): BelongsToMany
+    {
+        return $this->belongsToMany(Usuario::class, 'local_venta_usuario', 'local_venta_id', 'usuario_id')
+            ->withPivot(['orden'])
+            ->withTimestamps()
+            ->orderByPivot('orden');
+    }
+
+    /**
+     * Turnos de caja que se pueden abrir en este local.
+     */
+    public function turnosMaestro(): BelongsToMany
+    {
+        return $this->belongsToMany(TurnoLocal::class, 'local_venta_turno', 'local_venta_id', 'turno_local_id')
+            ->withPivot(['orden'])
+            ->withTimestamps()
+            ->orderByPivot('orden');
     }
 
     public function puntoventaDefault(): ?Puntoventa

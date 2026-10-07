@@ -158,21 +158,14 @@ class ComprobanteImpresionSesionService
     /**
      * @return array<string, mixed>
      */
-    public function armarDesdeVenta(Venta $venta, string $modo = 'OPERATIVO', ?string $soloFormulario = null, bool $planConEnvios = false): array
+    public function armarDesdeVenta(Venta $venta, string $modo = 'OPERATIVO', ?string $soloFormulario = null): array
     {
         $venta->loadMissing(['puntoventas', 'puntoventaremito', 'pedidos', 'remitos']);
-        $contexto = ComprobanteImpresionResolverSupport::contextoDesdeVenta($venta, $planConEnvios);
-        if ($planConEnvios && empty($contexto['programa'])) {
-            throw new \InvalidArgumentException(
-                'No hay un programa de impresión marcado como plan con envíos para esta empresa.'
-            );
-        }
+        $contexto = ComprobanteImpresionResolverSupport::contextoDesdeVenta($venta);
         $docs = $this->documentosDesdeVenta($venta);
         $pack = $this->packDesdeContexto($contexto, $docs, $modo, $soloFormulario);
-        $payload = $this->payload($contexto, $pack, 'FACTURA', (int) $venta->id, $modo, $soloFormulario, $docs);
-        $payload['plan_con_envios'] = $planConEnvios;
 
-        return $payload;
+        return $this->payload($contexto, $pack, 'FACTURA', (int) $venta->id, $modo, $soloFormulario, $docs);
     }
 
     /**
@@ -669,10 +662,22 @@ class ComprobanteImpresionSesionService
             return [];
         }
 
-        return ComprobanteImpresionResolverSupport::pack(
+        $pack = ComprobanteImpresionResolverSupport::pack(
             $programa,
             $docs,
             $modo,
+            $soloFormulario,
+            $modo === 'CONSULTA'
+        );
+        $empresaId = (int) ($contexto['empresa_id'] ?? 0);
+        if ($empresaId <= 0 && $programa && $programa->empresa_id) {
+            $empresaId = (int) $programa->empresa_id;
+        }
+
+        return ComprobanteImpresionResolverSupport::anexarEnvioAlPack(
+            $pack,
+            $empresaId > 0 ? $empresaId : null,
+            $docs,
             $soloFormulario,
             $modo === 'CONSULTA'
         );
@@ -766,7 +771,7 @@ class ComprobanteImpresionSesionService
             }
         }
 
-        // ENVÍO: solo si el programa lo pide y hay remito (Ferli); Bierzo sin línea ENVIO no lo usa.
+        // ENVÍO: hay remito. La copia entra al pack si algún programa de la empresa la tiene cargada.
         if (isset($docs[ComprobanteImpresionFormulario::REMITO])) {
             $docs[ComprobanteImpresionFormulario::ENVIO] = [
                 'id' => (int) $venta->id,

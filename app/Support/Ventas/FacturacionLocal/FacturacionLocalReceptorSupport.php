@@ -279,6 +279,30 @@ final class FacturacionLocalReceptorSupport
         ];
     }
 
+    /**
+     * DocTipo y número hacia ARCA a partir del documento guardado en la venta.
+     * El cliente ERP de locales es Consumidor Final y no tiene tipo: si la nota de crédito
+     * manda el DNI sin DocTipo, WSFE usa 99 y rechaza un número distinto de 0 (error 10015).
+     * Hay que repetir el par con el que se autorizó la factura (DNI 96, CUIT 80 o 99/0).
+     *
+     * @return array{tipodoc:int,numerodocumento:string}
+     */
+    public static function documentoArcaDesdeNumero(string $documento): array
+    {
+        $doc = preg_replace('/\D/', '', $documento) ?? '';
+        if ($doc !== '' && (int) $doc > 0 && strlen($doc) === 11) {
+            return ['tipodoc' => 80, 'numerodocumento' => $doc];
+        }
+        if ($doc !== '' && (int) $doc > 0 && strlen($doc) >= 7) {
+            return ['tipodoc' => 96, 'numerodocumento' => $doc];
+        }
+
+        return [
+            'tipodoc' => (int) config('arca_wsfe.receptor.consumidor_final_tipo_documento', 99),
+            'numerodocumento' => (string) config('arca_wsfe.receptor.consumidor_final_numero_documento', '0'),
+        ];
+    }
+
     public static function clienteContadoId(): int
     {
         $id = (int) config('facturacion_local.cliente_contado_id', 0);

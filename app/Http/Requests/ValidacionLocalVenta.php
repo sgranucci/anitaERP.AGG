@@ -2,6 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Seguridad\Usuario;
+use App\Models\Ventas\TurnoLocal;
+use App\Support\Seguridad\UsuarioOperativoSupport;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ValidacionLocalVenta extends FormRequest
@@ -46,7 +49,37 @@ class ValidacionLocalVenta extends FormRequest
             'pdf_inicio_actividad' => 'nullable|string|max:40',
             'cuentacaja_ids' => 'nullable|array',
             'cuentacaja_ids.*' => 'integer|exists:cuentacaja,id',
+            'usuario_ids' => 'nullable|array',
+            'usuario_ids.*' => 'integer|exists:usuario,id',
+            'turno_local_ids' => 'nullable|array',
+            'turno_local_ids.*' => 'integer|exists:turno_local,id',
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            foreach ($this->input('usuario_ids', []) as $usuarioId) {
+                $usuario = Usuario::query()->find((int) $usuarioId);
+                if (! UsuarioOperativoSupport::esOperativo($usuario)) {
+                    $validator->errors()->add('usuario_ids', 'Hay un usuario suspendido o que no se puede asignar.');
+                    break;
+                }
+            }
+
+            $turnoIds = $this->input('turno_local_ids', []);
+            $empresaId = (int) $this->input('empresa_id', 0);
+            if ($turnoIds !== [] && $empresaId > 0) {
+                $validos = TurnoLocal::query()
+                    ->whereIn('id', $turnoIds)
+                    ->where('empresa_id', $empresaId)
+                    ->where('activo', true)
+                    ->count();
+                if ($validos !== count($turnoIds)) {
+                    $validator->errors()->add('turno_local_ids', 'Hay un turno que no pertenece a la empresa del local.');
+                }
+            }
+        });
     }
 
     protected function prepareForValidation(): void
@@ -70,11 +103,27 @@ class ValidacionLocalVenta extends FormRequest
             ->values()
             ->all();
 
+        $usuarioIds = collect($this->input('usuario_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $turnoIds = collect($this->input('turno_local_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
         $this->merge([
             'activo' => $this->boolean('activo'),
             'puntoventa_ids' => $pvIds,
             'puntoventa_id' => $defaultId > 0 ? $defaultId : null,
             'cuentacaja_ids' => $cuentaIds,
+            'usuario_ids' => $usuarioIds,
+            'turno_local_ids' => $turnoIds,
             'listaprecio_id' => $this->filled('listaprecio_id') ? (int) $this->input('listaprecio_id') : null,
             'tipotransaccion_fac_id' => $this->filled('tipotransaccion_fac_id') ? (int) $this->input('tipotransaccion_fac_id') : null,
             'tipotransaccion_nc_id' => $this->filled('tipotransaccion_nc_id') ? (int) $this->input('tipotransaccion_nc_id') : null,

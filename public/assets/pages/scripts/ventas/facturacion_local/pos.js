@@ -1336,7 +1336,7 @@
         var turnoLocalEl = $('fl-turno-local-id');
         var turnoLocalId = turnoLocalEl ? String(turnoLocalEl.value || '') : '';
         if (!turnoLocalId) {
-            msg('Elegí Mañana, Tarde o Noche', false);
+            msg('Elegí el turno de este local', false);
             if (turnoLocalEl) turnoLocalEl.focus();
             return;
         }

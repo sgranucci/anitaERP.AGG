@@ -10,6 +10,7 @@ use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalReceptorSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioIvaSupport;
 use App\Support\Ventas\TipotransaccionOperacionStockSupport;
@@ -442,16 +443,18 @@ final class FacturacionLocalNotaCreditoService
 
         $docVenta = preg_replace('/\D/', '', (string) ($ventaOrigen->nroinscripcion ?? '')) ?? '';
         if (trim((string) ($ventaOrigen->nombre ?? '')) !== '' || ($docVenta !== '' && (int) $docVenta > 0)) {
+            $docArca = FacturacionLocalReceptorSupport::documentoArcaDesdeNumero($docVenta);
             $payload['venta_receptor'] = [
                 'nombre' => $ventaOrigen->nombre,
-                'numerodocumento' => $docVenta,
+                'numerodocumento' => $docArca['numerodocumento'],
                 'domicilio' => $ventaOrigen->domicilio,
                 'provincia_id' => (int) ($ventaOrigen->provincia_id ?: 0) ?: null,
                 'localidad_id' => (int) ($ventaOrigen->localidad_id ?: 0) ?: null,
             ];
             $payload['arca_receptor'] = array_filter([
+                'tipodoc' => $docArca['tipodoc'],
                 'nombre' => $ventaOrigen->nombre,
-                'numerodocumento' => $docVenta,
+                'numerodocumento' => $docArca['numerodocumento'],
                 'domicilio' => $ventaOrigen->domicilio,
             ], fn ($v) => $v !== null && $v !== '');
         }

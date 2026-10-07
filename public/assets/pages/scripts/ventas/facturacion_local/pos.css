@@ -43,6 +43,17 @@
     border: 1px solid #6fb3d8;
 }
 .fl-top strong { font-size: 18px; font-weight: 700; }
+.fl-local-fijo {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff;
+    border: 1px solid #5dade2;
+    border-radius: 4px;
+    padding: 8px 12px;
+    min-height: 40px;
+    font-weight: 700;
+}
 .fl-top select,
 .fl-top input[type="number"] {
     background: #fff;

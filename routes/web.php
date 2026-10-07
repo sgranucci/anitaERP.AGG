@@ -2923,6 +2923,7 @@ Route::get('caja/cheque/comprobante-deposito', 'Caja\ChequeController@comprobant
 Route::post('caja/cheque/acreditar-masivo', 'Caja\ChequeController@acreditarMasivo')->name('acreditar_masivo_cheque');
 Route::post('caja/cheque/caucionar-masivo', 'Caja\ChequeController@caucionarMasivo')->name('caucionar_masivo_cheque');
 Route::get('caja/cheque/{id}/rechazo-nd', 'Caja\ChequeController@datosRechazoNd')->name('datos_rechazo_nd_cheque');
+Route::post('caja/cheque/{id}/rechazo-nd/preview', 'Caja\ChequeController@previewRechazoNd')->name('preview_rechazo_nd_cheque');
 Route::post('caja/cheque/{id}/rechazar-nd', 'Caja\ChequeController@rechazarConNd')->name('rechazar_nd_cheque');
 Route::post('caja/cheque/{id}/depositar', 'Caja\ChequeController@depositar')->name('depositar_cheque');
 Route::post('caja/cheque/{id}/acreditar', 'Caja\ChequeController@acreditar')->name('acreditar_cheque');

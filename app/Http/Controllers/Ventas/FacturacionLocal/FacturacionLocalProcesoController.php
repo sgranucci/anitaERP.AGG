@@ -8,7 +8,6 @@ use App\Models\Stock\Color;
 use App\Models\Stock\Talle;
 use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\Cliente;
-use App\Repositories\Ventas\TurnoLocalRepositoryInterface;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalEmisionService;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalTurnoService;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalValeService;
@@ -21,6 +20,7 @@ use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalSplitFacNcSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalUsoCuentacajaSupport;
+use App\Support\Ventas\FacturacionLocal\LocalVentaAsignacionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVarianteArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalInformeListadoFiltros;
 use Illuminate\Http\Request;
@@ -31,7 +31,6 @@ class FacturacionLocalProcesoController extends Controller
         private readonly FacturacionLocalTurnoService $turnoService,
         private readonly FacturacionLocalEmisionService $emisionService,
         private readonly FacturacionLocalValeService $valeService,
-        private readonly TurnoLocalRepositoryInterface $turnoLocalRepository,
         private readonly StockLocalConsultaService $stockConsultaService,
     ) {
     }
@@ -41,15 +40,16 @@ class FacturacionLocalProcesoController extends Controller
         $this->assertFerli();
         can('usar-facturacion-local');
 
-        $locales = LocalVenta::query()->where('activo', true)->orderBy('codigo')->get();
+        $locales = LocalVentaAsignacionSupport::localesParaUsuario();
         $localId = (int) $request->input('local_id', 0);
-        if ($localId > 0) {
+        if ($localId > 0 && $locales->contains('id', $localId)) {
             session(['facturacion_local.local_id' => $localId]);
         } else {
             $localId = (int) session('facturacion_local.local_id', $locales->first()?->id ?? 0);
         }
         if ($localId > 0 && ! $locales->contains('id', $localId)) {
             $localId = (int) ($locales->first()?->id ?? 0);
+            session(['facturacion_local.local_id' => $localId]);
         }
 
         $local = $localId > 0
@@ -91,8 +91,9 @@ class FacturacionLocalProcesoController extends Controller
         // Index: sin SOAP (rápido). El JS refresca el próximo número vía apiContextoPos.
         $contextoPos = FacturacionLocalPosContextoSupport::paraLocal($local, false);
 
-        $turnosQuery = $this->turnoLocalRepository
-            ->listarParaSelect($local?->empresa_id ? (int) $local->empresa_id : null);
+        $turnosQuery = $local
+            ? LocalVentaAsignacionSupport::turnosParaLocal($local)
+            : collect();
         $turnoSugeridoId = 0;
         foreach ($turnosQuery as $t) {
             if ($t->cubreHora()) {
@@ -134,9 +135,9 @@ class FacturacionLocalProcesoController extends Controller
         $this->assertFerli();
         can('usar-facturacion-local', false);
 
-        $local = LocalVenta::query()->find((int) $request->input('local_id', 0));
+        $local = $this->localOperable($request);
         if (! $local) {
-            return response()->json(['ok' => false, 'error' => 'Local inválido'], 422);
+            return response()->json(['ok' => false, 'error' => 'Local no habilitado para este usuario.'], 403);
         }
 
         return response()->json([
@@ -153,9 +154,9 @@ class FacturacionLocalProcesoController extends Controller
         $this->assertFerli();
         can('usar-facturacion-local', false);
 
-        $local = LocalVenta::query()->find((int) $request->input('local_id', 0));
+        $local = $this->localOperable($request);
         if (! $local) {
-            return response()->json(['ok' => false, 'error' => 'Local inválido'], 422);
+            return response()->json(['ok' => false, 'error' => 'Local no habilitado para este usuario.'], 403);
         }
 
         $busqueda = trim((string) (
@@ -255,8 +256,13 @@ class FacturacionLocalProcesoController extends Controller
         $this->assertFerli();
         can('usar-facturacion-local', false);
 
+        $local = $this->localOperable($request);
+        if (! $local) {
+            return response()->json(['ok' => false, 'error' => 'Local no habilitado para este usuario.'], 403);
+        }
+
         return response()->json(FacturacionLocalPrecioArticuloSupport::paraLocal(
-            (int) $request->input('local_id', 0),
+            (int) $local->id,
             (int) $request->input('articulo_id'),
             (int) $request->input('combinacion_id', 0),
             (int) $request->input('talle_id', 0),
@@ -268,7 +274,10 @@ class FacturacionLocalProcesoController extends Controller
         $this->assertFerli();
         can('usar-facturacion-local');
 
-        $local = LocalVenta::query()->findOrFail((int) $request->input('local_id'));
+        $local = $this->localOperable($request);
+        if (! $local) {
+            return response()->json(['ok' => false, 'error' => 'Local no habilitado para este usuario.'], 403);
+        }
         $input = [
             'lineas' => $request->input('lineas', []),
             'medios_pago' => $request->input('medios_pago', []),
@@ -306,8 +315,11 @@ class FacturacionLocalProcesoController extends Controller
 		$this->assertFerli();
 		can('usar-facturacion-local', false);
 
-		$localId = (int) $request->input('local_id', 0);
-		$local = $localId > 0 ? LocalVenta::query()->find($localId) : null;
+		$localIdPedido = (int) $request->input('local_id', 0);
+		$local = $localIdPedido > 0 ? $this->localOperable($request) : null;
+		if ($localIdPedido > 0 && ! $local) {
+			return response()->json(['ok' => false, 'error' => 'Local no habilitado para este usuario.'], 403);
+		}
 		if ($local) {
 			return response()->json($this->emisionService->totalesCobro($local, [
 				'lineas' => $request->input('lineas', []),
@@ -380,6 +392,16 @@ class FacturacionLocalProcesoController extends Controller
                 'domicilio' => (string) ($cliente->domicilio ?? ''),
             ],
         ]);
+    }
+
+    private function localOperable(Request $request): ?LocalVenta
+    {
+        $localId = (int) $request->input('local_id', 0);
+        if ($localId <= 0 || ! LocalVentaAsignacionSupport::puedeOperarLocal($localId)) {
+            return null;
+        }
+
+        return LocalVenta::query()->find($localId);
     }
 
     private function assertFerli(): void

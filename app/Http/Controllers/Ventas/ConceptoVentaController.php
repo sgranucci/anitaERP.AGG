@@ -250,7 +250,8 @@ class ConceptoVentaController extends Controller
             || can('editar-factura', false)
             || can('crear-tipos-transacciones', false)
             || can('editar-tipos-transacciones', false)
-            || can('listar-ventas-por-concepto', false);
+            || can('listar-ventas-por-concepto', false)
+            || can('generar-nota-de-debito-cheque', false);
     }
 
     /**

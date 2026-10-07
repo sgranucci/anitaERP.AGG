@@ -27,7 +27,7 @@ class ChequeReporteExport implements FromView, WithColumnFormatting, WithColumnW
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'M';
+    private const COL_ULTIMA = 'N';
 
     /** Columna Importe (numérica). */
     private const COL_IMPORTE = 'D';
@@ -129,6 +129,7 @@ class ChequeReporteExport implements FromView, WithColumnFormatting, WithColumnW
             'K' => NumberFormat::FORMAT_TEXT,
             'L' => NumberFormat::FORMAT_TEXT,
             'M' => NumberFormat::FORMAT_TEXT,
+            'N' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -169,11 +170,12 @@ class ChequeReporteExport implements FromView, WithColumnFormatting, WithColumnW
             'F' => 32,
             'G' => 28,
             'H' => 14,
-            'I' => 26,
-            'J' => 8,
-            'K' => 14,
-            'L' => 10,
-            'M' => 16,
+            'I' => 12,
+            'J' => 26,
+            'K' => 8,
+            'L' => 14,
+            'M' => 10,
+            'N' => 16,
         ];
     }
 

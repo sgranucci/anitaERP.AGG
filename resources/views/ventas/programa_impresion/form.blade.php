@@ -70,12 +70,14 @@
             <input type="checkbox" name="plan_con_envios" id="plan_con_envios" class="form-check-input" value="1"
                 {{ $planConEnvios ? 'checked' : '' }}>
             <label class="form-check-label" for="plan_con_envios">
-                Este es el plan con envíos
+                Estas copias de Envío se usan en los demás programas
             </label>
         </div>
         <p class="text-muted small mb-0">
-            Uno por empresa. La ruta tiene que incluir el comprobante Envío.
-            En la facturación, el tilde «Imprimir con el plan de envíos» usa este programa y no el de las reglas.
+            Uno por empresa, y la ruta tiene que incluir el comprobante Envío.
+            Esas copias se suman a los programas de la empresa que no lo tienen.
+            Si ninguno está marcado, se usan las copias de Envío del programa que las tenga cargadas.
+            En la sesión se elige si se imprime, con Incluir, igual que Factura y Remito.
         </p>
     </div>
 </div>

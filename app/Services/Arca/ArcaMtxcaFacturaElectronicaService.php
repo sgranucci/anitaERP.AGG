@@ -812,10 +812,15 @@ class ArcaMtxcaFacturaElectronicaService
 
             $impuesto = ! empty($linea['impuesto_id']) ? $impuestos->get((int) $linea['impuesto_id']) : null;
             $tasa = $impuesto ? (float) $impuesto->valor : (float) ($linea['tasa_iva'] ?? $linea['tasa'] ?? 0);
-            $codigoCondicionIva = ArcaMtxcaComprobanteTotalesSupport::resolverCodigoCondicion(
-                $impuesto?->codigoarca ?? $linea['codigo_condicion_iva'] ?? $linea['codigoCondicionIVA'] ?? null,
-                $tasa,
-            );
+            if (($linea['tratamiento_fiscal'] ?? '') === 'nogravado') {
+                $codigoCondicionIva = ArcaMtxcaComprobanteTotalesSupport::CONDICION_NO_GRAVADO;
+                $tasa = 0.0;
+            } else {
+                $codigoCondicionIva = ArcaMtxcaComprobanteTotalesSupport::resolverCodigoCondicion(
+                    $impuesto?->codigoarca ?? $linea['codigo_condicion_iva'] ?? $linea['codigoCondicionIVA'] ?? null,
+                    $tasa,
+                );
+            }
             $alicuota = ArcaMtxcaComprobanteTotalesSupport::alicuotaPorCodigo($codigoCondicionIva) ?? 0.0;
 
             $precioLista = $this->precioNetoUnitarioItem($linea, (float) ($linea['precio'] ?? 0), $alicuota);

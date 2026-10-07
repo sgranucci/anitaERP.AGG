@@ -217,6 +217,19 @@ class ChequeReporteSupport
     }
 
     /**
+     * e-cheq o físico (Anita negociable E / resto).
+     */
+    public static function etiquetaInstrumento(Cheque $cheque): string
+    {
+        return ChequePropioInstrumentoSupport::etiquetaNegociable($cheque->negociable ?? null);
+    }
+
+    public static function esEcheq(Cheque $cheque): bool
+    {
+        return strtoupper(trim((string) ($cheque->negociable ?? ''))) === 'E';
+    }
+
+    /**
      * N.rec. (cobranza) o N.OP (pago proveedor).
      */
     public static function nroDocumentoOrigen(Cheque $cheque): string

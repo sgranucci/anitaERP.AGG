@@ -11,7 +11,7 @@
         'orden' => 'fechapago',
     ]);
     $esRecibido = (($tipoReporte ?? 'E') === 'R');
-    $colspanDatos = 13;
+    $colspanDatos = 14;
     $textoCero = static function ($valor): string {
         $t = trim((string) ($valor ?? ''));
         if ($t === '' || $t === '0' || preg_match('/^0+$/', $t)) {
@@ -76,10 +76,11 @@
 				<th style="width: 6%;">Fec.Che.</th>
 				<th style="width: 9%;">Importe</th>
 				<th style="width: 5%;">N.Cli.</th>
-				<th style="width: 14%;">Cliente</th>
-				<th style="width: 12%;">Destino</th>
-				<th style="width: 8%;">Nro. cheque</th>
-				<th style="width: 13%;">{{ $esRecibido ? 'Banco' : 'Cuenta' }}</th>
+				<th style="width: 12%;">Cliente</th>
+				<th style="width: 10%;">Destino</th>
+				<th style="width: 7%;">Nro. cheque</th>
+				<th style="width: 6%;">Tipo</th>
+				<th style="width: 12%;">{{ $esRecibido ? 'Banco' : 'Cuenta' }}</th>
 				<th style="width: 4%;">Suc</th>
 				<th style="width: 7%;">Cta.libr.</th>
 				<th style="width: 5%;">{{ $esRecibido ? 'N.rec.' : 'N.OP' }}</th>
@@ -99,6 +100,7 @@
 						<td>{{ ChequeReporteSupport::nombreCliente($data) }}</td>
 						<td>{{ ChequeReporteSupport::destino($data) }}</td>
 						<td>{{ $data->numerocheque }}</td>
+						<td>{{ ChequeReporteSupport::etiquetaInstrumento($data) }}</td>
 						<td>{{ ChequeReporteSupport::bancoOCuenta($data) }}</td>
 						<td>{{ $textoCero($data->sucursalpago) }}</td>
 						<td>{{ $textoCero($data->cuentalibradora) }}</td>
@@ -110,14 +112,14 @@
 						<td colspan="3">{{ $fila['etiqueta'] ?? '' }}</td>
 						<td class="text-right">{{ number_format((float) ($fila['monto'] ?? 0), 2, ',', '.') }}</td>
 						<td>{{ (int) ($fila['cantidad'] ?? 0) }}</td>
-						<td colspan="8"></td>
+						<td colspan="9"></td>
 					</tr>
 				@elseif (($fila['tipo'] ?? '') === 'total_general')
 					<tr class="total-general">
 						<td colspan="3">{{ $fila['etiqueta'] ?? 'Total general' }}</td>
 						<td class="text-right">{{ number_format((float) ($fila['monto'] ?? 0), 2, ',', '.') }}</td>
 						<td>{{ (int) ($fila['cantidad'] ?? 0) }}</td>
-						<td colspan="8"></td>
+						<td colspan="9"></td>
 					</tr>
 				@endif
 			@endforeach

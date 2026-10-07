@@ -17,6 +17,120 @@
     </div>
 </div>
 
+<style>
+    .local-operacion-ayuda { max-width: 46rem; }
+    .local-turno-grilla { display: flex; flex-direction: column; gap: 8px; }
+    .local-turno-opcion {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin: 0;
+        padding: 10px 12px;
+        border: 1px solid #d5d8dc;
+        border-radius: 8px;
+        background: #fff;
+        cursor: pointer;
+    }
+    .local-turno-opcion:hover { border-color: #5dade2; }
+    .local-turno-opcion:has(input:checked) {
+        border-color: #1a5276;
+        background: #eaf3fb;
+        box-shadow: inset 3px 0 0 #1a5276;
+    }
+    .local-turno-opcion input { margin-top: 3px; }
+    .local-turno-nombre { display: block; font-weight: 700; color: #1b2631; }
+    .local-turno-horario { display: block; color: #5d6d7e; font-size: 12px; }
+    .local-usuario-tambien { display: block; margin-top: 2px; }
+</style>
+
+<div class="form-group row">
+    <label class="col-lg-4 control-label text-right pr-2">Operación del local</label>
+    <div class="col-lg-8">
+        <div class="card card-outline card-info mb-2">
+            <div class="card-header py-2">
+                <strong><i class="fa fa-users"></i> Quién entra y qué turno abre</strong>
+            </div>
+            <div class="card-body p-3">
+                <p class="text-muted small local-operacion-ayuda mb-3">
+                    El usuario asignado solo ve este local en el POS. Si está en un solo local, el local queda fijo y no lo puede cambiar.
+                    Si no está en ninguno, sigue viendo todos (administración).
+                    El turno marcado es el único que se puede abrir en la caja de este local.
+                </p>
+                <div class="row">
+                    <div class="col-lg-7 mb-3 mb-lg-0">
+                        <h6 class="mb-2">Usuarios de este local</h6>
+                        <table class="table table-sm table-bordered mb-2" id="tabla-local-usuario">
+                            <thead style="background:#85C1E9;color:#17202A;">
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th style="width:4rem;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-local-usuario">
+                                @foreach ($usuariosSeleccionados as $usrRow)
+                                    <tr class="local-usuario-row">
+                                        <td>
+                                            <div class="tm-usuario-campo d-flex flex-nowrap align-items-center w-100" style="gap:4px;">
+                                                <input type="hidden" name="usuario_ids[]" class="usuario_id" value="{{ $usrRow['id'] ?? '' }}">
+                                                <input type="text" class="usuario_codigo_arbol form-control form-control-sm"
+                                                    value="{{ $usrRow['usuario'] ?? '' }}"
+                                                    placeholder="Usuario" autocomplete="off" style="width:7rem;flex-shrink:0;">
+                                                <button type="button" title="Consulta usuarios (F1)" class="btn-accion-tabla consultausuario tooltipsC flex-shrink-0">
+                                                    <i class="fa fa-search text-primary"></i>
+                                                </button>
+                                                <input type="text" class="nombreusuario form-control form-control-sm text-truncate"
+                                                    value="{{ $usrRow['nombre'] ?? '' }}"
+                                                    placeholder="Nombre" readonly style="min-width:0;flex:1 1 auto;">
+                                            </div>
+                                            @if (! empty($usrRow['id']) && ! empty($otrosLocalesPorUsuario[(int) $usrRow['id']]))
+                                                <small class="text-muted local-usuario-tambien">
+                                                    También opera: {{ $otrosLocalesPorUsuario[(int) $usrRow['id']] }}
+                                                </small>
+                                            @endif
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            <button type="button" class="btn-accion-tabla local-usuario-quitar" title="Quitar">
+                                                <i class="fa fa-times-circle text-danger"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="local-usuario-agregar">
+                            <i class="fa fa-plus"></i> Agregar usuario
+                        </button>
+                        <small class="form-text text-muted d-block">Código de usuario + Enter, o F1 / lupa.</small>
+                    </div>
+                    <div class="col-lg-5">
+                        <h6 class="mb-2">Turnos de caja</h6>
+                        @if (($turnosCatalogo ?? collect())->isEmpty())
+                            <p class="text-muted small mb-0">No hay turnos activos para la empresa de este local.</p>
+                        @else
+                            <div class="local-turno-grilla">
+                                @foreach ($turnosCatalogo as $turnoCat)
+                                    <label class="local-turno-opcion">
+                                        <input type="checkbox" name="turno_local_ids[]" value="{{ $turnoCat->id }}"
+                                            @if (in_array((int) $turnoCat->id, $turnoIdsSeleccionados ?? [], true))
+                                                checked
+                                            @endif
+                                        >
+                                        <span>
+                                            <span class="local-turno-nombre">{{ $turnoCat->nombre }}</span>
+                                            <span class="local-turno-horario">{{ $turnoCat->etiquetaHorario() }}</span>
+                                        </span>
+                                    </label>
+                                @endforeach
+                            </div>
+                            <small class="form-text text-muted d-block">Sin ninguno marcado, el POS ofrece todos los turnos de la empresa.</small>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <input type="hidden" name="puntoventa_id" id="puntoventa_id" value="{{ old('puntoventa_id', $data->puntoventa_id) }}">
 
 <div class="form-group row">
@@ -336,6 +450,28 @@
         </td>
         <td class="text-center align-middle">
             <button type="button" class="btn-accion-tabla local-pv-quitar" title="Quitar">
+                <i class="fa fa-times-circle text-danger"></i>
+            </button>
+        </td>
+    </tr>
+</template>
+
+<template id="template-local-usuario-row">
+    <tr class="local-usuario-row">
+        <td>
+            <div class="tm-usuario-campo d-flex flex-nowrap align-items-center w-100" style="gap:4px;">
+                <input type="hidden" name="usuario_ids[]" class="usuario_id" value="">
+                <input type="text" class="usuario_codigo_arbol form-control form-control-sm" value=""
+                    placeholder="Usuario" autocomplete="off" style="width:7rem;flex-shrink:0;">
+                <button type="button" title="Consulta usuarios (F1)" class="btn-accion-tabla consultausuario tooltipsC flex-shrink-0">
+                    <i class="fa fa-search text-primary"></i>
+                </button>
+                <input type="text" class="nombreusuario form-control form-control-sm text-truncate" value=""
+                    placeholder="Nombre" readonly style="min-width:0;flex:1 1 auto;">
+            </div>
+        </td>
+        <td class="text-center align-middle">
+            <button type="button" class="btn-accion-tabla local-usuario-quitar" title="Quitar">
                 <i class="fa fa-times-circle text-danger"></i>
             </button>
         </td>

@@ -3,12 +3,18 @@
 namespace App\Services\Caja;
 
 use App\Models\Caja\Cheque;
+use App\Models\Caja\Cuentacaja;
+use App\Models\Configuracion\Impuesto;
+use App\Models\Contable\Cuentacontable;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Concepto_Venta;
+use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Caja\ChequeNdConfigSupport;
 use App\Support\Caja\ChequeTerceroRechazoAnitaSupport;
+use App\Support\Ventas\ConceptoVentaMostradorSupport;
 use Exception;
 use InvalidArgumentException;
 
@@ -70,26 +76,28 @@ final class ChequeRechazadoNotaDebitoService
             $concepto = Concepto_Venta::query()->find($conceptoId);
             $impuestoId = (int) ($concepto->impuesto_id ?? ChequeNdConfigSupport::impuestoIdDefault());
             $lineas[] = [
+                'rol' => 'cheque',
                 'concepto_venta_id' => $conceptoId,
                 'codigo' => (string) ($concepto->codigo ?? ''),
                 'descripcion' => 'Cheque rechazado — '.$refCheque,
                 'cantidad' => 1.,
                 'precio' => round((float) $cheque->monto, 2),
-                'impuesto_id' => $impuestoId,
-                'incluyeimpuesto' => '1',
+                'impuesto_id' => null,
+                'tratamiento_fiscal' => 'nogravado',
             ];
 
             $gastosId = ChequeNdConfigSupport::conceptoIdParaGastosBancarios();
             $gastos = $gastosId ? Concepto_Venta::query()->find($gastosId) : null;
             if ($gastosId && $gastos) {
                 $lineas[] = [
+                    'rol' => 'gasto',
                     'concepto_venta_id' => $gastosId,
                     'codigo' => (string) ($gastos->codigo ?? ''),
                     'descripcion' => 'Gastos bancarios por cheque rechazado — '.$refCheque,
                     'cantidad' => 1.,
                     'precio' => 0.,
                     'impuesto_id' => (int) ($gastos->impuesto_id ?? $impuestoId),
-                    'incluyeimpuesto' => '1',
+                    'tratamiento_fiscal' => 'gravado',
                 ];
             }
         } catch (InvalidArgumentException $e) {
@@ -118,6 +126,13 @@ final class ChequeRechazadoNotaDebitoService
             'fecha' => date('Y-m-d'),
             'leyenda_sugerida' => 'ND por cheque rechazado — '.$refCheque,
             'config_error' => $configError,
+            'impuestos' => Impuesto::query()->orderBy('valor')->orderBy('id')->get(['id', 'nombre', 'valor'])
+                ->map(static fn (Impuesto $imp) => [
+                    'id' => (int) $imp->id,
+                    'nombre' => (string) $imp->nombre,
+                    'valor' => (float) $imp->valor,
+                ])->values()->all(),
+            'cuenta_nominal' => $this->describirCuentaNominal($cheque),
         ];
     }
 
@@ -138,75 +153,50 @@ final class ChequeRechazadoNotaDebitoService
      *   anita_ok:bool
      * }
      */
+    public function previewNotaDebitoChequeRechazado(
+        int $chequeId,
+        array $lineas,
+        ?string $fecha = null,
+        ?string $leyendaUsuario = null,
+        ?int $puntoventaId = null,
+    ): array {
+        $sesion = $this->prepararSesion($chequeId, $lineas, $fecha, $leyendaUsuario, $puntoventaId);
+        $calculo = $this->facturacionService->calculaFacturaGeneral($sesion['payload']);
+        if (isset($calculo['error'])) {
+            throw new InvalidArgumentException((string) $calculo['error']);
+        }
+
+        $conceptos = $calculo['conceptostotales'] ?? [];
+        $asientoCreditos = $this->facturacionService->armaContabilidad(
+            $calculo['datosfactura'] ?? [],
+            $conceptos,
+            (int) $sesion['puntoventa']->empresa_id,
+            (float) ($calculo['totalcomprobante'] ?? 0),
+        );
+
+        return [
+            'totales' => $this->totalesDesdeConceptos($conceptos, (float) ($calculo['totalcomprobante'] ?? 0)),
+            'asiento' => $this->asientoConContrapartida(
+                $asientoCreditos,
+                $sesion['cliente'],
+                $sesion['tipo'],
+                (int) $sesion['puntoventa']->empresa_id,
+            ),
+        ];
+    }
+
     public function emitirNotaDebitoChequeRechazado(
         int $chequeId,
         array $lineas,
         ?string $fecha = null,
         ?string $leyendaUsuario = null,
         ?string $motivoRechazo = null,
+        ?int $puntoventaId = null,
     ): array {
-        if (! ChequeNdConfigSupport::habilitado()) {
-            throw new InvalidArgumentException('La emisión de ND por cheque rechazado está deshabilitada.');
-        }
-
-        $cheque = Cheque::query()
-            ->with(['bancos', 'clientes.condicionivas', 'monedas'])
-            ->find($chequeId);
-
-        if (! $cheque) {
-            throw new InvalidArgumentException('No se encontró el cheque id '.$chequeId.'.');
-        }
-
-        if (! $this->esElegible($cheque)) {
-            throw new InvalidArgumentException('El cheque no es elegible para rechazo con nota de débito.');
-        }
-
-        $lineasNormalizadas = $this->normalizarLineas($lineas);
-        if ($lineasNormalizadas === []) {
-            throw new InvalidArgumentException('Debe indicar al menos una línea con concepto e importe mayor a cero.');
-        }
-
-        $cliente = $cheque->clientes;
-        if (! $cliente instanceof Cliente) {
-            $cliente = Cliente::query()->with('condicionivas')->find((int) $cheque->cliente_id);
-        }
-        if (! $cliente) {
-            throw new InvalidArgumentException('El cheque no tiene cliente asociado.');
-        }
-
-        $letra = ChequeNdConfigSupport::letraDesdeCliente($cliente);
-        $puntoventaId = ChequeNdConfigSupport::puntoventaIdParaEmpresa((int) $cheque->empresa_id);
-        $tipoNdId = ChequeNdConfigSupport::tipotransaccionNotaDebitoId($letra);
-        $fechaNd = $fecha && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) ? $fecha : date('Y-m-d');
-
-        $refCheque = $this->referenciaCheque($cheque);
-        $leyendaManual = trim((string) $leyendaUsuario);
-        $leyendaNd = $leyendaManual !== '' ? $leyendaManual : ('ND por cheque rechazado — '.$refCheque);
-        if (mb_strlen($leyendaNd) > 255) {
-            $leyendaNd = mb_substr($leyendaNd, 0, 255);
-        }
-
-        $payload = [
-            'tipotransaccion_id' => $tipoNdId,
-            'puntoventa_id' => $puntoventaId,
-            'fechafactura' => $fechaNd,
-            'leyendafactura' => $leyendaNd,
-            'actividad_arca_id' => 1,
-            'cliente_id' => (int) $cheque->cliente_id,
-            'moneda_id' => (int) ($cheque->moneda_id ?? 1),
-            'listaprecio_id' => 1,
-            'descuentolinea' => 0.,
-            'descuentopie' => 0.,
-            'descuentoimportepie' => 0.,
-            'articulo_ids' => array_fill(0, count($lineasNormalizadas), 0),
-            'concepto_venta_ids' => array_column($lineasNormalizadas, 'concepto_venta_id'),
-            'concepto_venta_id' => (int) $lineasNormalizadas[0]['concepto_venta_id'],
-            'cantidades' => array_column($lineasNormalizadas, 'cantidad'),
-            'precios' => array_column($lineasNormalizadas, 'precio'),
-            'descripcionarticulos' => array_column($lineasNormalizadas, 'descripcion'),
-            'impuesto_ids' => array_column($lineasNormalizadas, 'impuesto_id'),
-            'incluyeimpuestos' => array_column($lineasNormalizadas, 'incluyeimpuesto'),
-        ];
+        $sesion = $this->prepararSesion($chequeId, $lineas, $fecha, $leyendaUsuario, $puntoventaId);
+        $cheque = $sesion['cheque'];
+        $fechaNd = $sesion['fecha'];
+        $payload = $sesion['payload'];
 
         $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
 
@@ -221,10 +211,7 @@ final class ChequeRechazadoNotaDebitoService
 
         $ventaNd = Venta::query()->find($ventaNdId);
         $codigoNd = (string) ($ventaNd->codigo ?? $resultado['factura'] ?? '');
-        $importe = round(array_sum(array_map(
-            static fn (array $l) => (float) $l['cantidad'] * (float) $l['precio'],
-            $lineasNormalizadas
-        )), 2);
+        $importe = round(abs((float) ($ventaNd->total ?? 0)), 2);
 
         $motivo = trim((string) $motivoRechazo);
         if ($motivo === '') {
@@ -252,46 +239,386 @@ final class ChequeRechazadoNotaDebitoService
 
     /**
      * @param  list<array<string, mixed>>  $lineas
-     * @return list<array{concepto_venta_id:int,cantidad:float,precio:float,descripcion:string,impuesto_id:int,incluyeimpuesto:string}>
+     * @return array{
+     *   cheque: Cheque,
+     *   cliente: Cliente,
+     *   puntoventa: Puntoventa,
+     *   tipo: Tipotransaccion,
+     *   fecha: string,
+     *   payload: array<string, mixed>
+     * }
      */
-    private function normalizarLineas(array $lineas): array
+    private function prepararSesion(
+        int $chequeId,
+        array $lineas,
+        ?string $fecha,
+        ?string $leyendaUsuario,
+        ?int $puntoventaId,
+    ): array {
+        if (! ChequeNdConfigSupport::habilitado()) {
+            throw new InvalidArgumentException('La emisión de ND por cheque rechazado está deshabilitada.');
+        }
+
+        $cheque = Cheque::query()
+            ->with(['bancos', 'clientes.condicionivas', 'monedas'])
+            ->find($chequeId);
+
+        if (! $cheque) {
+            throw new InvalidArgumentException('No se encontró el cheque id '.$chequeId.'.');
+        }
+
+        if (! $this->esElegible($cheque)) {
+            throw new InvalidArgumentException('El cheque no es elegible para rechazo con nota de débito.');
+        }
+
+        $cliente = $cheque->clientes;
+        if (! $cliente instanceof Cliente) {
+            $cliente = Cliente::query()->with('condicionivas')->find((int) $cheque->cliente_id);
+        }
+        if (! $cliente) {
+            throw new InvalidArgumentException('El cheque no tiene cliente asociado.');
+        }
+
+        $empresaId = (int) $cheque->empresa_id;
+        $letra = ChequeNdConfigSupport::letraDesdeCliente($cliente);
+        $puntoventa = ChequeNdConfigSupport::puntoventaParaNotaDebito($empresaId, $puntoventaId);
+        $tipoNdId = ChequeNdConfigSupport::tipotransaccionNotaDebitoId($letra);
+        $tipo = Tipotransaccion::query()->find($tipoNdId);
+        if (! $tipo) {
+            throw new InvalidArgumentException('No se encontró el tipo de nota de débito.');
+        }
+
+        $fechaNd = $fecha && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) ? $fecha : date('Y-m-d');
+        $lineasNormalizadas = $this->normalizarLineas($cheque, $lineas, $empresaId, $tipoNdId, $fechaNd);
+
+        $refCheque = $this->referenciaCheque($cheque);
+        $leyendaManual = trim((string) $leyendaUsuario);
+        $leyendaNd = $leyendaManual !== '' ? $leyendaManual : ('ND por cheque rechazado — '.$refCheque);
+        if (mb_strlen($leyendaNd) > 255) {
+            $leyendaNd = mb_substr($leyendaNd, 0, 255);
+        }
+
+        return [
+            'cheque' => $cheque,
+            'cliente' => $cliente,
+            'puntoventa' => $puntoventa,
+            'tipo' => $tipo,
+            'fecha' => $fechaNd,
+            'payload' => [
+                'tipotransaccion_id' => $tipoNdId,
+                'puntoventa_id' => (int) $puntoventa->id,
+                'fechafactura' => $fechaNd,
+                'leyendafactura' => $leyendaNd,
+                'actividad_arca_id' => ChequeNdConfigSupport::actividadArcaIdParaPuntoventa((int) $puntoventa->id),
+                'cliente_id' => (int) $cheque->cliente_id,
+                'moneda_id' => (int) ($cheque->moneda_id ?? 1),
+                'listaprecio_id' => 1,
+                'descuentolinea' => 0.,
+                'descuentopie' => 0.,
+                'descuentoimportepie' => 0.,
+                'articulo_ids' => array_fill(0, count($lineasNormalizadas), 0),
+                'concepto_venta_ids' => array_column($lineasNormalizadas, 'concepto_venta_id'),
+                'concepto_venta_id' => (int) $lineasNormalizadas[0]['concepto_venta_id'],
+                'cantidades' => array_column($lineasNormalizadas, 'cantidad'),
+                'precios' => array_column($lineasNormalizadas, 'precio'),
+                'descripcionarticulos' => array_column($lineasNormalizadas, 'descripcion'),
+                'impuesto_ids' => array_column($lineasNormalizadas, 'impuesto_id'),
+                'incluyeimpuestos' => array_column($lineasNormalizadas, 'incluyeimpuesto'),
+                'tratamientos_fiscales' => array_column($lineasNormalizadas, 'tratamiento_fiscal'),
+                'cuentacontable_ids_linea' => array_column($lineasNormalizadas, 'cuentacontable_id'),
+            ],
+        ];
+    }
+
+    /**
+     * El nominal queda fijo, sin IVA. Los gastos son neto + la alícuota del renglón.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private function normalizarLineas(Cheque $cheque, array $lineas, int $empresaId, int $tipoId, string $fecha): array
     {
+        $conceptoChequeId = ChequeNdConfigSupport::conceptoIdParaChequeRechazado();
+        $impuestoExentoId = (int) (Impuesto::query()->where('valor', 0)->orderBy('id')->value('id') ?? 0);
+        if ($impuestoExentoId <= 0) {
+            throw new InvalidArgumentException('No hay un impuesto en cero para informar el nominal del cheque como no gravado.');
+        }
+
+        $cuentaDepositoId = $this->cuentaContableDeposito($cheque);
+        $nominal = round((float) $cheque->monto, 2);
         $out = [];
-        $impuestoDefault = ChequeNdConfigSupport::impuestoIdDefault();
+        $hayCheque = false;
 
         foreach ($lineas as $linea) {
             if (! is_array($linea)) {
                 continue;
             }
+            $rol = (string) ($linea['rol'] ?? 'gasto');
+            if ($rol === 'cheque') {
+                if ($hayCheque) {
+                    continue;
+                }
+                $hayCheque = true;
+                $concepto = $this->conceptoActivo($conceptoChequeId);
+                $cuenta = $cuentaDepositoId > 0
+                    ? $cuentaDepositoId
+                    : $this->cuentaDelConcepto($concepto, $empresaId, $tipoId, $fecha);
+                $out[] = $this->filaNormalizada(
+                    $concepto,
+                    1.,
+                    $nominal,
+                    trim((string) ($linea['descripcion'] ?? '')) !== ''
+                        ? (string) $linea['descripcion']
+                        : 'Cheque rechazado — '.$this->referenciaCheque($cheque),
+                    $impuestoExentoId,
+                    'nogravado',
+                    $cuenta,
+                );
+
+                continue;
+            }
+
             $conceptoId = (int) ($linea['concepto_venta_id'] ?? 0);
             $cantidad = round((float) ($linea['cantidad'] ?? 1), 4);
             $precio = round((float) ($linea['precio'] ?? 0), 2);
             if ($conceptoId <= 0 || $cantidad <= 0. || $precio <= 0.) {
                 continue;
             }
-
-            $concepto = Concepto_Venta::query()->whereKey($conceptoId)->where('activo', true)->first();
-            if (! $concepto) {
-                throw new InvalidArgumentException('El concepto de venta id '.$conceptoId.' no existe o no está activo.');
+            if ($conceptoId === $conceptoChequeId) {
+                throw new InvalidArgumentException('El concepto del nominal del cheque no se usa en los gastos. Elegí un concepto de gasto.');
             }
 
-            $incluye = (string) ($linea['incluyeimpuesto'] ?? '1');
-            $incluye = in_array($incluye, ['S', '1', 'Y'], true) ? '1' : 'N';
-            $descripcion = trim((string) ($linea['descripcion'] ?? ''));
-            if ($descripcion === '') {
-                $descripcion = (string) ($concepto->nombre ?? 'Cheque rechazado');
-            }
-            if (mb_strlen($descripcion) > 255) {
-                $descripcion = mb_substr($descripcion, 0, 255);
+            $concepto = $this->conceptoActivo($conceptoId);
+            $impuestoId = (int) ($linea['impuesto_id'] ?? $concepto->impuesto_id ?? 0);
+            if ($impuestoId <= 0 || ! Impuesto::query()->whereKey($impuestoId)->exists()) {
+                throw new InvalidArgumentException('Elegí la alícuota de IVA del gasto '.$concepto->codigo.'.');
             }
 
+            $out[] = $this->filaNormalizada(
+                $concepto,
+                $cantidad,
+                $precio,
+                (string) ($linea['descripcion'] ?? ''),
+                $impuestoId,
+                'gravado',
+                $this->cuentaDelConcepto($concepto, $empresaId, $tipoId, $fecha),
+            );
+        }
+
+        if (! $hayCheque) {
+            throw new InvalidArgumentException('Falta el renglón del nominal del cheque.');
+        }
+
+        return $out;
+    }
+
+    private function filaNormalizada(
+        Concepto_Venta $concepto,
+        float $cantidad,
+        float $precio,
+        string $descripcion,
+        int $impuestoId,
+        string $tratamiento,
+        int $cuentaId,
+    ): array {
+        $texto = trim($descripcion);
+        if ($texto === '') {
+            $texto = (string) ($concepto->nombre ?? '');
+        }
+        if (mb_strlen($texto) > 255) {
+            $texto = mb_substr($texto, 0, 255);
+        }
+
+        return [
+            'concepto_venta_id' => (int) $concepto->id,
+            'cantidad' => $cantidad,
+            'precio' => $precio,
+            'descripcion' => $texto,
+            'impuesto_id' => $impuestoId,
+            'incluyeimpuesto' => 'N',
+            'tratamiento_fiscal' => $tratamiento,
+            'cuentacontable_id' => $cuentaId,
+        ];
+    }
+
+    private function conceptoActivo(int $conceptoId): Concepto_Venta
+    {
+        $concepto = Concepto_Venta::query()->whereKey($conceptoId)->where('activo', true)->first();
+        if (! $concepto) {
+            throw new InvalidArgumentException('El concepto de venta id '.$conceptoId.' no existe o no está activo.');
+        }
+
+        return $concepto;
+    }
+
+    private function cuentaDelConcepto(Concepto_Venta $concepto, int $empresaId, int $tipoId, string $fecha): int
+    {
+        $linea = ConceptoVentaMostradorSupport::resolverLinea((int) $concepto->id, $empresaId, $tipoId, $fecha);
+        $cuentaId = (int) ($linea['cuentacontable_id'] ?? 0);
+        if ($cuentaId <= 0) {
+            throw new InvalidArgumentException(
+                'El concepto '.$concepto->codigo.' no tiene cuenta contable para esta empresa. Cargala en el concepto de venta antes de emitir la nota de débito.'
+            );
+        }
+
+        return $cuentaId;
+    }
+
+    private function cuentaContableDeposito(Cheque $cheque): int
+    {
+        $cajaId = (int) ($cheque->cuentacaja_deposito_id ?? 0);
+        if ($cajaId <= 0) {
+            return 0;
+        }
+
+        $cuentaId = (int) (Cuentacaja::query()->whereKey($cajaId)->value('cuentacontable_id') ?? 0);
+        if ($cuentaId <= 0) {
+            throw new InvalidArgumentException('La cuenta de caja del depósito no tiene cuenta contable. No se puede acreditar el nominal al banco.');
+        }
+
+        return $cuentaId;
+    }
+
+    /**
+     * @return array{id:int, codigo:string, nombre:string, origen:string}|null
+     */
+    private function describirCuentaNominal(Cheque $cheque): ?array
+    {
+        try {
+            $deposito = $this->cuentaContableDeposito($cheque);
+        } catch (InvalidArgumentException $e) {
+            return [
+                'id' => 0,
+                'codigo' => '',
+                'nombre' => $e->getMessage(),
+                'origen' => 'error',
+            ];
+        }
+
+        if ($deposito > 0) {
+            return $this->etiquetaCuenta($deposito, 'deposito');
+        }
+
+        try {
+            $concepto = $this->conceptoActivo(ChequeNdConfigSupport::conceptoIdParaChequeRechazado());
+            $cuentaId = $this->cuentaDelConcepto($concepto, (int) $cheque->empresa_id, 0, date('Y-m-d'));
+        } catch (InvalidArgumentException $e) {
+            return [
+                'id' => 0,
+                'codigo' => '',
+                'nombre' => $e->getMessage(),
+                'origen' => 'error',
+            ];
+        }
+
+        return $this->etiquetaCuenta($cuentaId, 'cartera');
+    }
+
+    /**
+     * @return array{id:int, codigo:string, nombre:string, origen:string}
+     */
+    private function etiquetaCuenta(int $cuentaId, string $origen): array
+    {
+        $cuenta = Cuentacontable::query()->find($cuentaId);
+
+        return [
+            'id' => $cuentaId,
+            'codigo' => (string) ($cuenta->codigo ?? ''),
+            'nombre' => (string) ($cuenta->nombre ?? ''),
+            'origen' => $origen,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $conceptos
+     * @return array{no_gravado:float, gravado:float, exento:float, iva:float, total:float}
+     */
+    private function totalesDesdeConceptos(array $conceptos, float $total): array
+    {
+        $noGravado = 0.;
+        $gravado = 0.;
+        $exento = 0.;
+        $iva = 0.;
+        foreach ($conceptos as $conc) {
+            if (! is_array($conc)) {
+                continue;
+            }
+            $nombre = (string) ($conc['concepto'] ?? '');
+            $importe = round((float) ($conc['importe'] ?? 0), 2);
+            if (str_starts_with($nombre, 'No Gravado')) {
+                $noGravado += $importe;
+            } elseif (str_starts_with($nombre, 'Gravado')) {
+                $gravado += $importe;
+            } elseif (str_starts_with($nombre, 'Exento')) {
+                $exento += $importe;
+            } elseif (str_starts_with($nombre, 'Iva ')) {
+                $iva += $importe;
+            }
+        }
+
+        return [
+            'no_gravado' => round($noGravado, 2),
+            'gravado' => round($gravado, 2),
+            'exento' => round($exento, 2),
+            'iva' => round($iva, 2),
+            'total' => round($total, 2),
+        ];
+    }
+
+    /**
+     * Misma convención que el asiento de la factura: signo S pone los renglones al Haber
+     * y al cliente al Debe.
+     *
+     * @param  list<array<string, mixed>>  $creditos
+     * @return list<array{codigo:string, nombre:string, debe:float, haber:float}>
+     */
+    private function asientoConContrapartida(array $creditos, Cliente $cliente, Tipotransaccion $tipo, int $empresaId): array
+    {
+        $signo = $tipo->signo == 'S' ? 1. : -1.;
+        $filas = [];
+        $suma = 0.;
+        $ids = [];
+        foreach ($creditos as $imp) {
+            $monto = round(abs((float) ($imp['monto'] ?? 0)), 2);
+            if ($monto < 0.009) {
+                continue;
+            }
+            $cuentaId = (int) ($imp['cuentacontable_id'] ?? 0);
+            $ids[] = $cuentaId;
+            $suma += $monto;
+            $filas[] = [
+                'cuenta_id' => $cuentaId,
+                'debe' => $signo > 0 ? 0. : $monto,
+                'haber' => $signo > 0 ? $monto : 0.,
+            ];
+        }
+
+        $clienteCuentaId = (int) ($cliente->cuentacontable_id ?? 0);
+        if ($clienteCuentaId <= 0) {
+            $clienteCuentaId = (int) (Cuentacontable::query()
+                ->where('empresa_id', $empresaId)
+                ->where('codigo', (string) config('cliente.DEUDORES_POR_VENTAS'))
+                ->value('id') ?? 0);
+        }
+        if ($clienteCuentaId <= 0) {
+            throw new InvalidArgumentException('El cliente no tiene cuenta de deudores para el asiento de la nota de débito.');
+        }
+        $ids[] = $clienteCuentaId;
+        array_unshift($filas, [
+            'cuenta_id' => $clienteCuentaId,
+            'debe' => $signo > 0 ? round($suma, 2) : 0.,
+            'haber' => $signo > 0 ? 0. : round($suma, 2),
+        ]);
+
+        $cuentas = Cuentacontable::query()->whereIn('id', array_unique($ids))->get()->keyBy('id');
+        $out = [];
+        foreach ($filas as $fila) {
+            $cuenta = $cuentas->get($fila['cuenta_id']);
             $out[] = [
-                'concepto_venta_id' => $conceptoId,
-                'cantidad' => $cantidad,
-                'precio' => $precio,
-                'descripcion' => $descripcion,
-                'impuesto_id' => (int) ($linea['impuesto_id'] ?? $concepto->impuesto_id ?? $impuestoDefault),
-                'incluyeimpuesto' => $incluye,
+                'codigo' => (string) ($cuenta->codigo ?? ''),
+                'nombre' => (string) ($cuenta->nombre ?? ''),
+                'debe' => (float) $fila['debe'],
+                'haber' => (float) $fila['haber'],
             ];
         }
 

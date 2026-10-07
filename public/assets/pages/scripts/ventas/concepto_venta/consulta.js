@@ -92,6 +92,7 @@ function aplicarConceptoVentaEnCampo($ctx, data) {
     $ctx.find('.codigoconceptoventa').val(data.codigo);
     $ctx.find('.nombreconceptoventa').val(data.nombre || data.descripcion);
     actualizarLinkEditarConceptoVenta($ctx, data.id);
+    $ctx.trigger('concepto-venta:aplicado', [data]);
     if ($ctx.closest('#concepto-venta-comprobante-wrap').length) {
         aplicarConceptoVentaCabeceraALineasVacias();
     }

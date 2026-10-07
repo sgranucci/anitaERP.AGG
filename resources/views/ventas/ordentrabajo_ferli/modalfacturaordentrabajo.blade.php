@@ -115,13 +115,9 @@
             @if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
             <div class="form-group row mb-0">
                 <div class="col-lg-8">
-                    <div class="form-check">
-                        <input type="checkbox" id="con_envios" class="form-check-input" value="1">
-                        <label class="form-check-label" for="con_envios">Imprimir con el plan de env&iacute;os</label>
-                    </div>
                     <p class="text-muted small mb-0">
-                        Tildado: usa el programa marcado como plan con env&iacute;os (tiene que incluir el comprobante Env&iacute;o).
-                        Destildado: sigue el programa de las reglas.
+                        El env&iacute;o sale en la sesi&oacute;n de impresi&oacute;n de cualquier programa.
+                        Ah&iacute; se destilda si no se imprime, igual que las otras copias.
                     </p>
                 </div>
             </div>

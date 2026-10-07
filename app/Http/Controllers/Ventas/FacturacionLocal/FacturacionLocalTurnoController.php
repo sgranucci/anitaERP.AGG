@@ -8,6 +8,7 @@ use App\Models\Ventas\TurnoOperativoLocal;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalTurnoService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalTurnoCierreSupport;
+use App\Support\Ventas\FacturacionLocal\LocalVentaAsignacionSupport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -24,7 +25,12 @@ class FacturacionLocalTurnoController extends Controller
         $this->assertFerli();
         can('listar-turno-facturacion-local');
 
+        $locales = LocalVentaAsignacionSupport::localesParaUsuario(soloActivos: false);
+        $permitidos = LocalVentaAsignacionSupport::idsOperables();
         $localId = (int) $request->input('local_id', 0);
+        if (is_array($permitidos) && ($localId <= 0 || ! in_array($localId, $permitidos, true))) {
+            $localId = count($permitidos) === 1 ? (int) $permitidos[0] : 0;
+        }
         $q = TurnoOperativoLocal::query()
             ->with([
                 'localVenta:id,codigo,nombre',
@@ -33,11 +39,13 @@ class FacturacionLocalTurnoController extends Controller
                 'usuarioCierre:id,nombre',
             ])
             ->orderByDesc('id');
+        if (is_array($permitidos)) {
+            $q->whereIn('local_venta_id', $permitidos !== [] ? $permitidos : [0]);
+        }
         if ($localId > 0) {
             $q->where('local_venta_id', $localId);
         }
         $datas = $q->paginate(20)->appends($request->query());
-        $locales = LocalVenta::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre']);
 
         return view('ventas.facturacion_local.turno.index', compact('datas', 'locales', 'localId'));
     }

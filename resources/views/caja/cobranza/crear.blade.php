@@ -18,10 +18,13 @@
 <script>
 window.chequeRechazoNdUrls = {
     datos: @json(url('caja/cheque/:id/rechazo-nd')),
+    preview: @json(url('caja/cheque/:id/rechazo-nd/preview')),
     emitir: @json(url('caja/cheque/:id/rechazar-nd'))
 };
 </script>
-<script src="{{ asset('assets/pages/scripts/caja/cheque/rechazo_nd.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/puntoventa/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/puntoventa/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/concepto_venta/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/concepto_venta/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/caja/cheque/rechazo_nd.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cheque/rechazo_nd.js')) ?: time() }}"></script>
 @endif
 @endsection
 

@@ -482,6 +482,39 @@ class ChequeController extends Controller
     }
 
     /**
+     * Asiento y totales de la ND, sin emitir.
+     */
+    public function previewRechazoNd(Request $request, int $id)
+    {
+        can('generar-nota-de-debito-cheque');
+
+        if (! ChequeNdConfigSupport::habilitado()) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'ND por cheque rechazado deshabilitada.'], 422);
+        }
+
+        $lineas = $request->input('lineas', []);
+        if (! is_array($lineas)) {
+            $lineas = [];
+        }
+
+        try {
+            $datos = $this->chequeRechazadoNdService->previewNotaDebitoChequeRechazado(
+                $id,
+                $lineas,
+                $request->input('fecha'),
+                $request->input('leyenda'),
+                (int) $request->input('puntoventa_id', 0) ?: null,
+            );
+
+            return response()->json(['mensaje' => 'ok', 'data' => $datos]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 422);
+        } catch (Exception $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Emite ND (FacturacionService) y marca cheque rechazado.
      */
     public function rechazarConNd(Request $request, int $id)
@@ -504,6 +537,7 @@ class ChequeController extends Controller
                 $request->input('fecha'),
                 $request->input('leyenda'),
                 $request->input('motivo_rechazo'),
+                (int) $request->input('puntoventa_id', 0) ?: null,
             );
 
             return response()->json([

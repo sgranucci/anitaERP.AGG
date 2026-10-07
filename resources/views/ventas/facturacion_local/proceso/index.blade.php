@@ -56,16 +56,22 @@ window.FACTURACION_LOCAL = {
 <div class="fl-pos" id="fl-pos-root">
     <div class="fl-top">
         <strong>POS Local</strong>
-        <form method="get" action="{{ route('facturacion_local_pos') }}" class="d-inline">
-            <select name="local_id" onchange="this.form.submit()" title="Local">
-                <option value="">Elegir local…</option>
-                @foreach ($locales as $loc)
-                    <option value="{{ $loc->id }}" @if ((int) ($local->id ?? 0) === (int) $loc->id) selected @endif>
-                        {{ $loc->codigo }} — {{ $loc->nombre }}
-                    </option>
-                @endforeach
-            </select>
-        </form>
+        @if ($locales->count() === 1 && $local)
+            <span class="fl-local-fijo" title="Local asignado a este usuario">
+                <i class="fa fa-map-marker"></i> {{ $local->codigo }} — {{ $local->nombre }}
+            </span>
+        @else
+            <form method="get" action="{{ route('facturacion_local_pos') }}" class="d-inline">
+                <select name="local_id" onchange="this.form.submit()" title="Local">
+                    <option value="">Elegir local…</option>
+                    @foreach ($locales as $loc)
+                        <option value="{{ $loc->id }}" @if ((int) ($local->id ?? 0) === (int) $loc->id) selected @endif>
+                            {{ $loc->codigo }} — {{ $loc->nombre }}
+                        </option>
+                    @endforeach
+                </select>
+            </form>
+        @endif
         @if ($turno)
             <span class="fl-status ok">
                 Caja abierta
@@ -142,10 +148,12 @@ window.FACTURACION_LOCAL = {
                     </p>
                     @if (can('abrir-turno-facturacion-local', false))
                         <div class="fl-gate-row">
-                            <select id="fl-turno-local-id">
-                                <option value="">Turno…</option>
+                            <select id="fl-turno-local-id" @if (count($turnosMaestro ?? []) === 1) disabled title="Turno asignado a este local" @endif>
+                                @if (count($turnosMaestro ?? []) !== 1)
+                                    <option value="">Turno…</option>
+                                @endif
                                 @foreach ($turnosMaestro ?? [] as $tm)
-                                    <option value="{{ $tm['id'] }}" @if ((int) ($turnoSugeridoId ?? 0) === (int) $tm['id']) selected @endif>
+                                    <option value="{{ $tm['id'] }}" @if ((int) ($turnoSugeridoId ?? 0) === (int) $tm['id'] || count($turnosMaestro ?? []) === 1) selected @endif>
                                         {{ $tm['etiqueta'] }}
                                     </option>
                                 @endforeach

@@ -16,6 +16,7 @@ use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalFacturaMedioPagoUiSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalNotaCreditoUiSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVentaDetalleSupport;
+use App\Support\Ventas\FacturacionLocal\LocalVentaAsignacionSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -36,8 +37,8 @@ class FacturacionLocalFacturasController extends Controller
         $this->assertFerli();
         can('listar-facturas-facturacion-local');
 
-        $locales = LocalVenta::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre']);
-        $localId = (int) $request->input('local_id', 0);
+        $locales = LocalVentaAsignacionSupport::localesParaUsuario(soloActivos: false);
+        $localId = $this->localIdOperable((int) $request->input('local_id', 0));
         $desde = $this->resolverFecha($request, 'desde', now()->format('Y-m-d'));
         $hasta = $this->resolverFecha($request, 'hasta', $desde);
         if ($hasta < $desde) {
@@ -112,7 +113,7 @@ class FacturacionLocalFacturasController extends Controller
 
         $desde = $this->resolverFecha($request, 'desde', now()->format('Y-m-d'));
         $hasta = $this->resolverFecha($request, 'hasta', $desde);
-        $localId = (int) $request->input('local_id', 0);
+        $localId = $this->localIdOperable((int) $request->input('local_id', 0));
         $localNombre = $localId > 0
             ? (LocalVenta::query()->whereKey($localId)->value('nombre') ?? '')
             : '';
@@ -339,7 +340,8 @@ class FacturacionLocalFacturasController extends Controller
      */
     private function ventasListadoQuery(Request $request): Builder
     {
-        $localId = (int) $request->input('local_id', 0);
+        $permitidos = LocalVentaAsignacionSupport::idsOperables();
+        $localId = $this->localIdOperable((int) $request->input('local_id', 0));
         $desde = $this->resolverFecha($request, 'desde', now()->format('Y-m-d'));
         $hasta = $this->resolverFecha($request, 'hasta', $desde);
         if ($hasta < $desde) {
@@ -347,7 +349,7 @@ class FacturacionLocalFacturasController extends Controller
         }
         $busqueda = trim((string) $request->get('busqueda', ''));
         $turnoId = (int) $request->input('turno_operativo_local_id', 0);
-        $pvIds = FacturacionLocalEmisionVinculoSupport::puntoventaIds($localId > 0 ? $localId : null);
+        $pvIds = $this->puntoventaIdsDelFiltro($localId, $permitidos);
 
         $q = Venta::query();
 
@@ -357,7 +359,7 @@ class FacturacionLocalFacturasController extends Controller
             $numeroComprobantePadded = str_pad((string) $id, max(1, $digitosComprobante), '0', STR_PAD_LEFT);
             $pvTodos = FacturacionLocalEmisionVinculoSupport::puntoventaIds(null);
 
-            return $q->where(function ($w) use ($id, $busqueda, $numeroComprobantePadded) {
+            $q->where(function ($w) use ($id, $busqueda, $numeroComprobantePadded) {
                 $w->where('venta.id', $id)
                     ->orWhere('venta.numerocomprobante', $id)
                     ->orWhere('venta.codigo', 'like', '%'.$busqueda.'%')
@@ -375,20 +377,34 @@ class FacturacionLocalFacturasController extends Controller
                                     ->orWhere('cae', 'like', '%'.$busqueda.'%');
                             });
                     });
-            })->where(function ($w) use ($pvTodos) {
-                $w->whereHas('facturacionLocalEmision')
-                    ->orWhereHas('facturacionLocalEmisionComoNc')
-                    ->orWhereIn('venta.puntoventa_id', $pvTodos !== [] ? $pvTodos : [0]);
-            })->orderByDesc('venta.id');
+            });
+            if (is_array($permitidos)) {
+                $pvAsignados = $this->puntoventaIdsDelFiltro(0, $permitidos);
+                $q->where(function ($w) use ($permitidos, $pvAsignados) {
+                    $w->whereHas('facturacionLocalEmision', fn ($e) => $e->whereIn('local_venta_id', $permitidos))
+                        ->orWhereHas('facturacionLocalEmisionComoNc', fn ($e) => $e->whereIn('local_venta_id', $permitidos))
+                        ->orWhereIn('venta.puntoventa_id', $pvAsignados !== [] ? $pvAsignados : [0]);
+                });
+            } else {
+                $q->where(function ($w) use ($pvTodos) {
+                    $w->whereHas('facturacionLocalEmision')
+                        ->orWhereHas('facturacionLocalEmisionComoNc')
+                        ->orWhereIn('venta.puntoventa_id', $pvTodos !== [] ? $pvTodos : [0]);
+                });
+            }
+
+            return $q->orderByDesc('venta.id');
         }
 
         $q->where('venta.fecha', '>=', $desde)
             ->where('venta.fecha', '<=', $hasta);
 
-        $q->where(function ($w) use ($localId, $turnoId, $pvIds) {
-            $w->whereHas('facturacionLocalEmision', function ($e) use ($localId, $turnoId) {
+        $q->where(function ($w) use ($localId, $turnoId, $pvIds, $permitidos) {
+            $w->whereHas('facturacionLocalEmision', function ($e) use ($localId, $turnoId, $permitidos) {
                 if ($localId > 0) {
                     $e->where('local_venta_id', $localId);
+                } elseif (is_array($permitidos)) {
+                    $e->whereIn('local_venta_id', $permitidos !== [] ? $permitidos : [0]);
                 }
                 if ($turnoId > 0) {
                     $e->where('turno_operativo_local_id', $turnoId);
@@ -597,6 +613,42 @@ class FacturacionLocalFacturasController extends Controller
         }
 
         return $default;
+    }
+
+    private function localIdOperable(int $localId): int
+    {
+        $ids = LocalVentaAsignacionSupport::idsOperables();
+        if ($ids === null) {
+            return $localId;
+        }
+        if ($localId > 0 && in_array($localId, $ids, true)) {
+            return $localId;
+        }
+
+        return count($ids) === 1 ? (int) $ids[0] : 0;
+    }
+
+    /**
+     * @param  list<int>|null  $permitidos
+     * @return list<int>
+     */
+    private function puntoventaIdsDelFiltro(int $localId, ?array $permitidos): array
+    {
+        if ($localId > 0) {
+            return FacturacionLocalEmisionVinculoSupport::puntoventaIds($localId);
+        }
+        if ($permitidos === null) {
+            return FacturacionLocalEmisionVinculoSupport::puntoventaIds(null);
+        }
+
+        $ids = [];
+        foreach ($permitidos as $idLocal) {
+            foreach (FacturacionLocalEmisionVinculoSupport::puntoventaIds((int) $idLocal) as $pvId) {
+                $ids[$pvId] = $pvId;
+            }
+        }
+
+        return array_values($ids);
     }
 
     private function assertFerli(): void

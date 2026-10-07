@@ -409,7 +409,7 @@ return [
                     ['La NCE/NDE requiere un comprobante FCE asociado', 'Referencia con formato FCE A-00008-00001234 y anulación S/N si la pide.'],
                     ['Debe seleccionar un lugar de entrega del cliente', 'El cliente tiene lugares y falta elegir uno.'],
                     ['No puede facturar cliente STOCK', 'Ese cliente no se factura por este circuito.'],
-                    ['La factura quedó grabada, pero no hay un programa marcado como plan con envíos', 'La factura está bien. Falta el programa de impresión con el comprobante Envío.'],
+                    ['El envío no aparece en la sesión de impresión', 'Ningún programa de esa empresa tiene el comprobante Envío en la ruta. En la sesión se destilda con Incluir, igual que las otras copias.'],
                     ['No se encontraron remitos para la fecha y repartos indicados', 'Fecha, código de reparto y que el remito exista ese día.'],
                     ['Se agotaron las series de certificado SENASA (A-Z)', 'Avisá a sistemas: el numerador de series de Anita llegó al final.'],
                 ],

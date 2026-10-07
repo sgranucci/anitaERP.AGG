@@ -23,7 +23,7 @@
     $tipo = ($f['tipo'] ?? 'E') === 'R' ? 'R' : 'E';
     $consultado = ! empty($consultado);
     $multiEmpresa = ($empresa_query ?? collect())->count() > 1;
-    $colspan = $multiEmpresa ? 14 : 13;
+    $colspan = $multiEmpresa ? 15 : 14;
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -178,6 +178,7 @@
                             <th>Cliente</th>
                             <th>Destino</th>
                             <th>Nro. cheque</th>
+                            <th title="Físico / e-cheq">Tipo</th>
                             <th>{{ $tipo === 'E' ? 'Cuenta' : 'Banco' }}</th>
                             <th>Suc</th>
                             <th>Cta.libr.</th>
@@ -203,6 +204,13 @@
                             <td class="small">{{ \Illuminate\Support\Str::limit(ChequeReporteSupport::nombreCliente($data), 28) }}</td>
                             <td class="small">{{ \Illuminate\Support\Str::limit(ChequeReporteSupport::destino($data), 28) }}</td>
                             <td>{{ $data->numerocheque }}</td>
+                            <td>
+                                @if (ChequeReporteSupport::esEcheq($data))
+                                    <span class="badge badge-warning">e-cheq</span>
+                                @else
+                                    <span class="badge badge-secondary">Físico</span>
+                                @endif
+                            </td>
                             <td class="small">{{ \Illuminate\Support\Str::limit(ChequeReporteSupport::bancoOCuenta($data), 24) }}</td>
                             <td>{{ $data->sucursalpago }}</td>
                             <td class="small">{{ $data->cuentalibradora }}</td>

@@ -5,6 +5,7 @@ namespace App\Services\Ventas\FacturacionLocal;
 use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\TurnoLocal;
 use App\Models\Ventas\TurnoOperativoLocal;
+use App\Support\Ventas\FacturacionLocal\LocalVentaAsignacionSupport;
 use Illuminate\Support\Facades\Auth;
 use InvalidArgumentException;
 
@@ -36,6 +37,9 @@ final class FacturacionLocalTurnoService
         if (! $local->activo) {
             throw new InvalidArgumentException('El local no está activo.');
         }
+
+        LocalVentaAsignacionSupport::assertPuedeOperarLocal((int) $local->id);
+        LocalVentaAsignacionSupport::assertTurnoDelLocal($local, (int) ($datos['turno_local_id'] ?? 0));
 
         $abierto = $this->turnoAbierto((int) $local->id, $datos['identificador_pc'] ?? null);
         if ($abierto) {

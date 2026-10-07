@@ -158,8 +158,14 @@ class ImpuestoService extends FacturacionService
 		$totalBrutoAuxiliar = 0;
 		$tasaDetraccion = 0.;
 		
-		foreach($dataItem as $item)
+		foreach($dataItem as $item) {
+			// No gravado (restitución de un valor, p. ej. nominal de cheque rechazado)
+			// no integra la base bruta de percepción.
+			if (($item['tratamiento_fiscal'] ?? '') === 'nogravado') {
+				continue;
+			}
 			$totalBrutoAuxiliar += ($item['cantidad'] * $item['precio']);
+		}
 
 		// Perc. IVA RI (PIVA): solo administración. Gastro / estacionamiento / POS mandan omitir_percepciones.
 		$fechaPiva = null;
@@ -317,6 +323,11 @@ class ImpuestoService extends FacturacionService
 							(float) $valorTasaImpuesto,
 						);
 						$conceptoNeto = ($valorTasaImpuesto == 0. ? 'Exento' : 'Gravado al '.$valorTasaImpuesto.'%');
+					}
+
+					if (($item['tratamiento_fiscal'] ?? '') === 'nogravado') {
+						$valorTasaImpuesto = 0;
+						$conceptoNeto = 'No Gravado';
 					}
 
 					$totalNeto = VentaImporteDosDecimalesSupport::redondear($neto['totalConDescuento']);
@@ -673,8 +684,13 @@ class ImpuestoService extends FacturacionService
 				$totalImpuestoInterno += (float) $neto['impuestoInternoMonto'];
 				$dataItem[$idx]['impuesto_interno_monto'] = (float) $neto['impuestoInternoMonto'];
 			}
+			if (($item['tratamiento_fiscal'] ?? '') === 'nogravado') {
+				$valorTasaImpuesto = 0;
+			}
 			self::agregaItemTotales(
-				($valorTasaImpuesto == 0. ? 'Exento' : 'Gravado al '.$valorTasaImpuesto.'%'),
+				($item['tratamiento_fiscal'] ?? '') === 'nogravado'
+					? 'No Gravado'
+					: ($valorTasaImpuesto == 0. ? 'Exento' : 'Gravado al '.$valorTasaImpuesto.'%'),
 				$valorTasaImpuesto,
 				$totalNetoLinea,
 				$impuesto->id,

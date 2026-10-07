@@ -11,6 +11,7 @@
 <script src="{{ asset('assets/pages/scripts/contable/cuentacontable/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cuentacontable/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/puntoventa/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/puntoventa/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/tipotransaccion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tipotransaccion/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/admin/usuario/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script>
 window.FACTURACION_LOCAL = {
     usocuentacajaLocalId: {{ (int) ($usocuentacaja_local_id ?? 0) }},
@@ -55,4 +56,5 @@ window.localVentaFormCfg = {
 @include('includes.contable.modalconsultacuentacontable')
 @include('includes.ventas.modalconsultapuntoventa')
 @include('includes.ventas.modalconsultatipotransaccion')
+@include('includes.admin.modalconsultausuario')
 @endsection

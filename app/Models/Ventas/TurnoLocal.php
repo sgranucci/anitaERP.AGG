@@ -4,6 +4,7 @@ namespace App\Models\Ventas;
 
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class TurnoLocal extends Model implements Auditable
@@ -40,6 +41,14 @@ class TurnoLocal extends Model implements Auditable
     public function turnosOperativos()
     {
         return $this->hasMany(TurnoOperativoLocal::class, 'turno_local_id');
+    }
+
+    public function locales(): BelongsToMany
+    {
+        return $this->belongsToMany(LocalVenta::class, 'local_venta_turno', 'turno_local_id', 'local_venta_id')
+            ->withPivot(['orden'])
+            ->withTimestamps()
+            ->orderByPivot('orden');
     }
 
     public function cruzaMedianoche(): bool

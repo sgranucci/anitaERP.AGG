@@ -39,8 +39,7 @@ class ComprobanteImpresionSesionController extends Controller
             $sesion = $this->sesionService->armarDesdeVenta(
                 $venta,
                 $this->modo($request),
-                $request->query('solo_formulario'),
-                $request->boolean('con_envios')
+                $request->query('solo_formulario')
             );
         } catch (\InvalidArgumentException $e) {
             return redirect()
@@ -585,8 +584,6 @@ class ComprobanteImpresionSesionController extends Controller
         }
 
         $pack = $request->boolean('pack') || $solo === null;
-        $planConEnvios = $request->boolean('con_envios')
-            || (is_array($sesionSesion) && ! empty($sesionSesion['plan_con_envios']));
         $sesion = match ($tipo) {
             'PEDIDO' => $this->sesionService->armarDesdePedido(
                 Pedido::query()->findOrFail($id),
@@ -603,8 +600,7 @@ class ComprobanteImpresionSesionController extends Controller
             default => $this->sesionService->armarDesdeVenta(
                 Venta::query()->with(['puntoventas', 'pedidos', 'remitos'])->findOrFail($id),
                 $modo,
-                $solo,
-                $planConEnvios,
+                $solo
             ),
         };
         $retorno = $this->resolverRetornoPath($request, is_array($sesionSesion) ? $sesionSesion : []);

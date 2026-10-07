@@ -9,9 +9,11 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Listaprecio;
+use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
+use App\Models\Ventas\TurnoLocal;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Ventas\FacturacionLocal\DepmaeLocalAnitaSyncService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
@@ -107,6 +109,8 @@ class LocalVentaController extends Controller
         $data = LocalVenta::query()->create($payload['atributos']);
         $this->syncPuntoventas($data, $payload['puntoventa_ids'], $payload['puntoventa_id']);
         $this->syncCuentas($data, $payload['cuentacaja_ids']);
+        $this->syncUsuarios($data, $payload['usuario_ids']);
+        $this->syncTurnosMaestro($data, $payload['turno_local_ids']);
 
         return redirect()->route('facturacion_local_locales')->with('mensaje', 'Local creado con éxito');
     }
@@ -116,7 +120,7 @@ class LocalVentaController extends Controller
         $this->assertFerli();
         can('editar-local-venta');
         $data = LocalVenta::query()
-            ->with(['cuentacajas', 'puntoventas', 'deposito', 'listaprecio', 'cuentacajaEfectivo', 'cuentacontableVenta', 'tipotransaccionFac', 'tipotransaccionNc'])
+            ->with(['cuentacajas', 'puntoventas', 'usuarios', 'turnosMaestro', 'deposito', 'listaprecio', 'cuentacajaEfectivo', 'cuentacontableVenta', 'tipotransaccionFac', 'tipotransaccionNc'])
             ->findOrFail($id);
 
         return view('ventas.facturacion_local.local_venta.editar', $this->formData($data));
@@ -175,6 +179,8 @@ class LocalVentaController extends Controller
         $data->update($payload['atributos']);
         $this->syncPuntoventas($data, $payload['puntoventa_ids'], $payload['puntoventa_id']);
         $this->syncCuentas($data, $payload['cuentacaja_ids']);
+        $this->syncUsuarios($data, $payload['usuario_ids']);
+        $this->syncTurnosMaestro($data, $payload['turno_local_ids']);
 
         return redirect()->route('facturacion_local_locales')->with('mensaje', 'Local actualizado con éxito');
     }
@@ -192,24 +198,28 @@ class LocalVentaController extends Controller
         }
         $data->cuentacajas()->detach();
         $data->puntoventas()->detach();
+        $data->usuarios()->detach();
+        $data->turnosMaestro()->detach();
         $data->delete();
 
         return response()->json(['mensaje' => 'ok']);
     }
 
     /**
-     * @return array{atributos: array<string, mixed>, puntoventa_ids: list<int>, puntoventa_id: ?int, cuentacaja_ids: list<int>}
+     * @return array{atributos: array<string, mixed>, puntoventa_ids: list<int>, puntoventa_id: ?int, cuentacaja_ids: list<int>, usuario_ids: list<int>, turno_local_ids: list<int>}
      */
     private function payloadPersistencia(ValidacionLocalVenta $request): array
     {
         $validated = $request->validated();
         $pvIds = array_values(array_map('intval', $validated['puntoventa_ids'] ?? []));
         $cuentaIds = array_values(array_map('intval', $validated['cuentacaja_ids'] ?? []));
+        $usuarioIds = array_values(array_map('intval', $validated['usuario_ids'] ?? []));
+        $turnoIds = array_values(array_map('intval', $validated['turno_local_ids'] ?? []));
         $defaultPv = isset($validated['puntoventa_id']) ? (int) $validated['puntoventa_id'] : 0;
         if ($defaultPv <= 0 || ! in_array($defaultPv, $pvIds, true)) {
             $defaultPv = $pvIds[0] ?? 0;
         }
-        unset($validated['puntoventa_ids'], $validated['cuentacaja_ids']);
+        unset($validated['puntoventa_ids'], $validated['cuentacaja_ids'], $validated['usuario_ids'], $validated['turno_local_ids']);
         $validated['puntoventa_id'] = $defaultPv > 0 ? $defaultPv : null;
 
         return [
@@ -217,6 +227,8 @@ class LocalVentaController extends Controller
             'puntoventa_ids' => $pvIds,
             'puntoventa_id' => $defaultPv > 0 ? $defaultPv : null,
             'cuentacaja_ids' => $cuentaIds,
+            'usuario_ids' => $usuarioIds,
+            'turno_local_ids' => $turnoIds,
         ];
     }
 
@@ -343,6 +355,20 @@ class LocalVentaController extends Controller
             $cuentasSeleccionadas[] = ['id' => '', 'codigo' => '', 'nombre' => ''];
         }
 
+        $usuariosSeleccionados = $this->usuariosSeleccionados($data);
+        $empresaIdTurnos = (int) old('empresa_id', $data->empresa_id ?? 0);
+        $turnosCatalogo = TurnoLocal::query()
+            ->where('activo', true)
+            ->when($empresaIdTurnos > 0, fn ($q) => $q->where('empresa_id', $empresaIdTurnos))
+            ->orderBy('orden')
+            ->orderBy('nombre')
+            ->get();
+        $turnoIdsSeleccionados = $this->turnoIdsSeleccionados($data);
+        $otrosLocalesPorUsuario = $this->otrosLocalesPorUsuario(
+            array_values(array_filter(array_map(static fn ($row) => (int) ($row['id'] ?? 0), $usuariosSeleccionados))),
+            (int) ($data->id ?? 0)
+        );
+
         return compact(
             'data',
             'empresa_query',
@@ -354,6 +380,10 @@ class LocalVentaController extends Controller
             'tipoNc',
             'puntoventasSeleccionados',
             'cuentasSeleccionadas',
+            'usuariosSeleccionados',
+            'turnosCatalogo',
+            'turnoIdsSeleccionados',
+            'otrosLocalesPorUsuario',
             'usocuentacaja_local_id'
         );
     }
@@ -399,6 +429,132 @@ class LocalVentaController extends Controller
     }
 
     /**
+     * @param  list<int>  $ids
+     */
+    private function syncUsuarios(LocalVenta $local, array $ids): void
+    {
+        $sync = [];
+        $orden = 0;
+        foreach (array_values(array_unique($ids)) as $id) {
+            $uid = (int) $id;
+            if ($uid <= 0) {
+                continue;
+            }
+            $sync[$uid] = ['orden' => $orden];
+            $orden++;
+        }
+        $local->usuarios()->sync($sync);
+    }
+
+    /**
+     * @param  list<int>  $ids
+     */
+    private function syncTurnosMaestro(LocalVenta $local, array $ids): void
+    {
+        $sync = [];
+        $orden = 0;
+        foreach (array_values(array_unique($ids)) as $id) {
+            $tid = (int) $id;
+            if ($tid <= 0) {
+                continue;
+            }
+            $sync[$tid] = ['orden' => $orden];
+            $orden++;
+        }
+        $local->turnosMaestro()->sync($sync);
+    }
+
+    /**
+     * @return list<array{id: int|string, usuario: string, nombre: string}>
+     */
+    private function usuariosSeleccionados(LocalVenta $data): array
+    {
+        $filas = [];
+        $oldIds = old('usuario_ids');
+        if (is_array($oldIds)) {
+            foreach ($oldIds as $usuarioId) {
+                $usuarioId = (int) $usuarioId;
+                if ($usuarioId <= 0) {
+                    continue;
+                }
+                $usuario = Usuario::query()->find($usuarioId);
+                if (! $usuario) {
+                    continue;
+                }
+                $filas[] = [
+                    'id' => (int) $usuario->id,
+                    'usuario' => (string) $usuario->usuario,
+                    'nombre' => (string) $usuario->nombre,
+                ];
+            }
+        } elseif ($data->exists) {
+            $usuarios = $data->relationLoaded('usuarios') ? $data->usuarios : $data->usuarios()->get();
+            foreach ($usuarios as $usuario) {
+                $filas[] = [
+                    'id' => (int) $usuario->id,
+                    'usuario' => (string) $usuario->usuario,
+                    'nombre' => (string) $usuario->nombre,
+                ];
+            }
+        }
+
+        if ($filas === []) {
+            $filas[] = ['id' => '', 'usuario' => '', 'nombre' => ''];
+        }
+
+        return $filas;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function turnoIdsSeleccionados(LocalVenta $data): array
+    {
+        $old = old('turno_local_ids');
+        if (is_array($old)) {
+            return array_values(array_filter(array_map('intval', $old), static fn ($id) => $id > 0));
+        }
+        if (! $data->exists) {
+            return [];
+        }
+
+        $turnos = $data->relationLoaded('turnosMaestro') ? $data->turnosMaestro : $data->turnosMaestro()->get();
+
+        return $turnos->pluck('id')->map(static fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * @param  list<int>  $usuarioIds
+     * @return array<int, string>
+     */
+    private function otrosLocalesPorUsuario(array $usuarioIds, int $localId): array
+    {
+        $usuarioIds = array_values(array_filter($usuarioIds, static fn ($id) => $id > 0));
+        if ($usuarioIds === []) {
+            return [];
+        }
+
+        $filas = LocalVenta::query()
+            ->select(['local_venta.id', 'local_venta.nombre', 'local_venta_usuario.usuario_id'])
+            ->join('local_venta_usuario', 'local_venta_usuario.local_venta_id', '=', 'local_venta.id')
+            ->whereIn('local_venta_usuario.usuario_id', $usuarioIds)
+            ->when($localId > 0, fn ($q) => $q->where('local_venta.id', '!=', $localId))
+            ->orderBy('local_venta.codigo')
+            ->get();
+
+        $out = [];
+        foreach ($filas as $fila) {
+            $uid = (int) $fila->usuario_id;
+            $nombre = (string) $fila->nombre;
+            $out[$uid] = isset($out[$uid]) && $out[$uid] !== ''
+                ? $out[$uid].', '.$nombre
+                : $nombre;
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  array<string, mixed>  $filtros
      * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection
      */
@@ -416,6 +572,8 @@ class LocalVentaController extends Controller
                 'deposito:id,codigo,nombre',
                 'listaprecio:id,codigo,nombre',
                 'empresa:id,nombre',
+                'usuarios:id,usuario,nombre',
+                'turnosMaestro:id,nombre',
             ])
             ->orderBy('local_venta.codigo');
 
