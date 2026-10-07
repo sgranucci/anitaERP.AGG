@@ -192,7 +192,7 @@
                                         </a>
                                         @if (can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false))
                                             <button type="button"
-                                                class="btn-accion-tabla tooltipsC js-op-documentos-relacionados text-info"
+                                                class="btn-accion-tabla tooltipsC js-op-documentos-relacionados text-primary"
                                                 title="Documentos relacionados (factura, OC, COM, requisición)"
                                                 data-id="{{ $fila->id }}"
                                                 data-numero="{{ $fila->etiquetaComprobante() }}">

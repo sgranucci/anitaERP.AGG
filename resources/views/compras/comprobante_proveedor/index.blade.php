@@ -161,7 +161,7 @@ use App\Support\Listado\QueryRetornoListado;
                                 @endif
                                 @if (can('listar-comprobante-proveedor', false) || can('editar-comprobante-proveedor', false))
                                 <button type="button"
-                                        class="btn-accion-tabla tooltipsC text-info js-circuito-documentos-relacionados"
+                                        class="btn-accion-tabla tooltipsC text-primary js-circuito-documentos-relacionados"
                                         title="Documentos relacionados (RQ, OC, COM, OP)"
                                         data-url="{{ route('comprobante_proveedor_documentos_relacionados', ['id' => $row->id]) }}"
                                         data-numero="Factura #{{ $row->id }}">

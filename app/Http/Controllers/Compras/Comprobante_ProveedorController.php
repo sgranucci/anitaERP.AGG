@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionComprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Archivo;
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Proveedor;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
@@ -1528,6 +1529,9 @@ class Comprobante_ProveedorController extends Controller
             'asientoPreview' => $asientoPreview,
             'mostrarSolapaAsiento' => true,
             'tiene_pagos' => $tienePagos,
+            'pagos_comprobante' => $comprobanteId
+                ? $this->pagosVisiblesDelComprobante((int) $comprobanteId)
+                : [],
             'bloqueado_edicion' => $bloqueadoEdicion,
             'puede_actualizar' => $puedeActualizar,
             'mostrarSolapaCom' => ! ($comPolitica['sin_com_por_tipo'] ?? false)
@@ -1560,6 +1564,53 @@ class Comprobante_ProveedorController extends Controller
             'validacionAbonoCompleta' => $validacionAbonoCompleta,
             'mostrarContabilizarAbono' => $mostrarContabilizarAbono,
         ]);
+    }
+
+    /**
+     * Órdenes de pago aplicadas a esta factura, para abrirlas desde la consulta.
+     *
+     * @return list<array{id: int, etiqueta: string, url_ver: string}>
+     */
+    private function pagosVisiblesDelComprobante(int $comprobanteId): array
+    {
+        if ($comprobanteId <= 0) {
+            return [];
+        }
+
+        $puedeVer = can('listar-pagoproveedor', false)
+            || can('editar-pagoproveedor', false)
+            || can('crear-pagoproveedor', false)
+            || can('listar-cuentacorriente-proveedor', false)
+            || can('listar-legajo-compra', false)
+            || can('listar-seguimiento-legajo-compra', false)
+            || can('listar-ordencompra', false)
+            || can('listar-comprobante-proveedor', false)
+            || can('editar-comprobante-proveedor', false);
+        if (! $puedeVer) {
+            return [];
+        }
+
+        $ids = CircuitoComprasDocumentosRelacionadosSupport::pagoproveedorIdsPorComprobante($comprobanteId);
+        if ($ids === []) {
+            return [];
+        }
+
+        return Pagoproveedor::query()
+            ->whereIn('id', $ids)
+            ->orderByDesc('id')
+            ->get()
+            ->map(static function (Pagoproveedor $pago): array {
+                return [
+                    'id' => (int) $pago->id,
+                    'etiqueta' => $pago->etiquetaComprobante(),
+                    'url_ver' => route('editar_pagoproveedor', [
+                        'id' => $pago->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]),
+                ];
+            })
+            ->all();
     }
 
     /**

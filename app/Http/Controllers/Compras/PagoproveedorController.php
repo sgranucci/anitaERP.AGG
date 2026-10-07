@@ -759,7 +759,9 @@ class PagoproveedorController extends Controller
             || can('listar-cuentacorriente-proveedor', false)
             || can('listar-legajo-compra', false)
             || can('listar-seguimiento-legajo-compra', false)
-            || can('listar-ordencompra', false);
+            || can('listar-ordencompra', false)
+            || can('listar-comprobante-proveedor', false)
+            || can('editar-comprobante-proveedor', false);
     }
 
     public function datosEnvioProveedor(int $id)

@@ -85,8 +85,15 @@
             <div class="card-header">
                 <h3 class="card-title">{{ $opSoloLectura ? 'Consultar' : 'Editar' }} orden de pago — {{ $estado }}</h3>
                 <div class="card-tools">
+                    <a href="{{ route('imprimir_pagoproveedor', $data->id) }}"
+                       class="btn btn-outline-light btn-sm mr-1"
+                       target="_blank"
+                       rel="noopener"
+                       title="Listado de la orden de pago">
+                        <i class="fa fa-list-alt"></i> Listado
+                    </a>
                     <button type="button"
-                        class="btn btn-outline-info btn-sm mr-1 js-op-documentos-relacionados"
+                        class="btn btn-outline-light btn-sm mr-1 js-op-documentos-relacionados"
                         title="Documentos relacionados (factura, OC, COM, requisición)"
                         data-id="{{ $data->id }}"
                         data-numero="{{ $data->etiquetaComprobante() }}">
@@ -174,7 +181,7 @@
                     <i class="fa fa-print"></i> Imprimir
                 </a>
                 <button type="button"
-                    class="btn btn-outline-info js-op-documentos-relacionados"
+                    class="btn btn-outline-primary js-op-documentos-relacionados"
                     title="Documentos relacionados (factura, OC, COM, requisición)"
                     data-id="{{ $data->id }}"
                     data-numero="{{ $data->etiquetaComprobante() }}">
