@@ -292,6 +292,7 @@ final class FacturacionLocalNotaCreditoService
         $colorIds = [];
         $impuestoIds = [];
         $incluyeImpuestos = [];
+        $idsLinea = [];
 
         $brutoTodos = 0.;
         $brutoSeleccionado = 0.;
@@ -335,6 +336,7 @@ final class FacturacionLocalNotaCreditoService
             $combinacionIds[] = (int) ($em->combinacion_id ?? 0);
             $talleIds[] = (int) ($em->talle_id ?? 0);
             $colorIds[] = (int) ($em->color_id ?? 0);
+            $idsLinea[] = $emisionId;
             $impuestoId = (int) ($em->impuesto_id ?? 0);
             $impuestoIds[] = $impuestoId > 0
                 ? $impuestoId
@@ -413,6 +415,9 @@ final class FacturacionLocalNotaCreditoService
             'combinacion_ids' => $combinacionIds,
             'talle_ids' => $talleIds,
             'color_ids' => $colorIds,
+            // Mismo orden que los renglones. Ferli copia combinación/talle desde la FAC
+            // por este id; sin él, una NC parcial toma el primer ítem de la factura.
+            'ids' => $idsLinea,
             'descuentopie' => $descuentoPie,
             'descuentoimportepie' => 0.,
             'vendedor_id' => Auth::id(),

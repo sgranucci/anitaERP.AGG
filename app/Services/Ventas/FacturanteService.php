@@ -237,6 +237,9 @@ class FacturanteService
 				'concepto' => "Total Iva",
 				'tasa' => 21,
 				'importe' => floatval($iva2),
+				'baseimponible' => abs(floatval($iva1)) < 0.0001
+					? abs(floatval($totalneto))
+					: round(abs(floatval($iva2)) / 0.21, 6),
 				'impuesto_id' => 3,
 			];
 		}
@@ -1361,6 +1364,7 @@ class FacturanteService
 				'concepto' => 'Total Iva',
 				'tasa' => 21,
 				'importe' => $iva,
+				'baseimponible' => abs($gravado) > 0.0001 ? abs($gravado) : round(abs($iva) / 0.21, 6),
 				'impuesto_id' => 3,
 			];
 		}

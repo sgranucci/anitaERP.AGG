@@ -18,7 +18,8 @@ class FacturacionLocalImportarVentasAnitaCommand extends Command
                             {--hasta=2026-09-30 : Fecha final Y-m-d}
                             {--usuario= : usuario_id para las altas}
                             {--dry-run : Solo lista las que faltan}
-                            {--ejecutar : Graba en anitaERP. No escribe Anita ni asientos}';
+                            {--ejecutar : Graba en anitaERP. No escribe Anita ni asientos}
+                            {--solo= : Solo estas claves tipo|letra|sucursal|numero, separadas por coma}';
 
     protected $description = 'Importa cabeceras de venta de locales que están en Anita y faltan en anitaERP (sin asiento ni stock)';
 
@@ -53,7 +54,9 @@ class FacturacionLocalImportarVentasAnitaCommand extends Command
         ));
 
         try {
-            $r = $service->importarFaltantes($desde, $hasta, ! $ejecutar);
+            $solo = trim((string) $this->option('solo'));
+            $soloClaves = $solo === '' ? null : array_values(array_filter(array_map('trim', explode(',', $solo))));
+            $r = $service->importarFaltantes($desde, $hasta, ! $ejecutar, $soloClaves);
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
 

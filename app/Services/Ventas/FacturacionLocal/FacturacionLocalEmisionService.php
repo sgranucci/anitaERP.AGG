@@ -85,10 +85,10 @@ final class FacturacionLocalEmisionService
             return ['ok' => false, 'error' => $msg, 'errores' => [$msg]];
         }
 
-		// Neto 0 (cambio equivalente): ARCA exige mínimo $0,01.
+		// Cambio equivalente (FAC y NC se compensan): ARCA exige mínimo $0,01.
+		// Una línea con precio 0 no es un cambio: no se le pega el mínimo.
 		$forzarMinimoArca = ! $esRegalo
-			&& abs((float) $split['neto']) < 0.009
-			&& $split['fac'] !== [];
+			&& FacturacionLocalSplitFacNcSupport::esCambioEquivalente($split);
 		if ($forzarMinimoArca) {
 			$split = $this->aplicarImporteMinimoArcaEnFac($split);
 		}
@@ -418,19 +418,23 @@ final class FacturacionLocalEmisionService
 	 * @param  array<string,mixed>  $input
 	 * @return array{
 	 *   neto:float,neto_fac:float,neto_nc:float,tiene_nc:bool,
-	 *   total_pagar:float,percepcion:float,
+	 *   total_pagar:float,cambio_equivalente:bool,percepcion:float,
 	 *   percepciones:list<array{concepto:string,tasa:float,importe:float}>
 	 * }
 	 */
 	public function totalesCobro(LocalVenta $local, array $input): array
 	{
 		$split = FacturacionLocalSplitFacNcSupport::partir($input['lineas'] ?? []);
+		$cambioEquivalente = FacturacionLocalSplitFacNcSupport::esCambioEquivalente($split);
 		$base = [
 			'neto' => (float) $split['neto'],
 			'neto_fac' => (float) $split['neto_fac'],
 			'neto_nc' => (float) $split['neto_nc'],
 			'tiene_nc' => (bool) $split['tiene_nc'],
-			'total_pagar' => max(0., (float) $split['neto']),
+			'total_pagar' => $cambioEquivalente
+				? FacturacionLocalAsientoMedioSupport::IMPORTE_MINIMO_ARCA
+				: max(0., (float) $split['neto']),
+			'cambio_equivalente' => $cambioEquivalente,
 			'percepcion' => 0.,
 			'percepciones' => [],
 		];
@@ -441,7 +445,7 @@ final class FacturacionLocalEmisionService
 			return $base;
 		}
 
-		if (! empty($receptor['omitir_percepciones']) || $split['fac'] === []) {
+		if ($cambioEquivalente || ! empty($receptor['omitir_percepciones']) || $split['fac'] === []) {
 			return $base;
 		}
 

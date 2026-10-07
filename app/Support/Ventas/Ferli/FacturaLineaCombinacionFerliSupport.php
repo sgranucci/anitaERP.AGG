@@ -52,24 +52,19 @@ final class FacturaLineaCombinacionFerliSupport
             (array) ($requestData['ids'] ?? [])
         ));
         $emisionesOrden = array_values($emisionesPorId);
+        $usadas = [];
 
         foreach ($dataFactura as $i => $item) {
             if (! is_array($item) || empty($item['articulo_id'])) {
                 continue;
             }
 
-            $emision = null;
-            $idEmision = (int) ($idsRequest[$i] ?? 0);
-            if ($idEmision > 0 && isset($emisionesPorId[$idEmision])) {
-                $emision = $emisionesPorId[$idEmision];
-            } elseif (isset($emisionesOrden[$i])) {
-                $emision = $emisionesOrden[$i];
-            }
-
+            $emision = self::resolverEmision($item, $i, $idsRequest, $emisionesPorId, $emisionesOrden, $usadas);
             if (! $emision) {
                 continue;
             }
 
+            $usadas[(int) $emision->id] = true;
             $dataFactura[$i] = self::aplicarEmisionAlItem($item, $emision);
         }
 
@@ -105,6 +100,63 @@ final class FacturaLineaCombinacionFerliSupport
         }
 
         return $out;
+    }
+
+    /**
+     * NC parcial: el renglón 0 no es el primer ítem de la factura.
+     * Si ya trae combinación, se busca esa variante. Si no, se usa la posición
+     * (NC total de mostrador, que no manda combinación ni talle).
+     *
+     * @param  array<string, mixed>  $item
+     * @param  list<int>  $idsRequest
+     * @param  array<int, Venta_Emision>  $emisionesPorId
+     * @param  list<Venta_Emision>  $emisionesOrden
+     * @param  array<int, true>  $usadas
+     */
+    private static function resolverEmision(
+        array $item,
+        int $i,
+        array $idsRequest,
+        array $emisionesPorId,
+        array $emisionesOrden,
+        array $usadas
+    ): ?Venta_Emision {
+        $idEmision = (int) ($idsRequest[$i] ?? 0);
+        if ($idEmision > 0 && isset($emisionesPorId[$idEmision]) && ! isset($usadas[$idEmision])) {
+            return $emisionesPorId[$idEmision];
+        }
+
+        $combinacionItem = (int) ($item['combinacion_id'] ?? 0);
+        if ($combinacionItem > 0) {
+            $articuloId = (int) ($item['articulo_id'] ?? 0);
+            $talleId = (int) ($item['talle_id'] ?? 0);
+            foreach ($emisionesOrden as $emision) {
+                $emisionId = (int) $emision->id;
+                if (isset($usadas[$emisionId])) {
+                    continue;
+                }
+                if ((int) $emision->articulo_id !== $articuloId) {
+                    continue;
+                }
+                if ((int) ($emision->combinacion_id ?? 0) !== $combinacionItem) {
+                    continue;
+                }
+                if ($talleId > 0 && (int) ($emision->talle_id ?? 0) !== $talleId) {
+                    continue;
+                }
+
+                return $emision;
+            }
+
+            return null;
+        }
+
+        $porIndice = $emisionesOrden[$i] ?? null;
+        if ($porIndice && isset($usadas[(int) $porIndice->id])) {
+            return null;
+        }
+
+        return $porIndice;
     }
 
     /**

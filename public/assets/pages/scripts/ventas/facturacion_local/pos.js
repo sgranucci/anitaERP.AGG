@@ -188,9 +188,6 @@
     }
 
     function aCobrarActual() {
-        if (Math.abs(netoActual) < 0.009 && cart.length) {
-            return 0.01;
-        }
         return Math.max(0, netoActual);
     }
 
@@ -226,21 +223,23 @@
 		}).then(function (res) {
 			if (seq !== previewSeq) return;
 			var b = res.body || {};
-			netoActual = Number(b.total_pagar != null ? b.total_pagar : (b.neto || 0));
+			var cambioEquivalente = !!b.cambio_equivalente
+				|| (Math.abs(Number(b.neto || 0)) < 0.009
+					&& Number(b.neto_fac || 0) > 0.009
+					&& Number(b.neto_nc || 0) > 0.009);
+			netoActual = cambioEquivalente
+				? 0.01
+				: Number(b.total_pagar != null ? b.total_pagar : (b.neto || 0));
 			sincronizarMontosAutomaticos();
 			var el = $('fl-totales');
 			if (el) {
-				var mostrar = netoActual;
-				if (Math.abs(netoActual) < 0.009 && cart.length) {
-					mostrar = 0.01;
-				}
-				el.childNodes[0].textContent = money(mostrar);
+				el.childNodes[0].textContent = money(netoActual);
 				var det = $('fl-totales-detalle');
 				if (det) {
 					var extra = '';
-					if (netoActual < -0.009) {
+					if (Number(b.neto || 0) < -0.009) {
 						extra = ' · Bloqueado (NC completa afuera)';
-					} else if (Math.abs(netoActual) < 0.009 && (Number(b.neto_fac || 0) > 0 || Number(b.neto_nc || 0) > 0)) {
+					} else if (cambioEquivalente) {
 						extra = ' · Mín. ARCA $0,01';
 					}
 					var perc = '';

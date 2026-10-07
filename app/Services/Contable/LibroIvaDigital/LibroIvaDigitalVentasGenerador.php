@@ -371,6 +371,16 @@ class LibroIvaDigitalVentasGenerador
             $concepto = (string) $imp->concepto;
             $importe = abs((float) $imp->importe);
 
+            if (IvaVentasDesgloseSupport::esTotalIva($concepto)) {
+                $tasa = round((float) $imp->tasa, 3);
+                $base = abs((float) $imp->baseimponible);
+                $alicuotas[$tasa]['iva'] = ($alicuotas[$tasa]['iva'] ?? 0) + $importe;
+                if ($base > 0) {
+                    $alicuotas[$tasa]['neto'] = ($alicuotas[$tasa]['neto'] ?? 0) + $base;
+                }
+                $alicuotas[$tasa]['tasa'] = $tasa;
+                continue;
+            }
             if (stripos($concepto, 'Total') === 0) {
                 $importeTotal = $importe;
                 continue;

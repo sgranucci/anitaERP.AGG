@@ -15,7 +15,8 @@ class FacturacionCargarHuecosArca extends Command
                             {--sin-mail : Graba pero no envía el aviso}
                             {--puntoventa= : Código de punto de venta, por ejemplo 12}
                             {--tipo= : Código AFIP, por ejemplo 3 para nota de crédito A}
-                            {--numero= : Un solo número. Exige --puntoventa y --tipo}';
+                            {--numero= : Un solo número. Exige --puntoventa y --tipo}
+                            {--nombre= : Nombre del receptor si el documento de ARCA no está en clientes}';
 
     protected $description = 'Carga comprobantes autorizados en ARCA que el ERP no tiene y avisa por mail.';
 
@@ -38,6 +39,7 @@ class FacturacionCargarHuecosArca extends Command
             'puntoventa' => $pv !== '' ? $pv : null,
             'tipo' => $tipo > 0 ? $tipo : null,
             'numero' => $numero > 0 ? $numero : null,
+            'nombre' => trim((string) $this->option('nombre')),
         ]);
 
         $filas = [];

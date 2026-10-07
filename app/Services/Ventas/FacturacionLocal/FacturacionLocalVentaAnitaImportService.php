@@ -39,12 +39,23 @@ final class FacturacionLocalVentaAnitaImportService
     ) {}
 
     /**
+     * @param  list<string>|null  $soloClaves  tipo|letra|sucursal|numero. Null = todos los faltantes del rango.
      * @return array{anita:int,faltantes:int,creadas:int,errores:list<string>,detalle:list<string>}
      */
-    public function importarFaltantes(string $desdeYmd, string $hastaYmd, bool $dryRun): array
+    public function importarFaltantes(string $desdeYmd, string $hastaYmd, bool $dryRun, ?array $soloClaves = null): array
     {
         $filas = $this->listarVenta($desdeYmd, $hastaYmd);
         $faltantes = $this->filtrarFaltantes($filas, $desdeYmd, $hastaYmd);
+        if ($soloClaves !== null) {
+            $permitidas = [];
+            foreach ($soloClaves as $clave) {
+                $permitidas[strtoupper(trim($clave))] = true;
+            }
+            $faltantes = array_values(array_filter(
+                $faltantes,
+                fn (stdClass $fila): bool => isset($permitidas[$this->clave($fila)])
+            ));
+        }
         $resultado = [
             'anita' => count($filas),
             'faltantes' => count($faltantes),

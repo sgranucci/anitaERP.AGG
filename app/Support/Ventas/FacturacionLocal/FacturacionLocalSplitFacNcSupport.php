@@ -60,6 +60,19 @@ final class FacturacionLocalSplitFacNcSupport
     }
 
     /**
+     * Cambio equivalente: hay factura y nota de crédito, y se compensan.
+     * Una línea en cero (precio 0) no es un cambio: no debe forzar el mínimo ARCA.
+     *
+     * @param  array{neto?:float,neto_fac?:float,neto_nc?:float}  $split
+     */
+    public static function esCambioEquivalente(array $split): bool
+    {
+        return abs((float) ($split['neto'] ?? 0)) < 0.009
+            && (float) ($split['neto_fac'] ?? 0) > 0.009
+            && (float) ($split['neto_nc'] ?? 0) > 0.009;
+    }
+
+    /**
      * Precio unitario tal que round(cantidad * precio, 2) coincide con el neto en pesos.
      * Evita convertir un importe a un porcentaje periódico (16,666…).
      */

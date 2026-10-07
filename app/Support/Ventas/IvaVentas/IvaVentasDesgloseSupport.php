@@ -69,6 +69,15 @@ final class IvaVentasDesgloseSupport
     }
 
     /**
+     * Facturante y el import de locales graban el IVA 21% con el rótulo «Total Iva».
+     * No es el total del comprobante: el importe es el IVA y la base es el neto.
+     */
+    public static function esTotalIva(string $concepto): bool
+    {
+        return preg_match('/^total\s+iva\b/iu', trim($concepto)) === 1;
+    }
+
+    /**
      * @return array{
      *   no_gravado: float,
      *   exento: float,
@@ -98,6 +107,11 @@ final class IvaVentasDesgloseSupport
             $importe = abs((float) $imp->importe);
             $base = abs((float) $imp->baseimponible);
 
+            if (self::esTotalIva($concepto)) {
+                $iva += $importe;
+                $baseIva += $base;
+                continue;
+            }
             if (stripos($concepto, 'Total') === 0) {
                 $total = $importe;
                 continue;

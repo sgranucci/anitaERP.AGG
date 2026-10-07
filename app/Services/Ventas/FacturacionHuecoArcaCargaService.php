@@ -22,8 +22,9 @@ use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
- * Busca números que ARCA autorizó y el ERP no tiene, y los graba
- * (cabecera, IVA, cuenta corriente y asiento) sin mover stock ni replicar Anita.
+ * Busca números que ARCA autorizó y el ERP no tiene, y los graba en el ERP
+ * (cabecera, IVA, cuenta corriente y asiento). No mueve stock ni escribe Anita.
+ * Sin ítems del comprobante original, arma un renglón genérico con el neto y el IVA de ARCA.
  */
 final class FacturacionHuecoArcaCargaService
 {
@@ -42,7 +43,8 @@ final class FacturacionHuecoArcaCargaService
      *   sin_mail?: bool,
      *   puntoventa?: ?string,
      *   tipo?: ?int,
-     *   numero?: ?int
+     *   numero?: ?int,
+     *   nombre?: ?string
      * }  $opciones
      * @return array{
      *   candidatos: int,
@@ -95,11 +97,11 @@ final class FacturacionHuecoArcaCargaService
         $excluidos = $this->idsPuntoVentaExcluidos();
         $desde = Carbon::today()->subDays($dias)->toDateString();
         $punta = max(1, (int) config('arca.huecos_facturacion.punta', 15));
+        $nombreReceptor = trim((string) ($opciones['nombre'] ?? ''));
 
         $pvs = Puntoventa::query()
             ->whereIn('modofacturacion', ['C', 'E'])
             ->where('webservice', 'wsfev1')
-            ->when($excluidos !== [], fn ($q) => $q->whereNotIn('id', $excluidos))
             ->orderBy('codigo')
             ->get();
 
@@ -123,23 +125,33 @@ final class FacturacionHuecoArcaCargaService
                     'codigo_afip' => $tipo,
                     'numero' => $numero,
                     'forzado' => true,
+                    'nombre_receptor' => $nombreReceptor,
+                    'es_local' => in_array((int) $pv->id, $excluidos, true),
                 ];
                 continue;
             }
 
-            $series = DB::table('venta')
+            $filas = DB::table('venta')
                 ->where('puntoventa_id', $pv->id)
                 ->where('fecha', '>=', $desde)
                 ->where('codigo_afip', '>', 0)
-                ->when($tipo > 0, fn ($q) => $q->where('codigo_afip', $tipo))
-                ->groupBy('codigo_afip')
-                ->selectRaw('codigo_afip, MIN(numerocomprobante) as minimo, MAX(numerocomprobante) as maximo')
-                ->get();
+                ->get(['codigo_afip', 'codigo', 'numerocomprobante']);
 
-            foreach ($series as $serie) {
-                $codigoAfip = (int) $serie->codigo_afip;
-                $minimo = (int) $serie->minimo;
-                $maximo = (int) $serie->maximo;
+            $porTipo = [];
+            foreach ($filas as $fila) {
+                $codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipDesdeVentaGrabada(
+                    (int) $fila->codigo_afip,
+                    (string) $fila->codigo,
+                );
+                if ($codigoAfip <= 0 || ($tipo > 0 && $codigoAfip !== $tipo)) {
+                    continue;
+                }
+                $porTipo[$codigoAfip][(int) $fila->numerocomprobante] = true;
+            }
+
+            foreach ($porTipo as $codigoAfip => $numeros) {
+                $minimo = min(array_keys($numeros));
+                $maximo = max(array_keys($numeros));
                 $hasta = $maximo;
                 try {
                     $ultimo = $this->arca->feCompUltimoAutorizado((int) $pv->empresa_id, (int) $pv->codigo, $codigoAfip);
@@ -151,17 +163,25 @@ final class FacturacionHuecoArcaCargaService
                         'error' => $e->getMessage(),
                     ]);
                 }
-                if ($minimo <= 0 || $hasta < $minimo) {
+                if ($minimo <= 0 || $hasta < $minimo || ($hasta - $minimo) > 5000) {
                     continue;
                 }
 
-                $existentes = DB::table('venta')
+                $tiene = $numeros;
+                $anteriores = DB::table('venta')
                     ->where('puntoventa_id', $pv->id)
-                    ->where('codigo_afip', $codigoAfip)
+                    ->where('codigo_afip', '>', 0)
                     ->whereBetween('numerocomprobante', [$minimo, $hasta])
-                    ->pluck('numerocomprobante')
-                    ->all();
-                $tiene = array_fill_keys(array_map('intval', $existentes), true);
+                    ->get(['codigo_afip', 'codigo', 'numerocomprobante']);
+                foreach ($anteriores as $fila) {
+                    $tipoFila = TipotransaccionCodigoAfipSupport::codigoAfipDesdeVentaGrabada(
+                        (int) $fila->codigo_afip,
+                        (string) $fila->codigo,
+                    );
+                    if ($tipoFila === (int) $codigoAfip) {
+                        $tiene[(int) $fila->numerocomprobante] = true;
+                    }
+                }
 
                 $resueltos = FacturacionHuecoArca::query()
                     ->where('puntoventa_id', $pv->id)
@@ -181,7 +201,7 @@ final class FacturacionHuecoArcaCargaService
                     if (! isset($tiene[$n])) {
                         $salida[] = [
                             'puntoventa' => $pv,
-                            'codigo_afip' => $codigoAfip,
+                            'codigo_afip' => (int) $codigoAfip,
                             'numero' => $n,
                             'forzado' => false,
                         ];
@@ -213,11 +233,7 @@ final class FacturacionHuecoArcaCargaService
             'notificar' => false,
         ];
 
-        $ya = Venta::query()
-            ->where('puntoventa_id', $pv->id)
-            ->where('codigo_afip', $codigoAfip)
-            ->where('numerocomprobante', $numero)
-            ->first();
+        $ya = $this->ventaYaGrabada($pv, $codigoAfip, $numero);
         if ($ya !== null) {
             return $base + [
                 'estado' => 'ya_existe',
@@ -252,7 +268,7 @@ final class FacturacionHuecoArcaCargaService
         }
 
         try {
-            $armado = $this->armar($pv, $codigoAfip, $numero, $arca);
+            $armado = $this->armar($pv, $codigoAfip, $numero, $arca, $candidato);
         } catch (Throwable $e) {
             $esTributo = str_contains($e->getMessage(), 'percepciones');
             return $this->cerrar(
@@ -419,6 +435,8 @@ final class FacturacionHuecoArcaCargaService
             'vto' => $vto,
             'fecha' => $this->fechaArca((string) ($rg->CbteFch ?? '')),
             'imp_total' => round((float) ($rg->ImpTotal ?? 0), 2),
+            'imp_neto' => round((float) ($rg->ImpNeto ?? 0), 2),
+            'imp_iva' => round((float) ($rg->ImpIVA ?? 0), 2),
             'imp_op_ex' => round((float) ($rg->ImpOpEx ?? 0), 2),
             'imp_tot_conc' => round((float) ($rg->ImpTotConc ?? 0), 2),
             'doc_tipo' => (int) ($rg->DocTipo ?? 99),
@@ -434,9 +452,36 @@ final class FacturacionHuecoArcaCargaService
      * @param  array<string, mixed>  $arca
      * @return array{payload: array<string, mixed>, cliente: string}
      */
-    private function armar(Puntoventa $pv, int $codigoAfip, int $numero, array $arca): array
+    private function armar(Puntoventa $pv, int $codigoAfip, int $numero, array $arca, array $candidato = []): array
     {
-        $cliente = $this->resolverCliente((int) $arca['doc_tipo'], (string) $arca['doc_nro']);
+        $receptor = null;
+        try {
+            $cliente = $this->resolverCliente((int) $arca['doc_tipo'], (string) $arca['doc_nro']);
+        } catch (\RuntimeException $e) {
+            $docNro = (string) $arca['doc_nro'];
+            $mensaje = $e->getMessage();
+            $sinFicha = str_contains($mensaje, 'Ningún cliente')
+                || str_contains($mensaje, 'consumidor final')
+                || str_contains($mensaje, 'clientes con el documento');
+            if (! $sinFicha) {
+                throw $e;
+            }
+            $cliente = Cliente::query()->where('codigo', '0')->orderBy('id')->first();
+            if ($cliente === null) {
+                throw $e;
+            }
+            $nombre = trim((string) ($candidato['nombre_receptor'] ?? ''));
+            if ($nombre === '' && $docNro !== '' && $docNro !== '0') {
+                $nombre = 'DNI '.$docNro;
+            }
+            if ($nombre === '') {
+                $nombre = (string) $cliente->nombre;
+            }
+            $receptor = [
+                'nombre' => $nombre,
+                'numerodocumento' => ($docNro !== '' && $docNro !== '0') ? $docNro : '0',
+            ];
+        }
         $tipo = $this->resolverTipo($pv, $codigoAfip);
         $moneda = $this->resolverMoneda((string) $arca['mon_id']);
         $lineas = $this->lineas($arca);
@@ -477,6 +522,9 @@ final class FacturacionHuecoArcaCargaService
                 'fechajornada' => $fecha,
             ],
         ];
+        if ($receptor !== null) {
+            $payload['venta_receptor'] = $receptor;
+        }
         if ((int) ($pv->actividad_arca_id ?? 0) > 0) {
             $payload['actividad_arca_id'] = (int) $pv->actividad_arca_id;
         }
@@ -486,7 +534,7 @@ final class FacturacionHuecoArcaCargaService
 
         return [
             'payload' => $payload,
-            'cliente' => (string) $cliente->nombre,
+            'cliente' => (string) ($receptor['nombre'] ?? $cliente->nombre),
         ];
     }
 
@@ -527,10 +575,55 @@ final class FacturacionHuecoArcaCargaService
         }
 
         if ($lineas === []) {
-            throw new \RuntimeException('ARCA no trajo alícuotas para armar el comprobante.');
+            $lineas = array_merge($lineas, $this->lineasGenericas($arca));
         }
 
         return $lineas;
+    }
+
+    /**
+     * Sin el detalle del comprobante original: un renglón que cierra con el total de ARCA.
+     *
+     * @param  array<string, mixed>  $arca
+     * @return list<array{base: float, impuesto_id: int, detalle: string}>
+     */
+    private function lineasGenericas(array $arca): array
+    {
+        $neto = round((float) ($arca['imp_neto'] ?? 0), 2);
+        $iva = round((float) ($arca['imp_iva'] ?? 0), 2);
+        $total = round((float) ($arca['imp_total'] ?? 0), 2);
+        if ($neto > self::TOLERANCIA_TOTAL && $iva > self::TOLERANCIA_TOTAL) {
+            $tasa = round($iva / $neto * 100, 2);
+            $codigoArca = match (true) {
+                abs($tasa - 10.5) < 0.2 => '4',
+                abs($tasa - 27) < 0.2 => '6',
+                abs($tasa - 21) < 0.2 => '5',
+                default => '5',
+            };
+            $impuesto = Impuesto::query()->where('codigoarca', $codigoArca)->orderBy('id')->first();
+            if ($impuesto === null) {
+                throw new \RuntimeException('No hay impuesto para armar el renglón genérico.');
+            }
+
+            return [[
+                'base' => $neto,
+                'impuesto_id' => (int) $impuesto->id,
+                'detalle' => 'Recuperado de ARCA — genérico',
+            ]];
+        }
+        if ($total <= self::TOLERANCIA_TOTAL) {
+            throw new \RuntimeException('ARCA no trajo alícuotas ni total para armar el comprobante.');
+        }
+        $exento = Impuesto::query()->where('codigoarca', '3')->orderBy('id')->first();
+        if ($exento === null) {
+            throw new \RuntimeException('ARCA no trajo IVA y no hay impuesto exento para el renglón genérico.');
+        }
+
+        return [[
+            'base' => $total,
+            'impuesto_id' => (int) $exento->id,
+            'detalle' => 'Recuperado de ARCA — genérico',
+        ]];
     }
 
     private function resolverCliente(int $docTipo, string $docNro): Cliente
@@ -880,6 +973,25 @@ final class FacturacionHuecoArcaCargaService
             in_array($n, [51, 52, 53], true) => 'M',
             default => '',
         };
+    }
+
+    private function ventaYaGrabada(Puntoventa $pv, int $codigoAfip, int $numero): ?Venta
+    {
+        $filas = Venta::query()
+            ->where('puntoventa_id', $pv->id)
+            ->where('numerocomprobante', $numero)
+            ->get(['id', 'codigo', 'codigo_afip']);
+        foreach ($filas as $fila) {
+            $tipo = TipotransaccionCodigoAfipSupport::codigoAfipDesdeVentaGrabada(
+                (int) $fila->codigo_afip,
+                (string) $fila->codigo,
+            );
+            if ($tipo === $codigoAfip) {
+                return $fila;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -14,6 +14,7 @@ use App\Services\Ventas\FacturacionLocal\FacturacionLocalValeService;
 use App\Services\Ventas\FacturacionLocal\StockLocalConsultaService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalAsientoMedioSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalMedioPresentacionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioArticuloSupport;
@@ -332,6 +333,11 @@ class FacturacionLocalProcesoController extends Controller
 		}
 
 		$split = FacturacionLocalSplitFacNcSupport::partir($request->input('lineas', []));
+		$cambioEquivalente = FacturacionLocalSplitFacNcSupport::esCambioEquivalente($split);
+		$split['total_pagar'] = $cambioEquivalente
+			? FacturacionLocalAsientoMedioSupport::IMPORTE_MINIMO_ARCA
+			: max(0., (float) $split['neto']);
+		$split['cambio_equivalente'] = $cambioEquivalente;
 
 		return response()->json($split);
 	}
