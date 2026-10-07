@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.1',
+    'version' => '1.3',
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Canjes Marketing (Gastronomía)',
 

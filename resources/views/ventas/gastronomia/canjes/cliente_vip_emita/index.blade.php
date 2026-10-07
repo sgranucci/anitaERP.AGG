@@ -20,27 +20,12 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">{{ $titulo }}</h3>
-                <div class="card-tools">
-                    @if ($modo === 'alias')
-                        <a href="{{ route('consultar_cliente_vip_emita', ['modo' => 'nombre']) }}" class="btn btn-outline-light btn-sm">
-                            <i class="fa fa-user"></i> Por nombre
-                        </a>
-                    @else
-                        <a href="{{ route('consultar_cliente_vip_emita', ['modo' => 'alias']) }}" class="btn btn-outline-light btn-sm">
-                            <i class="fa fa-id-badge"></i> Por alias
-                        </a>
-                    @endif
-                </div>
             </div>
-            <form method="get" action="{{ route('consultar_cliente_vip_emita', ['modo' => $modo]) }}" id="form-consulta-vip-emita" class="mb-0">
+            <form method="get" action="{{ route('consultar_cliente_vip_emita') }}" id="form-consulta-vip-emita" class="mb-0">
                 <input type="hidden" name="consultar" value="1">
                 <div class="card-body">
                     <p class="text-muted mb-3">
-                        @if ($modo === 'alias')
-                            Consulta la base de clientes VIP de Emita (cuenta Wigos con alias, o alias sin cuenta) que tienen última visita.
-                        @else
-                            Busca cuentas Wigos con última visita. El texto puede estar en el nombre y apellido de Wigos o en el alias, siempre que esa cuenta tenga un nombre Wigos asociado. Los alias sin cuenta se consultan en Por alias.
-                        @endif
+                        Un solo texto busca en el nombre y en el alias de Emita. Entran las cuentas Wigos con nombre, alias y última visita. Los apodos sin cuenta de Wigos aparecen al final: se pueden ver, pero no elegir para un canje.
                         La consulta de clientes VIP del ERP sigue en el menú Clientes VIP.
                     </p>
                     <div class="form-group row mb-0">
@@ -74,7 +59,7 @@
                     </div>
                     @if ($total > 0)
                         @include('includes.exportar-tabla-queryparams', [
-                            'ruta' => $modo === 'alias' ? 'lista_cliente_vip_emita_alias' : 'lista_cliente_vip_emita_nombre',
+                            'ruta' => 'lista_cliente_vip_emita',
                             'queryparams' => $filtrosQuery,
                         ])
                     @endif

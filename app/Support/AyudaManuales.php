@@ -65,7 +65,7 @@ class AyudaManuales
             ],
             [
                 'modulo' => 'Canjes Marketing',
-                'bajada' => 'Para quien empieza: entregar un producto a un cliente VIP, facturarlo con descuento y consultar en Emita por nombre o por alias.',
+                'bajada' => 'Para quien empieza: entregar un producto a un cliente VIP, facturarlo con descuento y consultar en Emita por nombre y alias en un solo botón.',
                 'url' => route('manual_canjes_marketing'),
                 'icono' => 'fa-gift',
                 'disponible' => true,

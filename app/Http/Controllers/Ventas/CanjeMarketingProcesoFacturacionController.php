@@ -505,17 +505,13 @@ class CanjeMarketingProcesoFacturacionController extends Controller
     {
         can('usar-facturador-canje-marketing');
 
-        $modo = (string) $request->input('modo', '');
         $texto = trim((string) $request->input('texto', ''));
-        if (! in_array($modo, [EmitaClienteVipConsulta::MODO_NOMBRE, EmitaClienteVipConsulta::MODO_ALIAS], true)) {
-            return response()->json(['error' => 'Modo de consulta inválido.'], 422);
-        }
         if (! EmitaClienteVipConsulta::textoValido($texto)) {
             return response()->json(['error' => 'Indique al menos '.EmitaClienteVipConsulta::LONGITUD_MINIMA.' caracteres.'], 422);
         }
 
         try {
-            $resultado = $this->emitaClienteVipConsulta->pagina($modo, $texto, 1, 30);
+            $resultado = $this->emitaClienteVipConsulta->pagina($texto, 1, 30);
         } catch (\RuntimeException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }

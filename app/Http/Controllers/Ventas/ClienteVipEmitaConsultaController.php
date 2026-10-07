@@ -20,11 +20,24 @@ class ClienteVipEmitaConsultaController extends Controller
         $this->middleware('auth');
     }
 
-    public function index(Request $request, string $modo)
+    public function redirigirModo(Request $request, string $modo)
+    {
+        if (! in_array($modo, ['nombre', 'alias'], true)) {
+            abort(404);
+        }
+
+        return redirect()->route('consultar_cliente_vip_emita', $request->query());
+    }
+
+    public function redirigirExportacion(Request $request, string $formato)
+    {
+        return redirect()->route('lista_cliente_vip_emita', ['formato' => $formato] + $request->query());
+    }
+
+    public function index(Request $request)
     {
         can('consultar-cliente-vip-emita');
 
-        $modo = $this->modo($modo);
         $texto = trim((string) $request->input('texto', ''));
         $consultar = (string) $request->input('consultar', '') === '1';
         $aviso = null;
@@ -38,7 +51,7 @@ class ClienteVipEmitaConsultaController extends Controller
             } else {
                 try {
                     $pagina = max(1, (int) $request->input('page', 1));
-                    $resultado = $this->consulta->pagina($modo, $texto, $pagina);
+                    $resultado = $this->consulta->pagina($texto, $pagina);
                     $total = $resultado['total'];
                     $filas = new LengthAwarePaginator(
                         $resultado['filas'],
@@ -54,7 +67,6 @@ class ClienteVipEmitaConsultaController extends Controller
         }
 
         return view('ventas.gastronomia.canjes.cliente_vip_emita.index', [
-            'modo' => $modo,
             'texto' => $texto,
             'consultar' => $consultar,
             'aviso' => $aviso,
@@ -62,22 +74,21 @@ class ClienteVipEmitaConsultaController extends Controller
             'filas' => $filas,
             'total' => $total,
             'filtrosQuery' => $this->filtrosQuery($texto, $consultar),
-            'titulo' => $this->titulo($modo),
-            'etiquetaCampo' => $modo === EmitaClienteVipConsulta::MODO_ALIAS ? 'Alias' : 'Nombre y apellido',
+            'titulo' => 'Clientes VIP Emita',
+            'etiquetaCampo' => 'Nombre o alias',
             'logosCabecera' => EmpresaLogoArchivo::logosCabeceraDesdeColeccion(collect([
                 (object) ['nombreempresa' => (string) config('app.empresa')],
             ])),
         ]);
     }
 
-    public function exportar(Request $request, string $modo, string $formato)
+    public function exportar(Request $request, string $formato)
     {
         can('consultar-cliente-vip-emita');
 
-        $modo = $this->modo($modo);
         $texto = trim((string) $request->input('texto', ''));
         if (! EmitaClienteVipConsulta::textoValido($texto)) {
-            return redirect()->route('consultar_cliente_vip_emita', ['modo' => $modo])
+            return redirect()->route('consultar_cliente_vip_emita')
                 ->with('errores', ['Indique al menos '.EmitaClienteVipConsulta::LONGITUD_MINIMA.' caracteres para exportar.']);
         }
 
@@ -85,21 +96,19 @@ class ClienteVipEmitaConsultaController extends Controller
         ini_set('max_execution_time', '0');
 
         try {
-            $resultado = $this->consulta->exportar($modo, $texto);
+            $resultado = $this->consulta->exportar($texto);
         } catch (RuntimeException $e) {
-            return redirect()->route('consultar_cliente_vip_emita', ['modo' => $modo, 'texto' => $texto, 'consultar' => 1])
+            return redirect()->route('consultar_cliente_vip_emita', ['texto' => $texto, 'consultar' => 1])
                 ->with('errores', [$e->getMessage()]);
         }
 
-        $titulo = $this->titulo($modo);
-        $subtitulo = ($modo === EmitaClienteVipConsulta::MODO_ALIAS ? 'Alias' : 'Nombre o alias').': '.$texto;
+        $titulo = 'Clientes VIP Emita';
+        $subtitulo = 'Nombre o alias: '.$texto;
         if ($resultado['truncado']) {
             $subtitulo .= ' (se exportan los primeros '.EmitaClienteVipConsulta::TOPE_EXPORTACION.' de '.$resultado['total'].')';
         }
 
-        $base = $modo === EmitaClienteVipConsulta::MODO_ALIAS
-            ? 'cliente_vip_emita_por_alias'
-            : 'cliente_vip_emita_por_nombre';
+        $base = 'cliente_vip_emita';
 
         switch (strtoupper($formato)) {
             case 'PDF':
@@ -130,23 +139,7 @@ class ClienteVipEmitaConsultaController extends Controller
                     ->download($base.'.csv', Excel::CSV);
         }
 
-        return redirect()->route('consultar_cliente_vip_emita', $this->filtrosQuery($texto, true) + ['modo' => $modo]);
-    }
-
-    private function modo(string $modo): string
-    {
-        if (! in_array($modo, [EmitaClienteVipConsulta::MODO_NOMBRE, EmitaClienteVipConsulta::MODO_ALIAS], true)) {
-            abort(404);
-        }
-
-        return $modo;
-    }
-
-    private function titulo(string $modo): string
-    {
-        return $modo === EmitaClienteVipConsulta::MODO_ALIAS
-            ? 'Clientes VIP Emita por alias'
-            : 'Clientes VIP Emita por nombre';
+        return redirect()->route('consultar_cliente_vip_emita', $this->filtrosQuery($texto, true));
     }
 
     /**

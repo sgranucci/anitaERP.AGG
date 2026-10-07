@@ -7,7 +7,7 @@
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Canjes Marketing',
-    'version' => '1.1',
+    'version' => '1.3',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -17,14 +17,14 @@ return [
             'parrafos' => [
                 'Canjes Marketing sirve para entregar un producto a un cliente especial (un cliente VIP) y dejar emitida la factura correspondiente. El descuento ya está definido: usted no lo elige ni cobra el producto en esta pantalla.',
                 'Está pensado para el equipo de Marketing. No reemplaza al facturador del salón (mesas, mozos de piso, cobranzas). Aquí solo se registran las entregas de cortesía a beneficiarios VIP.',
-                'En el menú se entra por Ventas, después Gastronomía, después Canjes. Ahí hay cinco pantallas. Las tres de siempre son Clientes VIP, Facturador canjes marketing y Listado canjes marketing. Las dos nuevas consultan la base de Emita: VIP Emita por nombre y VIP Emita por alias.',
+                'En el menú se entra por Ventas, después Gastronomía, después Canjes. Ahí están Clientes VIP, Facturador canjes marketing, Listado canjes marketing y Consulta VIP Emita.',
                 'Emita es el sistema donde están los clientes de la sala (cuentas de juego). Anita no copia toda esa base: la consulta cuando usted busca a alguien, y solo guarda en su lista de Clientes VIP a la persona que va a recibir el canje.',
             ],
             'items' => [
                 'Clientes VIP: la lista propia de Anita. Ahí se dan de alta, se corrigen y se buscan las personas que ya recibieron o van a recibir un canje.',
                 'Facturador canjes marketing: la pantalla del día a día. Se carga el producto, se indica quién lo recibe y se emite la factura.',
                 'Listado canjes marketing: el informe de lo ya entregado, para controlar fechas, productos y personas.',
-                'VIP Emita por nombre y VIP Emita por alias: consultas a Emita para encontrar a un cliente de la sala aunque todavía no esté en la lista de Anita.',
+                'Consulta VIP Emita: un solo botón. El mismo texto se busca a la vez en el nombre y en el alias, para encontrar a un cliente de la sala aunque todavía no esté en la lista de Anita.',
             ],
         ],
         [
@@ -72,7 +72,7 @@ return [
             'captura_id' => 'cliente_vip_listado',
             'parrafos' => [
                 'Esta pantalla es la lista de beneficiarios que guarda Anita. Menú: Ventas → Gastronomía → Canjes → Clientes VIP.',
-                'Úsela cuando ya conoce a la persona y quiere verla, corregir un dato o darla de alta a mano. Si la persona está en la sala pero todavía no está en esta lista, búsquela en VIP Emita por nombre o por alias (capítulos 8 y 9).',
+                'Úsela cuando ya conoce a la persona y quiere verla, corregir un dato o darla de alta a mano. Si la persona está en la sala pero todavía no está en esta lista, búsquela en Consulta VIP Emita (capítulos 8 y 9).',
             ],
             'items' => [
                 'La caja de arriba busca en todos los campos a la vez. Escriba apellido, nombre, documento o apodo y pulse Enter.',
@@ -125,6 +125,7 @@ return [
                     ['Agregar o tecla +', 'Pide la cantidad (y opciones del producto, si las tiene)'],
                     ['Tab en el código', 'Confirma el artículo y pasa al botón Agregar'],
                     ['Lista de ítems', 'Suma o resta cantidad, escribe un comentario o quita la línea'],
+                    ['Consultar Emita', 'Busca en Emita por nombre y por alias a la vez. Elegir solo si la fila tiene cuenta Wigos'],
                     ['Facturar o F8', 'Abre la ventana para confirmar el descuento y el cliente VIP'],
                 ],
             ],
@@ -133,7 +134,7 @@ return [
             'titulo' => '7. Identificar cliente VIP (beneficiario)',
             'parrafos' => [
                 'Sin cliente VIP no se puede facturar. Esa persona es quien recibe el producto. Hay varias formas de indicarla. Use la que tenga a mano.',
-                'La lupa que está al lado del nombre busca solo en la lista de Anita (Clientes VIP). No consulta Emita. Para buscar en Emita use los botones Por nombre y Por alias, explicados en el capítulo 9.',
+                'La lupa que está al lado del nombre busca solo en la lista de Anita (Clientes VIP). No consulta Emita. Para buscar en Emita use el botón Consultar Emita, explicado en el capítulo 9.',
             ],
             'tabla' => [
                 'caption' => 'Cómo indicar a la persona',
@@ -143,7 +144,7 @@ return [
                     ['El documento', 'Escríbalo en DNI y pulse Enter'],
                     ['Solo el apellido o el nombre, y ya está en Anita', 'Pulse la lupa, busque y elija Elegir'],
                     ['La tarjeta de la sala', 'Si ve el botón Tarjeta Wigos, pase la tarjeta y pulse Aplicar'],
-                    ['El nombre o el apodo, y puede no estar en Anita', 'Use Por nombre o Por alias (capítulo 9)'],
+                    ['El nombre o el apodo, y puede no estar en Anita', 'Use Consultar Emita (capítulo 9)'],
                 ],
             ],
             'items' => [
@@ -154,17 +155,17 @@ return [
         [
             'titulo' => '8. Consultar clientes VIP en Emita',
             'parrafos' => [
-                'Estas dos pantallas sirven para mirar la base de Emita sin facturar. Están en el mismo menú: Ventas → Gastronomía → Canjes → VIP Emita por nombre, y VIP Emita por alias.',
-                'En la esquina de cada pantalla hay un botón para pasar a la otra. No son dos búsquedas iguales: cada una muestra un grupo distinto de personas.',
+                'Esta pantalla sirve para mirar la base de Emita sin facturar. Menú: Ventas → Gastronomía → Canjes → Consulta VIP Emita. Ya no hay una entrada por nombre y otra por alias.',
+                'Hay un solo campo y un solo botón Consultar. Escriba un nombre, un apellido o un apodo: Anita lo busca en los dos lugares al mismo tiempo.',
                 'Escriba al menos 3 letras o números y pulse Consultar. La búsqueda puede tardar unos segundos: aparece un aviso y no hay que cerrar la página. No distingue mayúsculas ni acentos.',
                 'Si hay resultados, puede bajarlos a PDF, Excel o CSV. La exportación usa el mismo texto que acaba de consultar. Si hay muchísimos, el archivo trae los primeros 5.000 y lo avisa en el título.',
             ],
             'tabla' => [
-                'caption' => 'Cuándo usar cada consulta',
-                'headers' => ['Pantalla', 'Cuándo conviene', 'Qué va a ver'],
+                'caption' => 'Qué entra en el resultado',
+                'headers' => ['Si el texto está en…', 'Qué fila aparece', 'Se puede usar en un canje'],
                 'rows' => [
-                    ['VIP Emita por nombre', 'Sabe el nombre, el apellido o un apodo de alguien que ya tiene cuenta de juego', 'Solo cuentas con nombre y con fecha de última visita. El texto puede estar en el nombre o en el apodo.'],
-                    ['VIP Emita por alias', 'Solo conoce el apodo, o quiere ver apodos que todavía no tienen cuenta', 'Cuentas con apodo y, al final, apodos sueltos (sin cuenta). Esos apodos sueltos también tienen que tener una visita registrada.'],
+                    ['El nombre o el alias de una cuenta Wigos', 'Origen Wigos, con número de cuenta, nombre y última visita. La cuenta tiene que tener alias.', 'Sí, con el botón Elegir en el facturador'],
+                    ['Un apodo que todavía no tiene cuenta', 'Origen Solo alias, al final de la lista, sin número de cuenta. También tiene que tener una visita.', 'No. Se ve, pero no tiene Elegir'],
                 ],
             ],
             'items' => [
@@ -181,14 +182,14 @@ return [
         [
             'titulo' => '9. Elegir un cliente de Emita al facturar',
             'parrafos' => [
-                'En el facturador, dentro del recuadro Descuento y cliente VIP, hay dos botones azules: Por nombre y Por alias. Abren la misma búsqueda del capítulo 8, pero desde ahí puede elegir a la persona para el canje.',
+                'En el facturador, dentro del recuadro Descuento y cliente VIP, hay un solo botón: Consultar Emita. Ya no están Por nombre y Por alias. Abre la misma búsqueda del capítulo 8.',
                 'Escriba al menos 3 caracteres y pulse Consultar (o Enter). Si hay muchas coincidencias, la ventana muestra las primeras y le pide que escriba un texto más preciso.',
-                'Cuando encuentre a la persona correcta, pulse Elegir en esa fila. El nombre queda cargado como cliente VIP y puede seguir con F8.',
+                'En cada fila con cuenta de Wigos y nombre aparece el botón Elegir. Al pulsarlo, esa persona queda como cliente VIP del canje y puede seguir con F8.',
                 'Si esa persona ya estaba en Clientes VIP de Anita, se usa ese registro. Si no estaba, Anita la da de alta con los datos de Emita (documento, nombre, apodo y sala) y la deja lista para facturar. Usted no tiene que ir a la otra pantalla a crearla.',
             ],
             'items' => [
                 'Solo se puede elegir una fila que tenga cuenta de juego y nombre. Si la fila dice Sin cliente Wigos, es un apodo suelto: sirve para consultarlo, pero no para facturar el canje.',
-                'La lupa de al lado del nombre sigue buscando la lista de Anita. Los botones Por nombre y Por alias son los únicos que van a Emita.',
+                'La lupa de al lado del nombre sigue buscando la lista de Anita. Consultar Emita es el único botón que va a Emita.',
                 'Si Emita no responde, la ventana muestra el error. Espere un momento y vuelva a consultar. No cargue el canje a nombre de otra persona.',
                 'Un texto de una o dos letras no busca: el sistema pide al menos 3 caracteres para no traer a media sala.',
             ],
@@ -257,7 +258,7 @@ return [
                 'rows' => [
                     ['No hay punto de venta para esta PC', 'Avisar a sistemas para dar de alta la computadora'],
                     ['Jornada cerrada', 'Pedir a gastronomía que abra la jornada'],
-                    ['Cliente VIP no encontrado', 'Probar la lupa de Anita, o Por nombre / Por alias en Emita'],
+                    ['Cliente VIP no encontrado', 'Probar la lupa de Anita, o Consultar Emita'],
                     ['Cargue al menos un artículo', 'Agregar el producto antes de F8'],
                     ['Clave incorrecta', 'Verificar el código y la clave con el encargado'],
                     ['Indique al menos 3 caracteres', 'Escribir un nombre o apodo más largo y volver a consultar'],
@@ -277,7 +278,7 @@ return [
                 'Abra Facturador canjes marketing en la computadora del puesto.',
                 'Entre con su código y su clave.',
                 'Cargue el producto con el código, la lupa o F1.',
-                'Indique quién lo recibe: código, DNI, lupa de Anita, tarjeta, o Por nombre / Por alias si hay que buscarlo en Emita.',
+                'Indique quién lo recibe: código, DNI, lupa de Anita, tarjeta, o Consultar Emita si hay que buscarlo por nombre o por alias.',
                 'Si lo eligió desde Emita, controle que el nombre de la fila sea el de la persona que está delante.',
                 'Pulse F8, revise descuento y nombre, y facture.',
                 'Entregue el producto.',

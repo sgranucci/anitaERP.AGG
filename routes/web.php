@@ -2279,15 +2279,14 @@ Route::get('ventas/gastronomia/canjes/cliente-vip/{id}/editar', 'Ventas\ClienteV
 Route::put('ventas/gastronomia/canjes/cliente-vip/{id}', 'Ventas\ClienteVipGastronomiaController@actualizar')->name('actualizar_cliente_vip_gastronomia');
 Route::delete('ventas/gastronomia/canjes/cliente-vip/{id}', 'Ventas\ClienteVipGastronomiaController@eliminar')->name('eliminar_cliente_vip_gastronomia');
 
-Route::get('ventas/gastronomia/canjes/cliente-vip-emita/{modo}', 'Ventas\ClienteVipEmitaConsultaController@index')
-    ->where('modo', 'nombre|alias')
+Route::get('ventas/gastronomia/canjes/cliente-vip-emita', 'Ventas\ClienteVipEmitaConsultaController@index')
     ->name('consultar_cliente_vip_emita');
-Route::get('ventas/gastronomia/canjes/lista-cliente-vip-emita-nombre/{formato}', 'Ventas\ClienteVipEmitaConsultaController@exportar')
-    ->defaults('modo', 'nombre')
-    ->name('lista_cliente_vip_emita_nombre');
-Route::get('ventas/gastronomia/canjes/lista-cliente-vip-emita-alias/{formato}', 'Ventas\ClienteVipEmitaConsultaController@exportar')
-    ->defaults('modo', 'alias')
-    ->name('lista_cliente_vip_emita_alias');
+Route::get('ventas/gastronomia/canjes/cliente-vip-emita/{modo}', 'Ventas\ClienteVipEmitaConsultaController@redirigirModo')
+    ->where('modo', 'nombre|alias');
+Route::get('ventas/gastronomia/canjes/lista-cliente-vip-emita/{formato}', 'Ventas\ClienteVipEmitaConsultaController@exportar')
+    ->name('lista_cliente_vip_emita');
+Route::get('ventas/gastronomia/canjes/lista-cliente-vip-emita-nombre/{formato}', 'Ventas\ClienteVipEmitaConsultaController@redirigirExportacion');
+Route::get('ventas/gastronomia/canjes/lista-cliente-vip-emita-alias/{formato}', 'Ventas\ClienteVipEmitaConsultaController@redirigirExportacion');
 
 Route::get('ventas/gastronomia/canjes/listado-marketing', 'Ventas\CanjeMarketingListadoController@index')->name('canje_marketing_listado')->middleware('modo.consulta');
 Route::get('ventas/lista-canje-marketing-gastronomia/{formato}', 'Ventas\CanjeMarketingListadoController@exportar')->name('lista_canje_marketing_gastronomia');

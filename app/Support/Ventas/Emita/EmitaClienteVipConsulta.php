@@ -9,15 +9,11 @@ use Throwable;
 
 /**
  * Clientes VIP de Emita con última visita.
- * Por nombre: titular de Wigos o el alias mostrado, y siempre con nombre Wigos.
- * Por alias: alias de la cuenta Wigos o alias sin cuenta.
+ * Un mismo texto busca en el nombre de la cuenta Wigos y en el alias.
+ * El alias sin cuenta se lista al final y no se puede elegir.
  */
 final class EmitaClienteVipConsulta
 {
-    public const MODO_NOMBRE = 'nombre';
-
-    public const MODO_ALIAS = 'alias';
-
     public const LONGITUD_MINIMA = 3;
 
     public const POR_PAGINA = 20;
@@ -27,20 +23,19 @@ final class EmitaClienteVipConsulta
     /**
      * @return array{filas: list<array<string, string>>, total: int, truncado: bool}
      */
-    public function pagina(string $modo, string $texto, int $pagina, int $porPagina = self::POR_PAGINA): array
+    public function pagina(string $texto, int $pagina, int $porPagina = self::POR_PAGINA): array
     {
-        $modo = $this->modo($modo);
         $like = $this->like($texto);
         $porPagina = max(1, min(100, $porPagina));
         $pagina = max(1, $pagina);
         $offset = ($pagina - 1) * $porPagina;
 
         $pdo = EmitaSqlServer::conectar();
-        $total = $this->contar($pdo, $modo, $like);
-        $sql = $this->sql($modo, false).$this->orden().' OFFSET '.(int) $offset.' ROWS FETCH NEXT '.(int) $porPagina.' ROWS ONLY';
+        $total = $this->contar($pdo, $like);
+        $sql = $this->sql(false).$this->orden().' OFFSET '.(int) $offset.' ROWS FETCH NEXT '.(int) $porPagina.' ROWS ONLY';
 
         return [
-            'filas' => $this->ejecutar($pdo, $sql, $modo, $like),
+            'filas' => $this->ejecutar($pdo, $sql, $like),
             'total' => $total,
             'truncado' => false,
         ];
@@ -49,17 +44,16 @@ final class EmitaClienteVipConsulta
     /**
      * @return array{filas: list<array<string, string>>, total: int, truncado: bool}
      */
-    public function exportar(string $modo, string $texto): array
+    public function exportar(string $texto): array
     {
-        $modo = $this->modo($modo);
         $like = $this->like($texto);
         $pdo = EmitaSqlServer::conectar();
-        $total = $this->contar($pdo, $modo, $like);
+        $total = $this->contar($pdo, $like);
         $tope = self::TOPE_EXPORTACION;
-        $sql = $this->sql($modo, false).$this->orden().' OFFSET 0 ROWS FETCH NEXT '.$tope.' ROWS ONLY';
+        $sql = $this->sql(false).$this->orden().' OFFSET 0 ROWS FETCH NEXT '.$tope.' ROWS ONLY';
 
         return [
-            'filas' => $this->ejecutar($pdo, $sql, $modo, $like),
+            'filas' => $this->ejecutar($pdo, $sql, $like),
             'total' => $total,
             'truncado' => $total > $tope,
         ];
@@ -68,15 +62,6 @@ final class EmitaClienteVipConsulta
     public static function textoValido(string $texto): bool
     {
         return mb_strlen(trim($texto)) >= self::LONGITUD_MINIMA;
-    }
-
-    private function modo(string $modo): string
-    {
-        if (! in_array($modo, [self::MODO_NOMBRE, self::MODO_ALIAS], true)) {
-            throw new RuntimeException('Modo de consulta inválido.');
-        }
-
-        return $modo;
     }
 
     private function like(string $texto): string
@@ -94,11 +79,11 @@ final class EmitaClienteVipConsulta
         return '%'.$escapado.'%';
     }
 
-    private function contar(PDO $pdo, string $modo, string $like): int
+    private function contar(PDO $pdo, string $like): int
     {
         try {
-            $stmt = $pdo->prepare($this->sql($modo, true));
-            $stmt->execute($this->parametros($modo, $like));
+            $stmt = $pdo->prepare($this->sql(true));
+            $stmt->execute($this->parametros($like));
             $fila = $stmt->fetch(PDO::FETCH_ASSOC);
 
             return (int) ($fila['c'] ?? 0);
@@ -112,11 +97,11 @@ final class EmitaClienteVipConsulta
     /**
      * @return list<array<string, string>>
      */
-    private function ejecutar(PDO $pdo, string $sql, string $modo, string $like): array
+    private function ejecutar(PDO $pdo, string $sql, string $like): array
     {
         try {
             $stmt = $pdo->prepare($sql);
-            $stmt->execute($this->parametros($modo, $like));
+            $stmt->execute($this->parametros($like));
             $filas = [];
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 if (is_array($row)) {
@@ -137,12 +122,8 @@ final class EmitaClienteVipConsulta
     /**
      * @return list<string>
      */
-    private function parametros(string $modo, string $like): array
+    private function parametros(string $like): array
     {
-        if ($modo === self::MODO_ALIAS) {
-            return [$like, $like, $like];
-        }
-
         return [$like, $like, $like, $like, $like];
     }
 
@@ -157,91 +138,7 @@ final class EmitaClienteVipConsulta
             ." ELSE 1 END, sala, alias";
     }
 
-    private function sql(string $modo, bool $contar): string
-    {
-        if ($modo === self::MODO_ALIAS) {
-            return $this->sqlAlias($contar);
-        }
-
-        return $this->sqlNombre($contar);
-    }
-
-    private function sqlNombre(bool $contar): string
-    {
-        $select = $contar
-            ? 'SELECT COUNT(*) AS c'
-            : <<<'SQL'
-SELECT
-    s.nombre AS sala,
-    'Wigos' AS origen,
-    c.numero_cuenta AS cuenta_wigos,
-    c.titular AS nombre_apellido,
-    c.documento AS documento,
-    COALESCE(NULLIF(LTRIM(RTRIM(c.alias)), ''), av.alias) AS alias,
-    kv.nivel AS nivel_tarjeta,
-    CASE c.vip WHEN 1 THEN N'Sí' WHEN 0 THEN N'No' END AS vip,
-    CONVERT(varchar(10), kv.ultima_visita, 103) AS ultima_visita
-SQL;
-
-        return <<<SQL
-WITH alias_hit AS (
-    SELECT ta.cliente_id
-    FROM dbo.tracking_manual_alias ta
-    WHERE ta.cliente_id IS NOT NULL
-      AND ta.alias COLLATE Latin1_General_CI_AI LIKE ?
-),
-candidatos AS (
-    SELECT c.id
-    FROM dbo.clientes c
-    WHERE NULLIF(LTRIM(RTRIM(c.titular)), '') IS NOT NULL
-      AND (
-          c.titular COLLATE Latin1_General_CI_AI LIKE ?
-          OR ISNULL(c.alias, '') COLLATE Latin1_General_CI_AI LIKE ?
-          OR c.id IN (SELECT cliente_id FROM alias_hit)
-      )
-),
-kpi_vigente AS (
-    SELECT
-        k.cliente_id,
-        k.nivel,
-        k.ultima_visita,
-        ROW_NUMBER() OVER (
-            PARTITION BY k.cliente_id
-            ORDER BY
-                CASE WHEN k.anio IS NOT NULL THEN 0 ELSE 1 END,
-                COALESCE(k.fecha_hasta, k.fecha_corte) DESC
-        ) AS rn
-    FROM dbo.kpi_clientes k
-    INNER JOIN candidatos ca ON ca.id = k.cliente_id
-),
-alias_vinculado AS (
-    SELECT
-        ta.cliente_id,
-        ta.alias,
-        ROW_NUMBER() OVER (
-            PARTITION BY ta.cliente_id
-            ORDER BY ta.fecha_creacion DESC, ta.id DESC
-        ) AS rn
-    FROM dbo.tracking_manual_alias ta
-    INNER JOIN candidatos ca ON ca.id = ta.cliente_id
-    WHERE ta.cliente_id IS NOT NULL
-)
-{$select}
-FROM dbo.clientes c
-INNER JOIN candidatos ca ON ca.id = c.id
-INNER JOIN dbo.salas s ON s.id = c.sala_id
-LEFT JOIN alias_vinculado av ON av.cliente_id = c.id AND av.rn = 1
-LEFT JOIN kpi_vigente kv ON kv.cliente_id = c.id AND kv.rn = 1
-WHERE (NULLIF(LTRIM(RTRIM(c.alias)), '') IS NOT NULL OR av.cliente_id IS NOT NULL)
-  AND kv.ultima_visita IS NOT NULL
-  AND (
-      c.titular COLLATE Latin1_General_CI_AI LIKE ?
-      OR COALESCE(NULLIF(LTRIM(RTRIM(c.alias)), ''), av.alias) COLLATE Latin1_General_CI_AI LIKE ?
-  )
-SQL;
-    }
-
-    private function sqlAlias(bool $contar): string
+    private function sql(bool $contar): string
     {
         $select = $contar
             ? 'SELECT COUNT(*) AS c'
@@ -256,8 +153,12 @@ WITH alias_hit AS (
 candidatos AS (
     SELECT c.id
     FROM dbo.clientes c
-    WHERE ISNULL(c.alias, '') COLLATE Latin1_General_CI_AI LIKE ?
-       OR c.id IN (SELECT cliente_id FROM alias_hit WHERE cliente_id IS NOT NULL)
+    WHERE NULLIF(LTRIM(RTRIM(c.titular)), '') IS NOT NULL
+      AND (
+          c.titular COLLATE Latin1_General_CI_AI LIKE ?
+          OR ISNULL(c.alias, '') COLLATE Latin1_General_CI_AI LIKE ?
+          OR c.id IN (SELECT cliente_id FROM alias_hit WHERE cliente_id IS NOT NULL)
+      )
 ),
 kpi_vigente AS (
     SELECT
@@ -303,6 +204,10 @@ base AS (
     LEFT JOIN kpi_vigente kv ON kv.cliente_id = c.id AND kv.rn = 1
     WHERE (NULLIF(LTRIM(RTRIM(c.alias)), '') IS NOT NULL OR av.cliente_id IS NOT NULL)
       AND kv.ultima_visita IS NOT NULL
+      AND (
+          c.titular COLLATE Latin1_General_CI_AI LIKE ?
+          OR COALESCE(NULLIF(LTRIM(RTRIM(c.alias)), ''), av.alias) COLLATE Latin1_General_CI_AI LIKE ?
+      )
 
     UNION ALL
 
@@ -327,7 +232,6 @@ base AS (
 {$select}
 FROM base
 WHERE ultima_visita IS NOT NULL
-  AND alias COLLATE Latin1_General_CI_AI LIKE ?
 SQL;
     }
 

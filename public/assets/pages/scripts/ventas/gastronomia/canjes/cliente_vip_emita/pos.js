@@ -3,8 +3,6 @@
 
     const G = window.CANJE_MARKETING || {};
     const apiBase = (G.rutas && G.rutas.apiBase) ? G.rutas.apiBase.replace(/\/$/, '') : '';
-    let modo = 'nombre';
-
     function csrf() {
         return G.csrfToken || $('meta[name="csrf-token"]').attr('content') || '';
     }
@@ -22,13 +20,10 @@
         $aviso.removeClass('d-none').text(texto);
     }
 
-    function abrir(nuevoModo) {
-        modo = nuevoModo === 'alias' ? 'alias' : 'nombre';
-        $('#modal-cm-vip-emita-title').text(modo === 'alias' ? 'Clientes VIP Emita por alias' : 'Clientes VIP Emita por nombre');
-        $('#cm-vip-emita-label').text(modo === 'alias' ? 'Alias' : 'Nombre y apellido');
-        $('#cm-vip-emita-ayuda').text(modo === 'alias'
-            ? 'Los alias sin cliente Wigos se ven al final y no se pueden elegir. La lupa de Cliente VIP sigue buscando el padrón del ERP.'
-            : 'Busca el nombre de Wigos o el alias de una cuenta con nombre Wigos. La lupa de Cliente VIP sigue buscando el padrón del ERP.');
+    function abrir() {
+        $('#modal-cm-vip-emita-title').text('Clientes VIP Emita');
+        $('#cm-vip-emita-label').text('Nombre o alias');
+        $('#cm-vip-emita-ayuda').text('Busca el mismo texto en el nombre y en el alias. Elegir solo está en las filas con cuenta Wigos. Un apodo sin cuenta se ve al final y no se puede elegir. La lupa de Cliente VIP sigue buscando el padrón del ERP.');
         $('#cm-vip-emita-texto').val('');
         aviso('');
         $('#cm-vip-emita-tbody').html('<tr><td colspan="10" class="text-muted text-center">Indique un texto y consulte.</td></tr>');
@@ -87,7 +82,7 @@
                 'X-CSRF-TOKEN': csrf(),
                 'X-Requested-With': 'XMLHttpRequest',
             },
-            data: { _token: csrf(), modo: modo, texto: texto },
+            data: { _token: csrf(), texto: texto },
             success: function (resp) {
                 pintar(resp.filas || [], resp.total || 0);
             },
@@ -100,8 +95,7 @@
         });
     }
 
-    $('#cm-btn-vip-emita-nombre').on('click', function () { abrir('nombre'); });
-    $('#cm-btn-vip-emita-alias').on('click', function () { abrir('alias'); });
+    $('#cm-btn-vip-emita').on('click', function () { abrir(); });
     $('#cm-vip-emita-buscar').on('click', buscar);
     $('#cm-vip-emita-texto').on('keydown', function (e) {
         if (e.key === 'Enter') {

@@ -512,8 +512,7 @@
                         </div>
                         <div id="cm-vip-aviso" class="alert alert-warning py-1 px-2 small d-none mb-0 mt-1" role="alert"></div>
                         <div class="cm-fila-wigos">
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="cm-btn-vip-emita-nombre" title="Consultar clientes VIP de Emita por nombre y apellido o por alias con cuenta Wigos"><i class="fa fa-user"></i> Por nombre</button>
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="cm-btn-vip-emita-alias" title="Consultar clientes VIP de Emita por alias"><i class="fa fa-id-badge"></i> Por alias</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="cm-btn-vip-emita" title="Consultar en Emita por nombre o por alias. Solo se puede elegir si tiene cuenta Wigos."><i class="fa fa-search"></i> Consultar Emita</button>
                             @if ($wigos_account_info_habilitado)
                             <button type="button" class="btn btn-sm btn-outline-info" id="cm-btn-abrir-wigos" title="Leer tarjeta Wigos"><i class="fa fa-credit-card"></i> Tarjeta Wigos</button>
                             @endif
@@ -751,9 +750,9 @@
                 <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
             </div>
             <div class="modal-body py-2">
-                <p class="small text-muted mb-2" id="cm-vip-emita-ayuda">Consulta la base de Emita. La lupa de Cliente VIP sigue buscando el padrón del ERP.</p>
+                <p class="small text-muted mb-2" id="cm-vip-emita-ayuda">Busca el mismo texto en el nombre y en el alias. Si la fila tiene cuenta Wigos, use Elegir. Un apodo sin cuenta se ve al final y no se puede elegir. La lupa de Cliente VIP sigue buscando el padrón del ERP.</p>
                 <div class="form-inline mb-2">
-                    <label class="small mr-2 mb-0" for="cm-vip-emita-texto" id="cm-vip-emita-label">Nombre y apellido</label>
+                    <label class="small mr-2 mb-0" for="cm-vip-emita-texto" id="cm-vip-emita-label">Nombre o alias</label>
                     <input type="text" class="form-control form-control-sm mr-2" id="cm-vip-emita-texto" maxlength="80" autocomplete="off" placeholder="Al menos 3 caracteres">
                     <button type="button" class="btn btn-sm btn-primary" id="cm-vip-emita-buscar"><i class="fa fa-search"></i> Consultar</button>
                 </div>
