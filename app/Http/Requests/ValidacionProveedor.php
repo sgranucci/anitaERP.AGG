@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Compras\Proveedor;
+use App\Models\Compras\Proveedor_Integrante;
 use App\Models\Compras\Tiposervicio_Proveedor;
 use App\Models\Configuracion\Pais;
 use App\Rules\Compras\RuleProveedor;
@@ -121,6 +122,7 @@ class ValidacionProveedor extends FormRequest
         $validator->after(function (Validator $validator) {
             $this->validarRenglonesFormapago($validator);
             $this->validarRenglonesExclusion($validator);
+            $this->validarIntegrantesCondominio($validator);
         });
     }
 
@@ -189,6 +191,51 @@ class ValidacionProveedor extends FormRequest
             if (trim((string) ($monedaIds[$i] ?? '')) === '') {
                 $validator->errors()->add('moneda_ids.'.$i, "Formas de pago renglón {$nro}: la Moneda es obligatoria.");
             }
+        }
+    }
+
+    /**
+     * Condominio (RG 830 art. 8): los porcentajes de los integrantes suman 100.
+     */
+    private function validarIntegrantesCondominio(Validator $validator): void
+    {
+        if (! $this->has('integrantes_presentes')) {
+            return;
+        }
+        if (strtoupper(trim((string) $this->input('condicionganancia'))) !== 'C') {
+            return;
+        }
+
+        $filas = \App\Support\Compras\ProveedorIntegranteSupport::filasValidas((array) $this->input('integrantes', []));
+        if ($filas === []) {
+            $validator->errors()->add('integrantes', 'El condominio necesita al menos un integrante.');
+
+            return;
+        }
+
+        $suma = 0.0;
+        $cuits = [];
+        foreach ($filas as $i => $fila) {
+            $nro = $i + 1;
+            if ($fila['nombre'] === '') {
+                $validator->errors()->add('integrantes.'.$i.'.nombre', "Integrante {$nro}: el nombre es obligatorio.");
+            }
+            $digitos = Proveedor_Integrante::digitosCuit($fila['cuit']);
+            if (strlen($digitos) !== 11) {
+                $validator->errors()->add('integrantes.'.$i.'.cuit', "Integrante {$nro}: el CUIT debe tener 11 dígitos.");
+            } elseif (isset($cuits[$digitos])) {
+                $validator->errors()->add('integrantes.'.$i.'.cuit', "Integrante {$nro}: el CUIT está repetido.");
+            } else {
+                $cuits[$digitos] = true;
+            }
+            if ($fila['porcentaje'] <= 0) {
+                $validator->errors()->add('integrantes.'.$i.'.porcentaje', "Integrante {$nro}: el porcentaje tiene que ser mayor a cero.");
+            }
+            $suma += $fila['porcentaje'];
+        }
+
+        if (abs($suma - 100) > 0.01) {
+            $validator->errors()->add('integrantes', 'Los porcentajes de los integrantes tienen que sumar 100. Ahora suman '.number_format($suma, 2, ',', '.').'.');
         }
     }
 

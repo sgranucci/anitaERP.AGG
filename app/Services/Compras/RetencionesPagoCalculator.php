@@ -3,6 +3,8 @@
 namespace App\Services\Compras;
 
 use App\Support\Compras\Retencion\ProveedorExclusionRetencionSupport;
+use App\Support\Compras\Retencion\RetencionGananciasAcumuladoMesSupport;
+use App\Support\Compras\Retencion\RetencionGananciasCondominioSupport;
 use App\Support\Compras\Retencion\RetencionGananciasResultado;
 use App\Support\Compras\Retencion\RetencionIibbResultado;
 use App\Support\Compras\Retencion\RetencionIvaResultado;
@@ -29,17 +31,7 @@ class RetencionesPagoCalculator
         $exc = $input->exclusionesVigentes ?? [];
 
         $ganancias = $input->calcularGanancias
-            ? $this->gananciasCalculator->calcularParaProveedor(
-                $input->proveedor,
-                $input->netoGanancias(),
-                $input->gananciasNetoAcumulado,
-                $input->gananciasRetenidoAcumulado,
-                $input->gananciasManual,
-                $input->retenciongananciaIdPago,
-                $input->retenciongananciaIdComprobante,
-                $input->retieneGanancias,
-                $input->inscriptoGanancias,
-            )
+            ? $this->calcularGanancias($input)
             : RetencionGananciasResultado::noAplica(RetencionGananciasResultado::MOTIVO_NO_RETIENE, [
                 'omitido' => true,
             ]);
@@ -119,6 +111,29 @@ class RetencionesPagoCalculator
         return new RetencionesPagoResultado($ganancias, $iva, $suss, $iibb);
     }
 
+    private function calcularGanancias(RetencionesPagoInput $input): RetencionGananciasResultado
+    {
+        $condominio = new RetencionGananciasCondominioSupport(
+            $this->gananciasCalculator,
+            app(RetencionGananciasAcumuladoMesSupport::class),
+        );
+        if ($condominio->aplica($input->proveedor)) {
+            return $condominio->calcular($input);
+        }
+
+        return $this->gananciasCalculator->calcularParaProveedor(
+            $input->proveedor,
+            $input->netoGanancias(),
+            $input->gananciasNetoAcumulado,
+            $input->gananciasRetenidoAcumulado,
+            $input->gananciasManual,
+            $input->retenciongananciaIdPago,
+            $input->retenciongananciaIdComprobante,
+            $input->retieneGanancias,
+            $input->inscriptoGanancias,
+        );
+    }
+
     /**
      * @param  array<string, mixed>|null  $meta
      */
@@ -140,6 +155,11 @@ class RetencionesPagoCalculator
             );
         }
 
+        $lineas = $resultado->detalle['integrantes'] ?? null;
+        if (is_array($lineas) && $lineas !== []) {
+            return $this->aplicarExclusionGananciasPorIntegrante($resultado, $porcentaje, $detalleExc, $lineas);
+        }
+
         if (! $resultado->aplica || $resultado->importeRetencion <= 0) {
             return $resultado;
         }
@@ -154,6 +174,44 @@ class RetencionesPagoCalculator
             $resultado->alicuotaAplicada,
             $importe > 0 ? $resultado->motivo : RetencionGananciasResultado::MOTIVO_EXCLUIDO,
             array_merge($resultado->detalle, $detalleExc, [
+                'importe_antes_exclusion' => $resultado->importeRetencion,
+            ]),
+        );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineas
+     * @param  array<string, mixed>  $detalleExc
+     */
+    private function aplicarExclusionGananciasPorIntegrante(
+        RetencionGananciasResultado $resultado,
+        float $porcentaje,
+        array $detalleExc,
+        array $lineas,
+    ): RetencionGananciasResultado {
+        $factor = 1.0 - $porcentaje / 100.0;
+        $suma = 0.0;
+        $ajustadas = [];
+        foreach ($lineas as $linea) {
+            $antes = (float) ($linea['importe'] ?? 0);
+            $importe = round($antes * $factor, 2);
+            $linea['importe_antes_exclusion'] = $antes;
+            $linea['importe'] = $importe;
+            $linea['porcentaje_exclusion'] = $porcentaje;
+            $linea['aplica'] = $importe > 0 && ($linea['aplica'] ?? false);
+            $suma = round($suma + $importe, 2);
+            $ajustadas[] = $linea;
+        }
+
+        return new RetencionGananciasResultado(
+            $suma > 0,
+            $suma,
+            $resultado->baseCalculo,
+            $resultado->baseRetenible,
+            $resultado->alicuotaAplicada,
+            $suma > 0 ? $resultado->motivo : RetencionGananciasResultado::MOTIVO_EXCLUIDO,
+            array_merge($resultado->detalle, $detalleExc, [
+                'integrantes' => $ajustadas,
                 'importe_antes_exclusion' => $resultado->importeRetencion,
             ]),
         );

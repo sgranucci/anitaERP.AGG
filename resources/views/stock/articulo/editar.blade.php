@@ -29,6 +29,11 @@
 <script src="{{ asset('assets/pages/scripts/stock/combinacion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/combinacion/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/marketplace.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/marketplace.js')) ?: time() }}" type="text/javascript"></script>
 @endif
+@if (\App\Support\Logistica\ArticuloCatalogoLogisticaSupport::uiActiva())
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/logistica/catalogo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/logistica/catalogo.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 @include('includes.stock.kardex_deposito_scripts')
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
@@ -169,6 +174,7 @@ window.abrirRecalcularTraFormula = @json(session('abrir_recalcular_tra_formula')
                     @include('stock.articulo.form9_partes_unicas')
                 @endif
                 @include('stock.articulo.form10_marketplace')
+                @include('stock.articulo.form11_catalogo_logistica')
                 </div>
                 </div>
                 <div class="card-footer">
@@ -226,6 +232,11 @@ window.abrirRecalcularTraFormula = @json(session('abrir_recalcular_tra_formula')
 @include('stock.articulo.partials.modal_recalcular_transferencias_formula')
 <input type="hidden" id="articulo-preview-recalcular-tra-formula-url" value="{{ route('articulo_preview_recalcular_transferencias_formula', ['id' => $producto->id ?? 0]) }}">
 <input type="hidden" id="articulo-aplicar-recalcular-tra-formula-url" value="{{ route('articulo_aplicar_recalcular_transferencias_formula', ['id' => $producto->id ?? 0]) }}">
+@endif
+@if (\App\Support\Logistica\ArticuloCatalogoLogisticaSupport::uiActiva())
+@include('includes.contable.modalconsultacentrocosto')
+@include('includes.admin.modalconsultausuario')
+@include('includes.logistica.modales_catalogo')
 @endif
 @if (\App\Support\Stock\ArticuloMarketplaceGrillaSupport::uiActiva())
 @include('includes.ventas.modalconsultamarketplace')

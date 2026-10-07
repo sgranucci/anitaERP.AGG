@@ -876,7 +876,26 @@
             if (gd.retencion_calculada != null) {
                 html += filaDetalle('Calculada (bajo mínimo)', fmt(gd.retencion_calculada));
             }
-            html += '</tbody></table></div>';
+            var integrantes = gd.integrantes || [];
+            if (integrantes.length) {
+                html += '</tbody></table></div>';
+                html += '<div class="mt-2 small"><strong>Por integrante</strong></div>';
+                html += '<div class="table-responsive mt-1"><table class="table table-sm table-bordered mb-0"><thead><tr>'
+                    + '<th>Persona</th><th>CUIT</th><th class="text-right">%</th>'
+                    + '<th class="text-right">Parte del neto</th><th class="text-right">Sujeto</th><th class="text-right">Retención</th>'
+                    + '</tr></thead><tbody>';
+                integrantes.forEach(function (p) {
+                    html += '<tr><td>' + $('<div>').text(p.integrante_nombre || '').html()
+                        + '</td><td>' + $('<div>').text(p.integrante_cuit || '').html()
+                        + '</td><td class="text-right">' + fmt(p.integrante_porcentaje)
+                        + '</td><td class="text-right">' + fmt(p.neto_pago)
+                        + '</td><td class="text-right">' + fmt(p.base_retenible)
+                        + '</td><td class="text-right">' + fmt(p.importe) + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            } else {
+                html += '</tbody></table></div>';
+            }
             if (acum) {
                 html += '<div class="mt-3 small"><strong>Acumulado '
                     + (acum.desde || '') + ' → ' + (acum.hasta || '')

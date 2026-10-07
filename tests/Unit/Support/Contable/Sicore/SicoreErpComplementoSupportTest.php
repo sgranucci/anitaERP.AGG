@@ -37,6 +37,53 @@ class SicoreErpComplementoSupportTest extends TestCase
         $this->assertSame([], SicoreErpComplementoSupport::soloNuevos($erp, $anita));
     }
 
+    public function test_descarta_anita_sin_base_cuando_el_erp_tiene_la_misma_retencion(): void
+    {
+        $anita = [
+            [
+                'nro_comp' => 0,
+                'nro_cert' => 459,
+                'importe' => 60900.00,
+                'base_calculo' => 0,
+                'codigo_proveedor' => '005196',
+                'fecha_retencion' => '2026-09-30',
+                'referencia' => 'Ret.IVA 005196 — FC 0',
+            ],
+        ];
+        $erp = [
+            [
+                'nro_comp' => 125213,
+                'nro_cert' => 459,
+                'importe' => 60900.00,
+                'base_calculo' => 60900.00,
+                'codigo_proveedor' => '5196',
+                'fecha_retencion' => '2026-09-30',
+                'referencia' => 'Ret.ERP 5196 OPP 1-125213',
+            ],
+        ];
+
+        $anita = SicoreErpComplementoSupport::descartarSinBaseCubiertos($anita, $erp);
+
+        $this->assertSame([], $anita);
+        $this->assertCount(1, SicoreErpComplementoSupport::soloNuevos($erp, $anita));
+    }
+
+    public function test_conserva_anita_sin_base_si_no_hay_erp_que_la_cubra(): void
+    {
+        $anita = [
+            [
+                'nro_comp' => 0,
+                'nro_cert' => 10,
+                'importe' => 100.00,
+                'base_calculo' => 0,
+                'codigo_proveedor' => '1',
+                'fecha_retencion' => '2026-09-30',
+            ],
+        ];
+
+        $this->assertSame($anita, SicoreErpComplementoSupport::descartarSinBaseCubiertos($anita, []));
+    }
+
     public function test_conserva_erp_cuando_anita_esta_vacio(): void
     {
         $erp = [

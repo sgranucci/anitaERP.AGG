@@ -132,6 +132,7 @@ final class RetencionGananciasAcumuladoAnitaClaveSupport
             'retenido' => $retenido,
             'nro_certificado' => (int) ($fila['retv_nro_retencion'] ?? 0),
             'codigo_ret' => (int) ($fila['retv_codigo_ret'] ?? 0),
+            'cuit' => \App\Models\Compras\Proveedor_Integrante::digitosCuit((string) ($fila['retv_cuit_prov'] ?? '')),
         ];
     }
 

@@ -29,6 +29,7 @@
                         Configuración general → Agentes IIBB.
                         AGIP es una declaración mensual (e-ARCIBA, diseño vigente desde 01/2022).
                         Los datos salen de Anita (<code>retibrmov</code> / <code>venibr</code>) y, si no hay, del ERP.
+                        Las percepciones de IIBB de los gastos bancarios (ICO) se suman con el CUIT del banco.
                     </p>
                     @if (! empty($sin_agente))
                         <div class="alert alert-warning">

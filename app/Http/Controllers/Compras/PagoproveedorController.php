@@ -179,11 +179,16 @@ class PagoproveedorController extends Controller
 
     public function editar(int $id)
     {
-        can('editar-pagoproveedor');
+        $puedeEditar = can('editar-pagoproveedor', false);
+        if (! $puedeEditar && ! $this->puedeConsultarOrdenPago()) {
+            can('editar-pagoproveedor');
+        }
 
         $data = $this->pagoproveedorRepository->find($id);
 
-        return view('compras.pagoproveedor.editar', $this->datosFormulario($data));
+        return view('compras.pagoproveedor.editar', array_merge($this->datosFormulario($data), [
+            'consultaSinEditar' => ! $puedeEditar,
+        ]));
     }
 
     public function actualizar(ValidacionPagoproveedor $request, int $id)
@@ -712,7 +717,7 @@ class PagoproveedorController extends Controller
 
     public function documentosRelacionados(int $id)
     {
-        if (! can('listar-pagoproveedor', false) && ! can('editar-pagoproveedor', false)) {
+        if (! $this->puedeConsultarOrdenPago()) {
             return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
         }
 
@@ -726,7 +731,7 @@ class PagoproveedorController extends Controller
 
     public function imprimir(int $id)
     {
-        if (! can('listar-pagoproveedor', false) && ! can('listar-cuentacorriente-proveedor', false)) {
+        if (! $this->puedeConsultarOrdenPago()) {
             abort(403);
         }
 
@@ -735,9 +740,26 @@ class PagoproveedorController extends Controller
 
     public function imprimirRetencion(int $id, int $retencionId)
     {
-        can('listar-pagoproveedor');
+        if (! $this->puedeConsultarOrdenPago()) {
+            abort(403);
+        }
 
         return $this->pagoproveedorComprobantePdfService->streamRetencion($id, $retencionId);
+    }
+
+    /**
+     * Ver la OP, su PDF y el certificado desde el legajo, sin el ABM de órdenes de pago.
+     * Enc-compras entra al legajo y no tiene listar/editar-pagoproveedor.
+     */
+    private function puedeConsultarOrdenPago(): bool
+    {
+        return can('listar-pagoproveedor', false)
+            || can('editar-pagoproveedor', false)
+            || can('crear-pagoproveedor', false)
+            || can('listar-cuentacorriente-proveedor', false)
+            || can('listar-legajo-compra', false)
+            || can('listar-seguimiento-legajo-compra', false)
+            || can('listar-ordencompra', false);
     }
 
     public function datosEnvioProveedor(int $id)

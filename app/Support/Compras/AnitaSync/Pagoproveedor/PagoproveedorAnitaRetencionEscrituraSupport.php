@@ -243,6 +243,18 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
             ? abs((float) $pago->monto)
             : (float) ($det['pago_actual_anita'] ?? $netoPago);
 
+        $nombre = trim((string) ($det['integrante_nombre'] ?? ''));
+        $cuitPersona = trim((string) ($det['integrante_cuit'] ?? ''));
+        if ($nombre === '') {
+            $nombre = (string) ($proveedor->nombre ?? '');
+        }
+        if ($cuitPersona === '') {
+            $cuitPersona = self::cuitProveedor($proveedor);
+        } elseif (trim((string) ($det['integrante_cuit'] ?? '')) !== '') {
+            $cuitPersona = self::cuitCondominoAnita((string) $det['integrante_cuit']);
+        }
+        $gravado = (float) ($det['neto_gravado_comun'] ?? $netoPago);
+
         $camposEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ',
                 retv_empresa';
         $valorEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ",
@@ -281,7 +293,7 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 '".$ctx['nro']."',
                 '".$ctx['fecha']."',
                 '".$codigoRet."',
-                '".self::num($netoPago)."',
+                '".self::num($gravado)."',
                 '".self::num($pagoActual)."',
                 '".self::num($pagoAnterior)."',
                 '".self::num($sujeto)."',
@@ -290,8 +302,8 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 '".(int) $ret->nro_certificado."',
                 '".self::num($retMes)."',
                 '".self::num($retAnterior)."',
-                '".self::esc(self::recortar((string) ($proveedor->nombre ?? ''), 30))."',
-                '".self::esc(self::recortar(self::cuitProveedor($proveedor), 15))."',
+                '".self::esc(self::recortar($nombre, 30))."',
+                '".self::esc(self::recortar($cuitPersona, 15))."',
                 '".self::num($porcExcl)."',
                 '".self::esc(self::codMonedaAnita($pago))."'".$valorEmpresa,
         ], 'pagoproveedor retmov '.$pago->id);
@@ -583,6 +595,19 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
         $cuit = trim((string) ($proveedor->nroinscripcion ?? $proveedor->cuit ?? ''));
 
         return $cuit !== '' ? $cuit : ' ';
+    }
+
+    /**
+     * Anita marca el condómino con 'C' en el byte 15 de retv_cuit_prov (lista_retgan.fc).
+     */
+    private static function cuitCondominoAnita(string $cuit): string
+    {
+        $formato = \App\Models\Compras\Proveedor_Integrante::formatearCuit($cuit);
+        if (strlen($formato) > 13) {
+            $formato = substr($formato, 0, 13);
+        }
+
+        return str_pad($formato, 14, ' ', STR_PAD_RIGHT).'C';
     }
 
     private static function codMonedaAnita(Pagoproveedor $pago): string

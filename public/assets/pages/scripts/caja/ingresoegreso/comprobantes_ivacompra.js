@@ -12,6 +12,7 @@
     var ptrFilaCuentaConcepto = null;
     window.ptrIeCpFilaCuentaConcepto = null;
     var previewTimer = null;
+    var previewSeq = 0;
     var debitosGastoTocados = false;
     var debitosGastoSemilla = null;
     var ultimoPreview = null;
@@ -990,7 +991,69 @@
             .text('Suma ' + formatoNumero(suma) + ' / neto ' + formatoNumero(neto) + '.');
     }
 
+    function snapshotCuentasPreview() {
+        var map = {};
+        $('#ie-cp-preview-asiento tr.ie-cp-neto-manual').each(function () {
+            var $tr = $(this);
+            var conceptoId = parseInt($tr.attr('data-concepto-id') || '0', 10) || 0;
+            if (conceptoId <= 0) {
+                return;
+            }
+            var cuentaId = parseInt($tr.find('.cuentacontable_id').val() || '0', 10) || 0;
+            var codigo = $.trim($tr.find('.codigocuentacontable').val() || '');
+            var nombre = $.trim($tr.find('.nombrecuentacontable').val() || '');
+            var cc = parseInt($tr.find('.ie-cp-centrocosto').val() || '0', 10) || 0;
+            if (cuentaId <= 0 && codigo === '') {
+                delete cuentasGastoManual[String(conceptoId)];
+                return;
+            }
+            if (cuentaId > 0) {
+                cuentasGastoManual[String(conceptoId)] = {
+                    id: cuentaId,
+                    codigo: codigo,
+                    nombre: nombre,
+                };
+            }
+            if (cuentaId > 0 || codigo !== '') {
+                map[conceptoId] = {
+                    cuentaId: cuentaId,
+                    codigo: codigo,
+                    nombre: nombre,
+                    cc: cc,
+                };
+            }
+        });
+        return map;
+    }
+
+    function enriquecerLineaGasto(linea, snapshot) {
+        var conceptoId = parseInt(linea.concepto_ivacompra_id || '0', 10) || 0;
+        var cuentaId = parseInt(linea.cuentacontable_id || '0', 10) || 0;
+        if (cuentaId > 0 || conceptoId <= 0) {
+            return linea;
+        }
+        var guardada = snapshot[conceptoId] || null;
+        var manual = cuentasGastoManual[String(conceptoId)] || null;
+        if (guardada && guardada.cuentaId > 0) {
+            linea.cuentacontable_id = guardada.cuentaId;
+            linea.codigo = guardada.codigo || linea.codigo || '';
+            linea.nombre = guardada.nombre || linea.nombre || '';
+        } else if (manual && manual.id) {
+            linea.cuentacontable_id = manual.id;
+            linea.codigo = manual.codigo || linea.codigo || '';
+            linea.nombre = manual.nombre || linea.nombre || '';
+        } else if (guardada && guardada.codigo) {
+            linea.codigo = guardada.codigo;
+            linea.nombre = guardada.nombre || linea.nombre || '';
+        }
+        if (!(parseInt(linea.centrocosto_id || '0', 10) > 0) && guardada && guardada.cc > 0) {
+            linea.centrocosto_id = guardada.cc;
+        }
+        return linea;
+    }
+
     function pintarAsientoPreview(data) {
+        var cuentasEnPantalla = snapshotCuentasPreview();
         ultimoPreview = data || {};
         var $tbody = $('#ie-cp-preview-asiento');
         var lineas = data.lineas || [];
@@ -1040,7 +1103,7 @@
             var html = '';
             lineas.forEach(function (linea) {
                 if (linea.origen === 'neto_manual' || linea.origen === 'debe_gasto') {
-                    html += filaGastoHtml(linea, quitarNeto);
+                    html += filaGastoHtml(enriquecerLineaGasto(linea, cuentasEnPantalla), quitarNeto);
                 } else {
                     html += filaFijaHtml(linea);
                 }
@@ -1294,6 +1357,31 @@
             }
         });
         if (faltaCuenta) {
+            var $vacia = $('#ie-cp-preview-asiento tr.ie-cp-linea-gasto').filter(function () {
+                var id = parseInt($(this).find('.cuentacontable_id').val() || '0', 10) || 0;
+                var importe = $(this).hasClass('ie-cp-debito-gasto')
+                    ? (parseFloat($(this).find('.ie-cp-debito-importe').val() || '0') || 0)
+                    : (parseFloat($(this).attr('data-importe') || '0') || 0);
+                return Math.abs(importe) >= 0.0001 && id <= 0;
+            }).first();
+            if ($vacia.length) {
+                var $codigo = $vacia.find('.codigocuentacontable');
+                if ($codigo.length) {
+                    $codigo.trigger('focus');
+                }
+                var conceptoId = parseInt($vacia.attr('data-concepto-id') || '0', 10) || 0;
+                var nombre = '';
+                if (conceptoId > 0) {
+                    $('#ie-cp-tbody-conceptos .ie-cp-fila-concepto').each(function () {
+                        if (parseInt($(this).find('.concepto_ivacompra_id').val() || '0', 10) === conceptoId) {
+                            nombre = $.trim($(this).find('.nombre_concepto_ivacompra').val() || '');
+                        }
+                    });
+                }
+                if (nombre) {
+                    return 'Indique la cuenta de «' + nombre + '» en la vista previa del asiento.';
+                }
+            }
             return 'Indique la cuenta de cada débito de gasto en la vista previa del asiento.';
         }
         if (debitosGastoTocados && ultimoPreview && ultimoPreview.permite_reparto_gasto) {
@@ -1357,6 +1445,26 @@
         });
     }
 
+    function cuentaIdConceptoEnPreview(conceptoId) {
+        var $filaAsiento = $('#ie-cp-preview-asiento tr.ie-cp-neto-manual[data-concepto-id="' + conceptoId + '"]');
+        var cuentaId = parseInt($filaAsiento.find('.cuentacontable_id').val() || '0', 10) || 0;
+        var codigo = $.trim($filaAsiento.find('.codigocuentacontable').val() || '');
+        if (cuentaId > 0) {
+            cuentasGastoManual[String(conceptoId)] = {
+                id: cuentaId,
+                codigo: codigo,
+                nombre: $filaAsiento.find('.nombrecuentacontable').val() || '',
+            };
+            return cuentaId;
+        }
+        if ($filaAsiento.length && codigo === '') {
+            delete cuentasGastoManual[String(conceptoId)];
+            return 0;
+        }
+        var manual = cuentasGastoManual[String(conceptoId)];
+        return manual && manual.id ? manual.id : 0;
+    }
+
     function serializarModal() {
         var conceptos = [];
         $('#ie-cp-tbody-conceptos .ie-cp-fila-concepto').each(function () {
@@ -1366,13 +1474,13 @@
             if (conceptoId <= 0 || monto === 0) {
                 return;
             }
-            var cuentaManual = cuentasGastoManual[String(conceptoId)];
             var $filaAsiento = $('#ie-cp-preview-asiento tr.ie-cp-neto-manual[data-concepto-id="' + conceptoId + '"]');
             var ccConcepto = parseInt($filaAsiento.find('.ie-cp-centrocosto').val() || '0', 10) || 0;
+            var cuentaId = cuentaIdConceptoEnPreview(conceptoId);
             conceptos.push({
                 concepto_ivacompra_id: conceptoId,
                 monto: monto,
-                cuentacontabledebe_id: cuentaManual && cuentaManual.id ? cuentaManual.id : null,
+                cuentacontabledebe_id: cuentaId > 0 ? cuentaId : null,
                 centrocosto_id: ccConcepto > 0 ? ccConcepto : null,
             });
         });
@@ -1422,15 +1530,18 @@
     function programarPreview() {
         actualizarSumaConceptos();
         renderCoherenciaConceptosModal(validarCoherenciaConceptosModal());
+        var seq = ++previewSeq;
         clearTimeout(previewTimer);
-        previewTimer = setTimeout(recargarPreviewAsiento, 400);
+        previewTimer = setTimeout(function () {
+            recargarPreviewAsiento(seq);
+        }, 400);
     }
 
-    function recargarPreviewAsiento() {
+    function recargarPreviewAsiento(seq) {
         var $modal = $('#modal-ie-comprobante-iva');
         var url = $modal.data('preview-url');
         var empresaId = $('#empresa_id').val();
-        if (!url || !empresaId) {
+        if (!url || !empresaId || seq !== previewSeq) {
             return;
         }
 
@@ -1440,7 +1551,7 @@
             empresa_id: empresaId,
             comprobante_json: JSON.stringify(payload),
         }).done(function (data) {
-            if (data.mensaje !== 'ok') {
+            if (seq !== previewSeq || data.mensaje !== 'ok') {
                 return;
             }
             pintarAsientoPreview(data);
@@ -1470,7 +1581,62 @@
         });
     }
 
+    function filasGastoConCodigoSinId() {
+        var filas = [];
+        $('#ie-cp-preview-asiento tr.ie-cp-linea-gasto').each(function () {
+            var $tr = $(this);
+            var id = parseInt($tr.find('.cuentacontable_id').val() || '0', 10) || 0;
+            var codigo = $.trim($tr.find('.codigocuentacontable').val() || '');
+            var importe = $tr.hasClass('ie-cp-debito-gasto')
+                ? (parseFloat($tr.find('.ie-cp-debito-importe').val() || '0') || 0)
+                : (parseFloat($tr.attr('data-importe') || '0') || 0);
+            if (Math.abs(importe) >= 0.0001 && id <= 0 && codigo !== '') {
+                filas.push($tr);
+            }
+        });
+        return filas;
+    }
+
+    function resolverCuentasEscritasSinId(done) {
+        var filas = filasGastoConCodigoSinId();
+        if (!filas.length || typeof resolverPorCodigoCuentaContable !== 'function') {
+            done(true);
+            return;
+        }
+        var i = 0;
+        function siguiente() {
+            if (i >= filas.length) {
+                done(filasGastoConCodigoSinId().length === 0);
+                return;
+            }
+            var $tr = filas[i];
+            i += 1;
+            if (!document.contains($tr.get(0))) {
+                siguiente();
+                return;
+            }
+            var codigo = $.trim($tr.find('.codigocuentacontable').val() || '');
+            var $ctx = $tr.find('.tm-cuentacontable-campo').first();
+            resolverPorCodigoCuentaContable(codigo, $ctx.length ? $ctx : $tr, function () {
+                siguiente();
+            });
+        }
+        siguiente();
+    }
+
     function guardarDesdeModal() {
+        previewSeq += 1;
+        clearTimeout(previewTimer);
+        resolverCuentasEscritasSinId(function (ok) {
+            if (!ok) {
+                validarGastosAbiertos();
+                return;
+            }
+            confirmarComprobanteDesdeModal();
+        });
+    }
+
+    function confirmarComprobanteDesdeModal() {
         var payload = serializarModal();
         if (!payload.tipotransaccion_compra_id) {
             alert('Seleccione tipo de comprobante.');

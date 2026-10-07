@@ -65,6 +65,11 @@ class Proveedor extends Model implements Auditable
     	return $this->hasMany(Proveedor_Formapago::class, 'proveedor_id');
 	}
 
+	public function proveedor_integrantes()
+	{
+		return $this->hasMany(Proveedor_Integrante::class, 'proveedor_id')->orderBy('orden')->orderBy('id');
+	}
+
 	public function proveedor_archivos()
 	{
     	return $this->hasMany(Proveedor_Archivo::class, 'proveedor_id');

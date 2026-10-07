@@ -8,11 +8,18 @@ use App\ApiAnita;
 use App\Models\Contable\Iibb_Presentacion_Config;
 use App\Models\Configuracion\Provincia;
 use App\Models\Ventas\Venta;
+use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
+use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
 use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
+use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasCuitSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreVentaImpuestoSupport;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Percepciones IIBB — Anita venibr (opción 8) + ERP venta_impuesto (Perc. Buenos Aires…).
@@ -31,13 +38,197 @@ final class IngresosBrutosPercepcionesDatosService
     ): array {
         $anita = $this->desdeVenibrAnita($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
         $erp = $this->desdeVentaImpuestoErp($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
+        $bancos = $this->desdeGastoBancarioErp($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
 
         // Preferir Anita si hay datos; ERP complementa cuando no hay venibr (ventas solo ERP).
-        if ($anita !== []) {
-            return $anita;
+        // Los gastos bancarios (ICO) no están en venibr: se suman siempre, con el CUIT del banco.
+        $base = $anita !== [] ? $anita : $erp;
+
+        return $this->fusionarSinDuplicar($base, $bancos);
+    }
+
+    /**
+     * Percepciones de IIBB que el banco practica en el gasto bancario (ICO/IDO).
+     * El CUIT del archivo es el del banco, que es el agente.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function desdeGastoBancarioErp(
+        int $empresaId,
+        string $fechaDesde,
+        string $fechaHasta,
+        Iibb_Presentacion_Config $config,
+        Provincia $provincia,
+    ): array {
+        if ($empresaId <= 0
+            || ! Schema::hasTable('comprobante_proveedor')
+            || ! Schema::hasTable('comprobante_proveedor_concepto')
+            || ! Schema::hasTable('concepto_ivacompra')
+            || ! Schema::hasColumn('concepto_ivacompra', 'provincia_id')
+            || ! Schema::hasColumn('concepto_ivacompra', 'tipoconcepto')) {
+            return [];
         }
 
-        return $erp;
+        $provinciaId = (int) $provincia->id;
+        if ($provinciaId <= 0) {
+            return [];
+        }
+
+        $filas = DB::table('comprobante_proveedor as cp')
+            ->join('comprobante_proveedor_concepto as cpc', 'cpc.comprobante_proveedor_id', '=', 'cp.id')
+            ->join('concepto_ivacompra as ci', 'ci.id', '=', 'cpc.concepto_ivacompra_id')
+            ->leftJoin('tipotransaccion_compra as tt', 'tt.id', '=', 'cp.tipotransaccion_compra_id')
+            ->leftJoin('proveedor as p', 'p.id', '=', 'cp.proveedor_id')
+            ->where('cp.empresa_id', $empresaId)
+            ->whereBetween('cp.fechacomprobante', [$fechaDesde, $fechaHasta])
+            ->where(function ($q): void {
+                $q->whereNull('cp.estado')
+                    ->orWhere('cp.estado', '!=', ComprobanteProveedorEstados::ANULADO);
+            })
+            ->where('ci.tipoconcepto', ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IIBB)
+            ->where('ci.provincia_id', $provinciaId)
+            ->where(function ($q): void {
+                $q->where('cp.tipo_tesoreria', ComprobanteProveedorTipoTesoreria::GASTO_BANCO)
+                    ->orWhereIn('tt.abreviatura', ['ICO', 'IDO']);
+            })
+            ->orderBy('cp.fechacomprobante')
+            ->orderBy('cp.numerocomprobante')
+            ->get([
+                'cp.id',
+                'cp.fechacomprobante',
+                'cp.letra',
+                'cp.sucursal',
+                'cp.numerocomprobante',
+                'cp.moneda_id',
+                'cp.cotizacion',
+                'cp.proveedor_id',
+                'cp.proveedor_nombre_eventual',
+                'cp.proveedor_documento_eventual',
+                'cp.identificacion_proveedor_cuit',
+                'tt.abreviatura',
+                'tt.signo',
+                'p.nombre as proveedor_nombre',
+                'p.codigo as proveedor_codigo',
+                'p.nroinscripcion',
+                'ci.nombre as concepto_nombre',
+                'cpc.monto',
+            ]);
+
+        $out = [];
+        foreach ($filas as $fila) {
+            $tipo = strtoupper(substr(trim((string) ($fila->abreviatura ?? 'ICO')), 0, 3));
+            $vendedor = LibroIvaDigitalComprasCuitSupport::cuitYNombreVendedorErp(
+                (string) ($fila->nroinscripcion ?? ''),
+                (string) ($fila->identificacion_proveedor_cuit ?? ''),
+                (string) ($fila->proveedor_documento_eventual ?? ''),
+                (string) ($fila->proveedor_nombre ?? ''),
+                (string) ($fila->proveedor_nombre_eventual ?? ''),
+                $tipo !== '' ? $tipo : 'ICO',
+            );
+            if (! LibroIvaDigitalComprasCuitSupport::esCuitValido($vendedor['cuit'])) {
+                continue;
+            }
+
+            $signo = (float) ($fila->signo ?? 1);
+            if (abs($signo) < 0.0001) {
+                $signo = 1.0;
+            }
+            $coef = $this->coefMonedaComprobante($fila);
+            if ($coef <= 0) {
+                continue;
+            }
+            $importe = round((float) ($fila->monto ?? 0) * $signo * $coef, 2);
+            if (abs($importe) < 0.001) {
+                continue;
+            }
+
+            $fecha = substr((string) ($fila->fechacomprobante ?? ''), 0, 10);
+            $nro = (int) ($fila->numerocomprobante ?? 0);
+            $out[] = [
+                'origen' => 'gasto_bancario',
+                'iibb_config_id' => (int) $config->id,
+                'tipo' => 'percepciones',
+                'fecha_retencion' => $fecha,
+                'fecha_comp' => $fecha,
+                'nro_comp' => $nro,
+                'nro_cert' => 0,
+                'sucursal' => (int) ($fila->sucursal ?? 0),
+                'letra' => substr(trim((string) ($fila->letra ?? 'A')).' ', 0, 1),
+                'tipo_documento' => $importe < 0 ? 'C' : 'F',
+                'base_calculo' => abs($importe),
+                'importe' => $importe,
+                'alicuota' => 0.0,
+                'nro_documento' => IngresosBrutosFormatoArbaSupport::normalizarCuit($vendedor['cuit']),
+                'codigo_proveedor' => trim((string) ($fila->proveedor_codigo ?? '')),
+                'razon_social' => substr($vendedor['nombre'], 0, 30),
+                'referencia' => sprintf(
+                    'Perc.IIBB gasto bancario %s %s %s-%08d',
+                    $tipo !== '' ? $tipo : 'ICO',
+                    (string) ($fila->letra ?? 'A'),
+                    str_pad((string) ((int) ($fila->sucursal ?? 0)), 4, '0', STR_PAD_LEFT),
+                    $nro,
+                ),
+                'comprobante_proveedor_id' => (int) $fila->id,
+            ];
+        }
+
+        return $out;
+    }
+
+    private function coefMonedaComprobante(object $fila): float
+    {
+        $monedaId = (int) ($fila->moneda_id ?? 1);
+        if ($monedaId <= 1) {
+            return 1.0;
+        }
+
+        $cotizacion = (float) ($fila->cotizacion ?? 0);
+        if ($cotizacion > 1.0001) {
+            return $cotizacion;
+        }
+
+        $fecha = substr((string) ($fila->fechacomprobante ?? ''), 0, 10);
+        $vigente = CotizacionVigenteSupport::ventaValor($fecha, $monedaId);
+
+        return $vigente > 0 ? $vigente : 0.0;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $base
+     * @param  list<array<string, mixed>>  $extra
+     * @return list<array<string, mixed>>
+     */
+    private function fusionarSinDuplicar(array $base, array $extra): array
+    {
+        if ($extra === []) {
+            return $base;
+        }
+
+        $vistos = [];
+        foreach ($base as $reg) {
+            $vistos[$this->clavePercepcion($reg)] = true;
+        }
+        foreach ($extra as $reg) {
+            $clave = $this->clavePercepcion($reg);
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            $base[] = $reg;
+        }
+
+        return $base;
+    }
+
+    /**
+     * @param  array<string, mixed>  $reg
+     */
+    private function clavePercepcion(array $reg): string
+    {
+        return substr((string) ($reg['fecha_retencion'] ?? ''), 0, 10)
+            .'|'.(int) ($reg['nro_comp'] ?? 0)
+            .'|'.IngresosBrutosFormatoArbaSupport::normalizarCuit((string) ($reg['nro_documento'] ?? ''))
+            .'|'.number_format((float) ($reg['importe'] ?? 0), 2, '.', '');
     }
 
     /**

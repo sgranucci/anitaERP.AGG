@@ -46,6 +46,8 @@ final class RetencionGananciasAcumuladoAnitaRespaldoSupport
         ?int $retenciongananciaId,
         array $clavesOcupadas,
         array $certificadosOcupados = [],
+        ?string $cuitIntegrante = null,
+        ?float $porcentajeIntegrante = null,
     ): array {
         if (! self::estaHabilitada() || $proveedorId <= 0) {
             return [];
@@ -111,16 +113,26 @@ final class RetencionGananciasAcumuladoAnitaRespaldoSupport
             if (isset($vistos[$parsed['clave']])) {
                 continue;
             }
+            if ($cuitIntegrante !== null && $cuitIntegrante !== '') {
+                $cuitFila = (string) ($parsed['cuit'] ?? '');
+                if ($cuitFila === '' || $cuitFila !== $cuitIntegrante) {
+                    continue;
+                }
+            }
             $cert = $parsed['nro_certificado'];
             if ($cert > 0 && isset($certificadosOcupados[$cert])) {
                 continue;
             }
 
             $vistos[$parsed['clave']] = true;
+            $netoAnita = (float) $parsed['neto'];
+            if ($porcentajeIntegrante !== null && $porcentajeIntegrante > 0 && $porcentajeIntegrante < 99.999) {
+                $netoAnita = round($netoAnita * $porcentajeIntegrante / 100, 2);
+            }
             $out[] = [
                 'pagoproveedor_id' => 0,
                 'fecha' => $parsed['fecha'],
-                'neto' => $parsed['neto'],
+                'neto' => $netoAnita,
                 'retenido' => $parsed['retenido'],
                 'nro' => RetencionGananciasAcumuladoAnitaClaveSupport::etiqueta(
                     $parsed['tipo'],
@@ -160,7 +172,7 @@ final class RetencionGananciasAcumuladoAnitaRespaldoSupport
             'sistema' => (string) config('pagoproveedor.anita_sistema_retenciones', 'compras'),
             'tabla' => 'retmov',
             'campos' => 'retv_proveedor,retv_tipo,retv_letra,retv_sucursal,retv_nro,retv_fecha,'
-                .'retv_codigo_ret,retv_gravado,retv_pago_actual,retv_retencion,retv_nro_retencion,retv_empresa',
+                .'retv_codigo_ret,retv_gravado,retv_pago_actual,retv_retencion,retv_nro_retencion,retv_empresa,retv_cuit_prov',
             'whereArmado' => $where,
             'orderBy' => 'retv_fecha, retv_letra, retv_sucursal, retv_nro',
         ]);

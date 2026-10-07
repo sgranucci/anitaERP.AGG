@@ -241,4 +241,5 @@
         	</div>
         </div>
 	</div>
+	@include('compras.proveedor.partials.integrantes_ganancia', ['soloLectura' => true])
 </div>

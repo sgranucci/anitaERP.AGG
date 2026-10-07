@@ -117,6 +117,7 @@ class RetencionesPagoContextoBuilder
             porcentajeExclusionIibb: $pctB,
             porcentajeExclusionGanancias: $pctG,
             exclusionesVigentes: $exclusiones,
+            excluirPagoproveedorId: $excluirPagoproveedorId,
         );
 
         return [

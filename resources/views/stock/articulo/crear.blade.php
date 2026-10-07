@@ -23,6 +23,11 @@
 <script src="{{ asset('assets/pages/scripts/stock/combinacion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/combinacion/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/marketplace.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/marketplace.js')) ?: time() }}" type="text/javascript"></script>
 @endif
+@if (\App\Support\Logistica\ArticuloCatalogoLogisticaSupport::uiActiva())
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/logistica/catalogo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/logistica/catalogo.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @if (can('listar-formula-articulo', false) || can('listar-articulos', false))
 <script>
 window.consultaFormulaArticuloConfig = {
@@ -76,6 +81,7 @@ window.consultaFormulaArticuloConfig = {
                         @include('stock.articulo.form8')
                     @endif
                     @include('stock.articulo.form10_marketplace')
+                    @include('stock.articulo.form11_catalogo_logistica')
                 </div>
                 <div class="card-footer">
                 	<div class="row">
@@ -109,5 +115,10 @@ window.consultaFormulaArticuloConfig = {
 window.otCombinacionesLista = @json($articuloCombinacionesLista ?? []);
 </script>
 <style>#seleccionartodascombinacionModal{display:none;}</style>
+@endif
+@if (\App\Support\Logistica\ArticuloCatalogoLogisticaSupport::uiActiva())
+@include('includes.contable.modalconsultacentrocosto')
+@include('includes.admin.modalconsultausuario')
+@include('includes.logistica.modales_catalogo')
 @endif
 @endsection

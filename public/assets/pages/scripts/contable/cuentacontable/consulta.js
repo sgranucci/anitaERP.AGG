@@ -56,6 +56,9 @@ function contextoCuentaContableVivo($ctx) {
             conceptoId = parseInt($ctx.closest('[data-concepto-ivacompra-id]').attr('data-concepto-ivacompra-id') || '0', 10) || 0;
         }
     }
+    if (conceptoId <= 0 && $ctx && $ctx.length) {
+        conceptoId = parseInt($ctx.closest('tr').attr('data-concepto-id') || '0', 10) || 0;
+    }
     if (conceptoId > 0) {
         var $vivo = editorCuentaContableVivoEnPanel(
             $ctx,
@@ -63,6 +66,10 @@ function contextoCuentaContableVivo($ctx) {
         );
         if ($vivo.length) {
             return $vivo;
+        }
+        var $previewIe = $('#ie-cp-preview-asiento tr.ie-cp-linea-gasto[data-concepto-id="' + conceptoId + '"] .tm-cuentacontable-campo');
+        if ($previewIe.length && document.contains($previewIe.get(0))) {
+            return $previewIe.first();
         }
     }
     var debeIdx = 0;

@@ -79,5 +79,12 @@
             </a>
         </li>
         @endif
+        @if (\App\Support\Logistica\ArticuloCatalogoLogisticaSupport::uiActiva())
+        <li class="nav-item">
+            <a class="nav-link {{ $tabsArticuloActiva === 'logistica' ? 'active' : '' }}" href="#" id="botonform11" role="tab">
+                <i class="fa fa-truck"></i> Catálogo logística
+            </a>
+        </li>
+        @endif
     </ul>
 </div>

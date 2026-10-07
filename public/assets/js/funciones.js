@@ -109,7 +109,7 @@ function redondearDecimales(numero, decimales) {
 }
 
 /** Secciones de solapas usadas en CRUD multipágina (clientes, requisiciones, UIF, etc.). */
-var SECCIONES_SOLAPA_FORM = '.form1,.form2,.form3,.form4,.form5,.form6,.form7,.form8,.form9,.form10';
+var SECCIONES_SOLAPA_FORM = '.form1,.form2,.form3,.form4,.form5,.form6,.form7,.form8,.form9,.form10,.form11';
 
 /** Contenedores ocultos por regla de negocio: no validar sus required mientras estén ocultos. */
 var CONTENEDORES_REQUERIDO_CONDICIONAL = '#div-actividadso,#div-cumplenormativaso';

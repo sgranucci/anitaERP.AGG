@@ -72,6 +72,18 @@ final class IngresosBrutosReporteService
         $advertenciaDatos = null;
         if ($tipoConfig === IngresosBrutosListadoFiltros::TIPO_PERCEPCIONES) {
             $registros = $this->percepcionesDatosService->generar($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
+            $gastosBancarios = 0;
+            foreach ($registros as $reg) {
+                if (($reg['origen'] ?? '') === 'gasto_bancario') {
+                    $gastosBancarios++;
+                }
+            }
+            if ($gastosBancarios > 0) {
+                $advertenciaDatos = 'Se incluyeron '.$gastosBancarios.' percepción'
+                    .($gastosBancarios === 1 ? '' : 'es')
+                    .' de gastos bancarios (ICO/IDO) con el CUIT del banco.'
+                    .' Esas líneas no están en la cuenta de percepciones a terceros del agente.';
+            }
         } else {
             $registros = $this->retencionesDatosService->generar($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
             $advertenciaDatos = $this->retencionesDatosService->ultimaAdvertencia();

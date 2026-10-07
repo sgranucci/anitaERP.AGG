@@ -5,6 +5,7 @@ namespace App\Support\Compras\Retencion;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
+use App\Support\Compras\Retencion\RetencionGananciasResultado;
 use App\Support\Compras\Retencion\RetencionesPagoResultado;
 
 /**
@@ -37,19 +38,10 @@ final class PagoproveedorRetencionPersistenciaSupport
         $nroSuss = null;
 
         if ($resultado->ganancias->aplica && $resultado->ganancias->importeRetencion > 0) {
-            // Ganancias: un número por régimen con importe (cada graba_retmov).
-            $nroGan = $asignarCertificadosAnita
-                ? PagoproveedorAnitaRetencionNumeracionSupport::siguienteNumeroConLock(
-                    Pagoproveedor_Retencion::TIPO_GANANCIAS,
-                    $empresaId
-                )
-                : null;
-            $creadas[] = self::crear($pago, Pagoproveedor_Retencion::TIPO_GANANCIAS, $resultado->ganancias, $monedaId, $cotizacion, [
-                'retencionganancia_id' => $resultado->ganancias->detalle['regimen_id'] ?? null,
-                'codigo_regimen' => (string) ($resultado->ganancias->detalle['regimen'] ?? ''),
-                'codigo_retencion' => (string) ($resultado->ganancias->detalle['codigo'] ?? ''),
-                'nro_certificado' => $nroGan !== null ? (string) $nroGan : null,
-            ]);
+            $creadas = array_merge(
+                $creadas,
+                self::crearGanancias($pago, $resultado->ganancias, $monedaId, $cotizacion, $empresaId, $asignarCertificadosAnita),
+            );
         }
 
         if ($resultado->iva->aplica && $resultado->iva->importeRetencion > 0) {
@@ -126,6 +118,70 @@ final class PagoproveedorRetencionPersistenciaSupport
                     'nro_certificado' => $nroIibb !== null ? (string) $nroIibb : null,
                 ]);
             }
+        }
+
+        return $creadas;
+    }
+
+    /**
+     * Un certificado por integrante (retgan.fc). Sin integrantes, uno solo.
+     *
+     * @return list<Pagoproveedor_Retencion>
+     */
+    private static function crearGanancias(
+        Pagoproveedor $pago,
+        RetencionGananciasResultado $ganancias,
+        int $monedaId,
+        float $cotizacion,
+        int $empresaId,
+        bool $asignarCertificadosAnita,
+    ): array {
+        $lineas = $ganancias->detalle['integrantes'] ?? null;
+        if (! is_array($lineas) || $lineas === []) {
+            $nroGan = $asignarCertificadosAnita
+                ? PagoproveedorAnitaRetencionNumeracionSupport::siguienteNumeroConLock(
+                    Pagoproveedor_Retencion::TIPO_GANANCIAS,
+                    $empresaId
+                )
+                : null;
+
+            return [self::crear($pago, Pagoproveedor_Retencion::TIPO_GANANCIAS, $ganancias, $monedaId, $cotizacion, [
+                'retencionganancia_id' => $ganancias->detalle['regimen_id'] ?? null,
+                'codigo_regimen' => (string) ($ganancias->detalle['regimen'] ?? ''),
+                'codigo_retencion' => (string) ($ganancias->detalle['codigo'] ?? ''),
+                'nro_certificado' => $nroGan !== null ? (string) $nroGan : null,
+            ])];
+        }
+
+        $creadas = [];
+        foreach ($lineas as $linea) {
+            if (! is_array($linea)) {
+                continue;
+            }
+            $importe = (float) ($linea['importe'] ?? 0);
+            if ($importe <= 0) {
+                continue;
+            }
+            $nroGan = $asignarCertificadosAnita
+                ? PagoproveedorAnitaRetencionNumeracionSupport::siguienteNumeroConLock(
+                    Pagoproveedor_Retencion::TIPO_GANANCIAS,
+                    $empresaId
+                )
+                : null;
+            $parcial = (object) [
+                'importeRetencion' => $importe,
+                'baseCalculo' => (float) ($linea['base_calculo'] ?? 0),
+                'baseRetenible' => (float) ($linea['base_retenible'] ?? 0),
+                'alicuotaAplicada' => (float) ($linea['alicuota'] ?? $ganancias->alicuotaAplicada),
+                'motivo' => (string) ($linea['motivo'] ?? $ganancias->motivo),
+                'detalle' => $linea,
+            ];
+            $creadas[] = self::crear($pago, Pagoproveedor_Retencion::TIPO_GANANCIAS, $parcial, $monedaId, $cotizacion, [
+                'retencionganancia_id' => $linea['regimen_id'] ?? ($ganancias->detalle['regimen_id'] ?? null),
+                'codigo_regimen' => (string) ($linea['regimen'] ?? ($ganancias->detalle['regimen'] ?? '')),
+                'codigo_retencion' => (string) ($linea['codigo'] ?? ($ganancias->detalle['codigo'] ?? '')),
+                'nro_certificado' => $nroGan !== null ? (string) $nroGan : null,
+            ]);
         }
 
         return $creadas;

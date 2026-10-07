@@ -67,6 +67,7 @@ final class RetencionesPagoInput
         public readonly float $porcentajeExclusionGanancias = 0.0,
         /** @var array{G?:?array,I?:?array,S?:?array,B?:?array}|null */
         public readonly ?array $exclusionesVigentes = null,
+        public readonly ?int $excluirPagoproveedorId = null,
     ) {
     }
 

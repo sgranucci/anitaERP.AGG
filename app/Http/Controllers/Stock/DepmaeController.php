@@ -82,7 +82,8 @@ class DepmaeController extends Controller
             || can('actualizar-local-venta', false)
             || can('consultar-stock-local', false)
             || can('consultar-precios-local', false)
-            || can('usar-facturacion-local', false);
+            || can('usar-facturacion-local', false)
+            || can('gestionar-logistica-solicitud', false);
     }
 
     /**

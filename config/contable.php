@@ -101,4 +101,17 @@ return [
         'memory_limit' => env('SUMAS_SALDOS_MEMORY_LIMIT', '1024M'),
         'max_execution_time' => (int) env('SUMAS_SALDOS_MAX_EXECUTION_TIME', 600),
     ],
+
+    /*
+    | SIFERE (percepciones IIBB sufridas) y percepciones de IVA sufridas.
+    | Hasta fecha_limite_anita inclusive el mayor sale de Anita (ctamov + subdiario).
+    | Desde el día siguiente, solo asientos y comprobantes del ERP.
+    */
+    'percepcion_sufrida' => [
+        'fecha_limite_anita' => env('PERCEPCION_SUFRIDA_FECHA_LIMITE_ANITA', '2026-09-30'),
+        'cuenta_iibb' => (int) preg_replace('/\D/', '', (string) env('PERCEPCION_SUFRIDA_CUENTA_IIBB', '214010004')),
+        'cuenta_iva' => (int) preg_replace('/\D/', '', (string) env('PERCEPCION_SUFRIDA_CUENTA_IVA', '114010009')),
+        // Régimen del CSV F.2051 (percepciones impositivas sufridas). 493 = RG 2408, impuesto 767.
+        'regimen_percepcion_iva' => (int) env('PERCEPCION_IVA_REGIMEN', 493),
+    ],
 ];

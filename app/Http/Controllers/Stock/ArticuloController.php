@@ -43,6 +43,7 @@ use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Services\Stock\ArticuloAnitaSyncService;
 use App\Services\Stock\ArticuloParteUnicaService;
 use App\Services\Stock\PrecioService;
+use App\Support\Logistica\ArticuloCatalogoLogisticaSupport;
 use App\Services\Stock\StkdepSaldoAnitaService;
 use App\Support\Compras\ArticuloProveedorMatchSupport;
 use App\Support\Compras\ArticuloProveedorOperativoSupport;
@@ -1177,6 +1178,8 @@ class ArticuloController extends Controller
                     $this->articulo_proveedorRepository->syncFromRequest($data, (int) $articulo->id);
                 }
 
+                ArticuloCatalogoLogisticaSupport::sincronizarDesdeRequest($request, (int) $articulo->id);
+
                 if ($circuitoAlta) {
                     app(\App\Services\Stock\ArticuloArbolIntegracionService::class)
                         ->iniciarCircuito((int) $articulo->id, 'insert');
@@ -1373,6 +1376,8 @@ class ArticuloController extends Controller
             if (can('actualizar-compras-articulos', false)) {
                 $this->articulo_proveedorRepository->syncFromRequest($data, (int) $id);
             }
+
+            ArticuloCatalogoLogisticaSupport::sincronizarDesdeRequest($request, (int) $id);
 
             $despuesArbol = [
                 'cuentas_fp' => $arbolSvc->fingerprintCuentas((int) $id),

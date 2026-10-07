@@ -21,7 +21,7 @@ class Proveedor_Cuentacorriente extends Model implements Auditable
     protected $fillable = [
         'fecha', 'fechavencimiento', 'proveedor_id', 'total', 'moneda_id', 'cotizacion',
         'empresa_id', 'comprobante_proveedor_id', 'comprobante_proveedor_cuota_id',
-        'pagoproveedor_id',
+        'pagoproveedor_id', 'leyenda',
     ];
 
     protected $casts = [

@@ -874,7 +874,10 @@ class Comprobante_ProveedorController extends Controller
     {
         if (! can('editar-comprobante-proveedor', false)
             && ! can('listar-comprobante-proveedor', false)
-            && ! can('listar-cuentacorriente-proveedor', false)) {
+            && ! can('listar-cuentacorriente-proveedor', false)
+            && ! can('listar-legajo-compra', false)
+            && ! can('listar-seguimiento-legajo-compra', false)
+            && ! can('listar-ordencompra', false)) {
             abort(403);
         }
 

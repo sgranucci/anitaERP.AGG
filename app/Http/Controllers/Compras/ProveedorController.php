@@ -32,6 +32,7 @@ use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Caja\MediopagoRepositoryInterface;
 use App\Queries\Compras\ProveedorQueryInterface;
 use App\Services\Configuracion\IIBBService;
+use App\Support\Compras\ProveedorIntegranteSupport;
 use App\Support\Compras\ProveedorPadronIibbEtiquetaSupport;
 use App\Services\Compras\RequisicionService;
 use App\Services\Compras\OrdencompraService;
@@ -640,6 +641,9 @@ class ProveedorController extends Controller
                 $this->proveedor_servicioRepository->create($request->all(), $proveedor->id);
                 $proveedor_archivo = $this->proveedor_archivoRepository->create($request, $proveedor->id);
                 $this->proveedor_documento_fiscalRepository->sincronizarDesdeRequest((int) $proveedor->id, $request);
+                if ($request->has('integrantes_presentes')) {
+                    ProveedorIntegranteSupport::sincronizar((int) $proveedor->id, (array) $request->input('integrantes', []));
+                }
             }
             DB::commit();
         } catch (\Exception $e) {
@@ -753,6 +757,9 @@ class ProveedorController extends Controller
 
             // Graba CUIT / CM05 (solapa dedicada)
             $this->proveedor_documento_fiscalRepository->sincronizarDesdeRequest((int) $id, $request);
+            if ($request->has('integrantes_presentes')) {
+                ProveedorIntegranteSupport::sincronizar((int) $id, (array) $request->input('integrantes', []));
+            }
 
             DB::commit();
         } catch (\Exception $e) {

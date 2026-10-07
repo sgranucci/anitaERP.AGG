@@ -630,6 +630,8 @@ class MayorConceptoAnitaBridgeReader implements MayorConceptoLectorInterface
         ], fn ($n) => $n > 0)));
 
         foreach ($candidatosNro as $nro) {
+            // Este Informix no acepta LIMIT ni FIRST (error -201). El comprobante
+            // tiene pocas líneas; alcanza con saber si volvió alguna.
             $sub = $this->listar(
                 'contab',
                 'subdiario',
@@ -638,8 +640,7 @@ class MayorConceptoAnitaBridgeReader implements MayorConceptoLectorInterface
                 .' AND subd_tipo="'.addslashes($tipoAp).'"'
                 .' AND subd_letra='.$this->sqlChar($letra)
                 .' AND subd_sucursal='.$suc
-                .' AND subd_nro='.$nro
-                .' LIMIT 1',
+                .' AND subd_nro='.$nro,
                 $errores,
                 'axphist-empresa',
             );
@@ -654,8 +655,7 @@ class MayorConceptoAnitaBridgeReader implements MayorConceptoLectorInterface
                 'subd_empresa',
                 ' WHERE subd_empresa='.$empresaId
                 .' AND subd_tipo="'.addslashes($tipoAp).'"'
-                .' AND subd_nro_interno='.$nroInterno
-                .' LIMIT 1',
+                .' AND subd_nro_interno='.$nroInterno,
                 $errores,
                 'axphist-empresa-interno',
             );
@@ -1194,10 +1194,12 @@ class MayorConceptoAnitaBridgeReader implements MayorConceptoLectorInterface
             return 0;
         }
 
+        // stkm_cta_contablec (18). stkm_cta_contable_c tiene 19 y este Informix
+        // rechaza el identificador (-253): el UNLOAD no sale y el concepto queda en 0.
         $lineasOc = $this->listar(
             'compras',
             'pendmovp,stkmae',
-            'penvp_articulo,penvp_empresa,stkm_cta_contable_c',
+            'penvp_articulo,penvp_empresa,stkm_cta_contablec',
             ' WHERE penvp_tipo="PEP"'
             .' AND penvp_letra="X"'
             .' AND penvp_sucursal=0'
@@ -1208,7 +1210,7 @@ class MayorConceptoAnitaBridgeReader implements MayorConceptoLectorInterface
         );
 
         foreach ($lineasOc as $lineaOc) {
-            $cuenta = (int) ($lineaOc->stkm_cta_contable_c ?? 0);
+            $cuenta = (int) ($lineaOc->stkm_cta_contablec ?? 0);
             if ($cuenta <= 0) {
                 continue;
             }

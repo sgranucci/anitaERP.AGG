@@ -44,7 +44,9 @@
 @section('contenido')
 @php
     $estado = (string) ($data->estado ?? '');
-    $opSoloLectura = ! \App\Support\Compras\PagoproveedorEdicionCandadoSupport::esEditable($data);
+    $consultaSinEditar = ! empty($consultaSinEditar);
+    $opSoloLectura = $consultaSinEditar
+        || ! \App\Support\Compras\PagoproveedorEdicionCandadoSupport::esEditable($data);
     $puedeActualizar = can('actualizar-pagoproveedor', false)
         && ! $opSoloLectura
         && ! in_array($estado, \App\Models\Compras\Pagoproveedor::estadosFinalesBloqueados(), true);
@@ -66,7 +68,11 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        @if ($opSoloLectura)
+        @if ($consultaSinEditar)
+            <div class="alert alert-info">
+                <strong>Solo consulta.</strong> Podés ver la orden, la factura y los certificados. No se puede modificar.
+            </div>
+        @elseif ($opSoloLectura)
             <div class="alert alert-warning">
                 @if (! empty($data->pagoproveedor_origen_id))
                     <strong>Solo lectura:</strong> esta OP es una anulación compensatoria (AOP) y no se puede modificar.
@@ -79,16 +85,18 @@
             <div class="card-header">
                 <h3 class="card-title">{{ $opSoloLectura ? 'Consultar' : 'Editar' }} orden de pago — {{ $estado }}</h3>
                 <div class="card-tools">
-                    @if (can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false))
-                        <button type="button"
-                            class="btn btn-outline-info btn-sm mr-1 js-op-documentos-relacionados"
-                            title="Documentos relacionados (factura, OC, COM, requisición)"
-                            data-id="{{ $data->id }}"
-                            data-numero="{{ $data->etiquetaComprobante() }}">
-                            <i class="fa fa-sitemap"></i> Documentos
-                        </button>
+                    <button type="button"
+                        class="btn btn-outline-info btn-sm mr-1 js-op-documentos-relacionados"
+                        title="Documentos relacionados (factura, OC, COM, requisición)"
+                        data-id="{{ $data->id }}"
+                        data-numero="{{ $data->etiquetaComprobante() }}">
+                        <i class="fa fa-sitemap"></i> Documentos
+                    </button>
+                    @if ($consultaSinEditar)
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.close();">Cerrar solapa</button>
+                    @else
+                        <a href="{{ route('pagoproveedor') }}" class="btn btn-outline-info btn-sm"><i class="fa fa-reply-all"></i> Volver</a>
                     @endif
-                    <a href="{{ route('pagoproveedor') }}" class="btn btn-outline-info btn-sm"><i class="fa fa-reply-all"></i> Volver</a>
                 </div>
             </div>
             <form action="{{ route('actualizar_pagoproveedor', $data->id) }}" method="POST" id="form-pagoproveedor" class="form-horizontal form--label-right" autocomplete="off" enctype="multipart/form-data">
@@ -109,7 +117,7 @@
                     </button>
                 </div>
                 @include('compras.pagoproveedor.partials.resumen_desembolso')
-                <div class="card-body">
+                <div class="card-body{{ $consultaSinEditar ? ' pe-none' : '' }}">
                     @include('compras.pagoproveedor.form')
                     @include('compras.pagoproveedor.form2')
                     @include('compras.pagoproveedor.form3')
@@ -165,15 +173,13 @@
                 <a class="btn btn-secondary" target="_blank" rel="noopener" href="{{ route('imprimir_pagoproveedor', $data->id) }}">
                     <i class="fa fa-print"></i> Imprimir
                 </a>
-                @if (can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false))
-                    <button type="button"
-                        class="btn btn-outline-info js-op-documentos-relacionados"
-                        title="Documentos relacionados (factura, OC, COM, requisición)"
-                        data-id="{{ $data->id }}"
-                        data-numero="{{ $data->etiquetaComprobante() }}">
-                        <i class="fa fa-sitemap"></i> Documentos
-                    </button>
-                @endif
+                <button type="button"
+                    class="btn btn-outline-info js-op-documentos-relacionados"
+                    title="Documentos relacionados (factura, OC, COM, requisición)"
+                    data-id="{{ $data->id }}"
+                    data-numero="{{ $data->etiquetaComprobante() }}">
+                    <i class="fa fa-sitemap"></i> Documentos
+                </button>
             </div>
         </div>
     </div>

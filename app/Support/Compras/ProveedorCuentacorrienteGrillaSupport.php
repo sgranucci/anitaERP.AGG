@@ -8,8 +8,14 @@ use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 
 final class ProveedorCuentacorrienteGrillaSupport
 {
+    public const PREFIJO_LEYENDA_AJUSTE = 'Ajuste saldo CC ';
     public static function etiquetaComprobante(Proveedor_Cuentacorriente $fila): string
     {
+        $leyendaAjuste = self::leyendaAjusteVisible($fila);
+        if ($leyendaAjuste !== null) {
+            return $leyendaAjuste;
+        }
+
         // Crédito de OP: priorizar pago / etiqueta de aplicación (no la factura linkeada).
         if ((int) ($fila->pagoproveedor_id ?? 0) > 0 && $fila->pagoproveedores) {
             return $fila->pagoproveedores->etiquetaComprobante();
@@ -49,6 +55,11 @@ final class ProveedorCuentacorrienteGrillaSupport
      */
     public static function etiquetaComprobanteAbreviado(Proveedor_Cuentacorriente $fila): string
     {
+        $leyendaAjuste = self::leyendaAjusteVisible($fila);
+        if ($leyendaAjuste !== null) {
+            return $leyendaAjuste;
+        }
+
         $comp = $fila->comprobante_proveedores;
         if ($comp === null) {
             $etiquetaPago = $fila->pagoproveedores?->etiquetaComprobante();
@@ -67,6 +78,23 @@ final class ProveedorCuentacorrienteGrillaSupport
         );
 
         return $base.self::sufijoCuota($fila);
+    }
+
+    /**
+     * Renglón de ajuste de saldo (sin factura ni orden de pago). No entra en la deuda.
+     */
+    private static function leyendaAjusteVisible(Proveedor_Cuentacorriente $fila): ?string
+    {
+        if ((int) ($fila->pagoproveedor_id ?? 0) > 0 || (int) ($fila->comprobante_proveedor_id ?? 0) > 0) {
+            return null;
+        }
+
+        $leyenda = trim((string) ($fila->leyenda ?? ''));
+        if ($leyenda === '' || ! str_starts_with($leyenda, self::PREFIJO_LEYENDA_AJUSTE)) {
+            return null;
+        }
+
+        return $leyenda;
     }
 
     /**

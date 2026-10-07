@@ -289,9 +289,14 @@
             return;
         }
         var pagos = fac.pagos || [];
+        var urlFactura = fac.url_pdf || fac.url_comprobante || '';
+        var etiquetaFactura = esc(fac.etiqueta || ('#' + fac.id));
+        var tituloFactura = urlFactura
+            ? '<a href="' + esc(urlFactura) + '" class="text-primary" target="_blank" rel="noopener" title="Abrir la factura">' + etiquetaFactura + '</a>'
+            : etiquetaFactura;
         var head =
             '<div class="mb-3">' +
-            '<div class="font-weight-bold" style="font-size:1rem;">' + esc(fac.etiqueta || ('#' + fac.id)) + '</div>' +
+            '<div class="font-weight-bold" style="font-size:1rem;">' + tituloFactura + '</div>' +
             '<div class="text-muted small mt-1">' +
             (fac.fecha ? esc(fac.fecha) + ' · ' : '') +
             'Total ' + fmtMonto(fac.total) +
@@ -356,14 +361,19 @@
         }
         facs.forEach(function (f) {
             var key = String(f.id);
-            var $btn = $('<button type="button" class="bandeja-pagos-fac js-bandeja-pago-fac"></button>');
+            var $btn = $('<div class="bandeja-pagos-fac js-bandeja-pago-fac"></div>');
             $btn.attr('data-fac-key', key);
             if (key === String(activoKey)) {
                 $btn.addClass('is-active');
             }
+            var urlFacturaLista = f.url_pdf || f.url_comprobante || '';
+            var tituloLista = esc(f.etiqueta || ('#' + f.id));
+            if (urlFacturaLista) {
+                tituloLista = '<a href="' + esc(urlFacturaLista) + '" class="text-primary js-bandeja-abrir-factura" target="_blank" rel="noopener" title="Abrir la factura">' + tituloLista + '</a>';
+            }
             $btn.append(
                 '<div class="bandeja-pagos-fac-top">' +
-                '<div class="bandeja-pagos-fac-titulo">' + esc(f.etiqueta || ('#' + f.id)) + '</div>' +
+                '<div class="bandeja-pagos-fac-titulo">' + tituloLista + '</div>' +
                 chipPagoFactura(f) +
                 '</div>' +
                 '<div class="bandeja-pagos-fac-meta">' +

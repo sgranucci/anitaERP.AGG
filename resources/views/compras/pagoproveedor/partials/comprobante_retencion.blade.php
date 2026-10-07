@@ -27,7 +27,13 @@
             ?? '')
     );
     $legal = $leyendasLegales[$tipo] ?? '';
-    $netoGravado = (float) ($detalle['neto_periodo'] ?? $detalle['neto_pago'] ?? $detalle['neto_base'] ?? $detalle['neto'] ?? $retencion->base_calculo);
+    $beneficiarioNombre = trim((string) ($detalle['integrante_nombre'] ?? ''));
+    $beneficiarioCuit = trim((string) ($detalle['integrante_cuit'] ?? ''));
+    if ($tipo !== Pagoproveedor_Retencion::TIPO_GANANCIAS || $beneficiarioNombre === '') {
+        $beneficiarioNombre = $proveedor ? (string) $proveedor->nombre : '';
+        $beneficiarioCuit = $proveedor ? (string) ($proveedor->nroinscripcion ?? '') : '';
+    }
+    $netoGravado = (float) ($detalle['neto_gravado_comun'] ?? $detalle['neto_periodo'] ?? $detalle['neto_pago'] ?? $detalle['neto_base'] ?? $detalle['neto'] ?? $retencion->base_calculo);
     $minimo = (float) ($detalle['minimo_retencion'] ?? $detalle['minimo_imponible'] ?? $detalle['monto_excedente'] ?? 0);
     $sujeto = (float) ($detalle['base_retenible'] ?? $retencion->base_calculo);
     $yaRetenido = (float) ($detalle['retenido_previo'] ?? $detalle['retencion_periodo'] ?? 0);
@@ -80,8 +86,14 @@
     <tr>
         <td class="lbl">Proveedor</td>
         <td colspan="3">
-            @if ($proveedor)
-                {{ str_pad((string) $proveedor->codigo, 6, '0', STR_PAD_LEFT) }} {{ $proveedor->nombre }}
+            @if ($beneficiarioNombre !== '')
+                @if ($tipo === Pagoproveedor_Retencion::TIPO_GANANCIAS && trim((string) ($detalle['integrante_cuit'] ?? '')) !== '')
+                    {{ $beneficiarioNombre }}
+                @elseif ($proveedor)
+                    {{ str_pad((string) $proveedor->codigo, 6, '0', STR_PAD_LEFT) }} {{ $beneficiarioNombre }}
+                @else
+                    {{ $beneficiarioNombre }}
+                @endif
             @else
                 —
             @endif
@@ -98,7 +110,7 @@
     </tr>
     <tr>
         <td class="lbl">CUIT</td>
-        <td>{{ $proveedor->nroinscripcion ?? '—' }}</td>
+        <td>{{ $beneficiarioCuit !== '' ? $beneficiarioCuit : '—' }}</td>
         <td class="lbl">Cond. IVA</td>
         <td>{{ optional(optional($proveedor)->condicionivas)->nombre ?? '—' }}</td>
     </tr>

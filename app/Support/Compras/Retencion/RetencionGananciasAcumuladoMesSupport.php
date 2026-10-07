@@ -49,6 +49,8 @@ final class RetencionGananciasAcumuladoMesSupport
         ?int $retenciongananciaId = null,
         ?int $excluirPagoproveedorId = null,
         ?int $cantidadPeriodos = null,
+        ?string $cuitIntegrante = null,
+        ?float $porcentajeIntegrante = null,
     ): array {
         $fecha = Carbon::parse($fechaPago)->startOfDay();
         $periodos = $cantidadPeriodos;
@@ -115,6 +117,12 @@ final class RetencionGananciasAcumuladoMesSupport
 
         foreach ($filas as $fila) {
             $detalle = is_array($fila->detalle_calculo) ? $fila->detalle_calculo : [];
+            if ($cuitIntegrante !== null && $cuitIntegrante !== '') {
+                $cuitFila = \App\Models\Compras\Proveedor_Integrante::digitosCuit((string) ($detalle['integrante_cuit'] ?? ''));
+                if ($cuitFila !== $cuitIntegrante) {
+                    continue;
+                }
+            }
             $netoPago = (float) ($detalle['neto_pago'] ?? 0);
             if ($netoPago <= 0) {
                 $netoPago = (float) ($fila->base_calculo ?? 0);
@@ -175,6 +183,8 @@ final class RetencionGananciasAcumuladoMesSupport
                 $retenciongananciaId,
                 $clavesOcupadas,
                 $certificadosOcupados,
+                $cuitIntegrante,
+                $porcentajeIntegrante,
             );
             foreach ($faltantes as $anita) {
                 $neto = round($neto + (float) $anita['neto'], 2);

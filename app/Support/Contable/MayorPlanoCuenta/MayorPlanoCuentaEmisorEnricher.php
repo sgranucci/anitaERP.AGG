@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Contable\MayorPlanoCuenta;
 
 use App\Models\Caja\Cuentacaja;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasCuitSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -107,7 +108,145 @@ class MayorPlanoCuentaEmisorEnricher
             $filas[$idx] = $this->aplicarEmisor($fila, $entidad, $codigo, $registro);
         }
 
+        return $this->completarCuitGastoBancario($filas);
+    }
+
+    /**
+     * El egreso de tesorería identifica la cuenta de caja, que no tiene CUIT.
+     * El ICO/IDO del gasto bancario sí guarda el CUIT del banco: es el que
+     * tiene que verse en el mayor (y el que usa SIFERE).
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function completarCuitGastoBancario(array $filas): array
+    {
+        $ids = [];
+        foreach ($filas as $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+            if (! $this->esLineaGastoBancario($fila)) {
+                continue;
+            }
+            $cpId = (int) ($fila['comprobante_proveedor_id'] ?? 0);
+            if ($cpId > 0) {
+                $ids[$cpId] = $cpId;
+            }
+        }
+
+        if ($ids === [] || ! Schema::hasTable('comprobante_proveedor')) {
+            return $filas;
+        }
+
+        $identidad = $this->identidadFiscalComprobantes(array_values($ids));
+
+        foreach ($filas as $idx => $fila) {
+            if (! $this->esLineaGastoBancario($fila)) {
+                continue;
+            }
+            $info = $identidad[(int) ($fila['comprobante_proveedor_id'] ?? 0)] ?? null;
+            if ($info === null || $info['cuit'] === '') {
+                continue;
+            }
+
+            $filas[$idx]['cuit'] = $info['cuit'];
+            if ($info['nombre'] === '') {
+                continue;
+            }
+            $filas[$idx]['emisor_nombre'] = $info['nombre'];
+            $codigo = trim((string) ($filas[$idx]['emisor'] ?? ''));
+            $filas[$idx]['emisor_fmt'] = $codigo !== ''
+                ? $codigo.' — '.$info['nombre']
+                : $info['nombre'];
+        }
+
         return $filas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     */
+    private function esLineaGastoBancario(array $fila): bool
+    {
+        if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+            return false;
+        }
+        if (! empty($fila['comprobante_proveedor_de_linea'])) {
+            return true;
+        }
+
+        $tipo = strtoupper(substr(trim((string) ($fila['tipo_comp'] ?? '')), 0, 3));
+
+        return in_array($tipo, ['ICO', 'IDO'], true);
+    }
+
+    /**
+     * @param  list<int>  $comprobanteIds
+     * @return array<int, array{cuit: string, nombre: string}>
+     */
+    private function identidadFiscalComprobantes(array $comprobanteIds): array
+    {
+        $columnas = ['cp.id'];
+        foreach ([
+            'identificacion_proveedor_cuit',
+            'proveedor_documento_eventual',
+            'proveedor_nombre_eventual',
+            'proveedor_id',
+        ] as $columna) {
+            if (Schema::hasColumn('comprobante_proveedor', $columna)) {
+                $columnas[] = 'cp.'.$columna;
+            }
+        }
+
+        $query = DB::table('comprobante_proveedor as cp')->whereIn('cp.id', $comprobanteIds);
+        if (Schema::hasTable('proveedor')) {
+            $query->leftJoin('proveedor as p', 'p.id', '=', 'cp.proveedor_id');
+            if (Schema::hasColumn('proveedor', 'nroinscripcion')) {
+                $columnas[] = 'p.nroinscripcion';
+            }
+            if (Schema::hasColumn('proveedor', 'nombre')) {
+                $columnas[] = 'p.nombre as proveedor_nombre';
+            }
+        }
+        if (Schema::hasTable('tipotransaccion_compra')
+            && Schema::hasColumn('comprobante_proveedor', 'tipotransaccion_compra_id')) {
+            $query->leftJoin('tipotransaccion_compra as tt', 'tt.id', '=', 'cp.tipotransaccion_compra_id');
+            $columnas[] = 'tt.abreviatura';
+        }
+
+        $out = [];
+        foreach ($query->get($columnas) as $row) {
+            $tipo = strtoupper(substr(trim((string) ($row->abreviatura ?? 'ICO')), 0, 3));
+            $resuelto = LibroIvaDigitalComprasCuitSupport::cuitYNombreVendedorErp(
+                isset($row->nroinscripcion) ? (string) $row->nroinscripcion : null,
+                isset($row->identificacion_proveedor_cuit) ? (string) $row->identificacion_proveedor_cuit : null,
+                isset($row->proveedor_documento_eventual) ? (string) $row->proveedor_documento_eventual : null,
+                isset($row->proveedor_nombre) ? (string) $row->proveedor_nombre : null,
+                isset($row->proveedor_nombre_eventual) ? (string) $row->proveedor_nombre_eventual : null,
+                $tipo !== '' ? $tipo : 'ICO',
+            );
+            $cuit = $resuelto['cuit'];
+            if (! LibroIvaDigitalComprasCuitSupport::esCuitValido($cuit)) {
+                continue;
+            }
+            $out[(int) $row->id] = [
+                'cuit' => self::cuitConGuiones($cuit),
+                'nombre' => $resuelto['nombre'],
+            ];
+        }
+
+        return $out;
+    }
+
+    private static function cuitConGuiones(string $cuit): string
+    {
+        $d = LibroIvaDigitalComprasCuitSupport::soloDigitos($cuit);
+        if (strlen($d) !== 11) {
+            return $cuit;
+        }
+
+        return substr($d, 0, 2).'-'.substr($d, 2, 8).'-'.substr($d, 10, 1);
     }
 
     /**

@@ -1243,6 +1243,15 @@ Route::get('contable/exportar-sicore', 'Contable\SicoreReporteController@exporta
 Route::get('contable/listar-sicore/{formato?}', 'Contable\SicoreReporteController@listar')->name('listar_sicore');
 Route::get('contable/liquidacion-sicore', 'Contable\SicoreReporteController@liquidacion')->name('liquidacion_sicore');
 
+Route::get('contable/sifere', 'Contable\PercepcionSufridaController@sifere')->name('sifere');
+Route::get('contable/exportar-sifere', 'Contable\PercepcionSufridaController@exportarSifere')->name('exportar_sifere');
+Route::get('contable/listar-sifere/{formato?}', 'Contable\PercepcionSufridaController@listarSifere')->name('listar_sifere');
+Route::get('contable/exportar-sifere-reporte', 'Contable\PercepcionSufridaController@exportarReporteSifere')->name('exportar_sifere_reporte');
+
+Route::get('contable/percepciones-iva', 'Contable\PercepcionSufridaController@percepcionIva')->name('percepciones_iva');
+Route::get('contable/exportar-percepciones-iva', 'Contable\PercepcionSufridaController@exportarPercepcionIva')->name('exportar_percepciones_iva');
+Route::get('contable/listar-percepciones-iva/{formato?}', 'Contable\PercepcionSufridaController@listarPercepcionIva')->name('listar_percepciones_iva');
+
 Route::get('contable/ingresos-brutos', 'Contable\IngresosBrutosReporteController@index')->name('ingresos_brutos');
 Route::get('contable/exportar-ingresos-brutos', 'Contable\IngresosBrutosReporteController@exportar')->name('exportar_ingresos_brutos');
 Route::get('contable/listar-ingresos-brutos/{formato?}', 'Contable\IngresosBrutosReporteController@listar')->name('listar_ingresos_brutos');
@@ -5870,3 +5879,24 @@ foreach (['punto', 'area', 'motivo', 'sector'] as $tipoCatalogo) {
         ->defaults('tipo', $tipoCatalogo)
         ->name("eliminar_ingreso_proveedor_{$tipoCatalogo}");
 }
+
+Route::get('logistica/solicitud', 'Logistica\SolicitudLogisticaController@index')->name('logistica_solicitud');
+Route::get('logistica/listasolicitud/{formato?}/{busqueda?}', 'Logistica\SolicitudLogisticaController@listar')->name('lista_logistica_solicitud');
+Route::post('logistica/solicitud/workbench/preview', 'Logistica\SolicitudLogisticaController@previewWorkbench')->name('preview_workbench_logistica_solicitud');
+Route::post('logistica/solicitud/workbench/vista', 'Logistica\SolicitudLogisticaController@guardarVistaListado')->name('guardar_vista_listado_logistica_solicitud');
+Route::delete('logistica/solicitud/workbench/vista/{id}', 'Logistica\SolicitudLogisticaController@eliminarVistaListado')->name('eliminar_vista_listado_logistica_solicitud')->whereNumber('id');
+Route::post('logistica/solicitud/workbench/columnas', 'Logistica\SolicitudLogisticaController@guardarColumnasListado')->name('guardar_columnas_listado_logistica_solicitud');
+Route::post('logistica/solicitud/workbench/etiquetas', 'Logistica\SolicitudLogisticaController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_logistica_solicitud');
+Route::get('logistica/solicitud/crear', 'Logistica\SolicitudLogisticaController@crear')->name('crear_logistica_solicitud');
+Route::post('logistica/solicitud', 'Logistica\SolicitudLogisticaController@guardar')->name('guardar_logistica_solicitud');
+Route::get('logistica/solicitud/{id}', 'Logistica\SolicitudLogisticaController@ver')->name('ver_logistica_solicitud')->whereNumber('id');
+Route::post('logistica/solicitud/{id}/gestionar', 'Logistica\SolicitudLogisticaController@gestionar')->name('gestionar_logistica_solicitud')->whereNumber('id');
+Route::get('logistica/solicitud/{id}/archivo/{archivo}', 'Logistica\SolicitudLogisticaController@descargarArchivo')->name('descargar_archivo_logistica_solicitud')->whereNumber('id')->whereNumber('archivo');
+Route::post('logistica/resolver-ordencompra', 'Logistica\SolicitudLogisticaController@resolverOrdencompra')->name('resolver_ordencompra_logistica');
+Route::get('logistica/configuracion', 'Logistica\ConfiguracionLogisticaController@editar')->name('editar_configuracion_logistica');
+Route::put('logistica/configuracion', 'Logistica\ConfiguracionLogisticaController@actualizar')->name('actualizar_configuracion_logistica');
+Route::post('logistica/consulta-categoria-catalogo', 'Logistica\ConfiguracionLogisticaController@consultaCategoria')->name('consulta_categoria_catalogo_logistica');
+Route::post('logistica/resolver-categoria-catalogo', 'Logistica\ConfiguracionLogisticaController@resolverCategoria')->name('resolver_categoria_catalogo_logistica');
+Route::post('logistica/consulta-rol', 'Logistica\ConfiguracionLogisticaController@consultaRol')->name('consulta_rol_logistica');
+Route::post('logistica/resolver-rol', 'Logistica\ConfiguracionLogisticaController@resolverRol')->name('resolver_rol_logistica');
+Route::post('logistica/resolver-tipo-solicitud', 'Logistica\ConfiguracionLogisticaController@resolverTipo')->name('resolver_tipo_solicitud_logistica');

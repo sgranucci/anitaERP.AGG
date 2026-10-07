@@ -3112,10 +3112,17 @@ class OrdencompraLegajoBandejaPaqueteService
             } elseif ($clave !== '' && isset($porClave[$clave])) {
                 $idx = $porClave[$clave];
             }
+            $cpId = (int) ($cp['id'] ?? 0);
+            $urlFacturaPdf = $cpId > 0
+                ? route('comprobante_proveedor_factura_pdf', ['id' => $cpId, 'inline' => 1])
+                : '';
             if ($idx !== null) {
-                $facturas[$idx]['comprobante_proveedor_id'] = (int) ($cp['id'] ?? 0) ?: null;
+                $facturas[$idx]['comprobante_proveedor_id'] = $cpId ?: null;
                 if ($urlCp !== '') {
                     $facturas[$idx]['url_comprobante'] = $urlCp;
+                }
+                if ($urlFacturaPdf !== '' && trim((string) ($facturas[$idx]['url_pdf'] ?? '')) === '') {
+                    $facturas[$idx]['url_pdf'] = $urlFacturaPdf;
                 }
                 $facturas[$idx]['cargado_cxp'] = true;
                 $totalCp = isset($cp['total']) && $cp['total'] !== null ? (float) $cp['total'] : null;
@@ -3134,8 +3141,8 @@ class OrdencompraLegajoBandejaPaqueteService
             }
             $tipo = (string) ($cp['tipo'] ?? 'FC');
             $facturas[] = [
-                'id' => 'cp-'.(int) ($cp['id'] ?? 0),
-                'comprobante_proveedor_id' => (int) ($cp['id'] ?? 0) ?: null,
+                'id' => 'cp-'.$cpId,
+                'comprobante_proveedor_id' => $cpId ?: null,
                 'origen' => 'comprobante',
                 'origen_label' => (string) ($cp['origen_label'] ?? 'Comprobante cargado en CxP'),
                 'tipo' => $tipo,
@@ -3145,7 +3152,7 @@ class OrdencompraLegajoBandejaPaqueteService
                 'fecha' => (string) ($cp['fecha'] ?? ''),
                 'total' => $cp['total'] ?? null,
                 'estado' => (string) ($cp['estado'] ?? ''),
-                'url_pdf' => null,
+                'url_pdf' => $urlFacturaPdf !== '' ? $urlFacturaPdf : null,
                 'url_cargar_cxp' => null,
                 'url_comprobante' => $urlCp !== '' ? $urlCp : null,
                 'cargado_cxp' => true,

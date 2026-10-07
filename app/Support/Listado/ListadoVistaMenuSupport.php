@@ -33,6 +33,11 @@ final class ListadoVistaMenuSupport
             'icono' => 'fa-bookmark',
             'etiqueta_padre' => 'Empleados',
         ],
+        'logistica.solicitud' => [
+            'url_base' => 'logistica/solicitud',
+            'icono' => 'fa-bookmark',
+            'etiqueta_padre' => 'Solicitudes',
+        ],
     ];
 
     public static function columnaMenuDisponible(): bool

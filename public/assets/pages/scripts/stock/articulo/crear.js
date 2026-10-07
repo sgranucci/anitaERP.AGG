@@ -2,7 +2,7 @@ function mostrarSolapaArticulo(numero) {
     window.mostrarSolapaArticulo = mostrarSolapaArticulo;
     var secciones = (typeof SECCIONES_SOLAPA_FORM !== 'undefined')
         ? SECCIONES_SOLAPA_FORM
-        : '.form1,.form2,.form3,.form4,.form5,.form6,.form7,.form8,.form9,.form10';
+        : '.form1,.form2,.form3,.form4,.form5,.form6,.form7,.form8,.form9,.form10,.form11';
     $(secciones).hide();
     $('.form' + numero).show();
     var $tabs = $('#tabs-articulo');
@@ -97,6 +97,11 @@ function mostrarSolapaArticulo(numero) {
         $(document).on('click', '#botonform10', function (e) {
             e.preventDefault();
             mostrarSolapaArticulo(10);
+        });
+
+        $(document).on('click', '#botonform11', function (e) {
+            e.preventDefault();
+            mostrarSolapaArticulo(11);
         });
 
         if ($('#botonform1').length) {

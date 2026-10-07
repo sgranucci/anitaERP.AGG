@@ -267,6 +267,7 @@
         	</div>
         </div>
 	</div>
+	@include('compras.proveedor.partials.integrantes_ganancia', ['soloLectura' => false])
 </div>
 
 @include('compras.proveedor.arca-padron-modals')
