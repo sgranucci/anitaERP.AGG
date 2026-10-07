@@ -217,6 +217,8 @@ class CentrocostoController extends Controller
             'listar-conceptos-venta',
             'crear-logistica-solicitud',
             'gestionar-logistica-solicitud',
+            'editar-configuracion-logistica',
+            'actualizar-configuracion-logistica',
         ] as $permiso) {
             if (can($permiso, false)) {
                 return true;

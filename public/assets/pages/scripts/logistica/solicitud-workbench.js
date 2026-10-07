@@ -126,7 +126,7 @@
         });
 
         function queryExternosEmpleado() {
-            var keep = ['filtro_alcance', 'filtro_estado'];
+            var keep = ['filtro_alcance', 'filtro_estado', 'filtro_plazo'];
             var params = new URLSearchParams(window.location.search);
             var $form = $('#form-filtros-logistica-solicitud');
             var extra = [];

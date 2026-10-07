@@ -3,10 +3,13 @@
 namespace App\Models\Logistica;
 
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Requisicion;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Centrocosto;
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Depmae;
+use App\Models\Stock\MovimientoStock;
+use App\Models\Stock\Transferencia_Mercaderia;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -26,12 +29,22 @@ class SolicitudLogistica extends Model implements Auditable
         'accesorios_detalle', 'tipo_butaca', 'uid_bien', 'direccion_retiro',
         'modo_cumplimiento', 'deposito_id', 'deposito_destino_id', 'total_estimado',
         'responsable_snapshot',
+        'fecha_compromiso', 'fecha_preparacion', 'fecha_entrega',
+        'receptor_nombre', 'receptor_en',
+        'movimientostock_id', 'transferencia_mercaderia_id', 'requisicion_id',
     ];
 
     protected $casts = [
         'numero' => 'integer',
         'fecha' => 'date',
         'fecha_tentativa' => 'date',
+        'fecha_compromiso' => 'datetime',
+        'fecha_preparacion' => 'datetime',
+        'fecha_entrega' => 'datetime',
+        'receptor_en' => 'datetime',
+        'movimientostock_id' => 'integer',
+        'transferencia_mercaderia_id' => 'integer',
+        'requisicion_id' => 'integer',
         'usuario_id' => 'integer',
         'centrocosto_id' => 'integer',
         'tipo_solicitud_id' => 'integer',
@@ -95,6 +108,21 @@ class SolicitudLogistica extends Model implements Auditable
     public function depositoDestino(): BelongsTo
     {
         return $this->belongsTo(Depmae::class, 'deposito_destino_id');
+    }
+
+    public function movimientoStock(): BelongsTo
+    {
+        return $this->belongsTo(MovimientoStock::class, 'movimientostock_id');
+    }
+
+    public function transferencia(): BelongsTo
+    {
+        return $this->belongsTo(Transferencia_Mercaderia::class, 'transferencia_mercaderia_id');
+    }
+
+    public function requisicion(): BelongsTo
+    {
+        return $this->belongsTo(Requisicion::class, 'requisicion_id');
     }
 
     public function items(): HasMany

@@ -180,6 +180,16 @@ class AyudaManuales
             ],
         ];
 
+        if (EntornoEmpresaSupport::esAgg()) {
+            $manuales[] = [
+                'modulo' => 'Logística — Solicitudes, catálogo y cumplimiento',
+                'bajada' => 'Pedidos de insumos y trabajos, visibilidad, plazos, tope del centro, entrega parcial y vínculo con stock, transferencia o requisición.',
+                'url' => route('manual_logistica'),
+                'icono' => 'fa-truck',
+                'disponible' => true,
+            ];
+        }
+
         if (EntornoEmpresaSupport::esFerli()) {
             $manuales[] = [
                 'modulo' => 'Facturación Local — Cambios y devoluciones de e-commerce',

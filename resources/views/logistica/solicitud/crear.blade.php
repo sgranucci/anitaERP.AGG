@@ -77,6 +77,7 @@ window.LOGISTICA_RESOLVER_OC = @json(route('resolver_ordencompra_logistica'));
                                              data-sku="{{ $item['sku'] }}"
                                              data-nombre="{{ $item['nombre'] }}"
                                              data-precio="{{ $item['precio'] }}"
+                                             data-disponible="{{ $item['disponible'] ?? 0 }}"
                                              data-cc="{{ implode(',', $item['cc_ids'] ?? []) }}"
                                              data-texto="{{ strtolower($item['sku'].' '.$item['nombre']) }}"
                                              style="display:none;">
@@ -89,6 +90,8 @@ window.LOGISTICA_RESOLVER_OC = @json(route('resolver_ordencompra_logistica'));
                                         <h5>{{ $item['nombre'] }}</h5>
                                         <div class="log-sku">{{ $item['unidad'] }}</div>
                                         <div class="log-precio">$ {{ number_format((float) $item['precio'], 2, ',', '.') }}</div>
+                                        <div class="log-sku">Disponible {{ rtrim(rtrim(number_format((float) ($item['disponible'] ?? 0), 2, ',', '.'), '0'), ',') }}</div>
+                                        <span class="badge badge-warning log-compra" @if ((float) ($item['disponible'] ?? 0) >= 1) style="display:none;" @endif>Va a compra</span>
                                         <div class="log-card-acciones">
                                             <input type="number" class="form-control form-control-sm log-cant" min="0.01" step="0.01" value="1">
                                             <button type="button" class="btn btn-sm btn-primary log-agregar">Agregar</button>

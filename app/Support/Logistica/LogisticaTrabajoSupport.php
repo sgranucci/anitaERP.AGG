@@ -57,6 +57,11 @@ final class LogisticaTrabajoSupport
             ]));
 
             self::guardarArchivo($solicitud, $request->file('foto'), $trabajo->codigo === 'retiro');
+            LogisticaPlazoSupport::aplicar($solicitud);
+            if ($trabajo->codigo === 'butacas') {
+                $solicitud->load('ubicacionDestino:id,nombre');
+                LogisticaUidSupport::registrar($solicitud, $usuarioId);
+            }
 
             return $solicitud->fresh(['trabajoTipo', 'tipo']);
         });

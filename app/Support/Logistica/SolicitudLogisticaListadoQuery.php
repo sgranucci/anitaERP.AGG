@@ -43,6 +43,11 @@ final class SolicitudLogisticaListadoQuery
         if ($estado !== '' && array_key_exists($estado, SolicitudLogisticaListadoColumnas::ESTADOS)) {
             $query->where('solicitud_logistica.estado', $estado);
         }
+        if (($filtros['plazo'] ?? '') === 'vencidas') {
+            $query->whereNotNull('solicitud_logistica.fecha_compromiso')
+                ->where('solicitud_logistica.fecha_compromiso', '<', now())
+                ->whereNotIn('solicitud_logistica.estado', ['entregada', 'cerrada', 'rechazada']);
+        }
 
         SolicitudLogisticaListadoFiltros::aplicar($query, $filtros);
         SolicitudLogisticaListadoFiltros::aplicarOrden($query, $filtros);

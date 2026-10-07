@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Logistica;
 use App\Http\Controllers\Controller;
 use App\Models\Admin\Rol;
 use App\Models\Logistica\LogisticaCatalogoCategoria;
+use App\Models\Logistica\LogisticaCentrocostoTope;
 use App\Models\Logistica\LogisticaHabilitacion;
 use App\Models\Logistica\LogisticaParametro;
+use App\Models\Logistica\LogisticaSla;
 use App\Models\Logistica\LogisticaTipoSolicitud;
 use App\Models\Logistica\LogisticaTrabajoTipo;
 use App\Models\Logistica\LogisticaUbicacion;
@@ -48,6 +50,8 @@ class ConfiguracionLogisticaController extends Controller
         }
 
         $montoAprobacion = LogisticaParametro::montoAprobacion();
+        $slas = LogisticaSla::query()->orderBy('horas_entrega')->orderBy('prioridad')->get();
+        $topes = LogisticaCentrocostoTope::query()->with('centrocosto:id,codigo,nombre')->orderBy('id')->get();
 
         return view('logistica.configuracion.editar', compact(
             'categorias',
@@ -56,7 +60,9 @@ class ConfiguracionLogisticaController extends Controller
             'ubicaciones',
             'habilitaciones',
             'verComo',
-            'montoAprobacion'
+            'montoAprobacion',
+            'slas',
+            'topes'
         ));
     }
 

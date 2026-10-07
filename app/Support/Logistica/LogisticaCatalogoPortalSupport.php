@@ -4,7 +4,6 @@ namespace App\Support\Logistica;
 
 use App\Models\Logistica\ArticuloCatalogoLogistica;
 use App\Models\Logistica\LogisticaCatalogoCategoria;
-use App\Models\Logistica\LogisticaParametro;
 use App\Models\Logistica\LogisticaTipoSolicitud;
 use App\Models\Logistica\SolicitudLogistica;
 use App\Models\Logistica\SolicitudLogisticaItem;
@@ -70,8 +69,14 @@ final class LogisticaCatalogoPortalSupport
                     'precio' => ArticuloCatalogoLogisticaSupport::precioEstimado((int) $articulo->id),
                     'favorito' => (bool) $ficha->favorito,
                     'cc_ids' => $ccIds,
+                    'disponible' => 0.0,
                 ];
             }
+            $saldos = LogisticaDisponibleSupport::totales(array_map('intval', array_column($items, 'id')));
+            foreach ($items as &$item) {
+                $item['disponible'] = (float) ($saldos[$item['id']] ?? 0);
+            }
+            unset($item);
             usort($items, function (array $a, array $b) {
                 if ($a['favorito'] !== $b['favorito']) {
                     return $a['favorito'] ? -1 : 1;
@@ -153,10 +158,12 @@ final class LogisticaCatalogoPortalSupport
                 $total += $cantidad * $precio;
             }
 
-            $umbral = LogisticaParametro::montoAprobacion();
+            $decision = LogisticaTopeSupport::resolverInsumos($centrocostoId, $total);
             $solicitud->total_estimado = $total;
-            $solicitud->estado = ($umbral > 0 && $total > $umbral) ? 'pendiente_aprobacion' : 'enviada';
+            $solicitud->estado = $decision['estado'];
+            $solicitud->observacion = $decision['observacion'];
             $solicitud->save();
+            LogisticaPlazoSupport::aplicar($solicitud);
 
             return $solicitud->fresh(['items', 'tipo']);
         });

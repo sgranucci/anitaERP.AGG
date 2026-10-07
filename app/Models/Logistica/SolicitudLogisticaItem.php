@@ -15,6 +15,7 @@ class SolicitudLogisticaItem extends Model implements Auditable
 
     protected $fillable = [
         'solicitud_logistica_id', 'articulo_id', 'cantidad', 'precio_estimado',
+        'cantidad_preparada', 'cantidad_entregada',
     ];
 
     protected $casts = [
@@ -22,6 +23,8 @@ class SolicitudLogisticaItem extends Model implements Auditable
         'articulo_id' => 'integer',
         'cantidad' => 'float',
         'precio_estimado' => 'float',
+        'cantidad_preparada' => 'float',
+        'cantidad_entregada' => 'float',
     ];
 
     public function solicitud(): BelongsTo

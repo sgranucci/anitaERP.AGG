@@ -28,6 +28,21 @@
                         @include('logistica.solicitud.partials.dato', ['etiqueta' => 'Solicitante', 'valor' => $solicitud->usuario->nombre ?? ''])
                         @include('logistica.solicitud.partials.dato', ['etiqueta' => 'Centro de costo', 'valor' => trim(($solicitud->centrocosto->codigo ?? '').' '.($solicitud->centrocosto->nombre ?? ''))])
                         @include('logistica.solicitud.partials.dato', ['etiqueta' => 'Prioridad', 'valor' => $solicitud->prioridad])
+                        @if ($solicitud->fecha_compromiso)
+                            @include('logistica.solicitud.partials.dato', [
+                                'etiqueta' => 'Compromiso',
+                                'valor' => $solicitud->fecha_compromiso->format('d/m/Y H:i').(\App\Support\Logistica\LogisticaPlazoSupport::vencida($solicitud) ? ' · Vencida' : ''),
+                            ])
+                        @endif
+                        @if ($solicitud->observacion)
+                            @include('logistica.solicitud.partials.dato', ['etiqueta' => 'Aviso', 'valor' => $solicitud->observacion])
+                        @endif
+                        @if ($solicitud->receptor_nombre)
+                            @include('logistica.solicitud.partials.dato', [
+                                'etiqueta' => 'Recibió',
+                                'valor' => $solicitud->receptor_nombre.($solicitud->receptor_en ? ' · '.$solicitud->receptor_en->format('d/m/Y H:i') : ''),
+                            ])
+                        @endif
                         @if ($solicitud->trabajoTipo)
                             @include('logistica.solicitud.partials.dato', ['etiqueta' => 'Trabajo', 'valor' => $solicitud->trabajoTipo->nombre])
                             @include('logistica.solicitud.partials.dato', ['etiqueta' => 'Responsable', 'valor' => $solicitud->responsable_snapshot ?: ($solicitud->trabajoTipo->responsable ?? '')])
@@ -91,9 +106,17 @@
                             @endphp
                             @include('logistica.solicitud.partials.dato', ['etiqueta' => 'Cumplimiento', 'valor' => $textoModo])
                             <div class="form-group row mb-2">
-                                <label class="col-lg-4 control-label text-right pr-2"></label>
+                                <label class="col-lg-4 control-label text-right pr-2">Comprobante</label>
                                 <div class="col-lg-8">
-                                    <a class="text-primary" target="_blank" rel="noopener" href="{{ $linkModo }}">{{ $textoLink }}</a>
+                                    @if ($solicitud->movimientoStock)
+                                        <a class="text-primary" target="_blank" rel="noopener" href="{{ route('editar_movimientostock', $solicitud->movimientoStock->id) }}">Movimiento {{ $solicitud->movimientoStock->codigo }}</a>
+                                    @elseif ($solicitud->transferencia)
+                                        <a class="text-primary" target="_blank" rel="noopener" href="{{ route('transferencia_mercaderia') }}">Transferencia {{ $solicitud->transferencia->codigo }}</a>
+                                    @elseif ($solicitud->requisicion)
+                                        <a class="text-primary" target="_blank" rel="noopener" href="{{ route('editar_requisicion', $solicitud->requisicion->id) }}">Requisición {{ $solicitud->requisicion->numerorequisicion }}</a>
+                                    @else
+                                        <a class="text-primary" target="_blank" rel="noopener" href="{{ $linkModo }}">{{ $textoLink }}</a>
+                                    @endif
                                 </div>
                             </div>
                         @endif
@@ -106,13 +129,21 @@
                         <div class="card-body p-0 table-responsive">
                             <table class="table table-sm table-striped table-bordered table-hover mb-0">
                                 <thead style="background:#85C1E9;color:#17202A;">
-                                    <tr><th>Artículo</th><th class="text-right">Cantidad</th><th class="text-right">Precio estimado</th></tr>
+                                    <tr>
+                                        <th>Artículo</th>
+                                        <th class="text-right">Pedida</th>
+                                        <th class="text-right">Preparada</th>
+                                        <th class="text-right">Entregada</th>
+                                        <th class="text-right">Precio estimado</th>
+                                    </tr>
                                 </thead>
                                 <tbody>
                                     @foreach ($solicitud->items as $item)
                                         <tr>
                                             <td>{{ $item->articulo->sku ?? '' }} {{ $item->articulo->descripcion ?? '' }}</td>
                                             <td class="text-right">{{ rtrim(rtrim(number_format((float) $item->cantidad, 2, ',', '.'), '0'), ',') }}</td>
+                                            <td class="text-right">{{ rtrim(rtrim(number_format((float) $item->cantidad_preparada, 2, ',', '.'), '0'), ',') }}</td>
+                                            <td class="text-right">{{ rtrim(rtrim(number_format((float) $item->cantidad_entregada, 2, ',', '.'), '0'), ',') }}</td>
                                             <td class="text-right">$ {{ number_format((float) $item->precio_estimado, 2, ',', '.') }}</td>
                                         </tr>
                                     @endforeach
@@ -146,7 +177,7 @@
                 @endif
 
                 @if ($puedeGestionar && ! in_array($solicitud->estado, ['rechazada', 'entregada', 'cerrada'], true))
-                    <form method="POST" action="{{ route('gestionar_logistica_solicitud', $solicitud->id) }}" class="form-horizontal mt-2">
+                    <form method="POST" action="{{ route('gestionar_logistica_solicitud', $solicitud->id) }}" class="form-horizontal mt-2" enctype="multipart/form-data">
                         @csrf
                         @if ($solicitud->trabajo_tipo_id === null && in_array($solicitud->estado, ['enviada', 'aprobada'], true))
                             <div class="card card-outline card-info">
@@ -196,8 +227,56 @@
                                 <button class="btn btn-outline-danger" type="submit" name="accion" value="rechazar">Rechazar</button>
                             @endif
                             @if ($solicitud->estado === 'en_preparacion')
+                                @if ($solicitud->trabajo_tipo_id === null)
+                                    <div class="card card-outline card-info mt-3">
+                                        <div class="card-header"><strong>Vincular el comprobante</strong></div>
+                                        <div class="card-body">
+                                            <div class="form-group row mb-0">
+                                                <label class="col-lg-4 control-label text-right pr-2">Número</label>
+                                                <div class="col-lg-4">
+                                                    <input type="text" name="numero_comprobante" class="form-control" placeholder="Código o número">
+                                                </div>
+                                                <div class="col-lg-4">
+                                                    <button class="btn btn-outline-primary" type="submit" name="accion" value="vincular">Vincular</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card card-outline card-info">
+                                        <div class="card-header"><strong>Entrega</strong></div>
+                                        <div class="card-body p-0 table-responsive">
+                                            <table class="table table-sm table-bordered mb-0">
+                                                <thead style="background:#85C1E9;color:#17202A;">
+                                                    <tr><th>Artículo</th><th class="text-right">Pendiente</th><th class="text-right" style="width:8rem;">Entregar ahora</th></tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach ($solicitud->items as $item)
+                                                        @php $pendiente = max(0, (float) $item->cantidad - (float) $item->cantidad_entregada); @endphp
+                                                        <tr>
+                                                            <td>{{ $item->articulo->sku ?? '' }} {{ $item->articulo->descripcion ?? '' }}</td>
+                                                            <td class="text-right">{{ rtrim(rtrim(number_format($pendiente, 2, ',', '.'), '0'), ',') }}</td>
+                                                            <td><input type="number" name="entregar_item[{{ $item->id }}]" class="form-control form-control-sm text-right" min="0" max="{{ $pendiente }}" step="0.01" value="{{ $pendiente > 0 ? $pendiente : '' }}"></td>
+                                                        </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                @endif
+                                <div class="form-group row mt-3">
+                                    <label class="col-lg-4 control-label text-right pr-2">Quién recibió</label>
+                                    <div class="col-lg-4">
+                                        <input type="text" name="receptor_nombre" class="form-control" maxlength="120">
+                                    </div>
+                                </div>
+                                <div class="form-group row">
+                                    <label class="col-lg-4 control-label text-right pr-2">Constancia</label>
+                                    <div class="col-lg-6">
+                                        <input type="file" name="constancia" class="form-control" accept="image/*,.pdf">
+                                    </div>
+                                </div>
                                 <button class="btn btn-success" type="submit" name="accion" value="entregar">
-                                    {{ $solicitud->trabajo_tipo_id ? 'Cerrar' : 'Marcar entregada' }}
+                                    {{ $solicitud->trabajo_tipo_id ? 'Cerrar' : 'Registrar entrega' }}
                                 </button>
                             @endif
                         </div>
@@ -205,6 +284,33 @@
                     @if ($solicitud->trabajo_tipo_id === null && in_array($solicitud->estado, ['enviada', 'aprobada'], true))
                         @include('includes.stock.modalconsultadeposito')
                     @endif
+                @endif
+
+                @if (($historialUid ?? collect())->isNotEmpty())
+                    <div class="card card-outline card-info mt-3">
+                        <div class="card-header"><h3 class="card-title">Historial del UID {{ $solicitud->uid_bien }}</h3></div>
+                        <div class="card-body p-0 table-responsive">
+                            <table class="table table-sm table-striped table-bordered mb-0">
+                                <thead style="background:#85C1E9;color:#17202A;">
+                                    <tr><th>Fecha</th><th>Solicitud</th><th>Destino</th><th>Usuario</th></tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($historialUid as $fila)
+                                        <tr>
+                                            <td>{{ $fila->fecha?->format('d/m/Y') }}</td>
+                                            <td>
+                                                @if ($fila->solicitud)
+                                                    <a class="text-primary" href="{{ route('ver_logistica_solicitud', $fila->solicitud->id) }}">{{ $fila->solicitud->numeroVisible() }}</a>
+                                                @endif
+                                            </td>
+                                            <td>{{ $fila->destino }}</td>
+                                            <td>{{ $fila->usuario->nombre ?? '' }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 @endif
             </div>
         </div>

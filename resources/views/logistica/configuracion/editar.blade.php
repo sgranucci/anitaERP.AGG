@@ -5,6 +5,7 @@
 @section('scripts')
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/logistica/catalogo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/logistica/catalogo.js')) ?: time() }}"></script>
 @endsection
 @section('contenido')
@@ -13,8 +14,9 @@
         @include('includes.form-error')
         @include('includes.mensaje')
         <div class="card card-primary">
-            <div class="card-header">
-                <h3 class="card-title"><i class="fa fa-cog"></i> Catálogo de logística</h3>
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h3 class="card-title mb-0"><i class="fa fa-cog"></i> Catálogo de logística</h3>
+                @include('includes.logistica.boton-manual')
             </div>
             <div class="card-body">
                 <form method="GET" action="{{ route('editar_configuracion_logistica') }}" id="form-ver-como-usuario" class="form-horizontal mb-3">
@@ -57,9 +59,67 @@
                         <label class="col-lg-4 control-label text-right pr-2">Monto que pide aprobación</label>
                         <div class="col-lg-3">
                             <input type="number" name="monto_aprobacion" class="form-control" min="0" step="0.01" value="{{ old('monto_aprobacion', $montoAprobacion) }}">
-                            <small class="text-muted">0 = las solicitudes de insumos no pasan por aprobación. Si el total estimado supera este importe, quedan pendientes.</small>
+                            <small class="text-muted">0 = las solicitudes de insumos no pasan por este importe. Si el total estimado lo supera, quedan pendientes de aprobación de logística.</small>
                         </div>
                     </div>
+
+                    <h4>Plazo</h4>
+                    <p class="text-muted small">Horas desde que se envía la solicitud. Si el trabajo trae fecha tentativa, esa fecha es el compromiso.</p>
+                    <table class="table table-sm table-bordered">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr><th>Prioridad</th><th>Horas para preparar</th><th>Horas para entregar</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($slas ?? [] as $i => $sla)
+                                <tr>
+                                    <td>{{ $sla->prioridad }}<input type="hidden" name="sla_prioridad[{{ $i }}]" value="{{ $sla->prioridad }}"></td>
+                                    <td><input type="number" min="1" class="form-control form-control-sm" name="sla_horas_preparacion[{{ $i }}]" value="{{ $sla->horas_preparacion }}" style="width:6rem;"></td>
+                                    <td><input type="number" min="1" class="form-control form-control-sm" name="sla_horas_entrega[{{ $i }}]" value="{{ $sla->horas_entrega }}" style="width:6rem;"></td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+
+                    <h4 class="mt-3">Tope mensual por centro de costo</h4>
+                    <p class="text-muted small">Suma de insumos del mes, sin las rechazadas. Si el pedido lo pasa, queda pendiente de aprobación de logística. El presupuesto de partidas no se usa: no es un tope único del centro.</p>
+                    <table class="table table-sm table-bordered">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr><th>Centro de costo</th><th>Tope mensual</th><th></th></tr>
+                        </thead>
+                        <tbody id="tope-body">
+                            @foreach ($topes ?? [] as $tope)
+                                <tr>
+                                    <td>
+                                        <input type="hidden" name="tope_id[]" value="{{ $tope->id }}">
+                                        {{ $tope->centrocosto->codigo ?? '' }} {{ $tope->centrocosto->nombre ?? '' }}
+                                    </td>
+                                    <td><input type="number" min="0" step="0.01" class="form-control form-control-sm" name="tope_monto[]" value="{{ $tope->monto_mensual }}" style="width:8rem;"></td>
+                                    <td><button type="button" class="btn-accion-tabla hab-quitar"><i class="fa fa-times-circle text-danger"></i></button></td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                    <div class="form-group row">
+                        <label class="col-lg-4 control-label text-right pr-2">Agregar centro</label>
+                        <div class="col-lg-8">
+                            @include('contable.partials.campo_consulta_centrocosto', [
+                                'prefix' => 'logtope',
+                                'layout' => 'form_row',
+                                'inputName' => 'tope_cc_nuevo',
+                                'inputId' => 'logtope_centrocosto_id',
+                                'required' => false,
+                                'col_label' => 'd-none',
+                                'col_input' => 'col-lg-12',
+                            ])
+                            <div class="form-group row">
+                                <label class="col-lg-4 control-label text-right pr-2">Monto</label>
+                                <div class="col-lg-3">
+                                    <input type="number" min="0" step="0.01" name="tope_monto_nuevo" class="form-control" placeholder="0 = no agregar">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <h4>Categorías del catálogo</h4>
                     <table class="table table-sm table-bordered">
                         <thead style="background:#85C1E9;color:#17202A;">
@@ -107,7 +167,7 @@
                     </table>
 
                     <h4 class="mt-3">Tipos de trabajo</h4>
-                    <p class="text-muted small">Los formularios de cada trabajo se piden en la fase siguiente. Acá queda el responsable y la prioridad piso.</p>
+                    <p class="text-muted small">El email recibe el aviso cuando se crea un trabajo de ese tipo. La prioridad piso no se puede bajar en la solicitud.</p>
                     <table class="table table-sm table-bordered">
                         <thead style="background:#85C1E9;color:#17202A;">
                             <tr><th>Código</th><th>Nombre</th><th>Icono</th><th>Responsable</th><th>Email</th><th>Piso</th><th>Orden</th><th>Activo</th><th></th></tr>
@@ -279,5 +339,6 @@
     </tr>
 </template>
 @include('includes.admin.modalconsultausuario')
+@include('includes.contable.modalconsultacentrocosto')
 @include('includes.logistica.modales_catalogo')
 @endsection

@@ -31,6 +31,16 @@ final class SolicitudLogisticaListadoColumnas
             'attr' => 'numero',
             'group' => self::GRUPO_SOLICITUD,
         ],
+        'compromiso' => [
+            'label' => 'Compromiso',
+            'default' => true,
+            'export' => true,
+            'filterable' => true,
+            'type' => 'fecha',
+            'source' => 'solicitud_logistica.fecha_compromiso',
+            'attr' => 'fecha_compromiso',
+            'group' => self::GRUPO_SOLICITUD,
+        ],
         'fecha' => [
             'label' => 'Fecha',
             'default' => true,

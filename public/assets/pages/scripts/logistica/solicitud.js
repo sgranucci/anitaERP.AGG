@@ -163,6 +163,13 @@ $(function () {
         }
     });
 
+    $(document).on('input', '.log-cant', function () {
+        var $card = $(this).closest('.log-card');
+        var cant = parseFloat($(this).val()) || 0;
+        var disp = parseFloat($card.data('disponible')) || 0;
+        $card.find('.log-compra').toggle(cant > disp);
+    });
+
     $(document).on('click', '.log-agregar', function () {
         var $card = $(this).closest('.log-card');
         var id = parseInt($card.data('id'), 10);

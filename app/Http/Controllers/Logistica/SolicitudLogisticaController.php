@@ -20,9 +20,11 @@ use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Logistica\ArticuloCatalogoLogisticaSupport;
+use App\Support\Logistica\LogisticaAvisoSupport;
 use App\Support\Logistica\LogisticaCatalogoPortalSupport;
 use App\Support\Logistica\LogisticaCumplimientoSupport;
 use App\Support\Logistica\LogisticaTrabajoSupport;
+use App\Support\Logistica\LogisticaUidSupport;
 use App\Support\Logistica\SolicitudLogisticaListadoColumnas;
 use App\Support\Logistica\SolicitudLogisticaListadoFiltros;
 use App\Support\Logistica\SolicitudLogisticaListadoPreferenciasUsuario;
@@ -292,9 +294,10 @@ class SolicitudLogisticaController extends Controller
                 ->with('mensaje-error', $e->getMessage());
         }
 
+        LogisticaAvisoSupport::alta($solicitud);
         $aviso = 'Solicitud enviada: '.$solicitud->numeroVisible();
         if ($solicitud->estado === 'pendiente_aprobacion') {
-            $aviso .= '. Supera el monto y queda pendiente de aprobación.';
+            $aviso .= '. '.($solicitud->observacion ?: 'Queda pendiente de aprobación.');
         }
 
         return redirect()
@@ -311,6 +314,7 @@ class SolicitudLogisticaController extends Controller
         return view('logistica.solicitud.ver', [
             'solicitud' => $solicitud,
             'puedeGestionar' => can('gestionar-logistica-solicitud', false),
+            'historialUid' => LogisticaUidSupport::historial((string) $solicitud->uid_bien),
         ]);
     }
 
@@ -323,17 +327,31 @@ class SolicitudLogisticaController extends Controller
         $solicitud = $this->cargar($id);
 
         try {
+            $lineas = [];
+            foreach ((array) $request->input('entregar_item', []) as $itemId => $cantidad) {
+                $lineas[(int) $itemId] = (float) str_replace(',', '.', (string) $cantidad);
+            }
             LogisticaCumplimientoSupport::aplicar(
                 $solicitud,
                 (string) $request->input('accion', ''),
-                (int) $request->input('deposito_id', 0),
-                (int) $request->input('deposito_destino_id', 0),
-                (string) $request->input('modo_cumplimiento', ''),
+                [
+                    'deposito_id' => (int) $request->input('deposito_id', 0),
+                    'deposito_destino_id' => (int) $request->input('deposito_destino_id', 0),
+                    'modo' => (string) $request->input('modo_cumplimiento', ''),
+                    'numero_comprobante' => (string) $request->input('numero_comprobante', ''),
+                    'receptor_nombre' => (string) $request->input('receptor_nombre', ''),
+                    'lineas' => $lineas,
+                    'archivo' => $request->file('constancia'),
+                ],
             );
         } catch (\Throwable $e) {
             return redirect()
                 ->route('ver_logistica_solicitud', $solicitud->id)
                 ->with('mensaje-error', $e->getMessage());
+        }
+
+        if ((string) $request->input('accion') !== 'vincular') {
+            LogisticaAvisoSupport::cambio($solicitud->fresh());
         }
 
         return redirect()
@@ -398,6 +416,9 @@ class SolicitudLogisticaController extends Controller
                 'ordencompra.proveedores:id,nombre,domicilio',
                 'deposito:id,codigo,nombre',
                 'depositoDestino:id,codigo,nombre',
+                'movimientoStock:id,codigo,fecha',
+                'transferencia:id,codigo,fecha',
+                'requisicion:id,numerorequisicion,fecha',
                 'items.articulo:id,sku,descripcion',
                 'archivos',
             ])
@@ -440,6 +461,7 @@ class SolicitudLogisticaController extends Controller
             && ! $request->boolean('filtro_limpiar')
             && ! $request->has('filtro_estado')
             && ! $request->has('filtro_alcance')
+            && ! $request->has('filtro_plazo')
         ) {
             $vistaActiva = ListadoVistaSupport::defaultDelUsuario(SolicitudLogisticaListadoColumnas::RECURSO, $usuarioId);
         }

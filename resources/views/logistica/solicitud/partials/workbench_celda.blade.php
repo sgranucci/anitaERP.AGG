@@ -5,6 +5,11 @@
 <td class="{{ $alineado }}">
     @if ($key === 'numero')
         <a href="{{ route('ver_logistica_solicitud', $data->id) }}" class="text-primary">{{ SolicitudLogisticaListadoColumnas::numeroVisible($data) }}</a>
+    @elseif ($key === 'compromiso')
+        {{ SolicitudLogisticaListadoColumnas::valorCelda($data, $key) }}
+        @if (\App\Support\Logistica\LogisticaPlazoSupport::vencida($data))
+            <span class="badge badge-danger">Vencida</span>
+        @endif
     @elseif ($key === 'estado')
         @php
             $estado = (string) ($data->estado ?? '');

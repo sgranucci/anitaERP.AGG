@@ -183,9 +183,15 @@ final class SolicitudLogisticaListadoFiltros
             $estado = '';
         }
 
+        $plazo = (string) $request->input('filtro_plazo', '');
+        if ($plazo !== 'vencidas') {
+            $plazo = '';
+        }
+
         return [
             'alcance' => $alcance,
             'estado' => $estado,
+            'plazo' => $plazo,
         ];
     }
 
@@ -215,6 +221,9 @@ final class SolicitudLogisticaListadoFiltros
         if (($filtros['estado'] ?? '') !== '') {
             return true;
         }
+        if (($filtros['plazo'] ?? '') === 'vencidas') {
+            return true;
+        }
 
         return self::tieneCriteriosTexto($filtros);
     }
@@ -227,6 +236,7 @@ final class SolicitudLogisticaListadoFiltros
         return [
             'alcance' => 'mias',
             'estado' => '',
+            'plazo' => '',
             'modo' => self::MODO_TODOS,
             'campo' => self::CAMPO_DEFAULT,
             'operador' => 'contiene',
@@ -251,6 +261,9 @@ final class SolicitudLogisticaListadoFiltros
         }
         if (($filtros['estado'] ?? '') !== '') {
             $q['filtro_estado'] = $filtros['estado'];
+        }
+        if (($filtros['plazo'] ?? '') === 'vencidas') {
+            $q['filtro_plazo'] = 'vencidas';
         }
         if (self::tieneCriteriosTexto($filtros)) {
             $q['filtro_modo'] = $filtros['modo'] ?? self::MODO_TODOS;
@@ -281,6 +294,7 @@ final class SolicitudLogisticaListadoFiltros
         $externos = [
             'alcance' => $base['alcance'] ?? 'mias',
             'estado' => $base['estado'] ?? '',
+            'plazo' => ($base['plazo'] ?? '') === 'vencidas' ? 'vencidas' : '',
         ];
         $campos = self::camposOrdenables();
         $ordenVista = ListadoOrdenamientoSupport::normalizar($desdeVista['sort'] ?? [], $campos);
@@ -359,7 +373,11 @@ final class SolicitudLogisticaListadoFiltros
 
             return;
         }
-        $query->orderByDesc('solicitud_logistica.fecha')
+        $query->orderByRaw(
+            "CASE WHEN solicitud_logistica.fecha_compromiso IS NOT NULL AND solicitud_logistica.fecha_compromiso < ? AND solicitud_logistica.estado NOT IN ('entregada', 'cerrada', 'rechazada') THEN 0 ELSE 1 END",
+            [now()]
+        )->orderBy('solicitud_logistica.fecha_compromiso')
+            ->orderByDesc('solicitud_logistica.fecha')
             ->orderByDesc('solicitud_logistica.numero');
     }
 

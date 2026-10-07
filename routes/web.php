@@ -5900,3 +5900,6 @@ Route::post('logistica/resolver-categoria-catalogo', 'Logistica\ConfiguracionLog
 Route::post('logistica/consulta-rol', 'Logistica\ConfiguracionLogisticaController@consultaRol')->name('consulta_rol_logistica');
 Route::post('logistica/resolver-rol', 'Logistica\ConfiguracionLogisticaController@resolverRol')->name('resolver_rol_logistica');
 Route::post('logistica/resolver-tipo-solicitud', 'Logistica\ConfiguracionLogisticaController@resolverTipo')->name('resolver_tipo_solicitud_logistica');
+Route::get('logistica/manual', 'Logistica\ManualLogisticaController@index')->name('manual_logistica');
+Route::get('logistica/manual/descargar-pdf', 'Logistica\ManualLogisticaController@descargarPdf')->name('manual_logistica_pdf');
+Route::get('logistica/manual/descargar-word', 'Logistica\ManualLogisticaController@descargarWord')->name('manual_logistica_word');

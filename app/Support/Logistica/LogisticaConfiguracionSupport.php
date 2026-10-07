@@ -2,10 +2,13 @@
 
 namespace App\Support\Logistica;
 
+use App\Models\Contable\Centrocosto;
 use App\Models\Logistica\ArticuloCatalogoLogistica;
 use App\Models\Logistica\LogisticaCatalogoCategoria;
+use App\Models\Logistica\LogisticaCentrocostoTope;
 use App\Models\Logistica\LogisticaHabilitacion;
 use App\Models\Logistica\LogisticaParametro;
+use App\Models\Logistica\LogisticaSla;
 use App\Models\Logistica\LogisticaTipoSolicitud;
 use App\Models\Logistica\LogisticaTrabajoTipo;
 use App\Models\Logistica\LogisticaUbicacion;
@@ -18,6 +21,8 @@ final class LogisticaConfiguracionSupport
     public static function guardar(Request $request): void
     {
         self::guardarParametro($request);
+        self::guardarSla($request);
+        self::guardarTopes($request);
         self::guardarCategorias($request);
         self::guardarTipos($request);
         self::guardarTrabajos($request);
@@ -39,6 +44,65 @@ final class LogisticaConfiguracionSupport
         }
         $parametro->monto_aprobacion = $monto;
         $parametro->save();
+    }
+
+    private static function guardarSla(Request $request): void
+    {
+        $prioridades = (array) $request->input('sla_prioridad', []);
+        $preparacion = (array) $request->input('sla_horas_preparacion', []);
+        $entrega = (array) $request->input('sla_horas_entrega', []);
+        foreach ($prioridades as $i => $prioridad) {
+            $prioridad = trim((string) $prioridad);
+            $fila = LogisticaSla::query()->where('prioridad', $prioridad)->first();
+            if ($fila === null) {
+                continue;
+            }
+            $horasPrep = max(1, (int) ($preparacion[$i] ?? 1));
+            $horasEnt = max($horasPrep, (int) ($entrega[$i] ?? $horasPrep));
+            $fila->horas_preparacion = $horasPrep;
+            $fila->horas_entrega = $horasEnt;
+            $fila->save();
+        }
+    }
+
+    private static function guardarTopes(Request $request): void
+    {
+        $ids = (array) $request->input('tope_id', []);
+        $montos = (array) $request->input('tope_monto', []);
+        $conservar = [];
+        foreach ($ids as $i => $id) {
+            $id = (int) $id;
+            $monto = (float) str_replace(',', '.', (string) ($montos[$i] ?? '0'));
+            $fila = LogisticaCentrocostoTope::query()->find($id);
+            if ($fila === null) {
+                continue;
+            }
+            if ($monto <= 0) {
+                continue;
+            }
+            $fila->monto_mensual = $monto;
+            $fila->save();
+            $conservar[] = $fila->id;
+        }
+
+        $nuevoCc = (int) $request->input('tope_cc_nuevo', 0);
+        $nuevoMonto = (float) str_replace(',', '.', (string) $request->input('tope_monto_nuevo', '0'));
+        if ($nuevoCc > 0 && $nuevoMonto > 0) {
+            if (! Centrocosto::query()->whereKey($nuevoCc)->exists()) {
+                throw new RuntimeException('El centro de costo del tope no existe.');
+            }
+            $fila = LogisticaCentrocostoTope::query()->updateOrCreate(
+                ['centrocosto_id' => $nuevoCc],
+                ['monto_mensual' => $nuevoMonto]
+            );
+            $conservar[] = (int) $fila->id;
+        }
+
+        $borrar = LogisticaCentrocostoTope::query();
+        if ($conservar !== []) {
+            $borrar->whereNotIn('id', $conservar);
+        }
+        EloquentAuditDeleteSupport::each($borrar);
     }
 
     private static function guardarCategorias(Request $request): void

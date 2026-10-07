@@ -38,6 +38,9 @@
     if ($estadoActual !== '') {
         $limpiarQ['filtro_estado'] = $estadoActual;
     }
+    if (($filtros['plazo'] ?? '') === 'vencidas') {
+        $limpiarQ['filtro_plazo'] = 'vencidas';
+    }
     if ($vistaActiva ?? null) {
         $limpiarQ['vista_id'] = $vistaActiva->id;
     }
@@ -53,6 +56,7 @@
             <div class="card-header lw-header d-flex flex-wrap align-items-center justify-content-between">
                 <h3 class="card-title mb-0">Solicitudes de logística</h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end" style="gap:.4rem;">
+                    @include('includes.logistica.boton-manual')
                     @if ($puedeCrear ?? false)
                         <a href="{{ route('crear_logistica_solicitud') }}" class="btn btn-light btn-sm">
                             <i class="fa fa-plus"></i> Nueva solicitud
@@ -76,6 +80,9 @@
                 @endif
                 @if ($estadoActual !== '')
                     <input type="hidden" name="filtro_estado" value="{{ $estadoActual }}">
+                @endif
+                @if (($filtros['plazo'] ?? '') === 'vencidas')
+                    <input type="hidden" name="filtro_plazo" value="vencidas">
                 @endif
                 @if ($vistaActiva ?? null)
                     <input type="hidden" name="vista_id" value="{{ $vistaActiva->id }}">
