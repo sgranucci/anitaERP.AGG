@@ -220,6 +220,7 @@ class PedidoServiceFerli
 							$datas[] = ['numeropedido' => $numeropedido, 
 								'estadopedido' => $estadopedido,
 								'numeroot' => $numeroot,
+								'numeropicking' => $numeropicking,
 								'fecha' => $fecha,
 								'nombrevendedor' => $nombrevendedor,
 								'nombrecliente' => $nombrecliente,
@@ -247,6 +248,7 @@ class PedidoServiceFerli
 
 						$numeropedido = $pedido['pedido_id'];
 						[$estadopedido, $numeroot] = $this->estadoOtReporteGeneral($pedido);
+						$numeropicking = (int) ($pedido['numeropicking'] ?? 0) ?: '';
 						$fecha = $pedido['fecha'];
 						$nombrevendedor = $pedido['nombrevendedor'];
 						$nombrecliente = $pedido['nombrecliente'];
@@ -290,6 +292,7 @@ class PedidoServiceFerli
 					$datas[] = ['numeropedido' => $numeropedido, 
 								'estadopedido' => $estadopedido,
 								'numeroot' => $numeroot,
+								'numeropicking' => $numeropicking,
 								'fecha' => $fecha,
 								'nombrevendedor' => $nombrevendedor,
 								'nombrecliente' => $nombrecliente,

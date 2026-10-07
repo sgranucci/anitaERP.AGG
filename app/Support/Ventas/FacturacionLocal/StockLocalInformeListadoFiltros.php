@@ -2,6 +2,8 @@
 
 namespace App\Support\Ventas\FacturacionLocal;
 
+use App\Models\Stock\Categoria;
+use App\Models\Stock\Subcategoria;
 use Illuminate\Http\Request;
 
 /**
@@ -20,6 +22,12 @@ final class StockLocalInformeListadoFiltros
 
     public const ORDEN_CATEGORIA = 'categoria';
 
+    public const ESTADO_LOCAL_ACTIVO = 'ACTIVO';
+
+    public const ESTADO_LOCAL_INACTIVO = 'INACTIVO';
+
+    public const ESTADO_LOCAL_TODOS = 'TODOS';
+
     /** Datos del ERP (articulo_movimiento / saldo). Default. */
     public const ORIGEN_ERP = 'erp';
 
@@ -34,6 +42,15 @@ final class StockLocalInformeListadoFiltros
      *   origen: string,
      *   modo: string,
      *   orden: string,
+     *   categoria_id: ?int,
+     *   categoria_codigo: string,
+     *   categoria_nombre: string,
+     *   categoria_invalida: bool,
+     *   subcategoria_id: ?int,
+     *   subcategoria_codigo: string,
+     *   subcategoria_nombre: string,
+     *   subcategoria_invalida: bool,
+     *   estado_local: string,
      *   fecha_desde: ?string,
      *   fecha_hasta: ?string,
      *   desde_sku: string,
@@ -56,6 +73,24 @@ final class StockLocalInformeListadoFiltros
             $orden = self::ORDEN_ARTICULO;
         }
 
+        $categoria = self::resolverMaestro(
+            Categoria::class,
+            self::enteroOpcional($request->input('categoria_id')),
+            self::textoOpcional($request->input('categoria_codigo')),
+            $request->exists('categoria_codigo'),
+        );
+        $subcategoria = self::resolverMaestro(
+            Subcategoria::class,
+            self::enteroOpcional($request->input('subcategoria_id')),
+            self::textoOpcional($request->input('subcategoria_codigo')),
+            $request->exists('subcategoria_codigo'),
+        );
+
+        $estadoLocal = strtoupper(trim((string) $request->input('estado_local', self::ESTADO_LOCAL_ACTIVO)));
+        if (! in_array($estadoLocal, [self::ESTADO_LOCAL_ACTIVO, self::ESTADO_LOCAL_INACTIVO, self::ESTADO_LOCAL_TODOS], true)) {
+            $estadoLocal = self::ESTADO_LOCAL_ACTIVO;
+        }
+
         $filtros = [
             'local_venta_id' => self::enteroOpcional($request->input('local_venta_id')),
             'deposito_anita' => self::enteroOpcional($request->input('deposito_anita')),
@@ -63,6 +98,15 @@ final class StockLocalInformeListadoFiltros
             'origen' => self::ORIGEN_ERP,
             'modo' => $modo,
             'orden' => $orden,
+            'categoria_id' => $categoria['id'],
+            'categoria_codigo' => $categoria['codigo'],
+            'categoria_nombre' => $categoria['nombre'],
+            'categoria_invalida' => $categoria['invalida'],
+            'subcategoria_id' => $subcategoria['id'],
+            'subcategoria_codigo' => $subcategoria['codigo'],
+            'subcategoria_nombre' => $subcategoria['nombre'],
+            'subcategoria_invalida' => $subcategoria['invalida'],
+            'estado_local' => $estadoLocal,
             'fecha_desde' => self::fechaOpcional($request->input('fecha_desde')),
             'fecha_hasta' => self::fechaOpcional($request->input('fecha_hasta')),
             'desde_sku' => self::textoOpcional($request->input('desde_sku')),
@@ -88,6 +132,13 @@ final class StockLocalInformeListadoFiltros
             'deposito_erp_id' => $filtros['deposito_erp_id'] ?? null,
             'modo' => $filtros['modo'] ?? self::MODO_SALDO,
             'orden' => $filtros['orden'] ?? self::ORDEN_ARTICULO,
+            'categoria_id' => $filtros['categoria_id'] ?? null,
+            'categoria_codigo' => ($filtros['categoria_codigo'] ?? '') !== '' ? $filtros['categoria_codigo'] : null,
+            'subcategoria_id' => $filtros['subcategoria_id'] ?? null,
+            'subcategoria_codigo' => ($filtros['subcategoria_codigo'] ?? '') !== '' ? $filtros['subcategoria_codigo'] : null,
+            'estado_local' => ($filtros['estado_local'] ?? self::ESTADO_LOCAL_ACTIVO) !== self::ESTADO_LOCAL_ACTIVO
+                ? ($filtros['estado_local'] ?? null)
+                : null,
             'fecha_desde' => $filtros['fecha_desde'] ?? null,
             'fecha_hasta' => $filtros['fecha_hasta'] ?? null,
             'desde_sku' => $filtros['desde_sku'] ?? null,
@@ -108,6 +159,11 @@ final class StockLocalInformeListadoFiltros
             || ($filtros['origen'] ?? self::ORIGEN_ERP) !== self::ORIGEN_ERP
             || ($filtros['modo'] ?? self::MODO_SALDO) !== self::MODO_SALDO
             || ($filtros['orden'] ?? self::ORDEN_ARTICULO) !== self::ORDEN_ARTICULO
+            || ! empty($filtros['categoria_id'])
+            || ! empty($filtros['categoria_invalida'])
+            || ! empty($filtros['subcategoria_id'])
+            || ! empty($filtros['subcategoria_invalida'])
+            || ($filtros['estado_local'] ?? self::ESTADO_LOCAL_ACTIVO) !== self::ESTADO_LOCAL_ACTIVO
             || ! empty($filtros['fecha_desde'])
             || ! empty($filtros['fecha_hasta'])
             || trim((string) ($filtros['desde_sku'] ?? '')) !== ''
@@ -151,6 +207,15 @@ final class StockLocalInformeListadoFiltros
             : 'Por artículo';
     }
 
+    public static function etiquetaEstadoLocal(string $estado): string
+    {
+        return match ($estado) {
+            self::ESTADO_LOCAL_INACTIVO => 'Inactivos (canal local)',
+            self::ESTADO_LOCAL_TODOS => 'Activos e inactivos (canal local)',
+            default => 'Activos (canal local)',
+        };
+    }
+
     public static function etiquetaOrigen(string $origen): string
     {
         return $origen === self::ORIGEN_ANITA
@@ -190,5 +255,74 @@ final class StockLocalInformeListadoFiltros
     private static function textoOpcional($valor): string
     {
         return trim((string) $valor);
+    }
+
+    /**
+     * Si el formulario envió el código, manda el código (vacío = sin filtro).
+     * Si solo viene el id (paginación / export), se resuelve por id.
+     *
+     * @param  class-string<Categoria|Subcategoria>  $clase
+     * @return array{id:?int,codigo:string,nombre:string,invalida:bool}
+     */
+    private static function resolverMaestro(string $clase, ?int $id, string $codigo, bool $vinoCodigo): array
+    {
+        if ($vinoCodigo) {
+            if ($codigo === '') {
+                return ['id' => null, 'codigo' => '', 'nombre' => '', 'invalida' => false];
+            }
+            $fila = self::buscarMaestroPorCodigo($clase, $codigo);
+            if ($fila === null) {
+                return ['id' => null, 'codigo' => $codigo, 'nombre' => '', 'invalida' => true];
+            }
+
+            return [
+                'id' => (int) $fila->id,
+                'codigo' => (string) $fila->codigo,
+                'nombre' => (string) $fila->nombre,
+                'invalida' => false,
+            ];
+        }
+
+        if ($id === null) {
+            return ['id' => null, 'codigo' => '', 'nombre' => '', 'invalida' => false];
+        }
+
+        $fila = $clase::query()->select(['id', 'codigo', 'nombre'])->whereKey($id)->first();
+        if ($fila === null) {
+            return ['id' => null, 'codigo' => (string) $id, 'nombre' => '', 'invalida' => true];
+        }
+
+        return [
+            'id' => (int) $fila->id,
+            'codigo' => (string) $fila->codigo,
+            'nombre' => (string) $fila->nombre,
+            'invalida' => false,
+        ];
+    }
+
+    /**
+     * @param  class-string<Categoria|Subcategoria>  $clase
+     */
+    private static function buscarMaestroPorCodigo(string $clase, string $codigo): ?object
+    {
+        $base = $clase::query()->select(['id', 'codigo', 'nombre']);
+        $fila = (clone $base)->where('codigo', $codigo)->first();
+        if ($fila) {
+            return $fila;
+        }
+
+        $alt = ltrim($codigo, '0');
+        if ($alt !== '' && $alt !== $codigo) {
+            $fila = (clone $base)->where('codigo', $alt)->first();
+            if ($fila) {
+                return $fila;
+            }
+        }
+
+        if (ctype_digit($codigo)) {
+            return (clone $base)->whereKey((int) $codigo)->first();
+        }
+
+        return null;
     }
 }

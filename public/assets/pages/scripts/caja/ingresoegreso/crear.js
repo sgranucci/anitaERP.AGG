@@ -1398,20 +1398,14 @@ var montoPendienteSp = 0;
         //    });
 		//});
 
-		idMoneda.forEach(function(moneda, indice, array) {
-			if (moneda != moneda_id)
-				select.append('<option value="'+moneda+'">'+descripcionMoneda[moneda]+'</option>');
-			else
-				select.append('<option value="'+moneda+'" selected>'+descripcionMoneda[moneda]+'</option>');
+		idMoneda.forEach(function(moneda) {
+			var selected = String(moneda) === String(moneda_id) ? ' selected' : '';
+			select.append('<option value="'+moneda+'"'+selected+'>'+descripcionMoneda[moneda]+'</option>');
 		});
 
-		if (moneda_id > 0)
+		if (moneda_id !== '' && moneda_id != null)
 		{
-			select.value = moneda_id;
-
-			select.children().filter(function(){
-   				return this.text == moneda_id;
-			}).prop('selected', true);
+			select.val(String(moneda_id));
 		}
 	}
 

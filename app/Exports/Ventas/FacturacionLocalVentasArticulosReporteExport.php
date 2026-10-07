@@ -82,8 +82,8 @@ class FacturacionLocalVentasArticulosReporteExport implements FromView, ShouldAu
 
     private function resolverColUltima(): string
     {
-        // Base: A art B desc C comb D cant E imp  (sin talle, sin costo)
-        $idx = 5;
+        // Base: A art B desc C comb D cant E bruto F dto G venta (sin talle, sin costo)
+        $idx = 7;
         if ($this->abiertoTalle) {
             $idx++;
         }
@@ -97,9 +97,14 @@ class FacturacionLocalVentasArticulosReporteExport implements FromView, ShouldAu
     public function view(): View
     {
         $this->resultado = $this->reporteService->generar($this->filtros);
-        $coleccionLogo = $this->empresaNombre !== ''
-            ? collect([(object) ['nombreempresa' => $this->empresaNombre]])
-            : collect();
+        $nombresEmpresa = $this->resultado['nombres_empresa'] ?? [];
+        if ($nombresEmpresa === [] && $this->empresaNombre !== '') {
+            $nombresEmpresa = [$this->empresaNombre];
+        }
+        $coleccionLogo = collect(array_map(
+            static fn (string $nombre) => (object) ['nombreempresa' => $nombre],
+            $nombresEmpresa,
+        ));
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($coleccionLogo);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
 
@@ -142,6 +147,8 @@ class FacturacionLocalVentasArticulosReporteExport implements FromView, ShouldAu
             $formats[$col++] = $codigo; // p.vta
             $formats[$col++] = $codigo; // p.costo
         }
+        $formats[$col++] = $codigo; // imp bruto
+        $formats[$col++] = $codigo; // descuento
         $formats[$col++] = $codigo; // imp venta
         if ($this->incluirCosto) {
             $formats[$col] = $codigo; // imp costo
@@ -173,7 +180,9 @@ class FacturacionLocalVentasArticulosReporteExport implements FromView, ShouldAu
             $w[$col++] = 12;
             $w[$col++] = 12;
         }
-        $w[$col++] = 14;
+        $w[$col++] = 14; // bruto
+        $w[$col++] = 14; // descuento
+        $w[$col++] = 14; // venta
         if ($this->incluirCosto) {
             $w[$col] = 14;
         }

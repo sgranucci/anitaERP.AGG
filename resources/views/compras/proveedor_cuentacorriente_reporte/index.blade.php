@@ -116,6 +116,11 @@
                                     Sin detalle de comprobantes. En deuda queda el nombre, el saldo y el total general al final
                                 </label>
                             </div>
+                            @include('compras.partials.tilde_leyenda_cuenta_corriente', [
+                                'inputId' => 'imprimir_leyenda_cc_reporte',
+                                'claseExtra' => 'mb-0',
+                                'ayuda' => 'Cada proveedor muestra su leyenda al consultar, en el PDF y en el Excel.',
+                            ])
                         </div>
                     </div>
 

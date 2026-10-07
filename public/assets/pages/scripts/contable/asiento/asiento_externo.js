@@ -1043,22 +1043,42 @@ var totalHaberAsiento = 0;
 	{
 		let totalDebeAsiento = 0;
 		let totalHaberAsiento = 0;
+		// Con monedas mezcladas, totales en la moneda del primer renglón con importe
+		// (misma regla que AsientoBalanceSupport::totalesEnMonedaPrimeraLinea).
+		let monedaBase = null;
+		let cotizacionBase = 0;
 
-		$("#tbody-cuenta-asiento-table .debeasiento").each(function() {
-            let valor = parseMontoAsiento($(this).val());
+		$("#tbody-cuenta-asiento-table tr").each(function() {
+			let $tr = $(this);
+			let debe = parseMontoAsiento($tr.find('.debeasiento').val());
+			let haber = parseMontoAsiento($tr.find('.haberasiento').val());
 
-            if (valor > 0.000001) {
-                totalDebeAsiento += valor;
+			if (!(debe > 0.000001) && !(haber > 0.000001)) {
+				return;
 			}
-        });
 
-        $("#tbody-cuenta-asiento-table .haberasiento").each(function() {
-            let valor = parseMontoAsiento($(this).val());
-
-			if (valor > 0.000001) {
-				totalHaberAsiento += valor;
+			let moneda = parseInt($tr.find('.monedaasiento').val() || '0', 10) || 0;
+			let cotizacion = parseMontoAsiento($tr.find('.cotizacionasiento').val());
+			if (monedaBase === null) {
+				monedaBase = moneda;
+				cotizacionBase = cotizacion;
 			}
-    	});
+
+			let coef = 1;
+			if (moneda > 0 && monedaBase > 0 && moneda !== monedaBase) {
+				let cot = moneda === 1 ? cotizacionBase : cotizacion;
+				if (cot > 1.0001 && typeof calculaCoeficienteMoneda === 'function') {
+					coef = calculaCoeficienteMoneda(monedaBase, moneda, cot);
+				}
+			}
+
+			if (debe > 0.000001) {
+				totalDebeAsiento += debe * coef;
+			}
+			if (haber > 0.000001) {
+				totalHaberAsiento += haber * coef;
+			}
+		});
 
 		totalDebeAsiento = Math.round(totalDebeAsiento * 100) / 100;
 		totalHaberAsiento = Math.round(totalHaberAsiento * 100) / 100;

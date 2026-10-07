@@ -770,6 +770,9 @@
 
 			if (flCambioCliente)
 			{
+				if (typeof window.facturaLimpiarOtsPedido === 'function') {
+					window.facturaLimpiarOtsPedido();
+				}
 				aplicarVendedorDesdeCliente(data);
 				$('#transporte_id').val(transporte_id);
 				if ($('#codigotransporte').length) {
@@ -2359,7 +2362,17 @@
 			{
 				if (confirm("¿Desea borrar renglon?"))
 				{
-					$(this).parents('tr').remove();
+					var $trBorrar = $(this).parents('tr');
+					var pcOt = String($trBorrar.find('.pedido_combinacion_id').val() || '');
+					if (pcOt !== '') {
+						$('#tbody-tabla tr').each(function () {
+							var $o = $(this);
+							if ($o[0] !== $trBorrar[0] && String($o.find('.pedido_combinacion_id').val() || '') === pcOt) {
+								$o.remove();
+							}
+						});
+					}
+					$trBorrar.remove();
 					actualizaRenglones();
 					if (typeof window.facturaActualizarColumnasGrilla === 'function') {
 						window.facturaActualizarColumnasGrilla();

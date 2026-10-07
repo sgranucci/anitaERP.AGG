@@ -37,10 +37,12 @@ final class FacturacionLocalVentasArticulosReporteService
             $fechaCosto = now()->toDateString();
         }
 
-        $metaPv = $this->metaPuntoventa((int) ($filtros['puntoventa_id'] ?? 0));
+        $metaPv = $this->metaPuntosventa(FacturacionLocalVentasArticulosReporteFiltros::idsPuntoventa($filtros));
         $filas = [];
         $totales = [
             'cantidad' => 0.0,
+            'importe_bruto' => 0.0,
+            'descuento' => 0.0,
             'importe' => 0.0,
             'importe_costo' => 0.0,
         ];
@@ -62,6 +64,8 @@ final class FacturacionLocalVentasArticulosReporteService
 
             $cantidad = (float) $row->cantidad;
             $importe = (float) $row->importe;
+            $importeBruto = (float) $row->importe_bruto;
+            $descuento = round($importeBruto - $importe, 2);
             $precioVenta = abs($cantidad) > 0.0001
                 ? round($importe / $cantidad, 4)
                 : 0.0;
@@ -77,6 +81,8 @@ final class FacturacionLocalVentasArticulosReporteService
                 'talle' => $abiertoTalle ? ($talleTxt !== '' ? $talleTxt : '—') : null,
                 'cantidad' => $cantidad,
                 'precio_venta' => $precioVenta,
+                'importe_bruto' => $importeBruto,
+                'descuento' => $descuento,
                 'importe' => $importe,
                 'nombreempresa' => $metaPv['nombreempresa'],
             ];
@@ -109,10 +115,14 @@ final class FacturacionLocalVentasArticulosReporteService
 
             $filas[] = $item;
             $totales['cantidad'] += $cantidad;
+            $totales['importe_bruto'] += $importeBruto;
+            $totales['descuento'] += $descuento;
             $totales['importe'] += $importe;
         }
 
         $totales['cantidad'] = round($totales['cantidad'], 4);
+        $totales['importe_bruto'] = round($totales['importe_bruto'], 2);
+        $totales['descuento'] = round($totales['descuento'], 2);
         $totales['importe'] = round($totales['importe'], 2);
         $totales['importe_costo'] = round($totales['importe_costo'], 2);
 
@@ -124,6 +134,7 @@ final class FacturacionLocalVentasArticulosReporteService
             'puntoventa_texto' => $metaPv['puntoventa_texto'],
             'local_texto' => $metaPv['puntoventa_texto'],
             'nombreempresa' => $metaPv['nombreempresa'],
+            'nombres_empresa' => $metaPv['nombres_empresa'],
             'abierto_talle' => $abiertoTalle,
             'incluir_costo' => $incluirCosto,
             'costo_formula' => $incluirCosto
@@ -162,24 +173,39 @@ final class FacturacionLocalVentasArticulosReporteService
     }
 
     /**
-     * @return array{puntoventa_texto:string,nombreempresa:string}
+     * @param  list<int>  $puntoventaIds
+     * @return array{puntoventa_texto:string,nombreempresa:string,nombres_empresa:list<string>}
      */
-    private function metaPuntoventa(int $puntoventaId): array
+    private function metaPuntosventa(array $puntoventaIds): array
     {
-        if ($puntoventaId <= 0) {
-            return ['puntoventa_texto' => '', 'nombreempresa' => ''];
+        $vacio = ['puntoventa_texto' => '', 'nombreempresa' => '', 'nombres_empresa' => []];
+        if ($puntoventaIds === []) {
+            return $vacio;
         }
-        $pv = Puntoventa::query()
+        $pvs = Puntoventa::query()
             ->with(['empresas:id,nombre'])
-            ->whereKey($puntoventaId)
-            ->first(['id', 'codigo', 'nombre', 'empresa_id']);
-        if (! $pv) {
-            return ['puntoventa_texto' => '', 'nombreempresa' => ''];
+            ->whereIn('id', $puntoventaIds)
+            ->orderBy('codigo')
+            ->get(['id', 'codigo', 'nombre', 'empresa_id']);
+        if ($pvs->isEmpty()) {
+            return $vacio;
         }
 
+        $textos = [];
+        $empresas = [];
+        foreach ($pvs as $pv) {
+            $textos[] = trim(($pv->codigo ?? '').' — '.($pv->nombre ?? ''));
+            $nombre = trim((string) ($pv->empresas->nombre ?? ''));
+            if ($nombre !== '') {
+                $empresas[$nombre] = $nombre;
+            }
+        }
+        $nombres = array_values($empresas);
+
         return [
-            'puntoventa_texto' => trim(($pv->codigo ?? '').' — '.($pv->nombre ?? '')),
-            'nombreempresa' => trim((string) ($pv->empresas->nombre ?? '')),
+            'puntoventa_texto' => implode(' + ', $textos),
+            'nombreempresa' => implode(' · ', $nombres),
+            'nombres_empresa' => $nombres,
         ];
     }
 }

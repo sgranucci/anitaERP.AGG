@@ -51,6 +51,13 @@
                 @endif
             </td>
         </tr>
+        @if (($leyendaProveedor ?? '') !== '')
+            <tr>
+                <td colspan="{{ $colspan }}" style="font-size: 10pt; color: #17202A;">
+                    <strong>Leyenda:</strong> {{ $leyendaProveedor }}
+                </td>
+            </tr>
+        @endif
         @if (($totalFilas ?? 0) > 0)
             <tr>
                 <td colspan="{{ $colspan }}" style="font-size: 10pt; color: #444;">

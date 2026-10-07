@@ -57,6 +57,7 @@ use App\Models\Stock\Lote;
 use App\Models\Stock\Linea;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\Ferli\FacturaMostradorOtFerliSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
 use setasign\Fpdi\Fpdi;
@@ -2636,6 +2637,8 @@ class FacturacionService
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
 
+		FacturaMostradorOtFerliSupport::reiniciarSeguimiento();
+
 		if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
 			return $errorDespacho;
 		}
@@ -3086,6 +3089,45 @@ class FacturacionService
 			$combinacionIdLinea = (int) ($combinacionIdsInput[$offItem] ?? 0);
 			$talleIdLinea = (int) ($talleIdsInput[$offItem] ?? 0);
 			$colorIdLinea = (int) ($colorIdsInput[$offItem] ?? 0);
+			$otLineaMostrador = FacturaMostradorOtFerliSupport::lineaSiCorresponde(
+				$data,
+				$offItem,
+				(int) $cliente->id,
+				(string) $fechaFactura,
+				$esPosMostrador,
+				$esNcMostrador
+			);
+			if (is_array($otLineaMostrador) && isset($otLineaMostrador['error'])) {
+				return $otLineaMostrador;
+			}
+			$moduloIdLinea = null;
+			$codigoCombinacionLinea = null;
+			$ordentrabajoIdLinea = null;
+			$pedidoCombinacionIdLinea = null;
+			if (is_array($otLineaMostrador)) {
+				$cantidadLinea = (float) $otLineaMostrador['cantidad'];
+				$kiloDescuento = $cantidadLinea;
+				$precioUnitario = (float) $otLineaMostrador['precio'];
+				$precioConDescuento = $this->descuentoLinea != 0
+					? $precioUnitario * (1. - ($this->descuentoLinea / 100.))
+					: $precioUnitario;
+				$articulo_id = $otLineaMostrador['articulo_id'];
+				$sku = $otLineaMostrador['sku'];
+				$descripcion = $otLineaMostrador['descripcion'];
+				if ($leyendaLinea === '') {
+					$detalleLinea = $descripcion;
+				}
+				$combinacionIdLinea = (int) $otLineaMostrador['combinacion_id'];
+				if ((int) $otLineaMostrador['listaprecio_id'] > 0) {
+					$listaprecio_id = (int) $otLineaMostrador['listaprecio_id'];
+				}
+				$incluyeImpuesto = $otLineaMostrador['incluyeimpuesto'];
+				$omitirStockLinea = true;
+				$moduloIdLinea = (int) ($otLineaMostrador['modulo_id'] ?? 0) ?: null;
+				$codigoCombinacionLinea = (string) ($otLineaMostrador['codigocombinacion'] ?? '');
+				$ordentrabajoIdLinea = (int) $otLineaMostrador['ordentrabajo_id'];
+				$pedidoCombinacionIdLinea = (int) $otLineaMostrador['pedido_combinacion_id'];
+			}
 
 			$dataFactura[] = ["cantidad" => $cantidadLinea,
 				"kilodescuento" => $kiloDescuento,
@@ -3123,8 +3165,15 @@ class FacturacionService
 				'combinacion_id' => $combinacionIdLinea > 0 ? $combinacionIdLinea : null,
 				'talle_id' => $talleIdLinea > 0 ? $talleIdLinea : null,
 				'color_id' => $colorIdLinea > 0 ? $colorIdLinea : null,
+				'modulo_id' => $moduloIdLinea,
+				'codigocombinacion' => $codigoCombinacionLinea,
+				'ordentrabajo_id' => $ordentrabajoIdLinea,
+				'pedido_combinacion_id' => $pedidoCombinacionIdLinea,
 			];
-			$totCantidad += $cantidad;
+			$totCantidad += $cantidadLinea;
+		}
+		if ($errorOtMostrador = FacturaMostradorOtFerliSupport::errorSiFaltanGrupos()) {
+			return $errorOtMostrador;
 		}
 		// Arma datos del cliente
 		$provinciaDatosCliente = $this->esEmisionPos($data)
@@ -5144,6 +5193,14 @@ class FacturacionService
 								guardaArticuloMovimiento('create',
 								$dataFirmado, $dataTalle);
 				}
+			}
+			if (EntornoEmpresaSupport::esFerli() && ! $tipotransaccion->esNotaCredito()) {
+				FacturaMostradorOtFerliSupport::marcarFacturadasYConsumirStock(
+					$dataFactura,
+					(int) $vta->id,
+					(string) $fechaFactura,
+					(int) $depositoIdEmision
+				);
 			}
 			// Graba contabilidad
 			if (! $omitirContabilidad) {

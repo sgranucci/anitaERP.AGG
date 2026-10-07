@@ -100,6 +100,38 @@
                         </div>
                     </div>
 
+                    @include('stock.partials.campo_consulta_categoria', [
+                        'prefix' => 'sli',
+                        'label' => 'Categoría',
+                        'inputName' => 'categoria_id',
+                        'inputId' => 'categoria_sli',
+                        'codigoName' => 'categoria_codigo',
+                        'categoriaId' => $filtros['categoria_id'] ?? '',
+                        'codigo' => $filtros['categoria_codigo'] ?? '',
+                        'nombre' => $filtros['categoria_nombre'] ?? '',
+                        'col_label' => $colLabel,
+                        'col_input' => $colInput,
+                        'siguiente' => '#subcategoria_sli_codigo',
+                        'mostrar_editar' => false,
+                        'ayuda' => 'Vacío = todas. F1 o lupa consulta; Enter resuelve el código.',
+                    ])
+                    @include('stock.partials.campo_consulta_subcategoria', [
+                        'prefix' => 'sli',
+                        'label' => 'Subcategoría',
+                        'inputName' => 'subcategoria_id',
+                        'inputId' => 'subcategoria_sli',
+                        'codigoName' => 'subcategoria_codigo',
+                        'subcategoriaId' => $filtros['subcategoria_id'] ?? '',
+                        'codigo' => $filtros['subcategoria_codigo'] ?? '',
+                        'nombre' => $filtros['subcategoria_nombre'] ?? '',
+                        'col_label' => $colLabel,
+                        'col_input' => $colInput,
+                        'siguiente' => '#fecha_desde',
+                        'mostrar_editar' => false,
+                        'filtra_categoria' => '#categoria_sli',
+                        'ayuda' => 'Vacío = todas. Si hay categoría, la lupa lista las subcategorías de esa categoría.',
+                    ])
+
                     <div class="form-group row">
                         <label for="fecha_desde" class="{{ $colLabel }}">Desde fecha</label>
                         <div class="{{ $colInput }}">
@@ -166,6 +198,15 @@
                                 @endforeach
                             </select>
                             <small class="form-text text-muted">Vacío = todas las marcas del canal local.</small>
+                        </div>
+                        <label for="estado_local" class="{{ $colLabel }}">Estado local</label>
+                        <div class="{{ $colInput }}">
+                            <select name="estado_local" id="estado_local" class="form-control">
+                                <option value="ACTIVO" @selected(($filtros['estado_local'] ?? 'ACTIVO') === 'ACTIVO')>Activos</option>
+                                <option value="INACTIVO" @selected(($filtros['estado_local'] ?? '') === 'INACTIVO')>Inactivos</option>
+                                <option value="TODOS" @selected(($filtros['estado_local'] ?? '') === 'TODOS')>Todos</option>
+                            </select>
+                            <small class="form-text text-muted">Siempre del canal local. Activos es el predeterminado.</small>
                         </div>
                     </div>
 
@@ -242,10 +283,14 @@
     'subtitulo' => 'Lee el ERP. Puede demorar según el rango. Pulse Esc para ocultar el aviso.',
 ])
 @include('includes.stock.modalconsultaarticulo')
+@include('includes.stock.modalconsultacategoria')
+@include('includes.stock.modalconsultasubcategoria')
 @endsection
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/categoria/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/subcategoria/consulta.js') }}" type="text/javascript"></script>
 <script>
 (function () {
     var form = document.getElementById('form-stock-local-informe');

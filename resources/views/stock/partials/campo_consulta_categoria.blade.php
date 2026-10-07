@@ -15,6 +15,8 @@
     $colLabel = $col_label ?? 'col-lg-4 control-label text-right pr-2';
     $colInput = $col_input ?? 'col-lg-8';
     $siguiente = $siguiente ?? '';
+    $codigoName = $codigoName ?? '';
+    $ayuda = $ayuda ?? '';
     $puedeAbrirAbm = can('editar-categorias', false) || can('listar-categorias', false);
     $editUrl = ((int) $categoriaId > 0 && $puedeAbrirAbm)
         ? route('editar_categoria', ['id' => (int) $categoriaId, 'origen' => 'modal_consulta', 'vista' => 'consulta'])
@@ -46,6 +48,7 @@
                 @endif
                 <input type="text" class="form-control codigocategoria flex-shrink-0"
                     id="{{ $inputId }}_codigo" value="{{ $codigo }}"
+                    @if ($codigoName !== '') name="{{ $codigoName }}" @endif
                     placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off"
                     style="width: 5.5rem;"
                     @if ($siguiente !== '') data-siguiente="{{ $siguiente }}" @endif>
@@ -55,5 +58,8 @@
                     style="min-width: 0; flex: 1 1 auto;">
             @endif
         </div>
+        @if ($ayuda !== '')
+            <small class="form-text text-muted">{{ $ayuda }}</small>
+        @endif
     </div>
 </div>

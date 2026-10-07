@@ -1,5 +1,5 @@
 <tr>
- 	<td colspan='13'>TOTAL FINAL</td>
+ 	<td colspan='14'>TOTAL FINAL</td>
 	
 	@php $totalPares = 0; @endphp
 	@for ($ii = config('consprod.DESDE_MEDIDA'); $ii <= config('consprod.HASTA_MEDIDA'); $ii++)

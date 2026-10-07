@@ -164,6 +164,21 @@
 	#itemspedido-table .factura-abrir-leyenda-linea.tiene-leyenda {
 		color: #007bff;
 	}
+	#itemspedido-table .factura-abrir-ot-pedido.tiene-ot {
+		color: #1B4F72;
+	}
+	#itemspedido-table .factura-ot-badge {
+		font-size: 0.75rem;
+		color: #1B4F72;
+		line-height: 1.25;
+		margin-top: 2px;
+	}
+	#itemspedido-table .factura-ot-badge:empty {
+		display: none;
+	}
+	#itemspedido-table tr.item-concepto-venta .factura-abrir-ot-pedido {
+		display: none;
+	}
 	#itemspedido-table .factura-leyenda-badge:empty {
 		display: none;
 	}
@@ -756,6 +771,11 @@
                 				<input type="hidden" name="incluyeimpuestos[]" class="form-control incluyeimpuesto" readonly value="{{ $valorOldIndice('incluyeimpuestos', $idxItem, $item->incluyeimpuesto ?? '') }}" />
                 				<input type="hidden" name="ids[]" class="form-control ids" value="{{$item->id??''}}" />
 								<input type="hidden" name="loteids[]" class="form-control loteids" value="{{ $item->lotes?->id ?? '' }}" />
+								@include('ventas.factura.partials.ot_pedido_campos', [
+									'otIdLinea' => $valorOldIndice('ordentrabajo_ids', $idxItem, $item->ordentrabajo_id ?? ''),
+									'pedidoCombinacionIdLinea' => $valorOldIndice('pedido_combinacion_ids', $idxItem, $item->pedido_combinacion_id ?? ''),
+									'otGrupoIndiceLinea' => $valorOldIndice('ot_grupo_indices', $idxItem, ''),
+								])
 								@if ($layoutItemsPedido)
 									<input type="hidden" name="cantidades[]" class="form-control cantidad" value="{{ number_format((float) $kiloItem, 2, '.', '') }}" />
 									<input type="hidden" name="descuentos[]" class="form-control descuento" value="0" />
@@ -788,6 +808,7 @@
 								@endif
 								<textarea name="leyendas_linea[]" class="d-none factura-ta-leyenda-linea" aria-hidden="true">{{ $leyendaLineaItem }}</textarea>
 								<div class="factura-leyenda-badge" title="{{ $leyendaLineaItem }}">{{ $leyendaLineaItem !== '' ? $leyendaLineaItem : '' }}</div>
+								<div class="factura-ot-badge"></div>
 								@if ($extraNcTexto !== '')
 									<span class="nc-linea-extra">{{ $extraNcTexto }}</span>
 								@endif
@@ -853,6 +874,7 @@
 								<button type="button" title="Leyenda / comentario de la l&iacute;nea" class="btn-accion-tabla factura-abrir-leyenda-linea tooltipsC{{ $leyendaLineaItem !== '' ? ' tiene-leyenda' : '' }}">
 									<i class="fa fa-align-left"></i>
 								</button>
+								@include('ventas.factura.partials.boton_ot_pedido')
 								@if (empty($flGeneraNotaDeDebito))
 								<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
                             		<i class="fa fa-times-circle text-danger"></i>
@@ -890,6 +912,9 @@
 			@endif
 			<small class="form-text text-muted d-inline-block ml-2">
 				Mercader&iacute;a: lupa o F1 en el c&oacute;digo. Comentario de la l&iacute;nea: &iacute;cono de p&aacute;rrafo (como en OC). Sin art&iacute;culo: en cada rengl&oacute;n con precio eleg&iacute; la al&iacute;cuota (Exento, 10,5% o 21%). El &iacute;cono de documento, o F1 en el detalle, carga un concepto.
+				@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli() && empty($flGeneraNotaDeCredito) && empty($flGeneraNotaDeDebito) && empty($modoNc))
+					OT de un pedido: &iacute;cono # en el rengl&oacute;n.
+				@endif
 				@if ($layoutItemsPedido && can('entregar-articulo-sin-cargo-pedido-venta', false) && empty($flGeneraNotaDeCredito))
 					Regalo: &iacute;cono de regalo (art&iacute;culo sin cargo, mismo tope que pedidos).
 				@endif
@@ -1041,6 +1066,7 @@
 		</div>
 	</div>
 </div>
+@include('ventas.factura.partials.modal_ot_pedido')
 @include('ventas.factura.modal')
 @include('ventas.factura.templatetotalfactura')
 @include('includes.stock.modalconsultaarticulo')

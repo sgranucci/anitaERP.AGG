@@ -161,6 +161,7 @@ class PedidoQueryFerli
                                 'tiposuspensioncliente.nombre as estadocliente',
                                 DB::raw('COALESCE(ordentrabajo.id, ot_linea.id) as ordentrabajo_id'),
                                 DB::raw('COALESCE(ordentrabajo.codigo, ot_linea.codigo) as codigoot'),
+                                'pedido_picking.codigo as numeropicking',
                                 'vendedor.id as vendedor_id',
                                 'vendedor.nombre as nombrevendedor',
                                 'color.nombre as nombrecolorfondo')
@@ -174,6 +175,7 @@ class PedidoQueryFerli
                             $join->on('ot_linea.id', '=', 'pedido_combinacion.ot_id')
                                 ->where('pedido_combinacion.ot_id', '>', 0);
                         })
+                        ->leftJoin('pedido_picking', 'pedido_picking.id', '=', 'pedido_combinacion.picking_id')
                         ->join('articulo', 'articulo.id', '=', 'pedido_combinacion.articulo_id')
                         ->join('combinacion', 'combinacion.id', '=', 'pedido_combinacion.combinacion_id')
                         ->join('linea', 'linea.id', '=', 'articulo.linea_id')

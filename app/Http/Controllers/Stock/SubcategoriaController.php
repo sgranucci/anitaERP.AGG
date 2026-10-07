@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Stock\Subcategoria;
 use App\Models\Ventas\AreaComandaGastronomia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
 use Illuminate\Support\Facades\DB;
 use App\Http\Requests\ValidacionSubcategoria;
 
@@ -127,5 +128,125 @@ class SubcategoriaController extends Controller
             ->groupBy('empresa_id')
             ->map(fn ($coll) => $coll->values())
             ->toArray();
+    }
+
+    public function consultaSubcategoria(Request $request)
+    {
+        if (! $this->puedeConsultarSubcategoria()) {
+            abort(403);
+        }
+
+        $consulta = trim((string) ($request->get('consulta') ?? ''));
+        $categoriaId = (int) $request->input('categoria_id', 0);
+        $query = Subcategoria::query()->select('id', 'nombre', 'codigo');
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('codigo', 'LIKE', '%'.$consulta.'%');
+                if (ctype_digit($consulta)) {
+                    $q->orWhere('id', (int) $consulta);
+                }
+            });
+        }
+        if ($categoriaId > 0) {
+            $canalId = ArticuloCanalSupport::canalLocalId();
+            $query->whereExists(function ($q) use ($categoriaId, $canalId) {
+                $q->select(DB::raw(1))
+                    ->from('articulo')
+                    ->whereColumn('articulo.subcategoria_id', 'subcategoria.id')
+                    ->where('articulo.categoria_id', $categoriaId);
+                if ($canalId) {
+                    $q->whereExists(function ($c) use ($canalId) {
+                        $c->select(DB::raw(1))
+                            ->from('articulo_canal')
+                            ->whereColumn('articulo_canal.articulo_id', 'articulo.id')
+                            ->where('articulo_canal.canal_id', $canalId);
+                    });
+                }
+            });
+        }
+
+        $data = $query->orderBy('codigo')->orderBy('nombre')->limit(200)->get();
+        $puedeAbrirAbm = can('editar-subcategorias', false) || can('listar-subcategorias', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="4">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultasubcategoria">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_subcategoria', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td></tr>';
+            }
+        }
+
+        return response()->json($output);
+    }
+
+    public function leeUnaSubcategoriaPorCodigo(string $codigo)
+    {
+        if (! $this->puedeConsultarSubcategoria()) {
+            abort(403);
+        }
+
+        $fila = $this->findSubcategoriaPorCodigo($codigo);
+        if ($fila === null) {
+            return response()->json(null);
+        }
+
+        return response()->json([
+            'id' => (int) $fila->id,
+            'codigo' => (string) $fila->codigo,
+            'nombre' => (string) $fila->nombre,
+        ]);
+    }
+
+    private function puedeConsultarSubcategoria(): bool
+    {
+        return can('listar-subcategorias', false)
+            || can('editar-subcategorias', false)
+            || can('listar-articulos', false)
+            || can('editar-articulos', false)
+            || can('listar-informe-stock-local', false);
+    }
+
+    private function findSubcategoriaPorCodigo(string $codigo): ?Subcategoria
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return null;
+        }
+
+        $base = Subcategoria::query()->select('id', 'nombre', 'codigo');
+        $fila = (clone $base)->where('codigo', $codigo)->first();
+        if ($fila) {
+            return $fila;
+        }
+
+        $alt = ltrim($codigo, '0');
+        if ($alt !== '' && $alt !== $codigo) {
+            $fila = (clone $base)->where('codigo', $alt)->first();
+            if ($fila) {
+                return $fila;
+            }
+        }
+
+        if (ctype_digit($codigo)) {
+            return (clone $base)->whereKey((int) $codigo)->first();
+        }
+
+        return null;
     }
 }

@@ -45,6 +45,9 @@ function aplicarPuntoventaEnContexto($ctx, data) {
     if (typeof window.onPuntoventaSeleccionadoLocalVenta === 'function') {
         window.onPuntoventaSeleccionadoLocalVenta($ctx, data);
     }
+    if ($ctx.attr('id') === 'tm_puntoventa_fl_reporte' && data && data.id && typeof window.flReporteAgregarPuntoventa === 'function') {
+        window.flReporteAgregarPuntoventa();
+    }
 }
 
 function limpiarPuntoventaEnContexto($ctx, mantenerCodigo) {

@@ -2,7 +2,9 @@
 
 namespace App\Support\Contable;
 
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Validación Debe = Haber para asientos antes de grabar ERP / Anita ctamov.
@@ -67,11 +69,117 @@ final class AsientoBalanceSupport
     {
         $debes = $payload['debes'] ?? [];
         $haberes = $payload['haberes'] ?? [];
+        $monedas = $payload['moneda_ids'] ?? [];
+        $cotizaciones = $payload['cotizaciones'] ?? [];
 
-        return self::totalesDesdeDebeHaber(
+        return self::totalesEnMonedaPrimeraLinea(
             is_array($debes) ? $debes : [],
-            is_array($haberes) ? $haberes : []
+            is_array($haberes) ? $haberes : [],
+            is_array($monedas) ? $monedas : [],
+            is_array($cotizaciones) ? $cotizaciones : []
         );
+    }
+
+    /**
+     * Totales expresados en la moneda del primer movimiento con importe.
+     * Sin mezcla de monedas = suma directa ({@see totalesDesdeDebeHaber}).
+     * Con mezcla, cada línea se convierte con su propia cotización; una línea en
+     * moneda extranjera sin cotización (≤ 1) no se puede convertir y el asiento no balancea.
+     *
+     * @param  array<int, mixed>  $debes
+     * @param  array<int, mixed>  $haberes
+     * @param  array<int, mixed>  $monedas  ids (1/2) o códigos (PES/DOL)
+     * @param  array<int, mixed>  $cotizaciones
+     * @return array{total_debe: float, total_haber: float, diferencia: float, lineas_con_importe: int, balanceado: bool, monedas_mezcladas: bool, sin_cotizacion: bool}
+     */
+    public static function totalesEnMonedaPrimeraLinea(array $debes, array $haberes, array $monedas, array $cotizaciones): array
+    {
+        $debes = array_values($debes);
+        $haberes = array_values($haberes);
+        $monedas = array_values($monedas);
+        $cotizaciones = array_values($cotizaciones);
+
+        $q = max(count($debes), count($haberes));
+        $lineas = [];
+        for ($i = 0; $i < $q; $i++) {
+            $debe = self::parseMonto($debes[$i] ?? null);
+            $haber = self::parseMonto($haberes[$i] ?? null);
+            if ($debe <= 0 && $haber <= 0) {
+                continue;
+            }
+            $lineas[] = [
+                'debe' => max($debe, 0.0),
+                'haber' => max($haber, 0.0),
+                'moneda' => self::monedaIdDesdeValor($monedas[$i] ?? null),
+                'cotizacion' => self::parseMonto($cotizaciones[$i] ?? null),
+            ];
+        }
+
+        $base = self::totalesDesdeDebeHaber($debes, $haberes);
+        $base['monedas_mezcladas'] = false;
+        $base['sin_cotizacion'] = false;
+
+        $monedasPresentes = array_unique(array_filter(array_column($lineas, 'moneda')));
+        if (count($monedasPresentes) <= 1) {
+            return $base;
+        }
+
+        $monedaAsiento = (int) ($lineas[0]['moneda'] ?: 1);
+        $cotAsiento = (float) $lineas[0]['cotizacion'];
+        $totalDebe = 0.0;
+        $totalHaber = 0.0;
+        $tolerancia = self::TOLERANCIA;
+        $sinCotizacion = false;
+
+        foreach ($lineas as $linea) {
+            $monedaLinea = (int) ($linea['moneda'] ?: $monedaAsiento);
+            $coef = 1.0;
+            if ($monedaLinea !== $monedaAsiento) {
+                // Pesos → moneda extranjera usa la cotización de la moneda del asiento.
+                $cot = $monedaLinea === 1 ? $cotAsiento : (float) $linea['cotizacion'];
+                if ($cot <= 1.0001) {
+                    $sinCotizacion = true;
+                    $cot = 1.0;
+                }
+                $coef = (float) calculaCoeficienteMoneda($monedaAsiento, $monedaLinea, $cot);
+                $tolerancia += 0.005 * $coef;
+            }
+            $totalDebe += $linea['debe'] * $coef;
+            $totalHaber += $linea['haber'] * $coef;
+        }
+
+        $totalDebe = round($totalDebe, 4);
+        $totalHaber = round($totalHaber, 4);
+        $diferencia = round($totalDebe - $totalHaber, 4);
+
+        return [
+            'total_debe' => $totalDebe,
+            'total_haber' => $totalHaber,
+            'diferencia' => $diferencia,
+            'lineas_con_importe' => count($lineas),
+            'balanceado' => ! $sinCotizacion && abs($diferencia) <= $tolerancia,
+            'monedas_mezcladas' => true,
+            'sin_cotizacion' => $sinCotizacion,
+        ];
+    }
+
+    private static function monedaIdDesdeValor(mixed $valor): int
+    {
+        if ($valor === null || $valor === '') {
+            return 0;
+        }
+        if (is_numeric($valor)) {
+            return (int) $valor;
+        }
+
+        $canonico = MayorPlanoCuentaSupport::codigoMonedaCanonico((string) $valor);
+        if (is_numeric($canonico)) {
+            return (int) $canonico;
+        }
+
+        static $porCodigo = [];
+
+        return $porCodigo[$canonico] ??= (int) (DB::table('moneda')->where('codigo', $canonico)->value('id') ?? 0);
     }
 
     /**
@@ -88,6 +196,12 @@ final class AsientoBalanceSupport
         if ($totales['lineas_con_importe'] < 2) {
             throw new \InvalidArgumentException(
                 'El '.$contexto.' necesita al menos dos movimientos con importe.'
+            );
+        }
+
+        if (! empty($totales['sin_cotizacion'])) {
+            throw new \InvalidArgumentException(
+                'El '.$contexto.' mezcla monedas y tiene un movimiento en moneda extranjera sin cotización.'
             );
         }
 

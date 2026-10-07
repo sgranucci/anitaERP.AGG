@@ -225,6 +225,19 @@ return [
         'hora' => env('ARCA_CERTIFICADO_AVISO_HORA', '08:10'),
     ],
 
+    /*
+    | Huecos de numeración: ARCA autorizó el comprobante y el ERP no lo grabó
+    | (rollback después del CAE). facturacion:cargar-huecos-arca, una vez por día.
+    */
+    'huecos_facturacion' => [
+        'habilitado' => filter_var(env('ARCA_HUECOS_FACTURACION_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('ARCA_HUECOS_FACTURACION_HORA', '07:10'),
+        'dias' => max(1, (int) env('ARCA_HUECOS_FACTURACION_DIAS', 21)),
+        'punta' => max(1, (int) env('ARCA_HUECOS_FACTURACION_PUNTA', 15)),
+        'max_por_corrida' => max(1, (int) env('ARCA_HUECOS_FACTURACION_MAX', 40)),
+        'mails' => env('ARCA_HUECOS_FACTURACION_MAILS', ''),
+    ],
+
     'monitor_conectividad' => [
         'habilitado' => filter_var(env('ARCA_MONITOR_CONECTIVIDAD', true), FILTER_VALIDATE_BOOLEAN),
         'empresa_id' => ($v = (int) env('ARCA_MONITOR_EMPRESA_ID', 0)) > 0 ? $v : null,

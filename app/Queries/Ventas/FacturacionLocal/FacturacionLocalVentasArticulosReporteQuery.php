@@ -27,6 +27,20 @@ final class FacturacionLocalVentasArticulosReporteQuery
     }
 
     /**
+     * Bruto de lista: ve.precio ya es el unitario neto y ve.descuento el porcentaje de línea.
+     * Importe venta = cantidad firmada × precio. Bruto = ese importe / (1 − dto/100).
+     */
+    private static function importeBrutoExpr(): string
+    {
+        $neto = self::importeExpr();
+        $dto = 'COALESCE(ve.descuento, 0)';
+
+        return 'CASE WHEN '.$dto.' > 0 AND '.$dto.' < 100'
+            .' THEN ('.$neto.') / (1 - '.$dto.' / 100)'
+            .' ELSE ('.$neto.') END';
+    }
+
+    /**
      * @param  array<string, mixed>  $filtros
      * @return list<object{
      *   articulo_id:int,
@@ -42,6 +56,7 @@ final class FacturacionLocalVentasArticulosReporteQuery
      *   talle_codigo:string,
      *   talle_nombre:string,
      *   cantidad:float,
+     *   importe_bruto:float,
      *   importe:float
      * }>
      */
@@ -49,6 +64,7 @@ final class FacturacionLocalVentasArticulosReporteQuery
     {
         $cantidad = self::cantidadExpr();
         $importe = self::importeExpr();
+        $importeBruto = self::importeBrutoExpr();
         $abiertoTalle = FacturacionLocalVentasArticulosReporteFiltros::esAbiertoPorTalle($filtros);
         $tieneColor = Schema::hasColumn('venta_emision', 'color_id');
 
@@ -90,6 +106,7 @@ final class FacturacionLocalVentasArticulosReporteQuery
         $query = $this->queryBaseLineas($filtros, $tieneColor)
             ->select($select)
             ->selectRaw("SUM({$cantidad}) as cantidad")
+            ->selectRaw("SUM({$importeBruto}) as importe_bruto")
             ->selectRaw("SUM({$importe}) as importe")
             ->groupBy($groupBy)
             ->havingRaw("ABS(SUM({$cantidad})) > 0.0001")
@@ -126,6 +143,7 @@ final class FacturacionLocalVentasArticulosReporteQuery
                 'talle_codigo' => $abiertoTalle ? trim((string) ($row->talle_codigo ?? '')) : '',
                 'talle_nombre' => $abiertoTalle ? trim((string) ($row->talle_nombre ?? '')) : '',
                 'cantidad' => round((float) ($row->cantidad ?? 0), 4),
+                'importe_bruto' => round((float) ($row->importe_bruto ?? 0), 2),
                 'importe' => round((float) ($row->importe ?? 0), 2),
             ];
         }
@@ -154,9 +172,11 @@ final class FacturacionLocalVentasArticulosReporteQuery
                     });
             });
 
-        $puntoventaId = (int) ($filtros['puntoventa_id'] ?? 0);
-        if ($puntoventaId > 0) {
-            $query->where('v.puntoventa_id', $puntoventaId);
+        $puntoventaIds = FacturacionLocalVentasArticulosReporteFiltros::idsPuntoventa($filtros);
+        if ($puntoventaIds === []) {
+            $query->whereRaw('1 = 0');
+        } else {
+            $query->whereIn('v.puntoventa_id', $puntoventaIds);
         }
 
         if ($tieneColor) {

@@ -19,6 +19,7 @@ use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
+use App\Support\Caja\AsientoMonedaDesdeOperacionSupport;
 use App\Support\Caja\ChequeOperacionActivaSupport;
 use App\Support\Caja\ChequePropioInstrumentoSupport;
 use App\Support\Caja\ChequeConsultaChequeraSupport;
@@ -1141,11 +1142,22 @@ class PagoproveedorService
         $payload['fecha'] = $pago->fecha?->format('Y-m-d');
         $payload['observacion'] = $pago->detalle;
         $payload['pagoproveedor_id'] = $pago->id;
+        $origenesMoneda = AsientoMonedaDesdeOperacionSupport::origenesDesdeMedios($data);
+        $monedaPago = (int) ($pago->moneda_id ?: 1);
+        $cotizacionPago = (float) ($pago->cotizacion ?: 0);
+        if ($monedaPago > 1 && $cotizacionPago > 1.0001) {
+            $origenesMoneda[] = [
+                'moneda_id' => $monedaPago,
+                'monto' => abs((float) ($pago->monto ?? 0)),
+                'cotizacion' => $cotizacionPago,
+            ];
+        }
         $payload['moneda_ids'] = $data['monedaasiento_ids'] ?? $data['moneda_ids'] ?? [];
         $payload['centrocosto_ids'] = $data['centrocostoasiento_ids'] ?? $data['centrocosto_ids'] ?? [];
         $payload['debes'] = $data['debeasientos'] ?? $data['debes'] ?? [];
         $payload['haberes'] = $data['haberasientos'] ?? $data['haberes'] ?? [];
         $payload['cotizaciones'] = $data['cotizacionasientos'] ?? $data['cotizaciones'] ?? [];
+        $payload = AsientoMonedaDesdeOperacionSupport::aplicarEnPayload($payload, $origenesMoneda);
         $payload['observaciones'] = $data['observacionasientos'] ?? $data['observaciones'] ?? [];
         // Clave comprobante Anita (igual que IE OPP / a-movim MultiEmpresa): sin letra.
         $payload = array_merge($payload, $this->referenciaComprobanteCtamov($pago));

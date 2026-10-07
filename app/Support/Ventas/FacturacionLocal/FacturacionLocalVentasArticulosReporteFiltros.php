@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 
 /**
  * Filtros del reporte de ventas por artículo (Facturación Local / Reportes Local).
- * Criterio de alcance: punto de venta (venta.puntoventa_id).
+ * Criterio de alcance: uno o varios puntos de venta (venta.puntoventa_id).
  */
 final class FacturacionLocalVentasArticulosReporteFiltros
 {
@@ -37,14 +37,45 @@ final class FacturacionLocalVentasArticulosReporteFiltros
         }
 
         return [
-            'puntoventa_id' => (int) $request->input('puntoventa_id', 0),
-            'puntoventa_codigo' => trim((string) $request->input('puntoventa_codigo', '')),
-            'puntoventa_nombre' => trim((string) $request->input('puntoventa_nombre', '')),
+            'puntoventa_ids' => self::normalizarIds($request->input('puntoventa_id', [])),
             'fecha_desde' => $desde,
             'fecha_hasta' => $hasta,
             'modo' => $modo,
             'incluir_costo' => $request->boolean('incluir_costo'),
         ];
+    }
+
+    /**
+     * Acepta puntoventa_id=17 (histórico) y puntoventa_id[]=17&puntoventa_id[]=25.
+     *
+     * @return list<int>
+     */
+    public static function normalizarIds(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            $raw = [$raw];
+        }
+        $out = [];
+        foreach ($raw as $id) {
+            if (is_array($id)) {
+                continue;
+            }
+            $id = (int) $id;
+            if ($id > 0 && ! in_array($id, $out, true)) {
+                $out[] = $id;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    public static function idsPuntoventa(array $filtros): array
+    {
+        return self::normalizarIds($filtros['puntoventa_ids'] ?? []);
     }
 
     /**
@@ -70,7 +101,7 @@ final class FacturacionLocalVentasArticulosReporteFiltros
      */
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
-        if ((int) ($filtros['puntoventa_id'] ?? 0) <= 0) {
+        if (self::idsPuntoventa($filtros) === []) {
             return false;
         }
 
@@ -84,14 +115,9 @@ final class FacturacionLocalVentasArticulosReporteFiltros
     public static function paraQueryString(array $filtros): array
     {
         $out = [];
-        if ((int) ($filtros['puntoventa_id'] ?? 0) > 0) {
-            $out['puntoventa_id'] = (int) $filtros['puntoventa_id'];
-        }
-        if (($filtros['puntoventa_codigo'] ?? '') !== '') {
-            $out['puntoventa_codigo'] = $filtros['puntoventa_codigo'];
-        }
-        if (($filtros['puntoventa_nombre'] ?? '') !== '') {
-            $out['puntoventa_nombre'] = $filtros['puntoventa_nombre'];
+        $ids = self::idsPuntoventa($filtros);
+        if ($ids !== []) {
+            $out['puntoventa_id'] = $ids;
         }
         if (($filtros['fecha_desde'] ?? '') !== '') {
             $out['fecha_desde'] = $filtros['fecha_desde'];

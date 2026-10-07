@@ -4,6 +4,7 @@
 	<td>{{$data['estadopedido']}}</td>
     <td>{{date("d/m/Y", strtotime($data['fecha']))}}</td>
 	<td>{{$data['numeroot']}}</td>
+	<td>{{$data['numeropicking'] ?? ''}}</td>
 	<td>{{$data['nombrevendedor']}}</td>
 	<td>{{$data['nombrecliente']}}</td>
 	<td>{{$data['estadocliente']}}</td>

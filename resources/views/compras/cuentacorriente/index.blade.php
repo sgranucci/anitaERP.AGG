@@ -117,6 +117,17 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                             @endif
                         </label>
                     </div>
+                    @include('compras.partials.tilde_leyenda_cuenta_corriente', [
+                        'inputId' => 'imprimir_leyenda_cc_listado',
+                        'claseExtra' => 'mt-2',
+                        'ayuda' => 'La leyenda del proveedor sale en esta pantalla, en el PDF y en el Excel.',
+                    ])
+                    @if (($leyendaProveedor ?? '') !== '')
+                        <div class="alert alert-warning py-2 mt-2 mb-0">
+                            <strong>Leyenda:</strong>
+                            <span style="white-space: pre-wrap;">{{ $leyendaProveedor }}</span>
+                        </div>
+                    @endif
                 </div>
                 @include('compras.cuentacorriente.partials.filtros_listado', [
                     'limpiarUrl' => $limpiarUrl,

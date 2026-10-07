@@ -10,6 +10,7 @@ use App\Models\Configuracion\Empresa;
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use App\Support\Compras\ProveedorCuentacorrienteReporteFiltros;
 use App\Support\Compras\ProveedorCuentacorrienteReporteProveedorSupport;
+use App\Support\Compras\ProveedorLeyendaCuentaCorrienteSupport;
 use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Database\SqlDialectSupport;
@@ -114,6 +115,9 @@ class ProveedorCuentacorrienteReporteService
             $primero = $movsProveedor->first();
             $proveedorCodigo = trim((string) ($primero->proveedores->codigo ?? ''));
             $proveedorNombre = (string) ($primero->proveedores->nombre ?? '');
+            $leyendaProveedor = ProveedorLeyendaCuentaCorrienteSupport::texto(
+                optional($primero->proveedores)->leyenda
+            );
             $nombreEmpresa = $this->nombreEmpresaUnicaGrupo($movsProveedor);
 
             if (! $compactoDeuda) {
@@ -122,6 +126,7 @@ class ProveedorCuentacorrienteReporteService
                     'proveedor_id' => (int) $proveedorId,
                     'proveedor_codigo' => $proveedorCodigo,
                     'proveedor_nombre' => $proveedorNombre,
+                    'leyenda' => $leyendaProveedor,
                     'nombreempresa' => $nombreEmpresa,
                     'empresa_id' => (int) ($primero->empresa_id ?? 0),
                 ];
@@ -316,6 +321,7 @@ class ProveedorCuentacorrienteReporteService
                 'proveedor_id' => (int) $proveedorId,
                 'proveedor_codigo' => $proveedorCodigo,
                 'proveedor_nombre' => $proveedorNombre,
+                'leyenda' => $leyendaProveedor,
                 'nombreempresa' => $nombreEmpresa,
                 'comprobante' => 'Total proveedor',
                 'debe' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA ? $subDebe : null,
@@ -485,7 +491,7 @@ class ProveedorCuentacorrienteReporteService
     {
         $query = Proveedor_Cuentacorriente::query()
             ->with([
-                'proveedores:id,codigo,nombre',
+                'proveedores:id,codigo,nombre,leyenda',
                 'comprobante_proveedores.tipotransaccion_compras',
                 'comprobante_proveedores.comprobante_proveedor_cuotas',
                 'comprobante_proveedor_cuotas',
@@ -520,7 +526,7 @@ class ProveedorCuentacorrienteReporteService
     {
         $query = Proveedor_Cuentacorriente::query()
             ->with([
-                'proveedores:id,codigo,nombre',
+                'proveedores:id,codigo,nombre,leyenda',
                 'comprobante_proveedores.tipotransaccion_compras',
                 'comprobante_proveedores.comprobante_proveedor_cuotas',
                 'comprobante_proveedor_cuotas',

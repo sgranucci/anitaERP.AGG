@@ -95,6 +95,11 @@
                 <h2 class="titulo-reporte">{{ $tituloReporte }}</h2>
                 <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
                 <div class="meta">{{ $subtitulo }}</div>
+                @if (($leyendaProveedor ?? '') !== '')
+                    <div class="meta" style="margin-top: 2px; font-weight: bold; color: #1a1a1a;">
+                        Leyenda: {!! nl2br(e($leyendaProveedor)) !!}
+                    </div>
+                @endif
             </td>
             <td style="width: 22%; text-align: right; font-size: 8px;">
                 @if ($totalFilas > 0)

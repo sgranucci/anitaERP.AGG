@@ -27,6 +27,7 @@ use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Caja\AsientoMonedaDesdeOperacionSupport;
 use App\Support\Caja\IngresoEgresoAsientoDescripcionSupport;
 use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
 use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
@@ -247,13 +248,16 @@ class IngresoEgresoService
 			else
 				throw new Exception('Error en grabacion, no existe tipo de asiento de tesoreria');
 
-			// Arma el asiento contable
+			// Arma el asiento contable. La moneda se toma de los medios antes de
+			// pisar moneda_ids con la grilla del asiento.
+			$origenesMoneda = AsientoMonedaDesdeOperacionSupport::origenesDesdeMedios($data);
 			$data['moneda_ids'] = $data['monedaasiento_ids'];
 			$data['centrocosto_ids'] = $data['centrocostoasiento_ids'];
 			$data['debes'] = $data['debeasientos'];
 			$data['haberes'] = $data['haberasientos'];
 			$data['cotizaciones'] = $data['cotizacionasientos'];
 			$data['observaciones'] = $data['observacionasientos'];
+			$data = AsientoMonedaDesdeOperacionSupport::aplicarEnPayload($data, $origenesMoneda);
 			$data['caja_movimiento_id'] = $caja_movimiento->id;
 
 			$data['observacion'] = $data['detalle'];
@@ -383,13 +387,16 @@ class IngresoEgresoService
 				$data['numeroasiento'] = $asiento[0]->numeroasiento;
 			}
 
-			// Arma el asiento contable
+			// Arma el asiento contable. La moneda se toma de los medios antes de
+			// pisar moneda_ids con la grilla del asiento.
+			$origenesMoneda = AsientoMonedaDesdeOperacionSupport::origenesDesdeMedios($data);
 			$data['moneda_ids'] = $data['monedaasiento_ids'];
 			$data['centrocosto_ids'] = $data['centrocostoasiento_ids'];
 			$data['debes'] = $data['debeasientos'];
 			$data['haberes'] = $data['haberasientos'];
 			$data['cotizaciones'] = $data['cotizacionasientos'];
 			$data['observaciones'] = $data['observacionasientos'];
+			$data = AsientoMonedaDesdeOperacionSupport::aplicarEnPayload($data, $origenesMoneda);
 			$data['caja_movimiento_id'] = $id;
 			$data['observacion'] = $data['detalle'];
 
@@ -832,12 +839,28 @@ class IngresoEgresoService
 		$monedaAsientoId = $asiento[0]['moneda_id'];
 		$cotizacion = $asiento[0]['cotizacion'];
 
+		// Las líneas del comprobante quedan en su moneda y cotización; el balanceo
+		// (concepto de gasto y AsientoBalanceSupport) convierte con la de cada línea.
+		$lineasDebe = [];
 		try {
-			$lineasDebe = IngresoEgresoComprobanteIvaAsientoSupport::lineasDebeDesdeComprobantes(
-				$comprobantes,
-				1,
-				$empresaId > 0 ? $empresaId : null,
-			);
+			foreach ($comprobantes as $comprobante) {
+				$monedaComp = (int) ($comprobante['moneda_id'] ?? 0) ?: (int) $monedaAsientoId;
+				$cotComp = NumeroDecimalLocalSupport::aFloat($comprobante['cotizacion'] ?? 0);
+				if ($monedaComp === (int) $monedaAsientoId || $monedaComp === 1) {
+					$cotComp = NumeroDecimalLocalSupport::aFloat($cotizacion, 1.0);
+				} elseif ($cotComp <= 1.0001) {
+					throw new Exception('El comprobante de IVA en moneda extranjera no tiene cotización.');
+				}
+				foreach (IngresoEgresoComprobanteIvaAsientoSupport::lineasDebeDesdeComprobantes(
+					[$comprobante],
+					1,
+					$empresaId > 0 ? $empresaId : null,
+				) as $linea) {
+					$linea['moneda_id'] = $monedaComp;
+					$linea['cotizacion'] = $cotComp;
+					$lineasDebe[] = $linea;
+				}
+			}
 		} catch (\Throwable $e) {
 			throw new Exception($e->getMessage());
 		}
@@ -855,8 +878,8 @@ class IngresoEgresoService
 				'cuentacontable_id' => $linea['cuentacontable_id'],
 				'codigo' => $cuentacontable->codigo,
 				'nombre' => $cuentacontable->nombre,
-				'moneda_id' => $monedaAsientoId,
-				'cotizacion' => $cotizacion,
+				'moneda_id' => $linea['moneda_id'],
+				'cotizacion' => $linea['cotizacion'],
 				'centrocosto_id' => $linea['centrocosto_id'] ?? 0,
 				'debe' => $signo < 0 ? $importe : '',
 				'haber' => $signo >= 0 ? $importe : '',

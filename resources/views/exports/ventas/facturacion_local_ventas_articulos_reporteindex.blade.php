@@ -6,7 +6,7 @@
     $esExcel = ! empty($esExcel);
     $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
     $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
-    $colspan = 5 + ($abiertoTalle ? 1 : 0) + ($incluirCosto ? 3 : 0);
+    $colspan = 7 + ($abiertoTalle ? 1 : 0) + ($incluirCosto ? 3 : 0);
     $fmtCant = static function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
         $v = (float) $v;
         if (abs($v) <= 0.0001) {
@@ -60,6 +60,8 @@
             <th style="text-align: right;">P.Vta.</th>
             <th style="text-align: right;">P.Costo</th>
         @endif
+        <th style="text-align: right;">Importe bruto</th>
+        <th style="text-align: right;">Descuento</th>
         <th style="text-align: right;">Importe venta</th>
         @if ($incluirCosto)
             <th style="text-align: right;">Importe costo</th>
@@ -78,6 +80,8 @@
                 <td style="text-align: right;">{{ $fmtImp($fila['precio_venta'] ?? 0) }}</td>
                 <td style="text-align: right;">{{ $fmtImp($fila['precio_costo'] ?? 0) }}</td>
             @endif
+            <td style="text-align: right;">{{ $fmtImp($fila['importe_bruto'] ?? 0) }}</td>
+            <td style="text-align: right;">{{ $fmtImp($fila['descuento'] ?? 0) }}</td>
             <td style="text-align: right;">{{ $fmtImp($fila['importe'] ?? 0) }}</td>
             @if ($incluirCosto)
                 <td style="text-align: right;">{{ $fmtImp($fila['importe_costo'] ?? 0) }}</td>
@@ -92,6 +96,8 @@
                 <td></td>
                 <td></td>
             @endif
+            <td style="text-align: right; font-weight: bold;">{{ $fmtImp($totales['importe_bruto'] ?? 0) }}</td>
+            <td style="text-align: right; font-weight: bold;">{{ $fmtImp($totales['descuento'] ?? 0) }}</td>
             <td style="text-align: right; font-weight: bold;">{{ $fmtImp($totales['importe'] ?? 0) }}</td>
             @if ($incluirCosto)
                 <td style="text-align: right; font-weight: bold;">{{ $fmtImp($totales['importe_costo'] ?? 0) }}</td>

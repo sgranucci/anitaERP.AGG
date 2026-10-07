@@ -1,8 +1,13 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
-    $coleccionLogo = ! empty($resultado['nombreempresa'])
-        ? collect([(object) ['nombreempresa' => $resultado['nombreempresa']]])
-        : collect();
+    $nombresEmpresaLogo = $resultado['nombres_empresa'] ?? [];
+    if ($nombresEmpresaLogo === [] && ! empty($resultado['nombreempresa'])) {
+        $nombresEmpresaLogo = [$resultado['nombreempresa']];
+    }
+    $coleccionLogo = collect(array_map(
+        static fn (string $nombre) => (object) ['nombreempresa' => $nombre],
+        $nombresEmpresaLogo,
+    ));
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($coleccionLogo);
     $tituloReporte = $titulo ?? 'Reportes Local — Ventas por artículo';
     $subtituloReporte = $subtitulo ?? '';

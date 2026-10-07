@@ -831,7 +831,11 @@ class AsientoRepository implements AsientoRepositoryInterface
 						$codigoCentroCosto = 0;
 				}
 
-				$moneda = $this->monedaRepository->findPorCodigo($moneda_ids[$i_movimiento] ?? null);
+				// I/E, OP y cobranzas mandan el id (1/2); el resync desde modelo manda el código (PES/DOL).
+				$monedaRaw = $moneda_ids[$i_movimiento] ?? null;
+				$moneda = is_numeric($monedaRaw)
+					? $this->monedaRepository->findPorId((int) $monedaRaw)
+					: $this->monedaRepository->findPorCodigo($monedaRaw);
 				if ($moneda) {
 					// Ferli: ctav_cod_mon es numérico (1 pesos, 2 dólares). PES/DOL queda truncado y el mayor lee pesos.
 					$codigoMoneda = AsientoAnitaFerliSupport::aplica()

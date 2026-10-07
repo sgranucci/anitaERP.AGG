@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Caja;
 
+use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use InvalidArgumentException;
 
@@ -232,17 +233,14 @@ final class IngresoEgresoCuadreCajaAsientoSupport
      */
     public static function totalesAsiento(array $data): array
     {
-        $debe = 0.0;
-        $haber = 0.0;
+        $totales = AsientoBalanceSupport::totalesEnMonedaPrimeraLinea(
+            (array) ($data['debeasientos'] ?? $data['debes'] ?? []),
+            (array) ($data['haberasientos'] ?? $data['haberes'] ?? []),
+            (array) ($data['monedaasiento_ids'] ?? $data['moneda_ids'] ?? []),
+            (array) ($data['cotizacionasientos'] ?? $data['cotizaciones'] ?? []),
+        );
 
-        foreach ((array) ($data['debeasientos'] ?? $data['debes'] ?? []) as $m) {
-            $debe += NumeroDecimalLocalSupport::aFloat($m);
-        }
-        foreach ((array) ($data['haberasientos'] ?? $data['haberes'] ?? []) as $m) {
-            $haber += NumeroDecimalLocalSupport::aFloat($m);
-        }
-
-        return ['debe' => round($debe, 2), 'haber' => round($haber, 2)];
+        return ['debe' => round($totales['total_debe'], 2), 'haber' => round($totales['total_haber'], 2)];
     }
 
     /**

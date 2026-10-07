@@ -407,6 +407,8 @@ Route::delete('stock/forro/{id}', 'Stock\ForroController@eliminar')->name('elimi
 Route::get('stock/subcategoria', 'Stock\SubcategoriaController@index')->name('subcategoria');
 Route::get('stock/subcategoria/crear', 'Stock\SubcategoriaController@crear')->name('crear_subcategoria');
 Route::post('stock/subcategoria', 'Stock\SubcategoriaController@guardar')->name('guardar_subcategoria');
+Route::post('stock/subcategoria/consultasubcategoria', 'Stock\SubcategoriaController@consultaSubcategoria')->name('consulta_subcategoria');
+Route::get('stock/leersubcategoria/{codigo}', 'Stock\SubcategoriaController@leeUnaSubcategoriaPorCodigo')->name('leer_subcategoria');
 Route::get('stock/subcategoria/{id}/editar', 'Stock\SubcategoriaController@editar')->name('editar_subcategoria');
 Route::put('stock/subcategoria/{id}', 'Stock\SubcategoriaController@actualizar')->name('actualizar_subcategoria');
 Route::delete('stock/subcategoria/{id}', 'Stock\SubcategoriaController@eliminar')->name('eliminar_subcategoria');
@@ -832,6 +834,9 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
 
     Route::get('ventas/facturacion-local/reportes', 'Ventas\FacturacionLocal\FacturacionLocalReporteController@index')->name('facturacion_local_reportes');
     Route::get('ventas/facturacion-local/listar-reportes/{formato}', 'Ventas\FacturacionLocal\FacturacionLocalReporteController@exportar')->name('listar_facturacion_local');
+
+    Route::get('ventas/facturacion-local/reporte-costos', 'Ventas\FacturacionLocal\FacturacionLocalCostosLocalReporteController@index')->name('facturacion_local_reporte_costos');
+    Route::get('ventas/facturacion-local/listar-reporte-costos/{formato}', 'Ventas\FacturacionLocal\FacturacionLocalCostosLocalReporteController@exportar')->name('listar_facturacion_local_costos');
 
     Route::get('ventas/facturacion-local/parametros', 'Ventas\FacturacionLocal\FacturacionLocalParametroController@index')->name('facturacion_local_parametros');
     Route::put('ventas/facturacion-local/parametros', 'Ventas\FacturacionLocal\FacturacionLocalParametroController@actualizar')->name('actualizar_facturacion_local_parametros');
@@ -2696,6 +2701,7 @@ Route::post('ventas/ordenestrabajo/borrarOt', $ordentrabajoCtrl.'@borrarOt')->na
 
 Route::get('ventas/factura', 'Ventas\FacturacionController@index')->name('factura');
 Route::get('ventas/factura/crear', 'Ventas\FacturacionController@crear')->name('crear_factura');
+Route::get('ventas/factura/ots-pedido', 'Ventas\FacturacionController@consultaOtPedido')->name('consulta_factura_ot_pedido');
 Route::post('ventas/factura/preferencias', 'Ventas\FacturacionController@preferencias')->name('factura_preferencias');
 Route::post('ventas/factura', 'Ventas\FacturacionController@guardar')->name('guardar_factura');
 Route::get('ventas/factura/{id}/editar', 'Ventas\FacturacionController@editar')->name('editar_factura');

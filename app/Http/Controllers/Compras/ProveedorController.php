@@ -77,6 +77,7 @@ use App\Support\Seguridad\IngresoProveedorVinculoSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Compras\ProveedorCuentacorrienteListadoExport;
 use App\Support\Compras\ProveedorCuentacorrienteListadoFiltros;
+use App\Support\Compras\ProveedorLeyendaCuentaCorrienteSupport;
 use App\Support\Compras\ProveedorCuentacorrientePreferenciasUsuario;
 use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use Carbon\Carbon;
@@ -1275,9 +1276,11 @@ class ProveedorController extends Controller
 
         $nombreproveedor = '';
         $codigoproveedor = '';
+        $leyendaProveedor = '';
         if ($proveedor) {
             $nombreproveedor = $proveedor->nombre;
             $codigoproveedor = $proveedor->codigo;
+            $leyendaProveedor = ProveedorLeyendaCuentaCorrienteSupport::texto($proveedor->leyenda ?? null);
         }
 
         $saldosPorMoneda = $this->proveedor_cuentacorrienteRepository->calcularSaldosYDeudasPorMoneda((int) $proveedor_id, $filtros);
@@ -1296,6 +1299,7 @@ class ProveedorController extends Controller
                 'cuentacorriente',
                 'nombreproveedor',
                 'codigoproveedor',
+                'leyendaProveedor',
                 'modoVista',
                 'saldosPorMoneda',
                 'equivalentePesos',
@@ -1315,13 +1319,13 @@ class ProveedorController extends Controller
 
         case 'EXCEL':
             return (new ProveedorCuentacorrienteListadoExport($this->proveedor_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldosPorMoneda, $monedaId, false, $filtros, $expresion, $equivalentePesos, $codigoproveedor)
+                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldosPorMoneda, $monedaId, false, $filtros, $expresion, $equivalentePesos, $codigoproveedor, $leyendaProveedor)
                 ->download('cuentacorriente_proveedor.xlsx');
             break;
 
         case 'CSV':
             return (new ProveedorCuentacorrienteListadoExport($this->proveedor_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldosPorMoneda, $monedaId, true, $filtros, $expresion, $equivalentePesos, $codigoproveedor)
+                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldosPorMoneda, $monedaId, true, $filtros, $expresion, $equivalentePesos, $codigoproveedor, $leyendaProveedor)
                 ->download('cuentacorriente_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
             break;
 
@@ -1353,6 +1357,7 @@ class ProveedorController extends Controller
                 'id' => $proveedor_id,
                 'nombreproveedor' => $nombreproveedor,
                 'codigoproveedor' => $codigoproveedor,
+                'leyendaProveedor' => $leyendaProveedor,
                 'urlOrigen' => $urlOrigen,
                 'moneda_query' => $moneda_query,
                 'modoVista' => $modoVista,

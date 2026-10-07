@@ -38,6 +38,8 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
 
     private string $codigoProveedor = '';
 
+    private string $leyendaProveedor = '';
+
     /** @var list<array{moneda_id: int, abreviatura: string, saldo_cc: float, deuda: float}> */
     private array $saldosPorMoneda = [];
 
@@ -97,8 +99,10 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
             : $tituloBase;
         $subtitulo = '';
 
-        // titulo + Generado + Saldo/Deuda (+ Registros si hay filas)
-        $this->filasMetaEncabezado = 3 + ($filas->count() > 0 ? 1 : 0);
+        // titulo + Generado + Saldo/Deuda (+ leyenda Ferli) (+ Registros si hay filas)
+        $this->filasMetaEncabezado = 3
+            + ($this->leyendaProveedor !== '' ? 1 : 0)
+            + ($filas->count() > 0 ? 1 : 0);
         $this->filaInicioMeta = $offsetLogo + 1;
         $this->filaCabecerasExcel = $offsetLogo + $this->filasMetaEncabezado + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
@@ -114,6 +118,7 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
             'equivalentePesos' => $this->equivalentePesos,
             'mostrarSaldoCorrido' => CuentacorrienteSaldosPorMoneda::mostrarSaldoCorrido($this->monedaId, $this->saldosPorMoneda),
             'totalFilas' => $filas->count(),
+            'leyendaProveedor' => $this->leyendaProveedor,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'formatoNumeroExcel' => $this->formatoNumeroEfectivo(),
         ]);
@@ -296,12 +301,14 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
         string $expresion = CuentacorrienteSaldosPorMoneda::EXPRESION_ORIGEN,
         array $equivalentePesos = [],
         string $codigoProveedor = '',
+        string $leyendaProveedor = '',
     ): self {
         $this->busqueda = $busqueda;
         $this->proveedorId = $proveedorId;
         $this->modoVista = ProveedorCuentacorrientePreferenciasUsuario::resolverModoVista($modoVista);
         $this->nombreProveedor = $nombreProveedor;
         $this->codigoProveedor = $codigoProveedor;
+        $this->leyendaProveedor = trim($leyendaProveedor);
         $this->saldosPorMoneda = $saldosPorMoneda;
         $this->monedaId = $monedaId;
         $this->esCsv = $esCsv;

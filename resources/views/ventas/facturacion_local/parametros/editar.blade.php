@@ -18,6 +18,9 @@
                 <h3 class="card-title mb-0"><i class="fa fa-cogs"></i> Parámetros Facturación Local</h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end">
                     @if (can('reportes-facturacion-local', false))
+                        <a href="{{ route('facturacion_local_reporte_costos') }}" class="btn btn-outline-light btn-sm mr-1">
+                            <i class="fa fa-calculator"></i> Costos del local
+                        </a>
                         <a href="{{ route('facturacion_local_reportes') }}" class="btn btn-outline-light btn-sm">
                             <i class="fa fa-chart-bar"></i> Reportes Local
                         </a>
@@ -29,7 +32,7 @@
                 @method('PUT')
                 <div class="card-body">
                     <div class="alert alert-info py-2 mb-3">
-                        Valores usados por <strong>Reportes Local</strong> (valorización al costo).
+                        Valores usados por <strong>Reportes Local</strong> y por el <strong>reporte de costos del local</strong>.
                         Se guardan en base de datos; el .env solo aporta valores iniciales si la tabla está vacía.
                         Fórmula actual: <code>{{ $formula ?? '' }}</code>
                     </div>

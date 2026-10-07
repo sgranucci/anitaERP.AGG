@@ -199,6 +199,21 @@ final class StockLocalInformeService
         }
         $parts[] = StockLocalInformeListadoFiltros::etiquetaModo((string) ($filtros['modo'] ?? 'saldo'));
         $parts[] = StockLocalInformeListadoFiltros::etiquetaOrden((string) ($filtros['orden'] ?? 'articulo'));
+        $parts[] = StockLocalInformeListadoFiltros::etiquetaEstadoLocal(
+            (string) ($filtros['estado_local'] ?? StockLocalInformeListadoFiltros::ESTADO_LOCAL_ACTIVO)
+        );
+        if (! empty($filtros['categoria_invalida'])) {
+            $parts[] = 'Categoría no encontrada ('.($filtros['categoria_codigo'] ?? '').')';
+        } elseif ((int) ($filtros['categoria_id'] ?? 0) > 0) {
+            $rotulo = trim((string) ($filtros['categoria_codigo'] ?? '').' '.(string) ($filtros['categoria_nombre'] ?? ''));
+            $parts[] = 'Categoría '.($rotulo !== '' ? $rotulo : '#'.$filtros['categoria_id']);
+        }
+        if (! empty($filtros['subcategoria_invalida'])) {
+            $parts[] = 'Subcategoría no encontrada ('.($filtros['subcategoria_codigo'] ?? '').')';
+        } elseif ((int) ($filtros['subcategoria_id'] ?? 0) > 0) {
+            $rotulo = trim((string) ($filtros['subcategoria_codigo'] ?? '').' '.(string) ($filtros['subcategoria_nombre'] ?? ''));
+            $parts[] = 'Subcategoría '.($rotulo !== '' ? $rotulo : '#'.$filtros['subcategoria_id']);
+        }
         if (! empty($filtros['fecha_desde']) || ! empty($filtros['fecha_hasta'])) {
             $parts[] = 'Fechas '.($filtros['fecha_desde'] ?? '…').' / '.($filtros['fecha_hasta'] ?? '…');
         }
@@ -691,7 +706,23 @@ final class StockLocalInformeService
         $query = Articulo::query()
             ->select(['articulo.id', 'articulo.sku', 'articulo.descripcion', 'articulo.categoria_id'])
             ->with(['categorias:id,codigo,nombre']);
-        ArticuloCanalSupport::scopeArticulosCanalLocal($query);
+        ArticuloCanalSupport::scopeArticulosCanalLocalPorEstado(
+            $query,
+            (string) ($filtros['estado_local'] ?? StockLocalInformeListadoFiltros::ESTADO_LOCAL_ACTIVO),
+        );
+
+        if (! empty($filtros['categoria_invalida']) || ! empty($filtros['subcategoria_invalida'])) {
+            $query->whereRaw('1 = 0');
+        }
+
+        $categoriaId = (int) ($filtros['categoria_id'] ?? 0);
+        if ($categoriaId > 0) {
+            $query->where('articulo.categoria_id', $categoriaId);
+        }
+        $subcategoriaId = (int) ($filtros['subcategoria_id'] ?? 0);
+        if ($subcategoriaId > 0) {
+            $query->where('articulo.subcategoria_id', $subcategoriaId);
+        }
 
         $desdeSku = trim((string) ($filtros['desde_sku'] ?? ''));
         $hastaSku = trim((string) ($filtros['hasta_sku'] ?? ''));

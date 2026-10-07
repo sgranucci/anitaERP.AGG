@@ -80,6 +80,9 @@
             @else
                 {{ $fila['proveedor_nombre'] ?? '' }}
             @endif
+            @if (! empty($fila['leyenda']))
+                <div class="small font-weight-normal" style="white-space: pre-wrap;">{{ $fila['leyenda'] }}</div>
+            @endif
         </td>
         <td class="text-right">{{ $fmt($fila['saldo_pendiente'] ?? null) }}</td>
     </tr>
@@ -171,6 +174,14 @@
         $mostrarIdentidad = $esHeader || $esTotal || ($paraPdf && ($tipo === 'movimiento' || $esSaldoAnt));
     @endphp
     @if ($esHeader && $paraPdf)
+        @if (! empty($fila['leyenda']))
+            <tr class="cc-rep-header">
+                <td colspan="{{ $colSpan }}">
+                    <strong>{{ trim(($fila['proveedor_codigo'] ?? '').' '.($fila['proveedor_nombre'] ?? '')) }}</strong>
+                    — {!! nl2br(e($fila['leyenda'])) !!}
+                </td>
+            </tr>
+        @endif
         @continue
     @endif
     @if ($esHeaderEmpresa)
@@ -197,6 +208,9 @@
         <td>
             @if ($esHeader)
                 <strong>{{ $fila['proveedor_nombre'] ?? '' }}</strong>
+                @if (! empty($fila['leyenda']))
+                    <div class="small font-weight-normal" style="white-space: pre-wrap;">{{ $fila['leyenda'] }}</div>
+                @endif
             @elseif ($esTotal)
                 <strong>{{ $pdfCortar('Total '.($fila['proveedor_nombre'] ?? ''), 34) }}</strong>
             @elseif ($paraPdf && $tipo === 'movimiento')

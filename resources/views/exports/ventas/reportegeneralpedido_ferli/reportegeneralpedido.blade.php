@@ -58,6 +58,7 @@
        	<th>Estado</th>
        	<th>Fecha</th>
 		<th>Nro.OT</th>
+		<th>Nro. Picking</th>
        	<th>Vendedor</th>
        	<th>Cliente</th>
 		<th>Estado cliente</th>

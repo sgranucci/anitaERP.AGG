@@ -255,17 +255,32 @@ class MayorPlanoCuentaSupport
         string $codMonReporte,
         bool $soloMonedaOrigen,
     ): bool {
-        $codMov = trim($codMonMovimiento) !== '' ? trim($codMonMovimiento) : '1';
+        $codMov = self::codigoMonedaCanonico($codMonMovimiento);
+        $codReporte = self::codigoMonedaCanonico($codMonReporte);
 
         if ($soloMonedaOrigen) {
-            return $codMov === $codMonReporte;
+            return $codMov === $codReporte;
         }
 
-        if ($codMov === $codMonReporte) {
+        if ($codMov === $codReporte) {
             return true;
         }
 
         return $cotizacionMovimiento >= 0.01;
+    }
+
+    /**
+     * Anita manda 1/2 y el ERP guarda PES/DOL. Son la misma moneda.
+     */
+    public static function codigoMonedaCanonico(string $codigo): string
+    {
+        $cod = strtoupper(trim($codigo));
+
+        return match ($cod) {
+            '', '1', 'PES', 'ARS', '$' => '1',
+            '2', 'DOL', 'USD', 'U$S', 'U$D' => '2',
+            default => $cod,
+        };
     }
 
     /** OP*, OPP, OPA… — en un_mov() dispara busca_op() sobre che_ban.pago. */

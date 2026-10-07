@@ -26,10 +26,16 @@ class FacturacionLocalReporteController extends Controller
 
         $filtros = FacturacionLocalVentasArticulosReporteFiltros::resolverDesdeRequest($request);
         $filtros = $this->aplicarDefaultsFiltros($filtros);
-        $filtros = $this->enriquecerPuntoventa($filtros);
+        $filtros = $this->enriquecerPuntosventa($filtros);
 
         $consultado = $request->boolean('consultar')
             && FacturacionLocalVentasArticulosReporteFiltros::tieneCriteriosAplicados($filtros);
+
+        if ($request->boolean('consultar') && ! $consultado) {
+            return redirect()
+                ->route('facturacion_local_reportes', FacturacionLocalVentasArticulosReporteFiltros::paraQueryString($filtros))
+                ->with('error', 'Agregá al menos un punto de venta.');
+        }
 
         $resultado = null;
         $filasPag = null;
@@ -84,7 +90,7 @@ class FacturacionLocalReporteController extends Controller
 
         $filtros = FacturacionLocalVentasArticulosReporteFiltros::resolverDesdeRequest($request);
         $filtros = $this->aplicarDefaultsFiltros($filtros);
-        $filtros = $this->enriquecerPuntoventa($filtros);
+        $filtros = $this->enriquecerPuntosventa($filtros);
 
         if (! $request->boolean('consultar')
             || ! FacturacionLocalVentasArticulosReporteFiltros::tieneCriteriosAplicados($filtros)) {
@@ -167,30 +173,36 @@ class FacturacionLocalReporteController extends Controller
     }
 
     /**
-     * Completa código/nombre del PV para el input de consulta (GET sin blur).
+     * Deja solo puntos de venta existentes y arma las fichas (código + nombre) del filtro.
      *
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>
      */
-    private function enriquecerPuntoventa(array $filtros): array
+    private function enriquecerPuntosventa(array $filtros): array
     {
-        $id = (int) ($filtros['puntoventa_id'] ?? 0);
-        if ($id <= 0) {
+        $ids = FacturacionLocalVentasArticulosReporteFiltros::idsPuntoventa($filtros);
+        $filtros['puntoventa_ids'] = [];
+        $filtros['puntosventa'] = [];
+        if ($ids === []) {
             return $filtros;
         }
-        $pv = Puntoventa::query()->whereKey($id)->first(['id', 'codigo', 'nombre']);
-        if (! $pv) {
-            $filtros['puntoventa_id'] = 0;
-            $filtros['puntoventa_codigo'] = '';
-            $filtros['puntoventa_nombre'] = '';
 
-            return $filtros;
-        }
-        if (($filtros['puntoventa_codigo'] ?? '') === '') {
-            $filtros['puntoventa_codigo'] = (string) $pv->codigo;
-        }
-        if (($filtros['puntoventa_nombre'] ?? '') === '') {
-            $filtros['puntoventa_nombre'] = (string) $pv->nombre;
+        $pvs = Puntoventa::query()
+            ->whereIn('id', $ids)
+            ->get(['id', 'codigo', 'nombre'])
+            ->keyBy('id');
+
+        foreach ($ids as $id) {
+            $pv = $pvs->get($id);
+            if (! $pv) {
+                continue;
+            }
+            $filtros['puntoventa_ids'][] = (int) $pv->id;
+            $filtros['puntosventa'][] = [
+                'id' => (int) $pv->id,
+                'codigo' => (string) $pv->codigo,
+                'nombre' => (string) $pv->nombre,
+            ];
         }
 
         return $filtros;

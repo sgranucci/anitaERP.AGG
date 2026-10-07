@@ -21,7 +21,7 @@
     $fmtCosto = static function ($v) {
         return number_format((float) $v, 2, ',', '.');
     };
-    $colspan = 5 + ($abiertoTalle ? 1 : 0) + ($incluirCosto ? 3 : 0);
+    $colspan = 7 + ($abiertoTalle ? 1 : 0) + ($incluirCosto ? 3 : 0);
 @endphp
 <thead style="background:#85C1E9;color:#17202A;">
     <tr>
@@ -36,6 +36,8 @@
             <th class="text-right">P.Vta.</th>
             <th class="text-right">P.Costo</th>
         @endif
+        <th class="text-right">Importe bruto</th>
+        <th class="text-right">Descuento</th>
         <th class="text-right">Importe venta</th>
         @if ($incluirCosto)
             <th class="text-right">Importe costo</th>
@@ -68,6 +70,8 @@
                     {{ $fmtCosto($fila['precio_costo'] ?? 0) }}
                 </td>
             @endif
+            <td class="text-right">{{ $fmtImp($fila['importe_bruto'] ?? 0) }}</td>
+            <td class="text-right">{{ $fmtImp($fila['descuento'] ?? 0) }}</td>
             <td class="text-right">{{ $fmtImp($fila['importe'] ?? 0) }}</td>
             @if ($incluirCosto)
                 <td class="text-right @if (! empty($fila['sin_precio_fabrica'])) text-muted @endif">
@@ -93,6 +97,8 @@
                 <td></td>
                 <td></td>
             @endif
+            <td class="text-right">{{ $fmtImp($totales['importe_bruto'] ?? 0) }}</td>
+            <td class="text-right">{{ $fmtImp($totales['descuento'] ?? 0) }}</td>
             <td class="text-right">{{ $fmtImp($totales['importe'] ?? 0) }}</td>
             @if ($incluirCosto)
                 <td class="text-right">{{ $fmtCosto($totales['importe_costo'] ?? 0) }}</td>

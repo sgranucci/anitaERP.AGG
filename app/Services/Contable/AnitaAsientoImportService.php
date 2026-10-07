@@ -12,6 +12,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Support\Contable\Anita\AnitaAsientoImportBridgeReader;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Anita\AnitaSubdiarioMayorSupport;
 use App\Support\Contable\AsientoAnitaMetadatosSupport;
 use Carbon\Carbon;
@@ -1872,7 +1873,12 @@ final class AnitaAsientoImportService
             return $cache[$codigo];
         }
 
-        $moneda = $this->monedaRepository->findPorCodigo($codigo);
+        $canonico = MayorPlanoCuentaSupport::codigoMonedaCanonico($codigo);
+        $buscar = $canonico === '2' ? 'DOL' : ($canonico === '1' ? 'PES' : $codigo);
+        $moneda = $this->monedaRepository->findPorCodigo($buscar);
+        if ($moneda === null && $buscar !== $codigo) {
+            $moneda = $this->monedaRepository->findPorCodigo($codigo);
+        }
 
         return $cache[$codigo] = $moneda ? (int) $moneda->id : $defaultId;
     }

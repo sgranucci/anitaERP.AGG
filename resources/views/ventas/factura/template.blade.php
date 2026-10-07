@@ -8,6 +8,11 @@
 			<input type="hidden" name="descuentos[]" class="form-control descuento" readonly value="" />
 			<input type="hidden" name="ids[]" class="form-control ids" value="" />
 			<input type="hidden" name="loteids[]" class="form-control loteids" value="" />
+			@include('ventas.factura.partials.ot_pedido_campos', [
+				'otIdLinea' => '',
+				'pedidoCombinacionIdLinea' => '',
+				'otGrupoIndiceLinea' => '',
+			])
 		</td>
 		<td class="factura-col-articulo">
 			<div class="factura-sku-campo" id="articulo">
@@ -35,6 +40,7 @@
 			<input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="">
 			<textarea name="leyendas_linea[]" class="d-none factura-ta-leyenda-linea" aria-hidden="true"></textarea>
 			<div class="factura-leyenda-badge"></div>
+			<div class="factura-ot-badge"></div>
 		</td>
 		<td class="factura-col-iva">
 			@include('ventas.factura.partials.select_iva_linea')
@@ -52,6 +58,7 @@
 			<button type="button" title="Leyenda / comentario de la l&iacute;nea" class="btn-accion-tabla factura-abrir-leyenda-linea tooltipsC">
 				<i class="fa fa-align-left"></i>
 			</button>
+			@include('ventas.factura.partials.boton_ot_pedido')
 			<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
         		<i class="fa fa-times-circle text-danger"></i>
 			</button>

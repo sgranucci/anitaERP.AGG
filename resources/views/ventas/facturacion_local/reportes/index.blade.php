@@ -6,30 +6,8 @@
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/puntoventa/consulta.js') }}" type="text/javascript"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    if (typeof activa_eventos_consultapuntoventa === 'function') {
-        activa_eventos_consultapuntoventa();
-    }
-    var form = document.getElementById('form-fl-ventas-articulos');
-    if (form) {
-        form.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter' && e.target && e.target.classList && e.target.classList.contains('codigopuntoventa')) {
-                e.preventDefault();
-            }
-        });
-        form.addEventListener('submit', function () {
-            var cod = document.getElementById('puntoventa_id_codigo');
-            var nom = document.getElementById('puntoventa_id_nombre');
-            var qsCod = document.getElementById('fl_reporte_puntoventa_codigo_qs');
-            var qsNom = document.getElementById('fl_reporte_puntoventa_nombre_qs');
-            if (cod && qsCod) qsCod.value = cod.value || '';
-            if (nom && qsNom) qsNom.value = nom.value || '';
-        });
-    }
-});
-</script>
+<script src="{{ asset('assets/pages/scripts/ventas/puntoventa/consulta.js') }}?v={{ filemtime(public_path('assets/pages/scripts/ventas/puntoventa/consulta.js')) }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/facturacion_local/reporte_ventas_articulos.js') }}?v={{ filemtime(public_path('assets/pages/scripts/ventas/facturacion_local/reporte_ventas_articulos.js')) }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -46,6 +24,9 @@ document.addEventListener('DOMContentLoaded', function () {
                             <i class="fa fa-file-text-o"></i> Facturas Local
                         </a>
                     @endif
+                    <a href="{{ route('facturacion_local_reporte_costos') }}" class="btn btn-outline-light btn-sm mr-1">
+                        <i class="fa fa-calculator"></i> Costos del local
+                    </a>
                     @if (can('editar-facturacion-local-parametro', false))
                         <a href="{{ route('facturacion_local_parametros') }}" class="btn btn-outline-light btn-sm mr-1">
                             <i class="fa fa-cogs"></i> Parámetros
@@ -60,8 +41,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
                         Ventas netas del local y de Facturante (facturas menos notas de crédito) por artículo,
-                        combinación/color y talle. Elija el punto de venta, el rango de fechas y si abre por talle
-                        o cierra por artículo/combinación. El tilde de costo agrega P.Vta., P.Costo e importe al costo
+                        combinación/color y talle. Elija uno o varios puntos de venta, el rango de fechas y si abre por talle
+                        o cierra por artículo/combinación. Importe bruto es el precio de lista; Descuento, el de la línea;
+                        Importe venta, el neto cobrado. El tilde de costo agrega P.Vta., P.Costo e importe al costo
                         ({{ \App\Support\Ventas\FacturacionLocal\FacturacionLocalCostoFabricaSupport::etiquetaFormula() }}).
                         @if (can('editar-facturacion-local-parametro', false))
                             ·
@@ -75,21 +57,33 @@ document.addEventListener('DOMContentLoaded', function () {
                         'prefix' => 'fl_reporte',
                         'layout' => 'form_row',
                         'label' => 'Punto de venta',
-                        'inputName' => 'puntoventa_id',
-                        'inputId' => 'puntoventa_id',
-                        'puntoventaId' => $filtros['puntoventa_id'] ?? '',
-                        'codigo' => $filtros['puntoventa_codigo'] ?? '',
-                        'nombre' => $filtros['puntoventa_nombre'] ?? '',
-                        'required' => true,
+                        'inputName' => 'puntoventa_borrador_id',
+                        'inputId' => 'puntoventa_borrador_id',
+                        'puntoventaId' => '',
+                        'codigo' => '',
+                        'nombre' => '',
+                        'required' => false,
                         'col_label' => 'col-lg-2 control-label text-right pr-2',
                         'col_input' => 'col-lg-6',
                         'mostrar_editar' => true,
                     ])
-                    {{-- Espejo código/nombre para conservar en GET/paginación/export --}}
-                    <input type="hidden" name="puntoventa_codigo" id="fl_reporte_puntoventa_codigo_qs"
-                        value="{{ $filtros['puntoventa_codigo'] ?? '' }}">
-                    <input type="hidden" name="puntoventa_nombre" id="fl_reporte_puntoventa_nombre_qs"
-                        value="{{ $filtros['puntoventa_nombre'] ?? '' }}">
+                    <div class="form-group row">
+                        <div class="col-lg-6 offset-lg-2">
+                            <button type="button" class="btn btn-outline-primary btn-sm mb-2" id="btn-agregar-puntoventa">
+                                <i class="fa fa-plus"></i> Agregar punto de venta
+                            </button>
+                            <div id="puntosventa-elegidos">
+                                @foreach ($filtros['puntosventa'] ?? [] as $pv)
+                                    <span class="badge badge-info mr-1 mb-1 fl-reporte-pv-chip">
+                                        {{ $pv['codigo'] }}{{ ($pv['nombre'] ?? '') !== '' ? ' — '.$pv['nombre'] : '' }}
+                                        <button type="button" class="btn btn-link btn-sm text-white p-0 ml-1 quitar-puntoventa-fl" title="Quitar">&times;</button>
+                                        <input type="hidden" name="puntoventa_id[]" value="{{ $pv['id'] }}">
+                                    </span>
+                                @endforeach
+                            </div>
+                            <small class="form-text text-muted">Código y Enter, o la lupa. Podés pedir uno solo, o varios (por ejemplo 17 y 25).</small>
+                        </div>
+                    </div>
 
                     <div class="form-group row">
                         <label for="fecha_desde" class="col-lg-2 control-label text-right pr-2 requerido">Desde</label>
@@ -183,6 +177,10 @@ document.addEventListener('DOMContentLoaded', function () {
                             <div class="small mb-1 mb-md-0 text-md-right">
                                 <span class="text-muted">Totales filtro:</span>
                                 Cant. <strong>{{ number_format((float) ($resultado['totales']['cantidad'] ?? 0), 0, ',', '.') }}</strong>
+                                · Imp. bruto
+                                <strong>${{ number_format((float) ($resultado['totales']['importe_bruto'] ?? 0), 2, ',', '.') }}</strong>
+                                · Descuento
+                                <strong>${{ number_format((float) ($resultado['totales']['descuento'] ?? 0), 2, ',', '.') }}</strong>
                                 · Imp. venta
                                 <strong>${{ number_format((float) ($resultado['totales']['importe'] ?? 0), 2, ',', '.') }}</strong>
                                 @if (! empty($resultado['incluir_costo']))
@@ -194,10 +192,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     </div>
 
                     @php
+                        $nombresEmpresaLogo = $resultado['nombres_empresa'] ?? [];
+                        if ($nombresEmpresaLogo === [] && ! empty($resultado['nombreempresa'])) {
+                            $nombresEmpresaLogo = [$resultado['nombreempresa']];
+                        }
                         $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion(
-                            ! empty($resultado['nombreempresa'])
-                                ? collect([(object) ['nombreempresa' => $resultado['nombreempresa']]])
-                                : collect()
+                            collect(array_map(
+                                static fn (string $nombre) => (object) ['nombreempresa' => $nombre],
+                                $nombresEmpresaLogo,
+                            ))
                         );
                     @endphp
                     @if (count($logosVista) > 0)
@@ -242,5 +245,12 @@ document.addEventListener('DOMContentLoaded', function () {
         </div>
     </div>
 </div>
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'fl-reporte-overlay',
+    'tituloId' => 'fl-reporte-overlay-titulo',
+    'subtituloId' => 'fl-reporte-overlay-subtitulo',
+    'titulo' => 'Consultando ventas…',
+    'subtitulo' => 'Puede demorar según el período y los puntos de venta.',
+])
 @include('includes.ventas.modalconsultapuntoventa')
 @endsection

@@ -21,7 +21,7 @@ class MayorConceptoMonedaConverter
         private readonly CotizacionQueryInterface $cotizacionQuery,
     ) {
         foreach (DB::table('moneda')->get(['id', 'codigo', 'abreviatura']) as $moneda) {
-            $codigo = trim((string) $moneda->codigo);
+            $codigo = strtoupper(trim((string) $moneda->codigo));
             if ($codigo === '') {
                 continue;
             }
@@ -29,11 +29,13 @@ class MayorConceptoMonedaConverter
             $this->monedaIdPorCodigoAnita[$codigo] = $id;
             $this->codigoAnitaPorMonedaId[$id] = $codigo;
         }
+        $this->aliasCodigo('PES', ['1', 'ARS']);
+        $this->aliasCodigo('DOL', ['2', 'USD', 'U$S', 'U$D']);
     }
 
     public function monedaIdDesdeCodigoAnita(string $codMon): int
     {
-        $cod = trim($codMon);
+        $cod = strtoupper(trim($codMon));
         if ($cod === '') {
             return 1;
         }
@@ -68,18 +70,32 @@ class MayorConceptoMonedaConverter
         int $monedaReporteId,
         bool $soloMonedaOrigen,
     ): bool {
-        $codMov = trim($codMonMovimiento) !== '' ? trim($codMonMovimiento) : '1';
-        $codReporte = $this->codigoAnitaDesdeMonedaId($monedaReporteId);
-
-        if ($soloMonedaOrigen) {
-            return $codMov === $codReporte;
-        }
-
-        if ($codMov === $codReporte) {
+        $monedaMovId = $this->monedaIdDesdeCodigoAnita($codMonMovimiento);
+        if ($monedaMovId === $monedaReporteId) {
             return true;
+        }
+        if ($soloMonedaOrigen) {
+            return false;
         }
 
         return $cotizacionMovimiento >= 0.01;
+    }
+
+    /**
+     * PES y 1 son la misma moneda; DOL, USD y 2 también. Anita manda el número
+     * y el ERP guarda PES/DOL: si no se unifican, el mayor divide el nominal.
+     *
+     * @param  list<string>  $aliases
+     */
+    private function aliasCodigo(string $canonico, array $aliases): void
+    {
+        $id = $this->monedaIdPorCodigoAnita[$canonico] ?? null;
+        if ($id === null) {
+            return;
+        }
+        foreach ($aliases as $alias) {
+            $this->monedaIdPorCodigoAnita[strtoupper($alias)] = $id;
+        }
     }
 
     public function convertirImporte(

@@ -190,6 +190,12 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(30)
             ->appendOutputTo(storage_path('logs/arca-certificado-vencimiento.log'));
 
+        $schedule->command('facturacion:cargar-huecos-arca')
+            ->dailyAt((string) config('arca.huecos_facturacion.hora', '07:10'))
+            ->withoutOverlapping(90)
+            ->appendOutputTo(storage_path('logs/facturacion-huecos-arca.log'))
+            ->when(fn () => (bool) config('arca.huecos_facturacion.habilitado', false));
+
         $schedule->command('arca:auditar-proveedores-facturas-apocrifas')
             ->dailyAt((string) config('arca_wsapoc.auditoria_nocturna.hora', '05:30'))
             ->runInBackground()

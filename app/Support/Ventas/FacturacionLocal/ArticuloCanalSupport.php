@@ -122,6 +122,18 @@ final class ArticuloCanalSupport
      */
     public static function scopeArticulosCanalLocal($query)
     {
+        return self::scopeArticulosCanalLocalPorEstado($query, 'ACTIVO');
+    }
+
+    /**
+     * Canal LOCAL siempre. El estado es el del canal local: ACTIVO, INACTIVO o TODOS.
+     * ACTIVO mantiene además el estado maestro ACTIVO (mismo criterio histórico del informe).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder
+     */
+    public static function scopeArticulosCanalLocalPorEstado($query, string $estadoLocal = 'ACTIVO')
+    {
         $canalId = self::canalLocalId();
         if (! $canalId) {
             return $query->whereRaw('1 = 0');
@@ -134,11 +146,19 @@ final class ArticuloCanalSupport
                 ->where('articulo_canal.canal_id', $canalId);
         });
 
-        if (\Illuminate\Support\Facades\Schema::hasColumn('articulo', 'estado_local')) {
-            $query->where('articulo.estado_local', 'ACTIVO');
+        $estado = strtoupper(trim($estadoLocal));
+        if ($estado === 'TODOS') {
+            return $query;
+        }
+        if ($estado !== 'INACTIVO') {
+            $estado = 'ACTIVO';
         }
 
-        if (\Illuminate\Support\Facades\Schema::hasColumn('articulo', 'estado')) {
+        if (\Illuminate\Support\Facades\Schema::hasColumn('articulo', 'estado_local')) {
+            $query->where('articulo.estado_local', $estado);
+        }
+
+        if ($estado === 'ACTIVO' && \Illuminate\Support\Facades\Schema::hasColumn('articulo', 'estado')) {
             $query->where('articulo.estado', 'ACTIVO');
         }
 

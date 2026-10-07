@@ -40,6 +40,8 @@ use App\Support\Ventas\ComprobanteReferenciaConsultaSupport;
 use App\Support\Ventas\NotaCreditoCompletaUnicaSupport;
 use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
 use App\Support\Ventas\VentaFacturasPorArticuloClienteSupport;
+use App\Support\Ventas\Ferli\FacturaMostradorOtFerliSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -552,6 +554,48 @@ class FacturacionController extends Controller
     public function calculaFacturaGeneral(Request $request)
     {
         return $this->facturacionService->calculaFacturaGeneral($request->all());
+    }
+
+    public function consultaOtPedido(Request $request): JsonResponse
+    {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            abort(404);
+        }
+        if (
+            ! can('crear-factura', false)
+            && ! can('editar-factura', false)
+            && ! can('actualizar-factura', false)
+        ) {
+            abort(403, 'Sin permiso para facturar');
+        }
+
+        $clienteId = (int) $request->query('cliente_id');
+        if ($clienteId <= 0) {
+            return response()->json(['error' => 'Elegí el cliente de la factura.'], 422);
+        }
+
+        $pedidoCombinacionId = (int) $request->query('pedido_combinacion_id');
+        $ordentrabajoId = (int) $request->query('ordentrabajo_id');
+        if ($pedidoCombinacionId > 0 && $ordentrabajoId > 0) {
+            $resuelto = FacturaMostradorOtFerliSupport::resolver(
+                $pedidoCombinacionId,
+                $ordentrabajoId,
+                $clienteId,
+                (string) $request->query('fecha', date('Y-m-d'))
+            );
+            if (isset($resuelto['error'])) {
+                return response()->json($resuelto, 422);
+            }
+
+            return response()->json($resuelto);
+        }
+
+        return response()->json([
+            'filas' => FacturaMostradorOtFerliSupport::listarPendientes(
+                $clienteId,
+                (string) $request->query('q', '')
+            ),
+        ]);
     }    
 
     // Graba el comprobante
