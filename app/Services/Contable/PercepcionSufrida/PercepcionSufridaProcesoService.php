@@ -64,10 +64,8 @@ final class PercepcionSufridaProcesoService
             $reporte = array_merge($reporte, $conceptosErp);
         }
 
-        if ($esIibb) {
-            $mayor = $this->aplicarPesos($mayor);
-            $reporte = $this->aplicarPesos($reporte);
-        }
+        $mayor = $this->aplicarPesos($mayor);
+        $reporte = $this->aplicarPesos($reporte);
 
         $cruce = PercepcionSufridaCruceSupport::cruzar($mayor, $reporte, $esIibb);
         $archivo = $esIibb
@@ -75,11 +73,9 @@ final class PercepcionSufridaProcesoService
             : PercepcionSufridaArchivoSupport::percepcionIva($cruce['cruzados']);
 
         $totales = $cruce['totales'];
-        if ($esIibb) {
-            $saldo = $this->erp->saldoPeriodoPesos($empresaId, $desde, $hasta, $cuenta);
-            $totales['saldo_periodo'] = $saldo;
-            $totales['desvio_saldo'] = round((float) $totales['mayor'] - $saldo, 2);
-        }
+        $saldo = $this->erp->saldoPeriodoPesos($empresaId, $desde, $hasta, $cuenta);
+        $totales['saldo_periodo'] = $saldo;
+        $totales['desvio_saldo'] = round((float) $totales['mayor'] - $saldo, 2);
 
         return [
             'tipo' => $tipo,

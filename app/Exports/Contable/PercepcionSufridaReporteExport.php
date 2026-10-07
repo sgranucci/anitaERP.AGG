@@ -25,7 +25,7 @@ class PercepcionSufridaReporteExport implements FromView, WithColumnFormatting, 
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'G';
+    private string $colUltima = 'G';
 
     private bool $hayFilaLogos = false;
 
@@ -55,6 +55,7 @@ class PercepcionSufridaReporteExport implements FromView, WithColumnFormatting, 
     {
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion(collect($this->filasParaLogo));
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
+        $this->colUltima = $this->jurisdiccion > 0 ? 'G' : 'F';
         $offset = $this->hayFilaLogos ? 1 : 0;
         $this->filaTituloExcel = $offset + 1;
         $this->filaCabecerasExcel = $offset + 4;
@@ -65,21 +66,27 @@ class PercepcionSufridaReporteExport implements FromView, WithColumnFormatting, 
             'titulo' => $this->titulo,
             'subtitulo' => $this->subtitulo,
             'jurisdiccion' => $this->jurisdiccion,
+            'conJurisdiccion' => $this->jurisdiccion > 0,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
         ]);
     }
 
     public function columnFormats(): array
     {
-        return [
+        $importe = $this->jurisdiccion > 0 ? 'G' : 'F';
+        $formatos = [
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'C' => NumberFormat::FORMAT_TEXT,
             'D' => NumberFormat::FORMAT_TEXT,
             'E' => NumberFormat::FORMAT_TEXT,
-            'F' => NumberFormat::FORMAT_TEXT,
-            'G' => ExcelFormatoNumero::mascara(2),
         ];
+        if ($this->jurisdiccion > 0) {
+            $formatos['F'] = NumberFormat::FORMAT_TEXT;
+        }
+        $formatos[$importe] = ExcelFormatoNumero::mascara(2);
+
+        return $formatos;
     }
 
     public function styles(Worksheet $sheet)
@@ -94,20 +101,26 @@ class PercepcionSufridaReporteExport implements FromView, WithColumnFormatting, 
 
     public function columnWidths(): array
     {
-        return [
+        $anchos = [
             'A' => 14,
             'B' => 22,
             'C' => 36,
             'D' => 16,
             'E' => 42,
-            'F' => 14,
-            'G' => 16,
         ];
+        if ($this->jurisdiccion > 0) {
+            $anchos['F'] = 14;
+            $anchos['G'] = 16;
+        } else {
+            $anchos['F'] = 16;
+        }
+
+        return $anchos;
     }
 
     public function title(): string
     {
-        return 'Reporte '.$this->jurisdiccion;
+        return $this->jurisdiccion > 0 ? 'Reporte '.$this->jurisdiccion : 'Reporte';
     }
 
     public function registerEvents(): array
@@ -132,18 +145,19 @@ class PercepcionSufridaReporteExport implements FromView, WithColumnFormatting, 
                     }
                 }
                 $ultimaMeta = $this->filaCabecerasExcel - 1;
+                $col = $this->colUltima;
                 for ($fila = $this->filaTituloExcel; $fila <= $ultimaMeta; $fila++) {
-                    $sheet->mergeCells('A'.$fila.':'.self::COL_ULTIMA.$fila);
+                    $sheet->mergeCells('A'.$fila.':'.$col.$fila);
                 }
                 $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->setName('Arial')->setSize(16)->setBold(true)->getColor()->setRGB('17202A');
-                $sheet->getStyle('A'.$this->filaCabecerasExcel.':'.self::COL_ULTIMA.$this->filaCabecerasExcel)->applyFromArray([
+                $sheet->getStyle('A'.$this->filaCabecerasExcel.':'.$col.$this->filaCabecerasExcel)->applyFromArray([
                     'font' => ['bold' => true, 'color' => ['rgb' => '17202A'], 'name' => 'Arial', 'size' => 11],
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '85C1E9']],
                 ]);
                 $ultima = $this->filaPrimeraDatosExcel + max(0, count($this->filas));
                 $sheet->getStyle('E'.$this->filaPrimeraDatosExcel.':E'.$ultima)
                     ->getAlignment()->setWrapText(true);
-                $sheet->getStyle('G'.$this->filaPrimeraDatosExcel.':G'.$ultima)
+                $sheet->getStyle($col.$this->filaPrimeraDatosExcel.':'.$col.$ultima)
                     ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },

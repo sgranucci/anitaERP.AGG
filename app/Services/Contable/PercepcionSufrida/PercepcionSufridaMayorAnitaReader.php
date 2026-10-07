@@ -15,7 +15,7 @@ use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
  */
 final class PercepcionSufridaMayorAnitaReader
 {
-    private const CTAMOV_CAMPOS = 'ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_cuenta,ctav_d_h,ctav_importe,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_desc_mov';
+    private const CTAMOV_CAMPOS = 'ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_cuenta,ctav_d_h,ctav_importe,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_tipo_asiento,ctav_desc_mov';
 
     private const SUBDIARIO_CAMPOS = 'subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,subd_tipo_mov,'
         .'subd_cuenta,subd_contrapartida,subd_importe,subd_sistema,subd_ref_tipo,subd_ref_letra,subd_ref_sucursal,subd_ref_nro,subd_cod_mon,subd_cotizacion,subd_desc_mov';
@@ -66,6 +66,9 @@ final class PercepcionSufridaMayorAnitaReader
                 continue;
             }
             $tipo = strtoupper(trim((string) ($fila->ctav_tipo ?? '')));
+            if ($this->esProvisionCierre($fila->ctav_tipo_asiento ?? '', (int) ($fila->ctav_nro ?? 0))) {
+                continue;
+            }
             $sistema = strtoupper(trim((string) ($fila->ctav_sistema ?? '')));
             $desc = trim((string) ($fila->ctav_desc_mov ?? ''));
             $emisor = MayorPlanoCuentaEmisorSupport::resolver($sistema, $tipo, '', $desc);
@@ -124,6 +127,17 @@ final class PercepcionSufridaMayorAnitaReader
         }
 
         return $this->sinDuplicar($out);
+    }
+
+    /**
+     * La provisión de cierre (CON/CONT sin comprobante) acredita todo el saldo del mes.
+     * No es un movimiento de la cuenta: el mayor analítico y el saldo del período no la toman.
+     */
+    private function esProvisionCierre(string $tipoAsiento, int $nro): bool
+    {
+        $tipo = strtoupper(trim($tipoAsiento));
+
+        return $nro <= 0 && in_array($tipo, ['CON', 'CONT'], true);
     }
 
     /**

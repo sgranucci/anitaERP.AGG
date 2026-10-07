@@ -655,6 +655,15 @@ class MayorConceptoReporteService
     {
         $porEmpresa = $resultado['resultados_por_empresa'] ?? null;
         if (! is_array($porEmpresa) || $porEmpresa === []) {
+            if (isset($resultado['_auditoria']) && is_array($resultado['_auditoria'])) {
+                $conciliacion = $resultado['_auditoria'];
+
+                return [
+                    'cuadra' => (bool) ($conciliacion['cuadra'] ?? false),
+                    'conciliacion' => $conciliacion,
+                ];
+            }
+
             $conciliacion = $this->conciliarPorAsiento($resultado);
 
             return [
@@ -666,7 +675,9 @@ class MayorConceptoReporteService
         if (count($porEmpresa) === 1) {
             $empresaId = (int) array_key_first($porEmpresa);
             $bloque = $porEmpresa[$empresaId];
-            $conciliacion = $this->conciliacionAsientoSupport->conciliar($bloque, $empresaId);
+            $conciliacion = (isset($bloque['_auditoria']) && is_array($bloque['_auditoria']))
+                ? $bloque['_auditoria']
+                : $this->conciliacionAsientoSupport->conciliar($bloque, $empresaId);
 
             return [
                 'cuadra' => (bool) ($conciliacion['cuadra'] ?? false),
@@ -685,7 +696,9 @@ class MayorConceptoReporteService
         foreach ($porEmpresa as $empresaId => $bloque) {
             $empresaId = (int) $empresaId;
             $nombreEmpresa = $this->empresaRepository->find($empresaId)?->nombre ?? (string) $empresaId;
-            $conc = $this->conciliacionAsientoSupport->conciliar($bloque, $empresaId);
+            $conc = (isset($bloque['_auditoria']) && is_array($bloque['_auditoria']))
+                ? $bloque['_auditoria']
+                : $this->conciliacionAsientoSupport->conciliar($bloque, $empresaId);
 
             $tolerancia = (float) ($conc['tolerancia'] ?? $tolerancia);
             $regla = (string) ($conc['regla'] ?? $regla);

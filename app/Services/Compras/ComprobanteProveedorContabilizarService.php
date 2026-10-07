@@ -248,6 +248,11 @@ class ComprobanteProveedorContabilizarService
             // Si el ERP ya había commiteado, revertir estado/asiento locales.
             $this->revertirErpTrasFalloAnita($comprobante);
 
+            // El modelo de este método se cargó antes de syncCreate, que graba el nro
+            // en otra instancia. Sin refresh, anita_nro_interno vuelve a null en memoria
+            // (el original) y Eloquent no lo persiste: el borrador queda con un interno
+            // que Anita ya no tiene.
+            $comprobante->refresh();
             $comprobante->forceFill([
                 'anita_nro_interno' => null,
                 'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::ERROR,

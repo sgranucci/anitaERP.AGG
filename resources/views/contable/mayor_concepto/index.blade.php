@@ -13,6 +13,18 @@
     var SUBTITULO_CONSULTA = 'Puede tardar varios minutos según el período. No cierre ni recargue la página.';
     var TITULO_EXPORT = 'Generando exportación…';
     var SUBTITULO_EXPORT = 'Por favor espere. El PDF o Excel puede tardar según el volumen.';
+    var PROGRESO_URL = @json(route('mayor_concepto_progreso'));
+    var progresoBase = '';
+
+    function textoConSegundos(texto) {
+        var secs = window.__mayorConceptoOverlayShownAt
+            ? Math.floor((Date.now() - window.__mayorConceptoOverlayShownAt) / 1000)
+            : 0;
+        if (secs < 2) {
+            return texto;
+        }
+        return texto + ' (' + secs + ' s)';
+    }
 
     function mostrarProcesoOverlay(titulo, subtitulo) {
         var overlay = document.getElementById(OVERLAY_ID);
@@ -36,13 +48,26 @@
         window.__mayorConceptoOverlayShownAt = Date.now();
 
         if (window.__mayorConceptoOverlayHintTimer) {
-            clearTimeout(window.__mayorConceptoOverlayHintTimer);
+            clearInterval(window.__mayorConceptoOverlayHintTimer);
         }
-        window.__mayorConceptoOverlayHintTimer = setTimeout(function () {
-            if (subtituloEl && overlay.getAttribute('aria-hidden') === 'false') {
-                subtituloEl.textContent = 'Sigue en curso… Si tarda demasiado, pulse Esc o recargue con F5 (el banner no implica que el servidor siga trabajando).';
+        window.__mayorConceptoOverlayHintTimer = setInterval(function () {
+            if (! subtituloEl || overlay.getAttribute('aria-hidden') !== 'false') {
+                return;
             }
-        }, 90000);
+            if (progresoBase) {
+                subtituloEl.textContent = textoConSegundos(progresoBase);
+                return;
+            }
+            if (! window.__mayorConceptoProgresoPoll) {
+                return;
+            }
+            var secs = window.__mayorConceptoOverlayShownAt
+                ? Math.floor((Date.now() - window.__mayorConceptoOverlayShownAt) / 1000)
+                : 0;
+            if (secs >= 20) {
+                subtituloEl.textContent = 'Sigue leyendo Anita… ' + secs + ' s. No recargue la página: eso corta el proceso y hay que empezar de nuevo.';
+            }
+        }, 1000);
     }
 
     function ocultarProcesoOverlay() {
@@ -52,8 +77,13 @@
         }
 
         if (window.__mayorConceptoOverlayHintTimer) {
-            clearTimeout(window.__mayorConceptoOverlayHintTimer);
+            clearInterval(window.__mayorConceptoOverlayHintTimer);
             window.__mayorConceptoOverlayHintTimer = null;
+        }
+        progresoBase = '';
+        if (window.__mayorConceptoProgresoPoll) {
+            clearInterval(window.__mayorConceptoProgresoPoll);
+            window.__mayorConceptoProgresoPoll = null;
         }
 
         overlay.classList.add('d-none');
@@ -111,11 +141,41 @@
             mostrarProcesoOverlay(TITULO_CONSULTA, SUBTITULO_CONSULTA);
 
             function actualizarProgreso(texto) {
+                if (! texto) {
+                    return;
+                }
+                progresoBase = texto;
                 var subtituloEl = document.getElementById(SUBTITULO_ID);
                 if (subtituloEl) {
-                    subtituloEl.textContent = texto;
+                    subtituloEl.textContent = textoConSegundos(texto);
                 }
             }
+
+            function iniciarSondeoProgreso() {
+                if (window.__mayorConceptoProgresoPoll) {
+                    clearInterval(window.__mayorConceptoProgresoPoll);
+                }
+                window.__mayorConceptoProgresoPoll = setInterval(function () {
+                    fetch(PROGRESO_URL, {
+                        credentials: 'same-origin',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                        },
+                    }).then(function (res) {
+                        if (! res.ok) {
+                            return null;
+                        }
+                        return res.json();
+                    }).then(function (data) {
+                        if (data && data.mensaje) {
+                            actualizarProgreso(data.mensaje);
+                        }
+                    }).catch(function () {});
+                }, 2000);
+            }
+
+            iniciarSondeoProgreso();
 
             function restaurarBoton() {
                 if (btn) {
@@ -345,11 +405,10 @@
         if (! overlay || overlay.getAttribute('aria-hidden') === 'true') {
             return;
         }
-        // Tras 3+ minutos con banner y sin navegación, sugerir Esc (request probablemente muerto).
-        if (window.__mayorConceptoOverlayShownAt && (Date.now() - window.__mayorConceptoOverlayShownAt) > 180000) {
+        if (window.__mayorConceptoOverlayShownAt && (Date.now() - window.__mayorConceptoOverlayShownAt) > 180000 && progresoBase) {
             var subtituloEl = document.getElementById(SUBTITULO_ID);
             if (subtituloEl) {
-                subtituloEl.textContent = 'El proceso no respondió a tiempo. Pulse Esc o F5 e intente de nuevo (idealmente una empresa, o menos rango).';
+                subtituloEl.textContent = textoConSegundos(progresoBase);
             }
         }
     });

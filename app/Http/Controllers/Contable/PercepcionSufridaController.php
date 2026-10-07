@@ -95,6 +95,34 @@ class PercepcionSufridaController extends Controller
         ))->download('sifere_'.$jurisdiccion.'.xlsx');
     }
 
+    public function exportarReportePercepcionIva(Request $request)
+    {
+        can('exportar-percepcion-iva');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = PercepcionSufridaListadoFiltros::resolverDesdeRequest($request);
+        if (! PercepcionSufridaListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            return redirect()->route('percepciones_iva');
+        }
+
+        $resultado = $this->proceso->generar(PercepcionSufridaCorteSupport::TIPO_IVA, $filtros);
+        $filas = array_values($resultado['cruzados'] ?? []);
+        $empresa = $this->empresaRepository->allFiltrado()
+            ->firstWhere('id', (int) ($filtros['empresa_id'] ?? 0));
+        $nombreEmpresa = (string) ($empresa->nombre ?? '');
+        $periodo = PercepcionSufridaListadoFiltros::formatearPeriodoTexto($filtros);
+        $subtitulo = trim($nombreEmpresa.($periodo !== '' ? ' — '.$periodo : ''));
+
+        return (new PercepcionSufridaReporteExport(
+            [(object) ['nombreempresa' => $nombreEmpresa]],
+            $filas,
+            'Percepciones de IVA',
+            $subtitulo,
+        ))->download('percepciones_iva.xlsx');
+    }
+
     private function pantalla(Request $request, string $tipo)
     {
         can($this->permisoListar($tipo));
@@ -284,7 +312,7 @@ class PercepcionSufridaController extends Controller
             return [
                 'titulo' => 'Percepciones de IVA sufridas',
                 'titulo_listado' => 'Diferencias — percepciones de IVA sufridas',
-                'ayuda' => 'Cruza el mayor de la cuenta de percepción de IVA sufrida contra los conceptos de percepción del comprobante. El archivo es el CSV de IVA Simple (perciva.csv).',
+                'ayuda' => 'Cruza el mayor de la cuenta de percepción de IVA sufrida (todas las líneas, en pesos) contra el reporte de percepciones. El archivo es el CSV de IVA Simple (perciva.csv).',
                 'archivo_boton' => 'Descargar perciva.csv',
                 'archivo_listado' => 'diferencias_percepciones_iva',
                 'ruta_index' => 'percepciones_iva',

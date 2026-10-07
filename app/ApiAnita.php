@@ -142,7 +142,9 @@ class ApiAnita
         $esLectura = in_array($acc, ['list', 'customSql'], true);
         $maxIntentos = $esLectura
             ? max(1, (int) config('anita.bridge_csv_faltante_reintentos', 3))
-            : 1;
+            : ($acc === 'delete'
+                ? max(1, (int) config('anita.bridge_delete_reintentos', 3))
+                : 1);
 
         $response = false;
         $httpCode = 0;
@@ -153,6 +155,20 @@ class ApiAnita
             $httpCode = $http['http_code'];
             $errorMsg = $http['curl_error'];
             if ($errorMsg !== null) {
+                if (
+                    $acc === 'delete'
+                    && $intento < $maxIntentos
+                    && self::esErrorCurlTransitorio($errorMsg)
+                ) {
+                    Log::warning('anita_bridge.delete_curl_reintento', [
+                        'intento' => $intento,
+                        'tabla' => $data['tabla'] ?? null,
+                        'sistema' => $data['sistema'] ?? null,
+                        'mensaje' => $errorMsg,
+                    ]);
+                    usleep(200000 * $intento);
+                    continue;
+                }
                 break;
             }
 
@@ -253,6 +269,27 @@ class ApiAnita
             'http_code' => $httpCode,
             'curl_error' => $curlError,
         ];
+    }
+
+    /**
+     * Corte de transporte: el DELETE puede no haber llegado, o llegó y se perdió la respuesta.
+     * En ambos casos reintentar un DELETE es seguro.
+     */
+    public static function esErrorCurlTransitorio(?string $mensaje): bool
+    {
+        if ($mensaje === null || trim($mensaje) === '') {
+            return false;
+        }
+
+        $m = $mensaje;
+
+        return stripos($m, 'Empty reply from server') !== false
+            || stripos($m, 'Connection reset by peer') !== false
+            || stripos($m, 'Connection timed out') !== false
+            || stripos($m, 'Operation timed out') !== false
+            || stripos($m, 'Failed to connect') !== false
+            || stripos($m, 'Recv failure') !== false
+            || stripos($m, 'transfer closed') !== false;
     }
 
     /**

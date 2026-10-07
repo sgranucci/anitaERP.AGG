@@ -38,6 +38,12 @@ return [
      */
     'bridge_csv_faltante_reintentos' => (int) env('ANITA_BRIDGE_CSV_FALTANTE_REINTENTOS', 3),
 
+    /**
+     * DELETE es idempotente: un "Empty reply" suele ser el worker del bridge que cerró
+     * la conexión (colisión de cmd_sql bajo carga). Reintentar no duplica filas.
+     */
+    'bridge_delete_reintentos' => (int) env('ANITA_BRIDGE_DELETE_REINTENTOS', 3),
+
     'bridge_connect_timeout' => (int) env('ANITA_BRIDGE_CONNECT_TIMEOUT', 10),
 
     'bridge_timeout' => (int) env('ANITA_BRIDGE_TIMEOUT', 300),

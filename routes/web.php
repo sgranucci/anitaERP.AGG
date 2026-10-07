@@ -1240,6 +1240,7 @@ Route::post('contable/asiento/consulta-venta', 'Contable\AsientoReferenciaConsul
 Route::get('contable/asiento/resolver-venta', 'Contable\AsientoReferenciaConsultaController@resolverVenta')->name('asiento_resolver_venta');
 
 Route::get('contable/mayor-concepto', 'Contable\MayorConceptoController@index')->name('mayor_concepto');
+Route::get('contable/mayor-concepto/progreso', 'Contable\MayorConceptoController@progreso')->name('mayor_concepto_progreso');
 Route::post('contable/mayor-concepto/consultar', 'Contable\MayorConceptoController@consultar')->name('mayor_concepto_consultar');
 Route::get('contable/listar-mayor-concepto/{formato}', 'Contable\MayorConceptoController@exportar')->name('listar_mayor_concepto');
 
@@ -1256,6 +1257,7 @@ Route::get('contable/exportar-sifere-reporte', 'Contable\PercepcionSufridaContro
 Route::get('contable/percepciones-iva', 'Contable\PercepcionSufridaController@percepcionIva')->name('percepciones_iva');
 Route::get('contable/exportar-percepciones-iva', 'Contable\PercepcionSufridaController@exportarPercepcionIva')->name('exportar_percepciones_iva');
 Route::get('contable/listar-percepciones-iva/{formato?}', 'Contable\PercepcionSufridaController@listarPercepcionIva')->name('listar_percepciones_iva');
+Route::get('contable/exportar-percepciones-iva-reporte', 'Contable\PercepcionSufridaController@exportarReportePercepcionIva')->name('exportar_percepciones_iva_reporte');
 
 Route::get('contable/ingresos-brutos', 'Contable\IngresosBrutosReporteController@index')->name('ingresos_brutos');
 Route::get('contable/exportar-ingresos-brutos', 'Contable\IngresosBrutosReporteController@exportar')->name('exportar_ingresos_brutos');

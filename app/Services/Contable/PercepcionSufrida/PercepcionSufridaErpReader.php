@@ -33,6 +33,7 @@ final class PercepcionSufridaErpReader
             ->leftJoin('comprobante_proveedor as cp', 'cp.id', '=', DB::raw('COALESCE(am.comprobante_proveedor_id, a.comprobante_proveedor_id)'))
             ->leftJoin('tipotransaccion_compra as tt', 'tt.id', '=', 'cp.tipotransaccion_compra_id')
             ->leftJoin('proveedor as p', 'p.id', '=', 'cp.proveedor_id')
+            ->leftJoin('tipoasiento as ta', 'ta.id', '=', 'a.tipoasiento_id')
             ->where('a.empresa_id', $empresaId)
             ->whereBetween('a.fecha', [$fechaDesde, $fechaHasta])
             ->whereRaw('REPLACE(cc.codigo, "-", "") = ?', [(string) $cuenta])
@@ -63,10 +64,16 @@ final class PercepcionSufridaErpReader
                 'cp.proveedor_nombre_eventual',
                 'cp.proveedor_documento_eventual',
                 'cp.identificacion_proveedor_cuit',
+                'ta.abreviatura as tipo_asiento',
             ]);
 
         $out = [];
         foreach ($filas as $fila) {
+            $nroDoc = (int) ($fila->numerocomprobante ?: $fila->mov_nro ?: $fila->cab_nro ?: 0);
+            $tipoAsiento = strtoupper(trim((string) ($fila->tipo_asiento ?? '')));
+            if ($nroDoc <= 0 && in_array($tipoAsiento, ['CON', 'CONT'], true)) {
+                continue;
+            }
             $importe = round((float) ($fila->monto ?? 0), 2);
             if (abs($importe) < 0.009) {
                 continue;
@@ -239,7 +246,8 @@ final class PercepcionSufridaErpReader
 
     /**
      * Saldo del período de la cuenta en pesos, el mismo criterio que Sumas y saldos:
-     * cada movimiento por su cotización. La moneda local no se convierte.
+     * cada movimiento por su cotización (Debe − Haber). La moneda local no se convierte.
+     * Queda afuera la provisión de cierre cargada en el ERP, que no está en el mayor.
      */
     public function saldoPeriodoPesos(int $empresaId, string $fechaDesde, string $fechaHasta, int $cuenta): float
     {
@@ -250,9 +258,19 @@ final class PercepcionSufridaErpReader
         $filas = DB::table('asiento_movimiento as am')
             ->join('asiento as a', 'a.id', '=', 'am.asiento_id')
             ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
+            ->leftJoin('tipoasiento as ta', 'ta.id', '=', 'a.tipoasiento_id')
             ->where('a.empresa_id', $empresaId)
             ->whereBetween('a.fecha', [$fechaDesde, $fechaHasta])
             ->whereRaw('REPLACE(cc.codigo, "-", "") = ?', [(string) $cuenta])
+            // La provisión de cierre (CONT cargada en el ERP, sin comprobante Anita)
+            // acredita el saldo del mes. No está en el mayor analítico que se cruza.
+            ->where(function ($q): void {
+                $q->whereRaw('UPPER(TRIM(COALESCE(ta.abreviatura, ""))) <> ?', ['CONT'])
+                    ->orWhere(function ($q2): void {
+                        $q2->whereNotNull('a.anita_tipo')
+                            ->where('a.anita_tipo', '<>', '');
+                    });
+            })
             ->get(['am.monto', 'am.moneda_id', 'am.cotizacion']);
 
         $total = 0.0;

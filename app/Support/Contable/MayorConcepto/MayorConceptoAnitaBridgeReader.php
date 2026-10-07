@@ -163,6 +163,7 @@ class MayorConceptoAnitaBridgeReader implements MayorConceptoLectorInterface
 
         $this->periodoPorEmpresa = $porEmpresa;
         $this->periodoCacheFirma = $firma;
+        MayorConceptoProgreso::marcar('Guardando la lectura del período para las demás empresas…');
         Cache::store('file')->put(
             $this->periodoFileCacheKey($firma),
             ['por_empresa' => $porEmpresa],
@@ -498,6 +499,9 @@ class MayorConceptoAnitaBridgeReader implements MayorConceptoLectorInterface
         $msg = null;
 
         for ($i = 1; $i <= $intentos; $i++) {
+            MayorConceptoProgreso::marcar(
+                'Leyendo '.$etiqueta.' en Anita'.($i > 1 ? ' (intento '.$i.' de '.$intentos.')' : '').'…'
+            );
             $raw = (string) $this->api->apiCall($payload);
             $msg = ApiAnita::extraerMensajeError($raw);
             if ($msg === null) {

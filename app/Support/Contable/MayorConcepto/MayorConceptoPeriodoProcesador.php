@@ -139,7 +139,13 @@ class MayorConceptoPeriodoProcesador
             $anulacionesPorOp[$claveAnul][] = $lineaAnul;
         }
 
+        MayorConceptoProgreso::marcar(
+            'Resolviendo compras del período ('.count($auxpagLista).' aplicaciones)…'
+        );
         $statsPreload = $this->precargarCachesCompras($auxpagLista);
+        MayorConceptoProgreso::marcar(
+            'Imputando movimientos ('.count($subdiario).' subdiario, '.count($ctamovLista).' ctamov)…'
+        );
         $this->precargarCuentaPrepagaPorProveedor($auxpagLista);
 
         $subdiarioPorAsiento = $this->indexarSubdiarioPorAsiento($subdiario);
@@ -149,7 +155,11 @@ class MayorConceptoPeriodoProcesador
         $opsProcesadas = [];
         $opsEmisionProcesadaEnPeriodo = [];
 
+        $lineasVistas = 0;
         foreach ($subdiario as $linea) {
+            if ((++$lineasVistas % 500) === 0) {
+                MayorConceptoProgreso::marcar('Imputando movimientos ('.$lineasVistas.' de '.count($subdiario).')…');
+            }
             if (! $this->lineaVisible($linea, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
                 continue;
             }

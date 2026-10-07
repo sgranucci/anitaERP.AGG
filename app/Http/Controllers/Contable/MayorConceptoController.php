@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Contable\MayorConceptoReporteService;
+use App\Support\Contable\MayorConcepto\MayorConceptoProgreso;
 use App\Support\Contable\MayorConcepto\MayorConceptoRuntimeSupport;
 use App\Support\Contable\MayorConceptoExcelFormatoNumero;
 use App\Support\Contable\MayorConceptoListadoFiltros;
@@ -201,22 +202,63 @@ class MayorConceptoController extends Controller
         $nombreEmpresa = $this->empresaRepository->find($empresaId)?->nombre ?? ('#'.$empresaId);
         $progressKey = $this->cacheProgressKey($filtros);
 
+        if (! MayorConceptoProgreso::reservar()) {
+            return response()->json([
+                'ok' => false,
+                'mensaje' => 'Ya hay un mayor por concepto generándose con su usuario. Espere a que termine: no vuelva a pulsar Consultar ni recargue la página.',
+            ], 409);
+        }
+
+        MayorConceptoProgreso::activar();
         if ($idx === 0) {
+            MayorConceptoProgreso::olvidar();
             Cache::store('file')->forget($progressKey);
             Cache::store('file')->put($progressKey, ['bloques' => []], now()->addHours(2));
         }
+        MayorConceptoProgreso::marcar('Procesando '.$nombreEmpresa.' ('.($idx + 1).'/'.$total.')…');
 
+        try {
+            return $this->consultarPasoAjaxConLock($filtros, $empresaIds, $idx, $empresaId, $nombreEmpresa, $progressKey, $total);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'ok' => false,
+                'mensaje' => 'La generación se interrumpió: '.$e->getMessage(),
+            ], 500);
+        } finally {
+            MayorConceptoProgreso::liberar();
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  list<int>  $empresaIds
+     */
+    private function consultarPasoAjaxConLock(
+        array $filtros,
+        array $empresaIds,
+        int $idx,
+        int $empresaId,
+        string $nombreEmpresa,
+        string $progressKey,
+        int $total,
+    ) {
         $progress = Cache::store('file')->get($progressKey);
         if (! is_array($progress)) {
             $progress = ['bloques' => []];
         }
 
-        $bloque = $this->reporteService->generarUnaEmpresaDesdeFiltros($filtros, $empresaId);
+        $bloque = $this->aligerarBloqueEmpresa(
+            $this->reporteService->generarUnaEmpresaDesdeFiltros($filtros, $empresaId)
+        );
         $progress['bloques'][$empresaId] = $bloque;
-        Cache::store('file')->put($progressKey, $progress, now()->addHours(2));
 
         $siguiente = $idx + 1;
         if ($siguiente < $total) {
+            MayorConceptoProgreso::marcar('Guardando '.$nombreEmpresa.' ('.($idx + 1).'/'.$total.')…');
+            Cache::store('file')->put($progressKey, $progress, now()->addHours(2));
+
             return response()->json([
                 'ok' => true,
                 'done' => false,
@@ -228,6 +270,8 @@ class MayorConceptoController extends Controller
                 'mensaje' => 'Procesada '.$nombreEmpresa.' ('.($idx + 1).'/'.$total.')',
             ]);
         }
+
+        MayorConceptoProgreso::marcar('Armando el reporte…');
 
         $consolidar = (bool) ($filtros['consolidar_empresas'] ?? true);
         $bloques = [];
@@ -251,6 +295,7 @@ class MayorConceptoController extends Controller
 
         $this->persistirPackDesdeResultado($resultado, $filtros);
         Cache::store('file')->forget($progressKey);
+        MayorConceptoProgreso::olvidar();
 
         return response()->json([
             'ok' => true,
@@ -263,6 +308,63 @@ class MayorConceptoController extends Controller
                 MayorConceptoListadoFiltros::paraQueryString($filtros),
                 ['consultar' => 1],
             )),
+        ]);
+    }
+
+    /**
+     * Conciliación por empresa y se descartan los planos crudos: si no, el cache
+     * entre pasos AJAX retiene el mes completo y el request no llega a responder.
+     *
+     * @param  array<string, mixed>  $bloque
+     * @return array<string, mixed>
+     */
+    private function aligerarBloqueEmpresa(array $bloque): array
+    {
+        MayorConceptoProgreso::marcar('Conciliando asientos de la empresa…');
+
+        try {
+            $auditoria = $this->reporteService->conciliarPorAsiento($bloque);
+        } catch (\Throwable $e) {
+            report($e);
+            $auditoria = [
+                'cuadra' => false,
+                'asientos_analizados' => 0,
+                'asientos_cuadrados' => 0,
+                'asientos_descuadrados' => 0,
+                'filas_descuadradas' => [],
+                'filas_cuadradas' => [],
+                'nota' => 'No se pudo armar la conciliación: '.$e->getMessage(),
+            ];
+        }
+
+        if (isset($auditoria['filas_cuadradas']) && is_array($auditoria['filas_cuadradas']) && count($auditoria['filas_cuadradas']) > 50) {
+            $auditoria['filas_cuadradas'] = array_slice($auditoria['filas_cuadradas'], 0, 50);
+            $auditoria['filas_cuadradas_recortadas'] = true;
+        }
+        unset($auditoria['filas']);
+        $bloque['_auditoria'] = $auditoria;
+
+        unset(
+            $bloque['mayor_plano_disponibilidad'],
+            $bloque['mayor_plano_analitico'],
+            $bloque['analitico_por_asiento'],
+            $bloque['motivos_por_asiento'],
+            $bloque['mayor_plano_contrapartidas_disponibilidad'],
+        );
+
+        return $bloque;
+    }
+
+    public function progreso()
+    {
+        can('listar-mayor-concepto');
+
+        $data = MayorConceptoProgreso::leer((int) (auth()->id() ?? 0));
+
+        return response()->json([
+            'ok' => true,
+            'mensaje' => (string) ($data['mensaje'] ?? ''),
+            'ts' => (int) ($data['ts'] ?? 0),
         ]);
     }
 
@@ -458,7 +560,6 @@ class MayorConceptoController extends Controller
      */
     private function leerCachePack(array $filtros): ?array
     {
-        $firma = MayorConceptoListadoFiltros::firma($filtros);
         $pack = Cache::store('file')->get($this->cachePackKey($filtros));
 
         if (! is_array($pack) || ! isset($pack['resultado'])) {
@@ -471,11 +572,9 @@ class MayorConceptoController extends Controller
             return null;
         }
 
-        $marker = session(self::SESSION_CACHE_KEY);
-        if (is_array($marker) && ($marker['firma'] ?? '') !== '' && ($marker['firma'] ?? '') !== $firma) {
-            return null;
-        }
-
+        // La clave de cache ya incluye la firma de los filtros. El marcador de sesión
+        // no puede invalidarla: los contadores de la pantalla regraban la sesión
+        // mientras el POST de generación sigue abierto.
         return $pack;
     }
 

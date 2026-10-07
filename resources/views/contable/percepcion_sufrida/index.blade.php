@@ -95,6 +95,9 @@
                             <a href="{{ route($ruta_exportar, $filtrosQuery) }}" class="btn btn-success js-percepcion-descarga">
                                 <i class="fa fa-download"></i> {{ $archivo_boton }}
                             </a>
+                            <a href="{{ route('exportar_percepciones_iva_reporte', $filtrosQuery) }}" class="btn btn-outline-success js-percepcion-descarga">
+                                <i class="fa fa-file-excel-o"></i> Excel reporte
+                            </a>
                         @endif
                     @endif
                 </div>
@@ -121,14 +124,18 @@
                 $desvioSaldo = round((float) ($tot['desvio_saldo'] ?? 0), 2);
                 $desvioCierre = round((float) ($tot['desvio_cierre'] ?? 0), 2);
             @endphp
-            @if (($es_iibb ?? '0') === '1' && (abs($desvioSaldo) > 0.05 || abs($desvioCierre) > 0.05))
+            @if (abs($desvioSaldo) > 0.05 || abs($desvioCierre) > 0.05)
                 <div class="alert alert-danger">
                     El cruce no cierra.
                     @if (abs($desvioSaldo) > 0.05)
                         El mayor no coincide con el saldo del período ({{ number_format($desvioSaldo, 2, ',', '.') }}).
                     @endif
                     @if (abs($desvioCierre) > 0.05)
-                        La suma de 901, 902 y las diferencias no explica el mayor ({{ number_format($desvioCierre, 2, ',', '.') }}).
+                        @if (($es_iibb ?? '0') === '1')
+                            La suma de 901, 902 y las diferencias no explica el mayor ({{ number_format($desvioCierre, 2, ',', '.') }}).
+                        @else
+                            La suma del cruzado y las diferencias no explica el mayor ({{ number_format($desvioCierre, 2, ',', '.') }}).
+                        @endif
                     @endif
                 </div>
             @endif
@@ -167,23 +174,21 @@
                                 <td class="text-right">{{ number_format((float) ($tot['diferencias'] ?? 0), 2, ',', '.') }}</td>
                                 <td class="text-muted small">{{ (int) ($tot['lineas_diferencia'] ?? 0) }} líneas</td>
                             </tr>
-                            @if (($es_iibb ?? '0') === '1')
-                                <tr>
-                                    <th>Saldo del período</th>
-                                    <td class="text-right">{{ number_format((float) ($tot['saldo_periodo'] ?? 0), 2, ',', '.') }}</td>
-                                    <td class="text-muted small">Cuenta en pesos, como Sumas y saldos</td>
-                                </tr>
-                                <tr>
-                                    <th>Mayor − saldo</th>
-                                    <td class="text-right">{{ number_format((float) ($tot['desvio_saldo'] ?? 0), 2, ',', '.') }}</td>
-                                    <td class="text-muted small">Tiene que dar cero</td>
-                                </tr>
-                                <tr>
-                                    <th>Mayor − 901 − 902 − diferencias</th>
-                                    <td class="text-right">{{ number_format((float) ($tot['desvio_cierre'] ?? 0), 2, ',', '.') }}</td>
-                                    <td class="text-muted small">Tiene que dar cero</td>
-                                </tr>
-                            @endif
+                            <tr>
+                                <th>Saldo del período</th>
+                                <td class="text-right">{{ number_format((float) ($tot['saldo_periodo'] ?? 0), 2, ',', '.') }}</td>
+                                <td class="text-muted small">Cuenta en pesos, como Sumas y saldos</td>
+                            </tr>
+                            <tr>
+                                <th>Mayor − saldo</th>
+                                <td class="text-right">{{ number_format((float) ($tot['desvio_saldo'] ?? 0), 2, ',', '.') }}</td>
+                                <td class="text-muted small">Tiene que dar cero</td>
+                            </tr>
+                            <tr>
+                                <th>{{ ($es_iibb ?? '0') === '1' ? 'Mayor − 901 − 902 − diferencias' : 'Mayor − cruzado − diferencias' }}</th>
+                                <td class="text-right">{{ number_format((float) ($tot['desvio_cierre'] ?? 0), 2, ',', '.') }}</td>
+                                <td class="text-muted small">Tiene que dar cero</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
