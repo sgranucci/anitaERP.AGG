@@ -3715,11 +3715,11 @@ $(function () {
                 return;
             }
             var mid = monedaIdForm();
+            var diaTxt = (cotDia > 1) ? cotDia.toFixed(4).replace('.', ',') : '—';
             if (mid <= 1) {
-                $hint.html('Moneda local: cotización = 1');
+                $hint.html('Pesos: se graba la cotización del día (dólar): <strong id="cp-cotizacion-dia-valor">' + diaTxt + '</strong>');
                 return;
             }
-            var diaTxt = (cotDia > 0) ? cotDia.toFixed(4).replace('.', ',') : '—';
             var html = 'Cotización del día (venta): <strong id="cp-cotizacion-dia-valor">' + diaTxt + '</strong>';
             if (cotFactura && cotFactura > 1 && Math.abs(cotFactura - cotDia) > 0.0000005) {
                 html += ' · En factura/precarga: <strong id="cp-cotizacion-factura-valor">'
@@ -3733,11 +3733,6 @@ $(function () {
             var forzarCampo = !!opciones.forzarCampo;
             var mid = monedaIdForm();
             var fecha = fechaComprobanteForm();
-            if (mid <= 1) {
-                $cot.val(1);
-                actualizarHintDia(1, null);
-                return;
-            }
             if (!fecha) {
                 return;
             }

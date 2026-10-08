@@ -23,6 +23,7 @@ use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportExistenciaSup
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportOpaSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportSinCcSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
+use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
@@ -1470,7 +1471,11 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
         $monedaId = RecepcionProveedorAnitaImportSupport::monedaIdDesdeCodigoAnita($compra['com_cod_mon'] ?? 1);
         $cotizacionAnita = (float) ($compra['com_cotizacion'] ?? 1);
-        $cotizacion = ($monedaId <= 1) ? 1.0 : ($cotizacionAnita > 0 ? $cotizacionAnita : 1.0);
+        $cotizacion = ComprobanteProveedorCotizacionSupport::cotizacionParaGrabar(
+            $monedaId,
+            $cotizacionAnita,
+            $fecha,
+        );
         $total = round((float) ($compra['com_monto'] ?? 0), 4);
         $vto = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($compra['com_fecha_prox_vto'] ?? '') ?: $fecha;
 

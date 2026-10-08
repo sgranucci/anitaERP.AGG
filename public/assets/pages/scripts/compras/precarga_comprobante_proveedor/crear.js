@@ -35,13 +35,8 @@
     }
 
     function sincronizarCotizacionPorMoneda(conservarValor) {
-        var mid = parseInt($('#moneda_id').val() || '1', 10) || 1;
         var $cot = $('#cotizacion');
         if (!$cot.length || $cot.prop('readonly')) {
-            return;
-        }
-        if (mid <= 1) {
-            $cot.val('1');
             return;
         }
         if (conservarValor === true) {
@@ -55,9 +50,6 @@
 
     function refrescarCotizacionDia(forzar) {
         var mid = parseInt($('#moneda_id').val() || '1', 10) || 1;
-        if (mid <= 1) {
-            return;
-        }
         var fecha = (($('#fechafactura').val() || '') + '').substring(0, 10);
         if (!fecha) {
             return;

@@ -1447,9 +1447,8 @@ class Comprobante_ProveedorController extends Controller
                 $data->cotizacion ?? null,
                 $cotPrecarga
             );
-            // Si no había cotización usable en ME, completar con la del día.
-            if (ComprobanteProveedorCotizacionSupport::esMonedaExtranjera($monedaCot)
-                && (float) ($data->cotizacion ?? 0) <= 1.0
+            // Sin cotización usable: en ME la del día de esa moneda; en pesos, el dólar del día.
+            if ((float) ($data->cotizacion ?? 0) <= 1.0
                 && (float) $cotizacionMeta['cotizacion'] > 1.0) {
                 $data->cotizacion = $cotizacionMeta['cotizacion'];
             }

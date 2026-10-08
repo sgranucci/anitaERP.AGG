@@ -3,20 +3,58 @@
 namespace App\Support\Compras;
 
 use App\Queries\Configuracion\CotizacionQueryInterface;
+use App\Support\Configuracion\CotizacionVigenteSupport;
 
 /**
  * Cotización de cabecera del comprobante proveedor.
  *
  * Default: cotización venta del día (fecha comprobante) para moneda extranjera.
- * Pesos (moneda id 1): siempre 1.
+ * Pesos: se graba la cotización del dólar de esa fecha (Anita la muestra en el mayor
+ * aunque el importe siga en pesos). La conversión de importes no la usa: el motor
+ * sigue tratando la moneda local con coeficiente 1.
  * Precarga: la cotización se pasa por ComprobanteProveedorCotizacionIngresoSupport
  * (deduce escala 1,51→1510 o toma la del día si no encaja).
  */
 class ComprobanteProveedorCotizacionSupport
 {
+    /** Misma referencia que CotizacionService::leeCotizacionDiaria cuando la moneda es pesos. */
+    public const MONEDA_DOLAR_ID = 2;
+
     public static function esMonedaExtranjera(int $monedaId): bool
     {
         return ProveedorCuentaContableMonedaSupport::esMonedaExtranjera($monedaId);
+    }
+
+    /**
+     * Dólar venta vigente a la fecha. 1 si todavía no hay ninguna cotización cargada.
+     */
+    public static function cotizacionDolarDelDia(?string $fechaYmd): float
+    {
+        $fecha = substr(trim((string) $fechaYmd), 0, 10);
+        if ($fecha === '') {
+            $fecha = date('Y-m-d');
+        }
+
+        $valor = CotizacionVigenteSupport::ventaValor($fecha, self::MONEDA_DOLAR_ID);
+
+        return $valor > ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA ? $valor : 1.0;
+    }
+
+    /**
+     * Valor a persistir en la COM. En pesos, 0 ó 1 se reemplaza por el dólar del día.
+     * Una cotización ya cargada (mayor que 1) se conserva.
+     */
+    public static function cotizacionParaGrabar(int $monedaId, mixed $cotizacion, ?string $fechaYmd): float
+    {
+        $cotizacion = (float) ($cotizacion ?? 0);
+        if (self::esMonedaExtranjera($monedaId)) {
+            return $cotizacion > 0 ? $cotizacion : 1.0;
+        }
+        if ($cotizacion > ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA) {
+            return $cotizacion;
+        }
+
+        return self::cotizacionDolarDelDia($fechaYmd);
     }
 
     public static function cotizacionVentaDelDia(
@@ -25,7 +63,7 @@ class ComprobanteProveedorCotizacionSupport
         int $monedaId,
     ): float {
         if (! self::esMonedaExtranjera($monedaId)) {
-            return 1.0;
+            return self::cotizacionDolarDelDia($fechaYmd);
         }
 
         return RequisicionTotalesCabecera::cotizacionVentaPorMonedaEnFecha(
@@ -45,10 +83,6 @@ class ComprobanteProveedorCotizacionSupport
         int $monedaId,
         mixed $cotizacionPrecarga,
     ): float {
-        if (! self::esMonedaExtranjera($monedaId)) {
-            return 1.0;
-        }
-
         $ingreso = ComprobanteProveedorCotizacionIngresoSupport::resolverParaFecha(
             $monedaId,
             $cotizacionPrecarga,
@@ -83,9 +117,14 @@ class ComprobanteProveedorCotizacionSupport
     ): array {
         $dia = self::cotizacionVentaDelDia($cotizacionQuery, $fechaComprobanteYmd, $monedaId);
         if (! self::esMonedaExtranjera($monedaId)) {
+            $actual = (float) ($cotizacionActual ?? 0);
+            $cotizacion = $actual > ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA
+                ? $actual
+                : ($dia > ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA ? $dia : 1.0);
+
             return [
-                'cotizacion' => 1.0,
-                'cotizacion_dia' => 1.0,
+                'cotizacion' => $cotizacion,
+                'cotizacion_dia' => $dia > 0 ? $dia : 1.0,
                 'cotizacion_origen' => 'mn',
                 'cotizacion_factura' => null,
             ];

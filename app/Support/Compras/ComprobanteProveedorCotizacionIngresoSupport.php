@@ -39,9 +39,10 @@ final class ComprobanteProveedorCotizacionIngresoSupport
      */
     public static function resolverParaFecha(int $monedaId, mixed $cotizacionRecibida, ?string $fechaYmd): array
     {
-        $dia = 0.0;
         if (ComprobanteProveedorCotizacionSupport::esMonedaExtranjera($monedaId)) {
             $dia = CotizacionVigenteSupport::ventaValor($fechaYmd, $monedaId);
+        } else {
+            $dia = ComprobanteProveedorCotizacionSupport::cotizacionDolarDelDia($fechaYmd);
         }
 
         return self::resolver($monedaId, $cotizacionRecibida, $dia);
@@ -63,7 +64,9 @@ final class ComprobanteProveedorCotizacionIngresoSupport
         $dia = $cotizacionDia > 0 ? $cotizacionDia : 0.0;
 
         if (! ComprobanteProveedorCotizacionSupport::esMonedaExtranjera($monedaId)) {
-            return self::resultado(1.0, $recibida, 1.0, 'mn', null, null);
+            $guardar = $dia > ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA ? $dia : 1.0;
+
+            return self::resultado($guardar, $recibida, $guardar, 'mn', null, null);
         }
 
         if ($dia <= ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA) {

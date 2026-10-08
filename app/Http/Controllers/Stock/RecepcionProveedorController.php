@@ -24,7 +24,7 @@ use App\Services\Compras\ContratoValidacionAbonoService;
 use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Compras\CircuitoComprasDocumentosRelacionadosSupport;
 use App\Support\Compras\OrdencompraDescuentoSupport;
-use App\Support\Compras\RequisicionTotalesCabecera;
+use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
 use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
@@ -439,7 +439,7 @@ class RecepcionProveedorController extends Controller
 
         $fecha = substr((string) $request->query('fecha'), 0, 10);
         $monedaId = (int) $request->query('moneda_id');
-        $cot = RequisicionTotalesCabecera::cotizacionVentaPorMonedaEnFecha(
+        $cot = ComprobanteProveedorCotizacionSupport::cotizacionVentaDelDia(
             $this->cotizacionQuery,
             $fecha,
             $monedaId

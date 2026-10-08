@@ -295,8 +295,16 @@ final class IngresoEgresoImputacionDiariaService
                 $nroAnita
             );
             $tes = $tesmov[$keyComp] ?? ['ars' => 0.0, 'lineas' => 0, 'encontrado' => false];
-            $tesmovArs = round((float) ($tes['ars'] ?? 0), 2);
             $tieneTesmov = ! empty($tes['encontrado']);
+            $tesoreriaArs = round($cajaArs + $chequesArs, 2);
+            $tesmovArs = $tieneTesmov
+                ? Ie::reconciliarTesmovEnPesos(
+                    (float) ($tes['ars'] ?? 0),
+                    $tesoreriaArs,
+                    $cotizacionesMov,
+                    $tolerancia,
+                )
+                : 0.0;
             $tienePagoAnita = ! empty($pagosAnita[$keyComp]);
 
             $nroAsiento = (int) ($asiento?->numeroasiento ?? 0);
