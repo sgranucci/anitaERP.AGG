@@ -4,6 +4,7 @@ namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Support\Anita\AnitaTextoSanitizer;
+use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Configuracion\MonedaAnitaCodigoSupport;
@@ -85,13 +86,26 @@ final class ComprobanteProveedorAnitaContext
     /**
      * Cotización de la factura. En moneda extranjera nunca vale 1: si el comprobante no la
      * trae se resuelve la vigente, para no grabar dólares con coeficiente de peso en Anita.
+     * En pesos se graba el dólar del día (el importe de la compra sigue en pesos).
      */
     public function cotizacion(): string
     {
+        $monedaId = (int) ($this->comprobante->moneda_id ?: 1);
+        $fecha = $this->comprobante->fechacomprobante?->format('Y-m-d');
+        if (! ComprobanteProveedorMonedaMotor::esMonedaExtranjera($monedaId)) {
+            $cotizacion = ComprobanteProveedorCotizacionSupport::cotizacionParaGrabar(
+                $monedaId,
+                $this->comprobante->cotizacion,
+                $fecha,
+            );
+
+            return number_format($cotizacion, 4, '.', '');
+        }
+
         $cotizacion = ComprobanteProveedorMonedaMotor::cotizacionValida(
-            (int) ($this->comprobante->moneda_id ?: 1),
+            $monedaId,
             $this->comprobante->cotizacion,
-            $this->comprobante->fechacomprobante?->format('Y-m-d'),
+            $fecha,
             'la factura del proveedor',
         );
 

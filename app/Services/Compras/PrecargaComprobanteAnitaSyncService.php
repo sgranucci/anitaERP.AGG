@@ -13,6 +13,7 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Support\Compras\AnitaSync\Precarga\PrecargaCabeceraAnitaMapper;
 use App\Support\Compras\AnitaSync\Precarga\PrecargaConceptoAnitaMapper;
 use App\Support\Compras\ComprobanteProveedorCotizacionIngresoSupport;
+use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use Illuminate\Database\Eloquent\Builder;
@@ -256,7 +257,12 @@ class PrecargaComprobanteAnitaSyncService
         }
         if ($monedaId <= 1) {
             $payload['moneda_id'] = $monedaId > 0 ? $monedaId : 1;
-            $payload['cotizacion'] = 1.0;
+            $fechaCot = (string) ($payload['fechafactura'] ?? $payload['fecha'] ?? $payload['fechacomprobante'] ?? '');
+            $payload['cotizacion'] = ComprobanteProveedorCotizacionSupport::cotizacionParaGrabar(
+                1,
+                $payload['cotizacion'],
+                $fechaCot,
+            );
             // Corrección manual a MN: limpia marcas de cotización heredadas de un TC erróneo.
             $marca = (string) ($payload['marca_error'] ?? '');
             if ($marca === ''

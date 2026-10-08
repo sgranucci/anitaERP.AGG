@@ -170,6 +170,31 @@ class IngresoEgresoImputacionDiariaSupportTest extends TestCase
         $this->assertSame(94510.7, $balance['total_haber']);
     }
 
+    public function test_tesmov_en_dolares_sin_codigo_de_moneda_se_pasa_a_pesos_si_cierra(): void
+    {
+        // Ferli no trae tesv_cod_mon: 7,49 USD × 1.415 = 10.598,35 de la caja.
+        $pesos = IngresoEgresoImputacionDiariaSupport::reconciliarTesmovEnPesos(
+            7.49,
+            10598.35,
+            [2 => 1415.0]
+        );
+        $this->assertSame(10598.35, $pesos);
+
+        $yaEnPesos = IngresoEgresoImputacionDiariaSupport::reconciliarTesmovEnPesos(
+            100000.0,
+            100000.0,
+            [2 => 1415.0]
+        );
+        $this->assertSame(100000.0, $yaEnPesos);
+
+        $desvioReal = IngresoEgresoImputacionDiariaSupport::reconciliarTesmovEnPesos(
+            400.0,
+            600.0,
+            [2 => 1415.0]
+        );
+        $this->assertSame(400.0, $desvioReal);
+    }
+
     public function test_egr_desvio_caja_asiento_y_tesmov(): void
     {
         $eval = IngresoEgresoImputacionDiariaSupport::evaluar(

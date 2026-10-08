@@ -35,6 +35,7 @@ use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
+use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
@@ -743,7 +744,11 @@ class ComprobanteProveedorPersistenciaService
             'subtotal' => MontoEsArSupport::parse($request->input('subtotal', 0)),
             'total' => MontoEsArSupport::parse($request->input('total', 0)),
             'moneda_id' => (int) $request->input('moneda_id', 1),
-            'cotizacion' => MontoEsArSupport::parse($request->input('cotizacion', 1)) ?: 1.0,
+            'cotizacion' => ComprobanteProveedorCotizacionSupport::cotizacionParaGrabar(
+                (int) $request->input('moneda_id', 1),
+                MontoEsArSupport::parse($request->input('cotizacion', 1)) ?: 1.0,
+                substr((string) $request->input('fechacomprobante'), 0, 10),
+            ),
             'numerocae' => $request->input('numerocae'),
             'tipo_autorizacion' => ComprobanteProveedorTipoAutorizacion::normalizar(
                 $request->input('tipo_autorizacion')

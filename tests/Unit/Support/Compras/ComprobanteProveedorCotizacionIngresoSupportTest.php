@@ -7,12 +7,21 @@ use PHPUnit\Framework\TestCase;
 
 class ComprobanteProveedorCotizacionIngresoSupportTest extends TestCase
 {
-    public function test_pesos_siempre_uno(): void
+    public function test_pesos_graba_la_cotizacion_del_dia(): void
     {
-        $r = ComprobanteProveedorCotizacionIngresoSupport::resolver(1, 1.51, 1510);
+        $r = ComprobanteProveedorCotizacionIngresoSupport::resolver(1, 1, 1510);
+
+        $this->assertSame(1510.0, $r['cotizacion']);
+        $this->assertSame(1510.0, $r['cotizacion_dia']);
+        $this->assertNull($r['marca_error']);
+        $this->assertSame('mn', $r['origen']);
+    }
+
+    public function test_pesos_sin_cotizacion_del_dia_queda_en_uno(): void
+    {
+        $r = ComprobanteProveedorCotizacionIngresoSupport::resolver(1, 1, 0);
 
         $this->assertSame(1.0, $r['cotizacion']);
-        $this->assertNull($r['marca_error']);
         $this->assertSame('mn', $r['origen']);
     }
 

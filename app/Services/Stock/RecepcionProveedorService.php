@@ -14,6 +14,7 @@ use App\Models\Stock\Recepcion_Proveedor_Articulo;
 use App\Models\Stock\Recepcion_Proveedor_Estado;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\OrdencompraLineaEstados;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
@@ -118,7 +119,10 @@ class RecepcionProveedorService
                 $this->resolverDepositoCabecera($data['deposito_id'] ?? null),
                 $tipo === Recepcion_Proveedor::TIPO_DEVOLUCION
             );
-            $items = $analisis['items'];
+            $items = $this->aplicarCotizacionParaGrabar(
+                $analisis['items'],
+                (string) ($data['fecha'] ?? '')
+            );
 
             $primerItem = $items[0] ?? null;
             $requiereImpuestoInterno = RecepcionProveedorImpuestoInternoSupport::itemsRequierenImpuestoInterno($items);
@@ -221,7 +225,10 @@ class RecepcionProveedorService
                 $this->resolverDepositoCabecera($data['deposito_id'] ?? null),
                 $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION
             );
-            $items = $analisis['items'];
+            $items = $this->aplicarCotizacionParaGrabar(
+                $analisis['items'],
+                (string) ($data['fecha'] ?? $recepcion->fecha?->format('Y-m-d') ?? '')
+            );
             $primerItem = $items[0] ?? null;
             $requiereImpuestoInterno = RecepcionProveedorImpuestoInternoSupport::itemsRequierenImpuestoInterno($items);
             $impuestoInterno = $this->resolverImpuestoInternoParaGuardar(
@@ -876,6 +883,29 @@ class RecepcionProveedorService
     }
 
     /** @param list<array<string, mixed>> $items */
+    /**
+     * Pesos: 0 ó 1 se reemplaza por el dólar del día. Una tasa ya cargada se conserva.
+     * No modifica cantidades ni precios.
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    private function aplicarCotizacionParaGrabar(array $items, string $fecha): array
+    {
+        foreach ($items as $i => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $items[$i]['cotizacion'] = ComprobanteProveedorCotizacionSupport::cotizacionParaGrabar(
+                (int) ($item['moneda_id'] ?? 1),
+                $item['cotizacion'] ?? 1,
+                $fecha
+            );
+        }
+
+        return $items;
+    }
+
     private function reemplazarItems(Recepcion_Proveedor $recepcion, array $items): void
     {
         Recepcion_Proveedor_Articulo::where('recepcion_proveedor_id', $recepcion->id)->delete();

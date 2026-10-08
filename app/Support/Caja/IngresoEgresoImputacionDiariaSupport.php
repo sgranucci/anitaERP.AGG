@@ -215,6 +215,43 @@ final class IngresoEgresoImputacionDiariaSupport
     }
 
     /**
+     * Ferli no guarda tesv_cod_mon: el importe queda en la moneda de la línea y, si la
+     * cotización no se aplicó, el control compara dólares contra la caja en pesos.
+     * Solo se reescala cuando el producto cierra con la tesorería; una cotización
+     * decorativa sobre un importe que ya está en pesos no entra.
+     *
+     * @param  array<int, float>  $cotizacionesPorMoneda
+     */
+    public static function reconciliarTesmovEnPesos(
+        float $tesmovArs,
+        float $tesoreriaArs,
+        array $cotizacionesPorMoneda,
+        float $tolerancia = self::TOLERANCIA,
+    ): float {
+        $tesmovArs = round($tesmovArs, 2);
+        $tesoreriaArs = round($tesoreriaArs, 2);
+        if (abs($tesmovArs - $tesoreriaArs) < $tolerancia) {
+            return $tesmovArs;
+        }
+
+        foreach ($cotizacionesPorMoneda as $monedaId => $cotizacion) {
+            if ((int) $monedaId <= 1) {
+                continue;
+            }
+            $cotizacion = (float) $cotizacion;
+            if ($cotizacion <= CotizacionVigenteSupport::COTIZACION_MINIMA_EXTRANJERA) {
+                continue;
+            }
+            $enPesos = round($tesmovArs * $cotizacion, 2);
+            if (abs($enPesos - $tesoreriaArs) < $tolerancia) {
+                return $enPesos;
+            }
+        }
+
+        return $tesmovArs;
+    }
+
+    /**
      * tesmov guarda el importe en la moneda del movimiento (tesv_cod_mon) y la cotización aparte.
      *
      * @param  object|array<string, mixed>  $fila

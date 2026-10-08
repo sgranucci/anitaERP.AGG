@@ -1539,7 +1539,7 @@
      * Cotización venta del día (cron BNA) por moneda y fecha de recepción.
      * Agrupa por moneda para minimizar requests.
      */
-    function refrescarCotizacionesDia(cb) {
+    function refrescarCotizacionesDia(cb, soloSiFalta) {
         if (window.recepcionProveedorSoloLectura || esModoDevolucion()) {
             if (typeof cb === 'function') {
                 cb();
@@ -1557,8 +1557,8 @@
         var porMoneda = {};
         itemsActuales.forEach(function (item, idx) {
             var mid = parseInt(item.moneda_id, 10) || 1;
-            if (mid <= 1) {
-                item.cotizacion = 1;
+            var cotActual = parseFloat(item.cotizacion);
+            if (soloSiFalta && cotActual > 1.0001) {
                 return;
             }
             if (!porMoneda[mid]) {
@@ -1635,8 +1635,7 @@
         }
         var mid = parseInt(item.moneda_id, 10) || 1;
         var fecha = fechaRecepcionForm();
-        if (!fecha || mid <= 1) {
-            item.cotizacion = 1;
+        if (!fecha) {
             sincronizarCotizacionDom(idx);
             actualizarTotalRecepcion();
             if (typeof cb === 'function') {
@@ -2415,6 +2414,7 @@
                 sincronizarEmpresaDesdeOc(data);
                 actualizarAvisoDescuentoOc(data.descuento_ordencompra);
                 renderItems(data.lineas);
+                refrescarCotizacionesDia(null, true);
                 actualizarBotonConsultarOc();
             })
             .fail(function (xhr) {
@@ -2752,6 +2752,7 @@
 
         if (window.recepcionProveedorItemsInicial && window.recepcionProveedorItemsInicial.length) {
             renderItems(window.recepcionProveedorItemsInicial);
+            refrescarCotizacionesDia(null, true);
         }
 
         if (window.recepcionProveedorOrdencompraIdInicial) {

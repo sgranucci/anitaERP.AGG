@@ -16,6 +16,7 @@ use App\Support\Compras\ComprobanteProveedorAsientoDescripcionSupport;
 use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Contable\CuentaCentrocostoAsignadosSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
+use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorCuentaDebeNetoSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorCupoNcLegajoSupport;
@@ -832,7 +833,7 @@ class ComprobanteProveedorAsientoService
             $payloadAsiento['centrocosto_ids'][] = $linea['centrocosto_id'] ?? $centrocostoId;
             $payloadAsiento['debes'][] = $linea['importe'];
             $payloadAsiento['haberes'][] = 0;
-            $payloadAsiento['cotizaciones'][] = $monedaFactura['cotizacion'];
+            $payloadAsiento['cotizaciones'][] = $this->cotizacionLineaAsiento($comprobante, $monedaFactura);
             $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
             $payloadAsiento['editable_cuentas'][] = ! empty($linea['editable_cuenta']);
             $payloadAsiento['editable_importes'][] = ! empty($linea['editable_importe']);
@@ -846,7 +847,7 @@ class ComprobanteProveedorAsientoService
             $payloadAsiento['centrocosto_ids'][] = $linea['centrocosto_id'] ?? $centrocostoId;
             $payloadAsiento['debes'][] = 0;
             $payloadAsiento['haberes'][] = $linea['importe'];
-            $payloadAsiento['cotizaciones'][] = $monedaFactura['cotizacion'];
+            $payloadAsiento['cotizaciones'][] = $this->cotizacionLineaAsiento($comprobante, $monedaFactura);
             $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
             $payloadAsiento['editable_cuentas'][] = ! empty($linea['editable_cuenta']);
             $payloadAsiento['editable_importes'][] = ! empty($linea['editable_importe']);
@@ -1242,6 +1243,26 @@ class ComprobanteProveedorAsientoService
         }
 
         return round($total, 2);
+    }
+
+    /**
+     * Cotización que se graba en cada línea del asiento (y de ahí en ctamov).
+     * En moneda extranjera es la de la factura. En pesos es el dólar del día:
+     * el importe de la línea ya está en pesos y no se multiplica por esta tasa.
+     *
+     * @param  array{moneda_id: int, cotizacion: float, fecha: string, nombre: string}  $monedaFactura
+     */
+    private function cotizacionLineaAsiento(Comprobante_Proveedor $comprobante, array $monedaFactura): float
+    {
+        if (ComprobanteProveedorMonedaMotor::esMonedaExtranjera($monedaFactura['moneda_id'])) {
+            return $monedaFactura['cotizacion'];
+        }
+
+        return ComprobanteProveedorCotizacionSupport::cotizacionParaGrabar(
+            $monedaFactura['moneda_id'],
+            $comprobante->cotizacion,
+            $monedaFactura['fecha'],
+        );
     }
 
     /**

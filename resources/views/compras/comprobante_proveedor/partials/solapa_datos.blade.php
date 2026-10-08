@@ -487,7 +487,7 @@
                             (campo usa la de factura/precarga)
                         @endif
                     @else
-                        Moneda local: cotización = 1
+                        Pesos: se graba la cotización del día (dólar): <strong id="cp-cotizacion-dia-valor">{{ number_format($cotDiaRef, 4, ',', '.') }}</strong>
                     @endif
                 </small>
                 <small id="cp-aviso-cotizacion-com" class="form-text text-muted">
