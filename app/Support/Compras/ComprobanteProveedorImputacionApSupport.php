@@ -184,6 +184,49 @@ final class ComprobanteProveedorImputacionApSupport
     }
 
     /**
+     * Haber de la cuenta cargada en el proveedor.
+     *
+     * Factura: solo el haber (monto negativo). Nota de crédito: solo el debe
+     * (monto positivo). Si el gasto está en la misma cuenta, ese lado no se netea:
+     * es la pierna de gasto, no la de la deuda.
+     *
+     * @param  list<array{cuentacontable_id:int, monto:float, moneda_id:int, cotizacion:mixed, fecha?:string|null}>  $movimientos
+     */
+    public static function haberEnCuentaProveedor(
+        array $movimientos,
+        int $cuentaProveedorId,
+        bool $esNotaCredito,
+        string $contexto,
+    ): float {
+        if ($cuentaProveedorId <= 0) {
+            return 0.0;
+        }
+
+        $suma = 0.0;
+        foreach ($movimientos as $mov) {
+            if ((int) ($mov['cuentacontable_id'] ?? 0) !== $cuentaProveedorId) {
+                continue;
+            }
+
+            $monto = (float) ($mov['monto'] ?? 0);
+            $esPiernaDeuda = $esNotaCredito ? $monto > 0 : $monto < 0;
+            if (! $esPiernaDeuda) {
+                continue;
+            }
+
+            $suma += self::haberNetoArs(
+                $monto,
+                (int) ($mov['moneda_id'] ?? 1),
+                $mov['cotizacion'] ?? 1,
+                $mov['fecha'] ?? null,
+                $contexto
+            );
+        }
+
+        return round($suma, 2);
+    }
+
+    /**
      * Haber neto en proveedores (MN+ME). La CC de un comprobante se compara con esto,
      * no con el trío: en factura anticipada el debe a anticipo cancela el haber a AP.
      *

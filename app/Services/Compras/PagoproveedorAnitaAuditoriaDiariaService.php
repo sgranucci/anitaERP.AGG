@@ -12,6 +12,7 @@ use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
 use App\Support\Caja\ChequePropioCpromaeAnitaMapper;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
+use App\Support\Compras\AnitaImport\ProveedorCuentacorrienteAnitaImportFormatoSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Compras\PagoproveedorAnitaAuditoriaCompareSupport as Compare;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
@@ -300,6 +301,8 @@ final class PagoproveedorAnitaAuditoriaDiariaService
 
         $letra = strtoupper(trim((string) ($pago->letra ?? '')));
         $sucursal = (int) ($pago->sucursal ?? 0);
+        $perfil = ProveedorCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $tieneEmpresa = ! empty($perfil['tiene_empresa']);
         $where = ' WHERE prov_proveedor = '.$this->escSql($proveedor)
             .' AND prov_tipo = '.$this->escSql($tipo)
             .' AND prov_sucursal = '.$sucursal
@@ -307,14 +310,19 @@ final class PagoproveedorAnitaAuditoriaDiariaService
         if ($letra !== '') {
             $where .= ' AND prov_letra = '.$this->escSql($letra);
         }
-        if ($empresaAnita > 0) {
+        if ($tieneEmpresa && $empresaAnita > 0) {
             $where .= ' AND prov_empresa = '.$empresaAnita;
         }
 
+        $campos = 'prov_tipo,prov_nro,prov_nro_cuota,prov_monto';
+        if ($tieneEmpresa) {
+            $campos .= ',prov_empresa';
+        }
+
         $lista = $this->listar(
-            (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
-            'promov',
-            'prov_tipo,prov_nro,prov_nro_cuota,prov_monto,prov_empresa',
+            (string) ($perfil['sistema'] ?? config('comprobante_proveedor.anita_sistema_compras', 'compras')),
+            (string) ($perfil['tabla_promov'] ?? 'promov'),
+            $campos,
             $where,
         );
         if ($lista['error'] !== null) {

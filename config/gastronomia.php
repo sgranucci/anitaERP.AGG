@@ -695,6 +695,7 @@ return [
     /**
      * Proceso automático de cierre Waitry (gastronomia:cierre-jornada-waitry-automatico).
      * Schedule diario escalonado por empresa (horas en el mismo orden que empresas_ids).
+     * En Ferli el schedule y el comando no corren aunque este flag quede en true.
      */
     'cierre_jornada_automatico' => [
         'habilitado' => filter_var(env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),

@@ -25,6 +25,7 @@ use App\Services\Caja\ChequeEcheqService;
 use App\Services\Caja\ChequeIngresoMasivoService;
 use App\Services\Caja\ChequeRechazadoNotaDebitoService;
 use App\Support\Caja\ChequeAgingListadoFiltros;
+use App\Support\Caja\ChequeAvisoRechazoSupport;
 use App\Support\Caja\ChequeCarteraAgingSupport;
 use App\Support\Caja\ChequeCarteraConsultaSupport;
 use App\Support\Caja\ChequeCashflowSemanalSupport;
@@ -637,6 +638,24 @@ class ChequeController extends Controller
     }
 
     /**
+     * PDF del aviso de cheque rechazado (el formulario que imprimía Anita).
+     */
+    public function avisoRechazo(int $id)
+    {
+        can('listar-cheque');
+
+        $cheque = $this->repository->findOrFail($id);
+        if (! ChequeAvisoRechazoSupport::estaRechazado($cheque)) {
+            abort(404, 'El cheque no está rechazado.');
+        }
+
+        $datos = ChequeAvisoRechazoSupport::armar($cheque);
+        $pdf = Pdf::loadView('caja.cheque.aviso_rechazo', $datos)->setPaper('a4', 'portrait');
+
+        return $pdf->stream($datos['archivo']);
+    }
+
+    /**
      * Aging cartera CHT.
      */
     public function agingCartera(Request $request)
@@ -1229,6 +1248,14 @@ class ChequeController extends Controller
             can('editar-cheque');
         }
         $data = $this->repository->findOrFail($id);
+        $data->loadMissing([
+            'clientes.localidades',
+            'clientes.condicionivas',
+            'cobranzas',
+            'ventaNd',
+            'cuentacajaDeposito',
+            'bancos',
+        ]);
 
         $cuentacaja_query = $this->cuentacajaRepository->all();
         $origen_enum = Cheque::$enumOrigen;

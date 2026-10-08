@@ -1,3 +1,6 @@
+@if (isset($data) && ($data->origen ?? '') === 'R')
+    @include('caja.cheque.partials.form_tercero')
+@else
 @include('includes.form-empresa-asignada', [
     'empresa_query' => $empresa_query ?? collect(),
     'empresa_id' => $data->empresa_id ?? session('empresa_id'),
@@ -167,3 +170,4 @@
 	<label for="fechatransaccioncaja" class="col-lg-3 col-form-label">Fecha</label>
 	<input type="date" name="fechatransaccioncaja" id="fechatransaccioncaja" class="form-control" value="{{old('fechatransaccioncaja', $data->caja_movimientos->fecha ?? '')}}"  readonly>
 </div>
+@endif

@@ -121,6 +121,15 @@ final class ComprobanteImpresionSesionUrlSupport
     /**
      * Path relativo seguro para volver al index (evita open redirect).
      */
+    /**
+     * Path de la pantalla actual, para que «Volver» de la sesión de impresión
+     * regrese a quien la llamó (cheque, listado, etc.) y no al index de facturas.
+     */
+    public static function retornoRequestActual(): string
+    {
+        return self::sanitizarRetornoPath((string) request()->getRequestUri());
+    }
+
     public static function sanitizarRetornoPath(string $retorno): string
     {
         $retorno = trim($retorno);

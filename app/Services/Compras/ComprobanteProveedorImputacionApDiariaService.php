@@ -146,8 +146,9 @@ final class ComprobanteProveedorImputacionApDiariaService
             'mail_destino' => null,
             'mail_error' => null,
             'notas' => [
-                'Cada factura compara la CC (cuotas) vs el haber a cuenta de proveedores del asiento vs el mismo en ctamov Anita.',
-                'Solo suma líneas de proveedores MN/ME (códigos de config) y anticipo; ignora gastos/IVA del asiento.',
+                'Cada factura compara la CC (cuotas) vs el haber de la cuenta cargada en el proveedor vs el mismo en ctamov Anita.',
+                'La cuenta sale del ABM del proveedor (cuenta contable, o m/e si la moneda de la operación es extranjera).',
+                'Si el gasto está en esa misma cuenta, no se netea contra el haber de la factura ni contra el debe de la nota de crédito.',
                 'No usa el saldo neto de CC: ignora aplicaciones/OPP posteriores; exige existencia e importe de la factura en CC.',
                 'Solo facturas de origen ERP (excluye importación desde Anita).',
                 'Los comprobantes de ingresos y egresos no tienen cuenta corriente: se comparan con el debe del asiento del movimiento. Su ctamov lo controla el mail de I/E.',
@@ -222,6 +223,8 @@ final class ComprobanteProveedorImputacionApDiariaService
                 'empresa_anita' => SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId),
                 'numeroasiento' => $nro,
                 'fecha' => (string) ($fila['fecha'] ?? ''),
+                'codigo_cuenta' => (int) ($fila['cuenta_proveedor_codigo'] ?? 0),
+                'es_nota_credito' => ! empty($fila['es_nota_credito']),
             ];
         }
         $ctamovPorAsiento = $this->ctamov->sumarTrioPorAsiento($clavesCtamov, $catalogo);
@@ -317,6 +320,10 @@ final class ComprobanteProveedorImputacionApDiariaService
                 $ctamovAnticipoArs,
                 isset($fila['esperado_ars']) ? (float) $fila['esperado_ars'] : null,
             );
+            if ((int) ($fila['cuenta_proveedor_id'] ?? 0) <= 0) {
+                $eval['alertas'][] = 'Sin cuenta en el proveedor';
+                $eval['ok'] = false;
+            }
 
             $fila['cc_ars'] = $ccArs;
             $fila['asiento_ars'] = $asientoArs;

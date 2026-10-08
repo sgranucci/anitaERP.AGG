@@ -57,7 +57,7 @@ final class FacturaMostradorOtFerliSupport
             ->where(function ($w) use ($clienteId) {
                 $w->whereHas('pedidos', function ($p) use ($clienteId) {
                     $p->where('cliente_id', $clienteId);
-                })->orWhereHas('ordenestrabajo.ordentrabajo_combinacion_talles', function ($o) use ($clienteId) {
+                })->orWhereHas('pedido_combinacion_talles.pedidos_combinacion_ordenes', function ($o) use ($clienteId) {
                     $o->where('cliente_id', $clienteId);
                 });
             });
@@ -392,7 +392,14 @@ final class FacturaMostradorOtFerliSupport
         if ((int) ($pc->pedidos->cliente_id ?? 0) === $clienteId) {
             return true;
         }
+
+        // Boleta junta: el cliente va en los talles de esta combinación.
+        // No alcanza con que otra combinación de la misma OT sea de este cliente.
         foreach ($ot->ordentrabajo_combinacion_talles as $oct) {
+            $pct = $oct->pedido_combinacion_talles;
+            if (! $pct || (int) $pct->pedido_combinacion_id !== (int) $pc->id) {
+                continue;
+            }
             if ((int) ($oct->cliente_id ?? 0) === $clienteId) {
                 return true;
             }

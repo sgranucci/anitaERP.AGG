@@ -8,9 +8,9 @@ use App\Models\Configuracion\Empresa;
 /**
  * Catálogo de cuentas del trío AP MN / AP ME / anticipo.
  *
- * Solo suma lo imputado a cuenta de proveedores (códigos MN/ME de config,
- * por empresa) y anticipo. No toma las cuentas del maestro de proveedores:
- * ahí hay basura (gastos, MN metida en ME) que distorsiona el control.
+ * OPA, aplicaciones y el anticipo siguen estos códigos de config.
+ * El haber de un comprobante de proveedor no: usa la cuenta del ABM
+ * del proveedor (MN o m/e según la moneda de la operación).
  */
 final class ComprobanteProveedorImputacionApCuentasSupport
 {

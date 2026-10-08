@@ -3,6 +3,7 @@
 namespace App\Support\Caja;
 
 use App\ApiAnita;
+use App\Models\Caja\Cuentacaja;
 use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
 
 /**
@@ -10,6 +11,15 @@ use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
  */
 final class IngresoEgresoImputacionDiariaAnitaReader
 {
+    /** @var array<string, int>|null */
+    private ?array $monedaErpExacta = null;
+
+    /** @var array<string, int>|null */
+    private ?array $monedaErpImputacion = null;
+
+    /** @var array<string, int> cuenta normalizada → moneda; 0 = consultada y sin moneda */
+    private array $monedaResuelta = [];
+
     public function __construct(
         private readonly ApiAnita $api = new ApiAnita(),
     ) {}
@@ -43,21 +53,23 @@ final class IngresoEgresoImputacionDiariaAnitaReader
                 continue;
             }
             foreach (array_chunk($nros, 40) as $lote) {
-                foreach ($this->listar(
+                $filas = $this->listar(
                     IngresoEgresoAnitaTesmovSupport::sistema(),
                     'tesmov',
                     $this->camposTesmov('tesv_tipo,tesv_nro,tesv_cuenta'),
                     ' WHERE tesv_tipo = '.$this->esc($tipo)
                         .' AND tesv_nro IN ('.implode(',', $lote).')'
                         .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresa)
-                ) as $fila) {
+                );
+                $this->precargarMonedasCuenta($filas);
+                foreach ($filas as $fila) {
                     $nro = (int) ($fila->tesv_nro ?? 0);
                     $key = self::claveComprobante($empresa, $tipo, $nro);
                     if (! isset($out[$key])) {
                         continue;
                     }
                     $out[$key]['ars'] = round(
-                        $out[$key]['ars'] + IngresoEgresoImputacionDiariaSupport::tesmovImporteEnPesos($fila),
+                        $out[$key]['ars'] + $this->importeTesmovEnPesos($fila),
                         2
                     );
                     $out[$key]['lineas']++;
@@ -272,9 +284,11 @@ final class IngresoEgresoImputacionDiariaAnitaReader
                                 .' AND tesv_nro = '.(int) $leg['nro']
                                 .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresa)
                         );
-                        foreach (IngresoEgresoImputacionDiariaSupport::elegirFilasTesmovPierna($tes, (string) $leg['cuenta']) as $fila) {
+                        $piernas = IngresoEgresoImputacionDiariaSupport::elegirFilasTesmovPierna($tes, (string) $leg['cuenta']);
+                        $this->precargarMonedasCuenta($piernas);
+                        foreach ($piernas as $fila) {
                             $out[$key]['ars'] = round(
-                                $out[$key]['ars'] + IngresoEgresoImputacionDiariaSupport::tesmovImporteEnPesos($fila),
+                                $out[$key]['ars'] + $this->importeTesmovEnPesos($fila),
                                 2
                             );
                             $out[$key]['lineas']++;
@@ -287,23 +301,138 @@ final class IngresoEgresoImputacionDiariaAnitaReader
             $directo = $this->listar(
                 IngresoEgresoAnitaTesmovSupport::sistema(),
                 'tesmov',
-                $this->camposTesmov('tesv_tipo,tesv_nro'),
+                $this->camposTesmov('tesv_tipo,tesv_nro,tesv_cuenta'),
                 " WHERE tesv_tipo = 'TRA' AND tesv_nro IN (".implode(',', $lote).')'
                     .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresa)
             );
+            $this->precargarMonedasCuenta($directo);
             foreach ($directo as $fila) {
                 $key = self::claveComprobante($empresa, 'TRA', (int) ($fila->tesv_nro ?? 0));
                 if (! isset($out[$key]) || $out[$key]['encontrado']) {
                     continue;
                 }
                 $out[$key]['ars'] = round(
-                    $out[$key]['ars'] + IngresoEgresoImputacionDiariaSupport::tesmovImporteEnPesos($fila),
+                    $out[$key]['ars'] + $this->importeTesmovEnPesos($fila),
                     2
                 );
                 $out[$key]['lineas']++;
                 $out[$key]['encontrado'] = true;
             }
         }
+    }
+
+    /**
+     * @param  list<object|array<string, mixed>>  $filas
+     */
+    private function importeTesmovEnPesos(object|array $fila): float
+    {
+        $cuenta = is_array($fila)
+            ? (string) ($fila['tesv_cuenta'] ?? '')
+            : (string) ($fila->tesv_cuenta ?? '');
+        $norm = IngresoEgresoImputacionDiariaSupport::normalizarCuentaTesmov($cuenta);
+        $moneda = $norm !== '' ? ($this->monedaResuelta[$norm] ?? 0) : 0;
+
+        return IngresoEgresoImputacionDiariaSupport::tesmovImporteEnPesos(
+            $fila,
+            $moneda > 0 ? $moneda : null,
+        );
+    }
+
+    /**
+     * Moneda de cada tesv_cuenta: cuentacaja del ERP y, si no está, tesmae.tesm_cod_mon.
+     *
+     * @param  list<object|array<string, mixed>>  $filas
+     */
+    private function precargarMonedasCuenta(array $filas): void
+    {
+        $pendientes = [];
+        foreach ($filas as $fila) {
+            $cuenta = is_array($fila)
+                ? (string) ($fila['tesv_cuenta'] ?? '')
+                : (string) ($fila->tesv_cuenta ?? '');
+            $norm = IngresoEgresoImputacionDiariaSupport::normalizarCuentaTesmov($cuenta);
+            if ($norm === '' || array_key_exists($norm, $this->monedaResuelta)) {
+                continue;
+            }
+            $pendientes[$norm] = true;
+        }
+        if ($pendientes === []) {
+            return;
+        }
+
+        $this->cargarMapaMonedaErp();
+        $faltanTesmae = [];
+        foreach (array_keys($pendientes) as $norm) {
+            $id = IngresoEgresoImputacionDiariaSupport::monedaCuentaEnMapas(
+                $norm,
+                $this->monedaErpExacta ?? [],
+                $this->monedaErpImputacion ?? [],
+            );
+            if ($id !== null) {
+                $this->monedaResuelta[$norm] = $id;
+            } else {
+                $faltanTesmae[] = $norm;
+            }
+        }
+
+        foreach (array_chunk($faltanTesmae, 40) as $lote) {
+            $lista = implode(',', array_map(fn (string $cuenta) => $this->esc($cuenta), $lote));
+            foreach ($this->listar(
+                IngresoEgresoAnitaTesmovSupport::sistema(),
+                'tesmae',
+                'tesm_cuenta,tesm_cod_mon',
+                ' WHERE tesm_cuenta IN ('.$lista.')'
+            ) as $fila) {
+                $norm = IngresoEgresoImputacionDiariaSupport::normalizarCuentaTesmov((string) ($fila->tesm_cuenta ?? ''));
+                $cod = trim((string) ($fila->tesm_cod_mon ?? ''));
+                if ($norm === '' || $cod === '' || ! ctype_digit($cod) || (int) $cod <= 0) {
+                    continue;
+                }
+                $this->monedaResuelta[$norm] = (int) $cod;
+            }
+        }
+
+        foreach ($faltanTesmae as $norm) {
+            if (! array_key_exists($norm, $this->monedaResuelta)) {
+                $this->monedaResuelta[$norm] = 0;
+            }
+        }
+    }
+
+    private function cargarMapaMonedaErp(): void
+    {
+        if ($this->monedaErpExacta !== null) {
+            return;
+        }
+
+        $exacta = [];
+        $conteoImputacion = [];
+        $imputacion = [];
+        foreach (Cuentacaja::query()->get(['codigo', 'moneda_id']) as $cuenta) {
+            $moneda = (int) ($cuenta->moneda_id ?? 0);
+            $codigo = (string) ($cuenta->codigo ?? '');
+            if ($moneda <= 0 || trim($codigo) === '') {
+                continue;
+            }
+            $norm = IngresoEgresoImputacionDiariaSupport::normalizarCuentaTesmov($codigo);
+            if ($norm !== '') {
+                $exacta[$norm] = $moneda;
+            }
+            $imp = IngresoEgresoImputacionDiariaSupport::claveImputacionCuenta($codigo);
+            if ($imp === '') {
+                continue;
+            }
+            $conteoImputacion[$imp] = ($conteoImputacion[$imp] ?? 0) + 1;
+            $imputacion[$imp] = $moneda;
+        }
+        foreach ($conteoImputacion as $imp => $cantidad) {
+            if ($cantidad !== 1) {
+                unset($imputacion[$imp]);
+            }
+        }
+
+        $this->monedaErpExacta = $exacta;
+        $this->monedaErpImputacion = $imputacion;
     }
 
     private function camposTesmov(string $extra): string

@@ -21,7 +21,11 @@ final class ComprobanteProveedorImputacionApCtamovSupport
     ) {}
 
     /**
-     * @param  list<array{empresa_anita:int, numeroasiento:int, fecha:?string}>  $claves
+     * Cada clave puede traer `codigo_cuenta` (cuenta del ABM del proveedor) y
+     * `es_nota_credito`. En ese caso el haber de proveedores es solo esa cuenta
+     * y solo el lado de la deuda (H en factura, D en nota de crédito).
+     *
+     * @param  list<array{empresa_anita:int, numeroasiento:int, fecha:?string, codigo_cuenta?:int, es_nota_credito?:bool}>  $claves
      * @param  array{codigo_mn?: array<int, true>, codigo_me?: array<int, true>, codigo_anticipo?: array<int, true>}  $catalogo
      * @return array<string, array{trio: float, ap: float, anticipo: float, lineas: int, encontrado: bool}>
      */
@@ -29,6 +33,8 @@ final class ComprobanteProveedorImputacionApCtamovSupport
     {
         $out = [];
         $porEmpresa = [];
+        $modoPorClave = [];
+        $codigosExtra = [];
         foreach ($claves as $clave) {
             $empresa = (int) ($clave['empresa_anita'] ?? 0);
             $nro = (int) ($clave['numeroasiento'] ?? 0);
@@ -38,9 +44,21 @@ final class ComprobanteProveedorImputacionApCtamovSupport
             $key = self::clave($empresa, $nro);
             $out[$key] = ['trio' => 0.0, 'ap' => 0.0, 'anticipo' => 0.0, 'lineas' => 0, 'encontrado' => false];
             $porEmpresa[$empresa][$nro] = (string) ($clave['fecha'] ?? '');
+            $codigoCuenta = (int) ($clave['codigo_cuenta'] ?? 0);
+            if ($codigoCuenta > 0) {
+                $modoPorClave[$key] = [
+                    'codigo' => $codigoCuenta,
+                    'lado' => ! empty($clave['es_nota_credito']) ? 'D' : 'H',
+                ];
+                $codigosExtra[$codigoCuenta] = true;
+            }
         }
 
         $codigosAp = ComprobanteProveedorImputacionApCuentasSupport::codigosAp($catalogo);
+        foreach (array_keys($codigosExtra) as $codigo) {
+            $codigosAp[] = (int) $codigo;
+        }
+        $codigosAp = array_values(array_unique(array_filter($codigosAp, static fn (int $c) => $c > 0)));
         if ($codigosAp === [] || $porEmpresa === []) {
             return $out;
         }
@@ -61,9 +79,20 @@ final class ComprobanteProveedorImputacionApCtamovSupport
                     }
 
                     $cuenta = (int) $imputacion['cuenta'];
-                    $cubeta = ComprobanteProveedorImputacionApSupport::clasificarCodigo($cuenta, $catalogo);
-                    if ($cubeta === null) {
-                        continue;
+                    $modo = $modoPorClave[$key] ?? null;
+                    if ($modo !== null && $cuenta === (int) $modo['codigo']) {
+                        if ((string) $imputacion['dh'] !== (string) $modo['lado']) {
+                            continue;
+                        }
+                        $cubeta = ComprobanteProveedorImputacionApSupport::CUBETA_MN;
+                    } else {
+                        $cubeta = ComprobanteProveedorImputacionApSupport::clasificarCodigo($cuenta, $catalogo);
+                        if ($cubeta === null) {
+                            continue;
+                        }
+                        if ($modo !== null && $cubeta !== ComprobanteProveedorImputacionApSupport::CUBETA_ANTICIPO) {
+                            continue;
+                        }
                     }
 
                     $dhData = AnitaSubdiarioMayorSupport::debeHaberDesdeDh(

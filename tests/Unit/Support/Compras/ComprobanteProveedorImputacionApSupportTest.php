@@ -301,6 +301,41 @@ class ComprobanteProveedorImputacionApSupportTest extends TestCase
         $this->assertTrue($eval['ok']);
     }
 
+    public function test_haber_de_la_cuenta_del_proveedor_no_netea_el_gasto_en_la_misma_cuenta(): void
+    {
+        $movimientos = [
+            ['cuentacontable_id' => 516, 'monto' => 211764.71, 'moneda_id' => 1, 'cotizacion' => 1, 'fecha' => '2026-10-02'],
+            ['cuentacontable_id' => 114, 'monto' => 22235.29, 'moneda_id' => 1, 'cotizacion' => 1, 'fecha' => '2026-10-02'],
+            ['cuentacontable_id' => 516, 'monto' => -234211.76, 'moneda_id' => 1, 'cotizacion' => 1, 'fecha' => '2026-10-02'],
+        ];
+
+        $haber = ComprobanteProveedorImputacionApSupport::haberEnCuentaProveedor(
+            $movimientos,
+            516,
+            false,
+            'factura misma cuenta'
+        );
+
+        $this->assertSame(234211.76, $haber);
+    }
+
+    public function test_nota_credito_toma_el_debe_de_la_cuenta_del_proveedor(): void
+    {
+        $movimientos = [
+            ['cuentacontable_id' => 80, 'monto' => 500.0, 'moneda_id' => 1, 'cotizacion' => 1, 'fecha' => '2026-10-02'],
+            ['cuentacontable_id' => 80, 'monto' => -400.0, 'moneda_id' => 1, 'cotizacion' => 1, 'fecha' => '2026-10-02'],
+        ];
+
+        $haber = ComprobanteProveedorImputacionApSupport::haberEnCuentaProveedor(
+            $movimientos,
+            80,
+            true,
+            'nc misma cuenta'
+        );
+
+        $this->assertSame(-500.0, $haber);
+    }
+
     public function test_borrador_no_cuenta_como_desvio(): void
     {
         $partes = ComprobanteProveedorImputacionApSupport::particionarControlDiario([

@@ -93,6 +93,40 @@ class IngresoEgresoImputacionDiariaSupportTest extends TestCase
         );
     }
 
+    public function test_tra_pierna_con_barra_o_guion_matchea_imputacion_de_auxpag(): void
+    {
+        $frances = (object) ['tesv_cuenta' => '000625-9', 'tesv_importe' => 14800000];
+        $nacion = (object) ['tesv_cuenta' => '050563/5', 'tesv_importe' => 14800000];
+        $efectivo = (object) ['tesv_cuenta' => '00104/82', 'tesv_importe' => 878400];
+
+        $this->assertSame(
+            [$frances],
+            IngresoEgresoImputacionDiariaSupport::elegirFilasTesmovPierna([$frances, $nacion], '00006259')
+        );
+        $this->assertSame(
+            [$nacion],
+            IngresoEgresoImputacionDiariaSupport::elegirFilasTesmovPierna([$frances, $nacion], '00505635')
+        );
+        $this->assertSame(
+            [$efectivo],
+            IngresoEgresoImputacionDiariaSupport::elegirFilasTesmovPierna([$efectivo, $frances], '00010482')
+        );
+        $this->assertSame(
+            [],
+            IngresoEgresoImputacionDiariaSupport::elegirFilasTesmovPierna([$frances], '00000024')
+        );
+    }
+
+    public function test_moneda_de_la_cuenta_cruza_codigo_con_guion_contra_el_erp(): void
+    {
+        $exactas = ['00000024' => 2];
+        $porImputacion = ['00006259' => 1];
+
+        $this->assertSame(2, IngresoEgresoImputacionDiariaSupport::monedaCuentaEnMapas('00000024', $exactas, $porImputacion));
+        $this->assertSame(1, IngresoEgresoImputacionDiariaSupport::monedaCuentaEnMapas('000625-9', $exactas, $porImputacion));
+        $this->assertNull(IngresoEgresoImputacionDiariaSupport::monedaCuentaEnMapas('050563/5', $exactas, $porImputacion));
+    }
+
     public function test_tra_cuadra_con_maximo_de_piernas(): void
     {
         $eval = IngresoEgresoImputacionDiariaSupport::evaluar(
@@ -146,6 +180,24 @@ class IngresoEgresoImputacionDiariaSupportTest extends TestCase
             'tesv_cotizacion' => 1490,
         ]);
         $this->assertSame(94510.7, $tesmov);
+
+        // Ferli no trae tesv_cod_mon: la moneda es la de la cuenta (tesmae / cuentacaja).
+        $sinCodigo = IngresoEgresoImputacionDiariaSupport::tesmovImporteEnPesos((object) [
+            'tesv_importe' => 7.49,
+            'tesv_cuenta' => '00000024',
+            'tesv_cotizacion' => 1415,
+        ], 2);
+        $this->assertSame(10598.35, $sinCodigo);
+        $cuentaEnPesos = IngresoEgresoImputacionDiariaSupport::tesmovImporteEnPesos((object) [
+            'tesv_importe' => 7.49,
+            'tesv_cotizacion' => 1415,
+        ], 1);
+        $this->assertSame(7.49, $cuentaEnPesos);
+        $pesos = IngresoEgresoImputacionDiariaSupport::tesmovImporteEnPesos((object) [
+            'tesv_importe' => 1000,
+            'tesv_cotizacion' => 1,
+        ]);
+        $this->assertSame(1000.0, $pesos);
 
         $ctamov = IngresoEgresoImputacionDiariaSupport::totalesCtamovEnPesos([
             (object) ['ctav_d_h' => 'H', 'ctav_importe' => 63.43, 'ctav_cod_mon' => '2', 'ctav_cotizacion' => 1490],

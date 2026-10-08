@@ -44,7 +44,7 @@
                 <span class="badge badge-success">Acr</span>
             @endif
             @if (! empty($data->venta_nd_id))
-                <a href="{{ route('lista_una_factura', ['id' => $data->venta_nd_id]) }}"
+                <a href="{{ route('lista_una_factura', array_filter(['id' => $data->venta_nd_id, 'retorno' => $retornoImpresionNd ?? ''])) }}"
                    class="badge badge-danger text-white"
                    target="_blank"
                    rel="noopener"

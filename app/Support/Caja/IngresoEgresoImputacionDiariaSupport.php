@@ -69,9 +69,12 @@ final class IngresoEgresoImputacionDiariaSupport
     /**
      * Elige el tesmov de una pierna TRA.
      * La cuenta numérica (Macro 127 → 00000127) coincide con auxpag.
+     * auxpag guarda la imputación (solo dígitos: 625-9 → 00006259, 50563/5 → 00505635)
+     * y tesmov conserva el código (000625-9, 050563/5). Si no hay coincidencia
+     * exacta, se cruza por esos dígitos.
      * Una cuenta alfanumérica (GMEP) queda en tesmov como 0000GMEP y en auxpag
      * como 00000000, porque la imputación descarta las letras. Si no hay
-     * coincidencia exacta y auxpag no tiene dígitos, se toma esa pierna.
+     * coincidencia y auxpag no tiene dígitos, se toma esa pierna.
      *
      * @param  list<object|array<string, mixed>>  $filas
      * @return list<object|array<string, mixed>>
@@ -92,8 +95,18 @@ final class IngresoEgresoImputacionDiariaSupport
         if ($exactas !== []) {
             return $exactas;
         }
-        if (! self::cuentaSinImputacionNumerica($cuenta)) {
-            return [];
+
+        $imputacion = self::imputacionNumericaCuenta($cuenta);
+        if ($imputacion !== '') {
+            $porImputacion = [];
+            foreach ($filas as $fila) {
+                $tes = self::cuentaDeFilaTesmov($fila);
+                if ($tes !== '' && self::imputacionNumericaCuenta($tes) === $imputacion) {
+                    $porImputacion[] = $fila;
+                }
+            }
+
+            return $porImputacion;
         }
 
         $alfanumericas = [];
@@ -119,9 +132,22 @@ final class IngresoEgresoImputacionDiariaSupport
 
     private static function cuentaSinImputacionNumerica(string $cuenta): bool
     {
-        $digits = preg_replace('/\D+/', '', $cuenta) ?? '';
+        return self::imputacionNumericaCuenta($cuenta) === '';
+    }
 
-        return ltrim($digits, '0') === '';
+    /**
+     * Misma clave que auxpag.axp_banco: solo dígitos, sin ceros a la izquierda, en 8.
+     * Vacío si el código no tiene dígitos (GMEP → auxpag 00000000).
+     */
+    private static function imputacionNumericaCuenta(string $cuenta): string
+    {
+        $digits = preg_replace('/\D+/', '', $cuenta) ?? '';
+        $digits = ltrim($digits, '0');
+        if ($digits === '') {
+            return '';
+        }
+
+        return str_pad($digits, 8, '0', STR_PAD_LEFT);
     }
 
     private static function cuentaDeFilaTesmov(object|array $fila): string
@@ -252,14 +278,56 @@ final class IngresoEgresoImputacionDiariaSupport
     }
 
     /**
-     * tesmov guarda el importe en la moneda del movimiento (tesv_cod_mon) y la cotización aparte.
+     * Clave de imputación (solo dígitos, 8) para cruzar tesmov con la cuenta de caja.
+     * 000625-9 y 625-9 comparten 00006259.
+     */
+    public static function claveImputacionCuenta(string $cuenta): string
+    {
+        return self::imputacionNumericaCuenta(self::normalizarCuentaTesmov($cuenta));
+    }
+
+    /**
+     * Moneda de la cuenta de la pierna. Primero el código tal cual; si no, la imputación
+     * numérica (códigos con barra o guion).
+     *
+     * @param  array<string, int|string>  $exactas
+     * @param  array<string, int|string>  $porImputacion
+     */
+    public static function monedaCuentaEnMapas(string $cuenta, array $exactas, array $porImputacion): ?int
+    {
+        $norm = self::normalizarCuentaTesmov($cuenta);
+        if ($norm === '') {
+            return null;
+        }
+        if (isset($exactas[$norm]) && (int) $exactas[$norm] > 0) {
+            return (int) $exactas[$norm];
+        }
+        $imp = self::imputacionNumericaCuenta($norm);
+        if ($imp !== '' && isset($porImputacion[$imp]) && (int) $porImputacion[$imp] > 0) {
+            return (int) $porImputacion[$imp];
+        }
+
+        return null;
+    }
+
+    /**
+     * tesmov se graba en la moneda de la cuenta de caja (no se mezclan monedas).
+     * AGG trae tesv_cod_mon. Ferli no: la moneda sale de tesmae o de cuentacaja.
+     * Una cotización alta sobre una cuenta en pesos no convierte el importe.
      *
      * @param  object|array<string, mixed>  $fila
      */
-    public static function tesmovImporteEnPesos(object|array $fila): float
+    public static function tesmovImporteEnPesos(object|array $fila, int|string|null $monedaCuenta = null): float
     {
         $row = is_array($fila) ? $fila : get_object_vars($fila);
-        $moneda = (int) MonedaAnitaCodigoSupport::normalizar($row['tesv_cod_mon'] ?? 1);
+        $codMon = $row['tesv_cod_mon'] ?? null;
+        if ($codMon !== null && $codMon !== '') {
+            $moneda = (int) MonedaAnitaCodigoSupport::normalizar($codMon);
+        } elseif ($monedaCuenta !== null && $monedaCuenta !== '' && (int) $monedaCuenta > 0) {
+            $moneda = (int) MonedaAnitaCodigoSupport::normalizar($monedaCuenta);
+        } else {
+            $moneda = 1;
+        }
 
         return abs(self::aPesos(
             (float) ($row['tesv_importe'] ?? 0),

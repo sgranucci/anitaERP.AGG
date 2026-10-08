@@ -7,6 +7,7 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
+use App\Models\Contable\Cuentacontable;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorImputacionApCuentasSupport;
@@ -175,6 +176,11 @@ class ComprobanteProveedorImputacionApReporteService
         $asientos = $this->cargarAsientos(
             $comprobantes->pluck('asiento_id')->filter(fn ($id) => (int) $id > 0)->map(fn ($id) => (int) $id)->unique()->values()->all()
         );
+        $cuentaIdPorComprobante = [];
+        foreach ($comprobantes as $compCuenta) {
+            $cuentaIdPorComprobante[(int) $compCuenta->id] = ProveedorCuentaContableMonedaSupport::cuentaProveedorDesdeComprobante($compCuenta);
+        }
+        $codigosCuenta = $this->codigosCuentaProveedor(array_values($cuentaIdPorComprobante));
 
         $filas = [];
         foreach ($comprobantes as $comp) {
@@ -196,7 +202,7 @@ class ComprobanteProveedorImputacionApReporteService
                 $contexto
             );
 
-            $cuentaEsperadaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorDesdeComprobante($comp);
+            $cuentaEsperadaId = (int) ($cuentaIdPorComprobante[(int) $comp->id] ?? 0);
             $cubetaEsperada = ComprobanteProveedorImputacionApCuentasSupport::cubetaEsperadaComprobante(
                 $cuentaEsperadaId,
                 $catalogo
@@ -214,11 +220,35 @@ class ComprobanteProveedorImputacionApReporteService
             $rechazado = $asiento !== null
                 && ($asiento->estado_aprobacion ?? '') === Asiento::ESTADO_APROBACION_RECHAZADO;
 
-            $imputado = ComprobanteProveedorImputacionApSupport::imputacionTrio(
-                $this->movimientosDeAsiento($asiento, $fecha),
+            $movimientos = $this->movimientosDeAsiento($asiento, $fecha);
+            $imputadoCatalogo = ComprobanteProveedorImputacionApSupport::imputacionTrio(
+                $movimientos,
                 $catalogo,
                 $contexto
             );
+            $haberCuenta = ComprobanteProveedorImputacionApSupport::haberEnCuentaProveedor(
+                $movimientos,
+                $cuentaEsperadaId,
+                $esNc,
+                $contexto
+            );
+            $esMe = ProveedorCuentaContableMonedaSupport::esMonedaExtranjera(
+                ProveedorCuentaContableMonedaSupport::monedaIdParaCuentaProveedor($comp)
+            );
+            $apMn = $esMe ? 0.0 : $haberCuenta;
+            $apMe = $esMe ? $haberCuenta : 0.0;
+            $anticipo = (float) $imputadoCatalogo['anticipo'];
+            if ($cuentaEsperadaId > 0 && isset($catalogo['anticipo'][$cuentaEsperadaId])) {
+                $anticipo = 0.0;
+            }
+            $imputado = [
+                'ap_mn' => $apMn,
+                'ap_me' => $apMe,
+                'anticipo' => $anticipo,
+                'ap' => $haberCuenta,
+                'trio' => round($haberCuenta + $anticipo, 2),
+                'cubeta' => ComprobanteProveedorImputacionApSupport::cubetaDesdeImportes($apMn, $apMe, $anticipo),
+            ];
             $eval = ComprobanteProveedorImputacionApSupport::evaluar(
                 $esperado,
                 ComprobanteProveedorImputacionApSupport::haberAp($imputado),
@@ -258,6 +288,14 @@ class ComprobanteProveedorImputacionApReporteService
             );
             $fila['origen_entrada'] = (string) ($comp->origen_entrada ?? '');
             $fila['caja_movimiento_id'] = (int) ($comp->caja_movimiento_id ?? 0);
+            $fila['es_nota_credito'] = $esNc;
+            $fila['cuenta_proveedor_id'] = $cuentaEsperadaId;
+            $fila['cuenta_proveedor_codigo'] = (int) ($codigosCuenta[$cuentaEsperadaId] ?? 0);
+            if ($cuentaEsperadaId <= 0) {
+                $fila['alertas'][] = 'Sin cuenta en el proveedor';
+                $fila['ok'] = false;
+                $fila['alertas_texto'] = implode(' · ', $fila['alertas']);
+            }
             $filas[] = $fila;
         }
 
@@ -463,6 +501,31 @@ class ComprobanteProveedorImputacionApReporteService
         }
 
         return $filas;
+    }
+
+    /**
+     * @param  list<int>  $cuentaIds
+     * @return array<int, int> id de cuenta => código numérico
+     */
+    private function codigosCuentaProveedor(array $cuentaIds): array
+    {
+        $cuentaIds = array_values(array_unique(array_filter(
+            array_map('intval', $cuentaIds),
+            static fn (int $id) => $id > 0
+        )));
+        if ($cuentaIds === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach (Cuentacontable::query()->whereIn('id', $cuentaIds)->pluck('codigo', 'id') as $id => $codigo) {
+            $normalizado = (int) ComprobanteProveedorImputacionApCuentasSupport::normalizarCodigo((string) $codigo);
+            if ($normalizado > 0) {
+                $out[(int) $id] = $normalizado;
+            }
+        }
+
+        return $out;
     }
 
     /**

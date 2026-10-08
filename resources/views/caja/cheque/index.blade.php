@@ -119,6 +119,7 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
 @section('contenido')
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $retornoImpresionNd = \App\Support\Ventas\ComprobanteImpresionSesionUrlSupport::retornoRequestActual();
     $limpiarUrl = route('cheque', ChequeListadoFiltros::paraQueryStringExternos($filtros ?? []));
     $ordenActual = $filtros['orden'] ?? 'fechapago';
     $ordenDir = $filtros['orden_dir'] ?? 'desc';
@@ -335,7 +336,7 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                             @foreach ($columnasVisibles as $keyColumna)
                             @include('caja.cheque.partials.workbench_th', ['key' => $keyColumna])
                             @endforeach
-                            <th style="width:6rem;" data-orderable="false"></th>
+                            <th class="text-nowrap" style="width:1%;" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -372,6 +373,8 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                                 && (trim((string) ($data->nro_caucion ?? '')) === '' || trim((string) ($data->nro_caucion ?? '')) === '0');
                             $estaCaucionado = trim((string) ($data->nro_caucion ?? '')) !== ''
                                 && trim((string) ($data->nro_caucion ?? '')) !== '0';
+                            $estaRechazado = (string) ($data->estado ?? '') === 'R'
+                                || ! empty($data->fecha_rechazo);
                         @endphp
                         <tr>
                             @if (($puede_depositar_cheque ?? false) || ($puede_caucionar_cheque ?? false))
@@ -387,7 +390,7 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                             @foreach ($columnasVisibles as $keyColumna)
                             @include('caja.cheque.partials.workbench_celda', ['key' => $keyColumna])
                             @endforeach
-                            <td>
+                            <td class="text-nowrap">
                        			@if (can('editar-cheque', false))
                                 	<a href="{{route('editar_cheque', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
@@ -437,6 +440,22 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                                             data-cheque-id="{{ $data->id }}">
                                         <i class="fa fa-ban text-danger"></i>
                                     </button>
+                                @endif
+                                @if ($estaRechazado)
+                                    <a href="{{ route('aviso_rechazo_cheque', ['id' => $data->id]) }}"
+                                       class="btn-accion-tabla tooltipsC"
+                                       title="Aviso de rechazo (PDF)"
+                                       target="_blank" rel="noopener">
+                                        <i class="fa fa-file-text-o text-danger"></i>
+                                    </a>
+                                @endif
+                                @if (! empty($data->venta_nd_id))
+                                    <a href="{{ route('lista_una_factura_pdf', array_filter(['id' => $data->venta_nd_id, 'retorno' => $retornoImpresionNd])) }}"
+                                       class="btn-accion-tabla tooltipsC"
+                                       title="Imprimir nota de débito"
+                                       target="_blank" rel="noopener">
+                                        <i class="fa fa-print text-primary"></i>
+                                    </a>
                                 @endif
                        			@if (can('borrar-cheque', false))
                                 <form action="{{route('eliminar_cheque', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">

@@ -6,6 +6,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\JornadaGastronomia;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
@@ -34,6 +35,8 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
      */
     public function ejecutarTodasEmpresas(bool $enviarMail = true): array
     {
+        $this->assertEntornoPermiteCierreAutomatico();
+
         $informe = [
             'ejecutado_en' => now()->toIso8601String(),
             'empresas' => [],
@@ -83,6 +86,8 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
      */
     public function ejecutarEmpresa(int $empresaId, ?string $fechaJornada = null): array
     {
+        $this->assertEntornoPermiteCierreAutomatico();
+
         if (! $this->procesoService->habilitado()) {
             throw new InvalidArgumentException('El proceso de cierre Waitry no está habilitado en este entorno.');
         }
@@ -112,6 +117,8 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
      */
     public function ejecutarJornada(JornadaGastronomia $jornada, ?string $empresaNombre = null): array
     {
+        $this->assertEntornoPermiteCierreAutomatico();
+
         $this->asegurarUsuarioSistema();
         $this->prepararEntorno();
 
@@ -300,6 +307,13 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
         }
 
         return CierreJornadaProcesoAutomaticoSupport::jornadaPendienteMasReciente($empresaId);
+    }
+
+    private function assertEntornoPermiteCierreAutomatico(): void
+    {
+        if (EntornoEmpresaSupport::esFerli()) {
+            throw new InvalidArgumentException('El cierre de jornada Waitry está desconectado en Ferli.');
+        }
     }
 
     private function snapshotDeJornada(int $jornadaId): ?GastronomiaCierreJornadaProcesoSnapshot

@@ -34,13 +34,16 @@ class Kernel extends ConsoleKernel
             ->runInBackground()
             ->withoutOverlapping(30);
 
-        $schedule->command('interbanking:persistir-saldos-diarios')->daily()->at('07:15');
+        $schedule->command('interbanking:persistir-saldos-diarios')
+            ->daily()->at('07:15')
+            ->when(fn () => ! EntornoEmpresaSupport::esFerli());
 
         $diasMovimientos = max(1, min(60, (int) config('interbanking.movimientos_sync_dias_ventana', 14)));
         $schedule->command('interbanking:persistir-movimientos', ['--dias' => $diasMovimientos])
             ->dailyAt('07:30')
             ->runInBackground()
-            ->withoutOverlapping(120);
+            ->withoutOverlapping(120)
+            ->when(fn () => ! EntornoEmpresaSupport::esFerli());
 
         $schedule->command('interbanking:persistir-transferencias', ['--dias' => 14])
             ->hourly()
@@ -183,7 +186,8 @@ class Kernel extends ConsoleKernel
 
         $schedule->command('arca:solicitar-caea-quincenal')
             ->dailyAt('06:30')
-            ->when(fn () => config('arca.caea.pedido_automatico', true));
+            ->when(fn () => ! EntornoEmpresaSupport::esFerli()
+                && config('arca.caea.pedido_automatico', true));
 
         $schedule->command('arca:avisar-vencimiento-certificados')
             ->dailyAt((string) config('arca.certificado_aviso.hora', '08:10'))
@@ -368,7 +372,8 @@ class Kernel extends ConsoleKernel
             ->dailyAt((string) config('rendicion_gastronomia_anita.auditoria_diaria.hora', '07:00'))
             ->withoutOverlapping(180)
             ->appendOutputTo(storage_path('logs/rendicion-gastronomia-auditoria-schedule.log'))
-            ->when(fn () => (bool) config('rendicion_gastronomia_anita.auditoria_diaria.habilitada', true));
+            ->when(fn () => ! EntornoEmpresaSupport::esFerli()
+                && (bool) config('rendicion_gastronomia_anita.auditoria_diaria.habilitada', true));
 
         $ventanaAuditoriaCom = max(1, (int) config('recepcion_proveedor.auditoria_asientos_com_diaria.ventana_dias', 7));
         $schedule->command('recepcion-proveedor:auditoria-asientos-com', [
@@ -461,7 +466,8 @@ class Kernel extends ConsoleKernel
             ->dailyAt((string) config('rendicion_estacionamiento_anita.auditoria_diaria.hora', '07:30'))
             ->runInBackground()
             ->withoutOverlapping(120)
-            ->when(fn () => (bool) config('rendicion_estacionamiento_anita.auditoria_diaria.habilitada', false));
+            ->when(fn () => ! EntornoEmpresaSupport::esFerli()
+                && (bool) config('rendicion_estacionamiento_anita.auditoria_diaria.habilitada', false));
 
         $schedule->command('gastronomia:conciliacion-diaria-reporte', [
             '--fecha-desde' => Carbon::yesterday()->toDateString(),
@@ -485,7 +491,8 @@ class Kernel extends ConsoleKernel
             ->dailyAt((string) config('gastronomia.regenerar_z_desde_proceso.hora', '07:45'))
             ->withoutOverlapping(120)
             ->appendOutputTo(storage_path('logs/regenerar-z-desde-proceso-schedule.log'))
-            ->when(fn () => (bool) config('gastronomia.regenerar_z_desde_proceso.habilitado', true));
+            ->when(fn () => ! EntornoEmpresaSupport::esFerli()
+                && (bool) config('gastronomia.regenerar_z_desde_proceso.habilitado', true));
 
         // Auditoría mensual por medio de cobro (Z ↔ contabilizado, ERP sin ctamov): mes a la fecha, mail diario.
         // fecha-hasta = hoy − dias_atras (default 2): a las 09:15 el día de ayer aún no tiene asiento cerrado.
@@ -513,7 +520,8 @@ class Kernel extends ConsoleKernel
                 ->runInBackground()
                 ->withoutOverlapping(240)
                 ->appendOutputTo(storage_path('logs/cierre-jornada-waitry-automatico-schedule.log'))
-                ->when(fn () => (bool) config('gastronomia.cierre_jornada_automatico.habilitado', false));
+                ->when(fn () => ! EntornoEmpresaSupport::esFerli()
+                    && (bool) config('gastronomia.cierre_jornada_automatico.habilitado', false));
         }
 
         $schedule->command('waitry:reintentar-sync-status-pos', ['--limite' => 50])
@@ -558,7 +566,8 @@ class Kernel extends ConsoleKernel
             ->runInBackground()
             ->withoutOverlapping(240)
             ->appendOutputTo(storage_path('logs/costo-mensual-catalogo-schedule.log'))
-            ->when(fn () => (bool) config('gastronomia.costo_mensual_catalogo.habilitado', true));
+            ->when(fn () => ! EntornoEmpresaSupport::esFerli()
+                && (bool) config('gastronomia.costo_mensual_catalogo.habilitado', true));
 
         // Cierre de mes: última pasada del costo catálogo (lista 5000+mes) tras la jornada.
         $schedule->command('gastronomia:actualizar-costo-mensual-catalogo')
@@ -584,7 +593,7 @@ class Kernel extends ConsoleKernel
         }
         foreach ($horariosCuotasSp as $horaCuotaSp) {
             $horaCuotaSp = trim((string) $horaCuotaSp);
-            if ($horaCuotaSp === '') {
+            if ($horaCuotaSp === '' || (EntornoEmpresaSupport::esFerli() && $horaCuotaSp === '08:00')) {
                 continue;
             }
             $schedule->command('solicitudpago:generar-cuotas')

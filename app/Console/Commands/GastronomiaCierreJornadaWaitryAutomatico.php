@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\Ventas\Gastronomia\GastronomiaCierreJornadaProcesoAutomaticoService;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -20,6 +21,13 @@ class GastronomiaCierreJornadaWaitryAutomatico extends Command
     {
         @ini_set('memory_limit', (string) config('gastronomia.cierre_jornada_proceso_memory_limit', '1024M'));
         @set_time_limit(0);
+
+        if (EntornoEmpresaSupport::esFerli()) {
+            $this->warn('El cierre de jornada Waitry está desconectado en Ferli.');
+            Log::info('gastronomia.cierre_jornada_automatico.omitido_ferli');
+
+            return self::SUCCESS;
+        }
 
         $enviarMail = ! (bool) $this->option('sin-mail');
         if ((bool) $this->option('enviar-mail')) {
