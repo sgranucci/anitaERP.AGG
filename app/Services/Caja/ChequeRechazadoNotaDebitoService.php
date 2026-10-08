@@ -22,6 +22,7 @@ final class ChequeRechazadoNotaDebitoService
 {
     public function __construct(
         private readonly FacturacionService $facturacionService,
+        private readonly ChequeRechazadoDeudaProveedorService $deudaProveedorService,
     ) {}
 
     public function esElegible(Cheque $cheque): bool
@@ -228,12 +229,18 @@ final class ChequeRechazadoNotaDebitoService
 
         $anitaOk = ChequeTerceroRechazoAnitaSupport::marcarRechazo($cheque, $fechaNd);
 
+        $deudaProveedor = null;
+        if ($ventaNd instanceof Venta && (int) ($cheque->proveedor_id ?? 0) > 0) {
+            $deudaProveedor = $this->deudaProveedorService->generarSiCorresponde($cheque, $ventaNd);
+        }
+
         return [
             'venta_nd_id' => $ventaNdId,
             'codigo_nd' => $codigoNd,
             'cheque_id' => (int) $cheque->id,
             'importe' => $importe,
             'anita_ok' => $anitaOk,
+            'deuda_proveedor' => $deudaProveedor,
         ];
     }
 

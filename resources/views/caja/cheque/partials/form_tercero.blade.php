@@ -284,12 +284,24 @@
                         </div>
                     @endif
                     @if (! empty($data->venta_nd_id))
-                        <div class="form-group row mb-0">
+                        <div class="form-group row{{ empty($data->comprobante_proveedor_id) ? ' mb-0' : '' }}">
                             <label class="col-5 col-form-label text-right pr-2">Nota de d&eacute;bito</label>
                             <div class="col-7 d-flex align-items-center">
                                 <a href="{{ route('lista_una_factura_pdf', array_filter(['id' => $data->venta_nd_id, 'retorno' => $retornoImpresionNd ?? ''])) }}"
                                    class="text-primary pe-auto" target="_blank" rel="noopener">
                                     {{ $data->ventaNd->codigo ?? ('#'.$data->venta_nd_id) }}
+                                </a>
+                            </div>
+                        </div>
+                    @endif
+                    @if (! empty($data->comprobante_proveedor_id))
+                        <div class="form-group row mb-0">
+                            <label class="col-5 col-form-label text-right pr-2">Deuda proveedor</label>
+                            <div class="col-7 d-flex align-items-center">
+                                <a href="{{ route('editar_comprobante_proveedor', ['id' => $data->comprobante_proveedor_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                   class="text-primary pe-auto" target="_blank" rel="noopener">
+                                    {{ ($data->comprobanteProveedorRechazo->tipotransaccion_compras->abreviatura ?? 'NDR') }}
+                                    {{ $data->comprobanteProveedorRechazo->letra }}-{{ $data->comprobanteProveedorRechazo->sucursal }}-{{ $data->comprobanteProveedorRechazo->numerocomprobante }}
                                 </a>
                             </div>
                         </div>

@@ -10,6 +10,7 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Configuracion\Tipodocumento;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Banco;
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Proveedor;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Venta;
@@ -25,7 +26,7 @@ class Cheque extends Model implements Auditable
             'empresa_id', 'caja_id', 'caja_movimiento_id', 
             'cobranza_id', 'pagoproveedor_id', 'cheque_reemplaza_id',
             'numerocheque', 'nro_interno_anita', 'nro_echeq', 'moneda_id', 'monto', 'cotizacion', 'proveedor_id', 'cliente_id',
-            'venta_nd_id', 'fecha_rechazo', 'motivo_rechazo',
+            'venta_nd_id', 'comprobante_proveedor_id', 'fecha_rechazo', 'motivo_rechazo',
             'fecha_deposito', 'cuentacaja_deposito_id', 'nro_boleta_deposito', 'fecha_acreditacion', 'asiento_acreditacion_id',
             'nro_caucion', 'fecha_caucion',
             'tipodocumento_id', 'numerodocumento', 'entregado', 'anombrede', 'estadocheque_banco_id', 
@@ -107,6 +108,11 @@ class Cheque extends Model implements Auditable
     public function ventaNd()
     {
         return $this->belongsTo(Venta::class, 'venta_nd_id');
+    }
+
+    public function comprobanteProveedorRechazo()
+    {
+        return $this->belongsTo(Comprobante_Proveedor::class, 'comprobante_proveedor_id');
     }
 
     public function asientoAcreditacion()

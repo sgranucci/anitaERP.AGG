@@ -1253,6 +1253,7 @@ class ChequeController extends Controller
             'clientes.condicionivas',
             'cobranzas',
             'ventaNd',
+            'comprobanteProveedorRechazo.tipotransaccion_compras',
             'cuentacajaDeposito',
             'bancos',
         ]);

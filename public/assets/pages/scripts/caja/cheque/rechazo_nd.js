@@ -330,6 +330,13 @@
             if (data.anita_ok === false) {
                 msg += ' (Anita no actualizado; revisar log).';
             }
+            var deuda = data.deuda_proveedor;
+            if (deuda && deuda.codigo) {
+                msg += ' Deuda en ' + (deuda.proveedor || 'el proveedor') + ': ' + deuda.codigo;
+                if (deuda.error) {
+                    msg += ' (no se pudo contabilizar: ' + deuda.error + ')';
+                }
+            }
             $('#modalRechazoNdCheque').one('hidden.bs.modal', function () {
                 setTimeout(function () {
                     alert(msg);
