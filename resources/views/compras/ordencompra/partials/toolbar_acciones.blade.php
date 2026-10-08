@@ -28,7 +28,7 @@
             <i class="fas fa-file-pdf"></i> Apaisado
         </a>
         <button type="button"
-                class="btn btn-outline-info btn-sm mr-1 js-circuito-documentos-relacionados"
+                class="btn btn-outline-light btn-sm mr-1 js-circuito-documentos-relacionados"
                 title="Documentos relacionados (RQ, COM, factura, OP)"
                 data-url="{{ route('ordencompra_documentos_relacionados', ['id' => $data->id]) }}"
                 data-numero="OC {{ $data->numeroordencompra }}">
