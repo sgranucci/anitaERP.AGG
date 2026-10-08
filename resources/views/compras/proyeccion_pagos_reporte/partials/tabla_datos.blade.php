@@ -102,8 +102,9 @@
         if (in_array($clave, ['concepto', 'detalle_concepto'], true) && (int) ($fila['conceptogasto_id'] ?? 0) > 0) {
             $origenes = [
                 'pago' => 'Concepto del movimiento de caja del pago',
-                'cuenta' => 'Concepto de la cuenta contable imputada en el comprobante',
-                'asiento' => 'Concepto de la cuenta de mayor importe del asiento',
+                'comprobante' => 'Concepto de cash flow del comprobante',
+                'cuenta' => 'Concepto de la cuenta de gasto imputada en el comprobante',
+                'asiento' => 'Concepto de la cuenta de gasto del asiento',
                 'proveedor' => 'Concepto por defecto del proveedor',
             ];
             $titulo = $origenes[$fila['concepto_origen'] ?? ''] ?? '';

@@ -78,7 +78,7 @@ final class ProyeccionPagosColumnasSupport
             self::col('detalle_item', 'Detalle ítem comprado', self::GRUPO_APROBACION, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 30, anchoPdf: 6),
             self::col('empresa', 'Empr.', self::GRUPO_PROVEEDOR, self::TIPO_TEXTO, anchoExcel: 20, anchoPdf: 5),
             self::col('concepto', 'N.Con.', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 9, anchoPdf: 2.2, ayuda: 'Código del concepto de cash flow (Anita concoper) con enlace al ABM.'),
-            self::col('detalle_concepto', 'Detalle del concepto', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 26, anchoPdf: 5.4, ayuda: 'Concepto de cash flow: del pago, de la cuenta contable imputada o el asignado al proveedor.'),
+            self::col('detalle_concepto', 'Detalle del concepto', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 26, anchoPdf: 5.4, ayuda: 'Concepto de cash flow: del pago, del comprobante, de la cuenta de gasto o el asignado al proveedor. El concepto IVA no se usa.'),
             self::col('leyenda', 'Leyenda', self::GRUPO_APROBACION, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 28, anchoPdf: 5.6),
             self::col('cuenta_concepto', 'Cuenta cash flow', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 30, anchoPdf: 6, ayuda: 'Cuenta contable que aporta el concepto de cash flow.'),
         ];

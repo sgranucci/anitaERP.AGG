@@ -260,9 +260,10 @@ class ProyeccionPagosReporteService
     /**
      * Concepto de cash flow de cada movimiento (Anita `concoper`).
      *
-     * Cadena de resolución: concepto del pago (movimiento de caja) → cuenta imputada
-     * en la línea del comprobante → cuenta de mayor importe del asiento → concepto
-     * por defecto del proveedor.
+     * Cadena de resolución: concepto del pago (movimiento de caja) → concepto del
+     * comprobante → cuenta de gasto imputada → cuenta de gasto del asiento →
+     * concepto por defecto del proveedor. El concepto «IVA» (IVA crédito y pasivo)
+     * no clasifica el cash flow y se saltea.
      *
      * @param  Collection<int, object>  $deuda
      * @param  Collection<int, object>  $adelantos
@@ -285,6 +286,7 @@ class ProyeccionPagosReporteService
             $comprobanteIds[] = (int) ($row->comprobante_proveedor_id ?? 0);
             $cuentaIds[] = (int) ($row->concepto_cuenta_id ?? 0);
             $conceptoIds[] = (int) ($row->pago_conceptogasto_id ?? 0);
+            $conceptoIds[] = (int) ($row->comprobante_conceptogasto_id ?? 0);
             $conceptoIds[] = (int) ($row->proveedor_conceptogasto_id ?? 0);
         }
 
@@ -302,18 +304,17 @@ class ProyeccionPagosReporteService
             }
 
             $pagoConcepto = (int) ($row->pago_conceptogasto_id ?? 0);
+            $comprobanteConcepto = (int) ($row->comprobante_conceptogasto_id ?? 0);
             $cuentaId = (int) ($row->concepto_cuenta_id ?? 0);
             $asientoId = (int) ($row->asiento_id ?? 0);
             $comprobanteId = (int) ($row->comprobante_proveedor_id ?? 0);
             $proveedorConcepto = (int) ($row->proveedor_conceptogasto_id ?? 0);
 
-            if ($pagoConcepto > 0 && isset($nombres[$pagoConcepto])) {
-                $conceptos[$clave] = $this->conceptoSinCuenta(
-                    $pagoConcepto,
-                    $nombres[$pagoConcepto],
-                    ConceptoCashflowResolverSupport::ORIGEN_PAGO,
-                );
+            if ($this->asignarConceptoDirecto($conceptos, $clave, $pagoConcepto, $nombres, ConceptoCashflowResolverSupport::ORIGEN_PAGO)) {
+                continue;
+            }
 
+            if ($this->asignarConceptoDirecto($conceptos, $clave, $comprobanteConcepto, $nombres, ConceptoCashflowResolverSupport::ORIGEN_COMPROBANTE)) {
                 continue;
             }
 
@@ -332,16 +333,28 @@ class ProyeccionPagosReporteService
                 continue;
             }
 
-            if ($proveedorConcepto > 0 && isset($nombres[$proveedorConcepto])) {
-                $conceptos[$clave] = $this->conceptoSinCuenta(
-                    $proveedorConcepto,
-                    $nombres[$proveedorConcepto],
-                    ConceptoCashflowResolverSupport::ORIGEN_PROVEEDOR,
-                );
-            }
+            $this->asignarConceptoDirecto($conceptos, $clave, $proveedorConcepto, $nombres, ConceptoCashflowResolverSupport::ORIGEN_PROVEEDOR);
         }
 
         return $conceptos;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $conceptos
+     * @param  array<int, string>  $nombres
+     */
+    private function asignarConceptoDirecto(array &$conceptos, int $clave, int $conceptoId, array $nombres, string $origen): bool
+    {
+        if ($conceptoId <= 0 || ! isset($nombres[$conceptoId])) {
+            return false;
+        }
+        if (ConceptoCashflowResolverSupport::nombreEsConceptoIva($nombres[$conceptoId])) {
+            return false;
+        }
+
+        $conceptos[$clave] = $this->conceptoSinCuenta($conceptoId, $nombres[$conceptoId], $origen);
+
+        return true;
     }
 
     /**
@@ -482,6 +495,7 @@ class ProyeccionPagosReporteService
                 DB::raw(SqlDialectSupport::coalesce('reap.autorizante_nombre', 'arb.autorizante_nombre').' as autorizante_requisicion'),
                 DB::raw(SqlDialectSupport::coalesce('art.descripcion', 'oai.detalle').' as detalle_item'),
                 'comp.asiento_id as asiento_id',
+                'comp.conceptogasto_id as comprobante_conceptogasto_id',
                 'cpc.cuentacontabledebe_id as concepto_cuenta_id',
             ]);
 

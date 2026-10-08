@@ -318,9 +318,10 @@ return [
                 'headers' => ['Prioridad', 'Origen'],
                 'rows' => [
                     ['1', 'Concepto del movimiento de caja del pago'],
-                    ['2', 'Cuenta imputada en la línea del comprobante'],
-                    ['3', 'Cuenta de mayor peso del asiento (prioriza resultados sobre pasivo)'],
-                    ['4', 'Concepto por defecto del proveedor'],
+                    ['2', 'Concepto de cash flow cargado en el comprobante'],
+                    ['3', 'Cuenta de gasto imputada (no IVA crédito ni pasivo)'],
+                    ['4', 'Cuenta de gasto del asiento (prioriza resultados; ignora IVA y pasivo)'],
+                    ['5', 'Concepto por defecto del proveedor'],
                 ],
             ],
             'parrafos2' => [
