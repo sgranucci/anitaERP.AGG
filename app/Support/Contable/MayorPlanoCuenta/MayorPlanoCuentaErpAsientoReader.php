@@ -193,20 +193,7 @@ final class MayorPlanoCuentaErpAsientoReader
             $origen = $origenPersistido !== '' ? $origenPersistido : $comprobante['origen'];
             $esDetalleImportado = AsientoAnitaMetadatosSupport::esDetalle($origen);
 
-            $claveGrupo = $esDetalleImportado
-                ? implode('|', [
-                    $rowAsientoId,
-                    (int) $row->cuentacontable_id,
-                    (int) ($row->moneda_id ?? 0),
-                    (int) ($row->centrocosto_id ?? 0),
-                    $monto >= 0 ? 'D' : 'H',
-                    strtoupper(trim((string) ($row->mov_anita_tipo ?? ''))),
-                    trim((string) ($row->mov_anita_letra ?? '')),
-                    (int) ($row->mov_anita_sucursal ?? 0),
-                    (int) ($row->mov_anita_nro ?? 0),
-                    (int) ($row->mov_nro_ordencompra ?? 0),
-                ])
-                : 'mov|'.(int) $row->mov_id;
+            $claveGrupo = $this->claveAgrupacionMovimiento($row, $rowAsientoId, $monto, $esDetalleImportado);
             if (! isset($gruposAsiento[$claveGrupo])) {
                 $gruposAsiento[$claveGrupo] = [
                     'row' => $row,
@@ -281,11 +268,10 @@ final class MayorPlanoCuentaErpAsientoReader
     }
 
     /**
-     * Solo el detalle importado de subdiario/subhist se resume como Anita: por
-     * asiento, cuenta, moneda y centro de costo. Los asientos contables nativos
-     * conservan cada renglón, porque observaciones distintas pueden expresar una
-     * discriminación deliberada. Debe y Haber permanecen como piernas separadas
-     * para no alterar los totales brutos del balance de sumas y saldos.
+     * Dentro de cada asiento, los renglones de la misma cuenta, moneda, centro de
+     * costo y cotización se suman en una línea del mayor. Debe y Haber quedan en
+     * piernas distintas. Una observación distinta, u otro comprobante u orden de
+     * compra en el renglón, no se mezcla: eso es una discriminación del asiento.
      *
      * @param  array<string, array{row: object, cuenta: int, monto: float, observacion: string}>  $grupos
      * @param  list<object>  $ctamov
@@ -364,6 +350,37 @@ final class MayorPlanoCuentaErpAsientoReader
             }
             $ctamov[] = $filaCtamov;
         }
+    }
+
+    /**
+     * Clave de suma dentro del asiento. En asientos nativos la cotización entra
+     * en la clave para que Mon. Ref. siga saliendo con la tasa de esas líneas.
+     * El detalle importado conserva la clave anterior (sin cotización ni texto).
+     */
+    private function claveAgrupacionMovimiento(object $row, int $asientoId, float $monto, bool $esDetalleImportado): string
+    {
+        $partes = [
+            $asientoId,
+            (int) $row->cuentacontable_id,
+            (int) ($row->moneda_id ?? 0),
+            (int) ($row->centrocosto_id ?? 0),
+            $monto >= 0 ? 'D' : 'H',
+        ];
+        if (! $esDetalleImportado) {
+            $partes[] = number_format(round((float) ($row->cotizacion ?? 0), 6), 6, '.', '');
+        }
+        $partes[] = strtoupper(trim((string) ($row->mov_anita_tipo ?? '')));
+        $partes[] = trim((string) ($row->mov_anita_letra ?? ''));
+        $partes[] = (int) ($row->mov_anita_sucursal ?? 0);
+        $partes[] = (int) ($row->mov_anita_nro ?? 0);
+        $partes[] = (int) ($row->mov_nro_ordencompra ?? 0);
+        if (! $esDetalleImportado) {
+            $observacion = preg_replace('/\s+/', ' ', trim((string) ($row->mov_obs ?? ''))) ?? '';
+            $partes[] = (int) ($row->mov_comprobante_proveedor_id ?? 0);
+            $partes[] = $observacion;
+        }
+
+        return implode('|', $partes);
     }
 
     /**
