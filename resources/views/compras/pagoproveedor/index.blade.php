@@ -202,7 +202,7 @@
                                         @if (can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false))
                                             <button type="button"
                                                 class="btn-accion-tabla tooltipsC js-op-enviar-proveedor text-success"
-                                                title="Enviar OP por email"
+                                                title="{{ $fila->mailEnviado ? 'Ver o reenviar el correo' : 'Enviar OP por email' }}"
                                                 data-pagoproveedor-id="{{ $fila->id }}">
                                                 <i class="fa fa-envelope"></i>
                                             </button>

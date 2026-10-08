@@ -19,6 +19,25 @@
                     </p>
                     <div id="op-envio-proveedor-aviso" class="alert alert-info small d-none" role="alert"></div>
                     <div id="op-envio-proveedor-advertencia" class="alert alert-warning small d-none" role="alert"></div>
+                    <div id="op-envio-historial" class="d-none mb-3">
+                        <label class="d-block">Correos ya enviados de esta OP</label>
+                        <div class="table-responsive" style="max-height: 220px; overflow: auto;">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead style="background:#85C1E9;color:#17202A;">
+                                    <tr>
+                                        <th style="width: 130px;">Fecha</th>
+                                        <th style="width: 140px;">Envió</th>
+                                        <th>Destinatarios</th>
+                                        <th>Mensaje</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="op-envio-historial-body"></tbody>
+                            </table>
+                        </div>
+                        <small class="form-text text-muted mb-0">
+                            Cada envío guarda a quién se mandó y el texto adicional. Un envío nuevo se escribe abajo.
+                        </small>
+                    </div>
                     <div class="form-group">
                         <label for="op_envio_proveedor_email">Email destino <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="op_envio_proveedor_email" maxlength="500"
@@ -33,6 +52,7 @@
                         <label for="op_envio_proveedor_mensaje">Mensaje adicional <span class="text-muted">(opcional)</span></label>
                         <textarea class="form-control" id="op_envio_proveedor_mensaje" rows="3" maxlength="4000"
                             placeholder="Texto que se incluirá en el cuerpo del mail"></textarea>
+                        <small class="form-text text-muted">Queda guardado con el correo para consultarlo después desde este botón.</small>
                     </div>
                     <div class="form-group mb-0">
                         <label>Archivos adjuntos <span class="text-muted">(opcional)</span></label>

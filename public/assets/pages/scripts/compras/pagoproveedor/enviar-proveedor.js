@@ -13,6 +13,8 @@
         $('#op-envio-proveedor-email-error').addClass('d-none').text('');
         $('#op_envio_proveedor_email').val('').removeClass('is-invalid');
         $('#op_envio_proveedor_mensaje').val('');
+        $('#op-envio-historial').addClass('d-none');
+        $('#op-envio-historial-body').empty();
         $('#op-envio-archivos-actuales').addClass('d-none').text('');
         resetFilasArchivo();
         $('#op_envio_proveedor_confirmar').addClass('d-none').prop('disabled', false);
@@ -123,6 +125,45 @@
         return files;
     }
 
+    function textoCelda(valor) {
+        return document.createTextNode(valor == null ? '' : String(valor));
+    }
+
+    function pintarHistorialEnvios(envios) {
+        var $body = $('#op-envio-historial-body');
+        $body.empty();
+        if (!envios || !envios.length) {
+            $('#op-envio-historial').addClass('d-none');
+            return;
+        }
+        envios.forEach(function (envio) {
+            var tr = document.createElement('tr');
+            ['fecha', 'usuario', 'destinatarios'].forEach(function (campo) {
+                var td = document.createElement('td');
+                td.appendChild(textoCelda(envio[campo]));
+                tr.appendChild(td);
+            });
+            var tdMensaje = document.createElement('td');
+            tdMensaje.style.whiteSpace = 'pre-wrap';
+            if (!envio.texto_guardado) {
+                var nota = document.createElement('span');
+                nota.className = 'text-muted';
+                nota.textContent = 'Envío anterior: el destinatario quedó en la historia y el texto adicional no.';
+                tdMensaje.appendChild(nota);
+            } else if (!$.trim(envio.mensaje || '')) {
+                var vacio = document.createElement('span');
+                vacio.className = 'text-muted';
+                vacio.textContent = 'Sin texto adicional';
+                tdMensaje.appendChild(vacio);
+            } else {
+                tdMensaje.appendChild(textoCelda(envio.mensaje));
+            }
+            tr.appendChild(tdMensaje);
+            $body.append(tr);
+        });
+        $('#op-envio-historial').removeClass('d-none');
+    }
+
     function abrirModalEnvioProveedor(pagoproveedorId) {
         if (!pagoproveedorId) {
             return;
@@ -142,6 +183,7 @@
                 return;
             }
             $('#op-envio-proveedor-form-wrap').removeClass('d-none');
+            pintarHistorialEnvios(data.envios || []);
             $('#op_envio_proveedor_email').val(data.email || '');
             if (data.mensaje) {
                 $('#op-envio-proveedor-aviso').removeClass('d-none').text(data.mensaje);

@@ -97,6 +97,11 @@ class Pagoproveedor extends Model implements Auditable
         return $this->hasMany(Pagoproveedor_Estado::class, 'pagoproveedor_id');
     }
 
+    public function pagoproveedor_correos()
+    {
+        return $this->hasMany(Pagoproveedor_Correo::class, 'pagoproveedor_id');
+    }
+
     public function pagoproveedor_archivos()
     {
         return $this->hasMany(Pagoproveedor_Archivo::class, 'pagoproveedor_id');

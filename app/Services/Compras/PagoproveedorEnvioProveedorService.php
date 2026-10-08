@@ -5,12 +5,14 @@ namespace App\Services\Compras;
 use App\Mail\Compras\PagoproveedorOrdenPago;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Archivo;
+use App\Models\Compras\Pagoproveedor_Correo;
 use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Compras\Proveedor;
 use App\Support\Compras\PagoproveedorArchivoSupport;
 use App\Support\Mail\EmailsMultiplesSupport;
 use Auth;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
 class PagoproveedorEnvioProveedorService
@@ -29,7 +31,8 @@ class PagoproveedorEnvioProveedorService
      *     estado: string,
      *     advertencia_estado: string|null,
      *     mensaje: string|null,
-     *     archivos_asociados: int
+     *     archivos_asociados: int,
+     *     envios: list<array{fecha: string, usuario: string, destinatarios: string, mensaje: string, texto_guardado: bool}>
      * }
      */
     public function datosEnvio(int $pagoproveedorId): array
@@ -50,6 +53,7 @@ class PagoproveedorEnvioProveedorService
                 'advertencia_estado' => null,
                 'mensaje' => 'La orden de pago no existe.',
                 'archivos_asociados' => 0,
+                'envios' => [],
             ];
         }
 
@@ -66,6 +70,7 @@ class PagoproveedorEnvioProveedorService
                 'advertencia_estado' => null,
                 'mensaje' => 'La orden de pago no tiene proveedor asignado.',
                 'archivos_asociados' => 0,
+                'envios' => self::historialEnvios($pagoproveedorId),
             ];
         }
 
@@ -86,6 +91,7 @@ class PagoproveedorEnvioProveedorService
             'archivos_asociados' => (int) Pagoproveedor_Archivo::query()
                 ->where('pagoproveedor_id', $pago->id)
                 ->count(),
+            'envios' => self::historialEnvios($pago->id),
         ];
     }
 
@@ -180,6 +186,8 @@ class PagoproveedorEnvioProveedorService
         }
 
         $uid = Auth::id();
+        $estadoId = null;
+        $ahora = now();
         if ($uid) {
             $observacion = Pagoproveedor::PREFIJO_OBSERVACION_ENVIO_CORREO.' ('.implode(', ', $emails).')';
             if ($adjuntosExtra !== []) {
@@ -191,14 +199,24 @@ class PagoproveedorEnvioProveedorService
             } elseif ($nAdj > 1) {
                 $observacion .= ' + '.$nAdj.' archivos adjuntos';
             }
-            Pagoproveedor_Estado::query()->create([
+            $estado = Pagoproveedor_Estado::query()->create([
                 'pagoproveedor_id' => $pago->id,
-                'fecha' => now(),
+                'fecha' => $ahora,
                 'estado' => (string) ($pago->estado ?? ''),
                 'usuario_id' => $uid,
                 'observacion' => mb_substr($observacion, 0, 500),
             ]);
+            $estadoId = (int) $estado->id;
         }
+
+        Pagoproveedor_Correo::query()->create([
+            'pagoproveedor_id' => $pago->id,
+            'pagoproveedor_estado_id' => $estadoId,
+            'fecha' => $ahora,
+            'usuario_id' => $uid ?: null,
+            'destinatarios' => mb_substr(implode(', ', $emails), 0, 500),
+            'mensaje' => self::normalizarMensaje($mensajeAdicional),
+        ]);
 
         return ['mensaje' => 'ok'];
     }
@@ -247,5 +265,92 @@ class PagoproveedorEnvioProveedorService
         }
 
         return null;
+    }
+
+    public static function normalizarMensaje(?string $mensaje): ?string
+    {
+        $mensaje = trim((string) $mensaje);
+        if ($mensaje === '') {
+            return null;
+        }
+
+        return mb_substr($mensaje, 0, 4000);
+    }
+
+    /**
+     * Correos guardados con destinatario y texto, más envíos viejos que solo
+     * dejaron el destinatario en la historia de estados.
+     *
+     * @return list<array{fecha: string, usuario: string, destinatarios: string, mensaje: string, texto_guardado: bool}>
+     */
+    public static function historialEnvios(int $pagoproveedorId): array
+    {
+        $filas = [];
+        $estadosCubiertos = [];
+
+        $correos = Pagoproveedor_Correo::query()
+            ->with('usuarios:id,nombre')
+            ->where('pagoproveedor_id', $pagoproveedorId)
+            ->orderByDesc('fecha')
+            ->orderByDesc('id')
+            ->limit(30)
+            ->get();
+
+        foreach ($correos as $correo) {
+            if ($correo->pagoproveedor_estado_id) {
+                $estadosCubiertos[(int) $correo->pagoproveedor_estado_id] = true;
+            }
+            $filas[] = [
+                'orden' => optional($correo->fecha)->getTimestamp() ?: 0,
+                'fecha' => optional($correo->fecha)->format('d/m/Y H:i') ?? '',
+                'usuario' => (string) ($correo->usuarios->nombre ?? ''),
+                'destinatarios' => (string) $correo->destinatarios,
+                'mensaje' => (string) ($correo->mensaje ?? ''),
+                'texto_guardado' => true,
+            ];
+        }
+
+        $prefijo = Pagoproveedor::PREFIJO_OBSERVACION_ENVIO_CORREO.'%';
+        $legados = DB::table('pagoproveedor_estado as pe')
+            ->leftJoin('usuario as u', 'u.id', '=', 'pe.usuario_id')
+            ->where('pe.pagoproveedor_id', $pagoproveedorId)
+            ->where('pe.observacion', 'like', $prefijo)
+            ->orderByDesc('pe.fecha')
+            ->orderByDesc('pe.id')
+            ->limit(30)
+            ->get(['pe.id', 'pe.fecha', 'pe.observacion', 'u.nombre as usuario_nombre']);
+
+        foreach ($legados as $legado) {
+            if (isset($estadosCubiertos[(int) $legado->id])) {
+                continue;
+            }
+            $fecha = $legado->fecha ? \Illuminate\Support\Carbon::parse($legado->fecha) : null;
+            $filas[] = [
+                'orden' => $fecha?->getTimestamp() ?: 0,
+                'fecha' => $fecha?->format('d/m/Y H:i') ?? '',
+                'usuario' => (string) ($legado->usuario_nombre ?? ''),
+                'destinatarios' => self::destinatariosDesdeObservacion((string) ($legado->observacion ?? '')),
+                'mensaje' => '',
+                'texto_guardado' => false,
+            ];
+        }
+
+        usort($filas, static fn (array $a, array $b) => $b['orden'] <=> $a['orden']);
+
+        return array_map(static function (array $fila) {
+            unset($fila['orden']);
+
+            return $fila;
+        }, array_slice($filas, 0, 20));
+    }
+
+    public static function destinatariosDesdeObservacion(string $observacion): string
+    {
+        $prefijo = preg_quote(Pagoproveedor::PREFIJO_OBSERVACION_ENVIO_CORREO, '/');
+        if (preg_match('/^'.$prefijo.' \(([^)]*)\)/u', $observacion, $coincidencias) === 1) {
+            return trim($coincidencias[1]);
+        }
+
+        return '';
     }
 }
