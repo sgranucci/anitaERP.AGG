@@ -381,13 +381,96 @@
 			});
 	}
 
+	function urlCuentaCompraGasto(articuloId) {
+		var cfg = window.requisicionLineasConfig || {};
+		var plantilla = cfg.urlCuentaCompraGasto ? String(cfg.urlCuentaCompraGasto) : '';
+		if (!plantilla) {
+			var base = (typeof carpetaBase !== 'undefined' && carpetaBase) ? String(carpetaBase).replace(/\/$/, '') : '';
+			plantilla = base + '/stock/articulo/__ID__/cuenta-compra-gasto';
+		}
+		return plantilla.replace('__ID__', String(articuloId));
+	}
+
+	function pintarCuentaArticulo($row, payload) {
+		var $el = $row.find('.req-cuenta-articulo');
+		if (!$el.length) {
+			return;
+		}
+		var artId = parseInt($row.find('.articulo_id').val(), 10) || 0;
+		if (!artId) {
+			$el.addClass('d-none').removeClass('is-vacia').text('').removeAttr('title');
+			return;
+		}
+		var codigo = payload && payload.codigo ? String(payload.codigo).trim() : '';
+		var nombre = payload && payload.nombre ? String(payload.nombre).trim() : '';
+		var tipo = payload && payload.tipo ? String(payload.tipo).toUpperCase() : '';
+		if (!codigo && !nombre) {
+			$el.removeClass('d-none').addClass('is-vacia')
+				.text('Sin cuenta de compras/gastos')
+				.attr('title', 'Este artículo no tiene cuenta de compras ni de gastos para la empresa de la requisición.');
+			return;
+		}
+		var texto = codigo && nombre ? (codigo + ' · ' + nombre) : (codigo || nombre);
+		var rotulo = tipo === 'GASTOS' ? 'Cuenta de gastos' : 'Cuenta de compras';
+		$el.removeClass('d-none is-vacia').text(texto).attr('title', rotulo + ' de la empresa: ' + texto);
+	}
+
+	function cargarCuentaArticuloFila($row) {
+		if (!$row || !$row.length) {
+			return;
+		}
+		var artId = parseInt($row.find('.articulo_id').val(), 10) || 0;
+		var empId = parseInt($('#empresa_id').val(), 10) || 0;
+		if (!artId || !empId) {
+			pintarCuentaArticulo($row, null);
+			return;
+		}
+		var token = String(Date.now()) + '-' + artId + '-' + empId;
+		$row.attr('data-req-cuenta-token', token);
+		$.get(urlCuentaCompraGasto(artId), { empresa_id: empId })
+			.done(function (resp) {
+				if ($row.attr('data-req-cuenta-token') !== token) {
+					return;
+				}
+				pintarCuentaArticulo($row, resp || {});
+			});
+	}
+
+	window.reqLimpiarCuentaArticulo = function ($row) {
+		pintarCuentaArticulo($row, null);
+	};
+
+	function registrarCuentaArticulo() {
+		$(document)
+			.off('change.reqCuentaArtCodigo', SELECTOR_TABLA + ' .codigoarticulo')
+			.on('change.reqCuentaArtCodigo', SELECTOR_TABLA + ' .codigoarticulo', function () {
+				if (String($(this).val() || '').trim() !== '') {
+					return;
+				}
+				pintarCuentaArticulo($(this).closest(SELECTOR_FILA), null);
+			});
+
+		$(document)
+			.off('change.reqCuentaArtEmpresa', '#empresa_id')
+			.on('change.reqCuentaArtEmpresa', '#empresa_id', function () {
+				if (!$(SELECTOR_TABLA).length) {
+					return;
+				}
+				$(SELECTOR_TABLA).find(SELECTOR_FILA).each(function () {
+					cargarCuentaArticuloFila($(this));
+				});
+			});
+	}
+
 	function despuesDeArticuloCargado($row, dataArticulo) {
 		if (!$row || !$row.length || !dataArticulo) {
 			return;
 		}
 		if (!($row.find('.articulo_id').val() || '').trim()) {
+			pintarCuentaArticulo($row, null);
 			return;
 		}
+		cargarCuentaArticuloFila($row);
 		var sku = String(dataArticulo.sku || $row.find('.codigoarticulo').val() || '').trim();
 		if (!esPrimeraFila($row) && !filaCcManual($row)) {
 			aplicarPatronCcDestino($row);
@@ -753,6 +836,7 @@
 		}
 		registrarCambiosPatron();
 		registrarEventoArticuloCargado();
+		registrarCuentaArticulo();
 		registrarAtajosF1();
 		registrarEnterLineas();
 		registrarDetalleLineaModal();

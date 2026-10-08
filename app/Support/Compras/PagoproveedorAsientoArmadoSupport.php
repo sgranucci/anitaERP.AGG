@@ -19,7 +19,8 @@ use RuntimeException;
 /**
  * Preview/armado de asiento TES para orden de pago.
  *
- * Debe: proveedores MN/ME (según OC del comprobante); anticipos por lo pagado sin comprobante.
+ * Debe: proveedores MN/ME (la OC solo elige la cuenta); el importe va en la moneda de la
+ * factura / cuenta corriente. Anticipos por lo pagado sin comprobante.
  * Haber: cuentas de caja, cheques, retenciones; NC restan de proveedores; OPA al Haber de anticipos
  * (o de proveedores si la empresa no tiene cuenta de anticipo).
  *
@@ -292,11 +293,17 @@ final class PagoproveedorAsientoArmadoSupport
             $esOpa = $cc !== null && PagoproveedorAplicacionLadoSupport::esOpa($cc);
             $signo = $cc !== null ? PagoproveedorAplicacionLadoSupport::signo($cc) : 1;
 
+            // Importe en moneda de la deuda (factura / CC). La OC solo elige MN vs ME
+            // de la cuenta: una factura en pesos contra OC en dólares no se multiplica
+            // por la cotización (eso inflaba el Debe ~1.500 veces).
+            if ($cc && (int) ($cc->moneda_id ?? 0) > 0) {
+                $monedaDeudaId = (int) $cc->moneda_id;
+            }
+
             if ($esOpa) {
                 $cuentaAnticipo = ProveedorAnticipoCuentaContableSupport::cuentaParaCreditoAplicado($cc);
                 if ($cuentaAnticipo) {
                     $cuentaId = $cuentaAnticipo;
-                    $monedaDeudaId = (int) ($cc->moneda_id ?: $monedaDeudaId);
                 }
             }
             if ($cuentaId <= 0 && $cc?->comprobante_proveedores) {
@@ -304,8 +311,6 @@ final class PagoproveedorAsientoArmadoSupport
                     $cc->comprobante_proveedores,
                     $proveedor
                 );
-                $monedaDeudaId = ProveedorCuentaContableMonedaSupport::monedaIdParaCuentaProveedor($cc->comprobante_proveedores)
-                    ?: $monedaDeudaId;
             }
             if ($cuentaId <= 0) {
                 $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorId($proveedor, $monedaDeudaId);

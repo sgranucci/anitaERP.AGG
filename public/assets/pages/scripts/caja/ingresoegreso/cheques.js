@@ -39,20 +39,64 @@ function chequeraTipoCoincide(ch, preferirDiferido) {
     return preferirDiferido ? String(ch.tipocheque) === 'D' : String(ch.tipocheque) !== 'D';
 }
 
+function chequeraEnLista(lista, id) {
+    id = String(id || '');
+    if (!id || id === '0') {
+        return null;
+    }
+    return (lista || []).find(function (c) { return String(c.id) === id; }) || null;
+}
+
+function usuarioIdChequeraEmitida() {
+    var u = window.Laravel && window.Laravel.usuario;
+    return u && u.id ? String(u.id) : '';
+}
+
+function claveUltimaChequeraEmitida(cuentacajaId) {
+    return 'anitaERP_op_ultima_chequera_u' + usuarioIdChequeraEmitida() + '_c' + String(cuentacajaId || '');
+}
+
+function leerUltimaChequeraEmitida(cuentacajaId) {
+    if (!(parseInt(cuentacajaId || '0', 10) > 0)) {
+        return 0;
+    }
+    try {
+        return parseInt(localStorage.getItem(claveUltimaChequeraEmitida(cuentacajaId)) || '0', 10) || 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function guardarUltimaChequeraEmitida(cuentacajaId, chequeraId) {
+    if (!(parseInt(cuentacajaId || '0', 10) > 0) || !(parseInt(chequeraId || '0', 10) > 0)) {
+        return;
+    }
+    try {
+        localStorage.setItem(claveUltimaChequeraEmitida(cuentacajaId), String(parseInt(chequeraId, 10)));
+    } catch (e) {}
+}
+
+function olvidarUltimaChequeraEmitida(cuentacajaId) {
+    try {
+        localStorage.removeItem(claveUltimaChequeraEmitida(cuentacajaId));
+    } catch (e) {}
+}
+
 function chequeraDesdeLista(lista, idActual, preferirDiferido) {
     lista = lista || [];
     if (!lista.length) {
         return null;
     }
-    var actual = lista.find(function (c) { return String(c.id) === String(idActual || ''); });
-    if (actual && chequeraTipoCoincide(actual, preferirDiferido)) {
+    // La chequera ya elegida se queda: la fecha del cheque no la reemplaza por otra del tipo.
+    var actual = chequeraEnLista(lista, idActual);
+    if (actual) {
         return actual;
     }
     var preferidas = lista.filter(function (c) { return chequeraTipoCoincide(c, preferirDiferido); });
     if (preferidas.length) {
         return preferidas[0];
     }
-    return actual || lista[0] || null;
+    return lista[0] || null;
 }
 
 function aplicarNumeroSugeridoCheque($tr, $nro, data, forzarNumero) {
@@ -108,7 +152,16 @@ function filtrarChequerasChequeEmitido($tr, cuentacajaId, preferirDiferido, list
         return;
     }
     var actual = $tr.find('.chequera_emitido_id').val();
-    var ch = chequeraDesdeLista(lista, actual, preferirDiferido);
+    if (parseInt(actual || '0', 10) > 0 && !chequeraEnLista(lista, actual)) {
+        return;
+    }
+    var ch = null;
+    if (!(parseInt(actual || '0', 10) > 0)) {
+        ch = chequeraEnLista(lista, leerUltimaChequeraEmitida(cuentacajaId));
+    }
+    if (!ch) {
+        ch = chequeraDesdeLista(lista, actual, preferirDiferido);
+    }
     $tr.data('pp-skip-chequera', 1);
     pintarChequeraEmitido($tr, ch);
     $tr.removeData('pp-skip-chequera');
@@ -145,6 +198,12 @@ function aplicarChequeraDesdeConsulta($tr, ch) {
     $tr.data('pp-skip-chequera', 1);
     pintarChequeraEmitido($tr, ch);
     $tr.removeData('pp-skip-chequera');
+    $tr.removeData('chequera-desde-memoria');
+    if (ch && parseInt(ch.id || '0', 10) > 0) {
+        guardarUltimaChequeraEmitida($tr.find('.cuentacaja_emitido_id').val(), ch.id);
+    } else {
+        olvidarUltimaChequeraEmitida($tr.find('.cuentacaja_emitido_id').val());
+    }
     if (typeof flModificaAsiento !== 'undefined') {
         flModificaAsiento = true;
     }
@@ -166,6 +225,15 @@ function aplicarCuentaChequeEmitido($tr, data, forzarNumero) {
     if (!$tr || !$tr.length || !data || !(parseInt(data.id, 10) > 0)) {
         return;
     }
+    var cuentaNueva = parseInt(data.id, 10);
+    var cuentaAnterior = parseInt($tr.find('.cuentacaja_emitido_id').val() || '0', 10);
+    if (cuentaAnterior > 0 && cuentaAnterior !== cuentaNueva) {
+        $tr.removeData('chequera-desde-memoria');
+        $tr.removeData('chequera-memoria-descartada');
+        $tr.removeData('chequera-realineando');
+        $tr.find('.chequera_emitido_id').val('');
+        pintarChequeraEmitido($tr, null);
+    }
     $tr.find('.cuentacaja_emitido_id').val(data.id);
     if (data.codigo != null) {
         $tr.find('.codigo_emitido').val(data.codigo);
@@ -177,6 +245,18 @@ function aplicarCuentaChequeEmitido($tr, data, forzarNumero) {
     $tr.find('.tctes_numero_emitido').val(data.tctes_numero || '');
     $tr.find('.tctes_clave_emitido').val(data.tctes_clave || '');
     filtrarChequerasChequeEmitido($tr, data.id, !!data.diferido, data.chequeras || []);
+    var elegida = parseInt($tr.find('.chequera_emitido_id').val() || '0', 10);
+    var usada = parseInt(data.chequera_id || '0', 10);
+    if (Array.isArray(data.chequeras) && elegida > 0 && elegida !== usada && $tr.data('chequera-realineando') !== 1) {
+        $tr.data('chequera-realineando', 1);
+        var $nroPrevio = $tr.find('.numerocheque_emitido');
+        var cbRealineo = $tr.data('chequera-onok');
+        cargarEmisionChequeEmitido($tr, {
+            forzarNumero: $nroPrevio.data('auto') === 1 || !String($nroPrevio.val() || '').trim()
+        }, typeof cbRealineo === 'function' ? cbRealineo : undefined);
+        return;
+    }
+    $tr.removeData('chequera-realineando');
     if (data.chequera_id && !$tr.find('.chequera_emitido_id').val()) {
         var chAuto = chequeraDesdeLista(data.chequeras || [], data.chequera_id, !!data.diferido);
         if (chAuto) {
@@ -240,6 +320,20 @@ function cargarEmisionChequeEmitido($tr, extras, onOk) {
     if (extras.diferido === 1 || extras.diferido === 0) {
         params.diferido = extras.diferido;
     }
+    if (extras.porCodigo) {
+        $tr.removeData('chequera-desde-memoria');
+        $tr.find('.chequera_emitido_id').val('');
+    } else if (cuentaId > 0 && !(parseInt($tr.find('.chequera_emitido_id').val() || '0', 10) > 0)) {
+        var recordada = leerUltimaChequeraEmitida(cuentaId);
+        if (recordada > 0 && $tr.data('chequera-memoria-descartada') !== recordada) {
+            $tr.find('.chequera_emitido_id').val(String(recordada));
+            $tr.data('chequera-desde-memoria', 1);
+        } else {
+            $tr.removeData('chequera-desde-memoria');
+        }
+    } else {
+        $tr.removeData('chequera-desde-memoria');
+    }
     if (parseInt($tr.find('.chequera_emitido_id').val() || '0', 10) > 0) {
         params.chequera_id = $tr.find('.chequera_emitido_id').val();
     }
@@ -256,7 +350,26 @@ function cargarEmisionChequeEmitido($tr, extras, onOk) {
     }
     $.getJSON(url, params)
         .done(function (data) {
+            if ($tr.data('chequera-desde-memoria') === 1) {
+                var pedida = String($tr.find('.chequera_emitido_id').val() || '');
+                if (!chequeraEnLista(data.chequeras || [], pedida)) {
+                    olvidarUltimaChequeraEmitida(cuentaId || (data && data.id));
+                    $tr.data('chequera-memoria-descartada', parseInt(pedida, 10) || 0);
+                    $tr.removeData('chequera-desde-memoria');
+                    $tr.find('.chequera_emitido_id').val('');
+                    if ($tr.data('chequera-reintento') !== 1) {
+                        $tr.data('chequera-reintento', 1);
+                        cargarEmisionChequeEmitido($tr, extras, onOk);
+                        return;
+                    }
+                }
+            }
+            $tr.removeData('chequera-reintento');
+            $tr.data('chequera-onok', onOk);
             aplicarCuentaChequeEmitido($tr, data, !!extras.forzarNumero);
+            if ($tr.data('chequera-realineando') === 1) {
+                return;
+            }
             if (typeof onOk === 'function') {
                 onOk(true);
             }
@@ -306,6 +419,9 @@ function filtrarChequerasChequeReemplazo($tr, cuentacajaId, preferirDiferido, li
         return;
     }
     var actual = $tr.find('.chequera_reemplazo_id').val();
+    if (parseInt(actual || '0', 10) > 0 && !chequeraEnLista(lista, actual)) {
+        return;
+    }
     var ch = chequeraDesdeLista(lista, actual, preferirDiferido);
     pintarChequeraReemplazo($tr, ch);
 }
@@ -333,6 +449,11 @@ function abrirConsultaChequeraReemplazo($tr) {
         selectedId: $tr.find('.chequera_reemplazo_id').val(),
         onElegir: function (ch) {
             pintarChequeraReemplazo($tr, ch);
+            if (ch && parseInt(ch.id || '0', 10) > 0) {
+                guardarUltimaChequeraEmitida($tr.find('.cuentacaja_reemplazo_id').val(), ch.id);
+            } else {
+                olvidarUltimaChequeraEmitida($tr.find('.cuentacaja_reemplazo_id').val());
+            }
             if (typeof flModificaAsiento !== 'undefined') {
                 flModificaAsiento = true;
             }
@@ -620,14 +741,7 @@ function activaEventosChequesIngresoEgreso() {
     $(document).on('change', '.fechapago_emitido', function () {
         var $tr = $(this).closest('tr');
         if (parseInt($tr.find('.cuentacaja_emitido_id').val() || '0', 10) > 0) {
-            var fechaPago = String($tr.find('.fechapago_emitido').val() || '');
-            var fechaEmi = String($('#fecha').val() || '');
-            var diferido = fechaPago !== '' && fechaEmi !== '' && fechaPago > fechaEmi;
-            var tipo = String($tr.find('.chequera_emitido_tipo').val() || '').toUpperCase();
-            var tipoOk = tipo !== '' && (diferido ? tipo === 'D' : tipo !== 'D');
-            if (!tipoOk) {
-                $tr.find('.chequera_emitido_id').val('');
-            }
+            // La fecha actualiza el número y el rótulo Anita. No cambia la chequera ya elegida.
             cargarEmisionChequeEmitido($tr, { forzarNumero: $tr.find('.numerocheque_emitido').data('auto') === 1 });
         }
     });

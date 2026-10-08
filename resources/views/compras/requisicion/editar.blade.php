@@ -28,6 +28,7 @@ Requisiciones
 window.requisicionLineasConfig = window.requisicionLineasConfig || {};
 window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_precio_ultima_compra_articulo'));
 window.requisicionLineasConfig.urlCalcularTotales = @json(route('requisicion_calcular_totales'));
+window.requisicionLineasConfig.urlCuentaCompraGasto = @json(route('cuenta_compra_gasto_articulo', ['articulo_id' => '__ID__']));
 window.requisicionModoProvisorio = @json(!empty($es_provisorio));
 window.requisicionPideCcArbolAlGrabar = @json($pideCcArbolAlGrabar);
 window.requisicionUsaCcOrigenArbol = @json(\App\Support\Compras\RequisicionCentrocostoArbolOrigenSupport::usuarioPuedeCargar());

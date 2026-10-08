@@ -1481,7 +1481,9 @@ class CobranzaService
 				if ($cotiz <= 0) {
 					$cotiz = 1.0;
 				}
-				$peso = $montoEsta * $cotiz;
+				// Ponderar en pesos: en moneda local la cotización es informativa y
+				// multiplicarla desbalancea el promedio contra los comprobantes que la traen en 1.
+				$peso = $montoEsta * (float) calculaCoeficienteMoneda(1, $cc->moneda_id, $cotiz);
 				$pesoDias += $diasPago * $peso;
 				$pesoTotal += $peso;
 			}

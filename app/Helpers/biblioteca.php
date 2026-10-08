@@ -398,6 +398,13 @@ function getAllChkboxValues($chk_name)
 
 function calculaCoeficienteMoneda($aMoneda, $deMoneda, $cotizacion)
 {
+    // Una moneda vacía, nula o 0 es moneda local, no "otra moneda". Sin esto, una línea en
+    // pesos sin moneda cargada entraba por la rama de abajo y el importe quedaba multiplicado
+    // por la cotización (en pesos la cotización es informativa: sirve para expresar el
+    // movimiento en dólares, no para reescalarlo).
+    $aMoneda = (int) $aMoneda > 0 ? (int) $aMoneda : 1;
+    $deMoneda = (int) $deMoneda > 0 ? (int) $deMoneda : 1;
+
     if ($aMoneda == $deMoneda) {
         return 1.;
     }

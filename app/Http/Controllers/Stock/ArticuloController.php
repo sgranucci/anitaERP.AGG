@@ -53,6 +53,7 @@ use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
+use App\Support\Stock\ArticuloCuentaCompraGastoSupport;
 use App\Support\Stock\ArticuloEstadoCanalSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuRangoSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuSupport;
@@ -1760,6 +1761,43 @@ class ArticuloController extends Controller
             'proveedores' => $decision['items'],
             'elegido' => $decision['elegido'],
         ], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * Cuenta de compras o gastos del artículo para la empresa de la requisición.
+     * GET stock/articulo/{articulo_id}/cuenta-compra-gasto?empresa_id=
+     */
+    public function cuentaCompraGastoArticulo(int $articulo_id, Request $request)
+    {
+        if (! can('editar-articulos', false)
+            && ! can('listar-articulos', false)
+            && ! can('editar-compras-articulos', false)
+            && ! can('actualizar-compras-articulos', false)
+            && ! can('listar-requisicion', false)
+            && ! can('crear-requisicion', false)
+            && ! can('editar-requisicion', false)
+            && ! can('actualizar-requisicion', false)
+            && ! can('crear-ordencompra', false)
+            && ! can('editar-ordencompra', false)
+            && ! can('listar-ordencompra', false)) {
+            abort(403);
+        }
+
+        $empresaId = (int) $request->query('empresa_id', 0);
+        $vacia = [
+            'cuentacontable_id' => 0,
+            'codigo' => '',
+            'nombre' => '',
+            'tipo' => '',
+        ];
+        if ($articulo_id <= 0 || $empresaId <= 0) {
+            return response()->json($vacia);
+        }
+
+        $articulo = Articulo::query()->find($articulo_id);
+        $cuenta = ArticuloCuentaCompraGastoSupport::resolver($articulo, $empresaId);
+
+        return response()->json($cuenta ?? $vacia, 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function leeUnArticuloPorSku($sku, Request $request)

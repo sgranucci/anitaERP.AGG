@@ -1561,6 +1561,7 @@ Route::post('stock/articulo', 'Stock\ArticuloController@guardar')->name('guardar
 Route::get('stock/articulo/{articulo_id}/precio-proveedor/{proveedor_id}', 'Stock\ArticuloController@precioProveedorArticulo')->name('precio_proveedor_articulo');
 Route::get('stock/articulo/resolver-proveedor/{proveedor_id}', 'Stock\ArticuloController@resolverArticuloProveedor')->name('resolver_articulo_proveedor');
 Route::get('stock/articulo/{articulo_id}/proveedores-compra', 'Stock\ArticuloController@proveedoresCompraArticulo')->name('proveedores_compra_articulo');
+Route::get('stock/articulo/{articulo_id}/cuenta-compra-gasto', 'Stock\ArticuloController@cuentaCompraGastoArticulo')->name('cuenta_compra_gasto_articulo');
 Route::get('stock/articulo/{id}/editar', 'Stock\ArticuloController@editar')->name('editar_articulo')->middleware('modo.consulta');
 Route::get('stock/articulo/{id}/partes-unicas', 'Stock\ArticuloParteUnicaController@index')->name('articulo_partes_unicas');
 Route::post('stock/articulo/{id}/partes-unicas', 'Stock\ArticuloParteUnicaController@guardar')->name('crear_articulo_parte_unica');

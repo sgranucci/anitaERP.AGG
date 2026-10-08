@@ -74,6 +74,11 @@ function fNumero(Pvalor, Pdecimal)
 
 function calculaCoeficienteMoneda(aMoneda, deMoneda, Cotizacion)
 {
+    // Moneda vacia, nula o 0 es moneda local: en pesos la cotizacion es informativa y no
+    // reescala el importe. Mismo criterio que calculaCoeficienteMoneda() de biblioteca.php.
+    aMoneda = parseInt(aMoneda, 10) > 0 ? parseInt(aMoneda, 10) : 1;
+    deMoneda = parseInt(deMoneda, 10) > 0 ? parseInt(deMoneda, 10) : 1;
+
     if (aMoneda == deMoneda)
         return 1.;
 

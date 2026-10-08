@@ -351,6 +351,19 @@
             min-width: 0;
             flex: 1 1 0;
         }
+        #tabla-articulos-requisicion .req-cuenta-articulo {
+            display: block;
+            margin-top: 0.15rem;
+            font-size: 0.68rem;
+            line-height: 1.25;
+            color: #7b8a8b;
+            font-weight: 400;
+            white-space: normal;
+        }
+        #tabla-articulos-requisicion .req-cuenta-articulo.is-vacia {
+            color: #b9770e;
+            font-style: italic;
+        }
     </style>
     <table class="table" id="tabla-articulos-requisicion" data-requisicion-cc-destino-default="{{ $centrocostoDefaultDestino }}" data-requisicion-moneda-default="{{ $monedaDefaultLinea }}">
         <thead>
@@ -378,6 +391,18 @@
                 $lineas = (isset($data) && $data && $data->requisicion_articulos && $data->requisicion_articulos->count())
                     ? $data->requisicion_articulos
                     : collect([new \App\Models\Compras\Requisicion_Articulo()]);
+                $empresaReqCuentaId = (int) old('empresa_id', (isset($data) && $data) ? ($data->empresa_id ?? 0) : 0);
+                $idsCuentaReq = [];
+                foreach ($lineas as $idxCuenta => $lineaCuenta) {
+                    $idCuentaLin = (int) old('articulo_ids.'.$idxCuenta, $lineaCuenta->articulo_id ?? 0);
+                    if ($idCuentaLin > 0) {
+                        $idsCuentaReq[] = $idCuentaLin;
+                    }
+                }
+                $cuentasArticuloReq = \App\Support\Stock\ArticuloCuentaCompraGastoSupport::etiquetasPorArticulos(
+                    $idsCuentaReq,
+                    $empresaReqCuentaId
+                );
             @endphp
             @foreach ($lineas as $idx => $linea)
             @php
@@ -419,6 +444,15 @@
                         ? (string) $_ap->nombre_articulo_proveedor
                         : (optional($linea->articulos)->descripcion ?? '');
                 }
+                $_artIdCuenta = (int) old('articulo_ids.'.$idx, $linea->articulo_id ?? 0);
+                $_cuentaArt = $cuentasArticuloReq[$_artIdCuenta] ?? null;
+                $_cuentaArtTexto = \App\Support\Stock\ArticuloCuentaCompraGastoSupport::textoVisible($_cuentaArt);
+                $_cuentaArtTitulo = \App\Support\Stock\ArticuloCuentaCompraGastoSupport::titulo($_cuentaArt);
+                if ($_artIdCuenta > 0 && $_cuentaArtTexto === '') {
+                    $_cuentaArtTexto = 'Sin cuenta de compras/gastos';
+                    $_cuentaArtTitulo = 'Este artículo no tiene cuenta de compras ni de gastos para la empresa de la requisición.';
+                }
+                $_cuentaArtVacia = $_cuentaArtTexto === 'Sin cuenta de compras/gastos';
             @endphp
             <tr class="item-requisicion-articulo{{ $_lineaCerrada ? ' req-requisicion-linea-cerrada' : '' }}"@if($_lineaCerrada) title="{{ e($_etiqCierre) }}"@endif
                 data-maneja-stock-color-talle="{{ $_manejaColorTalle ? '1' : '0' }}">
@@ -444,6 +478,11 @@
                 </td>
                 <td>
                     <input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{ $_descLinea }}" readonly>
+                    <small class="req-cuenta-articulo{{ $_artIdCuenta <= 0 ? ' d-none' : '' }}{{ $_cuentaArtVacia ? ' is-vacia' : '' }}"
+                        @if ($_cuentaArtTitulo !== '')
+                            title="{{ $_cuentaArtTitulo }}"
+                        @endif
+                    >{{ $_cuentaArtTexto }}</small>
                 </td>
                 <td class="align-middle px-1">
                     <small class="linea-proveedor-etiqueta text-muted d-block text-truncate" style="max-width: 7rem;" title="{{ e($_provEtiq) }}">{{ $_provEtiq !== '' ? $_provEtiq : '—' }}</small>

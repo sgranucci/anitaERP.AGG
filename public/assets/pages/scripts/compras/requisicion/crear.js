@@ -269,6 +269,9 @@ $(function () {
 					$row.find('.codigoarticulo').val('');
 					$row.find('.descripcionarticulo').val('');
 					reqLimpiarCantidadAlternativaHint($row);
+					if (typeof window.reqLimpiarCuentaArticulo === 'function') {
+						window.reqLimpiarCuentaArticulo($row);
+					}
 					if (window.ArticuloProveedorOperativo) {
 						window.ArticuloProveedorOperativo.aplicarAFila($row, null, dataArticulo);
 					}
@@ -327,6 +330,9 @@ $(function () {
 		$clone.find('select.ms-color-id, select.ms-talle-id').val('').attr('data-selected', '');
 		$clone.attr('data-maneja-stock-color-talle', '0');
 		reqLimpiarCantidadAlternativaHint($clone);
+		if (typeof window.reqLimpiarCuentaArticulo === 'function') {
+			window.reqLimpiarCuentaArticulo($clone);
+		}
 		$clone.find('.linea-proveedor-etiqueta').text('—').attr('title', '');
 		$clone.find('.linea-conversion-hint').addClass('d-none').html('');
 		$clone.removeAttr('data-req-cc-manual data-req-moneda-manual');
