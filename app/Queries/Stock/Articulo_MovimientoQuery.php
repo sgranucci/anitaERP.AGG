@@ -3,6 +3,7 @@
 namespace App\Queries\Stock;
 
 use App\Models\Stock\Articulo_Movimiento;
+use App\Support\Stock\OtClienteCompartidoStockSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -90,6 +91,10 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
                             });
                     });
             });
+
+        // Factura de otro cliente de la misma OT: sus pares ya se enviaron.
+        // No restan el alta a STOCK del cliente que anuló.
+        OtClienteCompartidoStockSupport::excluirConsumoFacturaCompanero($articulo_query);
 
         if ($desdearticulo != '' && $hastaarticulo != '') {
             $articulo_query = $articulo_query->whereBetween('articulo.descripcion', [$desdearticulo, $hastaarticulo]);
@@ -333,8 +338,11 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             ->leftJoin('depmae', 'depmae.id', 'articulo_movimiento.deposito_id')
             ->leftJoin('ordentrabajo', 'ordentrabajo.id', 'articulo_movimiento.ordentrabajo_id')
             ->where('articulo_movimiento.articulo_id', $articuloId)
-            ->where('articulo_movimiento.combinacion_id', $combinacionId)
-            ->where(function ($w) {
+            ->where('articulo_movimiento.combinacion_id', $combinacionId);
+
+        OtClienteCompartidoStockSupport::excluirConsumoFacturaCompanero($q);
+
+        $q->where(function ($w) {
                 $w->where(function ($l) {
                     $l->whereNotNull('articulo_movimiento.lote')
                         ->where('articulo_movimiento.lote', '<>', '')

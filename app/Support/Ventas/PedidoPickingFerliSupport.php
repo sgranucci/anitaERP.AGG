@@ -21,6 +21,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\ArticuloCombinacionFotoSupport;
 use App\Support\Stock\CurvaModuloPresentacionSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
+use App\Support\Stock\OtClienteCompartidoStockSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
 use Carbon\Carbon;
@@ -910,7 +911,11 @@ final class PedidoPickingFerliSupport
                 if ($otId > 0) {
                     $q->orWhere('am.ordentrabajo_id', $otId);
                 }
-            })
+            });
+
+        OtClienteCompartidoStockSupport::excluirConsumoFacturaCompanero($rows, 'am');
+
+        $rows = $rows
             ->groupBy('am.deposito_id', 'd.codigo', 'd.nombre', 'am.lote', 'am.ordentrabajo_id', 't.nombre')
             ->select([
                 'am.deposito_id',
@@ -1825,6 +1830,11 @@ final class PedidoPickingFerliSupport
                 continue;
             }
             $otId = (int) ($ordentrabajoIds[$off] ?? ($linea->ot_id ?? 0));
+            // Compañero de la misma OT: sus pares se fabricaron y se enviaron.
+            // No consumen el alta a STOCK de otro cliente de esa OT.
+            if (OtClienteCompartidoStockSupport::esFacturaDeCompanero($linea, $otId)) {
+                continue;
+            }
             $lote = self::loteAsignadoParaStock($linea, $otId);
             if ($lote === '') {
                 continue;
