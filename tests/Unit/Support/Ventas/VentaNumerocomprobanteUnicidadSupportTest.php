@@ -69,4 +69,14 @@ final class VentaNumerocomprobanteUnicidadSupportTest extends TestCase
         );
         $this->assertLessThanOrEqual(100, mb_strlen($marcado));
     }
+
+    public function test_el_espejo_que_cedio_el_numero_no_es_comprobante_fiscal(): void
+    {
+        $this->assertTrue(VentaNumerocomprobanteUnicidadSupport::esEspejoAnitaCedido(
+            'NCD B-00017-00002463 · Anita sin CAE',
+        ));
+        $this->assertFalse(VentaNumerocomprobanteUnicidadSupport::esEspejoAnitaCedido(
+            'NCD B-00017-00002463',
+        ));
+    }
 }

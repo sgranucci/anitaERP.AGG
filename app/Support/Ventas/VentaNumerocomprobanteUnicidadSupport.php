@@ -122,6 +122,15 @@ final class VentaNumerocomprobanteUnicidadSupport
         ]);
     }
 
+    /**
+     * El número fiscal ya lo usa el comprobante autorizado. El espejo de Anita
+     * queda solo como rastro de la importación y no entra al libro de IVA.
+     */
+    public static function esEspejoAnitaCedido(string $codigo): bool
+    {
+        return str_contains($codigo, self::MARCA_ESPEJO_ANITA);
+    }
+
     public static function codigoMarcadoEspejoAnita(string $codigo): string
     {
         $codigo = trim($codigo);

@@ -21,6 +21,7 @@ use App\Support\Ventas\IvaVentas\IvaVentasUnidadNegocioSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
 use App\Support\Ventas\MaquinaFslTipoSupport;
 use App\Support\Ventas\TipotransaccionIvaVentasSupport;
+use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
@@ -319,6 +320,10 @@ final class IvaVentasReporteService
 
         if (! TipotransaccionIvaVentasSupport::vaAlIvaVentas($venta->tipotransacciones)) {
             return 'tipo';
+        }
+
+        if (VentaNumerocomprobanteUnicidadSupport::esEspejoAnitaCedido((string) $venta->codigo)) {
+            return 'espejo_anita';
         }
 
         $letra = IvaVentasDesgloseSupport::letra($venta);
