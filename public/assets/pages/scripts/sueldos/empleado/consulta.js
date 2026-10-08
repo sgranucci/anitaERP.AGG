@@ -106,6 +106,12 @@
         if (!legajo) {
             $input.removeData('empleadoLegajoInvalido');
             limpiar($campo, false);
+            if ($input.prop('required')) {
+                if (avanzarAlFinal && $input.get(0) && typeof $input.get(0).reportValidity === 'function') {
+                    $input.get(0).reportValidity();
+                }
+                return;
+            }
             if (avanzarAlFinal) {
                 avanzar($campo);
             }

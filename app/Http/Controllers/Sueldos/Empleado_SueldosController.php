@@ -131,6 +131,7 @@ class Empleado_SueldosController extends Controller
         if (ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], EmpleadoSueldosListadoFiltros::camposOrdenables()) !== []) {
             $cortes = $this->repository->cortesEmpleado($filtros);
         }
+        $graficoEmpleado = $this->graficoSueldoPorCategoria($filtros);
 
         $camposFiltro = EmpleadoSueldosListadoFiltros::camposQbeDisponibles();
         foreach ($camposFiltro as $key => $meta) {
@@ -165,7 +166,41 @@ class Empleado_SueldosController extends Controller
             'vistaActiva' => $vistaActiva,
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
             'cortes' => $cortes,
+            'graficoEmpleado' => $graficoEmpleado,
         ]);
+    }
+
+    /**
+     * Barras de sueldo básico por categoría sobre el universo del filtro.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array{labels: list<string>, montos: list<float>, cantidades: list<int>, total: int, truncado: bool}
+     */
+    private function graficoSueldoPorCategoria(array $filtros): array
+    {
+        $consulta = $filtros;
+        $consulta['agrupar'] = ['categoria'];
+        $cortes = $this->repository->cortesEmpleado($consulta);
+        $labels = [];
+        $montos = [];
+        $cantidades = [];
+        foreach ($cortes['filas'] ?? [] as $fila) {
+            if ((int) ($fila['nivel'] ?? 0) !== 0) {
+                continue;
+            }
+            $valor = trim((string) ($fila['valor'] ?? ''));
+            $labels[] = $valor !== '' ? $valor : '(vacío)';
+            $montos[] = round((float) (($fila['sumas']['sueldo_basico'] ?? 0)), 2);
+            $cantidades[] = (int) ($fila['count'] ?? 0);
+        }
+
+        return [
+            'labels' => $labels,
+            'montos' => $montos,
+            'cantidades' => $cantidades,
+            'total' => (int) ($cortes['total'] ?? 0),
+            'truncado' => (bool) ($cortes['truncado'] ?? false),
+        ];
     }
 
     /**

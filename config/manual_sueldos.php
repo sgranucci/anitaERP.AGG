@@ -1,9 +1,9 @@
 <?php
 
 return [
-    'version' => '1.0',
+    'version' => '2.0',
     'titulo' => 'Manual de Usuario',
-    'subtitulo' => 'Anita ERP — Módulo Sueldos · Sanciones disciplinarias',
+    'subtitulo' => 'Anita ERP — Sueldos y jornales',
 
     /**
      * Archivos en public/docs/manual-sueldos/img/
@@ -12,7 +12,7 @@ return [
         'flujo_sancion' => [
             'archivo' => 'flujo-sancion.svg',
             'titulo' => 'Circuito: tipo → expediente → novedad → recibo',
-            'seccion' => '3. Circuito de una sanción',
+            'seccion' => '16. Sanciones disciplinarias',
         ],
     ],
 ];

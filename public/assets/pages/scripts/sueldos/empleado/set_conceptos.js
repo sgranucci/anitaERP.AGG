@@ -45,6 +45,17 @@
         }
     });
 
+    $(document).on('change', '#sin-grupo-esperar', function () {
+        var url = $('#sin-grupo-modo-box').data('url');
+        if (!url) return;
+        var modo = $(this).is(':checked') ? 'novedades' : 'elegibilidad';
+        $.post(url, { _token: token(), sin_grupo_modo: modo }).done(pintar)
+            .fail(function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'No se pudo guardar el modo';
+                alert(msg);
+            });
+    });
+
     $(document).on('submit', '#form-empleado-agregar-grupo', function (e) {
         e.preventDefault();
         var emp = $('#set-conceptos-panel').data('empleado');

@@ -229,7 +229,8 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             'empleado_sueldos.id',
             static fn (object $row, string $key): string => EmpleadoSueldosListadoColumnas::valorCelda($row, $key),
             static fn (string $key): ?array => EmpleadoSueldosListadoColumnas::sqlAgrupacion($key),
-            $etiquetas
+            $etiquetas,
+            EmpleadoSueldosListadoColumnas::MEDIDAS
         );
     }
 
@@ -503,7 +504,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
     }
 
     /**
-     * Domicilio vinculado (como proveedores): la descripción del select se guarda
+     * Domicilio vinculado (como proveedores): la descripción de la consulta se guarda
      * en la columna de texto denormalizada (provincia / localidad).
      *
      * @param  array<string, mixed>  $data

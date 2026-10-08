@@ -29,6 +29,29 @@ class Empleado_GrupoConceptoController extends Controller
         return $this->responder($empleado);
     }
 
+    /** Sin grupos: elegibilidad o solo novedades. Lo elige la ficha. */
+    public function guardarSinGrupoModo(Request $request, $empleadoId)
+    {
+        can('actualizar-empleado-sueldos');
+        $empleado = Empleado_Sueldos::findOrFail($empleadoId);
+
+        $datos = $request->validate([
+            'sin_grupo_modo' => ['required', Rule::in([
+                ConceptoElegibilidadCatalogo::SIN_GRUPO_ELEGIBILIDAD,
+                ConceptoElegibilidadCatalogo::SIN_GRUPO_NOVEDADES,
+            ])],
+        ]);
+
+        $empleado->sin_grupo_modo = $datos['sin_grupo_modo'];
+        $empleado->save();
+
+        $mensaje = $datos['sin_grupo_modo'] === ConceptoElegibilidadCatalogo::SIN_GRUPO_NOVEDADES
+            ? 'Sin grupos: queda esperando novedades'
+            : 'Sin grupos: se liquida por elegibilidad';
+
+        return $this->responder($empleado->fresh('gruposConcepto'), $mensaje);
+    }
+
     /** Agrega un grupo más (N sin límite). */
     public function agregarGrupo(Request $request, $empleadoId)
     {

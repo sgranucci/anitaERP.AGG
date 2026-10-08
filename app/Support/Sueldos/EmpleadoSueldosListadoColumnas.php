@@ -14,6 +14,11 @@ final class EmpleadoSueldosListadoColumnas
 {
     public const RECURSO = 'sueldos.empleado';
 
+    /** @var list<array{key: string, column: string, label: string}> */
+    public const MEDIDAS = [
+        ['key' => 'sueldo_basico', 'column' => 'empleado_sueldos.sueldo_basico', 'label' => 'Sueldo básico'],
+    ];
+
     public const GRUPO_IDENTIFICACION = 'identificacion';
 
     public const GRUPO_ORGANIZACION = 'organizacion';

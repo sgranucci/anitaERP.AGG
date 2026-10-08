@@ -46,14 +46,19 @@ function campoCpRelacionadoLocalidad($contenedor) {
         }
         var $ambito = $contenedor.closest('form, .tab-pane');
         if ($ambito.length) {
-            var $cp = $ambito.find('#codigopostal').first();
+            var $cp = $ambito.find('#codigopostal, #codigo_postal').first();
             if ($cp.length) {
                 return $cp;
             }
         }
     }
 
-    return $('#codigopostal');
+    var $cpGlobal = $('#codigopostal');
+    if (!$cpGlobal.length) {
+        $cpGlobal = $('#codigo_postal');
+    }
+
+    return $cpGlobal;
 }
 
 function aplicarLocalidadEnCampo($contenedor, datos) {

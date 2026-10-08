@@ -9,15 +9,15 @@ use App\Services\Sueldos\ManualLsdSueldosService;
 
 class ManualLsdSueldosController extends ManualDocumentoController
 {
-    protected string $directorio = 'manual-lsd-sueldos';
+    protected string $directorio = 'manual-sueldos';
 
-    protected string $baseName = 'Manual_Usuario_AnitaERP_Libro_Sueldos_Digital';
+    protected string $baseName = 'Manual_Usuario_AnitaERP_Modulo_Sueldos';
 
-    protected string $configKey = 'manual_lsd_sueldos';
+    protected string $configKey = 'manual_sueldos';
 
-    protected string $imgPublicPrefix = 'docs/manual-lsd-sueldos/img';
+    protected string $imgPublicPrefix = 'docs/manual-sueldos/img';
 
-    protected string $etiquetaModulo = 'LSD';
+    protected string $etiquetaModulo = 'Sueldos y jornales';
 
     protected array $atajos = [
         ['label' => 'Libro de Sueldos Digital', 'route' => 'consultar_lsd_sueldos'],

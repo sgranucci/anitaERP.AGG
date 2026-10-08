@@ -99,37 +99,9 @@
         if (overlay) overlay.style.display = 'none';
     }
 
-    function cssEscape(v) {
-        if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(String(v));
-        return String(v).replace(/["\\]/g, '\\$&');
-    }
-
     function triggerChange(id) {
         const el = byId(id);
         if (el) el.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-
-    async function esperarOptionLocalidad(timeoutMs, desiredValue) {
-        const start = Date.now();
-        const desired = desiredValue == null ? '' : String(desiredValue);
-        while (Date.now() - start < timeoutMs) {
-            const loc = byId('localidad_id');
-            if (loc && loc.querySelector('option[value="' + cssEscape(desired) + '"]')) return true;
-            await sleep(100);
-        }
-        return false;
-    }
-
-    function ensureSelectHasOption(selectId, value, label) {
-        const sel = byId(selectId);
-        if (!sel || value == null || value === '') return;
-        if (sel.querySelector('option[value="' + cssEscape(value) + '"]')) return;
-        const opt = document.createElement('option');
-        opt.value = String(value);
-        opt.textContent = label || String(value);
-        sel.appendChild(opt);
     }
 
     async function aplicarDatosArcaEnFormulario(payload) {
@@ -143,7 +115,7 @@
         if (df.texto) setVal('domicilio', df.texto);
         if (df.codPostal) setVal('codigo_postal', df.codPostal);
 
-        // Provincia vinculada al maestro (dispara la carga de localidades vía domicilio.js).
+        // El change de provincia limpia la localidad; los campos de localidad se cargan después.
         if (df.provincia_id && byId('provincia_id')) {
             setVal('provincia_id', df.provincia_id);
             triggerChange('provincia_id');
@@ -154,15 +126,23 @@
             setVal('desc_provincia', df.provincia);
         }
 
-        // Localidad vinculada: esperar a que carguen las opciones de la provincia.
-        if (df.localidad_id && byId('localidad_id')) {
-            await esperarOptionLocalidad(7000, df.localidad_id);
-            ensureSelectHasOption('localidad_id', df.localidad_id, df.localidad || df.localidad_id);
+        if (df.localidad_id) {
             setVal('localidad_id', df.localidad_id);
-            triggerChange('localidad_id');
-            if (!getVal('desc_localidad') && df.localidad) setVal('desc_localidad', df.localidad);
+            setVal('localidad_id_previa', df.localidad_id);
+            setVal('nombrelocalidad', df.localidad || '');
+            setVal('desc_localidad', df.localidad || '');
+            if (df.localidad_codigo) {
+                setVal('codigolocalidad', df.localidad_codigo);
+            }
         } else if (df.localidad) {
             setVal('desc_localidad', df.localidad);
+            setVal('nombrelocalidad', df.localidad);
+        } else if (df.provincia_id) {
+            setVal('localidad_id', '');
+            setVal('localidad_id_previa', '');
+            setVal('codigolocalidad', '');
+            setVal('nombrelocalidad', '');
+            setVal('desc_localidad', '');
         }
     }
 

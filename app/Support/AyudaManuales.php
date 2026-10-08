@@ -127,16 +127,9 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
-                'modulo' => 'Sueldos — Sanciones disciplinarias',
-                'bajada' => 'Tipos y motivos, carga en el empleado, importe no cobrado, novedad de liquidación y reporte.',
+                'modulo' => 'Sueldos y jornales',
+                'bajada' => 'Legajo, conceptos, grupos, elegibilidad, liquidación, sanciones, Libro de Sueldos Digital y reportes definibles.',
                 'url' => route('manual_sueldos'),
-                'icono' => 'fa-gavel',
-                'disponible' => true,
-            ],
-            [
-                'modulo' => 'Sueldos — Libro de Sueldos Digital (ARCA)',
-                'bajada' => 'Conceptos AFIP, detracción Ley 27.430, tope SIPA, generación del TXT e importación en ARCA.',
-                'url' => route('manual_lsd_sueldos'),
                 'icono' => 'fa-book',
                 'disponible' => true,
             ],

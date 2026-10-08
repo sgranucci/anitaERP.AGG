@@ -2,9 +2,8 @@
     $esEdicion = isset($data);
     $puedeEditar = $puedeEditar ?? ($esEdicion ? can('actualizar-empleado-sueldos', false) : can('crear-empleado-sueldos', false));
     $provinciaIdSel = old('provincia_id', $data->provincia_id ?? '');
-    $localidadIdSel = old('localidad_id', $data->localidad_id ?? '');
     $descProvincia = old('desc_provincia', $data->provincia ?? '');
-    $descLocalidad = old('desc_localidad', $data->localidad ?? '');
+    $locDom = isset($data) ? $data->localidadDomicilio : null;
 @endphp
 
 <div class="row">
@@ -205,18 +204,18 @@
             <input type="hidden" id="desc_provincia" name="desc_provincia" value="{{ $descProvincia }}">
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-3" id="loc">
         <div class="form-group">
-            <label for="localidad_id">Localidad</label>
-            <select name="localidad_id" id="localidad_id" class="form-control">
-                @if ($localidadIdSel)
-                    <option value="{{ $localidadIdSel }}" selected>{{ $descLocalidad ?: $localidadIdSel }}</option>
-                @else
-                    <option value=""></option>
-                @endif
-            </select>
-            <input type="hidden" id="localidad_id_previa" name="localidad_id_previa" value="{{ $localidadIdSel }}">
-            <input type="hidden" id="desc_localidad" name="desc_localidad" value="{{ $descLocalidad }}">
+            <label>Localidad</label>
+            @include('configuracion.partials.campo_consulta_localidad', [
+                'layout' => 'inline',
+                'con_ids' => true,
+                'localidadId' => optional($data ?? null)->localidad_id ?? '',
+                'codigo' => optional($locDom)->codigo ?? '',
+                'nombre' => optional($locDom)->nombre ?: (optional($data ?? null)->localidad ?? ''),
+                'provinciaSource' => '#provincia_id',
+                'extra_class' => 'w-100',
+            ])
         </div>
     </div>
     <div class="col-md-3">

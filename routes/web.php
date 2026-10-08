@@ -5369,6 +5369,7 @@ Route::get('sueldos/empleado/{id}/simular-liquidacion', 'Sueldos\Empleado_Sueldo
 Route::get('sueldos/empleado/{id}/depurar-formulas', 'Sueldos\Empleado_SueldosController@depurarFormulas')->name('depurar_formulas_empleado_sueldos');
 Route::get('sueldos/empleado/{empleado}/set-conceptos', 'Sueldos\Empleado_GrupoConceptoController@panel')->name('set_conceptos_empleado_sueldos');
 Route::post('sueldos/empleado/{empleado}/grupos-concepto', 'Sueldos\Empleado_GrupoConceptoController@agregarGrupo')->name('agregar_grupo_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/sin-grupo-modo', 'Sueldos\Empleado_GrupoConceptoController@guardarSinGrupoModo')->name('guardar_sin_grupo_modo_empleado_sueldos');
 Route::delete('sueldos/empleado-grupo-concepto/{id}', 'Sueldos\Empleado_GrupoConceptoController@quitarGrupo')->name('quitar_grupo_empleado_sueldos');
 Route::post('sueldos/empleado/{empleado}/concepto-explicito', 'Sueldos\Empleado_GrupoConceptoController@guardarExplicito')->name('guardar_explicito_empleado_sueldos');
 Route::delete('sueldos/empleado-concepto/{id}', 'Sueldos\Empleado_GrupoConceptoController@eliminarExplicito')->name('eliminar_explicito_empleado_sueldos');

@@ -1,6 +1,8 @@
 # Manual — Reportes definibles de sueldos
 
-Ver pantalla en ERP: `sueldos/reporte-definible/manual`.
+El texto de uso está en el manual único: `docs/manual-sueldos/contenido.php`, capítulo «Reportes definibles y criterios premium».
+
+Pantalla corta en el ERP: `sueldos/reporte-definible/manual` (enlace al manual completo).
 
 Fuentes Anita: `listmae`, `listcol`, `listcon` (`a-listgen.c` / `l-listgen.c`).
 

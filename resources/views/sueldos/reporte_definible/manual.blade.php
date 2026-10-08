@@ -16,6 +16,12 @@
                 </div>
             </div>
             <div class="card-body">
+                <p class="alert alert-info">
+                    Este resumen queda en la pantalla del reporte.
+                    El manual completo del módulo (elegibilidad, grupos, liquidación, LSD y estos criterios premium) está en
+                    <a href="{{ route('manual_sueldos') }}" target="_blank" rel="noopener">Sueldos y jornales</a>,
+                    capítulo «Reportes definibles y criterios premium».
+                </p>
                 <h4>Qué es</h4>
                 <p>
                     Equivalente ERP de Anita <code>a-listgen</code> / <code>l-listgen</code>

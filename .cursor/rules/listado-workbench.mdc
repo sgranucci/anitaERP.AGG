@@ -43,7 +43,9 @@ Index de diseño (`ArticuloFerliController`), distinto del estándar. Workbench 
 
 Los chips de **Estado** (Activos por defecto, Provisorios, Bajas, Todos) y **Empresa** (una empresa o Todas mis empresas) quedan **por encima** del QBE y se combinan con AND. No los reemplaza la consulta avanzada. Al cambiar de vista, limpiar el QBE o exportar, se conservan `filtro_estado`, `empresa_id` y `empresa_todas`. Una vista guardada no pisa esos filtros.
 
-Barra propia: **Sincronizar desde Anita**, **Vincular domicilios**, **Nuevo empleado**. Grilla por defecto: Legajo, Nombre, CUIL, Empresa, Estado, Categoría, Ingreso, acciones al final. El diseñador puede mostrar el resto (documento, centro de costo, lugar, fechas, sueldo básico, etc.).
+Barra propia: **Nuevo empleado**. La sincronización desde Anita y el vínculo de domicilios no van en pantalla: se corren por consola (`sueldos:sincronizar-empleados-anita` y `sueldos:vincular-domicilios`) si hacen falta. Grilla por defecto: Legajo, Nombre, CUIL, Empresa, Estado, Categoría, Ingreso, acciones al final. El diseñador puede mostrar el resto (documento, centro de costo, lugar, fechas, sueldo básico, etc.).
+
+Los cortes suman **sueldo básico**. Si hay agrupación, la grilla muestra cabeceras de grupo con el conteo del universo filtrado. Aparte, un gráfico de barras **Sueldo básico por categoría** sobre ese universo (Chart.js). Colapsable; arranca **colapsado**. El canvas se dibuja al abrir el panel.
 
 ### Artículos (index estándar): no perder al pasar al workbench
 

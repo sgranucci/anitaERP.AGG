@@ -23,6 +23,62 @@
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/workbench.js') }}?v={{ file_exists($empleadoWorkbenchJs) ? filemtime($empleadoWorkbenchJs) : time() }}"></script>
+@if (($graficoEmpleado['total'] ?? 0) > 0)
+<script src="{{ asset('assets/lte/plugins/chart.js/Chart.min.js') }}"></script>
+<script>
+(function () {
+    var datos = @json($graficoEmpleado ?? []);
+    var grafico = null;
+    function dibujar() {
+        var canvas = document.getElementById('empleado-grafico-categoria');
+        if (!canvas || typeof Chart === 'undefined' || !datos.labels || !datos.labels.length) {
+            return;
+        }
+        if (!grafico) {
+            grafico = new Chart(canvas.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: datos.labels,
+                    datasets: [{
+                        label: 'Sueldo básico',
+                        data: datos.montos,
+                        backgroundColor: '#85C1E9',
+                        borderColor: '#2471A3',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    legend: { display: false },
+                    tooltips: {
+                        callbacks: {
+                            label: function (item) {
+                                var i = item.index;
+                                var monto = datos.montos[i] || 0;
+                                var cant = datos.cantidades[i] || 0;
+                                return monto.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                    + ' · ' + cant + ' empleados';
+                            }
+                        }
+                    },
+                    scales: {
+                        yAxes: [{ ticks: { beginAtZero: true } }],
+                        xAxes: [{ ticks: { autoSkip: false, maxRotation: 40, minRotation: 0 } }]
+                    }
+                }
+            });
+            return;
+        }
+        grafico.resize();
+    }
+    var panel = document.getElementById('empleado-grafico-body');
+    if (panel && window.jQuery) {
+        window.jQuery(panel).on('shown.bs.collapse', dibujar);
+    }
+})();
+</script>
+@endif
 @endsection
 
 @php
@@ -58,22 +114,6 @@
             <div class="card-header lw-header d-flex flex-wrap align-items-center justify-content-between">
                 <h3 class="card-title mb-0">Empleados</h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end" style="gap:.4rem;">
-                    @if (can('actualizar-empleado-sueldos', false))
-                        <form action="{{ route('sincronizar_empleado_sueldos_anita') }}" method="POST" class="d-inline"
-                              onsubmit="return confirm('¿Sincronizar empleados desde Anita? Se agregarán legajos faltantes y se actualizarán egreso/estado y datos organizativos (centro de costo, categoría, lugar de trabajo, etc.) en los existentes.');">
-                            @csrf
-                            <button type="submit" class="btn btn-outline-light btn-sm">
-                                <i class="fa fa-fw fa-refresh"></i> Sincronizar desde Anita
-                            </button>
-                        </form>
-                        <form action="{{ route('vincular_empleado_sueldos_domicilios') }}" method="POST" class="d-inline"
-                              onsubmit="return confirm('¿Vincular provincias y localidades con los maestros? Solo completa los empleados que hoy tienen el texto sin vincular; no pisa datos ya vinculados.');">
-                            @csrf
-                            <button type="submit" class="btn btn-outline-light btn-sm">
-                                <i class="fa fa-fw fa-map-marker-alt"></i> Vincular domicilios
-                            </button>
-                        </form>
-                    @endif
                     @if (can('crear-empleado-sueldos', false))
                         <a href="{{ route('crear_empleado_sueldos', $retornoListadoQuery) }}" class="btn btn-light btn-sm">
                             <i class="fa fa-plus"></i> Nuevo empleado
@@ -153,6 +193,52 @@
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
+            <div class="px-3 pt-2 pb-1">
+                <div class="card card-outline card-info mb-0 lw-cortes">
+                    <div class="card-header py-2 px-3 d-flex flex-wrap align-items-center justify-content-between">
+                        <button type="button" class="btn btn-sm lw-cortes-toggle lw-grafico-toggle collapsed" id="btn-empleado-grafico"
+                                data-toggle="collapse" data-target="#empleado-grafico-body"
+                                aria-expanded="false" aria-controls="empleado-grafico-body"
+                                title="Mostrar sueldo básico por categoría">
+                            <i class="fa fa-chevron-down lw-cortes-ico lw-cortes-ico-abierto" aria-hidden="true"></i>
+                            <i class="fa fa-chevron-right lw-cortes-ico lw-cortes-ico-cerrado" aria-hidden="true"></i>
+                            Sueldo básico por categoría
+                        </button>
+                        <span class="text-muted small">Universo del filtro, no solo la página.</span>
+                    </div>
+                    <div class="collapse" id="empleado-grafico-body">
+                        <div class="card-body py-2">
+                            @if (($graficoEmpleado['total'] ?? 0) === 0)
+                                <p class="text-muted mb-0">No hay empleados en este filtro para graficar.</p>
+                            @else
+                                <div style="height:220px;">
+                                    <canvas id="empleado-grafico-categoria"></canvas>
+                                </div>
+                                @if (! empty($graficoEmpleado['truncado']))
+                                    <p class="small text-muted mb-0 mt-1">El gráfico muestra los grupos más grandes del filtro.</p>
+                                @endif
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    var panel = document.getElementById('empleado-grafico-body');
+                    var btn = document.getElementById('btn-empleado-grafico');
+                    if (!panel || !btn || typeof jQuery === 'undefined') {
+                        return;
+                    }
+                    jQuery(panel).on('shown.bs.collapse hidden.bs.collapse', function (e) {
+                        if (e.target !== panel) {
+                            return;
+                        }
+                        var abierto = e.type === 'shown';
+                        btn.title = abierto ? 'Ocultar sueldo básico por categoría' : 'Mostrar sueldo básico por categoría';
+                        btn.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+                    });
+                });
+            </script>
             <div class="card-body py-2 border-bottom bg-white">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_empleado_sueldos',
@@ -170,28 +256,60 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($datas as $data)
-                        <tr class="{{ ($data->estado ?? '') === EmpleadoEstados::PROVISORIO ? 'table-warning' : (($data->estado ?? '') === EmpleadoEstados::BAJA ? 'table-secondary' : '') }}">
-                            @foreach ($columnasVisibles as $keyColumna)
-                                @include('sueldos.empleado.partials.workbench_celda', ['key' => $keyColumna, 'data' => $data])
-                            @endforeach
-                            <td class="text-nowrap align-middle">
-                                @if (can('editar-empleado-sueldos', false))
-                                    <a href="{{ route('editar_empleado_sueldos', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                        <i class="fa fa-edit"></i>
-                                    </a>
-                                @endif
-                                @if (can('borrar-empleado-sueldos', false))
-                                    <form action="{{ route('eliminar_empleado_sueldos', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
-                                        @csrf @method("delete")
-                                        <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                            <i class="fa fa-times-circle text-danger"></i>
-                                        </button>
-                                    </form>
-                                @endif
-                            </td>
-                        </tr>
-                        @endforeach
+                        @php
+                            $agruparActivo = \App\Support\Listado\ListadoAgrupacionSupport::normalizar(
+                                $filtros['agrupar'] ?? [],
+                                EmpleadoSueldosListadoFiltros::camposOrdenables()
+                            );
+                            $filasVista = \App\Support\Listado\ListadoAgrupacionSupport::segmentar(
+                                $datas,
+                                $agruparActivo,
+                                static fn ($row, string $campo): string => \App\Support\Sueldos\EmpleadoSueldosListadoColumnas::valorCelda($row, $campo),
+                                $etiquetasColumnas ?? [],
+                                ! empty($cortes['por_clave']) ? $cortes['por_clave'] : null
+                            );
+                            $colspanGrilla = count($columnasVisibles) + 1;
+                        @endphp
+                        @forelse ($filasVista as $filaVista)
+                            @if (($filaVista['type'] ?? '') === 'header')
+                                <tr class="lw-group-header lw-group-nivel-{{ (int) ($filaVista['nivel'] ?? 0) }}">
+                                    <td colspan="{{ $colspanGrilla }}">
+                                        <i class="fa fa-folder-open-o"></i>
+                                        <strong>{{ $filaVista['label'] }}:</strong>
+                                        {{ $filaVista['valor'] !== '' ? $filaVista['valor'] : '(vacío)' }}
+                                        <span class="lw-group-count" title="{{ ! empty($filaVista['count_universo']) ? 'Universo filtrado' : 'Página visible' }}">
+                                            {{ number_format((int) ($filaVista['count'] ?? 0), 0, ',', '.') }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            @else
+                                @php $data = $filaVista['row']; @endphp
+                                <tr class="{{ ($data->estado ?? '') === EmpleadoEstados::PROVISORIO ? 'table-warning' : (($data->estado ?? '') === EmpleadoEstados::BAJA ? 'table-secondary' : '') }}">
+                                    @foreach ($columnasVisibles as $keyColumna)
+                                        @include('sueldos.empleado.partials.workbench_celda', ['key' => $keyColumna, 'data' => $data])
+                                    @endforeach
+                                    <td class="text-nowrap align-middle">
+                                        @if (can('editar-empleado-sueldos', false))
+                                            <a href="{{ route('editar_empleado_sueldos', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                                <i class="fa fa-edit"></i>
+                                            </a>
+                                        @endif
+                                        @if (can('borrar-empleado-sueldos', false))
+                                            <form action="{{ route('eliminar_empleado_sueldos', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
+                                                @csrf @method("delete")
+                                                <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
+                                                    <i class="fa fa-times-circle text-danger"></i>
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endif
+                        @empty
+                            <tr>
+                                <td colspan="{{ count($columnasVisibles) + 1 }}" class="text-center text-muted py-4">No hay empleados con estos filtros.</td>
+                            </tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>

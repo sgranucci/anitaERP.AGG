@@ -40,6 +40,13 @@ class ConceptoElegibilidadCatalogo
     /** Sin grupo: catálogo activo + elegibilidad (+ novedades). Estilo SAP permissibility. */
     public const MODO_SAP = 'sap_elegibilidad';
 
+    /** Sin grupo y tilde en la ficha: no arma catálogo; solo novedades y explícitos. */
+    public const MODO_NOVEDADES = 'novedades';
+
+    public const SIN_GRUPO_ELEGIBILIDAD = 'elegibilidad';
+
+    public const SIN_GRUPO_NOVEDADES = 'novedades';
+
     /** @deprecated usar MODO_SAP */
     public const MODO_LEGACY = 'legacy_todos';
 
@@ -93,6 +100,7 @@ class ConceptoElegibilidadCatalogo
         return match ((string) $modo) {
             self::MODO_GRUPOS => 'Modo grupos',
             self::MODO_SAP, self::MODO_LEGACY => 'Sin grupo (catálogo + elegibilidad)',
+            self::MODO_NOVEDADES => 'Sin grupo (solo novedades)',
             default => (string) $modo,
         };
     }

@@ -1,6 +1,7 @@
 <?php
 
 /**
+ * Obsoleto: el PDF vigente sale de php docs/manual-sueldos/generar.php.
  * Genera Manual de Usuario LSD (Word + PDF) con capturas.
  * Ejecutar: php docs/manual-lsd-sueldos/generar.php
  */

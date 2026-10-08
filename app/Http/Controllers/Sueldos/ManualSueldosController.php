@@ -17,12 +17,15 @@ class ManualSueldosController extends ManualDocumentoController
 
     protected string $imgPublicPrefix = 'docs/manual-sueldos/img';
 
-    protected string $etiquetaModulo = 'Sueldos';
+    protected string $etiquetaModulo = 'Sueldos y jornales';
 
     protected array $atajos = [
-        ['label' => 'Tipos de sanción', 'route' => 'consultar_tipo_sancion_sueldos'],
-        ['label' => 'Motivos', 'route' => 'consultar_motivo_sancion_sueldos'],
-        ['label' => 'Reporte', 'route' => 'sancion_reporte_sueldos'],
+        ['label' => 'Empleados', 'route' => 'consultar_empleado_sueldos'],
+        ['label' => 'Conceptos', 'route' => 'consultar_concepto_sueldos'],
+        ['label' => 'Liquidación', 'route' => 'consultar_liquidacion_sueldos'],
+        ['label' => 'Libro LSD', 'route' => 'consultar_lsd_sueldos'],
+        ['label' => 'Reportes definibles', 'route' => 'reporte_sueldos_definible'],
+        ['label' => 'Sanciones', 'route' => 'sancion_reporte_sueldos'],
     ];
 
     public function __construct(ManualSueldosService $manual)

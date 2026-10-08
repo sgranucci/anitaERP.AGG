@@ -246,16 +246,26 @@ class Novedad_SueldosController extends Controller
             : null;
 
         $empresaId = (int) old('empresa_id', $data->empresa_id ?? ($liquidacion->empresa_id ?? 0));
-        $empleados = $empresaId > 0
-            ? Empleado_Sueldos::query()->where('empresa_id', $empresaId)->orderBy('legajo')->limit(500)->get(['id', 'legajo', 'nombre'])
-            : collect();
         $liquidaciones = $empresaId > 0
             ? Liquidacion_Sueldos::query()->where('empresa_id', $empresaId)->orderByDesc('numero')->limit(100)->get(['id', 'numero', 'descripcion', 'periodo', 'estado'])
             : collect();
 
+        $empleadoId = (int) old('empleado_id', $data->empleado_id ?? 0);
+        $empleadoSeleccionado = null;
+        if ($empleadoId > 0) {
+            if ($data !== null && (int) $data->empleado_id === $empleadoId) {
+                $empleadoSeleccionado = $data->relationLoaded('empleado')
+                    ? $data->empleado
+                    : $data->empleado()->first();
+            }
+            if ($empleadoSeleccionado === null) {
+                $empleadoSeleccionado = Empleado_Sueldos::query()->find($empleadoId);
+            }
+        }
+
         return [
             'empresas' => $empresas,
-            'empleados' => $empleados,
+            'empleadoSeleccionado' => $empleadoSeleccionado,
             'liquidaciones' => $liquidaciones,
             'liquidacionPrefill' => $liquidacion,
             'estados' => NovedadSueldosCatalogo::ESTADOS,

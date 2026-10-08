@@ -70,23 +70,25 @@ class ConceptoSetEfectivoService
                     }
                 }
             }
+        } elseif ((string) ($empleado->sin_grupo_modo ?? ConceptoElegibilidadCatalogo::SIN_GRUPO_ELEGIBILIDAD)
+            === ConceptoElegibilidadCatalogo::SIN_GRUPO_NOVEDADES) {
+            // Sin grupo y tilde en la ficha: no arma el catálogo. Más abajo entran
+            // solo novedades vigentes y asignaciones explícitas.
+            $modo = ConceptoElegibilidadCatalogo::MODO_NOVEDADES;
         } else {
-            // Sin grupo: catálogo activo + elegibilidad (SAP). No es “Anita todos”.
+            // Sin grupo: catálogo activo + elegibilidad (estilo SAP). Las novedades
+            // vigentes se suman más abajo.
             $modo = ConceptoElegibilidadCatalogo::MODO_SAP;
-            $qCat = Concepto_Sueldos::query()
+            $ids = Concepto_Sueldos::query()
                 ->where('activo', true)
-                ->where('momento', '!=', 'no_liquida');
-            if ($momentosGrupo !== null) {
-                $qCat->whereIn('momento', $momentosGrupo);
-            }
-            $candidatosIds = $qCat
-                ->pluck('id')
-                ->mapWithKeys(fn ($id) => [(int) $id => true])
-                ->all();
-            foreach (array_keys($candidatosIds) as $cid) {
+                ->where('momento', '!=', 'no_liquida')
+                ->pluck('id');
+            foreach ($ids as $id) {
+                $cid = (int) $id;
+                $candidatosIds[$cid] = true;
                 $meta[$cid] = [
                     'origen' => ConceptoElegibilidadCatalogo::ORIGEN_SAP,
-                    'detalle' => 'Sin grupo: catálogo activo; filtrado por elegibilidad del concepto',
+                    'detalle' => 'Catálogo activo (sin grupo de conceptos)',
                 ];
             }
         }

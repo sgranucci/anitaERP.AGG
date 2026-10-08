@@ -59,6 +59,7 @@ class Empleado_Sueldos extends Model implements Auditable
         'grupo_concepto_1_codigo',
         'grupo_concepto_2_codigo',
         'grupo_concepto_3_codigo',
+        'sin_grupo_modo',
         'sueldo_basico',
         'jornal_dia',
         'jornal_hora',

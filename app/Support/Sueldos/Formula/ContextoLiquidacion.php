@@ -2,8 +2,10 @@
 
 namespace App\Support\Sueldos\Formula;
 
+use App\ApiAnita;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
+use App\Support\Sueldos\AnitaAuxLiquidacionSupport;
 use App\Support\Sueldos\AntiguedadTablaResolver;
 use App\Support\Sueldos\CategoriaOrigenBases;
 use App\Support\Sueldos\Lsd\LsdDetraccionSupport;
@@ -54,6 +56,13 @@ class ContextoLiquidacion implements EntornoFormula
     /** @var list<array{periodo: int, cod: int, v1: float, v2: float}> Histórico de novedades del empleado. */
     private array $novedadesHist = [];
 
+    /**
+     * IL(concepto, liquidación): legajo => importe. Clave empresa|número|concepto.
+     *
+     * @var array<string, array<int, float>>
+     */
+    private static array $importeLiquidacionCache = [];
+
     private ParametroSueldosResolver $parametros;
 
     private int $empleadoId = 0;
@@ -97,9 +106,16 @@ class ContextoLiquidacion implements EntornoFormula
         $this->liquidacionId = (int) ($liquidacion->id ?? 0);
         $this->periodoYm = (int) ($liquidacion->periodo ?: ($this->anio * 100 + $this->mes));
         $this->cargarBases($empleado, $this->fechaRef);
-        // Tras cargar bases (categoría T o legajo C), B(1)/sueldo efectivo.
-        if (isset($this->bases['1']) && $this->bases['1'] > 0) {
-            $this->vars['empleado.sueldo_basico'] = $this->bases['1'];
+        // B(1): la base de la categoría es el piso. Si el sueldo del legajo es
+        // mayor, manda ese.
+        $baseCategoria = (float) ($this->bases['1'] ?? 0);
+        $sueldoLegajo = (float) ($this->vars['empleado.sueldo_basico'] ?? 0);
+        if ($baseCategoria > 0 || $sueldoLegajo > 0) {
+            $efectivo = max($baseCategoria, $sueldoLegajo);
+            $this->vars['empleado.sueldo_basico'] = $efectivo;
+            if ($efectivo > 0) {
+                $this->bases['1'] = $efectivo;
+            }
         }
         $this->cargarHistorico($this->empleadoId, $this->liquidacionId);
         $this->cargarNovedades();
@@ -485,6 +501,73 @@ class ContextoLiquidacion implements EntornoFormula
         return $suma;
     }
 
+    /**
+     * Anita IL(concepto, número de liquidación).
+     */
+    private function importeEnLiquidacion(int $concepto, int $numeroLiquidacion): float
+    {
+        if ($concepto <= 0 || $numeroLiquidacion <= 0) {
+            return 0.0;
+        }
+        $legajo = (int) ($this->vars['empleado.legajo'] ?? 0);
+        if ($legajo <= 0) {
+            return 0.0;
+        }
+        $clave = ((int) $this->empresaId).'|'.$numeroLiquidacion.'|'.$concepto;
+        if (! array_key_exists($clave, self::$importeLiquidacionCache)) {
+            self::$importeLiquidacionCache[$clave] = $this->cargarImporteLiquidacion($concepto, $numeroLiquidacion);
+        }
+
+        return (float) (self::$importeLiquidacionCache[$clave][$legajo] ?? 0.0);
+    }
+
+    /**
+     * @return array<int, float>
+     */
+    private function cargarImporteLiquidacion(int $concepto, int $numeroLiquidacion): array
+    {
+        $empresaId = (int) $this->empresaId;
+        if ($empresaId <= 0) {
+            return [];
+        }
+
+        $liqId = DB::table('liquidacion_sueldos')
+            ->where('empresa_id', $empresaId)
+            ->where('numero', $numeroLiquidacion)
+            ->where('estado', '!=', 'anulada')
+            ->value('id');
+        if ($liqId) {
+            $map = [];
+            $filas = DB::table('liquidacion_detalle_sueldos as d')
+                ->join('empleado_sueldos as e', 'e.id', '=', 'd.empleado_id')
+                ->where('d.liquidacion_id', $liqId)
+                ->where('d.concepto_codigo', $concepto)
+                ->groupBy('e.legajo')
+                ->selectRaw('e.legajo as legajo, SUM(d.importe) as importe')
+                ->get();
+            foreach ($filas as $f) {
+                $map[(int) $f->legajo] = (float) $f->importe;
+            }
+            // Corrida ERP sin ese concepto: no tapa el historial de Anita.
+            if ($map !== []) {
+                return $map;
+            }
+        }
+
+        try {
+            $anita = (new AnitaAuxLiquidacionSupport(new ApiAnita()))
+                ->valoresPorLegajoConcepto($empresaId, $numeroLiquidacion, [$concepto]);
+            $map = [];
+            foreach ($anita as $legajo => $porConcepto) {
+                $map[(int) $legajo] = (float) ($porConcepto[$concepto]['importe'] ?? 0);
+            }
+
+            return $map;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     private function novedadEnPeriodo(int $conceptoCodigo, int $periodoYm, int $cual): float
     {
         if ($conceptoCodigo <= 0 || $periodoYm <= 0) {
@@ -753,6 +836,10 @@ class ContextoLiquidacion implements EntornoFormula
             case 'novedad_empresa':
             case 'novedad2_empresa':
             case 'im_liquidacion':
+                // Anita IL(concepto, nro_liquidacion): importe de ese concepto
+                // en otra corrida. Primero el ERP; si esa corrida no está
+                // importada, auxhist.
+                return $this->importeEnLiquidacion((int) ($args[0] ?? 0), (int) ($args[1] ?? 0));
             case 'im_empresa':
             case 'valor_liquidacion':
             case 'cantidad_liquidacion':

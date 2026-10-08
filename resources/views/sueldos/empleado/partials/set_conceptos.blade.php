@@ -59,13 +59,35 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="4" class="text-muted text-center">
-                                Sin grupos: se usa el cat&aacute;logo activo filtrado por elegibilidad de cada concepto (estilo SAP).
-                            </td>
+                            <td colspan="4" class="text-muted text-center">Sin grupos asignados.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
+
+            @php
+                $sinGrupoModo = (string) ($empleado->sin_grupo_modo ?? ConceptoElegibilidadCatalogo::SIN_GRUPO_ELEGIBILIDAD);
+                $esperaNovedades = $sinGrupoModo === ConceptoElegibilidadCatalogo::SIN_GRUPO_NOVEDADES;
+                $tieneGrupos = count($set['grupos'] ?? []) > 0;
+            @endphp
+            <div class="border rounded p-2 mb-2 bg-light" id="sin-grupo-modo-box"
+                 data-url="{{ route('guardar_sin_grupo_modo_empleado_sueldos', ['empleado' => $empleado->id]) }}">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input" id="sin-grupo-esperar"
+                           @if ($esperaNovedades) checked @endif
+                           @if (! $puedeEditar) disabled @endif>
+                    <label class="custom-control-label" for="sin-grupo-esperar">
+                        Sin grupos: no liquidar por elegibilidad
+                    </label>
+                </div>
+                <p class="small text-muted mb-0 mt-1">
+                    @if ($tieneGrupos)
+                        Con grupos asignados se liquida por esos grupos. El tilde aplica cuando se quitan todos.
+                    @endif
+                    Tildado: espera grupos y novedades (no arma el cat&aacute;logo; entran novedades y asignaciones expl&iacute;citas).
+                    Destildado: cat&aacute;logo activo filtrado por elegibilidad, m&aacute;s las novedades.
+                </p>
+            </div>
 
             @if ($puedeEditar)
             <form id="form-empleado-agregar-grupo" class="form-row align-items-end">

@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Genera Manual de Usuario Módulo Sueldos (Word + PDF) con capturas.
+ * Genera el manual único de Sueldos y jornales (Word + PDF).
  * Ejecutar: php docs/manual-sueldos/generar.php
  */
 

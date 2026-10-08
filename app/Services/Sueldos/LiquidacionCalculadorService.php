@@ -130,10 +130,13 @@ class LiquidacionCalculadorService
             $erroresFormula = [];
 
             foreach ($empleados as $emp) {
-                $numeroRecibo++;
-                $ctx = new ContextoLiquidacion($emp, $liquidacion, $acumDefs, $parametros);
                 $setInfo = null;
                 $conceptosEmp = $this->conceptosParaEmpleado($conceptos, $emp, $liquidacion, $setInfo);
+                if ($conceptosEmp->isEmpty()) {
+                    continue;
+                }
+                $numeroRecibo++;
+                $ctx = new ContextoLiquidacion($emp, $liquidacion, $acumDefs, $parametros);
                 $lineas = $this->calcularEmpleado(
                     $ctx, $emp, $conceptosEmp, $overrides, $liquidacion, $planPendientes,
                     $setInfo['meta'] ?? [],

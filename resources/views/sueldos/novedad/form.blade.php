@@ -31,19 +31,19 @@
     <input type="hidden" name="retorno_liquidacion_id" value="{{ $liquidacionPrefill->id }}">
 @endif
 
-<div class="form-group row">
-    <label for="empleado_id" class="col-lg-3 col-form-label requerido">Empleado</label>
-    <div class="col-lg-6">
-        <select name="empleado_id" id="empleado_id" class="form-control" required>
-            <option value="">— Seleccione empresa primero —</option>
-            @foreach(($empleados ?? []) as $emp)
-                <option value="{{ $emp->id }}" {{ (int) old('empleado_id', $d->empleado_id ?? 0) === (int) $emp->id ? 'selected' : '' }}>
-                    {{ $emp->legajo }} — {{ $emp->nombre }}
-                </option>
-            @endforeach
-        </select>
-    </div>
-</div>
+@include('sueldos.partials.campo_consulta_empleado_sueldos', [
+    'layout' => 'form_row',
+    'prefix' => 'novedad_empleado',
+    'idInputName' => 'empleado_id',
+    'empleadoId' => optional($empleadoSeleccionado ?? null)->id ?? '',
+    'legajo' => optional($empleadoSeleccionado ?? null)->legajo ?? '',
+    'nombre' => optional($empleadoSeleccionado ?? null)->nombre ?? '',
+    'required' => true,
+    'label' => 'Empleado',
+    'col_label' => 'col-lg-3 control-label text-right pr-2',
+    'col_input' => 'col-lg-6',
+    'nextFocus' => '#concepto_sueldos_id_codigo',
+])
 
 @include('sueldos.partials.campo_consulta_concepto_sueldos', [
     'layout' => 'form_row',
@@ -128,28 +128,17 @@
 
 <script>
 (function () {
-    var urlEmp = @json(route('empleados_empresa_novedad_sueldos'));
     var urlLiq = @json(route('liquidaciones_empresa_novedad_sueldos'));
     var $empresa = $('#empresa_id');
-    var $emp = $('#empleado_id');
     var $liq = $('#liquidacion_id');
-    var empSel = @json((int) old('empleado_id', $d->empleado_id ?? 0));
     var liqSel = @json((int) $liqId);
 
-    function cargarDependientes() {
+    function cargarLiquidaciones() {
         var eid = $empresa.val();
         if (!eid) {
-            $emp.html('<option value="">— Seleccione empresa primero —</option>');
             $liq.html('<option value="">— Sin corrida —</option>');
             return;
         }
-        $.get(urlEmp, { empresa_id: eid }).done(function (items) {
-            var html = '<option value="">— Seleccione —</option>';
-            (items || []).forEach(function (it) {
-                html += '<option value="' + it.id + '"' + (parseInt(it.id, 10) === empSel ? ' selected' : '') + '>' + it.texto + '</option>';
-            });
-            $emp.html(html);
-        });
         $.get(urlLiq, { empresa_id: eid }).done(function (items) {
             var html = '<option value="">— Sin corrida (solo período) —</option>';
             (items || []).forEach(function (it) {
@@ -160,9 +149,8 @@
     }
 
     $empresa.on('change', function () {
-        empSel = 0;
         liqSel = 0;
-        cargarDependientes();
+        cargarLiquidaciones();
     });
 })();
 </script>
