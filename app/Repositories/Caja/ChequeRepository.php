@@ -791,6 +791,11 @@ class ChequeRepository implements ChequeRepositoryInterface
                 $chequera = $chequeraId ? $this->chequeraRepository->find($chequeraId) : null;
                 if ($chequera) {
                     ChequeConsultaChequeraSupport::assertNumeroDentroDeChequera($chequera, (string) $numeroReemplazo);
+                    ChequeConsultaChequeraSupport::assertChequeraAptoParaEmision(
+                        $chequera,
+                        $fechaOperacion,
+                        $fechaPago
+                    );
                 }
                 $negociable = ChequePropioInstrumentoSupport::negociable(
                     (string) ($anulado->negociable ?? ''),
