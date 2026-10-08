@@ -77,6 +77,7 @@ use App\Support\Ventas\TransporteDepositoSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use App\Support\Ventas\ComprobanteImpresionResolverSupport;
 use App\Support\Ventas\ComprobanteImpresionSesionUrlSupport;
+use App\Support\Ventas\ElBierzoDivisionFacturaSupport;
 use App\Support\Ventas\VillafrancaFacturacionSupport;
 use App\Support\Ventas\PedidoFacturaAnitaDeferSupport;
 use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
@@ -247,6 +248,8 @@ class FacturacionService
 	protected $facturandoDesdeRemitoId;
 	/** @var int|null Numeración remito ya emitida (no pedir MAX+1). */
 	protected $numeroremitoFijoDesdeRemito;
+	/** Segunda pata Villafranca: el remito ya quedó facturado contra la FAC de Bierzo. */
+	protected $aceptarLineasRemitoYaFacturadas = false;
 	/** @var int FAC de Bierzo recién emitida; la VF de la división la apunta. */
 	protected $ventaOrigenIdDivision;
 
@@ -359,6 +362,7 @@ class FacturacionService
 		$this->flCalculaDesdeGeneracionFactura = false;
 		$this->facturandoDesdeRemitoId = null;
 		$this->numeroremitoFijoDesdeRemito = null;
+		$this->aceptarLineasRemitoYaFacturadas = false;
 		$this->ventaOrigenIdDivision = 0;
     }
 
@@ -836,32 +840,23 @@ class FacturacionService
 	{
 		$retorno = null;
 
-		// División Bierzo/Villafranca (tipoexpreso 3/4). Pedidos IF suelen ir sin transporte.
+		// División Bierzo/Villafranca (tipoexpreso 3/4). Solo El Bierzo.
+		// Pedidos de otros clientes suelen ir sin transporte.
 		$tipoExpreso = (string) ($pedido->transportes?->tipoexpreso ?? '');
+		$planDivision = ElBierzoDivisionFacturaSupport::plan(
+			$cliente,
+			$tipoExpreso,
+			(string) ($tipotransaccion->codigo ?? '')
+		);
 
-		// Controla si divide factura
-		if (($tipoExpreso === '4' || $tipoExpreso === '3') &&
-			($tipotransaccion->codigo == '001' || $tipotransaccion->codigo == '201'))
+		if ($planDivision !== null)
 		{
-			if ($tipoExpreso === '4') // Genera solo remito
-				$this->coeficienteExtraCliente = config('facturacion.COEFICIENTE_EXTRA_REPARTO_101');
-			else
-				$this->coeficienteExtraCliente = $cliente->coeficienteextra;
-
-			// Reparto 101 no usa el coeficiente del cliente: el 100% va a Villafranca
-			// y en El Bierzo queda solo el remito. Sin coeficiente, el pedido caía
-			// en una FAC normal del punto de prueba (A 8).
-			if (isset($cliente->coeficientes) || $tipoExpreso === '4')
-			{
 				$this->flDivide = true;
 				$this->flGrabaComprobanteDividido = false;
-				$this->usaNumeradorVillafrancaPropio = VillafrancaFacturacionSupport::esReparto101($pedido);
-
-				if ($tipoExpreso === '4') // Reparto 101 con remito en bierzo
-					$this->coeficienteCliente = 100.;
-				else
-					$this->coeficienteCliente = $cliente->coeficientes->porcentajedivision;
-				$this->tasaImpuesto = isset($cliente->coeficientes) ? $cliente->coeficientes->tasa : 0;
+				$this->usaNumeradorVillafrancaPropio = $planDivision['reparto101'];
+				$this->coeficienteExtraCliente = $planDivision['extra'];
+				$this->coeficienteCliente = $planDivision['porcentaje'];
+				$this->tasaImpuesto = $planDivision['tasa'];
 
 				// Si no es toda dividida genera factura por el resto en el Bierzo
 				if ($this->coeficienteCliente < 100)
@@ -932,7 +927,6 @@ class FacturacionService
 				$retorno2 = $this->ocultarComprobanteDivididoEnMensaje($retorno2);
 
 				$retorno = [$retorno1, $retorno2];
-			}
 		}
 
 		if ($retorno === null) {
@@ -1035,7 +1029,12 @@ class FacturacionService
 		PedidoFacturacionProfiler::etapa('calcula_factura_fin');
 
 		if (! is_array($calculoFactura) || isset($calculoFactura['error'])) {
-			return ['error' => $calculoFactura['error'] ?? 'No se pudo calcular la factura del pedido.'];
+			$errorCalculo = ['error' => $calculoFactura['error'] ?? 'No se pudo calcular la factura del pedido.'];
+			if (! empty($calculoFactura['division_sin_lineas'])) {
+				$errorCalculo['division_sin_lineas'] = true;
+			}
+
+			return $errorCalculo;
 		}
 
 		if (empty($calculoFactura['datosfactura'])) {
@@ -1594,12 +1593,16 @@ class FacturacionService
 					
 					PedidoFacturacionProfiler::etapa('remito_erp_inicio');
 					// Remito ERP solo FAC/FCE (administración Bierzo; no gastronomía/estacionamiento/NC)
-					if ($emiteRemito && $this->facturandoDesdeRemitoId) {
+					$esPataVillaDeSplit = EntornoEmpresaSupport::esElBierzo()
+						&& $this->flDivide
+						&& $this->flGrabaComprobanteDividido
+						&& (float) $this->coeficienteCliente < 100;
+					if ($emiteRemito && $this->facturandoDesdeRemitoId && ! $esPataVillaDeSplit) {
 						app(\App\Services\Ventas\RemitoService::class)->marcarFacturado(
 							(int) $this->facturandoDesdeRemitoId,
 							(int) $vta->id
 						);
-					} elseif ($emiteRemito && (int) $numeroremito > 0 && $puntoventaremito) {
+					} elseif ($emiteRemito && ! $this->facturandoDesdeRemitoId && ! $esPataVillaDeSplit && (int) $numeroremito > 0 && $puntoventaremito) {
 						$remitoService = app(\App\Services\Ventas\RemitoService::class);
 						$remitoPendiente = \App\Models\Ventas\Remito::query()
 							->where('pedido_id', $pedido_id)
@@ -2601,6 +2604,7 @@ class FacturacionService
 		$this->descuentoPie = (float) str_replace(',', '.', (string) ($data['descuentopie'] ?? 0));
 		$this->descuentoLinea = 0;
 		$this->descuentoImportePie = (float) str_replace(',', '.', (string) ($data['descuentoimportepie'] ?? 0));
+		$this->anularDescuentoPieSiVillafranca();
 		$fechaFactura = $data['fechafactura'];
 		$this->activarGrabacionAnitaVillafrancaSiNotaCreditoDivision(
 			(int) $puntoventa_id,
@@ -3129,6 +3133,34 @@ class FacturacionService
 				$pedidoCombinacionIdLinea = (int) $otLineaMostrador['pedido_combinacion_id'];
 			}
 
+			if (EntornoEmpresaSupport::esElBierzo() && $this->flDivide && ! $esPosMostrador && ! $esNcMostrador) {
+				$divideArticulo = ($articulo_id && isset($articulo)) ? (string) ($articulo->divide ?? '') : null;
+				$partidaDivision = ElBierzoDivisionFacturaSupport::partirLinea(
+					$cantidadLinea,
+					$piezaLinea,
+					$cajaLinea,
+					(float) str_replace(',', '', (string) $precioUnitario),
+					$divideArticulo,
+					(float) $this->coeficienteCliente,
+					(float) $this->coeficienteExtraCliente,
+					(bool) $this->flGrabaComprobanteDividido
+				);
+				if ($partidaDivision['omitir']) {
+					continue;
+				}
+				$cantidadLinea = $partidaDivision['cantidad'];
+				$piezaLinea = $partidaDivision['pieza'];
+				$cajaLinea = $partidaDivision['caja'];
+				$precioUnitario = $partidaDivision['precio'];
+				$precioConDescuento = $this->descuentoLinea != 0
+					? round($precioUnitario * (1. - ($this->descuentoLinea / 100.)), 2)
+					: $precioUnitario;
+				$kiloDescuento = $cantidadLinea;
+				if ((float) $this->descuentoLinea != 0.0) {
+					$kiloDescuento = round($cantidadLinea * (1. - ($this->descuentoLinea / 100.)), 1);
+				}
+			}
+
 			$tratamientoFiscal = '';
 			if (is_array($tratamientosFiscalesInput) && isset($tratamientosFiscalesInput[$offItem])) {
 				$tratamiento = strtolower(trim((string) $tratamientosFiscalesInput[$offItem]));
@@ -3181,6 +3213,12 @@ class FacturacionService
 				'origen_mostrador' => is_array($otLineaMostrador) ? ($otLineaMostrador['origen_mostrador'] ?? null) : null,
 			];
 			$totCantidad += $cantidadLinea;
+		}
+		if ($dataFactura === [] && EntornoEmpresaSupport::esElBierzo() && $this->flDivide) {
+			return [
+				'error' => 'La división no deja ítems en este comprobante.',
+				'division_sin_lineas' => true,
+			];
 		}
 		if ($errorPickingMostrador = FacturaMostradorPickingFerliSupport::errorSiFaltanGrupos()) {
 			return $errorPickingMostrador;
@@ -3318,11 +3356,23 @@ class FacturacionService
 			(int) ($data['tipotransaccion_id'] ?? 0)
 		);
 
+		if (empty($data['_division_bierzo_en_curso']) && EntornoEmpresaSupport::esElBierzo() && ! $this->esEmisionPos($data)) {
+			$planMostrador = $this->planDivisionMostrador($data);
+			if ($planMostrador !== null) {
+				return $this->emitirMostradorConDivision($data, $planMostrador);
+			}
+		}
+
 		// Recalcula factura
 		$calculoFactura = Self::calculaFacturaGeneral($data);
 
 		if (isset($calculoFactura['error'])) {
-			return ['error' => $calculoFactura['error']];
+			$errorCalculo = ['error' => $calculoFactura['error']];
+			if (! empty($calculoFactura['division_sin_lineas'])) {
+				$errorCalculo['division_sin_lineas'] = true;
+			}
+
+			return $errorCalculo;
 		}
 
 		$puntoventa_id = $data['puntoventa_id'];
@@ -3346,6 +3396,7 @@ class FacturacionService
 		$this->descuentoPie = $data['descuentopie'] ?? 0;
 		$this->descuentoLinea = $data['descuentolinea'] ?? 0;
 		$this->descuentoImportePie = $data['descuentoimportepie'] ?? 0;
+		$this->anularDescuentoPieSiVillafranca();
 
 		if (isset($data['fecha']))
 			$fechaFactura = $data['fecha'];
@@ -3588,6 +3639,20 @@ class FacturacionService
 			}
 			$this->propagarOmitirNumeraAnitaFinEnOpcionesEmision($data);
 
+			$numeroReservadoVillafranca = false;
+			if (EntornoEmpresaSupport::esElBierzo() && $this->debeUsarNumeradorVillafrancaPropio()) {
+				if ((int) $this->numeroReservadoVillafrancaReparto101 > 0) {
+					$numero = (int) $this->numeroReservadoVillafrancaReparto101;
+				} else {
+					$reservadoVillafranca = $this->reservarNumeroVillafrancaReparto101('FAC', $letra);
+					if (is_array($reservadoVillafranca)) {
+						return $reservadoVillafranca;
+					}
+					$numero = (int) $reservadoVillafranca;
+					$this->numeroReservadoVillafrancaReparto101 = $numero;
+				}
+				$numeroReservadoVillafranca = true;
+			} else {
 			$numeroForzado = (int) ($data['numerocomprobante_forzado'] ?? 0);
 			$opcionesEmisionNumeracion = is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : [];
 			switch($puntoventa->modofacturacion)
@@ -3637,7 +3702,8 @@ class FacturacionService
 						);
 					}
 					break;
-			}			
+			}
+			}
 			$centrocosto_id = null;
 			if ($numero != -1)
 			{
@@ -3663,7 +3729,19 @@ class FacturacionService
 				else
 					$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
 
-				$numero++;
+				if (empty($numeroReservadoVillafranca)) {
+					$numero++;
+					if (EntornoEmpresaSupport::esElBierzo() && $this->flDivide && ! $this->flGrabaComprobanteDividido) {
+						$this->numeroComprobanteDivision = (int) $numero;
+					}
+					if (EntornoEmpresaSupport::esElBierzo()
+						&& $this->flGrabaComprobanteDividido
+						&& (int) $this->numeroComprobanteDivision > 0
+						&& ! $this->debeUsarNumeradorVillafrancaPropio()
+					) {
+						$numero = (int) $this->numeroComprobanteDivision;
+					}
+				}
 
 				// Arma detalle
 				$detalleContable = $tipoAnita." ".$letra." ".$puntoventa->codigo." ".$numero;
@@ -10497,6 +10575,7 @@ class FacturacionService
 		$this->descuentoPie = $data['descuentopie'] ?? 0;
 		$this->descuentoLinea = $data['descuentolinea'] ?? 0;
 		$this->descuentoImportePie = $data['descuentoimportepie'] ?? 0;
+		$this->anularDescuentoPieSiVillafranca();
 		$this->numeroDespacho = '';
 
 		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
@@ -10515,12 +10594,14 @@ class FacturacionService
 			return ['error' => 'Remito inexistente'];
 		}
 
-		$motivo = \App\Support\Ventas\RemitoEstadosSupport::motivoNoFacturable($remito);
-		if ($motivo !== null) {
-			return ['error' => $motivo];
+		if (! $this->aceptarLineasRemitoYaFacturadas) {
+			$motivo = \App\Support\Ventas\RemitoEstadosSupport::motivoNoFacturable($remito);
+			if ($motivo !== null) {
+				return ['error' => $motivo];
+			}
 		}
 
-		if (VillafrancaFacturacionSupport::esReparto101($remito)) {
+		if (EntornoEmpresaSupport::esElBierzo() && VillafrancaFacturacionSupport::esReparto101($remito)) {
 			$this->flGrabaComprobanteDividido = true;
 			if ((float) $this->coeficienteExtraCliente <= 0) {
 				$this->coeficienteExtraCliente = VillafrancaFacturacionSupport::coeficienteReparto101();
@@ -10541,7 +10622,8 @@ class FacturacionService
 			if (! $linea || (int) $linea->remito_id !== (int) $remito->id) {
 				continue;
 			}
-			if (! \App\Support\Ventas\RemitoEstadosSupport::lineaPendienteDeFacturar($linea)) {
+			if (! $this->aceptarLineasRemitoYaFacturadas
+				&& ! \App\Support\Ventas\RemitoEstadosSupport::lineaPendienteDeFacturar($linea)) {
 				continue;
 			}
 
@@ -10561,14 +10643,33 @@ class FacturacionService
 				}
 			}
 
-			$precioUnitario = $linea->precio;
-			if (VillafrancaFacturacionSupport::esReparto101($remito)
-				&& (float) $this->coeficienteExtraCliente > 0) {
-				$precioUnitario = $linea->precio * $this->coeficienteExtraCliente;
-			}
+			$precioUnitario = (float) $linea->precio;
 			$kilo = (float) $linea->kilo;
 			$pieza = (float) $linea->pieza;
 			$caja = (float) $linea->caja;
+			if (EntornoEmpresaSupport::esElBierzo() && $this->flDivide) {
+				$partidaDivision = ElBierzoDivisionFacturaSupport::partirLinea(
+					$kilo,
+					$pieza,
+					$caja,
+					$precioUnitario,
+					(string) ($articulo->divide ?? ''),
+					(float) $this->coeficienteCliente,
+					(float) $this->coeficienteExtraCliente,
+					(bool) $this->flGrabaComprobanteDividido
+				);
+				if ($partidaDivision['omitir']) {
+					continue;
+				}
+				$kilo = $partidaDivision['cantidad'];
+				$pieza = $partidaDivision['pieza'];
+				$caja = $partidaDivision['caja'];
+				$precioUnitario = $partidaDivision['precio'];
+			} elseif (EntornoEmpresaSupport::esElBierzo()
+				&& VillafrancaFacturacionSupport::esReparto101($remito)
+				&& (float) $this->coeficienteExtraCliente > 0) {
+				$precioUnitario = $linea->precio * $this->coeficienteExtraCliente;
+			}
 
 			if ($this->descuentoLinea != 0) {
 				$precioConDescuento = round($precioUnitario * (1. - ($this->descuentoLinea / 100.)), 2);
@@ -10640,7 +10741,10 @@ class FacturacionService
 		$totalComprobante = $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total', 'importe');
 
 		if ($dataFactura === []) {
-			return ['error' => 'No hay ítems pendientes para facturar del remito.'];
+			return [
+				'error' => 'No hay ítems pendientes para facturar del remito.',
+				'division_sin_lineas' => EntornoEmpresaSupport::esElBierzo() && (bool) $this->flDivide,
+			];
 		}
 		if ($totalComprobante == 0.) {
 			return ['error' => 'El total del comprobante es 0. Revise precios del remito.'];
@@ -10726,25 +10830,11 @@ class FacturacionService
 		$this->flGrabaComprobanteDividido = false;
 		$this->usaNumeradorVillafrancaPropio = false;
 		$this->numeroReservadoVillafrancaReparto101 = 0;
+		$this->ventaOrigenIdDivision = 0;
+		$this->puntoVentaDivision_id = 0;
 		$this->facturandoDesdeRemitoId = (int) $remito->id;
 		$this->numeroremitoFijoDesdeRemito = (int) $remito->numero;
-
-		if (VillafrancaFacturacionSupport::esReparto101($remito)) {
-			$pv101 = VillafrancaFacturacionSupport::idPuntoVentaReparto101();
-			if ($pv101 <= 0) {
-				return [
-					'error' => 'Error punto de venta Villafranca',
-					'mensaje' => 'No está configurado el punto de venta Villafranca sucursal 1 para el reparto 101.',
-				];
-			}
-			$this->usaNumeradorVillafrancaPropio = true;
-			$this->flGrabaComprobanteDividido = true;
-			$this->flDivide = true;
-			$this->coeficienteCliente = 100.;
-			$this->coeficienteExtraCliente = VillafrancaFacturacionSupport::coeficienteReparto101();
-			$this->puntoVentaDivision_id = $pv101;
-			$data['puntoventa_id'] = $pv101;
-		}
+		$this->aceptarLineasRemitoYaFacturadas = false;
 
 		$data['cliente_id'] = $cliente_id;
 		$data['remito_id'] = $remito->id;
@@ -10764,22 +10854,25 @@ class FacturacionService
 			$codigoDocRemito = (string) ($remito->pedidos->codigo ?? $remito->pedido->codigo ?? '');
 		}
 		if ($errorCircuito = $this->errorCircuitoAfipFacturacion($data, $cliente, $tipoRemito, $codigoDocRemito)) {
+			$this->cerrarFacturacionDesdeRemito();
+
 			return $errorCircuito;
 		}
 
-		$emitir = function () use ($data, $cliente, $remito) {
-			try {
-				// $remito actúa como cabecera (mismos campos que pedido: cond/vendedor/transporte/entrega)
-				$retorno = PedidoFacturaAnitaDeferSupport::tomarYProgramar(
-					$this->generaUnaFacturaPorPedido($data, $cliente, $remito),
-					'remito',
-				);
-			} finally {
-				$this->facturandoDesdeRemitoId = null;
-				$this->numeroremitoFijoDesdeRemito = null;
-			}
+		$planRemito = EntornoEmpresaSupport::esElBierzo()
+			? ElBierzoDivisionFacturaSupport::plan(
+				$cliente,
+				(string) ($remito->transportes?->tipoexpreso ?? ''),
+				(string) ($tipoRemito->codigo ?? '')
+			)
+			: null;
 
-			return [$retorno];
+		$emitir = function () use ($data, $cliente, $remito, $planRemito) {
+			try {
+				return $this->emitirFacturasDeRemito($data, $cliente, $remito, $planRemito);
+			} finally {
+				$this->cerrarFacturacionDesdeRemito();
+			}
 		};
 
 		$pedidoId = (int) ($remito->pedido_id ?: 0);
@@ -10790,6 +10883,205 @@ class FacturacionService
 		}
 
 		return $this->anexarUrlImpresionSesion($emitir());
+	}
+
+	/**
+	 * Divide el remito solo en El Bierzo. El plan nulo deja una sola factura.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @param  array{reparto101: bool, porcentaje: float, extra: float, tasa: float}|null  $plan
+	 * @return array<int|string, mixed>
+	 */
+	private function emitirFacturasDeRemito(array $data, $cliente, $remito, ?array $plan): array
+	{
+		$emitirUna = function (array $dataEmitir) use ($cliente, $remito) {
+			return PedidoFacturaAnitaDeferSupport::tomarYProgramar(
+				$this->generaUnaFacturaPorPedido($dataEmitir, $cliente, $remito),
+				'remito',
+			);
+		};
+
+		if ($plan === null || ! EntornoEmpresaSupport::esElBierzo()) {
+			return [$emitirUna($data)];
+		}
+
+		if ($plan['porcentaje'] < 100) {
+			$this->aplicarPlanDivision($plan, false);
+			$this->puntoVentaDivision_id = 0;
+			$ret1 = $emitirUna($data);
+			if ($this->resultadoFacturaPedidoConError($ret1)) {
+				return [$ret1];
+			}
+
+			$this->ventaOrigenIdDivision = (int) ($ret1['venta_id'] ?? 0);
+			$this->aplicarPlanDivision($plan, true);
+			$this->puntoVentaDivision_id = (int) config('facturacion.PUNTOVENTA_DIVISION_ID');
+			$dataVilla = $data;
+			$dataVilla['puntoventa_id'] = $this->puntoVentaDivision_id;
+			$this->aceptarLineasRemitoYaFacturadas = true;
+			$ret2 = $emitirUna($dataVilla);
+			if (! empty($ret2['division_sin_lineas'])) {
+				return [$ret1];
+			}
+
+			return [$ret1, $this->ocultarComprobanteDivididoEnMensaje($ret2)];
+		}
+
+		$this->aplicarPlanDivision($plan, true);
+		if ($plan['reparto101']) {
+			$pv = VillafrancaFacturacionSupport::idPuntoVentaReparto101();
+			if ($pv <= 0) {
+				return [[
+					'error' => 'Error punto de venta Villafranca',
+					'mensaje' => 'No está configurado el punto de venta Villafranca sucursal 1 para el reparto 101.',
+				]];
+			}
+		} else {
+			$pv = (int) config('facturacion.PUNTOVENTA_DIVISION_ID');
+		}
+		$this->puntoVentaDivision_id = $pv;
+		$data['puntoventa_id'] = $pv;
+
+		return [$emitirUna($data)];
+	}
+
+	/**
+	 * Mostrador de El Bierzo: mismas dos patas que el pedido. Fuera de El Bierzo no se llama.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array{reparto101: bool, porcentaje: float, extra: float, tasa: float}|null
+	 */
+	private function planDivisionMostrador(array $data): ?array
+	{
+		if (! EntornoEmpresaSupport::esElBierzo() || $this->esEmisionPos($data)) {
+			return null;
+		}
+		if ((int) ($data['venta_id'] ?? 0) > 0) {
+			return null;
+		}
+
+		$cliente = $this->clienteQuery->traeClienteporId($data['cliente_id'] ?? 0);
+		$tipo = null;
+		try {
+			$tipo = $this->tipotransaccionRepository->find($data['tipotransaccion_id'] ?? 0);
+		} catch (\Throwable $e) {
+			$tipo = null;
+		}
+		if (! $cliente || ! $tipo) {
+			return null;
+		}
+
+		$transporteId = TransporteDepositoSupport::transporteIdDesdeFactura($data, $cliente);
+		if ($transporteId <= 0) {
+			return null;
+		}
+
+		try {
+			$transporte = $this->transporteRepository->find($transporteId);
+		} catch (\Throwable $e) {
+			return null;
+		}
+
+		return ElBierzoDivisionFacturaSupport::plan(
+			$cliente,
+			(string) ($transporte->tipoexpreso ?? ''),
+			(string) ($tipo->codigo ?? '')
+		);
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 * @param  array{reparto101: bool, porcentaje: float, extra: float, tasa: float}  $plan
+	 * @return array<string, mixed>
+	 */
+	private function emitirMostradorConDivision(array $data, array $plan): array
+	{
+		if (! EntornoEmpresaSupport::esElBierzo()) {
+			$data['_division_bierzo_en_curso'] = 1;
+
+			return $this->generaComprobanteGeneral($data);
+		}
+
+		$this->flDivide = true;
+		$this->coeficienteCliente = (float) $plan['porcentaje'];
+		$this->coeficienteExtraCliente = (float) $plan['extra'];
+		$this->tasaImpuesto = (float) $plan['tasa'];
+		$this->usaNumeradorVillafrancaPropio = (bool) $plan['reparto101'];
+		$this->numeroComprobanteDivision = 0;
+		$this->numeroReservadoVillafrancaReparto101 = 0;
+		$this->ventaOrigenIdDivision = 0;
+		$this->puntoVentaDivision_id = 0;
+
+		try {
+			if ($plan['porcentaje'] < 100) {
+				$this->flGrabaComprobanteDividido = false;
+				$dataBierzo = $data;
+				$dataBierzo['_division_bierzo_en_curso'] = 1;
+				$ret1 = $this->generaComprobanteGeneral($dataBierzo);
+				if ($this->resultadoFacturaPedidoConError($ret1)) {
+					return $ret1;
+				}
+
+				$this->ventaOrigenIdDivision = (int) ($ret1['venta_id'] ?? 0);
+				$this->flGrabaComprobanteDividido = true;
+				$this->puntoVentaDivision_id = (int) config('facturacion.PUNTOVENTA_DIVISION_ID');
+				$dataVilla = $data;
+				$dataVilla['_division_bierzo_en_curso'] = 1;
+				$dataVilla['puntoventa_id'] = $this->puntoVentaDivision_id;
+				$ret2 = $this->generaComprobanteGeneral($dataVilla);
+				if (! empty($ret2['division_sin_lineas'])) {
+					return $ret1;
+				}
+				if ($this->resultadoFacturaPedidoConError($ret2)) {
+					return $ret2;
+				}
+
+				return $ret1;
+			}
+
+			$this->flGrabaComprobanteDividido = true;
+			if ($plan['reparto101']) {
+				$pv = VillafrancaFacturacionSupport::idPuntoVentaReparto101();
+				if ($pv <= 0) {
+					return [
+						'error' => 'No está configurado el punto de venta Villafranca sucursal 1 para el reparto 101.',
+					];
+				}
+			} else {
+				$pv = (int) config('facturacion.PUNTOVENTA_DIVISION_ID');
+			}
+			$this->puntoVentaDivision_id = $pv;
+			$dataVilla = $data;
+			$dataVilla['_division_bierzo_en_curso'] = 1;
+			$dataVilla['puntoventa_id'] = $pv;
+
+			return $this->generaComprobanteGeneral($dataVilla);
+		} finally {
+			$this->flDivide = false;
+			$this->flGrabaComprobanteDividido = false;
+			$this->usaNumeradorVillafrancaPropio = false;
+			$this->ventaOrigenIdDivision = 0;
+		}
+	}
+
+	/**
+	 * @param  array{reparto101: bool, porcentaje: float, extra: float, tasa: float}  $plan
+	 */
+	private function aplicarPlanDivision(array $plan, bool $ladoVillafranca): void
+	{
+		$this->flDivide = true;
+		$this->flGrabaComprobanteDividido = $ladoVillafranca;
+		$this->coeficienteCliente = (float) $plan['porcentaje'];
+		$this->coeficienteExtraCliente = (float) $plan['extra'];
+		$this->tasaImpuesto = (float) $plan['tasa'];
+		$this->usaNumeradorVillafrancaPropio = (bool) $plan['reparto101'];
+	}
+
+	private function cerrarFacturacionDesdeRemito(): void
+	{
+		$this->facturandoDesdeRemitoId = null;
+		$this->numeroremitoFijoDesdeRemito = null;
+		$this->aceptarLineasRemitoYaFacturadas = false;
 	}
 
 	/**
