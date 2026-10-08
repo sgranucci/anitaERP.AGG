@@ -265,23 +265,57 @@ final class ChequeConsultaChequeraSupport
             $out[] = self::serializar($ch, $preferirDiferido, $ultimos[(int) $ch->id] ?? null);
         }
 
-        usort($out, static function (array $a, array $b): int {
-            $cmp = ((int) $b['preferida']) <=> ((int) $a['preferida']);
-            if ($cmp !== 0) {
-                return $cmp;
-            }
-            // La que se está usando (último número más alto) queda primera,
-            // aunque esté agotada: así el aviso de "se terminó" no se saltea
-            // eligiendo otro talonario viejo que todavía tenga números.
-            $cmp = ((int) ($b['ultimo'] ?? 0)) <=> ((int) ($a['ultimo'] ?? 0));
-            if ($cmp !== 0) {
-                return $cmp;
-            }
+        usort($out, [self::class, 'compararParaListado']);
 
-            return strcmp((string) $a['codigo'], (string) $b['codigo']);
-        });
+        $marcoVigente = false;
+        foreach ($out as $i => $fila) {
+            $out[$i]['vigente'] = false;
+            if ($marcoVigente || empty($fila['preferida']) || ! self::tieneNumeros($fila)) {
+                continue;
+            }
+            $out[$i]['vigente'] = true;
+            $marcoVigente = true;
+        }
 
         return $out;
+    }
+
+    /**
+     * La del tipo pedido que todavía tiene números y el último usado más alto
+     * queda primera. Una agotada (aunque su último número sea más grande, de
+     * un talonario viejo) no tapa a la que se está usando.
+     *
+     * @param  array<string, mixed>  $a
+     * @param  array<string, mixed>  $b
+     */
+    public static function compararParaListado(array $a, array $b): int
+    {
+        $cmp = ((int) ($b['preferida'] ?? 0)) <=> ((int) ($a['preferida'] ?? 0));
+        if ($cmp !== 0) {
+            return $cmp;
+        }
+        $cmp = self::tieneNumeros($b) <=> self::tieneNumeros($a);
+        if ($cmp !== 0) {
+            return $cmp;
+        }
+        $cmp = ((int) ($b['ultimo'] ?? 0)) <=> ((int) ($a['ultimo'] ?? 0));
+        if ($cmp !== 0) {
+            return $cmp;
+        }
+
+        return strcmp((string) ($a['codigo'] ?? ''), (string) ($b['codigo'] ?? ''));
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     */
+    public static function tieneNumeros(array $fila): int
+    {
+        if (! array_key_exists('disponibles', $fila) || $fila['disponibles'] === null) {
+            return 1;
+        }
+
+        return (int) $fila['disponibles'] > 0 ? 1 : 0;
     }
 
     /**
@@ -356,7 +390,56 @@ final class ChequeConsultaChequeraSupport
             'etiqueta' => self::etiquetaCompacta($codigo, $tipo),
             'etiqueta_completa' => self::etiquetaCompleta($codigo, $tipo, $desde, $hasta),
             'preferida' => $preferirDiferido ? $tipo === 'D' : $tipo !== 'D',
+            'vigente' => false,
         ];
+    }
+
+    /**
+     * Corta la grabación si la chequera no es del tipo del pago (al día / diferido).
+     * Con varias activas, emitir en la de otro tipo fue lo que numeró Kandiko
+     * con el talonario viejo.
+     *
+     * @throws \RuntimeException
+     */
+    public static function assertChequeraAptoParaEmision(Chequera $chequera, string $fechaEmision, string $fechaPago): void
+    {
+        $diferido = ChequePropioAnitaNumeracionSupport::esFechaDiferida($fechaEmision, $fechaPago);
+        $tipo = strtoupper(trim((string) ($chequera->tipocheque ?? '')));
+        $esDiferida = $tipo === 'D';
+        if ($esDiferida === $diferido) {
+            return;
+        }
+
+        $codigo = trim((string) ($chequera->codigo ?? '')) ?: ('#'.$chequera->id);
+        $desde = (int) preg_replace('/\D/', '', (string) ($chequera->desdenumerocheque ?? ''));
+        $hasta = (int) preg_replace('/\D/', '', (string) ($chequera->hastanumerocheque ?? ''));
+        $vigente = self::textoChequeraVigente((int) $chequera->cuentacaja_id, $diferido);
+
+        throw new \RuntimeException(
+            'La chequera '.$codigo.' es '.($esDiferida ? 'de cheque diferido' : 'de cheque al día')
+            .' ('.$desde.'-'.$hasta.') y este pago es '.($diferido ? 'diferido' : 'al día').'. '
+            .$vigente
+        );
+    }
+
+    public static function textoChequeraVigente(int $cuentacajaId, bool $diferido): string
+    {
+        $filas = self::consultar([
+            'cuentacaja_id' => $cuentacajaId,
+            'preferir_diferido' => $diferido,
+            'incluir_terminadas' => false,
+        ]);
+        foreach ($filas as $fila) {
+            if (empty($fila['vigente'])) {
+                continue;
+            }
+            $codigo = trim((string) ($fila['codigo'] ?? '')) ?: ('#'.$fila['id']);
+
+            return 'La chequera en uso es '.$codigo.' ('.$fila['rango'].')'
+                .', próximo '.(string) ($fila['ultimo'] > 0 ? ((int) $fila['ultimo'] + 1) : ($fila['desde'] ?? '')).'.';
+        }
+
+        return 'No hay otra chequera activa con números para este tipo de cheque.';
     }
 
     /**

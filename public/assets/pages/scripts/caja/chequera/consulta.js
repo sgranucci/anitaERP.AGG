@@ -39,7 +39,7 @@ function htmlFilasConsultaChequera(filas, selectedId) {
     }
     var html = '';
     filas.forEach(function (fila, i) {
-        var sugerida = !!fila.preferida;
+        var sugerida = !!fila.vigente;
         var sel = String(fila.id) === String(selectedId || '');
         var cls = 'chequera-consulta-fila';
         if (sugerida) {
@@ -53,7 +53,7 @@ function htmlFilasConsultaChequera(filas, selectedId) {
         var btnAbm = fila.url_abm
             ? ' <a class="btn btn-info btn-sm" href="' + escapeHtmlChequera(fila.url_abm) + '" target="_blank" rel="noopener">Consultar</a>'
             : '';
-        var hint = sugerida ? ' <span class="badge badge-info">Sugerida</span>' : '';
+        var hint = sugerida ? ' <span class="badge badge-info">En uso</span>' : '';
         html += '<tr class="' + cls + '" data-idx="' + i + '" data-id="' + escapeHtmlChequera(fila.id) + '"'
             + ' title="' + escapeHtmlChequera(fila.etiqueta_completa || fila.etiqueta || '') + '">';
         html += '<td>' + escapeHtmlChequera(fila.codigo) + hint + '</td>';

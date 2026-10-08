@@ -31,15 +31,23 @@
         $cliente->paises_uif->nombre ?? '',
     ], fn($v) => $v !== '');
 
-    $logoAggPath = public_path('storage/imagenes/logos/AGG.png');
-    $logoAguasPath = public_path('storage/imagenes/logos/logoAguas.jpg');
-    $logoMime = 'jpeg';
-    $logoPath = $logoAguasPath;
-    if (config('app.empresa') == 'AGG' && is_file($logoAggPath)) {
-        $logoPath = $logoAggPath;
-        $logoMime = 'png';
+    $empresaFormulario = $cliente_premio_uif->salas->empresas ?? null;
+    $logoEmpresa = \App\Support\Configuracion\EmpresaLogoArchivo::dataUriDesdeNombre(
+        $empresaFormulario->nombre ?? null
+    );
+
+    $empresaNombre = trim((string) ($empresaFormulario->nombre ?? ''));
+    $empresaDomicilio = trim((string) ($empresaFormulario->domicilio ?? ''));
+    $empresaCp = trim((string) ($empresaFormulario->codigopostal ?? ''));
+    $empresaLocalidad = trim((string) ($empresaFormulario->localidad->nombre ?? ''));
+    $empresaCuit = trim((string) ($empresaFormulario->nroinscripcion ?? ''));
+    $empresaDomicilioLinea = $empresaDomicilio;
+    if ($empresaCp !== '') {
+        $empresaDomicilioLinea .= ($empresaDomicilioLinea !== '' ? ' ' : '').'('.$empresaCp.')';
     }
-    $logoData = is_file($logoPath) ? base64_encode(file_get_contents($logoPath)) : null;
+    if ($empresaLocalidad !== '') {
+        $empresaDomicilioLinea .= ($empresaDomicilioLinea !== '' ? ' ' : '').$empresaLocalidad;
+    }
 
     $pieLegalPath = resource_path('text/uif/premio_pie_legal.txt');
     $pieLegalParrafos = [];
@@ -65,6 +73,8 @@
         .sub-titulo { font-size: 10px; color: #555; }
         .meta { text-align: right; font-size: 10px; }
         .meta strong { font-size: 11px; }
+        .empresa-identificacion { margin-top: 4px; font-size: 8px; line-height: 1.25; color: #222; }
+        .empresa-identificacion strong { font-size: 9px; }
 
         .seccion { width: 100%; border-collapse: collapse; margin-top: 8px; }
         .seccion-titulo {
@@ -123,8 +133,21 @@
 <table class="header">
     <tr>
         <td style="width: 35%;">
-            @if ($logoData)
-                <img src="data:image/{{ $logoMime }};base64,{{ $logoData }}" alt="" style="max-width: 220px; max-height: 70px;">
+            @if (! empty($logoEmpresa['uri']))
+                <img src="{{ $logoEmpresa['uri'] }}" alt="" style="max-width: 180px; max-height: 58px;">
+            @endif
+            @if ($empresaNombre !== '' || $empresaDomicilioLinea !== '' || $empresaCuit !== '')
+                <div class="empresa-identificacion">
+                    @if ($empresaNombre !== '')
+                        <strong>{{ $empresaNombre }}</strong><br>
+                    @endif
+                    @if ($empresaDomicilioLinea !== '')
+                        {{ $empresaDomicilioLinea }}<br>
+                    @endif
+                    @if ($empresaCuit !== '')
+                        CUIT {{ $empresaCuit }}
+                    @endif
+                </div>
             @endif
         </td>
         <td style="width: 40%; text-align: center;">

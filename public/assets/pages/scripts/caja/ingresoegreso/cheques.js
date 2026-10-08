@@ -247,6 +247,17 @@ function aplicarCuentaChequeEmitido($tr, data, forzarNumero) {
     filtrarChequerasChequeEmitido($tr, data.id, !!data.diferido, data.chequeras || []);
     var elegida = parseInt($tr.find('.chequera_emitido_id').val() || '0', 10);
     var usada = parseInt(data.chequera_id || '0', 10);
+    var elegidaCh = chequeraEnLista(data.chequeras || [], elegida);
+    if (elegida > 0 && usada > 0 && elegida !== usada && elegidaCh && !chequeraTipoCoincide(elegidaCh, !!data.diferido)) {
+        olvidarUltimaChequeraEmitida(data.id || $tr.find('.cuentacaja_emitido_id').val());
+        var usadaCh = chequeraEnLista(data.chequeras || [], usada);
+        if (usadaCh) {
+            $tr.data('pp-skip-chequera', 1);
+            pintarChequeraEmitido($tr, usadaCh);
+            $tr.removeData('pp-skip-chequera');
+        }
+        elegida = usada;
+    }
     if (Array.isArray(data.chequeras) && elegida > 0 && elegida !== usada && $tr.data('chequera-realineando') !== 1) {
         $tr.data('chequera-realineando', 1);
         var $nroPrevio = $tr.find('.numerocheque_emitido');
@@ -278,7 +289,7 @@ function aplicarCuentaChequeEmitido($tr, data, forzarNumero) {
         }
     }
     $nro.attr('title', titulo);
-    if (data.aviso && !data.proximo_numero) {
+    if (data.aviso) {
         $nro.attr('title', data.aviso);
     }
     var lbl = '';
@@ -487,7 +498,7 @@ function aplicarCuentaChequeReemplazo($tr, data, forzarNumero) {
         ? 'Próximo de la chequera (talonario ERP)'
         : 'Numerador Anita';
     $nro.attr('title', titulo);
-    if (data.aviso && !data.proximo_numero) {
+    if (data.aviso) {
         $nro.attr('title', data.aviso);
     }
     var lbl = '';

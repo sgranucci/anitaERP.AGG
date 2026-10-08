@@ -42,6 +42,12 @@ final class ChequePropioAnitaNumeracionSupport
 
         $chequeras = self::chequerasDeCuenta((int) $cuenta->id, $diferido);
         $chequeraUsadaId = self::resolverChequeraIdParaNumero($chequeraId, $chequeras);
+        $chequeraUsadaId = self::reemplazarChequeraSiNoCoincideTipo(
+            $chequeraUsadaId,
+            $chequeras,
+            $diferido,
+            $aviso
+        );
 
         if ($chequeraUsadaId !== null) {
             try {
@@ -108,14 +114,60 @@ final class ChequePropioAnitaNumeracionSupport
         if ($chequeras === []) {
             return null;
         }
+        $fallback = null;
         foreach ($chequeras as $ch) {
-            if (! empty($ch['preferida']) && (int) ($ch['id'] ?? 0) > 0) {
+            if (empty($ch['preferida']) || (int) ($ch['id'] ?? 0) <= 0) {
+                continue;
+            }
+            if ($fallback === null) {
+                $fallback = (int) $ch['id'];
+            }
+            if (ChequeConsultaChequeraSupport::tieneNumeros($ch) === 1) {
                 return (int) $ch['id'];
             }
         }
-        $primero = (int) ($chequeras[0]['id'] ?? 0);
 
-        return $primero > 0 ? $primero : null;
+        return $fallback;
+    }
+
+    /**
+     * Si el navegador recuerda una chequera de otro tipo (al día vs diferido),
+     * el número sale de la que está en uso para este pago.
+     *
+     * @param  list<array<string, mixed>>  $chequeras
+     */
+    private static function reemplazarChequeraSiNoCoincideTipo(
+        ?int $chequeraId,
+        array $chequeras,
+        bool $diferido,
+        ?string &$aviso
+    ): ?int {
+        if ($chequeraId === null || $chequeraId <= 0) {
+            return $chequeraId;
+        }
+        $fila = null;
+        foreach ($chequeras as $ch) {
+            if ((int) ($ch['id'] ?? 0) === $chequeraId) {
+                $fila = $ch;
+                break;
+            }
+        }
+        if ($fila === null) {
+            return $chequeraId;
+        }
+        $esDiferida = strtoupper((string) ($fila['tipocheque'] ?? '')) === 'D';
+        if ($esDiferida === $diferido) {
+            return $chequeraId;
+        }
+        $reemplazo = self::resolverChequeraIdParaNumero(null, $chequeras);
+        if ($reemplazo === null || $reemplazo === $chequeraId) {
+            return $chequeraId;
+        }
+        $codigo = trim((string) ($fila['codigo'] ?? '')) ?: ('#'.$chequeraId);
+        $aviso = 'La chequera '.$codigo.' es '.($esDiferida ? 'de cheque diferido' : 'de cheque al día')
+            .' y este pago es '.($diferido ? 'diferido' : 'al día').'. Se usa la chequera en uso.';
+
+        return $reemplazo;
     }
 
     public static function estaHabilitada(): bool
