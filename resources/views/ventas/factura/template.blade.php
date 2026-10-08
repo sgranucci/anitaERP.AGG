@@ -12,6 +12,8 @@
 				'otIdLinea' => '',
 				'pedidoCombinacionIdLinea' => '',
 				'otGrupoIndiceLinea' => '',
+				'pickingPedidoCombinacionIdLinea' => '',
+				'pickingGrupoIndiceLinea' => '',
 			])
 		</td>
 		<td class="factura-col-articulo">
@@ -59,6 +61,7 @@
 				<i class="fa fa-align-left"></i>
 			</button>
 			@include('ventas.factura.partials.boton_ot_pedido')
+			@include('ventas.factura.partials.boton_picking_pedido')
 			<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
         		<i class="fa fa-times-circle text-danger"></i>
 			</button>

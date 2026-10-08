@@ -164,7 +164,8 @@
 	#itemspedido-table .factura-abrir-leyenda-linea.tiene-leyenda {
 		color: #007bff;
 	}
-	#itemspedido-table .factura-abrir-ot-pedido.tiene-ot {
+	#itemspedido-table .factura-abrir-ot-pedido.tiene-ot,
+	#itemspedido-table .factura-abrir-picking-pedido.tiene-picking {
 		color: #1B4F72;
 	}
 	#itemspedido-table .factura-ot-badge {
@@ -176,7 +177,8 @@
 	#itemspedido-table .factura-ot-badge:empty {
 		display: none;
 	}
-	#itemspedido-table tr.item-concepto-venta .factura-abrir-ot-pedido {
+	#itemspedido-table tr.item-concepto-venta .factura-abrir-ot-pedido,
+	#itemspedido-table tr.item-concepto-venta .factura-abrir-picking-pedido {
 		display: none;
 	}
 	#itemspedido-table .factura-leyenda-badge:empty {
@@ -777,6 +779,8 @@
 									'otIdLinea' => $valorOldIndice('ordentrabajo_ids', $idxItem, $item->ordentrabajo_id ?? ''),
 									'pedidoCombinacionIdLinea' => $valorOldIndice('pedido_combinacion_ids', $idxItem, $item->pedido_combinacion_id ?? ''),
 									'otGrupoIndiceLinea' => $valorOldIndice('ot_grupo_indices', $idxItem, ''),
+									'pickingPedidoCombinacionIdLinea' => $valorOldIndice('picking_pedido_combinacion_ids', $idxItem, ''),
+									'pickingGrupoIndiceLinea' => $valorOldIndice('picking_grupo_indices', $idxItem, ''),
 								])
 								@if ($layoutItemsPedido)
 									<input type="hidden" name="cantidades[]" class="form-control cantidad" value="{{ number_format((float) $kiloItem, 2, '.', '') }}" />
@@ -877,6 +881,7 @@
 									<i class="fa fa-align-left"></i>
 								</button>
 								@include('ventas.factura.partials.boton_ot_pedido')
+								@include('ventas.factura.partials.boton_picking_pedido')
 								@if (empty($flGeneraNotaDeDebito))
 								<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
                             		<i class="fa fa-times-circle text-danger"></i>
@@ -915,7 +920,7 @@
 			<small class="form-text text-muted d-inline-block ml-2">
 				Mercader&iacute;a: lupa o F1 en el c&oacute;digo. Comentario de la l&iacute;nea: &iacute;cono de p&aacute;rrafo (como en OC). Sin art&iacute;culo: en cada rengl&oacute;n con precio eleg&iacute; la al&iacute;cuota (Exento, 10,5% o 21%). El &iacute;cono de documento, o F1 en el detalle, carga un concepto.
 				@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli() && empty($flGeneraNotaDeCredito) && empty($flGeneraNotaDeDebito) && empty($modoNc))
-					OT de un pedido: &iacute;cono # en el rengl&oacute;n.
+					OT de un pedido: &iacute;cono #. Picking pendiente: &iacute;cono de lista.
 				@endif
 				@if ($layoutItemsPedido && can('entregar-articulo-sin-cargo-pedido-venta', false) && empty($flGeneraNotaDeCredito))
 					Regalo: &iacute;cono de regalo (art&iacute;culo sin cargo, mismo tope que pedidos).
@@ -1082,6 +1087,7 @@
 	</div>
 </div>
 @include('ventas.factura.partials.modal_ot_pedido')
+@include('ventas.factura.partials.modal_picking_pedido')
 @include('ventas.factura.modal')
 @include('ventas.factura.templatetotalfactura')
 @include('includes.stock.modalconsultaarticulo')

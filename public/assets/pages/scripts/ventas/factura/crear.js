@@ -802,6 +802,9 @@
 				if (typeof window.facturaLimpiarOtsPedido === 'function') {
 					window.facturaLimpiarOtsPedido();
 				}
+				if (typeof window.facturaLimpiarPickingsPedido === 'function') {
+					window.facturaLimpiarPickingsPedido();
+				}
 				aplicarVendedorDesdeCliente(data);
 				$('#transporte_id').val(transporte_id);
 				if ($('#codigotransporte').length) {

@@ -2703,6 +2703,7 @@ Route::post('ventas/ordenestrabajo/borrarOt', $ordentrabajoCtrl.'@borrarOt')->na
 Route::get('ventas/factura', 'Ventas\FacturacionController@index')->name('factura');
 Route::get('ventas/factura/crear', 'Ventas\FacturacionController@crear')->name('crear_factura');
 Route::get('ventas/factura/ots-pedido', 'Ventas\FacturacionController@consultaOtPedido')->name('consulta_factura_ot_pedido');
+Route::get('ventas/factura/pickings-pedido', 'Ventas\FacturacionController@consultaPickingPedido')->name('consulta_factura_picking_pedido');
 Route::post('ventas/factura/preferencias', 'Ventas\FacturacionController@preferencias')->name('factura_preferencias');
 Route::post('ventas/factura', 'Ventas\FacturacionController@guardar')->name('guardar_factura');
 Route::get('ventas/factura/{id}/editar', 'Ventas\FacturacionController@editar')->name('editar_factura');

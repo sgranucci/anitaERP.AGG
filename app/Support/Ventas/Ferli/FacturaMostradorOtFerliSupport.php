@@ -83,6 +83,9 @@ final class FacturaMostradorOtFerliSupport
             if (! $ot || ! self::perteneceAlCliente($pc, $ot, $clienteId)) {
                 continue;
             }
+            if (($pc->picking ?? PedidoPickingFerliSupport::NO_MARCADO) === PedidoPickingFerliSupport::MARCADO) {
+                continue;
+            }
             if (! self::listaParaFacturar($ot->ordentrabajo_tareas, (int) $pc->id)) {
                 continue;
             }
@@ -208,6 +211,9 @@ final class FacturaMostradorOtFerliSupport
 
         $pares = [];
         foreach ($dataFactura as $item) {
+            if (($item['origen_mostrador'] ?? '') === 'picking') {
+                continue;
+            }
             $otId = (int) ($item['ordentrabajo_id'] ?? 0);
             $pcId = (int) ($item['pedido_combinacion_id'] ?? 0);
             if ($otId <= 0 || $pcId <= 0) {
@@ -280,6 +286,13 @@ final class FacturaMostradorOtFerliSupport
         }
         if ($clienteId <= 0 || ! self::perteneceAlCliente($pc, $ot, $clienteId)) {
             return ['error' => 'La OT no es del cliente de la factura.'];
+        }
+        if (($pc->picking ?? PedidoPickingFerliSupport::NO_MARCADO) === PedidoPickingFerliSupport::MARCADO) {
+            if (($pc->picking_facturado ?? PedidoPickingFerliSupport::NO_MARCADO) === PedidoPickingFerliSupport::FACTURADO) {
+                return ['error' => 'La OT '.$ot->codigo.' ya fue facturada desde picking.'];
+            }
+
+            return ['error' => 'La OT '.$ot->codigo.' está en un picking pendiente. Facturala con el ícono de picking.'];
         }
         if (! self::listaParaFacturar($ot->ordentrabajo_tareas, (int) $pc->id)) {
             return ['error' => 'La OT '.$ot->codigo.' no está terminada o ya está facturada.'];

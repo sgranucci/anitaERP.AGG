@@ -58,6 +58,7 @@ use App\Models\Stock\Linea;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorOtFerliSupport;
+use App\Support\Ventas\Ferli\FacturaMostradorPickingFerliSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
 use setasign\Fpdi\Fpdi;
@@ -2613,6 +2614,7 @@ class FacturacionService
 			return ['error' => 'Cliente inexistente'];
 
 		FacturaMostradorOtFerliSupport::reiniciarSeguimiento();
+		FacturaMostradorPickingFerliSupport::reiniciarSeguimiento();
 
 		if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
 			return $errorDespacho;
@@ -3074,7 +3076,7 @@ class FacturacionService
 			$combinacionIdLinea = (int) ($combinacionIdsInput[$offItem] ?? 0);
 			$talleIdLinea = (int) ($talleIdsInput[$offItem] ?? 0);
 			$colorIdLinea = (int) ($colorIdsInput[$offItem] ?? 0);
-			$otLineaMostrador = FacturaMostradorOtFerliSupport::lineaSiCorresponde(
+			$otLineaMostrador = FacturaMostradorPickingFerliSupport::lineaSiCorresponde(
 				$data,
 				$offItem,
 				(int) $cliente->id,
@@ -3084,6 +3086,19 @@ class FacturacionService
 			);
 			if (is_array($otLineaMostrador) && isset($otLineaMostrador['error'])) {
 				return $otLineaMostrador;
+			}
+			if ($otLineaMostrador === null) {
+				$otLineaMostrador = FacturaMostradorOtFerliSupport::lineaSiCorresponde(
+					$data,
+					$offItem,
+					(int) $cliente->id,
+					(string) $fechaFactura,
+					$esPosMostrador,
+					$esNcMostrador
+				);
+				if (is_array($otLineaMostrador) && isset($otLineaMostrador['error'])) {
+					return $otLineaMostrador;
+				}
 			}
 			$moduloIdLinea = null;
 			$codigoCombinacionLinea = null;
@@ -3163,8 +3178,12 @@ class FacturacionService
 				'codigocombinacion' => $codigoCombinacionLinea,
 				'ordentrabajo_id' => $ordentrabajoIdLinea,
 				'pedido_combinacion_id' => $pedidoCombinacionIdLinea,
+				'origen_mostrador' => is_array($otLineaMostrador) ? ($otLineaMostrador['origen_mostrador'] ?? null) : null,
 			];
 			$totCantidad += $cantidadLinea;
+		}
+		if ($errorPickingMostrador = FacturaMostradorPickingFerliSupport::errorSiFaltanGrupos()) {
+			return $errorPickingMostrador;
 		}
 		if ($errorOtMostrador = FacturaMostradorOtFerliSupport::errorSiFaltanGrupos()) {
 			return $errorOtMostrador;
@@ -5212,6 +5231,11 @@ class FacturacionService
 					(int) $vta->id,
 					(string) $fechaFactura,
 					(int) $depositoIdEmision
+				);
+				FacturaMostradorPickingFerliSupport::marcarFacturadasYConsumirStock(
+					$dataFactura,
+					(int) $vta->id,
+					(string) $fechaFactura
 				);
 			}
 			if ($emiteRemitoMostrador) {

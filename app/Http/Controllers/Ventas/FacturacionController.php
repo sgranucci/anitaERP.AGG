@@ -41,6 +41,7 @@ use App\Support\Ventas\NotaCreditoCompletaUnicaSupport;
 use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
 use App\Support\Ventas\VentaFacturasPorArticuloClienteSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorOtFerliSupport;
+use App\Support\Ventas\Ferli\FacturaMostradorPickingFerliSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
@@ -592,6 +593,46 @@ class FacturacionController extends Controller
 
         return response()->json([
             'filas' => FacturaMostradorOtFerliSupport::listarPendientes(
+                $clienteId,
+                (string) $request->query('q', '')
+            ),
+        ]);
+    }
+
+    public function consultaPickingPedido(Request $request): JsonResponse
+    {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            abort(404);
+        }
+        if (
+            ! can('crear-factura', false)
+            && ! can('editar-factura', false)
+            && ! can('actualizar-factura', false)
+        ) {
+            abort(403, 'Sin permiso para facturar');
+        }
+
+        $clienteId = (int) $request->query('cliente_id');
+        if ($clienteId <= 0) {
+            return response()->json(['error' => 'Elegí el cliente de la factura.'], 422);
+        }
+
+        $pedidoCombinacionId = (int) $request->query('pedido_combinacion_id');
+        if ($pedidoCombinacionId > 0) {
+            $resuelto = FacturaMostradorPickingFerliSupport::resolver(
+                $pedidoCombinacionId,
+                $clienteId,
+                (string) $request->query('fecha', date('Y-m-d'))
+            );
+            if (isset($resuelto['error'])) {
+                return response()->json($resuelto, 422);
+            }
+
+            return response()->json($resuelto);
+        }
+
+        return response()->json([
+            'filas' => FacturaMostradorPickingFerliSupport::listarPendientes(
                 $clienteId,
                 (string) $request->query('q', '')
             ),
