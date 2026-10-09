@@ -3,6 +3,16 @@
     $valorEnum = function (string $campo) use ($data) {
         return old($campo, $data ? ($data->{$campo} ?? '') : '');
     };
+    $codigoSeleccionado = (string) old('codigoafip', $data->codigoafip ?? '');
+    $codigoNormalizado = $codigoSeleccionado !== ''
+        ? \App\Services\Arca\ArcaTiposComprobanteCatalogoService::normalizarCodigoAfip($codigoSeleccionado)
+        : '';
+    $empresa_query = $empresa_query ?? collect();
+    $empresaArcaId = (int) ($empresaArcaId ?? 0);
+    $tiposCbteArca = $tiposCbteArca ?? [];
+    $codigosArca = array_column($tiposCbteArca, 'codigo');
+    $codigoFueraDeArca = $codigoNormalizado !== '' && ! in_array($codigoNormalizado, $codigosArca, true);
+    $sincronizadoArcaTexto = $sincronizadoArcaTexto ?? null;
 @endphp
 <div class="row">
     <div class="col-lg-6">
@@ -18,10 +28,75 @@
                 <input type="text" name="abreviatura" id="abreviatura" class="form-control" value="{{ old('abreviatura', $data->abreviatura ?? '') }}" maxlength="5" required>
             </div>
         </div>
+        <div class="form-group row" id="tipotransaccion-arca-panel"
+             data-url-tipos="{{ route('tipotransaccion_compra_arca_tipos_cbte') }}"
+             data-select-id="codigoafip">
+            <label for="empresa_arca_id" class="col-lg-4 control-label text-right pr-2">Empresa (ARCA)</label>
+            <div class="col-lg-8">
+                @if ($empresa_query->isEmpty())
+                    <select name="empresa_arca_id" id="empresa_arca_id" class="form-control" disabled>
+                        <option value="">Sin empresas con certificado ARCA</option>
+                    </select>
+                @else
+                    @include('includes.form-empresa-asignada-control', [
+                        'empresa_query' => $empresa_query,
+                        'empresa_id' => $empresaArcaId,
+                        'id' => 'empresa_arca_id',
+                        'name' => 'empresa_arca_id',
+                        'required' => false,
+                        'mostrar_opcion_vacia' => false,
+                        'data_fouc' => true,
+                    ])
+                @endif
+                <small class="form-text text-muted">
+                    El listado sale de
+                    <code>arca_tipo_comprobante</code>, sincronizado con los web services que tienen puntos de venta activos.
+                    @if (!empty($webserviceArcaEtiqueta))
+                        Activos:
+                        <strong>{{ $webserviceArcaEtiqueta }}</strong>.
+                    @endif
+                </small>
+                @if ($sincronizadoArcaTexto && count($tiposCbteArca) > 0)
+                    <small id="tipotransaccion-webservice-arca" class="form-text text-muted">
+                        Catálogo local: {{ count($tiposCbteArca) }} tipos (sincronizado {{ $sincronizadoArcaTexto }}).
+                    </small>
+                @else
+                    <small id="tipotransaccion-webservice-arca" class="form-text text-muted">
+                        Todavía no hay catálogo local. Use Actualizar desde ARCA.
+                    </small>
+                @endif
+                <div id="tipotransaccion-arca-estado" class="alert alert-info py-2 px-3 mt-2 mb-0 d-none" role="status" aria-live="polite"></div>
+                <button type="button" id="btn-actualizar-tipos-arca" class="btn btn-outline-secondary btn-sm mt-2"
+                        @if ($empresa_query->isEmpty()) disabled @endif>
+                    <i class="fa fa-refresh" id="btn-actualizar-tipos-arca-icono"></i>
+                    <i class="fa fa-spinner fa-spin d-none" id="btn-actualizar-tipos-arca-spinner" aria-hidden="true"></i>
+                    <span id="btn-actualizar-tipos-arca-texto"> Actualizar desde ARCA</span>
+                </button>
+            </div>
+        </div>
         <div class="form-group row">
-            <label for="codigoafip" class="col-lg-4 control-label text-right pr-2 requerido">Tipo AFIP</label>
-            <div class="col-lg-4">
-                <input type="text" name="codigoafip" id="codigoafip" class="form-control" value="{{ old('codigoafip', $data->codigoafip ?? '') }}" required>
+            <label for="codigoafip" class="col-lg-4 control-label text-right pr-2 requerido">Tipo comprobante ARCA</label>
+            <div class="col-lg-8">
+                <select name="codigoafip" id="codigoafip" class="form-control" required data-fouc
+                        @if ($empresa_query->isEmpty() && $codigoNormalizado === '') disabled @endif>
+                    <option value="">Elija tipo de comprobante ARCA</option>
+                    @foreach ($tiposCbteArca as $tipo)
+                        @php
+                            $tipoCodigo = (string) ($tipo['codigo'] ?? '');
+                            $tipoCodigoNorm = $tipoCodigo !== ''
+                                ? \App\Services\Arca\ArcaTiposComprobanteCatalogoService::normalizarCodigoAfip($tipoCodigo)
+                                : '';
+                        @endphp
+                        <option value="{{ $tipoCodigo }}" @selected($tipoCodigoNorm !== '' && $tipoCodigoNorm === $codigoNormalizado)>
+                            {{ $tipoCodigo }} — {{ $tipo['descripcion'] }}
+                        </option>
+                    @endforeach
+                    @if ($codigoFueraDeArca)
+                        <option value="{{ $codigoNormalizado }}" selected>
+                            {{ $codigoNormalizado }} — valor actual (no figura en el catálogo)
+                        </option>
+                    @endif
+                </select>
             </div>
         </div>
         <div class="form-group row">

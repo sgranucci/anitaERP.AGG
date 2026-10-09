@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Caja;
 
 use App\Models\Caja\Caja_Movimiento;
+use App\Models\Caja\Cobranza;
+use App\Models\Compras\Pagoproveedor;
 use App\Models\Configuracion\Empresa;
 use App\Support\Caja\MovimientosCajaReporteFiltros;
 use Illuminate\Database\Eloquent\Builder;
@@ -77,6 +79,7 @@ class MovimientosCajaReporteService
         $cuentaFiltro = (int) ($filtros['cuentacaja_id'] ?? 0);
         $consolidar = ! empty($filtros['consolidar_empresas']);
         $multiEmpresa = count($empresaIds) > 1;
+        $montosCabecera = $this->montosCabeceraSinLineas($movimientos);
 
         $detalles = [];
         foreach ($movimientos as $mov) {
@@ -85,19 +88,9 @@ class MovimientosCajaReporteService
                 continue;
             }
 
-            $lineas = $this->lineasMovimiento($mov);
+            $lineas = $this->lineasMovimiento($mov, $montosCabecera);
             if ($lineas === []) {
-                $lineas = [[
-                    'cuenta_id' => 0,
-                    'cuenta_codigo' => '',
-                    'cuenta_nombre' => 'Sin cuenta de caja',
-                    'moneda_id' => 1,
-                    'cotizacion' => 1.0,
-                    'monto' => 0.0,
-                    'monto_mn' => 0.0,
-                    'ingreso' => 0.0,
-                    'egreso' => 0.0,
-                ]];
+                continue;
             }
 
             foreach ($lineas as $linea) {
@@ -217,6 +210,7 @@ class MovimientosCajaReporteService
                 'ingreso' => round($acumIngreso, 2),
                 'egreso' => round($acumEgreso, 2),
                 'total' => round($acumIngreso - $acumEgreso, 2),
+                'saldo' => round($acumIngreso - $acumEgreso, 2),
                 'nombreempresa' => $nombreEmpresaGrupo,
             ];
         };
@@ -246,9 +240,10 @@ class MovimientosCajaReporteService
                 ];
             }
 
-            $filas[] = $mov;
             $acumIngreso = round($acumIngreso + (float) $mov['ingreso'], 2);
             $acumEgreso = round($acumEgreso + (float) $mov['egreso'], 2);
+            $mov['saldo'] = round($acumIngreso - $acumEgreso, 2);
+            $filas[] = $mov;
             $totalIngreso = round($totalIngreso + (float) $mov['ingreso'], 2);
             $totalEgreso = round($totalEgreso + (float) $mov['egreso'], 2);
         }
@@ -262,6 +257,7 @@ class MovimientosCajaReporteService
                 'ingreso' => $totalIngreso,
                 'egreso' => $totalEgreso,
                 'total' => round($totalIngreso - $totalEgreso, 2),
+                'saldo' => round($totalIngreso - $totalEgreso, 2),
                 'nombreempresa' => $detalles[0]['nombreempresa'] ?? '',
             ];
         }
@@ -390,9 +386,58 @@ class MovimientosCajaReporteService
     }
 
     /**
+     * Cobranza o pago cuyo movimiento no tiene líneas de cuenta: el importe vive en la cabecera.
+     *
+     * @param  \Illuminate\Support\Collection<int, Caja_Movimiento>  $movimientos
+     * @return array{cobranza: array<int, array{monto: float, moneda_id: int, cotizacion: float}>, pago: array<int, array{monto: float, moneda_id: int, cotizacion: float}>}
+     */
+    private function montosCabeceraSinLineas($movimientos): array
+    {
+        $cobranzaIds = [];
+        $pagoIds = [];
+        foreach ($movimientos as $mov) {
+            if ($mov->caja_movimiento_cuentacajas->isNotEmpty()) {
+                continue;
+            }
+            $cobranzaId = (int) ($mov->cobranza_id ?? 0);
+            $pagoId = (int) ($mov->pagoproveedor_id ?? 0);
+            if ($cobranzaId > 0) {
+                $cobranzaIds[$cobranzaId] = $cobranzaId;
+            } elseif ($pagoId > 0) {
+                $pagoIds[$pagoId] = $pagoId;
+            }
+        }
+
+        $cobranza = [];
+        if ($cobranzaIds !== []) {
+            foreach (Cobranza::query()->whereIn('id', array_values($cobranzaIds))->get(['id', 'monto', 'moneda_id', 'cotizacion']) as $row) {
+                $cobranza[(int) $row->id] = [
+                    'monto' => (float) ($row->monto ?? 0),
+                    'moneda_id' => (int) ($row->moneda_id ?? 1),
+                    'cotizacion' => (float) ($row->cotizacion ?? 0),
+                ];
+            }
+        }
+
+        $pago = [];
+        if ($pagoIds !== []) {
+            foreach (Pagoproveedor::query()->whereIn('id', array_values($pagoIds))->get(['id', 'monto', 'moneda_id', 'cotizacion']) as $row) {
+                $pago[(int) $row->id] = [
+                    'monto' => (float) ($row->monto ?? 0),
+                    'moneda_id' => (int) ($row->moneda_id ?? 1),
+                    'cotizacion' => (float) ($row->cotizacion ?? 0),
+                ];
+            }
+        }
+
+        return ['cobranza' => $cobranza, 'pago' => $pago];
+    }
+
+    /**
+     * @param  array{cobranza: array<int, array{monto: float, moneda_id: int, cotizacion: float}>, pago: array<int, array{monto: float, moneda_id: int, cotizacion: float}>}  $montosCabecera
      * @return list<array<string, mixed>>
      */
-    private function lineasMovimiento(Caja_Movimiento $mov): array
+    private function lineasMovimiento(Caja_Movimiento $mov, array $montosCabecera): array
     {
         $lineas = [];
 
@@ -400,10 +445,7 @@ class MovimientosCajaReporteService
             $monto = (float) ($linea->monto ?? 0);
             $monedaId = (int) ($linea->moneda_id ?? 1);
             $cotizacion = (float) ($linea->cotizacion ?? 1);
-            $coef = $monedaId > 1 ? ($cotizacion > 0 ? $cotizacion : 1.0) : 1.0;
-            $mn = round($monto * $coef, 2);
-            $ingreso = $mn > 0 ? $mn : 0.0;
-            $egreso = $mn < 0 ? abs($mn) : 0.0;
+            $partida = $this->ingresoEgreso($monto, $monedaId, $cotizacion);
             $cuenta = $linea->cuentacajas;
             $lineas[] = [
                 'cuenta_id' => (int) ($linea->cuentacaja_id ?? 0),
@@ -412,14 +454,81 @@ class MovimientosCajaReporteService
                 'moneda_id' => $monedaId,
                 'cotizacion' => $cotizacion,
                 'monto' => $monto,
-                'monto_mn' => $mn,
-                'ingreso' => $ingreso,
-                'egreso' => $egreso,
+                'monto_mn' => $partida['monto_mn'],
+                'ingreso' => $partida['ingreso'],
+                'egreso' => $partida['egreso'],
                 'observacion' => (string) ($linea->observacion ?? ''),
             ];
         }
 
-        return $lineas;
+        if ($lineas !== []) {
+            return $lineas;
+        }
+
+        $cabecera = $this->cabeceraSinLineas($mov, $montosCabecera);
+        $partida = $this->ingresoEgreso($cabecera['monto'], $cabecera['moneda_id'], $cabecera['cotizacion']);
+
+        return [[
+            'cuenta_id' => 0,
+            'cuenta_codigo' => '',
+            'cuenta_nombre' => 'Sin cuenta de caja',
+            'moneda_id' => $cabecera['moneda_id'],
+            'cotizacion' => $cabecera['cotizacion'],
+            'monto' => $cabecera['monto'],
+            'monto_mn' => $partida['monto_mn'],
+            'ingreso' => $partida['ingreso'],
+            'egreso' => $partida['egreso'],
+            'observacion' => '',
+        ]];
+    }
+
+    /**
+     * @param  array{cobranza: array<int, array{monto: float, moneda_id: int, cotizacion: float}>, pago: array<int, array{monto: float, moneda_id: int, cotizacion: float}>}  $montosCabecera
+     * @return array{monto: float, moneda_id: int, cotizacion: float}
+     */
+    private function cabeceraSinLineas(Caja_Movimiento $mov, array $montosCabecera): array
+    {
+        $vacio = ['monto' => 0.0, 'moneda_id' => 1, 'cotizacion' => 1.0];
+        $cobranzaId = (int) ($mov->cobranza_id ?? 0);
+        if ($cobranzaId > 0) {
+            $cab = $montosCabecera['cobranza'][$cobranzaId] ?? $vacio;
+
+            return [
+                'monto' => (float) $cab['monto'],
+                'moneda_id' => (int) $cab['moneda_id'],
+                'cotizacion' => (float) $cab['cotizacion'],
+            ];
+        }
+
+        $pagoId = (int) ($mov->pagoproveedor_id ?? 0);
+        if ($pagoId > 0) {
+            $cab = $montosCabecera['pago'][$pagoId] ?? $vacio;
+            // El pago guarda el importe en positivo: en caja es una salida.
+            $monto = -abs((float) $cab['monto']);
+
+            return [
+                'monto' => $monto,
+                'moneda_id' => (int) $cab['moneda_id'],
+                'cotizacion' => (float) $cab['cotizacion'],
+            ];
+        }
+
+        return $vacio;
+    }
+
+    /**
+     * @return array{monto_mn: float, ingreso: float, egreso: float}
+     */
+    private function ingresoEgreso(float $monto, int $monedaId, float $cotizacion): array
+    {
+        $coef = $monedaId > 1 ? ($cotizacion > 0 ? $cotizacion : 1.0) : 1.0;
+        $mn = round($monto * $coef, 2);
+
+        return [
+            'monto_mn' => $mn,
+            'ingreso' => $mn > 0 ? $mn : 0.0,
+            'egreso' => $mn < 0 ? abs($mn) : 0.0,
+        ];
     }
 
     private function cliproCodigo(Caja_Movimiento $mov): string

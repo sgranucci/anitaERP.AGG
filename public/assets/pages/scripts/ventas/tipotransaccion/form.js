@@ -1,5 +1,6 @@
 /**
- * Tipos de transacción de ventas: catálogo AFIP desde ARCA (WSMTXCA / WSFE).
+ * Catálogo AFIP desde ARCA (WSMTXCA / WSFE).
+ * Lo usan tipos de transacción de ventas (#codigo) y de compras (#codigoafip, data-select-id).
  */
 (function () {
 	'use strict';
@@ -18,8 +19,14 @@
 		return sel ? parseInt(sel.value, 10) : 0;
 	}
 
+	function selectCodigo() {
+		const p = panel();
+		const id = (p && p.getAttribute('data-select-id')) || 'codigo';
+		return document.getElementById(id);
+	}
+
 	function codigoActual() {
-		const sel = document.getElementById('codigo');
+		const sel = selectCodigo();
 		return sel ? sel.value : '';
 	}
 
@@ -93,7 +100,7 @@
 	}
 
 	function poblarSelect(tipos, codigoPreservar) {
-		const sel = document.getElementById('codigo');
+		const sel = selectCodigo();
 		if (!sel) {
 			return;
 		}
@@ -164,6 +171,9 @@
 		}
 		if (body.sincronizado_at) {
 			texto += ' — ' + body.sincronizado_at;
+		}
+		if (body.advertencias && body.advertencias.length) {
+			texto += '. Avisos: ' + body.advertencias.join(' ');
 		}
 		return texto;
 	}
@@ -255,7 +265,7 @@
 		}
 
 		// Si el servidor no precargó opciones (p. ej. caché de vista), completar desde BD vía API
-		const sel = document.getElementById('codigo');
+		const sel = selectCodigo();
 		if (sel && empresaId() > 0 && sel.options.length <= 2) {
 			cargarTipos(false, true);
 		} else if (sel && window.jQuery && jQuery.fn.select2) {

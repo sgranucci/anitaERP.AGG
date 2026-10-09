@@ -68,6 +68,7 @@
                 <th>Estado</th>
                 <th>Ingreso</th>
                 <th>Egreso</th>
+                <th>Saldo</th>
                 <th>Empresa</th>
             </tr>
         </thead>
@@ -76,13 +77,14 @@
                 @php $tipoFila = $fila['tipo_fila'] ?? 'dato'; @endphp
                 @if ($tipoFila === 'grupo')
                     <tr class="grupo">
-                        <td colspan="11">Cuenta: {{ $fila['cuenta_etiqueta'] ?? '' }}</td>
+                        <td colspan="12">Cuenta: {{ $fila['cuenta_etiqueta'] ?? '' }}</td>
                     </tr>
                 @elseif ($tipoFila === 'total_cuenta' || $tipoFila === 'total_general')
                     <tr class="{{ $tipoFila === 'total_general' ? 'total-general' : 'total' }}">
                         <td colspan="8" class="text-right">{{ $fila['cuenta_etiqueta'] ?? ($fila['clipro_nombre'] ?? 'Total') }}</td>
                         <td class="text-right">{{ number_format((float) ($fila['ingreso'] ?? 0), 2, ',', '.') }}</td>
                         <td class="text-right">{{ number_format((float) ($fila['egreso'] ?? 0), 2, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format((float) ($fila['saldo'] ?? $fila['total'] ?? 0), 2, ',', '.') }}</td>
                         <td></td>
                     </tr>
                 @else
@@ -97,6 +99,7 @@
                         <td>{{ $fila['estado_nombre'] ?? '' }}</td>
                         <td class="text-right">{{ (float) ($fila['ingreso'] ?? 0) > 0 ? number_format((float) $fila['ingreso'], 2, ',', '.') : '' }}</td>
                         <td class="text-right">{{ (float) ($fila['egreso'] ?? 0) > 0 ? number_format((float) $fila['egreso'], 2, ',', '.') : '' }}</td>
+                        <td class="text-right">{{ number_format((float) ($fila['saldo'] ?? 0), 2, ',', '.') }}</td>
                         <td>{{ $fila['nombreempresa'] ?? '' }}</td>
                     </tr>
                 @endif

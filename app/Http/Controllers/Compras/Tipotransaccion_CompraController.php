@@ -6,10 +6,12 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Tipotransaccion_Compra;
+use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Centrocosto;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionTipotransaccion_Compra;
 use App\Exports\Compras\TipotransaccionCompraListadoExport;
+use App\Services\Arca\ArcaTiposComprobanteCatalogoService;
 use App\Support\Compras\TipotransaccionCompraListadoFiltros;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
@@ -19,6 +21,8 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
+use Exception;
+use Illuminate\Http\JsonResponse;
 use DB;
 
 class Tipotransaccion_CompraController extends Controller
@@ -28,12 +32,14 @@ class Tipotransaccion_CompraController extends Controller
     private $tipotransaccion_concepto_ivacompraRepository;
     private $concepto_ivacompraRepository;
 	private $centrocostoRepository;
+    private ArcaTiposComprobanteCatalogoService $arcaTiposComprobanteCatalogo;
 
     public function __construct(Tipotransaccion_CompraRepositoryInterface $repository,
                                 Concepto_IvacompraRepositoryInterface $concepto_ivacomprarepository,
                                 CentrocostoRepositoryInterface $centrocostorepository,
                                 Tipotransaccion_Compra_CentrocostoRepositoryInterface $tipotransaccion_compra_centrocostorepository,
-                                Tipotransaccion_Compra_Concepto_IvacompraRepositoryInterface $tipotransaccion_compra_concepto_ivacomprarepository
+                                Tipotransaccion_Compra_Concepto_IvacompraRepositoryInterface $tipotransaccion_compra_concepto_ivacomprarepository,
+                                ArcaTiposComprobanteCatalogoService $arcaTiposComprobanteCatalogo
                                 )
     {
         $this->repository = $repository;
@@ -41,6 +47,7 @@ class Tipotransaccion_CompraController extends Controller
 		$this->centrocostoRepository = $centrocostorepository;
         $this->tipotransaccion_compra_centrocostoRepository = $tipotransaccion_compra_centrocostorepository;
         $this->tipotransaccion_concepto_ivacompraRepository = $tipotransaccion_compra_concepto_ivacomprarepository;
+        $this->arcaTiposComprobanteCatalogo = $arcaTiposComprobanteCatalogo;
     }
 
     /**
@@ -118,7 +125,7 @@ class Tipotransaccion_CompraController extends Controller
         $estadoEnum = Tipotransaccion_Compra::$enumEstado;
         $retieneEnum = Tipotransaccion_Compra::$enumRetiene;
 
-        return view('compras.tipotransaccion_compra.crear', [
+        return view('compras.tipotransaccion_compra.crear', array_merge([
             'operacionEnum' => $operacionEnum,
             'signoEnum' => $signoEnum,
             'subdiarioEnum' => $subdiarioEnum,
@@ -127,7 +134,7 @@ class Tipotransaccion_CompraController extends Controller
             'retieneEnum' => $retieneEnum,
             'filasCentrocosto' => $this->filasCentrocosto(null),
             'filasConcepto' => $this->filasConcepto(null),
-        ]);
+        ], $this->datosArcaFormulario()));
     }
 
     /**
@@ -175,7 +182,7 @@ class Tipotransaccion_CompraController extends Controller
         $estadoEnum = Tipotransaccion_Compra::$enumEstado;
         $retieneEnum = Tipotransaccion_Compra::$enumRetiene;
 
-        return view('compras.tipotransaccion_compra.editar', [
+        return view('compras.tipotransaccion_compra.editar', array_merge([
             'data' => $data,
             'operacionEnum' => $operacionEnum,
             'signoEnum' => $signoEnum,
@@ -185,7 +192,7 @@ class Tipotransaccion_CompraController extends Controller
             'retieneEnum' => $retieneEnum,
             'filasCentrocosto' => $this->filasCentrocosto($data),
             'filasConcepto' => $this->filasConcepto($data),
-        ]);
+        ], $this->datosArcaFormulario()));
     }
 
     /**
@@ -457,6 +464,158 @@ class Tipotransaccion_CompraController extends Controller
         $clave = strtoupper(trim((string) $valor));
 
         return Tipotransaccion_Compra::$enumRetiene[$clave] ?? '';
+    }
+
+    /**
+     * Tipos de comprobante AFIP de los web services con puntos de venta activos.
+     */
+    public function tiposCbteArca(Request $request): JsonResponse
+    {
+        if (! can('crear-tipo-transaccion-compra', false) && ! can('editar-tipo-transaccion-compra', false)) {
+            abort(403, 'No tiene permiso');
+        }
+
+        $request->validate([
+            'empresa_id' => ['required', 'integer', 'min:1'],
+            'refresh' => ['sometimes', 'boolean'],
+        ]);
+
+        $empresaId = (int) $request->input('empresa_id');
+        $webservices = $this->arcaTiposComprobanteCatalogo->webservicesActivos($empresaId);
+        $webservice = $webservices[0] ?? $this->arcaTiposComprobanteCatalogo->webserviceParaEmpresa($empresaId);
+        $diagnostico = $this->arcaTiposComprobanteCatalogo->diagnosticoCertificado($empresaId, $webservice);
+
+        try {
+            $resultado = $this->arcaTiposComprobanteCatalogo->obtenerTiposComprobanteActivos(
+                $empresaId,
+                $request->boolean('refresh')
+            );
+        } catch (Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => $this->mensajeErrorArcaTiposCbte($e, $webservice, $diagnostico),
+                'webservice' => $webservice,
+                'webservices' => $webservices,
+                'diagnostico' => $diagnostico,
+            ], 500);
+        }
+
+        $usados = $resultado['webservices'] ?? $webservices;
+
+        return response()->json([
+            'ok' => true,
+            'empresa_id' => $empresaId,
+            'webservice' => $webservice,
+            'webservices' => $usados,
+            'webservice_etiqueta' => $this->arcaTiposComprobanteCatalogo->etiquetasWebservices($usados),
+            'diagnostico' => $diagnostico,
+            'origen' => $resultado['origen'],
+            'sincronizado_at' => $resultado['sincronizado_at'],
+            'persistido' => (bool) ($resultado['persistido'] ?? false),
+            'registros_guardados' => (int) ($resultado['registros_guardados'] ?? 0),
+            'advertencias' => $resultado['advertencias'] ?? [],
+            'tipos' => $resultado['tipos'],
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function datosArcaFormulario(): array
+    {
+        $empresa_query = $this->empresasArcaQuery();
+        $empresaArcaId = (int) old('empresa_arca_id', $this->empresaArcaDefaultId($empresa_query));
+        $webservicesArca = $empresaArcaId > 0
+            ? $this->arcaTiposComprobanteCatalogo->webservicesActivos($empresaArcaId)
+            : [];
+        $webserviceArcaEtiqueta = $webservicesArca !== []
+            ? $this->arcaTiposComprobanteCatalogo->etiquetasWebservices($webservicesArca)
+            : '';
+        $tiposCbteArca = [];
+        $sincronizadoArcaTexto = null;
+
+        if ($empresaArcaId > 0 && $this->arcaTiposComprobanteCatalogo->tieneCatalogoActivoEnBd($empresaArcaId)) {
+            $tiposCbteArca = $this->arcaTiposComprobanteCatalogo->listarDesdeBdActivos($empresaArcaId);
+            $ultima = $this->arcaTiposComprobanteCatalogo->ultimaSincronizacionActivos($empresaArcaId);
+            $sincronizadoArcaTexto = $ultima?->format('d/m/Y H:i');
+        }
+
+        return compact(
+            'empresa_query',
+            'empresaArcaId',
+            'webserviceArcaEtiqueta',
+            'tiposCbteArca',
+            'sincronizadoArcaTexto'
+        );
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Empresa>
+     */
+    private function empresasArcaQuery()
+    {
+        $ids = $this->arcaTiposComprobanteCatalogo->empresasConCertificadoArca();
+        if ($ids === []) {
+            return collect();
+        }
+
+        return Empresa::query()
+            ->whereIn('id', $ids)
+            ->orderBy('nombre')
+            ->get();
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Empresa>  $empresas
+     */
+    private function empresaArcaDefaultId($empresas): int
+    {
+        if ($empresas->isEmpty()) {
+            return 0;
+        }
+
+        $preferido = (int) config('cliente.EMPRESA_DEFAULT_ID', 1);
+        if ($empresas->contains('id', $preferido)) {
+            return $preferido;
+        }
+
+        return (int) $empresas->first()->id;
+    }
+
+    /**
+     * @param  array<string, mixed>  $diagnostico
+     */
+    private function mensajeErrorArcaTiposCbte(Exception $e, string $webservice, array $diagnostico = []): string
+    {
+        $msg = $e->getMessage();
+        $wsaa = (string) ($diagnostico['wsaa_service'] ?? '');
+        $certPath = (string) ($diagnostico['cert_path'] ?? '');
+        $cuitCert = (string) ($diagnostico['cuit_certificado'] ?? '');
+        $cuitEmp = (string) ($diagnostico['cuit_empresa'] ?? '');
+
+        if (stripos($msg, 'lista de relaciones') !== false || stripos($msg, 'ValidacionDeToken') !== false) {
+            $etiqueta = $this->arcaTiposComprobanteCatalogo->etiquetaWebservice($webservice);
+            $extra = $certPath !== '' ? " Cert: {$certPath}." : '';
+
+            return $msg.' — '.$etiqueta.' (WSAA «'.$wsaa.'»). CUIT certificado='.$cuitCert.', CUIT empresa='.$cuitEmp.'.'.$extra;
+        }
+
+        if (
+            stripos($msg, 'Parsing WSDL') !== false
+            || stripos($msg, 'failed to load external entity') !== false
+            || stripos($msg, 'Couldn\'t load from') !== false
+        ) {
+            $env = (string) config('arca.env', 'homo');
+            $subdir = $webservice === ArcaTiposComprobanteCatalogoService::WS_MTXCA ? 'mtxca' : 'wsfe';
+            $archivo = $webservice === ArcaTiposComprobanteCatalogoService::WS_MTXCA
+                ? 'MTXCAService.wsdl'
+                : 'service.wsdl';
+            $local = storage_path("app/arca/{$subdir}/wsdl/{$env}/{$archivo}");
+
+            return $msg.' — Copie el WSDL en '.$local.' o defina ARCA_'.strtoupper($subdir).'_WSDL_LOCAL en .env.';
+        }
+
+        return $msg;
     }
 
     private function puedeConsultarTipotransaccionCompra(): bool

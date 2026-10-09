@@ -24,7 +24,7 @@ class MovimientosCajaReporteExport implements FromView, WithColumnFormatting, Wi
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'K';
+    private const COL_ULTIMA = 'L';
 
     private bool $hayFilaLogos = false;
 
@@ -80,7 +80,8 @@ class MovimientosCajaReporteExport implements FromView, WithColumnFormatting, Wi
             'H' => NumberFormat::FORMAT_TEXT,
             'I' => '#,##0.00',
             'J' => '#,##0.00',
-            'K' => NumberFormat::FORMAT_TEXT,
+            'K' => '#,##0.00',
+            'L' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -97,7 +98,8 @@ class MovimientosCajaReporteExport implements FromView, WithColumnFormatting, Wi
             'H' => 12,
             'I' => 14,
             'J' => 14,
-            'K' => 18,
+            'K' => 14,
+            'L' => 18,
         ];
     }
 

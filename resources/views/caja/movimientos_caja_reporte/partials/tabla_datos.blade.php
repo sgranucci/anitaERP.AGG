@@ -18,6 +18,7 @@
             <th>Estado</th>
             <th class="text-right">Ingreso</th>
             <th class="text-right">Egreso</th>
+            <th class="text-right">Saldo</th>
             <th>Empresa</th>
         </tr>
     </thead>
@@ -26,7 +27,7 @@
         @php $tipoFila = $fila['tipo_fila'] ?? 'dato'; @endphp
         @if ($tipoFila === 'grupo')
             <tr class="mov-caja-grupo">
-                <td colspan="11">
+                <td colspan="12">
                     <strong>Cuenta:
                         @if ($puedeCuenta && (int) ($fila['cuenta_id'] ?? 0) > 0)
                             <a href="{{ route('editar_cuentacaja', ['id' => $fila['cuenta_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
@@ -42,6 +43,7 @@
                 <td colspan="8" class="text-right">{{ $fila['cuenta_etiqueta'] ?? ($fila['clipro_nombre'] ?? 'Total') }}</td>
                 <td class="text-right">{{ number_format((float) ($fila['ingreso'] ?? 0), 2, ',', '.') }}</td>
                 <td class="text-right">{{ number_format((float) ($fila['egreso'] ?? 0), 2, ',', '.') }}</td>
+                <td class="text-right">{{ number_format((float) ($fila['saldo'] ?? $fila['total'] ?? 0), 2, ',', '.') }}</td>
                 <td></td>
             </tr>
         @else
@@ -82,12 +84,13 @@
                         {{ number_format((float) $fila['egreso'], 2, ',', '.') }}
                     @endif
                 </td>
+                <td class="text-right">{{ number_format((float) ($fila['saldo'] ?? 0), 2, ',', '.') }}</td>
                 <td>{{ $fila['nombreempresa'] ?? '' }}</td>
             </tr>
         @endif
     @empty
         <tr>
-            <td colspan="11" class="text-center text-muted py-4">Sin movimientos para los filtros aplicados.</td>
+            <td colspan="12" class="text-center text-muted py-4">Sin movimientos para los filtros aplicados.</td>
         </tr>
     @endforelse
     </tbody>

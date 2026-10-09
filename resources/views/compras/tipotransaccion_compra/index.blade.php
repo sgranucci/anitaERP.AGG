@@ -82,10 +82,15 @@
                     'ruta' => 'lista_tipotransaccion_compra',
                     'queryparams' => $filtrosQuery ?? [],
                 ])
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+                <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada" style="width:100%;table-layout:fixed;">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach (TipotransaccionCompraListadoFiltros::COLUMNAS_GRILLA as $keyColumna => $tituloCol)
+                                @php
+                                    $anchoCol = TipotransaccionCompraListadoFiltros::ANCHOS_GRILLA[$keyColumna] ?? '6%';
+                                    $styleCol = 'width:'.$anchoCol.';max-width:'.$anchoCol.';';
+                                    $tituloVisible = TipotransaccionCompraListadoFiltros::TITULOS_INDEX[$keyColumna] ?? $tituloCol;
+                                @endphp
                                 @php
                                     $dirCol = \App\Support\Listado\ListadoOrdenamientoSupport::direccionDeCampo($ordenParaFlecha, $keyColumna);
                                     $idxCol = $ordenGuardado !== []
@@ -106,9 +111,10 @@
                                     );
                                 @endphp
                                 <th class="lw-col lw-col-sortable {{ $dirCol ? 'lw-col-sorted' : '' }}"
+                                    style="{{ $styleCol }}"
                                     title="{{ $tituloCol }} — clic para ordenar">
                                     <a href="{{ route('tipotransaccion_compra', $qsSort) }}" class="lw-sort-link">
-                                        {{ $tituloCol }}
+                                        {{ $tituloVisible }}
                                         @if ($dirCol === 'asc')
                                             <i class="fa fa-sort-up lw-sort-icon"></i>
                                         @elseif ($dirCol === 'desc')
@@ -122,53 +128,62 @@
                                     </a>
                                 </th>
                             @endforeach
-                            <th style="width:5.5rem;" data-orderable="false"></th>
+                            <th class="lw-col-acciones" data-orderable="false" style="width:9%;min-width:0;max-width:9%;"></th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($datas as $data)
                         <tr>
                             @foreach (TipotransaccionCompraListadoFiltros::COLUMNAS_GRILLA as $keyColumna => $tituloCol)
-                                @switch($keyColumna)
-                                    @case('id')
-                                        <td>{{ $data->id }}</td>
-                                        @break
-                                    @case('nombre')
-                                        <td>{{ $data->nombre }}</td>
-                                        @break
-                                    @case('operacion')
-                                        <td>{{ $data->desc_operacion }}</td>
-                                        @break
-                                    @case('abreviatura')
-                                        <td>{{ $data->abreviatura }}</td>
-                                        @break
-                                    @case('codigoafip')
-                                        <td>{{ $data->codigoafip }}</td>
-                                        @break
-                                    @case('signo')
-                                        <td>{{ $data->desc_signo }}</td>
-                                        @break
-                                    @case('subdiario')
-                                        <td>{{ $data->desc_subdiario }}</td>
-                                        @break
-                                    @case('asientocontable')
-                                        <td>{{ $data->desc_asientocontable }}</td>
-                                        @break
-                                    @case('estado')
-                                        <td>{{ $data->desc_estado }}</td>
-                                        @break
-                                    @case('retieneiva')
-                                        <td>{{ $data->desc_retieneiva }}</td>
-                                        @break
-                                    @case('retieneganancia')
-                                        <td>{{ $data->desc_retieneganancia }}</td>
-                                        @break
-                                    @case('retieneIIBB')
-                                        <td>{{ $data->desc_retieneiibb }}</td>
-                                        @break
-                                @endswitch
+                                @php
+                                    $anchoCol = TipotransaccionCompraListadoFiltros::ANCHOS_GRILLA[$keyColumna] ?? '6%';
+                                    $styleCol = 'width:'.$anchoCol.';max-width:'.$anchoCol.';';
+                                    $descArca = $keyColumna === 'codigoafip'
+                                        ? \App\Services\Arca\ArcaTiposComprobanteCatalogoService::descripcionCodigo((string) $data->codigoafip)
+                                        : '';
+                                    $signoMarca = match ((string) $data->signo) {
+                                        'S' => '+',
+                                        'R' => '−',
+                                        default => '0',
+                                    };
+                                    $textoCompleto = match ($keyColumna) {
+                                        'id' => (string) $data->id,
+                                        'nombre' => (string) $data->nombre,
+                                        'operacion' => (string) $data->desc_operacion,
+                                        'abreviatura' => (string) $data->abreviatura,
+                                        'codigoafip' => trim((string) $data->codigoafip.($descArca !== '' ? ' — '.$descArca : '')),
+                                        'signo' => (string) $data->desc_signo,
+                                        'subdiario' => (string) $data->desc_subdiario,
+                                        'asientocontable' => (string) $data->desc_asientocontable,
+                                        'estado' => (string) $data->desc_estado,
+                                        'retieneiva' => (string) $data->desc_retieneiva,
+                                        'retieneganancia' => (string) $data->desc_retieneganancia,
+                                        'retieneIIBB' => (string) $data->desc_retieneiibb,
+                                        default => '',
+                                    };
+                                    $textoCelda = match ($keyColumna) {
+                                        'operacion' => match ((string) $data->operacion) {
+                                            'L' => 'Local',
+                                            'I' => 'Import.',
+                                            default => $textoCompleto,
+                                        },
+                                        'signo' => $signoMarca,
+                                        'subdiario' => (string) $data->subdiario === 'C' ? 'Sí' : 'No',
+                                        'asientocontable' => (string) $data->asientocontable === 'S' ? 'Sí' : 'No',
+                                        'retieneiva', 'retieneganancia', 'retieneIIBB' => match ((string) $data->{$keyColumna}) {
+                                            'S' => 'Sí',
+                                            'N' => 'No',
+                                            default => $textoCompleto,
+                                        },
+                                        default => $textoCompleto,
+                                    };
+                                    $centrar = in_array($keyColumna, ['id', 'abreviatura', 'signo', 'subdiario', 'asientocontable', 'retieneiva', 'retieneganancia', 'retieneIIBB'], true);
+                                @endphp
+                                <td class="lw-col {{ $centrar ? 'text-center' : '' }}" style="{{ $styleCol }}" title="{{ $textoCompleto }}">
+                                    <span class="lw-celda-texto">{{ $textoCelda }}</span>
+                                </td>
                             @endforeach
-                            <td class="text-nowrap text-center">
+                            <td class="lw-col-acciones text-nowrap text-center" style="width:9%;min-width:0;max-width:9%;">
                                 @if (can('editar-tipo-transaccion-compra', false))
                                     <a href="{{ route('editar_tipotransaccion_compra', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>

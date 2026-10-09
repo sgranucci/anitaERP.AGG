@@ -25,7 +25,7 @@ class TipotransaccionCompraListadoFiltros
         'id' => ['column' => 'tipotransaccion_compra.id', 'type' => 'entero', 'label' => 'ID'],
         'nombre' => ['column' => 'tipotransaccion_compra.nombre', 'type' => 'texto', 'label' => 'Nombre'],
         'abreviatura' => ['column' => 'tipotransaccion_compra.abreviatura', 'type' => 'texto', 'label' => 'Abreviatura'],
-        'codigoafip' => ['column' => 'tipotransaccion_compra.codigoafip', 'type' => 'texto', 'label' => 'Tipo AFIP'],
+        'codigoafip' => ['column' => 'tipotransaccion_compra.codigoafip', 'type' => 'texto', 'label' => 'Tipo comprobante ARCA'],
         'operacion' => ['column' => 'tipotransaccion_compra.operacion', 'type' => 'enum', 'label' => 'Operación'],
         'signo' => ['column' => 'tipotransaccion_compra.signo', 'type' => 'enum', 'label' => 'Signo'],
         'subdiario' => ['column' => 'tipotransaccion_compra.subdiario', 'type' => 'enum', 'label' => 'Subdiario IVA'],
@@ -92,7 +92,7 @@ class TipotransaccionCompraListadoFiltros
         'nombre' => 'Nombre',
         'operacion' => 'Operación',
         'abreviatura' => 'Abreviatura',
-        'codigoafip' => 'Tipo AFIP',
+        'codigoafip' => 'Tipo comprobante ARCA',
         'signo' => 'Signo',
         'subdiario' => 'Subdiario IVA',
         'asientocontable' => 'Asiento',
@@ -100,6 +100,47 @@ class TipotransaccionCompraListadoFiltros
         'retieneiva' => 'Retiene IVA',
         'retieneganancia' => 'Retiene ganancias',
         'retieneIIBB' => 'Retiene IIBB',
+    ];
+
+    /**
+     * Títulos cortos del index. El nombre completo queda en COLUMNAS_GRILLA (QBE y title).
+     *
+     * @var array<string, string>
+     */
+    public const TITULOS_INDEX = [
+        'id' => 'ID',
+        'nombre' => 'Nombre',
+        'operacion' => 'Oper.',
+        'abreviatura' => 'Abr.',
+        'codigoafip' => 'Tipo ARCA',
+        'signo' => '±',
+        'subdiario' => 'Subd.',
+        'asientocontable' => 'Asiento',
+        'estado' => 'Estado',
+        'retieneiva' => 'IVA',
+        'retieneganancia' => 'Gan.',
+        'retieneIIBB' => 'IIBB',
+    ];
+
+    /**
+     * Reparto del ancho del index (suma 91; la columna de acciones ocupa el 9% restante).
+     * Sin mínimos en rem, para que no aparezca scroll horizontal.
+     *
+     * @var array<string, string>
+     */
+    public const ANCHOS_GRILLA = [
+        'id' => '5%',
+        'nombre' => '13%',
+        'operacion' => '7%',
+        'abreviatura' => '6%',
+        'codigoafip' => '16%',
+        'signo' => '4%',
+        'subdiario' => '7%',
+        'asientocontable' => '8%',
+        'estado' => '8%',
+        'retieneiva' => '5%',
+        'retieneganancia' => '6%',
+        'retieneIIBB' => '6%',
     ];
 
     public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array

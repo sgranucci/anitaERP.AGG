@@ -32,7 +32,7 @@
                 <th>Nombre</th>
                 <th>Operación</th>
                 <th>Abrev.</th>
-                <th>AFIP</th>
+                <th>Tipo ARCA</th>
                 <th>Signo</th>
                 <th>Subdiario</th>
                 <th>Asiento</th>
@@ -49,7 +49,7 @@
                     <td>{{ $data->nombre }}</td>
                     <td>{{ $data->desc_operacion }}</td>
                     <td>{{ $data->abreviatura }}</td>
-                    <td>{{ $data->codigoafip }}</td>
+                    <td>@include('compras.tipotransaccion_compra.partials.celda_codigo_arca')</td>
                     <td>{{ $data->desc_signo }}</td>
                     <td>{{ $data->desc_subdiario }}</td>
                     <td>{{ $data->desc_asientocontable }}</td>

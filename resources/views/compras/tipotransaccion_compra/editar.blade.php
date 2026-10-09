@@ -7,6 +7,7 @@
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/tipotransaccion_compra/crear.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/tipotransaccion/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tipotransaccion/form.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')

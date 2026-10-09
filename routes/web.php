@@ -3736,6 +3736,7 @@ Route::delete('compras/concepto_ivacompra/{id}', 'Compras\Concepto_IvacompraCont
 Route::get('compras/tipotransaccion_compra', 'Compras\Tipotransaccion_CompraController@index')->name('tipotransaccion_compra');
 Route::get('compras/lista-tipotransaccion-compra/{formato?}/{busqueda?}', 'Compras\Tipotransaccion_CompraController@listar')->name('lista_tipotransaccion_compra');
 Route::get('compras/tipotransaccion_compra/crear', 'Compras\Tipotransaccion_CompraController@crear')->name('crear_tipotransaccion_compra');
+Route::get('compras/tipotransaccion_compra/arca-tipos-cbte', 'Compras\Tipotransaccion_CompraController@tiposCbteArca')->name('tipotransaccion_compra_arca_tipos_cbte');
 Route::post('compras/tipotransaccion_compra', 'Compras\Tipotransaccion_CompraController@guardar')->name('guardar_tipotransaccion_compra');
 Route::post('compras/tipotransaccion_compra/consultatipotransaccion', 'Compras\Tipotransaccion_CompraController@consultaTipotransaccionCompra')->name('consulta_tipotransaccion_compra');
 Route::get('compras/tipotransaccion_compra/leer/{abreviatura}', 'Compras\Tipotransaccion_CompraController@leeUnTipotransaccionPorAbreviatura')->name('leer_tipotransaccion_compra_abreviatura');
