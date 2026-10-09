@@ -86,14 +86,9 @@ class OrdencompraLegajoBandejaService
                 'proveedores:id,codigo,nombre',
                 'centrocostos:id,codigo,nombre',
                 'sector_legajocompras:id,nombre',
-            ])
-            ->leftJoin('empresa', 'empresa.id', '=', 'ordencompra.empresa_id')
-            ->leftJoin('centrocosto', 'centrocosto.id', '=', 'ordencompra.centrocosto_id')
-            ->leftJoin('proveedor', 'proveedor.id', '=', 'ordencompra.proveedor_id')
-            ->leftJoin('usuario', 'usuario.id', '=', 'ordencompra.creousuario_id')
-            ->leftJoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'ordencompra.sector_legajocompra_id')
-            ->leftJoin('condicioncompra', 'condicioncompra.id', '=', 'ordencompra.condicioncompra_id')
-            ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id')
+            ]);
+        $this->joinsParaFiltrosListado($query);
+        $query
             ->orderByDesc('ordencompra.fecha')
             ->orderByDesc('ordencompra.id');
 
@@ -607,6 +602,23 @@ class OrdencompraLegajoBandejaService
         }
 
         return $out;
+    }
+
+    /**
+     * Joins que usa OrdencompraListadoFiltros (proveedor, empresa, requisición, etc.).
+     *
+     * @param  Builder<\App\Models\Compras\Ordencompra>  $query
+     */
+    private function joinsParaFiltrosListado(Builder $query): void
+    {
+        $query
+            ->leftJoin('empresa', 'empresa.id', '=', 'ordencompra.empresa_id')
+            ->leftJoin('centrocosto', 'centrocosto.id', '=', 'ordencompra.centrocosto_id')
+            ->leftJoin('proveedor', 'proveedor.id', '=', 'ordencompra.proveedor_id')
+            ->leftJoin('usuario', 'usuario.id', '=', 'ordencompra.creousuario_id')
+            ->leftJoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'ordencompra.sector_legajocompra_id')
+            ->leftJoin('condicioncompra', 'condicioncompra.id', '=', 'ordencompra.condicioncompra_id')
+            ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id');
     }
 
     /**
@@ -1700,6 +1712,7 @@ class OrdencompraLegajoBandejaService
                 'centrocostos:id,codigo,nombre',
                 'sector_legajocompras:id,nombre',
             ]);
+        $this->joinsParaFiltrosListado($query);
 
         app(EmpresaRepository::class)->aplicarFiltroEmpresasAsignadas($query, 'ordencompra.empresa_id');
         $this->aplicarFiltrosBusqueda($query, $filtros);
