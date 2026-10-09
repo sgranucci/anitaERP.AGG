@@ -1168,10 +1168,14 @@
 			consumoOtEnCurso = true;
 
 			var $form = $(this);
+			// El form de edición trae _method=PUT. Si viaja en este POST, Laravel lo enruta como PUT y la ruta responde 405.
+			var payload = $form.serializeArray().filter(function (p) {
+				return p.name !== '_method';
+			});
 			$.ajax({
 				url: window.movimientoStockAvisoConsumoOtUrl,
 				method: 'POST',
-				data: $form.serialize(),
+				data: payload,
 				headers: { 'Accept': 'application/json' }
 			}).done(function (resp) {
 				consumoOtEnCurso = false;

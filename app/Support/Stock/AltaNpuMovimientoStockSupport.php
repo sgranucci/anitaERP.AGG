@@ -324,6 +324,10 @@ final class AltaNpuMovimientoStockSupport
             throw new \RuntimeException("El NPU {$npu} ya está registrado en el sistema{$detalle}.");
         }
 
+        if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            return;
+        }
+
         try {
             $skuAnita = StkParteUnicaAnitaBridgeSupport::skuAnitaDeNumeroparte($npu);
         } catch (\Throwable $e) {

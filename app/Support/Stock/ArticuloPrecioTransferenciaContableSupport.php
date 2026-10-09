@@ -10,7 +10,7 @@ use App\Models\Stock\Articulo;
  * - fl_precio_promedio_transferencia (TITO): promedio 3 compras ERP en pesos
  *   (COM cubiertas por una DEP no entran)
  *   (moneda/cotización Anita recepmov); fallback stkmae compra1/2/3
- * - resto: última compra ERP → Anita stkm_pre_compra3 → costo/PPP artículo
+ * - resto: última compra ERP → (Anita stkm_pre_compra3 salvo Ferli) → costo/PPP artículo
  */
 final class ArticuloPrecioTransferenciaContableSupport
 {
@@ -30,7 +30,11 @@ final class ArticuloPrecioTransferenciaContableSupport
             return ArticuloPrecioPromedioCompraSupport::resolverPrecioUnitario($articulo);
         }
 
-        $dato = ArticuloPrecioUltimaCompraSupport::resolverPorArticulo($articulo);
+        $dato = ArticuloPrecioUltimaCompraSupport::resolverPorArticulos(
+            [$articulo],
+            null,
+            ! MovimientoStockFerliSupport::esCalzadosFerli(),
+        )[(int) $articulo->id] ?? null;
         $precio = $dato['precio'] ?? null;
 
         return $precio !== null && (float) $precio > 0 ? round((float) $precio, 6) : null;
@@ -73,7 +77,11 @@ final class ArticuloPrecioTransferenciaContableSupport
         }
 
         if ($resto !== []) {
-            foreach (ArticuloPrecioUltimaCompraSupport::resolverPorArticulos($resto) as $id => $dato) {
+            foreach (ArticuloPrecioUltimaCompraSupport::resolverPorArticulos(
+                $resto,
+                null,
+                ! MovimientoStockFerliSupport::esCalzadosFerli(),
+            ) as $id => $dato) {
                 $precio = $dato['precio'] ?? null;
                 $porId[$id] = $precio !== null && (float) $precio > 0
                     ? round((float) $precio, 6)

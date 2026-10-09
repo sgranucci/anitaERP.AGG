@@ -141,7 +141,11 @@ final class MovimientoStockListadoCostoSupport
         }
 
         // Última compra para no-catálogo y fallback si falta precio en lista 5000+mes.
-        $preciosCompra = ArticuloPrecioUltimaCompraSupport::resolverPorArticulos(array_keys($articuloIds));
+        $preciosCompra = ArticuloPrecioUltimaCompraSupport::resolverPorArticulos(
+            array_keys($articuloIds),
+            null,
+            ! MovimientoStockFerliSupport::esCalzadosFerli(),
+        );
 
         /** @var array<string, int|null> $listaIdPorMes */
         $listaIdPorMes = [];

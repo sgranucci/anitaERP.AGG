@@ -66,7 +66,11 @@ final class TransferenciaMercaderiaCostoSupport
         }
 
         if ($ultimaCompra !== []) {
-            $resueltos = ArticuloPrecioUltimaCompraSupport::resolverPorArticulos($ultimaCompra);
+            $resueltos = ArticuloPrecioUltimaCompraSupport::resolverPorArticulos(
+                $ultimaCompra,
+                null,
+                ! MovimientoStockFerliSupport::esCalzadosFerli(),
+            );
             foreach ($ultimaCompra as $id => $articulo) {
                 $precio = $resueltos[$id]['precio'] ?? null;
                 $out[$id] = $precio !== null && (float) $precio > 0

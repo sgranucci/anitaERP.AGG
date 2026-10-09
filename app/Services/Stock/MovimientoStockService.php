@@ -339,7 +339,29 @@ class MovimientoStockService
 					}
 				}
 
-				// Graba items
+				// Graba items. El precio vacío se resuelve una sola vez para todos los renglones.
+				// En Ferli esa resolución no consulta Anita.
+				$pidePrecio = (bool) ($tipotransaccion->pide_precio ?? false);
+				$forzarUltimaCompra = (bool) ($tipotransaccion->baja_npu ?? false)
+					|| (bool) ($tipotransaccion->alta_npu ?? false);
+				$preciosResueltos = [];
+				if (! $pidePrecio) {
+					$idsPrecio = [];
+					foreach ($articulos as $iPrecio => $artIdPrecio) {
+						$precioForm = (float) str_replace(',', '', (string) ($precios[$iPrecio] ?? 0));
+						if (($precioForm <= 0 || $forzarUltimaCompra) && (int) $artIdPrecio > 0) {
+							$idsPrecio[] = (int) $artIdPrecio;
+						}
+					}
+					if ($idsPrecio !== []) {
+						$preciosResueltos = ArticuloPrecioMovimientoStockSupport::resolverParaArticulos(
+							$idsPrecio,
+							$tipotransaccion,
+							$fechaPrecio
+						);
+					}
+				}
+
 				$dataArticuloMovimiento = [];
 				for ($i = 0; $i < count($articulos); $i++)
 				{
@@ -365,16 +387,14 @@ class MovimientoStockService
 						$modulo = $modulos[$i];
 
 					$precioLinea = (float) str_replace(',', '', (string) ($precios[$i] ?? 0));
-					$pidePrecio = (bool) ($tipotransaccion->pide_precio ?? false);
-					$forzarUltimaCompra = (bool) ($tipotransaccion->baja_npu ?? false)
-						|| (bool) ($tipotransaccion->alta_npu ?? false);
 					// Con pide_precio el operador debe cargarlo; no completar en silencio.
 					if (! $pidePrecio && ($precioLinea <= 0 || $forzarUltimaCompra) && (int) $articulos[$i] > 0) {
-						$datoPrecio = ArticuloPrecioMovimientoStockSupport::resolverParaLinea(
-							(int) $articulos[$i],
-							$tipotransaccion,
-							$fechaPrecio
-						);
+						$datoPrecio = $preciosResueltos[(int) $articulos[$i]] ?? [
+							'precio' => 0,
+							'listaprecio_id' => null,
+							'moneda_id' => null,
+							'incluyeimpuesto' => null,
+						];
 						$precioLinea = (float) ($datoPrecio['precio'] ?? 0);
 						if (empty($listaprecios[$i]) && ! empty($datoPrecio['listaprecio_id'])) {
 							$listaprecios[$i] = $datoPrecio['listaprecio_id'];

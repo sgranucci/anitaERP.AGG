@@ -12,7 +12,7 @@ use Carbon\Carbon;
  *
  * - Salidas de venta (abreviaturas en config stock.precio_movimiento_salida_venta_abreviaturas):
  *   lista de precios de venta vigente (PrecioService / tabla precio).
- * - Resto de movimientos: última compra (ERP → Anita → fallback artículo).
+ * - Resto de movimientos: última compra (ERP; en Ferli sin Anita; en otros clientes ERP → Anita → artículo).
  *
  * @see config('stock.precio_ultima_compra')
  */
@@ -61,24 +61,85 @@ final class ArticuloPrecioMovimientoStockSupport
         ?Tipotransaccion_Stock $tipo,
         ?Carbon $fechaReferencia = null,
     ): array {
-        $articulo = Articulo::query()->find($articuloId);
-        if (! $articulo) {
-            return self::respuestaVacia();
+        $mapa = self::resolverParaArticulos([$articuloId], $tipo, $fechaReferencia);
+
+        return $mapa[$articuloId] ?? self::respuestaVacia();
+    }
+
+    /**
+     * Misma regla que resolverParaLinea, en una sola lectura de última compra.
+     * En Ferli no consulta Anita. En el resto, Anita va en un solo llamado para todos los artículos.
+     *
+     * @param  list<int>  $articuloIds
+     * @return array<int, array{
+     *     precio: float,
+     *     listaprecio_id: int|null,
+     *     moneda_id: int|null,
+     *     incluyeimpuesto: int|null,
+     *     criterio: string,
+     *     origen_ultima_compra: string|null
+     * }>
+     */
+    public static function resolverParaArticulos(
+        array $articuloIds,
+        ?Tipotransaccion_Stock $tipo,
+        ?Carbon $fechaReferencia = null,
+    ): array {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $articuloIds),
+            static fn (int $id) => $id > 0
+        )));
+        if ($ids === []) {
+            return [];
         }
 
         $fechaReferencia ??= Carbon::today();
+        $articulos = Articulo::query()->whereIn('id', $ids)->get()->keyBy(
+            static fn (Articulo $articulo) => (int) $articulo->id
+        );
 
-        if ((bool) ($tipo?->baja_npu ?? false) || (bool) ($tipo?->alta_npu ?? false)) {
-            return self::resolverUltimaCompra($articulo);
+        $npu = (bool) ($tipo?->baja_npu ?? false) || (bool) ($tipo?->alta_npu ?? false);
+        $venta = ! $npu && self::usaPrecioVenta($tipo);
+
+        $out = [];
+        $pendientesUltima = [];
+        foreach ($ids as $id) {
+            $articulo = $articulos->get($id);
+            if (! $articulo instanceof Articulo) {
+                $out[$id] = self::respuestaVacia();
+
+                continue;
+            }
+
+            if ($venta) {
+                $precioVenta = self::resolverPrecioVentaSiHayLista($articulo, $fechaReferencia);
+                if ($precioVenta !== null) {
+                    $out[$id] = $precioVenta;
+
+                    continue;
+                }
+            }
+
+            $pendientesUltima[] = $articulo;
         }
 
-        if (self::usaPrecioVenta($tipo)) {
-            return self::resolverPrecioVenta($articulo, $fechaReferencia);
+        if ($pendientesUltima !== []) {
+            // Ferli no consulta stkmae: el precio sale del ERP (COM, entrada o costo del artículo).
+            $ultimas = ArticuloPrecioUltimaCompraSupport::resolverPorArticulos(
+                $pendientesUltima,
+                null,
+                ! MovimientoStockFerliSupport::esCalzadosFerli(),
+            );
+            foreach ($pendientesUltima as $articulo) {
+                $id = (int) $articulo->id;
+                $out[$id] = self::desdeUltimaCompra($ultimas[$id] ?? null);
+            }
         }
 
-        return self::resolverUltimaCompra($articulo);
+        return $out;
     }
 
+    /**
     /**
      * @return array{
      *     precio: float,
@@ -87,39 +148,31 @@ final class ArticuloPrecioMovimientoStockSupport
      *     incluyeimpuesto: int|null,
      *     criterio: string,
      *     origen_ultima_compra: string|null
-     * }
+     * }|null
      */
-    private static function resolverPrecioVenta(Articulo $articulo, Carbon $fechaReferencia): array
+    private static function resolverPrecioVentaSiHayLista(Articulo $articulo, Carbon $fechaReferencia): ?array
     {
         $listaId = (int) config('precio.listaprecio_default_id', 1);
         $precios = PrecioService::asignaPrecioPorLista((int) $articulo->id, $listaId, $fechaReferencia->toDateString());
 
-        if ($precios !== []) {
-            $p = $precios[0];
-
-            return [
-                'precio' => round((float) ($p['precio'] ?? 0), 6),
-                'listaprecio_id' => isset($p['listaprecio_id']) ? (int) $p['listaprecio_id'] : $listaId,
-                'moneda_id' => isset($p['moneda_id']) ? (int) $p['moneda_id'] : null,
-                'incluyeimpuesto' => isset($p['incluyeimpuesto']) ? (int) $p['incluyeimpuesto'] : null,
-                'criterio' => self::CRITERIO_VENTA,
-                'origen_ultima_compra' => null,
-            ];
+        if ($precios === []) {
+            return null;
         }
 
-        $ultima = ArticuloPrecioUltimaCompraSupport::resolverPorArticulo($articulo);
+        $p = $precios[0];
 
         return [
-            'precio' => round((float) ($ultima['precio'] ?? 0), 6),
-            'listaprecio_id' => null,
-            'moneda_id' => $ultima['moneda_id'] ?? null,
-            'incluyeimpuesto' => null,
-            'criterio' => self::CRITERIO_ULTIMA_COMPRA,
-            'origen_ultima_compra' => $ultima['origen'] ?? null,
+            'precio' => round((float) ($p['precio'] ?? 0), 6),
+            'listaprecio_id' => isset($p['listaprecio_id']) ? (int) $p['listaprecio_id'] : $listaId,
+            'moneda_id' => isset($p['moneda_id']) ? (int) $p['moneda_id'] : null,
+            'incluyeimpuesto' => isset($p['incluyeimpuesto']) ? (int) $p['incluyeimpuesto'] : null,
+            'criterio' => self::CRITERIO_VENTA,
+            'origen_ultima_compra' => null,
         ];
     }
 
     /**
+     * @param  array{precio: float|null, moneda_id: int|null, origen: string|null}|null  $ultima
      * @return array{
      *     precio: float,
      *     listaprecio_id: int|null,
@@ -129,10 +182,8 @@ final class ArticuloPrecioMovimientoStockSupport
      *     origen_ultima_compra: string|null
      * }
      */
-    private static function resolverUltimaCompra(Articulo $articulo): array
+    private static function desdeUltimaCompra(?array $ultima): array
     {
-        $ultima = ArticuloPrecioUltimaCompraSupport::resolverPorArticulo($articulo);
-
         return [
             'precio' => round((float) ($ultima['precio'] ?? 0), 6),
             'listaprecio_id' => null,

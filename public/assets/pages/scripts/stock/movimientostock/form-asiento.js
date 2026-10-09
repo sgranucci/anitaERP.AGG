@@ -65,7 +65,10 @@ $(function () {
             headers: {
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val()
             },
-            data: $form.serialize()
+            // El form de edición trae _method=PUT. Si viaja en este POST, Laravel lo enruta como PUT y el preview responde 405.
+            data: $form.serializeArray().filter(function (p) {
+                return p.name !== '_method';
+            })
         })
             .done(function (res) {
                 if (res && res.html) {

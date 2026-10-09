@@ -70,6 +70,7 @@ final class ArticuloPrecioUltimaCompraSupport
     public static function resolverPorArticulos(
         iterable $articulosOrIds,
         ?StkmaeUltimaCompraAnitaService $anitaService = null,
+        bool $leerAnita = true,
     ): array {
         $articulos = [];
         foreach ($articulosOrIds as $item) {
@@ -115,11 +116,14 @@ final class ArticuloPrecioUltimaCompraSupport
             self::considerarCandidato($candidatos, $id, $dato);
         }
 
-        $skusAnita = array_values(array_unique(array_filter($skuPorArticuloId)));
-        $anitaService ??= app(StkmaeUltimaCompraAnitaService::class);
-        $datosAnita = $skusAnita !== []
-            ? $anitaService->obtenerDatosUltimaCompraUnificadaPorSkus($skusAnita)
-            : [];
+        $datosAnita = [];
+        if ($leerAnita) {
+            $skusAnita = array_values(array_unique(array_filter($skuPorArticuloId)));
+            $anitaService ??= app(StkmaeUltimaCompraAnitaService::class);
+            $datosAnita = $skusAnita !== []
+                ? $anitaService->obtenerDatosUltimaCompraUnificadaPorSkus($skusAnita)
+                : [];
+        }
 
         foreach ($skuPorArticuloId as $id => $sku) {
             $datoAnita = $datosAnita[$sku] ?? null;
