@@ -160,6 +160,7 @@ use App\Support\Database\DbContencionSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
 use App\Support\Ventas\NotaCreditoCompletaUnicaSupport;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
 use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
 use App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport;
@@ -3583,11 +3584,16 @@ class FacturacionService
 		else
 			$condicionventa_id = null;
 
-		// Saca letra del comprobante
+		// Saca letra del comprobante. Si se está recuperando un comprobante ya
+		// autorizado, manda la letra de ARCA y no la condición del cliente local.
 		$condicioniva = $this->condicionivaRepository->find($cliente->condicioniva_id);
 		$letra = 'Z';
 		if ($condicioniva)
 			$letra = $condicioniva->letra;
+		$letraForzada = strtoupper(trim((string) ($data['letra_forzada'] ?? '')));
+		if (preg_match('/^[ABCEM]$/', $letraForzada) === 1) {
+			$letra = $letraForzada;
+		}
 
 		$this->aplicarTipotransaccionSegunClienteMonto(
 			$data,
@@ -3707,8 +3713,21 @@ class FacturacionService
 			$centrocosto_id = null;
 			if ($numero != -1)
 			{
-				// Arma asiento. NC: invertir el de la FAC origen (operacion=C; no solo signo R/S).
-				if (($tipotransaccion->esNotaCredito() || $esReversionNd) && isset($factura))
+				// NCP de cobranza: el neto va a la cuenta de Configuración general, no a ventas ni al asiento de la factura.
+				$esNcpCobranza = ! empty($data[NotaCreditoPercepcionIibbSupport::FLAG_NCP]);
+				if ($esNcpCobranza) {
+					$cuentaNcpId = ParametroSistemaSupport::ncpProntoPagoCuentaIdParaEmpresa((int) $empresa->id);
+					if ($cuentaNcpId <= 0) {
+						return ['error' => 'Falta la cuenta del neto de la nota de crédito por descuento de cobranza. Cargala en Configuración → Configuración general.'];
+					}
+					foreach ($dataFactura as $idxNcp => $itemNcp) {
+						$dataFactura[$idxNcp]['cuentacontable_id'] = $cuentaNcpId;
+					}
+					$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+				}
+				// Arma asiento. NC total: invertir el de la FAC origen.
+				// NC parcial: asientoInvertidoDesdeFactura devuelve [] y se arma desde los renglones.
+				elseif (($tipotransaccion->esNotaCredito() || $esReversionNd) && isset($factura))
 				{
 					$factura->loadMissing(['asientos.asiento_movimientos']);
 					$asientoFactura = $factura->asientos;
@@ -5439,7 +5458,7 @@ class FacturacionService
 						// Solicita CAE/CAEA en ARCA (último paso del flujo estándar).
 						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3),
 							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id,
-							$deferVencaeAnita);
+							$deferVencaeAnita, [], false, ! empty($data['omitir_envio_mail_automatico']));
 						if ($deferVencaeAnita) {
 							$vencaePendiente = $this->armarVencaePendienteDesdeCaePendiente([
 								'venta_id' => $vta->id,
@@ -8440,7 +8459,9 @@ class FacturacionService
 	}
 
 	/**
-	 * Invierte el asiento de la factura origen para la NC.
+	 * Invierte el asiento de la factura origen para una NC del mismo importe.
+	 * Si la NC es parcial (el total no cierra con el debe de la factura), devuelve
+	 * vacío: el caller arma el asiento desde los renglones de la NC.
 	 * Si las piernas tienen el mismo absoluto (caso típico 2 cuentas), usa el total
 	 * del comprobante al centavo: round(suma cruda) puede dar .39 y el total .38.
 	 *
@@ -8454,13 +8475,26 @@ class FacturacionService
 		}
 
 		$totalAbs = VentaImporteDosDecimalesSupport::redondear(abs($totalComprobante));
+		$totalOrigen = 0.0;
 		$absMontos = [];
 		foreach ($movimientos as $movimiento) {
-			$abs = abs((float) $movimiento->monto);
-			if ($abs > 0.009) {
-				$absMontos[] = $abs;
+			$montoFac = (float) $movimiento->monto;
+			$abs = abs($montoFac);
+			if ($abs <= 0.009) {
+				continue;
+			}
+			$absMontos[] = $abs;
+			if ($montoFac > 0) {
+				$totalOrigen += $montoFac;
 			}
 		}
+		$totalOrigen = VentaImporteDosDecimalesSupport::redondear($totalOrigen);
+		// NC parcial: el asiento de la factura es de otro importe. Devolver vacío
+		// para que el caller arme el asiento desde los renglones de la NC.
+		if ($totalOrigen > 0.02 && abs($totalOrigen - $totalAbs) > 0.05) {
+			return [];
+		}
+
 		$mismoAbsoluto = $absMontos !== []
 			&& (max($absMontos) - min($absMontos)) < 0.02;
 
@@ -8644,7 +8678,8 @@ class FacturacionService
 			}
 		}
 
-		// Pie: IVA/perc. ya van sobre gravado neto. Ventas venía en subtotal (renglón).
+		// Cantidad × precio es bruto (A) o con IVA (B). Ventas del asiento = neto fiscal.
+		// IVA y percepciones se agregan abajo desde los conceptos. Mostrador, pedido y picking.
 		$asientoContable = FacturaAsientoDescuentoPieSupport::netearLineasVenta(
 			$asientoContable,
 			$conceptostotales
@@ -10097,6 +10132,7 @@ class FacturacionService
 		bool $deferVencaeAnita = false,
 		array $opcionesEmisionArca = [],
 		bool $omitirVencaeAnita = false,
+		bool $omitirEnvioMailAutomatico = false,
 	) {
 		// Solicita CAE o CAEA
 		$flGrabaCae = false;
@@ -10186,7 +10222,7 @@ class FacturacionService
 										],
 										$venta_id);
 
-		if ($flGrabaCae && (int) $venta_id > 0) {
+		if ($flGrabaCae && (int) $venta_id > 0 && ! $omitirEnvioMailAutomatico) {
 			$ventaIdMail = (int) $venta_id;
 			\Illuminate\Support\Facades\DB::afterCommit(static function () use ($ventaIdMail) {
 				try {

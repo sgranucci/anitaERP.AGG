@@ -23,10 +23,6 @@ final class ChequeTerceroCtermaeAnitaMapper
     public static function aAtributosErp(object $row, array $ids): array
     {
         $nroInterno = (int) preg_replace('/\D/', '', (string) ($row->cter_nro_interno ?? '0'));
-        $nroCheque = trim((string) ($row->cter_nro_cheque ?? ''));
-        if ($nroCheque === '0') {
-            $nroCheque = '';
-        }
 
         $estadoAnita = (string) ($row->cter_estado ?? ' ');
         $estado = $estadoAnita !== '' ? $estadoAnita : ' ';
@@ -34,8 +30,8 @@ final class ChequeTerceroCtermaeAnitaMapper
         $fechaCheque = self::fechaAYMD($row->cter_fecha_cheque ?? null);
         $fechaIngreso = self::fechaAYMD($row->cter_fecha_ingreso ?? null) ?: $fechaCheque;
 
-        $numerocheque = $nroCheque !== '' ? $nroCheque : (string) $nroInterno;
         $negociable = self::negociableDesdeInterior($row->cter_interior ?? null);
+        $numerocheque = self::numerochequeDesdeFila($row, $nroInterno);
         $nroEcheq = self::nroEcheqDesdeFila($row, $negociable, $numerocheque);
 
         return [
@@ -62,6 +58,39 @@ final class ChequeTerceroCtermaeAnitaMapper
             'anombrede' => self::textoONull($row->cter_entregado_a ?? null),
             'nro_caucion' => self::nroCaucion($row->cter_nro_caucion ?? null),
         ];
+    }
+
+    /**
+     * Número físico del cheque. Anita deja cter_nro_cheque en 0 en muchos e-cheq
+     * y guarda el número en cter_nro_e_cheq. El interno solo entra si no hay ninguno.
+     */
+    public static function numerochequeDesdeFila(object $row, ?int $nroInterno = null): string
+    {
+        $interno = $nroInterno ?? (int) preg_replace('/\D/', '', (string) ($row->cter_nro_interno ?? '0'));
+        $nroCheque = self::numeroUtil($row->cter_nro_cheque ?? null);
+        if ($nroCheque !== null) {
+            return mb_substr($nroCheque, 0, 50);
+        }
+
+        $nroEcheq = self::numeroUtil($row->cter_nro_e_cheq ?? null);
+        if ($nroEcheq !== null) {
+            return mb_substr($nroEcheq, 0, 50);
+        }
+
+        return $interno > 0 ? (string) $interno : '';
+    }
+
+    /**
+     * Número usable de Anita: vacío y 0 no son un número de cheque.
+     */
+    public static function numeroUtil($valor): ?string
+    {
+        $t = trim((string) ($valor ?? ''));
+        if ($t === '' || $t === '0') {
+            return null;
+        }
+
+        return $t;
     }
 
     /**

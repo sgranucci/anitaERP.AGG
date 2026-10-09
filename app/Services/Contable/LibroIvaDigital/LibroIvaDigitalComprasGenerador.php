@@ -382,11 +382,17 @@ class LibroIvaDigitalComprasGenerador
             $cp->monedas->codigo ?? null,
             $cp->monedas->nombre ?? null,
         );
-        $fechaDoc = (string) ($cp->fechaiva ?: $cp->fechacomprobante);
+        $fechaArchivo = LibroIvaDigitalComprasAnitaArmadoSupport::fechaArchivoCompras(
+            $cp->fechacomprobante,
+            $cp->fechaiva,
+        );
+        if ($fechaArchivo === null) {
+            return null;
+        }
         $coeficiente = LibroIvaDigitalComprasAnitaArmadoSupport::coeficienteDesdeErp(
             (int) ($cp->moneda_id ?? 1),
             $cp->cotizacion,
-            $fechaDoc,
+            (string) ($cp->fechaiva ?: $cp->fechacomprobante),
             $codigoMoneda,
         );
         $totales = LibroIvaDigitalComprasImportesSupport::aplicarCoeficiente($totales, $coeficiente);
@@ -394,7 +400,7 @@ class LibroIvaDigitalComprasGenerador
         $credito = $prorrateoGlobal ? 0.0 : (float) $totales['credito_computable'];
 
         $cabecera = [
-            'fecha' => date('Ymd', strtotime($fechaDoc)),
+            'fecha' => $fechaArchivo,
             'tipo_comprobante' => $tipoComprobante,
             'punto_venta' => $puntoVenta,
             'numero_comprobante' => $numero,

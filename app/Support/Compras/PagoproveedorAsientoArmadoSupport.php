@@ -429,7 +429,76 @@ final class PagoproveedorAsientoArmadoSupport
             $cotizacionPago
         );
 
+        return self::cerrarImportesAlCentavo($asiento);
+    }
+
+    /**
+     * Cada línea queda en centavos. Si el redondeo deja una diferencia de pocos centavos,
+     * se absorbe en la línea más grande del lado que falta para que Debe = Haber.
+     *
+     * @param  list<array<string, mixed>>  $asiento
+     * @return list<array<string, mixed>>
+     */
+    public static function cerrarImportesAlCentavo(array $asiento): array
+    {
+        $debe = 0.0;
+        $haber = 0.0;
+        foreach ($asiento as $i => $linea) {
+            foreach (['debe', 'haber'] as $lado) {
+                if (! isset($linea[$lado]) || $linea[$lado] === '' || $linea[$lado] === null) {
+                    continue;
+                }
+                $importe = self::aCentavos((float) $linea[$lado]);
+                if ($importe <= 0.0) {
+                    $asiento[$i][$lado] = '';
+                    continue;
+                }
+                $asiento[$i][$lado] = $importe;
+                if ($lado === 'debe') {
+                    $debe += $importe;
+                } else {
+                    $haber += $importe;
+                }
+            }
+        }
+
+        $diff = self::aCentavos($debe - $haber);
+        if (abs($diff) < 0.005 || abs($diff) > 0.05) {
+            return $asiento;
+        }
+
+        $lado = $diff > 0 ? 'haber' : 'debe';
+        $idx = self::indiceLineaMayor($asiento, $lado);
+        if ($idx === null) {
+            return $asiento;
+        }
+
+        $asiento[$idx][$lado] = self::aCentavos((float) $asiento[$idx][$lado] + abs($diff));
+
         return $asiento;
+    }
+
+    private static function aCentavos(float $monto): float
+    {
+        return round($monto, 2);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $asiento
+     */
+    private static function indiceLineaMayor(array $asiento, string $lado): ?int
+    {
+        $idx = null;
+        $mayor = 0.0;
+        foreach ($asiento as $i => $linea) {
+            $importe = (float) ($linea[$lado] ?: 0);
+            if ($importe > $mayor) {
+                $mayor = $importe;
+                $idx = $i;
+            }
+        }
+
+        return $idx;
     }
 
     /**
@@ -676,6 +745,11 @@ final class PagoproveedorAsientoArmadoSupport
         string $observacion = '',
         int $centrocostoId = 0,
     ): void {
+        $monto = round($monto, 2);
+        if ($monto <= 0.0) {
+            return;
+        }
+
         $debe = $d_h === 'D' ? $monto : '';
         $haber = $d_h === 'H' ? $monto : '';
 
@@ -723,10 +797,10 @@ final class PagoproveedorAsientoArmadoSupport
         }
 
         if ($debe !== '') {
-            $asiento[$idx]['debe'] = (float) ($asiento[$idx]['debe'] ?: 0) + $monto;
+            $asiento[$idx]['debe'] = round((float) ($asiento[$idx]['debe'] ?: 0) + $monto, 2);
         }
         if ($haber !== '') {
-            $asiento[$idx]['haber'] = (float) ($asiento[$idx]['haber'] ?: 0) + $monto;
+            $asiento[$idx]['haber'] = round((float) ($asiento[$idx]['haber'] ?: 0) + $monto, 2);
         }
     }
 

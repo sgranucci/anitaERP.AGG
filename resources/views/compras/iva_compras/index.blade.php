@@ -5,6 +5,7 @@
 
 @section('scripts')
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/iva_compras/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/iva_compras/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
@@ -86,10 +87,21 @@
                         <div class="{{ $colInput }}">
                             <select name="orden" id="orden" class="form-control">
                                 @foreach ($orden_enum as $value => $label)
-                                    <option value="{{ $value }}" @selected(($filtros['orden'] ?? '') === $value)>{{ $label }}</option>
+                                    <option value="{{ $value }}" @selected(($filtros['orden'] ?? 'fechacomprobante') === $value)>{{ $label }}</option>
                                 @endforeach
                             </select>
                         </div>
+                        <label for="orden_dir" class="{{ $colLabel }}">Dirección</label>
+                        <div class="{{ $colInput }}">
+                            <select name="orden_dir" id="orden_dir" class="form-control">
+                                @foreach ($orden_dir_enum ?? [] as $value => $label)
+                                    <option value="{{ $value }}" @selected(($filtros['orden_dir'] ?? 'asc') === $value)>{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
                         <label for="subdiario" class="{{ $colLabel }}">Subdiario</label>
                         <div class="{{ $colInput }}">
                             <select name="subdiario" id="subdiario" class="form-control">
@@ -97,6 +109,48 @@
                                     <option value="{{ $value }}" @selected(($filtros['subdiario'] ?? '') === $value)>{{ $label }}</option>
                                 @endforeach
                             </select>
+                        </div>
+                    </div>
+
+                    @include('includes.compras.campo_proveedor_consulta', [
+                        'proveedor_id' => ($filtros['proveedor_id'] ?? 0) > 0 ? $filtros['proveedor_id'] : '',
+                        'codigo_proveedor' => $filtros['proveedor_codigo'] ?? '',
+                        'nombre_proveedor' => $filtros['proveedor_nombre'] ?? '',
+                        'col_label' => $colLabel,
+                        'col_input' => $colInput,
+                        'requerido' => false,
+                        'mostrar_ayuda' => true,
+                    ])
+
+                    <div class="form-group row">
+                        <label for="tipo" class="{{ $colLabel }}">Tipo</label>
+                        <div class="{{ $colInput }}">
+                            <input type="text" name="tipo" id="tipo" class="form-control" maxlength="20"
+                                placeholder="Vacío = todos. Ej. FC, NC"
+                                value="{{ $filtros['tipo'] ?? '' }}" autocomplete="off">
+                        </div>
+                        <label for="nro_comprobante" class="{{ $colLabel }}">Nro. comprobante</label>
+                        <div class="{{ $colInput }}">
+                            <input type="text" name="nro_comprobante" id="nro_comprobante" class="form-control" maxlength="12"
+                                placeholder="Vacío = todos"
+                                value="{{ $filtros['nro_comprobante'] ?? '' }}" autocomplete="off" inputmode="numeric">
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <label for="importe_desde" class="{{ $colLabel }}">Importe desde</label>
+                        <div class="{{ $colInput }}">
+                            <input type="text" name="importe_desde" id="importe_desde" class="form-control"
+                                placeholder="Vacío = sin mínimo"
+                                value="{{ ($filtros['importe_desde'] ?? null) === null ? '' : $filtros['importe_desde'] }}"
+                                autocomplete="off" inputmode="decimal">
+                        </div>
+                        <label for="importe_hasta" class="{{ $colLabel }}">Importe hasta</label>
+                        <div class="{{ $colInput }}">
+                            <input type="text" name="importe_hasta" id="importe_hasta" class="form-control"
+                                placeholder="Vacío = sin máximo"
+                                value="{{ ($filtros['importe_hasta'] ?? null) === null ? '' : $filtros['importe_hasta'] }}"
+                                autocomplete="off" inputmode="decimal">
                         </div>
                     </div>
 
@@ -143,6 +197,9 @@
                             <strong>Período:</strong> {{ $periodo_texto ?? '' }}
                             · <strong>Orden:</strong> {{ $orden_texto ?? '' }}
                             · <strong>Subdiario:</strong> {{ $subdiario_texto ?? '' }}
+                            @if (! empty($criterios_extra))
+                                · {{ $criterios_extra }}
+                            @endif
                         </p>
                     </div>
 
@@ -197,4 +254,5 @@
         </div>
     </div>
 </div>
+@include('includes.compras.modalconsultaproveedor')
 @endsection

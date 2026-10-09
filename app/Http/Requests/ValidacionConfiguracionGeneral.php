@@ -2,8 +2,12 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Compras\Concepto_Ivacompra;
+use App\Models\Contable\Cuentacontable;
 use App\Support\Configuracion\ParametroSistemaSupport;
+use App\Support\Contable\CuentacontableArbolSupport;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ValidacionConfiguracionGeneral extends FormRequest
 {
@@ -19,7 +23,7 @@ class ValidacionConfiguracionGeneral extends FormRequest
             return;
         }
         foreach (ParametroSistemaSupport::definiciones() as $clave => $def) {
-            if (($def['tipo'] ?? '') !== 'cuentacaja') {
+            if (! in_array($def['tipo'] ?? '', ['cuentacaja', 'concepto_ivacompra', 'cuentacontable'], true)) {
                 continue;
             }
             if (! array_key_exists($clave, $parametros)) {
@@ -41,6 +45,44 @@ class ValidacionConfiguracionGeneral extends FormRequest
             $rules['parametros.'.$clave] = match ($def['tipo']) {
                 'entero' => 'required|integer|min:0',
                 'cuentacaja' => 'nullable|integer|min:1|exists:cuentacaja,id',
+                'cuentacontable' => [
+                    'nullable',
+                    'integer',
+                    'min:1',
+                    Rule::exists('cuentacontable', 'id'),
+                    function (string $attribute, mixed $value, \Closure $fail): void {
+                        if ((int) $value <= 0) {
+                            return;
+                        }
+                        $cuenta = Cuentacontable::query()->find((int) $value);
+                        if (! $cuenta) {
+                            return;
+                        }
+                        if ((string) $cuenta->tipocuenta !== CuentacontableArbolSupport::TIPO_IMPUTABLE) {
+                            $fail('La cuenta '.$cuenta->codigo.' no es imputable.');
+                        }
+                    },
+                ],
+                'concepto_ivacompra' => [
+                    'nullable',
+                    'integer',
+                    'min:1',
+                    Rule::exists('concepto_ivacompra', 'id'),
+                    function (string $attribute, mixed $value, \Closure $fail): void {
+                        if ((int) $value <= 0) {
+                            return;
+                        }
+                        $concepto = Concepto_Ivacompra::query()->find((int) $value);
+                        if (! $concepto) {
+                            return;
+                        }
+                        $retiene = strtoupper(trim((string) ($concepto->retieneganancia ?? 'N'))) === 'S'
+                            || strtoupper(trim((string) ($concepto->retieneIIBB ?? 'N'))) === 'S';
+                        if ($retiene) {
+                            $fail('El concepto '.$concepto->codigo.' retiene ganancias o ingresos brutos. Elegí uno que no retenga.');
+                        }
+                    },
+                ],
                 'boolean' => 'required|in:0,1',
                 'select' => 'required|in:'.implode(',', array_keys($def['opciones'] ?? [])),
                 default => 'required|numeric|min:0',

@@ -82,8 +82,11 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             trim((string) ($compra['com_nombre_prov'] ?? '')),
         );
         $cuit = preg_replace('/\D+/', '', (string) ($compra['com_cuit_prov'] ?? '')) ?? '';
-        $fechaIva = self::fechaYmdAnita((string) ($compra['com_fecha_iva'] ?? $compra['com_fecha'] ?? ''));
-        if ($fechaIva === null) {
+        $fechaComprobante = self::fechaArchivoCompras(
+            $compra['com_fecha'] ?? null,
+            $compra['com_fecha_iva'] ?? null,
+        );
+        if ($fechaComprobante === null) {
             return null;
         }
 
@@ -91,7 +94,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         $credito = $prorrateoGlobal ? 0.0 : (float) $totales['credito_computable'];
 
         $cabecera = [
-            'fecha' => $fechaIva,
+            'fecha' => $fechaComprobante,
             'tipo_comprobante' => $tipoComprobante,
             'punto_venta' => $puntoVenta,
             'numero_comprobante' => $numero,
@@ -523,13 +526,38 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         return LibroIvaDigitalMapeosSupport::codigoMonedaAfip($cod, null);
     }
 
-    private static function fechaYmdAnita(string $valor): ?string
+    /**
+     * Fecha que va en el archivo de compras: la impresa del comprobante.
+     * La de contabilización solo entra si no hay fecha de comprobante.
+     * El período del libro sigue filtrándose por fecha IVA.
+     */
+    public static function fechaArchivoCompras(mixed $fechaComprobante, mixed $fechaContabilizacion): ?string
     {
-        $digits = preg_replace('/\D+/', '', $valor) ?? '';
-        if (strlen($digits) !== 8) {
+        return self::fechaYmd($fechaComprobante) ?? self::fechaYmd($fechaContabilizacion);
+    }
+
+    private static function fechaYmd(mixed $valor): ?string
+    {
+        if ($valor instanceof \DateTimeInterface) {
+            return $valor->format('Ymd');
+        }
+
+        $texto = trim((string) $valor);
+        if ($texto === '') {
             return null;
         }
 
-        return $digits;
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $texto, $m) === 1) {
+            return $m[1].$m[2].$m[3];
+        }
+
+        $digits = preg_replace('/\D+/', '', $texto) ?? '';
+        if (strlen($digits) === 8) {
+            return $digits;
+        }
+
+        $ts = strtotime($texto);
+
+        return $ts === false ? null : date('Ymd', $ts);
     }
 }

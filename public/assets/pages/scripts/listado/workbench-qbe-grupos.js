@@ -24,6 +24,15 @@
         } catch (e) {}
 
         var maxGrupos = parseInt($('#lw-qbe-grupos').attr('data-max-grupos') || '8', 10) || 8;
+        var opsSinValor = {
+            vacio: 1,
+            hoy: 1,
+            ayer: 1,
+            esta_semana: 1,
+            este_mes: 1,
+            mes_anterior: 1,
+            este_anio: 1
+        };
 
         function opsParaTipo(tipo) {
             return opsMap[tipo] || opsMap.texto;
@@ -86,10 +95,10 @@
             var $val = $row.find('.lw-qbe-valor');
             var $hastaWrap = $row.find('.lw-qbe-hasta-wrap');
             var $label = $row.find('.lw-qbe-valor-label');
-            if (op === 'vacio') {
+            if (opsSinValor[op]) {
                 $val.val('').prop('disabled', true);
                 $hastaWrap.addClass('d-none');
-                $label.text('Valor');
+                $label.text(op === 'vacio' ? 'Valor' : 'Período');
             } else {
                 $val.prop('disabled', false);
                 if (op === 'entre') {
@@ -298,7 +307,7 @@
                 var op = $(this).find('.lw-qbe-op').val();
                 var v = $.trim($(this).find('.lw-qbe-valor').val() || '');
                 var h = $.trim($(this).find('.lw-qbe-valor-hasta').val() || '');
-                if (op === 'vacio' || op === 'entre' || v !== '' || h !== '') {
+                if (opsSinValor[op] || op === 'entre' || v !== '' || h !== '') {
                     hay = true;
                     return false;
                 }

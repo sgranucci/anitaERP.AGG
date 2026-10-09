@@ -7,6 +7,7 @@ use App\Models\Ventas\Venta;
 use App\Repositories\Ventas\Cliente_CuentacorrienteRepositoryInterface;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Caja\CobranzaDescuentoConfigSupport;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
 use Exception;
 use InvalidArgumentException;
@@ -83,6 +84,12 @@ final class CobranzaDescuentoNotaCreditoService
             throw new InvalidArgumentException(
                 'El descuento ($ '.number_format($importe, 2, ',', '.')
                 .') supera el saldo del comprobante ($ '.number_format($saldoFactura, 2, ',', '.').').'
+            );
+        }
+
+        if (ParametroSistemaSupport::ncpProntoPagoCuentaIdParaEmpresa($empresaId) <= 0) {
+            throw new InvalidArgumentException(
+                'Falta la cuenta del neto de la nota de crédito por descuento. Cargala en Configuración → Configuración general.'
             );
         }
 

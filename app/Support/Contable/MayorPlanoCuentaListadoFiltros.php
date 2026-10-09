@@ -12,6 +12,10 @@ use Illuminate\Http\Request;
  */
 class MayorPlanoCuentaListadoFiltros
 {
+    public const PRESENTACION_TOTALES = 'totales';
+
+    public const PRESENTACION_MOVIMIENTOS = 'movimientos';
+
     /**
      * @return array<string, mixed>
      */
@@ -68,6 +72,7 @@ class MayorPlanoCuentaListadoFiltros
             'solo_moneda_origen' => $request->boolean('solo_moneda_origen'),
             'incluye_subdiario' => $request->boolean('incluye_subdiario', true),
             'modulo_movimientos' => $modulo,
+            'presentacion_modulo' => self::normalizarPresentacionModulo($request->input('presentacion_modulo')),
             'solo_movimientos_ventas' => $modulo === MayorPlanoCuentaModuloFiltroSupport::VENTAS,
             'modo_inclusion_asientos' => $modoAsientos,
             'cuenta_desde' => $cuentaDesde,
@@ -128,11 +133,30 @@ class MayorPlanoCuentaListadoFiltros
     }
 
     /**
-     * Un módulo elegido muestra totales del período, sin saldo anterior ni detalle de líneas.
+     * Totales o movimientos del módulo elegido. Sin módulo, la presentación no aplica.
+     */
+    public static function presentacionModulo(array $filtros): string
+    {
+        return self::normalizarPresentacionModulo($filtros['presentacion_modulo'] ?? '');
+    }
+
+    public static function normalizarPresentacionModulo(mixed $presentacion): string
+    {
+        $presentacion = strtolower(trim((string) $presentacion));
+
+        return $presentacion === self::PRESENTACION_MOVIMIENTOS
+            ? self::PRESENTACION_MOVIMIENTOS
+            : self::PRESENTACION_TOTALES;
+    }
+
+    /**
+     * Totales del período del módulo, sin detalle de líneas.
+     * Con presentación «movimientos» se listan las imputaciones una a una.
      */
     public static function esConsultaTotalesModulo(array $filtros): bool
     {
-        return self::moduloMovimientos($filtros) !== MayorPlanoCuentaModuloFiltroSupport::TODOS;
+        return self::moduloMovimientos($filtros) !== MayorPlanoCuentaModuloFiltroSupport::TODOS
+            && self::presentacionModulo($filtros) !== self::PRESENTACION_MOVIMIENTOS;
     }
 
     /**
@@ -281,6 +305,12 @@ class MayorPlanoCuentaListadoFiltros
         if ($modulo === MayorPlanoCuentaModuloFiltroSupport::VENTAS) {
             $out['solo_movimientos_ventas'] = 1;
         }
+        if (
+            $modulo !== MayorPlanoCuentaModuloFiltroSupport::TODOS
+            && self::presentacionModulo($filtros) === self::PRESENTACION_MOVIMIENTOS
+        ) {
+            $out['presentacion_modulo'] = self::PRESENTACION_MOVIMIENTOS;
+        }
 
         if ((int) ($filtros['cuenta_desde'] ?? 0) > 0) {
             $out['cuenta_desde'] = (int) $filtros['cuenta_desde'];
@@ -344,7 +374,13 @@ class MayorPlanoCuentaListadoFiltros
     public static function firma(array $filtros): string
     {
         $base = self::paraQueryString($filtros);
-        unset($base['filtro_texto'], $base['excel_solapas_separadas'], $base['mostrar_columna_centrocosto']);
+        unset(
+            $base['filtro_texto'],
+            $base['excel_solapas_separadas'],
+            $base['mostrar_columna_centrocosto'],
+            // La presentación no cambia el cálculo: totales y detalle salen del mismo cache.
+            $base['presentacion_modulo'],
+        );
         $base['fuente_mayor'] = MayorFuenteConsultaSupport::normalizarModo(
             $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
         );

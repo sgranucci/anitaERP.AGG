@@ -15,21 +15,22 @@
                 <span class="badge badge-success">Sin saltos en el período</span>
             @else
                 <span class="badge badge-danger">
-                    {{ (int) ($corr['grupos_con_saltos'] ?? 0) }} PV/tipo con saltos
+                    {{ (int) ($corr['grupos_con_saltos'] ?? 0) }} PV/tipo/letra con saltos
                     · {{ $totalFaltantes }} número(s) faltante(s)
                 </span>
             @endif
         </div>
         <p class="small text-muted mb-2">
             Detecta saltos de numeración entre comprobantes consecutivos del período, agrupados por
-            <strong>punto de venta</strong> y <strong>tipo de transacción</strong>.
+            <strong>punto de venta</strong>, <strong>letra</strong> y familia (factura, nota de crédito o nota de débito).
+            La A y la B no comparten serie. NCD y NCP, igual que las notas de débito, sí.
             Si un número faltante existe en otra fecha, se indica para distinguir desorden de jornada vs. comprobante ausente.
         </p>
 
         @if ($totalSaltos === 0)
             <p class="small text-success mb-0">
                 <i class="fa fa-check"></i>
-                La numeración es correlativa dentro del rango de fechas consultado para todos los PV/tipos con más de un comprobante.
+                La numeración es correlativa dentro del rango de fechas consultado para cada punto de venta, letra y familia con más de un comprobante.
             </p>
         @else
             <div class="accordion" id="accordion-correlatividad">

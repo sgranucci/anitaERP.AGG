@@ -799,7 +799,10 @@ class MayorPlanoCuentaReporteService
         }
         $modulo = MayorPlanoCuentaListadoFiltros::moduloMovimientos($filtros);
         if ($modulo !== '') {
-            $partes[] = 'Solo movimientos de '.MayorPlanoCuentaModuloFiltroSupport::etiqueta($modulo).' (totales)';
+            $como = MayorPlanoCuentaListadoFiltros::esConsultaTotalesModulo($filtros)
+                ? 'totales por cuenta'
+                : 'movimientos uno a uno';
+            $partes[] = 'Solo movimientos de '.MayorPlanoCuentaModuloFiltroSupport::etiqueta($modulo).' ('.$como.')';
         }
         if (! empty($filtros['solo_moneda_origen'])) {
             $partes[] = 'Solo moneda origen';

@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Compras;
 
 use App\Exports\Compras\IvaComprasListadoExport;
 use App\Http\Controllers\Controller;
+use App\Models\Compras\Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Compras\IvaComprasReporteService;
@@ -35,6 +36,7 @@ class IvaComprasReporteController extends Controller
         $monedaQuery = $this->monedaRepository->all();
         $filtros = IvaComprasListadoFiltros::resolverDesdeRequest($request);
         $filtros = $this->aplicarPreferenciasEmpresa($request, $filtros, $empresaQuery);
+        $filtros = $this->enriquecerProveedor($filtros);
 
         if ($request->boolean('consultar')) {
             ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
@@ -80,7 +82,9 @@ class IvaComprasReporteController extends Controller
             'empresa_query' => $empresaQuery,
             'moneda_query' => $monedaQuery,
             'orden_enum' => IvaComprasListadoFiltros::ORDENES,
+            'orden_dir_enum' => IvaComprasListadoFiltros::DIRECCIONES,
             'subdiario_enum' => IvaComprasListadoFiltros::SUBDIARIOS,
+            'criterios_extra' => IvaComprasListadoFiltros::formatearCriteriosExtra($filtros),
             'consultado' => $consultado,
             'resultado' => $resultado,
             'filas' => $filas,
@@ -103,7 +107,7 @@ class IvaComprasReporteController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = IvaComprasListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->enriquecerProveedor(IvaComprasListadoFiltros::resolverDesdeRequest($request));
 
         if (! IvaComprasListadoFiltros::tieneCriteriosAplicados($filtros)) {
             return redirect()->route('iva_compras');
@@ -162,6 +166,31 @@ class IvaComprasReporteController extends Controller
                 $filtros['empresa_id'] = (int) $empresaQuery->first()->id;
             }
         }
+
+        return $filtros;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function enriquecerProveedor(array $filtros): array
+    {
+        $proveedorId = (int) ($filtros['proveedor_id'] ?? 0);
+        if ($proveedorId <= 0) {
+            return $filtros;
+        }
+
+        $proveedor = Proveedor::query()->find($proveedorId, ['id', 'codigo', 'nombre']);
+        if ($proveedor === null) {
+            $filtros['proveedor_id'] = 0;
+
+            return $filtros;
+        }
+
+        $filtros['proveedor_codigo'] = (string) ($proveedor->codigo ?? '');
+        $filtros['proveedor_nombre'] = (string) ($proveedor->nombre ?? '');
+        $filtros['proveedor_etiqueta'] = trim($filtros['proveedor_codigo'].' '.$filtros['proveedor_nombre']);
 
         return $filtros;
     }

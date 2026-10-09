@@ -5,8 +5,7 @@
     $stats = $aud['stats'] ?? [];
     $tolerancia = (float) ($aud['tolerancia'] ?? 1);
     $diasConDif = (int) ($stats['dias_con_diferencia'] ?? 0);
-    $ctamovHabilitado = ! empty($aud['ctamov_habilitado']);
-    $colspanFoot = $ctamovHabilitado ? 11 : 9;
+    $colspanFoot = 9;
 @endphp
 @if (! empty($aud['habilitada']) && count($dias) > 0)
     <div class="px-3 py-3 border-bottom bg-white">
@@ -36,10 +35,6 @@
                         <th class="text-right">ERP IVA</th>
                         <th class="text-right">Ctb. IVA</th>
                         <th class="text-right">Dif. IVA</th>
-                        @if ($ctamovHabilitado)
-                            <th class="text-right" title="ctamov Anita — ventas (haber)">Ctamov vtas</th>
-                            <th class="text-right" title="ctamov Anita — IVA (débito − crédito)">Ctamov IVA</th>
-                        @endif
                         <th class="text-center">Estado</th>
                     </tr>
                 </thead>
@@ -60,10 +55,6 @@
                                 <td class="text-right">{{ $formatear($dia['erp']['iva'] ?? 0) }}</td>
                                 <td class="text-right">{{ $formatear($dia['contable']['iva'] ?? 0) }}</td>
                                 <td class="text-right font-weight-bold">{{ $formatear($dia['diferencias']['iva'] ?? 0) }}</td>
-                                @if ($ctamovHabilitado)
-                                    <td class="text-right">{{ $formatear($dia['ctamov']['ventas'] ?? 0) }}</td>
-                                    <td class="text-right">{{ $formatear($dia['ctamov']['iva'] ?? 0) }}</td>
-                                @endif
                                 <td class="text-center">
                                     @if (! $tieneMov)
                                         <span class="text-muted" title="Sin movimiento">—</span>

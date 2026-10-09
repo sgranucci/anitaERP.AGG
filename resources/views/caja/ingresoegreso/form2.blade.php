@@ -62,17 +62,19 @@
                             <tr class="item-cheque-recibido {{ ! empty($cheque->nro_interno_anita) ? 'cheque-desde-cartera' : '' }}">
                                 <td><input type="date" name="fechapago_recibidos[]" class="form-control fechapago_recibido" value="{{ $cheque->fechapago }}"></td>
                                 <td>
-                                    <input type="hidden" name="cheque_recibido_ids[]" class="cheque_recibido_id" value="{{ $cheque->id }}">
-                                    <input type="hidden" name="nro_interno_anita_recibidos[]" class="nro_interno_anita_recibido" value="{{ $cheque->nro_interno_anita ?? '' }}">
-                                    <input type="hidden" name="banco_recibido_ids[]" class="banco_recibido_id" value="{{ $cheque->banco_id }}">
-                                    <button type="button" class="btn-accion-tabla consultachequecartera_recibido tooltipsC" title="Cartera (F1)">
-                                        <i class="fa fa-folder-open text-success"></i>
-                                    </button>
-                                    <button type="button" class="btn-accion-tabla consultabanco_recibido tooltipsC" title="Consulta banco">
-                                        <i class="fa fa-search text-primary"></i>
-                                    </button>
-                                    <input type="text" class="codigobanco_recibido form-control d-inline-block" style="width:70px" name="codigobanco_recibido[]" value="{{ $cheque->bancos->codigo ?? '' }}">
-                                    <input type="text" class="nombrebanco_recibido form-control d-inline-block" style="width:120px" readonly value="{{ $cheque->bancos->nombre ?? '' }}">
+                                    <div class="pp-cheque-banco d-flex align-items-center flex-nowrap" style="gap:4px;min-width:18rem;">
+                                        <input type="hidden" name="cheque_recibido_ids[]" class="cheque_recibido_id" value="{{ $cheque->id }}">
+                                        <input type="hidden" name="nro_interno_anita_recibidos[]" class="nro_interno_anita_recibido" value="{{ $cheque->nro_interno_anita ?? '' }}">
+                                        <input type="hidden" name="banco_recibido_ids[]" class="banco_recibido_id" value="{{ $cheque->banco_id }}">
+                                        <button type="button" class="btn-accion-tabla consultachequecartera_recibido tooltipsC" title="Cartera (F1)">
+                                            <i class="fa fa-folder-open text-success"></i>
+                                        </button>
+                                        <button type="button" class="btn-accion-tabla consultabanco_recibido tooltipsC" title="Consulta banco">
+                                            <i class="fa fa-search text-primary"></i>
+                                        </button>
+                                        <input type="text" class="codigobanco_recibido form-control" style="width:4.2rem;flex:0 0 4.2rem;" name="codigobanco_recibido[]" value="{{ $cheque->bancos->codigo ?? '' }}">
+                                        <input type="text" class="nombrebanco_recibido form-control" style="flex:1 1 auto;min-width:9rem;" readonly value="{{ $cheque->bancos->nombre ?? '' }}" title="{{ $cheque->bancos->nombre ?? '' }}">
+                                    </div>
                                 </td>
                                 <td><input type="text" name="numerocheque_recibidos[]" class="form-control numerocheque_recibido" value="{{ $cheque->numerocheque }}"></td>
                                 <td><input type="text" name="sucursalpago_recibidos[]" class="form-control sucursalpago_recibido" value="{{ $cheque->sucursalpago }}"></td>

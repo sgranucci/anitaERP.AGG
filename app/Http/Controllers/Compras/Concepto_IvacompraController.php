@@ -283,6 +283,15 @@ class Concepto_IvacompraController extends Controller
             abort(403);
         }
 
+        if ($request->boolean('catalogo')) {
+            return response()->json([
+                'data' => $this->htmlFilasConsultaConcepto(
+                    ConceptoIvacompraConsultaSupport::listarCatalogo((string) $request->input('consulta', ''))
+                ),
+                'sin_config' => false,
+            ]);
+        }
+
         $tipoId = (int) $request->input('tipotransaccion_compra_id', 0);
         $consulta = (string) $request->input('consulta', '');
         $numeroOc = trim((string) (
@@ -318,16 +327,7 @@ class Concepto_IvacompraController extends Controller
             ]);
         }
 
-        $html = '';
-        foreach ($conceptos as $concepto) {
-            $html .= '<tr>'
-                .'<td class="concepto_ivacompra_id_celda">'.(int) $concepto->id.'</td>'
-                .'<td class="codigo">'.e((string) $concepto->codigo).'</td>'
-                .'<td class="nombre">'.e((string) $concepto->nombre).'</td>'
-                .'<td><small>'.e((string) ($concepto->tipoconcepto ?? '')).'</small></td>'
-                .'<td><button type="button" class="btn btn-sm btn-outline-primary eligeconsultaconcepto_ivacompra">Elegir</button></td>'
-                .'</tr>';
-        }
+        $html = $this->htmlFilasConsultaConcepto($conceptos);
 
         return response()->json([
             'data' => $html,
@@ -341,9 +341,21 @@ class Concepto_IvacompraController extends Controller
             abort(403);
         }
 
-        $tipoId = (int) $request->input('tipotransaccion_compra_id', 0);
         $valor = (string) $request->input('valor', $request->input('codigo', ''));
         $empresaId = (int) $request->input('empresa_id', 0);
+        if ($request->boolean('catalogo')) {
+            $concepto = ConceptoIvacompraConsultaSupport::resolverCatalogo($valor);
+            if (! $concepto) {
+                return response()->json([
+                    'ok' => false,
+                    'mensaje' => 'Concepto no encontrado.',
+                ], 404);
+            }
+
+            return response()->json($this->payloadConceptoResuelto($concepto, $empresaId));
+        }
+
+        $tipoId = (int) $request->input('tipotransaccion_compra_id', 0);
         $numeroOc = trim((string) (
             $request->input('numero_oc')
             ?? $request->input('numeroordencompra')
@@ -361,6 +373,37 @@ class Concepto_IvacompraController extends Controller
             ], 404);
         }
 
+        return response()->json($this->payloadConceptoResuelto($concepto, $empresaId));
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Compras\Concepto_Ivacompra>  $conceptos
+     */
+    private function htmlFilasConsultaConcepto($conceptos): string
+    {
+        if ($conceptos->isEmpty()) {
+            return '<tr><td colspan="5" class="text-muted">Sin resultados</td></tr>';
+        }
+
+        $html = '';
+        foreach ($conceptos as $concepto) {
+            $html .= '<tr>'
+                .'<td class="concepto_ivacompra_id_celda">'.(int) $concepto->id.'</td>'
+                .'<td class="codigo">'.e((string) $concepto->codigo).'</td>'
+                .'<td class="nombre">'.e((string) $concepto->nombre).'</td>'
+                .'<td><small>'.e((string) ($concepto->tipoconcepto ?? '')).'</small></td>'
+                .'<td><button type="button" class="btn btn-sm btn-outline-primary eligeconsultaconcepto_ivacompra">Elegir</button></td>'
+                .'</tr>';
+        }
+
+        return $html;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function payloadConceptoResuelto(\App\Models\Compras\Concepto_Ivacompra $concepto, int $empresaId): array
+    {
         if (! $concepto->relationLoaded('concepto_ivacompra_empresas')) {
             $concepto->load('concepto_ivacompra_empresas');
         }
@@ -384,12 +427,18 @@ class Concepto_IvacompraController extends Controller
             $tipoConcepto = 'I';
         }
 
-        return response()->json([
+        $retieneGan = strtoupper(trim((string) ($concepto->retieneganancia ?? 'N'))) === 'S';
+        $retieneIibb = strtoupper(trim((string) ($concepto->retieneIIBB ?? 'N'))) === 'S';
+
+        return [
             'ok' => true,
             'id' => (int) $concepto->id,
             'codigo' => (string) $concepto->codigo,
             'nombre' => (string) $concepto->nombre,
             'tipoconcepto' => $tipoConcepto,
+            'retieneganancia' => $retieneGan ? 'S' : 'N',
+            'retieneIIBB' => $retieneIibb ? 'S' : 'N',
+            'sin_retencion' => ! $retieneGan && ! $retieneIibb,
             'cuenta_debe_id' => $cuentaDebeId,
             'cuenta_debe_codigo' => $cuentaCodigo,
             'cuenta_debe_nombre' => $cuentaNombre,
@@ -400,10 +449,10 @@ class Concepto_IvacompraController extends Controller
             'impuesto_tasa' => $parsedFormula !== null
                 ? ConceptoIvacompraFormulaSupport::tasaPorcentajeDesdeFormula($formula)
                 : round((float) ($concepto->impuestos->valor ?? 0), 3),
-        ]);
+        ];
     }
 
-    /** Modal/resolver de concepto IVA desde CP, precarga o ingresos/egresos. */
+    /** Modal/resolver de concepto IVA desde CP, precarga, ingresos/egresos o configuración general. */
     private function puedeConsultarConceptoIvacompraOperativo(): bool
     {
         return can('listar-concepto-iva-compra', false)
@@ -412,6 +461,12 @@ class Concepto_IvacompraController extends Controller
             || can('crear-precarga-proveedores', false)
             || can('editar-precarga-proveedores', false)
             || can('crear-ingresos-egresos-caja', false)
-            || can('editar-ingresos-egresos-caja', false);
+            || can('editar-ingresos-egresos-caja', false)
+            || can('editar-configuracion-general', false)
+            || can('actualizar-configuracion-general', false)
+            || can('listar-tipo-transaccion-compra', false)
+            || can('crear-tipo-transaccion-compra', false)
+            || can('editar-tipo-transaccion-compra', false)
+            || can('actualizar-tipo-transaccion-compra', false);
     }
 }

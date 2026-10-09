@@ -86,8 +86,9 @@ class MayorPlanoCuentaProcesador
         );
 
         if ($this->soloTotalesModulo) {
-            // Totales del período del módulo elegido (subdiario V/C/T u órdenes de pago),
-            // sin tramo de saldo previo. El resumen ctamov (asi_mon_ref ≠ -1) se deduplica al normalizar.
+            // Período del módulo elegido (subdiario V/C/T u órdenes de pago), sin saldo previo.
+            // Las líneas quedan en la sección: la pantalla elige totales o el detalle uno a uno.
+            // El resumen ctamov (asi_mon_ref ≠ -1) se deduplica al normalizar.
             $diagSaldo = [
                 'fecha_comienzo_ejercicio' => $inicioEjercicio,
                 'fecha_comienzo_ajustada' => $fechaComienzoAjustada,

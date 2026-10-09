@@ -18,4 +18,10 @@ interface Comprobante_ProveedorRepositoryInterface
      * @param  array|string|null  $filtros
      */
     public function leeComprobanteProveedor($filtros, bool $paginar = false);
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesComprobanteProveedor(array $filtros): array;
 }

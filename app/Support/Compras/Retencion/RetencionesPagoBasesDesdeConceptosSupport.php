@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras\Retencion;
 
+use App\Models\Caja\Cheque;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
@@ -21,6 +22,7 @@ use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
  * Prorratea por monto aplicado / total del comprobante y convierte a moneda de pago
  * con la cotización de la aplicación (misma lógica que el desembolso).
  * NC (CC < 0) restan; OPA no entran (ya se retuvo al generarlas).
+ * El débito interno NDR de un cheque rechazado tampoco entra: no es compra.
  */
 final class RetencionesPagoBasesDesdeConceptosSupport
 {
@@ -75,6 +77,18 @@ final class RetencionesPagoBasesDesdeConceptosSupport
                 $detalle[] = [
                     'cc_id' => $ccId,
                     'omitido_retencion' => 'opa',
+                    'monto_aplicado' => $montoApl,
+                ];
+                continue;
+            }
+
+            // NDR de cheque rechazado: el importe se paga, pero no es base de retención.
+            $cpId = (int) ($cc->comprobante_proveedor_id ?? 0);
+            if ($cpId > 0 && Cheque::query()->where('comprobante_proveedor_id', $cpId)->exists()) {
+                $detalle[] = [
+                    'cc_id' => $ccId,
+                    'comprobante_id' => $cpId,
+                    'omitido_retencion' => 'ndr_cheque_rechazado',
                     'monto_aplicado' => $montoApl,
                 ];
                 continue;
@@ -172,10 +186,14 @@ final class RetencionesPagoBasesDesdeConceptosSupport
         }
 
         if (! $tuvoConceptos) {
-            $soloOpa = $detalle !== []
+            $soloOmitidas = $detalle !== []
                 && count($detalle) === count(array_filter(
                     $detalle,
-                    static fn (array $d) => ($d['omitido_retencion'] ?? '') === 'opa'
+                    static fn (array $d) => in_array(
+                        (string) ($d['omitido_retencion'] ?? ''),
+                        ['opa', 'ndr_cheque_rechazado'],
+                        true,
+                    )
                 ));
 
             return new RetencionesPagoBasesResultado(
@@ -186,7 +204,7 @@ final class RetencionesPagoBasesDesdeConceptosSupport
                 netoNogravado: 0.0,
                 importeIva: 0.0,
                 brutoAplicado: $bruto,
-                origen: $soloOpa ? 'opa_omitida' : 'fallback_bruto',
+                origen: $soloOmitidas ? 'opa_omitida' : 'fallback_bruto',
                 detalle: $detalle,
                 ivaDiscriminado: $ivaDiscriminado,
             );

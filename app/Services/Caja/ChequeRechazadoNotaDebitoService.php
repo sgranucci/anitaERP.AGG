@@ -11,6 +11,7 @@ use App\Models\Ventas\Concepto_Venta;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
+use App\Services\Ventas\FacturaMailEnvioService;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Caja\ChequeNdConfigSupport;
 use App\Support\Caja\ChequeTerceroRechazoAnitaSupport;
@@ -23,6 +24,7 @@ final class ChequeRechazadoNotaDebitoService
     public function __construct(
         private readonly FacturacionService $facturacionService,
         private readonly ChequeRechazadoDeudaProveedorService $deudaProveedorService,
+        private readonly FacturaMailEnvioService $facturaMailEnvioService,
     ) {}
 
     public function esElegible(Cheque $cheque): bool
@@ -62,7 +64,7 @@ final class ChequeRechazadoNotaDebitoService
             throw new InvalidArgumentException('El cheque no es elegible para rechazo con nota de débito.');
         }
 
-        $cheque->loadMissing(['bancos', 'clientes.condicionivas', 'monedas', 'empresas']);
+        $cheque->loadMissing(['bancos', 'clientes.condicionivas', 'monedas', 'empresas', 'proveedores']);
         $empresaId = (int) $cheque->empresa_id;
         $cliente = $cheque->clientes;
         $letra = ChequeNdConfigSupport::letraDesdeCliente($cliente);
@@ -117,6 +119,8 @@ final class ChequeRechazadoNotaDebitoService
                 'empresa' => (string) ($cheque->empresas->nombre ?? ''),
                 'cliente_id' => (int) $cheque->cliente_id,
                 'cliente' => (string) ($cliente->nombre ?? ''),
+                'proveedor_id' => (int) ($cheque->proveedor_id ?? 0),
+                'proveedor' => (string) ($cheque->proveedores->nombre ?? ''),
                 'banco' => (string) ($cheque->bancos->nombre ?? ''),
                 'fechapago' => (string) ($cheque->fechapago ?? ''),
                 'letra' => $letra,
@@ -193,11 +197,13 @@ final class ChequeRechazadoNotaDebitoService
         ?string $leyendaUsuario = null,
         ?string $motivoRechazo = null,
         ?int $puntoventaId = null,
+        bool $enviarClienteProveedor = false,
     ): array {
         $sesion = $this->prepararSesion($chequeId, $lineas, $fecha, $leyendaUsuario, $puntoventaId);
         $cheque = $sesion['cheque'];
         $fechaNd = $sesion['fecha'];
         $payload = $sesion['payload'];
+        $payload['omitir_envio_mail_automatico'] = true;
 
         $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
 
@@ -229,9 +235,13 @@ final class ChequeRechazadoNotaDebitoService
 
         $anitaOk = ChequeTerceroRechazoAnitaSupport::marcarRechazo($cheque, $fechaNd);
 
+        $mailCliente = null;
         $deudaProveedor = null;
-        if ($ventaNd instanceof Venta && (int) ($cheque->proveedor_id ?? 0) > 0) {
-            $deudaProveedor = $this->deudaProveedorService->generarSiCorresponde($cheque, $ventaNd);
+        if ($enviarClienteProveedor) {
+            $mailCliente = $this->facturaMailEnvioService->enviar($ventaNdId);
+            if ($ventaNd instanceof Venta && (int) ($cheque->proveedor_id ?? 0) > 0) {
+                $deudaProveedor = $this->deudaProveedorService->generarSiCorresponde($cheque, $ventaNd);
+            }
         }
 
         return [
@@ -240,6 +250,8 @@ final class ChequeRechazadoNotaDebitoService
             'cheque_id' => (int) $cheque->id,
             'importe' => $importe,
             'anita_ok' => $anitaOk,
+            'enviar_cliente_proveedor' => $enviarClienteProveedor,
+            'mail_cliente' => $mailCliente,
             'deuda_proveedor' => $deudaProveedor,
         ];
     }

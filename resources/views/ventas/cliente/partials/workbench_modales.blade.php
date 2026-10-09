@@ -243,7 +243,7 @@
                                                         ({{ ($grupo['logic'] ?? 'and') === 'or' ? 'Alguno' : 'Todos' }})
                                                         <ul class="mb-1 pl-3">
                                                             @foreach (($grupo['criterios'] ?? []) as $c)
-                                                                @if (($c['op'] ?? '') === 'vacio' || ($c['op'] ?? '') === 'entre' || trim((string) ($c['valor'] ?? '')) !== '' || trim((string) ($c['formula'] ?? '')) !== '')
+                                                                @if (\App\Support\Listado\ListadoQbeSupport::operadorSinValor((string) ($c['op'] ?? '')) || ($c['op'] ?? '') === 'entre' || trim((string) ($c['valor'] ?? '')) !== '' || trim((string) ($c['formula'] ?? '')) !== '')
                                                                     <li>
                                                                         @if (trim((string) ($c['formula'] ?? '')) !== '')
                                                                             <code>{{ $c['formula'] }}</code>
@@ -253,7 +253,7 @@
                                                                         {{ $c['op'] ?? 'contiene' }}
                                                                         @if (($c['op'] ?? '') === 'entre')
                                                                             «{{ $c['valor'] ?? '' }}»…«{{ $c['valor_hasta'] ?? '' }}»
-                                                                        @elseif (($c['op'] ?? '') !== 'vacio')
+                                                                        @elseif (! \App\Support\Listado\ListadoQbeSupport::operadorSinValor((string) ($c['op'] ?? '')))
                                                                             «{{ $c['valor'] ?? '' }}»
                                                                         @endif
                                                                     </li>

@@ -103,6 +103,34 @@ var flModificaAsiento = false;
         if (typeof window.pintarResumenDesembolso === 'function') {
             window.pintarResumenDesembolso();
         }
+        pintarTotalChequesRecibidos();
+    }
+
+    function pintarTotalChequesRecibidos() {
+        var $total = $('#pp-total-cheques-recibidos');
+        if (!$total.length) {
+            return;
+        }
+        var total = 0;
+        var cant = 0;
+        $('#tbody-cheque-recibido-table tr.item-cheque-recibido').each(function () {
+            var monto = parseFloat(String($(this).find('.montocheque_recibido').val() || '').replace(',', '.')) || 0;
+            if (monto <= 0) {
+                return;
+            }
+            total += Math.round(monto * 100) / 100;
+            cant++;
+        });
+        total = Math.round(total * 100) / 100;
+        $total.text(total.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+        var $cant = $('#pp-total-cheques-recibidos-cant');
+        if (cant === 0) {
+            $cant.text('');
+        } else if (cant === 1) {
+            $cant.text('1 cheque');
+        } else {
+            $cant.text(cant + ' cheques');
+        }
     }
 
     window.sumaMonto = sumaMonto;
@@ -658,9 +686,9 @@ var flModificaAsiento = false;
                         '<input type="hidden" class="centrocostoasiento_id_previo" name="centrocostoasiento_id_previo[]" value="' + (value.centrocosto_id || 0) + '" ></td>' +
                         '<td><select name="monedaasiento_ids[]" class="monedaasiento form-control required" required></select>' +
                         '<input type="hidden" class="monedaasiento_id_previo" name="monedaasiento_id_previo[]" value="' + value.moneda_id + '" ></td>' +
-                        '<td><input type="number" style="text-align: right;" name="debeasientos[]" class="form-control debeasiento" value="' + (value.debe || '') + '"></td>' +
-                        '<td><input type="number" style="text-align: right;" name="haberasientos[]" class="form-control haberasiento" value="' + (value.haber || '') + '"></td>' +
-                        '<td><input type="number" name="cotizacionasientos[]" class="form-control cotizacionasiento" value="' + value.cotizacion + '"></td>' +
+                        '<td><input type="text" inputmode="decimal" name="debeasientos[]" class="form-control text-right debeasiento" value="' + fmtLineaAsiento(value.debe) + '"></td>' +
+                        '<td><input type="text" inputmode="decimal" name="haberasientos[]" class="form-control text-right haberasiento" value="' + fmtLineaAsiento(value.haber) + '"></td>' +
+                        '<td><input type="text" inputmode="decimal" name="cotizacionasientos[]" class="form-control text-right cotizacionasiento" value="' + fmtLineaAsiento(value.cotizacion) + '"></td>' +
                         '<td><input type="text" name="observacionasientos[]" class="form-control observacionasiento" value="' + (value.observacion || '') + '"></td>' +
                         '<td><button type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_cuenta_asiento tooltipsC">' +
                         '<i class="fa fa-times-circle text-danger"></i></button></td>' +
@@ -676,11 +704,14 @@ var flModificaAsiento = false;
                 if (typeof activa_eventosAsiento === 'function') {
                     activa_eventosAsiento(false);
                 }
+                if (window.AsientoMontosFormato) {
+                    AsientoMontosFormato.initEnContenedor('#tbody-cuenta-asiento-table');
+                }
                 if (typeof sumaMontoAsiento === 'function') {
                     sumaMontoAsiento();
                 }
-                totalDebeAsiento = parseFloat($('#totaldebeasiento').val()) || 0;
-                totalHaberAsiento = parseFloat($('#totalhaberasiento').val()) || 0;
+                totalDebeAsiento = parseImporteAsientoUi($('#totaldebeasiento').val());
+                totalHaberAsiento = parseImporteAsientoUi($('#totalhaberasiento').val());
                 flModificaAsiento = false;
                 // Solo limpia marca manual si el API rearma (no vino preservado).
                 if (!preservarAsientoManual) {
@@ -697,6 +728,20 @@ var flModificaAsiento = false;
                 }
             }
         });
+    }
+
+    function fmtLineaAsiento(valor) {
+        if (valor === '' || valor == null) {
+            return '';
+        }
+        var n = parseImporteAsientoUi(valor);
+        if (!(Math.abs(n) > 0.000001)) {
+            return '';
+        }
+        if (window.AsientoMontosFormato && window.AsientoMontosFormato.fmt) {
+            return AsientoMontosFormato.fmt(n);
+        }
+        return (Math.round(n * 100) / 100).toFixed(2);
     }
 
     function parseImporteAsientoUi(valor) {
@@ -789,6 +834,10 @@ var flModificaAsiento = false;
                 aplicar();
             }
         });
+        $(document).on('input', '.montocheque_recibido', function () {
+            pintarTotalChequesRecibidos();
+        });
+
         $('#botonform3').on('click', function () {
             ocultarForms();
             $('.form3').show();

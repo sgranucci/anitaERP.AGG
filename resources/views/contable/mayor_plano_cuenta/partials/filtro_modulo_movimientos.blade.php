@@ -1,5 +1,6 @@
 @php
     $moduloActual = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::moduloMovimientos($filtros ?? []);
+    $presentacionModulo = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::presentacionModulo($filtros ?? []);
     $etiquetaModulo = \App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaModuloFiltroSupport::etiqueta($moduloActual);
     $opcionesModulo = [
         '' => ['label' => 'Todos', 'letra' => ''],
@@ -89,6 +90,22 @@
         <small class="text-muted d-block mt-1">
             Subdiario Anita: V ventas, C compras (facturas de proveedor), T caja.
             Cuentas a pagar toma &oacute;rdenes de pago (OPP, OPA, APA).
+        </small>
+    </div>
+    <div class="mpc-modulo-presentacion mt-2{{ $moduloActual === '' ? ' d-none' : '' }}" id="mpc-modulo-presentacion">
+        <div class="small text-muted mb-1">Presentaci&oacute;n del m&oacute;dulo</div>
+        <div class="mpc-modulo-opciones" role="radiogroup" aria-label="Presentacion del modulo">
+            <label class="mpc-modulo-opcion{{ $presentacionModulo === 'totales' ? ' activa' : '' }}">
+                <input type="radio" name="presentacion_modulo" value="totales" @checked($presentacionModulo === 'totales')>
+                <span>Totales</span>
+            </label>
+            <label class="mpc-modulo-opcion{{ $presentacionModulo === 'movimientos' ? ' activa' : '' }}">
+                <input type="radio" name="presentacion_modulo" value="movimientos" @checked($presentacionModulo === 'movimientos')>
+                <span>Movimientos</span>
+            </label>
+        </div>
+        <small class="text-muted d-block mt-1">
+            Totales agrupa por cuenta. Movimientos lista cada imputaci&oacute;n del per&iacute;odo, una a una, sin saldo anterior.
         </small>
     </div>
 </div>

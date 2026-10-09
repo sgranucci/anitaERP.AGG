@@ -62,12 +62,6 @@ final class IvaVentasListadoFiltros
                 ? $request->boolean('conciliar_por_unidad', true)
                 : true
         );
-        $completarFsl = $features['completar_fsl_anita'] && (
-            $consultando
-                ? $request->boolean('completar_fsl_anita', true)
-                : true
-        );
-
         return [
             'empresa_id' => $empresaId,
             'fecha_desde' => trim((string) $request->input('fecha_desde', date('Y-m-01'))),
@@ -81,7 +75,6 @@ final class IvaVentasListadoFiltros
             'cortar_por_sucursal_tipo' => $request->boolean('cortar_por_sucursal_tipo'),
             'clasificar_por_host' => $clasificarHost,
             'agrupar_b_por_dia' => $request->boolean('agrupar_b_por_dia'),
-            'auditar_ctamov' => $request->boolean('auditar_ctamov'),
             'conciliar_contable' => $consultando
                 ? $request->boolean('conciliar_contable', true)
                 : true,
@@ -89,7 +82,6 @@ final class IvaVentasListadoFiltros
             'solo_moneda_origen' => $consultando
                 ? $request->boolean('solo_moneda_origen')
                 : true,
-            'completar_fsl_anita' => $completarFsl,
             'moneda_id' => $monedaId > 0 ? $monedaId : 1,
         ];
     }
@@ -146,14 +138,9 @@ final class IvaVentasListadoFiltros
             $out['agrupar_b_por_dia'] = 1;
         }
 
-        if (! empty($filtros['auditar_ctamov'])) {
-            $out['auditar_ctamov'] = 1;
-        }
-
         $out['conciliar_contable'] = empty($filtros['conciliar_contable']) ? 0 : 1;
         $out['conciliar_por_unidad'] = empty($filtros['conciliar_por_unidad']) ? 0 : 1;
         $out['solo_moneda_origen'] = empty($filtros['solo_moneda_origen']) ? 0 : 1;
-        $out['completar_fsl_anita'] = empty($filtros['completar_fsl_anita']) ? 0 : 1;
 
         return $out;
     }

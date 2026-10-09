@@ -33,7 +33,7 @@ function buscar_datos_tipotransaccion_compra(consulta) {
             $('#datostipotransaccioncompra').html(html);
         })
         .fail(function () {
-            $('#datostipotransaccioncompra').html('<tr><td colspan="4">Error al consultar tipos de comprobante</td></tr>');
+            $('#datostipotransaccioncompra').html('<tr><td colspan="7">Error al consultar tipos de comprobante</td></tr>');
         });
 }
 

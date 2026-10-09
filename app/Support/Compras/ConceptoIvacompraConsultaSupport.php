@@ -185,4 +185,45 @@ final class ConceptoIvacompraConsultaSupport
 
         return array_values(array_unique(array_map('intval', array_filter($ids))));
     }
+
+    /**
+     * Catálogo completo, sin filtrar por tipo de comprobante.
+     * Lo usa Configuración general para elegir el concepto del débito por cheque rechazado.
+     *
+     * @return Collection<int, Concepto_Ivacompra>
+     */
+    public static function listarCatalogo(?string $consulta = null): Collection
+    {
+        $query = Concepto_Ivacompra::query();
+        $texto = trim((string) $consulta);
+        if ($texto !== '') {
+            $query->where(function ($q) use ($texto) {
+                $q->where('codigo', 'like', '%'.$texto.'%')
+                    ->orWhere('nombre', 'like', '%'.$texto.'%');
+            });
+        }
+
+        return $query
+            ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))
+            ->orderBy('nombre')
+            ->limit(80)
+            ->get();
+    }
+
+    public static function resolverCatalogo(string $valor): ?Concepto_Ivacompra
+    {
+        $valor = trim($valor);
+        if ($valor === '') {
+            return null;
+        }
+
+        if (ctype_digit($valor)) {
+            $porId = Concepto_Ivacompra::query()->find((int) $valor);
+            if ($porId) {
+                return $porId;
+            }
+        }
+
+        return Concepto_Ivacompra::query()->where('codigo', $valor)->orderBy('id')->first();
+    }
 }

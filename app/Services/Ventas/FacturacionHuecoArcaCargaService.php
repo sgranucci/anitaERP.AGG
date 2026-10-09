@@ -149,6 +149,7 @@ final class FacturacionHuecoArcaCargaService
                 $porTipo[$codigoAfip][(int) $fila->numerocomprobante] = true;
             }
 
+            $revisados = [];
             foreach ($porTipo as $codigoAfip => $numeros) {
                 $minimo = min(array_keys($numeros));
                 $maximo = max(array_keys($numeros));
@@ -204,13 +205,124 @@ final class FacturacionHuecoArcaCargaService
                             'codigo_afip' => (int) $codigoAfip,
                             'numero' => $n,
                             'forzado' => false,
+                            'en_punta' => $n > $maximo,
                         ];
                     }
                 }
+                $revisados[(int) $codigoAfip] = true;
+            }
+
+            $this->agregarPuntaSerieQuieta($pv, $tipo, $punta, $revisados, $salida);
+        }
+
+        usort($salida, static function (array $a, array $b): int {
+            $pa = self::prioridadTipo((int) $a['codigo_afip']);
+            $pb = self::prioridadTipo((int) $b['codigo_afip']);
+            if ($pa !== $pb) {
+                return $pa <=> $pb;
+            }
+
+            return ((int) $a['numero']) <=> ((int) $b['numero']);
+        });
+
+        return $salida;
+    }
+
+    /**
+     * Si la serie no tuvo comprobantes en la ventana, igual se compara el último
+     * número del ERP contra el último autorizado en ARCA. Así entra una NC que
+     * ARCA emitió después del último comprobante local, aunque ese último sea viejo.
+     *
+     * @param  array<int, true>  $revisados
+     * @param  list<array<string, mixed>>  $salida
+     */
+    private function agregarPuntaSerieQuieta(Puntoventa $pv, int $tipoFiltro, int $punta, array $revisados, array &$salida): void
+    {
+        $filas = DB::table('venta')
+            ->where('puntoventa_id', $pv->id)
+            ->where('codigo_afip', '>', 0)
+            ->groupBy('codigo_afip', DB::raw("SUBSTRING_INDEX(codigo, '-', 1)"))
+            ->selectRaw("codigo_afip, SUBSTRING_INDEX(codigo, '-', 1) as prefijo, MAX(numerocomprobante) as maximo")
+            ->get();
+
+        $maxPorTipo = [];
+        foreach ($filas as $fila) {
+            $codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipDesdeVentaGrabada(
+                (int) $fila->codigo_afip,
+                (string) $fila->prefijo.'-00000-00000000',
+            );
+            if ($codigoAfip <= 0 || ($tipoFiltro > 0 && $codigoAfip !== $tipoFiltro)) {
+                continue;
+            }
+            $maxPorTipo[$codigoAfip] = max($maxPorTipo[$codigoAfip] ?? 0, (int) $fila->maximo);
+        }
+
+        $ya = [];
+        foreach ($salida as $candidato) {
+            if ((int) $candidato['puntoventa']->id === (int) $pv->id) {
+                $ya[(int) $candidato['codigo_afip'].'|'.(int) $candidato['numero']] = true;
             }
         }
 
-        return $salida;
+        foreach ($maxPorTipo as $codigoAfip => $maximo) {
+            if ($maximo <= 0 || isset($revisados[$codigoAfip])) {
+                continue;
+            }
+            try {
+                $ultimo = $this->arca->feCompUltimoAutorizado((int) $pv->empresa_id, (int) $pv->codigo, (int) $codigoAfip);
+            } catch (Throwable $e) {
+                Log::warning('facturacion.hueco_arca.ultimo', [
+                    'puntoventa' => $pv->codigo,
+                    'codigo_afip' => $codigoAfip,
+                    'error' => $e->getMessage(),
+                ]);
+                continue;
+            }
+            $hasta = min((int) $ultimo, $maximo + $punta);
+            if ($hasta <= $maximo) {
+                continue;
+            }
+
+            $resueltos = FacturacionHuecoArca::query()
+                ->where('puntoventa_id', $pv->id)
+                ->where('codigo_afip', $codigoAfip)
+                ->whereBetween('numerocomprobante', [$maximo + 1, $hasta])
+                ->whereIn('estado', [
+                    FacturacionHuecoArca::CARGADO,
+                    FacturacionHuecoArca::INEXISTENTE,
+                    FacturacionHuecoArca::OMITIDO,
+                ])
+                ->pluck('numerocomprobante')
+                ->all();
+            $saltear = [];
+            foreach ($resueltos as $nro) {
+                $saltear[(int) $nro] = true;
+            }
+
+            for ($n = $maximo + 1; $n <= $hasta; $n++) {
+                if (isset($ya[$codigoAfip.'|'.$n]) || isset($saltear[$n])) {
+                    continue;
+                }
+                $salida[] = [
+                    'puntoventa' => $pv,
+                    'codigo_afip' => (int) $codigoAfip,
+                    'numero' => $n,
+                    'forzado' => false,
+                    'en_punta' => true,
+                ];
+            }
+        }
+    }
+
+    private static function prioridadTipo(int $codigoAfip): int
+    {
+        $base = $codigoAfip >= 200 && $codigoAfip < 250 ? $codigoAfip - 200 : $codigoAfip;
+
+        return match (true) {
+            in_array($base, [3, 8, 13, 53], true) => 0,
+            in_array($base, [2, 7, 12, 52], true) => 1,
+            default => 2,
+        };
     }
 
     /**
@@ -263,7 +375,7 @@ final class FacturacionHuecoArcaCargaService
         $arca = $consulta['arca'];
         $fecha = (string) $arca['fecha'];
         $corte = Carbon::today()->subDays($dias)->toDateString();
-        if ($fecha !== '' && $fecha < $corte && empty($candidato['forzado'])) {
+        if ($fecha !== '' && $fecha < $corte && empty($candidato['forzado']) && empty($candidato['en_punta'])) {
             return $this->cerrar($base, FacturacionHuecoArca::OMITIDO, 'Fecha ARCA '.$fecha.' anterior a la ventana.', $dryRun, false);
         }
 
@@ -513,6 +625,7 @@ final class FacturacionHuecoArcaCargaService
             'incluyeimpuestos' => array_fill(0, $n, 'N'),
             'omitir_percepciones' => true,
             'numerocomprobante_forzado' => $numero,
+            'letra_forzada' => $this->letraDesdeCodigoAfip($codigoAfip),
             'opciones_emision' => [
                 'omitir_movimiento_stock' => true,
                 'omitir_solicitud_arca_cae' => true,
@@ -799,9 +912,18 @@ final class FacturacionHuecoArcaCargaService
         try {
             Mail::to($destinos)->send(new FacturacionHuecoArcaMail($informe));
         } catch (Throwable $e) {
-            Log::error('facturacion.hueco_arca.mail', ['error' => $e->getMessage()]);
+            if (! str_contains($e->getMessage(), 'tempnam')) {
+                Log::error('facturacion.hueco_arca.mail', ['error' => $e->getMessage()]);
 
-            return 'falló el mail: '.$e->getMessage();
+                return 'falló el mail: '.$e->getMessage();
+            }
+            try {
+                $this->avisarHtmlPlano($destinos, $informe);
+            } catch (Throwable $e2) {
+                Log::error('facturacion.hueco_arca.mail', ['error' => $e2->getMessage()]);
+
+                return 'falló el mail: '.$e2->getMessage();
+            }
         }
 
         $claves = [];
@@ -821,6 +943,46 @@ final class FacturacionHuecoArcaCargaService
             ->update(['avisado_at' => now()]);
 
         return 'enviado a '.implode(', ', $destinos);
+    }
+
+    /**
+     * @param  list<string>  $destinos
+     * @param  array{cargados: list<array<string, mixed>>, errores: list<array<string, mixed>>, omitidos: list<array<string, mixed>>}  $informe
+     */
+    private function avisarHtmlPlano(array $destinos, array $informe): void
+    {
+        $cargados = count($informe['cargados'] ?? []);
+        $errores = count($informe['errores'] ?? []);
+        $fecha = now()->format('d/m/Y');
+        if ($cargados > 0 && $errores === 0) {
+            $asunto = 'Comprobantes de ARCA recuperados en el ERP — '.$fecha;
+        } elseif ($cargados > 0) {
+            $asunto = 'Comprobantes de ARCA recuperados, con errores — '.$fecha;
+        } else {
+            $asunto = 'No se pudieron cargar comprobantes autorizados en ARCA — '.$fecha;
+        }
+
+        $html = '<p>El proceso diario encontró comprobantes autorizados en ARCA que no estaban en el ERP.</p>';
+        foreach (['cargados' => 'Cargados', 'omitidos' => 'Sin carga automática', 'errores' => 'No se pudieron cargar'] as $clave => $titulo) {
+            $filas = $informe[$clave] ?? [];
+            if ($filas === []) {
+                continue;
+            }
+            $html .= '<h3>'.e($titulo).'</h3><ul>';
+            foreach ($filas as $fila) {
+                $codigo = (string) ($fila['codigo'] ?? (($fila['puntoventa'] ?? '').' '.($fila['tipo'] ?? '').' '.($fila['numero'] ?? '')));
+                $html .= '<li>'.e($codigo.' — '.($fila['detalle'] ?? '').' — '.($fila['cliente'] ?? ''));
+                if (! empty($fila['url_editar'])) {
+                    $html .= ' <a href="'.e((string) $fila['url_editar']).'">Abrir</a>';
+                }
+                $html .= '</li>';
+            }
+            $html .= '</ul>';
+        }
+
+        Mail::html($html, function ($message) use ($destinos, $asunto): void {
+            $message->to($destinos)->subject($asunto);
+        });
     }
 
     /**

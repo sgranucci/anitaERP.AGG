@@ -1,11 +1,12 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Tipos de Transacciones de Compras
+    Tipos de comprobante de compras
 @endsection
 
 @section("scripts")
-<script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/compras/tipotransaccion_compra/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/tipotransaccion_compra/crear.js') }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -13,16 +14,16 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Crear Tipo de Transacci&oacute;n de Compras</h3>
+                <h3 class="card-title">Crear tipo de comprobante de compras</h3>
                 <div class="card-tools">
-                    <a href="{{route('tipotransaccion_compra')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ route('tipotransaccion_compra') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_tipotransaccion_compra')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{ route('guardar_tipotransaccion_compra') }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf
                 <div class="card-body">
                     @include('compras.tipotransaccion_compra.form')
@@ -39,4 +40,6 @@
         </div>
     </div>
 </div>
+@include('includes.contable.modalconsultacentrocosto')
+@include('includes.compras.modalconsultaconcepto_ivacompra')
 @endsection

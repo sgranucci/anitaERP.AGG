@@ -40,6 +40,15 @@
                     <label for="rechazo_nd_motivo">Motivo de rechazo (opcional)</label>
                     <input type="text" maxlength="255" id="rechazo_nd_motivo" class="form-control form-control-sm" placeholder="Sin fondos / cuenta cerrada / etc." />
                 </div>
+                <div class="form-group">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="rechazo_nd_enviar" value="1">
+                        <label class="form-check-label" for="rechazo_nd_enviar">Enviar la nota de débito al cliente y al proveedor</label>
+                    </div>
+                    <p class="text-muted small mb-0" id="rechazo-nd-enviar-ayuda">
+                        Sin el tilde, la nota queda emitida: no se manda por mail al cliente ni se genera el débito en la cuenta del proveedor.
+                    </p>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered mb-2" id="rechazo-nd-lineas-table">
                         <thead style="background:#85C1E9;color:#17202A;">

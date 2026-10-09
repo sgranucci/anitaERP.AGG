@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Ventas\IvaVentas;
 
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
@@ -76,6 +77,20 @@ final class IvaVentasConciliacionCuentaSupport
             self::agregarCuentaPorCodigoConfig($ivaDebito, $detalle, 'iva_credito', self::FUENTE_IVA_VENTAS, $empresaId, $codigo, 'IVA crédito fiscal (config IVA ventas)');
         }
 
+        $cuentaNcpId = ParametroSistemaSupport::ncpProntoPagoCuentaIdParaEmpresa($empresaId);
+        if ($cuentaNcpId > 0) {
+            $ctaNcp = DB::table('cuentacontable')->where('id', $cuentaNcpId)->first(['codigo', 'nombre']);
+            self::agregarCuenta(
+                $ventasGravadas,
+                $detalle,
+                'ventas_gravadas',
+                'configuracion_general',
+                $cuentaNcpId,
+                (string) ($ctaNcp->codigo ?? ''),
+                (string) ($ctaNcp->nombre ?? 'NCP pronto pago')
+            );
+        }
+
         $ivaCredito = self::idsPorRolEnDetalle($detalle, 'iva_credito');
         $ventasGenerico = array_values(array_unique(array_merge($ventasGravadas, $ventasKiosco)));
 
@@ -88,38 +103,6 @@ final class IvaVentasConciliacionCuentaSupport
             'iva_credito' => $ivaCredito,
             'ventas_generico' => $ventasGenerico,
             'detalle' => $detalle,
-        ];
-    }
-
-    /**
-     * Códigos numéricos (ctamov / cuentacontable.codigo) del rango de conciliación
-     * clasificados en ventas vs iva, para auditar contra ctamov (Anita).
-     *
-     * @return array{ventas: list<int>, iva: list<int>}
-     */
-    public static function codigosCtamovConciliacion(int $empresaId): array
-    {
-        $cuentas = self::cuentasConciliacionEmpresa($empresaId);
-        $ventas = [];
-        $iva = [];
-
-        foreach ($cuentas['detalle'] ?? [] as $item) {
-            $codigo = (int) preg_replace('/\D+/', '', (string) ($item['codigo'] ?? ''));
-            if ($codigo <= 0) {
-                continue;
-            }
-
-            $rol = (string) ($item['rol'] ?? '');
-            if (in_array($rol, ['iva_debito', 'percepcion_iva', 'percepcion_no_categorizado', 'iva_credito'], true)) {
-                $iva[] = $codigo;
-            } else {
-                $ventas[] = $codigo;
-            }
-        }
-
-        return [
-            'ventas' => array_values(array_unique($ventas)),
-            'iva' => array_values(array_unique($iva)),
         ];
     }
 

@@ -11,5 +11,12 @@ interface Caja_MovimientoQueryInterface
      * @param  array<string, mixed>|string|null  $filtrosOBusqueda
      */
     public function leeCaja_Movimiento($filtrosOBusqueda, $caja_id = 0, $flPaginando = null, $empresaId = null);
+
+    /**
+     * Consulta del listado ya filtrada y ordenada, sin paginar.
+     *
+     * @param  array<string, mixed>|string|null  $filtrosOBusqueda
+     */
+    public function builderListado($filtrosOBusqueda, $caja_id = 0, $empresaId = null);
 }
 

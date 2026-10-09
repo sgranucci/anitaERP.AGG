@@ -2,6 +2,7 @@
 
 namespace App\Services\Contable\LibroIvaDigital;
 
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
@@ -59,6 +60,7 @@ class LibroIvaDigitalAnuladosGenerador
             ->where('cp.empresa_id', $empresaId)
             ->whereBetween('cpe.fecha', [substr($desde, 0, 10), substr($hasta, 0, 10)])
             ->select([
+                'cp.fechacomprobante',
                 'cp.fechaiva',
                 'cp.letra',
                 'cp.sucursal',
@@ -76,8 +78,15 @@ class LibroIvaDigitalAnuladosGenerador
                 (string) ($row->codigoafip ?? '001'),
                 $letra,
             );
+            $fechaComprobante = LibroIvaDigitalComprasAnitaArmadoSupport::fechaArchivoCompras(
+                $row->fechacomprobante,
+                $row->fechaiva,
+            );
+            if ($fechaComprobante === null) {
+                continue;
+            }
             $lineas[] = LibroIvaDigitalFormatoSupport::registroComprobanteAnulado([
-                'fecha_comprobante' => date('Ymd', strtotime((string) $row->fechaiva)),
+                'fecha_comprobante' => $fechaComprobante,
                 'tipo_comprobante' => $tipo,
                 'punto_venta' => (int) $row->sucursal,
                 'numero_comprobante' => (int) $row->numerocomprobante,

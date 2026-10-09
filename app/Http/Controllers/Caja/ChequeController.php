@@ -539,6 +539,7 @@ class ChequeController extends Controller
                 $request->input('leyenda'),
                 $request->input('motivo_rechazo'),
                 (int) $request->input('puntoventa_id', 0) ?: null,
+                $request->boolean('enviar_cliente_proveedor'),
             );
 
             return response()->json([

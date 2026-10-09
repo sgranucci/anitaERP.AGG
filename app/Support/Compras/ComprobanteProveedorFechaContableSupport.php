@@ -10,9 +10,14 @@ use RuntimeException;
 
 /**
  * Fecha contable del comprobante de proveedor = fecha de IVA = fecha de contabilización.
- * Manda en asiento, CC, Anita (promov/ctamov/fecha IVA) y en el libro IVA compras.
- * Se puede correr hacia atrás. Nunca hacia adelante del tope (hoy en el alta, la fecha
- * ya grabada en la edición). Un período cerrado la frena igual que cualquier otra operación.
+ * Manda en asiento, CC y Anita (promov/ctamov/fecha IVA), y define el período del libro IVA compras.
+ * La fecha que se informa en el archivo de IVA digital es la impresa del comprobante.
+ * Se puede correr hacia atrás. Hacia adelante, el tope es hoy en el alta.
+ * En edición arranca en la fecha ya grabada y sube hasta la fecha impresa del
+ * comprobante, y hasta el primer día operable si la grabada cayó en un período
+ * cerrado. Nunca posterior a hoy.
+ * La fecha impresa del comprobante no puede ser posterior a la de contabilización.
+ * Un período cerrado la frena igual que cualquier otra operación.
  * fechacomprobante es la fecha impresa de la factura y no define el período.
  */
 final class ComprobanteProveedorFechaContableSupport
@@ -23,27 +28,95 @@ final class ComprobanteProveedorFechaContableSupport
     }
 
     /**
-     * Tope: en el alta, hoy. En edición, la fecha de contabilización ya grabada.
+     * Tope de la fecha de contabilización, sin pasar de hoy.
+     * En edición arranca en la fecha ya grabada. Sube si la fecha impresa es posterior
+     * (si no, el comprobante no se puede corregir) y si esa fecha cayó en un período
+     * cerrado (hasta el primer día operable).
      */
-    public static function fechaTopeEnCarga(?Comprobante_Proveedor $existente): string
-    {
-        if ($existente) {
-            $iva = self::formatear($existente->fechaiva ?? null);
-            if ($iva !== null) {
-                return $iva;
-            }
+    public static function techoContabilizacion(
+        string $hoy,
+        ?string $fechaIvaGuardada,
+        ?string $fechaComprobante,
+        ?string $fechaMinimaOperable,
+    ): string {
+        $hoyYmd = self::formatear($hoy) ?? self::fechaCargaHoy();
+        $tope = $hoyYmd;
+        $iva = self::formatear($fechaIvaGuardada);
+        if ($iva !== null && $iva < $tope) {
+            $tope = $iva;
+        }
+        $comp = self::formatear($fechaComprobante);
+        if ($comp !== null && $comp > $tope && $comp <= $hoyYmd) {
+            $tope = $comp;
+        }
+        $min = self::formatear($fechaMinimaOperable);
+        if ($min !== null && $min > $tope && $min <= $hoyYmd) {
+            $tope = $min;
         }
 
-        return self::fechaCargaHoy();
+        return $tope;
+    }
+
+    /**
+     * Tope: en el alta, hoy. En edición, la fecha ya grabada si es anterior a hoy,
+     * elevada a la fecha del comprobante o al primer día operable cuando haga falta.
+     * $fechaComprobante es la del formulario; si no viene, se usa la grabada.
+     */
+    public static function fechaTopeEnCarga(?Comprobante_Proveedor $existente, mixed $fechaComprobante = null): string
+    {
+        $hoy = self::fechaCargaHoy();
+        if (! $existente) {
+            return self::techoContabilizacion($hoy, null, null, null);
+        }
+
+        $comp = self::formatear($fechaComprobante) ?? self::formatear($existente->fechacomprobante ?? null);
+
+        return self::techoContabilizacion(
+            $hoy,
+            self::formatear($existente->fechaiva ?? null),
+            $comp,
+            self::fechaMinimaOperable((int) ($existente->empresa_id ?? 0)),
+        );
+    }
+
+    /**
+     * La fecha impresa no puede pasar la de contabilización, y esa no puede pasar hoy.
+     * $hoyYmd solo para pruebas; en carga se usa el día del servidor.
+     */
+    public static function assertFechasCargaCoherentes(
+        mixed $fechaComprobante,
+        mixed $fechaContabilizacion,
+        ?string $hoyYmd = null,
+    ): void {
+        $hoy = self::formatear($hoyYmd) ?? self::fechaCargaHoy();
+        $contab = self::formatear($fechaContabilizacion) ?? $hoy;
+
+        if ($contab > $hoy) {
+            throw new RuntimeException(
+                'La fecha de contabilización ('.self::aDiaMesAnio($contab).') no puede ser posterior a hoy ('
+                .self::aDiaMesAnio($hoy).').'
+            );
+        }
+
+        $comp = self::formatear($fechaComprobante);
+        if ($comp !== null && $comp > $contab) {
+            throw new RuntimeException(
+                'La fecha del comprobante ('.self::aDiaMesAnio($comp).') no puede ser posterior a la fecha de contabilización ('
+                .self::aDiaMesAnio($contab).').'
+            );
+        }
     }
 
     /**
      * Fecha pedida en el formulario, sin pasar el tope.
      * Vacía = el tope. Posterior al tope = error.
      */
-    public static function resolverEnCarga(mixed $solicitada, ?Comprobante_Proveedor $existente): string
-    {
-        return self::fechaNoPosterior($solicitada, self::fechaTopeEnCarga($existente));
+    public static function resolverEnCarga(
+        mixed $solicitada,
+        ?Comprobante_Proveedor $existente,
+        mixed $fechaComprobante = null,
+    ): string {
+        return self::fechaNoPosterior($solicitada, self::fechaTopeEnCarga($existente, $fechaComprobante));
     }
 
     /**

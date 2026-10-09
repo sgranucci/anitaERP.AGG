@@ -2,17 +2,19 @@
     <tr class="item-cheque-recibido">
         <td><input type="date" name="fechapago_recibidos[]" class="form-control fechapago_recibido" value=""></td>
         <td>
-            <input type="hidden" name="cheque_recibido_ids[]" class="cheque_recibido_id" value="">
-            <input type="hidden" name="nro_interno_anita_recibidos[]" class="nro_interno_anita_recibido" value="">
-            <input type="hidden" name="banco_recibido_ids[]" class="banco_recibido_id" value="">
-            <button type="button" class="btn-accion-tabla consultachequecartera_recibido tooltipsC" title="Cartera (F1)">
-                <i class="fa fa-folder-open text-success"></i>
-            </button>
-            <button type="button" class="btn-accion-tabla consultabanco_recibido tooltipsC" title="Consulta banco">
-                <i class="fa fa-search text-primary"></i>
-            </button>
-            <input type="text" class="codigobanco_recibido form-control d-inline-block" style="width:70px" name="codigobanco_recibido[]" value="">
-            <input type="text" class="nombrebanco_recibido form-control d-inline-block" style="width:120px" readonly value="">
+            <div class="pp-cheque-banco d-flex align-items-center flex-nowrap" style="gap:4px;min-width:18rem;">
+                <input type="hidden" name="cheque_recibido_ids[]" class="cheque_recibido_id" value="">
+                <input type="hidden" name="nro_interno_anita_recibidos[]" class="nro_interno_anita_recibido" value="">
+                <input type="hidden" name="banco_recibido_ids[]" class="banco_recibido_id" value="">
+                <button type="button" class="btn-accion-tabla consultachequecartera_recibido tooltipsC" title="Cartera (F1)">
+                    <i class="fa fa-folder-open text-success"></i>
+                </button>
+                <button type="button" class="btn-accion-tabla consultabanco_recibido tooltipsC" title="Consulta banco">
+                    <i class="fa fa-search text-primary"></i>
+                </button>
+                <input type="text" class="codigobanco_recibido form-control" style="width:4.2rem;flex:0 0 4.2rem;" name="codigobanco_recibido[]" value="">
+                <input type="text" class="nombrebanco_recibido form-control" style="flex:1 1 auto;min-width:9rem;" readonly value="">
+            </div>
         </td>
         <td>
             <input type="text" name="numerocheque_recibidos[]" class="form-control numerocheque_recibido" value=""
@@ -27,7 +29,7 @@
                 @endforeach
             </select>
         </td>
-        <td><input type="number" name="montocheque_recibidos[]" class="form-control montocheque_recibido" min="0" step="0.01" value=""></td>
+        <td><input type="number" name="montocheque_recibidos[]" class="form-control montocheque_recibido text-right" min="0" step="0.01" value=""></td>
         <td><input type="number" name="cotizacioncheque_recibidos[]" class="form-control cotizacioncheque_recibido" step="0.0001" value="0"></td>
         <td>
             <button type="button" class="btn-accion-tabla eliminar_cheque_recibido tooltipsC" title="Eliminar">

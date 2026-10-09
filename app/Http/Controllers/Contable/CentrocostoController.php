@@ -219,6 +219,10 @@ class CentrocostoController extends Controller
             'gestionar-logistica-solicitud',
             'editar-configuracion-logistica',
             'actualizar-configuracion-logistica',
+            'listar-tipo-transaccion-compra',
+            'crear-tipo-transaccion-compra',
+            'editar-tipo-transaccion-compra',
+            'actualizar-tipo-transaccion-compra',
         ] as $permiso) {
             if (can($permiso, false)) {
                 return true;

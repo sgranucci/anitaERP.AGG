@@ -8,7 +8,7 @@ declare(strict_types=1);
 |--------------------------------------------------------------------------
 |
 | Rango de cuentas contables que el reporte IVA Ventas (ventas/iva-ventas)
-| suma al conciliar contra el mayor de AnitaERP y contra ctamov (Anita).
+| suma al conciliar contra el mayor del ERP.
 |
 | Se agregan a las cuentas que ya resuelve IvaVentasConciliacionCuentaSupport
 | desde gastronomia_cierre_jornada_config y config/facturacion.php.
@@ -29,7 +29,8 @@ $defaultSalaAgg = $empresaEntorno === 'AGG';
 return [
     /*
     |--------------------------------------------------------------------------
-    | Features de pantalla / proceso (Bingo, unidades, host, FSL Anita)
+    | Features de pantalla / proceso (Bingo, unidades, host).
+    | El reporte no consulta el bridge Anita.
     |--------------------------------------------------------------------------
     |
     | En AGG quedan encendidos por defecto. En Ferli / El Bierzo / otros se
@@ -49,29 +50,45 @@ return [
             env('IVA_VENTAS_CLASIFICAR_HOST', $defaultSalaAgg ? 'true' : 'false'),
             FILTER_VALIDATE_BOOLEAN
         ),
-        'completar_fsl_anita' => filter_var(
-            env('IVA_VENTAS_FSL_ANITA', $defaultSalaAgg ? 'true' : 'false'),
-            FILTER_VALIDATE_BOOLEAN
-        ),
     ],
 
-    'conciliacion' => [
-        'cuentas_ventas_por_empresa' => [
-            1 => [413010001, 414010001, 415010003, 414020001],
-            2 => [413010001, 414010001, 415010003, 414020001],
-            3 => [413010001, 414010001, 415010003, 414020001],
+    'conciliacion' => $empresaEntorno === 'CALZADOS FERLI'
+        ? [
+            // F-VENTAS y L-VENTAS. El IVA débito es 213100001.
+            // No sumar 114210001 (IVA crédito fiscal): es de compras y desbalancea el cuadre de ventas.
+            'cuentas_ventas_por_empresa' => [
+                1 => [411000001, 411000003],
+                2 => [411000001, 411000003],
+                3 => [411000001, 411000003],
+            ],
+            'cuentas_iva_debito_por_empresa' => [
+                1 => [213100001],
+                2 => [213100001],
+                3 => [213100001],
+            ],
+            'cuentas_iva_credito_por_empresa' => [
+                1 => [],
+                2 => [],
+                3 => [],
+            ],
+        ]
+        : [
+            'cuentas_ventas_por_empresa' => [
+                1 => [413010001, 414010001, 415010003, 414020001],
+                2 => [413010001, 414010001, 415010003, 414020001],
+                3 => [413010001, 414010001, 415010003, 414020001],
+            ],
+            'cuentas_iva_debito_por_empresa' => [
+                1 => [214010009],
+                2 => [214010009],
+                3 => [214010009],
+            ],
+            'cuentas_iva_credito_por_empresa' => [
+                1 => [114010011],
+                2 => [114010011],
+                3 => [114010011],
+            ],
         ],
-        'cuentas_iva_debito_por_empresa' => [
-            1 => [214010009],
-            2 => [214010009],
-            3 => [214010009],
-        ],
-        'cuentas_iva_credito_por_empresa' => [
-            1 => [114010011],
-            2 => [114010011],
-            3 => [114010011],
-        ],
-    ],
 
     /*
     |--------------------------------------------------------------------------

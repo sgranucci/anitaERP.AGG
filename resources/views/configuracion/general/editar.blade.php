@@ -24,7 +24,7 @@ Configuración general del sistema
                 <div class="card-body">
                     <div class="alert alert-info py-2">
                         Estos valores mandan sobre los defaults de <code>config/</code> y <code>.env</code>.
-                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos, umbrales de Compras / Suscripciones y la cantidad recibida de la recepción de proveedor.
+                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos, umbrales de Compras / Suscripciones, la cantidad recibida de la recepción de proveedor, el concepto del débito por cheque rechazado y la cuenta del neto de la nota de crédito por pronto pago.
                     </div>
 
                     @foreach ($grupos as $nombreGrupo => $parametros)
@@ -56,6 +56,75 @@ Configuración general del sistema
                                             value="{{ $cuenta['cbu'] ?? '' }}"
                                             placeholder="Se completa al elegir la cuenta">
                                         <small class="form-text text-muted">ARCA FCE dato adicional 21. Si queda vacío, cada empresa usa su cuenta en pesos de Banco Macro Gerli.</small>
+                                    </div>
+                                </div>
+                            @elseif ($parametro['tipo'] === 'concepto_ivacompra')
+                                @php
+                                    $conceptoOldId = (int) old('parametros.'.$parametro['clave'], $parametro['valor']);
+                                    $conceptoCfg = $parametro['concepto'] ?? ['id' => 0, 'codigo' => '', 'nombre' => ''];
+                                    if ((string) old('parametros.'.$parametro['clave'], '') !== '' && $conceptoOldId !== (int) ($conceptoCfg['id'] ?? 0)) {
+                                        $conceptoCfg = \App\Support\Configuracion\ParametroSistemaSupport::conceptoIvacompraParaFormulario($conceptoOldId);
+                                    }
+                                @endphp
+                                <div class="form-group row tm-concepto-ivacompra-campo" id="tm_concepto_ivacompra_ndr_cheque">
+                                    <label for="param_{{ $parametro['clave'] }}_codigo" class="col-lg-4 control-label text-right pr-2">{{ $parametro['etiqueta'] }}</label>
+                                    <div class="col-lg-7">
+                                        <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
+                                            <input type="hidden" name="parametros[{{ $parametro['clave'] }}]" id="param_{{ $parametro['clave'] }}" class="concepto_ivacompra_id" value="{{ $conceptoOldId > 0 ? $conceptoOldId : '' }}">
+                                            <button type="button" title="Consulta conceptos (F1)" class="btn-accion-tabla consultaconcepto-ndr-cheque flex-shrink-0">
+                                                <i class="fa fa-search text-primary"></i>
+                                            </button>
+                                            <input type="text" class="form-control codigo_concepto_ivacompra"
+                                                id="param_{{ $parametro['clave'] }}_codigo"
+                                                value="{{ $conceptoCfg['codigo'] ?? '' }}"
+                                                placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off"
+                                                style="width: 5.5rem; flex-shrink: 0;">
+                                            <input type="text" class="form-control nombre_concepto_ivacompra text-truncate"
+                                                id="param_{{ $parametro['clave'] }}_nombre"
+                                                value="{{ $conceptoCfg['nombre'] ?? '' }}"
+                                                placeholder="Descripci&oacute;n" readonly
+                                                style="min-width: 0; flex: 1 1 auto;">
+                                        </div>
+                                        <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
+                                    </div>
+                                </div>
+                            @elseif ($parametro['tipo'] === 'cuentacontable')
+                                @php
+                                    $cuentaContableOldId = (int) old('parametros.'.$parametro['clave'], $parametro['valor']);
+                                    $cuentaContableCfg = $parametro['cuentacontable'] ?? ['id' => 0, 'codigo' => '', 'nombre' => ''];
+                                    if ((string) old('parametros.'.$parametro['clave'], '') !== '' && $cuentaContableOldId !== (int) ($cuentaContableCfg['id'] ?? 0)) {
+                                        $cuentaContableCfg = \App\Support\Configuracion\ParametroSistemaSupport::cuentaContableParaFormulario($cuentaContableOldId);
+                                    }
+                                    $empresaPlanId = (int) ($cuentaContableCfg['empresa_id'] ?? 0);
+                                    if ($empresaPlanId <= 0) {
+                                        $empresaPlanId = (int) (optional($empresasIibb->sortBy('id')->first())->id ?? 0);
+                                    }
+                                @endphp
+                                <div class="form-group row">
+                                    <label for="empresa_id" class="col-lg-4 control-label text-right pr-2">Empresa del plan</label>
+                                    <div class="col-lg-4">
+                                        <select class="form-control" id="empresa_id">
+                                            @foreach ($empresasIibb as $empresaPlan)
+                                                <option value="{{ (int) $empresaPlan->id }}" @selected((int) $empresaPlan->id === $empresaPlanId)>{{ $empresaPlan->nombre }}</option>
+                                            @endforeach
+                                        </select>
+                                        <small class="form-text text-muted">Solo para buscar la cuenta. Se guarda el código y en las otras empresas se usa el mismo.</small>
+                                    </div>
+                                </div>
+                                @include('sueldos.partials.campo_consulta_cuentacontable', [
+                                    'label' => $parametro['etiqueta'],
+                                    'inputName' => 'parametros['.$parametro['clave'].']',
+                                    'inputId' => 'param_'.$parametro['clave'],
+                                    'cuentaId' => $cuentaContableOldId > 0 ? $cuentaContableOldId : '',
+                                    'codigo' => $cuentaContableCfg['codigo'] ?? '',
+                                    'descripcion' => $cuentaContableCfg['nombre'] ?? '',
+                                    'col_label' => 'col-lg-4 control-label text-right pr-2',
+                                    'col_input' => 'col-lg-7',
+                                    'required' => false,
+                                ])
+                                <div class="form-group row">
+                                    <div class="col-lg-7 offset-lg-4">
+                                        <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
                                     </div>
                                 </div>
                             @elseif ($parametro['tipo'] === 'boolean')
@@ -211,4 +280,7 @@ Configuración general del sistema
     </div>
 </div>
 @include('includes.caja.modalconsultacuentacaja')
+@include('includes.compras.modalconsultaconcepto_ivacompra')
+@include('includes.contable.modalconsultacuentacontable')
+<script src="{{ asset('assets/pages/scripts/contable/cuentacontable/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cuentacontable/consulta.js')) ?: time() }}"></script>
 @endsection

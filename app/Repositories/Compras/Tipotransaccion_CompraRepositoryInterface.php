@@ -10,6 +10,12 @@ interface Tipotransaccion_CompraRepositoryInterface extends RepositoryInterface
     public function all($operacion, $estado = null);
 
     /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, Tipotransaccion_Compra>|\Illuminate\Database\Eloquent\Collection<int, Tipotransaccion_Compra>
+     */
+    public function leeListado(array $filtros, bool $paginar);
+
+    /**
      * @return Collection<int, Tipotransaccion_Compra>
      */
     public function listarParaConsulta(?string $consulta = null, ?int $centrocostoId = null): Collection;

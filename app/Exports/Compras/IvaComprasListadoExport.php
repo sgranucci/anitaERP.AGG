@@ -89,15 +89,13 @@ class IvaComprasListadoExport implements FromView, WithColumnFormatting, WithCol
         $this->filaCabecerasExcel = $this->hayFilaLogos ? 4 : 3;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
-        $columnasFijas = 7; // N.Pro | Proveedor | CUIT | Fec.Mov | Fec.Iva | Tip | Nro.Comp
+        $columnasFijas = 7; // N.Pro | Proveedor | CUIT | Fec.Comp | Fec.Iva | Tip | Nro.Comp
         $this->cantidadMontos = count($resultado['columnas'] ?? []);
         $this->idxPrimerMonto = $columnasFijas + 1;
         $totalColumnas = max($columnasFijas, $columnasFijas + $this->cantidadMontos);
         $this->colUltima = Coordinate::stringFromColumnIndex($totalColumnas);
 
-        $subtitulo = 'Período: '.IvaComprasListadoFiltros::formatearPeriodoTexto($this->filtros)
-            .' · Orden: '.IvaComprasListadoFiltros::formatearOrdenTexto($this->filtros)
-            .' · '.IvaComprasListadoFiltros::formatearSubdiarioTexto($this->filtros);
+        $subtitulo = IvaComprasListadoFiltros::formatearSubtitulo($this->filtros);
 
         return view('exports.compras.iva_comprasindex', [
             'resultado' => $resultado,

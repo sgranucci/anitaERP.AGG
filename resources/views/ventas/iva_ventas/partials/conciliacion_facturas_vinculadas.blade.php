@@ -42,6 +42,7 @@
                     <thead>
                         <tr style="background-color: #85C1E9; color: #17202A;">
                             <th>Fecha</th>
+                            <th>Tipo</th>
                             <th>Comprobante</th>
                             <th>Cliente</th>
                             <th class="text-right">Neto grav. ERP</th>
@@ -57,6 +58,7 @@
                             @php $cuadra = ! empty($fac['cuadra']); @endphp
                             <tr @if (! $cuadra) class="table-warning" @endif>
                                 <td>{{ $fac['fecha_mov'] ?? '' }}</td>
+                                <td>{{ $fac['tipo'] ?? '' }}</td>
                                 <td>{{ $fac['comprobante'] ?? '' }}</td>
                                 <td>{{ $fac['cliente_nombre'] ?? '' }}</td>
                                 <td class="text-right">{{ $formatear($fac['erp']['neto_gravado'] ?? 0) }}</td>

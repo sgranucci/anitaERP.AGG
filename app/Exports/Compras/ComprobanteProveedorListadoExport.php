@@ -3,6 +3,7 @@
 namespace App\Exports\Compras;
 
 use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorListadoColumnas;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
@@ -24,12 +25,13 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'L';
-
-    /** Congela también ID y Empresa (columnas A y B): el freeze arranca en C. */
-    private const COL_FREEZE = 'C';
-
     private ?array $filtros = null;
+
+    /** @var list<string> */
+    private array $columnasVisibles = [];
+
+    /** @var array<string, string> */
+    private array $etiquetas = [];
 
     private bool $flDesdeIndex = false;
 
@@ -71,6 +73,8 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
                 'esExcel' => true,
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
                 'formatoNumero' => $this->formatoNumeroEfectivo(),
+                'columnasVisibles' => $this->columnasExport(),
+                'etiquetasColumnas' => $this->etiquetas,
             ]);
         }
 
@@ -95,13 +99,19 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
             return [];
         }
 
-        return [
-            'A' => NumberFormat::FORMAT_TEXT,
-            'E' => NumberFormat::FORMAT_TEXT,
-            'F' => NumberFormat::FORMAT_TEXT,
-            // I = Total (tras F. IVA / contabilización).
-            'I' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
-        ];
+        $formatos = [];
+        $catalogo = ComprobanteProveedorListadoColumnas::catalogoActivo();
+        foreach ($this->columnasExport() as $indice => $key) {
+            $letra = self::letraColumna($indice);
+            $type = (string) ($catalogo[$key]['type'] ?? 'texto');
+            if ($type === 'decimal') {
+                $formatos[$letra] = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+            } elseif (in_array($type, ['entero', 'texto'], true) && in_array($key, ['id', 'cuit', 'numeroasiento', 'numero_ie'], true)) {
+                $formatos[$letra] = NumberFormat::FORMAT_TEXT;
+            }
+        }
+
+        return $formatos;
     }
 
     public function styles(Worksheet $sheet)
@@ -132,20 +142,19 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
             return [];
         }
 
-        return [
-            'A' => 8,
-            'B' => 22,
-            'C' => 28,
-            'D' => 18,
-            'E' => 18,
-            'F' => 12,
-            'G' => 12,
-            'H' => 16,
-            'I' => 12,
-            'J' => 16,
-            'K' => 16,
-            'L' => 22,
-        ];
+        $anchos = [];
+        $catalogo = ComprobanteProveedorListadoColumnas::catalogoActivo();
+        foreach ($this->columnasExport() as $indice => $key) {
+            $type = (string) ($catalogo[$key]['type'] ?? 'texto');
+            $anchos[self::letraColumna($indice)] = match ($key) {
+                'id' => 8,
+                'proveedor', 'leyenda' => 28,
+                'empresa', 'origen', 'modo_carga' => 22,
+                default => $type === 'decimal' ? 14 : 16,
+            };
+        }
+
+        return $anchos;
     }
 
     public function registerEvents(): array
@@ -157,7 +166,7 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
                 }
 
                 $sheet = $event->sheet->getDelegate();
-                $ult = self::COL_ULTIMA;
+                $ult = self::letraColumna(max(0, count($this->columnasExport()) - 1));
 
                 if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
                     $sheet->getRowDimension(1)->setRowHeight(54);
@@ -189,7 +198,7 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
                 $sheet->mergeCells('A'.$filaSub.':'.$ult.$filaSub);
                 $sheet->getStyle('A'.$filaSub)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
 
-                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
+                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },
         ];
     }
@@ -202,7 +211,12 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
     /**
      * @param  array|string|null  $filtros
      */
-    public function parametros($filtros, bool $esCsv = false): self
+    /**
+     * @param  array|string|null  $filtros
+     * @param  list<string>|null  $columnas
+     * @param  array<string, string>|null  $etiquetas
+     */
+    public function parametros($filtros, bool $esCsv = false, ?array $columnas = null, ?array $etiquetas = null): self
     {
         if (is_string($filtros)) {
             $texto = trim($filtros);
@@ -216,8 +230,37 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
         $this->filtros = is_array($filtros) ? $filtros : [];
         $this->esCsv = $esCsv;
         $this->flDesdeIndex = true;
+        $this->columnasVisibles = is_array($columnas) ? array_values($columnas) : [];
+        $this->etiquetas = is_array($etiquetas) ? $etiquetas : [];
 
         return $this;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function columnasExport(): array
+    {
+        $catalogo = ComprobanteProveedorListadoColumnas::catalogoActivo();
+        $columnas = array_values(array_filter(
+            $this->columnasVisibles,
+            static fn ($key) => isset($catalogo[$key]) && ! empty($catalogo[$key]['export'])
+        ));
+
+        return $columnas !== [] ? $columnas : ComprobanteProveedorListadoColumnas::defaultsVisibles();
+    }
+
+    private static function letraColumna(int $indice): string
+    {
+        $n = $indice + 1;
+        $s = '';
+        while ($n > 0) {
+            $m = ($n - 1) % 26;
+            $s = chr(65 + $m).$s;
+            $n = intdiv($n - 1, 26);
+        }
+
+        return $s;
     }
 
     private function formatoNumeroEfectivo(): string

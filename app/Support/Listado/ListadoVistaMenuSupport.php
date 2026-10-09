@@ -38,6 +38,11 @@ final class ListadoVistaMenuSupport
             'icono' => 'fa-bookmark',
             'etiqueta_padre' => 'Solicitudes',
         ],
+        'caja.ingresoegreso' => [
+            'url_base' => 'caja/ingresoegreso',
+            'icono' => 'fa-bookmark',
+            'etiqueta_padre' => 'Ingresos y egresos',
+        ],
     ];
 
     public static function columnaMenuDisponible(): bool

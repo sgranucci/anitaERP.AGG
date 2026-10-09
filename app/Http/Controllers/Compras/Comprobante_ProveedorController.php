@@ -41,7 +41,17 @@ use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
+use App\Support\Compras\ComprobanteProveedorListadoColumnas;
 use App\Support\Compras\ComprobanteProveedorListadoFiltros;
+use App\Support\Compras\ComprobanteProveedorListadoPreferenciasUsuario;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
@@ -94,14 +104,12 @@ class Comprobante_ProveedorController extends Controller
     {
         can('listar-comprobante-proveedor');
 
-        $filtros = $this->resolverFiltrosListado($request);
-        $datas = $this->comprobanteRepository->leeComprobanteProveedor($filtros, true);
+        $armado = $this->armarListado($request);
+        if ($armado instanceof \Illuminate\Http\RedirectResponse) {
+            return $armado;
+        }
 
-        return view('compras.comprobante_proveedor.index', [
-            'datas' => $datas,
-            'filtros' => $filtros,
-            'filtrosQuery' => ComprobanteProveedorListadoFiltros::paraQueryString($filtros),
-            'camposFiltro' => ComprobanteProveedorListadoFiltros::CAMPOS,
+        return view('compras.comprobante_proveedor.index', $armado + [
             'empresa_query' => $this->empresaRepository->allFiltrado(),
         ]);
     }
@@ -115,6 +123,11 @@ class Comprobante_ProveedorController extends Controller
 
         $filtros = $this->resolverFiltrosListado($request, $busqueda);
         $filtrosQuery = ComprobanteProveedorListadoFiltros::paraQueryString($filtros);
+        $columnasVisibles = $this->columnasDesdeRequest($request);
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ComprobanteProveedorListadoColumnas::RECURSO,
+            ComprobanteProveedorListadoColumnas::catalogoActivo()
+        );
 
         if (! $formato) {
             return redirect()->route('comprobante_proveedor', $filtrosQuery);
@@ -123,33 +136,161 @@ class Comprobante_ProveedorController extends Controller
         switch ($formato) {
             case 'PDF':
                 $datas = $this->comprobanteRepository->leeComprobanteProveedor($filtros, false);
-
                 $view = \View::make('compras.comprobante_proveedor.listado', [
                     'datas' => $datas,
                     'filtros' => $filtros,
                     'filtrosQuery' => $filtrosQuery,
+                    'columnasVisibles' => $columnasVisibles,
+                    'etiquetasColumnas' => $etiquetas,
                 ])->render();
-                $path = storage_path('pdf/listados');
-                $nombre_pdf = 'listado_comprobante_proveedor';
+                $rutaPdf = storage_path('pdf/listados/listado_comprobante_proveedor.pdf');
+                DompdfListadoSupport::guardarLegalLandscape($view, $rutaPdf, [
+                    'titulo_corto' => 'Comprobantes de proveedor',
+                    'dompdf' => [
+                        'isFontSubsettingEnabled' => false,
+                        'isJavascriptEnabled' => false,
+                    ],
+                ]);
 
-                $pdf = \App::make('dompdf.wrapper');
-                $pdf->setPaper('legal', 'landscape');
-                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
-
-                return response()->download($path.'/'.$nombre_pdf.'.pdf');
+                return response()->download($rutaPdf);
 
             case 'EXCEL':
                 return (new ComprobanteProveedorListadoExport($this->comprobanteRepository))
-                    ->parametros($filtros)
+                    ->parametros($filtros, false, $columnasVisibles, $etiquetas)
                     ->download('comprobante_proveedor.xlsx');
 
             case 'CSV':
                 return (new ComprobanteProveedorListadoExport($this->comprobanteRepository))
-                    ->parametros($filtros, true)
+                    ->parametros($filtros, true, $columnasVisibles, $etiquetas)
                     ->download('comprobante_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
         return redirect()->route('comprobante_proveedor', $filtrosQuery);
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-comprobante-proveedor');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
+        $layout = ComprobanteProveedorListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $page = $this->comprobanteRepository->leeComprobanteProveedor($filtros, true);
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            ComprobanteProveedorListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            ComprobanteProveedorListadoFiltros::camposOrdenables()
+        );
+        $filtrosCortes = $filtros;
+        $filtrosCortes['agrupar'] = $agrupar;
+        $cortes = $agrupar !== []
+            ? $this->comprobanteRepository->cortesComprobanteProveedor($filtrosCortes)
+            : ['activo' => false];
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => ComprobanteProveedorListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
+        ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-comprobante-proveedor');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $layout = ComprobanteProveedorListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $orden = $filtros['sort'] ?? [];
+        $vista = ListadoVistaSupport::guardar(
+            ComprobanteProveedorListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'],
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $orden,
+                'orden' => $orden,
+                'agrupar' => $filtros['agrupar'] ?? [],
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('comprobante_proveedor', ComprobanteProveedorListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        $qs = ComprobanteProveedorListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('comprobante_proveedor', $qs)
+            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        can('listar-comprobante-proveedor');
+        $ok = ListadoVistaSupport::eliminar($id, ComprobanteProveedorListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('comprobante_proveedor', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-comprobante-proveedor');
+        $layout = ComprobanteProveedorListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario($vistaId, ComprobanteProveedorListadoColumnas::RECURSO, (int) auth()->id());
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            ComprobanteProveedorListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = $this->resolverFiltrosListado($request);
+        $qs = ComprobanteProveedorListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs[$vistaId > 0 ? 'vista_id' : 'vista_estandar'] = $vistaId > 0 ? $vistaId : 1;
+
+        return redirect()->route('comprobante_proveedor', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-comprobante-proveedor');
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            ComprobanteProveedorListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(ComprobanteProveedorListadoColumnas::catalogoActivo())
+        );
+
+        return redirect()->route(
+            'comprobante_proveedor',
+            ComprobanteProveedorListadoFiltros::paraQueryString($this->resolverFiltrosListado($request))
+        )->with('mensaje', 'Etiquetas actualizadas.');
     }
 
     public function crear(Request $request)
@@ -1713,6 +1854,132 @@ class Comprobante_ProveedorController extends Controller
             $request,
             $busquedaRuta,
             $empresaDefault ? (int) $empresaDefault : null
+        );
+    }
+
+    /**
+     * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
+     */
+    private function armarListado(Request $request): array|\Illuminate\Http\RedirectResponse
+    {
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(ComprobanteProveedorListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar')
+            || $request->input('vista_modo') === 'estandar';
+
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                ComprobanteProveedorListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('qbe')
+            && ! $request->boolean('limpiar_filtros')
+            && ! $request->boolean('filtro_limpiar')
+            && ! $request->has('empresa_id')
+            && ! $request->has('empresa_todas')
+            && ! $request->has('estado')
+            && ! $request->has('estado_todas')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ComprobanteProveedorListadoColumnas::RECURSO, $usuarioId);
+        }
+
+        $filtrosRequest = ListadoVistaSupport::prepararQbeContraVista(
+            $this->resolverFiltrosListado($request),
+            $request
+        );
+        $filtros = $filtrosRequest;
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = ComprobanteProveedorListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+        unset($filtros['_qbe_explicito']);
+        $guardoQbeVista = ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
+        if ($request->boolean('quitar_qbe') && $vistaActiva && $guardoQbeVista) {
+            return redirect()
+                ->route('comprobante_proveedor', ['vista_id' => $vistaActiva->id])
+                ->with('mensaje', 'Se quitaron los filtros de la vista «'.$vistaActiva->nombre.'». Las columnas siguen igual.');
+        }
+        if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
+            if ($request->exists('group')) {
+                $filtros['agrupar'] = $filtrosRequest['agrupar'] ?? [];
+            }
+            if ($request->exists('sort')) {
+                $filtros['sort'] = $filtrosRequest['sort'] ?? [];
+            }
+            ListadoVistaSupport::recordarOrdenYAgrupar(
+                $vistaActiva,
+                $filtros['sort'] ?? [],
+                $filtros['agrupar'] ?? []
+            );
+        }
+
+        $catalogo = ComprobanteProveedorListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ComprobanteProveedorListadoColumnas::RECURSO,
+            $catalogo
+        );
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = ComprobanteProveedorListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = ComprobanteProveedorListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+
+        $datas = $this->comprobanteRepository->leeComprobanteProveedor($filtros, true);
+        $cortes = ['activo' => false];
+        if (ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], ComprobanteProveedorListadoFiltros::camposOrdenables()) !== []) {
+            $cortes = $this->comprobanteRepository->cortesComprobanteProveedor($filtros);
+        }
+
+        $camposFiltro = ComprobanteProveedorListadoFiltros::camposQbeDisponibles();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
+
+        if ($vistaActiva) {
+            $filtros['vista_id'] = $vistaActiva->id;
+            unset($filtros['vista_estandar']);
+        } elseif ($forzarEstandar) {
+            $filtros['vista_estandar'] = 1;
+            unset($filtros['vista_id']);
+        }
+        $filtros['columnas'] = implode(',', $columnasVisibles);
+        $filtrosQuery = ComprobanteProveedorListadoFiltros::paraQueryString($filtros);
+
+        return [
+            'datas' => $datas,
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'camposFiltro' => $camposFiltro,
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'etiquetasInstalacion' => $etiquetasInstalacion,
+            'vistasListado' => $vistas,
+            'vistaActiva' => $vistaActiva,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'cortes' => $cortes,
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function columnasDesdeRequest(Request $request): array
+    {
+        $columnasRequest = $request->input('columnas');
+        if (is_string($columnasRequest)) {
+            $columnasRequest = array_filter(array_map('trim', explode(',', $columnasRequest)));
+        }
+
+        return ComprobanteProveedorListadoPreferenciasUsuario::resolverColumnas(
+            is_array($columnasRequest) ? $columnasRequest : null
         );
     }
 

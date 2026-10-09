@@ -2629,7 +2629,86 @@ $(function () {
         $input.trigger('blur');
     });
 
+    function ymdFechaCarga(valor) {
+        return String(valor || '').substring(0, 10);
+    }
+
+    function techoFechaContabilizacion(hoy, guardada, comp, minOp) {
+        var tope = hoy;
+        if (guardada && guardada < tope) {
+            tope = guardada;
+        }
+        if (comp && comp > tope && comp <= hoy) {
+            tope = comp;
+        }
+        if (minOp && minOp > tope && minOp <= hoy) {
+            tope = minOp;
+        }
+        return tope;
+    }
+
+    function mensajeFechasCargaComprobante() {
+        var compEl = document.getElementById('fechacomprobante');
+        var ivaEl = document.getElementById('fechaiva');
+        if (!compEl || !ivaEl) {
+            return '';
+        }
+        var comp = ymdFechaCarga(compEl.value);
+        var iva = ymdFechaCarga(ivaEl.value);
+        var hoy = ymdFechaCarga(ivaEl.getAttribute('data-hoy'));
+        var guardada = ymdFechaCarga(ivaEl.getAttribute('data-fecha-guardada'));
+        var minOp = ymdFechaCarga(ivaEl.getAttribute('data-min-operable'));
+        if (!hoy) {
+            hoy = ymdFechaCarga(ivaEl.getAttribute('max')) || comp;
+        }
+        var topeIva = techoFechaContabilizacion(hoy, guardada, comp, minOp);
+        if (topeIva) {
+            ivaEl.max = topeIva;
+            compEl.max = topeIva;
+        }
+        if (minOp && topeIva && minOp <= topeIva) {
+            ivaEl.min = minOp;
+        } else {
+            ivaEl.removeAttribute('min');
+        }
+        var ivaFutura = !!(iva && topeIva && iva > topeIva);
+        var ivaCerrada = !!(iva && minOp && topeIva && minOp <= topeIva && iva < minOp);
+        var compPosterior = !!(comp && iva && comp > iva);
+        function ymdADia(ymd) {
+            var p = String(ymd || '').split('-');
+            return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : ymd;
+        }
+        var avisoIva = '';
+        if (ivaFutura) {
+            avisoIva = 'La fecha de contabilización no puede ser posterior al ' + ymdADia(topeIva) + '.';
+        } else if (ivaCerrada) {
+            avisoIva = 'La fecha de contabilización no puede ser anterior al ' + ymdADia(minOp) + '.';
+        }
+        ivaEl.setCustomValidity(avisoIva);
+        compEl.setCustomValidity(compPosterior
+            ? 'La fecha del comprobante no puede ser posterior a la fecha de contabilización.'
+            : '');
+        $(ivaEl).toggleClass('is-invalid', !!(avisoIva));
+        $(compEl).toggleClass('is-invalid', compPosterior);
+        if (avisoIva) {
+            return avisoIva;
+        }
+        if (compPosterior) {
+            return 'La fecha del comprobante no puede ser posterior a la fecha de contabilización.';
+        }
+        return '';
+    }
+
+    $('#fechacomprobante, #fechaiva').on('change input', mensajeFechasCargaComprobante);
+    mensajeFechasCargaComprobante();
+
     $form.on('submit', function (e) {
+        var avisoFechas = mensajeFechasCargaComprobante();
+        if (avisoFechas) {
+            e.preventDefault();
+            alert(avisoFechas);
+            return;
+        }
         if (contabilizado) {
             return;
         }

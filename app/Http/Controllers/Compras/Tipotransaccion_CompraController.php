@@ -4,9 +4,14 @@ namespace App\Http\Controllers\Compras;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Tipotransaccion_Compra;
+use App\Models\Contable\Centrocosto;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionTipotransaccion_Compra;
+use App\Exports\Compras\TipotransaccionCompraListadoExport;
+use App\Support\Compras\TipotransaccionCompraListadoFiltros;
+use App\Support\Reportes\DompdfListadoSupport;
 use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Repositories\Compras\Tipotransaccion_Compra_CentrocostoRepositoryInterface;
 use App\Repositories\Compras\Tipotransaccion_Compra_Concepto_IvacompraRepositoryInterface;
@@ -43,13 +48,59 @@ class Tipotransaccion_CompraController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
         can('listar-tipo-transaccion-compra');
 
-        $datas = $this->repository->all('*');
+        $filtros = TipotransaccionCompraListadoFiltros::resolverDesdeRequest($request);
+        $datas = $this->repository->leeListado($filtros, true);
 
-        return view('compras.tipotransaccion_compra.index', compact('datas'));
+        return view('compras.tipotransaccion_compra.index', [
+            'datas' => $datas,
+            'filtros' => $filtros,
+            'filtrosQuery' => TipotransaccionCompraListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => TipotransaccionCompraListadoFiltros::CAMPOS,
+        ]);
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-tipo-transaccion-compra');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = TipotransaccionCompraListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
+        switch ($formato) {
+            case 'PDF':
+                $datas = $this->repository->leeListado($filtros, false);
+                $html = view('compras.tipotransaccion_compra.listado', [
+                    'datas' => $datas,
+                    'subtitulo' => trim((string) ($filtros['valor'] ?? '')),
+                ])->render();
+                $ruta = storage_path('pdf/listados/listado_tipotransaccion_compra.pdf');
+                if (! is_dir(dirname($ruta))) {
+                    mkdir(dirname($ruta), 0755, true);
+                }
+                DompdfListadoSupport::guardarLegalLandscape($html, $ruta, [
+                    'titulo_corto' => 'Tipos de comprobante',
+                ]);
+
+                return response()->download($ruta);
+
+            case 'EXCEL':
+                return (new TipotransaccionCompraListadoExport($this->repository))
+                    ->parametros($filtros)
+                    ->download('tipos_comprobante_compras.xlsx');
+
+            case 'CSV':
+                return (new TipotransaccionCompraListadoExport($this->repository))
+                    ->parametros($filtros)
+                    ->download('tipos_comprobante_compras.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return redirect()->route('tipotransaccion_compra', TipotransaccionCompraListadoFiltros::paraQueryString($filtros));
     }
 
     /**
@@ -66,12 +117,17 @@ class Tipotransaccion_CompraController extends Controller
         $asientocontableEnum = Tipotransaccion_Compra::$enumAsientoContable;
         $estadoEnum = Tipotransaccion_Compra::$enumEstado;
         $retieneEnum = Tipotransaccion_Compra::$enumRetiene;
-        $centrocosto_query = $this->centrocostoRepository->all();
-        $concepto_ivacompra_query = $this->concepto_ivacompraRepository->all();
 
-        return view('compras.tipotransaccion_compra.crear', compact('operacionEnum', 'signoEnum', 'subdiarioEnum',
-                                                                    'asientocontableEnum', 'estadoEnum', 'retieneEnum',
-                                                                    'centrocosto_query', 'concepto_ivacompra_query'));
+        return view('compras.tipotransaccion_compra.crear', [
+            'operacionEnum' => $operacionEnum,
+            'signoEnum' => $signoEnum,
+            'subdiarioEnum' => $subdiarioEnum,
+            'asientocontableEnum' => $asientocontableEnum,
+            'estadoEnum' => $estadoEnum,
+            'retieneEnum' => $retieneEnum,
+            'filasCentrocosto' => $this->filasCentrocosto(null),
+            'filasConcepto' => $this->filasConcepto(null),
+        ]);
     }
 
     /**
@@ -118,12 +174,18 @@ class Tipotransaccion_CompraController extends Controller
         $asientocontableEnum = Tipotransaccion_Compra::$enumAsientoContable;
         $estadoEnum = Tipotransaccion_Compra::$enumEstado;
         $retieneEnum = Tipotransaccion_Compra::$enumRetiene;
-        $centrocosto_query = $this->centrocostoRepository->all();
-        $concepto_ivacompra_query = $this->concepto_ivacompraRepository->all();
 
-        return view('compras.tipotransaccion_compra.editar', compact('data', 'operacionEnum', 'signoEnum', 'subdiarioEnum',
-                                                                    'asientocontableEnum', 'estadoEnum', 'retieneEnum',
-                                                                    'centrocosto_query', 'concepto_ivacompra_query'));
+        return view('compras.tipotransaccion_compra.editar', [
+            'data' => $data,
+            'operacionEnum' => $operacionEnum,
+            'signoEnum' => $signoEnum,
+            'subdiarioEnum' => $subdiarioEnum,
+            'asientocontableEnum' => $asientocontableEnum,
+            'estadoEnum' => $estadoEnum,
+            'retieneEnum' => $retieneEnum,
+            'filasCentrocosto' => $this->filasCentrocosto($data),
+            'filasConcepto' => $this->filasConcepto($data),
+        ]);
     }
 
     /**
@@ -195,13 +257,16 @@ class Tipotransaccion_CompraController extends Controller
 
         $output = ['data' => ''];
         if ($data->isEmpty()) {
-            $output['data'] = '<tr><td colspan="4">Sin resultados</td></tr>';
+            $output['data'] = '<tr><td colspan="7">Sin resultados</td></tr>';
         } else {
             foreach ($data as $row) {
                 $output['data'] .= '<tr>';
                 $output['data'] .= '<td class="id">'.e($row->id).'</td>';
                 $output['data'] .= '<td class="abreviatura">'.e($row->abreviatura).'</td>';
                 $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td>'.e($this->etiquetaRetiene($row->retieneiva ?? null)).'</td>';
+                $output['data'] .= '<td>'.e($this->etiquetaRetiene($row->retieneganancia ?? null)).'</td>';
+                $output['data'] .= '<td>'.e($this->etiquetaRetiene($row->getAttribute('retieneIIBB'))).'</td>';
                 $output['data'] .= '<td class="text-nowrap">';
                 $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultatipotransaccioncompra">Elegir</a>';
                 if ($puedeAbrirAbm) {
@@ -316,6 +381,82 @@ class Tipotransaccion_CompraController extends Controller
             'numero_oc' => $numeroOc,
             'conceptos' => $conceptos,
         ]);
+    }
+
+    /**
+     * @return list<array{id: string, codigo: string, nombre: string}>
+     */
+    private function filasCentrocosto(?Tipotransaccion_Compra $data): array
+    {
+        if (is_array(old('centrocosto_ids'))) {
+            return $this->filasDesdeIds(old('centrocosto_ids'), Centrocosto::class);
+        }
+
+        $filas = [];
+        foreach ($data->tipotransaccion_compra_centrocostos ?? [] as $linea) {
+            $cc = $linea->centrocostos;
+            $filas[] = [
+                'id' => (string) ($linea->centrocosto_id ?? ''),
+                'codigo' => (string) ($cc->codigo ?? ''),
+                'nombre' => (string) ($cc->nombre ?? ''),
+            ];
+        }
+
+        return $filas !== [] ? $filas : [['id' => '', 'codigo' => '', 'nombre' => '']];
+    }
+
+    /**
+     * @return list<array{id: string, codigo: string, nombre: string}>
+     */
+    private function filasConcepto(?Tipotransaccion_Compra $data): array
+    {
+        if (is_array(old('concepto_ivacompra_ids'))) {
+            return $this->filasDesdeIds(old('concepto_ivacompra_ids'), Concepto_Ivacompra::class);
+        }
+
+        $filas = [];
+        foreach ($data->tipotransaccion_compra_concepto_ivacompras ?? [] as $linea) {
+            $concepto = $linea->concepto_ivacompras;
+            $filas[] = [
+                'id' => (string) ($linea->concepto_ivacompra_id ?? ''),
+                'codigo' => (string) ($concepto->codigo ?? ''),
+                'nombre' => (string) ($concepto->nombre ?? ''),
+            ];
+        }
+
+        return $filas !== [] ? $filas : [['id' => '', 'codigo' => '', 'nombre' => '']];
+    }
+
+    /**
+     * @param  list<mixed>  $ids
+     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $modelo
+     * @return list<array{id: string, codigo: string, nombre: string}>
+     */
+    private function filasDesdeIds(array $ids, string $modelo): array
+    {
+        $numericos = array_values(array_filter(array_map('intval', $ids)));
+        $registros = $numericos === []
+            ? collect()
+            : $modelo::query()->whereIn('id', $numericos)->get()->keyBy('id');
+
+        $filas = [];
+        foreach ($ids as $id) {
+            $registro = $registros->get((int) $id);
+            $filas[] = [
+                'id' => $registro ? (string) $id : '',
+                'codigo' => $registro ? (string) $registro->codigo : '',
+                'nombre' => $registro ? (string) $registro->nombre : '',
+            ];
+        }
+
+        return $filas !== [] ? $filas : [['id' => '', 'codigo' => '', 'nombre' => '']];
+    }
+
+    private function etiquetaRetiene(mixed $valor): string
+    {
+        $clave = strtoupper(trim((string) $valor));
+
+        return Tipotransaccion_Compra::$enumRetiene[$clave] ?? '';
     }
 
     private function puedeConsultarTipotransaccionCompra(): bool

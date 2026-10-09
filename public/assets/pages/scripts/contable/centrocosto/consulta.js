@@ -250,9 +250,24 @@ function activa_eventos_consultacentrocosto() {
         });
 
     $(document)
+        .off('mousedown.ccConsultaLupa', '.consultacentrocosto')
+        .on('mousedown.ccConsultaLupa', '.consultacentrocosto', function () {
+            $(this).closest('.tm-centrocosto-campo').find('.codigocentrocosto').data('ccAbriendoModal', true);
+        });
+
+    $(document)
         .off('change.ccConsultaCod blur.ccConsultaCod', '.tm-centrocosto-campo .codigocentrocosto')
         .on('change.ccConsultaCod blur.ccConsultaCod', '.tm-centrocosto-campo .codigocentrocosto', function () {
-            leerCentrocostoPorCodigo($(this).val(), this);
+            var $input = $(this);
+            if ($input.data('ccAbriendoModal')) {
+                $input.removeData('ccAbriendoModal');
+                return;
+            }
+            var modal = document.getElementById('consultacentrocostoModal');
+            if (modal && (modal.classList.contains('show') || modal.classList.contains('in'))) {
+                return;
+            }
+            leerCentrocostoPorCodigo($input.val(), this);
         });
 
     $(document)

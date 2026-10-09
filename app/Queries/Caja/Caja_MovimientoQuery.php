@@ -8,6 +8,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Support\Caja\IngresoEgresoListadoFiltros;
 use App\Support\Caja\IngresoEgresoVisibilidadSupport;
+use Illuminate\Database\Eloquent\Builder;
 use DB;
 
 class Caja_MovimientoQuery implements Caja_MovimientoQueryInterface
@@ -56,6 +57,25 @@ class Caja_MovimientoQuery implements Caja_MovimientoQueryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $caja_movimientos = $this->builderListado($filtrosOBusqueda, $caja_id, $empresaId);
+
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
+                return $caja_movimientos->paginate(10);
+            }
+
+            return $caja_movimientos->get();
+        }
+
+        return $caja_movimientos->get();
+    }
+
+    /**
+     * @param  array<string, mixed>|string|null  $filtrosOBusqueda
+     * @return Builder<\App\Models\Caja\Caja_Movimiento>
+     */
+    public function builderListado($filtrosOBusqueda, $caja_id = 0, $empresaId = null)
+    {
         $caja_id = (int) $caja_id;
         $filtros = $this->normalizarFiltrosListado($filtrosOBusqueda, $empresaId);
 
@@ -71,6 +91,12 @@ class Caja_MovimientoQuery implements Caja_MovimientoQueryInterface
             'caja_movimiento.fecha as fecha',
             'conceptogasto.nombre as nombreconceptogasto',
             'caja_movimiento.detalle as detalle',
+            'caja_movimiento.solicitudpago_id as solicitudpago_id',
+            'caja_movimiento.usuario_id as usuario_id',
+            'usuario.nombre as nombreusuario',
+            'caja_movimiento.created_at as created_at',
+            'caja_movimiento.caja_movimiento_origen_id as caja_movimiento_origen_id',
+            'caja_movimiento.caja_movimiento_revertido_por_id as caja_movimiento_revertido_por_id',
         ];
         if ($esIguassu) {
             $select[] = 'caja_movimiento.ordenservicio_id as ordenservicio_id';
@@ -80,6 +106,7 @@ class Caja_MovimientoQuery implements Caja_MovimientoQueryInterface
                                 ->join('tipotransaccion_caja', 'tipotransaccion_caja.id', '=', 'caja_movimiento.tipotransaccion_caja_id')
                                 ->join('empresa', 'empresa.id', '=', 'caja_movimiento.empresa_id')
                                 ->leftjoin('conceptogasto', 'conceptogasto.id', '=', 'caja_movimiento.conceptogasto_id')
+                                ->leftJoin('usuario', 'usuario.id', '=', 'caja_movimiento.usuario_id')
                                 ->with(['caja_movimiento_cuentacajas', 'cheques']);
 
         if ($caja_id > 0) {
@@ -91,18 +118,9 @@ class Caja_MovimientoQuery implements Caja_MovimientoQueryInterface
         IngresoEgresoVisibilidadSupport::aplicarFiltroAlcance($caja_movimientos);
 
         IngresoEgresoListadoFiltros::aplicar($caja_movimientos, $filtros);
+        IngresoEgresoListadoFiltros::aplicarOrden($caja_movimientos, $filtros);
 
-        $caja_movimientos->orderBy('caja_movimiento.id', 'DESC');
-
-        if (isset($flPaginando)) {
-            if ($flPaginando) {
-                return $caja_movimientos->paginate(10);
-            }
-
-            return $caja_movimientos->get();
-        }
-
-        return $caja_movimientos->get();
+        return $caja_movimientos;
     }
 
     /**

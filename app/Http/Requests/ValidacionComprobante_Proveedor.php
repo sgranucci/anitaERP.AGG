@@ -147,6 +147,18 @@ class ValidacionComprobante_Proveedor extends FormRequest
                 }
             }
 
+            try {
+                ComprobanteProveedorFechaContableSupport::assertFechasCargaCoherentes(
+                    $this->input('fechacomprobante'),
+                    $this->input('fechaiva'),
+                );
+            } catch (RuntimeException $e) {
+                $campo = str_contains($e->getMessage(), 'posterior a hoy')
+                    ? 'fechaiva'
+                    : 'fechacomprobante';
+                $validator->errors()->add($campo, $e->getMessage());
+            }
+
             if ($validator->errors()->has('fechacomprobante')) {
                 return;
             }

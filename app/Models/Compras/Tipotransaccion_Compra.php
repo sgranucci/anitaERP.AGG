@@ -106,7 +106,9 @@ class Tipotransaccion_Compra extends Model
 
     public function getDescRetieneiibbAttribute()
 	{
-	  	return Arr::get(Tipotransaccion_Compra::$enumRetiene, $this->retieneiibb);
+        $valor = $this->attributes['retieneIIBB'] ?? '';
+
+	  	return Tipotransaccion_Compra::$enumRetiene[$valor] ?? '';
 	}
 }
 

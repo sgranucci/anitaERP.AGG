@@ -25,17 +25,11 @@ final class IvaVentasFeaturesSupport
         return (bool) config('iva_ventas.features.clasificar_por_host', false);
     }
 
-    public static function completarFslAnita(): bool
-    {
-        return (bool) config('iva_ventas.features.completar_fsl_anita', false);
-    }
-
     /**
      * @return array{
      *   bingo_fsl: bool,
      *   unidades_negocio: bool,
-     *   clasificar_por_host: bool,
-     *   completar_fsl_anita: bool
+     *   clasificar_por_host: bool
      * }
      */
     public static function all(): array
@@ -44,7 +38,6 @@ final class IvaVentasFeaturesSupport
             'bingo_fsl' => self::bingoFsl(),
             'unidades_negocio' => self::unidadesNegocio(),
             'clasificar_por_host' => self::clasificarPorHost(),
-            'completar_fsl_anita' => self::completarFslAnita(),
         ];
     }
 }

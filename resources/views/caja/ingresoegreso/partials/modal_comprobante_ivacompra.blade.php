@@ -148,11 +148,11 @@
                         <div class="form-row">
                             <div class="form-group col-md-3 mb-2">
                                 <label class="ie-cp-label" for="ie-cp-fecha-comprobante">Fecha comprobante</label>
-                                <input type="date" class="form-control form-control-sm ie-cp-fecha" id="ie-cp-fecha-comprobante">
+                                <input type="date" class="form-control form-control-sm ie-cp-fecha" id="ie-cp-fecha-comprobante" max="{{ now()->format('Y-m-d') }}" title="No puede ser posterior a la fecha de contabilizaci&oacute;n">
                             </div>
                             <div class="form-group col-md-3 mb-2">
                                 <label class="ie-cp-label" for="ie-cp-fecha-iva">Fecha IVA</label>
-                                <input type="date" class="form-control form-control-sm ie-cp-fecha" id="ie-cp-fecha-iva">
+                                <input type="date" class="form-control form-control-sm ie-cp-fecha" id="ie-cp-fecha-iva" max="{{ now()->format('Y-m-d') }}" data-hoy="{{ now()->format('Y-m-d') }}" title="Fecha de contabilizaci&oacute;n: nunca posterior a hoy">
                             </div>
                             <div class="form-group col-md-2 mb-2">
                                 <label class="ie-cp-label text-right" for="ie-cp-total">Total</label>

@@ -71,7 +71,10 @@ final class IvaComprasReporteService
                 'cuit' => $this->cuitProveedor($cp),
                 'fecha_mov' => $fechaMov !== '' ? date('d/m/Y', strtotime($fechaMov)) : '',
                 'fecha_iva' => $fechaIva !== '' ? date('d/m/Y', strtotime($fechaIva)) : '',
+                'fecha_mov_iso' => $fechaMov,
+                'fecha_iva_iso' => $fechaIva,
                 'fecha_orden' => $fechaIva !== '' ? $fechaIva : $fechaMov,
+                'importe_orden' => round((float) ($columnas[IvaComprasColumnasSupport::KEY_TOTAL] ?? 0), 2),
                 'tipo' => $tipo,
                 'tipo_orden' => $tipo,
                 'tipotransaccion_compra_id' => (int) ($cp->tipotransaccion_compra_id ?? 0),
@@ -90,6 +93,10 @@ final class IvaComprasReporteService
                 'cotizacion' => (float) ($cp->cotizacion ?? 1),
                 'nombreempresa' => (string) ($cp->empresas->nombre ?? ''),
             ];
+
+            if (! $this->pasaFiltroImporte($fila, $filtros)) {
+                continue;
+            }
 
             $filas[] = $fila;
             IvaComprasColumnasSupport::acumular($totalesGeneral, $columnas);
@@ -171,6 +178,24 @@ final class IvaComprasReporteService
             $query->where('comprobante_proveedor.es_fce', true);
         }
 
+        $proveedorId = (int) ($filtros['proveedor_id'] ?? 0);
+        if ($proveedorId > 0) {
+            $query->where('comprobante_proveedor.proveedor_id', $proveedorId);
+        }
+
+        $tipo = trim((string) ($filtros['tipo'] ?? ''));
+        if ($tipo !== '') {
+            $like = '%'.addcslashes($tipo, '%_\\').'%';
+            $query->whereHas('tipotransaccion_compras', static function (Builder $q) use ($like): void {
+                $q->where('abreviatura', 'like', $like);
+            });
+        }
+
+        $nro = trim((string) ($filtros['nro_comprobante'] ?? ''));
+        if ($nro !== '' && ctype_digit($nro)) {
+            $query->where('comprobante_proveedor.numerocomprobante', (int) $nro);
+        }
+
         return $query;
     }
 
@@ -235,34 +260,70 @@ final class IvaComprasReporteService
      */
     private function ordenarFilas(array $filas, array $filtros): array
     {
-        $orden = (string) ($filtros['orden'] ?? IvaComprasListadoFiltros::ORDEN_FECHA_IVA);
+        $orden = (string) ($filtros['orden'] ?? IvaComprasListadoFiltros::ORDEN_FECHA_COMP);
+        $direccion = ($filtros['orden_dir'] ?? IvaComprasListadoFiltros::DIR_ASC) === IvaComprasListadoFiltros::DIR_DESC
+            ? -1
+            : 1;
 
-        usort($filas, static function (array $a, array $b) use ($orden): int {
+        usort($filas, static function (array $a, array $b) use ($orden, $direccion): int {
             $cmp = match ($orden) {
                 IvaComprasListadoFiltros::ORDEN_PROVEEDOR => strcasecmp(
-                    (string) ($a['proveedor_codigo'] ?? ''),
-                    (string) ($b['proveedor_codigo'] ?? ''),
+                    trim((string) ($a['proveedor_codigo'] ?? '').' '.(string) ($a['proveedor_nombre'] ?? '')),
+                    trim((string) ($b['proveedor_codigo'] ?? '').' '.(string) ($b['proveedor_nombre'] ?? '')),
                 ),
                 IvaComprasListadoFiltros::ORDEN_TIPO => strcasecmp(
                     (string) ($a['tipo_orden'] ?? ''),
                     (string) ($b['tipo_orden'] ?? ''),
                 ),
-                IvaComprasListadoFiltros::ORDEN_FECHA_COMP => strcmp(
-                    (string) ($a['fecha_mov'] ?? ''),
-                    (string) ($b['fecha_mov'] ?? ''),
+                IvaComprasListadoFiltros::ORDEN_COMPROBANTE => strcmp(
+                    (string) ($a['comprobante'] ?? ''),
+                    (string) ($b['comprobante'] ?? ''),
+                ),
+                IvaComprasListadoFiltros::ORDEN_IMPORTE => ((float) ($a['importe_orden'] ?? 0)) <=> ((float) ($b['importe_orden'] ?? 0)),
+                IvaComprasListadoFiltros::ORDEN_FECHA_IVA => strcmp(
+                    (string) ($a['fecha_iva_iso'] ?? $a['fecha_orden'] ?? ''),
+                    (string) ($b['fecha_iva_iso'] ?? $b['fecha_orden'] ?? ''),
                 ),
                 default => strcmp(
-                    (string) ($a['fecha_orden'] ?? ''),
-                    (string) ($b['fecha_orden'] ?? ''),
+                    (string) ($a['fecha_mov_iso'] ?? ''),
+                    (string) ($b['fecha_mov_iso'] ?? ''),
                 ),
             };
             if ($cmp !== 0) {
-                return $cmp;
+                return $cmp * $direccion;
+            }
+
+            $porFecha = strcmp(
+                (string) ($a['fecha_mov_iso'] ?? ''),
+                (string) ($b['fecha_mov_iso'] ?? ''),
+            );
+            if ($porFecha !== 0) {
+                return $porFecha;
             }
 
             return strcmp((string) ($a['comprobante'] ?? ''), (string) ($b['comprobante'] ?? ''));
         });
 
         return $filas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     * @param  array<string, mixed>  $filtros
+     */
+    private function pasaFiltroImporte(array $fila, array $filtros): bool
+    {
+        $importe = (float) ($fila['importe_orden'] ?? 0);
+        $desde = $filtros['importe_desde'] ?? null;
+        $hasta = $filtros['importe_hasta'] ?? null;
+
+        if ($desde !== null && $importe < ((float) $desde - 0.0001)) {
+            return false;
+        }
+        if ($hasta !== null && $importe > ((float) $hasta + 0.0001)) {
+            return false;
+        }
+
+        return true;
     }
 }

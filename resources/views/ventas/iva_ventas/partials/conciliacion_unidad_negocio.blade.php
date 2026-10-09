@@ -5,8 +5,7 @@
     $totalErp = $un['total_erp'] ?? ['neto_gravado' => 0, 'imp_interno' => 0, 'exento' => 0, 'iva' => 0, 'total' => 0, 'ventas' => 0];
     $totalCtb = $un['total_contable'] ?? ['ventas' => 0, 'iva' => 0];
     $cuadre = $un['cuadre'] ?? [];
-    $ctamovHabil = ! empty($un['ctamov_habilitado']);
-    $colspanCuadre = $ctamovHabil ? 6 : 4;
+    $colspanCuadre = 4;
     $puedeVerCuenta = $puede_ver_cuenta ?? false;
     $queryConsulta = ['origen' => 'modal_consulta', 'vista' => 'consulta'];
 @endphp
@@ -172,10 +171,6 @@
                         <th class="text-right">ERP</th>
                         <th class="text-right">Contable</th>
                         <th class="text-right">Dif. contable</th>
-                        @if ($ctamovHabil)
-                            <th class="text-right">ctamov (Anita)</th>
-                            <th class="text-right">Dif. ctamov</th>
-                        @endif
                         <th class="text-center">Estado</th>
                     </tr>
                 </thead>
@@ -196,10 +191,6 @@
                             <td class="text-right">{{ $formatear($erpVU) }}</td>
                             <td class="text-right">{{ $formatear($ctbVU) }}</td>
                             <td class="text-right font-weight-bold">{{ $formatear($difVU) }}</td>
-                            @if ($ctamovHabil)
-                                <td class="text-right text-muted">—</td>
-                                <td class="text-right text-muted">—</td>
-                            @endif
                             <td class="text-center">
                                 @if (! $tieneMovU)
                                     <span class="text-muted">—</span>
@@ -215,10 +206,6 @@
                             <td class="text-right">{{ $formatear($erpIU) }}</td>
                             <td class="text-right">{{ $formatear($ctbIU) }}</td>
                             <td class="text-right font-weight-bold">{{ $formatear($difIU) }}</td>
-                            @if ($ctamovHabil)
-                                <td class="text-right text-muted">—</td>
-                                <td class="text-right text-muted">—</td>
-                            @endif
                             <td class="text-center">
                                 @if (! $tieneMovU)
                                     <span class="text-muted">—</span>
@@ -238,10 +225,6 @@
                                 <td class="text-right">{{ $formatear($linea['erp'] ?? 0) }}</td>
                                 <td class="text-right">{{ $formatear($linea['contable'] ?? 0) }}</td>
                                 <td class="text-right">{{ $formatear($linea['dif_contable'] ?? 0) }}</td>
-                                @if ($ctamovHabil)
-                                    <td class="text-right">{{ $formatear($linea['ctamov'] ?? 0) }}</td>
-                                    <td class="text-right">{{ $formatear($linea['dif_ctamov'] ?? 0) }}</td>
-                                @endif
                                 <td class="text-center">
                                     @if (! empty($linea['cuadra']))
                                         <i class="fa fa-check text-success" title="Cuadra"></i>

@@ -42,6 +42,20 @@ final class ListadoQbeSupport
         'vacio' => 'Vacío',
     ];
 
+    /**
+     * Períodos sin valor (etapa de transacciones: el criterio es el período, no una fecha tipeada).
+     *
+     * @var array<string, string>
+     */
+    public const OPERADORES_PERIODO = [
+        'hoy' => 'Hoy',
+        'ayer' => 'Ayer',
+        'esta_semana' => 'Esta semana',
+        'este_mes' => 'Este mes',
+        'mes_anterior' => 'Mes anterior',
+        'este_anio' => 'Este año',
+    ];
+
     /** @var array<string, string> */
     public const OPERADORES_FECHA = [
         'mayor_igual' => 'Desde',
@@ -50,6 +64,12 @@ final class ListadoQbeSupport
         'menor' => 'Anterior a',
         'igual' => 'Es el día',
         'entre' => 'Entre',
+        'hoy' => 'Hoy',
+        'ayer' => 'Ayer',
+        'esta_semana' => 'Esta semana',
+        'este_mes' => 'Este mes',
+        'mes_anterior' => 'Mes anterior',
+        'este_anio' => 'Este año',
         'vacio' => 'Sin fecha',
     ];
 
@@ -131,7 +151,7 @@ final class ListadoQbeSupport
                 if (is_array($criterio) && isset($criterio['campo'])) {
                     $op = (string) ($criterio['op'] ?? '');
                     $valor = trim((string) ($criterio['valor'] ?? ''));
-                    if ($op === 'vacio' || $valor !== '') {
+                    if (self::operadorSinValor($op) || $valor !== '') {
                         return true;
                     }
                 } elseif (! is_array($criterio) && trim((string) $criterio) !== '') {
@@ -154,7 +174,7 @@ final class ListadoQbeSupport
                 $valor = trim((string) ($criterio['valor'] ?? ''));
                 $hasta = trim((string) ($criterio['valor_hasta'] ?? ''));
                 $formula = trim((string) ($criterio['formula'] ?? ''));
-                if ($op === 'vacio' || $op === 'entre' || $valor !== '' || $hasta !== '' || $formula !== '') {
+                if (self::operadorSinValor($op) || $op === 'entre' || $valor !== '' || $hasta !== '' || $formula !== '') {
                     return true;
                 }
             }
@@ -193,7 +213,7 @@ final class ListadoQbeSupport
                 if ($campo === '' && $formula === '') {
                     continue;
                 }
-                if ($formula === '' && $op !== 'vacio' && $op !== 'entre' && $valor === '') {
+                if ($formula === '' && ! self::operadorSinValor($op) && $op !== 'entre' && $valor === '') {
                     continue;
                 }
                 if ($formula !== '' && $op !== 'vacio' && $op !== 'entre' && $valor === '') {
@@ -268,7 +288,7 @@ final class ListadoQbeSupport
                 }
                 $op = (string) ($c['op'] ?? '');
                 $valor = trim((string) ($c['valor'] ?? ''));
-                if ($op !== 'vacio' && $op !== 'entre' && $valor === '') {
+                if (! self::operadorSinValor($op) && $op !== 'entre' && $valor === '') {
                     continue;
                 }
                 $aplicarCriterio($query, [
@@ -307,7 +327,7 @@ final class ListadoQbeSupport
                 $op = (string) ($c['op'] ?? 'contiene');
                 $valor = trim((string) ($c['valor'] ?? ''));
                 $hasta = trim((string) ($c['valor_hasta'] ?? ''));
-                if ($op !== 'vacio' && $op !== 'entre' && $valor === '') {
+                if (! self::operadorSinValor($op) && $op !== 'entre' && $valor === '') {
                     continue;
                 }
                 if ($op === 'entre' && $valor === '' && $hasta === '') {
@@ -544,7 +564,7 @@ final class ListadoQbeSupport
                     continue;
                 }
                 $op = $normalizarOperador((string) ($fila['op'] ?? 'contiene'), $campo);
-                if ($op === 'vacio' || $op === 'entre' || $valor !== '' || $hasta !== '') {
+                if ($op === 'entre' || $valor !== '' || $hasta !== '' || self::operadorSinValor($op)) {
                     $criterios[] = [
                         'campo' => $campo,
                         'op' => $op,
@@ -677,6 +697,17 @@ final class ListadoQbeSupport
             return;
         }
 
+        if (isset(self::OPERADORES_PERIODO[$operador])) {
+            $rango = self::rangoPeriodo($operador);
+            if ($rango === null) {
+                return;
+            }
+            $query->where($column, '>=', $rango[0].' 00:00:00');
+            $query->where($column, '<', self::diaSiguiente($rango[1]).' 00:00:00');
+
+            return;
+        }
+
         $desde = self::normalizarFecha($valor);
         $hasta = self::normalizarFecha($valorHasta);
 
@@ -704,6 +735,58 @@ final class ListadoQbeSupport
                 ->where($column, '<', $siguiente.' 00:00:00'),
             default => $query->where($column, '>=', $desde.' 00:00:00'),
         };
+    }
+
+    public static function operadorSinValor(string $op): bool
+    {
+        return $op === 'vacio' || isset(self::OPERADORES_PERIODO[$op]);
+    }
+
+    /**
+     * Desde y hasta inclusive (Y-m-d). Semana = lunes a domingo.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    public static function rangoPeriodo(string $clave, ?DateTimeImmutable $hoy = null): ?array
+    {
+        if (! isset(self::OPERADORES_PERIODO[$clave])) {
+            return null;
+        }
+
+        $hoy = ($hoy ?? new DateTimeImmutable('today'))->setTime(0, 0);
+        if ($clave === 'hoy') {
+            $dia = $hoy->format('Y-m-d');
+
+            return [$dia, $dia];
+        }
+        if ($clave === 'ayer') {
+            $dia = $hoy->modify('-1 day')->format('Y-m-d');
+
+            return [$dia, $dia];
+        }
+        if ($clave === 'esta_semana') {
+            $lunes = $hoy->modify('-'.((int) $hoy->format('N') - 1).' days');
+
+            return [$lunes->format('Y-m-d'), $lunes->modify('+6 days')->format('Y-m-d')];
+        }
+        if ($clave === 'este_mes') {
+            return [
+                $hoy->modify('first day of this month')->format('Y-m-d'),
+                $hoy->modify('last day of this month')->format('Y-m-d'),
+            ];
+        }
+        if ($clave === 'mes_anterior') {
+            $inicio = $hoy->modify('first day of last month');
+
+            return [
+                $inicio->format('Y-m-d'),
+                $inicio->modify('last day of this month')->format('Y-m-d'),
+            ];
+        }
+
+        $anio = $hoy->format('Y');
+
+        return [$anio.'-01-01', $anio.'-12-31'];
     }
 
     public static function formatearFecha(mixed $valor): string

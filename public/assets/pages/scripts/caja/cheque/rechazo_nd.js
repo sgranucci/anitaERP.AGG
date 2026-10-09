@@ -139,6 +139,7 @@
             leyenda: $('#rechazo_nd_leyenda').val(),
             motivo_rechazo: $('#rechazo_nd_motivo').val(),
             puntoventa_id: $('#rechazo_nd_puntoventa_id').val(),
+            enviar_cliente_proveedor: $('#rechazo_nd_enviar').is(':checked'),
             lineas: recolectarLineas()
         };
     }
@@ -181,6 +182,8 @@
         $('#rechazo-nd-asiento').addClass('d-none');
         $('#rechazo-nd-config-error').hide().text('');
         $('#rechazo_nd_motivo').val('');
+        $('#rechazo_nd_enviar').prop('checked', false);
+        $('#rechazo-nd-enviar-ayuda').text('Sin el tilde, la nota queda emitida: no se manda por mail al cliente ni se genera el débito en la cuenta del proveedor.');
         $('#rechazo-nd-cuenta-nominal').text('');
 
         $.ajax({
@@ -203,6 +206,12 @@
                 (c.nro_interno_anita ? ' (int. ' + c.nro_interno_anita + ')' : '')
             );
             $('#rechazo-nd-cliente').text(c.cliente || '');
+            if (c.proveedor) {
+                $('#rechazo-nd-enviar-ayuda').text(
+                    'Sin el tilde, la nota queda emitida: no se manda por mail a ' + (c.cliente || 'el cliente')
+                    + ' ni se genera el débito de ' + c.proveedor + '.'
+                );
+            }
             $('#rechazo-nd-monto').text(formatMoney(nominal) + ' ' + (c.moneda || ''));
             $('#rechazo_nd_puntoventa_id').val(pv.id || '');
             $('#rechazo_nd_puntoventa_id_codigo').val(pv.codigo || '');
@@ -329,6 +338,10 @@
             var msg = 'Cheque rechazado. ND: ' + (data.codigo_nd || data.venta_nd_id || '');
             if (data.anita_ok === false) {
                 msg += ' (Anita no actualizado; revisar log).';
+            }
+            var mail = data.mail_cliente;
+            if (mail && mail.mensaje) {
+                msg += mail.ok ? (' ' + mail.mensaje + '.') : (' No se envió el mail al cliente: ' + mail.mensaje + '.');
             }
             var deuda = data.deuda_proveedor;
             if (deuda && deuda.codigo) {

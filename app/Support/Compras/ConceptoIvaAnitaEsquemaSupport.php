@@ -10,6 +10,8 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
  * Calzados Ferli (verificado 11/sep/2026 contra syscolumns /usr2/ferli):
  * - conccomp no tiene concc_tipo_conc, concc_alicuota_iva, concc_retiene_ibr.
  * - no existe la tabla concciva.
+ * - no existe compras.ccostcomp (centros de costo por tipo de comprobante).
+ *   t_comp y cont_comp sí existen (verificado 9/oct/2026).
  */
 final class ConceptoIvaAnitaEsquemaSupport
 {
@@ -50,6 +52,15 @@ final class ConceptoIvaAnitaEsquemaSupport
     }
 
     public static function leeConcciva(): bool
+    {
+        return ! EntornoEmpresaSupport::esFerli();
+    }
+
+    /**
+     * Tabla compras.ccostcomp (centros de costo habilitados por tipo de comprobante).
+     * En Ferli no está en el esquema: no leer ni escribir.
+     */
+    public static function leeCcostcomp(): bool
     {
         return ! EntornoEmpresaSupport::esFerli();
     }

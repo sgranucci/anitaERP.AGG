@@ -738,8 +738,15 @@ $(function () {
         }
     });
     mayorPlanoActualizarExcelSolapasSeparadas();
+    mayorPlanoActualizarPresentacionModulo();
     mayorPlanoActivarOverlayProceso();
+    $(document).on('change.mpcModulo', 'input[name="modulo_movimientos"]', mayorPlanoActualizarPresentacionModulo);
 });
+
+function mayorPlanoActualizarPresentacionModulo() {
+    var modulo = $('input[name="modulo_movimientos"]:checked').val() || '';
+    $('#mpc-modulo-presentacion').toggleClass('d-none', modulo === '');
+}
 
 var MAYOR_PLANO_OVERLAY_ID = 'mayor-plano-cuenta-overlay';
 var MAYOR_PLANO_TITULO_ID = 'mayor-plano-cuenta-overlay-titulo';

@@ -58,4 +58,53 @@ class MayorPlanoCuentaListadoFiltrosTest extends TestCase
         $this->assertSame(0, $filtros['cuenta_hasta']);
         $this->assertTrue(MayorPlanoCuentaListadoFiltros::tieneSeleccionParticularCuentas($filtros));
     }
+
+    public function test_modulo_en_totales_oculta_el_detalle(): void
+    {
+        $filtros = MayorPlanoCuentaListadoFiltros::resolverDesdeRequest(
+            Request::create('/contable/mayor-plano-cuenta', 'GET', [
+                'modulo_movimientos' => 'compras',
+            ])
+        );
+
+        $this->assertSame('compras', $filtros['modulo_movimientos']);
+        $this->assertSame(MayorPlanoCuentaListadoFiltros::PRESENTACION_TOTALES, $filtros['presentacion_modulo']);
+        $this->assertTrue(MayorPlanoCuentaListadoFiltros::esConsultaTotalesModulo($filtros));
+        $this->assertArrayNotHasKey('presentacion_modulo', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros));
+    }
+
+    public function test_modulo_en_movimientos_lista_imputaciones(): void
+    {
+        $filtros = MayorPlanoCuentaListadoFiltros::resolverDesdeRequest(
+            Request::create('/contable/mayor-plano-cuenta', 'GET', [
+                'modulo_movimientos' => 'caja',
+                'presentacion_modulo' => 'movimientos',
+            ])
+        );
+
+        $this->assertSame(MayorPlanoCuentaListadoFiltros::PRESENTACION_MOVIMIENTOS, $filtros['presentacion_modulo']);
+        $this->assertFalse(MayorPlanoCuentaListadoFiltros::esConsultaTotalesModulo($filtros));
+        $this->assertSame(
+            'movimientos',
+            MayorPlanoCuentaListadoFiltros::paraQueryString($filtros)['presentacion_modulo']
+        );
+        $this->assertSame(
+            MayorPlanoCuentaListadoFiltros::firma($filtros),
+            MayorPlanoCuentaListadoFiltros::firma(array_merge($filtros, [
+                'presentacion_modulo' => MayorPlanoCuentaListadoFiltros::PRESENTACION_TOTALES,
+            ]))
+        );
+    }
+
+    public function test_sin_modulo_la_presentacion_no_pasa_a_totales(): void
+    {
+        $filtros = MayorPlanoCuentaListadoFiltros::resolverDesdeRequest(
+            Request::create('/contable/mayor-plano-cuenta', 'GET', [
+                'presentacion_modulo' => 'movimientos',
+            ])
+        );
+
+        $this->assertFalse(MayorPlanoCuentaListadoFiltros::esConsultaTotalesModulo($filtros));
+        $this->assertArrayNotHasKey('presentacion_modulo', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros));
+    }
 }

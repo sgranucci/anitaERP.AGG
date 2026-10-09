@@ -12,8 +12,8 @@
         <th>N.Pro.</th>
         <th>Proveedor</th>
         <th>CUIT</th>
-        <th>Fec.Mov.</th>
-        <th>Fec.Iva</th>
+        <th title="Fecha del comprobante">Fec.Comp.</th>
+        <th title="Fecha IVA">Fec.Iva</th>
         <th>Tip</th>
         <th>Nro.Comp.</th>
         @foreach ($columnas as $col)

@@ -3,14 +3,15 @@
 namespace App\Support\Ventas;
 
 /**
- * Descuento general (pie) en el asiento de factura.
+ * Neto de ventas en el asiento de factura.
  *
- * IVA y percepciones ya se calculan sobre el gravado neto. El asiento armaba
- * ventas con cantidad × precio de renglón (antes del pie) y no imputaba el
- * concepto "Descuento Gral.": deudores quedaba inflado.
+ * El IVA y las percepciones salen de los conceptos, ya calculados sobre el
+ * neto. Las líneas de venta se arman con cantidad × precio: en letra A eso
+ * es el bruto antes del descuento de pie; en letra B, el precio con IVA.
+ * En mostrador, pedido, picking y el resto de los facturadores el asiento
+ * de ventas tiene que sumar el neto fiscal (gravado + exento + no gravado).
  *
- * Imputación: netear las líneas de venta (prorrateo). No se abre cuenta de
- * descuento ni se toca IVA/IIBB.
+ * No se abre cuenta de descuento ni se toca IVA / IIBB.
  */
 final class FacturaAsientoDescuentoPieSupport
 {
@@ -56,8 +57,11 @@ final class FacturaAsientoDescuentoPieSupport
     }
 
     /**
-     * Reduce las líneas de venta ya armadas para que sumen el neto fiscal.
-     * Solo aplica con descuento de pie (concepto "Descuento…").
+     * Lleva las líneas de venta al neto fiscal de la factura.
+     *
+     * Vale con descuento de pie, con el gravado ya neto y sin concepto
+     * "Descuento", y con precio que incluye IVA (letra B). Si no hay neto
+     * fiscal, solo netea un descuento de pie explícito.
      *
      * @param  list<array<string, mixed>>  $lineasVenta
      * @param  list<array<string, mixed>>  $conceptosTotales
@@ -65,33 +69,34 @@ final class FacturaAsientoDescuentoPieSupport
      */
     public static function netearLineasVenta(array $lineasVenta, array $conceptosTotales): array
     {
-        $descuento = self::importeDesdeConceptos($conceptosTotales);
-        if ($descuento < 0.01) {
-            return $lineasVenta;
-        }
-
         $sumaVentas = 0.0;
         foreach ($lineasVenta as $linea) {
             $sumaVentas += (float) ($linea['monto'] ?? 0);
         }
         $sumaVentas = VentaImporteDosDecimalesSupport::redondear($sumaVentas);
-        if ($sumaVentas < 0.01) {
-            return $lineasVenta;
-        }
-
         $netoFiscal = self::netoVentaFiscal($conceptosTotales);
-        if ($netoFiscal < 0.01) {
-            $ajuste = min($descuento, $sumaVentas);
-        } else {
-            $ajuste = VentaImporteDosDecimalesSupport::redondear($sumaVentas - $netoFiscal);
+
+        if ($netoFiscal >= 0.01 && $sumaVentas >= 0.01) {
+            $diferencia = VentaImporteDosDecimalesSupport::redondear($sumaVentas - $netoFiscal);
+            if (abs($diferencia) < 0.02) {
+                return $lineasVenta;
+            }
+            if ($diferencia > 0) {
+                return self::prorratearQuitando($lineasVenta, min($diferencia, $sumaVentas));
+            }
+
+            return self::prorratearSumando(
+                $lineasVenta,
+                VentaImporteDosDecimalesSupport::redondear($netoFiscal - $sumaVentas)
+            );
         }
-        if ($ajuste < 0.01) {
+
+        $descuento = self::importeDesdeConceptos($conceptosTotales);
+        if ($descuento < 0.01 || $sumaVentas < 0.01) {
             return $lineasVenta;
         }
 
-        $ajuste = min($ajuste, $sumaVentas);
-
-        return self::prorratearQuitando($lineasVenta, $ajuste);
+        return self::prorratearQuitando($lineasVenta, min($descuento, $sumaVentas));
     }
 
     public static function esConceptoNetoVenta(string $nombre): bool
@@ -138,6 +143,42 @@ final class FacturaAsientoDescuentoPieSupport
             $quita = min($quita, $monto);
             $lineas[$i]['monto'] = VentaImporteDosDecimalesSupport::redondear($monto - $quita);
             $aplicado = VentaImporteDosDecimalesSupport::redondear($aplicado + $quita);
+        }
+
+        return $lineas;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private static function prorratearSumando(array $lineas, float $ajuste): array
+    {
+        $indices = [];
+        $base = 0.0;
+        foreach ($lineas as $i => $linea) {
+            $monto = (float) ($linea['monto'] ?? 0);
+            if ($monto < 0.01) {
+                continue;
+            }
+            $indices[] = $i;
+            $base += $monto;
+        }
+        if ($indices === [] || $base < 0.01 || $ajuste < 0.01) {
+            return $lineas;
+        }
+
+        $aplicado = 0.0;
+        $ultimo = count($indices) - 1;
+        foreach ($indices as $k => $i) {
+            $monto = (float) $lineas[$i]['monto'];
+            if ($k === $ultimo) {
+                $agrega = VentaImporteDosDecimalesSupport::redondear($ajuste - $aplicado);
+            } else {
+                $agrega = VentaImporteDosDecimalesSupport::redondear($ajuste * ($monto / $base));
+            }
+            $lineas[$i]['monto'] = VentaImporteDosDecimalesSupport::redondear($monto + $agrega);
+            $aplicado = VentaImporteDosDecimalesSupport::redondear($aplicado + $agrega);
         }
 
         return $lineas;

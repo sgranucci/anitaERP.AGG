@@ -97,4 +97,49 @@ class FacturaAsientoDescuentoPieSupportTest extends TestCase
 
         self::assertEqualsWithDelta(16441.66, $out[0]['monto'], 0.001);
     }
+
+    public function test_factura_b_sin_descuento_baja_el_precio_con_iva_al_gravado(): void
+    {
+        $lineas = [
+            ['empresa_id' => 1, 'cuentacontable_id' => 10, 'monto' => 99000.00],
+        ];
+        $conceptos = [
+            ['concepto' => 'Gravado al 21.000%', 'importe' => 81818.18],
+            ['concepto' => 'Iva 21.000%', 'importe' => 17181.82],
+        ];
+
+        $out = S::netearLineasVenta($lineas, $conceptos);
+
+        self::assertEqualsWithDelta(81818.18, $out[0]['monto'], 0.001);
+    }
+
+    public function test_grava_el_neto_aunque_no_haya_concepto_descuento(): void
+    {
+        $lineas = [
+            ['empresa_id' => 1, 'cuentacontable_id' => 10, 'monto' => 10860000.00],
+        ];
+        $conceptos = [
+            ['concepto' => 'Gravado al 21.000%', 'importe' => 9556800.00],
+            ['concepto' => 'Iva 21.000%', 'importe' => 2006928.00],
+        ];
+
+        $out = S::netearLineasVenta($lineas, $conceptos);
+
+        self::assertEqualsWithDelta(9556800.00, $out[0]['monto'], 0.001);
+    }
+
+    public function test_prorratea_factura_b_en_varias_cuentas(): void
+    {
+        $lineas = [
+            ['empresa_id' => 1, 'cuentacontable_id' => 10, 'monto' => 121.00],
+            ['empresa_id' => 1, 'cuentacontable_id' => 11, 'monto' => 121.00],
+        ];
+        $conceptos = [
+            ['concepto' => 'Gravado al 21.000%', 'importe' => 200.00],
+        ];
+
+        $out = S::netearLineasVenta($lineas, $conceptos);
+
+        self::assertEqualsWithDelta(200.00, $out[0]['monto'] + $out[1]['monto'], 0.001);
+    }
 }

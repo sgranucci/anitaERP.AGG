@@ -20,6 +20,7 @@ use App\Support\Caja\IngresoEgresoComprobanteIvaNumeracionSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Caja\IngresoEgresoGastoBancoSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
+use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
@@ -304,7 +305,10 @@ class IngresoEgresoComprobanteIvaService
     private function crearComprobante(array $payload, int $cajaMovimientoId, int $empresaId): Comprobante_Proveedor
     {
         $payload = $this->aplicarNumeracion($payload);
-        $cabecera = $this->armarCabecera($payload, $cajaMovimientoId, $empresaId);
+        $cabecera = $this->aplicarFechasCarga(
+            $this->armarCabecera($payload, $cajaMovimientoId, $empresaId),
+            null
+        );
         $this->assertUnicoComprobante($cabecera, null);
 
         $cabecera['creousuario_id'] = Auth::id();
@@ -324,7 +328,10 @@ class IngresoEgresoComprobanteIvaService
     private function actualizarComprobante(Comprobante_Proveedor $comprobante, array $payload, int $empresaId): void
     {
         $payload = $this->aplicarNumeracion($payload, $comprobante);
-        $cabecera = $this->armarCabecera($payload, (int) $comprobante->caja_movimiento_id, $empresaId);
+        $cabecera = $this->aplicarFechasCarga(
+            $this->armarCabecera($payload, (int) $comprobante->caja_movimiento_id, $empresaId),
+            $comprobante
+        );
         $this->assertUnicoComprobante($cabecera, (int) $comprobante->id);
         unset($cabecera['creousuario_id'], $cabecera['estado']);
 
@@ -436,6 +443,28 @@ class IngresoEgresoComprobanteIvaService
             'caja_movimiento_id' => $cajaMovimientoId,
             'leyenda' => $payload['leyenda'] ?? null,
         ];
+    }
+
+    /**
+     * Fecha de contabilización: nunca posterior a hoy. En edición el tope sube hasta la
+     * fecha del comprobante (y al primer día operable si la grabada está en período cerrado).
+     *
+     * @param  array<string, mixed>  $cabecera
+     * @return array<string, mixed>
+     */
+    private function aplicarFechasCarga(array $cabecera, ?Comprobante_Proveedor $existente): array
+    {
+        $cabecera['fechaiva'] = ComprobanteProveedorFechaContableSupport::resolverEnCarga(
+            $cabecera['fechaiva'] ?? null,
+            $existente,
+            $cabecera['fechacomprobante'] ?? null,
+        );
+        ComprobanteProveedorFechaContableSupport::assertFechasCargaCoherentes(
+            $cabecera['fechacomprobante'] ?? null,
+            $cabecera['fechaiva']
+        );
+
+        return $cabecera;
     }
 
     /**

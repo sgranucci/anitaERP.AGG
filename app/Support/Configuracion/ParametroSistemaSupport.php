@@ -3,7 +3,9 @@
 namespace App\Support\Configuracion;
 
 use App\Models\Caja\Cuentacaja;
+use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Configuracion\Parametro_Sistema;
+use App\Models\Contable\Cuentacontable;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
@@ -28,6 +30,10 @@ final class ParametroSistemaSupport
     public const CLAVE_OC_SOLICITANTE_EDITABLE = 'oc_solicitante_editable';
 
     public const CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD = 'recepcion_no_precargar_cantidad';
+
+    public const CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID = 'ndr_cheque_concepto_ivacompra_id';
+
+    public const CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID = 'ncp_pronto_pago_cuentacontable_id';
 
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
@@ -79,6 +85,20 @@ final class ParametroSistemaSupport
                 'ayuda' => 'Activo: al traer la orden de compra, la cantidad recibida arranca en blanco y hay que cargarla. Inactivo: se completa con el pendiente de la orden.',
                 'tipo' => 'boolean',
                 'orden' => 70,
+            ],
+            self::CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID => [
+                'grupo' => 'Caja / Cheques',
+                'etiqueta' => 'Concepto del débito por cheque rechazado',
+                'ayuda' => 'Concepto de IVA compra del débito interno al proveedor cuando se rechaza un cheque entregado. Tiene que ser uno que no retenga ganancias ni ingresos brutos. F1 o la lupa abren la consulta.',
+                'tipo' => 'concepto_ivacompra',
+                'orden' => 80,
+            ],
+            self::CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID => [
+                'grupo' => 'Caja / Cobranzas',
+                'etiqueta' => 'Cuenta del neto — NC por pronto pago',
+                'ayuda' => 'Cuenta imputable del neto de la nota de crédito que se emite al descontar en cobranza (NCP). El IVA sigue en la cuenta de IVA débito. En las otras empresas se usa el mismo código. F1 o la lupa abren la consulta.',
+                'tipo' => 'cuentacontable',
+                'orden' => 90,
             ],
         ];
 
@@ -184,6 +204,49 @@ final class ParametroSistemaSupport
     }
 
     /**
+     * Concepto de IVA compra del débito interno al proveedor por cheque rechazado.
+     * 0 = todavía no se eligió en Configuración general.
+     */
+    public static function ndrChequeConceptoIvacompraId(): int
+    {
+        return max(0, (int) (self::mapa()[self::CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID] ?? 0));
+    }
+
+    /**
+     * Cuenta configurada del neto de la NCP de cobranza (id del plan elegido).
+     * 0 = todavía no se eligió en Configuración general.
+     */
+    public static function ncpProntoPagoCuentacontableId(): int
+    {
+        return max(0, (int) (self::mapa()[self::CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID] ?? 0));
+    }
+
+    /**
+     * Esa cuenta en el plan de $empresaId. Si se eligió en otra empresa, busca el mismo código.
+     */
+    public static function ncpProntoPagoCuentaIdParaEmpresa(int $empresaId): int
+    {
+        $id = self::ncpProntoPagoCuentacontableId();
+        if ($id <= 0 || $empresaId <= 0) {
+            return 0;
+        }
+
+        $cuenta = Cuentacontable::query()->find($id);
+        if (! $cuenta) {
+            return 0;
+        }
+
+        if ((int) $cuenta->empresa_id === $empresaId) {
+            return (int) $cuenta->id;
+        }
+
+        return (int) (Cuentacontable::query()
+            ->where('empresa_id', $empresaId)
+            ->where('codigo', $cuenta->codigo)
+            ->value('id') ?? 0);
+    }
+
+    /**
      * Día de escalamiento de factura portal: "ultimo" | "1".."31".
      * Prioridad: Configuración general → config/.env.
      */
@@ -216,6 +279,12 @@ final class ParametroSistemaSupport
             if ($def['tipo'] === 'cuentacaja') {
                 $item['cuenta'] = self::cuentaParaFormulario((int) $valor);
             }
+            if ($def['tipo'] === 'concepto_ivacompra') {
+                $item['concepto'] = self::conceptoIvacompraParaFormulario((int) $valor);
+            }
+            if ($def['tipo'] === 'cuentacontable') {
+                $item['cuentacontable'] = self::cuentaContableParaFormulario((int) $valor);
+            }
             if ($def['tipo'] === 'select' && isset($def['opciones']) && is_array($def['opciones'])) {
                 $item['opciones'] = $def['opciones'];
             }
@@ -235,7 +304,7 @@ final class ParametroSistemaSupport
                 continue;
             }
             $valorRaw = $valores[$clave];
-            if ($def['tipo'] === 'cuentacaja') {
+            if ($def['tipo'] === 'cuentacaja' || $def['tipo'] === 'concepto_ivacompra' || $def['tipo'] === 'cuentacontable') {
                 $valor = (string) max(0, (int) $valorRaw);
                 if ($valor === '0') {
                     $valor = '';
@@ -317,6 +386,8 @@ final class ParametroSistemaSupport
             ),
             self::CLAVE_OC_SOLICITANTE_EDITABLE => EntornoEmpresaSupport::esElBierzo() ? '1' : '0',
             self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => '0',
+            self::CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID => '',
+            self::CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID => '',
             default => '0',
         };
     }
@@ -329,6 +400,35 @@ final class ParametroSistemaSupport
         $v = strtolower(trim((string) $valor));
 
         return in_array($v, ['1', 'true', 's', 'si', 'sí', 'yes', 'on'], true);
+    }
+
+    /**
+     * @return array{id:int, codigo:string, nombre:string}
+     */
+    public static function conceptoIvacompraParaFormulario(int $id): array
+    {
+        $concepto = $id > 0 ? Concepto_Ivacompra::query()->find($id) : null;
+
+        return [
+            'id' => (int) ($concepto->id ?? 0),
+            'codigo' => (string) ($concepto->codigo ?? ''),
+            'nombre' => (string) ($concepto->nombre ?? ''),
+        ];
+    }
+
+    /**
+     * @return array{id:int, codigo:string, nombre:string, empresa_id:int}
+     */
+    public static function cuentaContableParaFormulario(int $id): array
+    {
+        $cuenta = $id > 0 ? Cuentacontable::query()->find($id) : null;
+
+        return [
+            'id' => (int) ($cuenta->id ?? 0),
+            'codigo' => (string) ($cuenta->codigo ?? ''),
+            'nombre' => (string) ($cuenta->nombre ?? ''),
+            'empresa_id' => (int) ($cuenta->empresa_id ?? 0),
+        ];
     }
 
     /**

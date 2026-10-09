@@ -191,8 +191,8 @@
                                             Fuente ERP nativo: todos los asientos de <code>asiento</code> entran (incluye los importados de subdiario, nro. 5.xxx.xxx).
                                         </span>
                                         Con un m&oacute;dulo elegido se usa ese subdiario (V ventas, C compras, T caja;
-                                        cuentas a pagar = &oacute;rdenes de pago) m&aacute;s el ctamov de origen ERP;
-                                        totales por cuenta, sin tramo de saldo.
+                                        cuentas a pagar = &oacute;rdenes de pago) m&aacute;s el ctamov de origen ERP, sin saldo anterior.
+                                        Totales agrupa por cuenta; Movimientos muestra cada imputaci&oacute;n.
                                         La columna de centro de costo queda grabada como preferencia del usuario.
                                     </small>
                                 </div>
@@ -371,7 +371,16 @@
                     @if (empty($solo_totales_modulo))
                     <div class="px-3 pt-2 pb-1">
                         <h6 class="mb-0 font-weight-bold">Detalle de movimientos</h6>
-                        <small class="text-muted">Listado paginado por cuenta contable</small>
+                        @php
+                            $moduloDetalle = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::moduloMovimientos($filtros ?? []);
+                        @endphp
+                        <small class="text-muted">
+                            @if ($moduloDetalle !== '')
+                                Cada imputaci&oacute;n de {{ \App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaModuloFiltroSupport::etiqueta($moduloDetalle) }} en el per&iacute;odo, sin saldo anterior.
+                            @else
+                                Listado paginado por cuenta contable
+                            @endif
+                        </small>
                     </div>
 
                     <style>

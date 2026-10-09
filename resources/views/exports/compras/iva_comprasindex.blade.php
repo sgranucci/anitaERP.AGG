@@ -34,7 +34,7 @@
         <th>N.Pro.</th>
         <th>Proveedor</th>
         <th>CUIT</th>
-        <th>Fec.Mov.</th>
+        <th>Fec.Comp.</th>
         <th>Fec.Iva</th>
         <th>Tip</th>
         <th>Nro.Comp.</th>

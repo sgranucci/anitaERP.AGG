@@ -459,6 +459,71 @@
         $row.removeClass('table-warning');
     }
 
+    function hoyContabilizacionIe() {
+        return String($('#ie-cp-fecha-iva').attr('data-hoy') || $('#ie-cp-fecha-iva').attr('max') || '').slice(0, 10);
+    }
+
+    function aplicarTopeFechaIvaIe(fechaGuardada) {
+        var $iva = $('#ie-cp-fecha-iva');
+        if (arguments.length > 0) {
+            $iva.data('fecha-guardada', String(fechaGuardada || '').slice(0, 10));
+        }
+        var hoy = hoyContabilizacionIe();
+        var guardada = String($iva.data('fecha-guardada') || '').slice(0, 10);
+        var comp = String($('#ie-cp-fecha-comprobante').val() || '').slice(0, 10);
+        var minOp = String($iva.attr('data-min-operable') || '').slice(0, 10);
+        var tope = hoy;
+        if (guardada && hoy && guardada < hoy) {
+            tope = guardada;
+        }
+        if (comp && tope && comp > tope && (!hoy || comp <= hoy)) {
+            tope = comp;
+        }
+        if (minOp && tope && minOp > tope && (!hoy || minOp <= hoy)) {
+            tope = minOp;
+        }
+        if (tope) {
+            $iva.attr('max', tope);
+        }
+        acotarFechaComprobanteIe();
+    }
+
+    function acotarFechaComprobanteIe() {
+        var $comp = $('#ie-cp-fecha-comprobante');
+        var topeIva = String($('#ie-cp-fecha-iva').attr('max') || '').slice(0, 10);
+        if (topeIva) {
+            $comp.attr('max', topeIva);
+        }
+    }
+
+    function copiarFechaComprobanteAIvaSiSigue() {
+        aplicarTopeFechaIvaIe();
+        var $iva = $('#ie-cp-fecha-iva');
+        if (String($iva.data('seguir-comprobante') || '1') === '0') {
+            acotarFechaComprobanteIe();
+            return;
+        }
+        var comp = String($('#ie-cp-fecha-comprobante').val() || '').slice(0, 10);
+        var tope = String($iva.attr('max') || hoyContabilizacionIe()).slice(0, 10);
+        if (comp && tope && comp <= tope) {
+            $iva.val(comp);
+        }
+        acotarFechaComprobanteIe();
+    }
+
+    function mensajeFechasIe() {
+        var comp = String($('#ie-cp-fecha-comprobante').val() || '').slice(0, 10);
+        var iva = String($('#ie-cp-fecha-iva').val() || '').slice(0, 10);
+        var topeIva = String($('#ie-cp-fecha-iva').attr('max') || '').slice(0, 10);
+        if (iva && topeIva && iva > topeIva) {
+            return 'La fecha de contabilización no puede ser posterior al ' + topeIva.split('-').reverse().join('/') + '.';
+        }
+        if (comp && iva && comp > iva) {
+            return 'La fecha del comprobante no puede ser posterior a la fecha de contabilización.';
+        }
+        return '';
+    }
+
     function limpiarModal() {
         descartarDecisionPendiente();
         iaDecisionId = null;
@@ -475,8 +540,14 @@
         $('#ie-cp-proveedor-id, #ie-cp-proveedor-codigo, #ie-cp-proveedor-nombre').val('');
         $('#ie-cp-eventual-nombre, #ie-cp-eventual-documento').val('');
         $('#ie-cp-eventual-condicioniva').val('');
-        var hoy = new Date().toISOString().slice(0, 10);
+        var hoy = String($('#ie-cp-fecha-iva').attr('data-hoy') || '').slice(0, 10);
+        if (!hoy) {
+            hoy = new Date().toISOString().slice(0, 10);
+        }
+        $('#ie-cp-fecha-iva').data('fecha-guardada', '');
+        $('#ie-cp-fecha-iva').attr('max', hoy);
         $('#ie-cp-fecha-comprobante, #ie-cp-fecha-iva').val(hoy);
+        acotarFechaComprobanteIe();
         $('#ie-cp-preview-asiento').empty();
         $('#ie-cp-preview-total-debe, #ie-cp-preview-total-haber').text('0.00');
         $('#ie-cp-preview-error, #ie-cp-asiento-avisos').addClass('d-none').empty();
@@ -761,6 +832,7 @@
             $('#ie-cp-eventual-condicioniva').val(c.proveedor_condicioniva_id_eventual || '');
             $('#ie-cp-fecha-comprobante').val(c.fechacomprobante || '');
             $('#ie-cp-fecha-iva').val(c.fechaiva || '');
+            aplicarTopeFechaIvaIe(c.id ? (c.fechaiva || '') : '');
             $('#ie-cp-total').val(c.total || 0);
             $('#ie-cp-moneda-id').val(c.moneda_id || 1);
             $('#ie-cp-cae').val(c.numerocae || '');
@@ -1638,6 +1710,11 @@
 
     function confirmarComprobanteDesdeModal() {
         var payload = serializarModal();
+        var avisoFechas = mensajeFechasIe();
+        if (avisoFechas) {
+            alert(avisoFechas);
+            return;
+        }
         if (!payload.tipotransaccion_compra_id) {
             alert('Seleccione tipo de comprobante.');
             return;
@@ -1779,6 +1856,7 @@
             actualizarModoNumeracion();
             $('#ie-cp-fecha-comprobante').val((cab.fechacomprobante || '').slice(0, 10));
             $('#ie-cp-fecha-iva').val((cab.fechaiva || '').slice(0, 10));
+            aplicarTopeFechaIvaIe('');
             $('#ie-cp-fecha-iva').data(
                 'seguir-comprobante',
                 ($('#ie-cp-fecha-comprobante').val() || '') === ($('#ie-cp-fecha-iva').val() || '') ? '1' : '0'
@@ -1910,24 +1988,19 @@
                 marcarSucursalInvalida(false);
             }
             if (id === 'ie-cp-fecha-comprobante') {
-                var $iva = $('#ie-cp-fecha-iva');
-                if (String($iva.data('seguir-comprobante') || '1') !== '0') {
-                    $iva.val($('#ie-cp-fecha-comprobante').val());
-                }
+                copiarFechaComprobanteAIvaSiSigue();
             }
             focoCampoIe(siguiente[id]);
         }, true);
 
         $('#ie-cp-fecha-comprobante').on('change', function () {
-            var $iva = $('#ie-cp-fecha-iva');
-            if (String($iva.data('seguir-comprobante') || '1') !== '0') {
-                $iva.val($(this).val());
-            }
+            copiarFechaComprobanteAIvaSiSigue();
         });
 
         $('#ie-cp-fecha-iva').on('input change', function () {
             var comp = $('#ie-cp-fecha-comprobante').val() || '';
             $(this).data('seguir-comprobante', ($(this).val() || '') === comp ? '1' : '0');
+            acotarFechaComprobanteIe();
         });
 
         $(document).on('click', '.ie-del-comprobante', function () {

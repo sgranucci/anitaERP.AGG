@@ -16,11 +16,6 @@ use Illuminate\Support\Facades\DB;
 
 final class IvaVentasConciliacionContableService
 {
-    public function __construct(
-        private readonly IvaVentasCtamovAuditoriaService $ctamovAuditoriaService,
-    ) {
-    }
-
     /**
      * @param  array<string, mixed>  $filtros
      * @param  array<string, mixed>  $resultadoIva
@@ -43,9 +38,7 @@ final class IvaVentasConciliacionContableService
             $filas,
         ))));
 
-        $ctamov = ! empty($filtros['auditar_ctamov'])
-            ? $this->ctamovAuditoriaService->auditar($empresaId, $filtros)
-            : ['habilitada' => false];
+        $ctamov = ['habilitada' => false];
 
         $statsAsiento = $this->statsAsientoPorVenta($ventaIds);
         $contableEmpresa = $this->totalesContablesEmpresa($empresaId, $filtros, $cuentas);
@@ -89,7 +82,7 @@ final class IvaVentasConciliacionContableService
             'auditoria_diaria' => $auditoriaDiaria,
             'auditoria_diaria_unidad' => $auditoriaDiariaUnidad,
             'ctamov' => $ctamov,
-            'notas' => $this->notasConciliacion($statsAsiento, count($filas), $porFactura, $ctamov),
+            'notas' => $this->notasConciliacion($statsAsiento, count($filas), $porFactura),
         ];
     }
 
@@ -915,7 +908,10 @@ final class IvaVentasConciliacionContableService
                     || abs((float) ($contableEmpresa['ventas_kiosco'] ?? 0)) > 0.009,
             ];
         } else {
-            $erpAlimentos = (float) ($erpRubro['alimentos'] ?? (float) ($totalesErp['neto_gravado'] ?? 0));
+            $erpAlimentos = round(
+                (float) ($totalesErp['neto_gravado'] ?? 0) + (float) ($totalesErp['exento'] ?? 0),
+                2
+            );
             $lineas = [
                 [
                     'concepto' => 'Ventas gravadas (neto + exento, sin desglose por unidad)',
@@ -1404,6 +1400,7 @@ final class IvaVentasConciliacionContableService
                 'venta_id' => $ventaId,
                 'asiento_id' => (int) ($asientoPorVenta[$ventaId] ?? 0),
                 'comprobante' => (string) ($fila['comprobante'] ?? ''),
+                'tipo' => (string) ($fila['tipo'] ?? ''),
                 'fecha_mov' => (string) ($fila['fecha_mov'] ?? ''),
                 'cliente_nombre' => (string) ($fila['cliente_nombre'] ?? ''),
                 'puntoventa_codigo' => (string) ($fila['puntoventa_codigo'] ?? ''),
@@ -1444,10 +1441,9 @@ final class IvaVentasConciliacionContableService
     /**
      * @param  array<string, mixed>  $statsAsiento
      * @param  array<string, mixed>  $porFactura
-     * @param  array<string, mixed>  $ctamov
      * @return list<string>
      */
-    private function notasConciliacion(array $statsAsiento, int $totalComprobantes, array $porFactura, array $ctamov = ['habilitada' => false]): array
+    private function notasConciliacion(array $statsAsiento, int $totalComprobantes, array $porFactura): array
     {
         $notas = [
             'Cuadre general: mayor contable del período (incluye cierres de jornada agrupados y facturas con asiento).',
@@ -1456,13 +1452,6 @@ final class IvaVentasConciliacionContableService
             'Cuentas cierre jornada: tabla gastronomia_cierre_jornada_config (Caja → cierre jornada Waitry / proceso).',
             'Cuentas configurables del reporte: config/iva_ventas.php (ventas + IVA débito/crédito por empresa).',
         ];
-
-        if (! empty($ctamov['habilitada'])) {
-            $notas[] = 'ctamov (Anita): '.(int) ($ctamov['lineas'] ?? 0).' línea(s) leídas del bridge para las cuentas configuradas (ventas por haber, IVA crédito netea).';
-            foreach ($ctamov['errores'] ?? [] as $error) {
-                $notas[] = 'ctamov: '.$error;
-            }
-        }
 
         $sinAsiento = (int) ($statsAsiento['sin_asiento'] ?? 0);
         if ($totalComprobantes > 0 && $sinAsiento >= $totalComprobantes) {

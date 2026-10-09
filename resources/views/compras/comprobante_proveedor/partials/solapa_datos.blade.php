@@ -336,43 +336,55 @@
             <label for="fechacomprobante" class="{{ $cpColLabel }} requerido">Fecha comprobante</label>
             <div class="col-lg-5">
                 @php
-                    $fechaCompMax = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaComprobanteMaximaYmd();
-                    $diasCompMax = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::maxDiasFuturoComprobante();
+                    $fechaCompValor = old(
+                        'fechacomprobante',
+                        $data->fechacomprobante instanceof \DateTimeInterface
+                            ? $data->fechacomprobante->format('Y-m-d')
+                            : ($data->fechacomprobante ?? date('Y-m-d'))
+                    );
+                    $fechaIvaGuardada = ($esEdicion ?? false)
+                        ? \App\Support\Compras\ComprobanteProveedorFechaContableSupport::formatear($data->fechaiva ?? null)
+                        : '';
+                    $fechaIvaMinOperable = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaMinimaOperable(
+                        (int) ($data->empresa_id ?? 0)
+                    );
+                    $fechaIvaTope = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaTopeEnCarga(
+                        ($esEdicion ?? false) ? $data : null,
+                        $fechaCompValor
+                    );
+                    $fechaIvaMin = $fechaIvaMinOperable;
+                    if ($fechaIvaMin !== null && $fechaIvaMin > $fechaIvaTope) {
+                        $fechaIvaMin = null;
+                    }
+                    $fechaIvaModelo = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::formatear($data->fechaiva ?? null);
+                    $fechaIvaValor = old('fechaiva', $fechaIvaModelo ?: $fechaIvaTope);
+                    $fechaHoyCarga = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaCargaHoy();
+                    $fechaIvaTopeTxt = \Carbon\Carbon::parse($fechaIvaTope)->format('d/m/Y');
+                    $fechaIvaCierreTxt = $fechaIvaMin
+                        ? \Carbon\Carbon::parse($fechaIvaMin)->subDay()->format('d/m/Y')
+                        : '';
                 @endphp
                 <input type="date" name="fechacomprobante" id="fechacomprobante" class="form-control"
-                    max="{{ $fechaCompMax }}"
-                    value="{{ old('fechacomprobante', $data->fechacomprobante instanceof \DateTimeInterface ? $data->fechacomprobante->format('Y-m-d') : ($data->fechacomprobante ?? date('Y-m-d'))) }}" required>
+                    max="{{ $fechaIvaTope }}"
+                    value="{{ $fechaCompValor }}" required>
                 <small class="form-text text-muted">
-                    Fecha impresa de la factura (libro IVA). No puede ser m&aacute;s de {{ $diasCompMax }} d&iacute;as a futuro.
+                    Fecha impresa de la factura. No puede ser posterior a la fecha de contabilizaci&oacute;n.
                 </small>
             </div>
         </div>
         <div class="form-group row">
             <label for="fechaiva" class="{{ $cpColLabel }} requerido">Fecha IVA / contabilizaci&oacute;n</label>
             <div class="col-lg-5">
-                @php
-                    $fechaIvaTope = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaTopeEnCarga(
-                        ($esEdicion ?? false) ? $data : null
-                    );
-                    $fechaIvaMin = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaMinimaOperable(
-                        (int) ($data->empresa_id ?? 0)
-                    );
-                    if ($fechaIvaMin !== null && $fechaIvaMin > $fechaIvaTope) {
-                        $fechaIvaMin = null;
-                    }
-                    $fechaIvaValor = old('fechaiva', $fechaIvaTope);
-                    $fechaIvaTopeTxt = \Carbon\Carbon::parse($fechaIvaTope)->format('d/m/Y');
-                    $fechaIvaCierreTxt = $fechaIvaMin
-                        ? \Carbon\Carbon::parse($fechaIvaMin)->subDay()->format('d/m/Y')
-                        : '';
-                @endphp
                 <input type="date" name="fechaiva" id="fechaiva" class="form-control" required
                     max="{{ $fechaIvaTope }}"
                     @if ($fechaIvaMin) min="{{ $fechaIvaMin }}" @endif
+                    data-hoy="{{ $fechaHoyCarga }}"
+                    data-fecha-guardada="{{ $fechaIvaGuardada }}"
+                    data-min-operable="{{ $fechaIvaMinOperable }}"
                     value="{{ $fechaIvaValor }}">
                 <small class="form-text text-muted">
                     Entra al asiento, al per&iacute;odo y al libro IVA compras.
-                    Se puede correr hacia atr&aacute;s, nunca despu&eacute;s del {{ $fechaIvaTopeTxt }}.
+                    Se puede correr hacia atr&aacute;s. Si qued&oacute; antes que la fecha del comprobante, o en un per&iacute;odo cerrado, se puede adelantar hasta el {{ $fechaIvaTopeTxt }}.
                     @if ($fechaIvaCierreTxt !== '')
                         Cuentas a pagar est&aacute; cerrado hasta el {{ $fechaIvaCierreTxt }}.
                     @endif

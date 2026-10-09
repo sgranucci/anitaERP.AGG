@@ -6,10 +6,12 @@ namespace App\Support\Ventas\IvaVentas;
 
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\IvaVentasListadoFiltros;
+use App\Support\Ventas\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Detecta saltos de numeración de comprobantes por punto de venta y tipo de transacción.
+ * Detecta saltos de numeración por punto de venta, letra y familia fiscal
+ * (factura, nota de crédito, nota de débito). La A y la B no comparten serie.
  */
 final class IvaVentasAuditoriaCorrelatividadSupport
 {
@@ -29,18 +31,22 @@ final class IvaVentasAuditoriaCorrelatividadSupport
             $pvId = (int) ($fila['puntoventa_id'] ?? 0);
             $tipoId = (int) ($fila['tipotransaccion_id'] ?? 0);
             $numero = (int) ($fila['numerocomprobante'] ?? 0);
-            if ($pvId <= 0 || $tipoId <= 0 || $numero <= 0) {
+            $letra = strtoupper(trim((string) ($fila['letra'] ?? '')));
+            $familia = self::familia((string) ($fila['tipo'] ?? ''));
+            if ($pvId <= 0 || $tipoId <= 0 || $numero <= 0 || $familia === '') {
                 continue;
             }
 
-            $clave = $pvId.'|'.$tipoId;
+            $clave = $pvId.'|'.$familia.'|'.$letra;
             if (! isset($grupos[$clave])) {
                 $grupos[$clave] = [
                     'puntoventa_id' => $pvId,
                     'puntoventa_codigo' => (string) ($fila['puntoventa_codigo'] ?? ''),
                     'puntoventa_nombre' => (string) ($fila['puntoventa_nombre'] ?? ''),
                     'tipotransaccion_id' => $tipoId,
-                    'tipo' => (string) ($fila['tipo'] ?? ''),
+                    'tipo' => trim($familia.($letra !== '' ? ' '.$letra : '')),
+                    'familia' => $familia,
+                    'letra' => $letra,
                     'seccion_label' => (string) ($fila['seccion_label'] ?? ''),
                     'numeros' => [],
                     'numeros_map' => [],
@@ -108,7 +114,8 @@ final class IvaVentasAuditoriaCorrelatividadSupport
             sort($faltantesEnPeriodo, SORT_NUMERIC);
             $fueraPeriodo = self::numerosExistentesFueraPeriodo(
                 (int) $grupo['puntoventa_id'],
-                (int) $grupo['tipotransaccion_id'],
+                (string) $grupo['familia'],
+                (string) $grupo['letra'],
                 $faltantesEnPeriodo,
                 $filtros,
             );
@@ -155,46 +162,82 @@ final class IvaVentasAuditoriaCorrelatividadSupport
     }
 
     /**
+     * Factura A y factura B son series distintas. NCD y NCP (y las ND) comparten
+     * la numeración fiscal del punto de venta y la letra.
+     */
+    private static function familia(string $abreviatura): string
+    {
+        $abreviatura = strtoupper(trim($abreviatura));
+        if (str_starts_with($abreviatura, 'NC')) {
+            return 'NC';
+        }
+        if (str_starts_with($abreviatura, 'ND')) {
+            return 'ND';
+        }
+
+        return $abreviatura;
+    }
+
+    /**
      * @param  list<int>  $numeros
      * @param  array<string, mixed>  $filtros
      * @return array<int, string>
      */
-    private static function numerosExistentesFueraPeriodo(int $puntoventaId, int $tipotransaccionId, array $numeros, array $filtros): array
+    private static function numerosExistentesFueraPeriodo(int $puntoventaId, string $familia, string $letra, array $numeros, array $filtros): array
     {
-        if ($numeros === []) {
+        if ($numeros === [] || $familia === '') {
             return [];
         }
 
         $campoFecha = ($filtros['orden_fecha'] ?? IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA) === IvaVentasListadoFiltros::ORDEN_FECHA
-            ? 'fecha'
-            : 'fechajornada';
+            ? 'venta.fecha'
+            : 'venta.fechajornada';
         $desde = (string) ($filtros['fecha_desde'] ?? '');
         $hasta = (string) ($filtros['fecha_hasta'] ?? '');
+        $letra = strtoupper(trim($letra));
 
         $out = [];
         foreach (array_chunk($numeros, 500) as $chunk) {
-            $rows = Venta::query()
-                ->where('puntoventa_id', $puntoventaId)
-                ->where('tipotransaccion_id', $tipotransaccionId)
-                ->whereIn('numerocomprobante', $chunk)
+            $query = Venta::query()
+                ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
+                ->where('venta.puntoventa_id', $puntoventaId)
+                ->whereIn('venta.numerocomprobante', $chunk)
                 ->where(function (Builder $q) use ($campoFecha, $desde, $hasta) {
                     $q->whereDate($campoFecha, '<', $desde)
                         ->orWhereDate($campoFecha, '>', $hasta);
-                })
-                ->select(['numerocomprobante', $campoFecha])
-                ->get();
+                });
+            self::aplicarFamilia($query, $familia);
+            if ($letra !== '') {
+                $query->where('venta.codigo', 'like', $familia.'% '.$letra.'-%');
+            }
+
+            $rows = $query->get(['venta.numerocomprobante', 'venta.codigo', $campoFecha.' as fecha_corr']);
 
             foreach ($rows as $row) {
                 $num = (int) ($row->numerocomprobante ?? 0);
                 if ($num <= 0) {
                     continue;
                 }
-                $fecha = (string) ($row->{$campoFecha} ?? '');
+                if ($letra !== '' && LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $row->codigo) !== $letra) {
+                    continue;
+                }
+                $fecha = (string) ($row->fecha_corr ?? '');
                 $out[$num] = $fecha !== '' ? date('d/m/Y', strtotime($fecha)) : '—';
             }
         }
 
         return $out;
+    }
+
+    private static function aplicarFamilia(Builder $query, string $familia): void
+    {
+        if ($familia === 'NC' || $familia === 'ND') {
+            $query->where('tt.abreviatura', 'like', $familia.'%');
+
+            return;
+        }
+
+        $query->where('tt.abreviatura', $familia);
     }
 
     /**

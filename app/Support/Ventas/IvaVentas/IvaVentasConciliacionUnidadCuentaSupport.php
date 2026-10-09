@@ -214,7 +214,19 @@ final class IvaVentasConciliacionUnidadCuentaSupport
             })->orWhere(function ($q2) use ($fechaDesde, $fechaHasta) {
                 $q2->whereNotNull('a.venta_id')
                     ->whereDate('v.fechajornada', '>=', $fechaDesde)
-                    ->whereDate('v.fechajornada', '<=', $fechaHasta);
+                    ->whereDate('v.fechajornada', '<=', $fechaHasta)
+                    ->whereExists(function ($ex) {
+                        $ex->selectRaw('1')
+                            ->from('venta as vv')
+                            ->join('puntoventa as pv', 'pv.id', '=', 'vv.puntoventa_id')
+                            ->join('tipotransaccion as tt', 'tt.id', '=', 'vv.tipotransaccion_id')
+                            ->whereColumn('vv.id', 'a.venta_id')
+                            ->whereColumn('pv.empresa_id', 'a.empresa_id')
+                            ->where('pv.iva_ventas', 1)
+                            ->where('tt.iva_ventas', 1)
+                            ->where('tt.abreviatura', '<>', 'PRE')
+                            ->where('vv.nombre', 'not like', 'ANULADA%');
+                    });
             })->orWhere(function ($q2) use ($fechaDesde, $fechaHasta, $estPat, $vendPat, $fechaCierreRendicion) {
                 $q2->whereNull('a.venta_id')
                     ->where(function ($q3) use ($estPat, $vendPat) {
@@ -225,6 +237,7 @@ final class IvaVentasConciliacionUnidadCuentaSupport
             })->orWhere(function ($q2) use ($fechaDesde, $fechaHasta) {
                 $q2->whereNull('a.venta_id')
                     ->where('a.observacion', 'not like', '%jornada%')
+                    ->where('a.observacion', 'not like', '[SUBD]%')
                     ->where('a.observacion', 'not like', CierreRendicionEstacionamientoAsientoSupport::DESCRIPCION_ASIENTO.'%')
                     ->where('a.observacion', 'not like', CierreRendicionMaquinavendingAsientoSupport::DESCRIPCION_ASIENTO.'%')
                     ->whereDate('a.fecha', '>=', $fechaDesde)

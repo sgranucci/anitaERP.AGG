@@ -99,10 +99,12 @@
     }
 
     function avisar(msg) {
-        var $modal = $('#consultacuentacajaModal');
-        if ($modal.hasClass('show')) {
-            $modal.modal('hide');
-        }
+        ['#consultacuentacajaModal', '#consultaconcepto_ivacompraModal'].forEach(function (sel) {
+            var $modal = $(sel);
+            if ($modal.hasClass('show')) {
+                $modal.modal('hide');
+            }
+        });
         setTimeout(function () {
             alert(msg);
         }, 0);
@@ -257,5 +259,225 @@
 
     $('#consultacuentacajaModal').on('hidden.bs.modal', function () {
         modalAbriendo = false;
+    });
+
+    var modalConceptoAbriendo = false;
+
+    function contenedorConcepto() {
+        return document.getElementById('tm_concepto_ivacompra_ndr_cheque');
+    }
+
+    function modalConceptoAbierto() {
+        var modal = document.getElementById('consultaconcepto_ivacompraModal');
+        return modalConceptoAbriendo || (modal && modal.classList.contains('show'));
+    }
+
+    function limpiarConcepto() {
+        var cont = contenedorConcepto();
+        if (!cont) {
+            return;
+        }
+        var hidden = cont.querySelector('.concepto_ivacompra_id');
+        var codigo = cont.querySelector('.codigo_concepto_ivacompra');
+        var nombre = cont.querySelector('.nombre_concepto_ivacompra');
+        if (hidden) {
+            hidden.value = '';
+        }
+        if (codigo) {
+            codigo.value = '';
+            codigo.removeAttribute('data-concepto-invalido');
+        }
+        if (nombre) {
+            nombre.value = '';
+        }
+    }
+
+    function asignarConcepto(data) {
+        var cont = contenedorConcepto();
+        if (!cont || !data || !data.id) {
+            return;
+        }
+        if (data.sin_retencion === false) {
+            limpiarConcepto();
+            avisar('Ese concepto retiene ganancias o ingresos brutos. Elegí uno que no retenga.');
+            return;
+        }
+        cont.querySelector('.concepto_ivacompra_id').value = data.id;
+        var codigo = cont.querySelector('.codigo_concepto_ivacompra');
+        codigo.value = data.codigo || '';
+        codigo.removeAttribute('data-concepto-invalido');
+        codigo.setAttribute('data-codigo-resuelto', data.codigo || '');
+        cont.querySelector('.nombre_concepto_ivacompra').value = data.nombre || '';
+    }
+
+    function buscarConceptoCatalogo(consulta) {
+        $.ajax({
+            url: resolverCarpetaBase() + '/compras/concepto_ivacompra/consulta',
+            type: 'POST',
+            dataType: 'json',
+            headers: {
+                'X-CSRF-TOKEN': csrfToken(),
+            },
+            data: {
+                catalogo: 1,
+                consulta: consulta || '',
+            },
+        })
+            .done(function (respuesta) {
+                var html = parseConsultaResponse(respuesta);
+                $('#datosconcepto_ivacompra').html(html || '<tr><td colspan="5" class="text-muted">Sin resultados</td></tr>');
+            })
+            .fail(function () {
+                $('#datosconcepto_ivacompra').html('<tr><td colspan="5" class="text-danger">Error al buscar conceptos.</td></tr>');
+            });
+    }
+
+    function abrirModalConcepto() {
+        if (!contenedorConcepto()) {
+            return;
+        }
+        modalConceptoAbriendo = true;
+        $('#consultaconcepto_ivacompra').val('');
+        $('#consultaconcepto_ivacompra-aviso').text('Catálogo completo. El concepto no puede retener.');
+        $('#datosconcepto_ivacompra').html('');
+        $('#consultaconcepto_ivacompraModal').one('shown.bs.modal.cfgGralConcepto', function () {
+            modalConceptoAbriendo = false;
+            $(this).find('#consultaconcepto_ivacompra').trigger('focus');
+            buscarConceptoCatalogo('');
+        });
+        $('#consultaconcepto_ivacompraModal').modal('show');
+    }
+
+    function resolverConceptoPorCodigo(alertar) {
+        var cont = contenedorConcepto();
+        if (!cont || modalConceptoAbierto()) {
+            return;
+        }
+        var $codigo = $(cont).find('.codigo_concepto_ivacompra');
+        var codigo = String($codigo.val() || '').trim();
+        if (!codigo) {
+            limpiarConcepto();
+            return;
+        }
+        if ($codigo.attr('data-concepto-invalido') === codigo) {
+            return;
+        }
+        if ($codigo.attr('data-codigo-resuelto') === codigo && parseInt(String($(cont).find('.concepto_ivacompra_id').val() || '0'), 10) > 0) {
+            return;
+        }
+
+        $.ajax({
+            url: resolverCarpetaBase() + '/compras/concepto_ivacompra/resolver',
+            type: 'POST',
+            dataType: 'json',
+            headers: {
+                'X-CSRF-TOKEN': csrfToken(),
+            },
+            data: {
+                catalogo: 1,
+                valor: codigo,
+            },
+        })
+            .done(function (data) {
+                if (data && data.ok && data.id > 0) {
+                    asignarConcepto(data);
+                    return;
+                }
+                $codigo.attr('data-concepto-invalido', codigo);
+                if (alertar) {
+                    avisar((data && data.mensaje) ? data.mensaje : 'No se encontró el concepto.');
+                    $codigo.trigger('focus');
+                }
+            })
+            .fail(function (xhr) {
+                $codigo.attr('data-concepto-invalido', codigo);
+                if (alertar) {
+                    var msg = 'No se encontró el concepto.';
+                    if (xhr && xhr.responseJSON && xhr.responseJSON.mensaje) {
+                        msg = xhr.responseJSON.mensaje;
+                    }
+                    avisar(msg);
+                    $codigo.trigger('focus');
+                }
+            });
+    }
+
+    $(document).on('click', '#tm_concepto_ivacompra_ndr_cheque .consultaconcepto-ndr-cheque', function (e) {
+        e.preventDefault();
+        abrirModalConcepto();
+    });
+
+    $(document).on('keydown', '#tm_concepto_ivacompra_ndr_cheque .codigo_concepto_ivacompra', function (e) {
+        if (e.key === 'F1' || e.keyCode === 112) {
+            e.preventDefault();
+            abrirModalConcepto();
+            return;
+        }
+        if (e.keyCode === 13) {
+            e.preventDefault();
+            resolverConceptoPorCodigo(true);
+        }
+    });
+
+    $(document).on('blur', '#tm_concepto_ivacompra_ndr_cheque .codigo_concepto_ivacompra', function () {
+        resolverConceptoPorCodigo(false);
+    });
+
+    $(document).on('input', '#tm_concepto_ivacompra_ndr_cheque .codigo_concepto_ivacompra', function () {
+        $(this).removeAttr('data-concepto-invalido');
+        $(this).removeAttr('data-codigo-resuelto');
+    });
+
+    $(document).on('keyup', '#consultaconcepto_ivacompra', function () {
+        if (!contenedorConcepto() || !modalConceptoAbierto()) {
+            return;
+        }
+        buscarConceptoCatalogo($(this).val());
+    });
+
+    $(document).on('keydown', '#consultaconcepto_ivacompra', function (e) {
+        if (!contenedorConcepto() || e.keyCode !== 13) {
+            return;
+        }
+        e.preventDefault();
+        var $primera = $('#datosconcepto_ivacompra .eligeconsultaconcepto_ivacompra').first();
+        if ($primera.length) {
+            $primera.trigger('click');
+        }
+    });
+
+    $(document).on('click', '#datosconcepto_ivacompra .eligeconsultaconcepto_ivacompra', function () {
+        if (!contenedorConcepto()) {
+            return;
+        }
+        var tr = $(this).closest('tr');
+        var id = parseInt(String(tr.find('.concepto_ivacompra_id_celda').text() || '0'), 10);
+        var codigo = tr.find('.codigo').text().trim();
+        if (!id || !codigo) {
+            return;
+        }
+        $.ajax({
+            url: resolverCarpetaBase() + '/compras/concepto_ivacompra/resolver',
+            type: 'POST',
+            dataType: 'json',
+            headers: {
+                'X-CSRF-TOKEN': csrfToken(),
+            },
+            data: {
+                catalogo: 1,
+                valor: codigo,
+            },
+        }).done(function (data) {
+            if (data && data.ok) {
+                asignarConcepto(data);
+                if (data.sin_retencion !== false) {
+                    $('#consultaconcepto_ivacompraModal').modal('hide');
+                }
+            }
+        });
+    });
+
+    $('#consultaconcepto_ivacompraModal').on('hidden.bs.modal', function () {
+        modalConceptoAbriendo = false;
     });
 })();

@@ -5,7 +5,13 @@ namespace App\Repositories\Compras;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
+use App\Support\Compras\ComprobanteProveedorListadoColumnas;
 use App\Support\Compras\ComprobanteProveedorListadoFiltros;
+use App\Support\Database\SqlDialectSupport;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoCortesSupport;
+use Illuminate\Database\Eloquent\Builder;
 
 class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepositoryInterface
 {
@@ -74,12 +80,77 @@ class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepository
             $filtros = ComprobanteProveedorListadoFiltros::filtrosVacios();
         }
 
+        $query = $this->queryListado($filtros);
+
+        $perPage = (int) ($filtros['_per_page'] ?? 10);
+        if ($perPage < 1) {
+            $perPage = 10;
+        }
+
+        return $paginar ? $query->paginate($perPage) : $query->get();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesComprobanteProveedor(array $filtros): array
+    {
+        $campos = ComprobanteProveedorListadoFiltros::camposOrdenables();
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ComprobanteProveedorListadoColumnas::RECURSO,
+            ComprobanteProveedorListadoColumnas::catalogoActivo()
+        );
+
+        return ListadoCortesSupport::calcular(
+            $this->queryListado($filtros),
+            $agrupar,
+            $campos,
+            'comprobante_proveedor.id',
+            static fn (object $row, string $key): string => ComprobanteProveedorListadoColumnas::valorCelda($row, $key),
+            static fn (string $key): ?array => ComprobanteProveedorListadoColumnas::sqlAgrupacion($key),
+            $etiquetas,
+            [[
+                'key' => 'total',
+                'column' => 'comprobante_proveedor.total',
+                'label' => 'Total',
+            ]]
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return Builder<Comprobante_Proveedor>
+     */
+    private function queryListado(array $filtros): Builder
+    {
+        $nombreProveedor = SqlDialectSupport::coalesce(
+            'proveedor.nombre',
+            'comprobante_proveedor.proveedor_nombre_eventual'
+        );
+
         $query = $this->model->newQuery()
             ->select('comprobante_proveedor.*')
             ->leftJoin('empresa', 'empresa.id', '=', 'comprobante_proveedor.empresa_id')
             ->leftJoin('proveedor', 'proveedor.id', '=', 'comprobante_proveedor.proveedor_id')
             ->leftJoin('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'comprobante_proveedor.tipotransaccion_compra_id')
             ->leftJoin('ordencompra', 'ordencompra.id', '=', 'comprobante_proveedor.ordencompra_id')
+            ->leftJoin('moneda', 'moneda.id', '=', 'comprobante_proveedor.moneda_id')
+            ->leftJoin('caja_movimiento', 'caja_movimiento.id', '=', 'comprobante_proveedor.caja_movimiento_id')
+            ->leftJoin('tipotransaccion_caja', 'tipotransaccion_caja.id', '=', 'caja_movimiento.tipotransaccion_caja_id')
+            ->leftJoin('asiento', 'asiento.id', '=', 'comprobante_proveedor.asiento_id')
+            ->addSelect([
+                'empresa.nombre as nombreempresa',
+                'tipotransaccion_compra.abreviatura as abreviatura_tipo',
+                'tipotransaccion_compra.nombre as nombre_tipo',
+                'ordencompra.numeroordencompra as numero_oc',
+                'moneda.abreviatura as moneda_abreviatura',
+                'caja_movimiento.numerotransaccion as numero_ie',
+                'tipotransaccion_caja.abreviatura as abreviatura_ie',
+                'asiento.numeroasiento as numeroasiento_listado',
+            ])
+            ->selectRaw($nombreProveedor.' as nombre_proveedor_listado')
             ->with([
                 'empresas',
                 'proveedores',
@@ -92,16 +163,12 @@ class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepository
                             ComprobanteProveedorArchivoTipos::FACTURA,
                         ]);
                 },
-            ])
-            // Más nuevo a más viejo por fecha de contabilización (IVA). El histórico
-            // Anita tiene ids altos y fechas viejas, así que el id solo desempata.
-            ->orderByDesc('comprobante_proveedor.fechaiva')
-            ->orderByDesc('comprobante_proveedor.id');
+            ]);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'comprobante_proveedor.empresa_id');
-
         ComprobanteProveedorListadoFiltros::aplicar($query, $filtros);
+        ComprobanteProveedorListadoFiltros::aplicarOrden($query, $filtros);
 
-        return $paginar ? $query->paginate(10) : $query->get();
+        return $query;
     }
 }

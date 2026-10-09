@@ -3507,6 +3507,11 @@ Route::get('caja/movimientocaja', 'Caja\MovimientoCajaController@index')->name('
 
 Route::get('caja/ingresoegreso', 'Caja\IngresoEgresoController@index')->name('ingresoegreso');
 Route::get('caja/ingresoegreso/crear/{caja?}', 'Caja\IngresoEgresoController@crear')->name('crear_ingresoegreso');
+Route::post('caja/ingresoegreso/workbench/preview', 'Caja\IngresoEgresoController@previewWorkbench')->name('preview_workbench_ingresoegreso');
+Route::post('caja/ingresoegreso/workbench/vista', 'Caja\IngresoEgresoController@guardarVistaListado')->name('guardar_vista_listado_ingresoegreso');
+Route::delete('caja/ingresoegreso/workbench/vista/{id}', 'Caja\IngresoEgresoController@eliminarVistaListado')->name('eliminar_vista_listado_ingresoegreso')->whereNumber('id');
+Route::post('caja/ingresoegreso/workbench/columnas', 'Caja\IngresoEgresoController@guardarColumnasListado')->name('guardar_columnas_listado_ingresoegreso');
+Route::post('caja/ingresoegreso/workbench/etiquetas', 'Caja\IngresoEgresoController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_ingresoegreso');
 Route::post('caja/ingresoegreso', 'Caja\IngresoEgresoController@guardar')->name('guardar_ingresoegreso');
 Route::get('caja/ingresoegreso/{id}/imprimir-pdf', 'Caja\IngresoEgresoController@imprimir')->name('imprimir_ingresoegreso');
 Route::get('caja/ingresoegreso/{id}/{origen?}/editar', 'Caja\IngresoEgresoController@editar')->name('editar_ingresoegreso');
@@ -3729,6 +3734,7 @@ Route::delete('compras/concepto_ivacompra/{id}', 'Compras\Concepto_IvacompraCont
  */
 
 Route::get('compras/tipotransaccion_compra', 'Compras\Tipotransaccion_CompraController@index')->name('tipotransaccion_compra');
+Route::get('compras/lista-tipotransaccion-compra/{formato?}/{busqueda?}', 'Compras\Tipotransaccion_CompraController@listar')->name('lista_tipotransaccion_compra');
 Route::get('compras/tipotransaccion_compra/crear', 'Compras\Tipotransaccion_CompraController@crear')->name('crear_tipotransaccion_compra');
 Route::post('compras/tipotransaccion_compra', 'Compras\Tipotransaccion_CompraController@guardar')->name('guardar_tipotransaccion_compra');
 Route::post('compras/tipotransaccion_compra/consultatipotransaccion', 'Compras\Tipotransaccion_CompraController@consultaTipotransaccionCompra')->name('consulta_tipotransaccion_compra');
@@ -3837,6 +3843,11 @@ Route::post('compras/tracking-facturas/sincronizar-pagina', 'Compras\TrackingFac
 Route::get('compras/lista_tracking_facturas/{formato?}/{busqueda?}', 'Compras\TrackingFacturasController@listar')->name('lista_tracking_facturas');
 
 Route::get('compras/comprobante-proveedor', 'Compras\Comprobante_ProveedorController@index')->name('comprobante_proveedor');
+Route::post('compras/comprobante-proveedor/workbench/vista', 'Compras\Comprobante_ProveedorController@guardarVistaListado')->name('guardar_vista_listado_comprobante_proveedor');
+Route::delete('compras/comprobante-proveedor/workbench/vista/{id}', 'Compras\Comprobante_ProveedorController@eliminarVistaListado')->name('eliminar_vista_listado_comprobante_proveedor')->whereNumber('id');
+Route::post('compras/comprobante-proveedor/workbench/columnas', 'Compras\Comprobante_ProveedorController@guardarColumnasListado')->name('guardar_columnas_listado_comprobante_proveedor');
+Route::post('compras/comprobante-proveedor/workbench/etiquetas', 'Compras\Comprobante_ProveedorController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_comprobante_proveedor');
+Route::post('compras/comprobante-proveedor/workbench/preview', 'Compras\Comprobante_ProveedorController@previewWorkbench')->name('preview_workbench_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/opciones-carga', 'Compras\Comprobante_ProveedorController@opcionesCarga')->name('comprobante_proveedor_opciones_carga');
 Route::get('compras/comprobante-proveedor/resolver-oc', 'Compras\Comprobante_ProveedorController@resolverOrdencompraParaAlta')->name('comprobante_proveedor_resolver_oc');
 Route::get('compras/lista_comprobante_proveedor/{formato?}/{busqueda?}', 'Compras\Comprobante_ProveedorController@listar')->name('lista_comprobante_proveedor');

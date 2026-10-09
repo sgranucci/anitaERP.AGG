@@ -31,8 +31,18 @@ use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Caja\IngresoEgresoImputacionDiariaSupport;
 use App\Support\Caja\IngresoEgresoGastoBancoSupport;
+use App\Support\Caja\IngresoEgresoListadoColumnas;
 use App\Support\Caja\IngresoEgresoListadoFiltros;
+use App\Support\Caja\IngresoEgresoListadoPreferenciasUsuario;
+use App\Support\Caja\IngresoEgresoListadoResumen;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use App\Support\Caja\IngresoEgresoVisibilidadSupport;
 use App\Queries\Caja\Caja_MovimientoQueryInterface;
@@ -122,19 +132,133 @@ class IngresoEgresoController extends Controller
 		if (!$hayMovimientosCaja)
 			$this->caja_movimientoRepository->sincronizarConAnita();
 
+        return view('caja.ingresoegreso.index', $this->armarListado($request));
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-ingresos-egresos-caja');
+
         $filtros = $this->resolverFiltrosListado($request);
-        $caja_movimiento = $this->caja_movimientoQuery->leeCaja_Movimiento($filtros, 0, true);
+        $layout = IngresoEgresoListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $page = $this->caja_movimientoQuery->builderListado($filtros)->paginate(ListadoDisenadorPreviewSupport::LIMITE_MUESTRA);
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            IngresoEgresoListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            IngresoEgresoListadoFiltros::camposOrdenables()
+        );
+        $cortes = ['activo' => false];
+        if ($agrupar !== []) {
+            $filtrosCortes = $filtros;
+            $filtrosCortes['agrupar'] = $agrupar;
+            $universo = $this->caja_movimientoQuery->builderListado($filtrosCortes)->get();
+            $cortes = IngresoEgresoListadoResumen::desdeFilas($universo, $agrupar, $etiquetas)['cortes'];
+        }
 
-        $datas = [
-            'caja_movimiento' => $caja_movimiento,
-            'filtros' => $filtros,
-            'camposFiltro' => IngresoEgresoListadoFiltros::camposParaVista(),
-            'empresa_query' => $this->empresaRepository->allFiltrado(),
-            'filtrosQuery' => IngresoEgresoListadoFiltros::paraQueryString($filtros),
-            'alcance_centro_costo' => IngresoEgresoVisibilidadSupport::etiquetaAlcanceActivo(),
-        ];
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => IngresoEgresoListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
+        ));
+    }
 
-        return view('caja.ingresoegreso.index', $datas);
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-ingresos-egresos-caja');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $layout = IngresoEgresoListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $orden = $filtros['sort'] ?? [];
+        $vista = ListadoVistaSupport::guardar(
+            IngresoEgresoListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'],
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $orden,
+                'orden' => $orden,
+                'agrupar' => $filtros['agrupar'] ?? [],
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('ingresoegreso', IngresoEgresoListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        $qs = IngresoEgresoListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('ingresoegreso', $qs)
+            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        can('listar-ingresos-egresos-caja');
+        $ok = ListadoVistaSupport::eliminar($id, IngresoEgresoListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('ingresoegreso', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-ingresos-egresos-caja');
+        $layout = IngresoEgresoListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario($vistaId, IngresoEgresoListadoColumnas::RECURSO, (int) auth()->id());
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            IngresoEgresoListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = $this->resolverFiltrosListado($request);
+        $qs = IngresoEgresoListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs[$vistaId > 0 ? 'vista_id' : 'vista_estandar'] = $vistaId > 0 ? $vistaId : 1;
+
+        return redirect()->route('ingresoegreso', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-ingresos-egresos-caja');
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            IngresoEgresoListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(IngresoEgresoListadoColumnas::catalogoActivo())
+        );
+
+        return redirect()->route(
+            'ingresoegreso',
+            IngresoEgresoListadoFiltros::paraQueryString($this->resolverFiltrosListado($request))
+        )->with('mensaje', 'Etiquetas actualizadas.');
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -840,6 +964,118 @@ class IngresoEgresoController extends Controller
             'cuentas_detalle_meta',
             'comprobantes_ivacompra_inicial',
         );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function armarListado(Request $request): array
+    {
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(IngresoEgresoListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar')
+            || $request->input('vista_modo') === 'estandar';
+
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                IngresoEgresoListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('qbe')
+            && ! $request->boolean('filtro_limpiar')
+            && ! $request->has('tipos')
+            && ! $request->has('filtro_periodo')
+            && ! $request->has('empresa_id')
+            && ! $request->has('empresa_todas')
+            && ! $request->has('fecha_desde')
+            && ! $request->has('fecha_hasta')
+            && ! $request->has('solicitudpago_id')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(IngresoEgresoListadoColumnas::RECURSO, $usuarioId);
+        }
+
+        $filtrosRequest = ListadoVistaSupport::prepararQbeContraVista(
+            $this->resolverFiltrosListado($request),
+            $request
+        );
+        $filtros = $filtrosRequest;
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = IngresoEgresoListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+        unset($filtros['_qbe_explicito'], $filtros['_limpiar']);
+        ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
+        if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
+            if ($request->exists('group')) {
+                $filtros['agrupar'] = $filtrosRequest['agrupar'] ?? [];
+            }
+            if ($request->exists('sort')) {
+                $filtros['sort'] = $filtrosRequest['sort'] ?? [];
+            }
+            ListadoVistaSupport::recordarOrdenYAgrupar(
+                $vistaActiva,
+                $filtros['sort'] ?? [],
+                $filtros['agrupar'] ?? []
+            );
+        }
+
+        $catalogo = IngresoEgresoListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            IngresoEgresoListadoColumnas::RECURSO,
+            $catalogo
+        );
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = IngresoEgresoListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = IngresoEgresoListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+
+        $builder = $this->caja_movimientoQuery->builderListado($filtros);
+        $universo = (clone $builder)->get();
+        $resumen = IngresoEgresoListadoResumen::desdeFilas($universo, $filtros['agrupar'] ?? [], $etiquetas);
+        $caja_movimiento = (clone $builder)->paginate(10);
+
+        $camposFiltro = IngresoEgresoListadoFiltros::camposQbeDisponibles();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
+
+        $filtrosQuery = IngresoEgresoListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
+        if ($request->boolean('filtro_limpiar')) {
+            $filtrosQuery['filtro_limpiar'] = 1;
+        }
+        if ($vistaActiva) {
+            $filtrosQuery['vista_id'] = $vistaActiva->id;
+        } elseif ($forzarEstandar) {
+            $filtrosQuery['vista_estandar'] = 1;
+        }
+
+        return [
+            'caja_movimiento' => $caja_movimiento,
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'camposFiltro' => $camposFiltro,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'alcance_centro_costo' => IngresoEgresoVisibilidadSupport::etiquetaAlcanceActivo(),
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'etiquetasInstalacion' => $etiquetasInstalacion,
+            'vistasListado' => $vistas,
+            'vistaActiva' => $vistaActiva,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'cortes' => $resumen['cortes'],
+            'totalesListado' => $resumen['totales'],
+            'tiposFichas' => IngresoEgresoListadoColumnas::tiposEnUso(),
+        ];
     }
 
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array

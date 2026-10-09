@@ -1,10 +1,29 @@
 @php
-    $esExcel = ! empty($esExcel);
-    $datas = $datas ?? collect();
+    use App\Support\Compras\ComprobanteProveedorEstados;
+    use App\Support\Compras\ComprobanteProveedorListadoColumnas;
+    use App\Support\Listado\ListadoExportPresentacionSupport;
+    $catalogo = ComprobanteProveedorListadoColumnas::catalogoActivo();
+    $columnas = $columnasVisibles ?? ComprobanteProveedorListadoColumnas::defaultsVisibles();
+    $columnas = array_values(array_filter(
+        $columnas,
+        static fn ($k) => isset($catalogo[$k]) && ! empty($catalogo[$k]['export'])
+    ));
+    if ($columnas === []) {
+        $columnas = ComprobanteProveedorListadoColumnas::defaultsVisibles();
+    }
+    $etiquetas = $etiquetasColumnas ?? [];
+    $colspan = max(1, count($columnas));
     $filtros = $filtros ?? [];
+    $filtrosExcel = $filtros;
+    $filtrosExcel['orden'] = $filtrosExcel['orden'] ?? ($filtrosExcel['sort'] ?? []);
     $partesSub = ['Generado '.date('d/m/Y H:i'), (is_countable($datas) ? count($datas) : 0).' registro(s)'];
-    if (! empty($filtros['valor'])) {
-        $partesSub[] = 'Filtro: '.$filtros['valor'];
+    $presentacion = ListadoExportPresentacionSupport::subtitulo(
+        $filtrosExcel,
+        $etiquetas,
+        \App\Support\Compras\ComprobanteProveedorListadoFiltros::camposOrdenables()
+    );
+    if ($presentacion !== '') {
+        $partesSub[] = $presentacion;
     }
     if (! empty($filtros['empresa_id'])) {
         $partesSub[] = 'Empresa id: '.$filtros['empresa_id'];
@@ -12,64 +31,43 @@
         $partesSub[] = 'Todas las empresas asignadas';
     }
     $estadoFiltro = (string) ($filtros['estado'] ?? '');
-    if ($estadoFiltro !== '' && $estadoFiltro !== \App\Support\Compras\ComprobanteProveedorEstados::FILTRO_TODOS) {
-        $partesSub[] = 'Estado: '.\App\Support\Compras\ComprobanteProveedorEstados::etiqueta($estadoFiltro);
+    if ($estadoFiltro !== '' && $estadoFiltro !== ComprobanteProveedorEstados::FILTRO_TODOS) {
+        $partesSub[] = 'Estado: '.ComprobanteProveedorEstados::etiqueta($estadoFiltro);
     }
     $subtitulo = implode(' — ', $partesSub);
-    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
-    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
-    $fmtMonto = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
-        $n = (float) $v;
-        if ($esExcel && $autoExcelNum) {
-            return number_format($n, 2, '.', '');
-        }
-        if ($esExcel) {
-            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
-        }
-        return number_format($n, 2, ',', '.');
-    };
 @endphp
 <table>
-    @if ($reservarFilaLogoExcel ?? false)
-    <tr><td colspan="12" style="height: 52px;">&#160;</td></tr>
+    @if (!empty($reservarFilaLogoExcel))
+    <tr><td colspan="{{ $colspan }}" style="height: 52px;">&#160;</td></tr>
     @endif
     <tr>
-        <td colspan="12"><strong style="font-size: 16pt;">Listado de comprobantes de proveedor</strong></td>
+        <td colspan="{{ $colspan }}"><strong style="font-size: 16pt;">Listado de comprobantes de proveedor</strong></td>
     </tr>
     <tr>
-        <td colspan="12"><strong>{{ $subtitulo }}</strong></td>
+        <td colspan="{{ $colspan }}"><strong>{{ $subtitulo }}</strong></td>
     </tr>
     <thead>
         <tr>
-            <th>ID</th>
-            <th>Empresa</th>
-            <th>Proveedor</th>
-            <th>Tipo</th>
-            <th>N&uacute;mero</th>
-            <th>OC</th>
-            <th>Fecha</th>
-            <th>F. IVA / contabiliz.</th>
-            <th>Total</th>
-            <th>Estado</th>
-            <th>Origen</th>
-            <th>Modo carga</th>
+            @foreach ($columnas as $key)
+                <th>{{ $etiquetas[$key] ?? ($catalogo[$key]['label'] ?? $key) }}</th>
+            @endforeach
         </tr>
     </thead>
     <tbody>
-        @foreach ($datas as $row)
+        @foreach ($datas as $data)
         <tr>
-            <td>{{ $row->id }}</td>
-            <td>{{ $row->empresas->nombre ?? '' }}</td>
-            <td>{{ $row->proveedores->nombre ?? '' }}</td>
-            <td>{{ trim(($row->tipotransaccion_compras->abreviatura ?? '').' '.($row->tipotransaccion_compras->nombre ?? '')) }}</td>
-            <td>{{ $row->letra }}{{ $row->sucursal }}-{{ $row->numerocomprobante }}</td>
-            <td>{{ $row->ordencompras->numeroordencompra ?? '' }}</td>
-            <td>{{ $row->fechacomprobante ? $row->fechacomprobante->format('d/m/Y') : '' }}</td>
-            <td>{{ $row->fechaiva ? $row->fechaiva->format('d/m/Y') : '' }}</td>
-            <td>{{ $fmtMonto($row->total) }}</td>
-            <td>{{ $row->estado }}</td>
-            <td>{{ \App\Support\Compras\ComprobanteProveedorOrigenEntrada::etiqueta($row->origen_entrada ?? '') }}</td>
-            <td>{{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta($row->modo_carga ?? '') }}</td>
+            @foreach ($columnas as $key)
+                @php
+                    $metaCol = $catalogo[$key] ?? [];
+                    $attrCol = (string) ($metaCol['attr'] ?? $key);
+                    $crudo = $data->{$attrCol} ?? null;
+                @endphp
+                @if (($metaCol['type'] ?? '') === 'decimal' && $crudo !== null && $crudo !== '')
+                    <td>{{ (float) $crudo }}</td>
+                @else
+                    <td>{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</td>
+                @endif
+            @endforeach
         </tr>
         @endforeach
     </tbody>

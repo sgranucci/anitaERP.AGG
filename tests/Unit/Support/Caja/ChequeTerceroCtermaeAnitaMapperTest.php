@@ -49,7 +49,8 @@ class ChequeTerceroCtermaeAnitaMapperTest extends TestCase
 
         $this->assertSame('E', $out['negociable']);
         $this->assertSame('67928118', $out['nro_echeq']);
-        $this->assertSame('97591', $out['numerocheque']);
+        $this->assertSame('67928118', $out['numerocheque']);
+        $this->assertSame(97591, $out['nro_interno_anita']);
     }
 
     public function test_a_atributos_erp_mapea_fisico(): void
@@ -77,5 +78,41 @@ class ChequeTerceroCtermaeAnitaMapperTest extends TestCase
         $this->assertSame('N', $out['negociable']);
         $this->assertNull($out['nro_echeq']);
         $this->assertSame('7662794', $out['numerocheque']);
+        $this->assertSame(80790, $out['nro_interno_anita']);
+    }
+
+    public function test_nro_cheque_anita_manda_sobre_e_cheq(): void
+    {
+        $row = (object) [
+            'cter_nro_interno' => '97771',
+            'cter_nro_cheque' => '10883010',
+            'cter_nro_e_cheq' => '999',
+            'cter_interior' => '3',
+            'cter_estado' => ' ',
+            'cter_fecha_cheque' => '20260916',
+            'cter_fecha_ingreso' => '20260916',
+            'cter_importe' => '1',
+            'cter_cod_mon' => '1',
+            'cter_cotizacion' => '1',
+        ];
+
+        $out = ChequeTerceroCtermaeAnitaMapper::aAtributosErp($row, [
+            'empresa_id' => 1,
+            'cliente_id' => null,
+            'proveedor_id' => null,
+            'banco_id' => null,
+        ]);
+
+        $this->assertSame('10883010', $out['numerocheque']);
+        $this->assertSame('999', $out['nro_echeq']);
+    }
+
+    public function test_sin_numero_fisico_queda_el_interno(): void
+    {
+        $this->assertSame('84790', ChequeTerceroCtermaeAnitaMapper::numerochequeDesdeFila((object) [
+            'cter_nro_interno' => '84790',
+            'cter_nro_cheque' => '0',
+            'cter_nro_e_cheq' => '0',
+        ]));
     }
 }

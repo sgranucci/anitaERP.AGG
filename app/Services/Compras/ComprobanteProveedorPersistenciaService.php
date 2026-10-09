@@ -105,13 +105,18 @@ class ComprobanteProveedorPersistenciaService
     /** @param  array<string, mixed>  $payload */
     private function assertFechaComprobanteCarga(array $payload): void
     {
+        ComprobanteProveedorFechaContableSupport::assertFechasCargaCoherentes(
+            $payload['fechacomprobante'] ?? null,
+            $payload['fechaiva'] ?? null,
+        );
         ComprobanteProveedorFechaContableSupport::assertFechaComprobanteNoExcesivamenteFutura(
             $payload['fechacomprobante'] ?? null
         );
     }
 
     /**
-     * Tope: hoy en el alta, la fecha ya grabada en la edición. Hacia atrás sí; hacia adelante no.
+     * Tope: hoy en el alta. En edición, la fecha ya grabada, elevada a la del comprobante
+     * o al primer día operable si quedó en un período cerrado. Nunca posterior a hoy.
      * El cierre de período se controla aparte, con la fecha ya resuelta.
      *
      * @param  array<string, mixed>  $payload
@@ -121,7 +126,8 @@ class ComprobanteProveedorPersistenciaService
     {
         $payload['fechaiva'] = ComprobanteProveedorFechaContableSupport::resolverEnCarga(
             $payload['fechaiva'] ?? null,
-            $existente
+            $existente,
+            $payload['fechacomprobante'] ?? null,
         );
 
         return $payload;

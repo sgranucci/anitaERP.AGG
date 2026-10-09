@@ -19,6 +19,9 @@
               <th>ID</th>
               <th>Abreviatura</th>
               <th>Nombre</th>
+              <th>IVA</th>
+              <th>Ganancias</th>
+              <th>IIBB</th>
               <th>Acciones</th>
           </thead>
           <tbody id="datostipotransaccioncompra"></tbody>

@@ -3,6 +3,9 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Tipotransaccion_Compra;
+use App\Support\Compras\TipotransaccionCompraListadoFiltros;
+use App\Support\Compras\TipotransaccionCompraRetencionFiltro;
+use App\Support\Compras\ConceptoIvaAnitaEsquemaSupport;
 use App\Repositories\Compras\Tipotransaccion_Compra_CentrocostoRepositoryInterface;
 use App\Repositories\Compras\Tipotransaccion_Compra_Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
@@ -57,6 +60,21 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
             $tipotransaccion = $tipotransaccion->wherein('estado', $estado);
         
         return $tipotransaccion->get();
+    }
+
+    public function leeListado(array $filtros, bool $paginar)
+    {
+        if (! $this->model->newQuery()->exists()) {
+            self::sincronizarConAnita();
+        }
+
+        $query = $this->model->newQuery();
+        if (TipotransaccionCompraListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            TipotransaccionCompraListadoFiltros::aplicar($query, $filtros);
+        }
+        TipotransaccionCompraListadoFiltros::aplicarOrden($query, $filtros);
+
+        return $paginar ? $query->paginate(10) : $query->get();
     }
 
     public function create(array $data)
@@ -121,19 +139,13 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
     public function listarParaConsulta(?string $consulta = null, ?int $centrocostoId = null): \Illuminate\Support\Collection
     {
         $query = $this->model->newQuery()
-            ->select('id', 'abreviatura', 'nombre')
+            ->select('id', 'abreviatura', 'nombre', 'retieneiva', 'retieneganancia', 'retieneIIBB')
             ->orderBy('nombre')
             ->limit(200);
 
         $this->aplicarFiltroCentrocosto($query, $centrocostoId);
 
-        $texto = strtoupper(trim((string) $consulta));
-        if ($texto !== '') {
-            $query->where(function ($q) use ($texto) {
-                $q->where('abreviatura', 'LIKE', '%'.$texto.'%')
-                    ->orWhere('nombre', 'LIKE', '%'.$texto.'%');
-            });
-        }
+        TipotransaccionCompraRetencionFiltro::aplicar($query, (string) $consulta);
 
         return $query->get();
     }
@@ -266,7 +278,9 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 			else
             	$tipotransaccion = $this->model->findOrFail($data->tcomp_clave)->update($arr_campos);
 
-			// Graba tabla de centros de costo del tipo de transaccion
+			// Graba tabla de centros de costo del tipo de transaccion.
+			// Ferli no tiene compras.ccostcomp: el vínculo queda solo en el ERP.
+			if (ConceptoIvaAnitaEsquemaSupport::leeCcostcomp()) {
 			$data = array( 
 				'acc' => 'list', 'tabla' => $this->tableAnita[1], 
 				'sistema' => 'compras',
@@ -294,6 +308,7 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 				if ($fl_crea_registro)
 					$this->tipotransaccion_compra_centrocostoRepository
 						->createUnRegistro($arr_tipotransaccion_compra_centrocosto);
+			}
 			}
 
 			// Graba tabla de conceptos de compras del tipo de transaccion
@@ -409,14 +424,16 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 				'whereArmado' => " WHERE tcomp_clave = '".$id."' " );
         $apiAnita->apiCallEscritura($data);
 
-		// Borra centros de costo
-        $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
-				'sistema' => 'compras',
-				'whereArmado' => " WHERE ccostc_tipo = '".$id."' " );
-        $apiAnita->apiCallEscritura($data);
+		if (ConceptoIvaAnitaEsquemaSupport::leeCcostcomp()) {
+			// Borra centros de costo
+			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
+					'sistema' => 'compras',
+					'whereArmado' => " WHERE ccostc_tipo = '".$id."' " );
+			$apiAnita->apiCallEscritura($data);
 
-		// Graba centros de costo
-		Self::grabaCentrocosto($request);
+			// Graba centros de costo
+			Self::grabaCentrocosto($request);
+		}
 
 		// Borra formas de pago
 		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
@@ -430,6 +447,10 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 
 	private function grabaCentrocosto($request)
 	{
+		if (! ConceptoIvaAnitaEsquemaSupport::leeCcostcomp()) {
+			return;
+		}
+
 		// Graba exclusiones
 		if (isset($request['centrocosto_ids']))
 		{
@@ -510,11 +531,13 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 				'whereArmado' => " WHERE tcomp_clave = '".$id."' " );
         $apiAnita->apiCallEscritura($data);
 
-		// Borra centros de costo
-        $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
-				'sistema' => 'compras',
-				'whereArmado' => " WHERE ccostc_tipo = '".$id."' " );
-        $apiAnita->apiCallEscritura($data);
+		if (ConceptoIvaAnitaEsquemaSupport::leeCcostcomp()) {
+			// Borra centros de costo
+			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
+					'sistema' => 'compras',
+					'whereArmado' => " WHERE ccostc_tipo = '".$id."' " );
+			$apiAnita->apiCallEscritura($data);
+		}
 
 		// Borra conceptos de iva compra
 		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 

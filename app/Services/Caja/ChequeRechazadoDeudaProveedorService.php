@@ -18,7 +18,7 @@ use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Services\Compras\ComprobanteProveedorContabilizarService;
-use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
@@ -35,6 +35,7 @@ use RuntimeException;
  * aplicarlo en otra orden de pago.
  *
  * El Debe copia cada cuenta que esa nota acreditó.
+ * El concepto sale de Configuración general y no retiene.
  */
 final class ChequeRechazadoDeudaProveedorService
 {
@@ -119,7 +120,7 @@ final class ChequeRechazadoDeudaProveedorService
             throw new RuntimeException('La nota de débito del cliente no tiene importe para trasladar al proveedor.');
         }
 
-        $concepto = $this->conceptoNeto();
+        $concepto = $this->conceptoSinRetencion();
         $empresaId = (int) $cheque->empresa_id;
         $fecha = (string) ($cheque->fecha_rechazo ?: date('Y-m-d'));
         $monedaId = (int) ($cheque->moneda_id ?: 1);
@@ -343,7 +344,7 @@ final class ChequeRechazadoDeudaProveedorService
 
         $lineas = $this->lineasDebeDesdeNotaCliente($ventaNd);
         $total = round(array_sum(array_column($lineas, 'importe')), 2);
-        $concepto = $this->conceptoNeto();
+        $concepto = $this->conceptoSinRetencion();
 
         DB::transaction(function () use ($comprobante, $lineas, $total, $concepto) {
             EloquentAuditDeleteSupport::each(
@@ -379,24 +380,28 @@ final class ChequeRechazadoDeudaProveedorService
         return $this->contabilizarYResponder($comprobante->fresh());
     }
 
-    private function conceptoNeto(): Concepto_Ivacompra
+    /**
+     * Concepto de Configuración general. Tiene que existir y no retener:
+     * el débito por cheque rechazado no es una compra.
+     */
+    private function conceptoSinRetencion(): Concepto_Ivacompra
     {
-        $concepto = Concepto_Ivacompra::query()
-            ->where('codigo', '1')
-            ->whereIn('tipoconcepto', ComprobanteProveedorConceptoIvaTipos::NETO)
-            ->orderBy('id')
-            ->first();
-
+        $id = ParametroSistemaSupport::ndrChequeConceptoIvacompraId();
+        $concepto = $id > 0 ? Concepto_Ivacompra::query()->find($id) : null;
         if (! $concepto) {
-            $concepto = Concepto_Ivacompra::query()
-                ->where('tipoconcepto', 'N')
-                ->whereNotIn('codigo', ComprobanteProveedorConceptoIvaTipos::CODIGOS_IMPUESTO_INTERNO)
-                ->orderBy('id')
-                ->first();
+            throw new RuntimeException(
+                'Falta el concepto de IVA compra del débito por cheque rechazado. '
+                .'Elegilo en Configuración general, grupo Caja / Cheques.'
+            );
         }
 
-        if (! $concepto) {
-            throw new RuntimeException('No hay un concepto de IVA compra no gravado para el débito interno del cheque rechazado.');
+        $retieneGan = strtoupper(trim((string) ($concepto->retieneganancia ?? 'N'))) === 'S';
+        $retieneIibb = strtoupper(trim((string) ($concepto->retieneIIBB ?? 'N'))) === 'S';
+        if ($retieneGan || $retieneIibb) {
+            throw new RuntimeException(
+                'El concepto '.$concepto->codigo.' '.$concepto->nombre.' retiene. '
+                .'En Configuración general elegí uno que no retenga ganancias ni ingresos brutos.'
+            );
         }
 
         return $concepto;

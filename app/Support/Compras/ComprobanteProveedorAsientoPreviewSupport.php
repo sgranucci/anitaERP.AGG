@@ -46,7 +46,8 @@ final class ComprobanteProveedorAsientoPreviewSupport
             'fechacomprobante' => $request->input('fechacomprobante', $base->fechacomprobante ?? now()->format('Y-m-d')),
             'fechaiva' => ComprobanteProveedorFechaContableSupport::resolverEnCarga(
                 $request->input('fechaiva'),
-                $base
+                $base,
+                $request->input('fechacomprobante', $base->fechacomprobante ?? null),
             ),
             'moneda_id' => (int) $request->input('moneda_id', $base->moneda_id ?? 1),
             'cotizacion' => MontoEsArSupport::parse($request->input('cotizacion', $base->cotizacion ?? 1)),

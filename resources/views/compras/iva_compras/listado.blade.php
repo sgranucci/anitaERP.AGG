@@ -5,9 +5,7 @@
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($coleccionLogos);
     $totalFilas = (int) ($resultado['stats']['comprobantes'] ?? (is_countable($filas) ? count($filas) : 0));
     $tituloReporte = 'IVA COMPRAS';
-    $subtitulo = 'Período: '.IvaComprasListadoFiltros::formatearPeriodoTexto($filtros)
-        .' · Orden: '.IvaComprasListadoFiltros::formatearOrdenTexto($filtros)
-        .' · '.IvaComprasListadoFiltros::formatearSubdiarioTexto($filtros);
+    $subtitulo = IvaComprasListadoFiltros::formatearSubtitulo($filtros);
     $columnas = $resultado['columnas'] ?? [];
     $cantMontos = max(1, count($columnas));
     $colSpan = 7 + count($columnas);
@@ -87,7 +85,7 @@
                 <th class="col-nowrap">N.Pro.</th>
                 <th>Proveedor</th>
                 <th class="col-nowrap">CUIT</th>
-                <th class="col-nowrap">Fec.Mov.</th>
+                <th class="col-nowrap">Fec.Comp.</th>
                 <th class="col-nowrap">Fec.Iva</th>
                 <th class="col-nowrap">Tip</th>
                 <th class="col-nowrap">Nro.Comp.</th>

@@ -32,14 +32,12 @@
                         $featBingoFsl = ! empty($feat['bingo_fsl']);
                         $featUnidades = ! empty($feat['unidades_negocio']);
                         $featHost = ! empty($feat['clasificar_por_host']);
-                        $featFslAnita = ! empty($feat['completar_fsl_anita']);
                     @endphp
                     <p class="text-muted small mb-3">
-                        Listado de ventas con desglose impositivo desde AnitaERP (tablas <code>venta</code> / <code>venta_impuesto</code>).
+                        Listado de ventas con desglose impositivo del ERP (tablas <code>venta</code> / <code>venta_impuesto</code>).
                         Solo entran los tipos de transacción con el tilde <strong>Va al IVA ventas</strong>
                         @if ($featBingoFsl)
                             (bingo FBI, máquinas FSL, facturas, NC/ND, etc.).
-                            Las FSL que aún viven en Anita se completan si el tipo FSL está tildado.
                         @else
                             (facturas, NC/ND, etc.).
                         @endif
@@ -210,21 +208,6 @@
                                     @checked(! empty($filtros['solo_moneda_origen']))>
                                 <label class="form-check-label" for="solo_moneda_origen">Convertir moneda extranjera con cotización del comprobante</label>
                             </div>
-                            <div class="form-check mb-1">
-                                <input class="form-check-input js-auto-consultar" type="checkbox" name="auditar_ctamov" id="auditar_ctamov" value="1"
-                                    @checked(! empty($filtros['auditar_ctamov']))>
-                                <label class="form-check-label" for="auditar_ctamov">Auditar contra ctamov (Anita) — lee el bridge, puede demorar</label>
-                            </div>
-                            @if ($featFslAnita)
-                                <input type="hidden" name="completar_fsl_anita" value="0">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="completar_fsl_anita" id="completar_fsl_anita" value="1"
-                                        @checked(! empty($filtros['completar_fsl_anita']))>
-                                    <label class="form-check-label" for="completar_fsl_anita">Incluir FSL máquinas/ruletas desde Anita (sin duplicar ERP)</label>
-                                </div>
-                            @else
-                                <input type="hidden" name="completar_fsl_anita" value="0">
-                            @endif
                         </div>
                     </div>
 
@@ -279,9 +262,6 @@
                                 <strong>{{ (int) ($resultado['stats']['ventas'] ?? 0) }}</strong>
                                 · Puntos de venta <strong>{{ (int) ($resultado['stats']['puntoventa'] ?? 0) }}</strong>
                                 · Total <strong>{{ number_format((float) ($resultado['totales_general']['total'] ?? 0), 2, ',', '.') }}</strong>
-                                @if ((int) ($resultado['stats']['ventas_fsl_anita'] ?? 0) > 0)
-                                    · FSL Anita <strong>{{ (int) $resultado['stats']['ventas_fsl_anita'] }}</strong>
-                                @endif
                                 @php $corrStats = $resultado['auditoria_correlatividad'] ?? []; @endphp
                                 @if (! empty($corrStats['habilitada']) && (int) ($corrStats['total_saltos'] ?? 0) > 0)
                                     · <span class="text-danger" title="Saltos de numeración detectados">
@@ -447,7 +427,7 @@
     'tituloId' => 'iva-ventas-procesando-titulo',
     'subtituloId' => 'iva-ventas-procesando-subtitulo',
     'titulo' => 'Calculando IVA ventas…',
-    'subtitulo' => 'Puede demorar según el período y la conciliación contable / ctamov. No cierre la página.',
+    'subtitulo' => 'Puede demorar según el período y la conciliación contable. No cierre la página.',
 ])
 
 <script>
