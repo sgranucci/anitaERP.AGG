@@ -115,7 +115,13 @@ class OrdencompraListadoFiltros
             $operador = 'contiene';
         }
 
-        $operador = self::normalizarOperador($operador, $modo === self::MODO_CAMPO ? $campo : 'numeroordencompra');
+        // «Cualquier campo» compara texto. Si se valida contra el número de OC,
+        // «contiene» no es un operador entero y termina en «igual» (LIKE sin %).
+        $campoOperador = $modo === self::MODO_CAMPO ? $campo : 'comentario';
+        $operador = self::normalizarOperador($operador, $campoOperador);
+        if ($modo === self::MODO_TODOS && $operador === 'igual' && $valor !== '' && ! ctype_digit($valor)) {
+            $operador = 'contiene';
+        }
 
         return [
             'modo' => $modo,

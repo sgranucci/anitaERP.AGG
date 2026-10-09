@@ -54,7 +54,7 @@
                 <label class="small mb-1" for="filtro_operador">Condición</label>
                 <select name="filtro_operador" id="filtro_operador" class="form-control form-control-sm"
                         data-operadores='@json($operadoresJson)'>
-                    @foreach(OrdencompraListadoFiltros::operadoresParaCampo($modo === OrdencompraListadoFiltros::MODO_CAMPO ? $campoActivo : 'numeroordencompra') as $opKey => $opLabel)
+                    @foreach($modo === OrdencompraListadoFiltros::MODO_CAMPO ? OrdencompraListadoFiltros::operadoresParaCampo($campoActivo) : OrdencompraListadoFiltros::OPERADORES_TEXTO as $opKey => $opLabel)
                         <option value="{{ $opKey }}" {{ $operadorActivo === $opKey ? 'selected' : '' }}>{{ $opLabel }}</option>
                     @endforeach
                 </select>

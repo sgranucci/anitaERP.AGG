@@ -571,6 +571,7 @@ Bandeja de legajos
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/devolver_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/devolver_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar_gastronomia_firmante.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/enviar_gastronomia_firmante.js')) ?: time() }}" type="text/javascript"></script>
@@ -947,6 +948,7 @@ Bandeja de legajos
                             || !empty($atajo),
                         'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Nº OC, proveedor, factura, COM u OP…',
+                        'mostrarCaja' => false,
                         'toggleTarget' => '#panel-filtros-ordencompra',
                         'toggleId' => 'btn-toggle-filtros-ordencompra',
                         'inputId' => 'filtro_valor',
@@ -962,6 +964,12 @@ Bandeja de legajos
                 @include('compras.ordencompra.partials.filtros_listado', ['limpiarUrl' => $limpiarUrl])
                 <div class="card-body py-2 border-bottom bg-light">
                     <div class="form-row align-items-end">
+                        <div class="form-group col-md-3 col-sm-6 mb-2">
+                            <label class="small mb-1" for="filtro_valor">Proveedor o texto</label>
+                            <input type="text" name="filtro_valor" id="filtro_valor" class="form-control form-control-sm"
+                                   value="{{ $filtros['valor'] ?? '' }}" placeholder="Coca, Medife, Pan American…" autocomplete="off"
+                                   title="Busca en el nombre del proveedor y en el resto de los datos del legajo">
+                        </div>
                         <div class="form-group col-md-2 col-sm-6 mb-2">
                             <label class="small mb-1" for="nro_oc">Nº OC</label>
                             <input type="text" name="nro_oc" id="nro_oc" class="form-control form-control-sm"

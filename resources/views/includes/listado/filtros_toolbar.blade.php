@@ -9,6 +9,7 @@
     $toggleId = $toggleId ?? 'btn-toggle-filtros-listado';
     $placeholder = $placeholder ?? 'Búsqueda…';
     $formId = $formId ?? 'form-filtros-cliente-uif';
+    $mostrarCaja = $mostrarCaja ?? true;
 @endphp
 @include('includes.listado.filtros_estilos_activos')
 <button type="button"
@@ -23,6 +24,7 @@
     <i class="fa fa-filter"></i>
         <span class="js-listado-filtros-toggle-text">{{ $toggleLabel ?? 'Filtros' }}</span>
 </button>
+@if ($mostrarCaja)
 <input type="text"
        name="{{ $inputName }}"
        id="{{ $inputId ?? 'filtro_valor' }}"
@@ -33,6 +35,7 @@
        placeholder="{{ $placeholder }}"
        autocomplete="off"
        title="Enter: búsqueda en todos los campos">
+@endif
 <button type="submit"
         form="{{ $formId }}"
         class="btn btn-light btn-sm mr-1"

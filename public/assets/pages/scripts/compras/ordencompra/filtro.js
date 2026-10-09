@@ -92,7 +92,9 @@
     }
 
     $(function () {
-        if (!$('#form-filtros-ordencompra').length) {
+        var $panel = $('#panel-filtros-ordencompra');
+        var $form = $panel.closest('form');
+        if (!$form.length) {
             return;
         }
 
@@ -110,15 +112,15 @@
             }
         }
 
-        $('#form-filtros-ordencompra').on('click', '[data-aplicar-filtros-panel]', function () {
+        $form.on('click', '[data-aplicar-filtros-panel]', function () {
             $valorPrincipal().val($valorPanel().val());
         });
 
-        $('#form-filtros-ordencompra').on('submit.listadoFiltrosSync', function () {
+        $form.on('submit.listadoFiltrosSync', function () {
             sincronizarValorAntesDeEnviar();
         });
 
-        LF.initSubmitBusquedaRapida($('#form-filtros-ordencompra'), {
+        LF.initSubmitBusquedaRapida($form, {
             selectorPanel: '#panel-filtros-ordencompra'
         });
 
