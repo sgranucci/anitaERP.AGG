@@ -384,6 +384,13 @@
 
             </form>
 
+            @if (($esEdicion ?? false) && ! empty($puede_excluir_circuito_pago) && ($data->id ?? null))
+            <form id="form-cp-excluir-pago" method="POST" class="d-none"
+                  action="{{ route('excluir_circuito_pago_comprobante_proveedor', ['id' => $data->id] + ($retornoListadoQuery ?? [])) }}">
+                @csrf
+            </form>
+            @endif
+
             <div class="card-footer">
                 @if ($esEdicion && ($puede_actualizar ?? false))
                 <div class="row">

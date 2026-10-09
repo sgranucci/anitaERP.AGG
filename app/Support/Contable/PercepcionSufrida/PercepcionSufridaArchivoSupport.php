@@ -10,6 +10,8 @@ namespace App\Support\Contable\PercepcionSufrida;
  * SIFERE (formato predeterminado de percepciones sufridas): jurisdicción 3,
  * CUIT con guiones 13, fecha dd/mm/aaaa 10, sucursal 4, número 8, tipo 1, letra 1,
  * importe 11 con coma decimal. Terminador LF, como p-sifere.c.
+ * Nota de crédito (tipo C, en el archivo «CA» si la letra es A): el importe
+ * va en negativo y ocupa las mismas 11 posiciones (-0000699,47).
  *
  * Percepciones de IVA: CSV de IVA Simple (F.2051), separador `;`.
  * Tipos vigentes: 1 factura, 2 recibo, 3 nota de crédito, 4 nota de débito, 5 otro.
@@ -42,7 +44,7 @@ final class PercepcionSufridaArchivoSupport
             if (trim($letra) === '') {
                 $letra = ' ';
             }
-            $importeTxt = str_replace('.', ',', sprintf('%011.2f', abs($importe)));
+            $importeTxt = self::importeSifere($importe, $tipo);
             $out .= sprintf(
                 '%03d%13s%10s%04d%08d%1s%1s%s',
                 $jur,
@@ -91,6 +93,17 @@ final class PercepcionSufridaArchivoSupport
         }
 
         return $out;
+    }
+
+    /**
+     * Factura, débito y el resto salen en positivo. La nota de crédito (tipo C)
+     * sale en negativo: el signo ocupa el primer dígito y el ancho sigue en 11.
+     */
+    public static function importeSifere(float $importe, string $tipo): string
+    {
+        $valor = $tipo === 'C' ? -abs($importe) : abs($importe);
+
+        return str_replace('.', ',', sprintf('%011.2f', $valor));
     }
 
     public static function tipoSifere(string $tipo, float $importe): string

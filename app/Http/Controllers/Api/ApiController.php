@@ -20,6 +20,7 @@ use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorAbreviaturaTipoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCentrocostoDestinoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosListaSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosTipoImputadoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCuitCoincidenciaSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorOcCuitMensajeSupport;
@@ -358,6 +359,12 @@ class ApiController extends Controller
             );
             $tipoAbreviatura = $corregido['abreviatura'];
             $tipotransaccion_compra_id = $corregido['tipo_id'];
+            if ((int) $tipotransaccion_compra_id !== (int) $comprobante->id) {
+                $alineado = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($tipoAbreviatura);
+                if ($alineado) {
+                    $comprobante = $alineado;
+                }
+            }
         }
 
         $log->info('recibe_comprobante.tipo_comprobante_ok', [
@@ -410,6 +417,7 @@ class ApiController extends Controller
         $avisosConceptos = [];
         $revisarPorIibb = false;
         $revisarPorProrrateo = false;
+        $revisarPorConceptoTipo = false;
         $netoGravado = 0.0;
         $cuadre = ComprobanteProveedorConceptosIvaCoherenciaSupport::cuadreConTotal([], 0.0);
         $totalRequest = round(abs((float) ($request->total ?? 0)), 2);
@@ -476,6 +484,31 @@ class ApiController extends Controller
                             'pesos_por_fino' => $prorrateo['pesos_por_fino'],
                         ]);
                     }
+                }
+            }
+
+            // El tipo ya es el de la OC. Si el agente mandó conceptos de otro fino
+            // (311 indirecto o 503 gastronomía en un FNS), se pasan al equivalente.
+            if ($metaProrrateo === null) {
+                $reubicados = PrecargaProveedorConceptosTipoImputadoSupport::reubicar(
+                    $lineasConcepto,
+                    (int) $comprobante->id,
+                    (string) $tipoAbreviatura,
+                );
+                $lineasConcepto = $reubicados['lineas'];
+                if ($reubicados['avisos'] !== []) {
+                    $avisosConceptos = array_merge($avisosConceptos, $reubicados['avisos']);
+                }
+                if ($reubicados['revisar']) {
+                    $revisarPorConceptoTipo = true;
+                }
+                if ($reubicados['reubico'] || $reubicados['revisar']) {
+                    $log->info('recibe_comprobante.conceptos_reubicados_tipo', [
+                        'tipo' => $tipoAbreviatura,
+                        'reubico' => $reubicados['reubico'],
+                        'revisar' => $reubicados['revisar'],
+                        'avisos' => $reubicados['avisos'],
+                    ]);
                 }
             }
 
@@ -548,7 +581,7 @@ class ApiController extends Controller
 
         // Total que no cuadra o imputación IIBB dudosa: la precarga entra igual, marcada
         // para revisión manual.
-        $pararevisar = (bool) $request->para_revisar || $revisarPorIibb || $revisarPorProrrateo;
+        $pararevisar = (bool) $request->para_revisar || $revisarPorIibb || $revisarPorProrrateo || $revisarPorConceptoTipo;
         if ($cuadre['aplica'] && ! $cuadre['cuadra']) {
             $pararevisar = true;
             $avisosConceptos[] = $cuadre['mensaje'];

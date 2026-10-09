@@ -3867,6 +3867,7 @@ Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/pre
 Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/{id}/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/contabilizar', 'Compras\Comprobante_ProveedorController@contabilizar')->name('contabilizar_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/liberar-bloqueo-pago', 'Compras\Comprobante_ProveedorController@liberarBloqueoPago')->name('liberar_bloqueo_pago_comprobante_proveedor');
+Route::post('compras/comprobante-proveedor/{id}/excluir-circuito-pago', 'Compras\Comprobante_ProveedorController@excluirCircuitoPago')->name('excluir_circuito_pago_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/{id}/validacion-abono', 'Compras\ContratoValidacionAbonoController@editarComprobante')->name('editar_validacion_abono_comprobante');
 Route::post('compras/comprobante-proveedor/{id}/validacion-abono', 'Compras\ContratoValidacionAbonoController@guardarComprobante')->name('guardar_validacion_abono_comprobante');
 Route::post('compras/comprobante-proveedor/validar-proveedor-arca', 'Compras\Comprobante_ProveedorController@validarProveedorArcaPadron')->name('comprobante_proveedor_validar_proveedor_arca');

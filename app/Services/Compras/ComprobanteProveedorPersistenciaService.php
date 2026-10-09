@@ -47,6 +47,7 @@ use App\Support\Compras\OrdencompraComprobanteEstados;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosTipoImputadoSupport;
 use App\Support\Contable\MontoEsArSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Stock\ArticuloSkuMatchSupport;
@@ -82,10 +83,73 @@ class ComprobanteProveedorPersistenciaService
         private ComprobanteProveedorContabilizarService $contabilizarService,
     ) {}
 
+    /** @var list<string> */
+    private array $avisosConceptosTipo = [];
+
     /** @return list<string> */
     public function ultimosAvisosControles(): array
     {
-        return $this->ultimosAvisosControles;
+        return array_values(array_unique(array_merge($this->avisosConceptosTipo, $this->ultimosAvisosControles)));
+    }
+
+    /**
+     * Los conceptos tienen que ser del tipo que se graba (FNS con 421, no con 311/503).
+     * Los que tienen un único equivalente (misma clase y alícuota) se cambian; si queda
+     * IVA de otro tipo, no se graba. Prorrateadas (FPB/…) y tipos sin conceptos: sin control.
+     */
+    private function alinearConceptosAlTipo(Request $request): void
+    {
+        $this->avisosConceptosTipo = [];
+        $tipoId = (int) $request->input('tipotransaccion_compra_id', 0);
+        $ids = $request->input('concepto_ivacompra_ids', []);
+        if ($tipoId <= 0 || ! is_array($ids) || $ids === []) {
+            return;
+        }
+
+        $abrev = PrecargaProveedorConceptosTipoImputadoSupport::abreviaturaTipo($tipoId);
+        $lineas = [];
+        foreach (array_values($ids) as $i => $id) {
+            $lineas[$i] = ['concepto_ivacompra_id' => (int) $id];
+        }
+
+        $res = PrecargaProveedorConceptosTipoImputadoSupport::reubicar($lineas, $tipoId, $abrev);
+        if ($res['reubico']) {
+            $request->merge([
+                'concepto_ivacompra_ids' => array_map(
+                    static fn (array $l): ?int => (int) $l['concepto_ivacompra_id'] > 0 ? (int) $l['concepto_ivacompra_id'] : null,
+                    $res['lineas']
+                ),
+            ]);
+            $this->avisosConceptosTipo = array_values(array_filter(
+                $res['avisos'],
+                static fn (string $a): bool => str_contains($a, 'Se imputó')
+            ));
+        }
+
+        $montos = $request->input('montos', []);
+        $idsConMonto = [];
+        foreach ((array) $request->input('concepto_ivacompra_ids', []) as $i => $id) {
+            if ((int) $id > 0 && abs(MontoEsArSupport::parse($montos[$i] ?? 0)) >= 0.0001) {
+                $idsConMonto[] = (int) $id;
+            }
+        }
+
+        $fuera = PrecargaProveedorConceptosTipoImputadoSupport::ivaFueraDelTipo($idsConMonto, $tipoId, $abrev);
+        if ($fuera->isNotEmpty()) {
+            throw new RuntimeException(self::mensajeIvaFueraDelTipo($fuera, $abrev));
+        }
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Compras\Concepto_Ivacompra>  $fuera
+     */
+    public static function mensajeIvaFueraDelTipo(\Illuminate\Support\Collection $fuera, string $abrev): string
+    {
+        $lista = $fuera->map(fn ($c) => (string) $c->codigo.' '.$c->nombre)->implode(', ');
+
+        return 'El IVA '.$lista.' no corresponde al tipo '.$abrev
+            .' y no tiene un equivalente único en ese tipo. Use los conceptos de IVA del tipo '
+            .'o agregue el concepto al tipo de transacción de compra.';
     }
 
     /**
@@ -181,6 +245,7 @@ class ComprobanteProveedorPersistenciaService
     public function crearDesdeRequest(Request $request): Comprobante_Proveedor
     {
         $this->vencimientoEdicionPrevio = null;
+        $this->alinearConceptosAlTipo($request);
         $payload = $this->fijarFechaContabilizacion($this->armarPayloadCabecera($request), null);
         $payload['creousuario_id'] = Auth::id();
         $payload['estado'] = ComprobanteProveedorEstados::BORRADOR;
@@ -309,6 +374,7 @@ class ComprobanteProveedorPersistenciaService
         }
 
         ComprobanteProveedorPagoSupport::assertSinPagosAplicados($id, 'actualizar');
+        $this->alinearConceptosAlTipo($request);
 
         $payloadPeriodo = $this->fijarFechaContabilizacion(
             $this->armarPayloadCabecera($request),

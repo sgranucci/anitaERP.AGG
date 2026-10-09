@@ -531,6 +531,28 @@
                             readonly tabindex="-1"
                             title="Se calcula con la suma de todos los conceptos">
                     </div>
+                    @php
+                        $cpIdExcluirPago = (int) ($data->id ?? 0);
+                        $excluirPagoOn = $cpIdExcluirPago > 0
+                            ? (int) ($data->getAttributes()['bloqueado_pago'] ?? 0) === 1
+                            : (bool) old('excluir_circuito_pago');
+                    @endphp
+                    @if (! empty($puede_excluir_circuito_pago))
+                        <label class="mb-0 small text-muted text-nowrap" style="font-weight:400;cursor:pointer;"
+                               title="No entra a propuestas, órdenes de pago ni a la proyección. Sigue en la deuda del proveedor.">
+                            <input type="checkbox" name="excluir_circuito_pago" id="excluir_circuito_pago" value="1"
+                                   class="align-middle"
+                                   @checked($excluirPagoOn)
+                                   @if ($cpIdExcluirPago > 0)
+                                       form="form-cp-excluir-pago"
+                                       onchange="if(!confirm(this.checked?'La factura queda fuera de propuestas, órdenes de pago y de la proyección. Sigue en la deuda. ¿Confirmar?':'La factura vuelve al circuito de pago y a la proyección. ¿Confirmar?')){this.checked=!this.checked;return;} this.form.submit();"
+                                   @endif
+                            >
+                            Fuera de pago
+                        </label>
+                    @elseif ($excluirPagoOn)
+                        <span class="small text-muted text-nowrap" title="No entra a propuestas, órdenes de pago ni a la proyección. Sigue en la deuda del proveedor.">Fuera de pago</span>
+                    @endif
                 </div>
                 <small class="form-text text-muted mt-1 mb-0">Calculados desde conceptos.</small>
             </div>

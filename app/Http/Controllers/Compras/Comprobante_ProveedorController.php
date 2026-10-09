@@ -368,6 +368,7 @@ class Comprobante_ProveedorController extends Controller
 
         try {
             $comprobante = $this->persistenciaService->crearDesdeRequest($request);
+            $this->aplicarExclusionCircuitoPago($request, $comprobante);
         } catch (ComprobanteProveedorDuplicadoException $e) {
             return $this->respuestaComprobanteDuplicado($e);
         } catch (ComprobanteProveedorYaExistenteEnAnitaException $e) {
@@ -982,6 +983,30 @@ class Comprobante_ProveedorController extends Controller
         return redirect()
             ->route('editar_comprobante_proveedor', ['id' => $id] + $this->queryRetornoListado($request))
             ->with('mensaje', 'Bloqueo para pago liberado. La factura ya puede incluirse en una orden de pago.');
+    }
+
+    /**
+     * Tilde manual de pagos: la factura sigue en la deuda y sale de propuestas, OP y proyección.
+     * No toca el asiento ni la cuenta corriente.
+     */
+    public function excluirCircuitoPago(Request $request, int $id)
+    {
+        can('excluir-circuito-pago-comprobante-proveedor');
+
+        $comprobante = Comprobante_Proveedor::query()->findOrFail($id);
+        $excluir = $request->boolean('excluir_circuito_pago');
+        $this->aplicarExclusionCircuitoPago($request, $comprobante, true);
+
+        return redirect()
+            ->route(
+                'editar_comprobante_proveedor',
+                ['id' => $id]
+                    + $this->queryRetornoListado($request)
+                    + ComprobanteProveedorRetornoLegajoSupport::queryParams($request)
+            )
+            ->with('mensaje', $excluir
+                ? 'La factura queda fuera del circuito de pago y de la proyección. Sigue en la deuda.'
+                : 'La factura vuelve al circuito de pago y a la proyección.');
     }
 
     public function contabilizar(Request $request, int $id)
@@ -1675,6 +1700,7 @@ class Comprobante_ProveedorController extends Controller
                 : [],
             'bloqueado_edicion' => $bloqueadoEdicion,
             'puede_actualizar' => $puedeActualizar,
+            'puede_excluir_circuito_pago' => can('excluir-circuito-pago-comprobante-proveedor', false),
             'mostrarSolapaCom' => ! ($comPolitica['sin_com_por_tipo'] ?? false)
                 && ! (($comPolitica['contrato_vigente'] ?? false) && ! ($comPolitica['contrato_requiere_recepcion'] ?? true))
                 && (
@@ -1752,6 +1778,28 @@ class Comprobante_ProveedorController extends Controller
                 ];
             })
             ->all();
+    }
+
+    /**
+     * El tilde de alta solo prende la exclusión. En un comprobante ya grabado también la saca.
+     */
+    private function aplicarExclusionCircuitoPago(Request $request, Comprobante_Proveedor $comprobante, bool $permiteQuitar = false): void
+    {
+        if (! can('excluir-circuito-pago-comprobante-proveedor', false)) {
+            return;
+        }
+
+        $excluir = $request->boolean('excluir_circuito_pago');
+        if (! $excluir && ! $permiteQuitar) {
+            return;
+        }
+
+        $servicio = app(ComprobanteProveedorBloqueoPagoService::class);
+        if ($excluir && ! $servicio->estaBloqueado($comprobante)) {
+            $servicio->bloquearManual($comprobante, 'Excluida manualmente del circuito de pago.');
+        } elseif (! $excluir && $servicio->estaBloqueado($comprobante)) {
+            $servicio->liberar($comprobante, 'Incluida de nuevo en el circuito de pago desde la carga.');
+        }
     }
 
     /**

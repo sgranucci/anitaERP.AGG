@@ -382,6 +382,12 @@ class ProyeccionPagosReporteService
             ->whereNotNull('cc.comprobante_proveedor_id')
             ->whereNull('cc.pagoproveedor_id')
             ->leftJoin('comprobante_proveedor as comp', 'comp.id', '=', 'cc.comprobante_proveedor_id')
+            // Contabilizada y en la deuda, pero fuera de esta proyección (el mismo tilde
+            // que la deja afuera de propuestas y de la orden de pago).
+            ->where(function ($q) {
+                $q->where('comp.bloqueado_pago', false)
+                    ->orWhereNull('comp.bloqueado_pago');
+            })
             ->leftJoin('tipotransaccion_compra as tt', 'tt.id', '=', 'comp.tipotransaccion_compra_id')
             ->leftJoin('comprobante_proveedor_cuota as cuo', 'cuo.id', '=', 'cc.comprobante_proveedor_cuota_id')
             ->leftJoin('formapago as fp', 'fp.id', '=', 'cuo.formapago_id')

@@ -19,6 +19,7 @@ use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosTipoImputadoSupport;
 use App\Support\Contable\AsientoEloquentDeleteSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\Auth;
@@ -94,6 +95,33 @@ class ComprobanteProveedorContabilizarService
         );
     }
 
+    /**
+     * El IVA va a la cuenta del concepto: un concepto de otro tipo (311/503 en una FNS)
+     * contabiliza crédito fiscal donde corresponde IVA no computable.
+     */
+    private function assertIvaDelTipo(Comprobante_Proveedor $comprobante): void
+    {
+        $tipoId = (int) ($comprobante->tipotransaccion_compra_id ?? 0);
+        $ids = $comprobante->comprobante_proveedor_conceptos()
+            ->where(function ($q) {
+                $q->where('monto', '>', 0.0001)->orWhere('monto', '<', -0.0001);
+            })
+            ->pluck('concepto_ivacompra_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $abrev = PrecargaProveedorConceptosTipoImputadoSupport::abreviaturaTipo($tipoId);
+        $fuera = PrecargaProveedorConceptosTipoImputadoSupport::ivaFueraDelTipo($ids, $tipoId, $abrev);
+        if ($fuera->isEmpty()) {
+            return;
+        }
+
+        throw new RuntimeException(
+            ComprobanteProveedorPersistenciaService::mensajeIvaFueraDelTipo($fuera, $abrev)
+            .' Abra el comprobante y vuelva a grabarlo: los conceptos con equivalente único se cambian solos.'
+        );
+    }
+
     public function contabilizar(int $comprobanteId): Comprobante_Proveedor
     {
         // Candado Redis: cubre la ventana completa (MySQL + Anita). El lockForUpdate del TX
@@ -117,6 +145,8 @@ class ComprobanteProveedorContabilizarService
         if ($comprobante->comprobante_proveedor_conceptos()->count() === 0) {
             throw new RuntimeException('Agregue al menos un concepto IVA antes de contabilizar.');
         }
+
+        $this->assertIvaDelTipo($comprobante);
 
         // Total desfasado de conceptos (ej. solo EXENTO con total=1): alinear y persistir
         // antes de cuotas / asiento / CC.

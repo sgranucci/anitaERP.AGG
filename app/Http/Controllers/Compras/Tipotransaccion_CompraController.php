@@ -21,6 +21,7 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosTipoImputadoSupport;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use DB;
@@ -382,11 +383,18 @@ class Tipotransaccion_CompraController extends Controller
 
         $conceptos = array_values(ConceptoIvacompraFormulaSupport::enriquecerMetaCliente($conceptos));
 
+        $desdeIds = $request->input('desde_ids', []);
+        $equivalencias = is_array($desdeIds) && $desdeIds !== []
+            ? PrecargaProveedorConceptosTipoImputadoSupport::equivalencias(array_map('intval', $desdeIds), $id, $abrev)
+            : [];
+
         return response()->json([
             'ok' => true,
+            'prorrateado' => $esProrrateo,
             'prorrateo_multi_cc' => $esProrrateo && $numeroOc !== null,
             'numero_oc' => $numeroOc,
             'conceptos' => $conceptos,
+            'equivalencias' => (object) $equivalencias,
         ]);
     }
 

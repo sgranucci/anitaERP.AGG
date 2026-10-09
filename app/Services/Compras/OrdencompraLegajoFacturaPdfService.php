@@ -80,7 +80,7 @@ class OrdencompraLegajoFacturaPdfService
         );
         if ($tipoId <= 0) {
             throw new RuntimeException(
-                'No hay tipo de transacción de compra con código ARCA '.$codigoAfipMaestro.'. Cárguelo en tipos de transacción de compra.'
+                'No se pudo resolver el tipo de factura por el centro de costo de la OC. No se asigna FGA por defecto.'
             );
         }
 

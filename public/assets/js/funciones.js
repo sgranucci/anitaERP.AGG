@@ -444,3 +444,40 @@ $(document).on('input', '#cantidadbulto', function () {
         this.value = 0;
     }
 });
+
+// Un <select> con foco trata la rueda como cambio de opción (forma de pago, moneda, etc.).
+// El listener va en el control, no en document, para no frenar el scroll del resto de la página.
+function anularRuedaEnSelect(nodo) {
+    if (!nodo || nodo.nodeName !== 'SELECT' || nodo.dataset.ruedaAnulada === '1') {
+        return;
+    }
+    if (nodo.multiple || nodo.size > 1) {
+        return;
+    }
+    nodo.dataset.ruedaAnulada = '1';
+    nodo.addEventListener('wheel', function (event) {
+        if (nodo.disabled) {
+            return;
+        }
+        if (document.activeElement === nodo) {
+            event.preventDefault();
+            nodo.blur();
+            return;
+        }
+        var valor = nodo.value;
+        var indice = nodo.selectedIndex;
+        window.setTimeout(function () {
+            if (nodo.value !== valor) {
+                nodo.selectedIndex = indice;
+            }
+        }, 0);
+    }, { passive: false });
+}
+
+document.addEventListener('mouseover', function (event) {
+    anularRuedaEnSelect(event.target);
+}, true);
+
+document.addEventListener('focusin', function (event) {
+    anularRuedaEnSelect(event.target);
+}, true);

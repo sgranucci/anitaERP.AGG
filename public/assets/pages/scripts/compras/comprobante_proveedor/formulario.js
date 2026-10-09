@@ -3026,29 +3026,43 @@ $(function () {
         return String($('#numeroordencompra').val() || $('input[name="numeroordencompra"]').val() || '').trim();
     }
 
+    var precargaConceptosTipoSeq = 0;
+
+    function renglonesConceptoActuales() {
+        var out = [];
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var cid = parseInt(String($(this).find('.concepto_ivacompra_id').val() || '0'), 10) || 0;
+            if (cid > 0) {
+                out.push({ id: cid, monto: parseMonto($(this).find('.monto').val() || '0'), $tr: $(this) });
+            }
+        });
+        return out;
+    }
+
     function precargarConceptosPorTipo(tipoId, forzar) {
         var id = parseInt(tipoId || '0', 10) || 0;
         if (id <= 0 || contabilizado) {
             return;
         }
-        // FPB/CPB/… con grilla vacía: la plantilla es la unión de finos de la OC.
-        // Si la precarga ya trajo renglones, hayConceptosCargados() corta más abajo.
-        var hayMontos = false;
-        $('#tbody-concepto-table tr.item-concepto').each(function () {
-            var monto = parseMonto($(this).find('.monto').val() || '0');
-            if (Math.abs(monto) >= 0.0001) {
-                hayMontos = true;
+        // forzar: el operador cambió el tipo. Hay que traer los conceptos de ese tipo.
+        // Sin forzar (alta con grilla vacía): no pisar renglones ya valuados o elegidos.
+        var reemplazar = !!forzar;
+        var habiaConceptos = hayConceptosCargados();
+        if (!reemplazar) {
+            var hayMontos = false;
+            $('#tbody-concepto-table tr.item-concepto').each(function () {
+                var monto = parseMonto($(this).find('.monto').val() || '0');
+                if (Math.abs(monto) >= 0.0001) {
+                    hayMontos = true;
+                }
+            });
+            if (hayMontos || habiaConceptos) {
+                return;
             }
-        });
-        // Nunca pisar conceptos ya valuados (p. ej. precarga prorrateada / API/IA).
-        if (hayMontos) {
-            return;
-        }
-        // Tampoco pisar renglones ya elegidos (edición, precarga con IDs, plantilla del server).
-        if (hayConceptosCargados()) {
-            return;
         }
 
+        var previos = reemplazar ? renglonesConceptoActuales() : [];
+        var seq = ++precargaConceptosTipoSeq;
         var $aviso = $('#cp-conceptos-tipo-aviso');
         var base = typeof window.carpetaBase !== 'undefined' ? window.carpetaBase : '';
         var params = {};
@@ -3056,13 +3070,38 @@ $(function () {
         if (numeroOc) {
             params.numero_oc = numeroOc;
         }
+        if (previos.length) {
+            params['desde_ids[]'] = previos.map(function (p) { return p.id; });
+        }
         var totalCabeceraAntes = parseMonto($('#total').val() || '0');
         $.getJSON(base + '/compras/tipotransaccion_compra/' + id + '/conceptos-iva', params)
             .done(function (res) {
+                if (seq !== precargaConceptosTipoSeq) {
+                    return;
+                }
                 var lista = (res && res.conceptos) || [];
                 var esProrrateo = !!(res && res.prorrateo_multi_cc);
-                limpiarFilasConceptos();
+                // Prorrateadas (FPB/…): unión de conceptos de los CC de la OC. No se reemplaza.
+                if (reemplazar && habiaConceptos && res && res.prorrateado) {
+                    if ($aviso.length) {
+                        $aviso.removeClass('d-none').html(
+                            '<i class="fa fa-info-circle"></i> Tipo prorrateado: se conservaron los conceptos y montos cargados.'
+                        );
+                    }
+                    programarPreviewAsiento();
+                    return;
+                }
                 if (!lista.length) {
+                    if (reemplazar && habiaConceptos) {
+                        if ($aviso.length) {
+                            $aviso.removeClass('d-none').html(
+                                '<i class="fa fa-info-circle"></i> El tipo no tiene conceptos IVA cargados. Se conservaron los renglones actuales.'
+                            );
+                        }
+                        programarPreviewAsiento();
+                        return;
+                    }
+                    limpiarFilasConceptos();
                     agregarFilaConcepto({}, '');
                     if ($aviso.length) {
                         var msgVacio = numeroOc
@@ -3073,6 +3112,31 @@ $(function () {
                         );
                     }
                 } else {
+                    var equivalencias = (res && res.equivalencias) || {};
+                    var idsLista = {};
+                    lista.forEach(function (c) {
+                        var cid = parseInt(String(c && c.id ? c.id : '0'), 10) || 0;
+                        if (cid > 0) {
+                            idsLista[cid] = true;
+                        }
+                    });
+                    // Monto de cada renglón anterior → concepto del tipo (mismo id o equivalente).
+                    var montoPorConcepto = {};
+                    var movidos = 0;
+                    var sobrantes = [];
+                    previos.forEach(function (p) {
+                        var destino = parseInt(String(equivalencias[p.id] || p.id), 10) || 0;
+                        if (idsLista[destino]) {
+                            montoPorConcepto[destino] = (montoPorConcepto[destino] || 0) + p.monto;
+                            if (destino !== p.id && Math.abs(p.monto) >= 0.0001) {
+                                movidos++;
+                            }
+                        } else if (Math.abs(p.monto) >= 0.0001) {
+                            sobrantes.push(p.$tr.detach());
+                        }
+                    });
+
+                    limpiarFilasConceptos();
                     var vistos = {};
                     var agregados = 0;
                     lista.forEach(function (c) {
@@ -3085,18 +3149,34 @@ $(function () {
                         if (clave) {
                             vistos[clave] = true;
                         }
-                        agregarFilaConcepto(c, '');
+                        var monto = (cid > 0 && montoPorConcepto[cid] !== undefined)
+                            ? Math.round(montoPorConcepto[cid] * 100) / 100
+                            : '';
+                        agregarFilaConcepto(c, monto);
                         agregados++;
                     });
+                    sobrantes.forEach(function ($tr) {
+                        $('#tbody-concepto-table').append($tr);
+                    });
+                    if (sobrantes.length) {
+                        actualizarColumnaCuentaDebe();
+                    }
                     enriquecerMetaGravadosDesdeFormulas();
                     if ($aviso.length) {
                         var msgOk = esProrrateo
                             ? 'Conceptos de la OC (unión de centros). Complete los montos que correspondan y quite el resto.'
-                            : 'Conceptos del tipo de comprobante. Complete los montos.';
-                        $aviso.removeClass('d-none').html(
-                            '<i class="fa fa-check-circle"></i> ' + msgOk
-                            + (agregados ? ' (' + agregados + ')' : '')
-                        );
+                            : (reemplazar && habiaConceptos
+                                ? 'Se cargaron los conceptos del tipo elegido.'
+                                    + (movidos ? ' ' + movidos + ' monto(s) pasaron al concepto equivalente del tipo.' : '')
+                                : 'Conceptos del tipo de comprobante. Complete los montos.');
+                        var html = '<i class="fa fa-check-circle"></i> ' + msgOk
+                            + (agregados ? ' (' + agregados + ')' : '');
+                        if (sobrantes.length) {
+                            html += '<br><i class="fa fa-exclamation-triangle text-warning"></i> '
+                                + sobrantes.length + ' renglón(es) con monto no tienen equivalente en este tipo y quedaron al final. '
+                                + 'Si son IVA, no se va a poder grabar: páselos al concepto del tipo.';
+                        }
+                        $aviso.removeClass('d-none').html(html);
                     }
                 }
                 // Plantilla en $0: no llevar a 0 el total/cuotas de una precarga API/IA/portal.
@@ -3106,6 +3186,9 @@ $(function () {
                 programarPreviewAsiento();
             })
             .fail(function () {
+                if (seq !== precargaConceptosTipoSeq) {
+                    return;
+                }
                 if ($aviso.length) {
                     $aviso.removeClass('d-none').html(
                         '<i class="fa fa-exclamation-triangle"></i> No se pudieron precargar los conceptos del tipo.'
@@ -3138,18 +3221,8 @@ $(function () {
     function alCambiarTipoComprobante(tipoId) {
         actualizarAbreviaturaTipoComprobante();
         aplicarExcepcionComPorTipo();
-        // Si ya hay conceptos (p. ej. al editar FNB→CNB), conservarlos: el asiento
-        // se recalcula con el signo del tipo nuevo (NC/ND invierte Debe/Haber).
-        if (hayConceptosCargados()) {
-            var $aviso = $('#cp-conceptos-tipo-aviso');
-            if ($aviso.length) {
-                $aviso.removeClass('d-none').html(
-                    '<i class="fa fa-info-circle"></i> Se conservaron los conceptos y montos. El asiento se recalcula según el nuevo tipo (NC/ND invierte Debe/Haber).'
-                );
-            }
-            programarPreviewAsiento();
-            return;
-        }
+        // El tipo nuevo trae sus conceptos (FGA → FNS). Si ese tipo no tiene
+        // conceptos cargados, se dejan los renglones que ya estaban.
         precargarConceptosPorTipo(tipoId, true);
     }
 
