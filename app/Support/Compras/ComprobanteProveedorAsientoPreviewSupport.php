@@ -359,7 +359,8 @@ final class ComprobanteProveedorAsientoPreviewSupport
         $origenMoneda = ProveedorCuentaContableMonedaSupport::etiquetaOrigenMoneda($resMoneda['origen']);
         $cuentaProveedor = ProveedorCuentaContableMonedaSupport::cuentaProveedorId(
             $comprobante->proveedores,
-            $monedaCuentaId
+            $monedaCuentaId,
+            (int) ($comprobante->empresa_id ?? 0)
         );
         if ((int) ($comprobante->proveedor_id ?? 0) <= 0) {
             $avisos[] = [

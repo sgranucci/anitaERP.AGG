@@ -51,6 +51,11 @@ return [
         'fuente_erp_hasta' => env('MAYOR_CONCEPTO_FUENTE_ERP_HASTA', ''),
         // UI + consulta: si false, solo Anita (bridge). Reactivar cuando el motor ERP cuadre.
         'fuente_erp_habilitada' => filter_var(env('MAYOR_CONCEPTO_FUENTE_ERP_HABILITADA', false), FILTER_VALIDATE_BOOLEAN),
+        // Excepción puntual: asientos que se reflejan con las dos patas (traspaso interno de
+        // disponibilidad, neto cero) aunque la contrapartida esté por encima del límite
+        // caja/banco. Formato "empresa:nro_asiento" separado por comas. No cambia la regla
+        // general: el resto de los ingresos desde 113xxx sigue imputando por concepto.
+        'asientos_traspaso_interno' => (string) env('MAYOR_CONCEPTO_ASIENTOS_TRASPASO_INTERNO', ''),
     ],
 
     /*

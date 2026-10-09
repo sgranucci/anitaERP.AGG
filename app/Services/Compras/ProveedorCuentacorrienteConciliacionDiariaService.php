@@ -6,6 +6,7 @@ use App\Mail\Compras\ProveedorCuentacorrienteConciliacionDiaria;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
+use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionLiquidacionSupport;
@@ -276,10 +277,29 @@ class ProveedorCuentacorrienteConciliacionDiariaService
                     }
                 }
             });
+
+        // El maestro apunta al plan de una sola empresa: el mayor de las demás usa
+        // el mismo código con otro id.
+        $empresaIds = Empresa::query()->orderBy('id')->pluck('id')->all();
+        foreach (array_keys($cuentas) as $cuentaId) {
+            foreach ($empresaIds as $empresaId) {
+                $homologada = ProveedorCuentaContableMonedaSupport::cuentaEnPlanDeEmpresa(
+                    (int) $cuentaId,
+                    (int) $empresaId
+                );
+                if ($homologada > 0) {
+                    $cuentas[$homologada] = true;
+                }
+            }
+        }
         $cuentaIds = array_keys($cuentas);
         if ($cuentaIds === []) {
             return;
         }
+
+        // La línea en moneda local lleva grabada la cotización de la operación: multiplicarla
+        // la inflaba por la cotización del dólar. Mismo criterio que valorLocal en la pata de CC.
+        $monedaLocalId = ProveedorCuentacorrienteAplicacionLiquidacionSupport::monedaLocalId();
 
         $gl = DB::table('asiento_movimiento as m')
             ->join('asiento as a', 'a.id', '=', 'm.asiento_id')
@@ -289,7 +309,11 @@ class ProveedorCuentacorrienteConciliacionDiariaService
                     ->orWhere('a.estado_aprobacion', '!=', Asiento::ESTADO_APROBACION_RECHAZADO);
             })
             ->selectRaw('a.empresa_id, m.cuentacontable_id')
-            ->selectRaw('SUM(m.monto * COALESCE(NULLIF(m.cotizacion, 0), 1)) as saldo_local')
+            ->selectRaw(
+                'SUM(CASE WHEN COALESCE(m.moneda_id, ?) > ? THEN m.monto * COALESCE(NULLIF(m.cotizacion, 0), 1)'
+                .' ELSE m.monto END) as saldo_local',
+                [$monedaLocalId, $monedaLocalId]
+            )
             ->groupBy('a.empresa_id', 'm.cuentacontable_id')
             ->get()
             ->keyBy(fn ($r) => $r->empresa_id.'|'.$r->cuentacontable_id);
@@ -323,12 +347,17 @@ class ProveedorCuentacorrienteConciliacionDiariaService
                     if ($cuentaId <= 0) {
                         $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorId(
                             $proveedor,
-                            (int) ($cc->moneda_id ?: 1)
+                            (int) ($cc->moneda_id ?: 1),
+                            (int) $cc->empresa_id
                         );
                     }
                     if ($cuentaId <= 0) {
                         continue;
                     }
+                    $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaEnPlanDeEmpresa(
+                        $cuentaId,
+                        (int) $cc->empresa_id
+                    );
                     $local = ProveedorCuentacorrienteAplicacionLiquidacionSupport::valorLocal(
                         $saldo,
                         (float) ($cc->cotizacion ?? 1),

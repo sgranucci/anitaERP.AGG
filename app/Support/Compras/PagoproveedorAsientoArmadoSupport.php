@@ -313,7 +313,11 @@ final class PagoproveedorAsientoArmadoSupport
                 );
             }
             if ($cuentaId <= 0) {
-                $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorId($proveedor, $monedaDeudaId);
+                $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorId(
+                    $proveedor,
+                    $monedaDeudaId,
+                    $empresaId
+                );
             }
             if ($cuentaId <= 0) {
                 continue;

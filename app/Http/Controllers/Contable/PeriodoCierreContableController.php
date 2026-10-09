@@ -287,6 +287,10 @@ class PeriodoCierreContableController extends Controller
         );
 
         $mensaje = 'Se programaron '.$resultado['guardados'].' alcance(s).';
+        if (($resultado['omitidos'] ?? 0) > 0) {
+            $mensaje .= ' Se omitieron '.$resultado['omitidos']
+                .' ya ejecutado(s) con una fecha de cierre igual o posterior.';
+        }
         if ($resultado['errores'] !== []) {
             return $this->redirectIndex($request)
                 ->with('mensaje', $mensaje)

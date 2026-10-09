@@ -8,11 +8,14 @@
         'error' => 'badge-danger',
         default => 'badge-light',
     };
-    $editable = $puede_ejecutar_cierre && $estado !== 'ejecutado';
+    $editable = $puede_ejecutar_cierre;
     $esModulo = ! empty($fila['es_modulo']);
     $formId = 'form-prog-'.$fila['alcance'];
     $grupoCodigo = $grupo_codigo ?? ($esModulo ? ($fila['alcance'] ?? '') : '');
     $cantHijos = (int) ($cantidad_hijos ?? 0);
+    $cierreVigente = $fila['cierre_vigente'] ?? null;
+    $cierreVigenteAlcance = $fila['cierre_vigente_alcance'] ?? null;
+    $cierreHeredado = $cierreVigente !== null && $cierreVigenteAlcance !== ($fila['alcance'] ?? null);
 @endphp
 <tr
     @if ($esModulo)
@@ -50,7 +53,7 @@
         <td class="align-middle">
             <input type="date" name="fecha_ejecucion" form="{{ $formId }}"
                 class="form-control form-control-sm" required
-                value="{{ old('fecha_ejecucion', $fila['fecha_ejecucion'] ?? date('Y-m-d')) }}">
+                value="{{ old('fecha_ejecucion', $fila['fecha_ejecucion_sugerida'] ?? $fila['fecha_ejecucion'] ?? date('Y-m-d')) }}">
         </td>
         <td class="align-middle">
             <input type="text" name="hora_ejecucion" form="{{ $formId }}"
@@ -66,7 +69,7 @@
             <input type="date" name="fecha_hasta" form="{{ $formId }}"
                 class="form-control form-control-sm" required
                 max="{{ date('Y-m-d') }}"
-                value="{{ old('fecha_hasta', $fila['fecha_hasta']) }}">
+                value="{{ old('fecha_hasta', $fila['fecha_hasta_sugerida'] ?? $fila['fecha_hasta']) }}">
         </td>
         <td class="align-middle">
             @if ($estado !== '')
@@ -76,6 +79,14 @@
                 @endif
             @else
                 <span class="text-muted">sin programar</span>
+            @endif
+            @include('contable.cierre_periodo.partials.leyenda_cierre_vigente', [
+                'cierre_vigente' => $cierreVigente,
+                'cierre_heredado' => $cierreHeredado,
+                'cierre_vigente_alcance' => $cierreVigenteAlcance,
+            ])
+            @if ($estado === 'ejecutado')
+                <small class="d-block text-muted">Reprogramable con fecha posterior.</small>
             @endif
         </td>
         <td class="align-middle">
@@ -140,6 +151,11 @@
             @else
                 <span class="text-muted">sin programar</span>
             @endif
+            @include('contable.cierre_periodo.partials.leyenda_cierre_vigente', [
+                'cierre_vigente' => $cierreVigente,
+                'cierre_heredado' => $cierreHeredado,
+                'cierre_vigente_alcance' => $cierreVigenteAlcance,
+            ])
         </td>
         <td class="align-middle">{{ $fila['observacion'] ?? '' }}</td>
         @if ($puede_ejecutar_cierre)

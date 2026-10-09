@@ -8,19 +8,27 @@
         <div class="card-body">
         <div class="row">
             <div class="col-sm-6">
+                @php
+                    $asientoYaCargado = isset($data) && ! empty($data->id);
+                    $puedeCambiarEmpresaAsiento = can(\App\Support\Contable\AsientoEmpresaCambioSupport::PERMISO, false);
+                @endphp
                 @include('includes.form-empresa-asignada', [
                     'empresa_query' => $empresa_query,
                     'empresa_id' => $data->empresa_id ?? session('empresa_id'),
                     'mostrar_id' => true,
-                    'solo_lectura' => isset($data) && ! empty($data->id),
+                    'solo_lectura' => $asientoYaCargado && ! $puedeCambiarEmpresaAsiento,
                     'col_label' => 'col-lg-4 text-right pr-2',
                     'col_input' => 'col-lg-7',
                 ])
-                @if (isset($data) && ! empty($data->id))
+                @if ($asientoYaCargado)
                     <div class="form-group row" style="margin-top:-0.75rem;">
                         <div class="col-lg-4"></div>
                         <div class="col-lg-7">
-                            <small class="form-text text-muted mb-0">La empresa no se puede cambiar en un asiento ya cargado.</small>
+                            @if ($puedeCambiarEmpresaAsiento)
+                                <small class="form-text text-muted mb-0">Al cambiar la empresa, el asiento se renumera en la empresa destino y se borra de la contabilidad de origen.</small>
+                            @else
+                                <small class="form-text text-muted mb-0">La empresa no se puede cambiar en un asiento ya cargado.</small>
+                            @endif
                         </div>
                     </div>
                 @endif

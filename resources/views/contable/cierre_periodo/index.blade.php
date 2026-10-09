@@ -39,6 +39,9 @@
                     <strong>hora</strong> (por defecto <strong>24:00</strong> = fin del día) y
                     <strong>fecha de cierre</strong> (tope contable inclusive, editable).
                     El sistema ejecuta automáticamente al llegar esa fecha/hora; también puede aplicar en el momento si la fecha ya llegó.
+                    Cerrar el módulo entero alcanza: no hace falta repetir el cierre en cada submódulo.
+                    Un alcance ya ejecutado en el mes se puede volver a programar indicando una
+                    <strong>fecha de cierre posterior</strong> a la ya cerrada.
                     La facturación valida contra la fecha de jornada cuando existe.
                 </p>
 
@@ -152,7 +155,7 @@
                         <div class="card-body p-0">
                             @if ($puede_ejecutar_cierre)
                                 @foreach ($agenda_grupos as $grupo)
-                                    @if (!empty($grupo['fila']) && ($grupo['fila']['estado'] ?? '') !== 'ejecutado')
+                                    @if (!empty($grupo['fila']))
                                         <form method="post" action="{{ route('programar_cierre_periodo_contable') }}"
                                             id="form-prog-{{ $grupo['fila']['alcance'] }}" class="d-none">
                                             @csrf
@@ -164,17 +167,15 @@
                                         </form>
                                     @endif
                                     @foreach ($grupo['hijos'] as $hijo)
-                                        @if (($hijo['estado'] ?? '') !== 'ejecutado')
-                                            <form method="post" action="{{ route('programar_cierre_periodo_contable') }}"
-                                                id="form-prog-{{ $hijo['alcance'] }}" class="d-none">
-                                                @csrf
-                                                <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
-                                                <input type="hidden" name="anio_mes" value="{{ $anio_mes }}">
-                                                <input type="hidden" name="alcance" value="{{ $hijo['alcance'] }}">
-                                                <input type="hidden" name="mes" value="{{ $mes }}">
-                                                <input type="hidden" name="anio" value="{{ $anio }}">
-                                            </form>
-                                        @endif
+                                        <form method="post" action="{{ route('programar_cierre_periodo_contable') }}"
+                                            id="form-prog-{{ $hijo['alcance'] }}" class="d-none">
+                                            @csrf
+                                            <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
+                                            <input type="hidden" name="anio_mes" value="{{ $anio_mes }}">
+                                            <input type="hidden" name="alcance" value="{{ $hijo['alcance'] }}">
+                                            <input type="hidden" name="mes" value="{{ $mes }}">
+                                            <input type="hidden" name="anio" value="{{ $anio }}">
+                                        </form>
                                     @endforeach
                                 @endforeach
                             @endif
@@ -226,6 +227,7 @@
                                 (último día del mes anterior). Puede cambiarla en cada fila.
                                 Hora de ejecución por defecto: <strong>24:00</strong> (fin del día).
                                 Los submódulos están colapsados: use el chevron de cada módulo (o <strong>Submódulos</strong>) para cerrar selectivo.
+                                «Cerrado hasta» muestra el cierre que hoy bloquea cada fila, aunque provenga del módulo padre o del cierre general.
                             </div>
                         </div>
                     </div>
@@ -368,7 +370,8 @@
                     </div>
                     <div class="modal-body">
                         <p class="small text-muted">
-                            Aplica las mismas fechas a todos los módulos y submódulos del mes (los ya ejecutados no se modifican).
+                            Aplica las mismas fechas a todos los módulos y submódulos del mes.
+                            Los ya ejecutados se vuelven a programar solo si la fecha de cierre avanza; si no, se omiten.
                         </p>
                         <div class="form-group">
                             <label class="requerido">Fecha de ejecución</label>

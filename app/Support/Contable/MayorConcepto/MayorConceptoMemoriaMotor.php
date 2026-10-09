@@ -39,6 +39,9 @@ class MayorConceptoMemoriaMotor
     /** Responsable inscripto IVA en prom_cond_iva. */
     private const COND_IVA_INSCRIPTO = '1';
 
+    /** @var list<string>|null claves "empresa:nro_asiento" parseadas de config */
+    private ?array $asientosTraspasoInternoForzado = null;
+
     /** Tipos auxpag que representan facturas / NC compras aplicadas al pago.
      * @deprecated Usar MayorConceptoTCompSupport (t_comp + axp_nro_interno; excluye NC).
      */
@@ -450,6 +453,44 @@ class MayorConceptoMemoriaMotor
     public function esCuentaAnaliticoControl(int $cuenta): bool
     {
         return $cuenta > 0 && $cuenta <= $this->limiteCuentaAnaliticoControl();
+    }
+
+    /**
+     * Asiento que contaduría pidió reflejar con las dos patas (traspaso interno, neto cero)
+     * aunque la contrapartida supere el límite caja/banco. Lista puntual en
+     * `MAYOR_CONCEPTO_ASIENTOS_TRASPASO_INTERNO`; sin entradas, nadie entra por acá.
+     */
+    public function esAsientoTraspasoInternoForzado(int $empresaId, int $nroAsiento): bool
+    {
+        if ($empresaId <= 0 || $nroAsiento <= 0) {
+            return false;
+        }
+
+        return in_array($empresaId.':'.$nroAsiento, $this->asientosTraspasoInternoForzado(), true);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function asientosTraspasoInternoForzado(): array
+    {
+        if ($this->asientosTraspasoInternoForzado !== null) {
+            return $this->asientosTraspasoInternoForzado;
+        }
+
+        $claves = [];
+        $crudo = (string) config('contable.mayor_concepto.asientos_traspaso_interno', '');
+
+        foreach (explode(',', $crudo) as $entrada) {
+            [$empresa, $asiento] = array_pad(explode(':', trim($entrada), 2), 2, '');
+            $empresa = (int) preg_replace('/\D/', '', $empresa);
+            $asiento = (int) preg_replace('/\D/', '', $asiento);
+            if ($empresa > 0 && $asiento > 0) {
+                $claves[] = $empresa.':'.$asiento;
+            }
+        }
+
+        return $this->asientosTraspasoInternoForzado = array_values(array_unique($claves));
     }
 
     public function limiteCajaBanco(): int

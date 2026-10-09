@@ -20,6 +20,7 @@ use App\Support\Contable\AsientoAnitaNumeracionLock;
 use App\Support\Contable\AsientoAnitaNumeracionSupport;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCtamovRollbackSupport;
+use App\Support\Contable\AsientoEmpresaCambioSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaEmisorSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
@@ -47,6 +48,8 @@ class AsientoRepository implements AsientoRepositoryInterface
 	private $tipoasientoRepository;
 	private $flGrabaAsiento, $numeroAsientoActual;
 	private $path_sistema;
+	/** @var array{empresa_id:int, numeroasiento:string}|null */
+	private $ctamovEmpresaOrigenPendiente;
 
     /**
      * PostRepository constructor.
@@ -70,6 +73,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 		$this->tipoasientoRepository = $tipoasientorepository;
 		$this->cuentacontableRepository = $cuentacontablerepository;
 		$this->path_sistema = null;
+		$this->ctamovEmpresaOrigenPendiente = null;
     }
 
     /**
@@ -216,14 +220,20 @@ class AsientoRepository implements AsientoRepositoryInterface
 		$data['usuario_id'] = Auth::user()->id;
 
 		$asientoExistente = $this->model->find($id);
-		if (
-			$asientoExistente
+		$cambiaEmpresa = $asientoExistente
 			&& array_key_exists('empresa_id', $data)
-			&& (int) $data['empresa_id'] !== (int) $asientoExistente->empresa_id
-		) {
-			throw new \InvalidArgumentException(
-				'No se puede cambiar la empresa de un asiento ya cargado.'
-			);
+			&& (int) $data['empresa_id'] !== (int) $asientoExistente->empresa_id;
+
+		if ($cambiaEmpresa && ! AsientoEmpresaCambioSupport::permitido()) {
+			throw new \InvalidArgumentException(AsientoEmpresaCambioSupport::MENSAJE_SIN_PERMISO);
+		}
+
+		if ($cambiaEmpresa) {
+			$this->ctamovEmpresaOrigenPendiente = [
+				'empresa_id' => (int) $asientoExistente->empresa_id,
+				'numeroasiento' => (string) $asientoExistente->numeroasiento,
+			];
+			$data['numeroasiento'] = $this->numeroAsientoParaEmpresaDestino($data, $asientoExistente);
 		}
 		if ($asientoExistente) {
 			$dataParaValidar = array_merge($asientoExistente->toArray(), $data);
@@ -240,11 +250,63 @@ class AsientoRepository implements AsientoRepositoryInterface
 		// (evita reescribir Anita con el request antes de persistir líneas en ERP).
 		$omitirAnita = filter_var($data['omitir_anita'] ?? false, FILTER_VALIDATE_BOOLEAN);
 		if (! $omitirAnita) {
+			$this->limpiarCtamovEmpresaOrigen((int) ($data['empresa_id'] ?? 0));
 			self::actualizarAnita($data);
 		}
 
 		return $asiento;
     }
+
+	/**
+	 * El numerador de Anita es por empresa: al mover el asiento hay que pedir número
+	 * nuevo en la destino, donde el de origen puede estar ocupado por otro asiento.
+	 * PRE se numera por período (AAAAMM + línea) y no depende de la empresa.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function numeroAsientoParaEmpresaDestino(array $data, Asiento $asientoExistente): string
+	{
+		$tipoasientoId = $data['tipoasiento_id'] ?? $asientoExistente->tipoasiento_id;
+		$tipoasiento = $tipoasientoId ? $this->tipoasientoRepository->find($tipoasientoId) : null;
+
+		if ($tipoasiento && $tipoasiento->abreviatura == 'PRE') {
+			return (string) $asientoExistente->numeroasiento;
+		}
+
+		return (string) $this->ultimoAsientoAnita($data['empresa_id']);
+	}
+
+	/**
+	 * Borra en Anita el ctamov que quedó en la empresa de origen tras mover el asiento.
+	 * Sin esto el comprobante queda duplicado en las dos contabilidades.
+	 *
+	 * Si el sync que sigue es sobre la misma empresa de origen (restauración tras
+	 * rollback del update), se descarta el pendiente sin borrar nada.
+	 */
+	private function limpiarCtamovEmpresaOrigen(?int $empresaDestinoId = null): void
+	{
+		$pendiente = $this->ctamovEmpresaOrigenPendiente;
+		$this->ctamovEmpresaOrigenPendiente = null;
+
+		if ($pendiente === null || trim($pendiente['numeroasiento']) === '') {
+			return;
+		}
+
+		if ($empresaDestinoId !== null && $empresaDestinoId === $pendiente['empresa_id']) {
+			return;
+		}
+
+		$empresa = $this->empresaRepository->findPorId($pendiente['empresa_id']);
+		$codigoEmpresa = $empresa ? $empresa->codigo : $pendiente['empresa_id'];
+
+		$this->eliminarAnita($codigoEmpresa, $pendiente['numeroasiento']);
+
+		Log::warning('asiento_ctamov.empresa_cambiada', [
+			'empresa_origen' => $pendiente['empresa_id'],
+			'numeroasiento_origen' => $pendiente['numeroasiento'],
+			'usuario_id' => Auth::id(),
+		]);
+	}
 
     /**
      * Reemplaza ctamov en Anita para un asiento ya existente en el ERP.
@@ -271,6 +333,7 @@ class AsientoRepository implements AsientoRepositoryInterface
             (int) ($data['empresa_id'] ?? 0),
             (string) ($data['numeroasiento'] ?? ''),
         );
+        $this->limpiarCtamovEmpresaOrigen((int) ($data['empresa_id'] ?? 0));
         $this->actualizarAnita($data);
     }
 

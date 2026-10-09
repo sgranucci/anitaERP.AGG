@@ -313,7 +313,8 @@ class ProveedorCuentacorrienteAplicacionAsientoService
 
         $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorId(
             $proveedor ?? $lado->proveedores,
-            (int) ($lado->moneda_id ?: 1)
+            (int) ($lado->moneda_id ?: 1),
+            (int) $lado->empresa_id
         );
         if ($cuentaId > 0) {
             return ProveedorCuentacorrienteCuentaApImputadaSupport::normalizarEmpresa(

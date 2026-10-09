@@ -1577,7 +1577,8 @@ class MayorConceptoPeriodoProcesador
         $refTipo = $refTipoForzado ?? trim((string) ($lineasOp[0]->subd_ref_tipo ?? $lineasOp[0]->subd_tipo ?? ''));
         $bancoReferenciaAsiento = $this->resolverBancoReferenciaAsiento($lineasOp);
 
-        if ($this->esAsientoTraspasoInternoDisponibilidad($lineasOp)) {
+        if ($this->esAsientoTraspasoInternoDisponibilidad($lineasOp)
+            || $this->esAsientoTraspasoInternoForzado($lineasOp)) {
             $lineaReferencia = $this->lineaReferenciaTraspasoInterno($lineasOp);
             $itemsTraspaso = $this->itemsTraspasoDoblePierna($lineaReferencia, $refTipo);
         } else {
@@ -3625,6 +3626,35 @@ class MayorConceptoPeriodoProcesador
         }
 
         return $totalDebe > 0 && abs($totalDebe - $totalHaber) <= 0.01;
+    }
+
+    /**
+     * Excepción de contaduría: asiento listado en config que debe salir con las dos patas
+     * aunque la contrapartida supere el límite caja/banco (ej. cobranza de tarjetas que el
+     * EFE considera dentro del efectivo). Solo asientos de dos piernas con una disponibilidad.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function esAsientoTraspasoInternoForzado(array $lineasOp): bool
+    {
+        if (count($lineasOp) !== 2) {
+            return false;
+        }
+
+        $nroAsiento = (int) ($lineasOp[0]->subd_nro_operacion ?? 0);
+        if (! $this->motor->esAsientoTraspasoInternoForzado($this->empresaActiva, $nroAsiento)) {
+            return false;
+        }
+
+        $referencia = $this->lineaReferenciaTraspasoInterno($lineasOp);
+        $cuenta = (int) ($referencia->subd_cuenta ?? 0);
+        $contrapartida = (int) ($referencia->subd_contrapartida ?? 0);
+
+        if ($cuenta <= 0 || $contrapartida <= 0 || $cuenta === $contrapartida) {
+            return false;
+        }
+
+        return $this->motor->esDisponibilidad($cuenta) || $this->motor->esDisponibilidad($contrapartida);
     }
 
     /**

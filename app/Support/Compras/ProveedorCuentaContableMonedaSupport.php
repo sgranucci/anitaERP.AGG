@@ -5,6 +5,7 @@ namespace App\Support\Compras;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor;
+use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -80,28 +81,28 @@ class ProveedorCuentaContableMonedaSupport
 
     /**
      * Id de cuenta contable a usar en el Haber del asiento / aplicación a proveedores.
+     *
+     * Con `$empresaId` la cuenta vuelve homologada al plan de esa empresa.
      */
-    public static function cuentaProveedorId(?Proveedor $proveedor, int $monedaId): int
+    public static function cuentaProveedorId(?Proveedor $proveedor, int $monedaId, int $empresaId = 0): int
     {
         if ($proveedor === null || $monedaId <= 0) {
             return 0;
         }
 
+        // Fallback operativo si falta ME (datos legacy); el preview avisa.
+        $cuentaId = (int) ($proveedor->cuentacontable_id
+            ?: $proveedor->cuentacontablecompra_id
+            ?: 0);
+
         if (self::esMonedaExtranjera($monedaId)) {
             $me = (int) ($proveedor->cuentacontableme_id ?? 0);
             if ($me > 0) {
-                return $me;
+                $cuentaId = $me;
             }
-
-            // Fallback operativo si falta ME (datos legacy); el preview avisa.
-            return (int) ($proveedor->cuentacontable_id
-                ?: $proveedor->cuentacontablecompra_id
-                ?: 0);
         }
 
-        return (int) ($proveedor->cuentacontable_id
-            ?: $proveedor->cuentacontablecompra_id
-            ?: 0);
+        return self::cuentaEnPlanDeEmpresa($cuentaId, $empresaId);
     }
 
     public static function cuentaProveedorDesdeComprobante(
@@ -111,7 +112,23 @@ class ProveedorCuentaContableMonedaSupport
         return self::cuentaProveedorId(
             $proveedor ?? $comprobante->proveedores,
             self::monedaIdParaCuentaProveedor($comprobante),
+            (int) ($comprobante->empresa_id ?? 0),
         );
+    }
+
+    /**
+     * El maestro de proveedores apunta al plan de una sola empresa; el asiento graba
+     * el plan de la empresa del comprobante (mismo código, otro id: lo homologa
+     * `Asiento_MovimientoObserver`). Sin homologar acá, comparar el haber del asiento
+     * por id da cero en toda empresa que no sea la del maestro.
+     */
+    public static function cuentaEnPlanDeEmpresa(int $cuentacontableId, int $empresaId): int
+    {
+        if ($cuentacontableId <= 0 || $empresaId <= 0) {
+            return max(0, $cuentacontableId);
+        }
+
+        return CuentacontableEmpresaHomologacionSupport::idParaEmpresa($cuentacontableId, $empresaId);
     }
 
     public static function etiquetaCuentaEsperada(int $monedaId): string

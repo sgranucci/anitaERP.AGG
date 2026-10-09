@@ -6,9 +6,13 @@ use App\Models\Caja\Caja_Movimiento;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Contable\Asiento;
+use App\Services\Compras\ProveedorCuentacorrienteAplicacionAnitaSyncService;
+use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaNumeracionSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use Auth;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * SP ANTICIPADA pagada por IE: deja OPA en pagoproveedor + crédito impago en CC.
@@ -58,7 +62,7 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
             'tipotransaccion_caja_id' => (int) $movimiento->tipotransaccion_caja_id,
             'tipocomprobante' => IngresoEgresoSolicitudpagoSupport::abreviaturaTipoPago($sp),
             'letra' => (string) config('pagoproveedor.letra_default', 'A'),
-            'sucursal' => (int) config('pagoproveedor.sucursal_default', 1),
+            'sucursal' => PagoproveedorAnitaNumeracionSupport::sucursalParaOp((int) $movimiento->empresa_id),
             'numerotransaccion' => (string) ($movimiento->numerotransaccion ?? ''),
             'fecha' => $movimiento->fecha,
             'proveedor_id' => $proveedorId,
@@ -108,6 +112,8 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
         if ($asientoId > 0) {
             Asiento::query()->whereKey($asientoId)->update(['pagoproveedor_id' => $pago->id]);
         }
+
+        self::espejarCuentacorrienteAnita($pago->fresh());
     }
 
     public static function eliminarDesdeMovimiento(Caja_Movimiento $movimiento): void
@@ -116,6 +122,8 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
         if ($pago === null) {
             return;
         }
+
+        self::borrarCuentacorrienteAnita($pago);
 
         PagoproveedorAplicacionCuentacorrienteSupport::revertirAplicacionesExistentes($pago);
 
@@ -134,6 +142,37 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
 
         Pagoproveedor_Estado::query()->where('pagoproveedor_id', (int) $pago->id)->delete();
         $pago->delete();
+    }
+
+    /**
+     * promov de la OPA en la cuenta corriente Anita del proveedor, igual que el
+     * circuito de pagos. Anita es otra base: un corte del bridge no debe hacer
+     * rollback del IE (la auditoría diaria lo informa como «Falta promov de la OP»).
+     */
+    private static function espejarCuentacorrienteAnita(Pagoproveedor $pago): void
+    {
+        try {
+            app(ProveedorCuentacorrienteAplicacionAnitaSyncService::class)
+                ->syncPorPagoproveedor((int) $pago->id);
+        } catch (Throwable $e) {
+            Log::warning('anita_bridge.fallo', [
+                'contexto' => 'promov OPA desde IE '.$pago->etiquetaComprobante(),
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private static function borrarCuentacorrienteAnita(Pagoproveedor $pago): void
+    {
+        try {
+            app(ProveedorCuentacorrienteAplicacionAnitaSyncService::class)
+                ->eliminarPromovCabeceraPorPago($pago);
+        } catch (Throwable $e) {
+            Log::warning('anita_bridge.fallo', [
+                'contexto' => 'promov delete OPA desde IE '.$pago->etiquetaComprobante(),
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
     }
 
     private static function pagoVinculado(Caja_Movimiento $movimiento): ?Pagoproveedor
