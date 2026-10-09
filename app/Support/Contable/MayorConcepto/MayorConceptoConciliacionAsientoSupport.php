@@ -11,10 +11,18 @@ use Illuminate\Support\Facades\DB;
  * (equivalente a Debe concepto = Haber analítico y Haber concepto = Debe analítico).
  *
  * Excluye asiento 0 (remanente mayor plano). Tolerancia default ±1,00.
+ *
+ * Excepción: los asientos de `MAYOR_CONCEPTO_ASIENTOS_TRASPASO_INTERNO` salen con las dos
+ * patas, así que su neto concepto es 0 y la regla da la diferencia del analítico. No son
+ * descuadres: se informan aparte.
  */
 class MayorConceptoConciliacionAsientoSupport
 {
     public const TOLERANCIA_DEFAULT = 1.0;
+
+    public function __construct(
+        private readonly MayorConceptoMemoriaMotor $motor = new MayorConceptoMemoriaMotor,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $resultado
@@ -33,6 +41,7 @@ class MayorConceptoConciliacionAsientoSupport
 
         $filas = [];
         $descuadrados = 0;
+        $excepciones = 0;
 
         foreach ($numeros as $nro) {
             $a = $analitico[$nro] ?? ['debe' => 0.0, 'haber' => 0.0, 'fecha_min' => null, 'cuentas' => []];
@@ -47,7 +56,16 @@ class MayorConceptoConciliacionAsientoSupport
             $diferencia = round($netoA + $netoC, 2);
             $cuadra = abs($diferencia) <= $tolerancia;
 
-            if (! $cuadra) {
+            // Traspaso interno forzado: las dos patas dejan el concepto en cero a propósito.
+            // Si el concepto netea, la diferencia contra el analítico es esperada.
+            $excepcion = ! $cuadra
+                && abs($netoC) <= $tolerancia
+                && $this->motor->esAsientoTraspasoInternoForzado($empresaId, (int) $nro);
+
+            if ($excepcion) {
+                $cuadra = true;
+                $excepciones++;
+            } elseif (! $cuadra) {
                 $descuadrados++;
             }
 
@@ -75,8 +93,11 @@ class MayorConceptoConciliacionAsientoSupport
                 'neto_concepto' => $netoC,
                 'diferencia' => $diferencia,
                 'cuadra' => $cuadra,
+                'excepcion' => $excepcion,
                 'origen' => $origen,
-                'motivo' => implode(' ', $motivos[(int) $nro] ?? []),
+                'motivo' => $excepcion
+                    ? 'Excepción configurada: el asiento sale con las dos patas (traspaso interno), el concepto netea a cero.'
+                    : implode(' ', $motivos[(int) $nro] ?? []),
                 'asiento_id' => 0,
             ];
         }
@@ -97,6 +118,7 @@ class MayorConceptoConciliacionAsientoSupport
             'asientos_analizados' => $analizados,
             'asientos_cuadrados' => $cuadrados,
             'asientos_descuadrados' => $descuadrados,
+            'asientos_excepcion' => $excepciones,
             'porcentaje_cuadrado' => $analizados > 0 ? round(100 * $cuadrados / $analizados, 1) : 100.0,
             'filas' => $filas,
             'filas_descuadradas' => $filasDescuadradas,

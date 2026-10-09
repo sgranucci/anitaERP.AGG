@@ -690,6 +690,7 @@ class MayorConceptoReporteService
         $asientosAnalizados = 0;
         $asientosCuadrados = 0;
         $asientosDescuadrados = 0;
+        $asientosExcepcion = 0;
         $tolerancia = 1.0;
         $regla = 'Neto analítico + Neto concepto = 0';
 
@@ -705,6 +706,7 @@ class MayorConceptoReporteService
             $asientosAnalizados += (int) ($conc['asientos_analizados'] ?? 0);
             $asientosCuadrados += (int) ($conc['asientos_cuadrados'] ?? 0);
             $asientosDescuadrados += (int) ($conc['asientos_descuadrados'] ?? 0);
+            $asientosExcepcion += (int) ($conc['asientos_excepcion'] ?? 0);
 
             foreach ($conc['filas_descuadradas'] ?? [] as $fila) {
                 $fila['empresa_id'] = $empresaId;
@@ -730,6 +732,7 @@ class MayorConceptoReporteService
             'asientos_analizados' => $asientosAnalizados,
             'asientos_cuadrados' => $asientosCuadrados,
             'asientos_descuadrados' => $asientosDescuadrados,
+            'asientos_excepcion' => $asientosExcepcion,
             'porcentaje_cuadrado' => $porcentaje,
             'filas_descuadradas' => $filasDescuadradas,
             'filas_cuadradas' => $filasCuadradas,

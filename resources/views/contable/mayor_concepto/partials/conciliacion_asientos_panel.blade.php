@@ -14,6 +14,7 @@
     $asientosCuadrados = (int) ($conc['asientos_cuadrados'] ?? 0);
     $asientosDescuadrados = (int) ($conc['asientos_descuadrados'] ?? 0);
     $asientosAnalizados = (int) ($conc['asientos_analizados'] ?? 0);
+    $asientosExcepcion = (int) ($conc['asientos_excepcion'] ?? 0);
     $todoCuadra = ! empty($panel['cuadra']);
 @endphp
 @if ($tieneConciliacion)
@@ -35,6 +36,11 @@
                         {{ number_format($asientosDescuadrados, 0, ',', '.') }} descuadrado{{ $asientosDescuadrados === 1 ? '' : 's' }}
                     </span>
                 @endif
+                @if ($asientosExcepcion > 0)
+                    <span class="badge badge-warning mr-1">
+                        {{ number_format($asientosExcepcion, 0, ',', '.') }} por excepción
+                    </span>
+                @endif
                 <span class="badge badge-secondary">
                     {{ number_format($asientosAnalizados, 0, ',', '.') }} analizados
                     ({{ number_format((float) ($conc['porcentaje_cuadrado'] ?? 0), 1, ',', '.') }}%)
@@ -48,6 +54,18 @@
                 Tolerancia ±{{ number_format((float) ($conc['tolerancia'] ?? 1), 2, ',', '.') }}.
                 Excluye asiento 0 (remanente mayor plano).
             </p>
+
+            @if ($asientosExcepcion > 0)
+                <p class="small text-muted mb-2">
+                    <i class="fa fa-exclamation-triangle text-warning"></i>
+                    {{ number_format($asientosExcepcion, 0, ',', '.') }}
+                    asiento{{ $asientosExcepcion === 1 ? '' : 's' }}
+                    entra{{ $asientosExcepcion === 1 ? '' : 'n' }} por excepción configurada
+                    (<code>MAYOR_CONCEPTO_ASIENTOS_TRASPASO_INTERNO</code>): salen con las dos patas,
+                    así que el neto concepto es cero y la diferencia contra el analítico es esperada.
+                    Se listan entre los balanceados con la marca «excepción».
+                </p>
+            @endif
 
             @if ($todoCuadra)
                 <p class="small text-success mb-2">
@@ -147,7 +165,12 @@
                                         @if (! empty($conc['multiempresa']))
                                             <td>{{ $fila['nombreempresa'] ?? '' }}</td>
                                         @endif
-                                        <td>{{ $fila['nro_asiento'] ?? '' }}</td>
+                                        <td>
+                                            {{ $fila['nro_asiento'] ?? '' }}
+                                            @if (! empty($fila['excepcion']))
+                                                <span class="badge badge-warning" title="{{ $fila['motivo'] ?? '' }}">excepción</span>
+                                            @endif
+                                        </td>
                                         <td>{{ $fila['fecha_fmt'] ?? '' }}</td>
                                         <td class="text-right">{{ $formatearMonto($fila['debe_analitico'] ?? null) }}</td>
                                         <td class="text-right">{{ $formatearMonto($fila['haber_analitico'] ?? null) }}</td>
