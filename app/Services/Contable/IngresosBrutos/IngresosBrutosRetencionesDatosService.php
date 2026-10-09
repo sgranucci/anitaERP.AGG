@@ -13,6 +13,7 @@ use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreProveedorErpSupport;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
@@ -22,6 +23,9 @@ use Illuminate\Support\Facades\Schema;
 final class IngresosBrutosRetencionesDatosService
 {
     private ?string $ultimaAdvertencia = null;
+
+    /** @var array<string, true>|null */
+    private ?array $notasCreditoCompra = null;
 
     public function __construct(
         private readonly SicoreProveedorErpSupport $proveedorSupport = new SicoreProveedorErpSupport(),
@@ -156,8 +160,20 @@ final class IngresosBrutosRetencionesDatosService
                     'alicuota' => (float) ($fila['retibr_porc_ret'] ?? 0),
                 ];
             }
-            $agrupados[$clave]['sujeto'] += (float) ($fila['retibr_sujeto'] ?? 0);
-            $agrupados[$clave]['retencion'] += (float) ($fila['retibr_retencion'] ?? 0);
+            // NC y anulación (AOP) se graban en positivo con el mismo nro de certificado
+            // que la OPP. Hay que restarlas: si se suman, el certificado queda duplicado.
+            // La NC aplicada (CIB, NCP, …) ya viene negativa en retibrmov y se deja así.
+            $tipoMov = strtoupper(trim((string) ($fila['retibr_tipo'] ?? '')));
+            $tipoComp = strtoupper(trim((string) ($fila['retibr_tipo_comp'] ?? '')));
+            $sujeto = (float) ($fila['retibr_sujeto'] ?? 0);
+            $retencion = (float) ($fila['retibr_retencion'] ?? 0);
+            if (self::movimientoResta($tipoMov)
+                || ($retencion > 0 && $this->esNotaCreditoCompra($tipoComp))) {
+                $sujeto = -abs($sujeto);
+                $retencion = -abs($retencion);
+            }
+            $agrupados[$clave]['sujeto'] += $sujeto;
+            $agrupados[$clave]['retencion'] += $retencion;
             $agrupados[$clave]['alicuota'] = (float) ($fila['retibr_porc_ret'] ?? $agrupados[$clave]['alicuota']);
         }
 
@@ -278,6 +294,12 @@ final class IngresosBrutosRetencionesDatosService
             if (abs($importe) < 0.001) {
                 continue;
             }
+            $tipoPago = strtoupper(substr(trim((string) ($pago->tipocomprobante ?? '')), 0, 3));
+            $base = (float) $ret->base_calculo;
+            if (self::movimientoResta($tipoPago) || ($importe > 0 && $this->esNotaCreditoCompra($tipoPago))) {
+                $importe = -abs($importe);
+                $base = -abs($base);
+            }
             $fecha = $pago->fecha?->format('Y-m-d') ?? '';
             $nroCert = (int) preg_replace('/\D+/', '', (string) ($ret->nro_certificado ?? '0'));
 
@@ -290,7 +312,7 @@ final class IngresosBrutosRetencionesDatosService
                 'nro_comp' => (int) ($pago->numerotransaccion ?? 0),
                 'nro_cert' => $nroCert,
                 'sucursal' => 1,
-                'base_calculo' => round(abs((float) $ret->base_calculo), 2),
+                'base_calculo' => round($base, 2),
                 'importe' => $importe,
                 'alicuota' => round((float) $ret->alicuota, 2),
                 'nro_documento' => IngresosBrutosFormatoArbaSupport::normalizarCuit((string) ($prov->nroinscripcion ?? '')),
@@ -301,5 +323,57 @@ final class IngresosBrutosRetencionesDatosService
         }
 
         return $out;
+    }
+
+    /**
+     * Anulación de orden de pago y nota de crédito del pago: restan la retención.
+     * En Anita (p-ingbruto, ARCIBA) el tipo que empieza con NC se resta.
+     */
+    private static function movimientoResta(string $tipo): bool
+    {
+        $tipo = strtoupper(trim($tipo));
+
+        return str_starts_with($tipo, 'NC') || str_starts_with($tipo, 'AOP');
+    }
+
+    /**
+     * Nota de crédito de compras (CIB, NCP, …). No incluye OPP/OPA: también
+     * tienen signo negativo, pero son el pago, no el comprobante aplicado.
+     */
+    private function esNotaCreditoCompra(string $abreviatura): bool
+    {
+        $abreviatura = strtoupper(trim($abreviatura));
+        if ($abreviatura === '') {
+            return false;
+        }
+
+        return isset($this->notasCreditoCompra()[$abreviatura]);
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function notasCreditoCompra(): array
+    {
+        if ($this->notasCreditoCompra !== null) {
+            return $this->notasCreditoCompra;
+        }
+
+        $this->notasCreditoCompra = [];
+        if (! Schema::hasTable('tipotransaccion_compra') || ! Schema::hasColumn('tipotransaccion_compra', 'signo')) {
+            return $this->notasCreditoCompra;
+        }
+
+        foreach (DB::table('tipotransaccion_compra')->get(['abreviatura', 'signo']) as $tipo) {
+            $abreviatura = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
+            if ($abreviatura === '' || (int) $tipo->signo >= 0) {
+                continue;
+            }
+            if (str_starts_with($abreviatura, 'NC') || str_starts_with($abreviatura, 'C')) {
+                $this->notasCreditoCompra[$abreviatura] = true;
+            }
+        }
+
+        return $this->notasCreditoCompra;
     }
 }
