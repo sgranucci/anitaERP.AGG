@@ -1,4 +1,5 @@
-FROM php:8.3-cli-bookworm
+# Espejo público de la imagen oficial. Docker Hub (auth.docker.io) corta por timeout en GitHub Actions.
+FROM public.ecr.aws/docker/library/php:8.3-cli-bookworm
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

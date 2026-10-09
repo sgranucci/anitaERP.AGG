@@ -2,7 +2,8 @@ version: "3.8"
 
 services:
   postgres:
-    image: postgres:16-bookworm
+    # Espejo público de la imagen oficial. Docker Hub (auth.docker.io) corta por timeout en GitHub Actions.
+    image: public.ecr.aws/docker/library/postgres:16-bookworm
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
