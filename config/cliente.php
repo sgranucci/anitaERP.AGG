@@ -120,6 +120,10 @@ switch(config('app.empresa'))
             'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['impuestosBSA@grupoagg.com'],
             'SINCRONIZA_CLIMA_ANITA' => true,
             'permitir_cuit_duplicado' => $permitirCuitDuplicado,
+            // Clientes internos de gastronomía: serie numérica propia (7000, 7001…).
+            // Administración sigue la serie ERP (ERP001…).
+            'SECUENCIA_GASTRONOMIA_DESDE' => 7000,
+            'SECUENCIA_GASTRONOMIA_HASTA' => 7999,
             // Etiquetas listado factura (VentasListadoEtiquetasSupport)
             'listado_etiqueta_transporte' => 'Transporte',
             'listado_etiqueta_transporte_plural' => 'Transportes',

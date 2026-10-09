@@ -36,6 +36,7 @@ use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Ventas\ClienteAnitaNumeracionSupport;
+use App\Support\Ventas\ClienteCodigoSecuenciaSupport;
 use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
 use App\Support\Ventas\ClienteAnitaGeoSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
@@ -78,11 +79,18 @@ class ClienteRepository implements ClienteRepositoryInterface
 
     public function create(array $data, ?bool $syncAnita = null)
     {
+		$secuencia = (string) ($data['secuencia_codigo'] ?? '');
+		unset($data['secuencia_codigo']);
+
 		if (config('app.empresa') !== 'INTERFORMING')
 		{
-			$codigo = '';
-			self::ultimoCodigo($codigo);
-			$data['codigo'] = $codigo;
+			if (ClienteCodigoSecuenciaSupport::esPedidoGastronomia($secuencia)) {
+				$data['codigo'] = ClienteCodigoSecuenciaSupport::proximoGastronomia(true);
+			} else {
+				$codigo = '';
+				self::ultimoCodigo($codigo);
+				$data['codigo'] = $codigo;
+			}
 		}
 		$data['estado'] = '0';
 
@@ -166,8 +174,19 @@ class ClienteRepository implements ClienteRepositoryInterface
 			}
 		}
 
-        $cliente = $this->model->findOrFail($id)
-            ->update($data);
+		$secuencia = (string) ($data['secuencia_codigo'] ?? '');
+		unset($data['secuencia_codigo']);
+
+		$clienteModelo = $this->model->findOrFail($id);
+		if (config('app.empresa') !== 'INTERFORMING') {
+			if (ClienteCodigoSecuenciaSupport::debeReasignarAGastronomia($clienteModelo->codigo, $secuencia)) {
+				$data['codigo'] = ClienteCodigoSecuenciaSupport::proximoGastronomia(true);
+			} else {
+				unset($data['codigo']);
+			}
+		}
+
+        $cliente = $clienteModelo->update($data);
 
 		// Anita: sincronizarAnitaDespuesDeGrabado() tras tablas asociadas (evita doble sync stksuspcli).
 
@@ -2391,22 +2410,28 @@ class ClienteRepository implements ClienteRepositoryInterface
 				
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
+		if (config('app.empresa') == 'AGG') {
+			$rawAnita = '';
+			if (is_array($dataAnita) && isset($dataAnita[0]->{$this->keyFieldAnita})) {
+				$rawAnita = (string) $dataAnita[0]->{$this->keyFieldAnita};
+			}
+			$numeroAnita = $rawAnita !== ''
+				? (int) filter_var($rawAnita, FILTER_SANITIZE_NUMBER_INT)
+				: 0;
+			$codigo = ClienteCodigoSecuenciaSupport::proximoCodigoAdministracion($numeroAnita);
+
+			return;
+		}
+
 		if ($dataAnita[0]->{$this->keyFieldAnita} != '')
 		{
 			$numero = filter_var($dataAnita[0]->{$this->keyFieldAnita}, FILTER_SANITIZE_NUMBER_INT);
 			$numero = $numero + 1;
-
-			if (config('app.empresa') == 'AGG')
-				$codigo = 'ERP'.str_pad($numero, 3, "0", STR_PAD_LEFT);
-			else
-				$codigo = str_pad($numero, 6, "0", STR_PAD_LEFT);
+			$codigo = str_pad($numero, 6, "0", STR_PAD_LEFT);
 		}
 		else
 		{
-			if (config('app.empresa') == 'AGG')
-				$codigo = 'ERP001';
-			else
-				$codigo = "000001";
+			$codigo = "000001";
 		}
 	}
 
