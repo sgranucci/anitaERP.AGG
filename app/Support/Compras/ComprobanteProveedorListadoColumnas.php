@@ -165,6 +165,17 @@ final class ComprobanteProveedorListadoColumnas
             'attr' => 'estado',
             'group' => self::GRUPO_COMPROBANTE,
         ],
+        'fuera_pago' => [
+            'label' => 'Fuera de pago',
+            'default' => false,
+            'export' => true,
+            'filterable' => true,
+            'type' => 'booleano',
+            'source' => 'comprobante_proveedor.bloqueado_pago',
+            'attr' => 'bloqueado_pago',
+            'group' => self::GRUPO_COMPROBANTE,
+            'alinea' => 'centro',
+        ],
         'origen' => [
             'label' => 'Origen',
             'default' => true,
@@ -423,7 +434,15 @@ final class ComprobanteProveedorListadoColumnas
             return trim((string) (($data->abreviatura_tipo ?? '').' '.($data->nombre_tipo ?? '')));
         }
         if ($key === 'estado') {
-            return ComprobanteProveedorEstados::etiqueta($data->estado ?? null);
+            $etiqueta = ComprobanteProveedorEstados::etiqueta($data->estado ?? null);
+            if ((int) ($data->bloqueado_pago ?? 0) === 1) {
+                $etiqueta = trim($etiqueta.' · Fuera de pago');
+            }
+
+            return $etiqueta;
+        }
+        if ($key === 'fuera_pago') {
+            return (int) ($data->bloqueado_pago ?? 0) === 1 ? 'Sí' : '';
         }
         if ($key === 'origen') {
             return ComprobanteProveedorOrigenEntrada::etiqueta((string) ($data->origen_entrada ?? ''));

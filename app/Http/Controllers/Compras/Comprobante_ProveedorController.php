@@ -1932,6 +1932,8 @@ class Comprobante_ProveedorController extends Controller
             && ! $request->has('empresa_todas')
             && ! $request->has('estado')
             && ! $request->has('estado_todas')
+            && ! $request->has('fuera_pago')
+            && ! $request->has('fuera_pago_todas')
         ) {
             $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ComprobanteProveedorListadoColumnas::RECURSO, $usuarioId);
         }

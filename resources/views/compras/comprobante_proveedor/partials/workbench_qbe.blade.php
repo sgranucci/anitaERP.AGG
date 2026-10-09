@@ -6,6 +6,7 @@
     $opsEntero = ComprobanteProveedorListadoFiltros::OPERADORES_ENTERO_QBE;
     $opsFecha = ComprobanteProveedorListadoFiltros::OPERADORES_FECHA_QBE;
     $opsDecimal = ComprobanteProveedorListadoFiltros::OPERADORES_DECIMAL;
+    $opsBool = ComprobanteProveedorListadoFiltros::OPERADORES_BOOLEANO;
     $camposQbeJson = [];
     foreach ($camposQbe as $k => $m) {
         $camposQbeJson[] = [
@@ -20,12 +21,13 @@
      data-ops-entero='@json($opsEntero)'
      data-ops-fecha='@json($opsFecha)'
      data-ops-decimal='@json($opsDecimal)'
+     data-ops-bool='@json($opsBool)'
      data-campos='@json($camposQbeJson)'>
     <input type="hidden" name="aplicar_qbe" id="lw-aplicar-qbe" value="">
     <div class="lw-qbe-title">
         <div>
             <h4><i class="fa fa-filter text-info"></i> Consulta avanzada</h4>
-            <div class="lw-hint">Se combina con la empresa y el estado de arriba. Origen, estado y modo de carga aceptan el nombre o el código (por ejemplo INGRESO_EGRESO).</div>
+            <div class="lw-hint">Se combina con la empresa y el estado de arriba. Origen, estado y modo de carga aceptan el nombre o el código (por ejemplo INGRESO_EGRESO). Fuera de pago: sí o no.</div>
         </div>
         <div class="d-flex" style="gap:.35rem;">
             <button type="button" class="btn btn-sm btn-outline-primary" id="btn-lw-add-criterio">
@@ -46,6 +48,7 @@
         'opsEntero' => $opsEntero,
         'opsFecha' => $opsFecha,
         'opsDecimal' => $opsDecimal,
+        'opsBool' => $opsBool,
         'etiquetasColumnas' => $etiquetasColumnas ?? [],
     ])
     <div id="lw-orden-qbe-slot">

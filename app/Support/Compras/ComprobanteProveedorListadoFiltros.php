@@ -18,6 +18,12 @@ use Illuminate\Http\Request;
  */
 class ComprobanteProveedorListadoFiltros
 {
+    public const PAGO_TODOS = 'todos';
+
+    public const PAGO_FUERA = 'fuera';
+
+    public const PAGO_CIRCUITO = 'circuito';
+
     public const MODO_TODOS = 'todos';
 
     public const MODO_CAMPO = 'campo';
@@ -56,6 +62,12 @@ class ComprobanteProveedorListadoFiltros
 
     /** @var array<string, string> */
     public const OPERADORES_DECIMAL = ListadoQbeSupport::OPERADORES_DECIMAL;
+
+    /** @var array<string, string> */
+    public const OPERADORES_BOOLEANO = [
+        'igual' => 'Es',
+        'vacio' => 'Sin dato',
+    ];
 
     /** @var array<string, array{column: string, type: string, label: string}> */
     public const CAMPOS = [
@@ -116,12 +128,14 @@ class ComprobanteProveedorListadoFiltros
     {
         [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
         $estado = self::resolverEstadoExterno($request);
+        $fueraPago = self::resolverFueraPagoExterno($request);
 
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
             return array_merge(self::filtrosVacios(), [
                 'empresa_id' => $empresaId,
                 'empresa_scope' => $empresaScope,
                 'estado' => $estado,
+                'fuera_pago' => $fueraPago,
                 '_limpiar' => true,
             ]);
         }
@@ -171,6 +185,7 @@ class ComprobanteProveedorListadoFiltros
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
             'estado' => $estado,
+            'fuera_pago' => $fueraPago,
             'qbe' => $qbe,
             'sort' => $sort,
             'agrupar' => $agrupar,
@@ -246,6 +261,19 @@ class ComprobanteProveedorListadoFiltros
         return $estado;
     }
 
+    private static function resolverFueraPagoExterno(Request $request): string
+    {
+        if ($request->boolean('fuera_pago_todas')) {
+            return self::PAGO_TODOS;
+        }
+
+        $valor = strtolower(trim((string) $request->input('fuera_pago', self::PAGO_TODOS)));
+
+        return in_array($valor, [self::PAGO_FUERA, self::PAGO_CIRCUITO], true)
+            ? $valor
+            : self::PAGO_TODOS;
+    }
+
     public static function tieneCriteriosTexto(array $filtros): bool
     {
         if (ListadoQbeSupport::tieneCriterios((array) ($filtros['qbe'] ?? []))) {
@@ -295,6 +323,7 @@ class ComprobanteProveedorListadoFiltros
             'empresa_id' => null,
             'empresa_scope' => 'una',
             'estado' => ComprobanteProveedorEstados::FILTRO_TODOS,
+            'fuera_pago' => self::PAGO_TODOS,
             'qbe' => ListadoQbeSupport::vacio(),
             'sort' => [],
             'agrupar' => [],
@@ -365,7 +394,11 @@ class ComprobanteProveedorListadoFiltros
      */
     public static function paraQueryStringExternos(array $filtros): array
     {
-        return array_merge(self::paraQueryStringEmpresa($filtros), self::paraQueryStringEstado($filtros));
+        return array_merge(
+            self::paraQueryStringEmpresa($filtros),
+            self::paraQueryStringEstado($filtros),
+            self::paraQueryStringFueraPago($filtros),
+        );
     }
 
     /**
@@ -382,6 +415,19 @@ class ComprobanteProveedorListadoFiltros
     }
 
     /**
+     * @return array<string, string>
+     */
+    public static function paraQueryStringFueraPago(array $filtros): array
+    {
+        $pago = (string) ($filtros['fuera_pago'] ?? self::PAGO_TODOS);
+        if ($pago === '' || $pago === self::PAGO_TODOS) {
+            return [];
+        }
+
+        return ['fuera_pago' => $pago];
+    }
+
+    /**
      * @param  Builder<\App\Models\Compras\Comprobante_Proveedor>  $query
      */
     public static function aplicar(Builder $query, array $filtros): void
@@ -395,6 +441,16 @@ class ComprobanteProveedorListadoFiltros
             $query->where('comprobante_proveedor.anita_sync_estado', ComprobanteProveedorAnitaSyncEstado::ERROR);
         } elseif ($estado !== '' && $estado !== ComprobanteProveedorEstados::FILTRO_TODOS) {
             $query->where('comprobante_proveedor.estado', $estado);
+        }
+
+        $fueraPago = (string) ($filtros['fuera_pago'] ?? self::PAGO_TODOS);
+        if ($fueraPago === self::PAGO_FUERA) {
+            $query->where('comprobante_proveedor.bloqueado_pago', true);
+        } elseif ($fueraPago === self::PAGO_CIRCUITO) {
+            $query->where(function ($q) {
+                $q->where('comprobante_proveedor.bloqueado_pago', false)
+                    ->orWhereNull('comprobante_proveedor.bloqueado_pago');
+            });
         }
 
         if (! self::tieneCriteriosTexto($filtros)) {
@@ -696,6 +752,7 @@ class ComprobanteProveedorListadoFiltros
             'empresa_id' => $base['empresa_id'] ?? null,
             'empresa_scope' => $base['empresa_scope'] ?? 'una',
             'estado' => $base['estado'] ?? ComprobanteProveedorEstados::FILTRO_TODOS,
+            'fuera_pago' => $base['fuera_pago'] ?? self::PAGO_TODOS,
         ];
         $campos = self::camposOrdenables();
         $ordenVista = ListadoOrdenamientoSupport::normalizar($desdeVista['sort'] ?? $desdeVista['orden'] ?? [], $campos);
@@ -900,6 +957,11 @@ class ComprobanteProveedorListadoFiltros
 
             return;
         }
+        if ($type === 'booleano') {
+            self::aplicarBooleanoQbe($query, $column, $operador, $valor);
+
+            return;
+        }
 
         self::aplicarTextoQbe($query, $column, $operador, $valor, $valorHasta);
     }
@@ -1091,6 +1153,23 @@ class ComprobanteProveedorListadoFiltros
         }
     }
 
+    /**
+     * @param  Builder<\App\Models\Compras\Comprobante_Proveedor>  $query
+     */
+    private static function aplicarBooleanoQbe(Builder $query, string $column, string $operador, string $valor): void
+    {
+        if ($operador === 'vacio') {
+            $query->where(function ($q) use ($column) {
+                $q->whereNull($column)->orWhere($column, 0);
+            });
+
+            return;
+        }
+
+        $truthy = in_array(mb_strtolower(trim($valor)), ['1', 'si', 'sí', 'true', 's', 'yes'], true);
+        $query->where($column, $truthy ? 1 : 0);
+    }
+
     private static function normalizarOperadorQbe(string $operador, string $campoKey): string
     {
         $type = self::camposQbeDisponibles()[$campoKey]['type'] ?? 'texto';
@@ -1098,6 +1177,7 @@ class ComprobanteProveedorListadoFiltros
             'entero' => array_keys(self::OPERADORES_ENTERO_QBE),
             'fecha' => array_keys(self::OPERADORES_FECHA_QBE),
             'decimal' => array_keys(self::OPERADORES_DECIMAL),
+            'booleano' => array_keys(self::OPERADORES_BOOLEANO),
             default => array_keys(self::OPERADORES_TEXTO_QBE),
         };
 

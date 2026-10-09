@@ -228,6 +228,7 @@ final class ListadoGrillaConfigSupport
     {
         return match ($key) {
             'id' => 52,
+            'fuera_pago' => 56,
             'codigo', 'estado', 'tipoalta', 'semaforo', 'apoc' => 60,
             'numerodocumento', 'codigopostal', 'telefono' => 96,
             'cbu' => 160,
@@ -248,7 +249,7 @@ final class ListadoGrillaConfigSupport
     public static function anchoMinimoLegible(string $key, array $meta = []): int
     {
         return match ($key) {
-            'id', 'codigo', 'estado', 'tipoalta', 'semaforo', 'apoc' => self::ANCHO_MIN_LEGIBLE,
+            'id', 'codigo', 'estado', 'tipoalta', 'semaforo', 'apoc', 'fuera_pago' => self::ANCHO_MIN_LEGIBLE,
             'cbu' => 100,
             'numerodocumento', 'alias_cbu' => 72,
             'nombre', 'fantasia', 'domicilio', 'email', 'emailoc', 'leyenda' => 80,
@@ -325,7 +326,7 @@ final class ListadoGrillaConfigSupport
         if ($type === 'entero' || in_array($key, ['cbu', 'codigo', 'codigopostal'], true)) {
             return self::ALINEA_DERECHA;
         }
-        if (in_array($key, ['estado', 'apoc', 'semaforo', 'tipoalta'], true)) {
+        if (in_array($key, ['estado', 'apoc', 'semaforo', 'tipoalta', 'fuera_pago'], true)) {
             return self::ALINEA_CENTRO;
         }
 

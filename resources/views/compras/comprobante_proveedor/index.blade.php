@@ -5,6 +5,30 @@
 
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<style>
+    .lw-workbench.lw-cp-grilla #tabla-paginada thead th {
+        font-size: 0.92rem;
+        padding-top: 0.45rem;
+        padding-bottom: 0.45rem;
+    }
+    .lw-workbench.lw-cp-grilla #tabla-paginada tbody td {
+        font-size: 0.95rem;
+        padding-top: 0.4rem;
+        padding-bottom: 0.4rem;
+    }
+    .lw-workbench.lw-cp-grilla #tabla-paginada .badge {
+        font-size: 0.82rem;
+    }
+    .lw-workbench.lw-cp-grilla #tabla-paginada th.cp-col-fechaiva,
+    .lw-workbench.lw-cp-grilla #tabla-paginada td.cp-col-fechaiva,
+    .lw-workbench.lw-cp-grilla #tabla-paginada th.cp-col-fecha,
+    .lw-workbench.lw-cp-grilla #tabla-paginada td.cp-col-fecha,
+    .lw-workbench.lw-cp-grilla #tabla-paginada th.cp-col-numero,
+    .lw-workbench.lw-cp-grilla #tabla-paginada td.cp-col-numero {
+        width: 1%;
+        white-space: nowrap;
+    }
+</style>
 @endsection
 
 @section("scripts")
@@ -53,7 +77,7 @@
     <div class="col-lg-12">
         @include('includes.mensaje')
         @include('compras.precarga_comprobante_proveedor.partials.aviso_ya_en_anita')
-        <div class="card card-info lw-workbench shadow-sm">
+        <div class="card card-info lw-workbench lw-cp-grilla shadow-sm">
             <div class="card-header lw-header d-flex flex-wrap align-items-center justify-content-between">
                 <h3 class="card-title mb-0">Comprobantes de proveedor</h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end" style="gap:.4rem;">
@@ -154,6 +178,13 @@
                     'queryparams' => $filtrosQuery ?? [],
                 ])
             </div>
+            @php
+                $camposOrdenablesThead = ComprobanteProveedorListadoFiltros::camposOrdenables();
+                $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
+                    $filtros['sort'] ?? [],
+                    $camposOrdenablesThead
+                );
+            @endphp
             <div class="card-body table-responsive p-0">
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">

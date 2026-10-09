@@ -31,8 +31,8 @@
                 ], true)
             );
         @endphp
-        <td class="text-nowrap">
-            <small>{{ ComprobanteProveedorListadoColumnas::numeroVisible($data) }}</small>
+        <td class="text-nowrap cp-col-numero">
+            {{ ComprobanteProveedorListadoColumnas::numeroVisible($data) }}
             @if ($puedeVerComprobante && $tienePdfFactura)
                 <a href="{{ route('comprobante_proveedor_factura_pdf', ['id' => $data->id, 'inline' => 1]) }}"
                    class="btn-accion-tabla text-danger ml-1" target="_blank" rel="noopener"
@@ -52,11 +52,18 @@
                 @if ($ordencompraId > 0 && can('editar-ordencompra', false))
                     <a href="{{ route('editar_ordencompra', ['id' => $ordencompraId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
                        class="text-primary" target="_blank" rel="noopener" title="Consultar orden de compra">
-                        <small>{{ $numeroOc }}</small>
+                        {{ $numeroOc }}
                     </a>
                 @else
-                    <small>{{ $numeroOc }}</small>
+                    {{ $numeroOc }}
                 @endif
+            @endif
+        </td>
+        @break
+    @case ('fuera_pago')
+        <td class="text-center">
+            @if ((int) ($data->bloqueado_pago ?? 0) === 1)
+                <i class="fa fa-check text-muted" title="{{ $data->bloqueado_pago_motivo ?: 'Fuera del circuito de pago y de la proyección' }}"></i>
             @endif
         </td>
         @break
@@ -68,28 +75,34 @@
         @endphp
         <td>
             <span class="{{ $badgeEstado['class'] }}">{{ $badgeEstado['label'] }}</span>
+            @if ((int) ($data->bloqueado_pago ?? 0) === 1)
+                <span class="badge badge-light border ml-1" title="{{ $data->bloqueado_pago_motivo ?: 'Fuera del circuito de pago y de la proyección' }}">Fuera de pago</span>
+            @endif
             @if ($badgeError)
                 <span class="{{ $badgeError['class'] }}" title="{{ $data->anita_sync_error }}">{{ $badgeError['label'] }}</span>
             @endif
         </td>
         @break
     @case ('origen')
-        <td><small>{{ ComprobanteProveedorOrigenEntrada::etiqueta($data->origen_entrada ?? '') }}</small></td>
+        <td><span class="cp-celda">{{ ComprobanteProveedorOrigenEntrada::etiqueta($data->origen_entrada ?? '') }}</span></td>
         @break
     @case ('modo_carga')
-        <td><small>{{ ComprobanteProveedorModoCarga::etiqueta($data->modo_carga ?? '') }}</small></td>
+        <td><span class="cp-celda">{{ ComprobanteProveedorModoCarga::etiqueta($data->modo_carga ?? '') }}</span></td>
+        @break
+    @case ('fechacomprobante')
+        <td class="text-nowrap cp-col-fecha">{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</td>
         @break
     @case ('fechaiva')
-        <td>
+        <td class="text-nowrap cp-col-fechaiva">
             @if ($data->fechaiva)
-                <span class="badge badge-info" title="Fecha de contabilización e IVA compras">{{ $data->fechaiva->format('d/m/Y') }}</span>
+                <span title="Fecha de contabilización e IVA compras">{{ $data->fechaiva->format('d/m/Y') }}</span>
             @endif
         </td>
         @break
     @case ('total')
     @case ('cotizacion')
-        <td class="text-right text-nowrap"><small>{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</small></td>
+        <td class="text-right text-nowrap">{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</td>
         @break
     @default
-        <td><small>{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</small></td>
+        <td>{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</td>
 @endswitch

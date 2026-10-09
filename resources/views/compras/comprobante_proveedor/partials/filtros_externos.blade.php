@@ -1,9 +1,14 @@
 @php
     use App\Support\Compras\ComprobanteProveedorEstados;
+    use App\Support\Compras\ComprobanteProveedorListadoFiltros;
 
     $empresaScope = $filtros['empresa_scope'] ?? 'una';
     $empresaActual = (int) ($filtros['empresa_id'] ?? 0);
     $estadoActual = (string) ($filtros['estado'] ?? ComprobanteProveedorEstados::FILTRO_TODOS);
+    $pagoActual = (string) ($filtros['fuera_pago'] ?? ComprobanteProveedorListadoFiltros::PAGO_TODOS);
+    $pagoFuera = ComprobanteProveedorListadoFiltros::PAGO_FUERA;
+    $pagoCircuito = ComprobanteProveedorListadoFiltros::PAGO_CIRCUITO;
+    $pagoTodos = ComprobanteProveedorListadoFiltros::PAGO_TODOS;
     $baseQ = $filtrosQuery ?? [];
     $rutaIndex = 'comprobante_proveedor';
 
@@ -30,38 +35,69 @@
 
         return route($rutaIndex, $q);
     };
+
+    $urlPago = function ($modo) use ($baseQ, $rutaIndex) {
+        $q = $baseQ;
+        unset($q['fuera_pago'], $q['fuera_pago_todas']);
+        if ($modo === ComprobanteProveedorListadoFiltros::PAGO_TODOS) {
+            $q['fuera_pago_todas'] = 1;
+        } else {
+            $q['fuera_pago'] = $modo;
+        }
+
+        return route($rutaIndex, $q);
+    };
 @endphp
 <div class="card-body py-2 border-bottom bg-white">
-    @if (($empresa_query ?? collect())->count() > 1)
-    <div class="d-flex flex-wrap align-items-center mb-1">
-        <span class="text-muted small mr-2"><i class="fa fa-building"></i> Empresa:</span>
-        <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtro de empresa">
-            @foreach ($empresa_query as $emp)
-                <a href="{{ $urlEmpresa($emp->id) }}"
-                   class="btn {{ ($empresaScope !== 'todas' && $empresaActual === (int) $emp->id) ? 'btn-info' : 'btn-outline-info' }}">
-                    {{ $emp->nombre }}
+    <div class="d-flex flex-wrap align-items-center" style="gap:.35rem .85rem;">
+        @if (($empresa_query ?? collect())->count() > 1)
+        <div class="d-flex flex-wrap align-items-center">
+            <span class="text-muted small mr-2"><i class="fa fa-building"></i> Empresa:</span>
+            <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtro de empresa">
+                @foreach ($empresa_query as $emp)
+                    <a href="{{ $urlEmpresa($emp->id) }}"
+                       class="btn {{ ($empresaScope !== 'todas' && $empresaActual === (int) $emp->id) ? 'btn-info' : 'btn-outline-info' }}">
+                        {{ $emp->nombre }}
+                    </a>
+                @endforeach
+                <a href="{{ $urlEmpresa('todas') }}"
+                   class="btn {{ $empresaScope === 'todas' ? 'btn-primary' : 'btn-outline-primary' }}">
+                    Todas mis empresas
                 </a>
-            @endforeach
-            <a href="{{ $urlEmpresa('todas') }}"
-               class="btn {{ $empresaScope === 'todas' ? 'btn-primary' : 'btn-outline-primary' }}">
-                Todas mis empresas
-            </a>
+            </div>
         </div>
-    </div>
-    @endif
-    <div class="d-flex flex-wrap align-items-center">
-        <span class="text-muted small mr-2"><i class="fa fa-filter"></i> Estado:</span>
-        <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtro de estado">
-            @foreach (ComprobanteProveedorEstados::opcionesFiltroListado() as $codEstado => $etiquetaEstado)
-                <a href="{{ $urlEstado($codEstado) }}"
-                   class="btn {{ ComprobanteProveedorEstados::filtroBotonClases($codEstado, $estadoActual === $codEstado) }}">
-                    {{ $etiquetaEstado }}
+        @endif
+        <div class="d-flex flex-wrap align-items-center">
+            <span class="text-muted small mr-2"><i class="fa fa-filter"></i> Estado:</span>
+            <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtro de estado">
+                @foreach (ComprobanteProveedorEstados::opcionesFiltroListado() as $codEstado => $etiquetaEstado)
+                    <a href="{{ $urlEstado($codEstado) }}"
+                       class="btn {{ ComprobanteProveedorEstados::filtroBotonClases($codEstado, $estadoActual === $codEstado) }}">
+                        {{ $etiquetaEstado }}
+                    </a>
+                @endforeach
+                <a href="{{ $urlEstado(ComprobanteProveedorEstados::FILTRO_TODOS) }}"
+                   class="btn {{ ComprobanteProveedorEstados::filtroBotonClases(ComprobanteProveedorEstados::FILTRO_TODOS, $estadoActual === ComprobanteProveedorEstados::FILTRO_TODOS) }}">
+                    Todos
                 </a>
-            @endforeach
-            <a href="{{ $urlEstado(ComprobanteProveedorEstados::FILTRO_TODOS) }}"
-               class="btn {{ ComprobanteProveedorEstados::filtroBotonClases(ComprobanteProveedorEstados::FILTRO_TODOS, $estadoActual === ComprobanteProveedorEstados::FILTRO_TODOS) }}">
-                Todos
-            </a>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap align-items-center">
+            <span class="text-muted small mr-2">Pago:</span>
+            <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtro fuera de pago">
+                <a href="{{ $urlPago($pagoFuera) }}"
+                   class="btn {{ $pagoActual === $pagoFuera ? 'btn-secondary' : 'btn-outline-secondary' }}">
+                    Fuera de pago
+                </a>
+                <a href="{{ $urlPago($pagoCircuito) }}"
+                   class="btn {{ $pagoActual === $pagoCircuito ? 'btn-info' : 'btn-outline-info' }}">
+                    En circuito
+                </a>
+                <a href="{{ $urlPago($pagoTodos) }}"
+                   class="btn {{ $pagoActual === $pagoTodos ? 'btn-primary' : 'btn-outline-primary' }}">
+                    Todos
+                </a>
+            </div>
         </div>
     </div>
 </div>
