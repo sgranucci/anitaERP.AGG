@@ -11,8 +11,9 @@ use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Emite la NC del cambio solo por las líneas «A devolver», al precio de la factura original.
- * Medio puente NCD. No toca gastronomía AGG.
+ * Emite la NC del cambio solo por las líneas «A devolver», al precio de la grilla.
+ * Si no lo editaron, ese precio es el de la factura original. Medio puente NCD.
+ * No toca gastronomía AGG.
  */
 final class CambioDevolucionMarketplaceNcService
 {
@@ -74,6 +75,7 @@ final class CambioDevolucionMarketplaceNcService
                 'registrar_historial' => false,
                 'venta_emision_ids' => $aDevolver['ids'],
                 'cantidades_por_emision' => $aDevolver['cantidades'],
+                'precios_por_emision' => $aDevolver['precios'],
             ]
         );
 
@@ -100,7 +102,7 @@ final class CambioDevolucionMarketplaceNcService
     }
 
     /**
-     * Solo las líneas «A devolver», al precio unitario de la factura original.
+     * Solo las líneas «A devolver». El precio es el de la grilla (producto, o el de la factura si no lo cambiaron).
      *
      * @return array{ids:list<int>,cantidades:array<int,float>,precios:array<int,float>}
      */
@@ -132,7 +134,10 @@ final class CambioDevolucionMarketplaceNcService
             }
             $ids[] = $emisionId;
             $cantidades[$emisionId] = round(($cantidades[$emisionId] ?? 0) + $cantidad, 4);
-            $precios[$emisionId] = (float) ($emision->precio ?? 0);
+            $precioGrilla = (float) ($linea->precio_unitario ?? 0);
+            $precios[$emisionId] = $precioGrilla > 0
+                ? $precioGrilla
+                : (float) ($emision->precio ?? 0);
             if ($cantidades[$emisionId] - $facturada > 0.0001) {
                 throw new \InvalidArgumentException('La cantidad a devolver supera la facturada en '.$emision->detalle.'.');
             }

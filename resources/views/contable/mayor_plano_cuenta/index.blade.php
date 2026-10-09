@@ -172,13 +172,9 @@
                                             Incluir movimientos de subdiario (solo fuente Anita)
                                         </label>
                                     </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="solo_movimientos_ventas" id="solo_movimientos_ventas" value="1"
-                                            @checked(! empty($filtros['solo_movimientos_ventas']))>
-                                        <label class="form-check-label" for="solo_movimientos_ventas">
-                                            Solo movimientos de ventas (totales)
-                                        </label>
-                                    </div>
+                                    @include('contable.mayor_plano_cuenta.partials.filtro_modulo_movimientos', [
+                                        'filtros' => $filtros ?? [],
+                                    ])
                                     <div class="form-check">
                                         <input type="hidden" name="mostrar_columna_centrocosto" value="0">
                                         <input class="form-check-input" type="checkbox" name="mostrar_columna_centrocosto" id="mostrar_columna_centrocosto" value="1"
@@ -194,8 +190,9 @@
                                         <span id="mpc-ayuda-subdiario-erp" class="{{ $ocultarIncluyeSubdiario ? '' : 'd-none' }}">
                                             Fuente ERP nativo: todos los asientos de <code>asiento</code> entran (incluye los importados de subdiario, nro. 5.xxx.xxx).
                                         </span>
-                                        Con &laquo;Solo movimientos de ventas&raquo; se usa subdiario sistema V del mes
-                                        m&aacute;s ctamov de facturas ERP (asi_mon_ref=-1); totales por cuenta, sin tramo de saldo.
+                                        Con un m&oacute;dulo elegido se usa ese subdiario (V ventas, C compras, T caja;
+                                        cuentas a pagar = &oacute;rdenes de pago) m&aacute;s el ctamov de origen ERP;
+                                        totales por cuenta, sin tramo de saldo.
                                         La columna de centro de costo queda grabada como preferencia del usuario.
                                     </small>
                                 </div>
@@ -288,7 +285,7 @@
                         </p>
                     </div>
 
-                    @if (empty($solo_totales_ventas))
+                    @if (empty($solo_totales_modulo))
                     <form method="get" action="{{ route('mayor_plano_cuenta') }}" id="form-mayor-plano-cuenta-filtro" class="px-3 py-2 border-bottom bg-light">
                         @foreach ($filtrosQuery ?? [] as $key => $val)
                             @if (is_array($val))
@@ -364,14 +361,14 @@
                         'resumen' => $resumen ?? [],
                         'resumen_cc' => $resumen_cc ?? [],
                         'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
-                        'expandido' => ! empty($solo_totales_ventas),
+                        'expandido' => ! empty($solo_totales_modulo),
                     ])
 
                     @include('contable.mayor_plano_cuenta.partials.cuadre_cobro_ventas', [
                         'cuadre_cobro_ventas' => $cuadre_cobro_ventas ?? null,
                     ])
 
-                    @if (empty($solo_totales_ventas))
+                    @if (empty($solo_totales_modulo))
                     <div class="px-3 pt-2 pb-1">
                         <h6 class="mb-0 font-weight-bold">Detalle de movimientos</h6>
                         <small class="text-muted">Listado paginado por cuenta contable</small>

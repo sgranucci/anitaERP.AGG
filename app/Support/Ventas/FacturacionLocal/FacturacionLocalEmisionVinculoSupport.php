@@ -107,6 +107,14 @@ final class FacturacionLocalEmisionVinculoSupport
             return $existente;
         }
 
+        $facturaId = FacturacionLocalNotasCreditoFacturaSupport::facturaIdDeNota($ventaId);
+        if ($facturaId) {
+            $deNota = FacturacionLocalEmision::query()->where('venta_id', $facturaId)->first();
+            if ($deNota) {
+                return $deNota;
+            }
+        }
+
         $puntoventaId = (int) (Venta::query()->whereKey($ventaId)->value('puntoventa_id') ?: 0);
         $localId = self::mapaLocalPorPuntoventa()[$puntoventaId] ?? 0;
         if ($localId <= 0) {

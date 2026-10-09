@@ -7,6 +7,7 @@ namespace App\Support\Ventas\FacturacionLocal;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cobranza;
 use App\Models\Ventas\FacturacionLocalEmision;
+use App\Models\Ventas\FacturacionLocalNotaCredito;
 use App\Models\Ventas\TurnoOperativoLocal;
 use App\Models\Ventas\Venta;
 use Illuminate\Support\Carbon;
@@ -140,6 +141,19 @@ final class FacturacionLocalTurnoCierreSupport
                 ->unique()
                 ->all();
             $ncIds = array_combine($ncIds, $ncIds) ?: [];
+            $extras = FacturacionLocalNotaCredito::query()
+                ->join('venta as v_nc', 'v_nc.id', '=', 'facturacion_local_nota_credito.venta_nc_id')
+                ->join('facturacion_local_emision as e', 'e.venta_id', '=', 'facturacion_local_nota_credito.venta_factura_id')
+                ->where('e.local_venta_id', (int) $turno->local_venta_id)
+                ->where('v_nc.created_at', '>=', $desde)
+                ->where('v_nc.created_at', '<=', $hasta)
+                ->pluck('facturacion_local_nota_credito.venta_nc_id');
+            foreach ($extras as $extraId) {
+                $extraId = (int) $extraId;
+                if ($extraId > 0) {
+                    $ncIds[$extraId] = $extraId;
+                }
+            }
         }
 
         $facIds = [];

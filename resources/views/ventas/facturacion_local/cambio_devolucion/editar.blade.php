@@ -83,7 +83,7 @@
 
                 @if ($estado === CambioDevolucionMarketplaceEstadosSupport::RECIBIDO && can('emitir-nc-cambio-devolucion-marketplace-facturacion-local', false))
                     <form method="POST" action="{{ route('emitir_nc_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1"
-                          onsubmit="return confirm('¿Emitir la nota de crédito solo por las líneas A devolver, al precio de la factura? El motivo define si ese par ingresa al stock.');">
+                          onsubmit="return confirm('¿Emitir la nota de crédito solo por las líneas A devolver, al precio cargado en la grilla? El motivo define si ese par ingresa al stock.');">
                         @csrf
                         <button type="submit" class="btn btn-danger">Emitir NC de lo devuelto (NCD)</button>
                     </form>

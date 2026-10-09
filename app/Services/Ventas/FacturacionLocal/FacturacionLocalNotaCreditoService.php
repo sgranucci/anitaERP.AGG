@@ -9,6 +9,7 @@ use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalNotasCreditoFacturaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalReceptorSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
@@ -40,9 +41,11 @@ final class FacturacionLocalNotaCreditoService
      *   medios_forzados?:list<array{cuentacaja_id:int,moneda_id?:int,monto:float}>,
      *   local_venta_id?:int,
      *   venta_emision_ids?:list<int>,
-     *   cantidades_por_emision?:array<int,float>
+     *   cantidades_por_emision?:array<int,float>,
+     *   precios_por_emision?:array<int,float>
      * }|null  $opciones  Solo Facturación Local / marketplace Ferli (no gastronomía).
      *   venta_emision_ids limita la NC a esos ítems (cambio: solo lo devuelto).
+     *   precios_por_emision reemplaza el precio de la factura (precio editado en el legajo).
      * @return array{ok:bool,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string,warn?:string,error?:string}
      */
     public function generarDesdeFactura(
@@ -96,11 +99,6 @@ final class FacturacionLocalNotaCreditoService
             return ['ok' => false, 'error' => 'La venta no corresponde a una emisión de Facturación Local.'];
         }
 
-        if ((int) ($emision->venta_nc_id ?? 0) > 0
-            || self::notaCreditoExistenteParaFactura($ventaFacturaId) !== null) {
-            return ['ok' => false, 'error' => 'Ya existe una nota de crédito para esta factura.'];
-        }
-
         if (! empty($emision->es_ticket_regalo)) {
             return ['ok' => false, 'error' => 'No se puede generar NC sobre un ticket regalo.'];
         }
@@ -148,6 +146,7 @@ final class FacturacionLocalNotaCreditoService
 
         $idsNc = self::idsEmisionOpcion($opciones['venta_emision_ids'] ?? null);
         $cantidadesNc = self::cantidadesPorEmisionOpcion($opciones['cantidades_por_emision'] ?? null);
+        $preciosNc = self::preciosPorEmisionOpcion($opciones['precios_por_emision'] ?? null);
 
         try {
             $payload = $this->armarPayloadNotaCredito(
@@ -157,10 +156,22 @@ final class FacturacionLocalNotaCreditoService
                 $leyendaUsuario,
                 $idsNc,
                 $cantidadesNc,
+                $preciosNc,
             );
         } catch (InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
+
+        $importeNuevo = self::importeDesdePayload($payload);
+        $mensajeTope = FacturacionLocalNotasCreditoFacturaSupport::mensajeSiSupera(
+            (float) $ventaOrigen->total,
+            FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado($ventaFacturaId),
+            $importeNuevo,
+        );
+        if ($mensajeTope !== null) {
+            return ['ok' => false, 'error' => $mensajeTope];
+        }
+
         if ($omitirReingresoStock) {
             $payload['opciones_emision']['omitir_movimiento_stock'] = true;
             $nItems = count($payload['articulo_ids'] ?? []);
@@ -187,7 +198,24 @@ final class FacturacionLocalNotaCreditoService
                 $motivoDevolucion,
                 $registrarHistorial,
                 $idsNc,
+                $importeNuevo,
             ) {
+                $emisionBloqueada = FacturacionLocalEmision::query()
+                    ->whereKey($emision->id)
+                    ->lockForUpdate()
+                    ->first();
+                if (! $emisionBloqueada) {
+                    throw new InvalidArgumentException('No se encontró la emisión de la factura.');
+                }
+                $mensajeTopeTx = FacturacionLocalNotasCreditoFacturaSupport::mensajeSiSupera(
+                    (float) $ventaOrigen->total,
+                    FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado($ventaFacturaId),
+                    $importeNuevo,
+                );
+                if ($mensajeTopeTx !== null) {
+                    throw new InvalidArgumentException($mensajeTopeTx);
+                }
+
                 $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
 
                 if (! is_array($resultado) || ! empty($resultado['error'])) {
@@ -197,6 +225,14 @@ final class FacturacionLocalNotaCreditoService
                 }
 
                 $ventaNc = $this->resolverVentaEmitida($ventaOrigen, $resultado);
+                $mensajeTopeReal = FacturacionLocalNotasCreditoFacturaSupport::mensajeSiSupera(
+                    (float) $ventaOrigen->total,
+                    FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado($ventaFacturaId),
+                    abs((float) $ventaNc->total),
+                );
+                if ($mensajeTopeReal !== null) {
+                    throw new InvalidArgumentException($mensajeTopeReal);
+                }
 
                 $lineasStock = $this->lineasStockDesdeEmisiones($ventaOrigen, $idsNc);
                 if ($registrarHistorial) {
@@ -217,11 +253,14 @@ final class FacturacionLocalNotaCreditoService
                     $this->facturacionService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
                 }
 
-                $emision->venta_nc_id = (int) $ventaNc->id;
-                if ((int) ($emision->turno_operativo_local_id ?? 0) <= 0) {
-                    $emision->turno_operativo_local_id = $turno->id;
+                FacturacionLocalNotasCreditoFacturaSupport::registrar($ventaFacturaId, (int) $ventaNc->id);
+                if ((int) ($emisionBloqueada->venta_nc_id ?? 0) <= 0) {
+                    $emisionBloqueada->venta_nc_id = (int) $ventaNc->id;
                 }
-                $emision->save();
+                if ((int) ($emisionBloqueada->turno_operativo_local_id ?? 0) <= 0) {
+                    $emisionBloqueada->turno_operativo_local_id = $turno->id;
+                }
+                $emisionBloqueada->save();
 
                 // Importe real de la NC (puede ser parcial). El cierre atribuye la NC al turno
                 // por ventana de emisión (created_at), no por el turno de la factura origen.
@@ -258,6 +297,11 @@ final class FacturacionLocalNotaCreditoService
 
     public static function notaCreditoExistenteParaFactura(int $ventaFacturaId): ?int
     {
+        $primera = FacturacionLocalNotasCreditoFacturaSupport::ids($ventaFacturaId)[0] ?? 0;
+        if ($primera > 0) {
+            return $primera;
+        }
+
         $id = FacturacionLocalEmision::query()
             ->where('venta_id', $ventaFacturaId)
             ->whereNotNull('venta_nc_id')
@@ -267,8 +311,33 @@ final class FacturacionLocalNotaCreditoService
     }
 
     /**
+     * Importe positivo estimado de la NC (precios finales, descuento de línea y de pie).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private static function importeDesdePayload(array $payload): float
+    {
+        $precios = $payload['precios'] ?? [];
+        $cantidades = $payload['cantidades'] ?? [];
+        $descuentos = $payload['_descuentos_linea_item'] ?? [];
+        $total = 0.0;
+        foreach ($precios as $i => $precio) {
+            $cantidad = (float) ($cantidades[$i] ?? 0);
+            $descuento = is_array($descuentos) ? (float) ($descuentos[$i] ?? 0) : 0.0;
+            $unitario = (float) $precio;
+            if (abs($descuento) > 0.00001) {
+                $unitario *= (1 - ($descuento / 100));
+            }
+            $total = round($total + round($cantidad * $unitario, 2), 2);
+        }
+
+        return round(max(0.0, $total - (float) ($payload['descuentopie'] ?? 0)), 2);
+    }
+
+    /**
      * @param  list<int>|null  $idsFiltro
      * @param  array<int, float>|null  $cantidadesPorEmision
+     * @param  array<int, float>|null  $preciosPorEmision  Precio de grilla; si falta, el de la factura.
      * @return array<string, mixed>
      */
     private function armarPayloadNotaCredito(
@@ -278,6 +347,7 @@ final class FacturacionLocalNotaCreditoService
         string $leyendaUsuario = '',
         ?array $idsFiltro = null,
         ?array $cantidadesPorEmision = null,
+        ?array $preciosPorEmision = null,
     ): array {
         $ventaOrigen->loadMissing(['venta_emisiones.articulos']);
         $esParcial = $idsFiltro !== null;
@@ -299,13 +369,20 @@ final class FacturacionLocalNotaCreditoService
         $idsVistos = [];
         foreach ($ventaOrigen->venta_emisiones->sortBy('numeroitem') as $em) {
             $cantidadFacturada = (float) ($em->cantidad ?? 0);
-            $precio = (float) ($em->precio ?? 0);
+            $precioFacturado = (float) ($em->precio ?? 0);
             $articuloId = (int) ($em->articulo_id ?? 0);
             $emisionId = (int) $em->id;
-            if ($articuloId <= 0 || ($cantidadFacturada <= 0 && abs($precio) < 0.00001)) {
+            $precio = $precioFacturado;
+            if ($preciosPorEmision !== null && array_key_exists($emisionId, $preciosPorEmision)) {
+                $precioGrilla = (float) $preciosPorEmision[$emisionId];
+                if ($precioGrilla > 0) {
+                    $precio = $precioGrilla;
+                }
+            }
+            if ($articuloId <= 0 || ($cantidadFacturada <= 0 && abs($precioFacturado) < 0.00001 && abs($precio) < 0.00001)) {
                 continue;
             }
-            $brutoLinea = round($cantidadFacturada * $precio, 2);
+            $brutoLinea = round($cantidadFacturada * $precioFacturado, 2);
             $brutoTodos = round($brutoTodos + $brutoLinea, 2);
             if ($esParcial && ! in_array($emisionId, $idsFiltro, true)) {
                 continue;
@@ -343,7 +420,7 @@ final class FacturacionLocalNotaCreditoService
                 : (int) ($em->articulos?->impuesto_id ?: 3);
             $incl = (string) ($em->incluyeimpuesto ?? '1');
             $incluyeImpuestos[] = in_array($incl, ['S', '1', 'Y'], true) ? '1' : 'N';
-            $brutoSeleccionado = round($brutoSeleccionado + round($cantidad * $precio, 2), 2);
+            $brutoSeleccionado = round($brutoSeleccionado + round($cantidad * $precioFacturado, 2), 2);
         }
 
         if ($articuloIds === []) {
@@ -594,6 +671,26 @@ final class FacturacionLocalNotaCreditoService
             $emisionId = (int) $id;
             if ($emisionId > 0) {
                 $out[$emisionId] = (float) $cantidad;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array<int, float>|null
+     */
+    private static function preciosPorEmisionOpcion(mixed $precios): ?array
+    {
+        if (! is_array($precios)) {
+            return null;
+        }
+
+        $out = [];
+        foreach ($precios as $id => $precio) {
+            $emisionId = (int) $id;
+            if ($emisionId > 0) {
+                $out[$emisionId] = (float) $precio;
             }
         }
 

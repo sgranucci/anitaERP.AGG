@@ -11,6 +11,7 @@ use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaComprobanteEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaEmisorEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaExcelPlanoEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaExcelPlanoSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaModuloFiltroSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaOrdencompraEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProcesador;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRecepcionAnitaEnricher;
@@ -68,6 +69,7 @@ class MayorPlanoCuentaReporteService
             MayorFuenteConsultaSupport::normalizarModo(
                 $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
             ),
+            (string) ($filtros['modulo_movimientos'] ?? ''),
         ];
 
         if ($consolidar || count($empresaIds) <= 1) {
@@ -351,7 +353,7 @@ class MayorPlanoCuentaReporteService
         $total = 0;
         $consolidar = (bool) ($filtros['consolidar_empresas'] ?? $resultado['parametros']['consolidar_empresas'] ?? true);
         $empresaHeaderActual = 0;
-        $soloTotalesVentas = ! empty($filtros['solo_movimientos_ventas']);
+        $soloTotalesVentas = MayorPlanoCuentaListadoFiltros::esConsultaTotalesModulo($filtros);
 
         foreach ($resultado['secciones'] ?? [] as $seccion) {
             $empresaSeccion = (int) ($seccion['empresa_id'] ?? 0);
@@ -457,7 +459,7 @@ class MayorPlanoCuentaReporteService
         $empresaIds = $resultado['parametros']['empresa_ids'] ?? [];
         $consolidar = (bool) ($filtros['consolidar_empresas'] ?? $resultado['parametros']['consolidar_empresas'] ?? true);
         $empresaHeaderActual = 0;
-        $soloTotalesVentas = ! empty($filtros['solo_movimientos_ventas']);
+        $soloTotalesVentas = MayorPlanoCuentaListadoFiltros::esConsultaTotalesModulo($filtros);
 
         foreach ($resultado['secciones'] ?? [] as $seccion) {
             $empresaSeccion = (int) ($seccion['empresa_id'] ?? 0);
@@ -795,8 +797,9 @@ class MayorPlanoCuentaReporteService
         } elseif ($fuente === MayorFuenteConsultaSupport::MODO_ERP) {
             $partes[] = 'Fuente ERP nativo (asientos)';
         }
-        if (! empty($filtros['solo_movimientos_ventas'])) {
-            $partes[] = 'Solo movimientos de ventas (totales)';
+        $modulo = MayorPlanoCuentaListadoFiltros::moduloMovimientos($filtros);
+        if ($modulo !== '') {
+            $partes[] = 'Solo movimientos de '.MayorPlanoCuentaModuloFiltroSupport::etiqueta($modulo).' (totales)';
         }
         if (! empty($filtros['solo_moneda_origen'])) {
             $partes[] = 'Solo moneda origen';

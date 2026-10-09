@@ -15,6 +15,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalFacturaMedioPagoUiSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalNotaCreditoUiSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalNotasCreditoFacturaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVentaDetalleSupport;
 use App\Support\Ventas\FacturacionLocal\LocalVentaAsignacionSupport;
 use Carbon\Carbon;
@@ -57,14 +58,9 @@ class FacturacionLocalFacturasController extends Controller
         $registros->setCollection($this->hidratarEmisiones($registros->getCollection()));
 
         $ventaIdsPagina = $registros->getCollection()->pluck('venta_id')->filter()->values();
-        $notasCreditoPorFactura = [];
-        if ($ventaIdsPagina->isNotEmpty()) {
-            $notasCreditoPorFactura = FacturacionLocalEmision::query()
-                ->whereIn('venta_id', $ventaIdsPagina)
-                ->whereNotNull('venta_nc_id')
-                ->pluck('venta_nc_id', 'venta_id')
-                ->all();
-        }
+        $notasCreditoPorFactura = $ventaIdsPagina->isNotEmpty()
+            ? FacturacionLocalNotasCreditoFacturaSupport::resumenPorFacturas($ventaIdsPagina->all())
+            : [];
 
         $totales = $this->calcularTotales($request);
         $turnoAbierto = $localId > 0 ? $this->turnoService->turnoAbierto($localId) : null;
@@ -181,9 +177,16 @@ class FacturacionLocalFacturasController extends Controller
         $cobranzaMedios = FacturacionLocalVentaDetalleSupport::mediosPagoPorCobranza($cobranzas);
 
         $esComprobanteNc = FacturacionLocalFacturaMedioPagoUiSupport::esComprobanteNotaCredito($meta, $ventaId);
-        $ncVentaId = $esComprobanteNc
-            ? null
-            : FacturacionLocalNotaCreditoService::notaCreditoExistenteParaFactura((int) $meta->venta_id);
+        $notasCredito = $esComprobanteNc
+            ? []
+            : (FacturacionLocalNotasCreditoFacturaSupport::resumenPorFacturas([(int) $meta->venta_id])[(int) $meta->venta_id] ?? []);
+        $acreditadoNc = $esComprobanteNc
+            ? 0.0
+            : FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado((int) $meta->venta_id);
+        $saldoNc = $esComprobanteNc
+            ? 0.0
+            : FacturacionLocalNotasCreditoFacturaSupport::disponible((float) $venta->total, $acreditadoNc);
+        $ncVentaId = $notasCredito[0]['id'] ?? null;
 
         $puedeNc = FacturacionLocalNotaCreditoUiSupport::puedeGenerarNotaCredito($meta, $venta, $ventaId);
         $puedeCambiarMedioPago = FacturacionLocalFacturaMedioPagoUiSupport::puedeCambiarMedioPago(
@@ -209,6 +212,8 @@ class FacturacionLocalFacturasController extends Controller
             'cobranzaMedios' => $cobranzaMedios,
             'puede_nc' => $puedeNc,
             'nc_venta_id' => $ncVentaId,
+            'notas_credito' => $notasCredito,
+            'saldo_nc' => $saldoNc,
             'es_comprobante_nc' => $esComprobanteNc,
             'turno_abierto' => $turnoAbierto,
             'puede_cambiar_medio_pago' => $puedeCambiarMedioPago,
@@ -522,10 +527,9 @@ class FacturacionLocalFacturasController extends Controller
             ->first();
 
         $nc = (clone $base)
-            ->join('facturacion_local_emision as fle', 'fle.venta_id', '=', 'venta.id')
-            ->whereNotNull('fle.venta_nc_id')
-            ->join('venta as venta_nc', 'venta_nc.id', '=', 'fle.venta_nc_id')
-            ->selectRaw('COUNT(DISTINCT fle.venta_nc_id) as cantidad_notas_credito')
+            ->join('facturacion_local_nota_credito as flnc', 'flnc.venta_factura_id', '=', 'venta.id')
+            ->join('venta as venta_nc', 'venta_nc.id', '=', 'flnc.venta_nc_id')
+            ->selectRaw('COUNT(DISTINCT flnc.venta_nc_id) as cantidad_notas_credito')
             ->selectRaw('COALESCE(SUM(venta_nc.total), 0) as total_notas_credito')
             ->first();
 
@@ -555,7 +559,22 @@ class FacturacionLocalFacturasController extends Controller
             ->orderByRaw('CASE WHEN venta_id = ? THEN 0 ELSE 1 END', [$ventaId])
             ->first();
 
-        return $emision ?? FacturacionLocalEmisionVinculoSupport::emisionVirtual($ventaId);
+        if ($emision) {
+            return $emision;
+        }
+
+        $facturaId = FacturacionLocalNotasCreditoFacturaSupport::facturaIdDeNota($ventaId);
+        if ($facturaId) {
+            $porNota = FacturacionLocalEmision::query()
+                ->where('venta_id', $facturaId)
+                ->with(['localVenta', 'turno.turnoLocal', 'ventaNc'])
+                ->first();
+            if ($porNota) {
+                return $porNota;
+            }
+        }
+
+        return FacturacionLocalEmisionVinculoSupport::emisionVirtual($ventaId);
     }
 
     /**

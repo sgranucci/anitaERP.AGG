@@ -88,7 +88,7 @@ final class MayorPlanoCuentaErpAsientoReader
         int $cuentaHasta = 0,
         array $cuentas = [],
         bool $cargarMetadatosComprobante = true,
-        bool $soloMovimientosVentas = false,
+        string $moduloMovimientos = '',
     ): array {
         $t0 = microtime(true);
         $errores = [];
@@ -144,8 +144,9 @@ final class MayorPlanoCuentaErpAsientoReader
             ], array_map(fn (string $columna) => 'a.'.$columna, array_merge($columnasFk, $columnasAnita)),
                 $this->columnasDocumentoMovimiento()));
 
-        if ($soloMovimientosVentas) {
-            MayorPlanoCuentaVentasFiltroSupport::aplicarFiltroErpQuery($query, $columnasAnita);
+        $modulo = MayorPlanoCuentaModuloFiltroSupport::normalizar($moduloMovimientos);
+        if ($modulo !== '') {
+            MayorPlanoCuentaModuloFiltroSupport::aplicarFiltroErpQuery($query, $modulo, $columnasAnita);
         }
 
         $linea = 0;
@@ -229,7 +230,7 @@ final class MayorPlanoCuentaErpAsientoReader
                 $cuentaHasta,
                 $cuentas,
                 $errores,
-                $soloMovimientosVentas,
+                $modulo,
             );
             foreach ($ctamov as $fila) {
                 if (empty($fila->erp_origen_subdiario)) {
@@ -400,7 +401,7 @@ final class MayorPlanoCuentaErpAsientoReader
         int $cuentaHasta,
         array $cuentas,
         array &$errores,
-        bool $soloMovimientosVentas = false,
+        string $moduloMovimientos = '',
     ): array {
         $empresaIds = array_values(array_unique(array_filter(array_map('intval', $empresaIds), fn (int $id) => $id > 0)));
         if ($empresaIds === []) {
@@ -409,8 +410,9 @@ final class MayorPlanoCuentaErpAsientoReader
 
         $where = ' WHERE subh_empresa IN ('.implode(',', $empresaIds).')'
             .' AND subh_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta;
-        if ($soloMovimientosVentas) {
-            $where .= MayorPlanoCuentaVentasFiltroSupport::condicionSqlSistema('subh_sistema');
+        $modulo = MayorPlanoCuentaModuloFiltroSupport::normalizar($moduloMovimientos);
+        if ($modulo !== '') {
+            $where .= MayorPlanoCuentaModuloFiltroSupport::condicionSqlAnita('subh_sistema', 'subh_tipo', $modulo);
         }
         $filtroCuenta = $this->condicionCuentasSubhist($cuentaDesde, $cuentaHasta, $cuentas);
         if ($filtroCuenta !== '') {

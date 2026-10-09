@@ -153,7 +153,7 @@ class MayorPlanoCuentaAnitaBridgeReader
         int $cuentaDesde = 0,
         int $cuentaHasta = 0,
         array $cuentas = [],
-        bool $soloMovimientosVentas = false,
+        string $moduloMovimientos = '',
         bool $soloPeriodoConsultado = false,
     ): array {
         $t0 = microtime(true);
@@ -168,9 +168,10 @@ class MayorPlanoCuentaAnitaBridgeReader
         $filtroSubdiario = $condCuentaSubd !== ''
             ? ' AND ('.$condCuentaSubd.' OR '.$condContraSubd.')'
             : '';
-        if ($soloMovimientosVentas) {
-            $filtroCtamov .= MayorPlanoCuentaVentasFiltroSupport::condicionSqlSistema('ctav_sistema');
-            $filtroSubdiario .= MayorPlanoCuentaVentasFiltroSupport::condicionSqlSistema('subd_sistema');
+        $modulo = MayorPlanoCuentaModuloFiltroSupport::normalizar($moduloMovimientos);
+        if ($modulo !== '') {
+            $filtroCtamov .= MayorPlanoCuentaModuloFiltroSupport::condicionSqlAnita('ctav_sistema', 'ctav_tipo', $modulo);
+            $filtroSubdiario .= MayorPlanoCuentaModuloFiltroSupport::condicionSqlAnita('subd_sistema', 'subd_tipo', $modulo);
         }
 
         $filtraEmpresaSubdiario = $this->subdiarioUsaColumnaEmpresa();
@@ -247,7 +248,7 @@ class MayorPlanoCuentaAnitaBridgeReader
             $timings['empresa_'.$empresaId.'_ms'] = round((microtime(true) - $tEmp) * 1000, 1);
         }
 
-        if ($soloMovimientosVentas && $incluyeSubdiario) {
+        if ($modulo !== '' && $incluyeSubdiario) {
             foreach ($empresaIds as $empresaId) {
                 $empresaId = (int) $empresaId;
                 if ($empresaId <= 0) {

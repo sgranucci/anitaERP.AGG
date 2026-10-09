@@ -39,15 +39,19 @@
                 antes de generar la nota de crédito.
             </div>
         @endif
-        @if ($nc_venta_id ?? null)
-            <div class="alert alert-info py-2 mb-2 d-flex justify-content-between align-items-center flex-wrap">
-                <span>
+        @if (($notas_credito ?? []) !== [])
+            <div class="alert alert-info py-2 mb-2">
+                <div class="mb-1">
                     <i class="fas fa-undo text-muted mr-1"></i>
-                    Este comprobante ya fue revertido por una nota de crédito.
-                </span>
-                <a href="{{ route('facturacion_local_facturas_ver', ['ventaId' => $nc_venta_id]) }}" class="btn btn-sm btn-outline-info">
-                    Ver nota de crédito
-                </a>
+                    Notas de crédito de esta factura. La suma no puede superar el total.
+                    Disponible: $ {{ number_format((float) ($saldo_nc ?? 0), 2, ',', '.') }}
+                </div>
+                @foreach ($notas_credito as $notaNc)
+                    <a href="{{ route('facturacion_local_facturas_ver', ['ventaId' => $notaNc['id']]) }}" class="btn btn-sm btn-outline-info mr-1 mb-1">
+                        {{ $notaNc['codigo'] }}
+                        ($ {{ number_format((float) $notaNc['total'], 2, ',', '.') }})
+                    </a>
+                @endforeach
             </div>
         @elseif ($es_comprobante_nc ?? false)
             <div class="alert alert-secondary py-2 mb-2">

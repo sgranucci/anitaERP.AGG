@@ -6,7 +6,7 @@
     $tituloReporte = $titulo ?? 'Mayor analítico por cuenta contable';
     $multiempresa = count($filtros['empresa_ids'] ?? []) > 1
         || empty($filtros['consolidar_empresas']);
-    $pdfTotalesVentas = ! empty($filtros['solo_movimientos_ventas']);
+    $pdfTotalesVentas = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::esConsultaTotalesModulo($filtros ?? []);
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -72,7 +72,7 @@
         </tr>
     </table>
 
-    @if (! empty($filtros['solo_movimientos_ventas']) && ! empty($resumen))
+    @if ($pdfTotalesVentas && ! empty($resumen))
         @php
             $mostrarCcPdf = collect($resumen)->contains(fn ($row) => array_key_exists('centrocosto_codigo', $row));
             $cuadrePdf = $cuadreCobroVentas ?? $cuadre_cobro_ventas ?? null;

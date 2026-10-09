@@ -1,6 +1,6 @@
 @php
     $multiempresa = (bool) ($multiempresa ?? false);
-    $soloVentas = ! empty($filtros['solo_movimientos_ventas']);
+    $soloVentas = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::esConsultaTotalesModulo($filtros ?? []);
     $resumen = is_array($resumen ?? null) ? $resumen : [];
     $mostrarCcResumen = collect($resumen)->contains(fn ($row) => array_key_exists('centrocosto_codigo', $row));
     $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);

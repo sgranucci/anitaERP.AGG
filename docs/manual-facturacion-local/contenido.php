@@ -15,7 +15,7 @@ return [
             'titulo' => '1. Para qué sirve el legajo',
             'parrafos' => [
                 'El legajo de cambios y devoluciones registra un cambio de un pedido de tienda (Tienda Nube, Mercado Libre o carga manual). El cliente devuelve un par y se lleva otro. El circuito emite dos comprobantes distintos y deja la diferencia anotada para compensarla a mano.',
-                'La factura nueva cubre solo el par que se lleva. La nota de crédito cubre solo lo marcado como «A devolver», al precio que ya tenía esa línea en la factura original. El resto de la factura (otro par, flete, cupón de otro artículo) no se vuelve a facturar ni se acredita.',
+                'La factura nueva cubre solo el par que se lleva. La nota de crédito cubre solo lo marcado como «A devolver», al precio de esa línea en la grilla. El resto de la factura (otro par, flete, cupón de otro artículo) no se vuelve a facturar ni se acredita.',
             ],
         ],
         [
@@ -31,7 +31,7 @@ return [
                     ['2. Confirmar', 'Abierto', 'No emite comprobante. Exige factura original, un motivo y al menos una línea de reemplazo. Las líneas se pueden seguir corrigiendo.'],
                     ['3. Factura de reemplazo', 'Aguardando recepción', 'Botón «Emitir FAC reemplazo (NCD)». Factura solo las líneas Reemplazo, al precio de la grilla, a nombre del mismo cliente. El par que se lleva sale de stock. El PDF queda en la solapa Comprobantes.'],
                     ['4. Recepción', 'Recibido', 'Cuando llega el par, se elige la disposición (reventa, deterioro o no recibido) y una observación. Todavía no mueve stock.'],
-                    ['5. Nota de crédito', 'NC emitida', 'Botón «Emitir NC de lo devuelto (NCD)». Solo las líneas «A devolver», al precio unitario de la factura original (aunque en la grilla se haya cambiado el número). El motivo define si ese par vuelve al stock vendible.'],
+                    ['5. Nota de crédito', 'NC emitida', 'Botón «Emitir NC de lo devuelto (NCD)». Solo las líneas «A devolver», al precio cargado en la grilla. Si no se tocó, es el de la factura. Si se igualó al importe del producto (descuento por transferencia), la nota sale por ese importe. El motivo define si ese par vuelve al stock vendible.'],
                     ['6. Diferencia', 'Cerrado o Pendiente compensación', 'Compara el total de la factura de reemplazo con el total de la nota de crédito. Si son iguales, el legajo se cierra. Si no, queda pendiente y se cierra con un texto de cómo se compensó (efectivo, transferencia, etc.). Ese texto no genera otro comprobante.'],
                 ],
             ],
@@ -40,7 +40,8 @@ return [
             'titulo' => '3. Precios: lista, factura y cupón',
             'parrafos' => [
                 'La línea «A devolver» muestra el precio con el que se facturó ese par, ya con el cupón repartido. La línea «Reemplazo» muestra el precio vigente de la lista del local (la misma que usa el punto de venta y Tienda Nube antes del cupón). No es un precio por talle de las listas 16/26 o 27/33: en la web el artículo tiene un precio único.',
-                'Si el pedido tenía un cupón, ese importe se reparte entre los artículos para que la factura cierre con AFIP. El par devuelto queda en la factura por menos que la lista. Al cambiarlo, la factura nueva vuelve a tomar la lista completa y la nota de crédito toma el precio ya descontado. La diferencia es la parte del cupón que se le había aplicado a ese par.',
+                'Si el pedido tenía un cupón, ese importe se reparte entre los artículos para que la factura cierre con AFIP. El par devuelto queda en la factura por menos que la lista. Si no se corrige el precio de «A devolver», la nota de crédito toma ese importe ya descontado y la factura de reemplazo toma la lista. La diferencia es la parte del cupón de ese par.',
+                'Descuento por transferencia: en la grilla se pone el importe del producto en «A devolver» y en «Reemplazo». La factura y la nota de crédito salen por ese importe. La diferencia queda en cero.',
             ],
         ],
         [
@@ -88,7 +89,7 @@ return [
                 'No anula la factura original entera cuando el pedido tenía más de un par.',
                 'No vuelve a aplicar el cupón: el descuento ya está en el precio de la línea facturada.',
                 'No genera el cobro ni la devolución de la diferencia. Eso se anota al cerrar la compensación.',
-                'Cada factura original admite una sola nota de crédito desde este circuito. Si después hay que acreditar otro par de la misma factura, no se emite una segunda nota desde el legajo: hay que resolverlo aparte.',
+                'Una factura puede tener más de una nota de crédito. La suma de esas notas no puede superar el total de la factura. El segundo cambio se acredita sobre la factura que todavía tiene saldo (la del reemplazo, o la original si el primer crédito fue parcial).',
                 'Anular el legajo no anula comprobantes fiscales ya emitidos. Con nota de crédito emitida, el legajo no se puede anular desde esta pantalla.',
             ],
         ],

@@ -4,6 +4,7 @@ namespace App\Exports\Contable;
 
 use App\Services\Contable\MayorPlanoCuentaReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaModuloFiltroSupport;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
@@ -83,7 +84,7 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
 
         $soloVentas = $this->esTotalesVentas();
         $resumen = $soloVentas ? $this->reporteService->resumenPorCuenta($resultado) : [];
-        $cuadre = $soloVentas
+        $cuadre = ! empty($this->filtros['solo_movimientos_ventas'])
             ? $this->reporteService->cuadreCobroVentasDesdeResumen($resumen)
             : null;
         $filas = $soloVentas
@@ -124,9 +125,9 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             'cuadre_cobro_ventas' => $cuadre,
             'totales' => $totales,
             'filtros' => $this->filtros,
-            'titulo' => $soloVentas
-                ? 'Mayor analítico por cuenta — solo movimientos de ventas'
-                : 'Mayor analítico por cuenta contable',
+            'titulo' => MayorPlanoCuentaModuloFiltroSupport::tituloConsulta(
+                MayorPlanoCuentaListadoFiltros::moduloMovimientos($this->filtros)
+            ),
             'subtitulo' => $subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'multiempresa' => $this->multiempresa,
@@ -158,7 +159,7 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
 
     private function esTotalesVentas(): bool
     {
-        return ! empty($this->filtros['solo_movimientos_ventas']);
+        return MayorPlanoCuentaListadoFiltros::esConsultaTotalesModulo($this->filtros);
     }
 
     private function mostrarColumnaCentrocosto(): bool

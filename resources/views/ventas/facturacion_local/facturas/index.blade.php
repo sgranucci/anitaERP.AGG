@@ -191,7 +191,8 @@
                                         }
                                     }
                                 }
-                                $ncVentaId = ($notas_credito_por_factura ?? [])[$r->venta_id] ?? ($r->venta_nc_id ?? null);
+                                $notasNc = ($notas_credito_por_factura ?? [])[$r->venta_id] ?? [];
+                                $ncVentaId = $notasNc[0]['id'] ?? ($r->venta_nc_id ?? null);
                                 $clienteTxt = $v?->nombre
                                     ?: ($v?->clientes?->nombre ?? '—');
                                 $puedeNc = \App\Support\Ventas\FacturacionLocal\FacturacionLocalNotaCreditoUiSupport::puedeGenerarNotaCredito($r, $v, (int) $r->venta_id);
@@ -220,7 +221,13 @@
                                 <td><small>{{ $pvTxt !== '' ? $pvTxt : '—' }}</small></td>
                                 <td class="text-right fl-col-monto"><small>{{ number_format((float) ($v?->total ?? 0), 2, ',', '.') }}</small></td>
                                 <td>
-                                    @if ($ncVentaId)
+                                    @if ($notasNc !== [])
+                                        @foreach ($notasNc as $notaNc)
+                                            <a href="{{ route('facturacion_local_facturas_ver', ['ventaId' => $notaNc['id']]) }}" class="small text-primary d-block">
+                                                {{ $notaNc['codigo'] }}
+                                            </a>
+                                        @endforeach
+                                    @elseif ($ncVentaId)
                                         <a href="{{ route('facturacion_local_facturas_ver', ['ventaId' => $ncVentaId]) }}" class="small text-primary">
                                             {{ $r->ventaNc?->codigo ?? ('#'.$ncVentaId) }}
                                         </a>

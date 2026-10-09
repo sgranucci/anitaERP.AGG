@@ -7,7 +7,8 @@
             </div>
             <div class="modal-body py-3">
                 <p class="mb-2 small">
-                    Se va a <strong>revertir</strong> el comprobante <strong id="fd-nc-compro">—</strong> emitiendo una nota de crédito por el mismo importe.
+                    Se va a emitir una nota de crédito del comprobante <strong id="fd-nc-compro">—</strong>.
+                    Si ya hay otras, la suma de todas no puede superar el total de la factura.
                 </p>
                 <ul class="small mb-3 pl-3">
                     <li>La factura original no se borra: queda compensada fiscalmente por la NC.</li>

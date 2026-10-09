@@ -3,6 +3,7 @@
 namespace App\Support\Contable;
 
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaModuloFiltroSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -50,6 +51,11 @@ class MayorPlanoCuentaListadoFiltros
             $request->input('centrocostos_codigo', ''),
         );
 
+        $modulo = MayorPlanoCuentaModuloFiltroSupport::normalizar($request->input('modulo_movimientos'));
+        if ($modulo === MayorPlanoCuentaModuloFiltroSupport::TODOS && $request->boolean('solo_movimientos_ventas')) {
+            $modulo = MayorPlanoCuentaModuloFiltroSupport::VENTAS;
+        }
+
         $filtros = [
             'empresa_ids' => $empresaIds,
             'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
@@ -61,7 +67,8 @@ class MayorPlanoCuentaListadoFiltros
             'fecha_hasta' => trim((string) $request->input('fecha_hasta', '')),
             'solo_moneda_origen' => $request->boolean('solo_moneda_origen'),
             'incluye_subdiario' => $request->boolean('incluye_subdiario', true),
-            'solo_movimientos_ventas' => $request->boolean('solo_movimientos_ventas'),
+            'modulo_movimientos' => $modulo,
+            'solo_movimientos_ventas' => $modulo === MayorPlanoCuentaModuloFiltroSupport::VENTAS,
             'modo_inclusion_asientos' => $modoAsientos,
             'cuenta_desde' => $cuentaDesde,
             'cuenta_hasta' => $cuentaHasta,
@@ -113,6 +120,19 @@ class MayorPlanoCuentaListadoFiltros
     public static function mostrarColumnaCentrocosto(array $filtros): bool
     {
         return ($filtros['mostrar_columna_centrocosto'] ?? true) !== false;
+    }
+
+    public static function moduloMovimientos(array $filtros): string
+    {
+        return MayorPlanoCuentaModuloFiltroSupport::desdeFiltros($filtros);
+    }
+
+    /**
+     * Un módulo elegido muestra totales del período, sin saldo anterior ni detalle de líneas.
+     */
+    public static function esConsultaTotalesModulo(array $filtros): bool
+    {
+        return self::moduloMovimientos($filtros) !== MayorPlanoCuentaModuloFiltroSupport::TODOS;
     }
 
     /**
@@ -254,7 +274,11 @@ class MayorPlanoCuentaListadoFiltros
             $out['incluye_subdiario'] = 0;
         }
 
-        if (! empty($filtros['solo_movimientos_ventas'])) {
+        $modulo = MayorPlanoCuentaModuloFiltroSupport::desdeFiltros($filtros);
+        if ($modulo !== MayorPlanoCuentaModuloFiltroSupport::TODOS) {
+            $out['modulo_movimientos'] = $modulo;
+        }
+        if ($modulo === MayorPlanoCuentaModuloFiltroSupport::VENTAS) {
             $out['solo_movimientos_ventas'] = 1;
         }
 

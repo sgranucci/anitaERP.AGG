@@ -324,7 +324,7 @@ class PedidoServiceFerli
 			switch($estado)
 			{
 				case 'PENDIENTES':
-					// Sin OT en la línea ni en sus talles, y sin facturar por picking.
+					// Sin OT, sin picking y sin facturar. El picking ya sacó el par de stock.
 					if ($item['estadopedido'] == 'PENDIENTE' && $this->reporteSinOt($item['numeroot']))
 						$cc = true;
 					break;
@@ -382,14 +382,26 @@ class PedidoServiceFerli
 		}
 
 		// Circuito picking stock (sin OT): picking_facturado = ya facturado.
+		// Picking preparado y sin facturar no es pendiente: el par ya salió de stock.
 		// Misma regla que conteoEstadoLineaCombinacion / cabecera estadopedido.
 		if ($estadopedido != 'ANULADO'
 			&& ($pedido['picking_facturado'] ?? PedidoPickingFerliSupport::NO_MARCADO)
 				=== PedidoPickingFerliSupport::FACTURADO) {
 			$estadopedido = 'FACTURADA';
+		} elseif ($estadopedido === 'PENDIENTE' && $this->lineaReporteConPicking($pedido)) {
+			$estadopedido = 'PICKING';
 		}
 
 		return [$estadopedido, $pedido['codigoot'] ?? null];
+	}
+
+	/**
+	 * @param  array<string, mixed>  $pedido
+	 */
+	private function lineaReporteConPicking($pedido): bool
+	{
+		return ($pedido['picking'] ?? PedidoPickingFerliSupport::NO_MARCADO)
+			=== PedidoPickingFerliSupport::MARCADO;
 	}
 
 	private function reporteSinOt($codigo): bool
@@ -1427,6 +1439,7 @@ class PedidoServiceFerli
 
 	/**
 	 * Clasifica una línea de pedido_combinacion para el estado de cabecera.
+	 * Pendiente = no se mandó a fabricar y no se sacó de stock.
 	 * Facturado = tarea OT facturada o picking_facturado (circuito stock sin OT).
 	 *
 	 * @return array{pendiente: int, produccion: int, facturado: int, anulado: int}
@@ -1441,6 +1454,8 @@ class PedidoServiceFerli
 		}
 
 		$tieneOt = $item->ot_id != 0 && $item->ot_id != null;
+		$pickingPreparado = ($item->picking ?? PedidoPickingFerliSupport::NO_MARCADO)
+			=== PedidoPickingFerliSupport::MARCADO;
 		$facturadoPicking = ($item->picking_facturado ?? PedidoPickingFerliSupport::NO_MARCADO)
 			=== PedidoPickingFerliSupport::FACTURADO;
 		$facturadoOt = false;
@@ -1453,7 +1468,7 @@ class PedidoServiceFerli
 			// Entra en producción/facturación cerrada para que qFacturado == qProduccion → "Facturado"
 			$conteo['produccion'] = 1;
 			$conteo['facturado'] = 1;
-		} elseif ($tieneOt) {
+		} elseif ($tieneOt || $pickingPreparado) {
 			$conteo['produccion'] = 1;
 		} else {
 			$conteo['pendiente'] = 1;

@@ -36,8 +36,11 @@ final class FacturacionLocalFacturaMedioPagoUiSupport
     public static function esComprobanteNotaCredito(FacturacionLocalEmision $emision, int $ventaId): bool
     {
         $ncId = (int) ($emision->venta_nc_id ?? 0);
+        if ($ncId > 0 && $ncId === $ventaId) {
+            return true;
+        }
 
-        return $ncId > 0 && $ncId === $ventaId;
+        return FacturacionLocalNotasCreditoFacturaSupport::esNotaCredito($ventaId);
     }
 
     /**

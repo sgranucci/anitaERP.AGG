@@ -195,38 +195,41 @@ class PedidoPickingFerliSupportTest extends TestCase
         ));
     }
 
-    public function test_curva_distinta_rechaza_aunque_cada_talle_alcance(): void
+    public function test_curva_distinta_deja_preparar_si_cada_talle_alcanza(): void
     {
-        // Pedido 1-2-3-3-2-1 contra lote 1-1-2-3-3-2 (15 módulos). Hay pares, la forma no es la misma.
-        $msg = S::mensajeSiNumeracionSuperaElLote(
+        // Pedido 1-2-3-3-2-1 contra lote con otra forma. Abierto o cerrado: hay pares de cada talle.
+        self::assertNull(S::mensajeSiNumeracionSuperaElLote(
             ['35' => 1, '36' => 2, '37' => 3, '38' => 3, '39' => 2, '40' => 1],
             ['35' => 15, '36' => 15, '37' => 30, '38' => 45, '39' => 45, '40' => 30]
+        ));
+    }
+
+    public function test_talle_con_dos_pares_rechaza_si_piden_tres(): void
+    {
+        $msg = S::mensajeSiNumeracionSuperaElLote(
+            ['35' => 3],
+            ['35' => 2]
         );
 
         self::assertNotNull($msg);
-        self::assertStringContainsString('no coincide con la curva', $msg);
-        self::assertStringContainsString('36:2', $msg);
-        self::assertStringContainsString('36:1', $msg);
+        self::assertStringContainsString('no alcanza', $msg);
+        self::assertStringContainsString('35: pide 3, hay 2', $msg);
     }
 
     public function test_modulo_abierto_acepta_curva_distinta_si_cada_talle_alcanza(): void
     {
-        // Pedido 5107 NELLIE Abierto 3-3-6-9-9-6 contra lote 503388 en 64-A.
-        $msg = S::mensajeSiNumeracionSuperaElLote(
+        // Pedido 5107 NELLIE 3-3-6-9-9-6 contra lote 503388 en 64-A.
+        self::assertNull(S::mensajeSiNumeracionSuperaElLote(
             ['35' => 3, '36' => 3, '37' => 6, '38' => 9, '39' => 9, '40' => 6],
-            ['35' => 10, '36' => 9, '37' => 19, '38' => 30, '39' => 31, '40' => 21],
-            false
-        );
-
-        self::assertNull($msg);
+            ['35' => 10, '36' => 9, '37' => 19, '38' => 30, '39' => 31, '40' => 21]
+        ));
     }
 
-    public function test_modulo_abierto_rechaza_si_un_talle_pide_de_mas(): void
+    public function test_rechaza_si_un_talle_pide_de_mas(): void
     {
         $msg = S::mensajeSiNumeracionSuperaElLote(
             ['35' => 3, '36' => 12],
-            ['35' => 10, '36' => 9],
-            false
+            ['35' => 10, '36' => 9]
         );
 
         self::assertNotNull($msg);
@@ -234,16 +237,12 @@ class PedidoPickingFerliSupportTest extends TestCase
         self::assertStringContainsString('36: pide 12, hay 9', $msg);
     }
 
-    public function test_talle_extra_en_el_lote_no_es_la_misma_curva(): void
+    public function test_talle_extra_en_el_lote_no_impide_si_los_pedidos_alcanzan(): void
     {
-        $msg = S::mensajeSiNumeracionSuperaElLote(
+        self::assertNull(S::mensajeSiNumeracionSuperaElLote(
             ['35' => 1, '36' => 2],
             ['35' => 10, '36' => 9, '37' => 2]
-        );
-
-        self::assertNotNull($msg);
-        self::assertStringContainsString('no coincide con la curva', $msg);
-        self::assertStringContainsString('37:2', $msg);
+        ));
     }
 
     public function test_elige_bucket_ot_lote_cero_cuando_hay_saldo_visible(): void

@@ -6,7 +6,6 @@ namespace App\Support\Ventas\FacturacionLocal;
 
 use App\Models\Ventas\FacturacionLocalEmision;
 use App\Models\Ventas\Venta;
-use App\Services\Ventas\FacturacionLocal\FacturacionLocalNotaCreditoService;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalTurnoService;
 
 /**
@@ -45,7 +44,9 @@ final class FacturacionLocalNotaCreditoUiSupport
             return false;
         }
 
-        if (FacturacionLocalNotaCreditoService::notaCreditoExistenteParaFactura((int) $emision->venta_id) !== null) {
+        $acreditado = FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado((int) $emision->venta_id);
+        $disponible = FacturacionLocalNotasCreditoFacturaSupport::disponible((float) ($venta->total ?? 0), $acreditado);
+        if ($disponible < FacturacionLocalNotasCreditoFacturaSupport::TOLERANCIA) {
             return false;
         }
 

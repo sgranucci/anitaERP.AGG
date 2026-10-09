@@ -26,7 +26,9 @@ class MayorPlanoCuentaProcesador
     /** @var array<string, string> */
     private array $nombresCentrocosto = [];
 
-    private bool $soloMovimientosVentas = false;
+    private bool $soloTotalesModulo = false;
+
+    private string $moduloMovimientos = '';
 
     private string $fuenteMayorModo = MayorFuenteConsultaSupport::MODO_ERP;
 
@@ -56,8 +58,14 @@ class MayorPlanoCuentaProcesador
         bool $agruparPorCc = false,
         bool $soloMovimientosVentas = false,
         string $fuenteMayor = MayorFuenteConsultaSupport::MODO_ERP,
+        string $moduloMovimientos = '',
     ): array {
-        $this->soloMovimientosVentas = $soloMovimientosVentas;
+        $modulo = MayorPlanoCuentaModuloFiltroSupport::normalizar($moduloMovimientos);
+        if ($modulo === '' && $soloMovimientosVentas) {
+            $modulo = MayorPlanoCuentaModuloFiltroSupport::VENTAS;
+        }
+        $this->moduloMovimientos = $modulo;
+        $this->soloTotalesModulo = $modulo !== '';
         $this->fuenteMayorModo = MayorFuenteConsultaSupport::normalizarModo($fuenteMayor);
         $empresaIds = array_values(array_filter(array_map('intval', $empresaIds), fn (int $id) => $id > 0));
         if ($empresaIds === []) {
@@ -77,8 +85,8 @@ class MayorPlanoCuentaProcesador
             $inicioEjercicio,
         );
 
-        if ($this->soloMovimientosVentas) {
-            // Totales del mes: subdiario sistema V (detalle Anita) + ctamov ERP (asi_mon_ref=-1),
+        if ($this->soloTotalesModulo) {
+            // Totales del período del módulo elegido (subdiario V/C/T u órdenes de pago),
             // sin tramo de saldo previo. El resumen ctamov (asi_mon_ref ≠ -1) se deduplica al normalizar.
             $diagSaldo = [
                 'fecha_comienzo_ejercicio' => $inicioEjercicio,
@@ -86,13 +94,13 @@ class MayorPlanoCuentaProcesador
                 'fecha_saldo_desde' => $fechaDesde,
                 'origen_minimo' => MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD,
                 'por_empresa' => [],
-                'origen' => 'solo_ventas_periodo',
+                'origen' => 'solo_modulo_periodo',
             ];
             $fechaSaldoDesde = $fechaDesde;
             $planSaldo = [
                 'usar_saldos_mes' => false,
                 'por_codigo' => [],
-                'fuente' => 'movimientos_solo_ventas',
+                'fuente' => 'movimientos_solo_modulo',
                 'movimientos_restados' => 0,
                 'fecha_saldo_movimientos_desde' => $fechaDesde,
                 'advertencias' => [],
@@ -183,7 +191,7 @@ class MayorPlanoCuentaProcesador
             $cuentaDesde,
             $cuentaHasta,
             $cuentas,
-            $this->soloMovimientosVentas
+            $this->soloTotalesModulo
                 ? true
                 : ($omitirCargaSaldoErpCompleto && $fechaSaldoMovimientosDesde <= 0),
             $soloPeriodoBridge,
@@ -312,7 +320,8 @@ class MayorPlanoCuentaProcesador
                 'solo_moneda_origen' => $soloMonedaOrigen,
                 'incluye_subdiario' => $incluyeSubdiarioEfectivo,
                 'incluye_subdiario_solicitado' => $incluyeSubdiario,
-                'solo_movimientos_ventas' => $this->soloMovimientosVentas,
+                'solo_movimientos_ventas' => $this->moduloMovimientos === MayorPlanoCuentaModuloFiltroSupport::VENTAS,
+                'modulo_movimientos' => $this->moduloMovimientos,
                 'modo_inclusion_asientos' => $modoInclusionAsientos,
                 'centrocostos_codigo' => $centrocostoFiltro->codigos(),
                 'centrocostos_meta' => $centrocostoFiltro->metaTexto(),
@@ -389,7 +398,7 @@ class MayorPlanoCuentaProcesador
                 $cuentaDesde,
                 $cuentaHasta,
                 $cuentas,
-                $this->soloMovimientosVentas,
+                $this->moduloMovimientos,
                 $soloPeriodoBridge,
             );
 
@@ -429,7 +438,7 @@ class MayorPlanoCuentaProcesador
                 $cuentaHasta,
                 $cuentas,
                 false,
-                $this->soloMovimientosVentas,
+                $this->moduloMovimientos,
             );
             $ctamov = array_merge($ctamov, $erp['ctamov'] ?? []);
             $errores = array_merge($errores, $erp['errores'] ?? []);
@@ -452,7 +461,7 @@ class MayorPlanoCuentaProcesador
                 $cuentaHasta,
                 $cuentas,
                 true,
-                $this->soloMovimientosVentas,
+                $this->moduloMovimientos,
             );
             $ctamov = array_merge($ctamov, $erp['ctamov'] ?? []);
             $errores = array_merge($errores, $erp['errores'] ?? []);
@@ -701,10 +710,10 @@ class MayorPlanoCuentaProcesador
         $movs = [];
         $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport;
 
-        // El mayor de ventas toma el detalle de subdiario sistema V. El ctamov de
+        // El filtro por módulo toma el detalle de ese subdiario. El ctamov de
         // cierre (V/C/T y asi_mon_ref ≠ -1) duplica ese detalle. Las FAC del ERP
         // (asi_mon_ref = -1) no están en subdiario: hay que sumarlas desde ctamov.
-        $omitirResumenCtamov = $this->soloMovimientosVentas && $incluyeSubdiario && $subdiario !== [];
+        $omitirResumenCtamov = $this->soloTotalesModulo && $incluyeSubdiario && $subdiario !== [];
 
         foreach ($ctamov as $linea) {
             if ($omitirResumenCtamov && AnitaAsientoImportService::esAsientoResumenSubdiario($linea)) {
@@ -761,7 +770,7 @@ class MayorPlanoCuentaProcesador
             return false;
         }
 
-        if (! $this->soloMovimientosVentas && ($mov['balancea'] ?? 'S') !== 'S') {
+        if (! $this->soloTotalesModulo && ($mov['balancea'] ?? 'S') !== 'S') {
             return false;
         }
 
@@ -778,7 +787,7 @@ class MayorPlanoCuentaProcesador
             return false;
         }
 
-        if ($this->soloMovimientosVentas && ! MayorPlanoCuentaVentasFiltroSupport::esMovimientoVentas($mov)) {
+        if ($this->soloTotalesModulo && ! MayorPlanoCuentaModuloFiltroSupport::esMovimiento($mov, $this->moduloMovimientos)) {
             return false;
         }
 

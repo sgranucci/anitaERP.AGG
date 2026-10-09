@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Ventas;
 
 use App\Models\Ventas\FacturacionLocalEmision;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalNotasCreditoFacturaSupport;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
@@ -195,6 +196,9 @@ final class VentaNumerocomprobanteUnicidadSupport
         }
 
         if (FacturacionLocalEmision::query()->where('venta_nc_id', $ventaId)->exists()) {
+            return false;
+        }
+        if (FacturacionLocalNotasCreditoFacturaSupport::esNotaCredito($ventaId)) {
             return false;
         }
 

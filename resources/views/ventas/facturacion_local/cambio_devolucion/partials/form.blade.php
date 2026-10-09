@@ -238,6 +238,7 @@
     <div class="tab-pane fade" id="tab-lineas" role="tabpanel">
         <p class="text-muted small">
             Al elegir la factura se cargan las líneas a devolver con el artículo, el talle y el color o la combinación.
+            El precio inicial es el de la factura. Si lo cambian (descuento por transferencia: mismo importe del producto en devolver y en reemplazo), la nota de crédito sale por ese precio.
             El reemplazo se elige con lupa o F1. Enter en el SKU lo resuelve.
             El calzado pide talle y, según el artículo, color o combinación. Si no maneja variante, esos campos quedan en «No aplica».
         </p>

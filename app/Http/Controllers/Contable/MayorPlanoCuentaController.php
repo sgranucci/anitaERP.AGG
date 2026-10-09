@@ -14,6 +14,7 @@ use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSuppo
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaClasificadoExportSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaConsultaAsyncSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCsvExportSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaModuloFiltroSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaXlsxExportSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
@@ -115,11 +116,11 @@ class MayorPlanoCuentaController extends Controller
             $resumenCc = $this->reporteService->resumenPorCentrocosto($resultado);
             $erroresBridge = $resultado['errores_bridge'] ?? [];
             $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
-            $soloTotalesVentas = ! empty($filtros['solo_movimientos_ventas']);
-            $cuadreCobroVentas = $soloTotalesVentas
+            $soloTotalesModulo = MayorPlanoCuentaListadoFiltros::esConsultaTotalesModulo($filtros);
+            $cuadreCobroVentas = ! empty($filtros['solo_movimientos_ventas'])
                 ? $this->reporteService->cuadreCobroVentasDesdeResumen($resumen)
                 : null;
-            $filas = $soloTotalesVentas
+            $filas = $soloTotalesModulo
                 ? $this->reporteService->paginarFilas([], $perPage)
                 : $this->reporteService->aplanarYPaginarParaPantalla($resultado, $filtros, $perPage);
             \Illuminate\Support\Facades\Log::info('mayor_plano_cuenta.render_pantalla', [
@@ -166,7 +167,7 @@ class MayorPlanoCuentaController extends Controller
             'inclusion_asientos_texto' => $this->reporteService->formatearInclusionAsientosTexto($filtros),
             'centrocostos_texto' => $this->reporteService->formatearCentrocostosTexto($filtros),
             'origen_movimientos_texto' => $this->reporteService->formatearOrigenMovimientosTexto($filtros),
-            'solo_totales_ventas' => ! empty($filtros['solo_movimientos_ventas']),
+            'solo_totales_modulo' => MayorPlanoCuentaListadoFiltros::esConsultaTotalesModulo($filtros),
             'cuadre_cobro_ventas' => $cuadreCobroVentas ?? null,
             'mes_actual' => (int) date('n'),
             'anio_actual' => (int) date('Y'),
@@ -250,9 +251,9 @@ class MayorPlanoCuentaController extends Controller
             ? $this->reporteService->cuadreCobroVentasDesdeResumen($resumen)
             : null;
         $totales = $this->armarTotalesDesdeResultado($resultado);
-        $titulo = ! empty($filtros['solo_movimientos_ventas'])
-            ? 'Mayor analítico por cuenta — solo movimientos de ventas'
-            : 'Mayor analítico por cuenta contable';
+        $titulo = MayorPlanoCuentaModuloFiltroSupport::tituloConsulta(
+            MayorPlanoCuentaListadoFiltros::moduloMovimientos($filtros)
+        );
         $subtitulo = $this->armarSubtituloExport($filtros);
 
         switch ($formatoNorm) {
