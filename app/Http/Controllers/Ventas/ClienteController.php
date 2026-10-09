@@ -73,6 +73,7 @@ use App\Support\Ventas\ArcaPadronClienteOperacionValidacionSupport;
 use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\ClienteFacturasApocrifasSupport;
 use App\Support\Ventas\ClienteDocumentoUnicoSupport;
+use App\Support\Ventas\ClienteHabilitacionAbmSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Services\Arca\ConstanciaInscripcionService;
 use Carbon\Carbon;
@@ -925,6 +926,15 @@ class ClienteController extends Controller
     public function actualizar(ValidacionCliente $request, $id)
     {
         can('actualizar-clientes');
+
+        $estadoActual = (string) (Cliente::query()->whereKey($id)->value('estado') ?? '');
+        $errorHabilitar = ClienteHabilitacionAbmSupport::errorSiHabilitaSuspendidoSinPermiso(
+            $estadoActual,
+            (string) $request->input('estado', '')
+        );
+        if ($errorHabilitar !== null) {
+            return redirect()->back()->withInput()->withErrors(['estado' => $errorHabilitar]);
+        }
 
         DB::beginTransaction();
         try

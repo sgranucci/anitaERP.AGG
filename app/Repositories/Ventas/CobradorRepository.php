@@ -26,10 +26,8 @@ class CobradorRepository implements CobradorRepositoryInterface
 
     public function all()
     {
-        $hay = Cobrador::first();
-        if (! $hay) {
-            self::sincronizarConAnita();
-        }
+        // Incremental: la tabla ya tiene filas; igual hay que traer códigos nuevos de Anita (ej. 103).
+        $this->sincronizarConAnita();
 
         $query = $this->model->with('empresas')->orderBy('nombre', 'ASC');
         // Anita suele traer cobr_empresa=0 → empresa_id null (aplica a cualquier empresa)
@@ -112,11 +110,21 @@ class CobradorRepository implements CobradorRepositoryInterface
         if ($alt !== '' && $alt !== $codigo) {
             $query = $this->model->newQuery()->where('codigo', $alt);
             $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'empresa_id', true);
-
-            return $query->first();
+            $cobrador = $query->first();
+            if ($cobrador) {
+                return $cobrador;
+            }
         }
 
-        return null;
+        $codigoAnita = ctype_digit($codigo)
+            ? (ltrim($codigo, '0') !== '' ? ltrim($codigo, '0') : '0')
+            : $codigo;
+        $this->traerRegistroDeAnita($codigoAnita);
+
+        $query = $this->model->newQuery()->where('codigo', $codigoAnita);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'empresa_id', true);
+
+        return $query->first();
     }
 
     public function sincronizarConAnita()
@@ -275,6 +283,15 @@ class CobradorRepository implements CobradorRepositoryInterface
         ini_set('memory_limit', '512M');
 
         $consulta = strtoupper(trim($consulta));
+        if ($consulta !== '' && ctype_digit($consulta)) {
+            $norm = ltrim($consulta, '0');
+            $norm = $norm !== '' ? $norm : '0';
+            $yaEsta = $this->model->newQuery()->where('codigo', $norm)->exists();
+            if (! $yaEsta) {
+                $this->traerRegistroDeAnita($norm);
+            }
+        }
+
         $query = $this->model->newQuery()->select('id', 'nombre', 'codigo');
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'empresa_id', true);
         if ($consulta !== '') {

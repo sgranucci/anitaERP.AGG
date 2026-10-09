@@ -125,6 +125,7 @@
             </div>
             <form action="{{ route('actualizar_cliente', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-general" data-consultas-modales-abm="1" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off"
                 data-cliente-id="{{ $data->id }}"
+                data-puede-habilitar-cliente="{{ \App\Support\Ventas\ClienteHabilitacionAbmSupport::usuarioPuedeHabilitar() ? '1' : '0' }}"
                 data-arca-validar-url="{{ route('validar_cliente_arca_padron', ['id' => $data->id]) }}"
             >
                 @csrf @method("put")

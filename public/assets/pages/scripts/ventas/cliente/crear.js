@@ -84,6 +84,14 @@
             $('#numerodocumento').focus();
         });
 
+        function puedeHabilitarClienteSuspendido() {
+            var flag = $('#form-general').attr('data-puede-habilitar-cliente');
+            if (flag === undefined || flag === null || flag === '') {
+                return true;
+            }
+            return String(flag) === '1';
+        }
+
         $("#botonestado").click(function(){
             var estado = String($("#estado").val() || '0');
 
@@ -94,6 +102,10 @@
             }
 
             if (estado === '1') {
+                if (!puedeHabilitarClienteSuspendido()) {
+                    alert('No tiene permiso para habilitar clientes suspendidos.');
+                    return;
+                }
                 if (confirm('¿Reactivar el cliente como Activo?')) {
                     aplicarEstadoClienteEnFormulario('0');
                 }
