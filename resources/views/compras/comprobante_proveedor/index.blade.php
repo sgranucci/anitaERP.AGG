@@ -53,6 +53,7 @@
 @php
     use App\Support\Compras\ComprobanteProveedorEstados;
     use App\Support\Compras\ComprobanteProveedorListadoFiltros;
+    use App\Support\Listado\ListadoOrdenamientoSupport;
     use App\Support\Listado\QueryRetornoListado;
 
     $columnasVisibles = $columnasVisibles ?? [];
@@ -69,6 +70,12 @@
     $limpiarUrl = route('comprobante_proveedor', $limpiarQ);
     $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $puedeVerComprobante = can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false);
+    $camposOrdenablesThead = ComprobanteProveedorListadoFiltros::camposOrdenables();
+    $ordenActualThead = ListadoOrdenamientoSupport::normalizar($filtros['sort'] ?? [], $camposOrdenablesThead);
+    $qsQuitarOrden = $filtrosQuery ?? [];
+    unset($qsQuitarOrden['sort']);
+    $qsQuitarOrden['quitar_orden'] = 1;
+    $urlQuitarOrden = route('comprobante_proveedor', $qsQuitarOrden);
 @endphp
 
 @section('contenido')
@@ -164,6 +171,11 @@
                                 <i class="fa fa-eraser"></i> Limpiar
                             </a>
                         @endif
+                        @if (($ordenActualThead ?? []) !== [])
+                            <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden por defecto y lo saca de la vista">
+                                <i class="fa fa-sort"></i> Quitar orden
+                            </a>
+                        @endif
                     </div>
                 </div>
                 @include('compras.comprobante_proveedor.partials.filtros_externos')
@@ -178,13 +190,6 @@
                     'queryparams' => $filtrosQuery ?? [],
                 ])
             </div>
-            @php
-                $camposOrdenablesThead = ComprobanteProveedorListadoFiltros::camposOrdenables();
-                $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
-                    $filtros['sort'] ?? [],
-                    $camposOrdenablesThead
-                );
-            @endphp
             <div class="card-body table-responsive p-0">
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">

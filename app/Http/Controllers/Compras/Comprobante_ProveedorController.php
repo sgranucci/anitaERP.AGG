@@ -1967,6 +1967,25 @@ class Comprobante_ProveedorController extends Controller
             );
         }
 
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva) {
+                $filtros['vista_id'] = $vistaActiva->id;
+                unset($filtros['vista_estandar']);
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            } elseif ($forzarEstandar) {
+                $filtros['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('comprobante_proveedor', ComprobanteProveedorListadoFiltros::paraQueryString($filtros))
+                ->with('mensaje', 'Se quitó el orden de la grilla.');
+        }
+
         $catalogo = ComprobanteProveedorListadoColumnas::catalogoActivo();
         $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
             ComprobanteProveedorListadoColumnas::RECURSO,

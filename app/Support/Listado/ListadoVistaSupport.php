@@ -73,11 +73,12 @@ final class ListadoVistaSupport
         $json = is_array($vista->filtros_json) ? $vista->filtros_json : [];
         $orden = array_values($orden);
         $agrupar = array_values($agrupar);
-        if (($json['orden'] ?? []) == $orden && ($json['agrupar'] ?? []) == $agrupar) {
+        if (($json['orden'] ?? []) == $orden && ($json['sort'] ?? []) == $orden && ($json['agrupar'] ?? []) == $agrupar) {
             return;
         }
 
         $json['orden'] = $orden;
+        $json['sort'] = $orden;
         $json['agrupar'] = $agrupar;
         $vista->filtros_json = $json;
         $vista->save();
