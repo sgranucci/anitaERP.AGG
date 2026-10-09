@@ -69,7 +69,7 @@ final class ComprobanteProveedorEstados
             self::CONTABILIZADO => 'Contabilizado',
             self::ANULADO => 'Anulado',
             self::ERROR_SYNC => 'Error sync',
-            self::FILTRO_ERROR_ANITA => 'Error Anita',
+            self::FILTRO_ERROR_ANITA => 'No se contabilizó',
             default => trim((string) $estado) !== '' ? (string) $estado : '—',
         };
     }
@@ -84,7 +84,7 @@ final class ComprobanteProveedorEstados
         if ($errorAnita) {
             return [
                 'class' => 'badge badge-danger',
-                'label' => 'Error Anita',
+                'label' => 'No se contabilizó',
             ];
         }
 

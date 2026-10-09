@@ -615,8 +615,8 @@
             totalPago += signoFila($tr) * liq.equivalente;
         });
 
-        // Residuo de medios sin aplicar a deuda = anticipo / OPA (evita TOTAL OP = 0).
-        // Si el asiento fue editado a mano (p.ej. debe a cuenta del proveedor), no crear OPA.
+        // Residuo de medios sin aplicar a deuda = anticipo. Con facturas, el servidor
+        // lo graba como OPA aparte; sin facturas, la propia orden pasa a ser OPA.
         var medios = typeof window.totalMediosPagoproveedor === 'function'
             ? window.totalMediosPagoproveedor()
             : Number(window.ppTotalMedios || 0);
@@ -626,13 +626,7 @@
             desembolsar = 0;
         }
         var residual = Math.round((medios - desembolsar) * 100) / 100;
-        var asientoManual = (typeof window.asientoTieneEdicionManual === 'function' && window.asientoTieneEdicionManual())
-            || window.flAsientoEditadoManual === true;
-        var hayAplicaciones = $form.find('input[name="idcuentacorrientes[]"]').filter(function () {
-            return parseInt($(this).val(), 10) > 0;
-        }).length > 0;
-        // Asiento a mano sobre cuenta de anticipo (sin facturas) igual es OPA en CC.
-        if (residual > 0.01 && (!asientoManual || !hayAplicaciones)) {
+        if (residual > 0.01) {
             $form.append($('<input type="hidden" name="anticipo">').val(residual.toFixed(2)));
             $form.append($('<input type="hidden" name="totalanticipo">').val(residual.toFixed(2)));
         }

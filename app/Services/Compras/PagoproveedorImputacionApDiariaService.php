@@ -9,11 +9,14 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
+use App\Models\Contable\Cuentacontable;
 use App\Support\Compras\ComprobanteProveedorImputacionApCuentasSupport;
 use App\Support\Compras\ComprobanteProveedorImputacionApCtamovSupport;
 use App\Support\Compras\ComprobanteProveedorImputacionApSupport;
 use App\Support\Compras\PagoproveedorImputacionApPromovSupport;
 use App\Support\Compras\PagoproveedorImputacionApSupport;
+use App\Support\Compras\ProveedorAnticipoCuentaContableSupport;
+use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -54,7 +57,7 @@ final class PagoproveedorImputacionApDiariaService
 
         $pagos = Pagoproveedor::query()
             ->with([
-                'proveedores:id,codigo,nombre',
+                'proveedores:id,codigo,nombre,cuentacontable_id,cuentacontableme_id,cuentacontablecompra_id',
                 'empresas:id,codigo,nombre',
                 'monedas:id,abreviatura,nombre',
                 'tipotransaccion_cajas:id,abreviatura',
@@ -165,6 +168,7 @@ final class PagoproveedorImputacionApDiariaService
                 'El asiento copiado del subdiario que cuadra (CC = asiento = promov) no se lista: el ctamov de cierre usa otro número, y la cabecera pag_trec incluye retenciones (promov es el neto). El stub sin CC ni asiento sigue aparte, como documento Anita.',
                 'OPP/OPA son crédito (Haber−Debe negativo). AOP invierte el signo.',
                 'El residual a anticipo entra al trío. Se controla aparte vs ctamov.',
+                'Sin cuenta de anticipo, la OPA va a proveedores: si no tiene asiento propio, su CC se suma a la OPP de origen (el Debe ya está en ese asiento).',
                 'Importes en $: CC al TC de la factura; promov al TC del pago. Haber suma, Debe resta.',
             ],
         ];
@@ -233,10 +237,15 @@ final class PagoproveedorImputacionApDiariaService
 
         $empresaIds = $pagos->pluck('empresa_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
         $catalogo = ComprobanteProveedorImputacionApCuentasSupport::armar($empresaIds);
+        $opaAbsorbidas = $this->opaAbsorbidasEnOrigen($pagos);
+        $this->registrarCuentasProveedor($pagos, $catalogo);
 
         $clavesCtamov = [];
         $clavesPromov = [];
         foreach ($pagos as $pago) {
+            if (isset($opaAbsorbidas[(int) $pago->id])) {
+                continue;
+            }
             $fecha = $this->fechaYmd($pago->fecha);
             $empresaAnita = PagoproveedorImputacionApPromovSupport::empresaAnitaDePago((int) $pago->empresa_id);
             $tipo = PagoproveedorImputacionApSupport::tipoDesdeComprobante((string) $pago->tipocomprobante);
@@ -270,28 +279,27 @@ final class PagoproveedorImputacionApDiariaService
         $out = [];
         $cabecerasAnita = [];
         foreach ($pagos as $pago) {
+            if (isset($opaAbsorbidas[(int) $pago->id])) {
+                continue;
+            }
             $fecha = $this->fechaYmd($pago->fecha);
             $tipo = PagoproveedorImputacionApSupport::tipoDesdeComprobante((string) $pago->tipocomprobante);
             $empresaAnita = PagoproveedorImputacionApPromovSupport::empresaAnitaDePago((int) $pago->empresa_id);
             $lineasCc = $ccPorPago->get($pago->id, collect());
-            $ccArs = 0.0;
+            $ccArs = $this->ccArsDePago($lineasCc, $cotLibroPorCcPago, $pago, $fecha);
             $tieneCc = $lineasCc->isNotEmpty();
-            foreach ($lineasCc as $cc) {
-                $monedaId = (int) ($cc->moneda_id ?: ($pago->moneda_id ?? 1));
-                $cotLibro = (float) ($cotLibroPorCcPago->get((int) $cc->id) ?? 0);
-                if ($cotLibro <= 0) {
-                    $cotLibro = (float) ($cc->cotizacion ?? ($pago->cotizacion ?? 1));
+            foreach ($opaAbsorbidas as $opaId => $origenId) {
+                if ($origenId !== (int) $pago->id) {
+                    continue;
                 }
-                if ($monedaId <= 1) {
-                    $cotLibro = 1;
+                $hijo = $pagos->firstWhere('id', $opaId);
+                $lineasHijo = $ccPorPago->get($opaId, collect());
+                if ($lineasHijo->isNotEmpty()) {
+                    $tieneCc = true;
                 }
-                $ccArs += ComprobanteProveedorImputacionApSupport::aPesosTolerante(
-                    (float) ($cc->total ?? 0),
-                    $monedaId,
-                    $cotLibro,
-                    $fecha !== '' ? $fecha : ($cc->fecha ?? null),
-                    'CC OP #'.$pago->id
-                );
+                if ($hijo !== null) {
+                    $ccArs += $this->ccArsDePago($lineasHijo, $cotLibroPorCcPago, $hijo, $fecha);
+                }
             }
             $ccArs = round($ccArs, 2);
 
@@ -446,6 +454,109 @@ final class PagoproveedorImputacionApDiariaService
         }
 
         return $out;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Pagoproveedor>  $pagos
+     * @return array<int, int> opa id => origen id
+     */
+    private function opaAbsorbidasEnOrigen($pagos): array
+    {
+        $idsEnControl = [];
+        foreach ($pagos as $pago) {
+            $idsEnControl[(int) $pago->id] = true;
+        }
+
+        $hayAnticipo = [];
+        $absorbidas = [];
+        foreach ($pagos as $pago) {
+            $empresaId = (int) $pago->empresa_id;
+            if (! array_key_exists($empresaId, $hayAnticipo)) {
+                $hayAnticipo[$empresaId] = ProveedorAnticipoCuentaContableSupport::cuentaAnticipoId($empresaId) !== null;
+            }
+            $origenId = (int) ($pago->pagoproveedor_origen_id ?? 0);
+            if (! PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
+                (string) $pago->tipocomprobante,
+                $hayAnticipo[$empresaId],
+                (int) ($pago->asiento_id ?? 0) > 0,
+                $origenId,
+                isset($idsEnControl[$origenId]),
+            )) {
+                continue;
+            }
+            $absorbidas[(int) $pago->id] = $origenId;
+        }
+
+        return $absorbidas;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Pagoproveedor>  $pagos
+     * @param  array<string, mixed>  $catalogo
+     */
+    private function registrarCuentasProveedor($pagos, array &$catalogo): void
+    {
+        $cuentaPorPago = [];
+        foreach ($pagos as $pago) {
+            $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorId(
+                $pago->proveedores,
+                (int) ($pago->moneda_id ?: 1)
+            );
+            if ($cuentaId > 0) {
+                $cuentaPorPago[(int) $pago->id] = $cuentaId;
+            }
+        }
+        if ($cuentaPorPago === []) {
+            return;
+        }
+
+        $codigos = Cuentacontable::query()
+            ->whereIn('id', array_values(array_unique($cuentaPorPago)))
+            ->pluck('codigo', 'id');
+
+        foreach ($pagos as $pago) {
+            $cuentaId = $cuentaPorPago[(int) $pago->id] ?? 0;
+            if ($cuentaId <= 0) {
+                continue;
+            }
+            $codigo = (int) ComprobanteProveedorImputacionApCuentasSupport::normalizarCodigo(
+                (string) ($codigos[$cuentaId] ?? '')
+            );
+            ComprobanteProveedorImputacionApCuentasSupport::registrarCuentaProveedor(
+                $catalogo,
+                $cuentaId,
+                $codigo,
+                ProveedorCuentaContableMonedaSupport::esMonedaExtranjera((int) ($pago->moneda_id ?: 1))
+            );
+        }
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, mixed>  $lineasCc
+     * @param  \Illuminate\Support\Collection<int, mixed>  $cotLibroPorCcPago
+     */
+    private function ccArsDePago($lineasCc, $cotLibroPorCcPago, Pagoproveedor $pago, string $fecha): float
+    {
+        $ccArs = 0.0;
+        foreach ($lineasCc as $cc) {
+            $monedaId = (int) ($cc->moneda_id ?: ($pago->moneda_id ?? 1));
+            $cotLibro = (float) ($cotLibroPorCcPago->get((int) $cc->id) ?? 0);
+            if ($cotLibro <= 0) {
+                $cotLibro = (float) ($cc->cotizacion ?? ($pago->cotizacion ?? 1));
+            }
+            if ($monedaId <= 1) {
+                $cotLibro = 1;
+            }
+            $ccArs += ComprobanteProveedorImputacionApSupport::aPesosTolerante(
+                (float) ($cc->total ?? 0),
+                $monedaId,
+                $cotLibro,
+                $fecha !== '' ? $fecha : ($cc->fecha ?? null),
+                'CC OP #'.$pago->id
+            );
+        }
+
+        return $ccArs;
     }
 
     private function fechaYmd(mixed $fecha): string

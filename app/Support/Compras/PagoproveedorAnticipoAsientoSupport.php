@@ -7,7 +7,8 @@ namespace App\Support\Compras;
  *
  * Lo pagado que no cancela ningún comprobante (OP adelantada o sobrepago) va al Debe de
  * la cuenta de anticipos a proveedores cuando la empresa la tiene configurada. Sin esa
- * cuenta el residuo queda a cargo del operador, como hasta ahora.
+ * cuenta el residuo se suma al Debe de proveedores para que el asiento balancee; el
+ * crédito del sobrante queda en la cuenta corriente como OPA.
  *
  * El residual se mide en moneda del pago: cada línea se expresa en esa moneda (ME × TC,
  * MN sin re-multiplicar por la TC informativa del header).
@@ -31,11 +32,36 @@ final class PagoproveedorAnticipoAsientoSupport
             return null;
         }
 
+        $residual = self::residual($asiento, $monedaPagoId, $cotizacionPago);
+        if ($residual < self::TOLERANCIA) {
+            return null;
+        }
+        if ($monedaPagoId <= 0) {
+            $monedaPagoId = max(1, (int) config('cotizacion.ID_MONEDA_DEFAULT', 1));
+        }
+
+        return [
+            'cuentacontable_id' => $cuentaId,
+            'moneda_id' => $monedaPagoId,
+            'cotizacion' => $cotizacionPago > 0 ? $cotizacionPago : 1.0,
+            'monto' => $residual,
+        ];
+    }
+
+    /**
+     * Haber menos Debe, en moneda del pago. Positivo = sobrante sin comprobante.
+     *
+     * @param  list<array<string, mixed>>  $asiento
+     */
+    public static function residual(
+        array $asiento,
+        int $monedaPagoId = 0,
+        float $cotizacionPago = 1.0,
+    ): float {
         $monedaLocal = max(1, (int) config('cotizacion.ID_MONEDA_DEFAULT', 1));
         if ($monedaPagoId <= 0) {
             $monedaPagoId = $monedaLocal;
         }
-        $cotizacionPago = $cotizacionPago > 0 ? $cotizacionPago : 1.0;
 
         $residual = 0.0;
         foreach ($asiento as $linea) {
@@ -47,17 +73,7 @@ final class PagoproveedorAnticipoAsientoSupport
             $residual += self::aMonedaPago($neto, $monedaId, $monedaPagoId, $cotizacion, $monedaLocal);
         }
 
-        $residual = round($residual, 4);
-        if ($residual < self::TOLERANCIA) {
-            return null;
-        }
-
-        return [
-            'cuentacontable_id' => $cuentaId,
-            'moneda_id' => $monedaPagoId,
-            'cotizacion' => $cotizacionPago,
-            'monto' => $residual,
-        ];
+        return round($residual, 4);
     }
 
     private static function aMonedaPago(

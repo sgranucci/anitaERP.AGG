@@ -1,5 +1,9 @@
 @php
     $fuente = $fuente ?? null;
+    $titulo = trim((string) ($titulo ?? ''));
+    if ($titulo === '') {
+        $titulo = 'Factura ya cargada';
+    }
     $mensaje = $mensaje ?? '';
     $comprobanteId = (int) ($comprobanteId ?? 0);
     $precargaId = (int) ($precargaId ?? 0);
@@ -7,7 +11,7 @@
 @endphp
 @if ($mensaje !== '')
 <div class="alert alert-danger" id="cp-aviso-duplicado-cabecera">
-    <h5 class="mb-2"><i class="fa fa-exclamation-triangle"></i> Factura ya cargada</h5>
+    <h5 class="mb-2"><i class="fa fa-exclamation-triangle"></i> {{ $titulo }}</h5>
     <p class="mb-2">{{ $mensaje }}</p>
     @if ($fuente === 'erp' && $comprobanteId > 0 && filled($urlEditar))
         <p class="mb-0">

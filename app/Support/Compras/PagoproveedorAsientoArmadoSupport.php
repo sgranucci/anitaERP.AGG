@@ -423,6 +423,8 @@ final class PagoproveedorAsientoArmadoSupport
             $empresaId,
             $cuentacontableRepository,
             $conceptoAnticipo,
+            $conceptoPago,
+            $cuentaApRef,
             $monedaPagoId,
             $cotizacionPago
         );
@@ -574,7 +576,9 @@ final class PagoproveedorAsientoArmadoSupport
         array &$asiento,
         int $empresaId,
         CuentacontableRepositoryInterface $cuentacontableRepository,
-        string $concepto,
+        string $conceptoAnticipo,
+        string $conceptoPago,
+        int $cuentaProveedorId,
         int $monedaPagoId = 1,
         float $cotizacionPago = 1.0,
     ): void {
@@ -584,19 +588,39 @@ final class PagoproveedorAsientoArmadoSupport
             $monedaPagoId,
             $cotizacionPago
         );
-        if ($linea === null) {
+        if ($linea !== null) {
+            self::agregaCuenta(
+                $asiento,
+                $linea['cuentacontable_id'],
+                $linea['moneda_id'],
+                $linea['cotizacion'],
+                'D',
+                $linea['monto'],
+                $cuentacontableRepository,
+                $conceptoAnticipo
+            );
+
             return;
+        }
+
+        // Sin cuenta de anticipo el sobrante sigue en Proveedores para que el asiento cierre.
+        $residual = PagoproveedorAnticipoAsientoSupport::residual($asiento, $monedaPagoId, $cotizacionPago);
+        if ($residual < PagoproveedorAnticipoAsientoSupport::TOLERANCIA || $cuentaProveedorId <= 0) {
+            return;
+        }
+        if ($monedaPagoId <= 0) {
+            $monedaPagoId = max(1, (int) config('cotizacion.ID_MONEDA_DEFAULT', 1));
         }
 
         self::agregaCuenta(
             $asiento,
-            $linea['cuentacontable_id'],
-            $linea['moneda_id'],
-            $linea['cotizacion'],
+            $cuentaProveedorId,
+            $monedaPagoId,
+            $cotizacionPago > 0 ? $cotizacionPago : 1.0,
             'D',
-            $linea['monto'],
+            $residual,
             $cuentacontableRepository,
-            $concepto
+            $conceptoPago
         );
     }
 

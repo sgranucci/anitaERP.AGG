@@ -70,6 +70,24 @@ final class PagoproveedorImputacionApSupport
     }
 
     /**
+     * Sin cuenta de anticipo la OPA no arma asiento propio: el sobrante queda
+     * en el Debe a proveedores del OPP de origen. El control suma esa CC al origen.
+     */
+    public static function opaSinAnticipoVaEnProveedoresDelOrigen(
+        string $tipo,
+        bool $hayCuentaAnticipo,
+        bool $tieneAsientoPropio,
+        int $origenId,
+        bool $origenEnControl,
+    ): bool {
+        return self::tipoDesdeComprobante($tipo) === self::TIPO_OPA
+            && ! $hayCuentaAnticipo
+            && ! $tieneAsientoPropio
+            && $origenId > 0
+            && $origenEnControl;
+    }
+
+    /**
      * Tesorería estilo I/E: asiento sin trío AP/anticipo y sin CC de proveedor.
      * Sale de este control (canon 215010, gasto, etc.) y va al de Ingreso/Egreso.
      */

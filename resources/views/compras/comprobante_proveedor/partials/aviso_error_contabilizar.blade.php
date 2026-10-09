@@ -4,7 +4,7 @@
 @endphp
 @if ($estadoAnitaError && $errorAnita !== '')
 <div id="cp-alerta-contabilizar" class="alert alert-danger">
-    <h4 class="mb-2"><i class="icon fa fa-ban"></i> No se pudo contabilizar / sincronizar con Anita</h4>
+    <h4 class="mb-2"><i class="icon fa fa-ban"></i> No se pudo contabilizar</h4>
     <p class="mb-1">{{ $errorAnita }}</p>
     <p class="mb-0">
         El comprobante quedó en <strong>{{ $data->estado ?? 'BORRADOR' }}</strong>.

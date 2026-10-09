@@ -451,6 +451,7 @@ class Comprobante_ProveedorController extends Controller
                 : null;
             $html = view('compras.comprobante_proveedor.partials.aviso_duplicado_cabecera', [
                 'fuente' => $erp['fuente'],
+                'titulo' => $erp['titulo'] ?? null,
                 'mensaje' => $erp['mensaje'],
                 'comprobanteId' => $comprobanteIdDup ?: null,
                 'precargaId' => (int) ($erp['precarga_id'] ?? 0) ?: null,

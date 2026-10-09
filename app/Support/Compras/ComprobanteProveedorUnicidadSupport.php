@@ -317,6 +317,7 @@ final class ComprobanteProveedorUnicidadSupport
      *   listo: bool,
      *   duplicado: bool,
      *   fuente: 'erp'|'precarga'|null,
+     *   titulo?: string|null,
      *   mensaje: string|null,
      *   comprobante_id: int|null,
      *   precarga_id: int|null,
@@ -385,6 +386,7 @@ final class ComprobanteProveedorUnicidadSupport
                 'listo' => true,
                 'duplicado' => true,
                 'fuente' => 'erp',
+                'titulo' => self::tituloDuplicado($duplicado),
                 'mensaje' => self::mensajeDuplicado($duplicado, $codigoAfip),
                 'comprobante_id' => (int) $duplicado->id,
                 'precarga_id' => null,
@@ -736,6 +738,15 @@ final class ComprobanteProveedorUnicidadSupport
         );
     }
 
+    public static function tituloDuplicado(Comprobante_Proveedor $existente): string
+    {
+        $estado = strtoupper(trim((string) ($existente->estado ?? '')));
+
+        return $estado === ComprobanteProveedorEstados::CONTABILIZADO
+            ? 'Factura ya cargada'
+            : 'Esta factura no está contabilizada';
+    }
+
     public static function mensajeDuplicado(Comprobante_Proveedor $existente, ?string $codigoAfip = null): string
     {
         $existente->loadMissing('tipotransaccion_compras');
@@ -756,16 +767,37 @@ final class ComprobanteProveedorUnicidadSupport
         $cuitFmt = $cuit !== '' ? self::formatearCuit($cuit) : 'sin CUIT';
         $estado = strtoupper(trim((string) ($existente->estado ?? '')));
         $origen = ComprobanteProveedorOrigenEntrada::etiqueta((string) ($existente->origen_entrada ?? ''));
+        $estadoLabel = $estado !== '' ? $estado : 'sin estado';
 
-        return sprintf(
-            'Ya existe el comprobante #%d (%s, CUIT %s, estado %s, origen %s). '
-            .'No se puede cargar dos veces: abrí ese registro para continuar o contabilizar.',
+        if ($estado === ComprobanteProveedorEstados::CONTABILIZADO) {
+            return sprintf(
+                'Ya existe el comprobante #%d (%s, CUIT %s, estado %s, origen %s). '
+                .'No se puede cargar dos veces: abrí ese registro.',
+                $existente->id,
+                $comprobante,
+                $cuitFmt,
+                $estadoLabel,
+                $origen,
+            );
+        }
+
+        $texto = sprintf(
+            'El comprobante #%d (%s, CUIT %s) quedó en estado %s, origen %s. '
+            .'Todavía no genera cuenta corriente ni compra en Anita. '
+            .'Abrí ese registro, corregilo y contabilizalo. No se puede cargar de nuevo.',
             $existente->id,
             $comprobante,
             $cuitFmt,
-            $estado !== '' ? $estado : 'sin estado',
+            $estadoLabel,
             $origen,
         );
+
+        $motivo = trim((string) ($existente->anita_sync_error ?? ''));
+        if ($motivo !== '') {
+            $texto .= ' Motivo: '.$motivo;
+        }
+
+        return $texto;
     }
 
     public static function mensajeDuplicadoCaeComprobante(Comprobante_Proveedor $existente, string $cae): string

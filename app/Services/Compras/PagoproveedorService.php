@@ -9,6 +9,8 @@ use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Proveedor;
+use App\Models\Compras\Proveedor_Cuentacorriente;
+use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Repositories\Caja\Caja_Movimiento_CuentacajaRepositoryInterface;
 use App\Repositories\Caja\Caja_Movimiento_EstadoRepositoryInterface;
 use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
@@ -32,9 +34,11 @@ use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscri
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Compras\PagoproveedorAsientoArmadoSupport;
+use App\Support\Compras\PagoproveedorLiquidacionSupport;
 use App\Support\Compras\PagoproveedorEdicionCandadoSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Compras\Retencion\PagoproveedorRetencionPersistenciaSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCargaManualSupport;
 use App\Support\Configuracion\SistemaNumeradorSupport;
@@ -65,6 +69,9 @@ class PagoproveedorService
         private CuentacontableRepositoryInterface $cuentacontableRepository,
         private ProveedorCuentacorrienteAplicacionAnitaSyncService $cuentacorrienteAnitaSyncService,
     ) {}
+
+    /** @var list<Pagoproveedor> OPA de sobrante borrada en esta petición; Anita se limpia después del commit. */
+    private array $opasSobranteBorradas = [];
 
     /**
      * Preview AJAX del asiento TES (no graba).
@@ -329,20 +336,20 @@ class PagoproveedorService
         $aplicaciones = $this->resolverAplicacionesDesdeRequest($data);
         PagoproveedorAplicacionCuentacorrienteSupport::reemplazarAplicaciones($pago, $aplicaciones);
 
-        $anticipo = (float) ($data['anticipo'] ?? $data['totalanticipo'] ?? 0);
-        if ($anticipo <= 0 && ! $this->hayAplicacionConMonto($aplicaciones)) {
-            $anticipo = abs((float) ($pago->monto ?? $data['monto'] ?? 0));
-        }
-        if ($anticipo > 0) {
+        $hayAplicaciones = $this->hayAplicacionConMonto($aplicaciones);
+        $anticipo = $this->resolverImporteAnticipo($pago, $data, $aplicaciones, $hayAplicaciones);
+        if ($hayAplicaciones) {
+            if ($pago->estado !== 'PRE CARGA') {
+                $this->sincronizarOpaDeSobrante($pago, $anticipo);
+            }
+        } elseif ($anticipo > 0.01) {
             PagoproveedorAplicacionCuentacorrienteSupport::crearAnticipo(
                 $pago,
                 $anticipo,
                 (int) ($pago->moneda_id ?: ($data['moneda_id'] ?? 1)),
                 (float) ($pago->cotizacion ?: 1),
             );
-            if (! $this->hayAplicacionConMonto($aplicaciones)) {
-                $this->marcarComoOpa($pago);
-            }
+            $this->marcarComoOpa($pago);
         }
 
         $this->persistirRetenciones($pago, $data);
@@ -1059,6 +1066,193 @@ class PagoproveedorService
     }
 
     /**
+     * Sobrante de una OPP ya grabada: OPA con el mismo número y crédito en cuenta corriente.
+     * No mueve caja ni asiento: eso ya está en la OPP.
+     */
+    public function generarOpaSobrante(int $pagoproveedorId, float $anticipo): Pagoproveedor
+    {
+        $pago = $this->pagoproveedorRepository->findOrFail($pagoproveedorId);
+        if (strtoupper((string) $pago->tipocomprobante) !== 'OPP') {
+            throw new Exception('Solo una OPP con facturas aplicadas genera la OPA del sobrante.');
+        }
+
+        $opa = $this->sincronizarOpaDeSobrante($pago, round($anticipo, 2));
+        if ($opa === null) {
+            throw new Exception('No quedó OPA de sobrante para la OPP '.$pago->numerotransaccion.'.');
+        }
+
+        return $opa;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  list<array<string, mixed>>  $aplicaciones
+     */
+    private function resolverImporteAnticipo(
+        Pagoproveedor $pago,
+        array $data,
+        array $aplicaciones,
+        bool $hayAplicaciones,
+    ): float {
+        $anticipo = round((float) ($data['anticipo'] ?? $data['totalanticipo'] ?? 0), 2);
+        if ($anticipo > 0.01) {
+            return $anticipo;
+        }
+        if (! $hayAplicaciones) {
+            return round(abs((float) ($pago->monto ?? $data['monto'] ?? 0)), 2);
+        }
+
+        $monedaPago = (int) ($pago->moneda_id ?: 1);
+        $cotPago = (float) ($pago->cotizacion ?: 1);
+        $aplicado = 0.0;
+        foreach ($aplicaciones as $apl) {
+            $monto = abs((float) ($apl['montoaplicado'] ?? 0));
+            if ($monto <= 0) {
+                continue;
+            }
+            $monedaDeuda = (int) ($apl['moneda_id'] ?? $monedaPago);
+            $cotDeuda = (float) ($apl['cotizacion'] ?? $cotPago);
+            $cotApl = (float) ($apl['cotizacion_aplicada'] ?? 0);
+            if ($cotApl <= 0) {
+                $cotApl = $cotPago;
+            }
+            $liq = PagoproveedorLiquidacionSupport::calcular($monto, $monedaDeuda, $cotDeuda, $monedaPago, $cotApl);
+            $aplicado += (float) $liq['equivalente_pago'];
+        }
+
+        return round(abs((float) $pago->monto) - $aplicado, 2);
+    }
+
+    /**
+     * Con facturas aplicadas, el sobrante es una OPA hermana (mismo número, sin caja ni asiento).
+     * Anita la toma como crédito abierto. Sin sobrante, se borra la OPA generada si nadie la aplicó.
+     */
+    private function sincronizarOpaDeSobrante(Pagoproveedor $opp, float $anticipo): ?Pagoproveedor
+    {
+        $anticipo = round($anticipo, 2);
+        $hija = Pagoproveedor::query()
+            ->where('pagoproveedor_origen_id', $opp->id)
+            ->where('tipocomprobante', 'OPA')
+            ->first();
+
+        if ($anticipo <= 0.01) {
+            if ($hija !== null) {
+                $this->borrarOpaSobranteLocal($hija);
+            }
+
+            return null;
+        }
+
+        if ($hija === null) {
+            $tipoOpaId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorAbreviaturaPublica('OPA');
+            if ($tipoOpaId <= 0) {
+                throw new Exception('No hay tipo de transacción de caja OPA. No se puede grabar el sobrante.');
+            }
+            $hija = $this->pagoproveedorRepository->create([
+                'empresa_id' => $opp->empresa_id,
+                'tipotransaccion_caja_id' => $tipoOpaId,
+                'tipocomprobante' => 'OPA',
+                'letra' => (string) ($opp->letra ?? ' '),
+                'sucursal' => (int) $opp->sucursal,
+                'numerotransaccion' => (string) $opp->numerotransaccion,
+                'fecha' => $opp->fecha?->format('Y-m-d'),
+                'caja_id' => null,
+                'proveedor_id' => $opp->proveedor_id,
+                'detalle' => 'Sobrante de OPP '.$opp->sucursal.'-'.$opp->numerotransaccion,
+                'estado' => 'CONFIRMADA',
+                'monto' => $anticipo,
+                'cotizacion' => (float) ($opp->cotizacion ?: 1),
+                'moneda_id' => (int) ($opp->moneda_id ?: 1),
+                'modo_cotizacion' => (string) ($opp->modo_cotizacion ?: 'factura'),
+                'usuario_id' => $opp->usuario_id ?: Auth::id(),
+                'asiento_id' => null,
+                'caja_movimiento_id' => null,
+                'pagoproveedor_origen_id' => $opp->id,
+            ]);
+            $this->registrarEstado($hija, 'CONFIRMADA', 'OPA por sobrante de OPP '.$opp->numerotransaccion);
+        } else {
+            $this->assertOpaSobranteSinAplicar($hija);
+            $this->pagoproveedorRepository->update([
+                'fecha' => $opp->fecha?->format('Y-m-d'),
+                'proveedor_id' => $opp->proveedor_id,
+                'monto' => $anticipo,
+                'cotizacion' => (float) ($opp->cotizacion ?: 1),
+                'moneda_id' => (int) ($opp->moneda_id ?: 1),
+                'detalle' => 'Sobrante de OPP '.$opp->sucursal.'-'.$opp->numerotransaccion,
+            ], $hija->id);
+            $hija = $this->pagoproveedorRepository->findOrFail($hija->id);
+        }
+
+        EloquentAuditDeleteSupport::each(
+            Proveedor_Cuentacorriente::query()->where('pagoproveedor_id', $hija->id)
+        );
+        PagoproveedorAplicacionCuentacorrienteSupport::crearAnticipo(
+            $hija,
+            $anticipo,
+            (int) ($hija->moneda_id ?: 1),
+            (float) ($hija->cotizacion ?: 1),
+        );
+
+        return $hija;
+    }
+
+    private function assertOpaSobranteSinAplicar(Pagoproveedor $opa): void
+    {
+        $aplicada = Proveedor_Cuentacorriente_Aplicacion::query()
+            ->where('pagoproveedor_id', $opa->id)
+            ->exists();
+        if ($aplicada || (int) ($opa->caja_movimiento_id ?? 0) > 0 || (int) ($opa->asiento_id ?? 0) > 0) {
+            throw new Exception(
+                'La OPA '.$opa->sucursal.'-'.$opa->numerotransaccion
+                .' del sobrante ya tiene aplicaciones, caja o asiento. No se puede rehacer.'
+            );
+        }
+    }
+
+    private function borrarOpaSobranteLocal(Pagoproveedor $opa): void
+    {
+        $this->assertOpaSobranteSinAplicar($opa);
+        EloquentAuditDeleteSupport::each(
+            Proveedor_Cuentacorriente::query()->where('pagoproveedor_id', $opa->id)
+        );
+        EloquentAuditDeleteSupport::each(
+            Pagoproveedor_Estado::query()->where('pagoproveedor_id', $opa->id)
+        );
+        $this->opasSobranteBorradas[] = $opa;
+        $opa->delete();
+    }
+
+    private function espejarOpaSobranteEnAnita(Pagoproveedor $pago): void
+    {
+        foreach ($this->opasSobranteBorradas as $opa) {
+            try {
+                $this->cuentacorrienteAnitaSyncService->eliminarPromovCabeceraPorPago($opa);
+            } catch (\Throwable $e) {
+                Log::warning('pagoproveedor.opa_sobrante.anita_delete', [
+                    'pagoproveedor_id' => $opa->id,
+                    'numero' => $opa->numerotransaccion,
+                    'mensaje' => $e->getMessage(),
+                ]);
+            }
+        }
+        $this->opasSobranteBorradas = [];
+
+        if (strtoupper((string) $pago->tipocomprobante) !== 'OPP') {
+            return;
+        }
+
+        $hija = Pagoproveedor::query()
+            ->where('pagoproveedor_origen_id', $pago->id)
+            ->where('tipocomprobante', 'OPA')
+            ->first();
+        if ($hija === null || (string) $hija->estado === 'PRE CARGA') {
+            return;
+        }
+
+        $this->cuentacorrienteAnitaSyncService->syncPorPagoproveedor((int) $hija->id);
+    }
+
+    /**
      * Replica pago/auxpag/tesmov en Anita (mismo camino que Ingreso/Egreso OPP).
      */
     public function sincronizarAnitaTesoreria(Pagoproveedor $pago, bool $reemplazar): void
@@ -1066,6 +1260,16 @@ class PagoproveedorService
         if ((string) $pago->estado === 'PRE CARGA') {
             return;
         }
+
+        try {
+            $this->sincronizarAnitaTesoreriaCuerpo($pago, $reemplazar);
+        } finally {
+            $this->espejarOpaSobranteEnAnita($pago);
+        }
+    }
+
+    private function sincronizarAnitaTesoreriaCuerpo(Pagoproveedor $pago, bool $reemplazar): void
+    {
 
         $cajaId = (int) ($pago->caja_movimiento_id ?? 0);
         if ($cajaId <= 0) {

@@ -12,7 +12,7 @@ class ComprobanteProveedorEstadosTest extends TestCase
         $this->assertSame('badge badge-secondary', ComprobanteProveedorEstados::badge(ComprobanteProveedorEstados::BORRADOR)['class']);
         $this->assertSame('badge badge-success', ComprobanteProveedorEstados::badge(ComprobanteProveedorEstados::CONTABILIZADO)['class']);
         $this->assertSame('badge badge-danger', ComprobanteProveedorEstados::badge(null, true)['class']);
-        $this->assertSame('Error Anita', ComprobanteProveedorEstados::badge(null, true)['label']);
+        $this->assertSame('No se contabilizó', ComprobanteProveedorEstados::badge(null, true)['label']);
     }
 
     public function test_filtro_error_anita_es_valido(): void

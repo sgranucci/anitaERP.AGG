@@ -39,7 +39,7 @@
                         @endphp
                         <span class="{{ $badgeEstadoForm['class'] }} ml-2">{{ $badgeEstadoForm['label'] }}</span>
                         @if (($data->anita_sync_estado ?? '') === \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::ERROR)
-                        <span class="badge badge-danger ml-1" title="{{ $data->anita_sync_error }}">Error Anita</span>
+                        <span class="badge badge-danger ml-1" title="{{ $data->anita_sync_error }}">No se contabilizó</span>
                         @endif
                     @else
                         Nuevo comprobante de proveedor

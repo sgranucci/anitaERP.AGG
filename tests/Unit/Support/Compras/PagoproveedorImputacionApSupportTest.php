@@ -154,6 +154,45 @@ class PagoproveedorImputacionApSupportTest extends TestCase
         $this->assertFalse(PagoproveedorImputacionApSupport::esOrigenIngresoEgreso(0, 'OPP'));
     }
 
+    public function test_opa_sin_anticipo_se_suma_al_proveedores_del_origen(): void
+    {
+        $this->assertTrue(PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
+            'OPA',
+            false,
+            false,
+            24279,
+            true
+        ));
+        $this->assertFalse(PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
+            'OPA',
+            true,
+            false,
+            24279,
+            true
+        ));
+        $this->assertFalse(PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
+            'OPA',
+            false,
+            true,
+            24279,
+            true
+        ));
+        $this->assertFalse(PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
+            'OPP',
+            false,
+            false,
+            24279,
+            true
+        ));
+        $this->assertFalse(PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
+            'OPA',
+            false,
+            false,
+            24279,
+            false
+        ));
+    }
+
     public function test_pago_tesoreria_sin_ap_sale_del_control_de_proveedores(): void
     {
         $this->assertTrue(PagoproveedorImputacionApSupport::esPagoSinTrioAp(false, true, 0.0));

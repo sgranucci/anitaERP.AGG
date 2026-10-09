@@ -204,6 +204,34 @@ final class ComprobanteProveedorImputacionApCuentasSupport
         return ComprobanteProveedorImputacionApSupport::CUBETA_MN;
     }
 
+    /**
+     * La OP imputa la cuenta del proveedor (MN o m/e), no solo el código fijo de config.
+     * Sin cuenta de anticipo, la OPA usa esa misma cuenta de proveedores.
+     *
+     * @param  array{
+     *     mn: array<int, true>,
+     *     me: array<int, true>,
+     *     codigo_mn?: array<int, true>,
+     *     codigo_me?: array<int, true>
+     * }  $catalogo
+     */
+    public static function registrarCuentaProveedor(
+        array &$catalogo,
+        int $cuentaId,
+        int $codigo,
+        bool $monedaExtranjera,
+    ): void {
+        if ($cuentaId <= 0) {
+            return;
+        }
+
+        $cubeta = $monedaExtranjera ? 'me' : 'mn';
+        $catalogo[$cubeta][$cuentaId] = true;
+        if ($codigo > 0) {
+            $catalogo['codigo_'.$cubeta][$codigo] = true;
+        }
+    }
+
     public static function normalizarCodigo(string $codigo): string
     {
         return preg_replace('/\D+/', '', $codigo) ?? '';

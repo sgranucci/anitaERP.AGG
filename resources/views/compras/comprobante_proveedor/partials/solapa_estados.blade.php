@@ -1,7 +1,7 @@
 @if (($data->anita_sync_estado ?? '') === \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::ERROR
     && filled($data->anita_sync_error ?? null))
 <div class="alert alert-danger mb-3">
-    <strong>Último error Anita</strong>
+    <strong>Último error al contabilizar</strong>
     <div>{{ $data->anita_sync_error }}</div>
     @if (filled($data->anita_sync_at ?? null))
     <small>{{ \Illuminate\Support\Carbon::parse($data->anita_sync_at)->format('d/m/Y H:i') }}</small>
