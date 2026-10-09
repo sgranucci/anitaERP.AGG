@@ -103,6 +103,7 @@ use App\Support\Ventas\AnitaComprobDescuentoSupport;
 use App\Support\Ventas\AnitaVengravCodigoTasaSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
 use App\Support\Ventas\FacturaAsientoDescuentoPieSupport;
+use App\Support\Ventas\Ferli\FacturaAsientoIvaPrecioFerliSupport;
 use App\Support\Ventas\FacturaBTotalesImpresionSupport;
 use App\Support\Ventas\FacturaPdfIdentificacionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
@@ -1331,6 +1332,7 @@ class FacturacionService
 				}
 				PedidoFacturacionProfiler::etapa('arma_contabilidad_inicio');
 				$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+				$this->assertAsientoIvaPrecioFerli($dataFactura, $conceptosTotales, $asientoContable);
 				PedidoFacturacionProfiler::etapa('arma_contabilidad_fin');
 
 				// Detalle asiento (ERP + ctamov): "FAC 1296 MORA CARLOS ARIEL" — solo factura por pedido Bierzo.
@@ -2218,6 +2220,7 @@ class FacturacionService
 			{
 				// Arma asiento
 				$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+				$this->assertAsientoIvaPrecioFerli($dataFactura, $conceptosTotales, $asientoContable);
 				$numero++;
 
 				// Arma detalle
@@ -3724,6 +3727,7 @@ class FacturacionService
 						$dataFactura[$idxNcp]['cuentacontable_id'] = $cuentaNcpId;
 					}
 					$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+					$this->assertAsientoIvaPrecioFerli($dataFactura, $conceptosTotales, $asientoContable);
 				}
 				// Arma asiento. NC total: invertir el de la FAC origen.
 				// NC parcial: asientoInvertidoDesdeFactura devuelve [] y se arma desde los renglones.
@@ -3743,10 +3747,13 @@ class FacturacionService
 					}
 					if ($asientoContable === []) {
 						$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+						$this->assertAsientoIvaPrecioFerli($dataFactura, $conceptosTotales, $asientoContable);
 					}
 				}
-				else
+				else {
 					$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+					$this->assertAsientoIvaPrecioFerli($dataFactura, $conceptosTotales, $asientoContable);
+				}
 
 				if (empty($numeroReservadoVillafranca)) {
 					$numero++;
@@ -4431,6 +4438,7 @@ class FacturacionService
 				$centrocosto_id = null;
 				$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 				$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+				$this->assertAsientoIvaPrecioFerli($dataFactura, $conceptosTotales, $asientoContable);
 				$detalleContable = $tipoAnita.' '.$letra.' '.$puntoventa->codigo.' '.$numero;
 
 				// Graba la factura
@@ -7616,6 +7624,23 @@ class FacturacionService
 	}
 
 	/**
+	 * Ferli: el asiento no puede superar el total de la venta.
+	 * Local, mostrador, pedido y picking pasan por armaContabilidad.
+	 *
+	 * @param  list<array<string, mixed>>  $dataFactura
+	 * @param  list<array<string, mixed>>  $conceptosTotales
+	 * @param  list<array<string, mixed>>  $asientoContable
+	 */
+	private function assertAsientoIvaPrecioFerli(array $dataFactura, array $conceptosTotales, array $asientoContable): void
+	{
+		if (! EntornoEmpresaSupport::esFerli()) {
+			return;
+		}
+
+		FacturaAsientoIvaPrecioFerliSupport::assertCierra($dataFactura, $conceptosTotales, $asientoContable);
+	}
+
+	/**
 	 * Falla antes de CAE si algún IVA no tiene Id AlicIVA válido (AFIP [10019]).
 	 *
 	 * @param  list<array<string, mixed>>  $impuestos
@@ -8678,8 +8703,8 @@ class FacturacionService
 			}
 		}
 
-		// Cantidad × precio es bruto (A) o con IVA (B). Ventas del asiento = neto fiscal.
-		// IVA y percepciones se agregan abajo desde los conceptos. Mostrador, pedido y picking.
+		// Cantidad × precio puede traer IVA o no (incluyeimpuesto). Ventas del asiento = neto fiscal.
+		// IVA y percepciones se agregan abajo desde los conceptos. Mostrador, pedido, picking y local.
 		$asientoContable = FacturaAsientoDescuentoPieSupport::netearLineasVenta(
 			$asientoContable,
 			$conceptostotales

@@ -10,7 +10,7 @@ use App\Models\Ventas\LocalVenta;
  *
  * Regla de negocio Ferli: las listas de los locales (WEB / OFERTA WEB / LUGANO
  * y cualquier listaprecio asignada a local_venta) son siempre precio final
- * (IVA incluido). Factura B debe emitir con incluyeimpuestos='1' sin sumar IVA.
+ * (IVA incluido). El flag de emisión sale de la lista, no de la letra A o B.
  */
 final class FacturacionLocalPrecioIvaSupport
 {
@@ -94,21 +94,16 @@ final class FacturacionLocalPrecioIvaSupport
         string $letra,
         bool $preciosSonDeLista = true,
     ): array {
-        unset($articuloIds, $preciosSonDeLista);
+        unset($articuloIds, $preciosSonDeLista, $letra);
 
         $flagLista = self::flagLista($listaprecioId);
-        $letra = strtoupper(trim($letra));
-        $esB = $letra === 'B' || $letra === '';
 
         $outPrecios = [];
         $outFlags = [];
 
         foreach ($precios as $precio) {
             $outPrecios[] = round((float) $precio, 4);
-            // Factura B (y locales): siempre IVA incluido. Letra A: mismo flag de lista local (también final).
-            $outFlags[] = ($esB || $flagLista === self::INCLUYE_SI)
-                ? self::INCLUYE_SI
-                : $flagLista;
+            $outFlags[] = $flagLista;
         }
 
         return [

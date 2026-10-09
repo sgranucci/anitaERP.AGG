@@ -6,10 +6,9 @@ namespace App\Support\Ventas;
  * Neto de ventas en el asiento de factura.
  *
  * El IVA y las percepciones salen de los conceptos, ya calculados sobre el
- * neto. Las líneas de venta se arman con cantidad × precio: en letra A eso
- * es el bruto antes del descuento de pie; en letra B, el precio con IVA.
- * En mostrador, pedido, picking y el resto de los facturadores el asiento
- * de ventas tiene que sumar el neto fiscal (gravado + exento + no gravado).
+ * neto. Las líneas de venta se arman con cantidad × precio: ese precio puede
+ * venir con IVA o sin IVA (incluyeimpuesto del renglón). El asiento de ventas
+ * tiene que sumar el neto fiscal (gravado + exento + no gravado).
  *
  * No se abre cuenta de descuento ni se toca IVA / IIBB.
  */
@@ -60,8 +59,8 @@ final class FacturaAsientoDescuentoPieSupport
      * Lleva las líneas de venta al neto fiscal de la factura.
      *
      * Vale con descuento de pie, con el gravado ya neto y sin concepto
-     * "Descuento", y con precio que incluye IVA (letra B). Si no hay neto
-     * fiscal, solo netea un descuento de pie explícito.
+     * "Descuento", y con precio que incluye IVA. Si no hay neto fiscal,
+     * solo netea un descuento de pie explícito.
      *
      * @param  list<array<string, mixed>>  $lineasVenta
      * @param  list<array<string, mixed>>  $conceptosTotales
