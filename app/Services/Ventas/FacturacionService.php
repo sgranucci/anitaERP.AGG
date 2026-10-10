@@ -9046,11 +9046,48 @@ class FacturacionService
 		return false;
 	}
 
+	/**
+	 * El tipo de comprobante puede no imputar (remito interno RIN).
+	 * Si la marca no existe todavía, se sigue generando el asiento.
+	 */
+	private function tipoGeneraAsientoContable($ventaId, $tipoAbreviatura): bool
+	{
+		if (! \Illuminate\Support\Facades\Schema::hasColumn('tipotransaccion', 'genera_asiento')) {
+			return true;
+		}
+
+		$tipo = null;
+		$ventaId = (int) $ventaId;
+		if ($ventaId > 0) {
+			$tipoId = (int) Venta::query()->whereKey($ventaId)->value('tipotransaccion_id');
+			if ($tipoId > 0) {
+				$tipo = Tipotransaccion::query()->find($tipoId);
+			}
+		}
+
+		if ($tipo === null) {
+			$abreviatura = strtoupper(substr(trim((string) $tipoAbreviatura), 0, 5));
+			if ($abreviatura !== '') {
+				$tipo = Tipotransaccion::query()->where('abreviatura', $abreviatura)->first();
+			}
+		}
+
+		if ($tipo === null || ! array_key_exists('genera_asiento', $tipo->getAttributes())) {
+			return true;
+		}
+
+		return (bool) $tipo->genera_asiento;
+	}
+
 	private function grabaAsientoContable($asientocontable, $empresa_id, $fecha, $venta_id, $observacion, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $contrapartida_id, $tipo, $letra, $sucursal, $nro,
 											?string $modoFacturacionPv = null, ?string $fechaJornada = null, bool $omitirAnita = false,
 											?array $opcionesEmision = null)
 	{
+		if (! $this->tipoGeneraAsientoContable($venta_id, $tipo)) {
+			return null;
+		}
+
 		$opcionesCierre = ['modofacturacion_pv' => $modoFacturacionPv];
 		if ($fechaJornada !== null && trim($fechaJornada) !== '') {
 			$opcionesCierre['fechajornada'] = $fechaJornada;

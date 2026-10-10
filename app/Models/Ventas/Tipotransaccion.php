@@ -13,11 +13,12 @@ class Tipotransaccion extends Model
     use SoftDeletes;
 	use TipotransaccionTrait;
 
-    protected $fillable = ['nombre', 'operacion', 'operacionstock', 'abreviatura', 'codigo', 'signo', 'estado', 'iva_ventas', 'concepto_venta_id'];
+    protected $fillable = ['nombre', 'operacion', 'operacionstock', 'abreviatura', 'codigo', 'signo', 'estado', 'iva_ventas', 'genera_asiento', 'concepto_venta_id'];
     protected $table = 'tipotransaccion';
 
     protected $casts = [
         'iva_ventas' => 'boolean',
+        'genera_asiento' => 'boolean',
     ];
 
     public function setSignoAttribute($signo)

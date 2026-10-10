@@ -37,6 +37,7 @@
                             <th>Signo</th>
                             <th>Estado</th>
                             <th>IVA ventas</th>
+                            <th>Asiento</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -52,6 +53,7 @@
                             <td>{{$signoEnum[$data->signo]}}</td>
                             <td>{{$estadoEnum[$data->estado]}}</td>
                             <td>{{ ! empty($data->iva_ventas) ? 'Sí' : 'No' }}</td>
+                            <td>{{ ! isset($data->genera_asiento) || $data->genera_asiento ? 'Sí' : 'No' }}</td>
                             <td>
                        			@if (can('editar-tipos-transacciones', false))
                                 	<a href="{{route('editar_tipotransaccion', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

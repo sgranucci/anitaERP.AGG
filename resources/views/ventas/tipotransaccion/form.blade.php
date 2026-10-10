@@ -167,5 +167,14 @@
             Si está tildado, los comprobantes de este tipo entran al listado IVA ventas (y las FSL de máquinas se completan desde Anita).
             Presupuestos, remitos internos y tipos que no informan IVA van destildados.
         </small>
+        <div class="form-check mt-2">
+            <input type="hidden" name="genera_asiento" value="0">
+            <input type="checkbox" class="form-check-input" name="genera_asiento" id="genera_asiento" value="1"
+                @checked(old('genera_asiento', $data?->genera_asiento ?? true))>
+            <label class="form-check-label" for="genera_asiento">Genera asiento contable</label>
+        </div>
+        <small class="form-text text-muted">
+            Destildado, el comprobante se graba sin imputación en el mayor (remito interno).
+        </small>
     </div>
 </div>
