@@ -68,6 +68,7 @@
             'para_pdf' => true,
             'mostrar_acciones' => false,
             'puede_ver_ticket' => false,
+            'calculadas' => $calculadas ?? [],
         ])
     </table>
 </body>

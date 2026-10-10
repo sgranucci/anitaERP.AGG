@@ -1,9 +1,24 @@
 ---
-description: Index workbench (QBE, diseñador de vista, cortes, PDF/Excel) al copiar clientes/proveedores
+description: Workbench obligatorio (QBE, vistas, diseñador, orden) en maestros y transacciones
 alwaysApply: true
 ---
 
 # Listado workbench
+
+## Obligatorio en maestros y transacciones
+
+Todo index de un **maestro importante** o de una **transacción** (comprobantes, pagos, ingresos/egresos, artículos, clientes, proveedores, cheques, empleados) usa este workbench. No dejar el panel viejo «Buscar en / Campo / Condición» ni una grilla fija sin vistas.
+
+En la misma pantalla, juntos:
+
+- **Consulta avanzada** (QBE en código): grupos AND/OR/NOT, fechas, importes decimales.
+- **Vistas**: selector, guardar, default, compartida, «Vista estándar».
+- **Diseñar vista**: columnas, orden, etiquetas, anchos. El orden del diseñador es el orden de la grilla.
+- **Orden por columna** con marca y **Quitar orden** (vuelve al orden de instalación y lo saca de la vista del usuario).
+- Chips externos (empresa, estado, mail, tipo) **por encima** del QBE, en AND, con botones que pasan de renglón. Una vista no los pisa.
+- Cortes si el listado agrupa; si hay importe, el corte lo suma.
+
+Canónico de transacción: comprobantes de proveedor e ingresos/egresos. Pago a proveedores entra en el mismo stack (`compras.pagoproveedor`). Cuentas de caja y el ícono de mail de esa grilla se arman después de paginar: se ven, no se filtran por QBE ni se ordenan.
 
 Al copiar el index de **clientes** o **proveedores**. Cheques y artículos estándar ya están en este patrón. Complementa `index-listado-paginado-export.mdc`, `pdf-listado-encabezado-hojas.mdc` y `export-excel-importes-cortes.mdc`.
 
@@ -139,7 +154,7 @@ Cheques suma, aparte, un gráfico de barras **Monto por estado** sobre el univer
 |---|---|
 | Shell + wireframe + muestra de 20 | Siempre, al copiar el workbench |
 | Cortes (conteo y, si hay importe, suma) | Cuando el listado se agrupa |
-| Workbook liviano (un gráfico simple) | Solo en la pantalla de análisis que se pida (cheques) |
-| Dashboard, varios gráficos, joins entre módulos | Fuera de esta ola |
+| Workbook liviano (un gráfico simple) | Cuando la pantalla lo pida (cheques). En pago a proveedores, ingresos y egresos y administración de tickets: gráfico, color de fila, columna calculada y envío del Excel. En ingresos y egresos la factura aplicada y el mail al proveedor salen solo en OPP y OPA ligadas a una orden de pago |
+| Medidas, relación y lienzo de hasta 3 gráficos | Pagos (con la relación a la factura), ingresos y egresos (cantidad, ingresos y egresos, ya en pesos) y administración de tickets (cantidad y suma de minutos, encima del alcance por rol). Regla `listado-medidas-modelo-lienzo`. No replicar al resto hasta el gate de esa regla |
 
 Reportes analíticos (mayor, kilos, SICORE) no se migran en la misma pasada.

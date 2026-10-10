@@ -28,6 +28,8 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
 
     private const COL_MONTO = 'F';
 
+    private int $columnasCalculadas = 0;
+
     private PagoproveedorRepositoryInterface $pagoproveedorRepository;
 
     /** @var array<string, mixed>|null */
@@ -72,18 +74,21 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
         $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
+        $this->columnasCalculadas = $this->cantidadCalculadas();
+
         return view('exports.compras.pagoproveedorindex', [
             'datas' => $datas,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'esExcel' => true,
             'formatoNumero' => $this->formatoNumeroEfectivo(),
+            'calculadas' => array_values(is_array($this->filtros['calculadas'] ?? null) ? $this->filtros['calculadas'] : []),
         ]);
     }
 
     public function columnFormats(): array
     {
         $cols = [];
-        foreach (range('A', self::COL_ULTIMA) as $c) {
+        foreach (range('A', $this->colUltima()) as $c) {
             $cols[$c] = NumberFormat::FORMAT_TEXT;
         }
         $cols[self::COL_MONTO] = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
@@ -106,9 +111,14 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
 
     public function columnWidths(): array
     {
-        return [
+        $anchos = [
             'A' => 12, 'B' => 18, 'C' => 22, 'D' => 28, 'E' => 36, 'F' => 14, 'G' => 14, 'H' => 40, 'I' => 12,
         ];
+        for ($i = 0; $i < $this->cantidadCalculadas(); $i++) {
+            $anchos[chr(ord('J') + $i)] = 22;
+        }
+
+        return $anchos;
     }
 
     public function title(): string
@@ -137,7 +147,7 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
                         $offsetX += 120;
                     }
                 }
-                $sheet->mergeCells('A'.$this->filaTituloExcel.':'.self::COL_ULTIMA.$this->filaTituloExcel);
+                $sheet->mergeCells('A'.$this->filaTituloExcel.':'.$this->colUltima().$this->filaTituloExcel);
                 $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->setName('Arial')->setSize(16)->setBold(true);
                 $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->getColor()->setRGB('17202A');
                 $sheet->getStyle('A'.$this->filaTituloExcel)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
@@ -155,5 +165,26 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
         $global = ExcelFormatoNumero::preferenciaGlobal();
 
         return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
+    }
+
+    private function cantidadCalculadas(): int
+    {
+        $n = 0;
+        $filas = $this->filtros['calculadas'] ?? [];
+        if (! is_array($filas)) {
+            return 0;
+        }
+        foreach ($filas as $fila) {
+            if (is_array($fila) && trim((string) ($fila['etiqueta'] ?? '')) !== '') {
+                $n++;
+            }
+        }
+
+        return min(2, $n);
+    }
+
+    private function colUltima(): string
+    {
+        return chr(ord('I') + $this->cantidadCalculadas());
     }
 }

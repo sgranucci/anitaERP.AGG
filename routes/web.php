@@ -3512,6 +3512,8 @@ Route::post('caja/ingresoegreso/workbench/vista', 'Caja\IngresoEgresoController@
 Route::delete('caja/ingresoegreso/workbench/vista/{id}', 'Caja\IngresoEgresoController@eliminarVistaListado')->name('eliminar_vista_listado_ingresoegreso')->whereNumber('id');
 Route::post('caja/ingresoegreso/workbench/columnas', 'Caja\IngresoEgresoController@guardarColumnasListado')->name('guardar_columnas_listado_ingresoegreso');
 Route::post('caja/ingresoegreso/workbench/etiquetas', 'Caja\IngresoEgresoController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_ingresoegreso');
+Route::post('caja/ingresoegreso/workbench/enviar', 'Caja\IngresoEgresoController@enviarListado')->name('enviar_listado_ingresoegreso');
+Route::post('caja/ingresoegreso/workbench/envio/{id}/baja', 'Caja\IngresoEgresoController@bajaEnvioProgramado')->name('baja_envio_ingresoegreso')->whereNumber('id');
 Route::post('caja/ingresoegreso', 'Caja\IngresoEgresoController@guardar')->name('guardar_ingresoegreso');
 Route::get('caja/ingresoegreso/{id}/imprimir-pdf', 'Caja\IngresoEgresoController@imprimir')->name('imprimir_ingresoegreso');
 Route::get('caja/ingresoegreso/{id}/{origen?}/editar', 'Caja\IngresoEgresoController@editar')->name('editar_ingresoegreso');
@@ -3882,6 +3884,15 @@ Route::post('compras/configuracion-comprobante-proveedor/tolerancias', 'Compras\
 
 Route::get('compras/pagoproveedor', 'Compras\PagoproveedorController@index')->name('pagoproveedor');
 Route::get('compras/listapagoproveedor/{formato?}/{busqueda?}', 'Compras\PagoproveedorController@listar')->name('lista_pagoproveedor');
+Route::post('compras/pagoproveedor/workbench/preview', 'Compras\PagoproveedorController@previewWorkbench')->name('preview_workbench_pagoproveedor');
+Route::post('compras/pagoproveedor/workbench/vista', 'Compras\PagoproveedorController@guardarVistaListado')->name('guardar_vista_listado_pagoproveedor');
+Route::delete('compras/pagoproveedor/workbench/vista/{id}', 'Compras\PagoproveedorController@eliminarVistaListado')->name('eliminar_vista_listado_pagoproveedor')->whereNumber('id');
+Route::post('compras/pagoproveedor/workbench/columnas', 'Compras\PagoproveedorController@guardarColumnasListado')->name('guardar_columnas_listado_pagoproveedor');
+Route::post('compras/pagoproveedor/workbench/etiquetas', 'Compras\PagoproveedorController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_pagoproveedor');
+Route::post('compras/pagoproveedor/workbench/enviar', 'Compras\PagoproveedorController@enviarListado')->name('enviar_listado_pagoproveedor');
+Route::post('compras/pagoproveedor/workbench/quitar-grafico', 'Compras\PagoproveedorController@quitarGraficoListado')->name('quitar_grafico_pagoproveedor');
+Route::post('compras/pagoproveedor/workbench/envio/{id}/baja', 'Compras\PagoproveedorController@bajaEnvioProgramado')->name('baja_envio_pagoproveedor')->whereNumber('id');
+Route::post('listado/workbench/quitar-grafico', 'Listado\ListadoVisualController@quitarGrafico')->name('quitar_grafico_listado');
 Route::get('compras/pagoproveedor/crear', 'Compras\PagoproveedorController@crear')->name('crear_pagoproveedor');
 Route::post('compras/pagoproveedor', 'Compras\PagoproveedorController@guardar')->name('guardar_pagoproveedor');
 Route::get('compras/pagoproveedor/{id}/editar', 'Compras\PagoproveedorController@editar')->name('editar_pagoproveedor');
@@ -4487,6 +4498,13 @@ Route::get('ticket/listaticket/{formato?}/{busqueda?}', 'Ticket\TicketController
  */
 
 Route::get('ticket/administracion_ticket', 'Ticket\Administracion_TicketController@index')->name('consulta_administracion_ticket');
+Route::post('ticket/administracion_ticket/workbench/preview', 'Ticket\Administracion_TicketController@previewWorkbench')->name('preview_workbench_administracion_ticket');
+Route::post('ticket/administracion_ticket/workbench/vista', 'Ticket\Administracion_TicketController@guardarVistaListado')->name('guardar_vista_listado_administracion_ticket');
+Route::delete('ticket/administracion_ticket/workbench/vista/{id}', 'Ticket\Administracion_TicketController@eliminarVistaListado')->name('eliminar_vista_listado_administracion_ticket')->whereNumber('id');
+Route::post('ticket/administracion_ticket/workbench/columnas', 'Ticket\Administracion_TicketController@guardarColumnasListado')->name('guardar_columnas_listado_administracion_ticket');
+Route::post('ticket/administracion_ticket/workbench/etiquetas', 'Ticket\Administracion_TicketController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_administracion_ticket');
+Route::post('ticket/administracion_ticket/workbench/enviar', 'Ticket\Administracion_TicketController@enviarListado')->name('enviar_listado_administracion_ticket');
+Route::post('ticket/administracion_ticket/workbench/envio/{id}/baja', 'Ticket\Administracion_TicketController@bajaEnvioProgramado')->name('baja_envio_administracion_ticket')->whereNumber('id');
 Route::get('ticket/administracion_ticket/crear', 'Ticket\Administracion_TicketController@crear')->name('crea_administracion_ticket');
 Route::post('ticket/administracion_ticket', 'Ticket\Administracion_TicketController@guardar')->name('guarda_administracion_ticket');
 Route::get('ticket/administracion_ticket/{id}/editar', 'Ticket\Administracion_TicketController@editar')->name('edita_administracion_ticket');

@@ -51,6 +51,7 @@ use App\Support\Listado\ListadoGrillaConfigSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
@@ -223,6 +224,8 @@ class Comprobante_ProveedorController extends Controller
                 'sort' => $orden,
                 'orden' => $orden,
                 'agrupar' => $filtros['agrupar'] ?? [],
+                'grafico' => ListadoVisualSupport::normalizarGrafico($request->input('grafico'), ComprobanteProveedorListadoFiltros::camposOrdenables()),
+                'formato' => ListadoVisualSupport::normalizarFormato($request->input('formato'), ComprobanteProveedorListadoFiltros::camposOrdenables()),
             ],
             $layout,
             $request->boolean('es_default'),
@@ -234,6 +237,7 @@ class Comprobante_ProveedorController extends Controller
                 ->with('error', 'No se pudo guardar la vista.');
         }
         ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        ListadoVisualSupport::asignarRol($vista, $request, ComprobanteProveedorListadoColumnas::RECURSO);
         $qs = ComprobanteProveedorListadoFiltros::paraQueryString($filtros);
         $qs['columnas'] = implode(',', $columnasVisibles);
         $qs['vista_id'] = $vista->id;
@@ -1935,7 +1939,8 @@ class Comprobante_ProveedorController extends Controller
             && ! $request->has('fuera_pago')
             && ! $request->has('fuera_pago_todas')
         ) {
-            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ComprobanteProveedorListadoColumnas::RECURSO, $usuarioId);
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ComprobanteProveedorListadoColumnas::RECURSO, $usuarioId)
+                ?? ListadoVistaSupport::defaultDelRol(ComprobanteProveedorListadoColumnas::RECURSO, (int) session('rol_id'));
         }
 
         $filtrosRequest = ListadoVistaSupport::prepararQbeContraVista(
@@ -1947,6 +1952,12 @@ class Comprobante_ProveedorController extends Controller
             $filtros = ComprobanteProveedorListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
         unset($filtros['_qbe_explicito']);
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null,
+            ComprobanteProveedorListadoFiltros::camposOrdenables()
+        );
         $guardoQbeVista = ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
         if ($request->boolean('quitar_qbe') && $vistaActiva && $guardoQbeVista) {
             return redirect()
@@ -2019,6 +2030,7 @@ class Comprobante_ProveedorController extends Controller
         }
         $filtros['columnas'] = implode(',', $columnasVisibles);
         $filtrosQuery = ComprobanteProveedorListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
 
         return [
             'datas' => $datas,
@@ -2034,6 +2046,13 @@ class Comprobante_ProveedorController extends Controller
             'vistaActiva' => $vistaActiva,
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
             'cortes' => $cortes,
+            'graficoSerie' => ListadoVisualSupport::serieDeConsulta(
+                $filtros,
+                ComprobanteProveedorListadoFiltros::camposOrdenables(),
+                $etiquetas,
+                fn (array $para): array => $this->comprobanteRepository->cortesComprobanteProveedor($para)
+            ),
+            'rolesVista' => ListadoVisualSupport::rolesParaInstalacion(),
         ];
     }
 

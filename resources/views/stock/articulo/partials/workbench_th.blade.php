@@ -17,12 +17,49 @@
         'fecha_alta' => 'Fecha de alta',
         'fecha_modificacion' => 'Fecha de modificación',
     ];
-    $titulo = $tituloColArticulo($key, $titulos[$key] ?? $key);
-    $ordenables = ['sku', 'codigobarra', 'descripcion'];
+    $titulo = ($etiquetasColumnas ?? [])[$key] ?? ($titulos[$key] ?? $key);
+    $alineacion = $key === 'saldo' ? 'text-right' : '';
+    $titleTh = $key === 'saldo'
+        ? 'Saldo en Anita (stkdep) para artículos LAB con depósito de entrega'
+        : $titulo;
+    $camposOrden = $camposOrdenablesThead ?? [];
+    $ordenActual = $ordenActualThead ?? [];
+    $esOrdenable = isset($camposOrden[$key]);
+    $dirCol = $esOrdenable
+        ? \App\Support\Listado\ListadoOrdenamientoSupport::direccionDeCampo($ordenActual, $key)
+        : null;
+    $idxCol = $esOrdenable
+        ? \App\Support\Listado\ListadoOrdenamientoSupport::indiceDeCampo($ordenActual, $key)
+        : null;
+    $claseCol = $alineacion;
+    if ($esOrdenable) {
+        $claseCol = trim($claseCol.' lw-col-sortable'.($dirCol ? ' lw-col-sorted' : ''));
+        $titleTh .= ' — clic para ordenar';
+        $qsSort = $filtrosQuery ?? [];
+        unset($qsSort['sort']);
+        $qsSort = array_merge(
+            $qsSort,
+            \App\Support\Listado\ListadoOrdenamientoSupport::paraQueryString(
+                \App\Support\Listado\ListadoOrdenamientoSupport::togglePrimario($ordenActual, $key, $camposOrden)
+            )
+        );
+    }
 @endphp
-<th class="{{ $key === 'saldo' ? 'text-right' : '' }}" @if ($key === 'saldo') title="Saldo en Anita (stkdep) para artículos LAB con depósito de entrega" @endif>
-    @if (in_array($key, $ordenables, true))
-        <a href="{{ $urlOrdenArticulo($key) }}" class="text-dark">{{ $titulo }}{{ $marcaOrdenArticulo($key) }}</a>
+<th class="{{ $claseCol }}" title="{{ $titleTh }}">
+    @if ($esOrdenable)
+        <a href="{{ route('articulo', $qsSort) }}" class="lw-sort-link">
+            {{ $titulo }}
+            @if ($dirCol === 'asc')
+                <i class="fa fa-sort-up lw-sort-icon"></i>
+            @elseif ($dirCol === 'desc')
+                <i class="fa fa-sort-down lw-sort-icon"></i>
+            @else
+                <i class="fa fa-sort lw-sort-icon lw-sort-muted"></i>
+            @endif
+            @if ($idxCol !== null && count($ordenActual) > 1)
+                <sup class="lw-sort-prio">{{ $idxCol + 1 }}</sup>
+            @endif
+        </a>
     @else
         {{ $titulo }}
     @endif

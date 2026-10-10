@@ -5,6 +5,10 @@ namespace App\Support\Compras;
 use App\Models\Compras\Pagoproveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
+use App\Support\Listado\ListadoCortesSupport;
+use App\Support\Listado\ListadoQbeSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
@@ -32,18 +36,20 @@ final class PagoproveedorListadoUnificadoSupport
         // hace timeout del index con ~24k OP + 100k movimientos de caja.
         $union = $this->queryUnion($filtros);
 
-        $query = DB::query()
-            ->fromSub($union, 'listado_op')
-            ->orderByDesc('fecha')
-            // Número de OP (no pk_id): IE y pagoproveedor mezclan IDs distintos.
-            ->orderByRaw("CAST(NULLIF(TRIM(numerotransaccion), '') AS UNSIGNED) DESC")
-            ->orderByDesc('pk_id');
+        $query = DB::query()->fromSub($union, 'listado_op');
+        $this->aplicarOrden($query, $filtros);
+
+        $perPage = (int) ($filtros['_per_page'] ?? self::PER_PAGE);
+        if ($perPage < 1 || $perPage > ListadoDisenadorPreviewSupport::LIMITE_MUESTRA) {
+            $perPage = self::PER_PAGE;
+        }
 
         if ($paginar) {
             $page = PaginatorImpl::resolveCurrentPage();
             $total = (clone $query)->count();
+            $this->aplicarColumnasCalculadas($query, $filtros);
             $filasRaw = (clone $query)
-                ->forPage($page, self::PER_PAGE)
+                ->forPage($page, $perPage)
                 ->get();
 
             $filas = $filasRaw
@@ -53,17 +59,70 @@ final class PagoproveedorListadoUnificadoSupport
             return new PaginatorImpl(
                 $this->hidratarMailEnviado($this->hidratarCuentasCaja($filas)),
                 $total,
-                self::PER_PAGE,
+                $perPage,
                 $page,
                 ['path' => PaginatorImpl::resolveCurrentPath()]
             );
         }
 
+        $limiteMail = (int) ($filtros['_mail_limite'] ?? 0);
+        if ($limiteMail > 0) {
+            $query->limit($limiteMail);
+        }
+        $this->aplicarColumnasCalculadas($query, $filtros);
         $filas = $query->get()
             ->map(fn ($row) => PagoproveedorListadoFila::desdeUnionRow($row))
             ->values();
 
         return $this->hidratarMailEnviado($this->hidratarCuentasCaja($filas));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, string>  $etiquetas
+     * @return array<string, mixed>
+     */
+    public function cortes(array $filtros, array $etiquetas = []): array
+    {
+        $agrupar = $filtros['agrupar'] ?? [];
+        if ($agrupar === []) {
+            return ['activo' => false];
+        }
+
+        $outer = DB::query()->fromSub($this->queryUnion($filtros), 'listado_op');
+        $eloquent = Pagoproveedor::query()->withoutGlobalScopes();
+        $eloquent->setQuery($outer);
+
+        return ListadoCortesSupport::calcular(
+            $eloquent,
+            $agrupar,
+            PagoproveedorListadoFiltros::camposOrdenables(),
+            'listado_op.fila_clave',
+            static fn (object $row, string $key): string => PagoproveedorListadoColumnas::valorCelda($row, $key),
+            null,
+            $etiquetas,
+            [[
+                'key' => 'monto',
+                'column' => 'listado_op.monto',
+                'label' => 'Monto',
+            ]]
+        );
+    }
+
+    /**
+     * @param  QueryBuilder  $query
+     * @param  array<string, mixed>  $filtros
+     */
+    private function aplicarColumnasCalculadas(QueryBuilder $query, array $filtros): void
+    {
+        $defs = PagoproveedorListadoAnalisisSupport::sqlCalculadas($filtros);
+        if ($defs === []) {
+            return;
+        }
+        $query->select('listado_op.*');
+        foreach ($defs as $def) {
+            $query->selectRaw('('.$def['sql'].') as '.$def['alias'], $def['bindings']);
+        }
     }
 
     /**
@@ -78,6 +137,39 @@ final class PagoproveedorListadoUnificadoSupport
     }
 
     /**
+     * @param  QueryBuilder  $query
+     * @param  array<string, mixed>  $filtros
+     */
+    private function aplicarOrden(QueryBuilder $query, array $filtros): void
+    {
+        $campos = PagoproveedorListadoFiltros::camposOrdenables();
+        $sort = ListadoOrdenamientoSupport::normalizar($filtros['sort'] ?? [], $campos);
+        if ($sort === []) {
+            $query->orderByDesc('fecha')
+                ->orderByRaw("CAST(NULLIF(TRIM(numerotransaccion), '') AS UNSIGNED) DESC")
+                ->orderByDesc('pk_id');
+
+            return;
+        }
+
+        foreach ($sort as $criterio) {
+            $dir = ($criterio['dir'] ?? '') === ListadoOrdenamientoSupport::DIR_DESC ? 'desc' : 'asc';
+            if (($criterio['campo'] ?? '') === 'op') {
+                $query->orderBy('tipocomprobante', $dir)
+                    ->orderByRaw("CAST(NULLIF(TRIM(numerotransaccion), '') AS UNSIGNED) {$dir}");
+
+                continue;
+            }
+            $column = (string) ($campos[$criterio['campo']]['column'] ?? '');
+            if ($column !== '' && ListadoOrdenamientoSupport::esColumnaSqlSegura($column)) {
+                $query->orderBy($column, $dir);
+            }
+        }
+
+        $query->orderByDesc('pk_id');
+    }
+
+    /**
      * @param  array<string, mixed>  $filtros
      */
     private function queryPagoproveedor(array $filtros): QueryBuilder
@@ -88,6 +180,7 @@ final class PagoproveedorListadoUnificadoSupport
             ->leftJoin('moneda', 'moneda.id', '=', 'pp.moneda_id')
             ->select([
                 DB::raw("'".PagoproveedorListadoFila::ORIGEN_PAGOPROVEEDOR."' as origen"),
+                DB::raw("CONCAT('pp-', pp.id) as fila_clave"),
                 'pp.id as pk_id',
                 'pp.fecha',
                 'pp.tipocomprobante',
@@ -120,6 +213,18 @@ final class PagoproveedorListadoUnificadoSupport
             'empresa_id' => 'pp.empresa_id',
         ]);
         $this->aplicarFiltroMail($query, $filtros, 'pp.id');
+        PagoproveedorListadoFiltros::aplicarQbe($query, (array) ($filtros['qbe'] ?? []), [
+            'id' => 'pp.id',
+            'op' => 'pp.numerotransaccion',
+            'fecha' => 'pp.fecha',
+            'empresa' => 'empresa.nombre',
+            'proveedor' => 'proveedor.nombre',
+            'detalle' => 'pp.detalle',
+            'monto' => 'pp.monto',
+            'estado' => 'pp.estado',
+            'moneda' => 'moneda.abreviatura',
+            'tipocomprobante' => 'pp.tipocomprobante',
+        ], PagoproveedorListadoFila::ORIGEN_PAGOPROVEEDOR);
 
         return $query;
     }
@@ -158,6 +263,7 @@ final class PagoproveedorListadoUnificadoSupport
             ->whereNull('cm.pagoproveedor_id')
             ->select([
                 DB::raw("'".PagoproveedorListadoFila::ORIGEN_IE_OPP."' as origen"),
+                DB::raw("CONCAT('ie-', cm.id) as fila_clave"),
                 'cm.id as pk_id',
                 'cm.fecha',
                 DB::raw("COALESCE(NULLIF(TRIM(ttc.abreviatura), ''), 'OPP') as tipocomprobante"),
@@ -199,6 +305,18 @@ final class PagoproveedorListadoUnificadoSupport
         if (PagoproveedorListadoFiltros::normalizarMail((string) ($filtros['mail'] ?? '')) !== '') {
             $query->whereRaw('0 = 1');
         }
+        PagoproveedorListadoFiltros::aplicarQbe($query, (array) ($filtros['qbe'] ?? []), [
+            'id' => 'cm.id',
+            'op' => 'cm.numerotransaccion',
+            'fecha' => 'cm.fecha',
+            'empresa' => 'empresa.nombre',
+            'proveedor' => 'proveedor.nombre',
+            'detalle' => 'cm.detalle',
+            'monto' => 'COALESCE(monto_agg.monto_mn, 0)',
+            'estado' => "CASE WHEN cm.caja_movimiento_revertido_por_id IS NOT NULL THEN 'REVERTIDA' ELSE 'CONFIRMADA' END",
+            'moneda' => "'".$monedaLocalAbrev."'",
+            'tipocomprobante' => "COALESCE(NULLIF(TRIM(ttc.abreviatura), ''), 'OPP')",
+        ], PagoproveedorListadoFila::ORIGEN_IE_OPP);
 
         return $query;
     }
@@ -240,7 +358,7 @@ final class PagoproveedorListadoUnificadoSupport
                 return $fila;
             }
 
-            return new PagoproveedorListadoFila(
+            $nueva = new PagoproveedorListadoFila(
                 origen: $fila->origen,
                 id: $fila->id,
                 fecha: $fila->fecha,
@@ -256,6 +374,8 @@ final class PagoproveedorListadoUnificadoSupport
                 revertible: $fila->revertible,
                 mailEnviado: true,
             );
+
+            return $nueva->conExtrasDe($fila);
         })->values();
     }
 
@@ -630,6 +750,13 @@ final class PagoproveedorListadoUnificadoSupport
         }
         if (($filtros['fecha_hasta'] ?? '') !== '') {
             $query->whereDate($cols['fecha'], '<=', $filtros['fecha_hasta']);
+        }
+
+        $rango = ListadoQbeSupport::rangoPeriodo((string) ($filtros['periodo'] ?? ''));
+        if ($rango !== null) {
+            $hastaExclusivo = (new \DateTimeImmutable($rango[1]))->modify('+1 day')->format('Y-m-d');
+            $query->where($cols['fecha'], '>=', $rango[0].' 00:00:00');
+            $query->where($cols['fecha'], '<', $hastaExclusivo.' 00:00:00');
         }
 
         if (! PagoproveedorListadoFiltros::tieneCriteriosTextoParaBusqueda($filtros)) {

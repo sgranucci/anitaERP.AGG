@@ -24,6 +24,10 @@
     @if (($f['mail'] ?? '') !== '')
         <input type="hidden" name="mail" value="{{ $f['mail'] }}">
     @endif
+    @foreach ($f['sort'] ?? [] as $iOrden => $criterioOrden)
+        <input type="hidden" name="sort[{{ $iOrden }}][campo]" value="{{ $criterioOrden['campo'] }}">
+        <input type="hidden" name="sort[{{ $iOrden }}][dir]" value="{{ $criterioOrden['dir'] }}">
+    @endforeach
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)
             <div class="mb-2">

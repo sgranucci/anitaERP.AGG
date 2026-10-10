@@ -2,7 +2,11 @@
 
 namespace App\Support\Caja;
 
+use App\Models\Compras\Pagoproveedor;
+use App\Support\Compras\PagoproveedorFacturaRelacion;
+use App\Support\Compras\PagoproveedorListadoFiltros;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
+use App\Support\Listado\ListadoRelacionCatalogo;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
@@ -101,6 +105,7 @@ class IngresoEgresoListadoFiltros
                 'empresa_scope' => $empresaScope,
                 'tipos' => self::tiposDesdeRequest($request),
                 'periodo' => self::periodoDesdeRequest($request),
+                'mail' => PagoproveedorListadoFiltros::normalizarMail((string) $request->input('mail', '')),
                 '_limpiar' => true,
             ]);
         }
@@ -160,6 +165,7 @@ class IngresoEgresoListadoFiltros
             'solicitudpago_id' => max(0, (int) $request->input('solicitudpago_id', 0)) ?: null,
             'tipos' => self::tiposDesdeRequest($request),
             'periodo' => self::periodoDesdeRequest($request),
+            'mail' => PagoproveedorListadoFiltros::normalizarMail((string) $request->input('mail', '')),
             'qbe' => $qbe,
             'sort' => $sort,
             'agrupar' => $agrupar,
@@ -259,6 +265,9 @@ class IngresoEgresoListadoFiltros
         if (($filtros['periodo'] ?? '') !== '') {
             return true;
         }
+        if (PagoproveedorListadoFiltros::normalizarMail((string) ($filtros['mail'] ?? '')) !== '') {
+            return true;
+        }
 
         return self::tieneCriteriosTexto($filtros);
     }
@@ -280,6 +289,7 @@ class IngresoEgresoListadoFiltros
             'empresa_scope' => 'todas',
             'tipos' => [],
             'periodo' => '',
+            'mail' => '',
             'qbe' => ListadoQbeSupport::vacio(),
             'sort' => [],
             'agrupar' => [],
@@ -329,6 +339,16 @@ class IngresoEgresoListadoFiltros
         }
         if (($filtros['periodo'] ?? '') !== '') {
             $params['filtro_periodo'] = $filtros['periodo'];
+        }
+        $mail = PagoproveedorListadoFiltros::normalizarMail((string) ($filtros['mail'] ?? ''));
+        if ($mail !== '') {
+            $params['mail'] = $mail;
+        }
+        foreach (self::normalizarCalculadas($filtros['calculadas'] ?? []) as $i => $calc) {
+            $params['calculadas'][$i] = [
+                'etiqueta' => $calc['etiqueta'],
+                'formula' => $calc['formula'],
+            ];
         }
 
         $params = array_merge($params, ListadoQbeSupport::paraQueryString((array) ($filtros['qbe'] ?? [])));
@@ -384,6 +404,8 @@ class IngresoEgresoListadoFiltros
             $query->where('caja_movimiento.fecha', '>=', $rango[0].' 00:00:00');
             $query->where('caja_movimiento.fecha', '<', $hastaExclusivo.' 00:00:00');
         }
+
+        self::aplicarMailPagoProveedor($query, $filtros);
 
         $modo = $filtros['modo'] ?? self::MODO_TODOS;
         if ($modo === self::MODO_QBE) {
@@ -660,6 +682,39 @@ class IngresoEgresoListadoFiltros
     }
 
     /**
+     * Mail al proveedor solo en OPP y OPA que tienen orden de pago.
+     *
+     * @param  Builder<\App\Models\Caja\Caja_Movimiento>  $query
+     * @param  array<string, mixed>  $filtros
+     */
+    private static function aplicarMailPagoProveedor(Builder $query, array $filtros): void
+    {
+        $mail = PagoproveedorListadoFiltros::normalizarMail((string) ($filtros['mail'] ?? ''));
+        if ($mail === '') {
+            return;
+        }
+
+        $query->whereRaw('UPPER(TRIM(tipotransaccion_caja.abreviatura)) IN (?, ?)', ['OPP', 'OPA'])
+            ->whereNotNull('caja_movimiento.pagoproveedor_id');
+
+        $prefijo = Pagoproveedor::PREFIJO_OBSERVACION_ENVIO_CORREO.'%';
+        $existe = function ($q) use ($prefijo) {
+            $q->selectRaw('1')
+                ->from('pagoproveedor_estado as pe_mail')
+                ->whereColumn('pe_mail.pagoproveedor_id', 'caja_movimiento.pagoproveedor_id')
+                ->where('pe_mail.observacion', 'like', $prefijo);
+        };
+
+        if ($mail === 'enviado') {
+            $query->whereExists($existe);
+
+            return;
+        }
+
+        $query->whereNotExists($existe);
+    }
+
+    /**
      * Campos visibles en el panel (oculta OS fuera de Iguassu).
      *
      * @return array<string, array{column: string, type: string, label: string}>
@@ -679,7 +734,10 @@ class IngresoEgresoListadoFiltros
      */
     public static function camposQbe(): array
     {
-        return IngresoEgresoListadoColumnas::camposFiltrables();
+        return array_merge(
+            IngresoEgresoListadoColumnas::camposFiltrables(),
+            PagoproveedorFacturaRelacion::campos()
+        );
     }
 
     /**
@@ -690,13 +748,124 @@ class IngresoEgresoListadoFiltros
         return IngresoEgresoListadoColumnas::camposOrdenables();
     }
 
+    /**
+     * Ejes del gráfico más las medidas que se calculan en memoria (ya en pesos).
+     *
+     * @return array<string, array{label: string, type: string, column: string}>
+     */
+    public static function camposVisual(): array
+    {
+        $out = self::camposOrdenables();
+        $out['ingresos'] = [
+            'label' => 'Ingresos',
+            'type' => 'decimal',
+            'column' => '',
+        ];
+        $out['egresos'] = [
+            'label' => 'Egresos',
+            'type' => 'decimal',
+            'column' => '',
+        ];
+
+        return $out;
+    }
+
     public static function camposQbeDisponibles(): array
     {
         return self::camposQbe();
     }
 
     /**
-     * La vista no pisa fichas de empresa, tipo, período ni el filtro de solicitud de pago.
+     * Campos que una fórmula puede mostrar. Ingresos y egresos en pesos no están en el SQL.
+     *
+     * @return array<string, array{column: string, type: string, label: string}>
+     */
+    public static function camposFormula(): array
+    {
+        $out = [];
+        foreach (self::camposQbe() as $key => $meta) {
+            $column = (string) ($meta['column'] ?? '');
+            if ($column === '' || ! ListadoOrdenamientoSupport::esColumnaSqlSegura($column)) {
+                continue;
+            }
+            $out[$key] = $meta;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array{etiqueta: string, formula: string, valida: bool}>
+     */
+    public static function normalizarCalculadas(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+        $campos = self::camposFormula();
+        $out = [];
+        foreach ($raw as $fila) {
+            if (count($out) >= 2 || ! is_array($fila)) {
+                continue;
+            }
+            $etiqueta = trim((string) ($fila['etiqueta'] ?? ''));
+            $formula = trim((string) ($fila['formula'] ?? ''));
+            if ($etiqueta === '' || $formula === '') {
+                continue;
+            }
+            $out[] = [
+                'etiqueta' => mb_substr($etiqueta, 0, 40),
+                'formula' => mb_substr($formula, 0, ListadoQbeFormulaSupport::MAX_LEN),
+                'valida' => ListadoQbeFormulaSupport::compilar($formula, $campos) !== null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>|null  $vistaJson
+     * @return array<string, mixed>
+     */
+    public static function mezclarCalculadas(array $filtros, Request $request, ?array $vistaJson): array
+    {
+        if ($request->exists('calculadas')) {
+            $filtros['calculadas'] = self::normalizarCalculadas($request->input('calculadas'));
+        } elseif (is_array($vistaJson)) {
+            $filtros['calculadas'] = self::normalizarCalculadas($vistaJson['calculadas'] ?? []);
+        } else {
+            $filtros['calculadas'] = self::normalizarCalculadas($filtros['calculadas'] ?? []);
+        }
+
+        return $filtros;
+    }
+
+    /**
+     * @param  Builder<\App\Models\Caja\Caja_Movimiento>  $query
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function aplicarCalculadas(Builder $query, array $filtros): void
+    {
+        $campos = self::camposFormula();
+        foreach (self::normalizarCalculadas($filtros['calculadas'] ?? []) as $i => $calc) {
+            if (! $calc['valida']) {
+                continue;
+            }
+            $compiled = ListadoQbeFormulaSupport::compilar($calc['formula'], $campos);
+            if ($compiled === null) {
+                continue;
+            }
+            $query->selectRaw('('.$compiled['sql'].') as calc_'.$i, $compiled['bindings']);
+        }
+        $limite = (int) ($filtros['_mail_limite'] ?? 0);
+        if ($limite > 0) {
+            $query->limit($limite);
+        }
+    }
+
+    /**
+     * La vista no pisa fichas de empresa, tipo, período, mail ni el filtro de solicitud de pago.
      *
      * @param  array<string, mixed>  $base
      * @param  array<string, mixed>  $desdeVista
@@ -709,6 +878,7 @@ class IngresoEgresoListadoFiltros
             'empresa_scope' => $base['empresa_scope'] ?? 'una',
             'tipos' => $base['tipos'] ?? [],
             'periodo' => $base['periodo'] ?? '',
+            'mail' => PagoproveedorListadoFiltros::normalizarMail((string) ($base['mail'] ?? '')),
             'solicitudpago_id' => $base['solicitudpago_id'] ?? null,
             'fecha_desde' => $base['fecha_desde'] ?? '',
             'fecha_hasta' => $base['fecha_hasta'] ?? '',
@@ -845,6 +1015,19 @@ class IngresoEgresoListadoFiltros
         }
 
         $campo = (string) ($criterio['campo'] ?? '');
+        if (ListadoRelacionCatalogo::aplica(IngresoEgresoListadoColumnas::RECURSO, $campo)) {
+            ListadoRelacionCatalogo::aplicar(
+                $query,
+                IngresoEgresoListadoColumnas::RECURSO,
+                $campo,
+                (string) ($criterio['op'] ?? 'contiene'),
+                trim((string) ($criterio['valor'] ?? '')),
+                trim((string) ($criterio['valor_hasta'] ?? '')),
+                ''
+            );
+
+            return;
+        }
         $def = self::camposQbe()[$campo] ?? null;
         if ($def === null) {
             return;
@@ -905,6 +1088,7 @@ class IngresoEgresoListadoFiltros
         $permitidos = match ($type) {
             'entero' => array_keys(self::OPERADORES_ENTERO_QBE),
             'fecha' => array_keys(self::OPERADORES_FECHA),
+            'decimal' => array_keys(ListadoQbeSupport::OPERADORES_DECIMAL),
             default => array_keys(self::OPERADORES_TEXTO),
         };
         $operador = strtolower(trim($operador));

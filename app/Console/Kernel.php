@@ -28,6 +28,10 @@ class Kernel extends ConsoleKernel
         $horaCotizacion = (string) config('cotizacion.hora_command', '11:00');
         $schedule->command('cotizacion:leeapi')->dailyAt($horaCotizacion);
 
+        $schedule->command('compras:enviar-listados-programados')
+            ->dailyAt('07:05')
+            ->withoutOverlapping(30);
+
         $horaReclasificacionCheques = (string) config('caja.reclasificar_cheques_diferidos_hora', '06:30');
         $schedule->command('caja:reclasificar-cheques-diferidos')
             ->dailyAt($horaReclasificacionCheques)

@@ -71,6 +71,15 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
 @section('contenido')
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $camposOrdenablesThead = ArticuloListadoFiltros::camposOrdenables();
+    $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
+        $filtros['sort'] ?? [],
+        $camposOrdenablesThead
+    );
+    $qsQuitarOrden = $filtrosQuery ?? [];
+    unset($qsQuitarOrden['sort']);
+    $qsQuitarOrden['quitar_orden'] = 1;
+    $urlQuitarOrden = route('articulo', $qsQuitarOrden);
 @endphp
 <meta name="csrf-token" content="{{ csrf_token() }}" />
 <div class="row">
@@ -139,6 +148,9 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                         <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-qbe-panel" aria-expanded="false" aria-controls="lw-qbe-panel">
                             <i class="fa fa-filter"></i> QBE
                         </button>
+                        <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico y color de fila">
+                            <i class="fa fa-bar-chart"></i> Visual
+                        </button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="modal" data-target="#modal-lw-etiquetas"
                                 @if (! ($workbenchListo ?? false)) disabled title="Requiere migraci&oacute;n" @endif>
                             <i class="fa fa-font"></i> Defaults instalaci&oacute;n
@@ -157,10 +169,24 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 <i class="fa fa-eraser"></i> Limpiar
                             </a>
                         @endif
+                        @if (($ordenActualThead ?? []) !== [])
+                            <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden por SKU y lo saca de la vista">
+                                <i class="fa fa-sort"></i> Quitar orden
+                            </a>
+                        @endif
                     </div>
                 </div>
                 @include('stock.articulo.partials.workbench_qbe')
+                @php
+                    $ejesVisual = \App\Support\Stock\ArticuloListadoFiltros::camposOrdenables();
+                    $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                @endphp
+                @include('includes.listado.workbench_visual')
             </form>
+            @include('includes.listado.workbench_grafico', [
+                'recursoVisual' => \App\Support\Stock\ArticuloListadoColumnas::RECURSO,
+                'rutaListadoVisual' => 'articulo',
+            ])
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
@@ -175,28 +201,6 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
             <div class="card-body table-responsive p-0">
                 @php
                     $filtroEmpresaActivo = ArticuloListadoFiltros::filtroEmpresaActivo();
-                    $tituloColArticulo = function (string $key, string $fallback) use ($etiquetasColumnas) {
-                        return ($etiquetasColumnas ?? [])[$key] ?? $fallback;
-                    };
-                    $sortActual = $filtros['sort'][0]['campo'] ?? '';
-                    $sortDir = $filtros['sort'][0]['dir'] ?? 'asc';
-                    $urlOrdenArticulo = function (string $col) use ($filtrosQuery, $sortActual, $sortDir) {
-                        $q = $filtrosQuery ?? [];
-                        unset($q['sort'], $q['group']);
-                        $q['sort'] = [[
-                            'campo' => $col,
-                            'dir' => ($sortActual === $col && $sortDir === 'asc') ? 'desc' : 'asc',
-                        ]];
-
-                        return route('articulo', $q);
-                    };
-                    $marcaOrdenArticulo = function (string $col) use ($sortActual, $sortDir) {
-                        if ($sortActual !== $col) {
-                            return '';
-                        }
-
-                        return $sortDir === 'asc' ? ' ↑' : ' ↓';
-                    };
                 @endphp
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
@@ -209,7 +213,14 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                     </thead>
                     <tbody>
 						@foreach($articulos as $articulo)
-    						<tr>
+                            @php
+                                $tonoFila = \App\Support\Listado\ListadoVisualSupport::tonoFila(
+                                    $articulo,
+                                    $filtros['formato'] ?? [],
+                                    static fn ($row, $key) => \App\Support\Stock\ArticuloListadoColumnas::valorCelda($row, $key)
+                                );
+                            @endphp
+    						<tr @class(['lw-tono-danger' => $tonoFila === 'danger', 'lw-tono-warning' => $tonoFila === 'warning', 'lw-tono-success' => $tonoFila === 'success'])>
                                 @foreach ($columnasVisibles as $keyColumna)
                                 @include('stock.articulo.partials.workbench_celda', ['key' => $keyColumna])
                                 @endforeach

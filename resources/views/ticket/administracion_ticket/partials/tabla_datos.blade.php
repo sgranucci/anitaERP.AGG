@@ -40,6 +40,9 @@
         <th style="@if($paraPdf) width: 8%; @endif">T&eacute;cnico asignado</th>
         <th style="@if($paraPdf) width: 8%; @endif">Resoluci&oacute;n</th>
         <th style="@if($paraPdf) width: 5%; @endif">Tiempo insumido (min)</th>
+        @foreach (($calculadas ?? []) as $calc)
+            <th>{{ $calc['etiqueta'] ?? '' }}</th>
+        @endforeach
         @if ($mostrarAcciones)
             <th class="width40" data-orderable="false"></th>
         @endif
@@ -71,6 +74,9 @@
             <td>{{ $nombresTecnicos($data) }}</td>
             <td>{{ TicketEstadisticaSupport::formatearResolucionDisplay($data->fecha_resolucion ?? null, $data->hora_resolucion ?? null) }}</td>
             <td class="text-right">{{ TicketEstadisticaSupport::formatearTiempoInsumido($data->tiempo_insumido_total ?? null) }}</td>
+            @foreach (($calculadas ?? []) as $iCalc => $calc)
+                <td>{{ $data->{'calc_'.$iCalc} ?? '' }}</td>
+            @endforeach
             @if ($mostrarAcciones)
                 <td>
                     @if ($puedeVerTicket)

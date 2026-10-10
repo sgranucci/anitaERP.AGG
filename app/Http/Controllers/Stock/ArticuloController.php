@@ -66,6 +66,7 @@ use App\Support\Listado\ListadoGrillaConfigSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Stock\ArticuloMarketplaceGrillaSupport;
 use App\Support\Stock\ArticuloListadoColumnas;
@@ -228,7 +229,8 @@ class ArticuloController extends Controller
             && ! $request->has('empresa_id')
             && ! $request->has('empresa_todas')
         ) {
-            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ArticuloListadoColumnas::RECURSO, $usuarioId);
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ArticuloListadoColumnas::RECURSO, $usuarioId)
+                ?? ListadoVistaSupport::defaultDelRol(ArticuloListadoColumnas::RECURSO, (int) session('rol_id'));
         }
 
         $filtros = ListadoVistaSupport::prepararQbeContraVista(
@@ -239,7 +241,40 @@ class ArticuloController extends Controller
             $filtros = ArticuloListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
         unset($filtros['_qbe_explicito']);
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null,
+            ArticuloListadoFiltros::camposOrdenables()
+        );
         ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
+        if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
+            ListadoVistaSupport::recordarOrdenYAgrupar(
+                $vistaActiva,
+                $filtros['sort'] ?? [],
+                $filtros['agrupar'] ?? []
+            );
+        }
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = ArticuloListadoFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif ($forzarEstandar) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('articulo', $params)
+                ->with('mensaje', 'Se quitó el orden de la grilla.');
+        }
 
         $empresa_query = ArticuloListadoFiltros::filtroEmpresaActivo()
             ? $this->empresaRepository->allFiltrado()
@@ -294,6 +329,7 @@ class ArticuloController extends Controller
             $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
         }
         $filtrosQuery = ArticuloListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
         $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
         if ($vistaActiva) {
             $filtrosQuery['vista_id'] = $vistaActiva->id;
@@ -320,6 +356,13 @@ class ArticuloController extends Controller
             'vistaActiva' => $vistaActiva,
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
             'cortes' => $cortes,
+            'graficoSerie' => ListadoVisualSupport::serieDeConsulta(
+                $filtros,
+                ArticuloListadoFiltros::camposOrdenables(),
+                $etiquetas,
+                fn (array $para): array => $this->articuloRepository->cortesArticulo($para)
+            ),
+            'rolesVista' => ListadoVisualSupport::rolesParaInstalacion(),
         ]);
     }
 
@@ -512,6 +555,8 @@ class ArticuloController extends Controller
                 'qbe' => $filtros['qbe'] ?? [],
                 'sort' => $filtros['sort'] ?? [],
                 'agrupar' => $filtros['agrupar'] ?? [],
+                'grafico' => ListadoVisualSupport::normalizarGrafico($request->input('grafico'), ArticuloListadoFiltros::camposOrdenables()),
+                'formato' => ListadoVisualSupport::normalizarFormato($request->input('formato'), ArticuloListadoFiltros::camposOrdenables()),
             ],
             $layout,
             $request->boolean('es_default'),
@@ -523,6 +568,7 @@ class ArticuloController extends Controller
                 ->with('error', 'No se pudo guardar la vista.');
         }
         ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        ListadoVisualSupport::asignarRol($vista, $request, ArticuloListadoColumnas::RECURSO);
         $qs = ArticuloListadoFiltros::paraQueryString($filtros);
         $qs['columnas'] = implode(',', $columnasVisibles);
         $qs['vista_id'] = $vista->id;

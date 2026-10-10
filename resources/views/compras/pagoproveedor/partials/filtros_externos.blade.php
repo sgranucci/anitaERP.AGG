@@ -27,31 +27,37 @@
     };
 @endphp
 <div class="card-body py-2 border-bottom bg-white">
-    <div class="d-flex flex-wrap align-items-center">
+    <div class="d-flex flex-wrap align-items-center" style="gap:.35rem;">
         @if (($empresa_query ?? collect())->count() > 1)
-        <div class="mb-1 mr-3">
-            <span class="text-muted small mr-2"><i class="fa fa-building"></i> Empresa:</span>
-            <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtro de empresa">
-                @foreach ($empresa_query as $emp)
-                    <a href="{{ $urlEmpresa($emp->id) }}"
-                       class="btn {{ ($empresaScope !== 'todas' && $empresaActual === (int) $emp->id) ? 'btn-info' : 'btn-outline-info' }}">
-                        {{ $emp->nombre }}
-                    </a>
-                @endforeach
-                <a href="{{ $urlEmpresa('todas') }}"
-                   class="btn {{ $empresaScope === 'todas' ? 'btn-primary' : 'btn-outline-primary' }}">
-                    Todas mis empresas
+            <span class="text-muted small mr-1"><i class="fa fa-building"></i> Empresa:</span>
+            @foreach ($empresa_query as $emp)
+                <a href="{{ $urlEmpresa($emp->id) }}"
+                   class="btn btn-sm {{ ($empresaScope !== 'todas' && $empresaActual === (int) $emp->id) ? 'btn-info' : 'btn-outline-info' }}">
+                    {{ $emp->nombre }}
                 </a>
-            </div>
-        </div>
+            @endforeach
+            <a href="{{ $urlEmpresa('todas') }}"
+               class="btn btn-sm {{ $empresaScope === 'todas' ? 'btn-primary' : 'btn-outline-primary' }}">
+                Todas mis empresas
+            </a>
         @endif
-        <div class="mb-1">
-            <span class="text-muted small mr-2" title="Filtra las órdenes de pago según si se enviaron por correo"><i class="fa fa-envelope"></i> Mail:</span>
-            <div class="btn-group btn-group-sm" role="group" aria-label="Filtro de correo enviado">
-                <a href="{{ $urlMail('') }}" class="btn btn-outline-secondary {{ $mailActual === '' ? 'active' : '' }}">Todos</a>
-                <a href="{{ $urlMail('enviado') }}" class="btn btn-outline-secondary {{ $mailActual === 'enviado' ? 'active' : '' }}">Enviado</a>
-                <a href="{{ $urlMail('no') }}" class="btn btn-outline-secondary {{ $mailActual === 'no' ? 'active' : '' }}">Sin enviar</a>
-            </div>
-        </div>
+        <span class="text-muted small ml-1 mr-1"><i class="fa fa-calendar"></i> Período:</span>
+        @foreach (\App\Support\Compras\PagoproveedorListadoFiltros::PERIODOS_FICHA as $clavePeriodo => $etiquetaPeriodo)
+            @php
+                $qPeriodo = $baseQ;
+                unset($qPeriodo['filtro_periodo']);
+                if ($clavePeriodo !== '') {
+                    $qPeriodo['filtro_periodo'] = $clavePeriodo;
+                }
+            @endphp
+            <a href="{{ route($rutaIndex, $qPeriodo) }}"
+               class="btn btn-sm {{ (string) ($filtros['periodo'] ?? '') === (string) $clavePeriodo ? 'btn-info' : 'btn-outline-info' }}">
+                {{ $etiquetaPeriodo }}
+            </a>
+        @endforeach
+        <span class="text-muted small ml-1 mr-1" title="Filtra las órdenes de pago según si se enviaron por correo"><i class="fa fa-envelope"></i> Mail:</span>
+        <a href="{{ $urlMail('') }}" class="btn btn-sm btn-outline-secondary {{ $mailActual === '' ? 'active' : '' }}">Todos</a>
+        <a href="{{ $urlMail('enviado') }}" class="btn btn-sm btn-outline-secondary {{ $mailActual === 'enviado' ? 'active' : '' }}">Enviado</a>
+        <a href="{{ $urlMail('no') }}" class="btn btn-sm btn-outline-secondary {{ $mailActual === 'no' ? 'active' : '' }}">Sin enviar</a>
     </div>
 </div>

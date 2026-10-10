@@ -6,7 +6,8 @@
     $reservarFilaLogoExcel = ! empty($reservarFilaLogoExcel);
     $caja_movimiento = $caja_movimiento ?? collect();
     $esIguassu = config('app.empresa') === 'Iguassu Travel';
-    $colspan = $esIguassu ? 10 : 9;
+    $calculadas = $calculadas ?? [];
+    $colspan = ($esIguassu ? 10 : 9) + count($calculadas);
 
     $logosCabecera = $esExcel ? [] : EmpresaLogoArchivo::logosCabeceraDesdeColeccion($caja_movimiento);
     $subtitulo = (is_countable($caja_movimiento) ? count($caja_movimiento) : 0).' registro(s)';
@@ -102,6 +103,9 @@
             @endif
             <th class="num">Monto en $</th>
             <th>Movimientos</th>
+            @foreach ($calculadas as $calc)
+                <th>{{ $calc['etiqueta'] ?? '' }}</th>
+            @endforeach
         </tr>
     </thead>
     <tbody>
@@ -130,6 +134,9 @@
                         @endforeach
                     </ul>
                 </td>
+                @foreach ($calculadas as $iCalc => $calc)
+                    <td>{{ $data->{'calc_'.$iCalc} ?? '' }}</td>
+                @endforeach
             </tr>
         @empty
             <tr>

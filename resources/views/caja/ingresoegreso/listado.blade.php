@@ -35,6 +35,9 @@
                 @endif
                 <th>Monto en $</th>
                 <th>Movimientos</th>
+                @foreach (($calculadas ?? []) as $calc)
+                    <th>{{ $calc['etiqueta'] ?? '' }}</th>
+                @endforeach
             </tr>
         </thead>
         <tbody>
@@ -64,6 +67,9 @@
                         @endif
                     @endforeach
                 </td>
+                @foreach (($calculadas ?? []) as $iCalc => $calc)
+                    <td>{{ $data->{'calc_'.$iCalc} ?? '' }}</td>
+                @endforeach
             </tr>
             @endforeach
         </tbody>

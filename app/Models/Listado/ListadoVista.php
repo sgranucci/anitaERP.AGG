@@ -16,6 +16,7 @@ class ListadoVista extends Model implements Auditable
     protected $fillable = [
         'recurso',
         'usuario_id',
+        'rol_id',
         'nombre',
         'filtros_json',
         'columnas_json',
@@ -30,6 +31,7 @@ class ListadoVista extends Model implements Auditable
         'es_default' => 'boolean',
         'compartida' => 'boolean',
         'menu_id' => 'integer',
+        'rol_id' => 'integer',
     ];
 
     public function usuario(): BelongsTo

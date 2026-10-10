@@ -1,5 +1,6 @@
 @php
-    $colspan = 14;
+    $calculadas = $calculadas ?? [];
+    $colspan = 14 + count($calculadas);
 @endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
@@ -24,5 +25,6 @@
         'para_pdf' => true,
         'mostrar_acciones' => false,
         'puede_ver_ticket' => false,
+        'calculadas' => $calculadas,
     ])
 </table>

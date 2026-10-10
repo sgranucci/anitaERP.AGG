@@ -19,6 +19,7 @@ use App\Repositories\Caja\ChequeRepositoryInterface;
 use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Models\Caja\Cheque;
+use App\Models\Listado\ListadoEnvioProgramado;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Services\Caja\IngresoEgresoComprobanteIvaPdfIaService;
 use App\Services\Caja\IngresoEgresoComprobanteIvaService;
@@ -32,6 +33,8 @@ use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Caja\IngresoEgresoImputacionDiariaSupport;
 use App\Support\Caja\IngresoEgresoGastoBancoSupport;
 use App\Support\Caja\IngresoEgresoListadoColumnas;
+use App\Support\Caja\IngresoEgresoListadoEnvioSupport;
+use App\Support\Caja\IngresoEgresoPagoProveedorSupport;
 use App\Support\Caja\IngresoEgresoListadoFiltros;
 use App\Support\Caja\IngresoEgresoListadoPreferenciasUsuario;
 use App\Support\Caja\IngresoEgresoListadoResumen;
@@ -40,9 +43,11 @@ use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoDisenadorPreviewSupport;
 use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoLienzoSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use App\Support\Caja\IngresoEgresoVisibilidadSupport;
 use App\Queries\Caja\Caja_MovimientoQueryInterface;
@@ -132,7 +137,12 @@ class IngresoEgresoController extends Controller
 		if (!$hayMovimientosCaja)
 			$this->caja_movimientoRepository->sincronizarConAnita();
 
-        return view('caja.ingresoegreso.index', $this->armarListado($request));
+        $armado = $this->armarListado($request);
+        if ($armado instanceof \Illuminate\Http\RedirectResponse) {
+            return $armado;
+        }
+
+        return view('caja.ingresoegreso.index', $armado);
     }
 
     public function previewWorkbench(Request $request)
@@ -178,6 +188,12 @@ class IngresoEgresoController extends Controller
         can('listar-ingresos-egresos-caja');
 
         $filtros = $this->resolverFiltrosListado($request);
+        $graficosVista = ListadoLienzoSupport::normalizar(
+            $request->input('graficos'),
+            $request->input('grafico'),
+            $request->exists('graficos'),
+            IngresoEgresoListadoFiltros::camposVisual()
+        );
         $layout = IngresoEgresoListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
         $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
         $orden = $filtros['sort'] ?? [];
@@ -191,6 +207,10 @@ class IngresoEgresoController extends Controller
                 'sort' => $orden,
                 'orden' => $orden,
                 'agrupar' => $filtros['agrupar'] ?? [],
+                'grafico' => ListadoLienzoSupport::primero($graficosVista),
+                'graficos' => $graficosVista,
+                'formato' => ListadoVisualSupport::normalizarFormato($request->input('formato'), IngresoEgresoListadoFiltros::camposVisual()),
+                'calculadas' => IngresoEgresoListadoFiltros::normalizarCalculadas($request->input('calculadas')),
             ],
             $layout,
             $request->boolean('es_default'),
@@ -202,6 +222,7 @@ class IngresoEgresoController extends Controller
                 ->with('error', 'No se pudo guardar la vista.');
         }
         ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        ListadoVisualSupport::asignarRol($vista, $request, IngresoEgresoListadoColumnas::RECURSO);
         $qs = IngresoEgresoListadoFiltros::paraQueryString($filtros);
         $qs['columnas'] = implode(',', $columnasVisibles);
         $qs['vista_id'] = $vista->id;
@@ -268,13 +289,14 @@ class IngresoEgresoController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = $this->resolverFiltrosListado($request, $busqueda);
+        $filtros = $this->filtrosDePantalla($request, $busqueda);
 
         switch ($formato) {
         case 'PDF':
             $caja_movimiento = $this->caja_movimientoQuery->leeCaja_Movimiento($filtros, 0, false);
 
-            $view = \View::make('caja.ingresoegreso.listado', compact('caja_movimiento'))->render();
+            $calculadas = IngresoEgresoListadoFiltros::normalizarCalculadas($filtros['calculadas'] ?? []);
+            $view = \View::make('caja.ingresoegreso.listado', compact('caja_movimiento', 'calculadas'))->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_caja_movimiento';
 
@@ -967,9 +989,9 @@ class IngresoEgresoController extends Controller
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
      */
-    private function armarListado(Request $request): array
+    private function armarListado(Request $request): array|\Illuminate\Http\RedirectResponse
     {
         $usuarioId = auth()->id() ? (int) auth()->id() : null;
         $vistas = ListadoVistaSupport::listarParaUsuario(IngresoEgresoListadoColumnas::RECURSO, $usuarioId);
@@ -996,7 +1018,8 @@ class IngresoEgresoController extends Controller
             && ! $request->has('fecha_hasta')
             && ! $request->has('solicitudpago_id')
         ) {
-            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(IngresoEgresoListadoColumnas::RECURSO, $usuarioId);
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(IngresoEgresoListadoColumnas::RECURSO, $usuarioId)
+                ?? ListadoVistaSupport::defaultDelRol(IngresoEgresoListadoColumnas::RECURSO, (int) session('rol_id'));
         }
 
         $filtrosRequest = ListadoVistaSupport::prepararQbeContraVista(
@@ -1008,6 +1031,14 @@ class IngresoEgresoController extends Controller
             $filtros = IngresoEgresoListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
         unset($filtros['_qbe_explicito'], $filtros['_limpiar']);
+        $vistaJson = ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null;
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            $vistaJson,
+            IngresoEgresoListadoFiltros::camposVisual()
+        );
+        $filtros = IngresoEgresoListadoFiltros::mezclarCalculadas($filtros, $request, $vistaJson);
         ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
         if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
             if ($request->exists('group')) {
@@ -1021,6 +1052,27 @@ class IngresoEgresoController extends Controller
                 $filtros['sort'] ?? [],
                 $filtros['agrupar'] ?? []
             );
+        }
+
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = IngresoEgresoListadoFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif ($forzarEstandar) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('ingresoegreso', $params)
+                ->with('mensaje', 'Se quitó el orden de la grilla.');
         }
 
         $catalogo = IngresoEgresoListadoColumnas::catalogoActivo();
@@ -1039,7 +1091,9 @@ class IngresoEgresoController extends Controller
         $builder = $this->caja_movimientoQuery->builderListado($filtros);
         $universo = (clone $builder)->get();
         $resumen = IngresoEgresoListadoResumen::desdeFilas($universo, $filtros['agrupar'] ?? [], $etiquetas);
+        $graficoSeries = $this->seriesGraficos($filtros, $etiquetas, $universo);
         $caja_movimiento = (clone $builder)->paginate(10);
+        IngresoEgresoPagoProveedorSupport::marcarMailEnPagina($caja_movimiento);
 
         $camposFiltro = IngresoEgresoListadoFiltros::camposQbeDisponibles();
         foreach ($camposFiltro as $key => $meta) {
@@ -1047,6 +1101,7 @@ class IngresoEgresoController extends Controller
         }
 
         $filtrosQuery = IngresoEgresoListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
         $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
         if ($request->boolean('filtro_limpiar')) {
             $filtrosQuery['filtro_limpiar'] = 1;
@@ -1075,7 +1130,150 @@ class IngresoEgresoController extends Controller
             'cortes' => $resumen['cortes'],
             'totalesListado' => $resumen['totales'],
             'tiposFichas' => IngresoEgresoListadoColumnas::tiposEnUso(),
+            'graficoSeries' => $graficoSeries,
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
+            'rolesVista' => ListadoVisualSupport::rolesParaInstalacion(),
+            'enviosProgramados' => ListadoEnvioProgramado::query()
+                ->where('usuario_id', (int) auth()->id())
+                ->where('recurso', IngresoEgresoListadoColumnas::RECURSO)
+                ->where('activo', true)
+                ->orderByDesc('id')
+                ->get(),
         ];
+    }
+
+    public function enviarListado(Request $request)
+    {
+        can('listar-ingresos-egresos-caja');
+        $email = trim((string) $request->input('email', ''));
+        $filtros = $this->filtrosDePantalla($request);
+        $qs = IngresoEgresoListadoFiltros::paraQueryString($filtros);
+        $qs = array_merge($qs, ListadoVisualSupport::paraQueryString($filtros));
+        if ($request->filled('vista_id')) {
+            $qs['vista_id'] = (int) $request->input('vista_id');
+        }
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return redirect()->route('ingresoegreso', $qs)->with('error', 'El correo no es válido.');
+        }
+
+        $frecuencia = (string) $request->input('programar', '');
+        if (in_array($frecuencia, ['diaria', 'semanal'], true)) {
+            ListadoEnvioProgramado::query()->create([
+                'recurso' => IngresoEgresoListadoColumnas::RECURSO,
+                'usuario_id' => (int) auth()->id(),
+                'email' => $email,
+                'frecuencia' => $frecuencia,
+                'filtros_json' => $filtros,
+                'activo' => true,
+            ]);
+
+            return redirect()->route('ingresoegreso', $qs)->with(
+                'mensaje',
+                $frecuencia === 'semanal'
+                    ? 'El listado queda programado cada lunes a '.$email.'.'
+                    : 'El listado queda programado todos los días a '.$email.'.'
+            );
+        }
+
+        try {
+            $filas = IngresoEgresoListadoEnvioSupport::enviar($filtros, $email);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()->route('ingresoegreso', $qs)
+                ->with('error', 'No se pudo enviar el listado. Revisá el correo o la configuración de mail.');
+        }
+
+        $recorte = $filas >= IngresoEgresoListadoEnvioSupport::MAX_FILAS;
+        $aviso = 'Listado enviado a '.$email.'.';
+        if ($recorte) {
+            $aviso .= ' El archivo trae hasta '.number_format(IngresoEgresoListadoEnvioSupport::MAX_FILAS, 0, ',', '.').' filas.';
+        }
+
+        return redirect()->route('ingresoegreso', $qs)->with('mensaje', $aviso);
+    }
+
+    public function bajaEnvioProgramado(int $id)
+    {
+        can('listar-ingresos-egresos-caja');
+        $envio = ListadoEnvioProgramado::query()
+            ->where('usuario_id', (int) auth()->id())
+            ->where('recurso', IngresoEgresoListadoColumnas::RECURSO)
+            ->whereKey($id)
+            ->first();
+        if ($envio) {
+            $envio->activo = false;
+            $envio->save();
+        }
+
+        return redirect()->back()->with('mensaje', 'Se dio de baja el envío programado.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function filtrosDePantalla(Request $request, ?string $busquedaRuta = null): array
+    {
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistaJson = null;
+        $filtros = $this->resolverFiltrosListado($request, $busquedaRuta);
+        if ($request->filled('vista_id')) {
+            $vista = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                IngresoEgresoListadoColumnas::RECURSO,
+                $usuarioId
+            );
+            if ($vista && is_array($vista->filtros_json)) {
+                $vistaJson = $vista->filtros_json;
+                $filtros = IngresoEgresoListadoFiltros::fusionarDesdeVista($filtros, $vistaJson);
+            }
+        }
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            $vistaJson,
+            IngresoEgresoListadoFiltros::camposVisual()
+        );
+
+        return IngresoEgresoListadoFiltros::mezclarCalculadas($filtros, $request, $vistaJson);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, string>  $etiquetas
+     * @param  iterable<int, object>  $universo
+     * @return list<array<string, mixed>>
+     */
+    private function seriesGraficos(array $filtros, array $etiquetas, iterable $universo): array
+    {
+        $campos = IngresoEgresoListadoFiltros::camposVisual();
+        $lista = is_array($filtros['graficos'] ?? null) ? $filtros['graficos'] : [];
+        if ($lista === [] && ($filtros['grafico']['tipo'] ?? '') !== '') {
+            $lista = [$filtros['grafico']];
+        }
+        $out = [];
+        foreach ($lista as $grafico) {
+            if (! is_array($grafico) || ($grafico['tipo'] ?? '') === '') {
+                continue;
+            }
+            $para = $filtros;
+            $para['grafico'] = $grafico;
+            $cortesPara = ListadoVisualSupport::filtrosParaCortes($para, $campos);
+            if ($cortesPara === null) {
+                continue;
+            }
+            $filas = ($cortesPara['qbe'] ?? []) == ($filtros['qbe'] ?? [])
+                ? $universo
+                : $this->caja_movimientoQuery->builderListado($cortesPara)->get();
+            $cortes = IngresoEgresoListadoResumen::desdeFilas(
+                $filas,
+                $cortesPara['agrupar'] ?? [],
+                $etiquetas
+            )['cortes'] ?? ['filas' => []];
+            $out[] = ListadoVisualSupport::serie($cortesPara['grafico'], is_array($cortes) ? $cortes : ['filas' => []], $etiquetas);
+        }
+
+        return $out;
     }
 
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array

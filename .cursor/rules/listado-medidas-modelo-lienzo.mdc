@@ -1,0 +1,51 @@
+---
+description: Lienzo de pagos, ingresos y egresos y administración de tickets — medidas, columnas calculadas, mail programado. La factura sigue en pagos y en OPP/OPA.
+globs: app/Support/Listado/**/*.php,app/Support/Compras/PagoproveedorListado*.php,app/Support/Compras/PagoproveedorFacturaRelacion.php,app/Support/Caja/IngresoEgresoListado*.php,app/Support/Ticket/AdministracionTicketListado*.php,app/Http/Controllers/Compras/PagoproveedorController.php,app/Http/Controllers/Caja/IngresoEgresoController.php,app/Http/Controllers/Ticket/Administracion_TicketController.php,resources/views/compras/pagoproveedor/**/*.blade.php,resources/views/caja/ingresoegreso/**/*.blade.php,resources/views/ticket/administracion_ticket/**/*.blade.php,public/assets/pages/scripts/compras/pagoproveedor/workbench.js,public/assets/pages/scripts/caja/ingresoegreso/workbench.js,public/assets/pages/scripts/ticket/administracion_ticket/workbench.js
+alwaysApply: false
+---
+
+# Medidas, relación y lienzo
+
+El código compartido vive en `App\Support\Listado`. Consumidores del lienzo, de las columnas calculadas y del Excel programado: **pago a proveedores**, **ingresos y egresos** y **administración de tickets**. En tickets el lienzo se suma al estado, a las fechas y al alcance por rol y usuario; no los reemplaza. La medida de tickets es `tiempo_insumido` (suma de minutos). La factura aplicada y el mail al proveedor siguen en pagos y, en ingresos y egresos, solo en OPP y OPA que tienen `pagoproveedor_id`. No copiar la pantalla a comprobantes, artículos, cheques, clientes, proveedores, empleados ni Ferli.
+
+## Contrato
+
+| Pieza | Clase | Qué pide la grilla |
+|---|---|---|
+| Medida | `ListadoMedidaSupport` | La clave (`conteo`, `monto`, `tiempo_insumido`). La suma se parte por moneda si el catálogo tiene `partir_moneda` y el eje no es `moneda`. `tiempo_insumido` no se parte y no es eje. |
+| Relación | `ListadoRelacionCatalogo` | `compras.pagoproveedor` y `caja.ingresoegreso` → `PagoproveedorFacturaRelacion`. En caja solo OPP y OPA con `pagoproveedor_id`. |
+| Lienzo | `ListadoLienzoSupport` | Hasta 3 gráficos. `grafico` sigue siendo el primero (vistas viejas). Si el request manda `graficos`, no volver al `grafico` suelto. |
+
+Las fórmulas de fila (`LENGTH`, `UPPER`, `LOWER`, `TRIM`, `CONCAT`) no son medidas. En ingresos y egresos se arman sobre los campos con columna SQL (`camposFormula`); `ingresos` y `egresos` no entran. `factura_*` no entra a una fórmula. El envío programado usa `listado_envio_programado` con `recurso` de cada grilla; el comando no se corre a mano para probar.
+
+## Clic
+
+`grafico_click` + `grafico_click_dimension`. La grilla y los otros gráficos quedan filtrados. El gráfico de esa dimensión se arma con `qbeSinClick` para poder elegir otra barra. Torta `valor · moneda`: el clic usa el texto anterior a ` · `.
+
+`grafico_off=1` apaga el lienzo y no lo restaura desde la vista. **Quitar gráficos** (POST) limpia `grafico`, `graficos` y, si la vista es del usuario, `filtros_json`.
+
+## Al registrar otra grilla (después del gate)
+
+1. Medidas: el campo (`monto`, `total`, `ingresos`, `egresos`, `tiempo_insumido`) tiene que estar en los campos de esa grilla. `ListadoMedidaSupport::catalogo` lo incluye solo.
+2. Relación: una clase propia y **una línea** en `ListadoRelacionCatalogo`. No heredar la factura de pagos.
+3. Lienzo: el mismo `ListadoLienzoSupport` (máx. 3). No duplicar el blade de pagos.
+
+## Gate antes de replicar
+
+Quitar gráficos queda apagado en el request siguiente. El clic filtra la grilla y los otros gráficos, y el clickeado sigue completo. Suma de monto sale en series por moneda (ARS y USD por separado). `1891-564` sigue trayendo la OP 28239. No sumar pesos con dólares.
+
+## Correcto
+
+```php
+$graficos = ListadoLienzoSupport::normalizar($request->input('graficos'), $request->input('grafico'), $request->exists('graficos'), $campos);
+ListadoRelacionCatalogo::aplicar($query, $recurso, $campo, $op, $valor, $hasta, $origen);
+```
+
+## Prohibido
+
+```php
+// Copiar el index de pagos a otra grilla
+// whereExists de factura fuera de PagoproveedorFacturaRelacion
+// SUM(monto) como total si hay más de una moneda
+// SELECT puntoventa en comprobante_proveedor
+```

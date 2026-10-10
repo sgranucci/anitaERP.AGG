@@ -5,6 +5,10 @@ namespace App\Support\Ticket;
 use App\Models\Ticket\Ticket_Estado;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoQbeFormulaSupport;
+use App\Support\Listado\ListadoQbeSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -16,6 +20,8 @@ class AdministracionTicketListadoFiltros
     public const MODO_TODOS = 'todos';
 
     public const MODO_CAMPO = 'campo';
+
+    public const MODO_QBE = 'qbe';
 
     /** Filtro externo de estado: Pendiente + En ejecución (default del index). */
     public const FILTRO_ESTADO_EN_CURSO = 'EN_CURSO';
@@ -37,7 +43,7 @@ class AdministracionTicketListadoFiltros
         'titulo' => ['column' => 'ticket.titulo', 'type' => 'texto', 'label' => 'Título'],
         'comentario' => ['column' => 'ticket.comentario', 'type' => 'texto', 'label' => 'Comentario'],
         'usuario' => ['column' => 'usuario.nombre', 'type' => 'texto', 'label' => 'Generó usuario'],
-        'tecnico' => ['column' => 'nombretecnico', 'type' => 'texto', 'label' => 'Técnico asignado'],
+        'tecnico' => ['column' => 'tickets_tarea.nombretecnico', 'type' => 'texto', 'label' => 'Técnico asignado'],
         'estado' => ['column' => 'ticket.estado_ticket', 'type' => 'texto', 'label' => 'Estado'],
         'fecha_resolucion' => ['column' => 'ticket.fecha_resolucion', 'type' => 'fecha', 'label' => 'Fecha resolución'],
         'tiempo_insumido' => ['column' => 'ticket.tiempo_insumido_total', 'type' => 'entero', 'label' => 'Tiempo insumido (min)'],
@@ -53,7 +59,7 @@ class AdministracionTicketListadoFiltros
         'ticket.titulo',
         'ticket.comentario',
         'usuario.nombre',
-        'nombretecnico',
+        'tickets_tarea.nombretecnico',
     ];
 
     /** @var array<string, string> */
@@ -82,6 +88,23 @@ class AdministracionTicketListadoFiltros
         'vacio' => 'Sin fecha',
     ];
 
+    /** @var array<string, string> */
+    public const OPERADORES_ENTERO_QBE = [
+        'igual' => 'Es igual a',
+        'mayor' => 'Mayor que',
+        'mayor_igual' => 'Mayor o igual',
+        'menor' => 'Menor que',
+        'menor_igual' => 'Menor o igual',
+        'entre' => 'Entre',
+        'vacio' => 'Está vacío',
+    ];
+
+    /** @var array<string, string> */
+    public const OPERADORES_BOOLEANO = [
+        'igual' => 'Es',
+        'vacio' => 'Sin dato',
+    ];
+
     public static function esAreaSistemas(int $areadestinoId): bool
     {
         return $areadestinoId === (int) config('ticket.administracion_sistemas_areadestino_id', 1);
@@ -102,7 +125,7 @@ class AdministracionTicketListadoFiltros
         $busquedaRapida = $request->boolean('filtro_busqueda_rapida');
 
         $modo = (string) $request->input('filtro_modo', self::MODO_TODOS);
-        if (! in_array($modo, [self::MODO_TODOS, self::MODO_CAMPO], true)) {
+        if (! in_array($modo, [self::MODO_TODOS, self::MODO_CAMPO, self::MODO_QBE], true)) {
             $modo = self::MODO_TODOS;
         }
 
@@ -113,9 +136,20 @@ class AdministracionTicketListadoFiltros
 
         $operador = (string) $request->input('filtro_operador', 'contiene');
 
+        $qbe = ListadoQbeSupport::normalizar(
+            $request->input('qbe', []),
+            self::camposQbe(),
+            static fn (string $op, string $campoQbe): string => self::normalizarOperadorQbe($op, $campoQbe)
+        );
+        $sort = ListadoOrdenamientoSupport::normalizar($request->input('sort', []), self::camposOrdenables());
+        $agrupar = ListadoAgrupacionSupport::normalizar($request->input('group', []), self::camposOrdenables());
+
         if ($busquedaRapida) {
             $modo = self::MODO_TODOS;
             $operador = 'contiene';
+            $qbe = ListadoQbeSupport::vacio();
+        } elseif ($request->input('aplicar_qbe') === '1' || ListadoQbeSupport::tieneCriterios($qbe)) {
+            $modo = self::MODO_QBE;
         }
 
         $operador = self::normalizarOperador($operador, $modo === self::MODO_CAMPO ? $campo : 'titulo');
@@ -138,6 +172,9 @@ class AdministracionTicketListadoFiltros
                 ? $request->boolean('ver_todos_tickets')
                 : true,
             'tecnico_usuario_id' => 0,
+            'qbe' => $qbe,
+            'sort' => $sort,
+            'agrupar' => $agrupar,
         ];
     }
 
@@ -197,6 +234,14 @@ class AdministracionTicketListadoFiltros
             return true;
         }
 
+        if (($filtros['modo'] ?? '') === self::MODO_QBE || ListadoQbeSupport::tieneCriterios($filtros['qbe'] ?? [])) {
+            return true;
+        }
+
+        if (($filtros['sort'] ?? []) !== [] || ($filtros['agrupar'] ?? []) !== []) {
+            return true;
+        }
+
         if (($filtros['operador'] ?? 'contiene') !== 'contiene') {
             return true;
         }
@@ -229,6 +274,9 @@ class AdministracionTicketListadoFiltros
             'fecha_resolucion_hasta' => '',
             'ver_todos_tickets' => true,
             'tecnico_usuario_id' => 0,
+            'qbe' => ListadoQbeSupport::vacio(),
+            'sort' => [],
+            'agrupar' => [],
         ];
     }
 
@@ -272,6 +320,15 @@ class AdministracionTicketListadoFiltros
             $params['fecha_resolucion_hasta'] = $filtros['fecha_resolucion_hasta'];
         }
         $params['ver_todos_tickets'] = ! empty($filtros['ver_todos_tickets']) ? '1' : '0';
+        $params = array_merge($params, ListadoQbeSupport::paraQueryString((array) ($filtros['qbe'] ?? [])));
+        $params = array_merge($params, ListadoOrdenamientoSupport::paraQueryString((array) ($filtros['sort'] ?? [])));
+        $params = array_merge($params, ListadoAgrupacionSupport::paraQueryString((array) ($filtros['agrupar'] ?? [])));
+        foreach (self::normalizarCalculadas($filtros['calculadas'] ?? []) as $i => $calc) {
+            $params['calculadas'][$i] = [
+                'etiqueta' => $calc['etiqueta'],
+                'formula' => $calc['formula'],
+            ];
+        }
 
         return $params;
     }
@@ -284,6 +341,12 @@ class AdministracionTicketListadoFiltros
         self::aplicarEstado($query, $filtros);
         self::aplicarRangoFechas($query, $filtros);
         self::aplicarRangoFechaResolucion($query, $filtros);
+
+        if (($filtros['modo'] ?? self::MODO_TODOS) === self::MODO_QBE) {
+            self::aplicarQbe($query, (array) ($filtros['qbe'] ?? []));
+
+            return;
+        }
 
         if (! self::tieneCriteriosTexto($filtros)) {
             return;
@@ -789,5 +852,306 @@ class AdministracionTicketListadoFiltros
         }
 
         return $fechaYmd;
+    }
+
+    /**
+     * La vista no pisa el estado, las fechas ni el tilde de alcance.
+     * El recorte por rol lo sigue aplicando la consulta, no esta clase.
+     *
+     * @param  array<string, mixed>  $base
+     * @param  array<string, mixed>  $desdeVista
+     * @return array<string, mixed>
+     */
+    public static function fusionarDesdeVista(array $base, array $desdeVista): array
+    {
+        $externos = [
+            'filtro_estado' => $base['filtro_estado'] ?? self::FILTRO_ESTADO_EN_CURSO,
+            'fecha_desde' => $base['fecha_desde'] ?? '',
+            'fecha_hasta' => $base['fecha_hasta'] ?? '',
+            'fecha_resolucion_desde' => $base['fecha_resolucion_desde'] ?? '',
+            'fecha_resolucion_hasta' => $base['fecha_resolucion_hasta'] ?? '',
+            'ver_todos_tickets' => $base['ver_todos_tickets'] ?? true,
+            'tecnico_usuario_id' => $base['tecnico_usuario_id'] ?? 0,
+            'valor' => $base['valor'] ?? '',
+            'valor_hasta' => $base['valor_hasta'] ?? '',
+            'busqueda' => $base['busqueda'] ?? '',
+            'campo' => $base['campo'] ?? 'titulo',
+            'operador' => $base['operador'] ?? 'contiene',
+        ];
+        $qbeExplicito = ! empty($base['_qbe_explicito']) || (($base['modo'] ?? '') === self::MODO_QBE);
+        $qbe = $qbeExplicito
+            ? ($base['qbe'] ?? ListadoQbeSupport::vacio())
+            : ListadoQbeSupport::normalizar(
+                $desdeVista['qbe'] ?? [],
+                self::camposQbe(),
+                static fn (string $op, string $campo): string => self::normalizarOperadorQbe($op, $campo)
+            );
+        $modo = (string) ($base['modo'] ?? self::MODO_TODOS);
+        if (ListadoQbeSupport::tieneCriterios($qbe)) {
+            $modo = self::MODO_QBE;
+        }
+        $campos = self::camposOrdenables();
+        $orden = ListadoOrdenamientoSupport::normalizar($base['sort'] ?? [], $campos);
+        if ($orden === []) {
+            $orden = ListadoOrdenamientoSupport::normalizar($desdeVista['sort'] ?? ($desdeVista['orden'] ?? []), $campos);
+        }
+        $agrupar = ListadoAgrupacionSupport::normalizar($base['agrupar'] ?? [], $campos);
+        if ($agrupar === []) {
+            $agrupar = ListadoAgrupacionSupport::normalizar($desdeVista['agrupar'] ?? ($desdeVista['group'] ?? []), $campos);
+        }
+
+        return array_merge($base, $externos, [
+            'modo' => $modo,
+            'qbe' => $qbe,
+            'sort' => $orden,
+            'agrupar' => $agrupar,
+        ]);
+    }
+
+    /**
+     * @return array<string, array{label: string, type: string, column: string}>
+     */
+    public static function camposQbe(): array
+    {
+        return AdministracionTicketListadoColumnas::camposFiltrables();
+    }
+
+    /**
+     * @return array<string, array{label: string, type: string, column: string}>
+     */
+    public static function camposQbeDisponibles(): array
+    {
+        return self::camposQbe();
+    }
+
+    /**
+     * @return array<string, array{label: string, type: string, column: string}>
+     */
+    public static function camposOrdenables(): array
+    {
+        return AdministracionTicketListadoColumnas::camposOrdenables();
+    }
+
+    /**
+     * Ejes del gráfico. Los minutos se suman, no se usan como eje.
+     *
+     * @return array<string, array{label: string, type: string, column: string}>
+     */
+    public static function camposVisual(): array
+    {
+        $out = self::camposOrdenables();
+        $out['tiempo_insumido']['column'] = '';
+
+        return $out;
+    }
+
+    /**
+     * @return array<string, array{column: string, type: string, label: string}>
+     */
+    public static function camposFormula(): array
+    {
+        $out = [];
+        foreach (self::camposQbe() as $key => $meta) {
+            $column = (string) ($meta['column'] ?? '');
+            if ($column === '' || ! ListadoOrdenamientoSupport::esColumnaSqlSegura($column)) {
+                continue;
+            }
+            $out[$key] = $meta;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array{etiqueta: string, formula: string, valida: bool}>
+     */
+    public static function normalizarCalculadas(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+        $campos = self::camposFormula();
+        $out = [];
+        foreach ($raw as $fila) {
+            if (count($out) >= 2 || ! is_array($fila)) {
+                continue;
+            }
+            $etiqueta = trim((string) ($fila['etiqueta'] ?? ''));
+            $formula = trim((string) ($fila['formula'] ?? ''));
+            if ($etiqueta === '' || $formula === '') {
+                continue;
+            }
+            $out[] = [
+                'etiqueta' => mb_substr($etiqueta, 0, 40),
+                'formula' => mb_substr($formula, 0, ListadoQbeFormulaSupport::MAX_LEN),
+                'valida' => ListadoQbeFormulaSupport::compilar($formula, $campos) !== null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>|null  $vistaJson
+     * @return array<string, mixed>
+     */
+    public static function mezclarCalculadas(array $filtros, Request $request, ?array $vistaJson): array
+    {
+        if ($request->exists('calculadas')) {
+            $filtros['calculadas'] = self::normalizarCalculadas($request->input('calculadas'));
+        } elseif (is_array($vistaJson)) {
+            $filtros['calculadas'] = self::normalizarCalculadas($vistaJson['calculadas'] ?? []);
+        } else {
+            $filtros['calculadas'] = self::normalizarCalculadas($filtros['calculadas'] ?? []);
+        }
+
+        return $filtros;
+    }
+
+    /**
+     * @param  Builder<\App\Models\Ticket\Ticket>  $query
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function aplicarCalculadas(Builder $query, array $filtros): void
+    {
+        $campos = self::camposFormula();
+        foreach (self::normalizarCalculadas($filtros['calculadas'] ?? []) as $i => $calc) {
+            if (! $calc['valida']) {
+                continue;
+            }
+            $compiled = ListadoQbeFormulaSupport::compilar($calc['formula'], $campos);
+            if ($compiled === null) {
+                continue;
+            }
+            $query->selectRaw('('.$compiled['sql'].') as calc_'.$i, $compiled['bindings']);
+        }
+        $limite = (int) ($filtros['_mail_limite'] ?? 0);
+        if ($limite > 0) {
+            $query->limit($limite);
+        }
+    }
+
+    /**
+     * @param  Builder<\App\Models\Ticket\Ticket>  $query
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function aplicarOrden(Builder $query, array $filtros): void
+    {
+        $campos = self::camposOrdenables();
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        $sort = ListadoOrdenamientoSupport::normalizar($filtros['sort'] ?? [], $campos);
+        if ($agrupar !== []) {
+            ListadoAgrupacionSupport::aplicarOrdenPrefijo($query, $agrupar, $campos);
+        }
+        if ($sort !== []) {
+            ListadoOrdenamientoSupport::aplicar($query, $sort, $campos, [
+                'campo' => 'id',
+                'dir' => ListadoOrdenamientoSupport::DIR_DESC,
+            ]);
+
+            return;
+        }
+
+        $query->orderBy('ticket.id', 'desc');
+    }
+
+    /**
+     * @param  Builder<\App\Models\Ticket\Ticket>  $query
+     * @param  array<string, mixed>  $qbe
+     */
+    private static function aplicarQbe(Builder $query, array $qbe): void
+    {
+        $norm = ListadoQbeSupport::normalizar(
+            $qbe,
+            self::camposQbe(),
+            static fn (string $op, string $campo): string => self::normalizarOperadorQbe($op, $campo)
+        );
+        ListadoQbeSupport::aplicar(
+            $query,
+            $norm,
+            static function (Builder $q, array $criterio, string $boolean = 'and'): void {
+                self::aplicarCriterioQbe($q, $criterio, $boolean);
+            }
+        );
+    }
+
+    /**
+     * @param  Builder<\App\Models\Ticket\Ticket>  $query
+     * @param  array<string, mixed>  $criterio
+     */
+    private static function aplicarCriterioQbe(Builder $query, array $criterio, string $boolean): void
+    {
+        if ($boolean === ListadoQbeSupport::LOGIC_OR) {
+            $query->orWhere(function (Builder $inner) use ($criterio) {
+                self::aplicarCriterioQbe($inner, $criterio, ListadoQbeSupport::LOGIC_AND);
+            });
+
+            return;
+        }
+
+        $formula = trim((string) ($criterio['formula'] ?? ''));
+        if ($formula !== '') {
+            $compiled = ListadoQbeFormulaSupport::compilar($formula, self::camposFormula());
+            if ($compiled === null) {
+                return;
+            }
+            ListadoQbeFormulaSupport::aplicarComparacion(
+                $query,
+                $compiled,
+                (string) ($criterio['op'] ?? 'contiene'),
+                trim((string) ($criterio['valor'] ?? '')),
+                trim((string) ($criterio['valor_hasta'] ?? ''))
+            );
+
+            return;
+        }
+
+        $campo = (string) ($criterio['campo'] ?? '');
+        $def = self::camposQbe()[$campo] ?? null;
+        if ($def === null) {
+            return;
+        }
+        $operador = (string) ($criterio['op'] ?? 'contiene');
+        $valor = trim((string) ($criterio['valor'] ?? ''));
+        $hasta = trim((string) ($criterio['valor_hasta'] ?? ''));
+        $column = (string) $def['column'];
+        $type = (string) ($def['type'] ?? 'texto');
+        if ($column === '' || ! ListadoOrdenamientoSupport::esColumnaSqlSegura($column)) {
+            return;
+        }
+        if ($type === 'fecha') {
+            ListadoQbeSupport::aplicarFecha($query, $column, $operador, $valor, $hasta);
+
+            return;
+        }
+        if ($type === 'entero') {
+            if ($operador === 'vacio') {
+                $query->whereNull($column);
+
+                return;
+            }
+            ListadoQbeSupport::aplicarDecimal($query, $column, $operador, $valor, $hasta);
+
+            return;
+        }
+        self::aplicarTexto($query, $column, $operador, $valor);
+    }
+
+    private static function normalizarOperadorQbe(string $operador, string $campoKey): string
+    {
+        $type = self::camposQbe()[$campoKey]['type'] ?? 'texto';
+        $permitidos = match ($type) {
+            'entero' => array_keys(self::OPERADORES_ENTERO_QBE),
+            'fecha' => array_keys(ListadoQbeSupport::OPERADORES_FECHA),
+            'decimal' => array_keys(ListadoQbeSupport::OPERADORES_DECIMAL),
+            default => array_keys(self::OPERADORES_TEXTO),
+        };
+        $operador = strtolower(trim($operador));
+        if (in_array($operador, $permitidos, true)) {
+            return $operador;
+        }
+
+        return $permitidos[0] ?? 'contiene';
     }
 }

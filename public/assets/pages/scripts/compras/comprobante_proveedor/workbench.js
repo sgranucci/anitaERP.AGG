@@ -60,6 +60,15 @@
         if (typeof window.lwQbeReindex === 'function') {
             window.lwQbeReindex();
         }
+        $('#form-lw-grilla-vista').find('[name^="grafico["], [name^="formato["]').remove();
+        $('#lw-analisis-panel').find('[name^="grafico["], [name^="formato["]').each(function () {
+            var $el = $(this);
+            var name = $el.attr('name');
+            if (!name) {
+                return;
+            }
+            $box.append($('<input type="hidden">').attr('name', name).val($el.val() || ''));
+        });
         $('#lw-qbe-panel').find('input[name^="qbe["], select[name^="qbe["]').each(function () {
             var $el = $(this);
             var name = $el.attr('name');

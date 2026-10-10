@@ -153,6 +153,9 @@
                         <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-qbe-panel" aria-expanded="false" aria-controls="lw-qbe-panel">
                             <i class="fa fa-filter"></i> QBE
                         </button>
+                        <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico y color de fila">
+                            <i class="fa fa-bar-chart"></i> Visual
+                        </button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="modal" data-target="#modal-lw-etiquetas"
                                 @if (! ($workbenchListo ?? false)) disabled title="Requiere migración" @endif>
                             <i class="fa fa-font"></i> Defaults instalación
@@ -180,7 +183,16 @@
                 </div>
                 @include('compras.comprobante_proveedor.partials.filtros_externos')
                 @include('compras.comprobante_proveedor.partials.workbench_qbe')
+                @php
+                    $ejesVisual = ComprobanteProveedorListadoFiltros::camposOrdenables();
+                    $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                @endphp
+                @include('includes.listado.workbench_visual')
             </form>
+            @include('includes.listado.workbench_grafico', [
+                'recursoVisual' => \App\Support\Compras\ComprobanteProveedorListadoColumnas::RECURSO,
+                'rutaListadoVisual' => 'comprobante_proveedor',
+            ])
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
@@ -202,7 +214,14 @@
                     </thead>
                     <tbody>
                         @forelse ($datas as $data)
-                        <tr>
+                        @php
+                            $tonoFila = \App\Support\Listado\ListadoVisualSupport::tonoFila(
+                                $data,
+                                $filtros['formato'] ?? [],
+                                static fn ($row, $key) => \App\Support\Compras\ComprobanteProveedorListadoColumnas::valorCelda($row, $key)
+                            );
+                        @endphp
+                        <tr @class(['lw-tono-danger' => $tonoFila === 'danger', 'lw-tono-warning' => $tonoFila === 'warning', 'lw-tono-success' => $tonoFila === 'success'])>
                             @foreach ($columnasVisibles as $keyColumna)
                                 @include('compras.comprobante_proveedor.partials.workbench_celda', [
                                     'key' => $keyColumna,

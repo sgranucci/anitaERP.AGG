@@ -320,6 +320,18 @@
                                                @if ($vistaActiva && $vistaActiva->compartida) checked @endif>
                                         <label class="custom-control-label" for="vista_compartida_grilla">Compartir con otros usuarios</label>
                                     </div>
+                                    @if (($rolesVista ?? collect())->isNotEmpty())
+                                        <div class="form-group mb-2">
+                                            <label class="small mb-0" for="vista_rol_grilla">Vista de instalación del rol</label>
+                                            <select name="rol_id" id="vista_rol_grilla" class="form-control form-control-sm">
+                                                <option value="0">Ningún rol</option>
+                                                @foreach ($rolesVista as $rolVista)
+                                                    <option value="{{ $rolVista->id }}" @selected((int) ($vistaActiva->rol_id ?? 0) === (int) $rolVista->id)>{{ $rolVista->nombre }}</option>
+                                                @endforeach
+                                            </select>
+                                            <p class="small text-muted mb-0">La ve quien entra con ese rol y no tiene una vista propia por defecto. El default personal gana.</p>
+                                        </div>
+                                    @endif
                                     @if (\App\Support\Listado\ListadoVistaMenuSupport::columnaMenuDisponible())
                                         <div class="custom-control custom-checkbox">
                                             <input type="checkbox" class="custom-control-input" id="vista_menu_grilla" name="crear_en_menu" value="1"

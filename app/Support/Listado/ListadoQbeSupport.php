@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Listado;
 
 use DateTimeImmutable;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Http\Request;
 
 /**

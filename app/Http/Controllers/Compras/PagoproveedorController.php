@@ -4,6 +4,10 @@ namespace App\Http\Controllers\Compras;
 
 use App\Exports\Compras\PagoproveedorListadoExport;
 use App\Http\Controllers\Controller;
+use App\Mail\Compras\PagoproveedorListadoMail;
+use App\Models\Admin\Rol;
+use App\Models\Listado\ListadoEnvioProgramado;
+use App\Models\Listado\ListadoVista;
 use App\Http\Requests\ValidacionPagoproveedor;
 use App\Models\Caja\Cheque;
 use App\Models\Compras\Pagoproveedor;
@@ -24,20 +28,37 @@ use App\Services\Compras\PagoproveedorService;
 use App\Services\Compras\ProveedorCuentacorrienteImportarDesdeAnitaService;
 use App\Services\Compras\RetencionesPagoCalculator;
 use App\Services\Compras\RetencionesPagoContextoBuilder;
+use App\Support\Caja\IngresoEgresoPagoProveedorSupport;
 use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
 use App\Support\Compras\PagoproveedorArchivoSupport;
 use App\Support\Compras\PagoproveedorDocumentosRelacionadosSupport;
+use App\Support\Compras\PagoproveedorListadoAnalisisSupport;
+use App\Support\Compras\PagoproveedorListadoEnvioSupport;
+use App\Support\Compras\PagoproveedorListadoColumnas;
 use App\Support\Compras\PagoproveedorListadoFiltros;
+use App\Support\Compras\PagoproveedorListadoPreferenciasUsuario;
+use App\Support\Compras\PagoproveedorListadoUnificadoSupport;
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use App\Support\Compras\PropuestaPagoModoSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVisualSupport;
+use App\Support\Listado\ListadoVistaSupport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Maatwebsite\Excel\Facades\Excel;
 
 class PagoproveedorController extends Controller
 {
+    private const MAIL_LISTADO_MAX_FILAS = 2000;
     public function __construct(
         private PagoproveedorRepositoryInterface $pagoproveedorRepository,
         private PagoproveedorService $pagoproveedorService,
@@ -59,19 +80,142 @@ class PagoproveedorController extends Controller
     {
         can('listar-pagoproveedor');
 
-        $filtros = $this->resolverFiltrosListado($request);
-        $filtrosQuery = PagoproveedorListadoFiltros::paraQueryString($filtros);
-        $coleccion = $this->pagoproveedorRepository->leePagoproveedor($filtros, true);
-        $empresa_query = $this->empresaRepository->allFiltrado();
-        $camposFiltro = PagoproveedorListadoFiltros::CAMPOS;
+        $armado = $this->armarListado($request);
+        if ($armado instanceof \Illuminate\Http\RedirectResponse) {
+            return $armado;
+        }
 
-        return view('compras.pagoproveedor.index', compact(
-            'coleccion',
-            'filtros',
-            'filtrosQuery',
-            'empresa_query',
-            'camposFiltro'
+        return view('compras.pagoproveedor.index', $armado);
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-pagoproveedor');
+
+        $filtros = $this->resolverFiltrosConVista($request);
+        $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
+        $layout = PagoproveedorListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $page = $this->pagoproveedorRepository->leePagoproveedor($filtros, true);
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            PagoproveedorListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            PagoproveedorListadoFiltros::camposOrdenables()
+        );
+        $filtrosCortes = $filtros;
+        $filtrosCortes['agrupar'] = $agrupar;
+        $cortes = $agrupar !== []
+            ? app(PagoproveedorListadoUnificadoSupport::class)->cortes($filtrosCortes, $etiquetas)
+            : ['activo' => false];
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => PagoproveedorListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
         ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-pagoproveedor');
+
+        $filtros = $this->resolverFiltrosConVista($request);
+        $layout = PagoproveedorListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $orden = $filtros['sort'] ?? [];
+        $vista = ListadoVistaSupport::guardar(
+            PagoproveedorListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'],
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $orden,
+                'orden' => $orden,
+                'agrupar' => $filtros['agrupar'] ?? [],
+                'grafico' => $filtros['grafico'] ?? PagoproveedorListadoAnalisisSupport::graficoVacio(),
+                'graficos' => $filtros['graficos'] ?? [],
+                'formato' => $filtros['formato'] ?? [],
+                'calculadas' => $filtros['calculadas'] ?? [],
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('pagoproveedor', PagoproveedorListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        $this->asignarVistaAlRol($vista, $request);
+        $qs = PagoproveedorListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('pagoproveedor', $qs)
+            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        can('listar-pagoproveedor');
+        $ok = ListadoVistaSupport::eliminar($id, PagoproveedorListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('pagoproveedor', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-pagoproveedor');
+        $layout = PagoproveedorListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario($vistaId, PagoproveedorListadoColumnas::RECURSO, (int) auth()->id());
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            PagoproveedorListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = $this->resolverFiltrosConVista($request);
+        $qs = PagoproveedorListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs[$vistaId > 0 ? 'vista_id' : 'vista_estandar'] = $vistaId > 0 ? $vistaId : 1;
+
+        return redirect()->route('pagoproveedor', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-pagoproveedor');
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            PagoproveedorListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(PagoproveedorListadoColumnas::catalogoActivo())
+        );
+
+        return redirect()->route(
+            'pagoproveedor',
+            PagoproveedorListadoFiltros::paraQueryString($this->resolverFiltrosConVista($request))
+        )->with('mensaje', 'Etiquetas actualizadas.');
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -80,7 +224,7 @@ class PagoproveedorController extends Controller
         ini_set('memory_limit', '512M');
         ini_set('max_execution_time', '120');
 
-        $filtros = $this->resolverFiltrosListado($request, $busqueda);
+        $filtros = $this->resolverFiltrosConVista($request, $busqueda);
         $formato = strtoupper((string) $formato);
 
         if (! in_array($formato, ['PDF', 'EXCEL', 'CSV'], true)) {
@@ -90,11 +234,12 @@ class PagoproveedorController extends Controller
         if ($formato === 'PDF') {
             $datas = $this->pagoproveedorRepository->leePagoproveedor($filtros, false);
             $logos = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($datas);
-            $pdf = Pdf::loadView('compras.pagoproveedor.listado', [
-                'datas' => $datas,
-                'logosCabecera' => $logos,
-                'filtros' => $filtros,
-            ])->setPaper('legal', 'landscape');
+        $pdf = Pdf::loadView('compras.pagoproveedor.listado', [
+            'datas' => $datas,
+            'logosCabecera' => $logos,
+            'filtros' => $filtros,
+            'calculadas' => array_values(is_array($filtros['calculadas'] ?? null) ? $filtros['calculadas'] : []),
+        ])->setPaper('legal', 'landscape');
 
             $dir = storage_path('pdf/listados');
             if (! is_dir($dir)) {
@@ -764,9 +909,25 @@ class PagoproveedorController extends Controller
             || can('editar-comprobante-proveedor', false);
     }
 
+    /**
+     * Quien lista ingresos y egresos puede mandar el mail solo si esa orden
+     * es un OPP o una OPA de caja.
+     */
+    private function puedeEnviarOrdenPago(int $id): bool
+    {
+        if (can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false)) {
+            return true;
+        }
+        if (! can('listar-ingresos-egresos-caja', false) && ! can('editar-ingresos-egresos-caja', false)) {
+            return false;
+        }
+
+        return IngresoEgresoPagoProveedorSupport::ordenTieneMovimiento($id);
+    }
+
     public function datosEnvioProveedor(int $id)
     {
-        if (! can('listar-pagoproveedor', false) && ! can('editar-pagoproveedor', false)) {
+        if (! $this->puedeEnviarOrdenPago($id)) {
             return response()->json(['message' => 'Sin permisos'], 403);
         }
 
@@ -775,7 +936,7 @@ class PagoproveedorController extends Controller
 
     public function enviarProveedor(Request $request, int $id)
     {
-        if (! can('listar-pagoproveedor', false) && ! can('editar-pagoproveedor', false)) {
+        if (! $this->puedeEnviarOrdenPago($id)) {
             return response()->json(['mensaje' => 'error', 'errores' => 'Sin permisos para enviar la OP.'], 403);
         }
 
@@ -819,6 +980,345 @@ class PagoproveedorController extends Controller
             $busquedaRuta,
             $empresaDefault > 0 ? $empresaDefault : null
         );
+    }
+
+    /**
+     * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
+     */
+    private function armarListado(Request $request): array|\Illuminate\Http\RedirectResponse
+    {
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(PagoproveedorListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar')
+            || $request->input('vista_modo') === 'estandar';
+
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                PagoproveedorListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('qbe')
+            && ! $request->boolean('filtro_limpiar')
+            && ! $request->has('empresa_id')
+            && ! $request->has('empresa_todas')
+            && ! $request->has('mail')
+            && ! $request->has('fecha_desde')
+            && ! $request->has('fecha_hasta')
+            && ! $request->has('filtro_periodo')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(PagoproveedorListadoColumnas::RECURSO, $usuarioId)
+                ?? ListadoVistaSupport::defaultDelRol(
+                    PagoproveedorListadoColumnas::RECURSO,
+                    (int) session('rol_id')
+                );
+        }
+
+        $filtrosRequest = ListadoVistaSupport::prepararQbeContraVista(
+            $this->resolverFiltrosListado($request),
+            $request
+        );
+        $filtros = $filtrosRequest;
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = PagoproveedorListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+        unset($filtros['_qbe_explicito'], $filtros['_limpiar'], $filtros['_grafico_explicito'], $filtros['_formato_explicito'], $filtros['_calculadas_explicito']);
+        ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
+        if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
+            if ($request->exists('group')) {
+                $filtros['agrupar'] = $filtrosRequest['agrupar'] ?? [];
+            }
+            if ($request->exists('sort')) {
+                $filtros['sort'] = $filtrosRequest['sort'] ?? [];
+            }
+            ListadoVistaSupport::recordarOrdenYAgrupar(
+                $vistaActiva,
+                $filtros['sort'] ?? [],
+                $filtros['agrupar'] ?? []
+            );
+        }
+
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = PagoproveedorListadoFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif ($forzarEstandar) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('pagoproveedor', $params)
+                ->with('mensaje', 'Se quitó el orden de la grilla.');
+        }
+
+        $catalogo = PagoproveedorListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            PagoproveedorListadoColumnas::RECURSO,
+            $catalogo
+        );
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = PagoproveedorListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = PagoproveedorListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+        $coleccion = $this->pagoproveedorRepository->leePagoproveedor($filtros, true);
+        $camposFiltro = PagoproveedorListadoFiltros::camposQbeDisponibles();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
+        $filtrosQuery = PagoproveedorListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
+        if ($request->boolean('filtro_limpiar')) {
+            $filtrosQuery['filtro_limpiar'] = 1;
+        }
+        if ($vistaActiva) {
+            $filtrosQuery['vista_id'] = $vistaActiva->id;
+        } elseif ($forzarEstandar) {
+            $filtrosQuery['vista_estandar'] = 1;
+        }
+
+        $graficoSeries = $this->seriesGraficos($filtros, $etiquetas);
+
+        return [
+            'coleccion' => $coleccion,
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'camposFiltro' => $camposFiltro,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'etiquetasInstalacion' => $etiquetasInstalacion,
+            'vistasListado' => $vistas,
+            'vistaActiva' => $vistaActiva,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'cortes' => app(PagoproveedorListadoUnificadoSupport::class)->cortes($filtros, $etiquetas),
+            'graficoSeries' => $graficoSeries,
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
+            'rolesVista' => $this->rolesParaVistaInstalacion(),
+            'enviosProgramados' => ListadoEnvioProgramado::query()
+                ->where('usuario_id', (int) auth()->id())
+                ->where('recurso', PagoproveedorListadoColumnas::RECURSO)
+                ->where('activo', true)
+                ->orderByDesc('id')
+                ->get(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, string>  $etiquetas
+     * @return list<array<string, mixed>>
+     */
+    private function seriesGraficos(array $filtros, array $etiquetas): array
+    {
+        $lista = is_array($filtros['graficos'] ?? null) ? $filtros['graficos'] : [];
+        if ($lista === [] && ($filtros['grafico']['tipo'] ?? '') !== '') {
+            $lista = [$filtros['grafico']];
+        }
+        $out = [];
+        foreach ($lista as $grafico) {
+            if (! is_array($grafico) || ($grafico['tipo'] ?? '') === '') {
+                continue;
+            }
+            $para = $filtros;
+            $para['grafico'] = $grafico;
+            $out[] = ListadoVisualSupport::serieDeConsulta(
+                $para,
+                PagoproveedorListadoFiltros::camposOrdenables(),
+                $etiquetas,
+                fn (array $consulta): array => app(PagoproveedorListadoUnificadoSupport::class)->cortes($consulta, $etiquetas)
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, string>  $etiquetas
+     * @return array{tipo: string, dimension: string, medida: string, labels: list<string>, valores: list<float>, titulo: string}
+     */
+    private function serieGrafico(array $filtros, array $etiquetas): array
+    {
+        return $this->seriesGraficos($filtros, $etiquetas)[0] ?? PagoproveedorListadoAnalisisSupport::serie(
+            PagoproveedorListadoAnalisisSupport::graficoVacio(),
+            ['filas' => []],
+            $etiquetas
+        );
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Rol>
+     */
+    private function rolesParaVistaInstalacion()
+    {
+        if ((string) session('rol_nombre') !== 'administrador' || ! ListadoVistaSupport::columnaRolDisponible()) {
+            return collect();
+        }
+
+        return Rol::query()->orderBy('nombre')->get(['id', 'nombre']);
+    }
+
+    private function asignarVistaAlRol(ListadoVista $vista, Request $request): void
+    {
+        if ((string) session('rol_nombre') !== 'administrador' || ! Schema::hasColumn('listado_vista', 'rol_id')) {
+            return;
+        }
+        $rolId = (int) $request->input('rol_id', 0);
+        if ($rolId > 0 && ! Rol::query()->whereKey($rolId)->exists()) {
+            return;
+        }
+        if ($rolId > 0) {
+            ListadoVista::query()
+                ->where('recurso', PagoproveedorListadoColumnas::RECURSO)
+                ->where('rol_id', $rolId)
+                ->where('id', '!=', $vista->id)
+                ->get()
+                ->each(function (ListadoVista $otra) {
+                    $otra->rol_id = null;
+                    $otra->save();
+                });
+        }
+        $vista->rol_id = $rolId > 0 ? $rolId : null;
+        $vista->save();
+    }
+
+    public function enviarListado(Request $request)
+    {
+        can('listar-pagoproveedor');
+        $email = trim((string) $request->input('email', ''));
+        $filtros = $this->resolverFiltrosConVista($request);
+        $qs = PagoproveedorListadoFiltros::paraQueryString($filtros);
+        if ($request->filled('vista_id')) {
+            $qs['vista_id'] = (int) $request->input('vista_id');
+        }
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return redirect()->route('pagoproveedor', $qs)->with('error', 'El correo no es válido.');
+        }
+
+        $frecuencia = (string) $request->input('programar', '');
+        if (in_array($frecuencia, ['diaria', 'semanal'], true)) {
+            ListadoEnvioProgramado::query()->create([
+                'recurso' => PagoproveedorListadoColumnas::RECURSO,
+                'usuario_id' => (int) auth()->id(),
+                'email' => $email,
+                'frecuencia' => $frecuencia,
+                'filtros_json' => $filtros,
+                'activo' => true,
+            ]);
+
+            return redirect()->route('pagoproveedor', $qs)->with(
+                'mensaje',
+                $frecuencia === 'semanal'
+                    ? 'El listado queda programado cada lunes a '.$email.'.'
+                    : 'El listado queda programado todos los días a '.$email.'.'
+            );
+        }
+
+        try {
+            $filas = PagoproveedorListadoEnvioSupport::enviar($filtros, $email);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()->route('pagoproveedor', $qs)
+                ->with('error', 'No se pudo enviar el listado. Revisá el correo o la configuración de mail.');
+        }
+
+        $recorte = $filas >= PagoproveedorListadoEnvioSupport::MAX_FILAS;
+        $aviso = 'Listado enviado a '.$email.'.';
+        if ($recorte) {
+            $aviso .= ' El archivo trae hasta '.number_format(PagoproveedorListadoEnvioSupport::MAX_FILAS, 0, ',', '.').' filas.';
+        }
+
+        return redirect()->route('pagoproveedor', $qs)->with('mensaje', $aviso);
+    }
+
+    public function quitarGraficoListado(Request $request)
+    {
+        can('listar-pagoproveedor');
+        $filtros = $this->resolverFiltrosConVista($request);
+        $filtros['grafico'] = PagoproveedorListadoAnalisisSupport::graficoVacio();
+        $filtros['graficos'] = [];
+        $filtros['grafico_off'] = true;
+        $filtros['grafico_click'] = '';
+        $filtros['grafico_click_dimension'] = '';
+        if ($request->filled('vista_id')) {
+            $vista = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                PagoproveedorListadoColumnas::RECURSO,
+                (int) auth()->id()
+            );
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id() && is_array($vista->filtros_json)) {
+                $json = $vista->filtros_json;
+                $json['grafico'] = PagoproveedorListadoAnalisisSupport::graficoVacio();
+                $json['graficos'] = [];
+                $vista->filtros_json = $json;
+                $vista->save();
+            }
+        }
+        $qs = PagoproveedorListadoFiltros::paraQueryString($filtros);
+        if ($request->filled('vista_id')) {
+            $qs['vista_id'] = (int) $request->input('vista_id');
+        }
+
+        return redirect()->route('pagoproveedor', $qs)->with('mensaje', 'Se quitó el gráfico.');
+    }
+
+    public function bajaEnvioProgramado(int $id)
+    {
+        can('listar-pagoproveedor');
+        $envio = ListadoEnvioProgramado::query()
+            ->where('usuario_id', (int) auth()->id())
+            ->whereKey($id)
+            ->first();
+        if ($envio) {
+            $envio->activo = false;
+            $envio->save();
+        }
+
+        return redirect()->back()->with('mensaje', 'Se dio de baja el envío programado.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosConVista(Request $request, ?string $busquedaRuta = null): array
+    {
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistaActiva = null;
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                PagoproveedorListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        }
+        $filtros = ListadoVistaSupport::prepararQbeContraVista(
+            $this->resolverFiltrosListado($request, $busquedaRuta),
+            $request
+        );
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = PagoproveedorListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+        unset($filtros['_qbe_explicito'], $filtros['_limpiar'], $filtros['_grafico_explicito'], $filtros['_formato_explicito'], $filtros['_calculadas_explicito']);
+
+        return PagoproveedorListadoFiltros::aplicarClickGrafico($filtros);
     }
 
     /**

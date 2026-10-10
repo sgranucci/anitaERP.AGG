@@ -18,8 +18,22 @@ use App\Models\Ticket\Ticket_Estado;
 use App\Models\Ticket\Ticket_Tarea_Novedad;
 use App\Queries\Ticket\TicketQueryInterface;
 use App\Exports\Ticket\AdministracionTicketListadoExport;
+use App\Models\Listado\ListadoEnvioProgramado;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoLienzoSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\QueryRetornoListado;
+use App\Support\Ticket\AdministracionTicketListadoColumnas;
+use App\Support\Ticket\AdministracionTicketListadoEnvioSupport;
 use App\Support\Ticket\AdministracionTicketListadoFiltros;
+use App\Support\Ticket\AdministracionTicketListadoPreferenciasUsuario;
+use App\Support\Ticket\AdministracionTicketListadoResumen;
 use App\Support\Ticket\TicketEmpresaSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -76,17 +90,12 @@ class Administracion_TicketController extends Controller
     {
         can('listar-ticket');
 
-        $filtros = $this->resolverFiltrosListado($request);
+        $armado = $this->armarListado($request);
+        if ($armado instanceof \Illuminate\Http\RedirectResponse) {
+            return $armado;
+        }
 
-        $ticket = $this->ticketQuery->leeTicketAdministracion($filtros, true);
-
-        return view('ticket.administracion_ticket.index', [
-            'ticket' => $ticket,
-            'filtros' => $filtros,
-            'filtrosQuery' => AdministracionTicketListadoFiltros::paraQueryString($filtros),
-            'camposFiltro' => AdministracionTicketListadoFiltros::CAMPOS,
-            'ver_todos_tickets' => ! empty($filtros['ver_todos_tickets']),
-        ]);
+        return view('ticket.administracion_ticket.index', $armado);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -96,13 +105,14 @@ class Administracion_TicketController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = $this->resolverFiltrosListado($request, $busqueda);
+        $filtros = $this->filtrosDePantalla($request, $busqueda);
 
         switch ($formato) {
         case 'PDF':
             $ticket = $this->ticketQuery->leeTicketAdministracion($filtros, false);
 
-            $view = \View::make('ticket.administracion_ticket.listado', compact('ticket', 'filtros'))
+            $calculadas = AdministracionTicketListadoFiltros::normalizarCalculadas($filtros['calculadas'] ?? []);
+            $view = \View::make('ticket.administracion_ticket.listado', compact('ticket', 'filtros', 'calculadas'))
                 ->render();
             $path = storage_path('pdf/listados');
             if (! is_dir($path)) {
@@ -135,6 +145,379 @@ class Administracion_TicketController extends Controller
         $filtros = AdministracionTicketListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
 
         return AdministracionTicketListadoFiltros::aplicarAlcanceUsuario($filtros, (int) auth()->id());
+    }
+
+    /**
+     * Export y mail usan la misma pantalla: vista y consulta encima del alcance de rol.
+     *
+     * @return array<string, mixed>
+     */
+    private function filtrosDePantalla(Request $request, ?string $busquedaRuta = null): array
+    {
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistaJson = null;
+        $filtros = $this->resolverFiltrosListado($request, $busquedaRuta);
+        if ($request->filled('vista_id')) {
+            $vista = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                AdministracionTicketListadoColumnas::RECURSO,
+                $usuarioId
+            );
+            if ($vista && is_array($vista->filtros_json)) {
+                $vistaJson = $vista->filtros_json;
+                $filtros = AdministracionTicketListadoFiltros::fusionarDesdeVista($filtros, $vistaJson);
+                $filtros = AdministracionTicketListadoFiltros::aplicarAlcanceUsuario($filtros, (int) auth()->id());
+            }
+        }
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            $vistaJson,
+            AdministracionTicketListadoFiltros::camposVisual()
+        );
+
+        return AdministracionTicketListadoFiltros::mezclarCalculadas($filtros, $request, $vistaJson);
+    }
+
+    /**
+     * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
+     */
+    private function armarListado(Request $request): array|\Illuminate\Http\RedirectResponse
+    {
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(AdministracionTicketListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar');
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                AdministracionTicketListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('qbe')
+            && ! $request->boolean('filtro_limpiar')
+            && ! $request->has('filtro_estado')
+            && ! $request->has('ver_todos_tickets')
+            && ! $request->has('fecha_desde')
+            && ! $request->has('fecha_hasta')
+            && ! $request->has('fecha_resolucion_desde')
+            && ! $request->has('fecha_resolucion_hasta')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(AdministracionTicketListadoColumnas::RECURSO, $usuarioId)
+                ?? ListadoVistaSupport::defaultDelRol(AdministracionTicketListadoColumnas::RECURSO, (int) session('rol_id'));
+        }
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $vistaJson = ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null;
+        if ($vistaJson) {
+            $filtros = AdministracionTicketListadoFiltros::fusionarDesdeVista($filtros, $vistaJson);
+            $filtros = AdministracionTicketListadoFiltros::aplicarAlcanceUsuario($filtros, (int) auth()->id());
+        }
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            $vistaJson,
+            AdministracionTicketListadoFiltros::camposVisual()
+        );
+        $filtros = AdministracionTicketListadoFiltros::mezclarCalculadas($filtros, $request, $vistaJson);
+
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva && (int) $vistaActiva->usuario_id === (int) auth()->id()) {
+                ListadoVistaSupport::recordarOrdenYAgrupar($vistaActiva, [], $filtros['agrupar'] ?? []);
+            }
+            $params = $this->queryDePantalla($filtros, $vistaActiva, $forzarEstandar);
+
+            return redirect()->route('consulta_administracion_ticket', $params)
+                ->with('mensaje', 'Se quitó el orden de la grilla.');
+        }
+
+        $catalogo = AdministracionTicketListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            AdministracionTicketListadoColumnas::RECURSO,
+            $catalogo
+        );
+        $grillaLayout = ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== [])
+            ? AdministracionTicketListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json)
+            : AdministracionTicketListadoPreferenciasUsuario::grillaEstandar();
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+        $ticket = $this->ticketQuery->leeTicketAdministracion($filtros, true);
+        $hayVisual = ($filtros['grafico']['tipo'] ?? '') !== ''
+            || (is_array($filtros['graficos'] ?? null) && $filtros['graficos'] !== [])
+            || ($filtros['agrupar'] ?? []) !== [];
+        $universo = $hayVisual ? $this->ticketQuery->leeTicketAdministracion($filtros, false) : collect();
+        $cortes = AdministracionTicketListadoResumen::desdeFilas($universo, $filtros['agrupar'] ?? [], $etiquetas)['cortes'];
+        $graficoSeries = $this->seriesGraficos($filtros, $etiquetas, $universo);
+        return [
+            'ticket' => $ticket,
+            'filtros' => $filtros,
+            'filtrosQuery' => $this->queryDePantalla($filtros, $vistaActiva, $forzarEstandar, $columnasVisibles),
+            'camposFiltro' => AdministracionTicketListadoFiltros::CAMPOS,
+            'ver_todos_tickets' => ! empty($filtros['ver_todos_tickets']),
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'etiquetasInstalacion' => $etiquetasInstalacion,
+            'vistasListado' => $vistas,
+            'vistaActiva' => $vistaActiva,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'cortes' => $cortes,
+            'graficoSeries' => $graficoSeries,
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
+            'rolesVista' => ListadoVisualSupport::rolesParaInstalacion(),
+            'enviosProgramados' => ListadoEnvioProgramado::query()
+                ->where('usuario_id', (int) auth()->id())
+                ->where('recurso', AdministracionTicketListadoColumnas::RECURSO)
+                ->where('activo', true)
+                ->orderByDesc('id')
+                ->get(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  list<string>  $columnasVisibles
+     * @return array<string, mixed>
+     */
+    private function queryDePantalla(array $filtros, mixed $vistaActiva, bool $forzarEstandar, array $columnasVisibles = []): array
+    {
+        $qs = AdministracionTicketListadoFiltros::paraQueryString($filtros);
+        $qs = array_merge($qs, ListadoVisualSupport::paraQueryString($filtros));
+        if ($columnasVisibles !== []) {
+            $qs['columnas'] = implode(',', $columnasVisibles);
+        }
+        if ($vistaActiva) {
+            $qs['vista_id'] = $vistaActiva->id;
+        } elseif ($forzarEstandar) {
+            $qs['vista_estandar'] = 1;
+        }
+
+        return $qs;
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-ticket');
+        $filtros = $this->filtrosDePantalla($request);
+        $layout = AdministracionTicketListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            AdministracionTicketListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            AdministracionTicketListadoFiltros::camposOrdenables()
+        );
+        $universo = $this->ticketQuery->leeTicketAdministracion($filtros, false);
+        $filas = $universo->take(ListadoDisenadorPreviewSupport::LIMITE_MUESTRA);
+        $cortes = ['activo' => false];
+        if ($agrupar !== []) {
+            $cortes = AdministracionTicketListadoResumen::desdeFilas($universo, $agrupar, $etiquetas)['cortes'];
+        }
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => AdministracionTicketListadoColumnas::valorCelda($row, $key),
+            $universo->count(),
+            $etiquetas,
+            $cortes
+        ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-ticket');
+        $filtros = $this->filtrosDePantalla($request);
+        $graficosVista = ListadoLienzoSupport::normalizar(
+            $request->input('graficos'),
+            $request->input('grafico'),
+            $request->exists('graficos'),
+            AdministracionTicketListadoFiltros::camposVisual()
+        );
+        $layout = AdministracionTicketListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $vista = ListadoVistaSupport::guardar(
+            AdministracionTicketListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'] ?? 'todos',
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $filtros['sort'] ?? [],
+                'orden' => $filtros['sort'] ?? [],
+                'agrupar' => $filtros['agrupar'] ?? [],
+                'grafico' => ListadoLienzoSupport::primero($graficosVista),
+                'graficos' => $graficosVista,
+                'formato' => ListadoVisualSupport::normalizarFormato($request->input('formato'), AdministracionTicketListadoFiltros::camposVisual()),
+                'calculadas' => AdministracionTicketListadoFiltros::normalizarCalculadas($request->input('calculadas')),
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('consulta_administracion_ticket', AdministracionTicketListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        ListadoVisualSupport::asignarRol($vista, $request, AdministracionTicketListadoColumnas::RECURSO);
+        $qs = $this->queryDePantalla($filtros, $vista, false, ListadoGrillaConfigSupport::keysVisibles($layout));
+
+        return redirect()->route('consulta_administracion_ticket', $qs)
+            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        can('listar-ticket');
+        $ok = ListadoVistaSupport::eliminar($id, AdministracionTicketListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('consulta_administracion_ticket', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-ticket');
+        $layout = AdministracionTicketListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario($vistaId, AdministracionTicketListadoColumnas::RECURSO, (int) auth()->id());
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            AdministracionTicketListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = $this->filtrosDePantalla($request);
+        $qs = $this->queryDePantalla($filtros, $vistaId > 0 ? (object) ['id' => $vistaId] : null, $vistaId < 1, ListadoGrillaConfigSupport::keysVisibles($layout));
+
+        return redirect()->route('consulta_administracion_ticket', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-ticket');
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            AdministracionTicketListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(AdministracionTicketListadoColumnas::catalogoActivo())
+        );
+
+        return redirect()->route(
+            'consulta_administracion_ticket',
+            AdministracionTicketListadoFiltros::paraQueryString($this->resolverFiltrosListado($request))
+        )->with('mensaje', 'Etiquetas actualizadas.');
+    }
+
+    public function enviarListado(Request $request)
+    {
+        can('listar-ticket');
+        $email = trim((string) $request->input('email', ''));
+        $filtros = $this->filtrosDePantalla($request);
+        $qs = $this->queryDePantalla($filtros, $request->filled('vista_id') ? (object) ['id' => (int) $request->input('vista_id')] : null, false);
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return redirect()->route('consulta_administracion_ticket', $qs)->with('error', 'El correo no es válido.');
+        }
+        $frecuencia = (string) $request->input('programar', '');
+        if (in_array($frecuencia, ['diaria', 'semanal'], true)) {
+            $filtros['_rol_id'] = (int) session('rol_id');
+            $filtros['_rol_nombre'] = (string) session('rol_nombre');
+            ListadoEnvioProgramado::query()->create([
+                'recurso' => AdministracionTicketListadoColumnas::RECURSO,
+                'usuario_id' => (int) auth()->id(),
+                'email' => $email,
+                'frecuencia' => $frecuencia,
+                'filtros_json' => $filtros,
+                'activo' => true,
+            ]);
+
+            return redirect()->route('consulta_administracion_ticket', $qs)->with(
+                'mensaje',
+                $frecuencia === 'semanal'
+                    ? 'El listado queda programado cada lunes a '.$email.'.'
+                    : 'El listado queda programado todos los días a '.$email.'.'
+            );
+        }
+        try {
+            $filas = AdministracionTicketListadoEnvioSupport::enviar($filtros, $email);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()->route('consulta_administracion_ticket', $qs)
+                ->with('error', 'No se pudo enviar el listado. Revisá el correo o la configuración de mail.');
+        }
+
+        return redirect()->route('consulta_administracion_ticket', $qs)
+            ->with('mensaje', 'Listado enviado a '.$email.' ('.$filas.' filas).');
+    }
+
+    public function bajaEnvioProgramado(int $id)
+    {
+        can('listar-ticket');
+        $envio = ListadoEnvioProgramado::query()
+            ->where('usuario_id', (int) auth()->id())
+            ->where('recurso', AdministracionTicketListadoColumnas::RECURSO)
+            ->whereKey($id)
+            ->first();
+        if ($envio) {
+            $envio->activo = false;
+            $envio->save();
+        }
+
+        return redirect()->back()->with('mensaje', 'Se dio de baja el envío programado.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, string>  $etiquetas
+     * @param  iterable<int, object>  $universo
+     * @return list<array<string, mixed>>
+     */
+    private function seriesGraficos(array $filtros, array $etiquetas, iterable $universo): array
+    {
+        $campos = AdministracionTicketListadoFiltros::camposVisual();
+        $lista = is_array($filtros['graficos'] ?? null) ? $filtros['graficos'] : [];
+        if ($lista === [] && ($filtros['grafico']['tipo'] ?? '') !== '') {
+            $lista = [$filtros['grafico']];
+        }
+        $out = [];
+        foreach ($lista as $grafico) {
+            if (! is_array($grafico) || ($grafico['tipo'] ?? '') === '') {
+                continue;
+            }
+            $para = $filtros;
+            $para['grafico'] = $grafico;
+            $cortesPara = ListadoVisualSupport::filtrosParaCortes($para, $campos);
+            if ($cortesPara === null) {
+                continue;
+            }
+            $filas = ($cortesPara['qbe'] ?? []) == ($filtros['qbe'] ?? [])
+                ? $universo
+                : $this->ticketQuery->leeTicketAdministracion($cortesPara, false);
+            $cortes = AdministracionTicketListadoResumen::desdeFilas(
+                $filas,
+                $cortesPara['agrupar'] ?? [],
+                $etiquetas
+            )['cortes'];
+            $out[] = ListadoVisualSupport::serie($cortesPara['grafico'], $cortes, $etiquetas);
+        }
+
+        return $out;
     }
 
     /**

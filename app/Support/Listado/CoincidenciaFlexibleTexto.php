@@ -3,7 +3,7 @@
 namespace App\Support\Listado;
 
 use App\Support\Database\SqlDialectSupport;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Contracts\Database\Query\Builder;
 
 /**
  * Coincidencia por prefijo + sufijo en SQL (tolera letras de más/menos: «bandfield» → Banfield).

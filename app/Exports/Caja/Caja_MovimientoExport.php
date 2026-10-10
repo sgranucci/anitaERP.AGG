@@ -3,6 +3,7 @@
 namespace App\Exports\Caja;
 
 use App\Queries\Caja\Caja_MovimientoQueryInterface;
+use App\Support\Caja\IngresoEgresoListadoFiltros;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
@@ -71,6 +72,7 @@ class Caja_MovimientoExport implements FromView, WithColumnFormatting, WithColum
             'esExcel' => true,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'formatoNumero' => $this->formatoNumeroEfectivo(),
+            'calculadas' => $this->calculadasExport(),
         ]);
     }
 
@@ -85,10 +87,13 @@ class Caja_MovimientoExport implements FromView, WithColumnFormatting, WithColum
         return (config('app.empresa') === 'Iguassu Travel') ? 'I' : 'H';
     }
 
-    /** Última columna (Movimientos): J en Iguassu, I en el resto. */
+    /** Última columna (Movimientos, más las calculadas): J en Iguassu, I en el resto. */
     private function columnaUltima(): string
     {
-        return (config('app.empresa') === 'Iguassu Travel') ? 'J' : 'I';
+        $base = (config('app.empresa') === 'Iguassu Travel') ? 'J' : 'I';
+        $extra = count($this->calculadasExport());
+
+        return chr(ord($base) + $extra);
     }
 
     public function columnWidths(): array
@@ -103,7 +108,12 @@ class Caja_MovimientoExport implements FromView, WithColumnFormatting, WithColum
             'G' => 24,
         ];
         $anchos[$this->columnaMonto()] = 16;
-        $anchos[$this->columnaUltima()] = 40;
+        $baseUltima = (config('app.empresa') === 'Iguassu Travel') ? 'J' : 'I';
+        $anchos[$baseUltima] = 40;
+        $extra = count($this->calculadasExport());
+        for ($i = 1; $i <= $extra; $i++) {
+            $anchos[chr(ord($baseUltima) + $i)] = 18;
+        }
 
         return $anchos;
     }
@@ -169,6 +179,16 @@ class Caja_MovimientoExport implements FromView, WithColumnFormatting, WithColum
                 $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
             },
         ];
+    }
+
+    /**
+     * @return list<array{etiqueta: string, formula: string, valida: bool}>
+     */
+    private function calculadasExport(): array
+    {
+        $raw = is_array($this->filtros) ? ($this->filtros['calculadas'] ?? []) : [];
+
+        return IngresoEgresoListadoFiltros::normalizarCalculadas($raw);
     }
 
     /**

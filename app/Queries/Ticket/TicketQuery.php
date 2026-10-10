@@ -289,8 +289,8 @@ class TicketQuery implements TicketQueryInterface
         }
 
         \App\Support\Ticket\AdministracionTicketListadoFiltros::aplicar($tickets, $filtros);
-
-        $tickets->orderBy('ticket.id', 'desc');
+        \App\Support\Ticket\AdministracionTicketListadoFiltros::aplicarOrden($tickets, $filtros);
+        \App\Support\Ticket\AdministracionTicketListadoFiltros::aplicarCalculadas($tickets, $filtros);
 
         if (isset($flPaginando)) {
             if ($flPaginando) {

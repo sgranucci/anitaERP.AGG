@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Listado;
 
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder;
 use stdClass;
 
@@ -106,7 +107,14 @@ final class ListadoCortesSupport
         }
 
         $q->selectRaw(implode(', ', $selects).', COUNT(DISTINCT '.$countDistinctColumn.') as _lw_count'.$sumSql);
-        $q->groupBy($groupBy);
+        foreach ($groupBy as $g) {
+            if (ListadoOrdenamientoSupport::esColumnaSqlSegura($g)) {
+                $q->groupBy($g);
+            } else {
+                // DATE(col) y equivalentes: groupBy() las cita como nombre de columna.
+                $q->groupByRaw($g);
+            }
+        }
         $q->orderByRaw('1');
         $q->limit(self::MAX_FILAS + 1);
 
@@ -246,6 +254,9 @@ final class ListadoCortesSupport
         if (preg_match('/^DATE\(([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\)$/i', $expr)) {
             return true;
         }
+        if (preg_match('/^\(([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\)::date$/i', $expr)) {
+            return true;
+        }
         if (preg_match('/[;]|--|\/\*|#/', $expr)) {
             return false;
         }
@@ -270,9 +281,11 @@ final class ListadoCortesSupport
         }
 
         if (($meta['type'] ?? '') === 'fecha') {
+            $expr = SqlDialectSupport::fecha($column);
+
             return [
-                'select' => ['DATE('.$column.') as '.$attr],
-                'groupBy' => ['DATE('.$column.')'],
+                'select' => [$expr.' as '.$attr],
+                'groupBy' => [$expr],
             ];
         }
 

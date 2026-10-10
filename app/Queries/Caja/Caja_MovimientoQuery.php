@@ -92,6 +92,7 @@ class Caja_MovimientoQuery implements Caja_MovimientoQueryInterface
             'conceptogasto.nombre as nombreconceptogasto',
             'caja_movimiento.detalle as detalle',
             'caja_movimiento.solicitudpago_id as solicitudpago_id',
+            'caja_movimiento.pagoproveedor_id as pagoproveedor_id',
             'caja_movimiento.usuario_id as usuario_id',
             'usuario.nombre as nombreusuario',
             'caja_movimiento.created_at as created_at',
@@ -119,6 +120,7 @@ class Caja_MovimientoQuery implements Caja_MovimientoQueryInterface
 
         IngresoEgresoListadoFiltros::aplicar($caja_movimientos, $filtros);
         IngresoEgresoListadoFiltros::aplicarOrden($caja_movimientos, $filtros);
+        IngresoEgresoListadoFiltros::aplicarCalculadas($caja_movimientos, $filtros);
 
         return $caja_movimientos;
     }

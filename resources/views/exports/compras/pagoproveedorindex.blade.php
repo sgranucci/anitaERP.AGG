@@ -13,13 +13,15 @@
 
         return number_format($n, 2, ',', '.');
     };
+    $calculadas = array_values($calculadas ?? []);
+    $colspan = 9 + count($calculadas);
 @endphp
 <table>
 @if (!empty($reservarFilaLogoExcel))
-    <tr><td colspan="9" style="height:52px;"></td></tr>
+    <tr><td colspan="{{ $colspan }}" style="height:52px;"></td></tr>
 @endif
     <tr>
-        <td colspan="9"><strong style="font-size:16pt;">Órdenes de pago a proveedores</strong></td>
+        <td colspan="{{ $colspan }}"><strong style="font-size:16pt;">Órdenes de pago a proveedores</strong></td>
     </tr>
     <thead>
         <tr>
@@ -32,6 +34,9 @@
             <th>Estado</th>
             <th>Detalle</th>
             <th>Mail</th>
+            @foreach ($calculadas as $calc)
+                <th>{{ $calc['etiqueta'] ?? '' }}</th>
+            @endforeach
         </tr>
     </thead>
     <tbody>
@@ -61,6 +66,9 @@
                         {{ $fila->mailEnviado ? 'Enviado' : 'Sin enviar' }}
                     @endif
                 </td>
+                @foreach ($calculadas as $iCalc => $calc)
+                    <td>{{ $fila->calculadas['calc_'.$iCalc] ?? '' }}</td>
+                @endforeach
             </tr>
         @endforeach
     </tbody>

@@ -35,6 +35,16 @@ final class PagoproveedorListadoFila
         $this->nombreempresa = $this->nombreEmpresa;
     }
 
+    /** @var array<string, string> alias calc_N => texto de la columna calculada */
+    public array $calculadas = [];
+
+    public function conExtrasDe(self $origen): self
+    {
+        $this->calculadas = $origen->calculadas;
+
+        return $this;
+    }
+
     public function esIeOpp(): bool
     {
         return $this->origen === self::ORIGEN_IE_OPP;
@@ -42,7 +52,7 @@ final class PagoproveedorListadoFila
 
     public function conCuentasCaja(string $cuentasCaja): self
     {
-        return new self(
+        $fila = new self(
             origen: $this->origen,
             id: $this->id,
             fecha: $this->fecha,
@@ -58,6 +68,8 @@ final class PagoproveedorListadoFila
             revertible: $this->revertible,
             mailEnviado: $this->mailEnviado,
         );
+
+        return $fila->conExtrasDe($this);
     }
 
     public function etiquetaComprobante(): string
@@ -165,7 +177,7 @@ final class PagoproveedorListadoFila
             (string) ($row->numerotransaccion ?? '')
         );
 
-        return new self(
+        $fila = new self(
             origen: $origen,
             id: (int) $row->pk_id,
             fecha: $fecha,
@@ -182,5 +194,13 @@ final class PagoproveedorListadoFila
             cuentasCaja: trim((string) ($row->cuentas_caja ?? '')),
             revertible: (int) ($row->revertible ?? 0) === 1,
         );
+        for ($i = 0; $i < 2; $i++) {
+            $alias = 'calc_'.$i;
+            if (isset($row->{$alias}) && $row->{$alias} !== null && $row->{$alias} !== '') {
+                $fila->calculadas[$alias] = (string) $row->{$alias};
+            }
+        }
+
+        return $fila;
     }
 }

@@ -65,6 +65,7 @@ class AdministracionTicketListadoExport implements FromView, ShouldAutoSize, Wit
                 'titulo' => 'Administración de tickets',
                 'subtitulo' => AdministracionTicketListadoFiltros::formatearResumenExport($this->filtros),
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
+                'calculadas' => $this->calculadasExport(),
             ]);
         }
 
@@ -79,6 +80,7 @@ class AdministracionTicketListadoExport implements FromView, ShouldAutoSize, Wit
             'titulo' => 'Administración de tickets',
             'subtitulo' => '',
             'reservarFilaLogoExcel' => false,
+            'calculadas' => [],
         ]);
     }
 
@@ -89,7 +91,7 @@ class AdministracionTicketListadoExport implements FromView, ShouldAutoSize, Wit
         }
 
         $cols = [];
-        foreach (range('A', self::COL_ULTIMA) as $c) {
+        foreach (range('A', $this->columnaUltima()) as $c) {
             $cols[$c] = NumberFormat::FORMAT_TEXT;
         }
 
@@ -124,7 +126,7 @@ class AdministracionTicketListadoExport implements FromView, ShouldAutoSize, Wit
             return [];
         }
 
-        return [
+        $anchos = [
             'A' => 8,
             'B' => 11,
             'C' => 14,
@@ -140,6 +142,27 @@ class AdministracionTicketListadoExport implements FromView, ShouldAutoSize, Wit
             'M' => 16,
             'N' => 14,
         ];
+        $extra = count($this->calculadasExport());
+        for ($i = 1; $i <= $extra; $i++) {
+            $anchos[chr(ord(self::COL_ULTIMA) + $i)] = 18;
+        }
+
+        return $anchos;
+    }
+
+    private function columnaUltima(): string
+    {
+        return chr(ord(self::COL_ULTIMA) + count($this->calculadasExport()));
+    }
+
+    /**
+     * @return list<array{etiqueta: string, formula: string, valida: bool}>
+     */
+    private function calculadasExport(): array
+    {
+        $raw = is_array($this->filtros) ? ($this->filtros['calculadas'] ?? []) : [];
+
+        return AdministracionTicketListadoFiltros::normalizarCalculadas($raw);
     }
 
     public function registerEvents(): array
@@ -175,9 +198,10 @@ class AdministracionTicketListadoExport implements FromView, ShouldAutoSize, Wit
                 }
 
                 $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit);
+                $col = $this->columnaUltima();
+                $sheet->mergeCells('A'.$filaTit.':'.$col.$filaTit);
                 $sheet->getRowDimension($filaTit)->setRowHeight(36);
-                $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
+                $sheet->getStyle('A'.$filaTit.':'.$col.$filaTit)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 14,

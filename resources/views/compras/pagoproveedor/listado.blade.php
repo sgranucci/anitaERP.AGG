@@ -38,6 +38,9 @@
             <th>Estado</th>
             <th>Detalle</th>
             <th>Mail</th>
+            @foreach (($calculadas ?? []) as $calc)
+                <th>{{ $calc['etiqueta'] ?? '' }}</th>
+            @endforeach
         </tr>
     </thead>
     <tbody>
@@ -67,6 +70,9 @@
                         {{ $fila->mailEnviado ? 'Enviado' : 'Sin enviar' }}
                     @endif
                 </td>
+                @foreach (($calculadas ?? []) as $iCalc => $calc)
+                    <td>{{ $fila->calculadas['calc_'.$iCalc] ?? '' }}</td>
+                @endforeach
             </tr>
         @endforeach
     </tbody>

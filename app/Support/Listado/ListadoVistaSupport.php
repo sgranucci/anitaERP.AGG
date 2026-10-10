@@ -31,8 +31,7 @@ final class ListadoVistaSupport
         return ListadoVista::query()
             ->where('recurso', $recurso)
             ->where(function ($q) use ($usuarioId) {
-                $q->where('usuario_id', $usuarioId)
-                    ->orWhere('compartida', true);
+                self::aplicarVisibilidad($q, $usuarioId);
             })
             ->orderByDesc('es_default')
             ->orderBy('nombre')
@@ -50,8 +49,7 @@ final class ListadoVistaSupport
             ->whereKey($id)
             ->where('recurso', $recurso)
             ->where(function ($q) use ($usuarioId) {
-                $q->where('usuario_id', $usuarioId)
-                    ->orWhere('compartida', true);
+                self::aplicarVisibilidad($q, $usuarioId);
             })
             ->first();
 
@@ -254,5 +252,39 @@ final class ListadoVistaSupport
             ->where('usuario_id', $usuarioId)
             ->where('es_default', true)
             ->first();
+    }
+
+    public static function columnaRolDisponible(): bool
+    {
+        return self::tablasDisponibles() && Schema::hasColumn('listado_vista', 'rol_id');
+    }
+
+    /**
+     * Vista de instalación del rol de la sesión. El default personal tiene prioridad.
+     */
+    public static function defaultDelRol(string $recurso, ?int $rolId): ?ListadoVista
+    {
+        if (! self::columnaRolDisponible() || $rolId === null || $rolId <= 0) {
+            return null;
+        }
+
+        return ListadoVista::query()
+            ->where('recurso', $recurso)
+            ->where('rol_id', $rolId)
+            ->orderByDesc('updated_at')
+            ->first();
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<ListadoVista>  $query
+     */
+    private static function aplicarVisibilidad($query, int $usuarioId): void
+    {
+        $rolId = (int) session('rol_id');
+        $query->where('usuario_id', $usuarioId)
+            ->orWhere('compartida', true);
+        if ($rolId > 0 && self::columnaRolDisponible()) {
+            $query->orWhere('rol_id', $rolId);
+        }
     }
 }

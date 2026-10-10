@@ -46,6 +46,7 @@ Los diagramas (`flujo-*`, `circuito-*`, etc.) se conservan en SVG y **no** se so
 | Contaduría (cierres de rendiciones) | `config/manual_cierres_rendiciones.php` | `public/docs/manual-cierres-rendiciones/img/` | `manual:generar-mockups cierres-rendiciones` |
 | UIF | `config/manual_uif.php` | `public/docs/manual-uif/img/` | `manual:generar-mockups uif` |
 | Reportes contables definibles | `config/manual_reporte_definible.php` | `public/docs/manual-reporte-definible/img/` | `manual:generar-mockups reporte-definible` |
+| Consultas de pagos (QBE y visual) | `config/manual_consultas_qbe.php` | `docs/manual-consultas-qbe/` | sin mockups (texto y tablas). `php docs/manual-consultas-qbe/generar.php` |
 
 Manual IA: sin capturas de pantalla activas (no generar mockups artificiales).
 

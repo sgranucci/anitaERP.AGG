@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Listado;
 
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Contracts\Database\Query\Builder;
 
 /**
  * Expresiones QBE seguras (estilo NetSuite Formula / Dynamics).
