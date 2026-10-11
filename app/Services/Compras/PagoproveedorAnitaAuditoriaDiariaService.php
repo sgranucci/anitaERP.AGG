@@ -15,6 +15,7 @@ use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 use App\Support\Compras\AnitaImport\ProveedorCuentacorrienteAnitaImportFormatoSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Compras\PagoproveedorAnitaAuditoriaCompareSupport as Compare;
+use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -617,10 +618,14 @@ final class PagoproveedorAnitaAuditoriaDiariaService
                 continue;
             }
             [$tabla, $pref] = $par;
+            $campos = $pref.'_tipo,'.$pref.'_nro';
             $where = ' WHERE '.$pref.'_tipo = '.$this->escSql($tipo)
-                .' AND '.$pref.'_nro = '.$nro
-                .' AND '.$pref.'_empresa = '.$empresaAnita;
-            $lista = $this->listar($sistema, $tabla, $pref.'_tipo,'.$pref.'_nro,'.$pref.'_empresa', $where);
+                .' AND '.$pref.'_nro = '.$nro;
+            if (AnitaRetencionEsquemaSupport::movimientosTienenColumnaEmpresa()) {
+                $campos .= ','.$pref.'_empresa';
+                $where .= ' AND '.$pref.'_empresa = '.$empresaAnita;
+            }
+            $lista = $this->listar($sistema, $tabla, $campos, $where);
             if ($lista['error'] !== null) {
                 $problemas[] = 'Lectura '.$tabla.': '.$lista['error'];
             } elseif ($lista['filas'] === []) {
