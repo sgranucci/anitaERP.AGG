@@ -17,6 +17,7 @@ use App\Support\Ventas\Waitry\WaitryCierreJornadaDiscrepanciaSupport;
 use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
+use App\Support\Ventas\Waitry\WaitryInformeZVentaRealSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZTransmisionFaltanteSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenCobroSupport;
@@ -510,7 +511,8 @@ final class GastronomiaCierreTotemJornadaService
             ->get();
         $resumenTotems = WaitryTotemJornadaResumenSupport::armar($totems, $lineasActivas, $empresaId);
         $totemsInformeZ = $totems->filter(static fn (TotemWaitryGastronomia $t) => $t->participaInformeZ());
-        $resumenInformeZ = WaitryTotemJornadaResumenSupport::armarParaInformeZ($totemsInformeZ, $lineasActivas, $empresaId);
+        $lineasInformeZ = WaitryInformeZVentaRealSupport::aplicarNotasCreditoALineasInformeZ($lineasActivas);
+        $resumenInformeZ = WaitryTotemJornadaResumenSupport::armarParaInformeZ($totemsInformeZ, $lineasInformeZ, $empresaId);
 
         $ids = array_keys($ordenesParaInformeZ);
         sort($ids, SORT_NUMERIC);
@@ -558,7 +560,7 @@ final class GastronomiaCierreTotemJornadaService
         );
 
         $lineasConIngreso = array_values(array_filter(
-            $lineasActivas,
+            $lineasInformeZ,
             static fn (array $ln) => WaitryTotemJornadaResumenSupport::lineaEntraInformeZSistema($ln),
         ));
 
@@ -1712,6 +1714,7 @@ final class GastronomiaCierreTotemJornadaService
                 'cuenta_id' => $cuenta?->id,
                 'cuenta_estado' => $cuenta?->estado,
                 'waitry_cobro_totem' => (bool) ($cuenta?->waitry_cobro_totem ?? $emision?->cuenta?->waitry_cobro_totem),
+                'venta_id' => (int) ($emision->venta_id ?? $cuenta?->venta_id ?? 0),
                 'venta_codigo' => $emision?->venta?->codigo ?? '',
                 'fuente_listado' => $orden['fuente'] ?? 'waitry',
                 'placed_at' => $orden['placed_at'] ?? $orden['created_at'] ?? null,

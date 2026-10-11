@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas\Waitry;
 
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAsientosPreviewSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -83,6 +84,7 @@ final class WaitryInformeZVentaRealSupport
      * El asiento TOTEM usa el total de la factura ERP, no el cobro Waitry.
      * El Informe Z, al regenerarse desde el proceso, tiene que usar el mismo importe
      * para no desalinearse de ventas / asientos / medios.
+     * Una nota de crédito de esa factura baja el Z igual que el asiento: si la anula, la orden sale del Z.
      *
      * @param  list<array<string, mixed>>  $lineas
      * @return list<array<string, mixed>>
@@ -116,6 +118,86 @@ final class WaitryInformeZVentaRealSupport
             }
             $lineas[$i]['total'] = $erp;
             $lineas[$i]['monto_cobro_waitry'] = $erp;
+        }
+
+        return self::aplicarNotasCreditoALineasInformeZ($lineas, $totales);
+    }
+
+    /**
+     * Resta las notas de crédito gastronomía de la factura Waitry.
+     * Anulación total: la orden no entra al Informe Z (el asiento ya la deja en cero).
+     * Anulación parcial: el Z queda por el neto, igual que {@see CierreJornadaProcesoAsientosPreviewSupport::netoFacturaMenosNotasCredito()}.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @param  array<int|string, float|int|string>  $totalesFacturaPorVentaId
+     * @return list<array<string, mixed>>
+     */
+    public static function aplicarNotasCreditoALineasInformeZ(array $lineas, array $totalesFacturaPorVentaId = []): array
+    {
+        $ids = [];
+        foreach ($lineas as $ln) {
+            $id = (int) ($ln['venta_id'] ?? 0);
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+        if ($ids === []) {
+            return $lineas;
+        }
+
+        $notas = CierreJornadaProcesoAsientosPreviewSupport::notasCreditoPorFacturaId(array_values($ids));
+        if ($notas === []) {
+            return $lineas;
+        }
+
+        $faltantes = [];
+        foreach (array_keys($notas) as $ventaId) {
+            if (! isset($totalesFacturaPorVentaId[$ventaId])) {
+                $faltantes[] = (int) $ventaId;
+            }
+        }
+        if ($faltantes !== []) {
+            $cargados = DB::table('venta')
+                ->whereIn('id', $faltantes)
+                ->pluck('total', 'id')
+                ->all();
+            foreach ($cargados as $id => $total) {
+                $totalesFacturaPorVentaId[$id] = $total;
+            }
+        }
+
+        return self::ajustarLineasInformeZPorNotaCredito($lineas, $totalesFacturaPorVentaId, $notas);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineas
+     * @param  array<int|string, float|int|string>  $totalesFacturaPorVentaId
+     * @param  array<int, float>  $notasCreditoPorVentaId  venta origen => suma de NC (negativo)
+     * @return list<array<string, mixed>>
+     */
+    public static function ajustarLineasInformeZPorNotaCredito(
+        array $lineas,
+        array $totalesFacturaPorVentaId,
+        array $notasCreditoPorVentaId,
+    ): array {
+        foreach ($lineas as $i => $ln) {
+            $ventaId = (int) ($ln['venta_id'] ?? 0);
+            if ($ventaId <= 0 || ! isset($notasCreditoPorVentaId[$ventaId])) {
+                continue;
+            }
+            $nc = round((float) $notasCreditoPorVentaId[$ventaId], 2);
+            if ($nc >= -0.0001) {
+                continue;
+            }
+            $factura = round((float) ($totalesFacturaPorVentaId[$ventaId] ?? 0), 2);
+            $waitry = round((float) ($ln['monto_cobro_waitry'] ?? $ln['total'] ?? 0), 2);
+            $neto = CierreJornadaProcesoAsientosPreviewSupport::netoFacturaMenosNotasCredito($factura, $nc, $waitry);
+            $lineas[$i]['total_antes_nota_credito'] = $waitry;
+            $lineas[$i]['total'] = $neto;
+            $lineas[$i]['monto_cobro_waitry'] = $neto;
+            if ($neto <= 0.0001) {
+                $lineas[$i]['anulada_por_nota_credito'] = true;
+            }
         }
 
         return $lineas;

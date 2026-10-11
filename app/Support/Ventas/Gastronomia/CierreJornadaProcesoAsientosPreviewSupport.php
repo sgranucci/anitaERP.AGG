@@ -937,7 +937,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
      * @param  list<int>  $ventaIds
      * @return array<int, float>
      */
-    private static function notasCreditoPorFacturaId(array $ventaIds): array
+    public static function notasCreditoPorFacturaId(array $ventaIds): array
     {
         $ventaIds = array_values(array_unique(array_filter(array_map('intval', $ventaIds))));
         if ($ventaIds === []) {

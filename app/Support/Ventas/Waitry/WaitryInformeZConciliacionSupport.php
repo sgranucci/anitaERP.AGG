@@ -330,6 +330,8 @@ final class WaitryInformeZConciliacionSupport
             return null;
         }
 
+        $lineas = WaitryInformeZVentaRealSupport::aplicarNotasCreditoALineasInformeZ($lineas);
+
         return WaitryTotemJornadaResumenSupport::armarParaInformeZ($totems, $lineas, $empresaId);
     }
 

@@ -298,6 +298,11 @@ final class WaitryTotemJornadaResumenSupport
             return false;
         }
 
+        // Factura Waitry anulada por nota de crédito: el asiento ya no la toma. El Z tampoco.
+        if (! empty($ln['anulada_por_nota_credito'])) {
+            return false;
+        }
+
         if (! self::cobradaEnWaitryLinea($ln)) {
             return false;
         }
