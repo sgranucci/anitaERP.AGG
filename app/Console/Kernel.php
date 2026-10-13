@@ -690,6 +690,13 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(180)
             ->appendOutputTo(storage_path('logs/tiendanube-stock-subida.log'))
             ->when(fn () => TiendanubeStockCatalogoSupport::debeDispararCron());
+
+        // Certificado HTTPS: aviso si vence, si Certbot falló o si se renovó.
+        $schedule->command('https:avisar-certificado')
+            ->dailyAt('08:15')
+            ->withoutOverlapping(15)
+            ->when(fn () => EntornoEmpresaSupport::esElBierzo()
+                && (bool) config('https_certificado.aviso_habilitado', false));
     }
 
     /**
