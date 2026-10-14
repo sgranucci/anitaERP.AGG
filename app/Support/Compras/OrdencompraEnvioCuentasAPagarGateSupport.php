@@ -126,6 +126,7 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             'siguiente_pendiente' => $pendientes[0]['etiqueta'] ?? null,
             'faltan_com' => $faltanComDetalle,
             'documentos_pendiente_entrega' => $retenidos,
+            'notas_credito' => OrdencompraLegajoNcImputacionSupport::listarPendientes($oc),
         ];
     }
 
@@ -646,6 +647,7 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             'paquete_errores' => $paqueteErrores,
             'faltan_com' => $faltanComDetalle,
             'documentos_pendiente_entrega' => $retenidos,
+            'notas_credito' => OrdencompraLegajoNcImputacionSupport::listarPendientes($oc),
         ];
     }
 

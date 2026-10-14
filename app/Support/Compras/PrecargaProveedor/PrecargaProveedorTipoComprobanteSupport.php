@@ -20,6 +20,25 @@ final class PrecargaProveedorTipoComprobanteSupport
         return self::normalizar(is_string($raw) || is_numeric($raw) ? (string) $raw : null);
     }
 
+    /**
+     * ctipo de base_admin.scanfactura. Anita indexa el recibo como 05
+     * (a-compprov.c: si es REC, ax_tipo_comp = "05"), aunque el maestro ERP
+     * tenga codigoafip 01.
+     */
+    public static function desdeCtipoScan(?string $ctipo): string
+    {
+        $t = mb_strtoupper(trim((string) $ctipo), 'UTF-8');
+        $digitos = preg_replace('/\D/', '', $t) ?? '';
+        if ($digitos !== '' && $digitos === $t && (int) $digitos === 5) {
+            return 'REC';
+        }
+        if ($t === 'REC' || str_starts_with($t, 'REC')) {
+            return 'REC';
+        }
+
+        return self::normalizar($t !== '' ? $t : null);
+    }
+
     public static function normalizar(?string $valor): string
     {
         $t = mb_strtoupper(trim((string) $valor), 'UTF-8');

@@ -63,6 +63,9 @@ window.abrirRecalcularTraFormula = @json(session('abrir_recalcular_tra_formula')
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/recalcular-transferencias-formula.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/recalcular-transferencias-formula.js')) ?: time() }}" type="text/javascript"></script>
 @endif
+@if (\App\Support\Stock\ArticuloWaitrySupport::uiActiva())
+<script src="{{ asset('assets/pages/scripts/stock/articulo/waitry.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/waitry.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @endsection
 
 @section('contenido')
@@ -247,5 +250,8 @@ window.abrirRecalcularTraFormula = @json(session('abrir_recalcular_tra_formula')
 window.otCombinacionesLista = @json($articuloCombinacionesLista ?? []);
 </script>
 <style>#seleccionartodascombinacionModal{display:none;}</style>
+@endif
+@if (\App\Support\Stock\ArticuloWaitrySupport::uiActiva())
+@include('stock.articulo.partials.modal_waitry')
 @endif
 @endsection

@@ -33,9 +33,10 @@ final class OrdencompraLegajoDocumentoTipoSupportTest extends TestCase
         ));
     }
 
-    public function test_no_exige_com_para_recibo(): void
+    public function test_recibo_exige_com_como_factura(): void
     {
-        $this->assertFalse(OrdencompraLegajoDocumentoTipoSupport::exigeCom('REC'));
+        $this->assertTrue(OrdencompraLegajoDocumentoTipoSupport::exigeCom('REC'));
+        $this->assertSame(0, OrdencompraLegajoDocumentoTipoSupport::prioridadCarga('REC'));
     }
 
     public function test_abreviatura_anita_cis_es_nota_credito(): void

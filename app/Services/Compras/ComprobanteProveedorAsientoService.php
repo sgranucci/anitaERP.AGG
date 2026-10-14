@@ -536,8 +536,11 @@ class ComprobanteProveedorAsientoService
                 }
             }
 
-            // Override explícito (p. ej. ND/NC de diferencia de cambio): una sola cuenta editable.
-            if ($overrideCuentaId > 0) {
+            // Una sola cuenta y un solo centro solo si la OC no prorratea (p. ej. ND/NC
+            // de diferencia de cambio). Con varios centros destino el gasto se abre
+            // en cada uno, tenga o no cuenta el neto.
+            $prorrateaCentros = OrdencompraContratoRutaFacturaSupport::prorrateaGastoPorCentrocosto($oc);
+            if ($overrideCuentaId > 0 && ! $prorrateaCentros) {
                 $lineasDebe[] = [
                     'cuentacontable_id' => $overrideCuentaId,
                     'importe' => $totalNetoConceptos,
@@ -553,7 +556,8 @@ class ComprobanteProveedorAsientoService
                     $totalNetoConceptos,
                     (int) ($comprobante->empresa_id ?? 0),
                     $centrocostoId,
-                    $descLineaErp
+                    $descLineaErp,
+                    $prorrateaCentros ? $overrideCuentaId : 0,
                 );
                 foreach ($lineasOc as $lineaOc) {
                     $lineaOc['origen'] = 'oc_articulo';

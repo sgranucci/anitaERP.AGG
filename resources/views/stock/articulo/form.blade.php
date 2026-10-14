@@ -2,11 +2,16 @@
     <div class="card-body">
         <div class="row">
             <div class="col-sm-6">
-                <div class="form-group row">
+                <div class="form-group row align-items-center flex-nowrap">
     				<label for="sku" class="col-lg-4 col-form-label text-right pr-2 requerido">Sku</label>
     				<div class="col-lg-5">
     					<input type="text" name="sku" id="sku" class="form-control sku" value="{{old('sku', $producto->sku ?? '')}}" required/>
                 	</div>
+                    @if (\App\Support\Stock\ArticuloWaitrySupport::uiActiva())
+                        <div class="col-auto pl-0" id="wrap-articulo-waitry" style="{{ \App\Support\Ventas\GastronomiaSkuCatalogoSupport::skuPermitido((string) old('sku', $producto->sku ?? '')) ? '' : 'display:none' }}">
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="btn-articulo-waitry">Waitry</button>
+                        </div>
+                    @endif
                 </div>
                 <div class="form-group row">
     				<label for="descripcion" class="col-lg-4 col-form-label text-right pr-2 requerido">Descripci&oacute;n</label>
@@ -391,4 +396,11 @@
     <input type="hidden" name="fechaprimeraventa" value="{{$producto->fechaprimeraventa}}">
     <input type="hidden" name="fechaprimeringreso" value="{{$producto->fechaprimeringreso}}">
     <input type="hidden" name="estadofacturacion" value="{{$producto->estadofacturacion}}">
+    @if (\App\Support\Stock\ArticuloWaitrySupport::uiActiva())
+        @php
+            $waitryMarcasForm = \App\Support\Stock\ArticuloWaitrySupport::marcasDe($producto ?? null);
+        @endphp
+        <input type="hidden" name="waitry_dispara_comanda" id="waitry_dispara_comanda" value="{{ old('waitry_dispara_comanda', $waitryMarcasForm['dispara_comanda'] ? '1' : '0') }}">
+        <input type="hidden" name="waitry_va_cocina" id="waitry_va_cocina" value="{{ old('waitry_va_cocina', $waitryMarcasForm['va_cocina'] ? '1' : '0') }}">
+    @endif
 </div>

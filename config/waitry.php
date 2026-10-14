@@ -25,6 +25,24 @@ return [
     ),
 
     /**
+     * Alta de un producto en la carta (Menu y Categories vacíos → categoría Sin Menú).
+     * placeId va en la query.
+     */
+    'sync_menu_pos_url' => env(
+        'WAITRY_SYNC_MENU_POS_URL',
+        'https://api.waitry.net/1/interface/interface/syncMenuPOSWebhook'
+    ),
+
+    /**
+     * Baja / inactivación de un producto. placeId va en la query.
+     * El cuerpo no está en la guía pública: se manda Items con active=false.
+     */
+    'sync_items_pos_url' => env(
+        'WAITRY_SYNC_ITEMS_POS_URL',
+        'https://api.waitry.net/1/interface/interface/syncItemsPOSWebhook'
+    ),
+
+    /**
      * Actualiza estado de la comanda en KDS (Solicitada → Aceptado, etc.).
      * Waitry indicó (sep 2026) que syncStatusPOS ya alcanza; el POST queda
      * deshabilitado por defecto para reactivar sin redeploy si hace falta.

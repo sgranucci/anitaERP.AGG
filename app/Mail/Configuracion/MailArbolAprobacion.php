@@ -3,10 +3,12 @@
 namespace App\Mail\Configuracion;
 
 use App\Services\Solicitudpago\SolicitudpagoMailAdjuntosService;
+use App\Support\Configuracion\CorreoHtmlBase64;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
+use Symfony\Component\Mime\Email;
 
 class MailArbolAprobacion extends Mailable
 {
@@ -51,7 +53,12 @@ class MailArbolAprobacion extends Mailable
             $this->adjuntarDocumentosSolicitudpago($mail);
         }
 
-        return $mail;
+        // Quoted-printable corta el href a 76 caracteres y el hash llega incompleto.
+        return $mail->withSymfonyMessage(function (Email $message): void {
+            if (! $message->getHeaders()->has(CorreoHtmlBase64::HEADER)) {
+                $message->getHeaders()->addTextHeader(CorreoHtmlBase64::HEADER, '1');
+            }
+        });
     }
 
     /**

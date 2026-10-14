@@ -116,7 +116,7 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
                 continue;
             }
             $numero = self::numero($fila);
-            $tipoGen = \App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport::normalizar(
+            $tipoGen = \App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport::desdeCtipoScan(
                 (string) ($fila['ctipo'] ?? 'FC')
             );
             $tipoLabel = OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipoGen);

@@ -565,6 +565,13 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(4)
             ->when(fn () => (bool) config('queue.verificacion_pico.habilitada', true));
 
+        $cadaReintentoCorreos = max(5, (int) config('queue.reintento_correos.cada_minutos', 10));
+        $schedule->command('queue:reintentar-correos-fallidos')
+            ->cron('*/'.$cadaReintentoCorreos.' * * * *')
+            ->withoutOverlapping(8)
+            ->appendOutputTo(storage_path('logs/queue-reintento-correos.log'))
+            ->when(fn () => (bool) config('queue.reintento_correos.habilitado', true));
+
         $schedule->command('gastronomia:actualizar-costo-mensual-catalogo')
             ->dailyAt((string) config('gastronomia.costo_mensual_catalogo.hora', '07:00'))
             ->runInBackground()

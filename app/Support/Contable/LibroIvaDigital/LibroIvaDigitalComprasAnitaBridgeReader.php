@@ -49,6 +49,11 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
             return self::$cachePeriodo[$cacheKey] = [];
         }
 
+        $unida = $this->listarCompraYConcmov($empresaAnita, $desde, $hasta);
+        if ($unida !== null) {
+            return self::$cachePeriodo[$cacheKey] = $unida;
+        }
+
         $filasCompra = $this->listarCompraPeriodo($empresaAnita, $desde, $hasta);
         if ($filasCompra === []) {
             return self::$cachePeriodo[$cacheKey] = [];
@@ -76,6 +81,86 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
         }
 
         return self::$cachePeriodo[$cacheKey] = $resultado;
+    }
+
+    /**
+     * Cabecera y conceptos en una sola lectura (compra OUTER concmov).
+     *
+     * @return list<array{compra: array<string, mixed>, conceptos: list<array{concepto: int, importe: float}>}>|null
+     */
+    private function listarCompraYConcmov(int $empresaAnita, int $desde, int $hasta): ?array
+    {
+        $campos = implode(', ', [
+            'compra.com_proveedor AS com_proveedor',
+            'compra.com_tipo AS com_tipo',
+            'compra.com_letra AS com_letra',
+            'compra.com_sucursal AS com_sucursal',
+            'compra.com_nro AS com_nro',
+            'compra.com_fecha AS com_fecha',
+            'compra.com_fecha_iva AS com_fecha_iva',
+            'compra.com_monto AS com_monto',
+            'compra.com_cod_mon AS com_cod_mon',
+            'compra.com_cotizacion AS com_cotizacion',
+            'compra.com_nro_interno AS com_nro_interno',
+            'compra.com_empresa AS com_empresa',
+            'compra.com_cuit_prov AS com_cuit_prov',
+            'compra.com_nombre_prov AS com_nombre_prov',
+            'concmov.concv_concepto AS concv_concepto',
+            'concmov.concv_importe AS concv_importe',
+        ]);
+        $where = ' WHERE compra.com_nro_interno = concmov.concv_nro_interno'
+            .' AND compra.com_fecha_iva >= '.$desde
+            .' AND compra.com_fecha_iva <= '.$hasta
+            .' AND compra.com_empresa = '.$empresaAnita;
+
+        $filas = $this->listar(
+            'compra, OUTER concmov',
+            $campos,
+            $where,
+            'compra.com_fecha_iva, compra.com_sucursal, compra.com_nro, concmov.concv_concepto',
+            'compras_anita_bridge_compra_concmov',
+            [
+                'empresa_anita' => $empresaAnita,
+                'desde' => $desde,
+                'hasta' => $hasta,
+            ],
+            self::TIMEOUT_MES_COMPLETO,
+        );
+        if ($filas === null) {
+            return null;
+        }
+
+        $porInterno = [];
+        $orden = [];
+        foreach ($filas as $fila) {
+            $nroInterno = (int) ($fila['com_nro_interno'] ?? 0);
+            if ($nroInterno <= 0) {
+                continue;
+            }
+            if (! isset($porInterno[$nroInterno])) {
+                $orden[] = $nroInterno;
+                $porInterno[$nroInterno] = [
+                    'compra' => $fila,
+                    'conceptos' => [],
+                ];
+            }
+            $concepto = (int) ($fila['concv_concepto'] ?? 0);
+            $importe = (float) ($fila['concv_importe'] ?? 0);
+            if ($concepto <= 0 || abs($importe) < 0.0001) {
+                continue;
+            }
+            $porInterno[$nroInterno]['conceptos'][] = [
+                'concepto' => $concepto,
+                'importe' => $importe,
+            ];
+        }
+
+        $resultado = [];
+        foreach ($orden as $nroInterno) {
+            $resultado[] = $porInterno[$nroInterno];
+        }
+
+        return $resultado;
     }
 
     /**

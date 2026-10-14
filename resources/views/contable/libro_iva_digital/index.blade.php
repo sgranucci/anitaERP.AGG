@@ -112,10 +112,9 @@
                                 </label>
                             </div>
                             <small class="form-text text-muted mb-2 d-block">
-                                Toma el libro de Anita (<code>compra</code> + <code>concmov</code> por
-                                <code>com_fecha_iva</code>) y s&oacute;lo agrega comprobantes del ERP que no est&eacute;n
-                                ya ah&iacute; (misma clave proveedor/tipo/letra/PV/nro o <code>anita_nro_interno</code>).
-                                As&iacute; no se pierde gravado ni NC cuando el ERP tiene el comprobante sin conceptos G/I.
+                                Lee el libro de Anita de una sola vez (<code>compra</code> con <code>concmov</code>,
+                                por <code>com_fecha_iva</code>). Por ahora no completa con comprobantes que est&eacute;n
+                                s&oacute;lo en el ERP.
                             </small>
 
                             <input type="hidden" name="completar_fsl_anita" value="0">
@@ -152,7 +151,7 @@
                                     <i class="fa fa-download"></i> Solo IVA Simple (CSV)
                                 </a>
                                 <small class="form-text text-muted d-inline-block ml-1">
-                                    El ZIP reutiliza la consulta (no vuelve a leer Anita).
+                                    El ZIP vuelve a armar el libro. En BSA septiembre tarda cerca de un minuto.
                                 </small>
                             @endif
                         </div>
@@ -174,7 +173,7 @@
                             CF computable = IVA del comprobante
                         @endif
                         @if (! empty($resultado['opciones']['completar_compras_anita']) || ! empty($resultado['compras']['resumen']['completar_compras_anita']))
-                            ; prioriza Anita (libro) y agrega ERP que no est&eacute;n
+                            ; compras le&iacute;das de Anita
                         @endif
                         @if (! empty($resultado['opciones']['completar_fsl_anita']) || ! empty($resultado['ventas']['resumen']['completar_fsl_anita']))
                             ; FSL m&aacute;quinas completadas desde Anita
@@ -578,6 +577,29 @@
             return;
         }
 
+        var reloj = null;
+        var inicio = 0;
+        var pollDescarga = null;
+        var subtituloBase = '';
+
+        var aviso = overlay.querySelector('.alert');
+        if (aviso && !document.getElementById('libro-iva-digital-procesando-cerrar')) {
+            var cerrar = document.createElement('button');
+            cerrar.type = 'button';
+            cerrar.id = 'libro-iva-digital-procesando-cerrar';
+            cerrar.className = 'btn btn-sm btn-outline-dark mt-3';
+            cerrar.textContent = 'Cerrar aviso';
+            cerrar.addEventListener('click', function () {
+                ocultarProcesoOverlay();
+            });
+            aviso.appendChild(cerrar);
+        }
+
+        function textoReloj() {
+            var seg = Math.max(0, Math.round((Date.now() - inicio) / 1000));
+            return subtituloBase + ' Lleva ' + seg + ' s.';
+        }
+
         function mostrarProcesoOverlay(titulo, subtitulo) {
             if (titulo) {
                 var tituloEl = document.getElementById('libro-iva-digital-procesando-titulo');
@@ -585,20 +607,37 @@
                     tituloEl.textContent = titulo;
                 }
             }
-            if (subtitulo) {
-                var subEl = document.getElementById('libro-iva-digital-procesando-subtitulo');
-                if (subEl) {
-                    subEl.textContent = subtitulo;
-                }
+            subtituloBase = subtitulo || 'Puede demorar. No cierre la página.';
+            inicio = Date.now();
+            var subEl = document.getElementById('libro-iva-digital-procesando-subtitulo');
+            if (subEl) {
+                subEl.textContent = textoReloj();
             }
+            if (reloj) {
+                window.clearInterval(reloj);
+            }
+            reloj = window.setInterval(function () {
+                var sub = document.getElementById('libro-iva-digital-procesando-subtitulo');
+                if (sub && overlay.getAttribute('aria-hidden') === 'false') {
+                    sub.textContent = textoReloj();
+                }
+            }, 1000);
             overlay.classList.remove('d-none');
-            overlay.style.display = 'flex';
+            overlay.style.setProperty('display', 'flex', 'important');
             overlay.setAttribute('aria-hidden', 'false');
         }
 
         function ocultarProcesoOverlay() {
+            if (reloj) {
+                window.clearInterval(reloj);
+                reloj = null;
+            }
+            if (pollDescarga) {
+                window.clearInterval(pollDescarga);
+                pollDescarga = null;
+            }
             overlay.classList.add('d-none');
-            overlay.style.display = '';
+            overlay.style.setProperty('display', 'none', 'important');
             overlay.setAttribute('aria-hidden', 'true');
         }
 
@@ -614,7 +653,7 @@
                 }
                 mostrarProcesoOverlay(
                     'Generando Libro IVA Digital e IVA Simple…',
-                    'Armando ventas, compras (ERP y Anita) e importes por actividad/concepto. Puede demorar. No cierre la página.'
+                    'Armando ventas, compras (ERP y Anita). En BSA septiembre tarda cerca de un minuto. No cierre la página.'
                 );
             });
         }
@@ -626,7 +665,7 @@
                 descargarConOverlay(
                     btnZip.getAttribute('href'),
                     'Armando ZIP de Libro IVA Digital…',
-                    'Vuelve a leer ventas, compras y Anita. Puede demorar. Pulse Esc para cerrar este aviso.'
+                    'Vuelve a armar ventas, compras y Anita. En BSA septiembre tarda cerca de un minuto.'
                 );
             });
         }
@@ -638,15 +677,32 @@
                 descargarConOverlay(
                     btnIvaSimple.getAttribute('href'),
                     'Armando ZIP de IVA Simple…',
-                    'Vuelve a leer ventas, compras y Anita. Puede demorar. Pulse Esc para cerrar este aviso.'
+                    'Vuelve a armar ventas, compras y Anita. En BSA septiembre tarda cerca de un minuto.'
                 );
             });
+        }
+
+        function urlConToken(url, token) {
+            return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'descarga_token=' + encodeURIComponent(token);
+        }
+
+        function cookieDescarga(token) {
+            var partes = document.cookie ? document.cookie.split(';') : [];
+            var i;
+            for (i = 0; i < partes.length; i++) {
+                var item = partes[i].replace(/^\s+/, '');
+                if (item.indexOf('lid_descarga=') === 0) {
+                    return item.substring('lid_descarga='.length) === token;
+                }
+            }
+            return false;
         }
 
         function descargarConOverlay(url, titulo, subtitulo) {
             if (!url) {
                 return;
             }
+            var token = String(Date.now());
             mostrarProcesoOverlay(titulo, subtitulo);
             var iframe = document.getElementById('lid-download-frame');
             if (!iframe) {
@@ -656,17 +712,27 @@
                 iframe.style.display = 'none';
                 document.body.appendChild(iframe);
             }
-            iframe.src = url;
-            window.setTimeout(function () {
-                var sub = document.getElementById('libro-iva-digital-procesando-subtitulo');
-                if (sub && overlay.getAttribute('aria-hidden') === 'false') {
-                    sub.textContent = 'La descarga debería haber empezado. Pulse Esc para cerrar este aviso.';
+            iframe.onload = function () {
+                if (cookieDescarga(token)) {
+                    document.cookie = 'lid_descarga=; Max-Age=0; path=/';
+                    ocultarProcesoOverlay();
                 }
-            }, 8000);
+            };
+            if (pollDescarga) {
+                window.clearInterval(pollDescarga);
+            }
+            pollDescarga = window.setInterval(function () {
+                if (!cookieDescarga(token)) {
+                    return;
+                }
+                document.cookie = 'lid_descarga=; Max-Age=0; path=/';
+                ocultarProcesoOverlay();
+            }, 500);
+            iframe.src = urlConToken(url, token);
         }
 
+        ocultarProcesoOverlay();
         window.addEventListener('pageshow', ocultarProcesoOverlay);
-        window.addEventListener('pagehide', ocultarProcesoOverlay);
         document.addEventListener('keydown', function (event) {
             if (event.key === 'Escape' || event.keyCode === 27) {
                 ocultarProcesoOverlay();

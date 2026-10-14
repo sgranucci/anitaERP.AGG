@@ -361,6 +361,7 @@ class OrdencompraLegajoBandejaPaqueteService
                     $importes,
                     $contextoMoneda,
                     $etiquetasCom,
+                    $this->etiquetasFacturaPorClave($mapaProvision),
                 );
                 if ($monedaIncoherente !== null) {
                     throw ValidationException::withMessages([
@@ -696,6 +697,62 @@ class OrdencompraLegajoBandejaPaqueteService
     }
 
     /**
+     * Número visible de cada factura del mapa (precarga_id o cp-N), el mismo de la bandeja.
+     * Si ya hay comprobante cargado, su número pisa el de la precarga.
+     *
+     * @param  array<int|string, list<int>>  $mapaEfectivo
+     * @return array<int|string, string>
+     */
+    private function etiquetasFacturaPorClave(array $mapaEfectivo): array
+    {
+        $precargaIds = [];
+        $cpIds = [];
+        foreach (array_keys($mapaEfectivo) as $clave) {
+            if (is_int($clave) || ctype_digit((string) $clave)) {
+                $id = (int) $clave;
+                if ($id > 0) {
+                    $precargaIds[$id] = true;
+                }
+                continue;
+            }
+            if (preg_match('/^cp-(\d+)$/i', (string) $clave, $m)) {
+                $cpIds[(int) $m[1]] = true;
+            }
+        }
+
+        $out = [];
+        if ($precargaIds !== []) {
+            $pres = Precarga_Comprobante_Proveedor::query()
+                ->whereIn('id', array_keys($precargaIds))
+                ->with('tipotransaccion_compras:id,abreviatura')
+                ->get(['id', 'letra', 'sucursal', 'numerocomprobante', 'tipotransaccion_compra_id', 'origen_entrada']);
+            foreach ($pres as $pre) {
+                $out[(int) $pre->id] = $this->etiquetaFactura($pre);
+            }
+        }
+
+        if ($cpIds !== []) {
+            $cps = Comprobante_Proveedor::query()
+                ->whereIn('id', array_keys($cpIds))
+                ->with('tipotransaccion_compras:id,abreviatura')
+                ->get([
+                    'id', 'letra', 'sucursal', 'numerocomprobante',
+                    'tipotransaccion_compra_id', 'precarga_comprobante_proveedor_id',
+                ]);
+            foreach ($cps as $cp) {
+                $label = $this->etiquetaComprobanteCargado($cp);
+                $out['cp-'.(int) $cp->id] = $label;
+                $preId = (int) ($cp->precarga_comprobante_proveedor_id ?? 0);
+                if ($preId > 0) {
+                    $out[$preId] = $label;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Provisión contable de cada COM, convertida a la moneda de la factura que la usa.
      * Sin conversión (solo moneda de la recepción) un FC en pesos vs COM en USD dispara
      * falso exceso (ej. OC 216515: 266 USD vs 406.980 ARS = 266 × 1530).
@@ -855,7 +912,8 @@ class OrdencompraLegajoBandejaPaqueteService
     }
 
     /**
-     * NC/ND/REC no consumen provisión de COM aunque el import Anita las haya vinculado.
+     * NC/ND no consumen provisión de COM aunque el import Anita las haya vinculado.
+     * El recibo consume provisión igual que una factura.
      *
      * @param  array<int|string, float>  $importes
      * @return array<int|string, float>
@@ -2723,7 +2781,7 @@ class OrdencompraLegajoBandejaPaqueteService
      */
     private function tipoComprobanteDesdeScanAnita(array $fila): string
     {
-        return PrecargaProveedorTipoComprobanteSupport::normalizar(
+        return PrecargaProveedorTipoComprobanteSupport::desdeCtipoScan(
             (string) ($fila['ctipo'] ?? 'FC')
         );
     }
@@ -2878,7 +2936,7 @@ class OrdencompraLegajoBandejaPaqueteService
      * FC/NC/ND re-resuelven el fino según el primer CC de la OC;
      * FIB/FGA/… graban esa abreviatura (útil en OC con varios centros de costo).
      *
-     * @param  'FC'|'NC'|'ND'|string  $tipoPedido
+     * @param  'FC'|'NC'|'ND'|'REC'|string  $tipoPedido
      */
     public function corregirTipoDocumento(Ordencompra $oc, int $precargaId, string $tipoPedido): Precarga_Comprobante_Proveedor
     {
@@ -2934,6 +2992,7 @@ class OrdencompraLegajoBandejaPaqueteService
                 ['value' => 'FC', 'label' => 'FC — Factura (según primer centro de costo de la OC)'],
                 ['value' => 'NC', 'label' => 'NC — Nota de crédito (no exige COM)'],
                 ['value' => 'ND', 'label' => 'ND — Nota de débito (no exige COM)'],
+                ['value' => 'REC', 'label' => 'REC — Recibo'],
             ];
         }
     }
@@ -3205,6 +3264,20 @@ class OrdencompraLegajoBandejaPaqueteService
         }
 
         return $base;
+    }
+
+    private function etiquetaComprobanteCargado(Comprobante_Proveedor $cp): string
+    {
+        $cp->loadMissing('tipotransaccion_compras:id,abreviatura');
+        $abrev = strtoupper(trim((string) ($cp->tipotransaccion_compras->abreviatura ?? '')));
+        $letra = trim((string) ($cp->letra ?? ''));
+        $suc = (int) ($cp->sucursal ?? 0);
+        $nro = (int) ($cp->numerocomprobante ?? 0);
+        $numero = ($letra !== '' || $nro > 0)
+            ? trim(sprintf('%s %04d-%08d', $letra !== '' ? $letra : 'FC', $suc, $nro))
+            : 'Factura #'.$cp->id;
+
+        return $abrev !== '' ? $abrev.' '.$numero : $numero;
     }
 
     private function documentoCom(Recepcion_Proveedor $rec): string

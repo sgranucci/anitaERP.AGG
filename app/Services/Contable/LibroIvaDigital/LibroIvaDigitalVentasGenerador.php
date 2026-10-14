@@ -17,10 +17,11 @@ use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 class LibroIvaDigitalVentasGenerador
 {
-    private const CHUNK_SIZE = 500;
+    private const CHUNK_SIZE = 8000;
 
     public function __construct(
         private readonly LibroIvaDigitalVentasFslAnitaBridgeReader $fslAnitaBridgeReader,
@@ -65,14 +66,15 @@ class LibroIvaDigitalVentasGenerador
         /** @var list<array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}> $registrosIndividuales */
         $registrosIndividuales = [];
 
-        $this->queryVentas($empresaId, $desde, $hasta, $porFechaJornada)
-            ->with($this->relacionesVentas())
-            ->orderBy(LibroIvaDigitalVentasPeriodoSupport::columnaFecha($porFechaJornada))
-            ->orderBy('venta.puntoventa_id')
-            ->orderBy('venta.tipotransaccion_id')
-            ->orderBy('venta.numerocomprobante')
-            ->lazy(self::CHUNK_SIZE)
-            ->each(function (Venta $venta) use (
+        $ids = $this->queryVentas($empresaId, $desde, $hasta, $porFechaJornada)
+            ->pluck('venta.id');
+        foreach ($ids->chunk(self::CHUNK_SIZE) as $lote) {
+            Venta::query()
+                ->select($this->columnasVenta())
+                ->whereIn('venta.id', $lote->all())
+                ->with($this->relacionesVentas())
+                ->get()
+                ->each(function (Venta $venta) use (
                 $porFechaJornada,
                 &$gruposFacturaB,
                 &$registrosIndividuales,
@@ -123,6 +125,7 @@ class LibroIvaDigitalVentasGenerador
 
                 $registrosIndividuales[] = $registro;
             });
+        }
 
         if ($completarFslAnita) {
             $pvFslDefault = CierreRendicionMaquinaConfigSupport::puntoventaFsl($empresaId);
@@ -201,7 +204,7 @@ class LibroIvaDigitalVentasGenerador
     {
         return [
             'venta_impuestos' => static function (HasMany $query): void {
-                $query->select('id', 'venta_id', 'concepto', 'importe', 'tasa');
+                $query->select('id', 'venta_id', 'concepto', 'importe', 'tasa', 'baseimponible');
             },
             'tipotransacciones:id,codigo,signo,abreviatura',
             'puntoventas:id,codigo,actividad_arca_id',
@@ -215,15 +218,59 @@ class LibroIvaDigitalVentasGenerador
         ];
     }
 
+    /**
+     * @return list<string>
+     */
+    private function columnasVenta(): array
+    {
+        return [
+            'venta.id',
+            'venta.fecha',
+            'venta.fechajornada',
+            'venta.tipotransaccion_id',
+            'venta.puntoventa_id',
+            'venta.numerocomprobante',
+            'venta.actividad_arca_id',
+            'venta.cliente_id',
+            'venta.total',
+            'venta.moneda_id',
+            'venta.cotizacion',
+            'venta.codigo',
+            'venta.nombre',
+            'venta.nroinscripcion',
+            'venta.condicioniva_id',
+            'venta.cae',
+        ];
+    }
+
     private function queryVentas(int $empresaId, string $desde, string $hasta, bool $porFechaJornada): Builder
     {
+        $indice = $porFechaJornada ? 'idx_venta_fechajornada' : 'idx_venta_fecha';
         $query = Venta::query()
-            ->select('venta.*')
+            ->from(DB::raw('venta FORCE INDEX ('.$indice.')'))
+            ->select('venta.id')
             ->join('puntoventa as pv_lid', 'pv_lid.id', '=', 'venta.puntoventa_id')
             ->where('pv_lid.empresa_id', $empresaId);
 
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
-        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroCaeORmv($query);
+
+        $tiposSinCae = DB::table('tipotransaccion')
+            ->whereIn('abreviatura', LibroIvaDigitalMapeosSupport::abreviaturasSinCaeInformables())
+            ->whereNull('deleted_at')
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->filter(static fn (int $id): bool => $id > 0)
+            ->values()
+            ->all();
+
+        $query->where(function ($filtro) use ($tiposSinCae): void {
+            $filtro->where(function ($cae): void {
+                $cae->whereNotNull('venta.cae')->where('venta.cae', '<>', '');
+            });
+            if ($tiposSinCae !== []) {
+                $filtro->orWhereIn('venta.tipotransaccion_id', $tiposSinCae);
+            }
+        });
 
         return $query;
     }

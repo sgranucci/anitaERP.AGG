@@ -44,6 +44,23 @@ final class ComprobanteProveedorFlujoOcComFacSupportTest extends TestCase
         );
     }
 
+    public function test_recibo_pide_com_igual_que_la_factura(): void
+    {
+        $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
+            null,
+            true,
+            '2026-09-10',
+            'REC'
+        );
+
+        $this->assertFalse($politica['sin_com_por_tipo']);
+        $this->assertTrue($politica['debe_asignar_com']);
+        $this->assertSame(
+            ComprobanteProveedorModoCarga::ASIGNA_RECEPCION,
+            ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido($politica)
+        );
+    }
+
     public function test_factura_sigue_pidiendo_com_si_hay_disponible(): void
     {
         $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(

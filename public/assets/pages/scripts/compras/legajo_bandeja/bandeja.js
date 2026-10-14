@@ -92,8 +92,7 @@
             return '<span class="badge badge-info" title="Sugerida: ' + esc(sug.motivo_label || '') + '">'
                 + esc(lab) + ' ¿?</span>';
         }
-        var tipo = String((f && f.tipo) || 'FC').toUpperCase();
-        var exige = !f || (f.exige_com !== false && tipo !== 'NC' && tipo !== 'ND');
+        var exige = documentoExigeCom(f);
         if (!exige) {
             return '<span class="badge badge-light border text-muted">no exige</span>';
         }
@@ -488,14 +487,42 @@
         mensajeBloqueaCom: ''
     };
 
+    function documentoExigeCom(fac) {
+        if (fac && fac.exige_com === false) {
+            return false;
+        }
+        var tipo = String((fac && fac.tipo) || 'FC').toUpperCase();
+        return tipo !== 'NC' && tipo !== 'ND';
+    }
+
+    function etiquetaSinCom(tipo) {
+        if (tipo === 'ND') {
+            return 'ND sin COM';
+        }
+        if (tipo === 'NC') {
+            return 'NC sin COM';
+        }
+        return 'no exige COM';
+    }
+
+    function textoTipoSinCom(tipo) {
+        if (tipo === 'ND') {
+            return 'nota de débito';
+        }
+        if (tipo === 'NC') {
+            return 'nota de crédito';
+        }
+        return 'este tipo';
+    }
+
     function badgeComDoc(fac) {
         if (fac && fac.cargado_cxp) {
             return '<span class="badge badge-success">en CxP</span>';
         }
         var tipo = String(fac.tipo || 'FC').toUpperCase();
-        var exige = fac.exige_com !== false && tipo !== 'NC' && tipo !== 'ND';
+        var exige = documentoExigeCom(fac);
         if (!exige) {
-            var label = tipo === 'ND' ? 'ND sin COM' : (tipo === 'NC' ? 'NC sin COM' : 'no exige COM');
+            var label = etiquetaSinCom(tipo);
             return '<span class="badge badge-light border text-muted">' + label + '</span>';
         }
         var ids = asignarEstado.mapa[String(fac.id)] || [];
@@ -527,7 +554,8 @@
                 : [
                     { value: 'FC', label: 'FC — Factura' },
                     { value: 'NC', label: 'NC — Nota de crédito (no exige COM)' },
-                    { value: 'ND', label: 'ND — Nota de débito (no exige COM)' }
+                    { value: 'ND', label: 'ND — Nota de débito (no exige COM)' },
+                    { value: 'REC', label: 'REC — Recibo' }
                 ];
             var tieneActual = opciones.some(function (opt) {
                 return String(opt.value || '').toUpperCase() === tipoActual;
@@ -561,9 +589,9 @@
             );
         }
         var tipoFac = String((fac && fac.tipo) || 'FC').toUpperCase();
-        var exige = !fac || (fac.exige_com !== false && tipoFac !== 'NC' && tipoFac !== 'ND');
+        var exige = documentoExigeCom(fac);
         if (!exige) {
-            var textoTipo = tipoFac === 'ND' ? 'nota de débito' : (tipoFac === 'NC' ? 'nota de crédito' : 'este tipo');
+            var textoTipo = textoTipoSinCom(tipoFac);
             $head.append('<p class="text-muted mb-1 small">Es ' + textoTipo + ': no exige COM.</p>');
         }
         if (asignarEstado.permiteAsignarCom === false && asignarEstado.mensajeBloqueaCom) {
@@ -939,12 +967,9 @@
         }
         var pendientes = facs.filter(function (f) { return !f.cargado_cxp; });
         var prefer = pendientes.find(function (f) {
-            var tipo = String(f.tipo || 'FC').toUpperCase();
-            var exige = f.exige_com !== false && tipo !== 'NC' && tipo !== 'ND';
-            return exige && !(f.coms_asignadas && f.coms_asignadas.length) && f.com_sugerida;
+            return documentoExigeCom(f) && !(f.coms_asignadas && f.coms_asignadas.length) && f.com_sugerida;
         }) || pendientes.find(function (f) {
-            var tipo = String(f.tipo || 'FC').toUpperCase();
-            return f.exige_com !== false && tipo !== 'NC' && tipo !== 'ND';
+            return documentoExigeCom(f);
         }) || pendientes[0] || facs[0] || null;
         asignarEstado.activo = prefer ? String(prefer.id) : null;
         renderAsignarListaDocs();

@@ -580,6 +580,7 @@ Bandeja de legajos
 @endsection
 
 @section('contenido')
+@include('includes.contable.modalconsultacuentacontable')
 @include('compras.ordencompra.partials.modal_asignar_factura_legajo')
 @include('compras.ordencompra.partials.modal_firmante_gastronomia_arbol')
 @php

@@ -170,7 +170,7 @@ $(function () {
 
     function tipoNoExigeCom() {
         var t = tipoGenericoComprobante();
-        return t === 'NC' || t === 'ND' || t === 'REC'
+        return t === 'NC' || t === 'ND'
             || String($form.attr('data-sin-com-por-tipo') || '') === '1';
     }
 
@@ -180,9 +180,6 @@ $(function () {
         }
         if (tipo === 'NC') {
             return 'Las notas de crédito no requieren recepción COM.';
-        }
-        if (tipo === 'REC') {
-            return 'Los recibos no requieren recepción COM.';
         }
         return 'Este tipo de comprobante no requiere recepción COM.';
     }
@@ -211,7 +208,7 @@ $(function () {
     function aplicarExcepcionComPorTipo() {
         var tipo = tipoGenericoComprobante();
         var abrev = normalizarTextoTipo($('#tipotransaccion_compra_id_abreviatura').val());
-        var detectado = tipo === 'NC' || tipo === 'ND' || tipo === 'REC';
+        var detectado = tipo === 'NC' || tipo === 'ND';
         if (detectado) {
             $form.attr('data-sin-com-por-tipo', '1');
         } else if (abrev !== '') {
@@ -272,6 +269,18 @@ $(function () {
             actualizarLinkEditarCuentaContable($campo, id);
         }
         actualizarVisibilidadEditorCuentaDebe($row);
+    }
+
+    function cuentaNcForzada() {
+        var id = parseInt($form.attr('data-nc-cuenta-forzada-id') || '0', 10) || 0;
+        if (id <= 0) {
+            return null;
+        }
+        return {
+            id: id,
+            codigo: String($form.attr('data-nc-cuenta-forzada-codigo') || ''),
+            nombre: String($form.attr('data-nc-cuenta-forzada-nombre') || '')
+        };
     }
 
     function tieneOrdenCompra() {
@@ -427,6 +436,13 @@ $(function () {
         }
         // Neto cubierto por OC/COM: no precargar la cuenta del maestro (sale de artículos OC;
         // el override solo se setea desde la solapa Asiento contable).
+        // NC/ND enviada con otra cuenta: esa cuenta manda sobre los artículos de la OC.
+        var cuentaNc = cuentaNcForzada();
+        if (esNeto && cuentaNc) {
+            setCuentaDebeEnFila($row, cuentaNc);
+            actualizarColumnaCuentaDebe();
+            return;
+        }
         if (conceptoId > 0 && reglaCubreCuentaDebeSinEditor(tipo, codigo)) {
             if (forzar) {
                 setCuentaDebeEnFila($row, { id: 0, codigo: '', nombre: '' });
@@ -899,6 +915,9 @@ $(function () {
                     actualizarLinkEditarCuentaContable($campo, id);
                 }
             });
+            if (netoCubiertoPorOrdenCompra(conceptoId)) {
+                return;
+            }
             $('#tbody-concepto-table tr.item-concepto').each(function () {
                 var $row = $(this);
                 if (parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) !== conceptoId) {
@@ -915,6 +934,11 @@ $(function () {
             codigo: String($campo.find('.codigocuentacontable').val() || ''),
             nombre: String($campo.find('.nombrecuentacontable').val() || '')
         };
+    }
+
+    function netoCubiertoPorOrdenCompra(conceptoId) {
+        var meta = conceptosMeta[conceptoId] || {};
+        return reglaCubreCuentaDebeSinEditor(String(meta.tipoconcepto || ''), String(meta.codigo || ''));
     }
 
     function conceptoNetoSinCuentaMaestro(conceptoId) {
@@ -1008,7 +1032,7 @@ $(function () {
         $('#tbody-concepto-table tr.item-concepto').each(function () {
             var $row = $(this);
             var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
-            if (!conceptoNetoSinCuentaMaestro(conceptoId)) {
+            if (!conceptoNetoSinCuentaMaestro(conceptoId) || netoCubiertoPorOrdenCompra(conceptoId)) {
                 return;
             }
             if ((parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0) > 0) {
@@ -1100,7 +1124,8 @@ $(function () {
                 return;
             }
             // Solo volcar si hay cuenta: un panel vacío no debe borrar la del renglón.
-            if (datos.id <= 0) {
+            // Neto cubierto por la OC: la cuenta del gasto sale de los artículos y se abre por centro.
+            if (datos.id <= 0 || netoCubiertoPorOrdenCompra(conceptoId)) {
                 return;
             }
             recordarCuentaAsientoManual(conceptoId, datos);

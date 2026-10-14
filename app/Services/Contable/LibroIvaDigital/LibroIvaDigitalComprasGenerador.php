@@ -151,6 +151,7 @@ class LibroIvaDigitalComprasGenerador
             }
         }
 
+        if (! $completarAnita) {
         $this->queryCompras($empresaId, $desde, $hasta)
             ->with([
                 'proveedores.tipoempresas',
@@ -243,6 +244,7 @@ class LibroIvaDigitalComprasGenerador
                     $totalIva,
                 );
             });
+        }
 
         $totalesPortal = LibroIvaDigitalIvaSimpleSupport::creditoDesdeRegistrosLibro($registros, $prorrateoGlobal);
 

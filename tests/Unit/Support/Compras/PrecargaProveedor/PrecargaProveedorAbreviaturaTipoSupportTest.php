@@ -92,7 +92,14 @@ class PrecargaProveedorAbreviaturaTipoSupportTest extends TestCase
     {
         $this->assertTrue(PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico('FC'));
         $this->assertTrue(PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico('nc'));
+        $this->assertTrue(PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico('REC'));
         $this->assertFalse(PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico('FGA'));
         $this->assertFalse(PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico('FIB'));
+    }
+
+    public function test_recibo_no_depende_del_centro_de_costo(): void
+    {
+        $this->assertSame('REC', PrecargaProveedorAbreviaturaTipoSupport::abreviatura('REC', 103, 'Indirecto', 'B'));
+        $this->assertSame('REC', PrecargaProveedorAbreviaturaTipoSupport::abreviatura('rec', 85, 'Directo', 'S'));
     }
 }

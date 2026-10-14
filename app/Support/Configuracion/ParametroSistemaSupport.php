@@ -341,8 +341,11 @@ final class ParametroSistemaSupport
 
     public static function olvidarCache(): void
     {
+        self::$tieneTabla = null;
         Cache::forget(self::CACHE_KEY);
     }
+
+    private static ?bool $tieneTabla = null;
 
     /**
      * @return array<string, string>
@@ -350,7 +353,10 @@ final class ParametroSistemaSupport
     private static function mapa(): array
     {
         try {
-            if (! Schema::hasTable('parametro_sistema')) {
+            if (self::$tieneTabla === null) {
+                self::$tieneTabla = Schema::hasTable('parametro_sistema');
+            }
+            if (! self::$tieneTabla) {
                 return [];
             }
 

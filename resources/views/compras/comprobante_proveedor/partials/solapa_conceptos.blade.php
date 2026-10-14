@@ -27,8 +27,9 @@
             es la unión de los finos de la OC (en $0 si la precarga no trajo montos). Si la
             precarga ya armó esos renglones, se conservan. El modal F1 lista la misma unión.
             En el monto, <kbd>Enter</kbd> valida coherencia y actualiza la vista previa del asiento.
-            La cuenta contable no se carga acá: el neto con OC toma las cuentas de los artículos;
-            en ND/NC (sin COM) se cambia en la solapa <strong>Asiento contable</strong>.
+            La cuenta contable no se carga acá: el neto con OC toma las cuentas de los artículos.
+            En una nota de crédito o débito esa elección se hace al enviar el legajo (cuenta de la OC u otra cuenta).
+            En ND/NC se puede cambiar después en la solapa <strong>Asiento contable</strong>.
             Sin OC ni COM se indica también en esa solapa.
             Los impuestos usan la cuenta del maestro de conceptos.
             @if ($cpImputacionManual)

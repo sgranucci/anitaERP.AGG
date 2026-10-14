@@ -36,6 +36,7 @@ use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
+use App\Support\Compras\OrdencompraLegajoNcImputacionSupport;
 use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
 use App\Support\Compras\OrdencompraSolicitanteSupport;
@@ -748,6 +749,7 @@ class OrdencompraGestionService
         ?UploadedFile $facturaPdf = null,
         bool $omitirGateYTrigger = false,
         ?int $destinatarioUsuarioId = null,
+        ?array $ncImputacion = null,
     ): array {
         $sec = Sector_Legajocompra::find($sectorLegajocompraId);
         if (! $sec) {
@@ -772,6 +774,17 @@ class OrdencompraGestionService
             );
 
         if ($exigePaquete) {
+            $erroresNc = OrdencompraLegajoNcImputacionSupport::persistirYValidar(
+                $ocPrev,
+                $ncImputacion
+            );
+            if ($erroresNc !== []) {
+                return [
+                    'mensaje' => 'error',
+                    'errores' => implode(' ', $erroresNc),
+                ];
+            }
+
             try {
                 if ($facturaPdf) {
                     $this->legajoFacturaPdfService->adjuntarPdfAlLegajo($ocPrev, $facturaPdf);
@@ -835,6 +848,7 @@ class OrdencompraGestionService
         ?string $leyenda,
         ?UploadedFile $facturaPdf = null,
         ?int $destinatarioUsuarioId = null,
+        ?array $ncImputacion = null,
     ): array {
         $oc = $this->ordencompraRepository->find($id);
         if (! $oc) {
@@ -884,7 +898,8 @@ class OrdencompraGestionService
             $leyenda,
             $facturaPdf,
             false,
-            ($preview['requiere_seleccion'] ?? false) ? $destinatarioUsuarioId : null
+            ($preview['requiere_seleccion'] ?? false) ? $destinatarioUsuarioId : null,
+            $ncImputacion
         );
     }
 
@@ -920,6 +935,7 @@ class OrdencompraGestionService
         ?string $observacion,
         ?string $leyenda,
         ?UploadedFile $facturaPdf = null,
+        ?array $ncImputacion = null,
     ): array {
         $oc = $this->ordencompraRepository->find($id);
         if (! $oc) {
@@ -952,7 +968,7 @@ class OrdencompraGestionService
             $obs = 'Enviar a Cuentas a pagar';
         }
 
-        return $this->cambiarSector($id, $sectorId, $obs, $leyenda, $facturaPdf);
+        return $this->cambiarSector($id, $sectorId, $obs, $leyenda, $facturaPdf, false, null, $ncImputacion);
     }
 
     /**

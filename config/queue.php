@@ -115,4 +115,15 @@ return [
         'failed_24h_warn' => max(1, (int) env('QUEUE_VERIFICACION_PICO_FAILED_24H_WARN', 5)),
     ],
 
+    /*
+    | Reencola correos que ya agotaron los reintentos del worker por un corte SMTP.
+    | No reintenta otros jobs. Comando: php artisan queue:reintentar-correos-fallidos
+    */
+    'reintento_correos' => [
+        'habilitado' => filter_var(env('QUEUE_REINTENTO_CORREOS_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'cada_minutos' => max(5, (int) env('QUEUE_REINTENTO_CORREOS_CADA_MINUTOS', 10)),
+        'max_reintentos' => max(1, (int) env('QUEUE_REINTENTO_CORREOS_MAX', 24)),
+        'lote' => max(1, (int) env('QUEUE_REINTENTO_CORREOS_LOTE', 30)),
+    ],
+
 ];

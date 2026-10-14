@@ -396,13 +396,28 @@ class ComprobanteProveedorReservaComLegajoSupportTest extends TestCase
             [814 => 406980.0],
             [814 => ['moneda_id' => 2, 'cotizacion' => 1530.0]],
             [67355 => 'Nº 167669'],
+            [814 => 'FGA A 3093-00133939'],
         );
 
         $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('FGA A 3093-00133939', $mensaje);
         $this->assertStringContainsString('pesos', $mensaje);
         $this->assertStringContainsString('167669', $mensaje);
         $this->assertStringContainsString('266,00', $mensaje);
         $this->assertStringContainsString('406.980,00', $mensaje);
+    }
+
+    public function test_moneda_incoherente_sin_etiqueta_nombra_la_precarga(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeMonedaIncoherenteFacturaVsCom(
+            ['cp-88' => [67355]],
+            [67355 => 266.0],
+            ['cp-88' => 406980.0],
+            ['cp-88' => ['moneda_id' => 2, 'cotizacion' => 1530.0]],
+        );
+
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('comprobante #88', $mensaje);
     }
 
     public function test_no_alerta_moneda_cuando_importe_coincide_con_provision_en_me(): void

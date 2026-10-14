@@ -1227,6 +1227,8 @@ class ArticuloController extends Controller
 
                 ArticuloCatalogoLogisticaSupport::sincronizarDesdeRequest($request, (int) $articulo->id);
 
+                \App\Support\Stock\ArticuloWaitrySupport::aplicarDesdeRequest($request, (int) $articulo->id);
+
                 if ($circuitoAlta) {
                     app(\App\Services\Stock\ArticuloArbolIntegracionService::class)
                         ->iniciarCircuito((int) $articulo->id, 'insert');
@@ -1425,6 +1427,8 @@ class ArticuloController extends Controller
             }
 
             ArticuloCatalogoLogisticaSupport::sincronizarDesdeRequest($request, (int) $id);
+
+            \App\Support\Stock\ArticuloWaitrySupport::aplicarDesdeRequest($request, (int) $id);
 
             $despuesArbol = [
                 'cuentas_fp' => $arbolSvc->fingerprintCuentas((int) $id),

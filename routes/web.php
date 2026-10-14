@@ -1583,6 +1583,9 @@ Route::get('stock/articulo/api/kardex-combinacion', 'Stock\ArticuloController@ap
 Route::get('stock/articulo/{id}/api/datos-etiqueta-ferli', 'Stock\ArticuloController@apiDatosEtiquetaFerli')->name('articulo_datos_etiqueta_ferli');
 Route::get('stock/articulo/{id}/api/preview-recalcular-transferencias-formula', 'Stock\ArticuloController@apiPreviewRecalcularTransferenciasFormula')->name('articulo_preview_recalcular_transferencias_formula');
 Route::post('stock/articulo/{id}/api/aplicar-recalcular-transferencias-formula', 'Stock\ArticuloController@apiAplicarRecalcularTransferenciasFormula')->name('articulo_aplicar_recalcular_transferencias_formula');
+Route::post('stock/articulo/{id}/waitry/marcas', 'Stock\ArticuloWaitryController@guardarMarcas')->name('articulo_waitry_marcas');
+Route::post('stock/articulo/{id}/waitry/alta', 'Stock\ArticuloWaitryController@alta')->name('articulo_waitry_alta');
+Route::post('stock/articulo/{id}/waitry/baja', 'Stock\ArticuloWaitryController@baja')->name('articulo_waitry_baja');
 Route::get('stock/listaarticulo/{formato?}/{busqueda?}', 'Stock\ArticuloController@listar')->name('lista_articulo');
 
 Route::get('stock/formula-articulo', 'Stock\FormulaArticuloController@index')->name('consultar_formula_articulo');

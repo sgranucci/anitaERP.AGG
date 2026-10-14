@@ -786,6 +786,11 @@ class OrdencompraController extends Controller
             'observacion' => 'nullable|string|max:255',
             'leyenda' => 'nullable|string|max:2000',
             'factura_pdf' => 'nullable|file|mimes:pdf|max:20480',
+            'nc_imputacion' => 'nullable|array',
+            'nc_imputacion.*.modo' => 'nullable|string|in:oc,cuenta',
+            'nc_imputacion.*.precarga_id' => 'nullable|integer',
+            'nc_imputacion.*.anita_scan_documento_id' => 'nullable|integer',
+            'nc_imputacion.*.cuentacontable_id' => 'nullable|integer',
         ]);
         $ret = $this->ordencompraGestionService->cambiarSector(
             (int) $id,
@@ -793,6 +798,9 @@ class OrdencompraController extends Controller
             $request->observacion,
             $request->leyenda,
             $request->file('factura_pdf'),
+            false,
+            null,
+            $request->input('nc_imputacion'),
         );
 
         if ($request->ajax() || $request->wantsJson()) {
@@ -814,6 +822,11 @@ class OrdencompraController extends Controller
             'leyenda' => 'nullable|string|max:2000',
             'factura_pdf' => 'nullable|file|mimes:pdf|max:20480',
             'destinatario_usuario_id' => 'nullable|integer',
+            'nc_imputacion' => 'nullable|array',
+            'nc_imputacion.*.modo' => 'nullable|string|in:oc,cuenta',
+            'nc_imputacion.*.precarga_id' => 'nullable|integer',
+            'nc_imputacion.*.anita_scan_documento_id' => 'nullable|integer',
+            'nc_imputacion.*.cuentacontable_id' => 'nullable|integer',
         ]);
         $destinatarioId = (int) $request->input('destinatario_usuario_id', 0);
         $ret = $this->ordencompraGestionService->enviarAGastronomia(
@@ -822,6 +835,7 @@ class OrdencompraController extends Controller
             $request->leyenda,
             $request->file('factura_pdf'),
             $destinatarioId > 0 ? $destinatarioId : null,
+            $request->input('nc_imputacion'),
         );
 
         if ($request->ajax() || $request->wantsJson()) {
@@ -862,12 +876,18 @@ class OrdencompraController extends Controller
             'observacion' => 'nullable|string|max:255',
             'leyenda' => 'nullable|string|max:2000',
             'factura_pdf' => 'nullable|file|mimes:pdf|max:20480',
+            'nc_imputacion' => 'nullable|array',
+            'nc_imputacion.*.modo' => 'nullable|string|in:oc,cuenta',
+            'nc_imputacion.*.precarga_id' => 'nullable|integer',
+            'nc_imputacion.*.anita_scan_documento_id' => 'nullable|integer',
+            'nc_imputacion.*.cuentacontable_id' => 'nullable|integer',
         ]);
         $ret = $this->ordencompraGestionService->enviarACuentasAPagar(
             (int) $id,
             $request->observacion,
             $request->leyenda,
             $request->file('factura_pdf'),
+            $request->input('nc_imputacion'),
         );
 
         if ($request->ajax() || $request->wantsJson()) {

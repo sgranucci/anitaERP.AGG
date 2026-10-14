@@ -17,6 +17,7 @@ use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
+use App\Support\Compras\OrdencompraLegajoNcImputacionSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
@@ -348,7 +349,7 @@ class ComprobanteProveedorPrefillService
             $fechacomprobante,
         );
 
-        return $prefill;
+        return $this->anexarImputacionNc($prefill, $precarga, true);
     }
 
     /** @return array<string, mixed> */
@@ -622,7 +623,7 @@ class ComprobanteProveedorPrefillService
             $rutaPdf = $comprobante->precarga_comprobante_proveedores->rutaalmacenamiento;
         }
 
-        return [
+        return $this->anexarImputacionNc([
             'data' => $comprobante,
             'origen_entrada' => $comprobante->origen_entrada
                 ?? ComprobanteProveedorOrigenEntrada::resolver(
@@ -635,7 +636,29 @@ class ComprobanteProveedorPrefillService
             'cuotas_escaladas' => false,
             'permite_edicion_cuotas' => true,
             'ruta_factura_pdf' => $rutaPdf,
-        ];
+        ], $comprobante->precarga_comprobante_proveedores, false);
+    }
+
+    /**
+     * @param  array<string, mixed>  $prefill
+     * @return array<string, mixed>
+     */
+    private function anexarImputacionNc(array $prefill, ?Precarga_Comprobante_Proveedor $precarga, bool $aplicarEnConceptos): array
+    {
+        $ordencompraId = (int) ($prefill['data']->ordencompra_id ?? 0);
+        $decision = OrdencompraLegajoNcImputacionSupport::decisionParaPrecarga($precarga, $ordencompraId);
+        $prefill['nc_imputacion'] = $decision;
+        if ($aplicarEnConceptos
+            && ($decision['modo'] ?? '') === OrdencompraLegajoNcImputacionSupport::MODO_CUENTA
+            && (int) ($decision['cuentacontable_id'] ?? 0) > 0
+        ) {
+            OrdencompraLegajoNcImputacionSupport::aplicarCuentaForzadaEnConceptos(
+                $prefill['conceptos'] ?? [],
+                (int) $decision['cuentacontable_id']
+            );
+        }
+
+        return $prefill;
     }
 
     private function resolverOrdencompraDesdePrecarga(Precarga_Comprobante_Proveedor $precarga): ?Ordencompra

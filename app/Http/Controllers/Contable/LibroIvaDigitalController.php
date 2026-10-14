@@ -8,6 +8,7 @@ use App\Services\Contable\LibroIvaDigitalService;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Cookie;
 
 class LibroIvaDigitalController extends Controller
 {
@@ -33,7 +34,7 @@ class LibroIvaDigitalController extends Controller
         }
 
         if (($request->boolean('consultar') || $request->boolean('mostrado')) && $filtros['empresa_id'] && $filtros['periodo']) {
-            $this->prepararRuntime(false);
+            $this->prepararRuntime(true);
             ignore_user_abort(true);
             $resultado = $this->libroIvaDigitalService->generarYCachear(
                 (int) $filtros['empresa_id'],
@@ -75,7 +76,7 @@ class LibroIvaDigitalController extends Controller
 
         $zipPath = $this->libroIvaDigitalService->crearZipDescarga($resultado, (int) $filtros['empresa_id']);
 
-        return response()->download($zipPath, basename($zipPath))->deleteFileAfterSend(false);
+        return $this->respuestaZip($request, $zipPath);
     }
 
     public function exportarIvaSimple(Request $request): BinaryFileResponse
@@ -101,7 +102,28 @@ class LibroIvaDigitalController extends Controller
 
         $zipPath = $this->libroIvaDigitalService->crearZipIvaSimple($resultado, (int) $filtros['empresa_id']);
 
-        return response()->download($zipPath, basename($zipPath))->deleteFileAfterSend(false);
+        return $this->respuestaZip($request, $zipPath);
+    }
+
+    private function respuestaZip(Request $request, string $zipPath): BinaryFileResponse
+    {
+        $respuesta = response()->download($zipPath, basename($zipPath))->deleteFileAfterSend(false);
+        $token = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) $request->query('descarga_token', '')) ?? '';
+        if ($token !== '') {
+            $respuesta->headers->setCookie(Cookie::create(
+                'lid_descarga',
+                $token,
+                time() + 120,
+                '/',
+                null,
+                false,
+                false,
+                false,
+                Cookie::SAMESITE_LAX,
+            ));
+        }
+
+        return $respuesta;
     }
 
     /**

@@ -51,7 +51,8 @@ final class ComprobanteProveedorFlujoOcComFacSupport
      *   o seguir anticipada; acá no forzamos: el operador elige el modo.
      *
      * Contrato vigente: sobrescribe la política (ruta con/sin recepción del contrato).
-     * NC / ND / REC no exigen COM aunque el contrato o el flujo de la empresa sí lo pidan para facturas.
+     * NC / ND no exigen COM aunque el contrato o el flujo de la empresa sí lo pidan para facturas.
+     * El recibo (REC) sigue la misma regla que la factura.
      *
      * @return array{
      *     exige_flujo: bool,

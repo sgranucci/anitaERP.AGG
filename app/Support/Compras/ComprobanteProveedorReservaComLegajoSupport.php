@@ -185,6 +185,7 @@ final class ComprobanteProveedorReservaComLegajoSupport
      * @param  array<int|string, float>  $importePorFactura
      * @param  array<int|string, array{moneda_id: int, cotizacion: float, fecha?: mixed}>  $contextoMoneda
      * @param  array<int, string>  $etiquetasCom
+     * @param  array<int|string, string>  $etiquetasFactura  precarga_id|cp-N => número visible (ej. FGA A 3093-00133939)
      */
     public static function mensajeMonedaIncoherenteFacturaVsCom(
         array $asignacionesPorPrecarga,
@@ -192,6 +193,7 @@ final class ComprobanteProveedorReservaComLegajoSupport
         array $importePorFactura,
         array $contextoMoneda,
         array $etiquetasCom = [],
+        array $etiquetasFactura = [],
     ): ?string {
         foreach ($asignacionesPorPrecarga as $precargaId => $recepcionIds) {
             $clave = is_numeric($precargaId) ? (int) $precargaId : trim((string) $precargaId);
@@ -243,12 +245,14 @@ final class ComprobanteProveedorReservaComLegajoSupport
             $etiqueta = trim((string) ($etiquetasCom[$rids[0]] ?? ''));
             $comLabel = $etiqueta !== '' ? $etiqueta : '#'.$rids[0];
             $provisionEnPesos = round($sumaProvision * $cotizacion, 2);
+            $facturaLabel = self::etiquetaFacturaMonedaIncoherente($clave, $etiquetasFactura);
 
             return sprintf(
-                'La factura está declarada en moneda extranjera (cotización %s) con importe %s, '
+                'La factura %s está declarada en moneda extranjera (cotización %s) con importe %s, '
                 .'pero la COM %s provisionó %s en esa moneda (≈ %s en pesos = provisión × cotización). '
-                .'Si la factura está en pesos, cambie la moneda a pesos antes de asignar la COM; '
+                .'Si esa factura está en pesos, cambie su moneda a pesos antes de asignar la COM; '
                 .'si está en dólares, el neto debería ser %s (no %s).',
+                $facturaLabel,
                 number_format($cotizacion, 2, ',', '.'),
                 number_format($importe, 2, ',', '.'),
                 $comLabel,
@@ -260,6 +264,27 @@ final class ComprobanteProveedorReservaComLegajoSupport
         }
 
         return null;
+    }
+
+    /**
+     * Número que el usuario ve en la bandeja. Sin etiqueta, al menos el id interno.
+     *
+     * @param  int|string  $clave
+     * @param  array<int|string, string>  $etiquetasFactura
+     */
+    private static function etiquetaFacturaMonedaIncoherente($clave, array $etiquetasFactura): string
+    {
+        $etiqueta = trim((string) ($etiquetasFactura[$clave] ?? $etiquetasFactura[(string) $clave] ?? ''));
+        if ($etiqueta !== '') {
+            return $etiqueta;
+        }
+
+        $claveTexto = (string) $clave;
+        if (preg_match('/^cp-(\d+)$/i', $claveTexto, $m)) {
+            return 'comprobante #'.$m[1];
+        }
+
+        return 'precarga #'.$claveTexto;
     }
 
     /**

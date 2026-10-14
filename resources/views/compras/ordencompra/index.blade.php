@@ -57,6 +57,7 @@ $(function () {
 <?php use App\Support\Compras\OrdencompraListadoFiltros; ?>
 
 @section('contenido')
+@include('includes.contable.modalconsultacuentacontable')
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
 @endphp

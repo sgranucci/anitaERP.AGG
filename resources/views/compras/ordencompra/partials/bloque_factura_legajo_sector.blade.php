@@ -9,6 +9,7 @@
         <span class="js-oc-gate-com-ok"></span>
     </div>
     <div class="alert alert-warning py-2 mb-2 js-oc-gate-errores d-none"></div>
+    <div class="js-oc-nc-imputacion d-none mb-2"></div>
     <div class="js-oc-pdf-upload">
         <label for="{{ $prefix }}_factura_pdf">Adjuntar PDF de factura</label>
         <input type="file" name="factura_pdf" id="{{ $prefix }}_factura_pdf" class="form-control-file" accept="application/pdf,.pdf">

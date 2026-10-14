@@ -57,6 +57,12 @@ final class PrecargaProveedorAbreviaturaTipoSupport
      */
     public static function abreviaturaDesdeOrdencompra(Ordencompra $oc, string $tipoComprobante = 'FC'): ?string
     {
+        $tipoComprobante = strtoupper(trim($tipoComprobante));
+        // El recibo no depende del centro de costo: el maestro es la abreviatura REC.
+        if ($tipoComprobante === 'REC') {
+            return 'REC';
+        }
+
         $oc->loadMissing([
             'centrocostos:id,codigo,tipoiva',
             'ordencompra_articulos.centrocostos_destino:id,codigo,tipoiva',
@@ -196,7 +202,7 @@ final class PrecargaProveedorAbreviaturaTipoSupport
 
     public static function esTipoGenerico(string $tipo): bool
     {
-        return in_array(strtoupper(trim($tipo)), ['FC', 'NC', 'ND'], true);
+        return in_array(strtoupper(trim($tipo)), ['FC', 'NC', 'ND', 'REC'], true);
     }
 
     /**
@@ -290,6 +296,7 @@ final class PrecargaProveedorAbreviaturaTipoSupport
             'FC' => 'FC — Factura (según primer centro de costo de la OC)',
             'NC' => 'NC — Nota de crédito (no exige COM)',
             'ND' => 'ND — Nota de débito (no exige COM)',
+            'REC' => 'REC — Recibo',
         ] as $val => $label) {
             if (! isset($seen[$val])) {
                 $opciones[] = ['value' => $val, 'label' => $label];

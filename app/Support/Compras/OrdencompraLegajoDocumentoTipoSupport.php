@@ -128,8 +128,8 @@ final class OrdencompraLegajoDocumentoTipoSupport
     {
         $t = self::desdeAbreviatura($tipoGenerico, $tipoGenerico);
 
-        // NC y ND no exigen recepción; REC tampoco.
-        return ! in_array($t, ['NC', 'ND', 'REC'], true);
+        // NC y ND no exigen recepción. El recibo sigue la misma regla que la factura.
+        return ! in_array($t, ['NC', 'ND'], true);
     }
 
     public static function mensajeSinRecepcionPorTipo(?string $tipoGenerico): string
@@ -137,7 +137,6 @@ final class OrdencompraLegajoDocumentoTipoSupport
         return match (self::etiquetaCorta((string) $tipoGenerico)) {
             'NC' => 'Las notas de crédito no requieren recepción COM.',
             'ND' => 'Las notas de débito no requieren recepción COM.',
-            'REC' => 'Los recibos no requieren recepción COM.',
             default => 'Este tipo de comprobante no requiere recepción COM.',
         };
     }
@@ -184,8 +183,7 @@ final class OrdencompraLegajoDocumentoTipoSupport
     public static function prioridadCarga(string $tipoGenerico): int
     {
         return match (PrecargaProveedorTipoComprobanteSupport::normalizar($tipoGenerico)) {
-            'FC', 'ND', 'REM' => 0,
-            'REC' => 1,
+            'FC', 'ND', 'REC', 'REM' => 0,
             'NC' => 2,
             default => 0,
         };

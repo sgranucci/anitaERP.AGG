@@ -6,6 +6,7 @@ use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Stock\Articulo;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use Carbon\Carbon;
 use RuntimeException;
 
@@ -210,7 +211,22 @@ final class OrdencompraContratoRutaFacturaSupport
     }
 
     /**
+     * La OC reparte el gasto cuando hay al menos dos centros destino con peso.
+     */
+    public static function prorrateaGastoPorCentrocosto(?Ordencompra $oc): bool
+    {
+        if (! $oc) {
+            return false;
+        }
+
+        return count(PrecargaProveedorProrrateoMultiCcSupport::centrosConPesoDesdeOrdencompraErp($oc)) >= 2;
+    }
+
+    /**
      * Prorratea el neto de la factura sobre las cuentas de compra/gasto de los artículos de la OC.
+     *
+     * Con cuenta forzada (la del neto, sea cual fuere) esa misma cuenta se abre en cada centro.
+     * Sin cuenta, cada renglón usa la cuenta de compras/gastos del artículo.
      *
      * @return list<array{cuentacontable_id:int, importe:float, centrocosto_id:int, observacion:string}>
      */
@@ -220,6 +236,7 @@ final class OrdencompraContratoRutaFacturaSupport
         int $empresaId,
         int $centrocostoDefault,
         string $observacion,
+        int $cuentaForzadaId = 0,
     ): array {
         $importeNeto = round($importeNeto, 2);
         if ($importeNeto <= 0) {
@@ -259,7 +276,9 @@ final class OrdencompraContratoRutaFacturaSupport
             }
 
             $articulo = $linea->articulos;
-            $ctaId = self::cuentaCompraOGastoArticulo($articulo, $empresaId);
+            $ctaId = $cuentaForzadaId > 0
+                ? $cuentaForzadaId
+                : self::cuentaCompraOGastoArticulo($articulo, $empresaId);
             if ($ctaId <= 0) {
                 $etiqueta = trim((string) ($articulo->sku ?? '').' '.(string) ($articulo->descripcion ?? ''));
                 throw new RuntimeException(
