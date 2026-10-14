@@ -277,6 +277,8 @@
                     </select>
                     @if ($tratamientoBloqueado)
                         <small class="form-text text-muted">No se puede cambiar: la OC ya tiene recepción o factura asociada.</small>
+                    @elseif (!empty($tratamiento_permite_pasar_a_anticipada))
+                        <small class="form-text text-muted">{{ \App\Support\Compras\OrdencompraTratamientoMovimientosSupport::mensajePermitePasarAAnticipada() }}</small>
                     @endif
                 </div>
                 <label for="numeroordencompra_show" class="col-lg-2 control-label text-right pr-2">Nº OC</label>

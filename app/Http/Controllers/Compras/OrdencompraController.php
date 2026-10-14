@@ -1459,6 +1459,7 @@ class OrdencompraController extends Controller
         $oc_totales_resumen = OrdencompraTotalesResumen::vacioParaVista();
         $oc_datos_envio_proveedor = null;
         $tratamiento_bloqueado_por_movimientos = false;
+        $tratamiento_permite_pasar_a_anticipada = false;
         if ($id !== null && $data) {
             $oc_totales_resumen = OrdencompraTotalesResumen::desdeModelo($data, $this->cotizacionQuery, $this->impuestoService);
             $monRef = $moneda_query->firstWhere('id', $oc_totales_resumen['moneda_id']);
@@ -1466,7 +1467,12 @@ class OrdencompraController extends Controller
                 $oc_totales_resumen['moneda_abrev'] = (string) ($monRef->abreviatura ?? '');
             }
             $oc_datos_envio_proveedor = $this->ordencompraEnvioProveedorService->datosEnvio($id);
-            $tratamiento_bloqueado_por_movimientos = OrdencompraTratamientoMovimientosSupport::hayMovimientosQueBloqueanCambio($id);
+            $estadoTratamiento = OrdencompraTratamientoMovimientosSupport::estadoEdicion(
+                $id,
+                $data->tratamiento ?? null,
+            );
+            $tratamiento_bloqueado_por_movimientos = $estadoTratamiento['bloqueado'];
+            $tratamiento_permite_pasar_a_anticipada = $estadoTratamiento['permite_pasar_a_anticipada'];
         }
 
         $sugerir_envio_oc = session('sugerir_envio_oc');
@@ -1558,6 +1564,7 @@ class OrdencompraController extends Controller
             'transporte_query',
             'tratamiento_enum',
             'tratamiento_bloqueado_por_movimientos',
+            'tratamiento_permite_pasar_a_anticipada',
             'estados_oc',
             'tipos_comprobante',
             'visualizar',
