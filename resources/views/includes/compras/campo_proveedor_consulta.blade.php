@@ -37,5 +37,13 @@
         @if (! empty($mostrar_aviso_cuenta))
         <span id="cp-aviso-proveedor-cuenta" class="small text-danger d-none d-block mt-1"></span>
         @endif
+        @if (! empty($mostrar_aviso_suspendido))
+        @php
+            $estadoProveedorAviso = trim((string) ($estado_proveedor ?? ''));
+        @endphp
+        <div id="cp-aviso-proveedor-suspendido" class="alert alert-warning py-2 mt-2 mb-0{{ $estadoProveedorAviso === 'Suspendido' ? '' : ' d-none' }}" role="status">
+            El proveedor está suspendido.
+        </div>
+        @endif
     </div>
 </div>

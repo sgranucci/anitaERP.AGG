@@ -2,6 +2,7 @@
 
 namespace App\Services\Contable;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -223,6 +224,10 @@ class ContabilidadCuentaAutomaticaSeedService
 
     private function codigoSugeridoParaClave(string $clave): ?string
     {
+        if ($clave === CuentaAutomaticaClaves::FACTURACION_LOCAL_VENTAS && EntornoEmpresaSupport::esFerli()) {
+            return '411000003';
+        }
+
         if (isset(self::CODIGO_SUGERIDO_POR_CLAVE[$clave])) {
             return self::CODIGO_SUGERIDO_POR_CLAVE[$clave];
         }

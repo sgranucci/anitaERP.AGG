@@ -101,6 +101,12 @@ final class CuentaAutomaticaClaves
 
     public const CIERRE_MAQUINA_PAGO24 = 'cierre_maquina.pago24';
 
+    /**
+     * Neto de comprobantes de locales (POS, Tiendanube, Facturante).
+     * No usa la cuenta de venta del artículo (F-VENTAS).
+     */
+    public const FACTURACION_LOCAL_VENTAS = 'facturacion_local.ventas';
+
     /** IVA fiscal general (todas las ventas / cierres que lo consumen). */
     public const VENTAS_IVA_DEBITO_FISCAL = 'ventas.iva_debito_fiscal';
 
@@ -491,6 +497,13 @@ final class CuentaAutomaticaClaves
             self::CIERRE_MAQUINA_PAGO24 => [
                 'grupo' => 'Cierre rendiciones máquinas',
                 'descripcion' => 'Pago 24 / venta ant. gastro (impcont 499)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::FACTURACION_LOCAL_VENTAS => [
+                'grupo' => 'Facturación local',
+                'descripcion' => 'Neto de ventas de locales (L-VENTAS). POS, Tiendanube y Facturante imputan el comprobante completo acá',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,

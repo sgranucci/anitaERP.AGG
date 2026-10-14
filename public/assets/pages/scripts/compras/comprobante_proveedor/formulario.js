@@ -3655,7 +3655,17 @@ $(function () {
                 $(this).val(v);
             });
 
+        function mostrarAvisoProveedorSuspendido(data) {
+            var $aviso = $('#cp-aviso-proveedor-suspendido');
+            if (!$aviso.length) {
+                return;
+            }
+            var suspendido = String((data && data.estado) || '') === 'Suspendido';
+            $aviso.toggleClass('d-none', !suspendido);
+        }
+
         window.afterProveedorConsultaOk = function (data, $input) {
+            mostrarAvisoProveedorSuspendido(data);
             aplicarLetraDesdeProveedor(data);
             var $codigo = $input && $input.length ? $input : $('#codigoproveedor');
             if (!$codigo.data('cp-avanzar-tras-ok')) {

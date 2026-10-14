@@ -60,6 +60,7 @@ class MayorPlanoCuentaComprobanteEnricher
         $remesaIds = [];
         $solicitudpagoIds = [];
         $cpIds = [];
+        $cobranzaIds = [];
         foreach ($filas as $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
                 continue;
@@ -82,7 +83,13 @@ class MayorPlanoCuentaComprobanteEnricher
             if ($cpLinea > 0) {
                 $cpIds[$cpLinea] = $cpLinea;
             }
+            $cobId = (int) ($fks['cobranza_id'] ?? 0);
+            if ($cobId > 0) {
+                $cobranzaIds[$cobId] = $cobId;
+            }
         }
+
+        $cobranzas = $this->cargarCobranzas(array_values($cobranzaIds));
 
         $numerosRemesa = [];
         if ($remesaIds !== [] && Schema::hasTable('remesa')) {
@@ -143,11 +150,12 @@ class MayorPlanoCuentaComprobanteEnricher
             $this->aplicarFacturaDeLineaIe($filas[$idx], $factura);
 
             if (trim((string) ($filas[$idx]['comprobante'] ?? '')) === '') {
-                $filas[$idx]['comprobante'] = $this->etiquetaComprobante($filas[$idx]);
+                $filas[$idx]['comprobante'] = $this->etiquetaComprobante($filas[$idx], $cobranzas);
             }
             if (trim((string) ($filas[$idx]['tipo_comp'] ?? '')) === '' && $filas[$idx]['comprobante'] !== '') {
-                $filas[$idx]['tipo_comp'] = $this->tipoCompDesdeFila($filas[$idx]);
+                $filas[$idx]['tipo_comp'] = $this->tipoCompDesdeFila($filas[$idx], $cobranzas);
             }
+            $this->aplicarTipoCobranza($filas[$idx], $cobranzas);
         }
 
         return $filas;
@@ -273,9 +281,74 @@ class MayorPlanoCuentaComprobanteEnricher
     }
 
     /**
-     * @param  array<string, mixed>  $fila
+     * Número y abreviatura (COB / COA) de las cobranzas del tramo.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array{tipo: string, numero: int}>
      */
-    private function etiquetaComprobante(array $fila): string
+    private function cargarCobranzas(array $ids): array
+    {
+        if ($ids === [] || ! Schema::hasTable('cobranza')) {
+            return [];
+        }
+
+        $query = DB::table('cobranza as c')
+            ->whereIn('c.id', $ids)
+            ->select(['c.id', 'c.numerotransaccion']);
+
+        if (Schema::hasTable('tipotransaccion_caja') && Schema::hasColumn('cobranza', 'tipotransaccion_caja_id')) {
+            $query->leftJoin('tipotransaccion_caja as tt', 'tt.id', '=', 'c.tipotransaccion_caja_id')
+                ->addSelect('tt.abreviatura');
+        }
+
+        $out = [];
+        foreach ($query->get() as $row) {
+            $tipo = strtoupper(substr(trim((string) ($row->abreviatura ?? 'COB')), 0, 3));
+            if (! in_array($tipo, ['COB', 'COA'], true)) {
+                $tipo = 'COB';
+            }
+            $out[(int) $row->id] = [
+                'tipo' => $tipo,
+                'numero' => (int) ($row->numerotransaccion ?? 0),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Tip de una cobranza es COB o COA, nunca una palabra del nombre del cliente.
+     *
+     * @param  array<string, mixed>  $fila
+     * @param  array<int, array{tipo: string, numero: int}>  $cobranzas
+     */
+    private function aplicarTipoCobranza(array &$fila, array $cobranzas): void
+    {
+        $cobId = (int) ($fila['cobranza_id'] ?? 0);
+        if ($cobId <= 0) {
+            return;
+        }
+
+        $cobranza = $cobranzas[$cobId] ?? ['tipo' => 'COB', 'numero' => 0];
+        $tipoActual = strtoupper(trim((string) ($fila['tipo_comp'] ?? '')));
+        if (! in_array($tipoActual, ['COB', 'COA'], true)) {
+            $fila['tipo_comp'] = $cobranza['tipo'];
+        }
+
+        $comp = trim((string) ($fila['comprobante'] ?? ''));
+        $esPlaceholder = $comp === ''
+            || str_starts_with(strtoupper($comp), 'NRO')
+            || preg_match('/^Cobranza #\d+$/', $comp) === 1;
+        if ($esPlaceholder && (int) $cobranza['numero'] > 0) {
+            $fila['comprobante'] = (string) $cobranza['numero'];
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     * @param  array<int, array{tipo: string, numero: int}>  $cobranzas
+     */
+    private function etiquetaComprobante(array $fila, array $cobranzas = []): string
     {
         if ((int) ($fila['comprobante_proveedor_id'] ?? 0) > 0) {
             return 'CP #'.(int) $fila['comprobante_proveedor_id'];
@@ -298,7 +371,9 @@ class MayorPlanoCuentaComprobanteEnricher
             return 'TM #'.(int) $fila['transferencia_mercaderia_id'];
         }
         if ((int) ($fila['cobranza_id'] ?? 0) > 0) {
-            return 'Cobranza #'.(int) $fila['cobranza_id'];
+            $numero = (int) ($cobranzas[(int) $fila['cobranza_id']]['numero'] ?? 0);
+
+            return $numero > 0 ? (string) $numero : 'Cobranza #'.(int) $fila['cobranza_id'];
         }
         if ((int) ($fila['pagoproveedor_id'] ?? 0) > 0) {
             return 'Pago #'.(int) $fila['pagoproveedor_id'];
@@ -338,8 +413,9 @@ class MayorPlanoCuentaComprobanteEnricher
 
     /**
      * @param  array<string, mixed>  $fila
+     * @param  array<int, array{tipo: string, numero: int}>  $cobranzas
      */
-    private function tipoCompDesdeFila(array $fila): string
+    private function tipoCompDesdeFila(array $fila, array $cobranzas = []): string
     {
         if ((int) ($fila['remesa_id'] ?? 0) > 0) {
             return 'REM';
@@ -354,7 +430,7 @@ class MayorPlanoCuentaComprobanteEnricher
             return 'TM';
         }
         if ((int) ($fila['cobranza_id'] ?? 0) > 0) {
-            return 'COB';
+            return $cobranzas[(int) $fila['cobranza_id']]['tipo'] ?? 'COB';
         }
         if ((int) ($fila['pagoproveedor_id'] ?? 0) > 0) {
             return 'OPP';

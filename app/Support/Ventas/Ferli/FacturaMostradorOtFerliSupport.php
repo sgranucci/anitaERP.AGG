@@ -364,6 +364,8 @@ final class FacturaMostradorOtFerliSupport
         if ($comb !== '') {
             $sufijo .= ' · '.$comb;
         }
+        $despacho = FacturaDespachoFerliSupport::desdeLinea($pc, (int) $ot->id);
+        $loteImportacionId = (int) $despacho['loteimportacion_id'];
 
         $salida = [];
         $indice = 0;
@@ -387,6 +389,8 @@ final class FacturaMostradorOtFerliSupport
                 'modulo_id' => (int) ($pc->modulo_id ?? 0),
                 'ordentrabajo_id' => (int) $ot->id,
                 'pedido_combinacion_id' => (int) $pc->id,
+                'despacho' => (string) $despacho['despacho'],
+                'loteimportacion_id' => $loteImportacionId > 0 ? $loteImportacionId : null,
                 'ot_codigo' => (string) $ot->codigo,
                 'pedido_codigo' => (string) ($pc->pedidos->codigo ?? ''),
             ];

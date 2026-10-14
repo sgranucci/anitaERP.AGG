@@ -130,8 +130,6 @@ class RepArticuloVendidoFerliService
             ->leftJoin('lote as lote_importacion', function ($join) use ($loteimportacionExpr) {
                 $join->on('lote_importacion.id', '=', DB::raw('('.$loteimportacionExpr.')'));
             })
-            ->whereNull('articulo_movimiento.deleted_at')
-            ->whereNull('venta.deleted_at')
             ->whereNotNull('articulo_movimiento.pedido_combinacion_id')
             ->whereBetween('venta.fecha', [$desdefecha, $hastafecha])
             ->whereBetween('articulo.id', [$desdearticulo_id, $hastaarticulo_id])

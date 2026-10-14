@@ -353,6 +353,8 @@ final class FacturaMostradorPickingFerliSupport
         if ($otId <= 0) {
             $otId = (int) ($pc->ot_id ?? 0);
         }
+        $despacho = FacturaDespachoFerliSupport::desdeLinea($pc, $otId);
+        $loteImportacionId = (int) $despacho['loteimportacion_id'];
 
         $salida = [];
         $indice = 0;
@@ -378,6 +380,8 @@ final class FacturaMostradorPickingFerliSupport
                 'modulo_id' => (int) ($pc->modulo_id ?? 0),
                 'ordentrabajo_id' => $otId > 0 ? $otId : 0,
                 'pedido_combinacion_id' => (int) $pc->id,
+                'despacho' => (string) $despacho['despacho'],
+                'loteimportacion_id' => $loteImportacionId > 0 ? $loteImportacionId : null,
                 'picking_codigo' => $pickingCodigo,
                 'pedido_codigo' => $pedidoCodigo,
             ];

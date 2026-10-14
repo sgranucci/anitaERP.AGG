@@ -304,6 +304,36 @@ final class MayorPlanoCuentaErpAsientoReader
             $linea++;
             $nroMov = (int) ($row->mov_anita_nro ?? 0);
             $usaDocumentoLinea = $nroMov > 0;
+            // La observación de una cobranza nativa trae el cliente («NORMA - Cobranza
+            // Nro. 77722»). Ese texto no es el tipo: Tip tiene que decir COB/FAC/….
+            $visible = AsientoAnitaMetadatosSupport::comprobanteVisible($obsAsiento);
+            $tipoPersistido = $usaDocumentoLinea
+                ? trim((string) ($row->mov_anita_tipo ?? ''))
+                : trim((string) ($row->anita_tipo ?? ''));
+            if ($tipoPersistido !== '') {
+                $tipo = $tipoPersistido;
+                $letra = $usaDocumentoLinea
+                    ? (string) ($row->mov_anita_letra ?? ' ')
+                    : (($row->anita_letra ?? null) !== null
+                        ? (string) $row->anita_letra
+                        : $comprobante['letra']);
+                $sucursal = $usaDocumentoLinea
+                    ? (int) ($row->mov_anita_sucursal ?? 0)
+                    : (($row->anita_sucursal ?? null) !== null
+                        ? (int) $row->anita_sucursal
+                        : $comprobante['sucursal']);
+                $nro = $usaDocumentoLinea
+                    ? $nroMov
+                    : (($row->anita_nro ?? null) !== null
+                        ? (int) $row->anita_nro
+                        : $comprobante['nro']);
+            } else {
+                $tipo = $visible['tipo'];
+                $letra = $visible['letra'];
+                $sucursal = $visible['sucursal'];
+                $nro = $visible['nro'];
+            }
+            $sistemaPersistido = trim((string) ($row->anita_sistema ?? ''));
 
             $filaCtamov = (object) [
                 'ctav_empresa' => (int) $row->empresa_id,
@@ -312,24 +342,10 @@ final class MayorPlanoCuentaErpAsientoReader
                 'ctav_d_h' => $monto >= 0 ? 'D' : 'H',
                 'ctav_cuenta' => (int) $grupo['cuenta'],
                 'ctav_fecha' => (int) str_replace('-', '', substr((string) $row->fecha, 0, 10)),
-                'ctav_tipo' => $usaDocumentoLinea
-                    ? (trim((string) ($row->mov_anita_tipo ?? '')) ?: $comprobante['tipo'])
-                    : (trim((string) ($row->anita_tipo ?? '')) ?: $comprobante['tipo']),
-                'ctav_letra' => $usaDocumentoLinea
-                    ? (string) ($row->mov_anita_letra ?? ' ')
-                    : (($row->anita_letra ?? null) !== null
-                        ? (string) $row->anita_letra
-                        : $comprobante['letra']),
-                'ctav_sucursal' => $usaDocumentoLinea
-                    ? (int) ($row->mov_anita_sucursal ?? 0)
-                    : (($row->anita_sucursal ?? null) !== null
-                        ? (int) $row->anita_sucursal
-                        : $comprobante['sucursal']),
-                'ctav_nro' => $usaDocumentoLinea
-                    ? $nroMov
-                    : (($row->anita_nro ?? null) !== null
-                        ? (int) $row->anita_nro
-                        : $comprobante['nro']),
+                'ctav_tipo' => $tipo,
+                'ctav_letra' => $letra,
+                'ctav_sucursal' => $sucursal,
+                'ctav_nro' => $nro,
                 'ctav_importe' => abs($monto),
                 'ctav_desc_mov' => $grupo['observacion'] !== '' ? $grupo['observacion'] : $obsAsiento,
                 'ctav_cod_mon' => (string) ($row->moneda_codigo ?? '1'),
@@ -338,7 +354,7 @@ final class MayorPlanoCuentaErpAsientoReader
                 'ctav_balancea' => 'S',
                 'ctav_o_compra' => (int) ($row->mov_nro_ordencompra ?? 0),
                 'ctav_ccosto' => (int) ($row->ccosto_codigo ?? 0),
-                'ctav_sistema' => trim((string) ($row->anita_sistema ?? '')) ?: $comprobante['sistema'],
+                'ctav_sistema' => $sistemaPersistido !== '' ? $sistemaPersistido : $visible['sistema'],
                 'ctav_asi_mon_ref' => AnitaAsientoImportService::ASI_MON_REF_ORIGEN_ERP,
                 'erp_origen_subdiario' => $esSub,
                 'erp_asiento_obs' => $obsAsiento,

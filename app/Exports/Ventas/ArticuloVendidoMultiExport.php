@@ -3,9 +3,11 @@
 namespace App\Exports\Ventas;
 
 use Maatwebsite\Excel\Concerns\Exportable;
+use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithMultipleSheets;
+use Maatwebsite\Excel\Events\BeforeWriting;
 
-class ArticuloVendidoMultiExport implements WithMultipleSheets
+class ArticuloVendidoMultiExport implements WithMultipleSheets, WithEvents
 {
     use Exportable;
 
@@ -44,6 +46,24 @@ class ArticuloVendidoMultiExport implements WithMultipleSheets
         $this->hastalinea_id = $params['hastalinea_id'];
         $this->mventa_id = $params['mventa_id'];
         $this->nombremventa = $params['nombremventa'];
+    }
+
+    public function registerEvents(): array
+    {
+        return [
+            BeforeWriting::class => function (BeforeWriting $event) {
+                $libro = $event->writer->getDelegate();
+                $activa = 0;
+                foreach ($libro->getAllSheets() as $indice => $hoja) {
+                    $primera = trim((string) $hoja->getCell('A6')->getValue());
+                    if ($primera !== '' && ! str_starts_with($primera, 'Sin ventas')) {
+                        $activa = $indice;
+                        break;
+                    }
+                }
+                $libro->setActiveSheetIndex($activa);
+            },
+        ];
     }
 
     public function sheets(): array

@@ -57,6 +57,12 @@
     @endforeach
     @if (count($articulos) > 0)
         @include('exports.ventas.reportearticulovendido.imprimetotalfinal', ['totales' => $totales])
+    @else
+        <tr>
+            <td colspan="10" style="font-family: Arial; font-style: italic;">
+                Sin ventas de este origen para los filtros indicados.
+            </td>
+        </tr>
     @endif
     </tbody>
 </table>

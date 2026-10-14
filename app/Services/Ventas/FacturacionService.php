@@ -57,6 +57,7 @@ use App\Models\Stock\Lote;
 use App\Models\Stock\Linea;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\Ferli\FacturaDespachoFerliSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorOtFerliSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorPickingFerliSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
@@ -65,6 +66,7 @@ use setasign\Fpdi\Fpdi;
 use App\Support\Ventas\CaiRemitoVigenteSupport;
 use App\Support\Ventas\FerliRinNumeracionSupport;
 use App\Support\Ventas\RemitoFormularioLeyendaSupport;
+use App\Support\Ventas\ReceptorEventualContactoSupport;
 use App\Support\Ventas\RemitoValorAseguradoSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
@@ -106,6 +108,7 @@ use App\Support\Ventas\FacturaAsientoDescuentoPieSupport;
 use App\Support\Ventas\Ferli\FacturaAsientoIvaPrecioFerliSupport;
 use App\Support\Ventas\FacturaBTotalesImpresionSupport;
 use App\Support\Ventas\FacturaPdfIdentificacionSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalCuentaVentaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
 use App\Support\Ventas\ElBierzoFacturacionCaeaSaltoSupport;
 use App\Models\Stock\Talle;
@@ -3112,6 +3115,8 @@ class FacturacionService
 			$codigoCombinacionLinea = null;
 			$ordentrabajoIdLinea = null;
 			$pedidoCombinacionIdLinea = null;
+			$despachoLinea = '';
+			$loteImportacionIdLinea = null;
 			if (is_array($otLineaMostrador)) {
 				$cantidadLinea = (float) $otLineaMostrador['cantidad'];
 				$kiloDescuento = $cantidadLinea;
@@ -3135,6 +3140,9 @@ class FacturacionService
 				$codigoCombinacionLinea = (string) ($otLineaMostrador['codigocombinacion'] ?? '');
 				$ordentrabajoIdLinea = (int) $otLineaMostrador['ordentrabajo_id'];
 				$pedidoCombinacionIdLinea = (int) $otLineaMostrador['pedido_combinacion_id'];
+				$despachoLinea = trim((string) ($otLineaMostrador['despacho'] ?? ''));
+				$loteImpMostrador = (int) ($otLineaMostrador['loteimportacion_id'] ?? 0);
+				$loteImportacionIdLinea = $loteImpMostrador > 0 ? $loteImpMostrador : null;
 			}
 
 			if (EntornoEmpresaSupport::esElBierzo() && $this->flDivide && ! $esPosMostrador && ! $esNcMostrador) {
@@ -3214,6 +3222,8 @@ class FacturacionService
 				'codigocombinacion' => $codigoCombinacionLinea,
 				'ordentrabajo_id' => $ordentrabajoIdLinea,
 				'pedido_combinacion_id' => $pedidoCombinacionIdLinea,
+				'despacho' => $despachoLinea,
+				'loteimportacion_id' => $loteImportacionIdLinea,
 				'origen_mostrador' => is_array($otLineaMostrador) ? ($otLineaMostrador['origen_mostrador'] ?? null) : null,
 			];
 			$totCantidad += $cantidadLinea;
@@ -3573,6 +3583,23 @@ class FacturacionService
 			if (! empty($vr['provincia_id'])) {
 				$clienteGraba->provincia_id = (int) $vr['provincia_id'];
 			}
+			// El maestro es un shell (Factura A eventual). No copiar su mail, teléfono ni expreso.
+			if (ReceptorEventualContactoSupport::identidadDistintaDelMaestro(
+				(string) ($clienteGraba->nombre ?? ''),
+				(string) ($clienteGraba->numerodocumento ?? ''),
+				(string) ($cliente->nombre ?? ''),
+				(string) ($cliente->numerodocumento ?? ''),
+			)) {
+				if (trim((string) ($vr['email'] ?? '')) === '') {
+					$clienteGraba->email = '';
+				}
+				if (trim((string) ($vr['telefono'] ?? '')) === '') {
+					$clienteGraba->telefono = '';
+				}
+				if ((int) ($vr['transporte_id'] ?? 0) <= 0) {
+					$clienteGraba->transporte_id = null;
+				}
+			}
 		}
 		$provinciaPedido = (int) ($data['provincia_id'] ?? 0);
 		if ($provinciaPedido > 0) {
@@ -3718,6 +3745,13 @@ class FacturacionService
 			{
 				// NCP de cobranza: el neto va a la cuenta de Configuración general, no a ventas ni al asiento de la factura.
 				$esNcpCobranza = ! empty($data[NotaCreditoPercepcionIibbSupport::FLAG_NCP]);
+				if (! $esNcpCobranza) {
+					$dataFactura = FacturacionLocalCuentaVentaSupport::aplicarSiCorresponde(
+						$dataFactura,
+						(int) $empresa->id,
+						(int) ($puntoventa->id ?? 0),
+					);
+				}
 				if ($esNcpCobranza) {
 					$cuentaNcpId = ParametroSistemaSupport::ncpProntoPagoCuentaIdParaEmpresa((int) $empresa->id);
 					if ($cuentaNcpId <= 0) {
@@ -9541,6 +9575,7 @@ class FacturacionService
 		// Ferli: el despacho de importación vive en el lote (lote.numerodespacho).
 		// L8 lo grababa en Anita como compa_despacho; el PDF lo imprime bajo el color.
 		$despachoPorLote = [];
+		$despachoPorEmision = [];
 		if (EntornoEmpresaSupport::esFerli()) {
 			$loteIds = [];
 			foreach ($venta->venta_emisiones as $ventaItemLote) {
@@ -9555,6 +9590,21 @@ class FacturacionService
 					->pluck('numerodespacho', 'id')
 					->all();
 			}
+			$sinLoteDespacho = [];
+			foreach ($venta->venta_emisiones as $ventaItemLote) {
+				if ((int) ($ventaItemLote->loteimportacion_id ?? 0) > 0) {
+					continue;
+				}
+				$pcIdDespacho = (int) ($ventaItemLote->pedido_combinacion_id ?? 0);
+				if ($pcIdDespacho <= 0) {
+					continue;
+				}
+				$sinLoteDespacho[(int) $ventaItemLote->id] = [
+					'pc' => $pcIdDespacho,
+					'ot' => (int) ($ventaItemLote->ordentrabajo_id ?? 0),
+				];
+			}
+			$despachoPorEmision = FacturaDespachoFerliSupport::porEmisiones($sinLoteDespacho);
 		}
 		$netearPrecioImpreso = strtoupper((string) $letra) === 'A';
 		$tasaDetraccionImpresion = $netearPrecioImpreso
@@ -9638,7 +9688,7 @@ class FacturacionService
 			$loteImportacionId = (int) ($ventaItem->loteimportacion_id ?? 0);
 			$despachoItem = $loteImportacionId > 0
 				? trim((string) ($despachoPorLote[$loteImportacionId] ?? ''))
-				: '';
+				: trim((string) ($despachoPorEmision[(int) $ventaItem->id] ?? ''));
 			$tblItem[] = [
 				'sku' => $sku,
 				'detalle' => $detalle,

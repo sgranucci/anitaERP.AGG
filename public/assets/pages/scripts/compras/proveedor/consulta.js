@@ -204,8 +204,16 @@ function avisarProveedorNoCargado(mensaje) {
     }
 }
 
+function ocultarAvisoProveedorSuspendido() {
+    var $aviso = $('#cp-aviso-proveedor-suspendido');
+    if ($aviso.length) {
+        $aviso.addClass('d-none');
+    }
+}
+
 function limpiarProveedorEnPantalla() {
     limpiarEstadoConsultaProveedor();
+    ocultarAvisoProveedorSuspendido();
     $('#proveedor_id').val('');
     $('#codigoproveedor').val('');
     $('#nombreproveedor, #descripcionproveedor, .descripcionproveedor').val('');
@@ -218,6 +226,7 @@ function limpiarProveedorEnPantalla() {
 }
 
 function limpiarProveedorEnPantallaManteniendoCodigo() {
+    ocultarAvisoProveedorSuspendido();
     $('#proveedor_id').val('');
     $('#nombreproveedor, #descripcionproveedor, .descripcionproveedor').val('');
     $('#proveedor').val('');

@@ -7,6 +7,7 @@ use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Venta;
 use App\Support\Mail\EmailsMultiplesSupport;
 use App\Support\Ventas\FacturaMailConfiguracionSupport;
+use App\Support\Ventas\ReceptorEventualContactoSupport;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
@@ -127,7 +128,7 @@ class FacturaMailEnvioService
 
         $emails = $emailOverride !== null && trim($emailOverride) !== ''
             ? self::parseEmails($emailOverride)
-            : self::parseEmails((string) ($cliente?->email ?? $venta->email ?? ''));
+            : self::emailsDestino($venta, $cliente);
 
         if ($emails === []) {
             return ['puede' => false, 'motivo' => 'El cliente no tiene un email válido'];
@@ -266,6 +267,29 @@ class FacturaMailEnvioService
             '{empresa}' => (string) ($venta->puntoventas?->empresas?->nombre ?? ''),
             '{fecha}' => $fechaStr,
         ]);
+    }
+
+    /**
+     * El cliente eventual del POS queda imputado a un maestro shell (hoy el RI
+     * interno). Si el comprobante es de otra persona, no se usa el mail de esa ficha.
+     *
+     * @return list<string>
+     */
+    private static function emailsDestino(Venta $venta, ?Cliente $cliente): array
+    {
+        $emailMaestro = (string) ($cliente?->email ?? '');
+        $emailVenta = (string) ($venta->email ?? '');
+        $distinta = $cliente !== null && ReceptorEventualContactoSupport::identidadDistintaDelMaestro(
+            (string) ($venta->nombre ?? ''),
+            (string) ($venta->nroinscripcion ?? $venta->numerodocumento ?? ''),
+            (string) ($cliente->nombre ?? ''),
+            (string) ($cliente->numerodocumento ?? ''),
+        );
+        if (! $distinta) {
+            return self::parseEmails($emailMaestro !== '' ? $emailMaestro : $emailVenta);
+        }
+
+        return ReceptorEventualContactoSupport::emailsPropiosDelComprobante($emailVenta, $emailMaestro);
     }
 
     /**

@@ -21,6 +21,9 @@ final class FacturacionLocalReceptorSupport
 
     public const MODO_CF = 'cf';
 
+    /** Código del cliente shell de Factura A eventual. No es un cliente real. */
+    public const CODIGO_CLIENTE_RI = 'EVENTUAL';
+
     /**
      * @param  array<string,mixed>  $input
      * @return array{
@@ -338,6 +341,15 @@ final class FacturacionLocalReceptorSupport
         $id = (int) config('facturacion_local.cliente_ri_id', 0);
         if ($id > 0 && Cliente::query()->whereKey($id)->exists()) {
             return $id;
+        }
+
+        $interno = Cliente::query()
+            ->with('condicionivas')
+            ->where('codigo', self::CODIGO_CLIENTE_RI)
+            ->orderBy('id')
+            ->first();
+        if ($interno && strtoupper((string) ($interno->condicionivas?->letra ?? '')) === 'A') {
+            return (int) $interno->id;
         }
 
         $cliente = Cliente::query()

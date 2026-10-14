@@ -75,6 +75,82 @@ final class AsientoAnitaMetadatosSupport
         ];
     }
 
+    /**
+     * Comprobante para la columna Tip del mayor.
+     *
+     * Una observación libre («ERASUN, NORMA NELIDA - Cobranza Nro. 77722») no es
+     * un comprobante: el segundo término es el nombre del cliente y no debe
+     * ocupar Tip. Sí valen el subdiario («T COB A 1 77384») y el asiento nativo
+     * de ventas («FAC A 00012 82997»), donde el tipo es FAC/NCD/COB.
+     *
+     * @return array{origen: string, sistema: string, tipo: string, letra: string, sucursal: int, nro: int}
+     */
+    public static function comprobanteVisible(string $observacion): array
+    {
+        $parseado = self::desdeObservacion($observacion);
+        $vacio = [
+            'origen' => $parseado['origen'],
+            'sistema' => preg_match('/^[A-Z]$/', (string) $parseado['sistema']) === 1
+                ? (string) $parseado['sistema']
+                : '',
+            'tipo' => '',
+            'letra' => ' ',
+            'sucursal' => 0,
+            'nro' => 0,
+        ];
+
+        $texto = trim((string) preg_replace(
+            '/^\[(?:SUBH|SUBD|SUBHIST|SUBDIARIO|RESU)\]\s*/i',
+            '',
+            trim($observacion),
+        ));
+        if ($parseado['origen'] === self::ORIGEN_CTAMOV_RESUMEN) {
+            $partesResu = preg_split('/\s+/', $texto) ?: [];
+            if (count($partesResu) >= 5) {
+                array_splice($partesResu, 1, 1);
+                $texto = implode(' ', $partesResu);
+            }
+        }
+
+        $partes = preg_split('/\s+/', $texto) ?: [];
+        if (count($partes) < 2) {
+            return $vacio;
+        }
+
+        $primero = strtoupper($partes[0]);
+        $segundo = strtoupper($partes[1]);
+
+        if (preg_match('/^[A-Z]$/', $primero) === 1
+            && preg_match('/^[A-Z]{3}$/', $segundo) === 1
+            && (int) $parseado['nro'] > 0
+            && preg_match('/^[A-Z]{3}$/', (string) $parseado['tipo']) === 1) {
+            $parseado['sistema'] = $primero;
+
+            return $parseado;
+        }
+
+        $ultimo = (string) ($partes[count($partes) - 1] ?? '');
+        if (preg_match('/^[A-Z]{3}$/', $primero) === 1
+            && preg_match('/^[A-Z]$/', $segundo) === 1
+            && preg_match('/^\d+$/', $ultimo) === 1) {
+            $sucursal = 0;
+            if (count($partes) >= 4 && preg_match('/^\d+$/', (string) $partes[2]) === 1) {
+                $sucursal = (int) $partes[2];
+            }
+
+            return [
+                'origen' => $parseado['origen'],
+                'sistema' => '',
+                'tipo' => $primero,
+                'letra' => $segundo,
+                'sucursal' => $sucursal,
+                'nro' => (int) $ultimo,
+            ];
+        }
+
+        return $vacio;
+    }
+
     public static function origenDesdeObservacion(string $observacion): string
     {
         $normalizada = strtoupper(trim($observacion));
