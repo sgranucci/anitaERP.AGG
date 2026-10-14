@@ -97,6 +97,9 @@ function buscar_datos_proveedor(consulta) {
     if (empresaId !== '') {
         payload.empresa_id = empresaId;
     }
+    if (window.consultaProveedorIncluirSuspendidos) {
+        payload.incluir_suspendidos = 1;
+    }
     actualizarAvisoConsultaProveedor(empresaId);
     $('#datosproveedor').html('<tr><td colspan="9" class="text-muted">Buscando…</td></tr>');
     $.ajax({
@@ -144,8 +147,9 @@ function leerFilaProveedorConsulta($link) {
     var $tr = $link.closest('tr');
     return {
         id: $.trim($tr.find('td.proveedor_id').first().text()),
-        nombre: $.trim($tr.find('td.nombreproveedor').first().text()),
+        nombre: $.trim($tr.find('td.nombreproveedor').first().clone().children().remove().end().text()),
         codigo: $.trim($tr.find('td.codigoproveedor').first().text()),
+        estado: $.trim($tr.attr('data-estado') || ''),
     };
 }
 

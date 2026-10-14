@@ -85,6 +85,9 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
         if (! empty($stats)) {
             $this->filasMeta++;
         }
+        if (! empty($this->resultado['advertencias'])) {
+            $this->filasMeta++;
+        }
 
         $offsetLogo = $this->hayFilaLogos ? 1 : 0;
         $this->filaTituloExcel = $offsetLogo + 1;

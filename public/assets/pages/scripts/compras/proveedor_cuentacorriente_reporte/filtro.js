@@ -59,6 +59,14 @@
         return $('#tbody-proveedores-cc-reporte tr[data-id="' + id + '"]').length > 0;
     }
 
+    function nombreProveedorVisible(prov) {
+        var nombre = (prov && prov.nombre) ? String(prov.nombre) : '';
+        if (prov && String(prov.estado || '') === 'Suspendido' && nombre.indexOf('(Suspendido)') < 0) {
+            return nombre + ' (Suspendido)';
+        }
+        return nombre;
+    }
+
     function agregarProveedor(prov) {
         if (!prov || !prov.id) {
             return;
@@ -69,7 +77,7 @@
         }
         var $tr = $('<tr></tr>').attr('data-id', id);
         $tr.append($('<td></td>').text(prov.codigo || ''));
-        $tr.append($('<td></td>').text(prov.nombre || ''));
+        $tr.append($('<td></td>').text(nombreProveedorVisible(prov)));
         $tr.append(
             $('<td class="text-center"></td>').append(
                 $('<button type="button" class="btn btn-outline-danger btn-xs btn-quitar-proveedor-cc-reporte" title="Quitar"></button>')
@@ -102,6 +110,7 @@
                     id: data.id,
                     codigo: data.codigo || codigo,
                     nombre: data.nombre || '',
+                    estado: data.estado || '',
                 });
             })
             .fail(function () {
@@ -117,6 +126,7 @@
             id: prov.id,
             codigo: prov.codigo || '',
             nombre: prov.nombre || '',
+            estado: prov.estado || '',
         };
         if (destinoModal === 'rango_desde') {
             $('#proveedor_codigo_desde').val(normalizado.codigo);
@@ -267,7 +277,7 @@
                     return;
                 }
                 proveedorPendiente = prov;
-                $('#nombreproveedor_cc_reporte').val(prov.nombre || '');
+                $('#nombreproveedor_cc_reporte').val(nombreProveedorVisible(prov));
             });
         });
 
@@ -288,7 +298,7 @@
                 return;
             }
             resolverCodigo(codigo, function (prov) {
-                $('#nombreproveedor_rango_desde').val(prov ? (prov.nombre || '') : '');
+                $('#nombreproveedor_rango_desde').val(prov ? nombreProveedorVisible(prov) : '');
             });
         });
 
@@ -308,7 +318,7 @@
                 return;
             }
             resolverCodigo(codigo, function (prov) {
-                $('#nombreproveedor_rango_hasta').val(prov ? (prov.nombre || '') : '');
+                $('#nombreproveedor_rango_hasta').val(prov ? nombreProveedorVisible(prov) : '');
             });
         });
 

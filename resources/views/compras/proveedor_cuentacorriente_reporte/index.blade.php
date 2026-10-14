@@ -6,6 +6,7 @@
 
 @section('scripts')
 <script>
+    window.consultaProveedorIncluirSuspendidos = true;
     window.CC_PROVEEDORES_REPORTE = {
         proveedoresIniciales: @json($proveedores_iniciales ?? []),
         leerProveedorUrlBase: @json(url('compras/leerproveedorporcodigo')),

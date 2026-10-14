@@ -84,6 +84,9 @@
                 <h2 class="titulo-reporte">{{ $tituloReporte }}</h2>
                 <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
                 <div class="meta">{{ $subtitulo ?? '' }}</div>
+                @foreach ($resultado['advertencias'] ?? [] as $aviso)
+                    <div class="meta" style="color: #7d6608; font-weight: bold;">{{ $aviso }}</div>
+                @endforeach
             </td>
             <td style="width: 22%; text-align: right; font-size: 8px;">
                 @if ($totalProveedores > 0)

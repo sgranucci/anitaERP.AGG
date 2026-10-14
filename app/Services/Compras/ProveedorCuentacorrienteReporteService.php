@@ -109,12 +109,20 @@ class ProveedorCuentacorrienteReporteService
         $aplicacionesCount = 0;
         $cotizacionesDiaUsadas = 0;
         $esFicha = $modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA;
+        $suspendidosConSaldo = [];
 
         foreach ($porProveedor as $proveedorId => $movsProveedor) {
             /** @var Collection<int, Proveedor_Cuentacorriente> $movsProveedor */
             $primero = $movsProveedor->first();
             $proveedorCodigo = trim((string) ($primero->proveedores->codigo ?? ''));
             $proveedorNombre = (string) ($primero->proveedores->nombre ?? '');
+            $proveedorSuspendido = trim((string) ($primero->proveedores->estado ?? '')) === 'Suspendido';
+            $proveedorNombreAviso = $proveedorSuspendido
+                ? $proveedorNombre.' (Suspendido)'
+                : $proveedorNombre;
+            if ($proveedorSuspendido) {
+                $suspendidosConSaldo[] = trim($proveedorCodigo.' '.$proveedorNombre);
+            }
             $leyendaProveedor = ProveedorLeyendaCuentaCorrienteSupport::texto(
                 optional($primero->proveedores)->leyenda
             );
@@ -125,7 +133,8 @@ class ProveedorCuentacorrienteReporteService
                     'tipo' => 'header_proveedor',
                     'proveedor_id' => (int) $proveedorId,
                     'proveedor_codigo' => $proveedorCodigo,
-                    'proveedor_nombre' => $proveedorNombre,
+                    'proveedor_nombre' => $proveedorNombreAviso,
+                    'proveedor_suspendido' => $proveedorSuspendido,
                     'leyenda' => $leyendaProveedor,
                     'nombreempresa' => $nombreEmpresa,
                     'empresa_id' => (int) ($primero->empresa_id ?? 0),
@@ -320,7 +329,8 @@ class ProveedorCuentacorrienteReporteService
                 'tipo' => 'total_proveedor',
                 'proveedor_id' => (int) $proveedorId,
                 'proveedor_codigo' => $proveedorCodigo,
-                'proveedor_nombre' => $proveedorNombre,
+                'proveedor_nombre' => $proveedorNombreAviso,
+                'proveedor_suspendido' => $proveedorSuspendido,
                 'leyenda' => $leyendaProveedor,
                 'nombreempresa' => $nombreEmpresa,
                 'comprobante' => 'Total proveedor',
@@ -364,6 +374,10 @@ class ProveedorCuentacorrienteReporteService
         if ($cotizacionesDiaUsadas > 0 && $enPesos) {
             $advertencias[] = 'Se usó cotización vigente del día en '.$cotizacionesDiaUsadas
                 .' movimiento(s) sin cotización cargada en el comprobante.';
+        }
+        if ($suspendidosConSaldo !== []) {
+            $advertencias[] = 'Hay '.count($suspendidosConSaldo)
+                .' proveedor(es) suspendido(s) con saldo. La deuda se lista igual, marcada como Suspendido, para no perderla.';
         }
 
         return [
@@ -491,7 +505,7 @@ class ProveedorCuentacorrienteReporteService
     {
         $query = Proveedor_Cuentacorriente::query()
             ->with([
-                'proveedores:id,codigo,nombre,leyenda',
+                'proveedores:id,codigo,nombre,leyenda,estado',
                 'comprobante_proveedores.tipotransaccion_compras',
                 'comprobante_proveedores.comprobante_proveedor_cuotas',
                 'comprobante_proveedor_cuotas',
@@ -526,7 +540,7 @@ class ProveedorCuentacorrienteReporteService
     {
         $query = Proveedor_Cuentacorriente::query()
             ->with([
-                'proveedores:id,codigo,nombre,leyenda',
+                'proveedores:id,codigo,nombre,leyenda,estado',
                 'comprobante_proveedores.tipotransaccion_compras',
                 'comprobante_proveedores.comprobante_proveedor_cuotas',
                 'comprobante_proveedor_cuotas',
