@@ -1,6 +1,6 @@
 @php
     $waitryArticuloId = (int) ($producto->id ?? 0);
-    $waitryPuedeActualizar = ! empty($puedeActualizarArticulo);
+    $waitryPuedeActualizar = \App\Support\Stock\ArticuloWaitrySupport::puedeOperar();
     $waitryPanel = app(\App\Services\Stock\ArticuloWaitrySyncService::class)->panel($producto ?? null, $waitryPuedeActualizar);
     $waitryPatron = \App\Support\Ventas\GastronomiaSkuCatalogoSupport::patronRegexCatalogo();
 @endphp

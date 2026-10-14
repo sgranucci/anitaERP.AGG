@@ -19,7 +19,7 @@ class ArticuloWaitryController extends Controller
 
     public function guardarMarcas(Request $request, int $id): JsonResponse
     {
-        can('actualizar-articulos');
+        can('enviar-articulo-waitry');
 
         $articulo = $this->articuloEnviable($id);
         if ($articulo instanceof JsonResponse) {
@@ -53,7 +53,7 @@ class ArticuloWaitryController extends Controller
 
     private function ejecutar(Request $request, int $id, string $operacion): JsonResponse
     {
-        can('actualizar-articulos');
+        can('enviar-articulo-waitry');
 
         $articulo = $this->articuloEnviable($id);
         if ($articulo instanceof JsonResponse) {

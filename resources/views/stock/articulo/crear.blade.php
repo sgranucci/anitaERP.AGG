@@ -38,7 +38,7 @@ window.consultaFormulaArticuloConfig = {
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/formula-modal.js') }}" type="text/javascript"></script>
 @endif
-@if (\App\Support\Stock\ArticuloWaitrySupport::uiActiva())
+@if (\App\Support\Stock\ArticuloWaitrySupport::puedeOperar())
 <script src="{{ asset('assets/pages/scripts/stock/articulo/waitry.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/waitry.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 @endsection
@@ -124,7 +124,7 @@ window.otCombinacionesLista = @json($articuloCombinacionesLista ?? []);
 @include('includes.admin.modalconsultausuario')
 @include('includes.logistica.modales_catalogo')
 @endif
-@if (\App\Support\Stock\ArticuloWaitrySupport::uiActiva())
+@if (\App\Support\Stock\ArticuloWaitrySupport::puedeOperar())
 @include('stock.articulo.partials.modal_waitry')
 @endif
 @endsection

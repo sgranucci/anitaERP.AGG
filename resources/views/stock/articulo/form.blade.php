@@ -7,7 +7,7 @@
     				<div class="col-lg-5">
     					<input type="text" name="sku" id="sku" class="form-control sku" value="{{old('sku', $producto->sku ?? '')}}" required/>
                 	</div>
-                    @if (\App\Support\Stock\ArticuloWaitrySupport::uiActiva())
+                    @if (\App\Support\Stock\ArticuloWaitrySupport::puedeOperar())
                         <div class="col-auto pl-0" id="wrap-articulo-waitry" style="{{ \App\Support\Ventas\GastronomiaSkuCatalogoSupport::skuPermitido((string) old('sku', $producto->sku ?? '')) ? '' : 'display:none' }}">
                             <button type="button" class="btn btn-outline-primary btn-sm" id="btn-articulo-waitry">Waitry</button>
                         </div>
@@ -396,7 +396,7 @@
     <input type="hidden" name="fechaprimeraventa" value="{{$producto->fechaprimeraventa}}">
     <input type="hidden" name="fechaprimeringreso" value="{{$producto->fechaprimeringreso}}">
     <input type="hidden" name="estadofacturacion" value="{{$producto->estadofacturacion}}">
-    @if (\App\Support\Stock\ArticuloWaitrySupport::uiActiva())
+    @if (\App\Support\Stock\ArticuloWaitrySupport::puedeOperar())
         @php
             $waitryMarcasForm = \App\Support\Stock\ArticuloWaitrySupport::marcasDe($producto ?? null);
         @endphp

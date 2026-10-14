@@ -19,6 +19,11 @@ final class ArticuloWaitrySupport
             && Schema::hasColumn('articulo', 'waitry_va_cocina');
     }
 
+    public static function puedeOperar(): bool
+    {
+        return self::uiActiva() && can('enviar-articulo-waitry', false);
+    }
+
     public static function skuEnviable(string $sku): bool
     {
         return self::uiActiva() && GastronomiaSkuCatalogoSupport::skuPermitido($sku);
