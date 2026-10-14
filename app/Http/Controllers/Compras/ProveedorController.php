@@ -927,7 +927,8 @@ class ProveedorController extends Controller
 
         $payload = $this->proveedorQuery->consultaProveedor(
             $request->input('consulta'),
-            $empresaId > 0 ? $empresaId : null
+            $empresaId > 0 ? $empresaId : null,
+            $request->boolean('incluir_suspendidos')
         );
 
         return response()->json($payload, 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

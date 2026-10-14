@@ -116,7 +116,7 @@ class ProveedorQuery implements ProveedorQueryInterface
         return $data;
     }
 
-    public function consultaProveedor($consulta, ?int $empresaId = null): array
+    public function consultaProveedor($consulta, ?int $empresaId = null, bool $incluirSuspendidos = false): array
     {
 		$columns = ['proveedor.id', 'proveedor.codigo', 'proveedor.nombre', 'proveedor.nroinscripcion', 'proveedor.domicilio', 'localidad.nombre', 'proveedor.telefono'];
 		$columnsOut = ['proveedor_id', 'codigoproveedor', 'nombreproveedor', 'cuit', 'domicilio', 'localidad', 'telefono'];
@@ -125,13 +125,17 @@ class ProveedorQuery implements ProveedorQueryInterface
         $consulta = trim((string) $consulta);
         $limite = 250;
         $filtroEmpresaAplicado = config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0;
+        $estados = ProveedorTrait::$estadosHabilitadosOperacion;
+        if ($incluirSuspendidos) {
+            $estados[] = 'Suspendido';
+        }
 
         $query = $this->model->select('proveedor.id as proveedor_id', 'proveedor.codigo as codigoproveedor',
                 'proveedor.nombre as nombreproveedor', 'proveedor.nroinscripcion as cuit',
                 'proveedor.domicilio as domicilio', 'localidad.nombre as localidad',
                 'proveedor.telefono as telefono', 'proveedor.estado as estado')
 				->leftJoin('localidad', 'proveedor.localidad_id', '=', 'localidad.id')
-                ->whereIn('proveedor.estado', ProveedorTrait::$estadosHabilitadosOperacion);
+                ->whereIn('proveedor.estado', $estados);
 
         if ($filtroEmpresaAplicado) {
             $query->paraEmpresa($empresaId);
@@ -167,9 +171,13 @@ class ProveedorQuery implements ProveedorQueryInterface
 			foreach ($rows as $row)
 			{
                 $flSinDatos = false;
-                $output['data'] .= '<tr>';
+                $estadoFila = (string) ($row->estado ?? '');
+                $output['data'] .= '<tr data-estado="'.htmlspecialchars($estadoFila, ENT_QUOTES, 'UTF-8').'">';
                 for ($i = 0; $i < $count; $i++) {
                     $valor = htmlspecialchars((string) ($row[$columnsOut[$i]] ?? ''), ENT_QUOTES, 'UTF-8');
+                    if ($columnsOut[$i] === 'nombreproveedor' && $estadoFila === 'Suspendido') {
+                        $valor .= ' <span class="badge badge-warning">Suspendido</span>';
+                    }
                     $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $valor . '</td>';
                 }
                 $output['data'] .= '<td><a href="#" class="btn btn-warning btn-sm eligeconsultaproveedor">Elegir</a></td>';

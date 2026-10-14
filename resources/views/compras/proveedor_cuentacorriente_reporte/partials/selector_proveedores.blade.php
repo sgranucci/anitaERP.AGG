@@ -20,7 +20,7 @@
                     <span class="cc-reporte-alcance-icono"><i class="fa fa-users"></i></span>
                     <span class="cc-reporte-alcance-texto">
                         <strong>Todos</strong>
-                        <small class="d-block text-muted">Proveedores con deuda o movimientos según empresa y fechas</small>
+                        <small class="d-block text-muted">Incluye suspendidos: si tienen deuda, se lista y se avisa</small>
                     </span>
                 </label>
 
@@ -50,7 +50,7 @@
                 <input type="hidden" name="proveedor_ids" id="proveedor_ids" value="{{ $idsIniciales }}">
                 <p class="small text-muted mb-2 mb-md-3">
                     Ingrese el código y pulse <kbd>Enter</kbd> o <strong>Agregar</strong>.
-                    También puede abrir la lupa (<kbd>F1</kbd>) para buscar por nombre.
+                    La lupa (<kbd>F1</kbd>) también trae proveedores suspendidos.
                 </p>
                 <div class="d-flex flex-wrap align-items-center mb-2" style="gap: 6px;">
                     <button type="button" class="btn btn-outline-secondary btn-sm consultaproveedor-cc-reporte"

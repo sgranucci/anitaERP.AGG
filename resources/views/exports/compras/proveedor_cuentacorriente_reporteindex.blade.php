@@ -47,6 +47,11 @@
             </td>
         </tr>
     @endif
+    @if (! empty($resultado['advertencias']))
+        <tr>
+            <td colspan="{{ $colspan }}">{{ implode(' ', $resultado['advertencias']) }}</td>
+        </tr>
+    @endif
     @if ($soloTotalesDeuda)
     <thead>
         <tr>
