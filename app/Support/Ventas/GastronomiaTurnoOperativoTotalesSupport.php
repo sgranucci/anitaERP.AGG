@@ -112,28 +112,26 @@ final class GastronomiaTurnoOperativoTotalesSupport
 
         foreach ($emisiones as $em) {
             $venta = $em->venta;
-            $fechaImputacion = self::fechaImputacionTurno($em);
-            if ($fechaImputacion === null) {
+            $timestamps = self::timestampsCoberturaTurno($em);
+            if ($timestamps === []) {
                 continue;
             }
 
-            $ts = $fechaImputacion;
             $cubierta = false;
-            foreach ($ventanas as $ventana) {
-                if ($ts < $ventana->habilitacion_en) {
-                    continue;
-                }
-                if ($ventana->cierre_en === null) {
-                    $cubierta = true;
-                    break;
-                }
-                if ($ts <= $ventana->cierre_en) {
-                    $cubierta = true;
-                    break;
+            foreach ($timestamps as $ts) {
+                foreach ($ventanas as $ventana) {
+                    if ($ts < $ventana->habilitacion_en) {
+                        continue;
+                    }
+                    if ($ventana->cierre_en === null || $ts <= $ventana->cierre_en) {
+                        $cubierta = true;
+                        break 2;
+                    }
                 }
             }
 
             if (! $cubierta) {
+                $ts = $timestamps[0];
                 $huerfanas[] = [
                     'venta_id' => (int) $venta->id,
                     'codigo' => (string) ($venta->codigo ?? ''),
@@ -889,6 +887,46 @@ final class GastronomiaTurnoOperativoTotalesSupport
                 'cuenta.mozo',
             ])
             ->get();
+    }
+
+    /**
+     * Instantes con los que un comprobante puede caer dentro de un turno.
+     *
+     * La recuperación de un hueco ARCA se imputa a la cuenta original (muchas veces del día
+     * anterior) pero se graba en la jornada vigente. Si solo se mira la hora de esa cuenta,
+     * la FAC y la NC quedan fuera de todos los turnos del día y bloquean habilitar el siguiente,
+     * aunque se hayan emitido con un turno abierto.
+     *
+     * @return list<Carbon>
+     */
+    private static function timestampsCoberturaTurno(VentaGastronomiaEmision $emision): array
+    {
+        $timestamps = [];
+        $imputacion = self::fechaImputacionTurno($emision);
+        if ($imputacion !== null) {
+            $timestamps[] = $imputacion;
+        }
+
+        if (! in_array((string) $emision->origen_pos, self::ORIGENES_AJUSTE_FISCAL_RETROACTIVO, true)) {
+            return $timestamps;
+        }
+
+        $alta = $emision->venta?->created_at !== null
+            ? Carbon::parse($emision->venta->created_at)
+            : null;
+        if ($alta === null) {
+            return $timestamps;
+        }
+
+        foreach ($timestamps as $ts) {
+            if ($ts->equalTo($alta)) {
+                return $timestamps;
+            }
+        }
+
+        $timestamps[] = $alta;
+
+        return $timestamps;
     }
 
     private static function fechaImputacionTurno(VentaGastronomiaEmision $emision): ?Carbon
