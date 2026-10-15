@@ -26,6 +26,8 @@ use App\Repositories\Configuracion\LocalidadRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ProveedorAnitaEsquemaSupport;
+use App\Support\Compras\ProveedorAnitaGeoSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Compras\ProveedorExclusionAnitaSupport;
 use App\Support\Configuracion\CondicionivaLetraComprasSupport;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
@@ -599,16 +601,21 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             }
             $resultado = null;
 
-			$localidad_id = NULL;
-			$provincia_id = NULL;
-	
-			$localidad = Localidad::select('id', 'nombre', 'provincia_id')
-									->where('nombre' , $data->prom_localidad)
-									->orwhere('codigo',$data->prom_cod_localidad)->first();
-			if ($localidad)
-			{
-				$localidad_id = $localidad->id;
-				$provincia_id = $localidad->provincia_id;
+			$localidad_id = null;
+			$provincia_id = null;
+			if (EntornoEmpresaSupport::esFerli()) {
+				$geoAnita = ProveedorAnitaGeoSupport::resolverDesdeFilaAnita($data);
+				$localidad_id = $geoAnita['localidad_id'];
+				$provincia_id = $geoAnita['provincia_id'];
+			} else {
+				$localidad = Localidad::select('id', 'nombre', 'provincia_id')
+					->where('nombre', $data->prom_localidad)
+					->orWhere('codigo', $data->prom_cod_localidad)
+					->first();
+				if ($localidad) {
+					$localidad_id = $localidad->id;
+					$provincia_id = $localidad->provincia_id;
+				}
 			}
 	
         	$pais = Pais::select('id', 'nombre')->where('id' , $data->prom_pais)->first();
@@ -1278,7 +1285,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			: null;
 
 		$codigolocalidad = $localidad
-			? ProveedorExclusionAnitaSupport::codigoEnteroAnita($localidad->codigo)
+			? ProveedorAnitaGeoSupport::codigoParaAnita($localidad->id, $localidad->codigo)
 			: 0;
 
 		$estado = '0';
@@ -1542,7 +1549,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			: null;
 
 		$codigolocalidad = $localidad
-			? ProveedorExclusionAnitaSupport::codigoEnteroAnita($localidad->codigo)
+			? ProveedorAnitaGeoSupport::codigoParaAnita($localidad->id, $localidad->codigo)
 			: 0;
 
 		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre']);

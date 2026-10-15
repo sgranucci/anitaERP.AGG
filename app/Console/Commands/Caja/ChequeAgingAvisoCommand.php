@@ -3,6 +3,7 @@
 namespace App\Console\Commands\Caja;
 
 use App\Support\Caja\ChequeCarteraAgingSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -20,7 +21,7 @@ class ChequeAgingAvisoCommand extends Command
 
     public function handle(): int
     {
-        if (! (bool) config('cheque.aging_aviso.habilitado', true)) {
+        if (EntornoEmpresaSupport::esFerli() || ! (bool) config('cheque.aging_aviso.habilitado', true)) {
             $this->info('Avisos aging cheques deshabilitados.');
 
             return self::SUCCESS;

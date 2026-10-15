@@ -58,7 +58,8 @@ final class ArcaPadronImpuestosClienteValidacion
                 'ok' => false,
                 'mensaje' => 'Problemas en ARCA: '.(string) $padronData['error'],
                 'detalles' => [],
-                'debe_suspender' => true,
+                // Un fallo de consulta no es un hallazgo fiscal: no suspende.
+                'debe_suspender' => false,
                 'condicioniva_id' => $condicionivaId,
             ];
         }

@@ -103,6 +103,12 @@
         if ($boton.length) {
             $boton.html("<i class='fa fa-bell'></i>&nbsp;Estado Suspendido");
         }
+        if (json.tiposuspension_id) {
+            $('#tiposuspension_id').val(json.tiposuspension_id);
+        }
+        if (json.tiposuspension_nombre) {
+            $('#nombretiposuspension').text('SUSPENDIDO: ' + json.tiposuspension_nombre);
+        }
     }
 
     function aplicarSuspensionClienteAbm(json, cfg) {

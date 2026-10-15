@@ -313,7 +313,8 @@ class Kernel extends ConsoleKernel
             ->runInBackground()
             ->withoutOverlapping(30)
             ->appendOutputTo(storage_path('logs/caja-cheque-aging-aviso-schedule.log'))
-            ->when(fn () => (bool) config('cheque.aging_aviso.habilitado', true));
+            ->when(fn () => ! EntornoEmpresaSupport::esFerli()
+                && (bool) config('cheque.aging_aviso.habilitado', true));
 
         // Interforming: PDF semanal auditoría notas CRM (todos los vendedores, últimos 7 días).
         $schedule->command('suitecrm:auditoria-notas-semanal')

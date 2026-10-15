@@ -48,6 +48,7 @@ use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Services\Arca\ConstanciaInscripcionService;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
 use App\Support\Compras\ProveedorFacturasApocrifasSupport;
+use App\Support\Compras\ProveedorPadronArcaSuspensionSupport;
 use Illuminate\Http\JsonResponse;
 use App\Repositories\Compras\Proveedor_ExclusionRepositoryInterface;
 use App\Repositories\Compras\Proveedor_ArchivoRepositoryInterface;
@@ -986,12 +987,8 @@ class ProveedorController extends Controller
                 $condicionivaId > 0 ? $condicionivaId : null,
                 $data
             );
-            $suspendido = false;
-
-            if (($validacion['debe_suspender'] ?? false) && ($validacion['aplica'] ?? false)) {
-                Proveedor::query()->whereKey($id)->update(['estado' => 'Suspendido']);
-                $suspendido = true;
-            }
+            $aplicacion = ProveedorPadronArcaSuspensionSupport::aplicar($proveedor, $validacion);
+            $suspendido = (bool) ($aplicacion['suspendido'] ?? false);
 
             $httpOk = ! ($validacion['aplica'] ?? false) || ($validacion['ok'] ?? false);
 
@@ -1001,6 +998,8 @@ class ProveedorController extends Controller
                 'data' => $data,
                 'validacion' => $validacion,
                 'suspendido' => $suspendido,
+                'tiposuspension_id' => $aplicacion['tiposuspension_id'] ?? null,
+                'tiposuspension_nombre' => $aplicacion['tiposuspension_nombre'] ?? null,
                 'estado' => $suspendido ? 'Suspendido' : (string) $proveedor->estado,
                 'soap' => $data['soap'] ?? null,
             ], $httpOk ? 200 : 422);

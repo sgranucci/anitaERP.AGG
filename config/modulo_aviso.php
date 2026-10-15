@@ -39,6 +39,7 @@ return [
         'compras.precarga_cotizacion_invalida' => App\Services\Configuracion\Handlers\ComprasPrecargaCotizacionInvalidaAvisoHandler::class,
         'compras.precarga_prorrateo_multi_cc' => App\Services\Configuracion\Handlers\ComprasPrecargaProrrateoMultiCcAvisoHandler::class,
         'compras.comprobante_proveedor_borrador_pendiente' => App\Services\Configuracion\Handlers\ComprasComprobanteProveedorBorradorPendienteAvisoHandler::class,
+        'compras.proveedor_padron_arca_suspension' => App\Services\Configuracion\Handlers\ComprasProveedorPadronArcaSuspensionAvisoHandler::class,
         'stock.transferencia_pendiente_aprobacion' => App\Services\Configuracion\Handlers\StockTransferenciaMercaderiaAvisoDespachoHandler::class,
         'stock.transferencia_confirmada' => App\Services\Configuracion\Handlers\StockTransferenciaMercaderiaAvisoDespachoHandler::class,
         'stock.transferencia_rechazada' => App\Services\Configuracion\Handlers\StockTransferenciaMercaderiaAvisoDespachoHandler::class,
