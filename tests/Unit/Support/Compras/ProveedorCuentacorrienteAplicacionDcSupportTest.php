@@ -3,7 +3,7 @@
 namespace Tests\Unit\Support\Compras;
 
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionDcSupport;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 class ProveedorCuentacorrienteAplicacionDcSupportTest extends TestCase
 {
@@ -34,6 +34,17 @@ class ProveedorCuentacorrienteAplicacionDcSupportTest extends TestCase
     public function test_centavos_bajo_tolerancia_se_omiten(): void
     {
         $this->assertSame(0.0, ProveedorCuentacorrienteAplicacionDcSupport::calcular(1, 1.005, 1.0));
+    }
+
+    public function test_pesos_con_cotizaciones_distintas_no_calculan(): void
+    {
+        $dc = ProveedorCuentacorrienteAplicacionDcSupport::calcularDesdeFilas(
+            ['moneda_id' => 1, 'cotizacion' => 1510],
+            ['moneda_id' => 1, 'cotizacion' => 1465],
+            48000
+        );
+
+        $this->assertSame(0.0, $dc);
     }
 
     public function test_monedas_distintas_no_calculan(): void

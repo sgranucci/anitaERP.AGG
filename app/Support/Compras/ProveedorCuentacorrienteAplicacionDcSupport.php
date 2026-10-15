@@ -25,7 +25,11 @@ final class ProveedorCuentacorrienteAplicacionDcSupport
      */
     public static function calcularDesdeFilas(array $deuda, array $credito, float $monto): float
     {
-        if ((int) ($deuda['moneda_id'] ?? 0) !== (int) ($credito['moneda_id'] ?? 0)) {
+        $monedaDeuda = (int) ($deuda['moneda_id'] ?? 0);
+        if ($monedaDeuda !== (int) ($credito['moneda_id'] ?? 0)) {
+            return 0.0;
+        }
+        if (ProveedorCuentacorrienteAplicacionLiquidacionSupport::esLocal($monedaDeuda)) {
             return 0.0;
         }
 

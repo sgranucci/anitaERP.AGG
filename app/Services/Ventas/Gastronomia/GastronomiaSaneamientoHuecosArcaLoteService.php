@@ -253,6 +253,9 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
         $fechaNc = $fechaNc && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaNc)
             ? $fechaNc
             : now()->format('Y-m-d');
+        // El cierre de esa jornada ya está presentado: FAC y NC se imputan a la jornada de hoy.
+        $turnoCerrado = $turno->estado === TurnoOperativoGastronomia::ESTADO_CERRADO;
+        $fechaJornadaGrabacion = $turnoCerrado ? $fechaNc : $fechaJornada;
         $pvCodigo = (string) ($recuperables[0]['puntoventa_codigo'] ?? '');
         $tipoFacId = (int) ($turno->configuracionPuntoventa?->tipotransaccion_id
             ?? config('gastronomia.tipotransaccion_factura_id', 1));
@@ -266,8 +269,10 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
             $pvCodigo,
             $tipoFacId,
             $fechaJornada,
+            $fechaJornadaGrabacion,
             $fechaNc,
             $turno,
+            $turnoCerrado,
             &$ventaFacturaIds,
             &$detalleFac,
         ): array {
@@ -300,7 +305,7 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
                     false,
                     true,
                     (string) $turno->identificador_pc,
-                    $fechaJornada,
+                    $fechaJornadaGrabacion,
                 );
                 $ventaId = (int) ($rec['venta_id'] ?? 0);
                 if ($ventaId <= 0) {
@@ -338,7 +343,8 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
                     $leyenda,
                     [
                         'fecha_factura' => $fechaNc,
-                        'fecha_jornada' => $fechaJornada,
+                        'fecha_jornada' => $fechaJornadaGrabacion,
+                        'fecha_asociacion' => $fechaJornada,
                         'identificador_pc' => (string) $turno->identificador_pc,
                         'omitir_stock' => true,
                         'omitir_impresion' => true,
@@ -352,7 +358,7 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
             }
 
             $z = null;
-            if ($turno->estado === TurnoOperativoGastronomia::ESTADO_CERRADO) {
+            if ($turnoCerrado && $fechaJornadaGrabacion === $fechaJornada) {
                 $z = $this->ajusteZService->actualizarLote($ventaFacturaIds, $ventaNcId, (int) $turno->id);
             }
 

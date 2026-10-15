@@ -7,7 +7,8 @@ use InvalidArgumentException;
 /**
  * Liquidación de una aplicación CC (misma moneda o cruzada).
  *
- * Misma moneda: consume el mismo monto en ambos lados; DC = monto × (cot deuda − cot crédito).
+ * Misma moneda extranjera: consume el mismo monto en ambos lados; DC = monto × (cot deuda − cot crédito).
+ * Misma moneda local: la cotización del documento es informativa (dólar de referencia) y no genera DC.
  * Cruzada (SAP/NetSuite): convierte por cotización de liquidación (pesos por 1 ME),
  * consume montos distintos en cada cubeta y asienta DC + reclasificación MN/ME.
  *
@@ -82,7 +83,11 @@ final class ProveedorCuentacorrienteAplicacionLiquidacionSupport
         $cruzada = self::esCruzada($monedaDeuda, $monedaCredito);
 
         if (! $cruzada) {
-            $dc = ProveedorCuentacorrienteAplicacionDcSupport::calcular($montoDeuda, $cotDeuda, $cotCredito);
+            // En pesos la cotización no reescala el importe: dos comprobantes en moneda local
+            // no tienen diferencia de cambio aunque el dólar de referencia haya cambiado.
+            $dc = self::esLocal($monedaDeuda)
+                ? 0.0
+                : ProveedorCuentacorrienteAplicacionDcSupport::calcular($montoDeuda, $cotDeuda, $cotCredito);
 
             return self::resultado(
                 false,

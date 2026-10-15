@@ -419,6 +419,7 @@ final class GastronomiaNotaCreditoService
         ];
         $totalAbs = 0.0;
         $codigos = [];
+        $descuentosPie = [];
         foreach ($ventaFacturaIds as $facId) {
             $v = $ventas->get($facId);
             if (! $v) {
@@ -426,6 +427,7 @@ final class GastronomiaNotaCreditoService
             }
             $totalAbs += abs((float) $v->total);
             $codigos[] = (string) $v->codigo;
+            $descuentosPie[] = round((float) ($v->descuento ?? 0), 4);
             $part = GastronomiaFacturaItemsPayloadSupport::desdeVentaEmisiones($v);
             $offset = count($itemsMerged['articulo_ids']);
             foreach ($part['articulo_ids'] as $i => $artId) {
@@ -443,7 +445,13 @@ final class GastronomiaNotaCreditoService
         }
 
         $ventaOrigen = $emision->venta;
-        $ymdJornada = str_replace('-', '', $fechaJornada);
+        $fechaAsociacion = trim((string) ($opciones['fecha_asociacion'] ?? ''));
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaAsociacion)) {
+            $fechaAsociacion = $fechaJornada;
+        }
+        $ymdJornada = str_replace('-', '', $fechaAsociacion);
+        $descuentosUnicos = array_values(array_unique($descuentosPie));
+        $descuentopie = count($descuentosUnicos) === 1 ? (float) $descuentosUnicos[0] : 0.;
         $leyendaNc = trim($leyendaUsuario);
         if ($leyendaNc === '') {
             $leyendaNc = 'NC lote saneamiento ARCA: '.implode(', ', $codigos);
@@ -466,7 +474,7 @@ final class GastronomiaNotaCreditoService
             'moneda_id' => (int) $ventaOrigen->moneda_id,
             'listaprecio_id' => (int) ($cfg->listaprecio_id ?? 1),
             'descuentolinea' => 0.,
-            'descuentopie' => 0.,
+            'descuentopie' => $descuentopie,
             'descuentoimportepie' => 0.,
             'articulo_ids' => $itemsMerged['articulo_ids'],
             'cantidades' => $itemsMerged['cantidades'],

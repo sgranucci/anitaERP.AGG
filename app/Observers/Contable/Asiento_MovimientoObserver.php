@@ -65,6 +65,8 @@ class Asiento_MovimientoObserver
         $original = $movimiento->getOriginal();
         $movimiento->loadMissing('asientos');
 
+        // La fecha que se lee es la ya grabada en la cabecera. Si el mes cambió,
+        // AsientoObserver reubica el saldo antes de que se actualicen las líneas.
         $contextoAnt = [
             'empresa_id' => $this->empresaIdDesdeAsientoId((int) ($original['asiento_id'] ?? 0)),
             'cuentacontable_id' => $original['cuentacontable_id'] ?? null,

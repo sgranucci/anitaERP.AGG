@@ -3,10 +3,26 @@
 namespace Tests\Unit\Support\Compras;
 
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionLiquidacionSupport;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 class ProveedorCuentacorrienteAplicacionLiquidacionSupportTest extends TestCase
 {
+    public function test_pesos_contra_pesos_ignora_cotizacion_informativa(): void
+    {
+        $liq = ProveedorCuentacorrienteAplicacionLiquidacionSupport::liquidar(
+            ['moneda_id' => 1, 'cotizacion' => 1510],
+            ['moneda_id' => 1, 'cotizacion' => 1465],
+            48000
+        );
+
+        $this->assertFalse($liq['cruzada']);
+        $this->assertSame(48000.0, $liq['monto_deuda']);
+        $this->assertSame(48000.0, $liq['monto_credito']);
+        $this->assertSame(48000.0, $liq['valor_local_deuda']);
+        $this->assertSame(48000.0, $liq['valor_local_credito']);
+        $this->assertSame(0.0, $liq['dc']);
+    }
+
     public function test_misma_moneda_usd_reusa_formula_dc(): void
     {
         $liq = ProveedorCuentacorrienteAplicacionLiquidacionSupport::liquidar(
@@ -72,7 +88,7 @@ class ProveedorCuentacorrienteAplicacionLiquidacionSupportTest extends TestCase
 
         ProveedorCuentacorrienteAplicacionLiquidacionSupport::liquidar(
             ['moneda_id' => 2, 'cotizacion' => 1200],
-            ['moneda_id' => 1, 'cotizacion' => 1],
+            ['moneda_id' => 3, 'cotizacion' => 1300],
             1000,
             0
         );

@@ -179,7 +179,7 @@
             <span class="acc-badge auto">Sugerida</span> se recálcula sola.
             <span class="acc-badge manual">Fijada</span> la cambiaste vos y no se toca.
             Destildá una factura para sacarla del matching.
-            Misma moneda: DC si cambió la cotización. Distinta moneda: cargá la cotización de liquidación y tildá la factura: se convierte, se consume cada cubeta en su moneda y se asienta DC. El FIFO no cruza monedas.
+            Misma moneda extranjera: DC si cambió la cotización. En pesos la cotización es informativa y no genera diferencia de cambio. Distinta moneda: cargá la cotización de liquidación y tildá la factura: se convierte, se consume cada cubeta en su moneda y se asienta DC. El FIFO no cruza monedas.
         </div>
         <div id="acc-board-body" class="acc-board-body"></div>
     </div>

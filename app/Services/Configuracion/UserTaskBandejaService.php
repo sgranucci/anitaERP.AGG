@@ -7,6 +7,7 @@ use App\Models\Seguridad\IngresoProveedor;
 use App\Models\Stock\Prestamo;
 use App\Models\Stock\Transferencia_Mercaderia;
 use App\Models\Sueldos\Solicitud_Prenda_Sueldos;
+use App\Support\Configuracion\AprobacionDetalleContenidoSupport;
 use App\Services\Contable\AsientoAprobacionService;
 use App\Services\Stock\PrestamoService;
 use App\Services\Stock\TransferenciaMercaderiaService;
@@ -220,10 +221,12 @@ class UserTaskBandejaService
         }
 
         $historial = $this->historialFuente($fuente, (int) ($item['comprobante_id'] ?? $id), $item);
+        $contenido = $this->contenidoDetalle($fuente, $item);
 
         return [
             'item' => $item,
             'campos' => $campos,
+            'contenido' => $contenido,
             'historial' => $historial,
             'banner_reemplazo' => ! empty($item['reemplazo_de'])
                 ? 'Estás actuando por reemplazo de '.$item['reemplazo_de']
@@ -235,6 +238,64 @@ class UserTaskBandejaService
             'url_rechazar' => $item['url_rechazar'] ?? null,
             'puede_aprobar' => ! empty($item['puede_aprobar']),
         ];
+    }
+
+    /**
+     * Contenido del comprobante (cabecera útil + renglones) para el panel.
+     *
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>|null
+     */
+    private function contenidoDetalle(string $fuente, array $item): ?array
+    {
+        $comprobanteId = (int) ($item['comprobante_id'] ?? 0);
+
+        try {
+            return match ($fuente) {
+                self::FUENTE_ARBOL => $this->contenidoArbol($item),
+                self::FUENTE_ASIENTO => AprobacionDetalleContenidoSupport::desdeAsiento(
+                    $comprobanteId > 0 ? Asiento::query()->find($comprobanteId) : null
+                ),
+                self::FUENTE_TRANSFERENCIA => AprobacionDetalleContenidoSupport::desdeTransferencia(
+                    $comprobanteId > 0 ? Transferencia_Mercaderia::query()->find($comprobanteId) : null
+                ),
+                self::FUENTE_INDUMENTARIA => AprobacionDetalleContenidoSupport::desdeIndumentaria(
+                    $comprobanteId > 0 ? Solicitud_Prenda_Sueldos::query()->find($comprobanteId) : null
+                ),
+                self::FUENTE_SALIDA_BIENES => AprobacionDetalleContenidoSupport::desdePrestamo(
+                    $comprobanteId > 0 ? Prestamo::query()->find($comprobanteId) : null
+                ),
+                default => null,
+            };
+        } catch (\Throwable $e) {
+            \Log::warning('mis_aprobaciones_detalle_contenido', [
+                'fuente' => $fuente,
+                'comprobante_id' => $comprobanteId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>|null
+     */
+    private function contenidoArbol(array $item): ?array
+    {
+        $tipo = strtoupper(trim((string) ($item['tipo'] ?? '')));
+        $comprobanteId = (int) ($item['comprobante_id'] ?? 0);
+        if ($tipo === '' || $comprobanteId <= 0) {
+            return null;
+        }
+
+        $documento = app(ArbolaprobacionService::class)->cargarDocumentoArbol($tipo, $comprobanteId);
+        if (! $documento) {
+            return null;
+        }
+
+        return AprobacionDetalleContenidoSupport::desdeArbol($tipo, $documento);
     }
 
     /**

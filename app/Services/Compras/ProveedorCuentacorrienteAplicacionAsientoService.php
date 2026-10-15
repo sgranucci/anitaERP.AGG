@@ -402,17 +402,16 @@ class ProveedorCuentacorrienteAplicacionAsientoService
             $reclasifica => 'Reclasificación aplicación CC',
             default => 'DC aplicación CC',
         };
-        $etiquetaDc = ProveedorCuentacorrienteAplicacionDcSupport::requiereAsiento($dc)
-            ? ProveedorCuentacorrienteAplicacionDcSupport::etiqueta($dc)
-            : 'sin DC';
+        $base = sprintf('%s %s / %s', $prefijo, $etiCredito, $etiDeuda);
+        if (! ProveedorCuentacorrienteAplicacionDcSupport::requiereAsiento($dc)) {
+            return $base;
+        }
 
         return sprintf(
-            '%s %s / %s · %s %s',
-            $prefijo,
-            $etiCredito,
-            $etiDeuda,
+            '%s · %s %s',
+            $base,
             number_format(abs($dc), 2, ',', '.'),
-            $etiquetaDc
+            ProveedorCuentacorrienteAplicacionDcSupport::etiqueta($dc)
         );
     }
 }

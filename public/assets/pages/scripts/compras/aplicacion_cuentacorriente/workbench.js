@@ -109,7 +109,9 @@
             return { cruzada: false, monto_deuda: montoDeuda, monto_credito: montoDeuda, dc: 0, cotizacion_liquidacion: 1 };
         }
         if (!esCruzada(c, d)) {
-            var dcMisma = round4(montoDeuda * (cotNorm(d.cotizacion) - cotNorm(c.cotizacion)));
+            var dcMisma = esLocal(d.moneda_id)
+                ? 0
+                : round4(montoDeuda * (cotNorm(d.cotizacion) - cotNorm(c.cotizacion)));
             return {
                 cruzada: false,
                 monto_deuda: montoDeuda,

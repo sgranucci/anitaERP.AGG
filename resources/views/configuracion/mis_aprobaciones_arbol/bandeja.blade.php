@@ -601,6 +601,43 @@
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
+    function htmlContenido(c) {
+        if (!c || ((!c.notas || !c.notas.length) && (!c.renglones || !c.renglones.length))) {
+            return '';
+        }
+        var html = '<section class="anita-inbox-doc">';
+        html += '<h3 class="anita-inbox-drawer-h">' + esc(c.titulo || 'Contenido') + '</h3>';
+        if (c.notas && c.notas.length) {
+            html += '<dl class="anita-inbox-doc-notas">';
+            c.notas.forEach(function (n) {
+                html += '<div><dt>' + esc(n.label) + '</dt><dd>' + esc(n.valor) + '</dd></div>';
+            });
+            html += '</dl>';
+        }
+        if (c.renglones && c.renglones.length) {
+            html += '<ul class="anita-inbox-doc-lines">';
+            c.renglones.forEach(function (r) {
+                html += '<li><div class="anita-inbox-doc-line-top"><strong>' + esc(r.titulo) + '</strong>';
+                if (r.importe) {
+                    html += '<span>' + esc(r.importe) + '</span>';
+                }
+                html += '</div>';
+                if (r.cantidad) {
+                    html += '<p class="anita-inbox-doc-qty">' + esc(r.cantidad) + '</p>';
+                }
+                (r.lineas || []).forEach(function (ln) {
+                    html += '<p class="anita-inbox-doc-meta">' + esc(ln) + '</p>';
+                });
+                html += '</li>';
+            });
+            html += '</ul>';
+        }
+        if (c.truncado) {
+            html += '<p class="anita-inbox-doc-more">' + esc(c.truncado) + '</p>';
+        }
+        html += '</section>';
+        return html;
+    }
     if (drawer) {
         function cerrarDrawer() {
             drawer.hidden = true;
@@ -636,6 +673,7 @@
                         else if (d.sla_estado === 'ok') slaClass += ' anita-inbox-tag--sla-ok';
                         html += '<span class="' + slaClass + ' anita-inbox-drawer-sla">' + esc(d.sla_label) + '</span>';
                     }
+                    html += htmlContenido(d.contenido);
                     html += '<dl class="anita-inbox-drawer-dl">';
                     (d.campos || []).forEach(function (c) {
                         html += '<div><dt>' + esc(c.label) + '</dt><dd>' + esc(c.valor) + '</dd></div>';
