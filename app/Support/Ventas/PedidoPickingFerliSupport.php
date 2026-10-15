@@ -1537,9 +1537,47 @@ final class PedidoPickingFerliSupport
         }
 
         $fechaYmd = $fecha ? Carbon::parse($fecha)->format('Y-m-d') : now()->toDateString();
+
+        return self::revertirMovimientosConsumo(
+            self::movimientosConsumoDeFactura($ventaOrigenId),
+            $ventaNcId,
+            $fechaYmd
+        );
+    }
+
+    /**
+     * NC parcial: devuelve el lote/OT solo de las líneas acreditadas por completo.
+     *
+     * @param  list<int>  $pedidoCombinacionIds
+     */
+    public static function revertirConsumoStockDeLineas(array $pedidoCombinacionIds, int $ventaNcId = 0, ?string $fecha = null): int
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $pedidoCombinacionIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($ids === [] || ! self::habilitado()) {
+            return 0;
+        }
+
+        $fechaYmd = $fecha ? Carbon::parse($fecha)->format('Y-m-d') : now()->toDateString();
+        $movimientos = Articulo_Movimiento::query()
+            ->with('articulo_movimiento_talles')
+            ->whereIn('pedido_combinacion_id', $ids)
+            ->orderBy('id')
+            ->get();
+
+        return self::revertirMovimientosConsumo($movimientos, $ventaNcId, $fechaYmd);
+    }
+
+    /**
+     * @param  Collection<int, Articulo_Movimiento>|iterable<int, Articulo_Movimiento>  $movimientos
+     */
+    private static function revertirMovimientosConsumo($movimientos, int $ventaNcId, string $fechaYmd): int
+    {
         $revertidos = 0;
 
-        foreach (self::movimientosConsumoDeFactura($ventaOrigenId) as $mov) {
+        foreach ($movimientos as $mov) {
             $payload = self::payloadReversoConsumoPicking($mov, $ventaNcId, $fechaYmd);
             if ($payload === null) {
                 continue;

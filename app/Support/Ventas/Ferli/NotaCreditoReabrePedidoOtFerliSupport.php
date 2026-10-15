@@ -15,8 +15,10 @@ use App\Support\Ventas\PedidoPickingFerliSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Ferli: NC total sobre FAC de OT/picking → libera la línea del pedido para refacturar.
- * Quita tarea FACTURADA (venta_id), restaura stock con el lote/OT asignado (picking o OT desde stock) y desmarca picking.
+ * Ferli: NC sobre FAC de OT/picking → libera la línea del pedido para refacturar.
+ * La NC total quita la tarea FACTURADA, restaura el stock del lote/OT y desmarca el picking.
+ * La NC parcial, si acredita una línea por completo, la deja pendiente en el mismo picking
+ * y devuelve a stock solo el lote/OT de esa línea.
  */
 final class NotaCreditoReabrePedidoOtFerliSupport
 {
@@ -92,7 +94,8 @@ final class NotaCreditoReabrePedidoOtFerliSupport
 
     /**
      * NC parcial: si una línea del picking quedó acreditada por completo, vuelve a pendiente
-     * en el mismo picking. No se desarma el picking ni se tocan las líneas que siguen facturadas.
+     * en el mismo picking y se devuelve el lote/OT de esa línea.
+     * No se desarma el picking ni se tocan las líneas que siguen facturadas.
      *
      * @param  array{aplicado: bool, tareas_borradas: int, picking_reabiertos: int, movimientos_revertidos: int}  $vacio
      * @return array{aplicado: bool, tareas_borradas: int, picking_reabiertos: int, movimientos_revertidos: int, motivo?: string}
@@ -100,14 +103,23 @@ final class NotaCreditoReabrePedidoOtFerliSupport
     private static function reabrirLineasPickingDeNcParcial(int $ventaNcId, array $vacio): array
     {
         $ids = self::idsLineasPickingAcreditadasPorCompleto($ventaNcId);
+        $fechaNc = $ventaNcId > 0
+            ? Venta::query()->whereKey($ventaNcId)->value('fecha')
+            : null;
+        $revertidos = PedidoPickingFerliSupport::revertirConsumoStockDeLineas(
+            $ids,
+            $ventaNcId,
+            $fechaNc !== null ? (string) $fechaNc : null
+        );
         $reabiertos = PedidoPickingFerliSupport::reabrirFacturadoDeLineas($ids);
+        $aplicado = $reabiertos > 0 || $revertidos > 0;
 
         return [
-            'aplicado' => $reabiertos > 0,
+            'aplicado' => $aplicado,
             'tareas_borradas' => 0,
             'picking_reabiertos' => $reabiertos,
-            'movimientos_revertidos' => 0,
-            'motivo' => $reabiertos > 0 ? 'nc_parcial_linea' : 'nc_parcial',
+            'movimientos_revertidos' => $revertidos,
+            'motivo' => $aplicado ? 'nc_parcial_linea' : 'nc_parcial',
         ] + $vacio;
     }
 

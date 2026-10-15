@@ -5525,7 +5525,8 @@ class FacturacionService
 					substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'], $vta->id);
 			}
 
-			// Ferli: NC total sobre FAC de OT/picking → stock con lote/OT original + línea para nuevo picking
+			// Ferli: NC sobre FAC de OT/picking → stock con lote/OT original.
+			// Total: reabre el pedido. Parcial: solo las líneas acreditadas por completo.
 			if (EntornoEmpresaSupport::esFerli() && $tipotransaccion->esNotaCredito() && (int) $venta_id > 0) {
 				$opcionesNc = is_array($opcionesEmision) ? $opcionesEmision : [];
 				\App\Support\Ventas\Ferli\NotaCreditoReabrePedidoOtFerliSupport::alGrabarNc(
