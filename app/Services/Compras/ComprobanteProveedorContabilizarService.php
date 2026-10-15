@@ -502,6 +502,9 @@ class ComprobanteProveedorContabilizarService
                     return;
                 }
 
+                // OP revertida: neto cero. Se cierra OPP contra AOP antes de borrar la deuda.
+                ComprobanteProveedorPagoSupport::liberarTrazasDePagosCompensados((int) $actual->id);
+
                 $asientoId = (int) ($actual->asiento_id ?? 0);
 
                 // Cuenta corriente generada en el intento.

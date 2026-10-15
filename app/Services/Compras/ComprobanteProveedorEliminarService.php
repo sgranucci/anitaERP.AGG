@@ -105,6 +105,8 @@ class ComprobanteProveedorEliminarService
                 throw new RuntimeException('Comprobante no encontrado.');
             }
 
+            ComprobanteProveedorPagoSupport::liberarTrazasDePagosCompensados((int) $actual->id);
+
             $ccIds = DB::table('comprobante_proveedor_cuota')
                 ->where('comprobante_proveedor_id', $actual->id)
                 ->whereNotNull('proveedor_cuentacorriente_id')
