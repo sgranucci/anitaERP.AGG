@@ -8,6 +8,7 @@ use App\Models\Compras\Configuracion_ComprobanteProveedorTolerancia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
+use App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use Illuminate\Http\Request;
 
@@ -38,6 +39,9 @@ class ConfiguracionComprobanteProveedorController extends Controller
             ->orderBy('centrocosto_id')
             ->get();
 
+        $toleranciaTcPct = ComprobanteProveedorDiferenciaCambioSupport::toleranciaPct();
+        $destinatariosTc = ComprobanteProveedorDiferenciaCambioSupport::destinatarios();
+
         return view('compras.configuracion_comprobante_proveedor.editar', compact(
             'empresa_query',
             'empresa_id',
@@ -45,6 +49,8 @@ class ConfiguracionComprobanteProveedorController extends Controller
             'comGeneraContabilidad',
             'centrocosto_query',
             'filasTolerancia',
+            'toleranciaTcPct',
+            'destinatariosTc',
         ));
     }
 
@@ -168,6 +174,49 @@ class ConfiguracionComprobanteProveedorController extends Controller
 
         return redirect(self::RUTA_INDEX.'?empresa_id='.$empresaId)
             ->with('mensaje', 'Tolerancias guardadas.');
+    }
+
+    public function guardarToleranciaTc(Request $request)
+    {
+        can('actualizar-configuracion-comprobante-proveedor');
+
+        $data = $request->validate([
+            'empresa_id' => 'nullable|integer',
+            'tolerancia_tc_pct' => 'required|numeric|min:0|max:100',
+        ]);
+
+        ComprobanteProveedorDiferenciaCambioSupport::guardarToleranciaPct((float) $data['tolerancia_tc_pct']);
+
+        $empresaId = (int) ($data['empresa_id'] ?? 0);
+
+        return redirect(self::RUTA_INDEX.($empresaId > 0 ? '?empresa_id='.$empresaId : ''))
+            ->with('mensaje', 'Tolerancia de tipo de cambio guardada.');
+    }
+
+    public function guardarDestinatariosTc(Request $request)
+    {
+        can('actualizar-configuracion-comprobante-proveedor');
+
+        $data = $request->validate([
+            'empresa_id' => 'nullable|integer',
+            'destinatarios' => 'nullable|array',
+            'destinatarios.*.usuario_id' => 'nullable|integer',
+        ]);
+
+        $ids = [];
+        foreach ($data['destinatarios'] ?? [] as $fila) {
+            $id = (int) ($fila['usuario_id'] ?? 0);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        ComprobanteProveedorDiferenciaCambioSupport::guardarDestinatarios($ids);
+
+        $empresaId = (int) ($data['empresa_id'] ?? 0);
+
+        return redirect(self::RUTA_INDEX.($empresaId > 0 ? '?empresa_id='.$empresaId : ''))
+            ->with('mensaje', 'Destinatarios de la aprobación guardados.');
     }
 
     /**

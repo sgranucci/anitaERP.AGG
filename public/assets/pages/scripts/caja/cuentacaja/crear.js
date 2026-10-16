@@ -41,6 +41,11 @@ function activaEventosConsultaCuentaContableCuentacaja() {
         let urlCta = carpetaBase + '/contable/cuentacontable/leercuentacontableporcodigo/' + empresaId + '/' + codigoNuevo;
 
         $.get(urlCta, function (data) {
+            if (typeof cuentaContableEstaInhabilitada === 'function' && cuentaContableEstaInhabilitada(data)) {
+                alert(mensajeCuentaContableInhabilitada(data));
+                limpiarCuentaContable();
+                return;
+            }
             if (data.id > 0) {
                 $('#cuentacontable_id').val(data.id);
                 $('#nombrecuentacontable').val(data.nombre);

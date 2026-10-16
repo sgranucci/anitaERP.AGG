@@ -69,6 +69,14 @@
             </div>
         </div>
 
+        <div class="form-group mb-2">
+            <div class="custom-control custom-checkbox">
+                <input type="checkbox" class="custom-control-input" id="pc-insp-inhabilitada" name="inhabilitada" value="1" @unless($puedeEditar) disabled @endunless>
+                <label class="custom-control-label" for="pc-insp-inhabilitada">Inhabilitada</label>
+            </div>
+            <small class="form-text text-muted">No se puede imputar. El mayor histórico se conserva. Destildar para volver a habilitar.</small>
+        </div>
+
         <div class="pc-preview" id="pc-preview">
             <div class="pc-preview__label">Así queda el bloque</div>
             <ul class="pc-preview__arbol mb-0" id="pc-preview-arbol"></ul>

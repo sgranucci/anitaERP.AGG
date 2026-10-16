@@ -85,6 +85,11 @@ function activaEventosConsultaCuentaContableRecepcion() {
         var urlCta = carpetaBase + '/contable/cuentacontable/leercuentacontableporcodigo/' + empresaId + '/' + encodeURIComponent(codigoNuevo);
 
         $.get(urlCta, function (data) {
+            if (typeof cuentaContableEstaInhabilitada === 'function' && cuentaContableEstaInhabilitada(data)) {
+                alert(mensajeCuentaContableInhabilitada(data));
+                limpiarCuentaCampo($campo);
+                return;
+            }
             if (data.id > 0) {
                 $campo.find('.cuentacontable_id').val(data.id);
                 $campo.find('.nombrecuentacontable').val(data.nombre);

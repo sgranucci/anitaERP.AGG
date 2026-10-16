@@ -151,6 +151,7 @@ $(function () {
             $('#pc-insp-nombre').val(String($nodo.attr('data-nombre') || ''));
             $('#pc-insp-tipo').val(String($nodo.attr('data-tipo') || '1'));
             $('#pc-insp-rubro').val(String($nodo.attr('data-rubro-id') || ''));
+            $('#pc-insp-inhabilitada').prop('checked', String($nodo.attr('data-inhabilitada') || '0') === '1');
             $titulo.text(String($nodo.attr('data-nombre') || 'Cuenta'));
             $estado.text($nodo.attr('data-codigo') || '');
 
@@ -299,7 +300,8 @@ $(function () {
                     nivel: $('#pc-insp-nivel').val(),
                     tipocuenta: $('#pc-insp-tipo').val(),
                     rubrocontable_id: $('#pc-insp-rubro').val(),
-                    parent_id: parentId || null
+                    parent_id: parentId || null,
+                    inhabilitada: $('#pc-insp-inhabilitada').is(':checked') ? 1 : 0
                 },
                 headers: {
                     'X-CSRF-TOKEN': tokenCsrf(),
@@ -346,6 +348,7 @@ $(function () {
             var parent = cuenta.parent_id || '';
             $nodo.attr('data-parent-id', parent);
             $nodo.attr('data-padre-origen', parent ? 'manual' : 'codigo');
+            $nodo.attr('data-inhabilitada', cuenta.inhabilitada ? '1' : '0');
 
             var $row = $nodo.children('.pc-nodo__row');
             $row.find('.pc-nodo__nombre').text(cuenta.nombre);
@@ -363,6 +366,16 @@ $(function () {
             }
             $nodo.toggleClass('pc-nodo--total', String(cuenta.tipocuenta) === '3');
             $row.find('.pc-nodo__nombre').toggleClass('font-weight-bold', String(cuenta.tipocuenta) === '2');
+            var $baja = $row.find('.pc-nodo__baja');
+            if (cuenta.inhabilitada) {
+                if (!$baja.length) {
+                    $row.find('.pc-nodo__tipo').after('<span class="badge badge-danger pc-nodo__baja ml-1">Inhabilitada</span>');
+                } else {
+                    $baja.prop('hidden', false);
+                }
+            } else if ($baja.length) {
+                $baja.prop('hidden', true);
+            }
         }
     }
 

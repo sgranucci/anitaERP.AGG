@@ -8,6 +8,7 @@
     $rubroActual = (int) old('rubrocontable_id', $data->rubrocontable_id ?? ($prefill['rubrocontable_id'] ?? 0));
     $manejaccosto = old('manejaccosto', $data->manejaccosto ?? 'N');
     $soloLectura = ! empty($soloConsulta);
+    $inhabilitadaMarcada = (string) old('inhabilitada', ! empty($data->inhabilitada) ? '1' : '0') === '1';
 @endphp
 @if (! empty($data) && empty($soloConsulta))
     <div class="alert alert-light border mb-3">
@@ -80,6 +81,19 @@
                     @endforeach
                 </select>
                 <small class="form-text text-muted">Título = grupo de suma. Totalizadora = gemela Anita (…9999).</small>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="inhabilitada" class="col-lg-3 col-form-label text-right">Estado</label>
+            <div class="col-lg-8">
+                <input type="hidden" name="inhabilitada" value="0">
+                <div class="custom-control custom-checkbox mt-2">
+                    <input type="checkbox" class="custom-control-input" name="inhabilitada" id="inhabilitada" value="1"
+                           @checked($inhabilitadaMarcada)
+                           @if($soloLectura) disabled @endif>
+                    <label class="custom-control-label" for="inhabilitada">Inhabilitada</label>
+                </div>
+                <small class="form-text text-muted">Queda en el plan y en el mayor. No se puede elegir ni tipear en imputaciones nuevas. Se puede volver a habilitar.</small>
             </div>
         </div>
     </div>

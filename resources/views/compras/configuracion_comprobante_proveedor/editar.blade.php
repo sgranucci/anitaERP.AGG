@@ -4,6 +4,7 @@ Configuración comprobante proveedor
 @endsection
 
 @section('scripts')
+<script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/admin/usuario/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/configuracion_comprobante_proveedor/editar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/configuracion_comprobante_proveedor/editar.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
@@ -63,6 +64,104 @@ Configuración comprobante proveedor
                 </div>
                 <div class="card-footer">
                     <button type="submit" class="btn btn-success">Guardar configuración</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card card-outline card-primary mt-3">
+            <div class="card-header">
+                <h3 class="card-title">Tolerancia de tipo de cambio</h3>
+                <p class="text-muted mb-0 mt-1" style="font-size:12px;">
+                    Es una sola para toda la instalación.
+                    Si la factura en moneda extranjera trae otro tipo de cambio que una recepción de un período ya cerrado,
+                    hasta este porcentaje se contabiliza sola la diferencia de cambio. Por encima, la factura queda en borrador
+                    y pasa a Mis aprobaciones.
+                </p>
+            </div>
+            <form action="{{ route('guardar_tolerancia_tc_comprobante_proveedor') }}" method="POST" autocomplete="off">
+                @csrf
+                <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
+                <div class="card-body">
+                    @php
+                        $tolTc = old('tolerancia_tc_pct', $toleranciaTcPct ?? \App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport::TOLERANCIA_TC_PCT_DEFAULT);
+                    @endphp
+                    <div class="form-group row mb-0">
+                        <label for="tolerancia_tc_pct" class="col-lg-3 control-label text-right pr-2">
+                            Tolerancia %
+                        </label>
+                        <div class="col-lg-2">
+                            <input type="number" step="0.01" min="0" max="100" required
+                                   class="form-control" id="tolerancia_tc_pct" name="tolerancia_tc_pct"
+                                   value="{{ is_numeric($tolTc) ? $tolTc : 3 }}">
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button type="submit" class="btn btn-success">Guardar tolerancia de tipo de cambio</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card card-outline card-primary mt-3">
+            <div class="card-header">
+                <h3 class="card-title">Destinatarios de la aprobación</h3>
+                <p class="text-muted mb-0 mt-1" style="font-size:12px;">
+                    Reciben el correo y ven el trámite en Mis aprobaciones cuando la diferencia de tipo de cambio
+                    supera la tolerancia. Es una lista para toda la instalación. F1 o la lupa eligen el usuario.
+                </p>
+            </div>
+            <form action="{{ route('guardar_destinatarios_tc_comprobante_proveedor') }}" method="POST" id="form-destinatarios-tc" autocomplete="off">
+                @csrf
+                <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
+                <div class="card-body table-responsive p-0">
+                    <table class="table table-sm table-bordered mb-0" id="tabla-destinatarios-tc">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr>
+                                <th>Usuario</th>
+                                <th class="width40"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @php
+                                $filasDestTc = old('destinatarios');
+                                if (! is_array($filasDestTc)) {
+                                    $filasDestTc = [];
+                                    foreach ($destinatariosTc ?? [] as $usuarioDest) {
+                                        $filasDestTc[] = [
+                                            'usuario_id' => $usuarioDest->id,
+                                            'usuario_codigo' => $usuarioDest->usuario,
+                                            'usuario_nombre' => $usuarioDest->nombre,
+                                        ];
+                                    }
+                                }
+                            @endphp
+                            @foreach ($filasDestTc as $idx => $fila)
+                                <tr class="fila-destinatario-tc">
+                                    <td>
+                                        <div class="tm-usuario-campo d-flex flex-nowrap align-items-center" style="gap:4px;">
+                                            <input type="hidden" class="usuario_id_arbol" name="destinatarios[{{ $idx }}][usuario_id]" value="{{ $fila['usuario_id'] ?? '' }}">
+                                            <input type="text" class="usuario_codigo_arbol form-control form-control-sm" value="{{ $fila['usuario_codigo'] ?? '' }}" placeholder="C&oacute;d." autocomplete="off" style="width:8rem;flex-shrink:0;" title="Login o ID; Enter valida; F1 consulta">
+                                            <button type="button" title="Consulta usuarios (F1)" class="btn-accion-tabla consultausuario tooltipsC flex-shrink-0" data-omitir_filtro_empresa="1">
+                                                <i class="fa fa-search text-primary"></i>
+                                            </button>
+                                            <input type="text" class="nombreusuario form-control form-control-sm" value="{{ $fila['usuario_nombre'] ?? '' }}" readonly placeholder="Nombre" style="min-width:0;flex:1 1 auto;">
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn-accion-tabla js-quitar-destinatario-tc" title="Quitar">
+                                            <i class="fa fa-times-circle text-danger"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-footer">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-agregar-destinatario-tc">
+                        <i class="fa fa-plus"></i> Agregar destinatario
+                    </button>
+                    <button type="submit" class="btn btn-success">Guardar destinatarios</button>
                 </div>
             </form>
         </div>
@@ -137,4 +236,24 @@ Configuración comprobante proveedor
 @include('compras.configuracion_comprobante_proveedor.partials.template_tolerancia', [
     'centrocosto_query' => $centrocosto_query,
 ])
+<template id="template-destinatario-tc">
+    <tr class="fila-destinatario-tc">
+        <td>
+            <div class="tm-usuario-campo d-flex flex-nowrap align-items-center" style="gap:4px;">
+                <input type="hidden" class="usuario_id_arbol" name="destinatarios[__IDX__][usuario_id]" value="">
+                <input type="text" class="usuario_codigo_arbol form-control form-control-sm" value="" placeholder="C&oacute;d." autocomplete="off" style="width:8rem;flex-shrink:0;" title="Login o ID; Enter valida; F1 consulta">
+                <button type="button" title="Consulta usuarios (F1)" class="btn-accion-tabla consultausuario tooltipsC flex-shrink-0" data-omitir_filtro_empresa="1">
+                    <i class="fa fa-search text-primary"></i>
+                </button>
+                <input type="text" class="nombreusuario form-control form-control-sm" value="" readonly placeholder="Nombre" style="min-width:0;flex:1 1 auto;">
+            </div>
+        </td>
+        <td>
+            <button type="button" class="btn-accion-tabla js-quitar-destinatario-tc" title="Quitar">
+                <i class="fa fa-times-circle text-danger"></i>
+            </button>
+        </td>
+    </tr>
+</template>
+@include('includes.admin.modalconsultausuario')
 @endsection

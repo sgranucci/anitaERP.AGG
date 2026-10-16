@@ -7,6 +7,20 @@ var consultaCuentaContableAjax = null;
 var CONSULTA_CUENTACONTABLE_DEBOUNCE_MS = 280;
 var abriendoModalCuentaContable = false;
 
+function cuentaContableEstaInhabilitada(data) {
+    if (!data) {
+        return false;
+    }
+    return data.inhabilitada === true || data.inhabilitada === 1 || data.inhabilitada === '1';
+}
+
+function mensajeCuentaContableInhabilitada(data) {
+    var codigo = data && data.codigo ? String(data.codigo) : '';
+    var nombre = data && data.nombre ? String(data.nombre) : '';
+    var quien = (codigo + ' ' + nombre).trim();
+    return 'La cuenta' + (quien ? ' ' + quien : '') + ' está inhabilitada. No se puede imputar.';
+}
+
 function esTeclaF1CuentaContable(e) {
     return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
 }
@@ -445,6 +459,14 @@ function resolverPorCodigoCuentaContable(codigo, $ctx, onDone) {
     var urlCta = carpetaBase + '/contable/cuentacontable/leercuentacontableporcodigo/' + empresaId + '/' + encodeURIComponent(codigoNuevo);
 
     $.get(urlCta, function(data) {
+        if (cuentaContableEstaInhabilitada(data)) {
+            alert(mensajeCuentaContableInhabilitada(data));
+            limpiarCuentaContableEnContexto($ctx);
+            if (typeof onDone === 'function') {
+                onDone(false, $ctx);
+            }
+            return;
+        }
         if (data && data.id > 0) {
             aplicarCuentaContableEnContexto($ctx, data);
 

@@ -24,7 +24,11 @@
                     <td>{{ $data->id }}</td>
                     <td>{{ $data->empresas->nombre ?? '' }}</td>
                     <td>{{ CuentacontableArbolSupport::formatearCodigo((string) $data->codigo) }}</td>
-                    <td>{{ $data->nombre }}</td>
+                    <td>{{ $data->nombre }}
+                        @if (! empty($data->inhabilitada))
+                            <span class="badge badge-danger">Inhabilitada</span>
+                        @endif
+                    </td>
                     <td>{{ $data->nivel }}</td>
                     <td>{{ CuentacontableArbolSupport::etiquetaTipo($tipo) }}</td>
                     <td>{{ $data->rubrocontables->nombre ?? '' }}</td>

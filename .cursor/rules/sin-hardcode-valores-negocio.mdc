@@ -1,0 +1,39 @@
+---
+description: Los valores de negocio se configuran en pantalla, no quedan fijos en el código
+alwaysApply: true
+---
+
+# Sin valores de negocio hardcodeados
+
+Umbrales, porcentajes, cuentas, mails, logins, destinatarios, plazos y textos que el operador puede cambiar van a la **configuración del módulo**. El código solo los lee.
+
+## Dónde se guarda
+
+| Dato | Lugar |
+|---|---|
+| Un número o texto global | `parametro_sistema`, pantalla del módulo |
+| Usuarios que aprueban o reciben avisos | Tabla de configuración del módulo + consulta de usuario |
+| Por empresa o centro de costo | Fila de la config de ese módulo |
+
+Elegir usuarios con `UsuarioOperativoSupport` (activos, empresa). No armar un `<select>` con la tabla `usuario`.
+
+## Prohibido
+
+```php
+// ❌ Lista fija de personas, mails o umbrales de negocio
+private const DESTINATARIOS = ['eguevara', 'rfogliatti'];
+$tolerancia = 3;
+Mail::to('contaduria@empresa.com');
+```
+
+```php
+// ✅ Lo que está cargado en la configuración
+$ids = ComprobanteProveedorDiferenciaCambioSupport::idsDestinatarios();
+$tolerancia = ComprobanteProveedorDiferenciaCambioSupport::toleranciaPct();
+```
+
+Un default (por ejemplo 3 %) solo vale como respaldo si la configuración todavía está vacía, y la pantalla tiene que mostrarlo para poder cambiarlo.
+
+## Al cerrar un cambio
+
+Buscar en el diff logins, mails, porcentajes y códigos de cuenta nuevos. Si aparecen, moverlos a la configuración del módulo antes de darlo por terminado.

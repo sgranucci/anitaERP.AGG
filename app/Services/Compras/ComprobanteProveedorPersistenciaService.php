@@ -432,6 +432,7 @@ class ComprobanteProveedorPersistenciaService
             'ordencompras',
         ]);
         app(ContratoValidacionAbonoService::class)->asegurarParaComprobante($comprobante);
+        app(ComprobanteProveedorDiferenciaCambioAvisoService::class)->sincronizarBorrador($comprobante);
 
         return $comprobante;
     }
@@ -591,6 +592,7 @@ class ComprobanteProveedorPersistenciaService
             'ordencompras',
         ]);
         app(ContratoValidacionAbonoService::class)->asegurarParaComprobante($comprobante);
+        app(ComprobanteProveedorDiferenciaCambioAvisoService::class)->sincronizarBorrador($comprobante);
 
         return $comprobante;
     }

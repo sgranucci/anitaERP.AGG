@@ -52,6 +52,9 @@
                             <th class="width20">ID</th>
                             <th>C&oacute;digo</th>
                             <th>Nombre</th>
+                            @if ($tipo === 'area')
+                                <th>Correos de aviso</th>
+                            @endif
                             <th>Activo</th>
                             <th class="text-nowrap" style="width:80px" data-orderable="false"></th>
                         </tr>
@@ -62,6 +65,25 @@
                                 <td>{{ $data->id }}</td>
                                 <td>{{ $data->codigo }}</td>
                                 <td>{{ $data->nombre }}</td>
+                                @if ($tipo === 'area')
+                                    <td class="small">
+                                        @php
+                                            $correosPorEmpresa = ($data->correos ?? collect())->groupBy('empresa_id');
+                                        @endphp
+                                        @forelse ($empresasCorreo as $empresa)
+                                            @php
+                                                $lista = $correosPorEmpresa->get($empresa->id, collect())->pluck('email');
+                                            @endphp
+                                            @if ($lista->isNotEmpty())
+                                                <div class="mb-1">
+                                                    <strong>{{ $empresa->nombre }}:</strong>
+                                                    {{ $lista->implode(', ') }}
+                                                </div>
+                                            @endif
+                                        @empty
+                                        @endforelse
+                                    </td>
+                                @endif
                                 <td>{{ $data->activo ? 'Sí' : 'No' }}</td>
                                 <td class="text-nowrap align-middle">
                                     @if (can('editar-ingreso-proveedor-catalogo', false))

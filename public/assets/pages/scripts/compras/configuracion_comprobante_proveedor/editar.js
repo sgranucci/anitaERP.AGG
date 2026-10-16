@@ -159,5 +159,29 @@
             $(this).closest('tr').remove();
             reindexTolerancias();
         });
+
+        function reindexDestinatariosTc() {
+            $('#tabla-destinatarios-tc tbody tr.fila-destinatario-tc').each(function (idx) {
+                $(this).find('[name^="destinatarios["]').each(function () {
+                    var name = $(this).attr('name') || '';
+                    $(this).attr('name', name.replace(/destinatarios\[(?:\d+|__IDX__)]/, 'destinatarios[' + idx + ']'));
+                });
+            });
+        }
+
+        $('#btn-agregar-destinatario-tc').on('click', function () {
+            var tpl = document.getElementById('template-destinatario-tc');
+            if (!tpl) {
+                return;
+            }
+            var idx = $('#tabla-destinatarios-tc tbody tr.fila-destinatario-tc').length;
+            var html = tpl.innerHTML.replace(/__IDX__/g, String(idx));
+            $('#tabla-destinatarios-tc tbody').append(html);
+        });
+
+        $(document).on('click', '.js-quitar-destinatario-tc', function () {
+            $(this).closest('tr').remove();
+            reindexDestinatariosTc();
+        });
     });
 })(jQuery);

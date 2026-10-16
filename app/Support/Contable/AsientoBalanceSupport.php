@@ -120,7 +120,15 @@ final class AsientoBalanceSupport
         $base['sin_cotizacion'] = false;
 
         $monedasPresentes = array_unique(array_filter(array_column($lineas, 'moneda')));
-        if (count($monedasPresentes) <= 1) {
+        $cotizacionesDistintas = [];
+        foreach ($lineas as $linea) {
+            if ((int) ($linea['moneda'] ?: 1) === 1) {
+                continue;
+            }
+            $cotizacionesDistintas[(string) round((float) $linea['cotizacion'], 6)] = true;
+        }
+        $cotizacionesMezcladas = count($cotizacionesDistintas) > 1;
+        if (count($monedasPresentes) <= 1 && ! $cotizacionesMezcladas) {
             return $base;
         }
 
@@ -143,6 +151,9 @@ final class AsientoBalanceSupport
                 }
                 $coef = (float) calculaCoeficienteMoneda($monedaAsiento, $monedaLinea, $cot);
                 $tolerancia += 0.005 * $coef;
+            } elseif ($monedaLinea !== 1 && $cotAsiento > 1.0001 && (float) $linea['cotizacion'] > 1.0001
+                && abs((float) $linea['cotizacion'] - $cotAsiento) > 0.0000005) {
+                $coef = (float) $linea['cotizacion'] / $cotAsiento;
             }
             $totalDebe += $linea['debe'] * $coef;
             $totalHaber += $linea['haber'] * $coef;

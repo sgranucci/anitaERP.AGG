@@ -462,6 +462,12 @@
 		var url_cta = carpetaBase + '/contable/cuentacontable/leercuentacontableporcodigo/' + empresa_id + '/' + encodeURIComponent(codigo_nuevo);
 
 		$.get(url_cta, function (data) {
+			if (typeof cuentaContableEstaInhabilitada === 'function' && cuentaContableEstaInhabilitada(data)) {
+				alert(mensajeCuentaContableInhabilitada(data));
+				$tr.find('.cuentacontable_id').val('');
+				$codigo.val('');
+				return;
+			}
 			if (!(data && data.id > 0)) {
 				return;
 			}
@@ -1018,6 +1024,10 @@
 				type: 'GET',
 				async: false,
 				success: function (data) {
+					if (typeof cuentaContableEstaInhabilitada === 'function' && cuentaContableEstaInhabilitada(data)) {
+						error = mensajeCuentaContableInhabilitada(data);
+						return;
+					}
 					if (data && data.id > 0) {
 						if (typeof aplicarCuentaContableEnContexto === 'function') {
 							aplicarCuentaContableEnContexto($tr, data);

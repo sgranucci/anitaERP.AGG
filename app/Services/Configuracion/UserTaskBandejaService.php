@@ -41,6 +41,8 @@ class UserTaskBandejaService
 
     public const FUENTE_INGRESO_PROVEEDOR = 'ingreso_proveedor';
 
+    public const FUENTE_DIFCAMBIO_FACTURA = 'difcambio_factura';
+
     private const CACHE_COUNT_TTL_SECONDS = 20;
 
     /** @var array<string, string> */
@@ -51,6 +53,7 @@ class UserTaskBandejaService
         self::FUENTE_ASIENTO => 'Asientos contables',
         self::FUENTE_TRANSFERENCIA => 'Transferencias',
         self::FUENTE_INGRESO_PROVEEDOR => 'Ingreso proveedor',
+        self::FUENTE_DIFCAMBIO_FACTURA => 'Diferencia de cambio en factura',
     ];
 
     /** @var list<string>|null */
@@ -74,7 +77,7 @@ class UserTaskBandejaService
      */
     public function fuentesDisponibles(): array
     {
-        return $this->fuentesDesdePermisos(null);
+        return $this->fuentesDesdePermisos(null, (int) (auth()->id() ?? 0));
     }
 
     /**
@@ -141,6 +144,15 @@ class UserTaskBandejaService
         }
         if (IngresoProveedor::query()->where('estado', IngresoProveedorEstados::PENDIENTE)->exists()) {
             $ids = $ids->merge($this->usuarioIdsConPermiso('autorizar-ingreso-proveedor'));
+        }
+        if (\Illuminate\Support\Facades\Schema::hasTable('comprobante_proveedor_difcambio')
+            && \App\Models\Compras\Comprobante_Proveedor_Difcambio::query()
+                ->where('estado', \App\Models\Compras\Comprobante_Proveedor_Difcambio::ESTADO_PENDIENTE)
+                ->exists()
+        ) {
+            $ids = $ids->merge(
+                \App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport::idsDestinatarios()
+            );
         }
         if (Transferencia_Mercaderia::query()
             ->where('estado', \App\Support\Stock\TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION)
@@ -265,6 +277,7 @@ class UserTaskBandejaService
                 self::FUENTE_SALIDA_BIENES => AprobacionDetalleContenidoSupport::desdePrestamo(
                     $comprobanteId > 0 ? Prestamo::query()->find($comprobanteId) : null
                 ),
+                self::FUENTE_DIFCAMBIO_FACTURA => $this->contenidoDifcambioFactura($comprobanteId),
                 default => null,
             };
         } catch (\Throwable $e) {
@@ -302,7 +315,7 @@ class UserTaskBandejaService
      * @param  list<string>|null  $slugs
      * @return list<string>
      */
-    private function fuentesDesdePermisos(?array $slugs): array
+    private function fuentesDesdePermisos(?array $slugs, ?int $usuarioId = null): array
     {
         $out = [];
         if ($this->puedeSlug('aprobar-mis-aprobaciones-arbol', $slugs)) {
@@ -324,6 +337,10 @@ class UserTaskBandejaService
         }
         if ($this->puedeSlug('autorizar-ingreso-proveedor', $slugs)) {
             $out[] = self::FUENTE_INGRESO_PROVEEDOR;
+        }
+        $uid = $usuarioId ?? (int) (auth()->id() ?? 0);
+        if (\App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport::esDestinatario($uid)) {
+            $out[] = self::FUENTE_DIFCAMBIO_FACTURA;
         }
 
         return $out;
@@ -560,7 +577,7 @@ class UserTaskBandejaService
         $soloReemplazo = ! empty($filtros['reemplazo']);
         $diasMin = max(0, (int) ($filtros['dias_min'] ?? 0));
         $montoMin = max(0.0, (float) ($filtros['monto_min'] ?? 0));
-        $fuentes = $this->fuentesDesdePermisos($this->permisosOverride);
+        $fuentes = $this->fuentesDesdePermisos($this->permisosOverride, $usuarioId);
 
         $items = collect();
 
@@ -603,6 +620,12 @@ class UserTaskBandejaService
                 && ($fuenteFiltro === '' || $fuenteFiltro === self::FUENTE_INGRESO_PROVEEDOR)
             ) {
                 $items = $items->merge($this->listarIngresoProveedor($usuarioId));
+            }
+
+            if (in_array(self::FUENTE_DIFCAMBIO_FACTURA, $fuentes, true)
+                && ($fuenteFiltro === '' || $fuenteFiltro === self::FUENTE_DIFCAMBIO_FACTURA)
+            ) {
+                $items = $items->merge($this->listarDifcambioFactura());
             }
         }
 
@@ -834,6 +857,120 @@ class UserTaskBandejaService
                 'sort_ts' => $fecha->getTimestamp(),
             ];
         });
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function listarDifcambioFactura(): Collection
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('comprobante_proveedor_difcambio')) {
+            return collect();
+        }
+
+        $filas = \App\Models\Compras\Comprobante_Proveedor_Difcambio::query()
+            ->with(['comprobantes.proveedores', 'comprobantes.empresas', 'comprobantes.ordencompras'])
+            ->where('estado', \App\Models\Compras\Comprobante_Proveedor_Difcambio::ESTADO_PENDIENTE)
+            ->orderByDesc('id')
+            ->get()
+            ->groupBy('comprobante_proveedor_id');
+
+        return $filas->map(function ($grupo) {
+            $fila = $grupo->first();
+            $comprobante = $fila?->comprobantes;
+            $fecha = $fila?->created_at ? Carbon::parse($fila->created_at) : Carbon::now();
+            $dias = max(0, $fecha->copy()->startOfDay()->diffInDays(Carbon::now()->startOfDay()));
+            $sla = $this->slaGenerico($dias, $fecha);
+            $numero = $comprobante
+                ? trim((string) $comprobante->letra.' '.$comprobante->sucursal.'-'.$comprobante->numerocomprobante)
+                : '#'.$fila->comprobante_proveedor_id;
+            $pesos = round((float) $grupo->sum('importe_pesos'), 2);
+            $id = (int) $fila->comprobante_proveedor_id;
+
+            return [
+                'fuente' => self::FUENTE_DIFCAMBIO_FACTURA,
+                'fuente_label' => self::FUENTES[self::FUENTE_DIFCAMBIO_FACTURA],
+                'task_key' => 'difcambio_factura:'.$id,
+                'tipo' => 'DC',
+                'etiqueta_tipo' => 'Dif. cambio factura',
+                'numero' => $numero,
+                'comprobante_id' => $id,
+                'nivel' => 1,
+                'monto' => abs($pesos),
+                'moneda_abrev' => 'ARS',
+                'fecha_envio' => $fecha->toDateTimeString(),
+                'dias_pendiente' => $dias,
+                'urgencia' => $this->urgenciaPorDias($dias),
+                'documento_existe' => $comprobante !== null,
+                'puede_aprobar' => true,
+                'es_aviso_pago' => false,
+                'reemplazo_de' => null,
+                'es_reemplazo' => false,
+                'sla_label' => $sla['sla_label'],
+                'sla_estado' => $sla['sla_estado'],
+                'sla_fecha_limite' => $sla['sla_fecha_limite'],
+                'dias_para_vencer' => $sla['dias_para_vencer'],
+                'url_ver' => url('mis-aprobaciones/diferencia-cambio-factura/'.$id),
+                'url_aprobar' => url('mis-aprobaciones/diferencia-cambio-factura/'.$id.'/aprobar'),
+                'url_rechazar' => url('mis-aprobaciones/diferencia-cambio-factura/'.$id.'/rechazar'),
+                'url_reenviar' => null,
+                'url_descartar' => null,
+                'url_detalle' => url('mis-aprobaciones/detalle/difcambio_factura/'.$id),
+                'subtitulo' => trim((string) (optional($comprobante?->proveedores)->nombre ?? '')),
+                'proveedor' => (string) (optional($comprobante?->proveedores)->nombre ?? ''),
+                'detalle' => 'TC recepción vs factura. Desvío '
+                    .number_format((float) $grupo->max('porcentaje'), 2, ',', '.').'%.',
+                'acciones_inline' => true,
+                'muestra_reenviar' => false,
+                'muestra_descartar' => false,
+                'sort_ts' => $fecha->getTimestamp(),
+            ];
+        })->values();
+    }
+
+    private function contenidoDifcambioFactura(int $comprobanteId): ?array
+    {
+        $comprobante = \App\Models\Compras\Comprobante_Proveedor::query()->find($comprobanteId);
+        if (! $comprobante) {
+            return null;
+        }
+
+        $datos = app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
+            ->comprobantesImplicados($comprobante);
+        $renglones = [[
+            'titulo' => 'Factura '.$comprobante->letra.' '.$comprobante->sucursal.'-'.$comprobante->numerocomprobante,
+            'cantidad' => '',
+            'importe' => number_format((float) $comprobante->total, 2, ',', '.'),
+            'lineas' => ['TC factura '.number_format((float) $comprobante->cotizacion, 4, ',', '.')],
+        ]];
+        if ($comprobante->ordencompras) {
+            $renglones[] = [
+                'titulo' => 'OC '.$comprobante->ordencompras->numeroordencompra,
+                'cantidad' => '',
+                'importe' => '',
+                'lineas' => [],
+            ];
+        }
+        foreach ($datos['recepciones'] as $recepcion) {
+            $renglones[] = [
+                'titulo' => 'Recepción #'.$recepcion['id'],
+                'cantidad' => '',
+                'importe' => '',
+                'lineas' => array_filter([
+                    $recepcion['fecha'] !== '' ? 'Fecha '.$recepcion['fecha'] : '',
+                    'TC '.number_format((float) $recepcion['tc'], 4, ',', '.'),
+                ]),
+            ];
+        }
+
+        return [
+            'titulo' => 'Comprobantes de la factura',
+            'notas' => [
+                ['label' => 'Proveedor', 'valor' => (string) (optional($comprobante->proveedores)->nombre ?? '')],
+            ],
+            'renglones' => $renglones,
+            'truncado' => null,
+        ];
     }
 
     /**

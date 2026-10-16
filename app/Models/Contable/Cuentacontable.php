@@ -17,8 +17,12 @@ class Cuentacontable extends Model
     protected $fillable = ['empresa_id', 'rubrocontable_id', 'parent_id', 'nivel',
                             'nombre', 'codigo', 'tipocuenta', 'monetaria', 'manejaccosto',
                             'usuarioultcambio_id', 'ajustamonedaextranjera', 'conceptogasto_id',
-                            'cuentacontable_difcambio_id'];
+                            'cuentacontable_difcambio_id', 'inhabilitada'];
     protected $table = 'cuentacontable';
+
+    protected $casts = [
+        'inhabilitada' => 'boolean',
+    ];
 
     public function cuentacontable_centrocostos()
 	{

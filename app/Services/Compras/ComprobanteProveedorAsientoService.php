@@ -20,6 +20,7 @@ use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorCuentaDebeNetoSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorCupoNcLegajoSupport;
+use App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport;
 use App\Support\Compras\ComprobanteProveedorDebeGastoSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
@@ -266,6 +267,7 @@ class ComprobanteProveedorAsientoService
         $lineasDebe = [];
         $lineasHaberExtra = [];
         $cuentaProvisionId = 0;
+        $tramosDifcambio = [];
         $totalNetoConceptos = 0.0;
         /** @var list<array{concepto_ivacompra_id:int, monto:float, cuentacontabledebe_id:int}> */
         $netoConceptosDetalle = [];
@@ -609,15 +611,37 @@ class ComprobanteProveedorAsientoService
 
             if ($totalProvision > 0) {
                 $cuentaProvisionId = $this->resolverCuentaProvision((int) $comprobante->empresa_id);
-                $lineasDebe[] = [
-                    'cuentacontable_id' => $cuentaProvisionId,
-                    'importe' => $totalProvision,
-                    'centrocosto_id' => $centrocostoId,
-                    'observacion' => $descLineaErp,
-                    'origen' => 'far',
-                    'editable_cuenta' => false,
-                    'concepto_ivacompra_id' => 0,
-                ];
+                $analisisDc = ComprobanteProveedorDiferenciaCambioSupport::analizar($comprobante);
+                $tramosDc = array_values(array_filter(
+                    $analisisDc['tramos'] ?? [],
+                    static fn (array $tramo) => (float) ($tramo['nominal_me'] ?? 0) > 0.0001
+                ));
+                $sumaTramos = round(array_sum(array_column($tramosDc, 'nominal_me')), 2);
+                if (($analisisDc['aplica'] ?? false) && $tramosDc !== [] && abs($sumaTramos - $totalProvision) <= 0.05) {
+                    $tramosDifcambio = $tramosDc;
+                    foreach ($tramosDc as $tramo) {
+                        $lineasDebe[] = [
+                            'cuentacontable_id' => $cuentaProvisionId,
+                            'importe' => (float) $tramo['nominal_me'],
+                            'centrocosto_id' => $centrocostoId,
+                            'observacion' => $descLineaErp,
+                            'origen' => 'far',
+                            'editable_cuenta' => false,
+                            'concepto_ivacompra_id' => 0,
+                            'cotizacion' => (float) $tramo['cotizacion_linea'],
+                        ];
+                    }
+                } else {
+                    $lineasDebe[] = [
+                        'cuentacontable_id' => $cuentaProvisionId,
+                        'importe' => $totalProvision,
+                        'centrocosto_id' => $centrocostoId,
+                        'observacion' => $descLineaErp,
+                        'origen' => 'far',
+                        'editable_cuenta' => false,
+                        'concepto_ivacompra_id' => 0,
+                    ];
+                }
             }
 
             // Hasta 5% sobre la COM disponible: prorrateo a cuentas de artículos (no cortar la grabación).
@@ -783,6 +807,42 @@ class ComprobanteProveedorAsientoService
             $totalDebe = round(array_sum(array_column($lineasDebe, 'importe')), 2);
         }
 
+        if ($tramosDifcambio !== []) {
+            $cuentaDcId = ComprobanteProveedorDiferenciaCambioSupport::cuentaDiferenciaCambioId($comprobante);
+            $numeroOc = (int) ($comprobante->ordencompras?->numeroordencompra ?? 0);
+            foreach ($tramosDifcambio as $tramo) {
+                if (! ($tramo['ajusta'] ?? false)) {
+                    continue;
+                }
+                $pesos = round((float) $tramo['importe_pesos'], 2);
+                if (abs($pesos) < 0.01) {
+                    continue;
+                }
+                if ($cuentaDcId <= 0) {
+                    throw new RuntimeException(
+                        'Hay diferencia de cambio contra una recepción de período cerrado pero falta la cuenta '
+                        .'532020-001 DIFERENCIAS DE CAMBIO (o la cuenta de dif. de cambio del proveedor).'
+                    );
+                }
+                $lineaDc = [
+                    'cuentacontable_id' => $cuentaDcId,
+                    'importe' => abs($pesos),
+                    'centrocosto_id' => $centrocostoId,
+                    'observacion' => 'Dif. cambio OC '.$numeroOc.' COM '.$tramo['recepcion_id'].' FAC '.$comprobante->numerocomprobante,
+                    'origen' => 'difcambio',
+                    'editable_cuenta' => false,
+                    'concepto_ivacompra_id' => 0,
+                    'moneda_id' => 1,
+                    'cotizacion' => 1.0,
+                ];
+                if ($pesos > 0) {
+                    $lineasHaber[] = $lineaDc;
+                } else {
+                    $lineasDebe[] = $lineaDc;
+                }
+            }
+        }
+
         if ($esNotaCredito) {
             [$lineasDebe, $lineasHaber] = [$lineasHaber, $lineasDebe];
         }
@@ -834,11 +894,11 @@ class ComprobanteProveedorAsientoService
 
         foreach ($lineasDebe as $linea) {
             $payloadAsiento['cuentacontable_ids'][] = $linea['cuentacontable_id'];
-            $payloadAsiento['moneda_ids'][] = $monedaFactura['moneda_id'];
+            $payloadAsiento['moneda_ids'][] = (int) ($linea['moneda_id'] ?? $monedaFactura['moneda_id']);
             $payloadAsiento['centrocosto_ids'][] = $linea['centrocosto_id'] ?? $centrocostoId;
             $payloadAsiento['debes'][] = $linea['importe'];
             $payloadAsiento['haberes'][] = 0;
-            $payloadAsiento['cotizaciones'][] = $this->cotizacionLineaAsiento($comprobante, $monedaFactura);
+            $payloadAsiento['cotizaciones'][] = (float) ($linea['cotizacion'] ?? $this->cotizacionLineaAsiento($comprobante, $monedaFactura));
             $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
             $payloadAsiento['editable_cuentas'][] = ! empty($linea['editable_cuenta']);
             $payloadAsiento['editable_importes'][] = ! empty($linea['editable_importe']);
@@ -848,11 +908,11 @@ class ComprobanteProveedorAsientoService
 
         foreach ($lineasHaber as $linea) {
             $payloadAsiento['cuentacontable_ids'][] = $linea['cuentacontable_id'];
-            $payloadAsiento['moneda_ids'][] = $monedaFactura['moneda_id'];
+            $payloadAsiento['moneda_ids'][] = (int) ($linea['moneda_id'] ?? $monedaFactura['moneda_id']);
             $payloadAsiento['centrocosto_ids'][] = $linea['centrocosto_id'] ?? $centrocostoId;
             $payloadAsiento['debes'][] = 0;
             $payloadAsiento['haberes'][] = $linea['importe'];
-            $payloadAsiento['cotizaciones'][] = $this->cotizacionLineaAsiento($comprobante, $monedaFactura);
+            $payloadAsiento['cotizaciones'][] = (float) ($linea['cotizacion'] ?? $this->cotizacionLineaAsiento($comprobante, $monedaFactura));
             $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
             $payloadAsiento['editable_cuentas'][] = ! empty($linea['editable_cuenta']);
             $payloadAsiento['editable_importes'][] = ! empty($linea['editable_importe']);

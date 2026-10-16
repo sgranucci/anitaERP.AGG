@@ -505,7 +505,7 @@
                     @endif
                 </small>
                 <small id="cp-aviso-cotizacion-com" class="form-text text-muted">
-                    En ME: si difiere de la COM del mismo mes, se actualiza la recepción; si es de otro mes, el legajo vuelve a Compras.
+                    En ME: si difiere de una recepción del período abierto, se actualiza esa recepción. Si el período de la recepción ya está cerrado, la diferencia de cambio se contabiliza en el mes de la factura. Por encima de la tolerancia de tipo de cambio de la configuración del comprobante de proveedor, queda en borrador para Mis aprobaciones.
                 </small>
             </div>
         </div>

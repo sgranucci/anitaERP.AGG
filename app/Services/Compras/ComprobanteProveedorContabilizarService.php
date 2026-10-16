@@ -244,6 +244,9 @@ class ComprobanteProveedorContabilizarService
 
         $this->assertEstadoPermiteContabilizar($comprobante);
 
+        app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
+            ->assertPuedeContabilizar($comprobante);
+
         app(ContratoValidacionAbonoService::class)->assertComprobanteContabilizable($comprobante);
 
         if ($comprobante->comprobante_proveedor_conceptos()->count() === 0) {
@@ -369,6 +372,9 @@ class ComprobanteProveedorContabilizarService
             ])->save();
 
             $this->enviarLegajoAPagosTrasContabilizar($comprobante);
+
+            app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
+                ->marcarContabilizado($comprobante, (int) ($resultadoErp['asiento_id'] ?? 0));
 
             return $comprobante->fresh();
         } catch (Throwable $e) {

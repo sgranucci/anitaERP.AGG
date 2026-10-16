@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Seguridad;
 
 use App\Exports\Seguridad\IngresoProveedorCatalogoListadoExport;
 use App\Http\Controllers\Controller;
+use App\Models\Seguridad\IngresoProveedorAreaCorreo;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use App\Support\Seguridad\IngresoProveedorAreaCorreoSupport;
 use App\Support\Seguridad\IngresoProveedorCatalogoListadoFiltros;
 use App\Support\Seguridad\IngresoProveedorCatalogoSupport;
 use Illuminate\Http\Request;
@@ -21,6 +23,9 @@ class IngresoProveedorCatalogoController extends Controller
         $filtros = IngresoProveedorCatalogoListadoFiltros::resolverDesdeRequest($request);
 
         $query = IngresoProveedorCatalogoSupport::modelo($tipo)::query();
+        if ($tipo === 'area') {
+            $query->with(['correos.empresas:id,nombre']);
+        }
         if (IngresoProveedorCatalogoListadoFiltros::tieneCriteriosAplicados($filtros)) {
             IngresoProveedorCatalogoListadoFiltros::aplicar($query, $filtros);
         }
@@ -33,6 +38,7 @@ class IngresoProveedorCatalogoController extends Controller
             'filtros' => $filtros,
             'filtrosQuery' => IngresoProveedorCatalogoListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => IngresoProveedorCatalogoListadoFiltros::CAMPOS,
+            'empresasCorreo' => $tipo === 'area' ? IngresoProveedorAreaCorreoSupport::empresasOperativas() : collect(),
         ]);
     }
 
@@ -89,6 +95,8 @@ class IngresoProveedorCatalogoController extends Controller
         return view('seguridad.ingreso_proveedor_catalogo.crear', [
             'tipo' => $tipo,
             'def' => IngresoProveedorCatalogoSupport::def($tipo),
+            'empresasCorreo' => $tipo === 'area' ? IngresoProveedorAreaCorreoSupport::empresasOperativas() : collect(),
+            'correosTexto' => [],
         ]);
     }
 
@@ -98,7 +106,9 @@ class IngresoProveedorCatalogoController extends Controller
         $tipo = IngresoProveedorCatalogoSupport::tipoDesdeRequest($request);
         $modelo = IngresoProveedorCatalogoSupport::modelo($tipo);
         $data = $this->validar($request, $modelo->getTable());
-        $modelo->newQuery()->create($data);
+        $this->validarCorreosArea($request, $tipo);
+        $fila = $modelo->newQuery()->create($data);
+        $this->sincronizarCorreosArea($request, $tipo, (int) $fila->id);
 
         return redirect()->route($this->rutaIndex($tipo))->with('mensaje', 'Registro creado con éxito');
     }
@@ -113,6 +123,10 @@ class IngresoProveedorCatalogoController extends Controller
             'tipo' => $tipo,
             'def' => IngresoProveedorCatalogoSupport::def($tipo),
             'data' => $data,
+            'empresasCorreo' => $tipo === 'area' ? IngresoProveedorAreaCorreoSupport::empresasOperativas() : collect(),
+            'correosTexto' => $tipo === 'area'
+                ? IngresoProveedorAreaCorreoSupport::textoPorEmpresa((int) $data->id)
+                : [],
         ]);
     }
 
@@ -122,8 +136,10 @@ class IngresoProveedorCatalogoController extends Controller
         $tipo = IngresoProveedorCatalogoSupport::tipoDesdeRequest($request);
         $modelo = IngresoProveedorCatalogoSupport::modelo($tipo);
         $data = $this->validar($request, $modelo->getTable(), (int) $id);
+        $this->validarCorreosArea($request, $tipo);
         $fila = $modelo->newQuery()->findOrFail($id);
         $fila->update($data);
+        $this->sincronizarCorreosArea($request, $tipo, (int) $id);
 
         return redirect()->route($this->rutaIndex($tipo))->with('mensaje', 'Registro actualizado con éxito');
     }
@@ -132,6 +148,11 @@ class IngresoProveedorCatalogoController extends Controller
     {
         can('borrar-ingreso-proveedor-catalogo');
         $tipo = IngresoProveedorCatalogoSupport::tipoDesdeRequest($request);
+        if ($tipo === 'area') {
+            EloquentAuditDeleteSupport::each(
+                IngresoProveedorAreaCorreo::query()->where('area_id', $id)
+            );
+        }
         EloquentAuditDeleteSupport::each(
             IngresoProveedorCatalogoSupport::modelo($tipo)::query()->where('id', $id)
         );
@@ -165,5 +186,60 @@ class IngresoProveedorCatalogoController extends Controller
     private function rutaIndex(string $tipo): string
     {
         return IngresoProveedorCatalogoSupport::def($tipo)['ruta'];
+    }
+
+    private function sincronizarCorreosArea(Request $request, string $tipo, int $areaId): void
+    {
+        if ($tipo !== 'area') {
+            return;
+        }
+
+        $empresas = IngresoProveedorAreaCorreoSupport::empresasOperativas();
+        IngresoProveedorAreaCorreoSupport::sincronizar(
+            $areaId,
+            (array) $request->input('correos', []),
+            $empresas->pluck('id')->map(static fn ($id) => (int) $id)->all()
+        );
+    }
+
+    private function validarCorreosArea(Request $request, string $tipo): void
+    {
+        if ($tipo !== 'area') {
+            return;
+        }
+
+        $this->validarCorreos(
+            $request,
+            IngresoProveedorAreaCorreoSupport::empresasOperativas()
+                ->pluck('id')
+                ->map(static fn ($id) => (int) $id)
+                ->all()
+        );
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     */
+    private function validarCorreos(Request $request, array $empresaIds): void
+    {
+        $reglas = [];
+        foreach ($empresaIds as $empresaId) {
+            $reglas['correos.'.$empresaId] = 'nullable|string|max:2000';
+        }
+        $request->validate($reglas);
+
+        $invalidos = [];
+        foreach ($empresaIds as $empresaId) {
+            foreach (IngresoProveedorAreaCorreoSupport::lineas($request->input('correos.'.$empresaId)) as $email) {
+                if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $invalidos[] = $email;
+                }
+            }
+        }
+        if ($invalidos !== []) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'correos' => 'Hay correos inválidos: '.implode(', ', $invalidos),
+            ]);
+        }
     }
 }

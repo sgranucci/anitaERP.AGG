@@ -65,6 +65,13 @@ class CuentacontableController extends Controller
             ->leftJoin('conceptogasto', 'conceptogasto.id', '=', 'cuentacontable.conceptogasto_id')
             ->select('cuentacontable.*');
 
+        $estado = (string) ($filtros['estado'] ?? '');
+        if ($estado === 'habilitadas') {
+            $query->where('cuentacontable.inhabilitada', false);
+        } elseif ($estado === 'inhabilitadas') {
+            $query->where('cuentacontable.inhabilitada', true);
+        }
+
         $vistaArbol = ($filtros['vista'] ?? '') === CuentacontableListadoFiltros::VISTA_ARBOL
             && ($filtros['empresa_scope'] ?? '') === 'una';
 
@@ -216,6 +223,7 @@ class CuentacontableController extends Controller
             'tipocuenta' => 'required|in:1,2,3',
             'rubrocontable_id' => 'required|integer',
             'parent_id' => 'nullable|integer',
+            'inhabilitada' => 'nullable|boolean',
         ]);
 
         $parentId = (int) ($validated['parent_id'] ?? 0);
@@ -236,13 +244,14 @@ class CuentacontableController extends Controller
         $payload = array_merge($cuenta->only([
             'empresa_id', 'rubrocontable_id', 'nombre', 'codigo', 'tipocuenta', 'nivel',
             'monetaria', 'manejaccosto', 'ajustamonedaextranjera', 'conceptogasto_id',
-            'cuentacontable_difcambio_id',
+            'cuentacontable_difcambio_id', 'inhabilitada',
         ]), [
             'nombre' => $validated['nombre'],
             'nivel' => (int) $validated['nivel'],
             'tipocuenta' => $validated['tipocuenta'],
             'rubrocontable_id' => (int) $validated['rubrocontable_id'],
             'parent_id' => $parentId > 0 ? $parentId : null,
+            'inhabilitada' => $request->boolean('inhabilitada'),
         ]);
 
         $this->cuentacontableRepository->updateJerarquia($payload, (int) $id);
@@ -259,6 +268,7 @@ class CuentacontableController extends Controller
                 'tipo_label' => CuentacontableArbolSupport::etiquetaTipo($cuenta->tipocuenta),
                 'rubrocontable_id' => (int) $cuenta->rubrocontable_id,
                 'parent_id' => (int) ($cuenta->parent_id ?? 0) ?: null,
+                'inhabilitada' => (bool) $cuenta->inhabilitada,
             ],
         ]);
     }
@@ -295,7 +305,8 @@ class CuentacontableController extends Controller
             'cuentacontable.tipocuenta'
         )
             ->leftJoin('empresa', 'cuentacontable.empresa_id', '=', 'empresa.id')
-            ->where('cuentacontable.tipocuenta', CuentacontableArbolSupport::TIPO_IMPUTABLE);
+            ->where('cuentacontable.tipocuenta', CuentacontableArbolSupport::TIPO_IMPUTABLE)
+            ->where('cuentacontable.inhabilitada', false);
 
         if ($empresaId > 0) {
             $query->where('cuentacontable.empresa_id', $empresaId);
@@ -467,6 +478,7 @@ class CuentacontableController extends Controller
             'conceptogasto_id',
             'cuentacontable_difcambio_id',
         ]);
+        $payload['inhabilitada'] = $request->boolean('inhabilitada');
         foreach (['conceptogasto_id', 'cuentacontable_difcambio_id', 'parent_id'] as $campo) {
             if (($payload[$campo] ?? '') === '' || (int) ($payload[$campo] ?? 0) === 0) {
                 $payload[$campo] = null;

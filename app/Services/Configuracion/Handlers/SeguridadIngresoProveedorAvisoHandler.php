@@ -7,6 +7,7 @@ use App\Mail\Configuracion\ModuloAvisoMail;
 use App\Models\Configuracion\ModuloAvisoTipo;
 use App\Models\Seguridad\IngresoProveedor;
 use App\Services\Configuracion\ModuloAvisoService;
+use App\Support\Seguridad\IngresoProveedorAreaCorreoSupport;
 use App\Support\Seguridad\IngresoProveedorEnlacePublicoSupport;
 use App\Support\Seguridad\IngresoProveedorEstados;
 use App\Support\Seguridad\IngresoProveedorVisitanteSupport;
@@ -29,6 +30,16 @@ class SeguridadIngresoProveedorAvisoHandler implements ModuloAvisoDespachoHandle
             $creador = $this->emailCreador($entityId);
             if ($creador !== null) {
                 $emails[] = $creador;
+            }
+        }
+
+        if ($tipo->codigo === 'ingreso_proveedor_creado') {
+            $ticket = $this->cargar($entityId);
+            foreach (IngresoProveedorAreaCorreoSupport::emailsDe(
+                (int) ($ticket->area_id ?? 0),
+                (int) ($ticket->empresa_id ?? 0)
+            ) as $emailArea) {
+                $emails[] = $emailArea;
             }
         }
 

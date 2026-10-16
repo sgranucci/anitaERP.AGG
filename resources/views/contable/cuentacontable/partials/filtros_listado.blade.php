@@ -76,6 +76,14 @@
                     @endforeach
                 </select>
             </div>
+            <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="filtro_estado">Estado</label>
+                <select name="filtro_estado" id="filtro_estado" class="form-control form-control-sm">
+                    <option value="" @selected(($f['estado'] ?? '') === '')>Todas</option>
+                    <option value="habilitadas" @selected(($f['estado'] ?? '') === 'habilitadas')>Habilitadas</option>
+                    <option value="inhabilitadas" @selected(($f['estado'] ?? '') === 'inhabilitadas')>Inhabilitadas</option>
+                </select>
+            </div>
             <div class="form-group col-md-1 col-sm-6 mb-2">
                 <label class="small mb-1" for="filtro_nivel">Nivel</label>
                 <select name="filtro_nivel" id="filtro_nivel" class="form-control form-control-sm">

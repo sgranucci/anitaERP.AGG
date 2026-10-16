@@ -29,6 +29,11 @@ var codigoxcodigo;
 			let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
 
 			$.get(url_cta, function(data){
+				if (typeof cuentaContableEstaInhabilitada === 'function' && cuentaContableEstaInhabilitada(data)) {
+					alert(mensajeCuentaContableInhabilitada(data));
+					$(codigo).parents('tr').remove();
+					return;
+				}
 				if (data.id > 0)
 				{
 					$(codigo).parents("tr").find('.cuentacontable_id').val(data.id);

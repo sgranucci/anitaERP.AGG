@@ -16,12 +16,14 @@ use App\Queries\Contable\AsientoQueryInterface;
 use App\Exports\Contable\AsientoDetalleExport;
 use App\Exports\Contable\AsientoExport;
 use App\Models\Contable\Asiento;
+use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Contable\Configuracion_AsientoContable;
 use App\Services\Contable\AsientoAprobacionService;
 use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCentrocostoObligatorioSupport;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
+use App\Support\Contable\CuentacontableInhabilitadaSupport;
 use App\Support\Contable\AsientoListadoFiltros;
 use App\Support\Contable\AsientoOrigenProcesoSupport;
 use App\Support\Contable\AsientoReferenciaAnitaSupport;
@@ -261,6 +263,9 @@ class AsientoController extends Controller
         try {
             AsientoBalanceSupport::assertValidoParaCrudAsiento($data);
             AsientoCentrocostoObligatorioSupport::assertDesdePayload($data);
+            CuentacontableInhabilitadaSupport::assertImputacionNueva(
+                is_array($cuentacontableIds) ? $cuentacontableIds : []
+            );
         } catch (\InvalidArgumentException $e) {
             return response()->json(['errores' => $e->getMessage()]);
         }
@@ -393,6 +398,14 @@ class AsientoController extends Controller
         try {
             AsientoBalanceSupport::assertValidoParaCrudAsiento($dataRequest);
             AsientoCentrocostoObligatorioSupport::assertDesdePayload($dataRequest);
+            $idsPrevios = Asiento_Movimiento::query()
+                ->where('asiento_id', $id)
+                ->pluck('cuentacontable_id')
+                ->all();
+            CuentacontableInhabilitadaSupport::assertImputacionNueva(
+                is_array($dataRequest['cuentacontable_ids'] ?? null) ? $dataRequest['cuentacontable_ids'] : [],
+                $idsPrevios
+            );
         } catch (\InvalidArgumentException $e) {
             return ['errores' => $e->getMessage()];
         }

@@ -252,6 +252,15 @@ var totalHaberAsiento = 0;
 			+ empresaId + '/' + encodeURIComponent(codigoNuevo);
 
 		$.get(urlCta, function (data) {
+			if (typeof cuentaContableEstaInhabilitada === 'function' && cuentaContableEstaInhabilitada(data)) {
+				$input.data('asiento-codigo-invalido', 1);
+				limpiarCuentaAsientoEnFila($tr, true);
+				if (alertar) {
+					alert(mensajeCuentaContableInhabilitada(data));
+				}
+				onDone(false);
+				return;
+			}
 			if (data && parseInt(data.id, 10) > 0) {
 				aplicarCuentaAsientoEnFila($tr, data);
 				$.when(refrescarCcAsientoTrasCuenta($tr, data)).always(function () {
@@ -937,6 +946,12 @@ var totalHaberAsiento = 0;
 				let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
 
 				return $.get(url_cta, function(data){
+					if (typeof cuentaContableEstaInhabilitada === 'function' && cuentaContableEstaInhabilitada(data)) {
+						alert(mensajeCuentaContableInhabilitada(data));
+						$(codigo).val('');
+						$(codigo).parents("tr").find('.cuentacontable_id').val('');
+						return;
+					}
 					var $trCc = $(codigo).parents("tr");
 					$trCc.find('.cuentacontable_id').val(data.id);
 					$trCc.find(".cuentacontable_id_previa").val(data.id);

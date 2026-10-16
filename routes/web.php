@@ -1124,6 +1124,9 @@ Route::middleware('auth')->group(function () {
     Route::post('mis-aprobaciones/salida-bienes/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarSalidaBienes')->name('rechazar_salida_bienes_mis_aprobaciones');
     Route::post('mis-aprobaciones/asiento/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarAsiento')->name('aprobar_asiento_mis_aprobaciones');
     Route::post('mis-aprobaciones/asiento/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarAsiento')->name('rechazar_asiento_mis_aprobaciones');
+    Route::get('mis-aprobaciones/diferencia-cambio-factura/{id}', 'Configuracion\MisAprobacionesArbolController@verDiferenciaCambioFactura')->name('ver_difcambio_factura_mis_aprobaciones');
+    Route::post('mis-aprobaciones/diferencia-cambio-factura/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarDiferenciaCambioFactura')->name('aprobar_difcambio_factura_mis_aprobaciones');
+    Route::post('mis-aprobaciones/diferencia-cambio-factura/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarDiferenciaCambioFactura')->name('rechazar_difcambio_factura_mis_aprobaciones');
     Route::post('mis-aprobaciones/transferencia/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarTransferencia')->name('aprobar_transferencia_mis_aprobaciones');
     Route::post('mis-aprobaciones/transferencia/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarTransferencia')->name('rechazar_transferencia_mis_aprobaciones');
     Route::post('mis-aprobaciones/ingreso-proveedor/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarIngresoProveedor')->name('aprobar_ingreso_proveedor_mis_aprobaciones');
@@ -1240,6 +1243,8 @@ Route::post('contable/asiento/consulta-venta', 'Contable\AsientoReferenciaConsul
 Route::get('contable/asiento/resolver-venta', 'Contable\AsientoReferenciaConsultaController@resolverVenta')->name('asiento_resolver_venta');
 
 Route::get('contable/mayor-concepto', 'Contable\MayorConceptoController@index')->name('mayor_concepto');
+Route::get('contable/diferencia-cambio-factura', 'Contable\DiferenciaCambioFacturaController@index')->name('diferencia_cambio_factura');
+Route::get('contable/listar-diferencia-cambio-factura/{formato}', 'Contable\DiferenciaCambioFacturaController@exportar')->name('listar_diferencia_cambio_factura');
 Route::get('contable/mayor-concepto/progreso', 'Contable\MayorConceptoController@progreso')->name('mayor_concepto_progreso');
 Route::post('contable/mayor-concepto/consultar', 'Contable\MayorConceptoController@consultar')->name('mayor_concepto_consultar');
 Route::get('contable/listar-mayor-concepto/{formato}', 'Contable\MayorConceptoController@exportar')->name('listar_mayor_concepto');
@@ -3894,6 +3899,8 @@ Route::get('compras/comprobante-proveedor/{id}/archivo/{archivo}', 'Compras\Comp
 Route::get('compras/configuracion-comprobante-proveedor', 'Compras\ConfiguracionComprobanteProveedorController@index')->name('configuracion_comprobante_proveedor');
 Route::put('compras/configuracion-comprobante-proveedor', 'Compras\ConfiguracionComprobanteProveedorController@actualizar')->name('actualizar_configuracion_comprobante_proveedor');
 Route::post('compras/configuracion-comprobante-proveedor/tolerancias', 'Compras\ConfiguracionComprobanteProveedorController@guardarTolerancias')->name('guardar_tolerancias_comprobante_proveedor');
+Route::post('compras/configuracion-comprobante-proveedor/tolerancia-tc', 'Compras\ConfiguracionComprobanteProveedorController@guardarToleranciaTc')->name('guardar_tolerancia_tc_comprobante_proveedor');
+Route::post('compras/configuracion-comprobante-proveedor/destinatarios-tc', 'Compras\ConfiguracionComprobanteProveedorController@guardarDestinatariosTc')->name('guardar_destinatarios_tc_comprobante_proveedor');
 
 Route::get('compras/pagoproveedor', 'Compras\PagoproveedorController@index')->name('pagoproveedor');
 Route::get('compras/listapagoproveedor/{formato?}/{busqueda?}', 'Compras\PagoproveedorController@listar')->name('lista_pagoproveedor');

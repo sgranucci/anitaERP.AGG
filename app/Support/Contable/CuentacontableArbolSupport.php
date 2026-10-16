@@ -434,6 +434,7 @@ class CuentacontableArbolSupport
             'parent_id' => (int) ($cuenta->parent_id ?? 0) ?: null,
             'manejaccosto' => (string) ($cuenta->manejaccosto ?? 'N'),
             'concepto' => (string) ($cuenta->conceptogastos->nombre ?? ''),
+            'inhabilitada' => (bool) ($cuenta->inhabilitada ?? false),
             'padre_codigo' => null,
             'padre_origen' => 'codigo',
             'hijos' => [],

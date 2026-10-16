@@ -18,7 +18,8 @@
     data-rubro-id="{{ $nodo['rubrocontable_id'] }}"
     data-rubro="{{ $nodo['rubro'] }}"
     data-parent-id="{{ $nodo['parent_id'] ?? '' }}"
-    data-padre-origen="{{ $nodo['padre_origen'] ?? 'codigo' }}">
+    data-padre-origen="{{ $nodo['padre_origen'] ?? 'codigo' }}"
+    data-inhabilitada="{{ ! empty($nodo['inhabilitada']) ? '1' : '0' }}">
     <div class="pc-nodo__row" role="button" tabindex="0">
         @if ($tieneHijos)
             <button type="button" class="pc-nodo__toggle" aria-expanded="{{ $expandido ? 'true' : 'false' }}" title="Expandir / contraer">
@@ -30,6 +31,7 @@
         <span class="pc-nodo__codigo">{{ $nodo['codigo_fmt'] }}</span>
         <span class="pc-nodo__nombre{{ $tipo === CuentacontableArbolSupport::TIPO_TITULO ? ' font-weight-bold' : '' }}">{{ $nodo['nombre'] }}</span>
         <span class="badge {{ $badgeClass }} pc-nodo__tipo">{{ $nodo['tipo_label'] }}</span>
+        <span class="badge badge-danger pc-nodo__baja ml-1" @if(empty($nodo['inhabilitada'])) hidden @endif>Inhabilitada</span>
         <span class="pc-nodo__meta text-muted">N{{ $nodo['nivel'] }}@if($nodo['rubro'] !== '') · {{ $nodo['rubro'] }}@endif</span>
         <span class="pc-nodo__acciones">
             @if (can('editar-cuentas-contables', false))

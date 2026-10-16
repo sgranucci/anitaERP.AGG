@@ -111,6 +111,7 @@ class CuentacontableListadoFiltros
             'mostrar_totalizadoras' => $request->boolean('mostrar_totalizadoras'),
             'tipocuenta' => self::normalizarTipo($request->input('filtro_tipocuenta')),
             'nivel' => self::normalizarNivel($request->input('filtro_nivel')),
+            'estado' => self::normalizarEstado($request->input('filtro_estado')),
         ];
     }
 
@@ -160,6 +161,9 @@ class CuentacontableListadoFiltros
         if ((int) ($filtros['nivel'] ?? 0) > 0) {
             return true;
         }
+        if ((string) ($filtros['estado'] ?? '') !== '') {
+            return true;
+        }
 
         return false;
     }
@@ -183,6 +187,7 @@ class CuentacontableListadoFiltros
             'mostrar_totalizadoras' => false,
             'tipocuenta' => '',
             'nivel' => 0,
+            'estado' => '',
         ];
 
         if ($empresaDefault !== null && $empresaDefault > 0) {
@@ -226,6 +231,9 @@ class CuentacontableListadoFiltros
         }
         if ((int) ($filtros['nivel'] ?? 0) > 0) {
             $params['filtro_nivel'] = (int) $filtros['nivel'];
+        }
+        if ((string) ($filtros['estado'] ?? '') !== '') {
+            $params['filtro_estado'] = $filtros['estado'];
         }
 
         return $params;
@@ -427,6 +435,13 @@ class CuentacontableListadoFiltros
         $n = (int) $valor;
 
         return $n >= 1 && $n <= 9 ? $n : 0;
+    }
+
+    private static function normalizarEstado(mixed $valor): string
+    {
+        $v = trim((string) $valor);
+
+        return in_array($v, ['habilitadas', 'inhabilitadas'], true) ? $v : '';
     }
 
     private static function patronLike(string $operador, string $valor): string

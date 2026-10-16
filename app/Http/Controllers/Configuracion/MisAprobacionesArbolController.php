@@ -506,6 +506,60 @@ class MisAprobacionesArbolController extends Controller
         return $this->redirectTrasAccion($request, 'Asiento rechazado.');
     }
 
+    public function verDiferenciaCambioFactura($id)
+    {
+        $this->asegurarAccesoBandeja();
+        $usuarioId = (int) (auth()->id() ?? 0);
+        if (! \App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport::esDestinatario($usuarioId)) {
+            abort(403);
+        }
+
+        $comprobante = \App\Models\Compras\Comprobante_Proveedor::query()->findOrFail((int) $id);
+        $datos = app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
+            ->comprobantesImplicados($comprobante);
+
+        return view('configuracion.mis_aprobaciones_arbol.difcambio_factura', $datos + [
+            'urlBandeja' => url('mis-aprobaciones?fuente=difcambio_factura'),
+            'urlAprobar' => url('mis-aprobaciones/diferencia-cambio-factura/'.$comprobante->id.'/aprobar'),
+            'urlRechazar' => url('mis-aprobaciones/diferencia-cambio-factura/'.$comprobante->id.'/rechazar'),
+            'pendiente' => $datos['filas']->contains(
+                fn ($fila) => $fila->estado === \App\Models\Compras\Comprobante_Proveedor_Difcambio::ESTADO_PENDIENTE
+            ),
+        ]);
+    }
+
+    public function aprobarDiferenciaCambioFactura(Request $request, $id)
+    {
+        $this->asegurarAccesoBandeja();
+
+        try {
+            app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
+                ->aprobar((int) $id, (int) (auth()->id() ?? 0));
+        } catch (\Throwable $e) {
+            return redirect()->to($this->urlRedirect($request))->with('error', $e->getMessage());
+        }
+
+        $this->userTaskBandejaService->invalidarContador();
+
+        return $this->redirectTrasAccion($request, 'Factura aprobada y contabilizada.');
+    }
+
+    public function rechazarDiferenciaCambioFactura(Request $request, $id)
+    {
+        $this->asegurarAccesoBandeja();
+
+        try {
+            app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
+                ->rechazar((int) $id, (int) (auth()->id() ?? 0));
+        } catch (\Throwable $e) {
+            return redirect()->to($this->urlRedirect($request))->with('error', $e->getMessage());
+        }
+
+        $this->userTaskBandejaService->invalidarContador();
+
+        return $this->redirectTrasAccion($request, 'La factura sigue en borrador. No se contabilizó.');
+    }
+
     public function aprobarTransferencia(Request $request, $id)
     {
         can('aprobar-transferencia-mercaderia');

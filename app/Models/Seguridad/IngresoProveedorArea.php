@@ -3,6 +3,7 @@
 namespace App\Models\Seguridad;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class IngresoProveedorArea extends Model implements Auditable
@@ -16,4 +17,9 @@ class IngresoProveedorArea extends Model implements Auditable
     protected $casts = [
         'activo' => 'boolean',
     ];
+
+    public function correos(): HasMany
+    {
+        return $this->hasMany(IngresoProveedorAreaCorreo::class, 'area_id');
+    }
 }

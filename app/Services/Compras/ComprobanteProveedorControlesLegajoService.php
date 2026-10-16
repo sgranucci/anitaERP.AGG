@@ -12,6 +12,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
+use App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
@@ -370,7 +371,36 @@ class ComprobanteProveedorControlesLegajoService
             return $resultado;
         }
 
-        $otroMes = $distintas->first(function (Recepcion_Proveedor $r) use ($mesFactura) {
+        $empresaId = (int) ($ordencompra->empresa_id ?? 0);
+        $cerradas = ComprobanteProveedorDiferenciaCambioSupport::recepcionesCerradasConOtroTc(
+            $distintas,
+            $cotFactura,
+            $monedaId,
+            $empresaId
+        );
+        $idsCerradas = array_map(static fn (array $fila) => (int) $fila['id'], $cerradas);
+
+        if ($cerradas !== []) {
+            $pct = ComprobanteProveedorDiferenciaCambioSupport::porcentajeMaximo($cerradas);
+            $tolerancia = ComprobanteProveedorDiferenciaCambioSupport::toleranciaPct($empresaId);
+            if (ComprobanteProveedorDiferenciaCambioSupport::requiereAprobacion($pct, $empresaId)) {
+                $resultado['avisos'][] = sprintf(
+                    'Recepción en período cerrado con TC distinto (desvío %s%%, tolerancia %s%%). La factura queda en borrador hasta que Contaduría la apruebe en Mis aprobaciones.',
+                    number_format($pct, 2, ',', '.'),
+                    number_format($tolerancia, 2, ',', '.')
+                );
+            } else {
+                $resultado['avisos'][] = sprintf(
+                    'Recepción en período cerrado con TC distinto (desvío %s%%). Al contabilizar se registra la diferencia de cambio en el mes de la factura, sin modificar la recepción.',
+                    number_format($pct, 2, ',', '.')
+                );
+            }
+        }
+
+        $otroMes = $distintas->first(function (Recepcion_Proveedor $r) use ($mesFactura, $idsCerradas) {
+            if (in_array((int) $r->id, $idsCerradas, true)) {
+                return false;
+            }
             $mesRec = $r->fecha ? $r->fecha->format('Y-m') : '';
 
             return $mesRec !== '' && $mesRec !== $mesFactura;
@@ -378,25 +408,19 @@ class ComprobanteProveedorControlesLegajoService
 
         if ($otroMes) {
             $detalle = sprintf(
-                'Cotización factura %s distinta de recepción #%s (cotización %s, fecha %s) en otro mes contable/calendario.',
+                'Cotización factura %s distinta de recepción #%s (cotización %s, fecha %s) en otro mes todavía abierto. Se puede alinear la recepción; si el período ya estuviera cerrado, la diferencia se contabiliza en el mes de la factura.',
                 number_format($cotFactura, 4, ',', '.'),
                 $otroMes->id,
                 number_format((float) ($otroMes->cotizacion ?: 1), 4, ',', '.'),
                 $otroMes->fecha ? $otroMes->fecha->format('d/m/Y') : '',
             );
-            $this->devolverCompras->devolver(
-                (int) $ordencompra->id,
-                'Cotización de factura distinta a recepción de otro mes',
-                $detalle,
-            );
-            $resultado['ok'] = false;
-            $resultado['devolvio_compras'] = true;
-            $resultado['errores'][] = $detalle.' El legajo fue devuelto a COMPRAS y se notificó por correo.';
-
-            return $resultado;
+            $resultado['avisos'][] = $detalle;
         }
 
         foreach ($distintas as $recepcion) {
+            if (in_array((int) $recepcion->id, $idsCerradas, true)) {
+                continue;
+            }
             $this->cambioCotizacionService->cambiar((int) $recepcion->id, $cotFactura);
             $resultado['cotizaciones_actualizadas'][] = (int) $recepcion->id;
             $resultado['avisos'][] = sprintf(
