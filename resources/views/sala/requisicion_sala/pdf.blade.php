@@ -15,7 +15,7 @@
         .pdf-cabecera td { border: none !important; vertical-align: top; }
         .pdf-cabecera .logo-empresa { max-width: 180px; max-height: 56px; }
         .items th, .items td { font-size: 9px; }
-        .num { text-align: right; white-space: nowrap; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; white-space: nowrap; }
         .cen { text-align: center; }
     </style>
 </head>

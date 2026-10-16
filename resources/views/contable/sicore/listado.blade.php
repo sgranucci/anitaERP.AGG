@@ -49,8 +49,8 @@
         .listado-header { width: 100%; margin-bottom: 6px; border-bottom: 2px solid #333; padding-bottom: 4px; }
         .listado-header td { vertical-align: middle; border: none; }
         .meta { font-size: 7px; color: #444; margin-top: 2px; }
-        /* Sin nowrap: DomPDF ensancha la tabla y corta el borde derecho */
-        .num { text-align: right; }
+        /* Más específico que table.data td { text-align:left }: si no, los importes quedan a la izquierda. */
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; }
     </style>
 </head>
 <body>

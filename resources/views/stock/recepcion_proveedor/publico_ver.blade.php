@@ -14,7 +14,7 @@
         table { width:100%; border-collapse:collapse; font-size:14px; margin-top:16px; }
         th, td { border:1px solid #ddd; padding:6px 8px; text-align:left; }
         th { background:#85C1E9; color:#17202A; }
-        .num { text-align:right; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align:right; }
         .meta { font-size:14px; line-height:1.6; margin-bottom:8px; }
         .aviso { background:#e8f4fd; border:1px solid #bee5eb; color:#0c5460; padding:12px 14px; border-radius:6px; margin-bottom:16px; font-size:14px; }
         .actions { margin-top:20px; }

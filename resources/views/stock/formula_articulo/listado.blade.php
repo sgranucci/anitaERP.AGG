@@ -32,7 +32,7 @@
 		.listado-header td { vertical-align: middle; border: none; }
 		.meta { font-size: 8px; color: #444; margin-top: 4px; }
 		.cell-items { font-size: 7px; white-space: normal; }
-		.num { text-align: right; white-space: nowrap; }
+		table.data td.num, table.data th.num, td.num, th.num { text-align: right; white-space: nowrap; }
 		a { color: #1a5276; text-decoration: none; }
 	</style>
 </head>

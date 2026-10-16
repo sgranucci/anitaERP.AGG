@@ -16,7 +16,7 @@
         .logo { max-height: 56px; max-width: 200px; }
         .subtitulo { font-size: 10px; color: #444; margin-bottom: 8px; }
         .lbl { background: #f0f0f0; font-weight: bold; width: 22%; }
-        .num { text-align: right; white-space: nowrap; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; white-space: nowrap; }
         .total-grande { font-size: 12px; font-weight: bold; background: #e8f4fc; }
     </style>
 </head>

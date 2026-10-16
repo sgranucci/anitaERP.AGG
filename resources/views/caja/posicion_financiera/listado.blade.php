@@ -52,7 +52,7 @@
         .listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 6px; }
         .listado-header td { vertical-align: middle; border: none; }
         .meta { font-size: 7px; color: #444; margin-top: 3px; }
-        .num { text-align: right; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; }
     </style>
 </head>
 <body>

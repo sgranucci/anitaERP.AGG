@@ -16,7 +16,7 @@
         .no-border td { border: none !important; }
         .lbl { background: #f4f6f7; font-weight: bold; width: 16%; white-space: nowrap; }
         .muted { color: #555; font-size: 8px; }
-        .num { text-align: right; white-space: nowrap; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; white-space: nowrap; }
         .cen { text-align: center; }
         .logo-empresa { max-width: 160px; max-height: 52px; }
         .estado-box {

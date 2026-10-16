@@ -50,12 +50,20 @@ final class SicoreReporteService
         }
 
         usort($registros, static function (array $a, array $b): int {
+            $cmp = strcmp((string) ($a['fecha_retencion'] ?? ''), (string) ($b['fecha_retencion'] ?? ''));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
             $cmp = ((int) ($a['cod_regimen'] ?? 0)) <=> ((int) ($b['cod_regimen'] ?? 0));
             if ($cmp !== 0) {
                 return $cmp;
             }
+            $cmp = strcmp((string) ($a['nro_documento'] ?? ''), (string) ($b['nro_documento'] ?? ''));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
 
-            return strcmp((string) ($a['fecha_retencion'] ?? ''), (string) ($b['fecha_retencion'] ?? ''));
+            return ((float) ($a['importe'] ?? 0)) <=> ((float) ($b['importe'] ?? 0));
         });
 
         $totales = [

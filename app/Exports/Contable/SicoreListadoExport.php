@@ -255,6 +255,16 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
                 // Congelar en la fila siguiente a la cabecera del detalle ("Reg."), para que los
                 // encabezados de columna queden fijos al desplazar los datos.
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+
+                $colsImporte = $this->ocultarRazonSocial ? ['E', 'F'] : ['F', 'G'];
+                $ultimaFila = $sheet->getHighestRow();
+                if ($ultimaFila >= $this->filaPrimeraDatosExcel) {
+                    foreach ($colsImporte as $col) {
+                        $sheet->getStyle($col.$this->filaPrimeraDatosExcel.':'.$col.$ultimaFila)
+                            ->getAlignment()
+                            ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                    }
+                }
             },
         ];
     }
@@ -289,6 +299,7 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
                     );
                 }
                 $sheet->getStyle($col.$row)->getNumberFormat()->setFormatCode($mascara);
+                $sheet->getStyle($col.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             }
         }
     }

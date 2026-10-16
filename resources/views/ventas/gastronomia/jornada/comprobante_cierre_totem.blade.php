@@ -24,7 +24,7 @@
         .logo { max-height: 50px; max-width: 180px; }
         .subtitulo { font-size: 9px; color: #444; }
         .lbl { background: #f0f0f0; font-weight: bold; width: 22%; }
-        .num { text-align: right; white-space: nowrap; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; white-space: nowrap; }
         .muted { color: #555; font-size: 7px; }
         .total-grande { font-size: 10px; font-weight: bold; background: #e8f4fc; }
         .fila-discrepancia { background: #fff3cd; }

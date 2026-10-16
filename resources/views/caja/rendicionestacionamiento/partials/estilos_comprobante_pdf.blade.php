@@ -11,7 +11,7 @@
     .logo { max-height: 56px; max-width: 200px; }
     .subtitulo { font-size: 10px; color: #444; margin-bottom: 8px; }
     .lbl { background: #f0f0f0; font-weight: bold; width: 28%; }
-    .num { text-align: right; white-space: nowrap; }
+    table.data td.num, table.data th.num, td.num, th.num { text-align: right; white-space: nowrap; }
     .muted { color: #555; font-size: 8px; }
     .bloque-obs { white-space: pre-wrap; word-wrap: break-word; word-break: break-word; font-size: 8px; }
     .celda-anulaciones { padding: 0 !important; }

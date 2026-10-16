@@ -99,7 +99,7 @@
             white-space: nowrap;
         }
         @endif
-        .num { text-align: right; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; }
         table.data td.num,
         table.data th.num {
             text-align: right !important;

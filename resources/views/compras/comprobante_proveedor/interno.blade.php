@@ -17,7 +17,7 @@
         .no-border td { border: none !important; padding: 1px 3px; }
         .lbl { background: #f4f6f7; font-weight: bold; white-space: nowrap; width: 14%; }
         .muted { color: #555; font-size: 8px; }
-        .num { text-align: right; white-space: nowrap; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; white-space: nowrap; }
         .cen { text-align: center; }
         .logo { max-height: 52px; max-width: 160px; }
         .badge {

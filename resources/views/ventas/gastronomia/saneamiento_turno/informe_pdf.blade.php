@@ -20,7 +20,7 @@
         .cabecera-doc { width: 100%; margin-bottom: 12px; border-bottom: 2px solid #333; padding-bottom: 8px; }
         .logo { max-height: 52px; max-width: 180px; }
         .subtitulo { font-size: 10px; color: #444; }
-        .num { text-align: right; white-space: nowrap; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; white-space: nowrap; }
         .muted { color: #555; font-size: 8px; }
         .alerta { background: #fdecea; border: 1px solid #c0392b; padding: 6px; margin-bottom: 8px; }
         .ok { background: #eafaf1; border: 1px solid #27ae60; padding: 6px; margin-bottom: 8px; }
