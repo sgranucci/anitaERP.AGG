@@ -171,7 +171,11 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
 										</a>
 									@endif
 								@endif
-                       			@if (can('generar-nota-de-credito', false))
+                       			@php
+										$esRin = \App\Support\Ventas\RinBorradoFisicoSupport::es($comprobante);
+										$puedeBorrarRin = $esRin && (can('editar-factura', false) || can('generar-nota-de-credito', false));
+									@endphp
+                       			@if (can('generar-nota-de-credito', false) && ! $esRin)
 									@if ($comprobante->total > 0)
 										@php
 											$ncCompletaCodigo = $ncCompletaPorFactura[(int) $comprobante->id] ?? '';
@@ -186,6 +190,15 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
                                 		</a>
 										@endif
 									@endif
+								@endif
+								@if ($puedeBorrarRin)
+									<form action="{{ route('eliminar_factura', ['id' => $comprobante->id]) }}" method="POST" class="d-inline form-eliminar">
+										@csrf
+										@method('DELETE')
+										<button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Borrar este remito interno. Libera la orden para facturarla. Queda en la auditoría.">
+											<i class="fa fa-times-circle text-danger"></i>
+										</button>
+									</form>
 								@endif
                        			@if (can('listar-factura', false))
                                 	<a href="{{route('lista_una_factura', array_filter(['id' => $comprobante->id, 'retorno' => $retornoImpresionPath]))}}" class="btn-accion-tabla tooltipsC" title="Listar el comprobante por impresora">

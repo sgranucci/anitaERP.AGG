@@ -17,6 +17,7 @@ use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportFormatoSuppo
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportVentaMatchSupport;
 use App\Support\Ventas\ClienteCuentacorrienteDeudaAlcanceSupport;
 use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
+use App\Support\Ventas\ClienteCuentacorrienteRemitoInternoSupport;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -1560,6 +1561,9 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             if ($origen === null || $monto <= 0.009) {
                 $stats['errores'][] = 'CC #'.$cc->id.' sin comprobante de origen.';
 
+                continue;
+            }
+            if (ClienteCuentacorrienteRemitoInternoSupport::es($origen->codigo, $origen->tipotransacciones->abreviatura ?? null)) {
                 continue;
             }
             $codigo = mb_substr('AJU Anita '.$origen->codigo, 0, 100);

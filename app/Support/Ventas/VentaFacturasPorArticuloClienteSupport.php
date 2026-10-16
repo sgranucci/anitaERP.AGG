@@ -46,7 +46,8 @@ final class VentaFacturasPorArticuloClienteSupport
             ])
             ->where('cliente_id', $clienteId)
             ->whereHas('tipotransacciones', static function ($q) {
-                $q->where('operacion', '!=', 'C');
+                $q->where('operacion', '!=', 'C')
+                    ->whereRaw('UPPER(TRIM(abreviatura)) <> ?', ['RIN']);
             })
             ->orderByDesc('fecha')
             ->orderByDesc('id')

@@ -6,6 +6,7 @@ use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\ClienteCuentacorrienteDeudaAlcanceSupport;
 use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
+use App\Support\Ventas\ClienteCuentacorrienteRemitoInternoSupport;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Services\Ventas\ClienteCuentacorrienteAplicacionService;
@@ -88,6 +89,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
             ->with(['ventas', 'cobranzas', 'monedas', 'empresas'])
             ->where('cliente_cuentacorriente.cliente_id', $cliente_id);
 
+        ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
         $this->aplicarFiltroMoneda($query, $monedaId);
 
         if ($busqueda !== '') {
@@ -152,9 +154,11 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
 
     public function calcularSaldoCuentaCorriente(int $cliente_id): float
     {
-        return (float) $this->model->query()
-            ->where('cliente_id', $cliente_id)
-            ->sum('total');
+        $query = $this->model->query()
+            ->where('cliente_id', $cliente_id);
+        ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
+
+        return (float) $query->sum('total');
     }
 
     /**
@@ -162,12 +166,14 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
      */
     public function calcularSaldosPorMoneda(int $cliente_id): array
     {
-        $filas = $this->model->query()
+        $filasQuery = $this->model->query()
             ->selectRaw('cliente_cuentacorriente.moneda_id as moneda_id')
             ->selectRaw('MAX(moneda.abreviatura) as abreviatura')
             ->selectRaw('SUM(cliente_cuentacorriente.total) as saldo_cc')
             ->leftJoin('moneda', 'moneda.id', '=', 'cliente_cuentacorriente.moneda_id')
-            ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
+            ->where('cliente_cuentacorriente.cliente_id', $cliente_id);
+        ClienteCuentacorrienteRemitoInternoSupport::excluir($filasQuery);
+        $filas = $filasQuery
             ->groupBy('cliente_cuentacorriente.moneda_id')
             ->orderBy('cliente_cuentacorriente.moneda_id')
             ->get();
@@ -230,6 +236,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                     });
             });
 
+        ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
         $this->aplicarFiltroMoneda($query, $monedaId);
 
         return (float) $query->sum('total');
@@ -254,10 +261,11 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                         $q2->where('cliente_cuentacorriente.fecha', $primerRegistro->fecha)
                             ->where('cliente_cuentacorriente.id', '<', $primerRegistro->id);
                     });
-            })
-            ->groupBy('cliente_cuentacorriente.moneda_id');
+            });
 
+        ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
         $this->aplicarFiltroMoneda($query, $monedaId);
+        $query->groupBy('cliente_cuentacorriente.moneda_id');
 
         $saldos = [];
         foreach ($query->get() as $fila) {
@@ -276,6 +284,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
             ->select('cliente_cuentacorriente.total', 'cliente_cuentacorriente.moneda_id', 'cliente_cuentacorriente.cotizacion')
             ->where('cliente_cuentacorriente.cliente_id', $cliente_id);
 
+        ClienteCuentacorrienteRemitoInternoSupport::excluir($movimientos);
         $this->aplicarFiltroMoneda($movimientos, $monedaId);
 
         return CuentacorrienteSaldosPorMoneda::equivalenteDesdeFilas(
@@ -301,6 +310,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                     });
             });
 
+        ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
         $this->aplicarFiltroMoneda($query, $monedaId);
 
         return CuentacorrienteSaldosPorMoneda::saldoAnteriorEnPesosDe($query->get(), $primerRegistro, $monedaId);
@@ -485,8 +495,9 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                     ->selectRaw('SUM(total)')
                     ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id'),
             ])
-            ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
-            ->whereRaw($lado === 'credito'
+            ->where('cliente_cuentacorriente.cliente_id', $cliente_id);
+        ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
+        $query->whereRaw($lado === 'credito'
                 ? ClienteCuentacorrienteAplicacionService::sqlLadoCredito()
                 : ClienteCuentacorrienteAplicacionService::sqlLadoDeuda());
 
@@ -516,8 +527,9 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                 '=',
                 'cliente_cuentacorriente_aplicacion.cliente_cuentacorriente_id'
             )
-            ->where('cc.cliente_id', $cliente_id)
-            ->where(function ($q) {
+            ->where('cc.cliente_id', $cliente_id);
+        ClienteCuentacorrienteRemitoInternoSupport::excluirAplicaciones($query);
+        $query->where(function ($q) {
                 $q->whereNull('cliente_cuentacorriente_aplicacion.cobranza_id')
                     ->orWhere('cliente_cuentacorriente_aplicacion.cobranza_id', 0);
             })

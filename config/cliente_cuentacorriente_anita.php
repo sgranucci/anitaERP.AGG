@@ -40,7 +40,7 @@ return [
      */
     'tipos_no_deuda' => array_values(array_filter(array_map(
         'trim',
-        explode(',', (string) env('CLIENTE_CC_ANITA_TIPOS_NO_DEUDA', 'COB,ANT,REC,RBO,AJU,PRE'))
+        explode(',', (string) env('CLIENTE_CC_ANITA_TIPOS_NO_DEUDA', 'COB,ANT,REC,RBO,AJU,PRE,RIN'))
     ))),
 
     /**

@@ -38,6 +38,7 @@ use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
 use App\Support\Ventas\ComprobanteReferenciaConsultaSupport;
 use App\Support\Ventas\NotaCreditoCompletaUnicaSupport;
+use App\Support\Ventas\RinBorradoFisicoSupport;
 use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
 use App\Support\Ventas\VentaFacturasPorArticuloClienteSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorOtFerliSupport;
@@ -365,7 +366,17 @@ class FacturacionController extends Controller
      */
     public function eliminar(Request $request, $id)
     {
-        
+        if (! can('editar-factura', false) && ! can('generar-nota-de-credito', false)) {
+            abort(403, 'Sin permiso para borrar el remito interno');
+        }
+
+        try {
+            RinBorradoFisicoSupport::borrar((int) $id);
+        } catch (\RuntimeException $e) {
+            return response()->json(['errores' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['mensaje' => 'ok']);
     }
 
     public function facturarItemOt(Request $request)
@@ -520,6 +531,13 @@ class FacturacionController extends Controller
         can('generar-nota-de-credito');
 
         $ventaId = (int) $id;
+        $origen = Venta::query()->with('tipotransacciones')->find($ventaId);
+        if (RinBorradoFisicoSupport::es($origen)) {
+            return redirect()->route('factura')->with('errores', [
+                'Un remito interno no lleva nota de crédito. Hay que borrarlo para volver a facturar la orden.',
+            ]);
+        }
+
         $ncCompleta = NotaCreditoCompletaUnicaSupport::completaExistente($ventaId);
         if ($ncCompleta !== null) {
             $factura = Venta::query()->find($ventaId, ['codigo']);

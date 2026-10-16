@@ -1,0 +1,41 @@
+---
+description: Movimiento nativo Anita en subdiario; el ERP lo importa como asiento. No duplicar en ctamov.
+alwaysApply: true
+---
+
+# Subdiario nativo → asiento ERP (sin copia en ctamov)
+
+Un movimiento **nativo de Anita** (ventas, compras, tesorería: sistemas `V` / `C` / `T`) vive en **subdiario** (o subhist). anitaERP lo toma de ahí como asiento. El mismo comprobante **no** se graba también en `ctamov`.
+
+Complementa `anita-subdiario-mayor.mdc`: el mayor **lee** las dos fuentes porque hay movimientos que están solo en una. Esta regla dice **dónde se graba** cada uno para no contarlo dos veces.
+
+## Dónde vive cada movimiento
+
+| Origen | Anita | anitaERP |
+|---|---|---|
+| Nativo (FAC, COM, OP, etc.) | `subdiario` / `subhist`. `subd_nro_operacion` es el número. | Un asiento. `numeroasiento` = `subd_nro_operacion`. `anita_origen` = `subdiario` (o `subhist`). Observación `[SUBD] …`. |
+| Anita lo graba directo, sin subdiario (sistema `P` / PER) | Solo `ctamov` | Asiento desde `ctamov` |
+| Nacido en anitaERP | `ctamov` con `ctav_asi_mon_ref = -1`, **sin** línea de subdiario | El asiento del ERP es la fuente |
+
+`AnitaAsientoImportService`: el detalle entra por `planDesdeSubdiario`. El `ctamov` de cierre (`sistema` V/C/T y `ctav_asi_mon_ref ≠ -1`) es resumen y se excluye si el mes ya tiene subdiario. `asi_mon_ref = -1` significa asiento del ERP, no un segundo ejemplar del subdiario.
+
+## Al corregir un comprobante
+
+1. Leer el subdiario (`subd_nro_operacion`, cuenta, contrapartida, importe). Esa es la imputación.
+2. El asiento ERP expande cada línea con `AnitaSubdiarioMayorSupport::imputacionesLineaSubdiario` (debe en `subd_cuenta`, haber en la contrapartida, o al revés).
+3. Si el mismo comprobante está en `ctamov`, es una copia. Borrar esas filas de `ctamov`. No “alinear” copiando el subdiario hacia `ctamov`.
+4. Si el ERP tiene el asiento con el número de `ctamov` (`ctav_nro_asiento`), renumerarlo a `subd_nro_operacion` y marcarlo `anita_origen = subdiario`.
+
+## Prohibido
+
+```text
+❌ Dejar FAC/COM en subdiario y además en ctamov “para que aparezca en el mayor”.
+❌ Tomar ctamov como fuente de un comprobante que ya tiene subdiario.
+❌ Importar las dos fuentes como dos asientos del mismo comprobante.
+```
+
+## Comprobación rápida
+
+```bash
+rg "esAsientoResumenSubdiario|planDesdeSubdiario|ASI_MON_REF_ORIGEN_ERP" app/Services/Contable/AnitaAsientoImportService.php
+```

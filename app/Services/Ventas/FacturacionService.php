@@ -1511,7 +1511,8 @@ class FacturacionService
 							$this->venta_impuestoRepository->create($data);
 						}
 					} 
-					// Graba cuenta corriente
+					// Graba cuenta corriente. El RIN no imputa: solo marca la baja del pedido.
+					if ($this->tipoImputaCuentaCorriente($tipotransaccion)) {
 					foreach($cuentaCorriente as $cuota)
 					{
 						$data = [
@@ -1526,6 +1527,7 @@ class FacturacionService
 							'empresa_id' => $empresa_id
 						];
 						$this->cliente_cuentacorrienteRepository->create($data);
+					}
 					}
 
 					// Graba items
@@ -2375,7 +2377,8 @@ class FacturacionService
 							$this->venta_impuestoRepository->create($data);
 						}
 					} 
-					// Graba cuenta corriente
+					// Graba cuenta corriente. El RIN no imputa: solo marca la baja del pedido.
+					if ($this->tipoImputaCuentaCorriente($tipotransaccionOrdenventa)) {
 					foreach($cuentacorriente as $cuota)
 					{
 						$data = [
@@ -2390,6 +2393,7 @@ class FacturacionService
 							'empresa_id' => 1
 						];
 						$this->cliente_cuentacorrienteRepository->create($data);
+					}
 					}
 					// Arma tabla de emision del comprobante
 					$numeroItem = 0;
@@ -4567,7 +4571,8 @@ class FacturacionService
 							$this->venta_impuestoRepository->create($data);
 						}
 					} 
-					// Graba cuenta corriente
+					// Graba cuenta corriente. El RIN no imputa: solo marca la baja del pedido.
+					if ($this->tipoImputaCuentaCorriente($tipotransaccion)) {
 					foreach($cuentacorriente as $cuota)
 					{
 						$data = [
@@ -4582,6 +4587,7 @@ class FacturacionService
 							'empresa_id' => $puntoventa->empresa_id
 						];
 						$this->cliente_cuentacorrienteRepository->create($data);
+					}
 					}
 
 					// Graba items
@@ -5209,8 +5215,8 @@ class FacturacionService
 					$this->venta_impuestoRepository->create($data);
 				}
 			} 
-			// Graba cuenta corriente
-			if (! $omitirCuentaCorriente) {
+			// Graba cuenta corriente. El RIN no imputa: solo marca la baja del pedido.
+			if (! $omitirCuentaCorriente && $this->tipoImputaCuentaCorriente($tipotransaccion)) {
 			foreach($cuentacorriente as $cuota)
 			{
 				// NC/ND sobre FAC sin CC (POS Local / recuperación ARCA con omitir_cuenta_corriente):
@@ -9082,6 +9088,16 @@ class FacturacionService
 		}
 
 		return false;
+	}
+
+	/**
+	 * El remito interno no es deuda ni crédito: solo registra la baja del pedido y su causa.
+	 */
+	private function tipoImputaCuentaCorriente($tipotransaccion): bool
+	{
+		$abr = strtoupper(trim((string) (is_object($tipotransaccion) ? ($tipotransaccion->abreviatura ?? '') : '')));
+
+		return $abr !== 'RIN';
 	}
 
 	/**

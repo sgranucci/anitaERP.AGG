@@ -11,6 +11,7 @@ use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\ClienteCuentacorrienteDeudaAlcanceSupport;
+use App\Support\Ventas\ClienteCuentacorrienteRemitoInternoSupport;
 use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
 use App\Support\Ventas\ClienteCuentacorrienteReporteClienteSupport;
 use App\Support\Ventas\ClienteCuentacorrienteReporteFiltros;
@@ -543,6 +544,7 @@ class ClienteCuentacorrienteReporteService
             ])
             ->select('cliente_cuentacorriente.*');
 
+        ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
         $this->aplicarFiltrosComunes($query, $filtros, $clienteIds, $vendedorIds);
 
         return $query
@@ -625,6 +627,7 @@ class ClienteCuentacorrienteReporteService
         $query = Cliente_Cuentacorriente::query()
             ->where('cliente_id', $clienteId)
             ->whereDate('fecha', '<', $fechaDesde);
+        ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
 
         $empresaIds = ClienteCuentacorrienteReporteFiltros::empresaIds($filtros);
         if ($empresaIds !== []) {
