@@ -15,6 +15,20 @@ else
   exit 1
 fi
 
+# El daemon a veces tarda en quedar listo (en GHA histórico fallaba en ~1s).
+echo "==> Esperando Docker daemon"
+for i in $(seq 1 30); do
+  if docker info >/dev/null 2>&1; then
+    break
+  fi
+  if [[ "$i" -eq 30 ]]; then
+    echo "ERROR: Docker daemon no disponible (docker info falló)." >&2
+    docker info >&2 || true
+    exit 1
+  fi
+  sleep 1
+done
+
 CON_SEED="${POSTGRES_LAB_CON_SEED:-1}"
 EMPRESA_LAB="${EMPRESA:-LAB_PG}"
 

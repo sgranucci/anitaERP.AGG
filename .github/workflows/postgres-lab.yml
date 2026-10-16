@@ -1,5 +1,9 @@
 name: PostgreSQL lab
 # package:discover needs DB-safe Schema checks (QueryException → false) before .env exists.
+#
+# CI usa el service container de Actions + PHP del runner (setup-php).
+# No usa docker compose: en GHA el daemon/compose fallaba a veces en ~1s
+# (exit 1 sin llegar a migrate). El compose local sigue en deploy/infra/postgres-lab.
 
 on:
   workflow_dispatch:
@@ -23,6 +27,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
+    services:
+      postgres:
+        # Espejo público de la imagen oficial. Docker Hub corta por timeout en GHA.
+        image: public.ecr.aws/docker/library/postgres:16-bookworm
+        env:
+          POSTGRES_DB: anitaerp_pg_lab
+          POSTGRES_USER: anitaerp_lab
+          POSTGRES_PASSWORD: lab_ci_only_not_prod
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U anitaerp_lab -d anitaerp_pg_lab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      EMPRESA: LAB_PG
+      APP_ENV: local
+      APP_DEBUG: 'false'
+      APP_URL: http://127.0.0.1
+      LOG_CHANNEL: stderr
+      CACHE_DRIVER: array
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: '5432'
+      DB_DATABASE: anitaerp_pg_lab
+      DB_USERNAME: anitaerp_lab
+      DB_PASSWORD: lab_ci_only_not_prod
+      DB_DATABASE_PROTEGIDA: anitaERP
+      POSTGRES_LAB_CON_SEED: '1'
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -45,24 +84,47 @@ jobs:
       - name: Composer install
         run: composer install --no-interaction --prefer-dist --no-progress
 
-      - name: Preparar laboratorio compose
+      - name: Preparar APP_KEY y storage
         run: |
           set -euo pipefail
-          LAB=deploy/infra/postgres-lab
-          rm -rf "${LAB}/app"
-          ln -s "${GITHUB_WORKSPACE}" "${LAB}/app"
-          cp "${LAB}/.env.example" "${LAB}/.env"
-          PG_PASS="$(openssl rand -hex 16)"
-          APP_KEY="base64:$(openssl rand -base64 32 | tr -d '\n')"
-          sed -i \
-            -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${PG_PASS}|" \
-            -e "s|^APP_KEY=.*|APP_KEY=${APP_KEY}|" \
-            "${LAB}/.env"
-          chmod +x "${LAB}/ci-run.sh"
+          echo "APP_KEY=base64:$(openssl rand -base64 32 | tr -d '\n')" >> "$GITHUB_ENV"
+          mkdir -p \
+            storage/framework/sessions \
+            storage/framework/views \
+            storage/framework/cache \
+            storage/logs \
+            bootstrap/cache
+          chmod -R ug+rwx storage bootstrap/cache
+
+      - name: Esperar PostgreSQL
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if php -r 'try { new PDO("pgsql:host=127.0.0.1;port=5432;dbname=anitaerp_pg_lab", "anitaerp_lab", "lab_ci_only_not_prod"); exit(0);} catch (Throwable $e) { fwrite(STDERR, $e->getMessage().PHP_EOL); exit(1);}'; then
+              echo "PostgreSQL listo"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "PostgreSQL no respondió a tiempo" >&2
+          exit 1
 
       - name: Migrate + smoke + seed
-        working-directory: deploy/infra/postgres-lab
-        env:
-          EMPRESA: LAB_PG
-          POSTGRES_LAB_CON_SEED: '1'
-        run: ./ci-run.sh
+        run: |
+          set -euo pipefail
+          echo "==> migrate --force (EMPRESA=${EMPRESA})"
+          php artisan migrate --force
+
+          echo "==> smoke base"
+          php scripts/postgres-lab-smoke.php
+
+          if [[ "${POSTGRES_LAB_CON_SEED}" == "1" ]]; then
+            echo "==> seed mínimo"
+            php scripts/postgres-lab-seed-minimo.php
+            echo "==> smoke con seed"
+            SMOKE_EXPECT_SEED=1 php scripts/postgres-lab-smoke.php
+            echo "==> smoke HTTP login"
+            SMOKE_EXPECT_SEED=1 php scripts/postgres-lab-smoke-http.php
+          fi
+
+          echo "CI lab PostgreSQL: OK"

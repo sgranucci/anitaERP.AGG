@@ -5,7 +5,8 @@ PostgreSQL. No publica el puerto de PostgreSQL y no usa la base MySQL operativa.
 
 Referencia: `docs/arquitectura/portabilidad-base-datos.md` (Fase 5).
 
-CI: `.github/workflows/postgres-lab.yml` → `./ci-run.sh` (migrate + smoke + seed).
+CI: `.github/workflows/postgres-lab.yml` (service container Postgres + PHP del runner;
+migrate + smoke + seed). Local / host lab: `./ci-run.sh` (docker compose).
 
 ## Preparación
 
