@@ -39,21 +39,38 @@ class PedidoPickingFerliSupportTest extends TestCase
         self::assertNull($payload['movimientostock_id']);
     }
 
-    public function test_no_revierte_lote_vacio_ni_entrada(): void
+    public function test_devuelve_el_consumo_aunque_el_lote_este_en_cero(): void
     {
-        self::assertFalse(S::esConsumoPickingRevertible([
-            'lote' => '0',
-            'cantidad' => -12,
-        ]));
         self::assertFalse(S::esConsumoPickingRevertible([
             'lote' => '45210',
             'cantidad' => 12,
+            'concepto' => 'Consumo de OT',
         ]));
-        self::assertNull(S::payloadReversoConsumoPicking([
-            'id' => 1,
-            'lote' => '',
+        self::assertFalse(S::esConsumoPickingRevertible([
+            'lote' => '45210',
             'cantidad' => -8,
-        ], 1, '2026-09-18'));
+            'concepto' => 'Devolución NC OT/lote #1',
+        ]));
+        self::assertTrue(S::esConsumoPickingRevertible([
+            'lote' => '0',
+            'cantidad' => -12,
+            'concepto' => 'Consumo de OT',
+        ]));
+        self::assertTrue(S::conceptoApuntaAMovimiento('Devolución NC OT/lote #12', 12));
+        self::assertFalse(S::conceptoApuntaAMovimiento('Devolución NC OT/lote #123', 12));
+        self::assertTrue(S::conceptoApuntaAMovimiento('Devolución NC OT/lote #12 / NC 99', 12));
+
+        $payload = S::payloadReversoConsumoPicking([
+            'id' => 1,
+            'lote' => '0',
+            'cantidad' => -8,
+            'concepto' => 'Consumo de OT',
+            'articulo_id' => 5,
+            'deposito_id' => 1,
+        ], 9, '2026-10-15');
+        self::assertNotNull($payload);
+        self::assertSame(8.0, $payload['cantidad']);
+        self::assertSame('0', $payload['lote']);
     }
 
     public function test_encabezado_excel_incluye_cliente_fecha_pedido_y_factura(): void

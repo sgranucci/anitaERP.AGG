@@ -819,6 +819,12 @@ class ImpuestoService extends FacturacionService
 		}
 
 		$empresaId = (int) ($dataCliente['empresa_id'] ?? 0);
+		$soloDatosReceptor = ! empty($dataCliente['percepcion_iibb_solo_receptor']);
+		if ($soloDatosReceptor) {
+			$condicioniibb_id = null;
+			$cliente_id = null;
+			$cm05 = collect();
+		}
 
 		$filas = $this->IIBBService->calculaPercepcionIIBB(
 			$baseNeto,
@@ -829,7 +835,8 @@ class ImpuestoService extends FacturacionService
 			$fechaFactura,
 			$cliente_id,
 			$forzarCaba,
-			$empresaId > 0 ? $empresaId : null
+			$empresaId > 0 ? $empresaId : null,
+			$soloDatosReceptor
 		);
 
 		// NC parcial / no anulación: sin percepción Buenos Aires; otras provincias sí.

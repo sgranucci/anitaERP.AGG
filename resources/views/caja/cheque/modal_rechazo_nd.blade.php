@@ -43,10 +43,10 @@
                 <div class="form-group">
                     <div class="form-check">
                         <input type="checkbox" class="form-check-input" id="rechazo_nd_enviar" value="1">
-                        <label class="form-check-label" for="rechazo_nd_enviar">Enviar la nota de débito al cliente y al proveedor</label>
+                        <label class="form-check-label" for="rechazo_nd_enviar">Enviar la nota de débito por mail al cliente</label>
                     </div>
                     <p class="text-muted small mb-0" id="rechazo-nd-enviar-ayuda">
-                        Sin el tilde, la nota queda emitida: no se manda por mail al cliente ni se genera el débito en la cuenta del proveedor.
+                        Si el cheque está a nombre de un proveedor, el débito en su cuenta se genera siempre. El tilde solo manda el mail al cliente.
                     </p>
                 </div>
                 <div class="table-responsive">

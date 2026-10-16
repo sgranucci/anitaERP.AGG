@@ -107,6 +107,7 @@ class IvaVentasReporteController extends Controller
             'subdiario_texto' => IvaVentasListadoFiltros::formatearSubdiarioTexto($filtros),
             'corte_texto' => IvaVentasListadoFiltros::formatearCorteTexto($filtros),
             'puntoventa' => $this->puntoventaFiltro($filtros),
+            'puntosventa_extra' => $this->puntosventaExtra($filtros),
             'tipotransaccion' => $this->tipotransaccionFiltro($filtros),
             'subdiario_ajustado' => $subdiarioAjustado,
             'puede_ver_venta' => can('editar-factura', false) || can('listar-factura', false),
@@ -178,6 +179,24 @@ class IvaVentasReporteController extends Controller
         $id = (int) ($filtros['puntoventa_id'] ?? 0);
 
         return $id > 0 ? Puntoventa::query()->find($id) : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Support\Collection<int, Puntoventa>
+     */
+    private function puntosventaExtra(array $filtros)
+    {
+        $ids = IvaVentasListadoFiltros::normalizarPuntoventaIds($filtros['puntoventa_ids'] ?? []);
+        if ($ids === []) {
+            return collect();
+        }
+        $pvs = Puntoventa::query()->whereIn('id', $ids)->get()->keyBy('id');
+
+        return collect($ids)
+            ->map(static fn (int $id) => $pvs->get($id))
+            ->filter()
+            ->values();
     }
 
     private function tipotransaccionFiltro(array $filtros): ?Tipotransaccion

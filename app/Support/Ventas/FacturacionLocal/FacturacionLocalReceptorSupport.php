@@ -123,6 +123,9 @@ final class FacturacionLocalReceptorSupport
         if (strlen($cuit) !== 11 || (int) $cuit <= 0) {
             throw new InvalidArgumentException('Indicá un CUIT válido de 11 dígitos (Factura A).');
         }
+        if (! self::cuitModulo11Valido($cuit)) {
+            throw new InvalidArgumentException('CUIT erróneo.');
+        }
         if ($domicilio === '') {
             throw new InvalidArgumentException('Indicá el domicilio del receptor (Factura A).');
         }
@@ -304,6 +307,33 @@ final class FacturacionLocalReceptorSupport
             'tipodoc' => (int) config('arca_wsfe.receptor.consumidor_final_tipo_documento', 99),
             'numerodocumento' => (string) config('arca_wsfe.receptor.consumidor_final_numero_documento', '0'),
         ];
+    }
+
+    /**
+     * Dígito verificador AFIP (módulo 11). No usa el trait ValidacionCuit:
+     * ese compara el resto contra el dígito y rechaza CUIT válidos.
+     */
+    public static function cuitModulo11Valido(string $cuit): bool
+    {
+        $digitos = preg_replace('/\D/', '', $cuit) ?? '';
+        if (strlen($digitos) !== 11) {
+            return false;
+        }
+
+        $factores = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+        $acum = 0;
+        for ($i = 0; $i < 10; $i++) {
+            $acum += ((int) $digitos[$i]) * $factores[$i];
+        }
+        $resto = $acum % 11;
+        $dv = 11 - $resto;
+        if ($dv === 11) {
+            $dv = 0;
+        } elseif ($dv === 10) {
+            $dv = 9;
+        }
+
+        return $dv === (int) $digitos[10];
     }
 
     public static function clienteContadoId(): int

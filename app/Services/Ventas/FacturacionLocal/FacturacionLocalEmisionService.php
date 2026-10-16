@@ -441,7 +441,11 @@ final class FacturacionLocalEmisionService
 
 		try {
 			$receptor = FacturacionLocalReceptorSupport::resolver($input);
-		} catch (InvalidArgumentException) {
+		} catch (InvalidArgumentException $e) {
+			if (str_contains($e->getMessage(), 'CUIT erróneo')) {
+				$base['error'] = 'CUIT erróneo';
+			}
+
 			return $base;
 		}
 

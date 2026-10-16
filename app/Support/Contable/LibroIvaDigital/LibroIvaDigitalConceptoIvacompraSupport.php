@@ -106,27 +106,31 @@ final class LibroIvaDigitalConceptoIvacompraSupport
             return;
         }
 
-        $tipo = strtoupper((string) ($ci->tipoconcepto ?? ''));
-        $tasa = (float) ($ci->impuestos->valor ?? 0);
+        $ci = LibroIvaDigitalComprasConceptoClasificacionSupport::maestroInformado($ci);
+        $clas = LibroIvaDigitalComprasConceptoClasificacionSupport::clasificar($ci);
+        $destino = $clas['destino'];
+        if ($destino === '') {
+            return;
+        }
+        $tasa = $clas['tasa'];
         $nombre = (string) ($ci->nombre ?? '');
         $conceptoIvaSimple = self::conceptoIvaSimpleDesdeNombre($nombre);
+        $key = (string) round($tasa, 3);
 
-        switch ($tipo) {
-            case 'G':
-                $key = (string) round($tasa, 3);
+        switch ($destino) {
+            case 'gravado':
                 $resultado['alicuotas'][$key]['neto'] = ($resultado['alicuotas'][$key]['neto'] ?? 0) + $monto;
                 $resultado['alicuotas'][$key]['tasa'] = $tasa;
                 $resultado['alicuotas'][$key]['concepto_iva_simple'] = $conceptoIvaSimple;
                 $resultado['neto_gravado'] += $monto;
                 break;
-            case 'E':
+            case 'exento':
                 $resultado['exento'] += $monto;
                 break;
-            case 'N':
+            case 'no_integra':
                 $resultado['no_integra'] += $monto;
                 break;
-            case 'I':
-                $key = (string) round($tasa, 3);
+            case 'iva':
                 $resultado['alicuotas'][$key]['iva'] = ($resultado['alicuotas'][$key]['iva'] ?? 0) + $monto;
                 $resultado['alicuotas'][$key]['tasa'] = $tasa;
                 if (! isset($resultado['alicuotas'][$key]['concepto_iva_simple'])) {
@@ -134,21 +138,23 @@ final class LibroIvaDigitalConceptoIvacompraSupport
                 }
                 $resultado['iva'] += $monto;
                 break;
-            case 'P':
+            case 'perc_iva':
                 $resultado['perc_iva'] += $monto;
                 break;
-            case 'B':
-            case 'S':
+            case 'perc_iibb':
                 $resultado['perc_iibb'] += $monto;
                 break;
-            case 'M':
+            case 'perc_municipal':
                 $resultado['perc_municipal'] += $monto;
                 break;
-            case 'A':
+            case 'perc_nacional':
                 $resultado['perc_nacional'] += $monto;
                 break;
-            case 'T':
+            case 'imp_interno':
                 $resultado['imp_interno'] += $monto;
+                break;
+            case 'otros':
+                $resultado['otros'] += $monto;
                 break;
         }
     }

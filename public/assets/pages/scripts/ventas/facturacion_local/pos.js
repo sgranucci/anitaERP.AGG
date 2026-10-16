@@ -247,6 +247,9 @@
 						if (!p || !p.concepto) return;
 						perc += ' · ' + p.concepto + ' ' + money(p.importe);
 					});
+					if (b.error) {
+						extra += ' · ' + b.error;
+					}
 					det.textContent = 'FAC ' + money(b.neto_fac || 0) + ' · NC ' + money(b.neto_nc || 0) + perc + extra;
 				}
 			}
@@ -1081,6 +1084,18 @@
         }
     }
 
+    function cuitModulo11Valido(cuit) {
+        var d = String(cuit || '').replace(/\D/g, '');
+        if (d.length !== 11) return false;
+        var factores = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+        var acum = 0;
+        for (var i = 0; i < 10; i++) acum += (+d.charAt(i)) * factores[i];
+        var dv = 11 - (acum % 11);
+        if (dv === 11) dv = 0;
+        else if (dv === 10) dv = 9;
+        return dv === (+d.charAt(10));
+    }
+
     function armarReceptorManual() {
         if (!receptorManualActivo()) return null;
         if (receptorManualModo === 'a') {
@@ -1114,6 +1129,7 @@
             if (!rec.nombre) { msg('Indicá la razón social del receptor (Factura A)', false); return false; }
             var cuit = String(rec.cuit || '').replace(/\D/g, '');
             if (cuit.length !== 11) { msg('Indicá un CUIT de 11 dígitos', false); ($('fl-rec-cuit') || {}).focus && $('fl-rec-cuit').focus(); return false; }
+            if (!cuitModulo11Valido(cuit)) { msg('CUIT erróneo', false); ($('fl-rec-cuit') || {}).focus && $('fl-rec-cuit').focus(); return false; }
             if (!rec.domicilio) { msg('Indicá el domicilio del receptor (Factura A)', false); return false; }
             if (!rec.localidad_id) { msg('Indicá la localidad del receptor (Factura A)', false); return false; }
             if (!rec.provincia_id) { msg('Indicá la provincia del receptor (Factura A)', false); return false; }

@@ -311,6 +311,19 @@ final class FacturacionLocalNotaCreditoService
     }
 
     /**
+     * El renglón guarda el precio ya descontado y, aparte, el porcentaje.
+     * La nota de crédito tiene que partir del precio anterior al % para aplicarlo una sola vez.
+     */
+    public static function precioListaDesdeGuardado(float $precioGuardado, float $descuentoLinea): float
+    {
+        if (abs($descuentoLinea) <= 0.00001 || abs($descuentoLinea) >= 99.999) {
+            return $precioGuardado;
+        }
+
+        return round($precioGuardado / (1. - ($descuentoLinea / 100.)), 4);
+    }
+
+    /**
      * Importe positivo estimado de la NC (precios finales, descuento de línea y de pie).
      *
      * @param  array<string, mixed>  $payload
@@ -372,12 +385,18 @@ final class FacturacionLocalNotaCreditoService
             $precioFacturado = (float) ($em->precio ?? 0);
             $articuloId = (int) ($em->articulo_id ?? 0);
             $emisionId = (int) $em->id;
+            $descuentoLinea = (float) ($em->descuento ?? 0);
             $precio = $precioFacturado;
             if ($preciosPorEmision !== null && array_key_exists($emisionId, $preciosPorEmision)) {
                 $precioGrilla = (float) $preciosPorEmision[$emisionId];
                 if ($precioGrilla > 0) {
                     $precio = $precioGrilla;
                 }
+            }
+            // venta_emision.precio ya tiene el % de línea aplicado. Si la NC
+            // vuelve a mandar ese % sobre el mismo importe, el descuento sale dos veces.
+            if (abs($precio - $precioFacturado) < 0.02) {
+                $precio = self::precioListaDesdeGuardado($precioFacturado, $descuentoLinea);
             }
             if ($articuloId <= 0 || ($cantidadFacturada <= 0 && abs($precioFacturado) < 0.00001 && abs($precio) < 0.00001)) {
                 continue;
@@ -408,7 +427,7 @@ final class FacturacionLocalNotaCreditoService
             $articuloIds[] = $articuloId;
             $cantidades[] = $cantidad;
             $precios[] = $precio;
-            $descuentos[] = (float) ($em->descuento ?? 0);
+            $descuentos[] = $descuentoLinea;
             $descripciones[] = $detalle;
             $combinacionIds[] = (int) ($em->combinacion_id ?? 0);
             $talleIds[] = (int) ($em->talle_id ?? 0);

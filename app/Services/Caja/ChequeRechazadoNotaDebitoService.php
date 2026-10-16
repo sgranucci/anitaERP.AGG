@@ -236,12 +236,13 @@ final class ChequeRechazadoNotaDebitoService
         $anitaOk = ChequeTerceroRechazoAnitaSupport::marcarRechazo($cheque, $fechaNd);
 
         $mailCliente = null;
-        $deudaProveedor = null;
         if ($enviarClienteProveedor) {
             $mailCliente = $this->facturaMailEnvioService->enviar($ventaNdId);
-            if ($ventaNd instanceof Venta && (int) ($cheque->proveedor_id ?? 0) > 0) {
-                $deudaProveedor = $this->deudaProveedorService->generarSiCorresponde($cheque, $ventaNd);
-            }
+        }
+
+        $deudaProveedor = null;
+        if ($ventaNd instanceof Venta && (int) ($cheque->proveedor_id ?? 0) > 0) {
+            $deudaProveedor = $this->deudaProveedorService->generarSiCorresponde($cheque, $ventaNd);
         }
 
         return [

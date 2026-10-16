@@ -51,6 +51,7 @@ final class IvaVentasListadoFiltros
         $monedaId = (int) $request->input('moneda_id', 1);
         $provinciaId = max(0, (int) $request->input('provincia_id', 0));
         $puntoventaId = max(0, (int) $request->input('puntoventa_id', 0));
+        $puntoventaIds = self::normalizarPuntoventaIds($request->input('puntoventa_ids', []));
         $tipotransaccionId = max(0, (int) $request->input('tipotransaccion_id', 0));
 
         $features = IvaVentasFeaturesSupport::all();
@@ -70,6 +71,7 @@ final class IvaVentasListadoFiltros
             'subdiario' => $subdiario,
             'provincia_id' => $provinciaId,
             'puntoventa_id' => $puntoventaId,
+            'puntoventa_ids' => $puntoventaIds,
             'tipotransaccion_id' => $tipotransaccionId,
             'cortar_por_jurisdiccion' => $request->boolean('cortar_por_jurisdiccion'),
             'cortar_por_sucursal_tipo' => $request->boolean('cortar_por_sucursal_tipo'),
@@ -115,6 +117,15 @@ final class IvaVentasListadoFiltros
         $puntoventaId = (int) ($filtros['puntoventa_id'] ?? 0);
         if ($puntoventaId > 0) {
             $out['puntoventa_id'] = $puntoventaId;
+        }
+
+        $puntoventaIds = self::idsDesdeFiltros($filtros);
+        $extras = array_values(array_filter(
+            $puntoventaIds,
+            static fn (int $id): bool => $id !== $puntoventaId
+        ));
+        if ($extras !== []) {
+            $out['puntoventa_ids'] = $extras;
         }
 
         $tipotransaccionId = (int) ($filtros['tipotransaccion_id'] ?? 0);
@@ -176,11 +187,19 @@ final class IvaVentasListadoFiltros
     public static function formatearCorteTexto(array $filtros): string
     {
         $partes = [];
-        $puntoventaId = (int) ($filtros['puntoventa_id'] ?? 0);
-        if ($puntoventaId > 0) {
-            $pv = Puntoventa::query()->find($puntoventaId, ['id', 'codigo', 'nombre']);
-            $etiqueta = trim((string) (($pv->codigo ?? '').' '.($pv->nombre ?? '')));
-            $partes[] = 'Sucursal: '.($etiqueta !== '' ? $etiqueta : '#'.$puntoventaId);
+        $puntoventaIds = self::idsDesdeFiltros($filtros);
+        if ($puntoventaIds !== []) {
+            $pvs = Puntoventa::query()
+                ->whereIn('id', $puntoventaIds)
+                ->get(['id', 'codigo', 'nombre'])
+                ->keyBy('id');
+            $etiquetas = [];
+            foreach ($puntoventaIds as $id) {
+                $pv = $pvs->get($id);
+                $etiqueta = trim((string) (($pv->codigo ?? '').' '.($pv->nombre ?? '')));
+                $etiquetas[] = $etiqueta !== '' ? $etiqueta : '#'.$id;
+            }
+            $partes[] = 'Sucursales: '.implode(', ', $etiquetas);
         }
 
         $tipoId = (int) ($filtros['tipotransaccion_id'] ?? 0);
@@ -200,6 +219,42 @@ final class IvaVentasListadoFiltros
     public static function firma(array $filtros): string
     {
         return md5(json_encode(self::paraQueryString($filtros)));
+    }
+
+    /**
+     * Sucursal única más las agregadas. Vacío = todas.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    public static function idsDesdeFiltros(array $filtros): array
+    {
+        $ids = self::normalizarPuntoventaIds($filtros['puntoventa_ids'] ?? []);
+        $uno = (int) ($filtros['puntoventa_id'] ?? 0);
+        if ($uno > 0) {
+            array_unshift($ids, $uno);
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * @return list<int>
+     */
+    public static function normalizarPuntoventaIds(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            $raw = $raw === null || $raw === '' ? [] : [$raw];
+        }
+        $ids = [];
+        foreach ($raw as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 
     public static function pasaSubdiario(string $letra, string $subdiario): bool

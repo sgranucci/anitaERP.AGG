@@ -16,9 +16,9 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Ferli: NC sobre FAC de OT/picking → libera la línea del pedido para refacturar.
- * La NC total quita la tarea FACTURADA, restaura el stock del lote/OT y desmarca el picking.
- * La NC parcial, si acredita una línea por completo, la deja pendiente en el mismo picking
- * y devuelve a stock solo el lote/OT de esa línea.
+ * La NC total quita la tarea FACTURADA, restaura todo el stock que esa factura había sacado y desmarca el picking.
+ * La NC parcial devuelve los pares acreditados (la curva completa o una parte), con el mismo lote/OT.
+ * Si la línea quedó acreditada por completo y estaba en un picking, vuelve a pendiente en el mismo.
  */
 final class NotaCreditoReabrePedidoOtFerliSupport
 {
@@ -93,8 +93,8 @@ final class NotaCreditoReabrePedidoOtFerliSupport
     }
 
     /**
-     * NC parcial: si una línea del picking quedó acreditada por completo, vuelve a pendiente
-     * en el mismo picking y se devuelve el lote/OT de esa línea.
+     * NC parcial: devuelve los pares acreditados, aunque sea una parte de la curva.
+     * Si la línea quedó cubierta por completo y estaba en un picking, vuelve a pendiente.
      * No se desarma el picking ni se tocan las líneas que siguen facturadas.
      *
      * @param  array{aplicado: bool, tareas_borradas: int, picking_reabiertos: int, movimientos_revertidos: int}  $vacio
@@ -106,8 +106,7 @@ final class NotaCreditoReabrePedidoOtFerliSupport
         $fechaNc = $ventaNcId > 0
             ? Venta::query()->whereKey($ventaNcId)->value('fecha')
             : null;
-        $revertidos = PedidoPickingFerliSupport::revertirConsumoStockDeLineas(
-            $ids,
+        $revertidos = PedidoPickingFerliSupport::devolverParesAcreditados(
             $ventaNcId,
             $fechaNc !== null ? (string) $fechaNc : null
         );
@@ -124,7 +123,7 @@ final class NotaCreditoReabrePedidoOtFerliSupport
     }
 
     /**
-     * Líneas de picking cuya cantidad facturada quedó cubierta por esta NC.
+     * Líneas de pedido (picking u OT) cuya cantidad facturada quedó cubierta por esta NC.
      *
      * @return list<int>
      */
@@ -151,7 +150,6 @@ final class NotaCreditoReabrePedidoOtFerliSupport
 
         $lineas = Pedido_Combinacion::query()
             ->whereIn('id', array_keys($cantidadesNc))
-            ->where('picking_facturado', PedidoPickingFerliSupport::FACTURADO)
             ->get(['id', 'picking_venta_id', 'cantidad']);
 
         $ids = [];

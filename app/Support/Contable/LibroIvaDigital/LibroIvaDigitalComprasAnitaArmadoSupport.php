@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Support\Contable\LibroIvaDigital;
 
-use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Support\Compras\ComprobanteProveedorInternoTipos;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
@@ -19,9 +18,6 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
 {
     /** @var array<string, Tipotransaccion_Compra>|null */
     private static ?array $tiposPorAbrev = null;
-
-    /** @var array<int, Concepto_Ivacompra>|null */
-    private static ?array $conceptosPorCodigo = null;
 
     public static function claveNatural(
         string $proveedor,
@@ -186,22 +182,20 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
                 continue;
             }
 
-            $concepto = self::conceptoPorCodigo($codigo);
+            $concepto = LibroIvaDigitalComprasConceptoClasificacionSupport::porCodigo($codigo);
             if ($concepto === null) {
                 continue;
             }
 
-            $tipo = strtoupper(trim((string) ($concepto->tipoconcepto ?? '')));
-            $tasa = (float) ($concepto->impuestos?->valor ?? 0);
+            $clas = LibroIvaDigitalComprasConceptoClasificacionSupport::clasificar($concepto, $nombreVendedor);
+            $destino = $clas['destino'];
+            if ($destino === '') {
+                continue;
+            }
+            $tasa = $clas['tasa'];
             $key = (string) round($tasa, 3);
             $nombreConcepto = (string) ($concepto->nombre ?? '');
             $conceptoIvaSimple = LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre($nombreConcepto);
-            $destino = LibroIvaDigitalComprasImportesSupport::destinoRubroLid(
-                $codigo,
-                $nombreConcepto,
-                $tipo,
-                $nombreVendedor,
-            );
 
             switch ($destino) {
                 case 'no_integra':
@@ -483,29 +477,6 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             }
             if ($norm !== '' && $norm !== $abrev) {
                 self::$tiposPorAbrev[$norm] = $tipo;
-            }
-        }
-    }
-
-    private static function conceptoPorCodigo(int $codigo): ?Concepto_Ivacompra
-    {
-        self::cargarConceptos();
-
-        return self::$conceptosPorCodigo[$codigo] ?? null;
-    }
-
-    private static function cargarConceptos(): void
-    {
-        if (self::$conceptosPorCodigo !== null) {
-            return;
-        }
-
-        self::$conceptosPorCodigo = [];
-        $conceptos = Concepto_Ivacompra::query()->with('impuestos')->get();
-        foreach ($conceptos as $concepto) {
-            $codigoNum = (int) preg_replace('/\D+/', '', (string) $concepto->codigo);
-            if ($codigoNum > 0) {
-                self::$conceptosPorCodigo[$codigoNum] = $concepto;
             }
         }
     }

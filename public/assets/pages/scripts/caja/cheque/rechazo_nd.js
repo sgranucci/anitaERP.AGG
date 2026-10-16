@@ -183,7 +183,7 @@
         $('#rechazo-nd-config-error').hide().text('');
         $('#rechazo_nd_motivo').val('');
         $('#rechazo_nd_enviar').prop('checked', false);
-        $('#rechazo-nd-enviar-ayuda').text('Sin el tilde, la nota queda emitida: no se manda por mail al cliente ni se genera el débito en la cuenta del proveedor.');
+        $('#rechazo-nd-enviar-ayuda').text('Si el cheque está a nombre de un proveedor, el débito en su cuenta se genera siempre. El tilde solo manda el mail al cliente.');
         $('#rechazo-nd-cuenta-nominal').text('');
 
         $.ajax({
@@ -208,8 +208,8 @@
             $('#rechazo-nd-cliente').text(c.cliente || '');
             if (c.proveedor) {
                 $('#rechazo-nd-enviar-ayuda').text(
-                    'Sin el tilde, la nota queda emitida: no se manda por mail a ' + (c.cliente || 'el cliente')
-                    + ' ni se genera el débito de ' + c.proveedor + '.'
+                    'Se genera el débito en la cuenta de ' + c.proveedor + '. '
+                    + 'El tilde solo manda el mail a ' + (c.cliente || 'el cliente') + '.'
                 );
             }
             $('#rechazo-nd-monto').text(formatMoney(nominal) + ' ' + (c.moneda || ''));

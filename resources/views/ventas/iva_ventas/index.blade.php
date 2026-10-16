@@ -128,6 +128,39 @@
                         'col_input' => $colInput,
                     ])
 
+                    <div class="form-group row mb-1">
+                        <div class="{{ $colLabel }} d-none d-lg-block"></div>
+                        <div class="{{ $colInput }}">
+                            <div id="iva-ventas-sucursales-extra">
+                                @foreach ($puntosventa_extra ?? [] as $pvExtra)
+                                    <div class="d-flex align-items-center mb-1 iva-ventas-sucursal-extra">
+                                        @include('ventas.partials.campo_consulta_puntoventa', [
+                                            'prefix' => 'iva_ventas_extra_'.$pvExtra->id,
+                                            'layout' => 'inline',
+                                            'label' => '',
+                                            'inputName' => 'puntoventa_ids[]',
+                                            'inputId' => 'puntoventa_extra_'.$pvExtra->id,
+                                            'puntoventaId' => (int) $pvExtra->id,
+                                            'codigo' => $pvExtra->codigo ?? '',
+                                            'nombre' => $pvExtra->nombre ?? '',
+                                            'required' => false,
+                                            'mostrar_editar' => false,
+                                        ])
+                                        <button type="button" class="btn btn-sm btn-link text-danger quitar-sucursal-iva" title="Quitar sucursal">
+                                            <i class="fa fa-times"></i>
+                                        </button>
+                                    </div>
+                                @endforeach
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm mt-1" id="agregar-sucursal-iva">
+                                <i class="fa fa-plus"></i> Agregar sucursal
+                            </button>
+                            <p class="text-muted small mb-0 mt-1">
+                                Vacío = todas. Sumá las que quieras (por ejemplo 17 y 26, o 21 y 25) y marcá el corte por jurisdicción.
+                            </p>
+                        </div>
+                    </div>
+
                     @include('ventas.partials.campo_consulta_tipotransaccion', [
                         'prefix' => 'iva_ventas',
                         'layout' => 'form_row',
@@ -154,7 +187,7 @@
                         'col_label' => $colLabel,
                         'col_input' => $colInput,
                         'requerido' => false,
-                        'help' => 'Opcional: filtrar una provincia. Vacío = todas. Entrega (cliente_entrega); si no hay, provincia/jurisdicción del cliente.',
+                        'help' => 'Opcional: una jurisdicción. Vacío = todas. Cliente o entrega; si no hay (local / consumidor final), la provincia del punto de venta.',
                     ])
 
                     <div class="form-group row">
@@ -164,7 +197,7 @@
                                 <input class="form-check-input" type="checkbox" name="cortar_por_jurisdiccion" id="cortar_por_jurisdiccion" value="1"
                                     @checked(! empty($filtros['cortar_por_jurisdiccion']))>
                                 <label class="form-check-label" for="cortar_por_jurisdiccion">
-                                    Cortar por jurisdicción (secciones y totales para convenio multilateral)
+                                    Cortar por jurisdicción (secciones y totales; o solo el total si no se marca)
                                 </label>
                             </div>
                             <div class="form-check mb-1">
@@ -419,6 +452,26 @@
     </div>
 </div>
 
+<template id="tpl-sucursal-iva">
+    <div class="d-flex align-items-center mb-1 iva-ventas-sucursal-extra">
+        @include('ventas.partials.campo_consulta_puntoventa', [
+            'prefix' => 'iva_ventas_extra_NUEVA',
+            'layout' => 'inline',
+            'label' => '',
+            'inputName' => 'puntoventa_ids[]',
+            'inputId' => 'puntoventa_extra_NUEVA',
+            'puntoventaId' => '',
+            'codigo' => '',
+            'nombre' => '',
+            'required' => false,
+            'mostrar_editar' => false,
+        ])
+        <button type="button" class="btn btn-sm btn-link text-danger quitar-sucursal-iva" title="Quitar sucursal">
+            <i class="fa fa-times"></i>
+        </button>
+    </div>
+</template>
+
 @include('includes.configuracion.modalconsultaprovincia')
 @include('includes.ventas.modalconsultapuntoventa')
 @include('includes.ventas.modalconsultatipotransaccion')
@@ -429,6 +482,30 @@
     'titulo' => 'Calculando IVA ventas…',
     'subtitulo' => 'Puede demorar según el período y la conciliación contable. No cierre la página.',
 ])
+
+<script>
+    (function () {
+        var lista = document.getElementById('iva-ventas-sucursales-extra');
+        var tpl = document.getElementById('tpl-sucursal-iva');
+        var btn = document.getElementById('agregar-sucursal-iva');
+        if (lista && tpl && btn) {
+            btn.addEventListener('click', function () {
+                var html = tpl.innerHTML.replace(/NUEVA/g, String(Date.now()));
+                lista.insertAdjacentHTML('beforeend', html);
+            });
+            lista.addEventListener('click', function (ev) {
+                var quitar = ev.target.closest('.quitar-sucursal-iva');
+                if (!quitar) {
+                    return;
+                }
+                var fila = quitar.closest('.iva-ventas-sucursal-extra');
+                if (fila) {
+                    fila.remove();
+                }
+            });
+        }
+    })();
+</script>
 
 <script>
     (function () {

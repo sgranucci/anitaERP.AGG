@@ -166,6 +166,7 @@ use App\Support\Ventas\VentaNumeracionEmpresaSupport;
 use App\Support\Ventas\NotaCreditoCompletaUnicaSupport;
 use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
+use App\Support\Ventas\VentaPercepcionIibbAsientoSupport;
 use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
 use App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport;
 use App\Support\Ventas\FacturaLineaPrecioImpresionSupport;
@@ -3292,8 +3293,9 @@ class FacturacionService
 		if ($provinciaPedido > 0 && empty($datosCliente['omitir_percepciones'])) {
 			$datosCliente['provincia'] = $provinciaPedido;
 		}
-		// Factura A eventual (locales / Tiendanube): el padrón es del CUIT del receptor,
-		// no del cliente shell. El shell no aporta CM05 ni exclusiones.
+		// Factura A eventual (locales / Tiendanube): CUIT, padrón y provincia son los
+		// del receptor cargado en la pantalla. La ficha del cliente shell no aporta
+		// documento, condición IIBB, CM05 ni exclusiones.
 		if (empty($datosCliente['omitir_percepciones'])) {
 			$docReceptor = preg_replace('/\D/', '', (string) ($data['venta_receptor']['numerodocumento'] ?? '')) ?? '';
 			if (strlen($docReceptor) === 11) {
@@ -3301,6 +3303,8 @@ class FacturacionService
 				$datosCliente['numerodocumento'] = $docReceptor;
 				if ($docCliente !== $docReceptor) {
 					$datosCliente['id'] = null;
+					$datosCliente['condicioniibb_id'] = null;
+					$datosCliente['percepcion_iibb_solo_receptor'] = true;
 				}
 			}
 		}
@@ -5525,9 +5529,8 @@ class FacturacionService
 					substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'], $vta->id);
 			}
 
-			// Ferli: NC sobre FAC de OT/picking → stock con lote/OT original.
-			// Total: reabre el pedido. Parcial: solo las líneas acreditadas por completo.
-			if (EntornoEmpresaSupport::esFerli() && $tipotransaccion->esNotaCredito() && (int) $venta_id > 0) {
+			// Ferli: la nota devuelve los pares que acredita, hasta lo que la factura había sacado de stock.
+			if (EntornoEmpresaSupport::esFerli() && $tipotransaccion->esNotaCredito()) {
 				$opcionesNc = is_array($opcionesEmision) ? $opcionesEmision : [];
 				\App\Support\Ventas\Ferli\NotaCreditoReabrePedidoOtFerliSupport::alGrabarNc(
 					(int) $venta_id,
@@ -9501,6 +9504,7 @@ class FacturacionService
 		ini_set('memory_limit', '512M');
 
 		$venta = $this->ventaRepository->find($id);
+		VentaPercepcionIibbAsientoSupport::completarPie($venta);
 		$venta->loadMissing([
 			'gastronomiaEmision',
 			'facturacionLocalEmision.localVenta',
@@ -9984,6 +9988,7 @@ class FacturacionService
 	public function editaUnaFactura($id, $flGeneraNotaDeCredito = null, int $articuloNcFiltro = 0, bool $flGeneraNotaDeDebito = false)
 	{
 	   	$data = Self::leeFactura($id);
+		VentaPercepcionIibbAsientoSupport::completarPie($data);
 
 		if (isset($flGeneraNotaDeCredito)) {
 			$data->fecha = Carbon::now();

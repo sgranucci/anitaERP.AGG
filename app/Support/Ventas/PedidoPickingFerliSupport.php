@@ -1298,13 +1298,50 @@ final class PedidoPickingFerliSupport
             return false;
         }
 
-        return Articulo_Movimiento::query()
+        $original = abs((float) Articulo_Movimiento::query()->whereKey($movimientoOrigenId)->value('cantidad'));
+        if ($original <= 0.0001) {
+            return false;
+        }
+
+        return self::paresDevueltosDeConsumo($movimientoOrigenId) + 0.0001 >= $original;
+    }
+
+    /**
+     * Pares ya reingresados contra un consumo. Una devolución parcial no bloquea el resto.
+     */
+    public static function paresDevueltosDeConsumo(int $movimientoOrigenId): float
+    {
+        if ($movimientoOrigenId <= 0) {
+            return 0.0;
+        }
+
+        $suma = 0.0;
+        $candidatos = Articulo_Movimiento::query()
+            ->where('cantidad', '>', 0)
             ->where(function ($q) use ($movimientoOrigenId) {
-                $q->where('concepto', self::conceptoDevolucionPicking($movimientoOrigenId))
-                    ->orWhere('concepto', self::conceptoDevolucionNcPicking($movimientoOrigenId))
-                    ->orWhere('concepto', 'Devolución NC picking #'.$movimientoOrigenId);
+                $marca = '#'.$movimientoOrigenId;
+                $q->where('concepto', 'like', '%'.$marca)
+                    ->orWhere('concepto', 'like', '%'.$marca.' %')
+                    ->orWhere('concepto', 'like', '%'.$marca.'/%');
             })
-            ->exists();
+            ->get(['concepto', 'cantidad']);
+
+        foreach ($candidatos as $mov) {
+            if (self::conceptoApuntaAMovimiento((string) $mov->concepto, $movimientoOrigenId)) {
+                $suma += (float) $mov->cantidad;
+            }
+        }
+
+        return $suma;
+    }
+
+    public static function conceptoApuntaAMovimiento(string $concepto, int $movimientoOrigenId): bool
+    {
+        if ($movimientoOrigenId <= 0 || $concepto === '') {
+            return false;
+        }
+
+        return preg_match('/#'.$movimientoOrigenId.'(?:\D|$)/', $concepto) === 1;
     }
 
     /**
@@ -1439,13 +1476,16 @@ final class PedidoPickingFerliSupport
      */
     public static function esConsumoPickingRevertible($mov): bool
     {
-        $lote = trim((string) self::valorMovimiento($mov, 'lote', ''));
-        $otId = (int) self::valorMovimiento($mov, 'ordentrabajo_id', 0);
-        if (($lote === '' || $lote === '0') && $otId <= 0) {
+        if ((float) self::valorMovimiento($mov, 'cantidad', 0) >= -0.0001) {
             return false;
         }
 
-        return (float) self::valorMovimiento($mov, 'cantidad', 0) < 0;
+        $concepto = trim((string) self::valorMovimiento($mov, 'concepto', ''));
+        if (str_starts_with($concepto, 'Devolución')) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -1484,7 +1524,10 @@ final class PedidoPickingFerliSupport
             'movimientostock_id' => null,
             'pedido_combinacion_id' => $pcId > 0 ? $pcId : null,
             'ordentrabajo_id' => $otId > 0 ? $otId : null,
-            'lote' => trim((string) self::valorMovimiento($mov, 'lote', '')),
+            'lote' => self::loteVisibleEnReporteStock(
+                trim((string) self::valorMovimiento($mov, 'lote', '')),
+                $otId
+            ),
             'articulo_id' => (int) self::valorMovimiento($mov, 'articulo_id', 0),
             'color_id' => $colorId > 0 ? $colorId : null,
             'talle_id' => $talleId > 0 ? $talleId : null,
@@ -1528,11 +1571,42 @@ final class PedidoPickingFerliSupport
     }
 
     /**
+     * El stock por OT no lista un consumo con lote 0 de una OT de cliente comercial.
+     * La devolución usa el número de esa OT como lote para que los pares aparezcan.
+     * Si la OT es de STOCK, o el lote ya es visible, se conserva para que netee en la misma fila.
+     */
+    private static function loteVisibleEnReporteStock(string $lote, int $ordentrabajoId): string
+    {
+        if (ReporteStockOtSituacionSupport::esLoteImportado($lote) || $ordentrabajoId <= 0) {
+            return $lote;
+        }
+
+        $esStock = Ordentrabajo_Combinacion_Talle::query()
+            ->where('ordentrabajo_id', $ordentrabajoId)
+            ->where('cliente_id', ReporteStockOtSituacionSupport::clienteStockId())
+            ->exists();
+        if ($esStock) {
+            return $lote;
+        }
+
+        $codigo = trim((string) (Ordentrabajo::query()->whereKey($ordentrabajoId)->value('codigo') ?? ''));
+        if ($codigo !== '' && $codigo !== '0') {
+            return $codigo;
+        }
+
+        return $lote;
+    }
+
+    /**
      * Devuelve al stock el lote/OT consumido al facturar picking o al armar la OT desde stock.
      */
     public static function revertirConsumoStockPorVenta(int $ventaOrigenId, int $ventaNcId = 0, ?string $fecha = null): int
     {
         if ($ventaOrigenId <= 0 || ! self::habilitado()) {
+            return 0;
+        }
+
+        if (self::notaYaGeneroEntrada($ventaNcId)) {
             return 0;
         }
 
@@ -1543,6 +1617,122 @@ final class PedidoPickingFerliSupport
             $ventaNcId,
             $fechaYmd
         );
+    }
+
+    /**
+     * Devuelve los pares que la nota acredita, aunque sea una parte de la curva.
+     * No pasa de lo que esa línea todavía tiene afuera de stock.
+     */
+    public static function devolverParesAcreditados(int $ventaNcId, ?string $fecha = null): int
+    {
+        if ($ventaNcId <= 0 || ! self::habilitado() || self::notaYaGeneroEntrada($ventaNcId)) {
+            return 0;
+        }
+
+        $fechaYmd = $fecha ? Carbon::parse($fecha)->format('Y-m-d') : now()->toDateString();
+        $grupos = [];
+        foreach (Venta_Emision::query()
+            ->where('venta_id', $ventaNcId)
+            ->where('pedido_combinacion_id', '>', 0)
+            ->get(['pedido_combinacion_id', 'talle_id', 'cantidad', 'precio']) as $emision) {
+            $id = (int) $emision->pedido_combinacion_id;
+            $cant = abs((float) $emision->cantidad);
+            if ($cant <= 0.0001) {
+                continue;
+            }
+            if (! isset($grupos[$id])) {
+                $grupos[$id] = ['cantidad' => 0.0, 'talles' => []];
+            }
+            $grupos[$id]['cantidad'] += $cant;
+            $talleId = (int) ($emision->talle_id ?? 0);
+            if ($talleId > 0) {
+                $grupos[$id]['talles'][] = [
+                    'pedido_combinacion_talle_id' => null,
+                    'talle_id' => $talleId,
+                    'cantidad' => $cant,
+                    'precio' => $emision->precio,
+                ];
+            }
+        }
+
+        $revertidos = 0;
+        foreach ($grupos as $pcId => $grupo) {
+            $neto = (float) Articulo_Movimiento::query()
+                ->where('pedido_combinacion_id', (int) $pcId)
+                ->sum('cantidad');
+            if ($neto >= -0.0001) {
+                continue;
+            }
+            $aDevolver = min((float) $grupo['cantidad'], abs($neto));
+            if ($aDevolver <= 0.0001) {
+                continue;
+            }
+            $revertidos += self::acreditarDevolucionSobreConsumos(
+                (int) $pcId,
+                $aDevolver,
+                $grupo['talles'],
+                $ventaNcId,
+                $fechaYmd
+            );
+        }
+
+        return $revertidos;
+    }
+
+    /**
+     * @param  list<array{pedido_combinacion_talle_id:mixed, talle_id:int, cantidad:float, precio:mixed}>  $tallesNc
+     */
+    private static function acreditarDevolucionSobreConsumos(
+        int $pedidoCombinacionId,
+        float $aDevolver,
+        array $tallesNc,
+        int $ventaNcId,
+        string $fechaYmd
+    ): int {
+        $movimientos = Articulo_Movimiento::query()
+            ->with('articulo_movimiento_talles')
+            ->where('pedido_combinacion_id', $pedidoCombinacionId)
+            ->where('cantidad', '<', 0)
+            ->orderBy('id')
+            ->get();
+
+        $restante = $aDevolver;
+        $revertidos = 0;
+        foreach ($movimientos as $mov) {
+            if ($restante <= 0.0001) {
+                break;
+            }
+            if (! self::esConsumoPickingRevertible($mov)) {
+                continue;
+            }
+            $pendiente = abs((float) $mov->cantidad) - self::paresDevueltosDeConsumo((int) $mov->id);
+            if ($pendiente <= 0.0001) {
+                continue;
+            }
+            $take = min($pendiente, $restante);
+            $talles = self::consumirTallesAcreditados($tallesNc, $take);
+            if ($talles === []) {
+                $talles = null;
+            }
+            if (self::entradaPorConsumo($mov, $ventaNcId, $fechaYmd, $take, $talles)) {
+                $restante -= $take;
+                $revertidos++;
+            }
+        }
+
+        return $revertidos;
+    }
+
+    private static function notaYaGeneroEntrada(int $ventaNcId): bool
+    {
+        if ($ventaNcId <= 0) {
+            return false;
+        }
+
+        return Articulo_Movimiento::query()
+            ->where('venta_id', $ventaNcId)
+            ->where('cantidad', '>', 0)
+            ->exists();
     }
 
     /**
@@ -1578,29 +1768,136 @@ final class PedidoPickingFerliSupport
         $revertidos = 0;
 
         foreach ($movimientos as $mov) {
-            $payload = self::payloadReversoConsumoPicking($mov, $ventaNcId, $fechaYmd);
-            if ($payload === null) {
+            if (! self::esConsumoPickingRevertible($mov)) {
                 continue;
             }
-
-            if (self::yaTieneDevolucionConsumoPicking((int) $mov->id)) {
+            $pendiente = abs((float) $mov->cantidad) - self::paresDevueltosDeConsumo((int) $mov->id);
+            if ($pendiente <= 0.0001) {
                 continue;
             }
-
-            $reverso = Articulo_Movimiento::query()->create($payload);
-            foreach ($mov->articulo_movimiento_talles as $talle) {
-                Articulo_Movimiento_Talle::query()->create([
-                    'articulo_movimiento_id' => $reverso->id,
-                    'pedido_combinacion_talle_id' => $talle->pedido_combinacion_talle_id,
-                    'talle_id' => $talle->talle_id,
-                    'cantidad' => -1 * (float) $talle->cantidad,
-                    'precio' => $talle->precio,
-                ]);
+            if (self::entradaPorConsumo($mov, $ventaNcId, $fechaYmd, $pendiente, null)) {
+                $revertidos++;
             }
-            $revertidos++;
         }
 
         return $revertidos;
+    }
+
+    /**
+     * @param  list<array{pedido_combinacion_talle_id:mixed, talle_id:int, cantidad:float, precio:mixed}>|null  $talles
+     */
+    private static function entradaPorConsumo($mov, int $ventaNcId, string $fechaYmd, float $cantidad, ?array $talles): bool
+    {
+        if ($cantidad <= 0.0001) {
+            return false;
+        }
+
+        $payload = self::payloadReversoConsumoPicking($mov, $ventaNcId, $fechaYmd);
+        if ($payload === null) {
+            return false;
+        }
+
+        $totalMov = abs((float) self::valorMovimiento($mov, 'cantidad', 0));
+        $yaDevuelto = self::paresDevueltosDeConsumo((int) self::valorMovimiento($mov, 'id', 0));
+        $esTotal = $yaDevuelto < 0.0001 && abs($cantidad - $totalMov) < 0.0001;
+        $payload['cantidad'] = $cantidad;
+        if (! $esTotal) {
+            $payload['concepto'] = self::conceptoDevolucionNcPicking((int) self::valorMovimiento($mov, 'id', 0))
+                .' / NC '.$ventaNcId;
+        }
+
+        $reverso = Articulo_Movimiento::query()->create($payload);
+        foreach ($talles ?? self::tallesProporcionales($mov, $cantidad) as $talle) {
+            $cantTalle = abs((float) ($talle['cantidad'] ?? 0));
+            if ($cantTalle <= 0.0001) {
+                continue;
+            }
+            Articulo_Movimiento_Talle::query()->create([
+                'articulo_movimiento_id' => $reverso->id,
+                'pedido_combinacion_talle_id' => $talle['pedido_combinacion_talle_id'] ?? null,
+                'talle_id' => $talle['talle_id'],
+                'cantidad' => $cantTalle,
+                'precio' => $talle['precio'] ?? 0,
+            ]);
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  list<array{pedido_combinacion_talle_id:mixed, talle_id:int, cantidad:float, precio:mixed}>  $talles
+     * @return list<array{pedido_combinacion_talle_id:mixed, talle_id:int, cantidad:float, precio:mixed}>
+     */
+    private static function consumirTallesAcreditados(array &$talles, float $take): array
+    {
+        $suma = 0.0;
+        foreach ($talles as $talle) {
+            $suma += (float) ($talle['cantidad'] ?? 0);
+        }
+        if ($suma + 0.0001 < $take) {
+            return [];
+        }
+
+        $out = [];
+        $falta = $take;
+        foreach ($talles as $i => $talle) {
+            if ($falta <= 0.0001) {
+                break;
+            }
+            $disp = (float) ($talle['cantidad'] ?? 0);
+            if ($disp <= 0.0001) {
+                continue;
+            }
+            $usar = min($disp, $falta);
+            $out[] = [
+                'pedido_combinacion_talle_id' => $talle['pedido_combinacion_talle_id'] ?? null,
+                'talle_id' => $talle['talle_id'],
+                'cantidad' => $usar,
+                'precio' => $talle['precio'] ?? 0,
+            ];
+            $talles[$i]['cantidad'] = $disp - $usar;
+            $falta -= $usar;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array{pedido_combinacion_talle_id:mixed, talle_id:int, cantidad:float, precio:mixed}>
+     */
+    private static function tallesProporcionales($mov, float $cantidad): array
+    {
+        $original = abs((float) self::valorMovimiento($mov, 'cantidad', 0));
+        $talles = $mov->articulo_movimiento_talles ?? [];
+        if ($original <= 0.0001 || count($talles) === 0) {
+            return [];
+        }
+
+        $factor = $cantidad / $original;
+        $out = [];
+        $acum = 0.0;
+        $items = collect($talles)->values();
+        $last = $items->count() - 1;
+        foreach ($items as $i => $talle) {
+            $base = abs((float) $talle->cantidad);
+            if ($i === $last) {
+                $cant = round($cantidad - $acum, 4);
+            } else {
+                $cant = round($base * $factor, 4);
+                $acum += $cant;
+            }
+            if ($cant <= 0.0001) {
+                continue;
+            }
+            $out[] = [
+                'pedido_combinacion_talle_id' => $talle->pedido_combinacion_talle_id,
+                'talle_id' => $talle->talle_id,
+                'cantidad' => $cant,
+                'precio' => $talle->precio,
+            ];
+        }
+
+        return $out;
     }
 
     /**

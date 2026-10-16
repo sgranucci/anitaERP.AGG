@@ -15,6 +15,7 @@ use App\Support\Ventas\IvaVentas\IvaVentasUnidadNegocioSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
 use App\Support\Ventas\TipotransaccionIvaVentasSupport;
 use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
+use App\Support\Ventas\VentaPercepcionIibbAsientoSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
@@ -41,6 +42,7 @@ final class IvaVentasReporteService
     public function generarDesdeFiltros(array $filtros): array
     {
         $ventas = $this->queryVentas($filtros)->get();
+        VentaPercepcionIibbAsientoSupport::completarPieColeccion($ventas);
         $filas = [];
         $totalesPorPv = [];
         $totalesGeneral = IvaVentasColumnasSupport::montosVacios();
@@ -76,6 +78,10 @@ final class IvaVentasReporteService
                 $venta->cliente_entregas,
                 (int) ($venta->provincia_id ?? 0) ?: null,
             );
+            if ($provinciaJurisdiccionId === null) {
+                $pvProvincia = (int) ($venta->puntoventas->provincia_id ?? 0);
+                $provinciaJurisdiccionId = $pvProvincia > 0 ? $pvProvincia : null;
+            }
             if ($provinciaFiltroId > 0 && $provinciaJurisdiccionId !== $provinciaFiltroId) {
                 $excluidasJurisdiccion++;
                 continue;
@@ -242,7 +248,7 @@ final class IvaVentasReporteService
             : 'fechajornada';
 
         $filtraIvaVentas = Schema::hasColumn('puntoventa', 'iva_ventas');
-        $puntoventaId = (int) ($filtros['puntoventa_id'] ?? 0);
+        $puntoventaIds = IvaVentasListadoFiltros::idsDesdeFiltros($filtros);
         $tipotransaccionId = (int) ($filtros['tipotransaccion_id'] ?? 0);
 
         $query = Venta::query()
@@ -255,8 +261,8 @@ final class IvaVentasReporteService
             ->whereDate($campoFecha, '>=', $filtros['fecha_desde'])
             ->whereDate($campoFecha, '<=', $filtros['fecha_hasta']);
 
-        if ($puntoventaId > 0) {
-            $query->where('puntoventa_id', $puntoventaId);
+        if ($puntoventaIds !== []) {
+            $query->whereIn('puntoventa_id', $puntoventaIds);
         }
         if ($tipotransaccionId > 0) {
             $query->where('tipotransaccion_id', $tipotransaccionId);

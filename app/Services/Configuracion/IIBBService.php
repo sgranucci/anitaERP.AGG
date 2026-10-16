@@ -190,7 +190,7 @@ class IIBBService
 
 	// Calcula percepciones de ingresos brutos para ventas
 
-	public function calculaPercepcionIIBB($totalNeto, $numeroDocumento, $condicioniibb_id, $provincia_id, $cm05, $fechaFactura, $cliente_id = null, bool $forzarCaba = false, ?int $empresaId = null)
+	public function calculaPercepcionIIBB($totalNeto, $numeroDocumento, $condicioniibb_id, $provincia_id, $cm05, $fechaFactura, $cliente_id = null, bool $forzarCaba = false, ?int $empresaId = null, bool $soloDatosReceptor = false)
 	{
 		$percepcionesIIBB = [];
 
@@ -203,7 +203,9 @@ class IIBBService
 			&& $condicioniibb->formacalculo === 'N'
 			&& $condicioniibb->estado === 'A';
 		// Anita: PERC_NO_RETIENE + padrón CABA → PERC_CAPITAL. Lo mismo en BA si hay ARBA.
+		// Receptor eventual: no hay ficha. Solo el padrón del CUIT cargado.
 		$puedeCalcular = $forzarCaba
+			|| $soloDatosReceptor
 			|| ($condicioniibb && $condicioniibb->formacalculo != 'N' && $condicioniibb->estado == 'A')
 			|| $esNoRetiene;
 
@@ -314,13 +316,17 @@ class IIBBService
 						$registroPadron = $this->leeTasaPercepcion($numeroDocumento, $jurisdiccionesPercepcion[$i], $fechaFactura);
 						$tasaPadron = $this->tasaPercepcionDesdePadron($registroPadron, $jurisdiccionesPercepcion[$i]);
 
-						$tasa = PercepcionIibbPrioridadAlicuotaSupport::resolver(
-							$provincia->prioridad_alicuota_percepcion ?? null,
-							$tasaPadron,
-							(float) $tasasDescarte[$i],
-							(string) $jurisdiccionesPercepcion[$i] === (string) $jurisdiccionCliente,
-							$esNoRetiene
-						);
+						if ($soloDatosReceptor) {
+							$tasa = ($tasaPadron !== null && $tasaPadron > 0.00001) ? $tasaPadron : null;
+						} else {
+							$tasa = PercepcionIibbPrioridadAlicuotaSupport::resolver(
+								$provincia->prioridad_alicuota_percepcion ?? null,
+								$tasaPadron,
+								(float) $tasasDescarte[$i],
+								(string) $jurisdiccionesPercepcion[$i] === (string) $jurisdiccionCliente,
+								$esNoRetiene
+							);
+						}
 						if ($tasa === null) {
 							continue;
 						}
