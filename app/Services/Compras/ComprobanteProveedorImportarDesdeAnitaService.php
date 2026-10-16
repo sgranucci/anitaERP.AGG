@@ -1311,9 +1311,9 @@ class ComprobanteProveedorImportarDesdeAnitaService
     }
 
     /**
-     * ICO/IDO de Anita con proveedor 000000: el CUIT del banco viene en la compra.
-     * Si el banco existe en el maestro se vincula; si no, queda como eventual
-     * con ese CUIT para que IVA digital e IVA simple no salgan sin vendedor.
+     * Compras Anita con proveedor 000000. El nombre y el CUIT de la factura
+     * son com_nombre_prov y com_cuit_prov: se graban en el comprobante y no
+     * se reemplazan por un proveedor del maestro.
      *
      * @return array<string, mixed>
      */
@@ -1337,13 +1337,14 @@ class ComprobanteProveedorImportarDesdeAnitaService
         }
         $concmov = $this->reader->listarConcmovPorInternos($nrosInternos);
 
-        $stats = $this->statsVacios(0, 'Gastos bancarios '.$codigo);
+        $stats = $this->statsVacios(0, 'Proveedor eventual '.$codigo);
         $stats['sin_cuenta_corriente'] = true;
         $stats['filtrar_por_fecha_iva'] = $filtrarPorFechaIva;
         $stats['anita_compra'] = count($compras);
         $stats['anita_concmov'] = array_sum(array_map('count', $concmov));
 
         $plan = [];
+        $clavesLote = [];
         foreach ($compras as $compra) {
             $preparado = $this->prepararGastoBancario($compra, $concmov, $empresaCodigoFiltro);
             if ($preparado['estado'] === 'omitida') {
@@ -1359,6 +1360,25 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
                 continue;
             }
+            $tipoClave = (int) $preparado['tipo']->id > 0
+                ? (string) (int) $preparado['tipo']->id
+                : (string) $preparado['tipo']->abreviatura;
+            $claveFiscal = $preparado['empresa_id'].'|'
+                .$tipoClave.'|'
+                .$preparado['letra'].'|'
+                .$preparado['sucursal'].'|'
+                .$preparado['numero'].'|'
+                .$preparado['cuit'];
+            if (isset($clavesLote[$claveFiscal])) {
+                $stats['duplicadas_lote']++;
+                $stats['errores'][] = 'Duplicada en Anita (misma clave fiscal, otro nro interno): '
+                    .$preparado['resumen']['etiqueta']
+                    .' nro interno '.$preparado['nro_interno']
+                    .' (ya planificada nro interno '.$clavesLote[$claveFiscal].')';
+
+                continue;
+            }
+            $clavesLote[$claveFiscal] = $preparado['nro_interno'];
             $plan[] = $preparado;
             if ($limite !== null && $limite > 0 && count($plan) >= $limite) {
                 break;
@@ -1367,7 +1387,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
         $stats['a_crear'] = count($plan);
         $stats['conceptos'] = array_sum(array_map(static fn (array $i) => count($i['conceptos']), $plan));
-        $stats['muestra'] = array_map(static fn (array $i) => $i['resumen'], array_slice($plan, 0, 20));
+        $stats['muestra'] = array_map(static fn (array $i) => $i['resumen'], array_slice($plan, 0, 40));
 
         if ($dryRun) {
             $stats['modo'] = 'dry-run';
@@ -1394,15 +1414,8 @@ class ComprobanteProveedorImportarDesdeAnitaService
     private function prepararGastoBancario(array $compra, array $concmov, ?int $empresaCodigoFiltro): array
     {
         $tipoAbrev = ComprobanteProveedorAnitaImportClaveSupport::tipo((string) ($compra['com_tipo'] ?? ''));
-        if (! in_array($tipoAbrev, ['ICO', 'IDO'], true)) {
-            return [
-                'estado' => 'sin_tipo',
-                'error' => 'Proveedor genérico bancario con tipo '.$tipoAbrev.' '
-                    .ComprobanteProveedorAnitaImportExistenciaSupport::etiquetaCompra($compra),
-            ];
-        }
-        $tipo = $this->resolverTipo($tipoAbrev, permitirStub: false);
-        if ($tipo === null || (int) $tipo->id <= 0) {
+        $tipo = $this->resolverTipo($tipoAbrev, permitirStub: true);
+        if ($tipo === null || ($tipo->exists && (int) $tipo->id <= 0)) {
             return [
                 'estado' => 'sin_tipo',
                 'error' => 'Sin tipotransaccion_compra para '.$tipoAbrev.' '
@@ -1427,7 +1440,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
         if (! LibroIvaDigitalComprasCuitSupport::esCuitValido($cuit)) {
             return [
                 'estado' => 'sin_cuit_banco',
-                'error' => 'ICO/IDO sin CUIT de banco válido. '
+                'error' => 'Compra de proveedor eventual sin CUIT válido. '
                     .ComprobanteProveedorAnitaImportExistenciaSupport::etiquetaCompra($compra),
             ];
         }
@@ -1445,14 +1458,21 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $letra = ComprobanteProveedorAnitaImportClaveSupport::letra((string) ($compra['com_letra'] ?? ''));
         $sucursal = (int) ($compra['com_sucursal'] ?? 0);
         $numero = (int) ($compra['com_nro'] ?? 0);
-        if ($this->gastoBancarioYaEnErp($nroInterno, $empresaId, (int) $tipo->id, $letra, $sucursal, $numero, $cuit)) {
-            return ['estado' => 'omitida'];
-        }
+        $nombreFactura = LibroIvaDigitalComprasCuitSupport::nombreBancoSinCuenta((string) ($compra['com_nombre_prov'] ?? ''));
+        $existente = $this->buscarCompraEventualEnErp($nroInterno, $empresaId, (int) $tipo->id, $letra, $sucursal, $numero, $cuit);
+        if ($existente !== null) {
+            $nombreExistente = $this->nombreGuardadoComprobante($existente);
+            if (($nroInterno > 0 && (int) ($existente->anita_nro_interno ?? 0) === $nroInterno)
+                || $this->mismoNombreFactura($nombreFactura, $nombreExistente)) {
+                return ['estado' => 'omitida'];
+            }
 
-        $banco = $this->resolverProveedorPorCuit($cuit);
-        $nombreBanco = LibroIvaDigitalComprasCuitSupport::nombreBancoSinCuenta((string) ($compra['com_nombre_prov'] ?? ''));
-        if ($nombreBanco === '' && $banco !== null) {
-            $nombreBanco = trim((string) $banco->nombre);
+            return [
+                'estado' => 'colision_cuit',
+                'error' => ComprobanteProveedorAnitaImportExistenciaSupport::etiquetaCompra($compra)
+                    .' CUIT '.$cuit.' ya está en el ERP a nombre de '.$nombreExistente
+                    .' (el comprobante se identifica por número y CUIT). No se pisa el nombre.',
+            ];
         }
 
         $conceptos = [];
@@ -1482,8 +1502,8 @@ class ComprobanteProveedorImportarDesdeAnitaService
         return [
             'estado' => 'ok',
             'empresa_id' => $empresaId,
-            'proveedor_id' => $banco ? (int) $banco->id : null,
-            'nombre_banco' => $nombreBanco,
+            'proveedor_id' => null,
+            'nombre_banco' => $nombreFactura,
             'cuit' => $cuit,
             'tipo' => $tipo,
             'letra' => $letra,
@@ -1507,7 +1527,8 @@ class ComprobanteProveedorImportarDesdeAnitaService
                 'total' => $total,
                 'empresa_id' => $empresaId,
                 'cuit' => $cuit,
-                'banco' => $nombreBanco,
+                'banco' => $nombreFactura,
+                'vinculo' => $nombreFactura,
             ],
         ];
     }
@@ -1519,14 +1540,13 @@ class ComprobanteProveedorImportarDesdeAnitaService
     {
         /** @var Tipotransaccion_Compra $tipo */
         $tipo = $item['tipo'];
-        $proveedorId = (int) ($item['proveedor_id'] ?? 0);
         $datosCp = [
             'empresa_id' => $item['empresa_id'],
-            'proveedor_id' => $proveedorId > 0 ? $proveedorId : null,
-            'proveedor_nombre_eventual' => $proveedorId > 0 ? null : ($item['nombre_banco'] !== '' ? $item['nombre_banco'] : null),
-            'proveedor_documento_eventual' => $proveedorId > 0 ? null : $item['cuit'],
+            'proveedor_id' => null,
+            'proveedor_nombre_eventual' => $item['nombre_banco'] !== '' ? $item['nombre_banco'] : null,
+            'proveedor_documento_eventual' => $item['cuit'],
             'identificacion_proveedor_cuit' => $item['cuit'],
-            'proveedor_condicioniva_id_eventual' => $proveedorId > 0 ? null : 1,
+            'proveedor_condicioniva_id_eventual' => 1,
             'tipotransaccion_compra_id' => $tipo->id,
             'condicionpago_id' => $item['condicionpago_id'],
             'letra' => $item['letra'],
@@ -1582,11 +1602,11 @@ class ComprobanteProveedorImportarDesdeAnitaService
             'fecha' => $item['fecha'],
             'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
             'usuario_id' => $usuarioId,
-            'observacion' => 'Importado desde Anita (ICO/IDO gasto bancario, CUIT '.$item['cuit'].')',
+            'observacion' => 'Importado desde Anita ('.$item['nombre_banco'].', CUIT '.$item['cuit'].')',
         ]);
     }
 
-    private function gastoBancarioYaEnErp(
+    private function buscarCompraEventualEnErp(
         int $nroInterno,
         int $empresaId,
         int $tipoId,
@@ -1594,18 +1614,31 @@ class ComprobanteProveedorImportarDesdeAnitaService
         int $sucursal,
         int $numero,
         string $cuit,
-    ): bool {
-        if ($nroInterno > 0 && Comprobante_Proveedor::query()
-            ->where('anita_nro_interno', $nroInterno)
-            ->where(function ($q): void {
-                $q->whereNull('estado')
-                    ->orWhere('estado', '!=', ComprobanteProveedorEstados::ANULADO);
-            })
-            ->exists()) {
-            return true;
+    ): ?Comprobante_Proveedor {
+        if ($nroInterno > 0) {
+            $porInterno = Comprobante_Proveedor::query()
+                ->with('proveedores:id,nombre')
+                ->where('anita_nro_interno', $nroInterno)
+                ->where(function ($q): void {
+                    $q->whereNull('estado')
+                        ->orWhere('estado', '!=', ComprobanteProveedorEstados::ANULADO);
+                })
+                ->first();
+            if ($porInterno !== null) {
+                return $porInterno;
+            }
         }
 
-        if (Comprobante_Proveedor::query()
+        if ($tipoId <= 0) {
+            return null;
+        }
+
+        $cuitFormateado = strlen($cuit) === 11
+            ? substr($cuit, 0, 2).'-'.substr($cuit, 2, 8).'-'.substr($cuit, 10, 1)
+            : $cuit;
+
+        return Comprobante_Proveedor::query()
+            ->with('proveedores:id,nombre')
             ->where('empresa_id', $empresaId)
             ->where('tipotransaccion_compra_id', $tipoId)
             ->where('letra', $letra)
@@ -1615,37 +1648,53 @@ class ComprobanteProveedorImportarDesdeAnitaService
                 $q->whereNull('estado')
                     ->orWhere('estado', '!=', ComprobanteProveedorEstados::ANULADO);
             })
-            ->exists()) {
+            ->where(function ($q) use ($cuit, $cuitFormateado): void {
+                $q->where('identificacion_proveedor_cuit', $cuit)
+                    ->orWhere('identificacion_proveedor_cuit', $cuitFormateado)
+                    ->orWhere('proveedor_documento_eventual', $cuit)
+                    ->orWhere('proveedor_documento_eventual', $cuitFormateado)
+                    ->orWhereHas('proveedores', function ($p) use ($cuit, $cuitFormateado): void {
+                        $p->where('nroinscripcion', $cuit)
+                            ->orWhere('nroinscripcion', $cuitFormateado);
+                    });
+            })
+            ->first();
+    }
+
+    private function nombreGuardadoComprobante(Comprobante_Proveedor $comprobante): string
+    {
+        $eventual = trim((string) ($comprobante->proveedor_nombre_eventual ?? ''));
+        if ($eventual !== '') {
+            return $eventual;
+        }
+
+        return trim((string) ($comprobante->proveedores?->nombre ?? ''));
+    }
+
+    private function mismoNombreFactura(string $nombreFactura, string $nombreGuardado): bool
+    {
+        $factura = $this->normalizarNombreFactura($nombreFactura);
+        $guardado = $this->normalizarNombreFactura($nombreGuardado);
+        if ($factura === '' || $guardado === '') {
+            return false;
+        }
+        if ($factura === $guardado || str_contains($guardado, $factura) || str_contains($factura, $guardado)) {
             return true;
         }
 
-        $codigoAfip = ComprobanteProveedorUnicidadSupport::codigoAfipDesdeTipoId($tipoId);
+        $token = strtok($factura, ' ') ?: '';
 
-        return ComprobanteProveedorUnicidadSupport::findDuplicadoPorAfip(
-            $empresaId,
-            $codigoAfip,
-            $letra,
-            $sucursal,
-            $numero,
-            $cuit,
-        ) !== null;
+        return strlen($token) >= 5 && str_contains($guardado, $token);
     }
 
-    private function resolverProveedorPorCuit(string $cuitDigitos): ?Proveedor
+    private function normalizarNombreFactura(string $nombre): string
     {
-        $cuitDigitos = LibroIvaDigitalComprasCuitSupport::soloDigitos($cuitDigitos);
-        if (! LibroIvaDigitalComprasCuitSupport::esCuitValido($cuitDigitos)) {
-            return null;
-        }
-        $formateado = substr($cuitDigitos, 0, 2).'-'.substr($cuitDigitos, 2, 8).'-'.substr($cuitDigitos, 10, 1);
+        $texto = mb_strtoupper(trim($nombre));
+        $texto = str_replace(['.', ',', '-', '/', '(', ')'], ' ', $texto);
+        $texto = preg_replace('/\bFC\s*\d+\b/', ' ', $texto) ?? $texto;
+        $texto = preg_replace('/\s+/', ' ', $texto) ?? $texto;
 
-        return Proveedor::query()
-            ->where(function ($q) use ($cuitDigitos, $formateado): void {
-                $q->where('nroinscripcion', $cuitDigitos)
-                    ->orWhere('nroinscripcion', $formateado);
-            })
-            ->orderBy('id')
-            ->first();
+        return trim($texto);
     }
 
     private function esCodigoProveedorGenericoBancario(string $codigo): bool

@@ -175,15 +175,17 @@ class ComprobanteProveedorImportarDesdeAnitaCommand extends Command
             ]);
 
             if ($stats['muestra'] !== []) {
-                $this->line('Muestra CP nuevos (hasta 5):');
+                $this->line('Muestra CP nuevos (hasta 40):');
                 $this->table(
-                    ['Comprobante', 'Emp', 'Fecha', 'Total'],
+                    ['Comprobante', 'Emp', 'Fecha', 'Total', 'CUIT', 'Vínculo'],
                     array_map(static fn (array $r) => [
                         $r['etiqueta'],
                         $r['empresa_id'] ?? '—',
                         $r['fecha'],
                         number_format((float) $r['total'], 2, ',', '.'),
-                    ], array_slice($stats['muestra'], 0, 5))
+                        $r['cuit'] ?? '',
+                        $r['vinculo'] ?? ($r['banco'] ?? ''),
+                    ], array_slice($stats['muestra'], 0, 40))
                 );
             }
 
