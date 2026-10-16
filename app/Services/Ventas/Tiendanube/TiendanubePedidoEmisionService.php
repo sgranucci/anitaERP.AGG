@@ -440,6 +440,8 @@ final class TiendanubePedidoEmisionService
                 'permitir_caea' => false,
                 'origen_tiendanube' => true,
                 'omitir_solicitud_arca_cae' => false,
+                // Un solo asiento: medios al Debe, venta/IVA al Haber (sin puente ni asiento de cobranza).
+                'asiento_medios_pago' => $this->mediosParaAsiento($input['medios_pago'] ?? []),
             ],
         ];
 
@@ -477,6 +479,33 @@ final class TiendanubePedidoEmisionService
         }
 
         throw new InvalidArgumentException('No hay tipo de caja Cobranza (COB). Revisá TIENDANUBE_TIPO_CAJA_ID.');
+    }
+
+    /**
+     * @param  list<array{cuentacaja_id?:int,moneda_id?:int,monto?:float,cotizacion?:float|null}>  $mediosPago
+     * @return list<array{cuentacaja_id:int,monto:float,cotizacion:float}>
+     */
+    private function mediosParaAsiento(array $mediosPago): array
+    {
+        $out = [];
+        foreach ($mediosPago as $medio) {
+            $cuentacajaId = (int) ($medio['cuentacaja_id'] ?? 0);
+            $monto = round((float) ($medio['monto'] ?? 0), 2);
+            if ($cuentacajaId <= 0 || $monto < 0.009) {
+                continue;
+            }
+            $cotizacion = (float) ($medio['cotizacion'] ?? 1.);
+            if ($cotizacion <= 0.) {
+                $cotizacion = 1.;
+            }
+            $out[] = [
+                'cuentacaja_id' => $cuentacajaId,
+                'monto' => $monto,
+                'cotizacion' => $cotizacion,
+            ];
+        }
+
+        return $out;
     }
 
     /**

@@ -25,6 +25,7 @@ use App\Models\Ventas\Venta;
 use App\ApiAnita;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalCuentaVentaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
+use App\Support\Ventas\FacturanteAsientoMedioSupport;
 use App\Support\Ventas\FacturanteLineaIvaSupport;
 use App\Support\Ventas\TipotransaccionOperacionStockSupport;
 use Exception;
@@ -271,10 +272,6 @@ class FacturanteService
 			return ['error' => 'No se pudo leer un item de '.$numeroItem.': '.$e->getMessage()];
 		}
 
-		$cuentaVenta = '411000003';
-		$contrapartida = '114110007';
-		$moneda_id = '1';
-
 		$cae['cae'] = $numeroCae;
 		$cae['fechavencimientocae'] = $fechavencimientocae;
 		$comprobante = $tipoComprobante.' '.$letra.' '.$puntoVenta.'-'.$numero;
@@ -320,7 +317,8 @@ class FacturanteService
 				(string) $fechavencimientocae,
 				$nombreCliente,
 				(string) ($arrayCliente->NroDocumento ?? ''),
-				$direccionCliente
+				$direccionCliente,
+				(string) $mediopago
 			);
 
 			return ['error' => 'Success', 'estado' => 'grabada', 'comprobante' => $comprobante];
@@ -1012,14 +1010,7 @@ class FacturanteService
 
 	private function resolverMedioPago($prefijo)
 	{
-		if ($prefijo == 21 || $prefijo == 27)
-			return '1';
-		if ($prefijo == 23)
-			return '2';
-		if ($prefijo == 26)
-			return '5';
-
-		return '6';
+		return FacturanteAsientoMedioSupport::mediopagoDesdePrefijo((int) $prefijo);
 	}
 
 	private function mapearTipoComprobanteAnita($tipoComprobante)
@@ -1135,7 +1126,8 @@ class FacturanteService
 		string $fechaVencimientoCae,
 		string $nombreCliente,
 		string $documentoCliente,
-		string $direccionCliente
+		string $direccionCliente,
+		?string $mediopago = null
 	): int {
 		$puntoventa = Puntoventa::query()
 			->where('codigo', str_pad((string) $puntoVenta, 5, '0', STR_PAD_LEFT))
@@ -1204,13 +1196,37 @@ class FacturanteService
 		);
 		$dataCAE['codigoempresa'] = $dataCAE['codigoempresa'] ?? ($empresa->codigo ?? 1);
 
+		$mediopagoResuelto = trim((string) ($mediopago ?? ''));
+		if ($mediopagoResuelto === '' || $mediopagoResuelto === '6') {
+			$mediopagoResuelto = FacturanteAsientoMedioSupport::mediopagoDesdePrefijo($puntoVenta);
+		}
+		$mediosAsiento = $mediopagoResuelto !== '6'
+			? FacturanteAsientoMedioSupport::lineasAsientoMedios($mediopagoResuelto, $totalAbs)
+			: [];
+
+		$opcionesEmision = [
+			'deposito_id' => (int) $deposito->id,
+			'omitir_sincronizacion_anita' => true,
+			'omitir_stkmov_anita' => true,
+			'omitir_solicitud_arca_cae' => true,
+			'omitir_numera_anita_fin' => true,
+			'omitir_cuenta_corriente' => true,
+			// Un solo asiento: medio al Debe, venta/IVA al Haber (sin puente ni asiento de cobranza).
+			'forzar_operacion_stock' => $signo < 0
+				? TipotransaccionOperacionStockSupport::ENTRADA
+				: TipotransaccionOperacionStockSupport::SALIDA,
+		];
+		if ($mediosAsiento !== []) {
+			$opcionesEmision['asiento_medios_pago'] = $mediosAsiento;
+		}
+
 		$ret = $this->facturacionService->grabaFacturaERP(
 			$empresa,
 			$tipotransaccion->codigo,
 			$tipotransaccion,
 			$fecha,
 			$clienteGraba,
-			abs((float) ($venta['total'] ?? 0)),
+			$totalAbs,
 			1,
 			1,
 			'Facturante',
@@ -1230,17 +1246,7 @@ class FacturanteService
 			0,
 			null,
 			null,
-			[
-				'deposito_id' => (int) $deposito->id,
-				'omitir_sincronizacion_anita' => true,
-				'omitir_stkmov_anita' => true,
-				'omitir_solicitud_arca_cae' => true,
-				'omitir_numera_anita_fin' => true,
-				'omitir_cuenta_corriente' => true,
-				'forzar_operacion_stock' => $signo < 0
-					? TipotransaccionOperacionStockSupport::ENTRADA
-					: TipotransaccionOperacionStockSupport::SALIDA,
-			]
+			$opcionesEmision
 		);
 
 		if (! is_array($ret) || trim((string) ($ret['error'] ?? '')) !== '') {
@@ -1401,7 +1407,8 @@ class FacturanteService
 			$fechaCae,
 			trim((string) ($fila->ven_nombre_cliente ?? '')),
 			trim((string) ($fila->ven_cuit_cli ?? '')),
-			trim((string) ($fila->ven_direccion_cli ?? ''))
+			trim((string) ($fila->ven_direccion_cli ?? '')),
+			FacturanteAsientoMedioSupport::mediopagoDesdePrefijo($puntoVenta)
 		);
 	}
 
