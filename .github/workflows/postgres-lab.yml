@@ -29,8 +29,10 @@ jobs:
 
     services:
       postgres:
-        # Espejo público de la imagen oficial. Docker Hub corta por timeout en GHA.
-        image: public.ecr.aws/docker/library/postgres:16-bookworm
+        # Service containers de Actions fallan el pull de public.ecr.aws (run 169).
+        # Docker Hub oficial suele estar cacheado en el runner; el espejo ECR
+        # sigue en deploy/infra/postgres-lab/docker-compose.yml (compose local/CI viejo).
+        image: postgres:16-bookworm
         env:
           POSTGRES_DB: anitaerp_pg_lab
           POSTGRES_USER: anitaerp_lab
