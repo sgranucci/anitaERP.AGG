@@ -16,7 +16,7 @@
         table.data th { background: #85C1E9; color: #17202A; font-weight: bold; padding: 6px 5px; border: 1px solid #888; font-size: 11px; }
         table.data td { padding: 5px; border: 1px solid #ccc; font-size: 11px; }
         table.data tr:nth-child(even) { background: #f5f5f5; }
-        .num { text-align: right; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; }
         .tot { font-weight: bold; background: #f5f5f5; }
         .pie { margin-top: 12px; }
         .firma { margin-top: 32px; width: 100%; }

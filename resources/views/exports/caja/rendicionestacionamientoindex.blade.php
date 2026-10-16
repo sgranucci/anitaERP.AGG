@@ -8,7 +8,7 @@
         table { font-family: DejaVu Sans, Arial, sans-serif; border-collapse: collapse; width: 100%; font-size: 9px; }
         th, td { border: 1px solid #666; padding: 4px 6px; text-align: left; }
         th { background: #d4e6f1; }
-        .num { text-align: right; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; }
         h2 { font-size: 14px; margin-bottom: 8px; }
     </style>
 </head>

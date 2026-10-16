@@ -47,7 +47,7 @@
         table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
         table.data thead tr { background-color: #85C1E9; }
         table.data th { font-weight: bold; color: #17202A; }
-        .num { text-align: right; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; }
         .listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 4px; }
         .listado-header td { border: none; vertical-align: middle; }
         .meta { font-size: 8px; color: #444; margin-top: 2px; }

@@ -11,7 +11,7 @@
         th, td { border: 1px solid #444; padding: 3px 4px; vertical-align: top; }
         th { background: #e8e8e8; font-weight: bold; text-align: left; }
         .cabecera .lbl { background: #f0f0f0; font-weight: bold; width: 14%; }
-        .num { text-align: right; white-space: nowrap; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; white-space: nowrap; }
         .dif-neg { color: #a00; font-weight: bold; }
         .dif-cero { color: #060; }
         .grupo { background: #d5e8f5; font-weight: bold; }

@@ -839,3 +839,13 @@ body.modo-consulta .navbar-text.text-warning {
     border-radius: 0.25rem;
     overflow-x: auto;
 }
+
+/* Importes y cantidades: a la derecha en cualquier listado de pantalla. */
+.table th.num,
+.table td.num,
+.table th.text-right,
+.table td.text-right,
+table.data th.num,
+table.data td.num {
+    text-align: right !important;
+}

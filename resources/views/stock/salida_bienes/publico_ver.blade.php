@@ -11,7 +11,7 @@
         table { width:100%; border-collapse:collapse; font-size:13px; }
         th, td { border:1px solid #ddd; padding:6px; text-align:left; }
         th { background:#85C1E9; color:#17202A; }
-        .num { text-align:right; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align:right; }
     </style>
 </head>
 <body>

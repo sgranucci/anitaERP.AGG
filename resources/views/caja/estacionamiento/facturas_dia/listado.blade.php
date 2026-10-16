@@ -29,7 +29,7 @@
         .listado-header { width: 100%; margin-bottom: 10px; border-bottom: 2px solid #333; padding-bottom: 6px; }
         .listado-header td { vertical-align: middle; border: none; }
         .meta { font-size: 8px; color: #444; margin-top: 4px; }
-        .num { text-align: right; white-space: nowrap; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; white-space: nowrap; }
     </style>
 </head>
 <body>

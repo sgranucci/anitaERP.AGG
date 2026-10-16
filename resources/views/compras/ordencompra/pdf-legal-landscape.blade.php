@@ -35,7 +35,7 @@
         .cabecera .lbl { background: #f0f0f0; font-weight: bold; font-size: 10px; }
         .cabecera td:not(.lbl) { font-size: 10px; }
         table.cabecera td { padding: 4px 6px; vertical-align: middle; }
-        .num { text-align: right; white-space: nowrap; overflow: hidden; overflow-wrap: normal; word-wrap: normal; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; white-space: nowrap; overflow: hidden; overflow-wrap: normal; word-wrap: normal; }
         .cen { text-align: center; }
         .muted { color: #444; font-size: 8px; }
         .pdf-cabecera { width: 100%; margin-bottom: 6px; page-break-inside: avoid; }

@@ -33,7 +33,7 @@
             font-weight: bold;
             color: #17202A;
         }
-        .num { text-align: right; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; }
         .totales { margin-bottom: 8px; }
         .totales td { border: none; padding: 1px 4px; }
     </style>

@@ -10,7 +10,7 @@
         th, td { border: 1px solid #444; padding: 4px 5px; text-align: left; vertical-align: top; }
         th { background: #e8e8e8; font-weight: bold; }
         tr:nth-child(even) { background: #f5f5f5; }
-        .num { text-align: right; }
+        table.data td.num, table.data th.num, td.num, th.num { text-align: right; }
     </style>
 </head>
 <body>
