@@ -109,6 +109,50 @@ final class LibroIvaDigitalVentasAgrupacionSupport
     }
 
     /**
+     * RG 4597: la nota de crédito se informa con importes positivos.
+     * El tipo de comprobante es lo que la resta del débito fiscal.
+     * Un importe negativo ARCA lo toma como crédito fiscal de compras.
+     *
+     * @param  array{cabecera: array<string, mixed>, alicuotas?: list<array<string, mixed>>}  $registro
+     * @return array{cabecera: array<string, mixed>, alicuotas?: list<array<string, mixed>>}
+     */
+    public static function positivizarSiNotaCredito(array $registro): array
+    {
+        $tipo = (string) ($registro['cabecera']['tipo_comprobante'] ?? '');
+        if (! LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipo)) {
+            return $registro;
+        }
+
+        foreach ([
+            'importe_total',
+            'no_integra_neto',
+            'percepcion_no_categorizados',
+            'operaciones_exentas',
+            'percepciones_nacionales',
+            'percepciones_iibb',
+            'percepciones_municipales',
+            'impuestos_internos',
+            'otros_tributos',
+        ] as $campo) {
+            if (! array_key_exists($campo, $registro['cabecera'])) {
+                continue;
+            }
+            $registro['cabecera'][$campo] = abs(round((float) $registro['cabecera'][$campo], 2));
+        }
+
+        foreach ($registro['alicuotas'] ?? [] as $i => $alicuota) {
+            if (array_key_exists('neto_gravado', $alicuota)) {
+                $registro['alicuotas'][$i]['neto_gravado'] = abs(round((float) $alicuota['neto_gravado'], 2));
+            }
+            if (array_key_exists('impuesto_liquidado', $alicuota)) {
+                $registro['alicuotas'][$i]['impuesto_liquidado'] = abs(round((float) $alicuota['impuesto_liquidado'], 2));
+            }
+        }
+
+        return $registro;
+    }
+
+    /**
      * @param  array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}  $registro
      * @return array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}
      */

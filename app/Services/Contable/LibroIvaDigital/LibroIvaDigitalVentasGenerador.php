@@ -156,6 +156,10 @@ class LibroIvaDigitalVentasGenerador
             $registrosFinales[] = LibroIvaDigitalVentasAgrupacionSupport::consolidarGrupoFacturaB($grupo);
         }
 
+        foreach ($registrosFinales as $i => $registro) {
+            $registrosFinales[$i] = LibroIvaDigitalVentasAgrupacionSupport::positivizarSiNotaCredito($registro);
+        }
+
         usort(
             $registrosFinales,
             static fn (array $a, array $b): int => LibroIvaDigitalVentasAgrupacionSupport::compararRegistrosCabecera($a, $b),
