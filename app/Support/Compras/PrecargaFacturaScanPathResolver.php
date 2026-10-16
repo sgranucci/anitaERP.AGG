@@ -45,7 +45,7 @@ class PrecargaFacturaScanPathResolver
      * Resuelve la ruta absoluta del PDF escaneado bajo {montaje}/comprobantes
      * o {montaje}/comprobantes-revisar, o null.
      */
-    public function resolve(?string $rutaAlmacenamiento): ?string
+    public function resolve(?string $rutaAlmacenamiento, bool $buscarPorNombre = true): ?string
     {
         $rutaAlmacenamiento = trim((string) $rutaAlmacenamiento);
         if ($rutaAlmacenamiento === '' || str_contains($rutaAlmacenamiento, '..')) {
@@ -63,6 +63,10 @@ class PrecargaFacturaScanPathResolver
                     return $candidate;
                 }
             }
+        }
+
+        if (! $buscarPorNombre) {
+            return null;
         }
 
         $basename = basename($this->normalizeSlashes($rutaAlmacenamiento));

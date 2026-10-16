@@ -3188,12 +3188,16 @@ $(function () {
                     }
                     enriquecerMetaGravadosDesdeFormulas();
                     if ($aviso.length) {
-                        var msgOk = esProrrateo
+                        var msgOk = (res && res.plantilla_modo === 'fino')
+                            ? 'La OC tiene un solo centro: se cargaron los conceptos de '
+                                + (res.plantilla_fino || 'ese tipo')
+                                + '. Complete los montos que correspondan y quite el resto.'
+                            : (esProrrateo
                             ? 'Conceptos de la OC (unión de centros). Complete los montos que correspondan y quite el resto.'
                             : (reemplazar && habiaConceptos
                                 ? 'Se cargaron los conceptos del tipo elegido.'
                                     + (movidos ? ' ' + movidos + ' monto(s) pasaron al concepto equivalente del tipo.' : '')
-                                : 'Conceptos del tipo de comprobante. Complete los montos.');
+                                : 'Conceptos del tipo de comprobante. Complete los montos.'));
                         var html = '<i class="fa fa-check-circle"></i> ' + msgOk
                             + (agregados ? ' (' + agregados + ')' : '');
                         if (sobrantes.length) {
@@ -3229,7 +3233,12 @@ $(function () {
             10
         ) || 0;
         var id = cc || fromCampo;
-        return id > 0 ? { centrocosto_id: id } : {};
+        var extra = id > 0 ? { centrocosto_id: id } : {};
+        var numeroOc = numeroOcComprobante();
+        if (numeroOc) {
+            extra.numero_oc = numeroOc;
+        }
+        return extra;
     };
 
     function hayConceptosCargados() {

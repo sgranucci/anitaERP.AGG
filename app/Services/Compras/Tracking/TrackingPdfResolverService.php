@@ -124,7 +124,7 @@ class TrackingPdfResolverService
             ->first(fn ($a) => trim((string) $a->ruta_externa) !== '');
 
         if ($archivo !== null) {
-            $ruta = $this->archivoPath->absolutePathDesdeStorageReference($archivo->ruta_externa);
+            $ruta = $this->archivoPath->absolutePathDesdeStorageReference((string) $archivo->ruta_externa, false);
             if ($ruta !== null) {
                 return TrackingPdfReferencia::adjunto($ruta, (int) $archivo->id);
             }
@@ -132,13 +132,13 @@ class TrackingPdfResolverService
 
         $rutaPrecarga = $comprobante->precarga_comprobante_proveedores?->rutaalmacenamiento;
         if (trim((string) $rutaPrecarga) !== '') {
-            $ruta = $this->scanPath->resolve($rutaPrecarga);
+            $ruta = $this->scanPath->resolve($rutaPrecarga, false);
             if ($ruta !== null) {
                 return TrackingPdfReferencia::precarga($ruta);
             }
         }
 
-        $ruta = $this->archivoPath->absolutePathDesdeComprobante($comprobante);
+        $ruta = $this->archivoPath->absolutePathDesdeComprobante($comprobante, false);
 
         return $ruta !== null ? TrackingPdfReferencia::convencion($ruta) : null;
     }

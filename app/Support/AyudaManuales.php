@@ -175,6 +175,13 @@ class AyudaManuales
 
         if (EntornoEmpresaSupport::esAgg()) {
             $manuales[] = [
+                'modulo' => 'Contable — Cuentas y centros de costo (BIYEMAS)',
+                'bajada' => 'Plan de cuentas de BIYEMAS: en qué proceso entra cada cuenta, asiento de ejemplo y uso de los centros de costo en el circuito.',
+                'url' => route('manual_cuentas_procedimiento'),
+                'icono' => 'fa-book',
+                'disponible' => true,
+            ];
+            $manuales[] = [
                 'modulo' => 'Logística — Solicitudes, catálogo y cumplimiento',
                 'bajada' => 'Pedidos de insumos y trabajos, visibilidad, plazos, tope del centro, entrega parcial y vínculo con stock, transferencia o requisición.',
                 'url' => route('manual_logistica'),

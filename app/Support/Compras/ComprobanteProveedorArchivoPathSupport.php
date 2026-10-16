@@ -109,14 +109,14 @@ final class ComprobanteProveedorArchivoPathSupport
         return $this->scanPathResolver->resolve('storage:/comprobantes/'.ltrim($relative, '/'));
     }
 
-    public function absolutePathDesdeComprobante(Comprobante_Proveedor $comprobante): ?string
+    public function absolutePathDesdeComprobante(Comprobante_Proveedor $comprobante, bool $buscarPorNombre = true): ?string
     {
-        return $this->scanPathResolver->resolve($this->storageReferenceDesdeComprobante($comprobante));
+        return $this->scanPathResolver->resolve($this->storageReferenceDesdeComprobante($comprobante), $buscarPorNombre);
     }
 
-    public function absolutePathDesdeStorageReference(?string $rutaAlmacenamiento): ?string
+    public function absolutePathDesdeStorageReference(?string $rutaAlmacenamiento, bool $buscarPorNombre = true): ?string
     {
-        return $this->scanPathResolver->resolve($rutaAlmacenamiento);
+        return $this->scanPathResolver->resolve($rutaAlmacenamiento, $buscarPorNombre);
     }
 
     public function directorioAbsolutoParaComprobante(Comprobante_Proveedor $comprobante): string

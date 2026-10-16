@@ -945,6 +945,15 @@ final class GastronomiaConciliacionDiariaReporteService
                 \App\Models\Ventas\GastronomiaHuecoArcaPendiente::ESTADO_ARCA_INDISPONIBLE,
                 \App\Models\Ventas\GastronomiaHuecoArcaPendiente::ESTADO_RECUPERABLE,
             ])
+            ->whereNotExists(function ($venta) {
+                // FAC B ya grabada (cualquier jornada): no es hueco. El alta nueva tampoco
+                // persiste un número que ya exista en su propio código AFIP.
+                $venta->select(\Illuminate\Support\Facades\DB::raw(1))
+                    ->from('venta as v')
+                    ->whereColumn('v.puntoventa_id', 'gastronomia_hueco_arca_pendiente.puntoventa_id')
+                    ->whereColumn('v.numerocomprobante', 'gastronomia_hueco_arca_pendiente.numero_comprobante')
+                    ->where('v.codigo_afip', 6);
+            })
             ->orderBy('numero_comprobante')
             ->get()
             ->map(static fn ($p) => [

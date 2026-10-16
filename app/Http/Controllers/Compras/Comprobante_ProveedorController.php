@@ -436,7 +436,9 @@ class Comprobante_ProveedorController extends Controller
     public function editar(Request $request, int $id)
     {
         // Listar alcanza para consultar (Control de Gestión, circuito). Actualizar sigue exigiendo su permiso.
-        if (! can('editar-comprobante-proveedor', false) && ! can('listar-comprobante-proveedor', false)) {
+        if (! can('editar-comprobante-proveedor', false)
+            && ! can('listar-comprobante-proveedor', false)
+            && ! can('listar-comprobantes-pdf-lote', false)) {
             can('editar-comprobante-proveedor');
         }
 
@@ -1052,7 +1054,8 @@ class Comprobante_ProveedorController extends Controller
             && ! can('listar-cuentacorriente-proveedor', false)
             && ! can('listar-legajo-compra', false)
             && ! can('listar-seguimiento-legajo-compra', false)
-            && ! can('listar-ordencompra', false)) {
+            && ! can('listar-ordencompra', false)
+            && ! can('listar-comprobantes-pdf-lote', false)) {
             abort(403);
         }
 

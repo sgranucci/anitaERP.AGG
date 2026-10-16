@@ -22,6 +22,7 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosTipoImputadoSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use DB;
@@ -261,6 +262,7 @@ class Tipotransaccion_CompraController extends Controller
         $centrocostoId = (int) ($request->input('centrocosto_id') ?: 0) ?: null;
 
         $data = $this->repository->listarParaConsulta($consulta !== '' ? $consulta : null, $centrocostoId);
+        $data = $this->sinTiposProrrateadosSiOcSimple($data, $request);
         $puedeAbrirAbm = can('editar-tipo-transaccion-compra', false) || can('listar-tipo-transaccion-compra', false);
 
         $output = ['data' => ''];
@@ -307,6 +309,11 @@ class Tipotransaccion_CompraController extends Controller
             return response()->json(['id' => null]);
         }
 
+        $motivo = $this->motivoProrrateoContraOcDelRequest((string) $tipo->abreviatura, $request);
+        if ($motivo !== null) {
+            return response()->json(['id' => null, 'mensaje' => $motivo]);
+        }
+
         return response()->json([
             'id' => (int) $tipo->id,
             'abreviatura' => (string) $tipo->abreviatura,
@@ -334,6 +341,10 @@ class Tipotransaccion_CompraController extends Controller
         $tipo = Tipotransaccion_Compra::query()->find($id);
         $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
         $esProrrateo = \App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado($abrev);
+        $plantilla = ($esProrrateo && $numeroOc !== null && $tipo)
+            ? app(\App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport::class)
+                ->plantillaParaTipoProrrateado($tipo, $numeroOc)
+            : ['modo' => '', 'fino' => ''];
 
         $conceptos = $lista->map(function ($c) {
                 $formula = (string) ($c->formula ?? '');
@@ -391,11 +402,48 @@ class Tipotransaccion_CompraController extends Controller
         return response()->json([
             'ok' => true,
             'prorrateado' => $esProrrateo,
-            'prorrateo_multi_cc' => $esProrrateo && $numeroOc !== null,
+            'prorrateo_multi_cc' => ($plantilla['modo'] ?? '') === 'union',
+            'plantilla_modo' => (string) ($plantilla['modo'] ?? ''),
+            'plantilla_fino' => (string) ($plantilla['fino'] ?? ''),
             'numero_oc' => $numeroOc,
             'conceptos' => $conceptos,
             'equivalencias' => (object) $equivalencias,
         ]);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Tipotransaccion_Compra>  $data
+     * @return \Illuminate\Support\Collection<int, Tipotransaccion_Compra>
+     */
+    private function sinTiposProrrateadosSiOcSimple($data, Request $request)
+    {
+        $numeroOc = trim((string) ($request->input('numero_oc') ?: $request->input('numeroordencompra') ?: ''));
+        if ($numeroOc === '') {
+            return $data;
+        }
+        $oc = PrecargaProveedorProrrateoMultiCcSupport::ordencompraDesdeNumero($numeroOc);
+        if (PrecargaProveedorProrrateoMultiCcSupport::ocTieneMultiplesCentrosDestino($oc)) {
+            return $data;
+        }
+
+        return $data->reject(
+            static fn ($tipo): bool => PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado(
+                (string) ($tipo->abreviatura ?? '')
+            )
+        )->values();
+    }
+
+    private function motivoProrrateoContraOcDelRequest(string $abreviatura, Request $request): ?string
+    {
+        $numeroOc = trim((string) ($request->input('numero_oc') ?: $request->input('numeroordencompra') ?: ''));
+        if ($numeroOc === '') {
+            return null;
+        }
+
+        return PrecargaProveedorProrrateoMultiCcSupport::motivoRechazoAsignacionManual(
+            $abreviatura,
+            PrecargaProveedorProrrateoMultiCcSupport::ordencompraDesdeNumero($numeroOc)
+        );
     }
 
     /**

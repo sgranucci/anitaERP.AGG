@@ -25,8 +25,8 @@ return [
     ),
 
     /**
-     * Alta de un producto en la carta (Menu y Categories vacíos → categoría Sin Menú).
-     * placeId va en la query.
+     * Alta o actualización de un producto. Menu vacío y Categories vacío → Sin Menú (preparar).
+     * No preparar manda la categoría NO-PREPARAR. placeId va en la query.
      */
     'sync_menu_pos_url' => env(
         'WAITRY_SYNC_MENU_POS_URL',
@@ -34,8 +34,8 @@ return [
     ),
 
     /**
-     * Baja / inactivación de un producto. placeId va en la query.
-     * El cuerpo no está en la guía pública: se manda Items con active=false.
+     * Suspensión de un producto. placeId va en la query.
+     * Cuerpo: itemId + suspension_info.suspend_until (timestamp Unix, 2040-01-01).
      */
     'sync_items_pos_url' => env(
         'WAITRY_SYNC_ITEMS_POS_URL',

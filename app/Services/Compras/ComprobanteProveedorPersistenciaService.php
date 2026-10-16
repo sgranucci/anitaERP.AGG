@@ -94,6 +94,27 @@ class ComprobanteProveedorPersistenciaService
         return array_values(array_unique(array_merge($this->avisosConceptosTipo, $this->ultimosAvisosControles)));
     }
 
+    private function assertTipoProrrateadoContraOc(Request $request): void
+    {
+        $tipoId = (int) $request->input('tipotransaccion_compra_id', 0);
+        if ($tipoId <= 0) {
+            return;
+        }
+        $abrev = PrecargaProveedorConceptosTipoImputadoSupport::abreviaturaTipo($tipoId);
+        $ocId = (int) $request->input('ordencompra_id', 0);
+        $oc = $ocId > 0 ? Ordencompra::query()->find($ocId) : null;
+        if ($oc === null) {
+            $numero = trim((string) $request->input('numeroordencompra', ''));
+            if ($numero !== '') {
+                $oc = PrecargaProveedorProrrateoMultiCcSupport::ordencompraDesdeNumero($numero);
+            }
+        }
+        $motivo = PrecargaProveedorProrrateoMultiCcSupport::motivoRechazoAsignacionManual($abrev, $oc);
+        if ($motivo !== null) {
+            throw new RuntimeException($motivo);
+        }
+    }
+
     /**
      * Los conceptos tienen que ser del tipo que se graba (FNS con 421, no con 311/503).
      * Los que tienen un único equivalente (misma clase y alícuota) se cambian; si queda
@@ -305,6 +326,7 @@ class ComprobanteProveedorPersistenciaService
     public function crearDesdeRequest(Request $request): Comprobante_Proveedor
     {
         $this->vencimientoEdicionPrevio = null;
+        $this->assertTipoProrrateadoContraOc($request);
         $this->alinearConceptosAlTipo($request);
         $payload = $this->fijarFechaContabilizacion($this->armarPayloadCabecera($request), null);
         $payload['creousuario_id'] = Auth::id();
@@ -434,6 +456,7 @@ class ComprobanteProveedorPersistenciaService
         }
 
         ComprobanteProveedorPagoSupport::assertSinPagosAplicados($id, 'actualizar');
+        $this->assertTipoProrrateadoContraOc($request);
         $this->alinearConceptosAlTipo($request);
 
         $payloadPeriodo = $this->fijarFechaContabilizacion(

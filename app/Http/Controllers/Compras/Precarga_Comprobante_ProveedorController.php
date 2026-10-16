@@ -9,6 +9,8 @@ use App\Repositories\Compras\Precarga_Comprobante_Proveedor_ConceptoRepositoryIn
 use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
+use App\Models\Compras\Tipotransaccion_Compra;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
@@ -408,6 +410,10 @@ class Precarga_Comprobante_ProveedorController extends Controller
      */
     public function guardar(ValidacionPrecarga_Comprobante_Proveedor $request)
     {
+        if ($motivo = $this->motivoTipoProrrateado($request)) {
+            return redirect()->back()->withInput()->with('errores', [$motivo]);
+        }
+
         try {
             DB::transaction(function () use ($request) {
                 $payload = $this->precargaAnitaSync->enriquecerPayloadParaAnita($request->all());
@@ -453,6 +459,18 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
         $empresa_query = $this->empresaRepository->allFiltrado();
         $tipotransaccion_compra_query = $this->tipotransaccion_compraRepository->all('*');
+        $ocPrecarga = PrecargaProveedorProrrateoMultiCcSupport::ordencompraDesdeNumero(
+            (string) ($data->numeroordencompra ?? '')
+        );
+        $bloquearTiposProrrateados = $ocPrecarga !== null
+            && ! PrecargaProveedorProrrateoMultiCcSupport::ocTieneMultiplesCentrosDestino($ocPrecarga);
+        if ($bloquearTiposProrrateados) {
+            $tipotransaccion_compra_query = $tipotransaccion_compra_query->reject(
+                static fn ($tipo): bool => PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado(
+                    (string) ($tipo->abreviatura ?? '')
+                )
+            );
+        }
         $concepto_ivacompra_query = $this->concepto_ivacompraRepository->all();
         $moneda_query = $this->monedaRepository->all();
         $puedeActualizar = can('actualizar-precarga-proveedores', false);
@@ -468,8 +486,24 @@ class Precarga_Comprobante_ProveedorController extends Controller
             'soloConsulta',
             'soloLectura',
             'puedeActualizar',
-            'retornoListadoQuery'
+            'retornoListadoQuery',
+            'bloquearTiposProrrateados'
         ));
+    }
+
+    private function motivoTipoProrrateado(Request $request): ?string
+    {
+        $tipoId = (int) $request->input('tipotransaccion_compra_id', 0);
+        if ($tipoId <= 0) {
+            return null;
+        }
+        $abrev = (string) (Tipotransaccion_Compra::query()->whereKey($tipoId)->value('abreviatura') ?? '');
+        $numero = trim((string) $request->input('numeroordencompra', ''));
+        $oc = $numero !== ''
+            ? PrecargaProveedorProrrateoMultiCcSupport::ordencompraDesdeNumero($numero)
+            : null;
+
+        return PrecargaProveedorProrrateoMultiCcSupport::motivoRechazoAsignacionManual($abrev, $oc);
     }
 
     public function marcarCargadaEnAnita(Request $request, int $id)
@@ -538,6 +572,10 @@ class Precarga_Comprobante_ProveedorController extends Controller
             return redirect()
                 ->back()
                 ->with('errores', ['Esta precarga ya está marcada como cargada en Anita y no se puede modificar.']);
+        }
+
+        if ($motivo = $this->motivoTipoProrrateado($request)) {
+            return redirect()->back()->withInput()->with('errores', [$motivo]);
         }
 
         try {

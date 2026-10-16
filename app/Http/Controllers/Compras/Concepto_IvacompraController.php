@@ -309,13 +309,12 @@ class Concepto_IvacompraController extends Controller
         }
 
         if (! ConceptoIvacompraConsultaSupport::tipoTieneConceptosConfigurados($tipoId, $numeroOc)) {
-            $msg = $numeroOc === null
-                ? 'No hay conceptos IVA configurados para este tipo de comprobante. Si es prorrateado multi-CC (FPB/…), indique la OC.'
-                : 'No hay conceptos IVA configurados para este tipo de comprobante.';
-
             return response()->json([
-                'data' => '<tr><td colspan="5" class="text-warning">'.e($msg).'</td></tr>',
+                'data' => $this->htmlFilasConsultaConcepto(
+                    ConceptoIvacompraConsultaSupport::listarCatalogo($consulta)
+                ),
                 'sin_config' => true,
+                'catalogo' => true,
             ]);
         }
 
@@ -364,6 +363,9 @@ class Concepto_IvacompraController extends Controller
         $numeroOc = $numeroOc !== '' ? $numeroOc : null;
 
         $concepto = ConceptoIvacompraConsultaSupport::resolverPorCodigoOId($tipoId, $valor, $numeroOc);
+        if (! $concepto && ! ConceptoIvacompraConsultaSupport::tipoTieneConceptosConfigurados($tipoId, $numeroOc)) {
+            $concepto = ConceptoIvacompraConsultaSupport::resolverCatalogo($valor);
+        }
         if (! $concepto) {
             return response()->json([
                 'ok' => false,

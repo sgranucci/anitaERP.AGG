@@ -248,6 +248,10 @@ final class PrecargaProveedorAbreviaturaTipoSupport
             if ($abrev === '' || self::esTipoGenerico($abrev)) {
                 continue;
             }
+            if (PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado($abrev)
+                && ! PrecargaProveedorProrrateoMultiCcSupport::ocTieneMultiplesCentrosDestino($oc)) {
+                continue;
+            }
             $fam = match (substr($abrev, 0, 1)) {
                 'C' => 'NC',
                 'D' => 'ND',

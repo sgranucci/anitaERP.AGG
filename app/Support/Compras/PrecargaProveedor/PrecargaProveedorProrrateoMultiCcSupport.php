@@ -35,6 +35,70 @@ final class PrecargaProveedorProrrateoMultiCcSupport
     }
 
     /**
+     * Asignación manual de FPB/CPB/…: solo si la OC tiene al menos dos centros destino.
+     */
+    public static function ocTieneMultiplesCentrosDestino(?Ordencompra $oc): bool
+    {
+        if ($oc === null) {
+            return false;
+        }
+
+        return count(self::centrosConPesoDesdeOrdencompraErp($oc)) >= 2;
+    }
+
+    public static function ordencompraDesdeNumero(string $numero): ?Ordencompra
+    {
+        $numero = trim($numero);
+        if ($numero === '') {
+            return null;
+        }
+
+        $sinCeros = ltrim($numero, '0');
+
+        return Ordencompra::query()
+            ->where(function ($q) use ($numero, $sinCeros) {
+                $q->where('numeroordencompra', $numero);
+                if ($sinCeros !== '' && $sinCeros !== $numero) {
+                    $q->orWhere('numeroordencompra', $sinCeros);
+                }
+            })
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /**
+     * Null si el tipo se puede asignar. Mensaje si es prorrateado y la OC no tiene varios centros.
+     */
+    public static function motivoRechazoAsignacionManual(string $abreviatura, ?Ordencompra $oc): ?string
+    {
+        $abrev = strtoupper(trim($abreviatura));
+        if (! self::esTipoProrrateado($abrev)) {
+            return null;
+        }
+        if (self::ocTieneMultiplesCentrosDestino($oc)) {
+            return null;
+        }
+
+        if ($oc === null) {
+            return 'El tipo '.$abrev.' es prorrateado. Solo se asigna si la orden de compra tiene más de un centro de costo.';
+        }
+
+        $numero = trim((string) ($oc->numeroordencompra ?? ''));
+        $codigos = [];
+        foreach (self::centrosConPesoDesdeOrdencompraErp($oc) as $centro) {
+            $codigo = trim((string) ($centro['codigo'] ?? ''));
+            if ($codigo !== '') {
+                $codigos[] = $codigo;
+            }
+        }
+        $detalle = $codigos === []
+            ? 'no tiene centros de costo destino'
+            : 'tiene un solo centro de costo ('.implode(', ', $codigos).')';
+
+        return 'No se puede asignar '.$abrev.' a la OC '.$numero.': '.$detalle.'.';
+    }
+
+    /**
      * @param  'FC'|'ND'|'NC'|string  $tipoComprobante
      * @param  list<array{codigo: string, tipoiva: string, peso: float}>  $centrosConPeso
      * @return array{
@@ -186,6 +250,23 @@ final class PrecargaProveedorProrrateoMultiCcSupport
             return [];
         }
 
+        return $this->plantillaParaTipoProrrateado($tipo, (string) $numeroOc)['ids'];
+    }
+
+    /**
+     * Plantilla de un tipo P contra la OC.
+     * Con ≥2 finos: unión. Con un solo centro: conceptos de ese fino (CGA, CDB, …).
+     *
+     * @return array{ids: list<int>, modo: 'union'|'fino'|'vacio', fino: string}
+     */
+    public function plantillaParaTipoProrrateado(Tipotransaccion_Compra $tipo, string $numeroOc): array
+    {
+        $vacio = ['ids' => [], 'modo' => 'vacio', 'fino' => ''];
+        $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
+        if (! self::esTipoProrrateado($abrev) || trim($numeroOc) === '') {
+            return $vacio;
+        }
+
         $tipoComprobante = match ($abrev[0] ?? '') {
             'F' => 'FC',
             'C' => 'NC',
@@ -193,7 +274,7 @@ final class PrecargaProveedorProrrateoMultiCcSupport
             default => '',
         };
         if ($tipoComprobante === '') {
-            return [];
+            return $vacio;
         }
 
         $tipoItem = strtoupper(substr($abrev, 2, 1) ?: 'B');
@@ -201,12 +282,56 @@ final class PrecargaProveedorProrrateoMultiCcSupport
             $tipoItem = 'B';
         }
 
-        $centrosConPeso = self::centrosConPesoParaOc((string) $numeroOc, []);
+        $centrosConPeso = self::centrosConPesoParaOc($numeroOc, []);
         if ($centrosConPeso === []) {
+            return $vacio;
+        }
+
+        $res = $this->resolverDesdeCentros($tipoComprobante, $tipoItem, $centrosConPeso);
+        if ($res['concepto_ids'] !== []) {
+            return [
+                'ids' => array_values(array_map('intval', $res['concepto_ids'])),
+                'modo' => 'union',
+                'fino' => '',
+            ];
+        }
+
+        $origen = array_values(array_filter(array_map('strval', $res['tipos_origen'] ?? [])));
+        if (count($origen) !== 1) {
+            return $vacio;
+        }
+
+        return [
+            'ids' => $this->idsConceptoDeAbreviatura($origen[0]),
+            'modo' => 'fino',
+            'fino' => $origen[0],
+        ];
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function idsConceptoDeAbreviatura(string $abreviatura): array
+    {
+        $abreviatura = strtoupper(trim($abreviatura));
+        if ($abreviatura === '' || self::esTipoProrrateado($abreviatura)) {
             return [];
         }
 
-        return $this->resolverDesdeCentros($tipoComprobante, $tipoItem, $centrosConPeso)['concepto_ids'];
+        $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($abreviatura);
+        if (! $comprobante) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($comprobante->tipotransaccion_compra_concepto_ivacompras ?? [] as $linea) {
+            $id = (int) ($linea->concepto_ivacompras->id ?? 0);
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+
+        return array_values($ids);
     }
 
     /**

@@ -9,6 +9,8 @@ use App\Support\Contable\AsientoBalanceSupport;
 /**
  * Control I/E: tesorería ERP (caja + cheques) ↔ tesmov Anita;
  * asiento ERP ↔ ctamov Anita. ING/EGR/TRA también exigen caja ↔ asiento.
+ * El cheque propio no tiene tesmov con el nro del I/E: el importe está en tesmov CHP,
+ * imputado al comprobante por auxpag.
  * Los importes en moneda extranjera se comparan en pesos con la cotización de cada línea.
  */
 final class IngresoEgresoImputacionDiariaSupport
@@ -118,6 +120,55 @@ final class IngresoEgresoImputacionDiariaSupport
         }
 
         return $alfanumericas;
+    }
+
+    /**
+     * Tesmov CHP de los cheques propios imputados al comprobante (auxpag axp_tipo_ap = CHP).
+     * Un OPP solo-cheque no graba tesmov con el nro del OPP: el importe queda en tesmov CHP
+     * de la cuenta del cheque. Se cruza por número y por la imputación de la cuenta.
+     *
+     * @param  list<object|array<string, mixed>>  $auxpag
+     * @param  list<object|array<string, mixed>>  $tesmovChp
+     * @return list<object|array<string, mixed>>
+     */
+    public static function filasTesmovChpDeComprobante(array $auxpag, array $tesmovChp): array
+    {
+        $buscados = [];
+        foreach ($auxpag as $fila) {
+            $row = is_array($fila) ? $fila : get_object_vars($fila);
+            $tipoAp = strtoupper(substr(trim((string) ($row['axp_tipo_ap'] ?? '')), 0, 3));
+            if ($tipoAp !== 'CHP') {
+                continue;
+            }
+            $nro = (int) ($row['axp_nro'] ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            $cuenta = self::imputacionNumericaCuenta(self::normalizarCuentaTesmov((string) ($row['axp_banco'] ?? '')));
+            $buscados[$nro.'|'.$cuenta] = true;
+        }
+        if ($buscados === []) {
+            return [];
+        }
+
+        $out = [];
+        $vistos = [];
+        foreach ($tesmovChp as $fila) {
+            $row = is_array($fila) ? $fila : get_object_vars($fila);
+            $nro = (int) ($row['tesv_nro'] ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            $cuenta = self::imputacionNumericaCuenta(self::cuentaDeFilaTesmov($fila));
+            $key = $nro.'|'.$cuenta;
+            if (! isset($buscados[$key]) || isset($vistos[$key])) {
+                continue;
+            }
+            $vistos[$key] = true;
+            $out[] = $fila;
+        }
+
+        return $out;
     }
 
     public static function normalizarCuentaTesmov(string $cuenta): string

@@ -9,6 +9,7 @@ use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\Gastronomia\GastronomiaNumeracionHuecosSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaVentasSoloErpSupport;
+use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 
@@ -201,7 +202,8 @@ final class GastronomiaAuditoriaHuecosNumeracionService
     }
 
     /**
-     * Huecos ERP por jornada sin consultar Anita (rápido para barridos mensuales).
+     * Huecos ERP de una fecha de comprobante, por punto de venta y código AFIP.
+     * La jornada no parte la serie: un número existente en otra jornada no es hueco.
      *
      * @return list<array<string, mixed>>
      */
@@ -218,44 +220,39 @@ final class GastronomiaAuditoriaHuecosNumeracionService
 
         $huecos = [];
         foreach ($query->get() as $puntoventa) {
-            $ventas = Venta::query()
-                ->select([
-                    'venta.id',
-                    'venta.numerocomprobante',
-                    'venta.codigo',
-                    'venta.tipotransaccion_id',
-                ])
+            $emitidos = Venta::query()
+                ->select(['venta.codigo_afip', 'venta.codigo'])
                 ->where('puntoventa_id', (int) $puntoventa->id)
-                ->whereDate('fechajornada', $fechaJornada)
+                ->whereDate('fecha', $fechaJornada)
+                ->where('codigo_afip', '>', 0)
                 ->whereHas('gastronomiaEmision')
-                ->orderBy('venta.codigo')
                 ->get();
 
-            if ($ventas->isEmpty()) {
+            if ($emitidos->isEmpty()) {
                 continue;
             }
 
-            foreach ($ventas->groupBy(fn (Venta $venta): int => (int) $venta->tipotransaccion_id) as $tipoId => $ventasTipo) {
-                $numerosCircuito = GastronomiaNumeracionHuecosSupport::normalizarNumeros(
-                    $ventasTipo->pluck('numerocomprobante'),
+            $tipos = [];
+            foreach ($emitidos as $venta) {
+                $codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipDesdeVentaGrabada(
+                    (int) $venta->codigo_afip,
+                    (string) $venta->codigo,
                 );
-                if (count($numerosCircuito) < 2) {
-                    continue;
+                if ($codigoAfip > 0) {
+                    $tipos[$codigoAfip] = $codigoAfip;
                 }
+            }
 
-                $numerosCompartidos = Venta::query()
-                    ->where('puntoventa_id', (int) $puntoventa->id)
-                    ->where('tipotransaccion_id', (int) $tipoId)
-                    ->whereBetween('numerocomprobante', [min($numerosCircuito), max($numerosCircuito)])
-                    ->pluck('numerocomprobante');
-
-                foreach (GastronomiaNumeracionHuecosSupport::detectarHuecosSecuenciaCompartida(
-                    $numerosCircuito,
-                    $numerosCompartidos,
+            foreach ($tipos as $codigoAfip) {
+                foreach (GastronomiaNumeracionHuecosSupport::huecosSeriePorFechaComprobante(
+                    (int) $puntoventa->id,
+                    (int) $codigoAfip,
+                    $fechaJornada,
                 ) as $row) {
                     $row['pv_codigo'] = (string) $puntoventa->codigo;
                     $row['empresa_id'] = $empresaId;
-                    $row['tipotransaccion_id'] = (int) $tipoId;
+                    $row['codigo_afip'] = (int) $codigoAfip;
+                    $row['fecha'] = $fechaJornada;
                     $huecos[] = $row;
                 }
             }
@@ -272,6 +269,7 @@ final class GastronomiaAuditoriaHuecosNumeracionService
         return implode('|', [
             (string) ($row['empresa_id'] ?? ''),
             (string) ($row['pv_codigo'] ?? ''),
+            (string) ($row['codigo_afip'] ?? ''),
             (string) ($row['fecha_jornada'] ?? ''),
             (string) ($row['desde'] ?? ''),
             (string) ($row['hasta'] ?? ''),

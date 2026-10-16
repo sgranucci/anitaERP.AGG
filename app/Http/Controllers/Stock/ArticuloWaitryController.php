@@ -26,11 +26,7 @@ class ArticuloWaitryController extends Controller
             return $articulo;
         }
 
-        ArticuloWaitrySupport::guardarMarcas(
-            $id,
-            $request->boolean('waitry_dispara_comanda'),
-            $request->boolean('waitry_va_cocina')
-        );
+        ArticuloWaitrySupport::guardarMarcas($id, $request->boolean('waitry_preparar'));
 
         $articulo->refresh();
 
@@ -60,7 +56,7 @@ class ArticuloWaitryController extends Controller
             return $articulo;
         }
 
-        if ($request->exists('waitry_dispara_comanda') || $request->exists('waitry_va_cocina')) {
+        if ($request->exists('waitry_preparar')) {
             ArticuloWaitrySupport::aplicarDesdeRequest($request, $id);
             $articulo->refresh();
         }

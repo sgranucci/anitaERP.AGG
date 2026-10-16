@@ -21,9 +21,10 @@
             </div>
             <div class="modal-body">
                 <p class="mb-2">
-                    El alta crea el producto en la categoría <strong>Sin Menú</strong> de cada sala.
-                    El kiosco no lo ofrece a la venta. Un pedido posterior que use el SKU integra igual.
-                    La foto y la categoría pública se cargan después en Waitry.
+                    <strong>Preparar</strong> deja el producto en <strong>Sin Menú</strong>.
+                    <strong>No preparar</strong> lo manda a la categoría No preparar, que Waitry excluye del filtro de cocina.
+                    Un envío con el mismo SKU actualiza el producto. La foto y la categoría pública se cargan después en Waitry.
+                    Cómo se ve eso en el KDS todavía no está confirmado.
                 </p>
                 <p class="text-muted small mb-3" id="articulo-waitry-sku-guardado">
                     Se envía el SKU guardado{{ $waitryPanel['sku'] !== '' ? ': '.$waitryPanel['sku'] : '' }}.
@@ -31,15 +32,10 @@
                 <div class="form-row mb-3">
                     <div class="col-sm-6">
                         <div class="custom-control custom-checkbox">
-                            <input type="checkbox" class="custom-control-input" id="articulo-waitry-dispara-comanda" {{ $waitryPanel['marcas']['dispara_comanda'] ? 'checked' : '' }}>
-                            <label class="custom-control-label" for="articulo-waitry-dispara-comanda">Dispara comanda</label>
+                            <input type="checkbox" class="custom-control-input" id="articulo-waitry-preparar" {{ $waitryPanel['marcas']['preparar'] ? 'checked' : '' }}>
+                            <label class="custom-control-label" for="articulo-waitry-preparar">Preparar</label>
                         </div>
-                    </div>
-                    <div class="col-sm-6">
-                        <div class="custom-control custom-checkbox">
-                            <input type="checkbox" class="custom-control-input" id="articulo-waitry-va-cocina" {{ $waitryPanel['marcas']['va_cocina'] ? 'checked' : '' }}>
-                            <label class="custom-control-label" for="articulo-waitry-va-cocina">Va a cocina</label>
-                        </div>
+                        <small class="text-muted">Sin tilde, el alta va a la categoría No preparar.</small>
                     </div>
                 </div>
                 <div id="articulo-waitry-aviso" class="alert alert-info py-2 {{ $waitryPanel['puede_enviar'] ? 'd-none' : '' }}">
@@ -76,7 +72,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cerrar</button>
                 <button type="button" class="btn btn-outline-primary" id="btn-articulo-waitry-marcas" {{ $waitryPanel['puede_enviar'] ? '' : 'disabled' }}>Guardar marcas</button>
-                <button type="button" class="btn btn-warning" id="btn-articulo-waitry-baja" {{ $waitryPanel['puede_enviar'] ? '' : 'disabled' }}>Inactivar en Waitry</button>
+                <button type="button" class="btn btn-warning" id="btn-articulo-waitry-baja" {{ $waitryPanel['puede_enviar'] ? '' : 'disabled' }}>Suspender en Waitry</button>
                 <button type="button" class="btn btn-primary" id="btn-articulo-waitry-alta" {{ $waitryPanel['puede_enviar'] ? '' : 'disabled' }}>Dar de alta en Waitry</button>
             </div>
         </div>

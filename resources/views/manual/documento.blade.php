@@ -37,8 +37,12 @@
                 @endif
             @endforeach
             <button type="button" id="mc-theme-toggle" class="mc-btn" title="Cambiar tema">Tema</button>
-            <a href="{{ route($rutaPdf) }}" class="mc-btn" target="_blank" rel="noopener">PDF</a>
-            <a href="{{ route($rutaWord) }}" class="mc-btn" target="_blank" rel="noopener">Word</a>
+            @if (!empty($rutaPdf))
+                <a href="{{ route($rutaPdf) }}" class="mc-btn" target="_blank" rel="noopener">PDF</a>
+            @endif
+            @if (!empty($rutaWord))
+                <a href="{{ route($rutaWord) }}" class="mc-btn" target="_blank" rel="noopener">Word</a>
+            @endif
         </header>
 
         <main class="mc-content">

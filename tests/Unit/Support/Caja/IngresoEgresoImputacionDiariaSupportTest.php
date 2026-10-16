@@ -334,4 +334,23 @@ class IngresoEgresoImputacionDiariaSupportTest extends TestCase
         $this->assertContains('Asiento desbalanceado', $eval['alertas']);
         $this->assertContains('Asiento ≠ ctamov', $eval['alertas']);
     }
+
+    public function test_opp_solo_cheque_toma_el_tesmov_chp_imputado(): void
+    {
+        $auxpag = [
+            (object) ['axp_tipo_ap' => 'CHP', 'axp_nro' => 70399670, 'axp_banco' => '00000226'],
+            (object) ['axp_tipo_ap' => 'CHP', 'axp_nro' => 70399670, 'axp_banco' => '226'],
+            (object) ['axp_tipo_ap' => 'RGP', 'axp_nro' => 0, 'axp_banco' => '00000001'],
+        ];
+        $tesmov = [
+            (object) ['tesv_tipo' => 'CHP', 'tesv_nro' => 70399670, 'tesv_cuenta' => '00000226', 'tesv_importe' => 150000000],
+            (object) ['tesv_tipo' => 'CHP', 'tesv_nro' => 10041691, 'tesv_cuenta' => '00003112', 'tesv_importe' => 314642.05],
+        ];
+
+        $filas = IngresoEgresoImputacionDiariaSupport::filasTesmovChpDeComprobante($auxpag, $tesmov);
+
+        $this->assertCount(1, $filas);
+        $this->assertSame(70399670, (int) $filas[0]->tesv_nro);
+        $this->assertSame(150000000.0, (float) $filas[0]->tesv_importe);
+    }
 }

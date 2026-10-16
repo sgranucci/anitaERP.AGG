@@ -7,14 +7,16 @@ namespace App\Support\Ventas\Gastronomia;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\TurnoOperativoGastronomia;
-use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
+use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 
 /**
- * Detección ERP (sin ARCA) de huecos de numeración FAC en la ventana de un turno operativo.
+ * Detección ERP (sin ARCA) de huecos fiscales en las fechas de comprobante de un turno.
+ *
+ * La serie es punto de venta + código AFIP. La jornada no participa: un comprobante
+ * recuperado conserva su fecha original aunque se impute a la jornada del turno.
  */
 final class GastronomiaTurnoHuecosArcaSupport
 {
@@ -24,8 +26,9 @@ final class GastronomiaTurnoHuecosArcaSupport
      *   puntoventa_id: ?int,
      *   puntoventa_codigo: ?string,
      *   fecha_jornada: ?string,
-     *   huecos: list<array{desde:int,hasta:int,faltantes:string,cantidad:int}>,
+     *   huecos: list<array{desde:int,hasta:int,faltantes:string,cantidad:int,codigo_afip?:int,fecha?:string}>,
      *   numeros_faltantes: list<int>,
+     *   faltantes: list<array{numero:int,codigo_afip:int,fecha:string}>,
      *   preview: list<array{numero:int,puntoventa_codigo:string}>
      * }
      */
@@ -40,6 +43,7 @@ final class GastronomiaTurnoHuecosArcaSupport
             'fecha_jornada' => null,
             'huecos' => [],
             'numeros_faltantes' => [],
+            'faltantes' => [],
             'preview' => [],
         ];
 
@@ -74,49 +78,44 @@ final class GastronomiaTurnoHuecosArcaSupport
         $empresaId = (int) $turno->empresa_id;
         $pvCodigo = str_pad(trim((string) ($pvCae->codigo ?? '')), 5, '0', STR_PAD_LEFT);
 
-        $numerosCircuito = self::numerosTicketsEnVentana(
-            $pc,
-            $empresaId,
-            $fechaJornada,
-            $desde,
-            $hastaInclusive,
-            $pvId,
-        );
-
-        if (count($numerosCircuito) < 2) {
-            return array_merge($vacio, [
-                'puntoventa_id' => $pvId,
-                'puntoventa_codigo' => $pvCodigo,
-                'fecha_jornada' => $fechaJornada,
-            ]);
-        }
-
-        $numerosCompartidos = self::numerosTicketsDiaEmpresaPv($empresaId, $fechaJornada, $pvId);
-        $huecos = GastronomiaNumeracionHuecosSupport::detectarHuecosSecuenciaCompartida(
-            $numerosCircuito,
-            $numerosCompartidos,
-        );
-
+        $series = self::fechasEmitidasEnTurno($pc, $empresaId, $pvId, $desde, $hastaInclusive);
+        $huecos = [];
         $faltantes = [];
-        foreach ($huecos as $hueco) {
-            $csv = trim((string) ($hueco['faltantes'] ?? ''));
-            if ($csv === '') {
-                continue;
-            }
-            foreach (explode(',', $csv) as $n) {
-                $n = (int) trim($n);
-                if ($n > 0) {
-                    $faltantes[$n] = $n;
+        foreach ($series as $codigoAfip => $fechas) {
+            foreach ($fechas as $fechaComprobante) {
+                foreach (GastronomiaNumeracionHuecosSupport::huecosSeriePorFechaComprobante($pvId, (int) $codigoAfip, $fechaComprobante) as $row) {
+                    $row['codigo_afip'] = (int) $codigoAfip;
+                    $row['fecha'] = $fechaComprobante;
+                    $huecos[] = $row;
+                    $csv = trim((string) ($row['faltantes'] ?? ''));
+                    if ($csv === '') {
+                        continue;
+                    }
+                    foreach (explode(',', $csv) as $n) {
+                        $n = (int) trim($n);
+                        if ($n <= 0) {
+                            continue;
+                        }
+                        $faltantes[$codigoAfip.'|'.$n] = [
+                            'numero' => $n,
+                            'codigo_afip' => (int) $codigoAfip,
+                            'fecha' => $fechaComprobante,
+                        ];
+                    }
                 }
             }
         }
-        $faltantes = array_values($faltantes);
-        sort($faltantes, SORT_NUMERIC);
 
+        $faltantes = array_values($faltantes);
+        usort($faltantes, static function (array $a, array $b): int {
+            return [$a['codigo_afip'], $a['numero']] <=> [$b['codigo_afip'], $b['numero']];
+        });
+
+        $numeros = array_map(static fn (array $f): int => (int) $f['numero'], $faltantes);
         $preview = [];
-        foreach (array_slice($faltantes, 0, 12) as $numero) {
+        foreach (array_slice($faltantes, 0, 12) as $faltante) {
             $preview[] = [
-                'numero' => $numero,
+                'numero' => (int) $faltante['numero'],
                 'puntoventa_codigo' => $pvCodigo,
             ];
         }
@@ -127,7 +126,8 @@ final class GastronomiaTurnoHuecosArcaSupport
             'puntoventa_codigo' => $pvCodigo,
             'fecha_jornada' => $fechaJornada,
             'huecos' => $huecos,
-            'numeros_faltantes' => $faltantes,
+            'numeros_faltantes' => $numeros,
+            'faltantes' => $faltantes,
             'preview' => $preview,
         ];
     }
@@ -149,54 +149,45 @@ final class GastronomiaTurnoHuecosArcaSupport
     }
 
     /**
-     * @return list<int>
+     * Fechas de comprobante emitidas por el turno, agrupadas por código AFIP.
+     * La ventana es la del turno (habilitación a cierre), no la jornada.
+     *
+     * @return array<int, list<string>>
      */
-    public static function numerosTicketsEnVentana(
+    private static function fechasEmitidasEnTurno(
         string $identificadorPc,
         int $empresaId,
-        string $fechaJornada,
+        int $puntoventaId,
         Carbon $desdeHabilitacion,
         ?Carbon $hastaInclusive,
-        int $puntoventaId,
     ): array {
-        $rows = self::queryEmisionesTickets(
-            $identificadorPc,
-            $empresaId,
-            $fechaJornada,
-            $desdeHabilitacion,
-            $hastaInclusive,
-        )
+        $filas = self::queryEmisionesTickets($identificadorPc, $empresaId, $desdeHabilitacion, $hastaInclusive)
             ->where('venta.puntoventa_id', $puntoventaId)
-            ->pluck('venta.numerocomprobante');
+            ->get();
 
-        return GastronomiaNumeracionHuecosSupport::normalizarNumeros($rows);
-    }
+        $series = [];
+        foreach ($filas as $fila) {
+            $codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipDesdeVentaGrabada(
+                (int) $fila->codigo_afip,
+                (string) $fila->codigo,
+            );
+            $fecha = $fila->fecha instanceof \DateTimeInterface
+                ? $fila->fecha->format('Y-m-d')
+                : substr((string) $fila->fecha, 0, 10);
+            if ($codigoAfip <= 0 || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+                continue;
+            }
+            $series[$codigoAfip][$fecha] = $fecha;
+        }
 
-    /**
-     * Números FAC del día en el PV (todos los circuitos / PCs) para secuencia compartida.
-     *
-     * @return list<int>
-     */
-    public static function numerosTicketsDiaEmpresaPv(int $empresaId, string $fechaJornada, int $puntoventaId): array
-    {
-        $rows = Venta::query()
-            ->where('puntoventa_id', $puntoventaId)
-            ->where(function ($fecha) use ($fechaJornada) {
-                $fecha->whereDate('fechajornada', $fechaJornada)
-                    ->orWhere(function ($legacy) use ($fechaJornada) {
-                        $legacy->whereNull('fechajornada')
-                            ->whereDate('fecha', $fechaJornada);
-                    });
-            })
-            ->whereExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('venta_gastronomia_emision as vge')
-                    ->whereColumn('vge.venta_id', 'venta.id')
-                    ->whereNull('vge.venta_factura_origen_id');
-            })
-            ->pluck('numerocomprobante');
+        $salida = [];
+        foreach ($series as $codigoAfip => $fechas) {
+            $lista = array_values($fechas);
+            sort($lista);
+            $salida[(int) $codigoAfip] = $lista;
+        }
 
-        return GastronomiaNumeracionHuecosSupport::normalizarNumeros($rows);
+        return $salida;
     }
 
     /**
@@ -205,7 +196,6 @@ final class GastronomiaTurnoHuecosArcaSupport
     private static function queryEmisionesTickets(
         string $identificadorPc,
         int $empresaId,
-        string $fechaJornada,
         Carbon $desdeHabilitacion,
         ?Carbon $hastaInclusive,
     ): Builder {
@@ -215,14 +205,13 @@ final class GastronomiaTurnoHuecosArcaSupport
             ->where('venta_gastronomia_emision.identificador_pc', $identificadorPc)
             ->whereNull('venta_gastronomia_emision.venta_factura_origen_id')
             ->where('puntoventa.empresa_id', $empresaId)
-            ->where(function ($fecha) use ($fechaJornada) {
-                $fecha->whereDate('venta.fechajornada', $fechaJornada)
-                    ->orWhere(function ($legacy) use ($fechaJornada) {
-                        $legacy->whereNull('venta.fechajornada')
-                            ->whereDate('venta.fecha', $fechaJornada);
-                    });
-            })
+            ->where('venta.codigo_afip', '>', 0)
             ->where('venta.created_at', '>=', $desdeHabilitacion)
-            ->when($hastaInclusive !== null, fn (Builder $q) => $q->where('venta.created_at', '<=', $hastaInclusive));
+            ->when($hastaInclusive !== null, fn (Builder $q) => $q->where('venta.created_at', '<=', $hastaInclusive))
+            ->select([
+                'venta.codigo_afip as codigo_afip',
+                'venta.codigo as codigo',
+                'venta.fecha as fecha',
+            ]);
     }
 }

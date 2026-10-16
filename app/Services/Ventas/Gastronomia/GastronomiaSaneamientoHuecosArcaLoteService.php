@@ -9,6 +9,7 @@ use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
+use App\Support\Ventas\Gastronomia\GastronomiaNumeracionHuecosSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaTurnoHuecosArcaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -21,8 +22,6 @@ use Throwable;
  */
 final class GastronomiaSaneamientoHuecosArcaLoteService
 {
-    private const CBTE_TIPO_FAC_B = 6;
-
     public function __construct(
         private readonly ArcaWsfeFacturaElectronicaService $arcaWsfeService,
         private readonly GastronomiaRecuperarComprobanteArcaService $recuperarService,
@@ -46,7 +45,7 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
     public function diagnosticar(TurnoOperativoGastronomia $turno): array
     {
         $det = GastronomiaTurnoHuecosArcaSupport::detectarParaTurno($turno);
-        $faltantes = $det['numeros_faltantes'];
+        $faltantes = $det['faltantes'] ?? [];
         $pvCodigo = (string) ($det['puntoventa_codigo'] ?? '');
         $pvId = (int) ($det['puntoventa_id'] ?? 0);
         $fechaJornada = (string) ($det['fecha_jornada'] ?? '');
@@ -72,19 +71,29 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
         $arcaIndisponible = false;
         $suma = 0.0;
 
-        foreach ($faltantes as $numero) {
+        foreach ($faltantes as $faltante) {
+            $numero = (int) ($faltante['numero'] ?? 0);
+            $codigoAfip = (int) ($faltante['codigo_afip'] ?? 0);
+            if ($numero <= 0 || $codigoAfip <= 0) {
+                continue;
+            }
+            if ($this->descartarPendienteCubierto($empresaId, $pvId, $numero, $codigoAfip)) {
+                continue;
+            }
             $filaBase = [
                 'numero' => $numero,
+                'codigo_afip' => $codigoAfip,
                 'puntoventa_id' => $pvId,
                 'puntoventa_codigo' => $pvCodigo,
                 'fecha_jornada' => $fechaJornada,
+                'fecha_comprobante' => (string) ($faltante['fecha'] ?? ''),
             ];
 
             try {
                 $res = $this->arcaWsfeService->feCompConsultar(
                     $empresaId,
                     $ptoVta,
-                    self::CBTE_TIPO_FAC_B,
+                    $codigoAfip,
                     $numero,
                 );
                 $rg = $res->ResultGet ?? null;
@@ -282,6 +291,10 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
                 $existente = Venta::query()
                     ->where('puntoventa_id', (int) $r['puntoventa_id'])
                     ->where('numerocomprobante', $numero)
+                    ->when(
+                        (int) ($r['codigo_afip'] ?? 0) > 0,
+                        fn ($q) => $q->where('codigo_afip', (int) $r['codigo_afip']),
+                    )
                     ->first();
 
                 if ($existente !== null) {
@@ -515,6 +528,30 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
         }
 
         return null;
+    }
+
+    private function descartarPendienteCubierto(int $empresaId, int $puntoventaId, int $numero, int $codigoAfip): bool
+    {
+        if (! GastronomiaNumeracionHuecosSupport::numeroExisteEnSerie($puntoventaId, $codigoAfip, $numero)) {
+            return false;
+        }
+
+        GastronomiaHuecoArcaPendiente::query()
+            ->where('empresa_id', $empresaId)
+            ->where('puntoventa_id', $puntoventaId)
+            ->where('numero_comprobante', $numero)
+            ->whereIn('estado', [
+                GastronomiaHuecoArcaPendiente::ESTADO_PENDIENTE,
+                GastronomiaHuecoArcaPendiente::ESTADO_ARCA_INDISPONIBLE,
+                GastronomiaHuecoArcaPendiente::ESTADO_RECUPERABLE,
+            ])
+            ->update([
+                'estado' => GastronomiaHuecoArcaPendiente::ESTADO_DESCARTADO,
+                'ultimo_error' => 'El número ya existe en la serie del punto de venta y el tipo AFIP.',
+                'resuelto_en' => now(),
+            ]);
+
+        return true;
     }
 
     private function persistirPendiente(

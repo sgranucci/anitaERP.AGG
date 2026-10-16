@@ -1481,6 +1481,10 @@ Route::post('contable/cierre-periodo/ejecutar-pendientes', 'Contable\PeriodoCier
 Route::post('contable/cierre-periodo/programado/{id}/ejecutar', 'Contable\PeriodoCierreContableController@ejecutarProgramado')->name('ejecutar_programado_cierre_periodo_contable');
 Route::post('contable/cierre-periodo/programado/{id}/cancelar', 'Contable\PeriodoCierreContableController@cancelarProgramado')->name('cancelar_programado_cierre_periodo_contable');
 
+Route::get('contable/manual-cuentas', 'Contable\ManualCuentasProcedimientoController@index')
+    ->middleware('auth')
+    ->name('manual_cuentas_procedimiento');
+
 Route::get('contable/manual', 'Contable\ManualContableController@index')->name('manual_contable');
 Route::get('contable/manual/descargar-pdf', 'Contable\ManualContableController@descargarPdf')->name('manual_contable_pdf');
 Route::get('contable/manual/descargar-word', 'Contable\ManualContableController@descargarWord')->name('manual_contable_word');
@@ -4078,6 +4082,8 @@ Route::get('compras/comprobante-proveedor-imputacion-ap-reporte', 'Compras\Compr
 Route::get('compras/listar-comprobante-proveedor-imputacion-ap/{formato?}', 'Compras\ComprobanteProveedorImputacionApReporteController@exportar')->name('listar_reporte_imputacion_ap_proveedor');
 Route::get('compras/iva-compras', 'Compras\IvaComprasReporteController@index')->name('iva_compras');
 Route::get('compras/listar-iva-compras/{formato}', 'Compras\IvaComprasReporteController@exportar')->name('listar_iva_compras');
+Route::get('compras/comprobantes-pdf-lote', 'Compras\ComprobantesPdfLoteReporteController@index')->name('comprobantes_pdf_lote');
+Route::get('compras/comprobantes-pdf-lote/zip', 'Compras\ComprobantesPdfLoteReporteController@descargarZip')->name('comprobantes_pdf_lote_zip');
 Route::get('compras/proveedor-control-ganancias-reporte', 'Compras\ProveedorControlGananciasReporteController@index')->name('proveedor_control_ganancias_reporte');
 Route::get('compras/listar-proveedor-control-ganancias-reporte/{formato}', 'Compras\ProveedorControlGananciasReporteController@exportar')->name('listar_proveedor_control_ganancias_reporte');
 Route::get('compras/kpi', 'Compras\KpiComprasController@index')->name('consultar_kpi_compras');

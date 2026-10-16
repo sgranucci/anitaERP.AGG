@@ -400,7 +400,6 @@
         @php
             $waitryMarcasForm = \App\Support\Stock\ArticuloWaitrySupport::marcasDe($producto ?? null);
         @endphp
-        <input type="hidden" name="waitry_dispara_comanda" id="waitry_dispara_comanda" value="{{ old('waitry_dispara_comanda', $waitryMarcasForm['dispara_comanda'] ? '1' : '0') }}">
-        <input type="hidden" name="waitry_va_cocina" id="waitry_va_cocina" value="{{ old('waitry_va_cocina', $waitryMarcasForm['va_cocina'] ? '1' : '0') }}">
+        <input type="hidden" name="waitry_preparar" id="waitry_preparar" value="{{ old('waitry_preparar', $waitryMarcasForm['preparar'] ? '1' : '0') }}">
     @endif
 </div>

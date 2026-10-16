@@ -38,6 +38,7 @@ use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorAbreviaturaTipoSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -2963,6 +2964,13 @@ class OrdencompraLegajoBandejaPaqueteService
         if ($tipoId <= 0) {
             throw ValidationException::withMessages([
                 'tipo' => 'No se pudo resolver el tipo contable «'.$tipo.'».',
+            ]);
+        }
+        $abrevAsignada = (string) (Tipotransaccion_Compra::query()->whereKey($tipoId)->value('abreviatura') ?? $tipo);
+        $motivoProrrateo = PrecargaProveedorProrrateoMultiCcSupport::motivoRechazoAsignacionManual($abrevAsignada, $oc);
+        if ($motivoProrrateo !== null) {
+            throw ValidationException::withMessages([
+                'tipo' => $motivoProrrateo,
             ]);
         }
         $precarga->tipotransaccion_compra_id = $tipoId;

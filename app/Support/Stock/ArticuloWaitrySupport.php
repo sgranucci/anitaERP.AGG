@@ -15,8 +15,7 @@ final class ArticuloWaitrySupport
     {
         return EntornoEmpresaSupport::esAgg()
             && Schema::hasTable('articulo')
-            && Schema::hasColumn('articulo', 'waitry_dispara_comanda')
-            && Schema::hasColumn('articulo', 'waitry_va_cocina');
+            && Schema::hasColumn('articulo', 'waitry_preparar');
     }
 
     public static function puedeOperar(): bool
@@ -31,45 +30,35 @@ final class ArticuloWaitrySupport
 
     public static function aplicarDesdeRequest(Request $request, int $articuloId): void
     {
-        if (! self::uiActiva() || $articuloId <= 0) {
+        if (! self::uiActiva() || $articuloId <= 0 || ! $request->exists('waitry_preparar')) {
             return;
         }
 
-        if (! $request->exists('waitry_dispara_comanda') && ! $request->exists('waitry_va_cocina')) {
-            return;
-        }
-
-        self::guardarMarcas(
-            $articuloId,
-            $request->boolean('waitry_dispara_comanda'),
-            $request->boolean('waitry_va_cocina')
-        );
+        self::guardarMarcas($articuloId, $request->boolean('waitry_preparar'));
     }
 
-    public static function guardarMarcas(int $articuloId, bool $disparaComanda, bool $vaCocina): void
+    public static function guardarMarcas(int $articuloId, bool $preparar): void
     {
         if (! self::uiActiva() || $articuloId <= 0) {
             return;
         }
 
         DB::table('articulo')->where('id', $articuloId)->update([
-            'waitry_dispara_comanda' => $disparaComanda,
-            'waitry_va_cocina' => $vaCocina,
+            'waitry_preparar' => $preparar,
         ]);
     }
 
     /**
-     * @return array{dispara_comanda:bool,va_cocina:bool}
+     * @return array{preparar:bool}
      */
     public static function marcasDe(?Articulo $articulo): array
     {
         if ($articulo === null) {
-            return ['dispara_comanda' => true, 'va_cocina' => true];
+            return ['preparar' => true];
         }
 
         return [
-            'dispara_comanda' => (bool) ($articulo->waitry_dispara_comanda ?? true),
-            'va_cocina' => (bool) ($articulo->waitry_va_cocina ?? true),
+            'preparar' => (bool) ($articulo->waitry_preparar ?? true),
         ];
     }
 }

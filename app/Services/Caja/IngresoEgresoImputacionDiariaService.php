@@ -141,7 +141,7 @@ final class IngresoEgresoImputacionDiariaService
             'notas' => [
                 'Incluye ING / EGR / TRA y OPP/OPA de tesorería (sin CC de proveedor).',
                 'No incluye cobranzas ni las OP de proveedores con facturas/anticipo (esas van al control AP).',
-                'Caja + cheques ERP se cruza con tesmov Anita. El asiento ERP se cruza con ctamov.',
+                'Caja + cheques ERP se cruza con tesmov Anita. El cheque propio se toma del tesmov CHP que auxpag imputa al comprobante (un OPP solo-cheque no tiene tesmov con el nro del OPP). El asiento ERP se cruza con ctamov.',
                 'En ING/EGR/TRA además se exige que caja+cheques cuadre con el total del asiento.',
                 'Dólares y otras monedas se comparan en pesos con la cotización de cada línea (caja, asiento, tesmov y ctamov).',
                 'OPP/OPA de I/E no exigen caja = asiento (el asiento incluye AP/retenciones).',

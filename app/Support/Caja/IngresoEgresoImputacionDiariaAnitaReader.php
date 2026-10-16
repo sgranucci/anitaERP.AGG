@@ -50,32 +50,33 @@ final class IngresoEgresoImputacionDiariaAnitaReader
             $nros = array_map('intval', array_keys($nrosMap));
             if (IngresoEgresoImputacionDiariaSupport::esTransferencia($tipo)) {
                 $this->sumarTesmovTra($out, $empresa, $nros);
-                continue;
-            }
-            foreach (array_chunk($nros, 40) as $lote) {
-                $filas = $this->listar(
-                    IngresoEgresoAnitaTesmovSupport::sistema(),
-                    'tesmov',
-                    $this->camposTesmov('tesv_tipo,tesv_nro,tesv_cuenta'),
-                    ' WHERE tesv_tipo = '.$this->esc($tipo)
-                        .' AND tesv_nro IN ('.implode(',', $lote).')'
-                        .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresa)
-                );
-                $this->precargarMonedasCuenta($filas);
-                foreach ($filas as $fila) {
-                    $nro = (int) ($fila->tesv_nro ?? 0);
-                    $key = self::claveComprobante($empresa, $tipo, $nro);
-                    if (! isset($out[$key])) {
-                        continue;
-                    }
-                    $out[$key]['ars'] = round(
-                        $out[$key]['ars'] + $this->importeTesmovEnPesos($fila),
-                        2
+            } else {
+                foreach (array_chunk($nros, 40) as $lote) {
+                    $filas = $this->listar(
+                        IngresoEgresoAnitaTesmovSupport::sistema(),
+                        'tesmov',
+                        $this->camposTesmov('tesv_tipo,tesv_nro,tesv_cuenta'),
+                        ' WHERE tesv_tipo = '.$this->esc($tipo)
+                            .' AND tesv_nro IN ('.implode(',', $lote).')'
+                            .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresa)
                     );
-                    $out[$key]['lineas']++;
-                    $out[$key]['encontrado'] = true;
+                    $this->precargarMonedasCuenta($filas);
+                    foreach ($filas as $fila) {
+                        $nro = (int) ($fila->tesv_nro ?? 0);
+                        $key = self::claveComprobante($empresa, $tipo, $nro);
+                        if (! isset($out[$key])) {
+                            continue;
+                        }
+                        $out[$key]['ars'] = round(
+                            $out[$key]['ars'] + $this->importeTesmovEnPesos($fila),
+                            2
+                        );
+                        $out[$key]['lineas']++;
+                        $out[$key]['encontrado'] = true;
+                    }
                 }
             }
+            $this->sumarTesmovChp($out, $empresa, $tipo, $nros);
         }
 
         return $out;
@@ -232,6 +233,69 @@ final class IngresoEgresoImputacionDiariaAnitaReader
     public static function claveCheque(string $cuenta, int $nroCheque): string
     {
         return str_pad(ltrim($cuenta, '0') ?: '0', 8, '0', STR_PAD_LEFT).':'.$nroCheque;
+    }
+
+    /**
+     * Suma el tesmov CHP de los cheques propios imputados al comprobante.
+     * Un OPP solo-cheque no tiene tesmov con su propio número.
+     *
+     * @param  array<string, array{ars: float, lineas: int, encontrado: bool}>  $out
+     * @param  list<int>  $nros
+     */
+    private function sumarTesmovChp(array &$out, int $empresa, string $tipo, array $nros): void
+    {
+        foreach (array_chunk($nros, 40) as $lote) {
+            $aux = $this->listar(
+                IngresoEgresoAnitaTesmovSupport::sistema(),
+                'auxpag',
+                'axp_rec,axp_tipo_ap,axp_nro,axp_banco',
+                ' WHERE axp_tipo = '.$this->esc($tipo)
+                    ." AND axp_tipo_ap = 'CHP'"
+                    .' AND axp_rec IN ('.implode(',', $lote).')'
+                    .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaAuxpag($empresa)
+            );
+            $porComp = [];
+            $nrosCh = [];
+            foreach ($aux as $fila) {
+                $nroComp = (int) ($fila->axp_rec ?? 0);
+                $nroCh = (int) ($fila->axp_nro ?? 0);
+                if ($nroComp <= 0 || $nroCh <= 0) {
+                    continue;
+                }
+                $porComp[$nroComp][] = $fila;
+                $nrosCh[$nroCh] = true;
+            }
+            if ($nrosCh === []) {
+                continue;
+            }
+
+            $tes = [];
+            foreach (array_chunk(array_map('intval', array_keys($nrosCh)), 40) as $loteCh) {
+                $tes = array_merge($tes, $this->listar(
+                    IngresoEgresoAnitaTesmovSupport::sistema(),
+                    'tesmov',
+                    $this->camposTesmov('tesv_tipo,tesv_nro,tesv_cuenta'),
+                    " WHERE tesv_tipo = 'CHP' AND tesv_nro IN (".implode(',', $loteCh).')'
+                        .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresa)
+                ));
+            }
+            $this->precargarMonedasCuenta($tes);
+
+            foreach ($porComp as $nroComp => $legs) {
+                $key = self::claveComprobante($empresa, $tipo, (int) $nroComp);
+                if (! isset($out[$key])) {
+                    continue;
+                }
+                foreach (IngresoEgresoImputacionDiariaSupport::filasTesmovChpDeComprobante($legs, $tes) as $fila) {
+                    $out[$key]['ars'] = round(
+                        $out[$key]['ars'] + $this->importeTesmovEnPesos($fila),
+                        2
+                    );
+                    $out[$key]['lineas']++;
+                    $out[$key]['encontrado'] = true;
+                }
+            }
+        }
     }
 
     /**

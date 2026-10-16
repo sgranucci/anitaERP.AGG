@@ -3,36 +3,70 @@
 namespace App\Support\Ventas\Waitry;
 
 /**
- * Cuerpos de alta y baja de un producto Waitry.
- *
- * Alta: Menu y Categories vacíos, solo Items. Waitry lo crea en Sin Menú.
- * Baja: la guía pública solo publica la URL. El cuerpo usa el mismo arreglo
- * Items e identifica el producto por externalId con active=false.
+ * Alta y suspensión de un artículo de catálogo en Waitry.
+ * El alta con Menú y Categorías vacíos cae en Sin Menú.
+ * No preparar manda el ítem en la categoría que Waitry deja fuera del filtro de cocina.
+ * La suspensión usa syncItemsPOSWebhook: suspend_until es timestamp Unix.
  */
 final class WaitryArticuloMenuPayloadSupport
 {
+    /** 2040-01-01 00:00:00 UTC. */
+    public const SUSPENDER_HASTA = 2208988800;
+
+    public const CATEGORIA_NO_PREPARAR_ID = 'NO-PREPARAR';
+
+    public const CATEGORIA_NO_PREPARAR = 'No preparar';
+
     /**
-     * @return array{Menu:array<int, mixed>,Categories:array<int, mixed>,Items:list<array{externalId:string,name:string}>}
+     * @return array{Menu:list<mixed>,Categories:list<array<string,mixed>>,Items:list<array<string,mixed>>}
      */
-    public static function alta(string $sku, string $nombre): array
+    public static function alta(string $sku, string $nombre, bool $preparar = true): array
     {
+        $item = self::item($sku, $nombre);
+        $categorias = [];
+
+        if (! $preparar) {
+            $categorias[] = [
+                'id' => self::CATEGORIA_NO_PREPARAR_ID,
+                'externalId' => self::CATEGORIA_NO_PREPARAR_ID,
+                'name' => self::CATEGORIA_NO_PREPARAR,
+                'title' => self::CATEGORIA_NO_PREPARAR,
+                'entities' => [
+                    ['type' => 'ITEM', 'id' => $item['id']],
+                ],
+            ];
+        }
+
         return [
             'Menu' => [],
-            'Categories' => [],
-            'Items' => [self::item($sku, $nombre)],
+            'Categories' => $categorias,
+            'Items' => [$item],
         ];
     }
 
     /**
-     * @return array{Items:list<array{externalId:string,name:string,active:bool}>}
+     * @return array{itemId:string,suspension_info:array{suspend_until:int}}
      */
-    public static function baja(string $sku, string $nombre): array
+    public static function baja(string $sku): array
     {
-        $item = self::item($sku, $nombre);
-        $item['active'] = false;
-
         return [
-            'Items' => [$item],
+            'itemId' => self::itemId($sku),
+            'suspension_info' => [
+                'suspend_until' => self::SUSPENDER_HASTA,
+            ],
+        ];
+    }
+
+    /**
+     * @return array{itemId:string,suspension_info:array{suspend_until:null}}
+     */
+    public static function reactivar(string $sku): array
+    {
+        return [
+            'itemId' => self::itemId($sku),
+            'suspension_info' => [
+                'suspend_until' => null,
+            ],
         ];
     }
 
@@ -42,18 +76,18 @@ final class WaitryArticuloMenuPayloadSupport
      */
     public static function interpretar(array $data): array
     {
-        if (($data['ok'] ?? null) === false) {
-            return ['ok' => false, 'mensaje' => self::mensaje($data, 'Waitry rechazó el pedido.')];
+        if (array_key_exists('ok', $data) && $data['ok'] === false) {
+            return ['ok' => false, 'mensaje' => self::mensaje($data)];
         }
 
         $response = $data['response'] ?? null;
-        if (is_string($response) && stripos($response, 'error') !== false) {
-            return ['ok' => false, 'mensaje' => trim($response)];
+        if (is_string($response) && str_contains(mb_strtolower($response), 'error')) {
+            return ['ok' => false, 'mensaje' => $response];
         }
 
         if (is_array($response)) {
-            $error = trim((string) ($response['error'] ?? $response['message'] ?? ''));
-            if ($error !== '') {
+            $error = $response['error'] ?? $response['message'] ?? null;
+            if (is_string($error) && $error !== '' && ($response['result'] ?? true) === false) {
                 return ['ok' => false, 'mensaje' => $error];
             }
         }
@@ -62,34 +96,38 @@ final class WaitryArticuloMenuPayloadSupport
     }
 
     /**
-     * @return array{externalId:string,name:string}
+     * @return array{id:string,externalId:string,name:string,title:string}
      */
     private static function item(string $sku, string $nombre): array
     {
-        $sku = mb_strtoupper(trim($sku), 'UTF-8');
-        $nombre = trim($nombre);
-        if ($nombre === '') {
-            $nombre = $sku;
-        }
+        $id = self::itemId($sku);
+        $titulo = trim($nombre) !== '' ? trim($nombre) : $id;
 
         return [
-            'externalId' => $sku,
-            'name' => mb_substr($nombre, 0, 180),
+            'id' => $id,
+            'externalId' => $id,
+            'name' => mb_substr($titulo, 0, 180),
+            'title' => mb_substr($titulo, 0, 180),
         ];
+    }
+
+    private static function itemId(string $sku): string
+    {
+        return mb_strtoupper(trim($sku), 'UTF-8');
     }
 
     /**
      * @param  array<string, mixed>  $data
      */
-    private static function mensaje(array $data, string $defecto): string
+    private static function mensaje(array $data): string
     {
-        $msg = $data['msg'] ?? $data['message'] ?? $data['error'] ?? $defecto;
-        if (is_array($msg)) {
-            $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
+        foreach (['msg', 'message', 'error'] as $clave) {
+            $valor = $data[$clave] ?? null;
+            if (is_string($valor) && trim($valor) !== '') {
+                return trim($valor);
+            }
         }
 
-        $msg = trim((string) $msg);
-
-        return $msg !== '' ? $msg : $defecto;
+        return 'Waitry rechazó el envío.';
     }
 }

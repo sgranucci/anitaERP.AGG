@@ -39,6 +39,9 @@
                     Si es servicio/prepaga, cambi&aacute; a <strong>FIS</strong> (o FNS seg&uacute;n IVA).
                     Si corresponde gastronom&iacute;a, us&aacute; <strong>FGA</strong>
                     (en NC/ND: CGA / DGA).
+                    @if (! empty($bloquearTiposProrrateados ?? false))
+                        Esta OC tiene un solo centro de costo: no se puede asignar un tipo prorrateado (FPB, CPB, …).
+                    @endif
                 </small>
             </div>
         </div>

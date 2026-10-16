@@ -34,8 +34,7 @@
         });
     }
 
-    marca('articulo-waitry-dispara-comanda', 'waitry_dispara_comanda');
-    marca('articulo-waitry-va-cocina', 'waitry_va_cocina');
+    marca('articulo-waitry-preparar', 'waitry_preparar');
 
     boton.addEventListener('click', function () {
         if (window.jQuery) {
@@ -54,8 +53,7 @@
 
     function cuerpo() {
         return JSON.stringify({
-            waitry_dispara_comanda: document.getElementById('articulo-waitry-dispara-comanda').checked ? 1 : 0,
-            waitry_va_cocina: document.getElementById('articulo-waitry-va-cocina').checked ? 1 : 0
+            waitry_preparar: document.getElementById('articulo-waitry-preparar').checked ? 1 : 0
         });
     }
 
@@ -77,13 +75,11 @@
                 celda.textContent = sala.estado || '';
             }
         });
-        var dispara = document.getElementById('articulo-waitry-dispara-comanda');
-        var cocina = document.getElementById('articulo-waitry-va-cocina');
-        if (panel.marcas && dispara && cocina) {
-            dispara.checked = !!panel.marcas.dispara_comanda;
-            cocina.checked = !!panel.marcas.va_cocina;
-            document.getElementById('waitry_dispara_comanda').value = dispara.checked ? '1' : '0';
-            document.getElementById('waitry_va_cocina').value = cocina.checked ? '1' : '0';
+        var preparar = document.getElementById('articulo-waitry-preparar');
+        var hidden = document.getElementById('waitry_preparar');
+        if (panel.marcas && preparar && hidden) {
+            preparar.checked = !!panel.marcas.preparar;
+            hidden.value = preparar.checked ? '1' : '0';
         }
     }
 
@@ -103,7 +99,7 @@
         if (!url || enviando) {
             return;
         }
-        if (confirmar && !window.confirm('Inactiva el producto en las salas donde Anita lo dio de alta. No borra el artículo.')) {
+        if (confirmar && !window.confirm('Suspende el producto en Waitry hasta 2040 en las salas donde Anita lo dio de alta. No borra el artículo.')) {
             return;
         }
         enviando = true;

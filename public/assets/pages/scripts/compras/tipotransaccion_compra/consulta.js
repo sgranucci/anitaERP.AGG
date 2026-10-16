@@ -195,7 +195,9 @@ function leerTipotransaccionCompraPorAbreviatura(abreviatura, target, callback, 
             }
             if (!data || !data.id) {
                 if (debeAvisar) {
-                    alert('No se encontró el tipo de comprobante «' + abrev + '».');
+                    alert((data && data.mensaje)
+                        ? data.mensaje
+                        : ('No se encontró el tipo de comprobante «' + abrev + '».'));
                 }
                 if (ptrTipotransaccionCompra_id && ptrTipotransaccionCompra_id.length) {
                     ptrTipotransaccionCompra_id.val('');

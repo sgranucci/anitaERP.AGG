@@ -25,4 +25,19 @@ class PrecargaProveedorProrrateoMultiCcSupportTest extends TestCase
         $this->assertSame('NC', PrecargaProveedorProrrateoMultiCcSupport::familiaDesdeAbreviatura('CPS'));
         $this->assertSame('ND', PrecargaProveedorProrrateoMultiCcSupport::familiaDesdeAbreviatura('DPU'));
     }
+
+    public function test_tipo_fino_se_asigna_sin_oc(): void
+    {
+        $this->assertNull(PrecargaProveedorProrrateoMultiCcSupport::motivoRechazoAsignacionManual('CGA', null));
+        $this->assertNull(PrecargaProveedorProrrateoMultiCcSupport::motivoRechazoAsignacionManual('FGA', null));
+    }
+
+    public function test_tipo_prorrateado_sin_oc_se_rechaza(): void
+    {
+        $motivo = PrecargaProveedorProrrateoMultiCcSupport::motivoRechazoAsignacionManual('CPB', null);
+
+        $this->assertNotNull($motivo);
+        $this->assertStringContainsString('CPB', (string) $motivo);
+        $this->assertStringContainsString('más de un centro', (string) $motivo);
+    }
 }

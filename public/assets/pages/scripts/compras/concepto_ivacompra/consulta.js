@@ -77,6 +77,12 @@ function buscar_datos_concepto_ivacompra(consulta) {
                 html = '<tr><td colspan="5" class="text-muted">Sin resultados</td></tr>';
             }
             $('#datosconcepto_ivacompra').html(html);
+            if (respuesta && respuesta.catalogo) {
+                $('#consultaconcepto_ivacompra-aviso').text(
+                    'Este tipo no tiene conceptos propios ni unión de la OC. '
+                    + 'Catálogo completo: elija el concepto a mano.'
+                );
+            }
         })
         .fail(function () {
             $('#datosconcepto_ivacompra').html('<tr><td colspan="5" class="text-danger">Error al consultar conceptos</td></tr>');

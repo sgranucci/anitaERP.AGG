@@ -26,7 +26,7 @@ final class ArticuloWaitrySyncService
     ) {}
 
     /**
-     * @return array{sku:string,descripcion:string,marcas:array{dispara_comanda:bool,va_cocina:bool},salas:list<array<string,mixed>>,puede_enviar:bool}
+     * @return array{sku:string,descripcion:string,marcas:array{preparar:bool},salas:list<array<string,mixed>>,puede_enviar:bool}
      */
     public function panel(?Articulo $articulo, bool $puedeActualizar): array
     {
@@ -68,18 +68,24 @@ final class ArticuloWaitrySyncService
         $huboFallo = false;
         $huboEnvio = false;
 
+        $preparar = ArticuloWaitrySupport::marcasDe($articulo)['preparar'];
+
         foreach ($this->salas() as $sala) {
             $decision = $this->decisionSala((int) $articulo->id, (int) $sala['empresa_id']);
-            $permitido = $operacion === ArticuloWaitryEnvio::ALTA
-                ? $decision['puede_alta']
-                : $decision['puede_baja'];
-
-            if (! $permitido) {
+            if ($operacion === ArticuloWaitryEnvio::BAJA && ! $decision['puede_baja']) {
                 continue;
             }
 
             $huboEnvio = true;
-            $resultado = $this->enviarSala($articulo, $sku, $nombre, $operacion, $sala);
+            $resultado = $this->enviarSala(
+                $articulo,
+                $sku,
+                $nombre,
+                $operacion,
+                $sala,
+                $preparar,
+                $decision['vigente'] === ArticuloWaitryEnvio::BAJA
+            );
             if (! $resultado['ok']) {
                 $huboFallo = true;
             }
@@ -87,10 +93,10 @@ final class ArticuloWaitrySyncService
 
         $mensaje = match (true) {
             $huboFallo => 'Alguna sala no pudo completarse. Se puede reintentar solo esa.',
-            ! $huboEnvio && $operacion === ArticuloWaitryEnvio::ALTA => 'Anita ya lo envió a las salas que correspondían.',
-            ! $huboEnvio => 'No hay salas con un alta registrada para inactivar.',
-            $operacion === ArticuloWaitryEnvio::ALTA => 'Alta enviada.',
-            default => 'Inactivación enviada.',
+            ! $huboEnvio && $operacion === ArticuloWaitryEnvio::ALTA => 'No hay salas Waitry configuradas.',
+            ! $huboEnvio => 'No hay salas con un alta registrada para suspender.',
+            $operacion === ArticuloWaitryEnvio::ALTA => 'Producto enviado. Si ya existía, Waitry lo actualiza.',
+            default => 'Suspensión enviada hasta 2040.',
         };
 
         return [
@@ -104,11 +110,18 @@ final class ArticuloWaitrySyncService
      * @param  array{empresa_id:int,place_id:int,nombre:string}  $sala
      * @return array{ok:bool}
      */
-    private function enviarSala(Articulo $articulo, string $sku, string $nombre, string $operacion, array $sala): array
-    {
+    private function enviarSala(
+        Articulo $articulo,
+        string $sku,
+        string $nombre,
+        string $operacion,
+        array $sala,
+        bool $preparar,
+        bool $levantarSuspension,
+    ): array {
         $payload = $operacion === ArticuloWaitryEnvio::ALTA
-            ? WaitryArticuloMenuPayloadSupport::alta($sku, $nombre)
-            : WaitryArticuloMenuPayloadSupport::baja($sku, $nombre);
+            ? WaitryArticuloMenuPayloadSupport::alta($sku, $nombre, $preparar)
+            : WaitryArticuloMenuPayloadSupport::baja($sku);
 
         $base = $operacion === ArticuloWaitryEnvio::ALTA
             ? (string) config('waitry.sync_menu_pos_url')
@@ -121,8 +134,29 @@ final class ArticuloWaitrySyncService
             ? WaitryArticuloMenuPayloadSupport::interpretar($http['data'])
             : ['ok' => false, 'mensaje' => (string) ($http['error'] ?? 'Waitry no respondió.')];
 
+        if ($interpretado['ok'] && $operacion === ArticuloWaitryEnvio::ALTA && $levantarSuspension) {
+            $reactivacion = WaitryArticuloMenuPayloadSupport::reactivar($sku);
+            $httpClear = $this->httpClient->postJson(
+                (string) config('waitry.sync_items_pos_url').'?'.http_build_query(['placeId' => $sala['place_id']]),
+                $reactivacion,
+                'articulo_reactivar'
+            );
+            $clear = ($httpClear['ok'] ?? false) && is_array($httpClear['data'])
+                ? WaitryArticuloMenuPayloadSupport::interpretar($httpClear['data'])
+                : ['ok' => false, 'mensaje' => (string) ($httpClear['error'] ?? 'Waitry no respondió.')];
+            $payload = ['alta' => $payload, 'reactivacion' => $reactivacion];
+            $http['data'] = ['alta' => $http['data'] ?? null, 'reactivacion' => $httpClear['data'] ?? $httpClear['error'] ?? null];
+            $http['http_code'] = $httpClear['http_code'] ?? $http['http_code'] ?? 0;
+            if (! $clear['ok']) {
+                $interpretado = [
+                    'ok' => false,
+                    'mensaje' => 'El producto se actualizó pero sigue suspendido: '.$clear['mensaje'],
+                ];
+            }
+        }
+
         $mensaje = $interpretado['ok']
-            ? ($operacion === ArticuloWaitryEnvio::ALTA ? 'Alta aceptada.' : 'Inactivación aceptada.')
+            ? ($operacion === ArticuloWaitryEnvio::ALTA ? 'Alta aceptada.' : 'Suspensión aceptada.')
             : mb_substr((string) $interpretado['mensaje'], 0, 500);
 
         ArticuloWaitryEnvio::query()->create([

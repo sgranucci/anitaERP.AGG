@@ -18,7 +18,7 @@ final class ArticuloWaitryEstadoSupportTest extends TestCase
         $this->assertSame('Sin envío', $r['estado']);
     }
 
-    public function test_alta_ok_no_se_repite_y_permite_baja(): void
+    public function test_alta_ok_se_puede_volver_a_enviar_y_permite_baja(): void
     {
         $r = ArticuloWaitryEstadoSupport::decidir([
             ['operacion' => 'alta', 'ok' => false, 'mensaje' => 'timeout'],
@@ -26,12 +26,12 @@ final class ArticuloWaitryEstadoSupportTest extends TestCase
         ]);
 
         $this->assertSame('alta', $r['vigente']);
-        $this->assertFalse($r['puede_alta']);
+        $this->assertTrue($r['puede_alta']);
         $this->assertTrue($r['puede_baja']);
-        $this->assertSame('Anita ya lo envió', $r['estado']);
+        $this->assertStringContainsString('actualiza', $r['estado']);
     }
 
-    public function test_baja_fallida_deja_reintentar_solo_la_baja(): void
+    public function test_baja_fallida_deja_reintentar_la_baja_y_el_alta(): void
     {
         $r = ArticuloWaitryEstadoSupport::decidir([
             ['operacion' => 'alta', 'ok' => true],
@@ -39,12 +39,12 @@ final class ArticuloWaitryEstadoSupportTest extends TestCase
         ]);
 
         $this->assertSame('alta', $r['vigente']);
-        $this->assertFalse($r['puede_alta']);
+        $this->assertTrue($r['puede_alta']);
         $this->assertTrue($r['puede_baja']);
         $this->assertStringContainsString('rechazado', $r['estado']);
     }
 
-    public function test_baja_ok_vuelve_a_permitir_alta(): void
+    public function test_baja_ok_permite_alta_y_no_otra_baja(): void
     {
         $r = ArticuloWaitryEstadoSupport::decidir([
             ['operacion' => 'alta', 'ok' => true],
@@ -54,25 +54,34 @@ final class ArticuloWaitryEstadoSupportTest extends TestCase
         $this->assertSame('baja', $r['vigente']);
         $this->assertTrue($r['puede_alta']);
         $this->assertFalse($r['puede_baja']);
-        $this->assertSame('Inactivo según Anita', $r['estado']);
+        $this->assertStringContainsString('2040', $r['estado']);
     }
 
-    public function test_alta_manda_menu_y_categorias_vacios(): void
+    public function test_alta_preparar_manda_menu_y_categorias_vacios(): void
     {
-        $payload = WaitryArticuloMenuPayloadSupport::alta('v0647', 'Agua');
+        $payload = WaitryArticuloMenuPayloadSupport::alta('v0647', 'Agua', true);
 
         $this->assertSame([], $payload['Menu']);
         $this->assertSame([], $payload['Categories']);
         $this->assertSame('V0647', $payload['Items'][0]['externalId']);
+        $this->assertSame('V0647', $payload['Items'][0]['id']);
         $this->assertSame('Agua', $payload['Items'][0]['name']);
     }
 
-    public function test_baja_marca_el_item_inactivo(): void
+    public function test_alta_no_preparar_manda_la_categoria(): void
     {
-        $payload = WaitryArticuloMenuPayloadSupport::baja('V0001', '');
+        $payload = WaitryArticuloMenuPayloadSupport::alta('V0647', 'Agua', false);
 
-        $this->assertSame('V0001', $payload['Items'][0]['externalId']);
-        $this->assertFalse($payload['Items'][0]['active']);
+        $this->assertSame('NO-PREPARAR', $payload['Categories'][0]['externalId']);
+        $this->assertSame('V0647', $payload['Categories'][0]['entities'][0]['id']);
+    }
+
+    public function test_baja_suspende_hasta_2040(): void
+    {
+        $payload = WaitryArticuloMenuPayloadSupport::baja('V0001');
+
+        $this->assertSame('V0001', $payload['itemId']);
+        $this->assertSame(WaitryArticuloMenuPayloadSupport::SUSPENDER_HASTA, $payload['suspension_info']['suspend_until']);
     }
 
     public function test_respuesta_ok_false_no_cuenta_como_alta(): void
