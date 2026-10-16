@@ -154,42 +154,37 @@ class PagoproveedorImputacionApSupportTest extends TestCase
         $this->assertFalse(PagoproveedorImputacionApSupport::esOrigenIngresoEgreso(0, 'OPP'));
     }
 
-    public function test_opa_sin_anticipo_se_suma_al_proveedores_del_origen(): void
+    public function test_opa_sobrante_sin_asiento_se_suma_al_origen(): void
     {
-        $this->assertTrue(PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
+        $this->assertTrue(PagoproveedorImputacionApSupport::opaSobranteVaEnAsientoDelOrigen(
             'OPA',
-            false,
             false,
             24279,
             true
         ));
-        $this->assertFalse(PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
+        $this->assertFalse(PagoproveedorImputacionApSupport::opaSobranteVaEnAsientoDelOrigen(
             'OPA',
-            true,
-            false,
-            24279,
-            true
-        ));
-        $this->assertFalse(PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
-            'OPA',
-            false,
             true,
             24279,
             true
         ));
-        $this->assertFalse(PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
+        $this->assertFalse(PagoproveedorImputacionApSupport::opaSobranteVaEnAsientoDelOrigen(
             'OPP',
             false,
-            false,
             24279,
             true
         ));
-        $this->assertFalse(PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
+        $this->assertFalse(PagoproveedorImputacionApSupport::opaSobranteVaEnAsientoDelOrigen(
             'OPA',
-            false,
             false,
             24279,
             false
+        ));
+        $this->assertFalse(PagoproveedorImputacionApSupport::opaSobranteVaEnAsientoDelOrigen(
+            'OPA',
+            false,
+            0,
+            true
         ));
     }
 

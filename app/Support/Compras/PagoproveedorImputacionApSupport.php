@@ -70,18 +70,17 @@ final class PagoproveedorImputacionApSupport
     }
 
     /**
-     * Sin cuenta de anticipo la OPA no arma asiento propio: el sobrante queda
-     * en el Debe a proveedores del OPP de origen. El control suma esa CC al origen.
+     * OPA de sobrante: no arma asiento propio. El Debe ya está en la OPP de origen
+     * (cuenta de anticipo, o proveedores si la empresa no la tiene). El control
+     * suma esa CC al origen y no lista la OPA.
      */
-    public static function opaSinAnticipoVaEnProveedoresDelOrigen(
+    public static function opaSobranteVaEnAsientoDelOrigen(
         string $tipo,
-        bool $hayCuentaAnticipo,
         bool $tieneAsientoPropio,
         int $origenId,
         bool $origenEnControl,
     ): bool {
         return self::tipoDesdeComprobante($tipo) === self::TIPO_OPA
-            && ! $hayCuentaAnticipo
             && ! $tieneAsientoPropio
             && $origenId > 0
             && $origenEnControl;

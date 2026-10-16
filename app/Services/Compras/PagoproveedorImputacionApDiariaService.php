@@ -15,7 +15,6 @@ use App\Support\Compras\ComprobanteProveedorImputacionApCtamovSupport;
 use App\Support\Compras\ComprobanteProveedorImputacionApSupport;
 use App\Support\Compras\PagoproveedorImputacionApPromovSupport;
 use App\Support\Compras\PagoproveedorImputacionApSupport;
-use App\Support\Compras\ProveedorAnticipoCuentaContableSupport;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -168,7 +167,7 @@ final class PagoproveedorImputacionApDiariaService
                 'El asiento copiado del subdiario que cuadra (CC = asiento = promov) no se lista: el ctamov de cierre usa otro número, y la cabecera pag_trec incluye retenciones (promov es el neto). El stub sin CC ni asiento sigue aparte, como documento Anita.',
                 'OPP/OPA son crédito (Haber−Debe negativo). AOP invierte el signo.',
                 'El residual a anticipo entra al trío. Se controla aparte vs ctamov.',
-                'Sin cuenta de anticipo, la OPA va a proveedores: si no tiene asiento propio, su CC se suma a la OPP de origen (el Debe ya está en ese asiento).',
+                'La OPA de sobrante no tiene asiento propio: el Debe (anticipo o proveedores) ya está en la OPP de origen. Su CC se suma a esa OPP y no se lista aparte.',
                 'Importes en $: CC al TC de la factura; promov al TC del pago. Haber suma, Debe resta.',
             ],
         ];
@@ -467,17 +466,11 @@ final class PagoproveedorImputacionApDiariaService
             $idsEnControl[(int) $pago->id] = true;
         }
 
-        $hayAnticipo = [];
         $absorbidas = [];
         foreach ($pagos as $pago) {
-            $empresaId = (int) $pago->empresa_id;
-            if (! array_key_exists($empresaId, $hayAnticipo)) {
-                $hayAnticipo[$empresaId] = ProveedorAnticipoCuentaContableSupport::cuentaAnticipoId($empresaId) !== null;
-            }
             $origenId = (int) ($pago->pagoproveedor_origen_id ?? 0);
-            if (! PagoproveedorImputacionApSupport::opaSinAnticipoVaEnProveedoresDelOrigen(
+            if (! PagoproveedorImputacionApSupport::opaSobranteVaEnAsientoDelOrigen(
                 (string) $pago->tipocomprobante,
-                $hayAnticipo[$empresaId],
                 (int) ($pago->asiento_id ?? 0) > 0,
                 $origenId,
                 isset($idsEnControl[$origenId]),
