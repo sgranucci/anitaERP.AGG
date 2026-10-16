@@ -204,6 +204,9 @@ function activa_eventos_consultapuntoventa() {
                 return;
             }
             var $input = $(this);
+            if ($input.prop('readonly') || $input.prop('disabled')) {
+                return;
+            }
             var $ctx = $input.closest('.tm-puntoventa-campo, tr');
             var idActual = parseInt(String($ctx.find('.puntoventa_id').val() || '0'), 10);
             var cod = $.trim($input.val() || '');
@@ -220,6 +223,9 @@ function activa_eventos_consultapuntoventa() {
     $(document)
         .off('input.codigoPuntoventa', '.codigopuntoventa')
         .on('input.codigoPuntoventa', '.codigopuntoventa', function () {
+            if ($(this).prop('readonly') || $(this).prop('disabled')) {
+                return;
+            }
             var $ctx = $(this).closest('.tm-puntoventa-campo, tr');
             $ctx.find('.puntoventa_id').val('');
             $ctx.find('.descripcionpuntoventa').val('');

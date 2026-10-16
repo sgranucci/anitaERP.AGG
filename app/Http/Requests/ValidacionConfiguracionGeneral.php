@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Contable\Cuentacontable;
+use App\Models\Ventas\Puntoventa;
 use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Contable\CuentacontableArbolSupport;
 use Illuminate\Foundation\Http\FormRequest;
@@ -23,7 +24,7 @@ class ValidacionConfiguracionGeneral extends FormRequest
             return;
         }
         foreach (ParametroSistemaSupport::definiciones() as $clave => $def) {
-            if (! in_array($def['tipo'] ?? '', ['cuentacaja', 'concepto_ivacompra', 'cuentacontable'], true)) {
+            if (! in_array($def['tipo'] ?? '', ['cuentacaja', 'concepto_ivacompra', 'cuentacontable', 'puntoventa'], true)) {
                 continue;
             }
             if (! array_key_exists($clave, $parametros)) {
@@ -60,6 +61,22 @@ class ValidacionConfiguracionGeneral extends FormRequest
                         }
                         if ((string) $cuenta->tipocuenta !== CuentacontableArbolSupport::TIPO_IMPUTABLE) {
                             $fail('La cuenta '.$cuenta->codigo.' no es imputable.');
+                        }
+                    },
+                ],
+                'puntoventa' => [
+                    'nullable',
+                    'integer',
+                    'min:1',
+                    Rule::exists('puntoventa', 'id')->whereNull('deleted_at'),
+                    function (string $attribute, mixed $value, \Closure $fail): void {
+                        $pv = Puntoventa::query()->find((int) $value);
+                        if (! $pv) {
+                            return;
+                        }
+                        $estado = strtoupper(trim((string) ($pv->estado ?? 'A')));
+                        if ($estado === 'I' || $estado === 'S') {
+                            $fail('El punto de venta '.$pv->codigo.' está inactivo.');
                         }
                     },
                 ],

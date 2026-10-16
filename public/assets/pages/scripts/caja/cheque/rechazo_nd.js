@@ -219,7 +219,8 @@
             var modo = String(pv.modofacturacion || 'M');
             var modoTxt = { C: 'CAE online', E: 'Exportación', A: 'CAEA', M: 'Manual (sin WS)' }[modo] || modo;
             var ws = pv.webservice ? ' · ' + pv.webservice : '';
-            $('#rechazo-nd-modo-fe').text(modoTxt + ws);
+            var fija = pv.sucursal_fija ? ('Sucursal fija ' + (pv.codigo || '03333') + '. ') : '';
+            $('#rechazo-nd-modo-fe').text(fija + modoTxt + ws);
             $('#rechazo_nd_fecha').val(d.fecha || '');
             $('#rechazo_nd_leyenda').val(d.leyenda_sugerida || '');
 

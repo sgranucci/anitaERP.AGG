@@ -154,7 +154,7 @@
                         · <strong>${{ number_format((float) ($tot['total_facturas'] ?? 0), 2, ',', '.') }}</strong>
                         @if (($tot['cantidad_notas_credito'] ?? 0) > 0)
                             · NC
-                            <strong>${{ number_format((float) ($tot['total_notas_credito'] ?? 0), 2, ',', '.') }}</strong>
+                            <strong class="text-danger">${{ number_format(abs((float) ($tot['total_notas_credito'] ?? 0)), 2, ',', '.') }}</strong>
                             <span class="text-muted">({{ (int) ($tot['cantidad_notas_credito'] ?? 0) }})</span>
                         @endif
                         · Neto
@@ -225,11 +225,15 @@
                                         @foreach ($notasNc as $notaNc)
                                             <a href="{{ route('facturacion_local_facturas_ver', ['ventaId' => $notaNc['id']]) }}" class="small text-primary d-block">
                                                 {{ $notaNc['codigo'] }}
+                                                <span class="text-danger">${{ number_format(abs((float) ($notaNc['total'] ?? 0)), 2, ',', '.') }}</span>
                                             </a>
                                         @endforeach
                                     @elseif ($ncVentaId)
-                                        <a href="{{ route('facturacion_local_facturas_ver', ['ventaId' => $ncVentaId]) }}" class="small text-primary">
+                                        <a href="{{ route('facturacion_local_facturas_ver', ['ventaId' => $ncVentaId]) }}" class="small text-primary d-block">
                                             {{ $r->ventaNc?->codigo ?? ('#'.$ncVentaId) }}
+                                            @if ($r->ventaNc)
+                                                <span class="text-danger">${{ number_format(abs((float) $r->ventaNc->total), 2, ',', '.') }}</span>
+                                            @endif
                                         </a>
                                     @else
                                         <small class="text-muted">—</small>
