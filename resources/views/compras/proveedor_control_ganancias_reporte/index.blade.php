@@ -78,10 +78,11 @@
                         </div>
                         <label for="limite" class="{{ $colLabel }}">Límite proveedores</label>
                         <div class="{{ $colInput }}">
-                            <input type="number" name="limite" id="limite" class="form-control" min="1"
-                                max="{{ (int) config('compras_control_ganancias.limite_max', 2000) }}"
+                            <input type="number" name="limite" id="limite" class="form-control" min="0"
+                                max="{{ (int) config('compras_control_ganancias.limite_max', 20000) }}"
+                                placeholder="0 = todos"
                                 value="{{ (int) ($filtros['limite'] ?? 100) }}">
-                            <small class="form-text text-muted">Cada CUIT consulta ARCA (con caché). Empezá con un lote chico.</small>
+                            <small class="form-text text-muted">0 = todos los proveedores del filtro. Con consulta ARCA, el total puede demorar varios minutos.</small>
                         </div>
                     </div>
 
@@ -130,6 +131,25 @@
                 'titulo' => 'Generando control de ganancias…',
                 'subtitulo' => 'Consulta ARCA por CUIT. Puede demorar según el límite. No cierre la página.',
             ])
+
+            @if (is_array($lote ?? null) && ($lote['estado'] ?? '') !== 'listo')
+                <div class="card-body border-top">
+                    <div class="alert alert-info mb-0">
+                        <strong>{{ $lote['mensaje'] ?? 'Generando el control…' }}</strong>
+                        @if ((int) ($lote['total'] ?? 0) > 0)
+                            <div class="small mt-1">{{ (int) ($lote['procesados'] ?? 0) }} / {{ (int) $lote['total'] }} proveedores</div>
+                        @endif
+                        @if (($lote['estado'] ?? '') === 'error')
+                            <div class="small text-danger mt-1">{{ $lote['error'] ?? '' }} Volvé a consultar para reintentar.</div>
+                        @else
+                            <div class="small text-muted mt-1">La consulta corre en segundo plano. Esta página se actualiza sola.</div>
+                        @endif
+                    </div>
+                </div>
+                @if (($lote['estado'] ?? '') === 'corriendo')
+                    <script>setTimeout(function () { window.location.reload(); }, 5000);</script>
+                @endif
+            @endif
 
             @if ($consultado ?? false)
                 <div class="card-body p-0 border-top">

@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Compras\Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\ProveedorControlGananciasReporteService;
+use App\Support\Compras\ProveedorControlGananciasLoteSupport;
 use App\Support\Compras\ProveedorControlGananciasReporteFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
@@ -38,6 +39,7 @@ class ProveedorControlGananciasReporteController extends Controller
         $resultado = null;
         $filas = null;
         $filasVista = [];
+        $lote = null;
 
         if ($request->boolean('consultar') && ProveedorControlGananciasReporteFiltros::tieneCriteriosAplicados($filtros)) {
             if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
@@ -46,20 +48,35 @@ class ProveedorControlGananciasReporteController extends Controller
                 ]);
             }
 
-            ini_set('memory_limit', '-1');
-            ini_set('max_execution_time', '0');
+            if (ProveedorControlGananciasLoteSupport::debeSegundoPlano($filtros)) {
+                $jobId = ProveedorControlGananciasLoteSupport::id($filtros, (int) auth()->id());
+                $lote = ProveedorControlGananciasLoteSupport::asegurar($jobId, $filtros);
+                $lote['id'] = $jobId;
+                if (($lote['estado'] ?? '') === 'listo' && is_array($lote['resultado'] ?? null)) {
+                    $resultado = $lote['resultado'];
+                }
+            } else {
+                ini_set('memory_limit', '-1');
+                ini_set('max_execution_time', '0');
+                set_time_limit(0);
+                $resultado = $this->reporteService->generar($filtros);
+            }
 
-            $resultado = $this->reporteService->generar($filtros);
-            $perPage = max(10, min(500, (int) $request->input('per_page', 50)));
-            $page = max(1, (int) $request->input('page', 1));
-            $filas = $this->reporteService->paginarFilas($resultado['filas'] ?? [], $perPage, $page);
-            $filasVista = $filas->items();
-            $consultado = true;
+            if (is_array($resultado)) {
+                $perPage = max(10, min(500, (int) $request->input('per_page', 50)));
+                $page = max(1, (int) $request->input('page', 1));
+                $filas = $this->reporteService->paginarFilas($resultado['filas'] ?? [], $perPage, $page);
+                $filasVista = $filas->items();
+                $consultado = true;
+            }
         }
 
         $filtrosQuery = ProveedorControlGananciasReporteFiltros::paraQueryString($filtros);
-        if ($consultado) {
+        if ($consultado || $lote !== null) {
             $filtrosQuery['consultar'] = 1;
+        }
+        if (is_array($lote) && ! empty($lote['id'])) {
+            $filtrosQuery['lote'] = $lote['id'];
         }
         if ($request->has('per_page')) {
             $filtrosQuery['per_page'] = max(10, min(500, (int) $request->input('per_page', 50)));
@@ -79,6 +96,7 @@ class ProveedorControlGananciasReporteController extends Controller
             'filasVista' => $filasVista,
             'subtitulo' => ProveedorControlGananciasReporteFiltros::formatearSubtitulo($filtros),
             'puede_ver_proveedor' => can('editar-proveedor', false) || can('listar-proveedor', false),
+            'lote' => $lote,
         ]);
     }
 
@@ -97,7 +115,14 @@ class ProveedorControlGananciasReporteController extends Controller
             return redirect()->route('proveedor_control_ganancias_reporte');
         }
 
-        $resultado = $this->reporteService->generar($filtros);
+        $resultado = $this->resultadoParaExportar($filtros);
+        if ($resultado === null) {
+            return redirect()->route(
+                'proveedor_control_ganancias_reporte',
+                array_merge(ProveedorControlGananciasReporteFiltros::paraQueryString($filtros), ['consultar' => 1])
+            )->with('mensaje-aviso', 'El control todavía se está generando. Esperá a que termine y volvé a exportar.');
+        }
+
         $titulo = 'Control de ganancias — proveedores';
         $subtitulo = ProveedorControlGananciasReporteFiltros::formatearSubtitulo($filtros);
         $filas = $resultado['filas'] ?? [];
@@ -113,6 +138,28 @@ class ProveedorControlGananciasReporteController extends Controller
                 ProveedorControlGananciasReporteFiltros::paraQueryString($filtros)
             ),
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>|null
+     */
+    private function resultadoParaExportar(array $filtros): ?array
+    {
+        if (ProveedorControlGananciasLoteSupport::debeSegundoPlano($filtros)) {
+            $job = ProveedorControlGananciasLoteSupport::leer(
+                ProveedorControlGananciasLoteSupport::id($filtros, (int) auth()->id())
+            );
+            if (($job['estado'] ?? '') === 'listo' && is_array($job['resultado'] ?? null)) {
+                return $job['resultado'];
+            }
+
+            return null;
+        }
+
+        set_time_limit(0);
+
+        return $this->reporteService->generar($filtros);
     }
 
     /**

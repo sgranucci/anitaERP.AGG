@@ -16,6 +16,7 @@ use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraUiConfigSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
+use App\Services\Compras\OrdencompraLegajoFacturaPdfService;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\PortalProveedorOrdencompraListadoFiltros;
 use App\Support\Compras\PortalProveedorPagosListadoFiltros;
@@ -434,6 +435,7 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
 
             $totales = OrdencompraTotalesCabecera::sumaLineasEnMonedaReferencia($oc->ordencompra_articulos ?? []);
             $row->monto_lineas = $totales['monto'];
+            $row->moneda_sugerida_id = app(OrdencompraLegajoFacturaPdfService::class)->monedaSugeridaId($oc);
         }
     }
 

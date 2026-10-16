@@ -51,7 +51,8 @@
                 title="Asignar PDF de factura al legajo"
                 data-url="{{ route('ordencompra_asignar_factura_pdf', ['id' => $row->id]) }}"
                 data-numero="{{ $row->numeroordencompra }}"
-                data-proveedor="{{ $row->nombreproveedor }}">
+                data-proveedor="{{ $row->nombreproveedor }}"
+                data-moneda-id="{{ (int) ($row->moneda_sugerida_id ?? 1) }}">
             <i class="fa fa-file-pdf-o"></i>
         </button>
     @endif

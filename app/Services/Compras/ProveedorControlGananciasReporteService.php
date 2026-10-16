@@ -22,10 +22,13 @@ class ProveedorControlGananciasReporteService
 
     /**
      * @param  array<string, mixed>  $filtros
+     * @param  callable(int, int): void|null  $progreso  procesados, total
      * @return array{filas: list<array<string, mixed>>, stats: array<string, int>, advertencias: list<string>}
      */
-    public function generar(array $filtros): array
+    public function generar(array $filtros, ?callable $progreso = null): array
     {
+        $this->extenderTiempo();
+
         $advertencias = [];
         $proveedores = $this->queryProveedores($filtros)->get();
 
@@ -43,7 +46,13 @@ class ProveedorControlGananciasReporteService
         $consultasArca = 0;
 
         if ($consultarArca) {
+            $totalProveedores = $proveedores->count();
+            $procesados = 0;
             foreach ($proveedores as $proveedor) {
+                $procesados++;
+                if ($progreso !== null && ($procesados === 1 || $procesados % 10 === 0 || $procesados === $totalProveedores)) {
+                    $progreso($procesados, $totalProveedores);
+                }
                 $cuit = preg_replace('/\D+/', '', (string) ($proveedor->nroinscripcion ?? '')) ?? '';
                 if (strlen($cuit) !== 11) {
                     $erroresPorCuit[$cuit !== '' ? $cuit : 'p'.$proveedor->id] = 'CUIT inválida (11 dígitos).';
@@ -56,6 +65,9 @@ class ProveedorControlGananciasReporteService
 
                 $cacheKey = 'compras_control_ganancias_arca_'.$cuit;
                 try {
+                    if ($consultasArca > 0 && $consultasArca % 25 === 0) {
+                        $this->extenderTiempo();
+                    }
                     if ($cacheSeg > 0 && Cache::has($cacheKey)) {
                         $padronPorCuit[$cuit] = Cache::get($cacheKey);
                     } else {
@@ -121,6 +133,13 @@ class ProveedorControlGananciasReporteService
         ];
     }
 
+    private function extenderTiempo(): void
+    {
+        @ini_set('memory_limit', '-1');
+        @ini_set('max_execution_time', '0');
+        @set_time_limit(0);
+    }
+
     public function paginarFilas(array $filas, int $perPage, int $page): LengthAwarePaginator
     {
         $page = max(1, $page);
@@ -142,7 +161,7 @@ class ProveedorControlGananciasReporteService
      */
     private function queryProveedores(array $filtros)
     {
-        $limite = max(1, (int) ($filtros['limite'] ?? 100));
+        $limite = (int) ($filtros['limite'] ?? 100);
         $riId = (int) config('arca.padron_validacion_proveedor.condicioniva_responsable_inscripto_id', 1);
         $monoId = CondicionivaLetraComprasSupport::condicionivaMonotributoId();
 
@@ -193,6 +212,10 @@ class ProveedorControlGananciasReporteService
             $query->whereIn('condicioniva_id', $ids);
         }
 
-        return $query->limit($limite);
+        if ($limite > 0) {
+            $query->limit($limite);
+        }
+
+        return $query;
     }
 }

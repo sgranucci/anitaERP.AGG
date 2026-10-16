@@ -9,6 +9,7 @@ use App\Support\Ventas\Waitry\WaitryComandaOrderItemsSupport;
 use App\Support\Ventas\Waitry\WaitryDisplayIdSupport;
 use App\Support\Ventas\Waitry\WaitryExternalClientIdSupport;
 use App\Support\Ventas\Waitry\WaitryMediosPagoFromVentaSupport;
+use App\Support\Ventas\Waitry\WaitryMesaAsignadaSupport;
 use App\Support\Ventas\Waitry\WaitryPaymentPayloadSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -57,7 +58,7 @@ final class WaitryComandaService
         }
 
         $empresaId = (int) $cuenta->empresa_id;
-        $table = $this->resolverTable($empresaId);
+        $table = $this->resolverTable($empresaId, $cuenta);
         if ($table === null) {
             Log::warning('waitry.comanda.table_vacio', ['venta_id' => $ventaId, 'empresa_id' => $empresaId]);
 
@@ -122,7 +123,7 @@ final class WaitryComandaService
         }
 
         $empresaId = (int) $envio->empresa_id;
-        $table = $this->resolverTable($empresaId);
+        $table = $this->resolverTable($empresaId, $cuenta);
         $placeId = (int) $envio->place_id;
         if ($table === null || $placeId <= 0) {
             $this->envioService->registrarFallo($envio, 'Configuración table/placeId inválida');
@@ -300,22 +301,18 @@ final class WaitryComandaService
     /**
      * @return array<string, mixed>|null
      */
-    private function resolverTable(int $empresaId): ?array
+    private function resolverTable(int $empresaId, ?CuentaGastronomia $cuenta = null): ?array
     {
-        $map = config('waitry.table_por_empresa', []);
-        if (is_array($map)) {
-            $table = $map[$empresaId] ?? null;
-            if (is_array($table) && $table !== []) {
-                return $table;
+        $tableId = null;
+        if ($cuenta !== null) {
+            $cuenta->loadMissing('configuracionPuntoventa.waitryMesa');
+            $mesa = $cuenta->configuracionPuntoventa?->waitryMesa;
+            if ($mesa !== null && $mesa->activo && (int) $mesa->table_id > 0) {
+                $tableId = (int) $mesa->table_id;
             }
         }
 
-        $legacy = config('waitry.table', []);
-        if (is_array($legacy) && $legacy !== []) {
-            return $legacy;
-        }
-
-        return null;
+        return WaitryMesaAsignadaSupport::payload($tableId, $empresaId);
     }
 
     /**

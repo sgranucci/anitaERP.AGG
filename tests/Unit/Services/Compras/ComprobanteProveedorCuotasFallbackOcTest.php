@@ -29,5 +29,6 @@ class ComprobanteProveedorCuotasFallbackOcTest extends TestCase
         $this->assertStringContainsString('armarCuotasDesdeCondicion', $src);
         $this->assertStringContainsString('autogenerarCuotasSiFaltan', $src);
         $this->assertStringContainsString('ComprobanteProveedorVencimientoCondicionSupport', $src);
+        $this->assertStringContainsString('sanitizarMetaCuotasParaNcNd', $src);
     }
 }

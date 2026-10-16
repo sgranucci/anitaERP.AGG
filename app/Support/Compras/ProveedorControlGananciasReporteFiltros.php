@@ -49,19 +49,26 @@ final class ProveedorControlGananciasReporteFiltros
             $segmento = self::SEGMENTO_TODOS;
         }
 
-        $limiteMax = max(1, (int) config('compras_control_ganancias.limite_max', 2000));
-        $limite = (int) $request->input('limite', $defaults['limite']);
-        if ($limite <= 0) {
-            $limite = (int) $defaults['limite'];
+        $consultando = $request->boolean('consultar');
+
+        $limiteMax = max(1, (int) config('compras_control_ganancias.limite_max', 20000));
+        // 0 o vacío al consultar = todos. Sin consultar, el default es un lote chico.
+        $limiteRaw = $request->input('limite', null);
+        if ($limiteRaw === null || $limiteRaw === '') {
+            $limite = $consultando ? 0 : (int) $defaults['limite'];
+        } else {
+            $limite = (int) $limiteRaw;
         }
-        $limite = min($limiteMax, max(1, $limite));
+        if ($limite > 0) {
+            $limite = min($limiteMax, $limite);
+        } else {
+            $limite = 0;
+        }
 
         $estado = trim((string) $request->input('estado', $defaults['estado']));
         if ($estado === 'todos') {
             $estado = '';
         }
-
-        $consultando = $request->boolean('consultar');
 
         return [
             'empresa_id' => (int) $request->input('empresa_id', 0),
@@ -130,7 +137,8 @@ final class ProveedorControlGananciasReporteFiltros
             $partes[] = 'Sin consulta ARCA (solo ABM)';
         }
 
-        $partes[] = 'Límite: '.(int) ($filtros['limite'] ?? 0);
+        $limite = (int) ($filtros['limite'] ?? 0);
+        $partes[] = $limite > 0 ? 'Límite: '.$limite : 'Límite: todos';
 
         return implode(' · ', $partes);
     }

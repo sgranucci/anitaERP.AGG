@@ -5,6 +5,7 @@ $(function () {
     const $ubicacion = $('#ubicacion_id');
     const $depositoVenta = $('#deposito_venta_id');
     const $depositoInsumos = $('#deposito_insumos_id');
+    const $mesaWaitry = $('#waitry_mesa_gastronomia_id');
 
     if (!$empresa.length) {
         return;
@@ -23,6 +24,7 @@ $(function () {
         $ubicacion.empty().append(opcionVacia('Todas las ubicaciones'));
         $depositoVenta.empty().append(opcionVacia('Seleccione…'));
         $depositoInsumos.empty().append(opcionVacia('Seleccione…'));
+        $mesaWaitry.empty().append(opcionVacia('Mesa por defecto de la sala'));
     }
 
     function rellenarPuntoventa($select, items) {
@@ -49,6 +51,13 @@ $(function () {
         });
     }
 
+    function rellenarMesasWaitry(items) {
+        $mesaWaitry.empty().append(opcionVacia('Mesa por defecto de la sala'));
+        (items || []).forEach(function (item) {
+            $mesaWaitry.append($('<option>').attr('value', item.id).text(item.label));
+        });
+    }
+
     function cargarSelectsPorEmpresa(empresaId) {
         if (!empresaId) {
             limpiarSelectsPorEmpresa();
@@ -61,6 +70,7 @@ $(function () {
                 rellenarPuntoventa($pvCaea, data.puntoventa_caea);
                 rellenarUbicaciones(data.ubicaciones);
                 rellenarDepositos(data.depositos);
+                rellenarMesasWaitry(data.mesas_waitry);
             })
             .fail(function () {
                 limpiarSelectsPorEmpresa();

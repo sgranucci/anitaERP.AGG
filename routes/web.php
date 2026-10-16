@@ -2156,6 +2156,12 @@ Route::post('ventas/contrato-venta-cola/prefill-batch', 'Ventas\ContratoVentaCol
 /*
  * Configuración punto de venta gastronomía
  */
+Route::get('ventas/configuracion-puntoventa-gastronomia/mesas-waitry', 'Ventas\WaitryMesaGastronomiaController@index')->name('consultar_waitry_mesa_gastronomia');
+Route::get('ventas/configuracion-puntoventa-gastronomia/mesas-waitry/crear', 'Ventas\WaitryMesaGastronomiaController@crear')->name('crear_waitry_mesa_gastronomia');
+Route::post('ventas/configuracion-puntoventa-gastronomia/mesas-waitry', 'Ventas\WaitryMesaGastronomiaController@guardar')->name('guardar_waitry_mesa_gastronomia');
+Route::get('ventas/configuracion-puntoventa-gastronomia/mesas-waitry/{id}/editar', 'Ventas\WaitryMesaGastronomiaController@editar')->name('editar_waitry_mesa_gastronomia');
+Route::put('ventas/configuracion-puntoventa-gastronomia/mesas-waitry/{id}', 'Ventas\WaitryMesaGastronomiaController@actualizar')->name('actualizar_waitry_mesa_gastronomia');
+Route::delete('ventas/configuracion-puntoventa-gastronomia/mesas-waitry/{id}', 'Ventas\WaitryMesaGastronomiaController@eliminar')->name('eliminar_waitry_mesa_gastronomia');
 Route::get('ventas/configuracion-puntoventa-gastronomia', 'Ventas\ConfiguracionPuntoventaGastronomiaController@index')->name('consultar_configuracion_puntoventa_gastronomia');
 Route::get('ventas/configuracion-puntoventa-gastronomia/crear', 'Ventas\ConfiguracionPuntoventaGastronomiaController@crear')->name('crear_configuracion_puntoventa_gastronomia');
 Route::post('ventas/configuracion-puntoventa-gastronomia', 'Ventas\ConfiguracionPuntoventaGastronomiaController@guardar')->name('guardar_configuracion_puntoventa_gastronomia');

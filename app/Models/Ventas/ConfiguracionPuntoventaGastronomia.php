@@ -34,6 +34,7 @@ class ConfiguracionPuntoventaGastronomia extends Model implements Auditable
         'tipotransaccion_nota_credito_id',
         'tipotransaccion_caja_id',
         'waitry_habilitado',
+        'waitry_mesa_gastronomia_id',
     ];
 
     protected $casts = [
@@ -75,6 +76,11 @@ class ConfiguracionPuntoventaGastronomia extends Model implements Auditable
     public function ubicacion()
     {
         return $this->belongsTo(UbicacionGastronomia::class, 'ubicacion_id');
+    }
+
+    public function waitryMesa()
+    {
+        return $this->belongsTo(WaitryMesaGastronomia::class, 'waitry_mesa_gastronomia_id');
     }
 
     public function salidaComanda()

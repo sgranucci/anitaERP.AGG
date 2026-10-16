@@ -14,7 +14,7 @@ return [
 
     'limite_default' => (int) env('COMPRAS_CONTROL_GANANCIAS_LIMITE', 100),
 
-    'limite_max' => (int) env('COMPRAS_CONTROL_GANANCIAS_LIMITE_MAX', 2000),
+    'limite_max' => (int) env('COMPRAS_CONTROL_GANANCIAS_LIMITE_MAX', 20000),
 
     /**
      * Nombre esperado de condición IVA para monotributistas proveedores

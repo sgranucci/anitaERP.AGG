@@ -62,9 +62,20 @@
                                     <input type="number" name="numerocomprobante" id="oc_factura_numero" class="form-control text-right" min="1" required placeholder="00000000">
                                 </div>
                             </div>
-                            <div class="form-group mb-0">
+                            <div class="form-group mb-3">
                                 <label class="oc-factura-label" for="oc_factura_fecha">Fecha de factura</label>
                                 <input type="date" name="fechafactura" id="oc_factura_fecha" class="form-control" value="{{ $hoy }}" required>
+                            </div>
+                            <div class="form-group mb-0">
+                                <label class="oc-factura-label" for="oc_factura_moneda">Moneda</label>
+                                <select name="moneda_id" id="oc_factura_moneda" class="form-control" required>
+                                    @foreach (($monedasAsignarFactura ?? \App\Models\Configuracion\Moneda::query()->orderBy('nombre')->get(['id', 'nombre', 'abreviatura'])) as $monedaOpt)
+                                        <option value="{{ $monedaOpt->id }}">
+                                            {{ $monedaOpt->nombre }}@if (filled($monedaOpt->abreviatura ?? null)) ({{ $monedaOpt->abreviatura }})@endif
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <small class="form-text text-muted">Viene de la orden. Cuentas a pagar puede cambiarla al cargar el comprobante.</small>
                             </div>
                         </div>
                     </div>

@@ -133,7 +133,8 @@
                     <button type="button" class="dropdown-item js-oc-asignar-factura"
                             data-url="{{ route('ordencompra_asignar_factura_pdf', ['id' => $data->id]) }}"
                             data-numero="{{ $data->numeroordencompra }}"
-                            data-proveedor="{{ $data->proveedores->nombre ?? '' }}">
+                            data-proveedor="{{ $data->proveedores->nombre ?? '' }}"
+                            data-moneda-id="{{ app(\App\Services\Compras\OrdencompraLegajoFacturaPdfService::class)->monedaSugeridaId($data) }}">
                         <i class="fa fa-file-pdf-o"></i> Asignar factura PDF
                     </button>
                 @endif

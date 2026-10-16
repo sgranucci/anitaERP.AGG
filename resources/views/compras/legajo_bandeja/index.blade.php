@@ -1212,6 +1212,7 @@ Bandeja de legajos
                                                 data-url="{{ $row['url_asignar_factura'] }}"
                                                 data-numero="{{ $row['numero'] }}"
                                                 data-proveedor="{{ $row['proveedor'] }}"
+                                                data-moneda-id="{{ (int) ($row['moneda_sugerida_id'] ?? 1) }}"
                                                 title="Asignar PDF de factura al legajo">
                                             <i class="fa fa-cloud-upload"></i>
                                         </button>

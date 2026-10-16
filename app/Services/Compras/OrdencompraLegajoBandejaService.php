@@ -235,6 +235,8 @@ class OrdencompraLegajoBandejaService
         $pagos = $this->pagosPorComprobante($cpIds);
         $decisiones = $this->ultimaDecisionArbol($ids);
 
+        $ocs->loadMissing('ordencompra_articulos:id,ordencompra_id,moneda_id');
+
         return $ocs->values()->map(function (Ordencompra $oc) use ($historias, $facturas, $coms, $asignadas, $comprobantes, $pagos, $decisiones) {
             $id = (int) $oc->id;
             $hist = $historias[$id] ?? null;
@@ -385,6 +387,7 @@ class OrdencompraLegajoBandejaService
                 'url_nota' => route('ordencompra_legajo_bandeja_nota', ['id' => $id]),
                 'url_asignar_com' => route('ordencompra_legajo_bandeja_asignar_com', ['id' => $id]),
                 'url_asignar_factura' => route('ordencompra_asignar_factura_pdf', ['id' => $id]),
+                'moneda_sugerida_id' => app(OrdencompraLegajoFacturaPdfService::class)->monedaSugeridaId($oc),
                 'url_cargar_cxp' => $urlCargar,
                 'url_comprobante' => $primeraCp['url'] ?? null,
                 'url_pago' => $pago['url'] ?? null,

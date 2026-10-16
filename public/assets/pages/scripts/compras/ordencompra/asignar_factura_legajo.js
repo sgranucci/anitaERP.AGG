@@ -55,6 +55,17 @@
         actualizarChip();
     }
 
+    function aplicarMoneda(monedaId) {
+        var $sel = $('#oc_factura_moneda');
+        if (!$sel.length) {
+            return;
+        }
+        var id = String(monedaId || '');
+        if (id !== '' && $sel.find('option[value="' + id + '"]').length) {
+            $sel.val(id);
+        }
+    }
+
     function mostrarAlerta(ok, texto) {
         var $a = $('.js-oc-factura-alert');
         $a.removeClass('d-none oc-factura-alert-ok oc-factura-alert-err')
@@ -65,6 +76,7 @@
     function abrir(opts) {
         resetForm();
         $('#formAsignarFacturaLegajo').attr('action', opts.url || '');
+        aplicarMoneda(opts.monedaId);
         $('.js-oc-factura-numero').text(opts.numero || '—');
         var prov = opts.proveedor ? ' · ' + opts.proveedor : '';
         $('.js-oc-factura-proveedor').text(prov);
@@ -77,7 +89,8 @@
             abrir({
                 url: $(this).data('url'),
                 numero: $(this).data('numero'),
-                proveedor: $(this).data('proveedor')
+                proveedor: $(this).data('proveedor'),
+                monedaId: $(this).data('monedaId')
             });
         });
 

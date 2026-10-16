@@ -46,6 +46,8 @@ return [
     */
     'padron' => [
         'cuit_representada' => env('ARCA_CUIT_REPRESENTADA'),
+        // Tope por llamada SOAP (conexión y respuesta). Evita que un CUIT cuelgue el lote.
+        'soap_timeout' => max(5, (int) env('ARCA_PADRON_SOAP_TIMEOUT', 25)),
 
         'ws_sr_constancia_inscripcion' => [
             'service_id' => 'ws_sr_constancia_inscripcion',

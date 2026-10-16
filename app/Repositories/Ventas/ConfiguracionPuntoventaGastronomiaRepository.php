@@ -30,6 +30,7 @@ class ConfiguracionPuntoventaGastronomiaRepository implements ConfiguracionPunto
                 'depositoVenta',
                 'depositoInsumos',
                 'tipotransaccion',
+                'waitryMesa',
             ]);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);

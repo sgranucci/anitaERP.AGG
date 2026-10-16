@@ -10,6 +10,7 @@ use App\Models\Stock\Listaprecio;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\WaitryMesaGastronomia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\SalidaRepositoryInterface;
 use App\Repositories\Ventas\ConfiguracionPuntoventaGastronomiaRepositoryInterface;
@@ -55,6 +56,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             $tipotransaccion_nota_credito_query,
             $tipotransaccion_caja_query,
             $deposito_query,
+            $mesas_waitry_query,
             $empresaId
         );
 
@@ -70,6 +72,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             'tipotransaccion_nota_credito_query',
             'tipotransaccion_caja_query',
             'deposito_query',
+            'mesas_waitry_query',
         ));
     }
 
@@ -97,6 +100,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             $tipotransaccion_nota_credito_query,
             $tipotransaccion_caja_query,
             $deposito_query,
+            $mesas_waitry_query,
             (int) $data->empresa_id
         );
 
@@ -112,6 +116,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             'tipotransaccion_nota_credito_query',
             'tipotransaccion_caja_query',
             'deposito_query',
+            'mesas_waitry_query',
         ));
     }
 
@@ -152,6 +157,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
                 'puntoventa_caea' => [],
                 'ubicaciones' => [],
                 'depositos' => [],
+                'mesas_waitry' => [],
             ]);
         }
 
@@ -177,6 +183,10 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             'depositos' => $this->formatDepositoOptions(
                 $this->queryDepositosPorEmpresa($empresaId)->get(['id', 'codigo', 'nombre'])
             ),
+            'mesas_waitry' => $this->mesasWaitryPorEmpresa($empresaId)
+                ->map(fn (WaitryMesaGastronomia $mesa) => ['id' => $mesa->id, 'label' => $mesa->etiqueta()])
+                ->values()
+                ->all(),
         ]);
     }
 
@@ -218,6 +228,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
         &$tipotransaccion_nota_credito_query,
         &$tipotransaccion_caja_query,
         &$deposito_query,
+        &$mesas_waitry_query,
         ?int $empresaId = null,
     ): void {
         $empresa_query = $this->empresaRepository->allFiltrado();
@@ -243,6 +254,20 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             ->get(['id', 'abreviatura', 'nombre']);
         $deposito_query = $this->queryDepositosPorEmpresa($empresaId)
             ->get(['id', 'codigo', 'nombre']);
+        $mesas_waitry_query = $this->mesasWaitryPorEmpresa($empresaId);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, WaitryMesaGastronomia>
+     */
+    private function mesasWaitryPorEmpresa(?int $empresaId)
+    {
+        return WaitryMesaGastronomia::query()
+            ->when($empresaId !== null && $empresaId > 0, fn ($q) => $q->where('empresa_id', $empresaId))
+            ->where('activo', true)
+            ->orderBy('servicio')
+            ->orderBy('nombre')
+            ->get();
     }
 
     private function assertEmpresaPermitida(int $empresaId): void

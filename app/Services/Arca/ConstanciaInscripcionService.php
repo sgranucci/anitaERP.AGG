@@ -12,6 +12,8 @@ class ConstanciaInscripcionService
     /** @var array{request: string, response: string}|null */
     private ?array $lastSoapTrace = null;
 
+    private ?SoapClient $clientePadron = null;
+
     public function __construct(private WsaaService $wsaaService) {}
 
     /**
@@ -39,14 +41,12 @@ class ConstanciaInscripcionService
 
         $ts = $this->wsaaService->getTokenSign($serviceId, $this->wsaaContextPadron());
 
-        $wsdl = $this->wsdl();
-        $client = new SoapClient($wsdl, [
-            'trace' => 1,
-            'exceptions' => true,
-            'cache_wsdl' => WSDL_CACHE_NONE,
-        ]);
+        $timeout = max(5, (int) config('arca.padron.soap_timeout', 25));
+        $socketAnterior = ini_get('default_socket_timeout');
+        ini_set('default_socket_timeout', (string) $timeout);
 
         try {
+            $client = $this->clientePadron();
             $resp = $client->getPersona_v2([
                 'token' => $ts['token'],
                 'sign' => $ts['sign'],
@@ -64,8 +64,36 @@ class ConstanciaInscripcionService
 
             return $data;
         } finally {
-            $this->lastSoapTrace = $this->captureSoapTrace($client);
+            if (isset($client) && $client instanceof SoapClient) {
+                $this->lastSoapTrace = $this->captureSoapTrace($client);
+            }
+            if ($socketAnterior !== false) {
+                ini_set('default_socket_timeout', (string) $socketAnterior);
+            }
         }
+    }
+
+    private function clientePadron(): SoapClient
+    {
+        if ($this->clientePadron instanceof SoapClient) {
+            return $this->clientePadron;
+        }
+
+        $timeout = max(5, (int) config('arca.padron.soap_timeout', 25));
+
+        $this->clientePadron = new SoapClient($this->wsdl(), [
+            'trace' => 1,
+            'exceptions' => true,
+            'cache_wsdl' => WSDL_CACHE_DISK,
+            'connection_timeout' => $timeout,
+            'stream_context' => stream_context_create([
+                'http' => [
+                    'timeout' => $timeout,
+                ],
+            ]),
+        ]);
+
+        return $this->clientePadron;
     }
 
     /**

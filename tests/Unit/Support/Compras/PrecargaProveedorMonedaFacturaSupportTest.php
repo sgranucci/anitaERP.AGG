@@ -38,27 +38,19 @@ class PrecargaProveedorMonedaFacturaSupportTest extends TestCase
         $this->assertSame('storage:/x.pdf', $payload['rutaalmacenamiento']);
     }
 
-    public function test_stub_de_scan_sin_importes_puede_tomar_moneda_de_la_oc(): void
+    public function test_pdf_de_legajo_conserva_la_moneda_elegida_al_asignar(): void
     {
         $pre = new Precarga_Comprobante_Proveedor([
-            'moneda_id' => 1,
-            'moneda' => 'PESOS',
-            'cotizacion' => 1,
-            'subtotal' => 0,
-            'total' => 0,
-            'origen_entrada' => PrecargaComprobanteOrigenEntrada::SCAN_ANITA,
-        ]);
-
-        $this->assertFalse(PrecargaProveedorMonedaFacturaSupport::conservarMonedaCotizacion($pre));
-
-        $payload = PrecargaProveedorMonedaFacturaSupport::payloadSinPisarMoneda([
             'moneda_id' => 2,
             'moneda' => 'DOL',
             'cotizacion' => 1,
-        ], $pre);
+            'subtotal' => 0,
+            'total' => 0,
+            'origen_entrada' => PrecargaComprobanteOrigenEntrada::LEGAJO,
+        ]);
 
-        $this->assertSame(2, $payload['moneda_id']);
-        $this->assertSame('DOL', $payload['moneda']);
+        $this->assertFalse(PrecargaProveedorMonedaFacturaSupport::conservarMonedaCotizacion($pre));
+        $this->assertSame(2, PrecargaProveedorMonedaFacturaSupport::monedaIdParaComprobante($pre));
     }
 
     public function test_origen_ia_sin_importe_tambien_conserva(): void

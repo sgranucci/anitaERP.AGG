@@ -5,11 +5,31 @@ namespace App\Support\Compras;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 
 /**
- * La moneda de la factura manda. La OC solo elige cuenta MN/ME; no se usa para pisar
- * una precarga que ya trajo moneda/cotización del PDF, API o portal.
+ * La moneda de la factura se elige al asignar el PDF (viene predefinida con la de la orden).
+ * Cuentas a pagar puede cambiarla al cargar el comprobante. No se inventa otra si la precarga no trae ninguna.
  */
 final class PrecargaProveedorMonedaFacturaSupport
 {
+    public static function monedaLocalId(): int
+    {
+        $id = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
+
+        return $id > 0 ? $id : 1;
+    }
+
+    /**
+     * Moneda con la que se abre el comprobante: la que quedó en la precarga al asignar el PDF.
+     */
+    public static function monedaIdParaComprobante(?Precarga_Comprobante_Proveedor $precarga): int
+    {
+        $id = (int) ($precarga->moneda_id ?? 0);
+        if ($id > 0) {
+            return $id;
+        }
+
+        return self::monedaLocalId();
+    }
+
     /**
      * True si la precarga ya declara la moneda de la factura (no un stub de scan/legajo).
      */

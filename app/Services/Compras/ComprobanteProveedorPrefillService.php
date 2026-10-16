@@ -22,6 +22,7 @@ use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Support\Compras\PrecargaProveedorMonedaFacturaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -491,7 +492,7 @@ class ComprobanteProveedorPrefillService
 
         // Día de carga de la factura (no la fecha de la OC).
         $fecha = now()->format('Y-m-d');
-        $monedaId = $this->resolverMonedaIdDesdeOrdencompra($ordencompra);
+        $monedaId = app(OrdencompraLegajoFacturaPdfService::class)->monedaSugeridaId($ordencompra);
         $cotizacion = ComprobanteProveedorCotizacionSupport::resolverParaMonedaYFecha(
             $this->cotizacionQuery,
             $fecha,
@@ -736,33 +737,17 @@ class ComprobanteProveedorPrefillService
             ->first();
     }
 
-    private function resolverMonedaIdDesdeOrdencompra(Ordencompra $ordencompra): int
-    {
-        $ordencompra->loadMissing('ordencompra_articulos');
-        $linea = $ordencompra->ordencompra_articulos->first();
-
-        return max(1, (int) ($linea->moneda_id ?? 1));
-    }
-
     /**
-     * Manda la moneda de la factura leída del PDF. La OC solo se usa cuando la precarga no
-     * trae moneda: su moneda decide la cuenta de proveedores MN/ME, no los importes de la
-     * factura (una OC en dólares se puede facturar en pesos y viceversa).
+     * Manda la moneda que ya trajo la factura (API, portal o IA). Un PDF de legajo sin
+     * importes no la declara: no se usa la moneda guardada ni la de la orden.
      */
     private function resolverMonedaIdDesdePrecarga(
         Precarga_Comprobante_Proveedor $precarga,
         ?Ordencompra $ordencompra,
     ): int {
-        $desdePrecarga = (int) ($precarga->moneda_id ?: 0);
-        if ($desdePrecarga > 0) {
-            return $desdePrecarga;
-        }
+        unset($ordencompra);
 
-        if ($ordencompra) {
-            return $this->resolverMonedaIdDesdeOrdencompra($ordencompra);
-        }
-
-        return 1;
+        return PrecargaProveedorMonedaFacturaSupport::monedaIdParaComprobante($precarga);
     }
 
     private function resolverCotizacionDesdePrecarga(

@@ -5,6 +5,7 @@ namespace App\Services\Compras;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorVencimientoCondicionSupport;
@@ -84,6 +85,9 @@ class ComprobanteProveedorCuentacorrienteService
         $fechaBase = $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d');
         $cuotas = [];
 
+        $tipoId = (int) ($comprobante->tipotransaccion_compra_id ?? 0);
+        $esNcNd = ComprobanteProveedorCondicionPagoNcNdSupport::esNotaCreditoODebitoPorTipoId($tipoId);
+
         if ($comprobante->ordencompra_id && $comprobante->ordencompras) {
             $meta = $this->condicionPagoDesdeOc->resolverDesdeOrdencompra(
                 $comprobante->ordencompras,
@@ -93,11 +97,21 @@ class ComprobanteProveedorCuentacorrienteService
                 $monedaFacturaId,
                 $cotizacionFactura,
             );
+            // El control de contabilizar corre antes de este autogenerado. Sin este filtro,
+            // una ND/NC sin cuotas hereda el plan de la OC (moneda y N cuotas).
+            $meta = ComprobanteProveedorCondicionPagoNcNdSupport::sanitizarMetaCuotasParaNcNd($tipoId, $meta);
             $cuotas = $meta['cuotas'];
 
-            if (! $comprobante->condicionpago_id && ! empty($meta['condicionpago_id'])) {
+            if (! $esNcNd && ! $comprobante->condicionpago_id && ! empty($meta['condicionpago_id'])) {
                 $comprobante->forceFill(['condicionpago_id' => $meta['condicionpago_id']])->save();
             }
+        }
+
+        if ($esNcNd && ComprobanteProveedorCondicionPagoNcNdSupport::condicionEsMultiCuota(
+            isset($comprobante->condicionpago_id) ? (int) $comprobante->condicionpago_id : null
+        )) {
+            $comprobante->forceFill(['condicionpago_id' => null])->save();
+            $cuotas = [];
         }
 
         // Sin OC o sin plan usable: armar desde condición de pago, o una cuota al total.

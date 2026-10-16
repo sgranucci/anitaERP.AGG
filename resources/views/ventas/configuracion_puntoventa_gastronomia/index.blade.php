@@ -15,6 +15,11 @@
             <div class="card-header">
                 <h3 class="card-title">Configuración de PC de gastronomía</h3>
                 <div class="card-tools">
+                    @if (can('listar-configuracion-puntoventa-gastronomia', false))
+                    <a href="{{ route('consultar_waitry_mesa_gastronomia') }}" class="btn btn-outline-info btn-sm">
+                        <i class="fa fa-fw fa-cutlery"></i> Mesas Waitry
+                    </a>
+                    @endif
                     @if (can('crear-configuracion-puntoventa-gastronomia', false))
                     <a href="{{ route('crear_configuracion_puntoventa_gastronomia') }}" class="btn btn-outline-secondary btn-sm">
                         <i class="fa fa-fw fa-plus-circle"></i> Nueva PC
@@ -45,6 +50,7 @@
                                 <th>Salida comandas</th>
                                 <th>Salida facturas</th>
                                 <th>Waitry</th>
+                                <th>Mesa Waitry</th>
                                 <th class="width80" data-orderable="false"></th>
                             </tr>
                         </thead>
@@ -65,6 +71,7 @@
                                 <td>{{ optional($data->salidaComanda)->nombre }}</td>
                                 <td>{{ optional($data->salidaFactura)->nombre }}</td>
                                 <td>{{ ($data->waitry_habilitado ?? true) ? 'Sí' : 'No' }}</td>
+                                <td>{{ optional($data->waitryMesa)->etiqueta() ?? '—' }}</td>
                                 <td>
                                     @if (can('editar-configuracion-puntoventa-gastronomia', false))
                                         <a href="{{ route('editar_configuracion_puntoventa_gastronomia', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

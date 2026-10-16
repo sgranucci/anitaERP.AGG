@@ -160,6 +160,23 @@
     </div>
 </div>
 <div class="form-group row">
+    <label for="waitry_mesa_gastronomia_id" class="{{ $lbl }}">Mesa Waitry</label>
+    <div class="{{ $inp }}">
+        <select name="waitry_mesa_gastronomia_id" id="waitry_mesa_gastronomia_id" class="form-control">
+            <option value="">Mesa por defecto de la sala</option>
+            @foreach ($mesas_waitry_query as $mesa)
+                <option value="{{ $mesa->id }}" {{ (int) old('waitry_mesa_gastronomia_id', $data->waitry_mesa_gastronomia_id ?? 0) === (int) $mesa->id ? 'selected' : '' }}>
+                    {{ $mesa->etiqueta() }}
+                </option>
+            @endforeach
+        </select>
+        <small class="form-text text-muted">
+            Origen de la comanda en Waitry (Mostrador, VIP, Mood).
+            <a href="{{ route('consultar_waitry_mesa_gastronomia') }}">Cargar mesas</a>
+        </small>
+    </div>
+</div>
+<div class="form-group row">
     <label for="salida_comanda_id" class="{{ $lbl }} requerido">Salida de comandas</label>
     <div class="{{ $inp }}">
         <select name="salida_comanda_id" id="salida_comanda_id" class="form-control" required>

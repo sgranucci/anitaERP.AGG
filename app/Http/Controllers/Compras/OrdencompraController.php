@@ -1054,6 +1054,7 @@ class OrdencompraController extends Controller
             'sucursal' => 'required|integer|min:0|max:99999',
             'numerocomprobante' => 'required|integer|min:1',
             'fechafactura' => 'required|date',
+            'moneda_id' => 'required|integer|exists:moneda,id',
         ]);
 
         $oc = Ordencompra::query()->find((int) $id);
@@ -1074,6 +1075,7 @@ class OrdencompraController extends Controller
                 (int) $request->input('sucursal'),
                 (int) $request->input('numerocomprobante'),
                 (string) $request->input('fechafactura'),
+                (int) $request->input('moneda_id'),
             );
         } catch (RuntimeException $e) {
             if ($request->ajax() || $request->wantsJson()) {

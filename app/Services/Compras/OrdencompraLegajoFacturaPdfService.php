@@ -42,6 +42,7 @@ class OrdencompraLegajoFacturaPdfService
         int $sucursal,
         int $numerocomprobante,
         string $fechafactura,
+        int $monedaId,
     ): Precarga_Comprobante_Proveedor {
         $this->assertPdfValido($pdf);
 
@@ -109,7 +110,7 @@ class OrdencompraLegajoFacturaPdfService
 
         $abrev = (string) (Tipotransaccion_Compra::query()->whereKey($tipoId)->value('abreviatura') ?? 'FAC');
         $ruta = $this->guardarPdfCanonico($pdf, $proveedor, $fechaYmd, $abrev, $letra, $sucursal, $numerocomprobante);
-        $monedaId = $this->monedaIdParaPrecarga($oc);
+        $monedaId = $this->assertMonedaId($monedaId);
 
         $payload = [
             'empresa_id' => $empresaId,
@@ -217,9 +218,10 @@ class OrdencompraLegajoFacturaPdfService
     }
 
     /**
-     * Moneda de la precarga: primer ítem de la OC, contrato, o primera moneda válida.
+     * Valor inicial del campo Moneda al asignar el PDF: la de la orden.
+     * Quien asigna puede cambiarla; lo que se guarda es lo que confirma el formulario.
      */
-    public function monedaIdParaPrecarga(Ordencompra $oc): int
+    public function monedaSugeridaId(Ordencompra $oc): int
     {
         $oc->loadMissing('ordencompra_articulos');
         $candidatos = [];
@@ -228,7 +230,7 @@ class OrdencompraLegajoFacturaPdfService
             $candidatos[] = (int) ($linea->moneda_id ?? 0);
         }
         $candidatos[] = (int) ($oc->contrato_moneda_id ?? 0);
-        $candidatos[] = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
+        $candidatos[] = PrecargaProveedorMonedaFacturaSupport::monedaLocalId();
 
         foreach ($candidatos as $id) {
             if ($id > 0 && Moneda::query()->whereKey($id)->exists()) {
@@ -236,12 +238,26 @@ class OrdencompraLegajoFacturaPdfService
             }
         }
 
-        $fallback = (int) (Moneda::query()->orderBy('id')->value('id') ?? 0);
-        if ($fallback <= 0) {
-            throw new RuntimeException('No hay una moneda válida para crear la precarga del legajo.');
+        return PrecargaProveedorMonedaFacturaSupport::monedaLocalId();
+    }
+
+    /**
+     * Moneda de un PDF adjunto sin formulario (scan). El asignar PDF pide la moneda aparte.
+     */
+    public function monedaIdParaPrecarga(Ordencompra $oc): int
+    {
+        unset($oc);
+
+        return PrecargaProveedorMonedaFacturaSupport::monedaLocalId();
+    }
+
+    private function assertMonedaId(int $monedaId): int
+    {
+        if ($monedaId <= 0 || ! Moneda::query()->whereKey($monedaId)->exists()) {
+            throw new RuntimeException('Indique la moneda de la factura.');
         }
 
-        return $fallback;
+        return $monedaId;
     }
 
     private function monedaEtiqueta(int $monedaId): string

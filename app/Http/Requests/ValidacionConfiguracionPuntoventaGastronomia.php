@@ -17,6 +17,9 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
         if ($this->input('ubicacion_id') === '' || $this->input('ubicacion_id') === '0') {
             $this->merge(['ubicacion_id' => null]);
         }
+        if ($this->input('waitry_mesa_gastronomia_id') === '' || $this->input('waitry_mesa_gastronomia_id') === '0') {
+            $this->merge(['waitry_mesa_gastronomia_id' => null]);
+        }
         // caja_id no aplica a PC de gastronomía (sí a estacionamiento/bingo).
         $input = $this->all();
         unset($input['caja_id']);
@@ -76,6 +79,12 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
             'tipotransaccion_nota_credito_id' => 'nullable|exists:tipotransaccion,id',
             'tipotransaccion_caja_id' => 'required|exists:tipotransaccion_caja,id',
             'waitry_habilitado' => 'required|in:0,1',
+            'waitry_mesa_gastronomia_id' => [
+                'nullable',
+                Rule::exists('waitry_mesa_gastronomia', 'id')->where(function ($query) use ($empresaId) {
+                    $query->where('empresa_id', $empresaId);
+                }),
+            ],
         ];
     }
 
@@ -95,6 +104,7 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
             'tipotransaccion_nota_credito_id' => 'tipo de transacción (nota de crédito)',
             'tipotransaccion_caja_id' => 'tipo de transacción de caja (cobranza)',
             'waitry_habilitado' => 'integración Waitry',
+            'waitry_mesa_gastronomia_id' => 'mesa Waitry',
         ];
     }
 }
