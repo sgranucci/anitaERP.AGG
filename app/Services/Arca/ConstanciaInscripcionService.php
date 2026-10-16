@@ -138,6 +138,8 @@ class ConstanciaInscripcionService
                 ],
                 'impuestos' => $this->extraerImpuestos($personaReturn),
                 'datosMonotributo' => $this->normalizarDatosMonotributo($personaReturn->datosMonotributo ?? null),
+                'actividades' => $this->extraerActividadesRegimenGeneral($personaReturn),
+                'actividadPrincipal' => $this->resolverActividadPrincipal($personaReturn),
                 'error' => $this->extraerMensajeErrorConstancia($err),
                 'raw' => $personaReturn,
             ];
@@ -208,8 +210,102 @@ class ConstanciaInscripcionService
             ],
             'impuestos' => $this->extraerImpuestos($personaReturn),
             'datosMonotributo' => $this->normalizarDatosMonotributo($personaReturn->datosMonotributo ?? null),
+            'actividades' => $this->extraerActividadesRegimenGeneral($personaReturn),
+            'actividadPrincipal' => $this->resolverActividadPrincipal($personaReturn),
             'error' => $errorMsg,
             'raw' => $personaReturn,
+        ];
+    }
+
+    /**
+     * Actividades económicas del régimen general (orden 1 = principal).
+     *
+     * @return list<array{idActividad: int|null, descripcionActividad: string|null, nomenclador: int|null, orden: int|null, periodo: string|null}>
+     */
+    private function extraerActividadesRegimenGeneral(object $personaReturn): array
+    {
+        $rg = $personaReturn->datosRegimenGeneral ?? null;
+        if ($rg === null || ! isset($rg->actividad)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($this->comoLista($rg->actividad) as $act) {
+            $normalizada = $this->normalizarActividad($act);
+            if ($normalizada !== null) {
+                $out[] = $normalizada;
+            }
+        }
+
+        usort($out, static function (array $a, array $b): int {
+            $oa = $a['orden'] ?? PHP_INT_MAX;
+            $ob = $b['orden'] ?? PHP_INT_MAX;
+
+            return $oa <=> $ob;
+        });
+
+        return $out;
+    }
+
+    /**
+     * Actividad principal: orden=1 del régimen general; si no hay, actividad monotributista.
+     *
+     * @return array{idActividad: int|null, descripcionActividad: string|null, nomenclador: int|null, orden: int|null, periodo: string|null, fuente: string}|null
+     */
+    private function resolverActividadPrincipal(object $personaReturn): ?array
+    {
+        $actividades = $this->extraerActividadesRegimenGeneral($personaReturn);
+        foreach ($actividades as $act) {
+            if ((int) ($act['orden'] ?? 0) === 1) {
+                return $act + ['fuente' => 'regimen_general'];
+            }
+        }
+
+        if ($actividades !== []) {
+            return $actividades[0] + ['fuente' => 'regimen_general'];
+        }
+
+        $mono = $this->normalizarDatosMonotributo($personaReturn->datosMonotributo ?? null);
+        $actMono = is_array($mono['actividadMonotributista'] ?? null) ? $mono['actividadMonotributista'] : null;
+        if ($actMono === null || (($actMono['idActividad'] ?? null) === null && ($actMono['descripcionActividad'] ?? null) === null)) {
+            return null;
+        }
+
+        return [
+            'idActividad' => $actMono['idActividad'] ?? null,
+            'descripcionActividad' => $actMono['descripcionActividad'] ?? null,
+            'nomenclador' => null,
+            'orden' => 1,
+            'periodo' => $actMono['periodo'] ?? null,
+            'fuente' => 'monotributo',
+        ];
+    }
+
+    /**
+     * @return array{idActividad: int|null, descripcionActividad: string|null, nomenclador: int|null, orden: int|null, periodo: string|null}|null
+     */
+    private function normalizarActividad(mixed $act): ?array
+    {
+        if (! is_object($act)) {
+            return null;
+        }
+
+        $id = isset($act->idActividad) ? (int) $act->idActividad : null;
+        $desc = isset($act->descripcionActividad) ? trim((string) $act->descripcionActividad) : null;
+        if ($desc === '') {
+            $desc = null;
+        }
+
+        if ($id === null && $desc === null) {
+            return null;
+        }
+
+        return [
+            'idActividad' => $id,
+            'descripcionActividad' => $desc,
+            'nomenclador' => isset($act->nomenclador) ? (int) $act->nomenclador : null,
+            'orden' => isset($act->orden) ? (int) $act->orden : null,
+            'periodo' => isset($act->periodo) ? (string) $act->periodo : null,
         ];
     }
 

@@ -48,6 +48,8 @@ use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosTipoImputadoSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorIvaLineasDesdeOcSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use App\Support\Contable\MontoEsArSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Stock\ArticuloSkuMatchSupport;
@@ -95,7 +97,9 @@ class ComprobanteProveedorPersistenciaService
     /**
      * Los conceptos tienen que ser del tipo que se graba (FNS con 421, no con 311/503).
      * Los que tienen un único equivalente (misma clase y alícuota) se cambian; si queda
-     * IVA de otro tipo, no se graba. Prorrateadas (FPB/…) y tipos sin conceptos: sin control.
+     * IVA de otro tipo, no se graba.
+     * Tipos P (FPB/FPS/…): si la OC tiene ≥2 finos, prorratea el IVA por CC destino
+     * (mismo criterio que recibe_comprobante / PDF-IA; cubre el alta LEGAJO).
      */
     private function alinearConceptosAlTipo(Request $request): void
     {
@@ -107,23 +111,33 @@ class ComprobanteProveedorPersistenciaService
         }
 
         $abrev = PrecargaProveedorConceptosTipoImputadoSupport::abreviaturaTipo($tipoId);
+        $montos = $request->input('montos', []);
         $lineas = [];
         foreach (array_values($ids) as $i => $id) {
-            $lineas[$i] = ['concepto_ivacompra_id' => (int) $id];
+            $lineas[$i] = [
+                'concepto_ivacompra_id' => (int) $id,
+                'monto' => MontoEsArSupport::parse($montos[$i] ?? 0),
+            ];
         }
 
-        $res = PrecargaProveedorConceptosTipoImputadoSupport::reubicar($lineas, $tipoId, $abrev);
-        if ($res['reubico']) {
-            $request->merge([
-                'concepto_ivacompra_ids' => array_map(
-                    static fn (array $l): ?int => (int) $l['concepto_ivacompra_id'] > 0 ? (int) $l['concepto_ivacompra_id'] : null,
-                    $res['lineas']
-                ),
-            ]);
-            $this->avisosConceptosTipo = array_values(array_filter(
-                $res['avisos'],
-                static fn (string $a): bool => str_contains($a, 'Se imputó')
-            ));
+        if (PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado($abrev)) {
+            $this->prorratearConceptosDesdeOcEnRequest($request, $lineas, $abrev);
+        } else {
+            $res = PrecargaProveedorConceptosTipoImputadoSupport::reubicar($lineas, $tipoId, $abrev);
+            if ($res['reubico']) {
+                $request->merge([
+                    'concepto_ivacompra_ids' => array_map(
+                        static fn (array $l): ?int => (int) $l['concepto_ivacompra_id'] > 0
+                            ? (int) $l['concepto_ivacompra_id']
+                            : null,
+                        $res['lineas']
+                    ),
+                ]);
+                $this->avisosConceptosTipo = array_values(array_filter(
+                    $res['avisos'],
+                    static fn (string $a): bool => str_contains($a, 'Se imputó')
+                ));
+            }
         }
 
         $montos = $request->input('montos', []);
@@ -138,6 +152,52 @@ class ComprobanteProveedorPersistenciaService
         if ($fuera->isNotEmpty()) {
             throw new RuntimeException(self::mensajeIvaFueraDelTipo($fuera, $abrev));
         }
+    }
+
+    /**
+     * @param  list<array{concepto_ivacompra_id:int, monto:float}>  $lineas
+     */
+    private function prorratearConceptosDesdeOcEnRequest(Request $request, array $lineas, string $abrev): void
+    {
+        $ocId = (int) $request->input('ordencompra_id', 0);
+        $oc = $ocId > 0 ? Ordencompra::query()->find($ocId) : null;
+        if ($oc === null) {
+            return;
+        }
+
+        $corr = app(PrecargaProveedorIvaLineasDesdeOcSupport::class)->corregir($lineas, $oc, $abrev);
+        if (! $corr['cambio']) {
+            return;
+        }
+
+        $idsOut = [];
+        $montosOut = [];
+        $cuentasOut = [];
+        $ccOut = [];
+        $centrosReq = $request->input('concepto_centrocosto_ids', []);
+        $cuentasReq = $request->input('cuentacontabledebe_ids', []);
+        // Conserva CC/cuenta de la 1ª línea original como fallback de renglón no-I.
+        $ccFallback = is_array($centrosReq) ? ($centrosReq[0] ?? null) : null;
+        $ctaFallback = is_array($cuentasReq) ? ($cuentasReq[0] ?? null) : null;
+
+        foreach ($corr['lineas'] as $l) {
+            $id = (int) ($l['concepto_ivacompra_id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $idsOut[] = $id;
+            $montosOut[] = round((float) ($l['monto'] ?? 0), 2);
+            $cuentasOut[] = $l['cuentacontabledebe_id'] ?? $ctaFallback;
+            $ccOut[] = $l['centrocosto_id'] ?? $ccFallback;
+        }
+
+        $request->merge([
+            'concepto_ivacompra_ids' => $idsOut,
+            'montos' => $montosOut,
+            'cuentacontabledebe_ids' => $cuentasOut,
+            'concepto_centrocosto_ids' => $ccOut,
+        ]);
+        $this->avisosConceptosTipo = array_values($corr['avisos']);
     }
 
     /**

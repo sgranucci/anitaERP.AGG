@@ -3,7 +3,9 @@
 namespace App\Services\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Models\Compras\Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
+use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
@@ -20,6 +22,8 @@ use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosTipoImputadoSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorIvaLineasDesdeOcSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use App\Support\Contable\AsientoEloquentDeleteSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\Auth;
@@ -122,6 +126,106 @@ class ComprobanteProveedorContabilizarService
         );
     }
 
+    /**
+     * Tipos P (FPB/…): si la OC exige varios finos y el IVA quedó en un solo Indirecto
+     * (típico alta LEGAJO), reparte antes de asentar.
+     */
+    private function alinearIvaProrrateoDesdeOcSiCorresponde(Comprobante_Proveedor $comprobante): void
+    {
+        $comprobante->loadMissing([
+            'tipotransaccion_compras:id,abreviatura',
+            'ordencompras.ordencompra_articulos.centrocostos_destino:id,codigo,tipoiva',
+            'ordencompras.centrocostos:id,codigo,tipoiva',
+            'comprobante_proveedor_conceptos.concepto_ivacompras',
+        ]);
+
+        $abrev = strtoupper(trim((string) ($comprobante->tipotransaccion_compras?->abreviatura ?? '')));
+        if (! PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado($abrev)) {
+            return;
+        }
+        $oc = $comprobante->ordencompras;
+        if ($oc === null) {
+            return;
+        }
+
+        $lineas = [];
+        foreach ($comprobante->comprobante_proveedor_conceptos as $c) {
+            $ci = $c->concepto_ivacompras;
+            if (! $ci) {
+                continue;
+            }
+            $lineas[] = [
+                'concepto_ivacompra_id' => (int) $ci->id,
+                'codigo_concepto_anita' => (int) $ci->codigo,
+                'monto' => round((float) $c->monto, 2),
+                'centrocosto_id' => ((int) ($c->centrocosto_id ?? 0)) ?: null,
+            ];
+        }
+
+        $corr = app(PrecargaProveedorIvaLineasDesdeOcSupport::class)->corregir($lineas, $oc, $abrev);
+        if (! $corr['cambio']) {
+            return;
+        }
+
+        $empresaId = (int) ($comprobante->empresa_id ?? 0);
+        $idsI = [];
+        foreach ($comprobante->comprobante_proveedor_conceptos as $c) {
+            $ci = $c->concepto_ivacompras;
+            if ($ci && strtoupper(trim((string) $ci->tipoconcepto)) === 'I') {
+                $idsI[] = (int) $ci->id;
+            }
+        }
+        $idsI = array_values(array_unique($idsI));
+        if ($idsI !== []) {
+            EloquentAuditDeleteSupport::each(
+                Comprobante_Proveedor_Concepto::query()
+                    ->where('comprobante_proveedor_id', $comprobante->id)
+                    ->whereIn('concepto_ivacompra_id', $idsI)
+            );
+        }
+
+        $orden = (int) Comprobante_Proveedor_Concepto::query()
+            ->where('comprobante_proveedor_id', $comprobante->id)
+            ->max('orden');
+
+        $conceptosNuevos = Concepto_Ivacompra::query()
+            ->whereIn('id', array_values(array_unique(array_map(
+                static fn (array $l): int => (int) ($l['concepto_ivacompra_id'] ?? 0),
+                $corr['lineas']
+            ))))
+            ->get()
+            ->keyBy('id');
+
+        foreach ($corr['lineas'] as $l) {
+            $conceptoId = (int) ($l['concepto_ivacompra_id'] ?? 0);
+            $concepto = $conceptosNuevos->get($conceptoId);
+            if (! $concepto || strtoupper(trim((string) $concepto->tipoconcepto)) !== 'I') {
+                continue;
+            }
+            $monto = round((float) ($l['monto'] ?? 0), 2);
+            if (abs($monto) < 0.0001) {
+                continue;
+            }
+            $orden++;
+            Comprobante_Proveedor_Concepto::query()->create([
+                'comprobante_proveedor_id' => $comprobante->id,
+                'concepto_ivacompra_id' => $conceptoId,
+                'orden' => $orden,
+                'monto' => $monto,
+                'cuentacontabledebe_id' => $concepto->cuentacontableDebeIdParaEmpresa(
+                    $empresaId > 0 ? $empresaId : null
+                ) ?: null,
+                'centrocosto_id' => ((int) ($l['centrocosto_id'] ?? 0)) ?: null,
+            ]);
+        }
+
+        $comprobante->unsetRelation('comprobante_proveedor_conceptos');
+        Log::info('comprobante_proveedor.contabilizar.iva_prorrateo_alineado', [
+            'comprobante_id' => $comprobante->id,
+            'avisos' => $corr['avisos'],
+        ]);
+    }
+
     public function contabilizar(int $comprobanteId): Comprobante_Proveedor
     {
         // Candado Redis: cubre la ventana completa (MySQL + Anita). El lockForUpdate del TX
@@ -147,6 +251,7 @@ class ComprobanteProveedorContabilizarService
         }
 
         $this->assertIvaDelTipo($comprobante);
+        $this->alinearIvaProrrateoDesdeOcSiCorresponde($comprobante);
 
         // Total desfasado de conceptos (ej. solo EXENTO con total=1): alinear y persistir
         // antes de cuotas / asiento / CC.
