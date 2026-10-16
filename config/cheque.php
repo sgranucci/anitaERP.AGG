@@ -3,6 +3,8 @@
 /**
  * Mapa empresa_id => puntoventa_id para ND por cheque rechazado.
  * Override: CHEQUE_ND_PUNTOVENTA_POR_EMPRESA='{"1":1}'
+ * Si Configuración general (Caja / Cheques) tiene sucursal de la NDR para esa empresa, manda ese id.
+ * En Ferli se ignora este mapa: la NDR sale siempre con la sucursal configurada (03333).
  *
  * @return array<int, int>
  */

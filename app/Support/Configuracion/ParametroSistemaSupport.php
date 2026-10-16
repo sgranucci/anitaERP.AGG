@@ -6,6 +6,7 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Configuracion\Parametro_Sistema;
 use App\Models\Contable\Cuentacontable;
+use App\Models\Ventas\Puntoventa;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
@@ -32,6 +33,8 @@ final class ParametroSistemaSupport
     public const CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD = 'recepcion_no_precargar_cantidad';
 
     public const CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID = 'ndr_cheque_concepto_ivacompra_id';
+
+    public const CLAVE_NDR_CHEQUE_PUNTOVENTA_ID = 'ndr_cheque_puntoventa_id';
 
     public const CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID = 'ncp_pronto_pago_cuentacontable_id';
 
@@ -92,6 +95,13 @@ final class ParametroSistemaSupport
                 'ayuda' => 'Concepto de IVA compra del débito interno al proveedor cuando se rechaza un cheque entregado. Tiene que ser uno que no retenga ganancias ni ingresos brutos. F1 o la lupa abren la consulta.',
                 'tipo' => 'concepto_ivacompra',
                 'orden' => 80,
+            ],
+            self::CLAVE_NDR_CHEQUE_PUNTOVENTA_ID => [
+                'grupo' => 'Caja / Cheques',
+                'etiqueta' => 'Sucursal de la NDR por cheque rechazado',
+                'ayuda' => 'Punto de venta de esta instalación. En Ferli queda fijo para todas las empresas (sucursal 03333) y el rechazo no lo cambia. En las demás, si el .env tiene un solo punto de venta se propone ese id; si hay uno distinto por empresa, queda vacío y sigue el mapa CHEQUE_ND_PUNTOVENTA_POR_EMPRESA.',
+                'tipo' => 'puntoventa',
+                'orden' => 85,
             ],
             self::CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID => [
                 'grupo' => 'Caja / Cobranzas',
@@ -213,6 +223,20 @@ final class ParametroSistemaSupport
     }
 
     /**
+     * Punto de venta de la NDR por cheque rechazado (Configuración general).
+     * 0 = no hay uno solo para esta instalación; el rechazo usa el mapa del .env.
+     */
+    public static function ndrChequePuntoventaId(): int
+    {
+        $valor = self::mapa()[self::CLAVE_NDR_CHEQUE_PUNTOVENTA_ID] ?? null;
+        if ($valor === null || $valor === '') {
+            return (int) self::fallbackValor(self::CLAVE_NDR_CHEQUE_PUNTOVENTA_ID);
+        }
+
+        return max(0, (int) $valor);
+    }
+
+    /**
      * Cuenta configurada del neto de la NCP de cobranza (id del plan elegido).
      * 0 = todavía no se eligió en Configuración general.
      */
@@ -285,6 +309,9 @@ final class ParametroSistemaSupport
             if ($def['tipo'] === 'cuentacontable') {
                 $item['cuentacontable'] = self::cuentaContableParaFormulario((int) $valor);
             }
+            if ($def['tipo'] === 'puntoventa') {
+                $item['puntoventa'] = self::puntoventaParaFormulario((int) $valor);
+            }
             if ($def['tipo'] === 'select' && isset($def['opciones']) && is_array($def['opciones'])) {
                 $item['opciones'] = $def['opciones'];
             }
@@ -304,7 +331,7 @@ final class ParametroSistemaSupport
                 continue;
             }
             $valorRaw = $valores[$clave];
-            if ($def['tipo'] === 'cuentacaja' || $def['tipo'] === 'concepto_ivacompra' || $def['tipo'] === 'cuentacontable') {
+            if ($def['tipo'] === 'cuentacaja' || $def['tipo'] === 'concepto_ivacompra' || $def['tipo'] === 'cuentacontable' || $def['tipo'] === 'puntoventa') {
                 $valor = (string) max(0, (int) $valorRaw);
                 if ($valor === '0') {
                     $valor = '';
@@ -393,6 +420,7 @@ final class ParametroSistemaSupport
             self::CLAVE_OC_SOLICITANTE_EDITABLE => EntornoEmpresaSupport::esElBierzo() ? '1' : '0',
             self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => '0',
             self::CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID => '',
+            self::CLAVE_NDR_CHEQUE_PUNTOVENTA_ID => (string) self::ndrChequePuntoventaIdFallback(),
             self::CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID => '',
             default => '0',
         };
@@ -438,6 +466,20 @@ final class ParametroSistemaSupport
     }
 
     /**
+     * @return array{id:int, codigo:string, nombre:string}
+     */
+    public static function puntoventaParaFormulario(int $id): array
+    {
+        $pv = $id > 0 ? Puntoventa::query()->find($id) : null;
+
+        return [
+            'id' => (int) ($pv->id ?? 0),
+            'codigo' => (string) ($pv->codigo ?? ''),
+            'nombre' => (string) ($pv->nombre ?? ''),
+        ];
+    }
+
+    /**
      * @return array{id:int, codigo:string, nombre:string, cbu:string}
      */
     public static function cuentaParaFormulario(int $id): array
@@ -450,6 +492,59 @@ final class ParametroSistemaSupport
             'nombre' => (string) ($cta->nombre ?? ''),
             'cbu' => (string) ($cta->cbu ?? ''),
         ];
+    }
+
+    private static function ndrChequePuntoventaIdFallback(): int
+    {
+        if (EntornoEmpresaSupport::esFerli()) {
+            return self::puntoventaActivoIdPorCodigo('03333');
+        }
+
+        $map = config('cheque.nd_puntoventa_por_empresa', []);
+        if (! is_array($map)) {
+            return 0;
+        }
+
+        $ids = [];
+        foreach ($map as $pvId) {
+            $id = (int) $pvId;
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+        if (count($ids) !== 1) {
+            return 0;
+        }
+
+        $id = (int) array_key_first($ids);
+        $pv = Puntoventa::query()->find($id);
+        if (! $pv || ! self::puntoventaActivo($pv)) {
+            return 0;
+        }
+
+        return $id;
+    }
+
+    private static function puntoventaActivoIdPorCodigo(string $codigo): int
+    {
+        $normalizado = Puntoventa::normalizarCodigoArca($codigo);
+        if ($normalizado === null) {
+            return 0;
+        }
+
+        $pv = Puntoventa::query()
+            ->where('codigo', $normalizado)
+            ->get()
+            ->first(static fn (Puntoventa $fila): bool => self::puntoventaActivo($fila));
+
+        return (int) ($pv->id ?? 0);
+    }
+
+    private static function puntoventaActivo(Puntoventa $pv): bool
+    {
+        $estado = strtoupper(trim((string) ($pv->estado ?? 'A')));
+
+        return $estado !== 'I' && $estado !== 'S';
     }
 
     private static function cuentacajaIdFallbackAnita(): int

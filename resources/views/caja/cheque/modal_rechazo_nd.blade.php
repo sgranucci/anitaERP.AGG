@@ -24,7 +24,11 @@
                     'col_label' => 'col-lg-3 control-label text-right pr-2',
                     'col_input' => 'col-lg-8',
                     'required' => true,
+                    'solo_lectura' => \App\Support\Configuracion\EntornoEmpresaSupport::esFerli(),
                 ])
+                @if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
+                    <p class="text-muted small mb-2">La NDR sale siempre con la sucursal de Configuración general, grupo Caja / Cheques. Acá no se cambia.</p>
+                @endif
                 <p class="text-muted small mb-3" id="rechazo-nd-modo-fe"></p>
                 <div class="form-row">
                     <div class="form-group col-md-4">

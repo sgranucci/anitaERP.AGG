@@ -21,6 +21,7 @@ use App\Support\Ventas\FacturacionLocal\LocalVentaAsignacionSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Excel;
 
@@ -526,10 +527,20 @@ class FacturacionLocalFacturasController extends Controller
             ->selectRaw('COALESCE(SUM(venta.total), 0) as total_facturas')
             ->first();
 
-        $nc = (clone $base)
+        // La tabla nueva no cubre las NC grabadas solo en facturacion_local_emision.venta_nc_id
+        // (Caballito 09/10/2026: NCD −175.000 sin fila en facturacion_local_nota_credito).
+        $idsTabla = (clone $base)
             ->join('facturacion_local_nota_credito as flnc', 'flnc.venta_factura_id', '=', 'venta.id')
-            ->join('venta as venta_nc', 'venta_nc.id', '=', 'flnc.venta_nc_id')
-            ->selectRaw('COUNT(DISTINCT flnc.venta_nc_id) as cantidad_notas_credito')
+            ->select('flnc.venta_nc_id as venta_nc_id');
+        $idsEmision = (clone $base)
+            ->join('facturacion_local_emision as fle_nc', 'fle_nc.venta_id', '=', 'venta.id')
+            ->where('fle_nc.venta_nc_id', '>', 0)
+            ->select('fle_nc.venta_nc_id as venta_nc_id');
+
+        $nc = DB::query()
+            ->fromSub($idsTabla->union($idsEmision), 'nc_ids')
+            ->join('venta as venta_nc', 'venta_nc.id', '=', 'nc_ids.venta_nc_id')
+            ->selectRaw('COUNT(venta_nc.id) as cantidad_notas_credito')
             ->selectRaw('COALESCE(SUM(venta_nc.total), 0) as total_notas_credito')
             ->first();
 

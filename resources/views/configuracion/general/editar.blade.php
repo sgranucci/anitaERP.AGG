@@ -24,7 +24,7 @@ Configuración general del sistema
                 <div class="card-body">
                     <div class="alert alert-info py-2">
                         Estos valores mandan sobre los defaults de <code>config/</code> y <code>.env</code>.
-                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos, umbrales de Compras / Suscripciones, la cantidad recibida de la recepción de proveedor, el concepto del débito por cheque rechazado y la cuenta del neto de la nota de crédito por pronto pago.
+                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos, umbrales de Compras / Suscripciones, la cantidad recibida de la recepción de proveedor, el concepto y la sucursal del débito por cheque rechazado, y la cuenta del neto de la nota de crédito por pronto pago.
                     </div>
 
                     @foreach ($grupos as $nombreGrupo => $parametros)
@@ -56,6 +56,32 @@ Configuración general del sistema
                                             value="{{ $cuenta['cbu'] ?? '' }}"
                                             placeholder="Se completa al elegir la cuenta">
                                         <small class="form-text text-muted">ARCA FCE dato adicional 21. Si queda vacío, cada empresa usa su cuenta en pesos de Banco Macro Gerli.</small>
+                                    </div>
+                                </div>
+                            @elseif ($parametro['tipo'] === 'puntoventa')
+                                @php
+                                    $pvOldId = (int) old('parametros.'.$parametro['clave'], $parametro['valor']);
+                                    $pvCfg = $parametro['puntoventa'] ?? ['id' => 0, 'codigo' => '', 'nombre' => ''];
+                                    if ((string) old('parametros.'.$parametro['clave'], '') !== '' && $pvOldId !== (int) ($pvCfg['id'] ?? 0)) {
+                                        $pvCfg = \App\Support\Configuracion\ParametroSistemaSupport::puntoventaParaFormulario($pvOldId);
+                                    }
+                                @endphp
+                                @include('ventas.partials.campo_consulta_puntoventa', [
+                                    'prefix' => 'ndr_cheque',
+                                    'label' => $parametro['etiqueta'],
+                                    'layout' => 'form_row',
+                                    'inputName' => 'parametros['.$parametro['clave'].']',
+                                    'inputId' => 'param_'.$parametro['clave'],
+                                    'puntoventaId' => $pvOldId > 0 ? $pvOldId : '',
+                                    'codigo' => $pvCfg['codigo'] ?? '',
+                                    'nombre' => $pvCfg['nombre'] ?? '',
+                                    'col_label' => 'col-lg-4 control-label text-right pr-2',
+                                    'col_input' => 'col-lg-7',
+                                    'required' => false,
+                                ])
+                                <div class="form-group row">
+                                    <div class="col-lg-7 offset-lg-4">
+                                        <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
                                     </div>
                                 </div>
                             @elseif ($parametro['tipo'] === 'concepto_ivacompra')
@@ -282,5 +308,7 @@ Configuración general del sistema
 @include('includes.caja.modalconsultacuentacaja')
 @include('includes.compras.modalconsultaconcepto_ivacompra')
 @include('includes.contable.modalconsultacuentacontable')
+@include('includes.ventas.modalconsultapuntoventa')
 <script src="{{ asset('assets/pages/scripts/contable/cuentacontable/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cuentacontable/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/puntoventa/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/puntoventa/consulta.js')) ?: time() }}"></script>
 @endsection
