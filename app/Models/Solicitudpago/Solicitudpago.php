@@ -132,12 +132,14 @@ class Solicitudpago extends Model implements Auditable
     }
 
     /**
-     * Órdenes de pago / IE generados desde esta SP (excluye compensatorios de reverso).
+     * Órdenes de pago vigentes de esta SP.
+     * Excluye el compensatorio de la anulación y la orden ya revertida.
      */
     public function cajaMovimientosPago(): HasMany
     {
         return $this->hasMany(Caja_Movimiento::class, 'solicitudpago_id')
             ->whereNull('caja_movimiento_origen_id')
+            ->whereNull('caja_movimiento_revertido_por_id')
             ->orderByDesc('id');
     }
 

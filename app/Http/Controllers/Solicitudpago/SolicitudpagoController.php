@@ -656,14 +656,9 @@ class SolicitudpagoController extends Controller
     {
         can('actualizar-solicitud-pago');
         $this->asegurarAccesoSolicitud((int) $id);
-        $sp = $this->repository->findOrFail($id);
-        if ($sp->estado !== SolicitudpagoEstados::AUTORIZADA) {
-            return redirect()->route('editar_solicitudpago', $id)
-                ->with('mensaje', 'Solo se puede marcar PAGADA una solicitud AUTORIZADA.');
-        }
-        $this->repository->cambiarEstado((int) $id, SolicitudpagoEstados::PAGADA, 'Pagada manual');
 
-        return redirect()->route('editar_solicitudpago', $id)->with('mensaje', 'Solicitud marcada como pagada');
+        return redirect()->route('editar_solicitudpago', $id)
+            ->with('mensaje_error', 'La solicitud pasa a Pagada solo al registrar la orden de pago (Pagar).');
     }
 
     public function irAPago($id)

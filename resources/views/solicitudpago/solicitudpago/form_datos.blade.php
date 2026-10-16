@@ -2,7 +2,7 @@
     use App\Support\Solicitudpago\SolicitudpagoEstados;
     use App\Support\Solicitudpago\SolicitudpagoTratamientos;
     $tratamientoActual = old('tratamiento', $data->tratamiento ?? SolicitudpagoTratamientos::NORMAL);
-    $estadoActual = old('estado', $data->estado ?? SolicitudpagoEstados::EMITIDA);
+    $estadoActual = isset($data) ? (string) $data->estado : SolicitudpagoEstados::EMITIDA;
     $estadoNombre = $estadoActual;
     foreach ($estado_enum as $opt) {
         if ($opt['valor'] === $estadoActual) {
@@ -211,7 +211,6 @@
             <div class="col-lg-8">
                 <input type="text" id="estado_mostrar" class="form-control" readonly
                        value="{{ $estadoNombre }}"/>
-                <input type="hidden" name="estado" value="{{ $estadoActual }}"/>
             </div>
         </div>
 

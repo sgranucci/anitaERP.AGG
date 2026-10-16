@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Solicitudpago;
 
+use App\Models\Caja\Caja_Movimiento;
 use App\Models\Solicitudpago\Concepto_Solicitudpago;
 use App\Models\Solicitudpago\Solicitudpago;
 use App\Models\Solicitudpago\Solicitudpago_Archivo;
@@ -216,6 +217,11 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             if ($anterior === $nuevoEstado) {
                 return $sp;
             }
+            if ($nuevoEstado === SolicitudpagoEstados::PAGADA && ! $this->tienePagoCajaVigente((int) $sp->id)) {
+                throw new \InvalidArgumentException(
+                    'La solicitud pasa a Pagada solo cuando hay una orden de pago vigente.'
+                );
+            }
             $sp->update(['estado' => $nuevoEstado]);
             $this->registrarEstadoLocal($sp, $anterior, $nuevoEstado, $leyenda !== '' ? $leyenda : 'Cambio estado');
             if ($nuevoEstado === SolicitudpagoEstados::PAGADA) {
@@ -253,7 +259,11 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             $tratamiento = SolicitudpagoTratamientos::NORMAL;
         }
 
-        $estado = (string) ($data['estado'] ?? ($existente->estado ?? SolicitudpagoEstados::EMITIDA));
+        // En una edición el estado lo cambian el árbol, la suspensión o el pago.
+        // El formulario no puede pisarlo: un guardado con la pantalla vieja dejaba Pagada sin orden de pago.
+        $estado = $existente !== null
+            ? (string) $existente->estado
+            : (string) ($data['estado'] ?? SolicitudpagoEstados::EMITIDA);
         if (! in_array($estado, array_column(SolicitudpagoEstados::opciones(), 'valor'), true)) {
             $estado = SolicitudpagoEstados::EMITIDA;
         }
@@ -447,6 +457,15 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
                 'hora' => now()->format('H:i'),
             ]);
         }
+    }
+
+    private function tienePagoCajaVigente(int $solicitudpagoId): bool
+    {
+        return Caja_Movimiento::query()
+            ->where('solicitudpago_id', $solicitudpagoId)
+            ->whereNull('caja_movimiento_origen_id')
+            ->whereNull('caja_movimiento_revertido_por_id')
+            ->exists();
     }
 
     private function registrarEstadoLocal(

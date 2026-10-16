@@ -88,12 +88,6 @@
                                     <i class="fa fa-money"></i> Pagar (IE)
                                 </a>
                             @endif
-                            <form action="{{ route('marcar_pagada_solicitudpago', $data->id) }}" method="POST" class="d-inline">
-                                @csrf
-                                <button type="submit" class="btn btn-outline-success btn-sm" onclick="return confirm('¿Marcar como PAGADA sin IE?');">
-                                    <i class="fa fa-check"></i> Marcar pagada
-                                </button>
-                            </form>
                         @endif
                     @endif
                     @if (

@@ -23,7 +23,7 @@
         <div class="card-body p-0">
             @if ($pagos->isEmpty())
                 <p class="text-muted mb-0 p-3">
-                    Estado PAGADA sin orden de pago vinculada (pudo marcarse manualmente).
+                    Estado Pagada sin orden de pago vigente.
                 </p>
             @else
                 <div class="table-responsive">
