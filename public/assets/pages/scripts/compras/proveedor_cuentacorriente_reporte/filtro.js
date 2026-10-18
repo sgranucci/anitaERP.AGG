@@ -327,6 +327,38 @@
             actualizarHiddenIds();
         });
 
+        if (window.ListadoFiltros) {
+            window.ListadoFiltros.init();
+            window.ListadoFiltros.sincronizarValorPrincipal('#filtro_valor', '#filtro_valor_panel');
+            window.ListadoFiltros.initSubmitBusquedaRapida($('#form-cc-proveedores-reporte'), {
+                hiddenRapida: '#filtro_busqueda_rapida',
+                selectorRapidaBtn: '[data-busqueda-rapida]',
+                selectorAplicarBtn: '[data-aplicar-filtros-panel]',
+                selectorInputRapida: '#filtro_valor',
+                selectorPanel: '#panel-filtros-cc-proveedores'
+            });
+        }
+
+        function syncFiltroCampoWrap() {
+            var modo = $('#filtro_modo').val() || 'todos';
+            $('.filtro-campo-wrap').toggle(modo === 'campo');
+        }
+
+        $('#filtro_modo').on('change', syncFiltroCampoWrap);
+        syncFiltroCampoWrap();
+
+        $('#filtro_campo').on('change', function () {
+            var $op = $('#filtro_operador');
+            var mapa = $op.data('operadores') || {};
+            var campo = $(this).val();
+            var ops = mapa[campo] || (window.ListadoFiltros && window.ListadoFiltros.operadoresModoTodos
+                ? window.ListadoFiltros.operadoresModoTodos()
+                : {});
+            if (window.ListadoFiltros && window.ListadoFiltros.rellenarSelectOperadores) {
+                window.ListadoFiltros.rellenarSelectOperadores($op, ops, $op.val());
+            }
+        });
+
         $('#form-cc-proveedores-reporte').on('submit', function (e) {
             var btnConsol = this.querySelector('.btn-toggle-consolidar-empresas');
             var inputConsol = this.querySelector('input[name="consolidar_empresas"]');
@@ -347,6 +379,12 @@
             }
             if (alcance !== 'rango') {
                 $('#proveedor_codigo_desde, #proveedor_codigo_hasta').prop('disabled', true);
+            }
+            // Espejo panel → name=filtro_valor (la caja del toolbar)
+            var $panelValor = $('#filtro_valor_panel');
+            var $toolbarValor = $('#filtro_valor');
+            if ($panelValor.length && $toolbarValor.length && document.activeElement === $panelValor[0]) {
+                $toolbarValor.val($panelValor.val());
             }
             mostrarOverlay('Consultando cuenta corriente…');
         });

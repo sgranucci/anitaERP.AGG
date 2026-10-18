@@ -65,6 +65,11 @@ class ProveedorCuentacorrienteReporteController extends Controller
         }
 
         $proveedoresIniciales = $this->proveedoresInicialesParaVista($filtros, $resultado);
+        $tieneFiltrosTexto = ProveedorCuentacorrienteReporteFiltros::tieneFiltrosTextoAplicados($filtros);
+        $limpiarTexto = array_merge(
+            ProveedorCuentacorrienteReporteFiltros::paraQueryStringSinTexto($filtros),
+            ['consultar' => 1]
+        );
 
         return view('compras.proveedor_cuentacorriente_reporte.index', [
             'filtros' => $filtros,
@@ -75,6 +80,10 @@ class ProveedorCuentacorrienteReporteController extends Controller
             'filas' => $filas,
             'filasVista' => $filasVista,
             'proveedores_iniciales' => $proveedoresIniciales,
+            'tiene_filtros_texto' => $tieneFiltrosTexto,
+            'limpiar_filtros_texto_url' => $consultado
+                ? route('proveedor_cuentacorriente_reporte', $limpiarTexto)
+                : route('proveedor_cuentacorriente_reporte'),
             'subtitulo' => ProveedorCuentacorrienteReporteFiltros::armarSubtitulo(
                 $filtros,
                 $this->textoEmpresas($filtros, $empresaQuery)

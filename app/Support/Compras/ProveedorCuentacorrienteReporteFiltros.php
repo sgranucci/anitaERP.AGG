@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Compras;
 
+use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Http\Request;
 
 /**
@@ -28,6 +29,41 @@ final class ProveedorCuentacorrienteReporteFiltros
     public const COTIZACION_COMPROBANTE_O_DIA = 'comprobante_o_dia';
 
     public const COTIZACION_DIA = 'dia';
+
+    public const FILTRO_MODO_TODOS = 'todos';
+
+    public const FILTRO_MODO_CAMPO = 'campo';
+
+    /** @var array<string, array{prop: string, type: string, label: string}> */
+    public const CAMPOS_TEXTO = [
+        'proveedor_codigo' => ['prop' => 'proveedor_codigo', 'type' => 'texto', 'label' => 'Código proveedor'],
+        'proveedor_nombre' => ['prop' => 'proveedor_nombre', 'type' => 'texto', 'label' => 'Nombre proveedor'],
+        'nombreempresa' => ['prop' => 'nombreempresa', 'type' => 'texto', 'label' => 'Empresa'],
+        'fecha' => ['prop' => 'fecha', 'type' => 'texto', 'label' => 'Fecha'],
+        'fechavencimiento' => ['prop' => 'fechavencimiento', 'type' => 'texto', 'label' => 'Vencimiento'],
+        'comprobante' => ['prop' => 'comprobante', 'type' => 'texto', 'label' => 'Comprobante'],
+        'abreviatura' => ['prop' => 'abreviatura', 'type' => 'texto', 'label' => 'Moneda'],
+        'importe' => ['prop' => 'importe', 'type' => 'texto', 'label' => 'Importe'],
+        'saldo_pendiente' => ['prop' => 'saldo_pendiente', 'type' => 'texto', 'label' => 'Saldo pendiente'],
+    ];
+
+    /** @var list<string> */
+    public const COLUMNAS_COINCIDENCIA_FLEXIBLE = [
+        'proveedor_codigo',
+        'proveedor_nombre',
+        'nombreempresa',
+        'comprobante',
+    ];
+
+    /** @var array<string, string> */
+    public const OPERADORES_TEXTO = [
+        'contiene' => 'Contiene (en cualquier parte)',
+        'empieza' => 'Empieza con',
+        'termina' => 'Termina con',
+        'igual' => 'Igual a',
+        'distinto' => 'Distinto de',
+        'vacio' => 'Vacío',
+    ];
 
     /**
      * @return array<string, mixed>
@@ -62,6 +98,24 @@ final class ProveedorCuentacorrienteReporteFiltros
 
         $proveedorIds = self::parseIdsCsv($request->input('proveedor_ids', ''));
 
+        $filtroValor = FiltrosListadoRequest::valorBusqueda($request);
+        $busquedaRapida = $request->boolean('filtro_busqueda_rapida');
+        $filtroModo = trim((string) $request->input('filtro_modo', self::FILTRO_MODO_TODOS));
+        if (! in_array($filtroModo, [self::FILTRO_MODO_TODOS, self::FILTRO_MODO_CAMPO], true)) {
+            $filtroModo = self::FILTRO_MODO_TODOS;
+        }
+        $filtroCampo = trim((string) $request->input('filtro_campo', 'proveedor_nombre'));
+        if (! isset(self::CAMPOS_TEXTO[$filtroCampo])) {
+            $filtroCampo = 'proveedor_nombre';
+        }
+        $filtroOperador = self::normalizarOperadorTexto(
+            (string) $request->input('filtro_operador', 'contiene')
+        );
+        if ($busquedaRapida) {
+            $filtroModo = self::FILTRO_MODO_TODOS;
+            $filtroOperador = 'contiene';
+        }
+
         return [
             'empresa_ids' => $empresaIds,
             'empresa_id' => $empresaIds[0] ?? null,
@@ -77,6 +131,11 @@ final class ProveedorCuentacorrienteReporteFiltros
             'solo_totales' => $request->boolean('solo_totales'),
             'expresion' => $expresion,
             'cotizacion_modo' => $cotizacionModo,
+            'filtro_modo' => $filtroModo,
+            'filtro_campo' => $filtroCampo,
+            'filtro_operador' => $filtroOperador,
+            'filtro_valor' => $filtroValor,
+            'filtro_busqueda_rapida' => $busquedaRapida,
         ];
     }
 
@@ -144,7 +203,61 @@ final class ProveedorCuentacorrienteReporteFiltros
             $out['proveedor_codigo_hasta'] = $hasta;
         }
 
+        if (self::tieneFiltrosTextoAplicados($filtros)) {
+            $out['filtro_modo'] = $filtros['filtro_modo'] ?? self::FILTRO_MODO_TODOS;
+            $out['filtro_campo'] = $filtros['filtro_campo'] ?? 'proveedor_nombre';
+            $out['filtro_operador'] = $filtros['filtro_operador'] ?? 'contiene';
+            $out['filtro_valor'] = trim((string) ($filtros['filtro_valor'] ?? ''));
+        }
+
         return $out;
+    }
+
+    /**
+     * Criterios del panel / caja de búsqueda (como en índices CRUD).
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function tieneFiltrosTextoAplicados(array $filtros): bool
+    {
+        if (trim((string) ($filtros['filtro_valor'] ?? '')) !== '') {
+            return true;
+        }
+
+        return ($filtros['filtro_operador'] ?? '') === 'vacio';
+    }
+
+    /**
+     * Query string sin el filtro de texto (conserva empresa, fechas, alcance, etc.).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function paraQueryStringSinTexto(array $filtros): array
+    {
+        $copia = $filtros;
+        $copia['filtro_valor'] = '';
+        $copia['filtro_operador'] = 'contiene';
+        $copia['filtro_busqueda_rapida'] = false;
+
+        return self::paraQueryString($copia);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function operadoresParaCampoTexto(string $campo): array
+    {
+        return self::OPERADORES_TEXTO;
+    }
+
+    public static function normalizarOperadorTexto(string $operador): string
+    {
+        if (! isset(self::OPERADORES_TEXTO[$operador])) {
+            return 'contiene';
+        }
+
+        return $operador;
     }
 
     /**
@@ -236,6 +349,19 @@ final class ProveedorCuentacorrienteReporteFiltros
         }
         if (! empty($filtros['incluir_aplicaciones'])) {
             $partes[] = 'Con aplicaciones';
+        }
+        if (self::tieneFiltrosTextoAplicados($filtros)) {
+            $valor = trim((string) ($filtros['filtro_valor'] ?? ''));
+            $operador = (string) ($filtros['filtro_operador'] ?? 'contiene');
+            if ($operador === 'vacio') {
+                $partes[] = 'Filtro texto: vacío';
+            } elseif ($valor !== '') {
+                $modoTexto = (string) ($filtros['filtro_modo'] ?? self::FILTRO_MODO_TODOS);
+                $etiquetaCampo = $modoTexto === self::FILTRO_MODO_CAMPO
+                    ? (self::CAMPOS_TEXTO[$filtros['filtro_campo'] ?? '']['label'] ?? 'Campo')
+                    : 'Cualquier campo';
+                $partes[] = 'Filtro: '.$etiquetaCampo.' «'.$valor.'»';
+            }
         }
         $partes[] = (($filtros['expresion'] ?? '') === self::EXPRESION_PESOS)
             ? 'Importes en moneda local'

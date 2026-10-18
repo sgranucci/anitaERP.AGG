@@ -14,6 +14,7 @@
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/listado-filtros.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor_cuentacorriente_reporte/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor_cuentacorriente_reporte/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
@@ -25,6 +26,7 @@
     $colLabel = 'col-lg-2 control-label text-right pr-2';
     $modoDeuda = ($filtros['modo'] ?? ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA)
         !== ProveedorCuentacorrienteReporteFiltros::MODO_FICHA;
+    $tieneFiltrosTexto = ! empty($tiene_filtros_texto);
 @endphp
 
 @include('includes.proceso_overlay_aviso', [
@@ -41,18 +43,34 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Deuda / ficha de cuenta corriente de proveedores</h3>
-                <div class="card-tools">
-                    <a href="{{ route('proveedor_cuentacorriente_reporte') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'filtroValor' => $filtros['filtro_valor'] ?? '',
+                        'tieneCriterios' => $tieneFiltrosTexto,
+                        'limpiarUrl' => $limpiar_filtros_texto_url
+                            ?? route('proveedor_cuentacorriente_reporte'),
+                        'placeholder' => 'Buscar proveedor, comprobante…',
+                        'toggleTarget' => '#panel-filtros-cc-proveedores',
+                        'formId' => 'form-cc-proveedores-reporte',
+                        'inputId' => 'filtro_valor',
+                        'toggleLabel' => 'Filtros',
+                        'toggleLabelOculto' => 'Ocultar filtros',
+                    ])
+                    <a href="{{ route('proveedor_cuentacorriente_reporte') }}" class="btn btn-outline-secondary btn-sm ml-1" title="Limpiar todo">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>
                 </div>
             </div>
 
             <form method="get" action="{{ route('proveedor_cuentacorriente_reporte') }}" id="form-cc-proveedores-reporte" class="mb-0">
+                @include('compras.proveedor_cuentacorriente_reporte.partials.filtros_texto', [
+                    'filtros' => $filtros,
+                    'tiene_filtros_texto' => $tieneFiltrosTexto,
+                ])
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
                         Consultá la <strong>deuda pendiente</strong> o la <strong>ficha corrida</strong> de uno, varios o todos los proveedores.
-                        Elegí primero cómo querés seleccionar proveedores; el resto de filtros se aplica igual en todos los casos.
+                        Con <strong>Todos</strong>, usá la caja de búsqueda o el panel Filtros (arriba a la derecha) para acotar por proveedor, comprobante, etc.
                     </p>
 
                     @include('includes.reportes.asignacion_empresas_checkboxes', [

@@ -10,6 +10,7 @@ use App\Models\Configuracion\Empresa;
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use App\Support\Compras\ProveedorCuentacorrienteReporteFiltros;
 use App\Support\Compras\ProveedorCuentacorrienteReporteProveedorSupport;
+use App\Support\Compras\ProveedorCuentacorrienteReporteTextoSupport;
 use App\Support\Compras\ProveedorLeyendaCuentaCorrienteSupport;
 use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
@@ -39,10 +40,13 @@ class ProveedorCuentacorrienteReporteService
             $resultado = $this->generarInterno($filtros);
             $resultado['secciones'] = [];
 
-            return $resultado;
+            return ProveedorCuentacorrienteReporteTextoSupport::aplicar($resultado, $filtros);
         }
 
-        return $this->generarPorEmpresa($filtros, $empresaIds);
+        return ProveedorCuentacorrienteReporteTextoSupport::aplicar(
+            $this->generarPorEmpresa($filtros, $empresaIds),
+            $filtros
+        );
     }
 
     /**
