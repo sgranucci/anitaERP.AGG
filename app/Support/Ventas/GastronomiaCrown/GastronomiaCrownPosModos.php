@@ -4,6 +4,10 @@ namespace App\Support\Ventas\GastronomiaCrown;
 
 /**
  * Modos del POS Crown (paridad a-comandera / confptovta).
+ *
+ * Letras Anita (cpvta_modo_uso): R=resto S=sala C=comandera O=restosolo.
+ * Comanda (cpvta_comanda): C=sola F/A=factura_y_comanda N/vacío=sin_comanda.
+ * Sync: config-pv-gastronomia:sincronizar-anita ← confptovta (cncadmin).
  */
 final class GastronomiaCrownPosModos
 {

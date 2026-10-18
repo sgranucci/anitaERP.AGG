@@ -119,53 +119,62 @@ final class PagoproveedorAnitaImpresionBridgeReader
         int $fechaHastaYmd,
         array &$errores,
     ): array {
-        $empresasAnita = $this->normalizarEmpresas($empresasAnita);
-        if ($empresasAnita === []) {
+        $tieneEmpresa = PagoproveedorAnitaImportEmpresaSupport::auxpagTieneEmpresa();
+        $empresasAnita = $this->normalizarEmpresas($empresasAnita, $tieneEmpresa);
+        if ($tieneEmpresa && $empresasAnita === []) {
             return [];
         }
 
-        $inEmp = implode(',', $empresasAnita);
         $tipos = "('OPP','OPA')";
+        $rango = ' BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd;
+        $inEmp = $tieneEmpresa ? implode(',', $empresasAnita) : '';
 
         $gan = $this->listar(
             'compras',
             'retmov',
-            self::RETMOV_CAMPOS,
-            ' WHERE retv_empresa IN ('.$inEmp.') AND retv_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
-                .' AND retv_tipo IN '.$tipos,
+            $tieneEmpresa ? self::RETMOV_CAMPOS : self::RETMOV_CAMPOS_MONO,
+            $tieneEmpresa
+                ? ' WHERE retv_empresa IN ('.$inEmp.') AND retv_fecha'.$rango.' AND retv_tipo IN '.$tipos
+                : ' WHERE retv_fecha'.$rango.' AND retv_tipo IN '.$tipos,
             $errores,
             'impresion-retmov'
         );
         $iva = $this->listar(
             'compras',
             'retimov',
-            self::RETIMOV_CAMPOS,
-            ' WHERE retiv_empresa IN ('.$inEmp.') AND retiv_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
-                .' AND retiv_tipo IN '.$tipos,
+            $tieneEmpresa ? self::RETIMOV_CAMPOS : self::RETIMOV_CAMPOS_MONO,
+            $tieneEmpresa
+                ? ' WHERE retiv_empresa IN ('.$inEmp.') AND retiv_fecha'.$rango.' AND retiv_tipo IN '.$tipos
+                : ' WHERE retiv_fecha'.$rango.' AND retiv_tipo IN '.$tipos,
             $errores,
             'impresion-retimov'
         );
         $suss = $this->listar(
             'compras',
             'retsmov',
-            self::RETSMOV_CAMPOS,
-            ' WHERE retsv_empresa IN ('.$inEmp.') AND retsv_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
-                .' AND retsv_tipo IN '.$tipos,
+            $tieneEmpresa ? self::RETSMOV_CAMPOS : self::RETSMOV_CAMPOS_MONO,
+            $tieneEmpresa
+                ? ' WHERE retsv_empresa IN ('.$inEmp.') AND retsv_fecha'.$rango.' AND retsv_tipo IN '.$tipos
+                : ' WHERE retsv_fecha'.$rango.' AND retsv_tipo IN '.$tipos,
             $errores,
             'impresion-retsmov'
         );
         $ibr = $this->listar(
             'compras',
             'retibrmov',
-            self::RETIBRMOV_CAMPOS,
-            ' WHERE retibr_empresa IN ('.$inEmp.') AND retibr_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
-                .' AND retibr_tipo IN '.$tipos,
+            $tieneEmpresa ? self::RETIBRMOV_CAMPOS : self::RETIBRMOV_CAMPOS_MONO,
+            $tieneEmpresa
+                ? ' WHERE retibr_empresa IN ('.$inEmp.') AND retibr_fecha'.$rango.' AND retibr_tipo IN '.$tipos
+                : ' WHERE retibr_fecha'.$rango.' AND retibr_tipo IN '.$tipos,
             $errores,
             'impresion-retibrmov'
         );
 
         $out = [];
         foreach ($gan as $f) {
+            if (! $tieneEmpresa && ! isset($f->retv_empresa)) {
+                $f->retv_empresa = 0;
+            }
             $k = $this->claveRet(
                 (int) ($f->retv_empresa ?? 0),
                 (string) ($f->retv_tipo ?? ''),
@@ -182,6 +191,9 @@ final class PagoproveedorAnitaImpresionBridgeReader
             $out[$k]['ibr'] ??= [];
         }
         foreach ($iva as $f) {
+            if (! $tieneEmpresa && ! isset($f->retiv_empresa)) {
+                $f->retiv_empresa = 0;
+            }
             $k = $this->claveRet(
                 (int) ($f->retiv_empresa ?? 0),
                 (string) ($f->retiv_tipo ?? ''),
@@ -198,6 +210,9 @@ final class PagoproveedorAnitaImpresionBridgeReader
             $out[$k]['ibr'] ??= [];
         }
         foreach ($suss as $f) {
+            if (! $tieneEmpresa && ! isset($f->retsv_empresa)) {
+                $f->retsv_empresa = 0;
+            }
             $k = $this->claveRet(
                 (int) ($f->retsv_empresa ?? 0),
                 (string) ($f->retsv_tipo ?? ''),
@@ -214,6 +229,9 @@ final class PagoproveedorAnitaImpresionBridgeReader
             $out[$k]['ibr'] ??= [];
         }
         foreach ($ibr as $f) {
+            if (! $tieneEmpresa && ! isset($f->retibr_empresa)) {
+                $f->retibr_empresa = 0;
+            }
             $k = $this->claveRet(
                 (int) ($f->retibr_empresa ?? 0),
                 (string) ($f->retibr_tipo ?? ''),
@@ -236,7 +254,8 @@ final class PagoproveedorAnitaImpresionBridgeReader
     public function claveRet(int $empresa, string $tipo, string $letra, int $sucursal, int $nro): string
     {
         $tipo = ComprobanteProveedorAnitaImportClaveSupport::tipo($tipo);
-        if ($empresa <= 0 || $tipo === '' || $nro <= 0) {
+        // Mono (Crown): empresa Anita = 0 es válida.
+        if ($empresa < 0 || $tipo === '' || $nro <= 0) {
             return '';
         }
         $let = ComprobanteProveedorAnitaImportClaveSupport::letra($letra);
@@ -248,12 +267,16 @@ final class PagoproveedorAnitaImpresionBridgeReader
      * @param  list<int>  $empresasAnita
      * @return list<int>
      */
-    private function normalizarEmpresas(array $empresasAnita): array
+    private function normalizarEmpresas(array $empresasAnita, ?bool $tieneEmpresa = null): array
     {
-        return array_values(array_unique(array_filter(
-            array_map('intval', $empresasAnita),
-            static fn (int $id) => $id > 0
-        )));
+        $tieneEmpresa ??= PagoproveedorAnitaImportEmpresaSupport::auxpagTieneEmpresa();
+        $ids = array_values(array_unique(array_map('intval', $empresasAnita)));
+        if ($tieneEmpresa) {
+            return array_values(array_filter($ids, static fn (int $id) => $id > 0));
+        }
+
+        // Mono: aceptar 0; si viene vacío, usar [0].
+        return $ids === [] ? [0] : $ids;
     }
 
     /**

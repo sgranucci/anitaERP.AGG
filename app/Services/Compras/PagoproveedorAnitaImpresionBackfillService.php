@@ -7,11 +7,11 @@ namespace App\Services\Compras;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
+use App\Support\Compras\AnitaImport\PagoproveedorAnitaImportEmpresaSupport;
 use App\Support\Compras\AnitaImport\PagoproveedorAnitaImpresionAuxpagMapper;
 use App\Support\Compras\AnitaImport\PagoproveedorAnitaImpresionBridgeReader;
 use App\Support\Compras\AnitaImport\PagoproveedorAnitaImpresionElegibleSupport;
 use App\Support\Compras\AnitaImport\PagoproveedorAnitaImpresionRetencionMapper;
-use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -85,13 +85,8 @@ class PagoproveedorAnitaImpresionBackfillService
 
         $empresasAnita = [];
         foreach ($elegibles as $pago) {
-            $cod = SicoreEmpresaAnitaSupport::codigoEmpresaAnita((int) $pago->empresa_id);
-            if ($cod <= 0) {
-                $cod = (int) $pago->empresa_id;
-            }
-            if ($cod > 0) {
-                $empresasAnita[$cod] = $cod;
-            }
+            $cod = PagoproveedorAnitaImportEmpresaSupport::empresaAnitaClaveDesdeErp((int) $pago->empresa_id);
+            $empresasAnita[$cod] = $cod;
         }
 
         $auxpags = $this->reader->listarAuxpag(
@@ -126,10 +121,7 @@ class PagoproveedorAnitaImpresionBackfillService
 
         foreach ($elegibles as $pago) {
             try {
-                $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita((int) $pago->empresa_id);
-                if ($empresaAnita <= 0) {
-                    $empresaAnita = (int) $pago->empresa_id;
-                }
+                $empresaAnita = PagoproveedorAnitaImportEmpresaSupport::empresaAnitaClaveDesdeErp((int) $pago->empresa_id);
                 $tipo = ComprobanteProveedorAnitaImportClaveSupport::tipo((string) $pago->tipocomprobante);
                 $nro = (int) $pago->numerotransaccion;
                 $claveAux = PagoproveedorAnitaImpresionAuxpagMapper::claveOp($empresaAnita, $tipo, $nro);
