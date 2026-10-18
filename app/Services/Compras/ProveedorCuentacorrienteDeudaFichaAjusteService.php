@@ -41,6 +41,13 @@ final class ProveedorCuentacorrienteDeudaFichaAjusteService
                 }
 
                 $total = round((float) $grupo['ajuste_propuesto'], 2);
+                $monedaId = (int) ($grupo['moneda_id'] ?? CotizacionVigenteSupport::MONEDA_LOCAL_ID);
+                if ($monedaId <= 0) {
+                    $monedaId = CotizacionVigenteSupport::MONEDA_LOCAL_ID;
+                }
+                $cotizacion = $monedaId === CotizacionVigenteSupport::MONEDA_LOCAL_ID
+                    ? 1.0
+                    : CotizacionVigenteSupport::ventaValorOUno($fecha, $monedaId);
                 $primero = $ids[0] ?? 0;
                 if ($primero > 0) {
                     $fila = Proveedor_Cuentacorriente::query()->find($primero);
@@ -48,8 +55,8 @@ final class ProveedorCuentacorrienteDeudaFichaAjusteService
                         $fila->fecha = $fecha;
                         $fila->fechavencimiento = $fecha;
                         $fila->total = $total;
-                        $fila->moneda_id = CotizacionVigenteSupport::MONEDA_LOCAL_ID;
-                        $fila->cotizacion = 1;
+                        $fila->moneda_id = $monedaId;
+                        $fila->cotizacion = $cotizacion;
                         $fila->leyenda = $leyenda;
                         $fila->comprobante_proveedor_id = null;
                         $fila->comprobante_proveedor_cuota_id = null;
@@ -68,8 +75,8 @@ final class ProveedorCuentacorrienteDeudaFichaAjusteService
                     'proveedor_id' => (int) $grupo['proveedor_id'],
                     'empresa_id' => (int) $grupo['empresa_id'],
                     'total' => $total,
-                    'moneda_id' => CotizacionVigenteSupport::MONEDA_LOCAL_ID,
-                    'cotizacion' => 1,
+                    'moneda_id' => $monedaId,
+                    'cotizacion' => $cotizacion,
                     'leyenda' => $leyenda,
                     'comprobante_proveedor_id' => null,
                     'comprobante_proveedor_cuota_id' => null,

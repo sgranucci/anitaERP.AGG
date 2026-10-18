@@ -12,8 +12,9 @@ use Illuminate\Support\Facades\DB;
  * Las dos lecturas son las del reporte Deuda / ficha: mismas filas, mismas aplicaciones
  * y la cotización grabada en el comprobante.
  *
- * Pesos: cada movimiento × su cotización histórica.
- * Dólares: esos pesos ÷ el dólar vigente de la fecha de ese movimiento.
+ * Expresión origen: saldos en la moneda de cada movimiento (sin convertir).
+ * Expresión pesos: cada movimiento × su cotización histórica; dólares = esos pesos ÷
+ * el dólar vigente de la fecha de ese movimiento.
  *
  * No consulta Anita ni el bridge. El renglón de ajuste no lleva factura ni orden de pago,
  * así que entra en la ficha y no en la deuda.
@@ -22,12 +23,17 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
 {
     public const FECHA_CORTE_DEFAULT = '2026-09-30';
 
+    public const EXPRESION_ORIGEN = 'origen';
+
+    public const EXPRESION_PESOS = 'pesos';
+
     /**
      * @return array{
      *   fecha: string,
+     *   expresion: string,
      *   leyenda: string,
-     *   moneda_dolar_id: int,
-     *   cotizacion_dolar_corte: float,
+     *   moneda_dolar_id: int|null,
+     *   cotizacion_dolar_corte: float|null,
      *   cotizacion_dolar_fecha: string|null,
      *   tolerancia: float,
      *   resumen: array<string, int|float>,
@@ -39,17 +45,27 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
         ?int $empresaId = null,
         ?int $proveedorId = null,
         float $tolerancia = ProveedorCuentacorrienteConciliacionSupport::TOLERANCIA,
+        string $expresion = self::EXPRESION_ORIGEN,
     ): array {
         $fechaCorte = $this->fechaYmd($fechaCorte);
+        $expresion = $expresion === self::EXPRESION_PESOS
+            ? self::EXPRESION_PESOS
+            : self::EXPRESION_ORIGEN;
         $leyenda = ProveedorCuentacorrienteGrillaSupport::PREFIJO_LEYENDA_AJUSTE
             .date('d/m/Y', strtotime($fechaCorte));
-        $monedaDolar = $this->resolverMonedaDolar();
-        $cotDolarCorte = CotizacionVigenteSupport::venta($fechaCorte, $monedaDolar['id']);
-        $cotCorte = (float) $cotDolarCorte['valor'];
-        if ($cotCorte <= 0) {
-            throw new \RuntimeException(
-                'No hay cotización de dólar vigente al '.$fechaCorte.'. Sin eso no se puede armar el control en dólares ni el efecto del ajuste.'
-            );
+
+        $monedaDolar = null;
+        $cotCorte = null;
+        $cotDolarCorte = ['valor' => 0.0, 'fecha' => null];
+        if ($expresion === self::EXPRESION_PESOS) {
+            $monedaDolar = $this->resolverMonedaDolar();
+            $cotDolarCorte = CotizacionVigenteSupport::venta($fechaCorte, $monedaDolar['id']);
+            $cotCorte = (float) $cotDolarCorte['valor'];
+            if ($cotCorte <= 0) {
+                throw new \RuntimeException(
+                    'No hay cotización de dólar vigente al '.$fechaCorte.'. Sin eso no se puede armar el control en dólares ni el efecto del ajuste.'
+                );
+            }
         }
 
         $grupos = [];
@@ -58,6 +74,7 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
             'grupos' => 0,
             'con_diferencia_pesos' => 0,
             'con_diferencia_dolares' => 0,
+            'con_diferencia_origen' => 0,
             'ajustes_a_grabar' => 0,
             'ajustes_a_borrar' => 0,
             'filas_cotizacion_dia' => 0,
@@ -65,9 +82,14 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
             'filas_sin_dolar' => 0,
             'suma_diferencia_pesos' => 0.0,
             'suma_diferencia_dolares' => 0.0,
+            'suma_diferencia_origen' => 0.0,
             'suma_ajuste_propuesto' => 0.0,
             'suma_dolares_despues' => 0.0,
         ];
+
+        $abreviaturas = DB::table('moneda')->pluck('abreviatura', 'id')->map(
+            static fn ($v) => strtoupper(trim((string) $v))
+        )->all();
 
         $query = DB::table('proveedor_cuentacorriente as cc')
             ->join('proveedor as p', function ($join) {
@@ -112,20 +134,42 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
             $query->where('cc.proveedor_id', $proveedorId);
         }
 
-        $query->chunkById(800, function ($filas) use (&$grupos, &$resumen, $leyenda, $monedaDolar, $fechaCorte) {
+        $query->chunkById(800, function ($filas) use (
+            &$grupos,
+            &$resumen,
+            $leyenda,
+            $monedaDolar,
+            $expresion,
+            $abreviaturas
+        ) {
             foreach ($filas as $fila) {
                 $resumen['movimientos']++;
-                $key = ((int) $fila->proveedor_id).'|'.((int) $fila->empresa_id);
+                $monedaId = (int) ($fila->moneda_id ?: CotizacionVigenteSupport::MONEDA_LOCAL_ID);
+                $key = $expresion === self::EXPRESION_ORIGEN
+                    ? ((int) $fila->proveedor_id).'|'.((int) $fila->empresa_id).'|'.$monedaId
+                    : ((int) $fila->proveedor_id).'|'.((int) $fila->empresa_id);
                 if (! isset($grupos[$key])) {
-                    $grupos[$key] = $this->grupoVacio($fila);
+                    $grupos[$key] = $this->grupoVacio($fila, $monedaId, $abreviaturas[$monedaId] ?? '');
                 }
 
                 $esAjuste = trim((string) ($fila->leyenda ?? '')) === $leyenda
                     && (int) ($fila->comprobante_proveedor_id ?? 0) === 0
                     && (int) ($fila->pagoproveedor_id ?? 0) === 0;
 
+                if ($expresion === self::EXPRESION_ORIGEN) {
+                    $this->acumularOrigen($grupos[$key], $fila, $esAjuste);
+
+                    continue;
+                }
+
                 $pesosTotal = $this->aPesos($fila, $resumen, null, true);
-                $usdTotal = $this->aDolares($pesosTotal, $this->ymd($fila->fecha), $monedaDolar['id'], $resumen, true);
+                $usdTotal = $this->aDolares(
+                    $pesosTotal,
+                    $this->ymd($fila->fecha),
+                    (int) $monedaDolar['id'],
+                    $resumen,
+                    true
+                );
 
                 $grupos[$key]['ficha_pesos'] += $pesosTotal;
                 if ($usdTotal !== null) {
@@ -155,7 +199,13 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
                     (float) ($fila->aplicado ?? 0)
                 );
                 $pesosPendiente = $this->aPesos($fila, $resumen, $pendiente, false);
-                $usdPendiente = $this->aDolares($pesosPendiente, $this->ymd($fila->fecha), $monedaDolar['id'], $resumen, false);
+                $usdPendiente = $this->aDolares(
+                    $pesosPendiente,
+                    $this->ymd($fila->fecha),
+                    (int) $monedaDolar['id'],
+                    $resumen,
+                    false
+                );
                 $grupos[$key]['deuda_pesos'] += $pesosPendiente;
                 if ($usdPendiente !== null) {
                     $grupos[$key]['deuda_usd'] += $usdPendiente;
@@ -167,16 +217,23 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
 
         $salida = [];
         foreach ($grupos as $grupo) {
-            $armado = $this->cerrarGrupo($grupo, $cotCorte, $tolerancia);
+            $armado = $expresion === self::EXPRESION_ORIGEN
+                ? $this->cerrarGrupoOrigen($grupo, $tolerancia)
+                : $this->cerrarGrupo($grupo, (float) $cotCorte, $tolerancia);
             if ($armado === null) {
                 continue;
             }
             $salida[] = $armado;
-            $resumen['con_diferencia_pesos'] += abs($armado['diferencia_pesos']) >= $tolerancia ? 1 : 0;
-            $resumen['con_diferencia_dolares'] += abs($armado['diferencia_usd']) >= $tolerancia ? 1 : 0;
-            $resumen['suma_diferencia_pesos'] += $armado['diferencia_pesos'];
-            $resumen['suma_diferencia_dolares'] += $armado['diferencia_usd'];
-            $resumen['suma_dolares_despues'] += $armado['diferencia_usd_despues'];
+            if ($expresion === self::EXPRESION_ORIGEN) {
+                $resumen['con_diferencia_origen'] += abs($armado['diferencia_origen']) >= $tolerancia ? 1 : 0;
+                $resumen['suma_diferencia_origen'] += $armado['diferencia_origen'];
+            } else {
+                $resumen['con_diferencia_pesos'] += abs($armado['diferencia_pesos']) >= $tolerancia ? 1 : 0;
+                $resumen['con_diferencia_dolares'] += abs($armado['diferencia_usd']) >= $tolerancia ? 1 : 0;
+                $resumen['suma_diferencia_pesos'] += $armado['diferencia_pesos'];
+                $resumen['suma_diferencia_dolares'] += $armado['diferencia_usd'];
+                $resumen['suma_dolares_despues'] += $armado['diferencia_usd_despues'];
+            }
             if ($armado['accion'] === 'grabar') {
                 $resumen['ajustes_a_grabar']++;
                 $resumen['suma_ajuste_propuesto'] += $armado['ajuste_propuesto'];
@@ -185,14 +242,17 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
             }
         }
 
-        usort($salida, function (array $a, array $b): int {
-            return abs($b['diferencia_pesos']) <=> abs($a['diferencia_pesos']);
+        usort($salida, function (array $a, array $b) use ($expresion): int {
+            $campo = $expresion === self::EXPRESION_ORIGEN ? 'diferencia_origen' : 'diferencia_pesos';
+
+            return abs((float) $b[$campo]) <=> abs((float) $a[$campo]);
         });
 
         $resumen['grupos'] = count($salida);
         foreach ([
             'suma_diferencia_pesos',
             'suma_diferencia_dolares',
+            'suma_diferencia_origen',
             'suma_ajuste_propuesto',
             'suma_dolares_despues',
         ] as $clave) {
@@ -201,11 +261,12 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
 
         return [
             'fecha' => $fechaCorte,
+            'expresion' => $expresion,
             'leyenda' => $leyenda,
-            'moneda_dolar_id' => $monedaDolar['id'],
-            'moneda_dolar_abreviatura' => $monedaDolar['abreviatura'],
+            'moneda_dolar_id' => $monedaDolar['id'] ?? null,
+            'moneda_dolar_abreviatura' => $monedaDolar['abreviatura'] ?? null,
             'cotizacion_dolar_corte' => $cotCorte,
-            'cotizacion_dolar_fecha' => $cotDolarCorte['fecha'],
+            'cotizacion_dolar_fecha' => $cotDolarCorte['fecha'] ?? null,
             'tolerancia' => $tolerancia,
             'resumen' => $resumen,
             'grupos' => $salida,
@@ -213,10 +274,38 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
     }
 
     /**
+     * @param  array<string, mixed>  $grupo
+     */
+    private function acumularOrigen(array &$grupo, object $fila, bool $esAjuste): void
+    {
+        $total = (float) $fila->total;
+        $grupo['ficha_origen'] += $total;
+
+        if ($esAjuste) {
+            $grupo['ajuste_ids'][] = (int) $fila->id;
+            $grupo['ajuste_actual'] += $total;
+
+            return;
+        }
+
+        $grupo['ficha_origen_sin_ajuste'] += $total;
+
+        if (! $this->esDeudaAbierta($fila)) {
+            return;
+        }
+
+        $pendiente = ProveedorCuentacorrienteGrillaSupport::saldoPendiente(
+            $total,
+            (float) ($fila->aplicado ?? 0)
+        );
+        $grupo['deuda_origen'] += $pendiente;
+    }
+
+    /**
      * @param  object  $fila
      * @return array<string, mixed>
      */
-    private function grupoVacio(object $fila): array
+    private function grupoVacio(object $fila, int $monedaId, string $abreviatura): array
     {
         return [
             'proveedor_id' => (int) $fila->proveedor_id,
@@ -224,15 +313,67 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
             'proveedor_nombre' => trim((string) ($fila->proveedor_nombre ?? '')),
             'empresa_id' => (int) $fila->empresa_id,
             'empresa_nombre' => trim((string) ($fila->empresa_nombre ?? '')),
+            'moneda_id' => $monedaId,
+            'moneda_abreviatura' => $abreviatura !== '' ? $abreviatura : 'ARS',
             'deuda_pesos' => 0.0,
             'ficha_pesos' => 0.0,
             'ficha_pesos_sin_ajuste' => 0.0,
             'deuda_usd' => 0.0,
             'ficha_usd' => 0.0,
             'ficha_usd_sin_ajuste' => 0.0,
+            'deuda_origen' => 0.0,
+            'ficha_origen' => 0.0,
+            'ficha_origen_sin_ajuste' => 0.0,
             'ajuste_actual' => 0.0,
             'ajuste_ids' => [],
             'usd_incompleto' => false,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $grupo
+     * @return array<string, mixed>|null
+     */
+    private function cerrarGrupoOrigen(array $grupo, float $tolerancia): ?array
+    {
+        $deuda = round((float) $grupo['deuda_origen'], 2);
+        $ficha = round((float) $grupo['ficha_origen'], 2);
+        $ajusteActual = round((float) $grupo['ajuste_actual'], 2);
+        $ajustePropuesto = round((float) $grupo['deuda_origen'] - (float) $grupo['ficha_origen_sin_ajuste'], 2);
+        if (abs($ajustePropuesto) < $tolerancia) {
+            $ajustePropuesto = 0.0;
+        }
+
+        $diferencia = round($deuda - $ficha, 2);
+        $cambiaAjuste = abs($ajustePropuesto - $ajusteActual) >= $tolerancia
+            || ($ajustePropuesto == 0.0 && $grupo['ajuste_ids'] !== []);
+        $hayDiferencia = abs($diferencia) >= $tolerancia;
+        if (! $hayDiferencia && ! $cambiaAjuste) {
+            return null;
+        }
+
+        $accion = 'ninguna';
+        if ($ajustePropuesto == 0.0 && $grupo['ajuste_ids'] !== []) {
+            $accion = 'borrar';
+        } elseif (abs($ajustePropuesto - $ajusteActual) >= $tolerancia) {
+            $accion = 'grabar';
+        }
+
+        return [
+            'proveedor_id' => $grupo['proveedor_id'],
+            'proveedor_codigo' => $grupo['proveedor_codigo'],
+            'proveedor_nombre' => $grupo['proveedor_nombre'],
+            'empresa_id' => $grupo['empresa_id'],
+            'empresa_nombre' => $grupo['empresa_nombre'],
+            'moneda_id' => $grupo['moneda_id'],
+            'moneda_abreviatura' => $grupo['moneda_abreviatura'],
+            'deuda_origen' => $deuda,
+            'ficha_origen' => $ficha,
+            'diferencia_origen' => $diferencia,
+            'ajuste_actual' => $ajusteActual,
+            'ajuste_propuesto' => $ajustePropuesto,
+            'ajuste_ids' => $grupo['ajuste_ids'],
+            'accion' => $accion,
         ];
     }
 
@@ -278,6 +419,8 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
             'proveedor_nombre' => $grupo['proveedor_nombre'],
             'empresa_id' => $grupo['empresa_id'],
             'empresa_nombre' => $grupo['empresa_nombre'],
+            'moneda_id' => $grupo['moneda_id'],
+            'moneda_abreviatura' => $grupo['moneda_abreviatura'],
             'deuda_pesos' => $deudaPesos,
             'ficha_pesos' => $fichaPesos,
             'diferencia_pesos' => $diferenciaPesos,

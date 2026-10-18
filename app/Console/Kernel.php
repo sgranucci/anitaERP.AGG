@@ -239,6 +239,13 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/compras-cc-conciliacion-schedule.log'))
             ->when(fn () => (bool) config('compras.conciliacion_cc_proveedor.habilitada', true));
 
+        $schedule->command('compras:auditar-deuda-ficha-proveedor')
+            ->dailyAt((string) config('compras.deuda_ficha_auditor.hora', '07:50'))
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/compras-deuda-ficha-auditor-schedule.log'))
+            ->when(fn () => (bool) config('compras.deuda_ficha_auditor.habilitada', true));
+
         $schedule->command('compras:alertas-ordencompra-abiertas')
             ->dailyAt((string) config('compras.oc_alertas_abiertas.hora', '08:15'))
             ->runInBackground()

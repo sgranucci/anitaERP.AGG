@@ -14,10 +14,12 @@ class LeeCotizacionApi extends Command
     protected $signature = 'cotizacion:leeapi
                             {--fecha= : Fecha YYYY-MM-DD (default: hoy)}
                             {--backfill-vacias : Actualiza registros con venta vacía/cero en el rango reciente}
-                            {--desde= : Con --backfill-vacias, desde YYYY-MM-DD}
-                            {--hasta= : Con --backfill-vacias, hasta YYYY-MM-DD}';
+                            {--importar-rango : Alta/actualiza cada día con cotización BNA entre --desde y --hasta}
+                            {--solo-informe : Con --importar-rango, solo cuenta cuántos días tienen dato (no graba)}
+                            {--desde= : Con --backfill-vacias o --importar-rango, desde YYYY-MM-DD}
+                            {--hasta= : Con --backfill-vacias o --importar-rango, hasta YYYY-MM-DD}';
 
-    protected $description = 'Lee cotización dólar oficial BNA (DolarApi + fallback BNA) y la graba en cotizacion / cotizacion_moneda';
+    protected $description = 'Lee cotización dólar oficial BNA (ArgentinaDatos + fallback DolarApi) y la graba en cotizacion / cotizacion_moneda';
 
     public function __construct(
         private CotizacionRepositoryInterface $cotizacionRepository,
@@ -28,6 +30,10 @@ class LeeCotizacionApi extends Command
 
     public function handle(): int
     {
+        if ($this->option('importar-rango')) {
+            return $this->importarRango();
+        }
+
         if ($this->option('backfill-vacias')) {
             return $this->backfillVacias();
         }
@@ -35,6 +41,164 @@ class LeeCotizacionApi extends Command
         $fecha = $this->resolverFechaOption($this->option('fecha')) ?? Carbon::now()->startOfDay();
 
         return $this->grabarFecha($fecha) === true ? self::SUCCESS : self::FAILURE;
+    }
+
+    private function importarRango(): int
+    {
+        $hasta = $this->resolverFechaOption($this->option('hasta')) ?? Carbon::now()->startOfDay();
+        $desde = $this->resolverFechaOption($this->option('desde'))
+            ?? $hasta->copy()->startOfYear();
+        if ($desde->gt($hasta)) {
+            $this->error('El --desde no puede ser posterior al --hasta.');
+
+            return self::FAILURE;
+        }
+
+        $soloInforme = (bool) $this->option('solo-informe');
+        $this->line(sprintf(
+            'Importar rango %s → %s · %s',
+            $desde->toDateString(),
+            $hasta->toDateString(),
+            $soloInforme ? 'solo informe' : 'graba cotizacion / cotizacion_moneda'
+        ));
+
+        $serie = $this->leerSerieOficialArgentinaDatos($desde, $hasta);
+        if ($serie === null) {
+            $this->error('No se pudo leer la serie oficial de ArgentinaDatos.');
+
+            return self::FAILURE;
+        }
+
+        $diasRango = (int) $desde->diffInDays($hasta) + 1;
+        $conDato = 0;
+        $sinDato = 0;
+        $yaOk = 0;
+        $aCrear = 0;
+        $aActualizar = 0;
+        $ok = 0;
+        $fail = 0;
+        $monedaId = (int) config('cotizacion.monedaIdCommand');
+        $cursor = $desde->copy();
+
+        while ($cursor->lte($hasta)) {
+            $fechaSql = $cursor->toDateString();
+            $payload = $serie[$fechaSql] ?? null;
+            if ($payload === null) {
+                $sinDato++;
+                $cursor->addDay();
+
+                continue;
+            }
+
+            $conDato++;
+            $estadoPre = $this->estadoFilaCotizacion($fechaSql, $monedaId);
+            if ($estadoPre === 'ok') {
+                $yaOk++;
+            } elseif ($estadoPre === 'crear') {
+                $aCrear++;
+            } else {
+                $aActualizar++;
+            }
+
+            if (! $soloInforme) {
+                $resultado = $this->persistirCotizacion($cursor, $payload);
+                if ($resultado) {
+                    $ok++;
+                } else {
+                    $fail++;
+                }
+            }
+
+            $cursor->addDay();
+        }
+
+        $this->table(['Control', 'Valor'], [
+            ['Días del rango', (string) $diasRango],
+            ['Con cotización BNA', (string) $conDato],
+            ['Sin dato (finde/feriado)', (string) $sinDato],
+            ['Ya cargadas (>0)', (string) $yaOk],
+            ['A crear', (string) $aCrear],
+            ['A actualizar (vacías)', (string) $aActualizar],
+            ['Grabadas en esta corrida', $soloInforme ? '—' : (string) $ok],
+            ['Fallidas', $soloInforme ? '—' : (string) $fail],
+        ]);
+
+        if ($soloInforme) {
+            $this->comment(sprintf(
+                'Para grabar: php artisan cotizacion:leeapi --importar-rango --desde=%s --hasta=%s',
+                $desde->toDateString(),
+                $hasta->toDateString()
+            ));
+
+            return self::SUCCESS;
+        }
+
+        return $fail > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * @return array<string, array{venta: float, compra: float, fuente: string, fecha: string}>|null
+     */
+    private function leerSerieOficialArgentinaDatos(Carbon $desde, Carbon $hasta): ?array
+    {
+        $url = 'https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial';
+        $ctx = stream_context_create([
+            'http' => [
+                'timeout' => 60,
+                'header' => "Accept: application/json\r\nUser-Agent: anitaERP-cotizacion:leeapi\r\n",
+            ],
+        ]);
+        $raw = @file_get_contents($url, false, $ctx);
+        if (! is_string($raw) || $raw === '') {
+            return null;
+        }
+        $data = json_decode($raw, true);
+        if (! is_array($data)) {
+            return null;
+        }
+
+        $desdeSql = $desde->toDateString();
+        $hastaSql = $hasta->toDateString();
+        $salida = [];
+        foreach ($data as $fila) {
+            if (! is_array($fila)) {
+                continue;
+            }
+            $fecha = substr(trim((string) ($fila['fecha'] ?? '')), 0, 10);
+            if ($fecha === '' || $fecha < $desdeSql || $fecha > $hastaSql) {
+                continue;
+            }
+            $venta = (float) ($fila['venta'] ?? 0);
+            if ($venta <= 0) {
+                continue;
+            }
+            $salida[$fecha] = [
+                'venta' => $venta,
+                'compra' => (float) ($fila['compra'] ?? 0),
+                'fuente' => 'argentinadatos-oficial',
+                'fecha' => $fecha,
+            ];
+        }
+
+        return $salida;
+    }
+
+    /** @return 'ok'|'crear'|'actualizar' */
+    private function estadoFilaCotizacion(string $fechaSql, int $monedaId): string
+    {
+        $cotizacion = DB::table('cotizacion')->whereDate('fecha', $fechaSql)->first();
+        if (! $cotizacion) {
+            return 'crear';
+        }
+        $existeMoneda = DB::table('cotizacion_moneda')
+            ->where('cotizacion_id', (int) $cotizacion->id)
+            ->where('moneda_id', $monedaId)
+            ->first();
+        if ($existeMoneda && (float) ($existeMoneda->cotizacionventa ?? 0) > 0) {
+            return 'ok';
+        }
+
+        return 'actualizar';
     }
 
     private function backfillVacias(): int
@@ -96,12 +260,24 @@ class LeeCotizacionApi extends Command
             return $tolerarSinDato ? null : false;
         }
 
+        return $this->persistirCotizacion($fecha, $payload) ? true : false;
+    }
+
+    /**
+     * @param  array{venta: float|int|string, compra?: float|int|string, fuente?: string}  $payload
+     */
+    private function persistirCotizacion(Carbon $fecha, array $payload): bool
+    {
         $venta = (float) $payload['venta'];
         $compra = (float) ($payload['compra'] ?? 0);
         $fuente = (string) ($payload['fuente'] ?? '');
         $monedaId = (int) config('cotizacion.monedaIdCommand');
         $usuario = (int) config('cotizacion.usuarioIdCommand');
         $fechaSql = $fecha->toDateString();
+
+        if ($venta <= 0) {
+            return false;
+        }
 
         DB::beginTransaction();
         try {
@@ -179,9 +355,9 @@ class LeeCotizacionApi extends Command
      */
     private function leerCotizacionBna(Carbon $fecha): ?array
     {
-        $script = storage_path('cotizacionbna.py');
-        if (! is_file($script)) {
-            $this->error("No existe parser: {$script}");
+        $script = $this->resolverScriptCotizacionBna();
+        if ($script === null) {
+            $this->error('No existe parser: scripts/cotizacionbna.py ni storage/cotizacionbna.py');
 
             return null;
         }
@@ -239,5 +415,20 @@ class LeeCotizacionApi extends Command
         }
 
         return Carbon::parse((string) $valor)->startOfDay();
+    }
+
+    private function resolverScriptCotizacionBna(): ?string
+    {
+        $candidatos = [
+            base_path('scripts/cotizacionbna.py'),
+            storage_path('cotizacionbna.py'),
+        ];
+        foreach ($candidatos as $ruta) {
+            if (is_file($ruta)) {
+                return $ruta;
+            }
+        }
+
+        return null;
     }
 }
