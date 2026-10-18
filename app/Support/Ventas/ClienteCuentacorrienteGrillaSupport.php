@@ -6,8 +6,17 @@ use App\Models\Ventas\Cliente_Cuentacorriente;
 
 final class ClienteCuentacorrienteGrillaSupport
 {
+    public const PREFIJO_LEYENDA_AJUSTE = 'Ajuste saldo CC ';
+
     public static function etiquetaComprobante(Cliente_Cuentacorriente $fila): string
     {
+        $leyenda = trim((string) ($fila->leyenda ?? ''));
+        if ($leyenda !== '' && str_starts_with($leyenda, self::PREFIJO_LEYENDA_AJUSTE)
+            && (int) ($fila->venta_id ?? 0) === 0
+            && (int) ($fila->cobranza_id ?? 0) === 0) {
+            return $leyenda;
+        }
+
         if ((int) ($fila->cobranza_id ?? 0) > 0 && $fila->cobranzas) {
             return (string) ($fila->cobranzas->detalle ?? 'Cobranza');
         }

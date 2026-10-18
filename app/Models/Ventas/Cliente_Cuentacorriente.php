@@ -13,7 +13,7 @@ class Cliente_Cuentacorriente extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
     protected $fillable = ['fecha', 'fechavencimiento', 'cliente_id', 'total', 'moneda_id', 'cotizacion', 'venta_id',
-                            'cobranza_id', 'empresa_id'];
+                            'cobranza_id', 'empresa_id', 'leyenda'];
 	
     protected $table = 'cliente_cuentacorriente';
 
