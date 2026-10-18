@@ -192,6 +192,12 @@ class CentrocostoController extends Controller
 
     private function puedeConsultarCentrocosto(): bool
     {
+        // ABM usuarios: middleware superadmin (administrador / Enc-sistemas)
+        $rol = (string) session()->get('rol_nombre');
+        if ($rol === 'Enc-sistemas') {
+            return true;
+        }
+
         foreach ([
             'listar-centro-costo',
             'editar-centro-costo',
@@ -223,6 +229,11 @@ class CentrocostoController extends Controller
             'crear-tipo-transaccion-compra',
             'editar-tipo-transaccion-compra',
             'actualizar-tipo-transaccion-compra',
+            'crear-usuarios',
+            'editar-usuarios',
+            'actualizar-usuarios',
+            'listar-usuarios',
+            'importar-usuarios',
         ] as $permiso) {
             if (can($permiso, false)) {
                 return true;

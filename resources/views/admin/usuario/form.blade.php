@@ -150,19 +150,34 @@
     <div class="card-body">
         <div class="row">
             <div class="col-lg-6">
-                <div class="form-group row">
-                    <label for="centrocosto_id" class="col-lg-4 col-form-label requerido">Centro de costo</label>
-                    <div class="col-lg-8">
-                        <select class="form-control" id="centrocosto_id" name="centrocosto_id" required>
-                            <option value="">Seleccione el centro de costo</option>
-                            @foreach ($centrocosto_query as $centrocosto)
-                                <option value="{{ $centrocosto['id'] }}" {{ (int) old('centrocosto_id', isset($data) ? $data->centrocosto_id : '') === (int) $centrocosto['id'] ? 'selected' : '' }}>
-                                    {{ $centrocosto['nombre'] }} ({{ $centrocosto['codigo'] }})
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
+                @php
+                    $centrocostoIdUsuario = old('centrocosto_id', isset($data) ? ($data->centrocosto_id ?? '') : '');
+                    $centrocostoCodigoUsuario = '';
+                    $centrocostoNombreUsuario = '';
+                    if ($centrocostoIdUsuario) {
+                        if (isset($data) && $data->relationLoaded('centrocostos') && $data->centrocostos
+                            && (int) $data->centrocostos->id === (int) $centrocostoIdUsuario) {
+                            $centrocostoCodigoUsuario = $data->centrocostos->codigo ?? '';
+                            $centrocostoNombreUsuario = $data->centrocostos->nombre ?? '';
+                        } else {
+                            $ccResuelto = \App\Models\Contable\Centrocosto::query()->find($centrocostoIdUsuario);
+                            $centrocostoCodigoUsuario = $ccResuelto->codigo ?? '';
+                            $centrocostoNombreUsuario = $ccResuelto->nombre ?? '';
+                        }
+                    }
+                @endphp
+                @include('contable.partials.campo_consulta_centrocosto', [
+                    'prefix' => 'usuario',
+                    'layout' => 'form_row',
+                    'inputName' => 'centrocosto_id',
+                    'inputId' => 'centrocosto_id',
+                    'centrocostoId' => $centrocostoIdUsuario,
+                    'codigo' => $centrocostoCodigoUsuario,
+                    'descripcion' => $centrocostoNombreUsuario,
+                    'col_label' => 'col-lg-4',
+                    'col_input' => 'col-lg-8',
+                    'required' => true,
+                ])
                 <div class="form-group row">
                     <label for="sector_legajocompra_id" class="col-lg-4 col-form-label">Sector legajo compras</label>
                     <div class="col-lg-8">

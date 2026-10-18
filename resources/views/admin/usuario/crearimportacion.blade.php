@@ -5,6 +5,7 @@
 
 @section("scripts")
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/vendedor/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/usuario/empresas_roles.js') }}" type="text/javascript"></script>
 <script>
@@ -66,5 +67,6 @@
     'titulo' => 'Importando usuarios…',
     'subtitulo' => 'Puede demorar según la cantidad de filas. No cierre la página.',
 ])
+@include('includes.contable.modalconsultacentrocosto')
 @include('includes.ventas.modalconsultavendedor')
 @endsection

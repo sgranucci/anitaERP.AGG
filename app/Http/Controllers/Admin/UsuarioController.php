@@ -13,7 +13,6 @@ use App\Support\Seguridad\UsuarioOperativoSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
-use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Http\EliminacionRegistroSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
@@ -26,8 +25,6 @@ class UsuarioController extends Controller
 {
     private $empresaRepository;
 
-    private $centrocostoRepository;
-
     private $usuarioRepository;
 
     private $oficinacompraRepository;
@@ -35,13 +32,11 @@ class UsuarioController extends Controller
     private ContabilidadCuentaAutomaticaSeedService $cuentaAutomaticaSeedService;
 
     public function __construct(EmpresaRepositoryInterface $empresarepository,
-        CentrocostoRepositoryInterface $centrocostorepository,
         UsuarioRepositoryInterface $usuariorepository,
         OficinacompraRepositoryInterface $oficinacomprarepository,
         ContabilidadCuentaAutomaticaSeedService $cuentaAutomaticaSeedService)
     {
         $this->empresaRepository = $empresarepository;
-        $this->centrocostoRepository = $centrocostorepository;
         $this->usuarioRepository = $usuariorepository;
         $this->oficinacompraRepository = $oficinacomprarepository;
         $this->cuentaAutomaticaSeedService = $cuentaAutomaticaSeedService;
@@ -60,12 +55,11 @@ class UsuarioController extends Controller
     {
         $rols = Rol::orderBy('id')->pluck('nombre', 'id')->toArray();
         $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
-        $centrocosto_query = $this->centrocostoRepository->all()->toArray();
         $oficinacompra_query = $this->oficinacompraRepository->all()->pluck('nombre', 'id')->toArray();
         $sector_legajocompra_query = SectorLegajocompra::orderBy('nombre')->get();
         $sala_query = $this->salasParaAsignacion();
 
-        return view('admin.usuario.crear', compact('rols', 'empresa_query', 'centrocosto_query', 'oficinacompra_query', 'sector_legajocompra_query', 'sala_query'));
+        return view('admin.usuario.crear', compact('rols', 'empresa_query', 'oficinacompra_query', 'sector_legajocompra_query', 'sala_query'));
     }
 
     public function guardar(ValidacionUsuario $request)
@@ -110,14 +104,14 @@ class UsuarioController extends Controller
             'depositosAutorizados.empresas',
             'tipotransaccionesStockAutorizadas',
             'vendedores',
+            'centrocostos',
         ])->findOrFail($id);
         $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
-        $centrocosto_query = $this->centrocostoRepository->all()->toArray();
         $oficinacompra_query = $this->oficinacompraRepository->all()->pluck('nombre', 'id')->toArray();
         $sector_legajocompra_query = SectorLegajocompra::orderBy('nombre')->get();
         $sala_query = $this->salasParaAsignacion();
 
-        return view('admin.usuario.editar', compact('data', 'rols', 'empresa_query', 'centrocosto_query', 'oficinacompra_query', 'sector_legajocompra_query', 'sala_query'));
+        return view('admin.usuario.editar', compact('data', 'rols', 'empresa_query', 'oficinacompra_query', 'sector_legajocompra_query', 'sala_query'));
     }
 
     public function actualizar(ValidacionUsuario $request, $id)

@@ -27,6 +27,47 @@ return [
     ),
 
     /**
+     * Empresas Anita al importar OPP/OPA desde che_ban.pago.
+     * Vacío = multi → 1,2,3; mono → 0 (Crown: pag_empresa=0).
+     * Ejemplo Crown: PAGOPROVEEDOR_ANITA_IMPORT_EMPRESAS=0
+     *
+     * @var list<int>
+     */
+    'anita_import_empresas' => (static function (): array {
+        $raw = trim((string) env('PAGOPROVEEDOR_ANITA_IMPORT_EMPRESAS', ''));
+        if ($raw !== '') {
+            return array_values(array_unique(array_map(
+                static fn ($v) => (int) $v,
+                explode(',', $raw)
+            )));
+        }
+        $multi = filter_var(
+            env(
+                'PAGOPROVEEDOR_ANITA_MULTIEMPRESA',
+                strtoupper(trim((string) env('EMPRESA', 'AGG'))) === 'AGG' ? 'true' : 'false'
+            ),
+            FILTER_VALIDATE_BOOLEAN
+        );
+
+        return $multi ? [1, 2, 3] : [0];
+    })(),
+
+    /**
+     * Si Anita manda pag_empresa=0 (mono), empresa_id ERP a grabar.
+     * Crown: 1.
+     */
+    'anita_import_empresa_erp' => max(1, (int) env('PAGOPROVEEDOR_ANITA_IMPORT_EMPRESA_ERP', 1)),
+
+    /**
+     * auxpag / ret*mov con columna *_empresa.
+     * null = mismo criterio que anita_multiempresa.
+     * Crown: false (Informix sin axp_empresa ni retv_empresa).
+     */
+    'anita_auxpag_tiene_empresa' => (($v = env('PAGOPROVEEDOR_ANITA_AUXPAG_TIENE_EMPRESA')) === null || $v === '')
+        ? null
+        : filter_var($v, FILTER_VALIDATE_BOOLEAN),
+
+    /**
      * Período híbrido: al acumular Ganancias (RG 830) lee retmov Anita como
      * respaldo de OPs que no están en pagoproveedor_retencion.
      * Clave completa tipo|letra|sucursal|nro|empresa (Anita graba letra).

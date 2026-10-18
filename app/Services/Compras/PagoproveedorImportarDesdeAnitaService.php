@@ -8,6 +8,7 @@ use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Compras\Proveedor;
 use App\Models\Seguridad\Usuario;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
+use App\Support\Compras\AnitaImport\PagoproveedorAnitaImportEmpresaSupport;
 use App\Support\Compras\PagosSabanaAnitaBridgeReader;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use Illuminate\Support\Facades\DB;
@@ -65,7 +66,8 @@ class PagoproveedorImportarDesdeAnitaService
             return $stats;
         }
 
-        $pagosAnita = $this->reader->listarPagos([1, 2, 3], $desde, $hasta, $stats['errores_bridge']);
+        $empresasAnita = PagoproveedorAnitaImportEmpresaSupport::empresasAnitaImport();
+        $pagosAnita = $this->reader->listarPagos($empresasAnita, $desde, $hasta, $stats['errores_bridge']);
         $stats['en_anita'] = count($pagosAnita);
 
         $existentes = $this->indexarPagosExistentes($desdeIso, $hastaIso);
@@ -75,19 +77,16 @@ class PagoproveedorImportarDesdeAnitaService
             if (! in_array($tipo, ['OPP', 'OPA'], true)) {
                 continue;
             }
-            $empresaId = (int) ($pago->pag_empresa ?? 0);
-            if ($empresaId <= 0) {
-                $stats['sin_empresa']++;
-
-                continue;
-            }
+            // Crown: pag_empresa=0 → empresa ERP configurada (default 1).
+            $empresaId = PagoproveedorAnitaImportEmpresaSupport::empresaErpDesdeAnita((int) ($pago->pag_empresa ?? 0));
             $sucursal = (int) ($pago->pag_sucursal ?? 0);
             $numero = (int) ($pago->pag_rec ?? 0);
             if ($numero <= 0) {
                 continue;
             }
 
-            // La letra de Anita no identifica la OP: el ERP no la usa.
+            // Letra Anita: hace falta para enganchar asiento (planAsientoPagos).
+            $letra = ComprobanteProveedorAnitaImportClaveSupport::letra((string) ($pago->pag_letra ?? ' '));
             $clave = self::claveOp($empresaId, $tipo, $sucursal, $numero);
             if (isset($existentes[$clave])) {
                 $stats['omitidos']++;
@@ -119,7 +118,7 @@ class PagoproveedorImportarDesdeAnitaService
             }
 
             try {
-                DB::transaction(function () use ($pago, $tipo, $sucursal, $numero, $empresaId, $proveedorId, $fecha, $uid) {
+                DB::transaction(function () use ($pago, $tipo, $sucursal, $numero, $empresaId, $proveedorId, $fecha, $uid, $letra) {
                     $monedaAnita = (int) ($pago->pag_cod_mon_me ?? 0);
                     $monedaId = RecepcionProveedorAnitaImportSupport::monedaIdDesdeCodigoAnita($monedaAnita > 0 ? $monedaAnita : 1);
                     $cotizacion = (float) ($pago->pag_cotizacion ?? 1);
@@ -136,7 +135,7 @@ class PagoproveedorImportarDesdeAnitaService
                         'empresa_id' => $empresaId,
                         'tipotransaccion_caja_id' => $this->resolverTipoCajaId($tipo),
                         'tipocomprobante' => $tipo,
-                        'letra' => (string) config('pagoproveedor.letra_default', ' '),
+                        'letra' => $letra !== '' ? $letra : (string) config('pagoproveedor.letra_default', ' '),
                         'sucursal' => $sucursal,
                         'numerotransaccion' => (string) $numero,
                         'fecha' => $fecha,

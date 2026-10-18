@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Compras;
 
 use App\ApiAnita;
+use App\Support\Compras\AnitaImport\PagoproveedorAnitaImportEmpresaSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -34,10 +35,8 @@ final class PagosSabanaAnitaBridgeReader
      */
     public function listarPagos(array $empresasAnita, int $fechaDesdeYmd, int $fechaHastaYmd, array &$errores): array
     {
-        $empresasAnita = array_values(array_unique(array_filter(
-            array_map('intval', $empresasAnita),
-            static fn (int $id) => $id > 0
-        )));
+        // Crown mono: pag_empresa=0 (no filtrar con > 0).
+        $empresasAnita = array_values(array_unique(array_map('intval', $empresasAnita)));
         if ($empresasAnita === []) {
             return [];
         }
@@ -56,19 +55,39 @@ final class PagosSabanaAnitaBridgeReader
      */
     public function listarAuxpag(array $empresasAnita, int $fechaDesdeYmd, int $fechaHastaYmd, array &$errores): array
     {
-        $empresasAnita = array_values(array_unique(array_filter(
-            array_map('intval', $empresasAnita),
-            static fn (int $id) => $id > 0
-        )));
-        if ($empresasAnita === []) {
+        $tieneEmpresa = PagoproveedorAnitaImportEmpresaSupport::auxpagTieneEmpresa();
+        $empresasAnita = array_values(array_unique(array_map('intval', $empresasAnita)));
+        if ($tieneEmpresa && $empresasAnita === []) {
             return [];
         }
 
-        $where = ' WHERE axp_empresa IN ('.implode(',', $empresasAnita).')'
-            .' AND axp_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
-            ." AND axp_tipo IN ('OPP','OPA')";
+        // Crown: sin axp_empresa / axp_concepto / axp_cbu.
+        $campos = $tieneEmpresa
+            ? self::AUXPAG_CAMPOS
+            : 'axp_fecha,axp_tipo,axp_rec,axp_pro,axp_nro,axp_tipo_ap,'
+                .'axp_monto_ap,axp_cod_mon_co,axp_banco,axp_letra_comp,axp_sucursal,axp_sucursal_cob,'
+                .'axp_nro_interno,axp_fecha_co';
 
-        return $this->listar('che_ban', 'auxpag', self::AUXPAG_CAMPOS, $where, $errores, 'pagos-sabana-auxpag');
+        $where = $tieneEmpresa
+            ? ' WHERE axp_empresa IN ('.implode(',', $empresasAnita).')'
+                .' AND axp_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
+                ." AND axp_tipo IN ('OPP','OPA')"
+            : ' WHERE axp_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
+                ." AND axp_tipo IN ('OPP','OPA')";
+
+        $filas = $this->listar('che_ban', 'auxpag', $campos, $where, $errores, 'pagos-sabana-auxpag');
+        if ($tieneEmpresa) {
+            return $filas;
+        }
+
+        // Inventar axp_empresa=0 para claves mono (mismo criterio que import).
+        foreach ($filas as $fila) {
+            if (! isset($fila->axp_empresa)) {
+                $fila->axp_empresa = 0;
+            }
+        }
+
+        return $filas;
     }
 
     /**

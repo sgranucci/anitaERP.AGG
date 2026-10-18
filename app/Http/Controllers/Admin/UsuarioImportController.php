@@ -7,7 +7,6 @@ use App\Models\Admin\Rol;
 use App\Models\Compras\SectorLegajocompra;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
-use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Services\Admin\UsuarioImportPreviewService;
 use App\Services\Admin\UsuarioImportService;
 use App\Support\Admin\UsuarioImportIdentidadSupport;
@@ -18,7 +17,6 @@ class UsuarioImportController extends Controller
 {
     public function __construct(
         private EmpresaRepositoryInterface $empresaRepository,
-        private CentrocostoRepositoryInterface $centrocostoRepository,
         private OficinacompraRepositoryInterface $oficinacompraRepository,
         private UsuarioImportPreviewService $previewService,
         private UsuarioImportService $importService,
@@ -31,7 +29,6 @@ class UsuarioImportController extends Controller
 
         $rols = Rol::orderBy('id')->pluck('nombre', 'id')->toArray();
         $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
-        $centrocosto_query = $this->centrocostoRepository->all()->toArray();
         $oficinacompra_query = $this->oficinacompraRepository->all()->pluck('nombre', 'id')->toArray();
         $sector_legajocompra_query = SectorLegajocompra::orderBy('nombre')->get();
         $dominio_email_default = UsuarioImportIdentidadSupport::dominioEmailDefault();
@@ -41,7 +38,6 @@ class UsuarioImportController extends Controller
         return view('admin.usuario.crearimportacion', compact(
             'rols',
             'empresa_query',
-            'centrocosto_query',
             'oficinacompra_query',
             'sector_legajocompra_query',
             'dominio_email_default',

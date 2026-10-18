@@ -1,4 +1,7 @@
 $(document).ready(function () {
+    if (typeof activa_eventos_consultacentrocosto === 'function') {
+        activa_eventos_consultacentrocosto();
+    }
     if (typeof activa_eventos_consultavendedor === 'function') {
         activa_eventos_consultavendedor();
     }

@@ -7,6 +7,7 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/tipotransaccion_stock/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/contable/centrocosto/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/vendedor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/usuario/empresas_roles.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/usuario/salas_crown.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/admin/usuario/salas_crown.js')) }}" type="text/javascript"></script>
@@ -61,5 +62,6 @@
 </div>
 @include('includes.stock.modalconsultadeposito')
 @include('includes.stock.modalconsultatipotransaccionstock')
+@include('includes.contable.modalconsultacentrocosto')
 @include('includes.ventas.modalconsultavendedor')
 @endsection

@@ -36,19 +36,28 @@
         <strong class="text-dark"><i class="fas fa-briefcase mr-1"></i> Asignaciones operativas</strong>
     </div>
     <div class="card-body">
-        <div class="form-group row">
-            <label for="centrocosto_id" class="col-lg-3 col-form-label requerido">Centro de costo</label>
-            <div class="col-lg-6">
-                <select class="form-control" id="centrocosto_id" name="centrocosto_id" required>
-                    <option value="">Seleccione el centro de costo</option>
-                    @foreach ($centrocosto_query as $centrocosto)
-                        <option value="{{ $centrocosto['id'] }}" @selected((int) old('centrocosto_id') === (int) $centrocosto['id'])>
-                            {{ $centrocosto['nombre'] }} ({{ $centrocosto['codigo'] }})
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-        </div>
+        @php
+            $centrocostoIdImport = old('centrocosto_id', '');
+            $centrocostoCodigoImport = '';
+            $centrocostoNombreImport = '';
+            if ($centrocostoIdImport) {
+                $ccImportResuelto = \App\Models\Contable\Centrocosto::query()->find($centrocostoIdImport);
+                $centrocostoCodigoImport = $ccImportResuelto->codigo ?? '';
+                $centrocostoNombreImport = $ccImportResuelto->nombre ?? '';
+            }
+        @endphp
+        @include('contable.partials.campo_consulta_centrocosto', [
+            'prefix' => 'usuario_import',
+            'layout' => 'form_row',
+            'inputName' => 'centrocosto_id',
+            'inputId' => 'centrocosto_id',
+            'centrocostoId' => $centrocostoIdImport,
+            'codigo' => $centrocostoCodigoImport,
+            'descripcion' => $centrocostoNombreImport,
+            'col_label' => 'col-lg-3',
+            'col_input' => 'col-lg-6',
+            'required' => true,
+        ])
 
         <div class="form-group row">
             <label for="sector_legajocompra_id" class="col-lg-3 col-form-label">Sector legajo compras</label>
