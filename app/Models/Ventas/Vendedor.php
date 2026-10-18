@@ -9,10 +9,12 @@ use App\Models\Ventas\Vendedorasociado;
 use Illuminate\Support\Str;
 use App\Traits\Ventas\VendedorTrait;
 use App\ApiAnita;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Vendedor extends Model
+class Vendedor extends Model implements Auditable
 {
     use VendedorTrait;
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'comisionventa', 'comisioncobranza', 'aplicasobre', 'empresa_id', 'legajo_id', 'email',
                             'codigo', 'estado'];
     protected $table = 'vendedor';

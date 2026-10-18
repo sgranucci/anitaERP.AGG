@@ -3,9 +3,11 @@
 namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Articulo_ParteUnica extends Model
+class Articulo_ParteUnica extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'articulo_parte_unica';
 
     protected $fillable = [

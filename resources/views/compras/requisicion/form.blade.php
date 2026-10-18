@@ -42,12 +42,40 @@
                 </script>
             @endif
 
-            @include('includes.form-empresa-asignada', [
-                'empresa_query' => $empresa_query,
-                'empresa_id' => (isset($data) && $data) ? $data->empresa_id : null,
-                'solo_lectura' => $cabeceraSoloLectura,
-                'col_input' => 'col-lg-5',
-            ])
+            @php
+                $esCrownForm = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown();
+                $salaIdForm = old('sala_id', (isset($data) && $data) ? ($data->sala_id ?? null) : null);
+                $salaQueryForm = $sala_query ?? collect();
+            @endphp
+            @if ($esCrownForm)
+                <input type="hidden" name="empresa_id" id="empresa_id" value="{{ old('empresa_id', (isset($data) && $data) ? $data->empresa_id : (optional($salaQueryForm->firstWhere('id', (int) $salaIdForm))->empresa_id ?? optional($empresa_query->first())->id)) }}">
+                <div class="form-group row">
+                    <label for="sala_id" class="col-lg-3 control-label requerido">Sala</label>
+                    <div class="col-lg-5">
+                        <select name="sala_id" id="sala_id" class="form-control" required {{ $cabeceraSoloLectura ? 'disabled' : '' }}
+                                onchange="var o=this.options[this.selectedIndex]; if(o&&o.dataset.empresa){ document.getElementById('empresa_id').value=o.dataset.empresa; }">
+                            <option value="">Seleccione…</option>
+                            @foreach ($salaQueryForm as $sala)
+                                <option value="{{ $sala->id }}"
+                                        data-empresa="{{ $sala->empresa_id }}"
+                                        {{ (int) $salaIdForm === (int) $sala->id ? 'selected' : '' }}>
+                                    {{ $sala->codigo }} — {{ $sala->nombre }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @if ($cabeceraSoloLectura)
+                            <input type="hidden" name="sala_id" value="{{ $salaIdForm }}">
+                        @endif
+                    </div>
+                </div>
+            @else
+                @include('includes.form-empresa-asignada', [
+                    'empresa_query' => $empresa_query,
+                    'empresa_id' => (isset($data) && $data) ? $data->empresa_id : null,
+                    'solo_lectura' => $cabeceraSoloLectura,
+                    'col_input' => 'col-lg-5',
+                ])
+            @endif
 
             <div class="form-group row">
                 <label for="oficinacompra_id_show" class="col-lg-3 control-label">Oficina compra</label>
@@ -257,8 +285,8 @@
             </div>
         </div>
     </div>
-    <div class="oc-solapa-head">
-        <h5>Artículos</h5>
+    <div class="oc-solapa-head d-flex flex-wrap align-items-center justify-content-between">
+        <h5 class="mb-0">Artículos</h5>
     </div>
     <p class="text-muted small mb-2">
         Si el art&iacute;culo tiene datos en la solapa <strong>Proveedores</strong> del maestro (<code>articulo_proveedor</code>),
@@ -289,16 +317,35 @@
                 $modoStockColorTalleInicial = '0';
             }
         }
+        $reqPedirPartidaCapex = \App\Support\Compras\OrdencompraUiConfigSupport::pedirPartidaCapex();
+        // art, desc, prov, color, talle, cant, cant.alt, precio, mon, cc, [partida, capex], detalle (+ eliminar si editable)
+        $reqColspanMetaArticulos = $lineasSoloLectura ? 11 : 12;
+        if ($reqPedirPartidaCapex) {
+            $reqColspanMetaArticulos += 2;
+        }
     @endphp
     <div id="ms-ayuda-color-talle" class="alert alert-info py-2 small mb-2" style="display:none;">
         Este comprobante usa stock por color y talle: todas las líneas deben tener color y talle.
     </div>
     <input type="hidden" name="modo_stock_color_talle" id="modo_stock_color_talle" value="{{ $modoStockColorTalleInicial }}">
-    @php
-        // art, desc, prov, color, talle, cant, cant.alt, precio, mon, cc, partida, capex, detalle (+ eliminar si editable)
-        $reqColspanMetaArticulos = $lineasSoloLectura ? 13 : 14;
-    @endphp
     <style>
+        #tabla-articulos-requisicion thead th {
+            font-size: 0.78rem;
+            font-weight: 600;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+        #tabla-articulos-requisicion tbody td {
+            vertical-align: middle;
+            padding: 0.35rem 0.4rem;
+        }
+        #tabla-articulos-requisicion .form-control,
+        #tabla-articulos-requisicion .form-control-sm {
+            min-height: 32px;
+            height: 32px;
+            padding: 0.2rem 0.4rem;
+            font-size: 0.8125rem;
+        }
         #tabla-articulos-requisicion tbody tr.req-requisicion-linea-cerrada td {
             background-color: rgba(25, 135, 84, 0.1);
         }
@@ -364,25 +411,36 @@
             color: #b9770e;
             font-style: italic;
         }
+        #tabla-articulos-requisicion .codigoarticulo {
+            width: 7.5rem !important;
+            max-width: 9rem !important;
+            height: 32px !important;
+        }
     </style>
-    <table class="table" id="tabla-articulos-requisicion" data-requisicion-cc-destino-default="{{ $centrocostoDefaultDestino }}" data-requisicion-moneda-default="{{ $monedaDefaultLinea }}">
-        <thead>
+    <div class="table-responsive border rounded mb-2">
+    <table class="table table-sm table-bordered mb-0" id="tabla-articulos-requisicion"
+           data-requisicion-cc-destino-default="{{ $centrocostoDefaultDestino }}"
+           data-requisicion-moneda-default="{{ $monedaDefaultLinea }}"
+           data-req-pedir-partida-capex="{{ $reqPedirPartidaCapex ? '1' : '0' }}">
+        <thead style="background:#85C1E9;color:#17202A;">
             <tr>
-                <th style="width: 11%;">Artículo</th>
-                <th style="width: 12%;">Descripción</th>
-                <th style="width: 7%;" class="text-nowrap" title="Solo si el artículo tiene filas en articulo_proveedor: proveedor/UM de compra del catálogo">Prov.</th>
+                <th style="width: 12%;">Artículo</th>
+                <th style="width: {{ $reqPedirPartidaCapex ? '14%' : '22%' }};">Descripción</th>
+                <th style="width: 8%;" class="text-nowrap" title="Solo si el artículo tiene filas en articulo_proveedor: proveedor/UM de compra del catálogo">Prov.</th>
                 <th class="ms-col-color-talle" style="width: 7%; display:none;">Color</th>
                 <th class="ms-col-color-talle" style="width: 6%; display:none;">Talle</th>
                 <th style="width: 7%;">Cantidad</th>
                 <th style="width: 6%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase) o conversión UM compra → stock">Cant. alt.</th>
-                <th style="width: 7%;">Precio unit.</th>
+                <th style="width: 8%;">Precio unit.</th>
                 <th style="width: 5%;">Moneda</th>
-                <th style="width: 9%;">CC destino</th>
-                <th style="width: 16%;">Partida presupuesto</th>
-                <th style="width: 16%;">Capex</th>
+                <th style="width: {{ $reqPedirPartidaCapex ? '10%' : '14%' }};">CC destino</th>
+                @if ($reqPedirPartidaCapex)
+                    <th style="width: 14%;">Partida presupuesto</th>
+                    <th style="width: 12%;">Capex</th>
+                @endif
                 <th style="width: 3%;" class="text-center" title="Detalle / leyenda de la línea">Det.</th>
                 @if(!$lineasSoloLectura)
-                <th style="width: 4%;"></th>
+                <th style="width: 3%;"></th>
                 @endif
             </tr>
         </thead>
@@ -473,7 +531,7 @@
                         <button type="button" title="Consultar listas de precios de compra (si no hay artículo, muestra las últimas listas vigentes del proveedor)" style="padding:1;" class="btn-accion-tabla consultalistasprecio tooltipsC flex-shrink-0">
                                 <i class="fa fa-tags text-info"></i>
                         </button>
-                        <input type="text" class="codigoarticulo codigoarticulolocal form-control flex-shrink-0" style="width: 140px; max-width: 15vw; height: 38px;" name="codigoarticulos[]" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }} >
+                        <input type="text" class="codigoarticulo codigoarticulolocal form-control form-control-sm flex-shrink-0" name="codigoarticulos[]" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }} >
                     </div>
                 </td>
                 <td>
@@ -536,6 +594,7 @@
                         @endforeach
                     </select>
                 </td>
+                @if ($reqPedirPartidaCapex)
                 <td class="align-middle">
                     <div class="celda-partidagasto d-flex align-items-center flex-nowrap">
                         <input type="hidden" class="partidagasto_id" name="partidagasto_ids[]" value="{{ old('partidagasto_ids.'.$idx, $linea->partidagasto_id ?? '') }}" >
@@ -556,7 +615,16 @@
                         <input type="text" class="descripcioncapex form-control form-control-sm ml-1 flex-grow-1" style="min-width: 0; font-size: 0.8rem;" name="descripcioncapexs[]" value="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}" readonly title="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}">
                     </div>
                 </td>
+                @endif
                 <td class="align-middle p-1 text-center">
+                    @unless ($reqPedirPartidaCapex)
+                        <input type="hidden" class="partidagasto_id" name="partidagasto_ids[]" value="">
+                        <input type="hidden" name="codigopartidagastos[]" value="">
+                        <input type="hidden" name="descripcionpartidagastos[]" value="">
+                        <input type="hidden" class="capex_id" name="capex_ids[]" value="">
+                        <input type="hidden" name="codigocapexs[]" value="">
+                        <input type="hidden" name="descripcioncapexs[]" value="">
+                    @endunless
                     @if (!$lineasSoloLectura)
                         <button type="button" title="Editar detalle de la línea" class="btn btn-sm btn-outline-secondary req-abrir-detalle-linea" data-toggle="modal" data-target="#modalReqDetalleLinea">
                             <i class="fa fa-align-left"></i>
@@ -588,6 +656,7 @@
             @endforeach
         </tbody>
     </table>
+    </div>{{-- /.table-responsive --}}
     <div class="modal fade" id="modalReqDetalleLinea" tabindex="-1" role="dialog" aria-labelledby="modalReqDetalleLineaLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
@@ -644,8 +713,10 @@
     </div>
 </div>
 @include('includes.stock.modalconsultaarticulo')
-@include('includes.presupuesto.modalconsultapartidagasto', ['centrocosto_query' => $centrocosto_query ?? null])
-@include('includes.presupuesto.modalconsultacapex', ['centrocosto_query' => $centrocosto_query ?? null])
+@if (!empty($reqPedirPartidaCapex))
+    @include('includes.presupuesto.modalconsultapartidagasto', ['centrocosto_query' => $centrocosto_query ?? null])
+    @include('includes.presupuesto.modalconsultacapex', ['centrocosto_query' => $centrocosto_query ?? null])
+@endif
 @include('includes.compras.modalconsultaproveedor')
 @include('includes.compras.modalconsultalistasprecio')
 @include('includes.compras.modal_elegir_articulo_proveedor')

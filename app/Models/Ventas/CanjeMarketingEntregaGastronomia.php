@@ -4,9 +4,11 @@ namespace App\Models\Ventas;
 
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CanjeMarketingEntregaGastronomia extends Model
+class CanjeMarketingEntregaGastronomia extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'canje_marketing_entrega_gastronomia';
 
     protected $fillable = [

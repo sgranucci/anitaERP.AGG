@@ -4,9 +4,11 @@ namespace App\Models\Sueldos;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ReporteSueldosDefinibleVersion extends Model
+class ReporteSueldosDefinibleVersion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'reporte_sueldos_definible_version';
 
     protected $fillable = [

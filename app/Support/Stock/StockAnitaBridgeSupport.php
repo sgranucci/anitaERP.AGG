@@ -36,6 +36,10 @@ final class StockAnitaBridgeSupport
         if ($map === []) {
             $map = (array) config('stock.anita_stkmov.anita_por_empresa', []);
         }
+        // CROWN: un solo Informix /usr2/casino — no heredar mapa AGG (Kandiko/Rebisco).
+        if ($map === [] && \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+            return [];
+        }
         if ($map === []) {
             $map = (array) config('gastronomia.ticket_tarjeta_anita_por_empresa', []);
         }

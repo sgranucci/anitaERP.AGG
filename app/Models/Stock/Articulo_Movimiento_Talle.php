@@ -5,9 +5,11 @@ namespace App\Models\Stock;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Articulo_Movimiento_Talle extends Model
+class Articulo_Movimiento_Talle extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['articulo_movimiento_id', 'pedido_combinacion_talle_id', 'talle_id', 'cantidad', 'precio'];
     protected $table = 'articulo_movimiento_talle';
 

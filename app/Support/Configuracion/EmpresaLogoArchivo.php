@@ -138,6 +138,7 @@ final class EmpresaLogoArchivo
                 'INTERFORMING.jpg',
                 'INTERFORMING.png',
             ],
+            $slug === 'CROWN' || str_contains($slug, 'CROWN') => self::archivosLogoCrown(),
             self::esSlugFerli($slug) => self::archivosLogoFerli(),
             default => [],
         };
@@ -164,8 +165,25 @@ final class EmpresaLogoArchivo
                 'INTERFORMING.png',
             ];
         }
+        if (str_contains($nombre, 'CROWN') || $nombre === 'BUDGET' || str_contains($nombre, 'INVITACIONES')) {
+            return self::archivosLogoCrown();
+        }
 
         return [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function archivosLogoCrown(): array
+    {
+        return [
+            'CROWN.jpg',
+            'CROWN.jpeg',
+            'CROWN.png',
+            'Logo_sin_lema.jpg',
+            'Emprendimientos Crown SA.jpg',
+        ];
     }
 
     /**

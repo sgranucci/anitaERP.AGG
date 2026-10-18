@@ -7,9 +7,11 @@ namespace App\Models\Contable;
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Suss_Presentacion_Config_Cuenta extends Model
+class Suss_Presentacion_Config_Cuenta extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'suss_presentacion_config_cuenta';
 
     protected $fillable = [

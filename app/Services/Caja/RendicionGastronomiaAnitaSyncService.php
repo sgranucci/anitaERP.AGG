@@ -112,7 +112,8 @@ class RendicionGastronomiaAnitaSyncService
 
     public function sincronizarDespuesDeGuardar(RendicionGastronomiaCaja $rendicion): void
     {
-        if ($rendicion->esRendicionJornada()) {
+        // Jornada y cierre X son presentaciones del ERP: no viajan a rendgastro.
+        if ($rendicion->esRendicionJornada() || $rendicion->esRendicionCierreX()) {
             return;
         }
 
@@ -135,7 +136,7 @@ class RendicionGastronomiaAnitaSyncService
 
     public function sincronizarDespuesDeEliminar(RendicionGastronomiaCaja $rendicion): void
     {
-        if ($rendicion->esRendicionJornada()) {
+        if ($rendicion->esRendicionJornada() || $rendicion->esRendicionCierreX()) {
             return;
         }
 

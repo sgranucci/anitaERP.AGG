@@ -6,10 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Localidad extends Model
+class Localidad extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'codigopostal', 'codigo', 'provincia_id', 'codigosenasa'];
     protected $table = 'localidad';
     protected $keyField = 'id';
@@ -105,7 +108,8 @@ class Localidad extends Model
     private function camposListadoAnita(): string
     {
         if (config('app.empresa') == 'INTERFORMING' ||
-            config('app.empresa') == 'FRASLE') {
+            config('app.empresa') == 'FRASLE' ||
+            EntornoEmpresaSupport::esCrown()) {
             return 'loc_localidad, loc_provincia, loc_desc';
         }
 
@@ -146,7 +150,8 @@ class Localidad extends Model
         $provincia_id = $provincia?->id;
 
         if (config('app.empresa') == 'INTERFORMING' ||
-            config('app.empresa') == 'FRASLE') {
+            config('app.empresa') == 'FRASLE' ||
+            EntornoEmpresaSupport::esCrown()) {
             $payload = [
                 'nombre' => $data->loc_desc,
                 'codigopostal' => null,

@@ -159,6 +159,12 @@ final class CuentaAutomaticaClaves
     public const SUELDOS_BANCO_PAGO = 'sueldos.banco_pago';
 
     /**
+     * Debe del asiento de amortizaciones de bienes de uso (Anita p-asibie.c / impcont 301).
+     * Cuenta fija de gasto; el haber usa cta_amort del bien.
+     */
+    public const BIEN_USO_GASTO_AMORTIZACION = 'bien_uso.gasto_amortizacion';
+
+    /**
      * @return array<string, array{
      *   grupo: string,
      *   descripcion: string,
@@ -629,6 +635,13 @@ final class CuentaAutomaticaClaves
             self::SUELDOS_BANCO_PAGO => [
                 'grupo' => 'Sueldos',
                 'descripcion' => 'Banco / caja del pago de haberes (asiento 2; se usa en fase 3)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::BIEN_USO_GASTO_AMORTIZACION => [
+                'grupo' => 'Bienes de uso',
+                'descripcion' => 'Gasto de amortizaciones (Debe asiento amort.; Anita impcont 301)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,

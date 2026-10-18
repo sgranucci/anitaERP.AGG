@@ -160,22 +160,15 @@ class BancoRepository implements BancoRepositoryInterface
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-		$usuario_id = Auth::user()->id;
+        if (! is_array($dataAnita) || count($dataAnita) === 0) {
+            return;
+        }
 
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
 
-        	$provincia = Provincia::select('id', 'nombre')->where('id' , $data->banm_provincia)->first();
-			if ($provincia)
-				$provincia_id = $provincia->id;
-			else
-				$provincia_id = NULL;
-	
-        	$localidad = Localidad::select('id', 'nombre')->where('id' , $data->banm_localidad)->first();
-			if ($localidad)
-				$localidad_id = $localidad->id;
-			else
-				$localidad_id = NULL;
+			$provincia_id = self::resolverProvinciaIdAnita((string) ($data->banm_provincia ?? ''));
+			$localidad_id = self::resolverLocalidadIdAnita((string) ($data->banm_localidad ?? ''), $provincia_id);
 	
 			$condicioniva_id = 1;
 			switch($data->banm_cond_iva)
@@ -358,6 +351,55 @@ class BancoRepository implements BancoRepositoryInterface
 			$output['data'] .= '</tr>';
 		}
 		return(json_encode($output, JSON_UNESCAPED_UNICODE));
+    }
+
+    /**
+     * Anita banmae: banm_provincia puede ser id numérico (AGG) o nombre (Crown).
+     */
+    private static function resolverProvinciaIdAnita(string $valor): ?int
+    {
+        $valor = trim($valor);
+        if ($valor === '' || $valor === '0') {
+            return null;
+        }
+        if (ctype_digit($valor)) {
+            $porId = Provincia::query()->whereKey((int) $valor)->value('id');
+            if ($porId) {
+                return (int) $porId;
+            }
+        }
+
+        $porNombre = Provincia::query()
+            ->whereRaw('LOWER(nombre) = ?', [mb_strtolower($valor)])
+            ->value('id');
+
+        return $porNombre ? (int) $porNombre : null;
+    }
+
+    /**
+     * Anita banmae: banm_localidad puede ser id numérico (AGG) o nombre (Crown).
+     */
+    private static function resolverLocalidadIdAnita(string $valor, ?int $provinciaId): ?int
+    {
+        $valor = trim($valor);
+        if ($valor === '' || $valor === '0') {
+            return null;
+        }
+        if (ctype_digit($valor)) {
+            $porId = Localidad::query()->whereKey((int) $valor)->value('id');
+            if ($porId) {
+                return (int) $porId;
+            }
+        }
+
+        $q = Localidad::query()->whereRaw('LOWER(nombre) = ?', [mb_strtolower($valor)]);
+        if ($provinciaId) {
+            $q->where('provincia_id', $provinciaId);
+        }
+
+        $id = $q->value('id');
+
+        return $id ? (int) $id : null;
     }
 
 }

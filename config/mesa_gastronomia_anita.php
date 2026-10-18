@@ -14,7 +14,14 @@ return [
     /** Sistema Informix en apiERP.php (null = sin cláusula de sistema, como stkcmae). */
     'sistema' => env('MESA_GASTRONOMIA_SYNC_ANITA_SISTEMA', 'ventas'),
 
+    /** CROWN: cncadmin (Cipolletti). Vacío = bridge global. */
+    'ifx_server' => env('MESA_GASTRONOMIA_SYNC_ANITA_IFX_SERVER', ''),
+    'path_sistema' => env('MESA_GASTRONOMIA_SYNC_ANITA_PATH', ''),
+
     'empresa_default_id' => (int) env('MESA_GASTRONOMIA_SYNC_EMPRESA_ID', 0) ?: (int) (config('cliente.EMPRESA_DEFAULT_ID') ?? 1),
+
+    /** CROWN: código sala (ej. CIP). Vacío = sin sala_id (AGG). */
+    'sala_codigo' => env('MESA_GASTRONOMIA_SYNC_SALA_CODIGO', ''),
 
     'campos_listado' => 'mes_codigo, mes_ubicacion, mes_detalle, mes_clave, mes_estado',
 

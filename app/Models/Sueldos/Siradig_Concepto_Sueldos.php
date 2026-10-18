@@ -6,13 +6,15 @@ use App\Support\Sueldos\SiradigTablas;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Concepto de una presentación F572: deducción (D), retención/percepción/pago (R)
  * o ajuste (J). Espejo de ConceptoType / AjusteType.
  */
-class Siradig_Concepto_Sueldos extends Model
+class Siradig_Concepto_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'siradig_concepto_sueldos';
 
     protected $fillable = [

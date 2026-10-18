@@ -4,9 +4,11 @@ namespace App\Models\Configuracion;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class AnitaNotificacion extends Model
+class AnitaNotificacion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'anita_notificacion';
 
     protected $fillable = [

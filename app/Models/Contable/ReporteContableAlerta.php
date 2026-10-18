@@ -4,9 +4,11 @@ namespace App\Models\Contable;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ReporteContableAlerta extends Model
+class ReporteContableAlerta extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'reporte_contable_alerta';
 
     public const TIPO_VAR_PCT_ABS = 'var_pct_abs';

@@ -13,7 +13,7 @@ use App\Models\Presupuesto\Presupuesto;
  * En edición, los IDs ya grabados en el documento se aceptan aunque pertenezcan
  * a un presupuesto anterior (OC / requisición de un ejercicio viejo).
  *
- * Si `compras.oc_pedir_partida_capex` es false (El Bierzo), no exige ni valida.
+ * Si Configuración general → «Pedir partida…» está apagado (no-AGG), no exige ni valida.
  */
 final class ValidacionPresupuestoPartidaCapexLineas
 {

@@ -100,12 +100,17 @@ class RecepcionProveedorImportarDesdeAnitaCommand extends Command
 
         $this->table(['Métrica', 'Cantidad'], [
             ['Importadas', $stats['importadas']],
+            ['Con OC vinculada', $stats['con_oc'] ?? 0],
             ['Omitidas / ya existían', $stats['omitidas']],
             ['Sin proveedor ERP', $stats['sin_proveedor']],
             ['Sin empresa ERP', $stats['sin_empresa']],
             ['OC Anita no encontrada en ERP', $stats['sin_oc']],
             ['Líneas grabadas', $stats['lineas']],
         ]);
+
+        foreach ($stats['errores'] ?? [] as $error) {
+            $this->warn($error);
+        }
 
         if ($dryRun) {
             $this->comment('Dry-run: no se grabó nada.');

@@ -5,6 +5,7 @@ namespace App\Repositories\Contable;
 use App\Models\Caja\Conceptogasto;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
+use App\Models\Seguridad\Usuario;
 use App\Repositories\Contable\Cuentacontable_CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -16,6 +17,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\CuentacontableArbolSupport;
 use Auth;
 use Exception;
+use Illuminate\Support\Facades\DB;
 
 class CuentacontableRepository implements CuentacontableRepositoryInterface
 {
@@ -187,6 +189,8 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
             'errores' => [],
         ];
 
+        $this->asegurarRubrosCrown();
+
         $apiAnita = new ApiAnita();
         $payload = [
             'acc' => 'list',
@@ -234,7 +238,10 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
             }
 
             try {
-                $this->traerRegistroDeAnita($empresaCodigo, $cuentaCodigo);
+                if ($this->traerRegistroDeAnita($empresaCodigo, $cuentaCodigo) === false) {
+                    $ret['omitidos']++;
+                    continue;
+                }
                 $locales[$clave] = true;
                 $ret['importados']++;
             } catch (Exception $e) {
@@ -442,6 +449,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
     }
 
     public function traerRegistroDeAnita($empresa, $key){
+        $this->asegurarRubrosCrown();
         $apiAnita = new ApiAnita();
         $data = array( 
             'acc' => 'list', 'tabla' => $this->tableAnita[0], 
@@ -468,7 +476,10 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        $usuario_id = Auth::id() ?? 1;
+        $usuario_id = Auth::id();
+        if (! $usuario_id || ! Usuario::query()->whereKey($usuario_id)->exists()) {
+            $usuario_id = (int) Usuario::query()->orderBy('id')->value('id');
+        }
 
         // Ferli (y bridges con tablas opcionales): ctaconc/ccosvalid pueden devolver
         // {"Error":"…"} → stdClass; no usar count() sin is_array.
@@ -478,20 +489,25 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
             $ctamCuenta = $data->ctam_cuenta;
 
 			$tipocuenta = self::tipocuentaErpDesdeAnita((string) ($data->ctam_tipo ?? ''));
+            if (EntornoEmpresaSupport::esCrown() && CuentacontableArbolSupport::esTotalizadora($tipocuenta)) {
+                return false;
+            }
 
-            // Lee el concepto de gasto        
-            $apiAnitaConc = new ApiAnita();
-            $dataConc = array( 
-                'acc' => 'list', 'tabla' => $this->tableAnita[1], 
-                'sistema' => 'contab',
-                'campos' => '
-                    ctaco_empresa,
-                    ctaco_cuenta,
-                    ctaco_concepto
-                ' , 
-                'whereArmado' => " WHERE ctaco_cuenta = '".$key."' AND ctaco_empresa = '".$empresa."' " 
-            );
-            $dataAnitaConc = json_decode($apiAnita->apiCall($dataConc));
+            // Crown no tiene ctaconc: el concepto de gasto queda vacío.
+            $dataAnitaConc = [];
+            if (! EntornoEmpresaSupport::esCrown()) {
+                $dataConc = array(
+                    'acc' => 'list', 'tabla' => $this->tableAnita[1],
+                    'sistema' => 'contab',
+                    'campos' => '
+                        ctaco_empresa,
+                        ctaco_cuenta,
+                        ctaco_concepto
+                    ' ,
+                    'whereArmado' => " WHERE ctaco_cuenta = '".$key."' AND ctaco_empresa = '".$empresa."' "
+                );
+                $dataAnitaConc = json_decode($apiAnita->apiCall($dataConc));
+            }
 
             $conceptogasto_id = null;
             if (is_array($dataAnitaConc) && count($dataAnitaConc) > 0)
@@ -527,7 +543,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
             try {
                 $cuentacontable = $this->model->create([
                     "empresa_id" => $empresa_id,
-                    "rubrocontable_id" => $data->ctam_rubro,
+                    "rubrocontable_id" => $this->rubroIdDesdeAnita($data->ctam_rubro ?? ''),
                     "nivel" => $data->ctam_nivel,
                     "nombre" => $data->ctam_desc,
                     "codigo" => $data->ctam_cuenta,
@@ -825,10 +841,52 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 	}
 
 	/**
-	 * AGG y Ferli comparten la semántica de ctam_tipo en Anita (0=Regular).
+	 * AGG, Ferli y Crown: ctam_tipo 0 = imputable, 1 y 3 = título, 2 = totalizadora.
 	 */
 	private static function anitaTipocuentaComoFerli(): bool
 	{
-		return EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esAgg();
+		return EntornoEmpresaSupport::esFerli()
+            || EntornoEmpresaSupport::esAgg()
+            || EntornoEmpresaSupport::esCrown();
 	}
+
+    /**
+     * Crown: ctam_rubro 1–6 y la letra P (patrimonio). El ERP guarda el id de rubrocontable.
+     */
+    private function asegurarRubrosCrown(): void
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return;
+        }
+
+        $rubros = [
+            1 => 'ACTIVO',
+            2 => 'PASIVO',
+            3 => 'PATRIMONIO NETO',
+            4 => 'ESTADO DE RESULTADO',
+            5 => 'RESULTADOS',
+            6 => 'CUENTA PUENTE',
+        ];
+        foreach ($rubros as $id => $nombre) {
+            if (DB::table('rubrocontable')->where('id', $id)->exists()) {
+                continue;
+            }
+            DB::table('rubrocontable')->insert([
+                'id' => $id,
+                'nombre' => $nombre,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    }
+
+    private function rubroIdDesdeAnita(mixed $raw): int
+    {
+        $rubro = strtoupper(trim((string) $raw));
+        if (EntornoEmpresaSupport::esCrown() && $rubro === 'P') {
+            return 3;
+        }
+
+        return (int) $rubro;
+    }
 }

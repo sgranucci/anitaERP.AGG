@@ -7,12 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Maestro destino SENASA (Anita `destino`, clave = zona de venta).
  */
-class Destino extends Model
+class Destino extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'destino';
 
     protected $fillable = [

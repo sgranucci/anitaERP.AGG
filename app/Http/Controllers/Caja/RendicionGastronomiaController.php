@@ -227,7 +227,10 @@ class RendicionGastronomiaController extends Controller
         $totalesTurno = null;
         $totalesDia = null;
         $auditoriaJornada = null;
-        if ($data->esRendicionJornada()) {
+        if ($data->esRendicionCierreX()) {
+            // Cierre X Crown: el total X por mozo viene de la cabecera; no hay recálculo por turno.
+            $data->loadMissing(['mozo', 'sala', 'jornada']);
+        } elseif ($data->esRendicionJornada()) {
             try {
                 $datosJornada = $this->service->datosDesdeJornada((int) $data->jornada_gastronomia_id, $id);
                 $totalesDia = $datosJornada['totales_dia'] ?? null;

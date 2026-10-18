@@ -720,7 +720,11 @@
 
 			if ($target.is('select[name="centrocostodestino_ids[]"]')) {
 				$target.trigger('change');
-				enfocarCampoLinea($row, 'partidagasto');
+				if ($(SELECTOR_TABLA).attr('data-req-pedir-partida-capex') === '1') {
+					enfocarCampoLinea($row, 'partidagasto');
+				} else {
+					agregarRenglonYEnfocarArticulo();
+				}
 				return;
 			}
 

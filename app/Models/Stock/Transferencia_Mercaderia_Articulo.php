@@ -3,9 +3,11 @@
 namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Transferencia_Mercaderia_Articulo extends Model
+class Transferencia_Mercaderia_Articulo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'transferencia_mercaderia_articulo';
 
     protected $fillable = [

@@ -5,9 +5,11 @@ namespace App\Models\Ventas;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\Venta;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class VentaGastronomiaEmision extends Model
+class VentaGastronomiaEmision extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'venta_gastronomia_emision';
 
     protected $primaryKey = 'venta_id';

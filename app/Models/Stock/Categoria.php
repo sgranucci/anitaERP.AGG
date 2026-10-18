@@ -9,9 +9,11 @@ use App\ApiAnita;
 use App\Models\Stock\Tipoarticulo;
 use App\Support\Stock\CategoriaAnitaBridgeSupport;
 use App\Support\Stock\TipoarticuloDefaultSupport;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Categoria extends Model
+class Categoria extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'codigo', 'copiaot', 'tipoarticulo_id',
                             'division', 'estado', 'grupocompra', 'linea_id', 'deposito_id', 
                             'puntoventa_id', 'excel'];

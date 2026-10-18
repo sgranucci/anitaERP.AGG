@@ -39,6 +39,9 @@
                                 <th class="width20">ID</th>
                                 <th>Identificador PC</th>
                                 <th>Descripción</th>
+                                @if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown())
+                                    <th>Modo POS</th>
+                                @endif
                                 <th>Empresa</th>
                                 <th>PV CAE</th>
                                 <th>PV CAEA</th>
@@ -60,6 +63,17 @@
                                 <td>{{ $data->id }}</td>
                                 <td>{{ $data->identificador_pc }}</td>
                                 <td>{{ $data->descripcion }}</td>
+                                @if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown())
+                                    <td>
+                                        {{ \App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPosModos::modos()[$data->modo_pos ?? 'resto'] ?? ($data->modo_pos ?? 'resto') }}
+                                        @if (!empty($data->solo_marcha))
+                                            <span class="badge badge-warning">marcha</span>
+                                        @endif
+                                        @if (!empty($data->habilita_hotel))
+                                            <span class="badge badge-secondary">hotel</span>
+                                        @endif
+                                    </td>
+                                @endif
                                 <td>{{ optional($data->empresa)->nombre }}</td>
                                 <td>{{ optional($data->puntoventaCae)->codigo }} — {{ optional($data->puntoventaCae)->nombre }}</td>
                                 <td>{{ optional($data->puntoventaCaea)->codigo }} — {{ optional($data->puntoventaCaea)->nombre }}</td>

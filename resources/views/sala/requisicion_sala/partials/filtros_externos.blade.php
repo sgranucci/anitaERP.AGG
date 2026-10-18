@@ -29,7 +29,7 @@
         return route($rutaIndex, $q);
     };
 
-    $mostrarEmpresa = ($empresa_query ?? collect())->count() > 1;
+    $mostrarEmpresa = \App\Support\Configuracion\EmpresaFiltroExternoSupport::mostrarChips();
 @endphp
 <div class="card-body py-2 border-bottom bg-white">
     <div class="d-flex flex-wrap align-items-center">

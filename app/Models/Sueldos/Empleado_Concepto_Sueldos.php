@@ -6,9 +6,11 @@ use App\Models\Seguridad\Usuario;
 use App\Support\Sueldos\ConceptoElegibilidadCatalogo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Empleado_Concepto_Sueldos extends Model
+class Empleado_Concepto_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'empleado_concepto_sueldos';
 
     protected $fillable = [

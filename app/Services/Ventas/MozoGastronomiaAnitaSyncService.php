@@ -7,6 +7,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\MozoGastronomia;
 use App\Repositories\Ventas\MozoGastronomiaRepositoryInterface;
 use App\Support\Stock\AnitaSync\Mozo\MozoFieldMapper;
+use App\Support\Ventas\GastronomiaSalaSupport;
 use App\Support\Ventas\GastronomiaTicketTarjetaAnitaBridgeSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -229,6 +230,20 @@ class MozoGastronomiaAnitaSyncService
             $payload['sistema'] = $sistema;
         }
 
+        // CROWN: override explícito (cncadmin) manda sobre mapa AGG por empresa.
+        $ifxCfg = trim((string) config('mozo_gastronomia_anita.ifx_server', ''));
+        $pathCfg = rtrim(trim((string) config('mozo_gastronomia_anita.path_sistema', '')), '/');
+        if ($ifxCfg !== '' || $pathCfg !== '') {
+            if ($ifxCfg !== '') {
+                $payload['ifx_server'] = $ifxCfg;
+            }
+            if ($pathCfg !== '') {
+                $payload['path_sistema'] = $pathCfg;
+            }
+
+            return $payload;
+        }
+
         if ($empresaId > 0) {
             $bridge = GastronomiaTicketTarjetaAnitaBridgeSupport::parametrosBridge($empresaId);
             if (isset($bridge['servidor'])) {
@@ -249,16 +264,12 @@ class MozoGastronomiaAnitaSyncService
     private function leerMozoEnAnita(int $vendCodigo): ?object
     {
         $api = new ApiAnita;
-        $payload = [
+        $payload = array_merge($this->payloadBridgeBase(0), [
             'acc' => 'list',
             'tabla' => config('mozo_gastronomia_anita.tabla', 'vendedor'),
             'campos' => config('mozo_gastronomia_anita.campos_listado'),
             'whereArmado' => " WHERE vend_codigo={$vendCodigo}",
-        ];
-        $sistema = config('mozo_gastronomia_anita.sistema');
-        if ($sistema !== null && $sistema !== '') {
-            $payload['sistema'] = $sistema;
-        }
+        ]);
 
         $rows = json_decode($api->apiCall($payload));
 
@@ -299,15 +310,22 @@ class MozoGastronomiaAnitaSyncService
      */
     private function persistirMozo(int $empresaId, string $codigoAnita, string $nombre, ?string $claveAnita): string
     {
+        $salaId = GastronomiaSalaSupport::idPorCodigo(
+            (string) config('mozo_gastronomia_anita.sala_codigo', '')
+        );
+
         $datos = [
             'codigo' => $codigoAnita,
             'nombre' => $nombre,
             'empresa_id' => $empresaId,
+            'sala_id' => $salaId,
         ];
 
         $existente = MozoGastronomia::query()
             ->where('empresa_id', $empresaId)
             ->where('codigo', $codigoAnita)
+            ->when($salaId !== null, fn ($q) => $q->where('sala_id', $salaId))
+            ->when($salaId === null, fn ($q) => $q->whereNull('sala_id'))
             ->first();
 
         $claveNueva = $this->resolverClaveDestino($claveAnita, $existente);
@@ -316,17 +334,19 @@ class MozoGastronomiaAnitaSyncService
         try {
             if ($existente) {
                 $huboCambioNombre = $existente->nombre !== $datos['nombre'];
+                $huboCambioSala = (int) ($existente->sala_id ?? 0) !== (int) ($salaId ?? 0);
                 $huboCambioClave = $claveNueva !== null && ! $this->claveCoincide($existente->clave, $claveNueva);
-                if (! $huboCambioNombre && ! $huboCambioClave) {
+                if (! $huboCambioNombre && ! $huboCambioClave && ! $huboCambioSala) {
                     DB::commit();
 
                     return 'omitido';
                 }
-                if ($huboCambioNombre) {
+                if ($huboCambioNombre || $huboCambioSala) {
                     $existente->update([
                         'nombre' => $datos['nombre'],
                         'codigo' => $datos['codigo'],
                         'empresa_id' => $datos['empresa_id'],
+                        'sala_id' => $datos['sala_id'],
                     ]);
                 }
                 if ($huboCambioClave && $claveNueva !== null) {

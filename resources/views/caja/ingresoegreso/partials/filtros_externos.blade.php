@@ -63,7 +63,7 @@
 @endphp
 <div class="card-body py-2 border-bottom bg-white">
     <div class="d-flex flex-wrap align-items-center" style="gap:.35rem;">
-        @if (($empresa_query ?? collect())->count() > 1)
+        @if (\App\Support\Configuracion\EmpresaFiltroExternoSupport::mostrarChips())
             <span class="text-muted small mr-1"><i class="fa fa-building"></i> Empresa:</span>
             @foreach ($empresa_query as $emp)
                 <a href="{{ $urlEmpresa($emp->id) }}"

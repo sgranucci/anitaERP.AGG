@@ -6,9 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Numeracion extends Model
+class Numeracion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'desde_nro', 'hasta_nro'];
     protected $table = 'numeracion';
     protected $keyField = 'numer_numeracion';

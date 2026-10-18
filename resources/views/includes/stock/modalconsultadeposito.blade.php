@@ -1,8 +1,10 @@
 @once('anita-modal-consulta-deposito')
 @php
     $mostrarEmpresaConsultaDeposito = \App\Support\Stock\MovimientosArticuloDepositoSupport::mostrarEmpresaConsultaDeposito();
+    $mostrarSalaConsultaDeposito = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown();
 @endphp
 <input type="hidden" id="consultadeposito-mostrar-empresa" value="{{ $mostrarEmpresaConsultaDeposito ? '1' : '0' }}">
+<input type="hidden" id="consultadeposito-mostrar-sala" value="{{ $mostrarSalaConsultaDeposito ? '1' : '0' }}">
 <div class="modal fade" id="consultadepositoModal" role="dialog" aria-labelledby="consultadepositoModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl" role="document">
     <div class="modal-content">
@@ -25,6 +27,9 @@
               <th>Código</th>
               <th>Descripción</th>
               <th>Tipo</th>
+              @if ($mostrarSalaConsultaDeposito)
+              <th class="col-sala-deposito">Sala</th>
+              @endif
               @if ($mostrarEmpresaConsultaDeposito)
               <th class="col-empresa-deposito">Empresa</th>
               @endif

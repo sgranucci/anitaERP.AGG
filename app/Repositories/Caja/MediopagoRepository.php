@@ -100,14 +100,19 @@ class MediopagoRepository implements MediopagoRepositoryInterface
             return;
         }
 
-        $datosLocal = Mediopago::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
-        }
+        $datosLocalArray = Mediopago::query()
+            ->pluck($this->keyField)
+            ->map(static fn ($c) => trim((string) $c))
+            ->filter(static fn ($c) => $c !== '')
+            ->values()
+            ->all();
 
         foreach ($parsed['filas'] as $value) {
-            if (!in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
+            $clave = trim((string) ($value->{$this->keyField} ?? ''));
+            if ($clave === '') {
+                continue;
+            }
+            if (! in_array($clave, $datosLocalArray, true)) {
                 $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
             }
         }
@@ -115,6 +120,10 @@ class MediopagoRepository implements MediopagoRepositoryInterface
 
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
+        $key = trim((string) $key);
+        if ($key === '') {
+            return;
+        }
         $data = array( 
             'acc' => 'list', 'tabla' => $this->tableAnita, 
 			'sistema' => 'che_ban',
@@ -136,24 +145,29 @@ class MediopagoRepository implements MediopagoRepositoryInterface
         }
 
         $data = $parsed['filas'][0];
+        $clave = trim((string) ($data->tctes_clave ?? ''));
+        $imputacion = trim((string) ($data->tctes_imputacion ?? ''));
 
-        if ($data->tctes_imputacion !== "00000000")
-        {
-            // Busca la cuenta de caja
-            $cuentacaja = $this->cuentacajaRepository->findPorCodigo(ltrim($data->tctes_imputacion,'0'));
-
-            if ($cuentacaja)
-            {
-                $arr_campos = [
-                    "nombre" => $data->tctes_desc,
-                    "codigo" => $data->tctes_clave,
-                    "cuentacaja_id" => $cuentacaja->id,
-                    "empresa_id" => $cuentacaja->empresa_id,
-                    ];
-
-                $this->model->create($arr_campos);
-            }
+        if ($clave === '' || $imputacion === '' || $imputacion === '00000000') {
+            return;
         }
+
+        // No ltrim ciegos: Crown usa códigos con "/" o espacios (071080/1, 00102 eu).
+        $cuentacaja = $this->cuentacajaRepository->findPorCodigo($imputacion);
+        if (! $cuentacaja) {
+            return;
+        }
+
+        if ($this->model->where('codigo', $clave)->exists()) {
+            return;
+        }
+
+        $this->model->create([
+            'nombre' => $data->tctes_desc,
+            'codigo' => $clave,
+            'cuentacaja_id' => $cuentacaja->id,
+            'empresa_id' => $cuentacaja->empresa_id,
+        ]);
     }
 
 	public function guardarAnita($request) {

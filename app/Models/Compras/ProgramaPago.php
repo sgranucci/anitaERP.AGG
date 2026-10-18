@@ -7,9 +7,11 @@ use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ProgramaPago extends Model
+class ProgramaPago extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_BORRADOR = 'BORRADOR';
 
     public const ESTADO_CERRADO = 'CERRADO';

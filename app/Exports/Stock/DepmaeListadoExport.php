@@ -4,6 +4,7 @@ namespace App\Exports\Stock;
 
 use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -23,9 +24,12 @@ class DepmaeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'E';
-
     private DepmaeRepositoryInterface $depmaeRepository;
+
+    private function colUltima(): string
+    {
+        return EntornoEmpresaSupport::esCrown() ? 'F' : 'E';
+    }
 
     /** @var array<string, mixed>|string|null */
     private $filtros;
@@ -84,7 +88,7 @@ class DepmaeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
     {
         if ($this->flDesdeIndex) {
             $cols = [];
-            foreach (range('A', self::COL_ULTIMA) as $c) {
+            foreach (range('A', $this->colUltima()) as $c) {
                 $cols[$c] = NumberFormat::FORMAT_TEXT;
             }
 
@@ -119,6 +123,17 @@ class DepmaeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
     public function columnWidths(): array
     {
         if ($this->flDesdeIndex) {
+            if (EntornoEmpresaSupport::esCrown()) {
+                return [
+                    'A' => 8,
+                    'B' => 32,
+                    'C' => 18,
+                    'D' => 16,
+                    'E' => 16,
+                    'F' => 14,
+                ];
+            }
+
             return [
                 'A' => 8,
                 'B' => 36,
@@ -164,9 +179,10 @@ class DepmaeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
                 }
 
                 $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit);
+                $colUlt = $this->colUltima();
+                $sheet->mergeCells('A'.$filaTit.':'.$colUlt.$filaTit);
                 $sheet->getRowDimension($filaTit)->setRowHeight(30);
-                $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
+                $sheet->getStyle('A'.$filaTit.':'.$colUlt.$filaTit)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 16,

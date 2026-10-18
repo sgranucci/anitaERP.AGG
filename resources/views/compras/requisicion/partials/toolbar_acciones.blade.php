@@ -29,7 +29,7 @@
                 title="Documentos relacionados (OC, COM, factura, OP)"
                 data-url="{{ route('requisicion_documentos_relacionados', ['id' => $data->id]) }}"
                 data-numero="REQ {{ $data->numerorequisicion }}">
-            <i class="fa fa-sitemap"></i> Documentos
+            <i class="fa fa-folder-open"></i> Documentos
         </button>
     @endif
 

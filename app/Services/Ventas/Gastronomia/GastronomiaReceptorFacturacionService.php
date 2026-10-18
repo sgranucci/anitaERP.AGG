@@ -231,7 +231,7 @@ final class GastronomiaReceptorFacturacionService
 
         $clienteFacturacionId = $this->clienteIdFacturacionExplicito($cuenta);
         if ($clienteFacturacionId) {
-            return $this->resolverModoMaestro($cuenta, $clienteFacturacionId, $total, $tope);
+            return $this->resolverModoMaestro($clienteFacturacionId, $total, $tope);
         }
 
         if ($tope > 0 && $total >= $tope) {
@@ -239,6 +239,31 @@ final class GastronomiaReceptorFacturacionService
         }
 
         return $this->resolverModoConsumidorFinal($total, $tope);
+    }
+
+    /**
+     * Receptor para POS sin `CuentaGastronomia` (Crown): solo cliente del maestro o CF.
+     * Sin receptor manual: sobre el tope exige cliente identificado.
+     *
+     * @return array{cliente_id:int,modo:string,arca_receptor:array,venta_receptor:array,subtotal_estimado:float,tope_consumidor_final:float}
+     */
+    public function resolverParaFacturarPorClienteId(?int $clienteId, float $subtotal): array
+    {
+        $tope = ParametroSistemaSupport::topeConsumidorFinal();
+        $clienteFacturacionId = $this->normalizarClienteIdFacturacion((int) ($clienteId ?? 0));
+
+        if ($clienteFacturacionId !== null) {
+            return $this->resolverModoMaestro($clienteFacturacionId, $subtotal, $tope);
+        }
+
+        if ($tope > 0 && $subtotal >= $tope) {
+            throw new InvalidArgumentException(
+                'El total ($'.number_format($subtotal, 2, ',', '.').') supera el tope de Consumidor Final ($'
+                .number_format($tope, 2, ',', '.').'): asigne un cliente del maestro a la cuenta antes de facturar.'
+            );
+        }
+
+        return $this->resolverModoConsumidorFinal($subtotal, $tope);
     }
 
     /**
@@ -288,7 +313,7 @@ final class GastronomiaReceptorFacturacionService
      *   tope_consumidor_final:float
      * }
      */
-    private function resolverModoMaestro(CuentaGastronomia $cuenta, int $clienteMaestroId, float $total, float $tope): array
+    private function resolverModoMaestro(int $clienteMaestroId, float $total, float $tope): array
     {
         $cliente = Cliente::query()->with('tipodocumentos')->find($clienteMaestroId);
         if (! $cliente) {

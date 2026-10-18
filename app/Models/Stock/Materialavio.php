@@ -7,9 +7,11 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
 use App\Models\Stock\Articulo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Materialavio extends Model
+class Materialavio extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'articulo_id'];
     protected $table = 'materialavio';
 

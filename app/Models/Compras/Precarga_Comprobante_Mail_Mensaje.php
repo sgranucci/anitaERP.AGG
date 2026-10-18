@@ -4,13 +4,15 @@ namespace App\Models\Compras;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Auditoría y dedupe de la ingesta de facturas por correo.
  * Una fila por adjunto PDF de cada mensaje procesado.
  */
-class Precarga_Comprobante_Mail_Mensaje extends Model
+class Precarga_Comprobante_Mail_Mensaje extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_PROCESADO = 'PROCESADO';
 
     public const ESTADO_ERROR = 'ERROR';

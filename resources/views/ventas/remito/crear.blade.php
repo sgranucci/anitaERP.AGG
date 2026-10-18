@@ -10,7 +10,7 @@
         && filter_var(config('arca_wsapoc.habilitado', true), FILTER_VALIDATE_BOOLEAN);
 @endphp
 <script>window.REQUIERE_VALIDACION_APOC_OPERACION = @json($requiereValidacionApocOperacion);</script>
-<script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/padron-operacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/padron-operacion.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 @include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'boleta'])

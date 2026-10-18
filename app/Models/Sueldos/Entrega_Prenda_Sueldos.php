@@ -6,9 +6,11 @@ use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\MovimientoStock;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Entrega_Prenda_Sueldos extends Model
+class Entrega_Prenda_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'entrega_prenda_sueldos';
 
     protected $fillable = [

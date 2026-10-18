@@ -8,9 +8,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Impuesto extends Model
+class Impuesto extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'valor', 'fechavigencia', 'codigo', 'codigoarca'];
     protected $table = 'impuesto';
 

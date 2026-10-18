@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Carbon\Carbon;
@@ -83,14 +84,23 @@ class OrdencompraListadoFiltros
         'vacio' => 'Sin fecha',
     ];
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
-    {
+    public static function resolverDesdeRequest(
+        Request $request,
+        ?string $busquedaRuta = null,
+        ?int $empresaDefault = null,
+        ?int $salaDefault = null
+    ): array {
         [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+        [$salaId, $salaScope] = self::resolverSalaExterna($request, $salaDefault);
+        $presupuesto = self::normalizarPresupuestoExterno($request->input('presupuesto'));
 
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
             return array_merge(self::filtrosVacios(), [
                 'empresa_id' => $empresaId,
                 'empresa_scope' => $empresaScope,
+                'sala_id' => $salaId,
+                'sala_scope' => $salaScope,
+                'presupuesto' => $presupuesto,
                 'estado' => self::normalizarEstadoExterno($request->input('estado')),
             ]);
         }
@@ -133,8 +143,47 @@ class OrdencompraListadoFiltros
             'busqueda_rapida' => $busquedaRapida,
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
+            'sala_id' => $salaId,
+            'sala_scope' => $salaScope,
+            'presupuesto' => $presupuesto,
             'estado' => self::normalizarEstadoExterno($request->input('estado')),
         ];
+    }
+
+    /**
+     * Crown: sala (default primera) o todas (`sala_todas=1`). Fuera de Crown no filtra.
+     *
+     * @return array{0:?int,1:string}
+     */
+    private static function resolverSalaExterna(Request $request, ?int $salaDefault): array
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return [null, 'todas'];
+        }
+        if ($request->boolean('sala_todas') || $request->input('sala_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('sala_id')) {
+            return [(int) $request->input('sala_id'), 'una'];
+        }
+        if ($salaDefault !== null && $salaDefault > 0) {
+            return [$salaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
+    }
+
+    /**
+     * Chip de partida de presupuesto. Solo aplica si el flag `oc_pedir_partida_capex` está activo.
+     */
+    public static function normalizarPresupuestoExterno($valor): string
+    {
+        if (! OrdencompraUiConfigSupport::pedirPartidaCapex()) {
+            return '';
+        }
+        $valor = strtolower(trim((string) $valor));
+
+        return in_array($valor, ['con', 'sin'], true) ? $valor : '';
     }
 
     public static function normalizarEstadoExterno($estado): string
@@ -214,6 +263,9 @@ class OrdencompraListadoFiltros
             'busqueda' => '',
             'empresa_id' => null,
             'empresa_scope' => 'una',
+            'sala_id' => null,
+            'sala_scope' => 'todas',
+            'presupuesto' => '',
             'estado' => '',
         ];
     }
@@ -252,10 +304,22 @@ class OrdencompraListadoFiltros
     public static function paraQueryStringEmpresa(array $filtros): array
     {
         $params = [];
+        if (EntornoEmpresaSupport::esCrown()) {
+            if (($filtros['sala_scope'] ?? 'todas') === 'todas') {
+                $params['sala_todas'] = 1;
+            } elseif (! empty($filtros['sala_id'])) {
+                $params['sala_id'] = (int) $filtros['sala_id'];
+            }
+        }
         if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
             $params['empresa_todas'] = 1;
         } elseif (! empty($filtros['empresa_id'])) {
             $params['empresa_id'] = (int) $filtros['empresa_id'];
+        }
+
+        $presupuesto = self::normalizarPresupuestoExterno($filtros['presupuesto'] ?? '');
+        if ($presupuesto !== '') {
+            $params['presupuesto'] = $presupuesto;
         }
 
         $estado = self::normalizarEstadoExterno($filtros['estado'] ?? '');
@@ -271,8 +335,32 @@ class OrdencompraListadoFiltros
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
+        if (EntornoEmpresaSupport::esCrown()
+            && ! empty($filtros['sala_id'])
+            && ($filtros['sala_scope'] ?? 'una') !== 'todas') {
+            $query->where('ordencompra.sala_id', (int) $filtros['sala_id']);
+        }
         if (! empty($filtros['empresa_id'])) {
             $query->where('ordencompra.empresa_id', (int) $filtros['empresa_id']);
+        }
+
+        $presupuesto = self::normalizarPresupuestoExterno($filtros['presupuesto'] ?? '');
+        if ($presupuesto === 'con') {
+            $query->whereExists(function ($sub) {
+                $sub->selectRaw('1')
+                    ->from('ordencompra_articulo')
+                    ->whereColumn('ordencompra_articulo.ordencompra_id', 'ordencompra.id')
+                    ->whereNotNull('ordencompra_articulo.partidagasto_id')
+                    ->where('ordencompra_articulo.partidagasto_id', '>', 0);
+            });
+        } elseif ($presupuesto === 'sin') {
+            $query->whereNotExists(function ($sub) {
+                $sub->selectRaw('1')
+                    ->from('ordencompra_articulo')
+                    ->whereColumn('ordencompra_articulo.ordencompra_id', 'ordencompra.id')
+                    ->whereNotNull('ordencompra_articulo.partidagasto_id')
+                    ->where('ordencompra_articulo.partidagasto_id', '>', 0);
+            });
         }
 
         $estado = self::normalizarEstadoExterno($filtros['estado'] ?? '');

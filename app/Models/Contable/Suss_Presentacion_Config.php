@@ -6,9 +6,11 @@ namespace App\Models\Contable;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Suss_Presentacion_Config extends Model
+class Suss_Presentacion_Config extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'suss_presentacion_config';
 
     protected $fillable = [

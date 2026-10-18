@@ -5,12 +5,14 @@ namespace App\Models\Sueldos;
 use App\Support\Sueldos\SiradigTablas;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Carga de familia declarada en una presentación F572 (SiRADIG).
  */
-class Siradig_Carga_Familia_Sueldos extends Model
+class Siradig_Carga_Familia_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'siradig_carga_familia_sueldos';
 
     protected $fillable = [

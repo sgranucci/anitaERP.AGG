@@ -4,9 +4,11 @@ namespace App\Models\Receptivo;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Guia_Idioma extends Model
+class Guia_Idioma extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = [
                             'guia_id', 'idioma_id'
                         ];

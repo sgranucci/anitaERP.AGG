@@ -7,9 +7,11 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ModuloAvisoDestinatario extends Model
+class ModuloAvisoDestinatario extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'modulo_aviso_destinatario';
 
     protected $fillable = [

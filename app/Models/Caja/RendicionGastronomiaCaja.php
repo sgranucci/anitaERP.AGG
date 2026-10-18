@@ -3,18 +3,25 @@
 namespace App\Models\Caja;
 
 use App\Models\Configuracion\Empresa;
+use App\Models\Configuracion\Sala;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\CierreTotemJornadaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
+use App\Models\Ventas\MozoGastronomia;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class RendicionGastronomiaCaja extends Model
+class RendicionGastronomiaCaja extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const TIPO_TURNO = 'turno';
 
     public const TIPO_JORNADA = 'jornada';
+
+    /** Cierre X por mozo (Crown): una rendición por mozo de la jornada de la sala. */
+    public const TIPO_CIERRE_X = 'cierre_x';
 
     protected $table = 'rendicion_gastronomia_caja';
 
@@ -25,14 +32,17 @@ class RendicionGastronomiaCaja extends Model
         'fuente_nro_oper',
         'anita_sincronizado_en',
         'empresa_id',
+        'sala_id',
         'puntoventa_cae_id',
         'puntoventa_caea_id',
         'caja_id',
+        'mozo_gastronomia_id',
         'creousuario_id',
         'fecharendicion',
         'iniciodelfondo',
         'totalfactura',
         'totalcobrado',
+        'total_x',
         'totalinvitacion',
         'totalnotacredito',
         'totalredondeo',
@@ -55,6 +65,7 @@ class RendicionGastronomiaCaja extends Model
         'iniciodelfondo' => 'float',
         'totalfactura' => 'float',
         'totalcobrado' => 'float',
+        'total_x' => 'float',
         'totalinvitacion' => 'float',
         'totalnotacredito' => 'float',
         'totalredondeo' => 'float',
@@ -65,6 +76,16 @@ class RendicionGastronomiaCaja extends Model
     public function empresa()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function sala()
+    {
+        return $this->belongsTo(Sala::class, 'sala_id');
+    }
+
+    public function mozo()
+    {
+        return $this->belongsTo(MozoGastronomia::class, 'mozo_gastronomia_id');
     }
 
     public function puntoventaCae()
@@ -105,6 +126,11 @@ class RendicionGastronomiaCaja extends Model
     public function esRendicionJornada(): bool
     {
         return $this->tipo === self::TIPO_JORNADA;
+    }
+
+    public function esRendicionCierreX(): bool
+    {
+        return $this->tipo === self::TIPO_CIERRE_X;
     }
 
     public function esRendicionTurno(): bool

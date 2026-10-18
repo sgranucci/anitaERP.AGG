@@ -9,11 +9,13 @@ use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
 use App\Models\Configuracion\Pais;
 use App\Traits\Receptivo\GuiaTrait;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Guia extends Model
+class Guia extends Model implements Auditable
 {
 	use GuiaTrait;
 
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = [
 							'nombre', 'codigo', 'tipodocumento', 'numerodocumento', 'maneja', 'tipoguia', 'carnetguia',
 							'carnetconducir', 'categoriacarnetconducir', 'carnetsanidad', 'observacion', 'email',

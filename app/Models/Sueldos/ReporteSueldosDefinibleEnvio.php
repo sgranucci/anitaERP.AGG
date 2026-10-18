@@ -4,9 +4,11 @@ namespace App\Models\Sueldos;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ReporteSueldosDefinibleEnvio extends Model
+class ReporteSueldosDefinibleEnvio extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_PENDIENTE = 'pendiente';
 
     public const ESTADO_ENVIADO = 'enviado';

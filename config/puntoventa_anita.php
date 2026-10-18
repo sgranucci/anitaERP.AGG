@@ -10,8 +10,10 @@ return [
 
     'sistema' => env('PUNTOVENTA_SYNC_ANITA_SISTEMA', 'ventas'),
 
-    /** Si no resuelve empresa por suc_nroemp ni por fragmentos. */
-    'empresa_id_default' => (int) env('PUNTOVENTA_SYNC_EMPRESA_ID', 0) ?: 3,
+    /** Si no resuelve empresa por suc_nroemp ni por fragmentos. Crown → 1. */
+    'empresa_id_default' => (int) env('PUNTOVENTA_SYNC_EMPRESA_ID', 0) ?: (
+        strtoupper((string) env('EMPRESA', '')) === 'CROWN' ? 1 : 3
+    ),
 
     /**
      * Misma secuencia que el repositorio histórico: se evalúa en orden;
@@ -43,7 +45,12 @@ return [
      * Si su base tiene columnas extra (póliza, remito, etc.), defina PUNTOVENTA_SYNC_ANITA_CAMPOS_LISTADO completo.
      */
     'campos_listado' => env('PUNTOVENTA_SYNC_ANITA_CAMPOS_LISTADO')
-        ?: 'suc_numero,suc_empresa,suc_leyenda1,suc_leyenda2,suc_direccion,suc_telefono,suc_localidad,suc_cond_iva,suc_fiscal,suc_nroemp,suc_ubic_afip,suc_cuit',
+        ?: (
+            strtoupper((string) env('EMPRESA', '')) === 'CROWN'
+                // Crown no tiene suc_nroemp: el nombre del PV vive en suc_empresa.
+                ? 'suc_numero,suc_empresa,suc_leyenda1,suc_leyenda2,suc_direccion,suc_telefono,suc_localidad,suc_cond_iva,suc_fiscal,suc_ubic_afip,suc_cuit'
+                : 'suc_numero,suc_empresa,suc_leyenda1,suc_leyenda2,suc_direccion,suc_telefono,suc_localidad,suc_cond_iva,suc_fiscal,suc_nroemp,suc_ubic_afip,suc_cuit'
+        ),
 
     /** Lista extendida de referencia (solo para copiar a .env si existen en Informix). */
     // suc_cod_postal,suc_division,suc_poliza,suc_suc_remito,suc_nro_ibr,suc_fecha_inicio,suc_fl_retiene_ibr,suc_fl_retiene_iva,suc_sucursal_div

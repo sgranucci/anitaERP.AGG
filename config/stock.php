@@ -80,6 +80,14 @@ return [
         explode(',', (string) env('STOCK_DEPMAE_ANITA_EMPRESAS_SYNC', '1,2,3'))
     ), fn (int $id) => $id > 0)),
 
+    /*
+    | Crown: JSON de fuentes Anita → sala (código repetible por sala).
+    | Ej. [{"ifx_server":"cncadmin","sala_codigo":"CIP","empresa_id":1},
+    |      {"ifx_server":"acncadmin","sala_codigo":"AC","empresa_id":1}]
+    | Vacío en Crown = default cncadmin→CIP + acncadmin→AC. AGG: vacío = sync por empresa.
+    */
+    'depmae_anita_fuentes' => env('STOCK_DEPMAE_ANITA_FUENTES', ''),
+
     'anita_stkmov' => [
         'habilitado' => filter_var(env('STOCK_ANITA_STKMOV_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
         'sistema_ventas' => env('STOCK_ANITA_STKMOV_SISTEMA', 'ventas'),
@@ -202,6 +210,31 @@ return [
     | Filtro stkp_fe_ult_act mínimo Ymd; tras upsert deja solo la fila más vigente por artículo+lista.
     */
     'precio_anita_sync_desde' => env('STOCK_PRECIO_ANITA_SYNC_DESDE', '20250101'),
+
+    /*
+    | Bridge Informix opcional para stkpre / premae (CROWN: cncadmin Cipolletti).
+    | Vacío = bridge global ANITA_*.
+    */
+    'precio_anita_ifx_server' => env('STOCK_PRECIO_ANITA_IFX_SERVER', ''),
+    'precio_anita_path_sistema' => env('STOCK_PRECIO_ANITA_PATH_SISTEMA', ''),
+    'precio_anita_sistema' => env('STOCK_PRECIO_ANITA_SISTEMA', ''),
+
+    /*
+    | Bridge Informix para fórmulas (stkcmae/stkcmov). CROWN: AC local (acncadmin) casi vacío;
+    | las recetas viven en los casinos (cncadmin=Cipolletti, cancadmin=CA, etc.).
+    | Vacío = bridge global ANITA_*.
+    */
+    'formula_anita_ifx_server' => env('STOCK_FORMULA_ANITA_IFX_SERVER', ''),
+    'formula_anita_path_sistema' => env('STOCK_FORMULA_ANITA_PATH_SISTEMA', ''),
+    'formula_anita_sistema' => env('STOCK_FORMULA_ANITA_SISTEMA', ''),
+
+    /*
+    | Bridge Informix opcional para lectura stkmae (insumos I0* en casinos Crown).
+    | Vacío = bridge global. Mismo esquema que formula_anita_*.
+    */
+    'articulo_anita_ifx_server' => env('STOCK_ARTICULO_ANITA_IFX_SERVER', ''),
+    'articulo_anita_path_sistema' => env('STOCK_ARTICULO_ANITA_PATH_SISTEMA', ''),
+    'articulo_anita_sistema' => env('STOCK_ARTICULO_ANITA_SISTEMA', ''),
 
     /*
     | Pedido DESPACHO (El Bierzo): TM desde el pedido de reposición.

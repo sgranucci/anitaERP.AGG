@@ -9,11 +9,13 @@ use App\Models\Contable\Cuentacontable;
 use App\Traits\Compras\Concepto_IvacompraTrait;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Concepto_Ivacompra extends Model
+class Concepto_Ivacompra extends Model implements Auditable
 {
     use Concepto_IvacompraTrait;
 
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = [
         'nombre',
         'codigo',

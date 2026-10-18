@@ -5,9 +5,11 @@ namespace App\Models\Ventas;
 use App\Models\Stock\Articulo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class TiendanubeStockSubidaLinea extends Model
+class TiendanubeStockSubidaLinea extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_OK = 'ok';
 
     public const ESTADO_ERROR = 'error';

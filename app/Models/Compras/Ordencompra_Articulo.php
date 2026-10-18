@@ -11,9 +11,11 @@ use App\Models\Stock\Articulo_Proveedor;
 use App\Models\Stock\Color;
 use App\Models\Stock\Talle;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Ordencompra_Articulo extends Model
+class Ordencompra_Articulo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'ordencompra_articulo';
 
     protected $fillable = [

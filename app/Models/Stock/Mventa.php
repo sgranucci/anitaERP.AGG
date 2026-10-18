@@ -6,9 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Mventa extends Model
+class Mventa extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'codigo'];
     protected $table = 'mventa';
     protected $tablaAnita = 'marmae';

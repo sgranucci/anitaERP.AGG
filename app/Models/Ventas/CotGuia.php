@@ -6,9 +6,11 @@ use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CotGuia extends Model
+class CotGuia extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_BORRADOR = 'borrador';
 
     public const ESTADO_ENVIADA = 'enviada';

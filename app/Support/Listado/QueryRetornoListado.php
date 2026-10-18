@@ -46,6 +46,10 @@ class QueryRetornoListado
             'estado_comb',
             'filtro_estado',
             'filtro_canal',
+            'sala_id',
+            'sala_todas',
+            'sala_sin',
+            'sala_scope',
             // Pedidos Tiendanube
             'desde',
             'hasta',

@@ -88,7 +88,9 @@ use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
                         <tr>
                             <td>{{ $row->id }}</td>
                             <td>
-                                @if ($row->esRendicionJornada())
+                                @if ($row->esRendicionCierreX())
+                                    <span class="badge badge-primary">Cierre X</span>
+                                @elseif ($row->esRendicionJornada())
                                     <span class="badge badge-info">Jornada</span>
                                 @else
                                     <span class="badge badge-secondary">Turno</span>
@@ -100,7 +102,10 @@ use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
                             <td>{{ $row->caja?->nombre }}</td>
                             <td><small>{{ $etiquetaPv !== '' ? $etiquetaPv : '—' }}</small></td>
                             <td>
-                                @if ($row->esRendicionJornada())
+                                @if ($row->esRendicionCierreX())
+                                    Jornada #{{ $row->jornada_gastronomia_id }}
+                                    <br><small class="text-muted">Mozo {{ $row->mozo?->nombre ?? '#'.$row->mozo_gastronomia_id }}</small>
+                                @elseif ($row->esRendicionJornada())
                                     Jornada #{{ $row->jornada_gastronomia_id }}
                                     @if ((int) ($row->waitry_order_id_hasta ?? 0) > 0)
                                         <br><small class="text-muted">Waitry ≤ {{ $row->waitry_order_id_hasta }}</small>

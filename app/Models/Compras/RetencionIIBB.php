@@ -7,9 +7,11 @@ use Illuminate\Support\Facades\Storage;
 use App\Models\Compras\RetencionIIBB_Condicion;
 use App\Models\Configuracion\Provincia;
 use App\Models\Contable\Cuentacontable;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class RetencionIIBB extends Model
+class RetencionIIBB extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = [
 						'nombre', 'provincia_id', 'cuentacontable_id'
 						];

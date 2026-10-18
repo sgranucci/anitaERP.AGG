@@ -78,7 +78,9 @@
 </table>
 
 <h2>
-    @if (($d['tipo_rendicion'] ?? '') === 'jornada')
+    @if (($d['tipo_rendicion'] ?? '') === 'cierre_x')
+        Datos del cierre X rendido
+    @elseif (($d['tipo_rendicion'] ?? '') === 'jornada')
         Datos del cierre de jornada rendido
     @else
         Datos del turno rendido
@@ -92,7 +94,7 @@
         <td>{{ $d['identificador_pc'] }}</td>
     </tr>
     <tr>
-        <td class="lbl">{{ ($d['tipo_rendicion'] ?? '') === 'jornada' ? 'Jornada' : 'Turno' }}</td>
+        <td class="lbl">{{ in_array($d['tipo_rendicion'] ?? '', ['jornada', 'cierre_x'], true) ? 'Jornada' : 'Turno' }}</td>
         <td>{{ $d['turno_catalogo'] }} @if(($d['turno_horario'] ?? '—') !== '—') ({{ $d['turno_horario'] }}) @endif</td>
         <td class="lbl">Jornada contable</td>
         <td>{{ $d['fecha_jornada'] ?: '—' }}</td>

@@ -7,9 +7,11 @@ use App\Models\Stock\Depmae;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class TiendanubePedido extends Model
+class TiendanubePedido extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'tiendanube_pedido';
 
     protected $fillable = [

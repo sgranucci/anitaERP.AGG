@@ -6,9 +6,11 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Configuracion_Indumentaria_Sueldos extends Model
+class Configuracion_Indumentaria_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'configuracion_indumentaria_sueldos';
 
     protected $fillable = [

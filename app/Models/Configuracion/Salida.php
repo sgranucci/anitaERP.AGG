@@ -5,9 +5,11 @@ namespace App\Models\Configuracion;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Salida extends Model
+class Salida extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'ubicacion_impresora_id', 'comando'];
 
     protected $table = 'salida';

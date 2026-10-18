@@ -3,6 +3,7 @@
 namespace App\Models\Compras;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Log idempotente de avisos de vencimiento de contratos / OC abiertas.
@@ -10,8 +11,9 @@ use Illuminate\Database\Eloquent\Model;
  * Una fila por (orden de compra, clave de umbral). La clave incluye la fecha de
  * referencia, de modo que al renovar el contrato los umbrales vuelven a dispararse.
  */
-class Ordencompra_Contrato_Aviso extends Model
+class Ordencompra_Contrato_Aviso extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     /** Faltan N días para el fin de vigencia. */
     public const TIPO_VIGENCIA = 'VIGENCIA';
 

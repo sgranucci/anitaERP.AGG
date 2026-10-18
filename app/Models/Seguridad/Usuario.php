@@ -6,6 +6,7 @@ use App\Models\Admin\Rol;
 use App\Models\Compras\SectorLegajocompra;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Oficinacompra;
+use App\Models\Configuracion\Sala;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Usuario_Cuentacontable;
 use App\Models\Stock\Depmae;
@@ -84,6 +85,11 @@ class Usuario extends Authenticatable implements Auditable
         return $this->belongsToMany(Empresa::class, 'usuario_empresa');
     }
 
+    public function usuario_salas()
+    {
+        return $this->belongsToMany(Sala::class, 'usuario_sala');
+    }
+
     public function usuario_cuentacontables()
     {
         return $this->hasMany(Usuario_Cuentacontable::class)->with('cuentacontables');
@@ -134,6 +140,10 @@ class Usuario extends Authenticatable implements Auditable
             Session::put('roles', $roles);
         }
         Session::put('usuario_empresas', $empresas);
+        $salas = $this->relationLoaded('usuario_salas')
+            ? $this->usuario_salas
+            : $this->usuario_salas()->get();
+        Session::put('usuario_salas', $salas->toArray());
         UsuarioDepositoAutorizado::cargarEnSession($this);
         UsuarioTipotransaccionStockAutorizado::cargarEnSession($this);
     }

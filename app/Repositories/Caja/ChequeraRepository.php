@@ -152,6 +152,21 @@ class ChequeraRepository implements ChequeraRepositoryInterface
         return $this->model->where('codigo', $norm)->with('cuentacajas')->first();
     }
 
+    public function findPorCuentaYNumero(int $cuentacajaId, int $numeroCheque): ?Chequera
+    {
+        if ($cuentacajaId <= 0 || $numeroCheque <= 0) {
+            return null;
+        }
+
+        return $this->model->newQuery()
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where('desdenumerocheque', '<=', $numeroCheque)
+            ->where('hastanumerocheque', '>=', $numeroCheque)
+            ->orderByRaw("CASE WHEN estado = 'A' THEN 0 ELSE 1 END")
+            ->orderByDesc('id')
+            ->first();
+    }
+
     /**
      * @return array{en_anita:int,creadas:int,actualizadas:int,omitidas:int,errores:list<string>}
      */
@@ -279,26 +294,38 @@ class ChequeraRepository implements ChequeraRepositoryInterface
 
     private function resolverCuentacajaIdDesdeAnita($codigoAnita): ?int
     {
-        $codigoNorm = ltrim(trim((string) $codigoAnita), '0');
-        if ($codigoNorm === '') {
+        $codigoRaw = trim((string) $codigoAnita);
+        if ($codigoRaw === '') {
             return null;
         }
 
-        $cuentacaja = $this->cuentacajaRepository->findPorCodigo($codigoNorm);
+        // Crown: códigos con "/" o espacios (071080/1). No ltrim ciegos.
+        $cuentacaja = $this->cuentacajaRepository->findPorCodigo($codigoRaw);
         if ($cuentacaja) {
             return (int) $cuentacaja->id;
         }
 
-        $estado = $this->cuentacajaRepository->traerRegistroDeAnita(
-            str_pad($codigoNorm, 8, '0', STR_PAD_LEFT)
-        );
-        if ($estado !== 'importado') {
-            return null;
+        if (preg_match('/^\d+$/', $codigoRaw) === 1) {
+            $codigoNorm = ltrim($codigoRaw, '0');
+            if ($codigoNorm === '') {
+                $codigoNorm = '0';
+            }
+            $cuentacaja = $this->cuentacajaRepository->findPorCodigo($codigoNorm);
+            if ($cuentacaja) {
+                return (int) $cuentacaja->id;
+            }
+
+            $estado = $this->cuentacajaRepository->traerRegistroDeAnita(
+                str_pad($codigoNorm, 8, '0', STR_PAD_LEFT)
+            );
+            if ($estado === 'importado') {
+                $cuentacaja = $this->cuentacajaRepository->findPorCodigo($codigoNorm);
+
+                return $cuentacaja ? (int) $cuentacaja->id : null;
+            }
         }
 
-        $cuentacaja = $this->cuentacajaRepository->findPorCodigo($codigoNorm);
-
-        return $cuentacaja ? (int) $cuentacaja->id : null;
+        return null;
     }
 
     public function traerRegistroDeAnita($key)

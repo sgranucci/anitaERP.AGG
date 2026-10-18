@@ -3,9 +3,11 @@
 namespace App\Models\Compras;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Contrato_Validacion_Abono_Respuesta extends Model
+class Contrato_Validacion_Abono_Respuesta extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'contrato_validacion_abono_respuesta';
 
     protected $fillable = [

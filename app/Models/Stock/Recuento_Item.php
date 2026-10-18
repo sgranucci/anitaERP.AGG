@@ -4,9 +4,11 @@ namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Recuento_Item extends Model
+class Recuento_Item extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'recuento_item';
 
     protected $fillable = [

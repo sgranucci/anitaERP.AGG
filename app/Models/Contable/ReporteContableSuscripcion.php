@@ -5,12 +5,14 @@ namespace App\Models\Contable;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Envío programado de un informe definible por mail (distribución automática).
  */
-class ReporteContableSuscripcion extends Model
+class ReporteContableSuscripcion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const PERIODICIDAD_MENSUAL = 'mensual';
 
     public const PERIODICIDAD_SEMANAL = 'semanal';

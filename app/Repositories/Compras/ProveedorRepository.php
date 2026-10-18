@@ -6,6 +6,7 @@ use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Exclusion;
 use App\Models\Compras\Proveedor_Formapago;
 use App\Models\Compras\Proveedor_Servicio;
+use App\Models\Configuracion\Sala;
 use App\Models\Configuracion\Condicioniva;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Impuesto;
@@ -27,6 +28,8 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ProveedorAnitaEsquemaSupport;
 use App\Support\Compras\ProveedorAnitaGeoSupport;
+use App\Support\Compras\ProveedorPropagoAnitaSupport;
+use App\Support\Compras\ProveedorSalaAnitaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Compras\ProveedorExclusionAnitaSupport;
 use App\Support\Configuracion\CondicionivaLetraComprasSupport;
@@ -146,6 +149,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			$data['retienesuss'] = 'N';
 
 		$data = LocalidadProvinciaSupport::aplicar($data);
+		$data = $this->aplicarCuentaMeDesdeOrigenSiCorresponde($data);
 
         $proveedor = $this->model->create($data);
 
@@ -159,6 +163,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$data = \App\Support\Compras\ProveedorImpuestosRetencionRules::normalizar($data);
 		$data = $this->normalizarEmpresaId($data);
 		$data = LocalidadProvinciaSupport::aplicar($data);
+		$data = $this->aplicarCuentaMeDesdeOrigenSiCorresponde($data);
 
         $proveedor = $this->model->findOrFail($id)
             ->update($data);
@@ -214,6 +219,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 									->with("proveedor_formapagos")
 									->with("proveedor_integrantes")
 									->with("proveedor_servicios")
+									->with("proveedor_salas.salas")
 									->with("tipossuspensionproveedores")
 									->with("tipoempresas")
 									->with("condicionIIBBs")
@@ -292,6 +298,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 											->with("proveedor_formapagos")
 									->with("proveedor_integrantes")
 											->with("proveedor_servicios")
+											->with("proveedor_salas.salas")
 											->with("tipossuspensionproveedores")
 											->with("tipoempresas")
 											->with("condicionIIBBs")
@@ -636,17 +643,28 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			else
 				$cuentacontable_id = NULL;
 
-			$cuenta = $this->cuentacontableRepository->findPorCodigo(1, $data->prom_cta_cont_me);				
-			if ($cuenta)
-				$cuentacontableme_id = $cuenta->id;
-			else
-				$cuentacontableme_id = NULL;
-			
-			$cuenta = $this->cuentacontableRepository->findPorCodigo(1, $data->prom_cta_default);
-			if ($cuenta)
-				$cuentacontablecompra_id = $cuenta->id;
-			else
-				$cuentacontablecompra_id = NULL;
+			// Crown no tiene prom_cta_cont_me: ME = misma cuenta de origen (MN).
+			$cuentacontableme_id = null;
+			if (! ProveedorAnitaEsquemaSupport::esCrown()
+				&& (int) ($data->prom_cta_cont_me ?? 0) > 0) {
+				$cuenta = $this->cuentacontableRepository->findPorCodigo(1, $data->prom_cta_cont_me);
+				if ($cuenta) {
+					$cuentacontableme_id = $cuenta->id;
+				}
+			}
+
+			$cuentacontablecompra_id = null;
+			$centrocostocompra_id = null;
+			if (! ProveedorAnitaEsquemaSupport::esCrown()) {
+				$cuenta = $this->cuentacontableRepository->findPorCodigo(1, $data->prom_cta_default);
+				if ($cuenta) {
+					$cuentacontablecompra_id = $cuenta->id;
+				}
+				$centrocosto = $this->centrocostoRepository->findPorCodigo($data->prom_cc_default);
+				if ($centrocosto) {
+					$centrocostocompra_id = $centrocosto->id;
+				}
+			}
 
 			// proveedor.cuentacontable_id es NOT NULL: fallback a la cuenta hallada o primera disponible.
 			if (empty($cuentacontable_id)) {
@@ -657,15 +675,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					$cuentacontable_id = null;
 				}
 			}
+			// Cuenta ME vacía → copia la de moneda de origen (MN).
 			if (empty($cuentacontableme_id)) {
 				$cuentacontableme_id = $cuentacontable_id;
 			}
-				
-			$centrocosto = $this->centrocostoRepository->findPorCodigo($data->prom_cc_default);
-			if ($centrocosto)
-				$centrocostocompra_id = $centrocosto->id;
-			else
-				$centrocostocompra_id = null;
 				
 			$condicioniva_id = 1;
 			switch($data->prom_cond_iva)
@@ -752,17 +765,18 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			else
 				$condicioncompra_id = null;
 
-			if ($data->prom_concepto == 0)
-				$concepto_id = 66;
-			else
-				$concepto_id = $data->prom_concepto;
-
-			$concepto = $this->conceptogastoRepository->findPorId($concepto_id);
-
-			if ($concepto)
-				$conceptogasto_id = $concepto->id;
-			else
-				$conceptogasto_id = null;
+			// Crown / esquemas sin prom_concepto: dejar vacío (no inventar id 66 de AGG).
+			$conceptogasto_id = null;
+			if (! ProveedorAnitaEsquemaSupport::esCrown()
+				&& (int) ($data->prom_concepto ?? 0) > 0) {
+				$concepto = $this->conceptogastoRepository->findPorId((int) $data->prom_concepto);
+				$conceptogasto_id = $concepto ? $concepto->id : null;
+			} elseif (! ProveedorAnitaEsquemaSupport::esCrown()
+				&& (int) ($data->prom_concepto ?? 0) === 0
+				&& ProveedorAnitaEsquemaSupport::esEsquemaAgg()) {
+				$concepto = $this->conceptogastoRepository->findPorId(66);
+				$conceptogasto_id = $concepto ? $concepto->id : null;
+			}
 			
 			$estado = 'Activo';
 			switch($data->prom_estado_pro)
@@ -908,8 +922,15 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             $filasPropago = $this->consultarPropagoAnita($apiAnita, $key);
             $this->reemplazarFormapagosDesdeAnita($proveedor, $filasPropago);
 
-            $filasServicios = $this->consultarServiciosAnita($apiAnita, $key);
-            $this->reemplazarServiciosDesdeAnita($proveedor, $filasServicios);
+            if (ProveedorAnitaEsquemaSupport::leeTablasHijasAgg()) {
+                $filasServicios = $this->consultarServiciosAnita($apiAnita, $key);
+                $this->reemplazarServiciosDesdeAnita($proveedor, $filasServicios);
+            }
+
+            if (ProveedorAnitaEsquemaSupport::leeProcasino()) {
+                $filasProcasino = $this->consultarProcasinoAnita($apiAnita, $key);
+                $this->reemplazarSalasDesdeAnita($proveedor, $filasProcasino);
+            }
 
             return $resultado;
         }
@@ -968,15 +989,11 @@ class ProveedorRepository implements ProveedorRepositoryInterface
      */
     private function consultarPropagoAnita(ApiAnita $apiAnita, string $key): array
     {
-        if (! ProveedorAnitaEsquemaSupport::leeTablasHijasAgg()) {
+        if (! ProveedorAnitaEsquemaSupport::leePropago()) {
             return [];
         }
 
-        $data = $this->withAnitaPath([
-            'acc' => 'list',
-            'tabla' => $this->tableAnita[3],
-            'sistema' => 'compras',
-            'campos' => '
+        $campos = '
 					prop_proveedor,
 					prop_nombre,
 					prop_forma_pago,
@@ -987,13 +1004,50 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					prop_cuit,
 					prop_cod_banco,
 					prop_tipo_comp,
-					prop_e_mail_conf,
-					prop_offset
-				',
+					prop_e_mail_conf
+				';
+        if (ProveedorAnitaEsquemaSupport::propagoTieneOffset()) {
+            $campos .= ",\n\t\t\t\t\tprop_offset";
+        }
+
+        $data = $this->withAnitaPath([
+            'acc' => 'list',
+            'tabla' => $this->tableAnita[3],
+            'sistema' => 'compras',
+            'campos' => $campos,
             'whereArmado' => " WHERE prop_proveedor = '{$key}' ",
         ]);
 
         return ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
+    }
+
+    /**
+     * @return list<object>
+     */
+    private function consultarProcasinoAnita(ApiAnita $apiAnita, string $key): array
+    {
+        if (! ProveedorAnitaEsquemaSupport::leeProcasino()) {
+            return [];
+        }
+
+        $data = $this->withAnitaPath([
+            'acc' => 'list',
+            'tabla' => 'procasino',
+            'sistema' => 'compras',
+            'campos' => 'proca_proveedor,proca_casino',
+            'whereArmado' => " WHERE proca_proveedor = '{$key}' ",
+        ]);
+
+        return ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
+    }
+
+    /**
+     * @param  list<object>  $filasProcasino
+     */
+    private function reemplazarSalasDesdeAnita(Proveedor $proveedor, array $filasProcasino): void
+    {
+        $salaIds = ProveedorSalaAnitaSupport::salaIdsDesdeFilasProcasino($filasProcasino);
+        app(Proveedor_SalaRepositoryInterface::class)->reemplazar((int) $proveedor->id, $salaIds);
     }
 
     private function reemplazarExclusionesDesdeAnita(Proveedor $proveedor, array $filasProexcl, object $promae): void
@@ -1017,12 +1071,19 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     {
         Proveedor_Formapago::query()->where('proveedor_id', $proveedor->id)->delete();
 
-        foreach ($filasPropago as $formapago) {
-            $forma = $this->formapagoRepository->findPorAbreviatura($formapago->prop_forma_pago);
-            $formapago_id = $forma ? $forma->id : 1;
+        $monedaFallbackId = (int) (\App\Models\Configuracion\Moneda::query()->orderBy('id')->value('id') ?? 0);
 
-            $tipocuentacaja = $this->tipocuentacajaRepository->find($formapago->prop_tipo_cta);
-            $tipocuentacaja_id = $tipocuentacaja ? $tipocuentacaja->id : 1;
+        foreach ($filasPropago as $formapago) {
+            $formapagoId = ProveedorPropagoAnitaSupport::formapagoIdDesdeAnita(
+                (string) ($formapago->prop_forma_pago ?? '')
+            );
+            if ($formapagoId === null) {
+                continue;
+            }
+
+            $tipocuentacajaId = ProveedorPropagoAnitaSupport::tipocuentacajaIdDesdeAnita(
+                (string) ($formapago->prop_tipo_cta ?? '')
+            );
 
             $banco = $this->bancoRepository->findPorCodigo($formapago->prop_cod_banco);
             $banco_id = $banco ? $banco->id : null;
@@ -1031,20 +1092,23 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             $mediopago_id = $mediopago ? $mediopago->id : null;
 
             $moneda = $this->monedaRepository->findPorCodigo($formapago->prop_cod_mon);
-            $moneda_id = $moneda ? $moneda->id : 1;
+            $moneda_id = $moneda ? $moneda->id : ($monedaFallbackId > 0 ? $monedaFallbackId : null);
+            if ($moneda_id === null) {
+                continue;
+            }
 
             Proveedor_Formapago::query()->create([
                 'proveedor_id' => $proveedor->id,
-                'nombre' => $formapago->prop_nombre,
-                'formapago_id' => $formapago_id,
-                'cbu' => $formapago->prop_cbu,
-                'tipocuentacaja_id' => $tipocuentacaja_id,
+                'nombre' => $formapago->prop_nombre ?? '',
+                'formapago_id' => $formapagoId,
+                'cbu' => (string) ($formapago->prop_cbu ?? ''),
+                'tipocuentacaja_id' => $tipocuentacajaId,
                 'moneda_id' => $moneda_id,
-                'numerocuenta' => $formapago->prop_nro_cuenta,
-                'nroinscripcion' => $formapago->prop_cuit,
+                'numerocuenta' => (string) ($formapago->prop_nro_cuenta ?? ''),
+                'nroinscripcion' => (string) ($formapago->prop_cuit ?? ''),
                 'banco_id' => $banco_id,
                 'mediopago_id' => $mediopago_id,
-                'email' => $formapago->prop_e_mail_conf,
+                'email' => (string) ($formapago->prop_e_mail_conf ?? ''),
             ]);
         }
     }
@@ -1139,6 +1203,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			'proveedor_exclusiones',
 			'proveedor_formapagos',
 			'proveedor_servicios',
+			'proveedor_salas',
 			'condicionivas',
 		]);
 
@@ -1203,6 +1268,14 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			$datos['servicios_detalles'][] = $serv->detalle ?? '';
 			$datos['servicios_empresa_ids'][] = $serv->empresa_id ?? null;
 		}
+
+		$datos['sala_ids'] = $proveedor->proveedor_salas
+			->pluck('sala_id')
+			->map(static fn ($id) => (int) $id)
+			->filter(static fn (int $id) => $id > 0)
+			->values()
+			->all();
+		$datos['salas_presentes'] = 1;
 
 		return $datos;
 	}
@@ -1397,15 +1470,16 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 	private function limpiarTablasDependientesAnita(ApiAnita $apiAnita, string $codigoAnita): void
 	{
 		$tablas = [
-			[$this->tableAnita[1], 'prol_proveedor', 'proley delete previo alta'],
-			['promadic', 'proad_proveedor', 'promadic delete previo alta'],
-			[$this->tableAnita[2], 'proex_proveedor', 'proexcl delete previo alta'],
-			[$this->tableAnita[3], 'prop_proveedor', 'propago delete previo alta'],
-			[$this->tableAnita[4], 'serv_proveedor', 'servicios delete previo alta'],
+			[$this->tableAnita[1], 'prol_proveedor', 'proley delete previo alta', true],
+			['promadic', 'proad_proveedor', 'promadic delete previo alta', ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg()],
+			[$this->tableAnita[2], 'proex_proveedor', 'proexcl delete previo alta', ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg()],
+			[$this->tableAnita[3], 'prop_proveedor', 'propago delete previo alta', ProveedorAnitaEsquemaSupport::escribePropago()],
+			[$this->tableAnita[4], 'serv_proveedor', 'servicios delete previo alta', ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg()],
+			['procasino', 'proca_proveedor', 'procasino delete previo alta', ProveedorAnitaEsquemaSupport::escribeProcasino()],
 		];
 
-		foreach ($tablas as [$tabla, $campo, $contexto]) {
-			if (! ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg() && $tabla !== 'proley') {
+		foreach ($tablas as [$tabla, $campo, $contexto, $habilitado]) {
+			if (! $habilitado) {
 				continue;
 			}
 			$this->borrarDependienteAnitaVerificado($apiAnita, $tabla, $campo, $codigoAnita, $contexto);
@@ -1477,29 +1551,34 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			$this->apiCallAnitaEscritura($apiAnita, $data, 'proley insert');
 		}
 
-		if (! ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg()) {
-			return;
-		}
-
-		$data = [
-			'tabla' => 'promadic',
-			'acc' => 'insert',
-			'sistema' => 'compras',
-			'campos' => '
+		if (ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg()) {
+			$data = [
+				'tabla' => 'promadic',
+				'acc' => 'insert',
+				'sistema' => 'compras',
+				'campos' => '
 					proad_proveedor,
 					proad_e_mail_oc,
 					proad_semaforo
 							',
-			'valores' => "
+				'valores' => "
 					'".$codigoAnita."',
 					'".ProveedorExclusionAnitaSupport::escaparSqlAnita((string) ($request['emailoc'] ?? ''))."',
 					'".substr((string) ($request['semaforo'] ?? ' '), 0, 1)."' ",
-		];
-		$this->apiCallAnitaEscritura($apiAnita, $data, 'promadic insert');
+			];
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'promadic insert');
 
-		self::grabaExclusion($request, $apiAnita);
-		self::grabaFormaDePago($request, $apiAnita);
-		self::grabaServicios($request, $apiAnita);
+			self::grabaExclusion($request, $apiAnita);
+			self::grabaServicios($request, $apiAnita);
+		}
+
+		if (ProveedorAnitaEsquemaSupport::escribePropago()) {
+			self::grabaFormaDePago($request, $apiAnita);
+		}
+
+		if (ProveedorAnitaEsquemaSupport::escribeProcasino()) {
+			$this->grabaProcasino($request, $apiAnita, $codigoAnita);
+		}
 	}
 
 	private function actualizarAnita($request, $id) {
@@ -1714,8 +1793,12 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
 			$tipoCuenta = '';
 			if ($tipocuentacajaId > 0) {
-				$tipocuentacaja = $this->tipocuentacajaRepository->find($tipocuentacajaId);
-				$tipoCuenta = $tipocuentacaja ? $tipocuentacaja->id : $tipocuentacajaId;
+				if (ProveedorAnitaEsquemaSupport::esCrown()) {
+					$tipoCuenta = ProveedorPropagoAnitaSupport::propTipoCtaAnitaDesdeTipocuentacajaId($tipocuentacajaId);
+				} else {
+					$tipocuentacaja = $this->tipocuentacajaRepository->find($tipocuentacajaId);
+					$tipoCuenta = $tipocuentacaja ? $tipocuentacaja->id : $tipocuentacajaId;
+				}
 			}
 
 			$bancoId = (int) ($banco_ids[$i_formapago] ?? 0);
@@ -1733,11 +1816,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			$emailEsc = ProveedorExclusionAnitaSupport::escaparSqlAnita((string) ($emails[$i_formapago] ?? ''));
 			$formaPagoEsc = ProveedorExclusionAnitaSupport::escaparSqlAnita((string) $formaPago);
 
-			$data = [
-				'tabla' => $this->tableAnita[3],
-				'acc' => 'insert',
-				'sistema' => 'compras',
-				'campos' => '
+			$campos = '
 						prop_proveedor,
 						prop_nombre,
 						prop_forma_pago,
@@ -1748,10 +1827,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 						prop_cuit,
 						prop_cod_banco,
 						prop_tipo_comp,
-						prop_e_mail_conf,
-						prop_offset
-					',
-				'valores' => "
+						prop_e_mail_conf
+					';
+			$valores = "
 						'".str_pad($request['codigo'], 6, '0', STR_PAD_LEFT)."',
 						'".$nombreEsc."',
 						'".$formaPagoEsc."',
@@ -1762,11 +1840,56 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 						'".$cuitEsc."',
 						'".$codigoBanco."',
 						'".$tipoComprobante."',
-						'".$emailEsc."',
-						'".$offsetAnita."' ",
+						'".$emailEsc."' ";
+			if (ProveedorAnitaEsquemaSupport::propagoTieneOffset()) {
+				$campos .= ",\n\t\t\t\t\t\tprop_offset";
+				$valores .= ",\n\t\t\t\t\t\t'".$offsetAnita."' ";
+			}
+
+			$data = [
+				'tabla' => $this->tableAnita[3],
+				'acc' => 'insert',
+				'sistema' => 'compras',
+				'campos' => $campos,
+				'valores' => $valores,
 			];
 			$this->apiCallAnitaEscritura($apiAnita, $data, 'propago insert');
 			$offsetAnita++;
+		}
+	}
+
+	/**
+	 * @param  array<string, mixed>  $request
+	 */
+	private function grabaProcasino(array $request, ApiAnita $apiAnita, string $codigoAnita): void
+	{
+		$salaIds = $request['sala_ids'] ?? [];
+		if (! is_array($salaIds)) {
+			$salaIds = $salaIds !== null && $salaIds !== '' ? [$salaIds] : [];
+		}
+
+		foreach ($salaIds as $salaId) {
+			$salaId = (int) $salaId;
+			if ($salaId <= 0) {
+				continue;
+			}
+			$sala = Sala::query()->find($salaId);
+			if ($sala === null) {
+				continue;
+			}
+			$casino = ProveedorSalaAnitaSupport::casinoAnitaDesdeSala($sala);
+			if ($casino === null) {
+				continue;
+			}
+
+			$data = [
+				'tabla' => 'procasino',
+				'acc' => 'insert',
+				'sistema' => 'compras',
+				'campos' => 'proca_proveedor,proca_casino',
+				'valores' => "'".$codigoAnita."','".$casino."'",
+			];
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'procasino insert');
 		}
 	}
 
@@ -1837,27 +1960,33 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				'whereArmado' => " WHERE prol_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
         $this->apiCallAnitaEscritura($apiAnita, $data, 'proley delete');
 
-		if (! ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg()) {
-			return;
+		$codigoAnita = str_pad((string) $id, 6, '0', STR_PAD_LEFT);
+
+		if (ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg()) {
+			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2],
+				'sistema' => 'compras',
+				'whereArmado' => " WHERE proex_proveedor = '".$codigoAnita."' " );
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'proexcl delete');
+
+			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[4],
+				'sistema' => 'compras',
+				'whereArmado' => " WHERE serv_proveedor = '".$codigoAnita."' " );
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'servicios delete');
 		}
 
-		// Borra exclusiones
-		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
-			'sistema' => 'compras',
-			'whereArmado' => " WHERE proex_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $this->apiCallAnitaEscritura($apiAnita, $data, 'proexcl delete');
-
-		// Borra formas de pago
-		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[3], 
+		if (ProveedorAnitaEsquemaSupport::escribePropago()) {
+			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[3],
 				'sistema' => 'compras',
-				'whereArmado' => " WHERE prop_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $this->apiCallAnitaEscritura($apiAnita, $data, 'propago delete');
+				'whereArmado' => " WHERE prop_proveedor = '".$codigoAnita."' " );
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'propago delete');
+		}
 
-		// Borra servicios / medidores
-		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[4],
+		if (ProveedorAnitaEsquemaSupport::escribeProcasino()) {
+			$data = array( 'acc' => 'delete', 'tabla' => 'procasino',
 				'sistema' => 'compras',
-				'whereArmado' => " WHERE serv_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-		$this->apiCallAnitaEscritura($apiAnita, $data, 'servicios delete');
+				'whereArmado' => " WHERE proca_proveedor = '".$codigoAnita."' " );
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'procasino delete');
+		}
 	}
 
 	// Devuelve ultimo codigo de proveedors + 1 para agregar nuevos en Anita
@@ -2172,6 +2301,23 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 	 * @param  array<string, mixed>  $data
 	 * @return array<string, mixed>
 	 */
+	/**
+	 * Crown / sync: si falta cuenta ME, copia la de moneda de origen (MN).
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array<string, mixed>
+	 */
+	private function aplicarCuentaMeDesdeOrigenSiCorresponde(array $data): array
+	{
+		$mn = (int) ($data['cuentacontable_id'] ?? 0);
+		$me = (int) ($data['cuentacontableme_id'] ?? 0);
+		if ($mn > 0 && $me <= 0) {
+			$data['cuentacontableme_id'] = $mn;
+		}
+
+		return $data;
+	}
+
 	private function normalizarEmpresaId(array $data): array
 	{
 		if (! config('proveedor.filtro_empresa')) {

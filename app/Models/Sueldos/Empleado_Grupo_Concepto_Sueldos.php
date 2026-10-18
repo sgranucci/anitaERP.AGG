@@ -4,9 +4,11 @@ namespace App\Models\Sueldos;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Empleado_Grupo_Concepto_Sueldos extends Model
+class Empleado_Grupo_Concepto_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'empleado_grupo_concepto_sueldos';
 
     protected $fillable = [

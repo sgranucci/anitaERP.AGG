@@ -1,6 +1,8 @@
 @php
     use App\Models\Stock\Depmae;
     use App\Support\Configuracion\EmpresaLogoArchivo;
+    use App\Support\Configuracion\EntornoEmpresaSupport;
+    $esCrown = EntornoEmpresaSupport::esCrown();
     foreach ($datas as $row) {
         $row->nombreempresa = $row->empresas->nombre ?? '';
     }
@@ -63,10 +65,13 @@
 		<thead>
 			<tr>
 				<th style="width: 6%;">ID</th>
-				<th style="width: 32%;">Descripci&oacute;n</th>
-				<th style="width: 20%;">Empresa</th>
-				<th style="width: 22%;">Tipo de dep&oacute;sito</th>
-				<th style="width: 20%;">C&oacute;digo ANITA</th>
+				<th style="width: {{ $esCrown ? '26%' : '32%' }};">Descripci&oacute;n</th>
+				<th style="width: 16%;">Empresa</th>
+				@if ($esCrown)
+				<th style="width: 14%;">Sala</th>
+				@endif
+				<th style="width: {{ $esCrown ? '18%' : '22%' }};">Tipo de dep&oacute;sito</th>
+				<th style="width: 16%;">C&oacute;digo ANITA</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -75,6 +80,9 @@
 					<td>{{ $data->id }}</td>
 					<td>{{ $data->nombre }}</td>
 					<td>{{ $data->empresas->nombre ?? '' }}</td>
+					@if ($esCrown)
+					<td>{{ $data->salas ? trim(($data->salas->codigo ?? '').' — '.($data->salas->nombre ?? ''), ' —') : '' }}</td>
+					@endif
 					<td>{{ Depmae::etiquetaTipoDeposito($data->tipodeposito) }}</td>
 					<td>{{ $data->codigo }}</td>
 				</tr>

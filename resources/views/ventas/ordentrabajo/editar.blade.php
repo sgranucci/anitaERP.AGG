@@ -4,7 +4,7 @@
 @endsection
 
 @section("scripts")
-<script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/padron-operacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/padron-operacion.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script>
     var tareaEmpaque = "{{ config('consprod.TAREA_EMPAQUE') }}";

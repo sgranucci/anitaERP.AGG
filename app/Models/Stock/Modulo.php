@@ -8,9 +8,11 @@ use Illuminate\Support\Str;
 use App\ApiAnita;
 use App\Models\Stock\Talle;
 use App\Models\Ventas\Pedido_Combinacion;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Modulo extends Model
+class Modulo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'codigo'];
     protected $table = 'modulo';
     protected $keyField = 'modu_modulo';

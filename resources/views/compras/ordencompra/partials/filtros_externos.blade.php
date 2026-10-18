@@ -1,12 +1,20 @@
 @php
+    use App\Support\Compras\OrdencompraUiConfigSupport;
+    use App\Support\Configuracion\EntornoEmpresaSupport;
+
+    $esCrown = EntornoEmpresaSupport::esCrown();
     $empresaScope = $filtros['empresa_scope'] ?? 'una';
     $empresaActual = (int) ($filtros['empresa_id'] ?? 0);
+    $salaScope = $filtros['sala_scope'] ?? 'todas';
+    $salaActual = (int) ($filtros['sala_id'] ?? 0);
+    $presupuestoActivo = (string) ($filtros['presupuesto'] ?? '');
+    $pedirPresupuesto = OrdencompraUiConfigSupport::pedirPartidaCapex();
     $baseQ = $filtrosQuery ?? [];
     $rutaIndex = $rutaIndex ?? 'consultar_ordencompra';
 
     $urlEmpresa = function ($id) use ($baseQ, $rutaIndex) {
         $q = $baseQ;
-        unset($q['empresa_id'], $q['empresa_todas']);
+        unset($q['empresa_id'], $q['empresa_todas'], $q['page']);
         if ($id === 'todas') {
             $q['empresa_todas'] = 1;
         } else {
@@ -15,12 +23,55 @@
 
         return route($rutaIndex, $q);
     };
-    $mostrarEmpresas = ($empresa_query ?? collect())->count() > 1;
+
+    $urlSala = function ($id) use ($baseQ, $rutaIndex) {
+        $q = $baseQ;
+        unset($q['sala_id'], $q['sala_todas'], $q['page']);
+        if ($id === 'todas') {
+            $q['sala_todas'] = 1;
+        } else {
+            $q['sala_id'] = $id;
+        }
+
+        return route($rutaIndex, $q);
+    };
+
+    $urlPresupuesto = function (string $valor) use ($baseQ, $rutaIndex) {
+        $q = $baseQ;
+        unset($q['presupuesto'], $q['page']);
+        if ($valor !== '') {
+            $q['presupuesto'] = $valor;
+        }
+
+        return route($rutaIndex, $q);
+    };
+
+    // Todas las instalaciones: chips de empresa solo con >1 asignada en sesión.
+    $mostrarEmpresas = \App\Support\Configuracion\EmpresaFiltroExternoSupport::mostrarChips();
+    $mostrarSalas = $esCrown && ($sala_query ?? collect())->count() > 0;
+    $mostrarPresupuesto = $pedirPresupuesto;
     $mostrarExport = ! empty($exportRuta);
 @endphp
-@if ($mostrarEmpresas || $mostrarExport)
+@if ($mostrarEmpresas || $mostrarSalas || $mostrarPresupuesto || $mostrarExport)
 <div class="oc-empresas card-body py-2 border-bottom bg-white">
     <div class="d-flex flex-wrap align-items-center">
+        @if ($mostrarSalas)
+        <div class="mb-1 mr-2">
+            <span class="text-muted small mr-2 oc-emp-label"><i class="fa fa-map-marker"></i> Sala:</span>
+            <div class="btn-group btn-group-sm flex-wrap oc-seg" role="group" aria-label="Filtro de sala">
+                @foreach ($sala_query as $sala)
+                    <a href="{{ $urlSala($sala->id) }}"
+                       class="btn {{ ($salaScope !== 'todas' && $salaActual === (int) $sala->id) ? 'btn-info oc-activo' : 'btn-outline-info' }}">
+                        {{ $sala->codigo }}
+                    </a>
+                @endforeach
+                <a href="{{ $urlSala('todas') }}"
+                   class="btn {{ $salaScope === 'todas' ? 'btn-primary oc-activo' : 'btn-outline-primary' }}">
+                    Todas las salas
+                </a>
+            </div>
+        </div>
+        @endif
         @if ($mostrarEmpresas)
         <div class="mb-1 mr-2">
             <span class="text-muted small mr-2 oc-emp-label"><i class="fa fa-building"></i> Empresa:</span>
@@ -35,6 +86,19 @@
                    class="btn {{ $empresaScope === 'todas' ? 'btn-primary oc-activo' : 'btn-outline-primary' }}">
                     Todas mis empresas
                 </a>
+            </div>
+        </div>
+        @endif
+        @if ($mostrarPresupuesto)
+        <div class="mb-1 mr-2">
+            <span class="text-muted small mr-2 oc-emp-label"><i class="fa fa-calculator"></i> Presupuesto:</span>
+            <div class="btn-group btn-group-sm flex-wrap oc-seg" role="group" aria-label="Filtro de partida de presupuesto">
+                <a href="{{ $urlPresupuesto('') }}"
+                   class="btn {{ $presupuestoActivo === '' ? 'btn-primary oc-activo' : 'btn-outline-primary' }}">Todas</a>
+                <a href="{{ $urlPresupuesto('con') }}"
+                   class="btn {{ $presupuestoActivo === 'con' ? 'btn-info oc-activo' : 'btn-outline-info' }}">Con partida</a>
+                <a href="{{ $urlPresupuesto('sin') }}"
+                   class="btn {{ $presupuestoActivo === 'sin' ? 'btn-info oc-activo' : 'btn-outline-info' }}">Sin partida</a>
             </div>
         </div>
         @endif

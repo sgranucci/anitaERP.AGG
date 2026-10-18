@@ -1,0 +1,320 @@
+/* KDS gastronomía Crown — pantalla de cocina (grilla de comandas por sala) */
+
+.gck {
+    background: #10171f;
+    color: #e8edf3;
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    min-height: calc(100vh - 170px);
+}
+
+.gck-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    background: linear-gradient(90deg, #15587f, #1a6b9a);
+    border-radius: 0.4rem;
+    padding: 0.5rem 0.85rem;
+}
+
+.gck-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.gck-brand-mark {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #fff;
+}
+
+.gck-brand-sub {
+    font-size: 0.8rem;
+    color: #cfe3ef;
+}
+
+.gck-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.gck-meta .text-muted {
+    color: #cfe3ef !important;
+}
+
+.gck-meta .custom-control-label {
+    color: #e8edf3;
+}
+
+.gck-filtros {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.6rem;
+}
+
+.gck-filtros-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #8fa6b8;
+    margin-right: 0.3rem;
+}
+
+.gck-chip {
+    display: inline-block;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid #2b3b4c;
+    background: #18222d;
+    color: #cfe3ef;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.gck-chip:hover {
+    background: #223040;
+    color: #fff;
+    text-decoration: none;
+}
+
+.gck-chip.activo {
+    background: #1a6b9a;
+    border-color: #1a6b9a;
+    color: #fff;
+}
+
+.gck-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 0.7rem;
+    margin-top: 0.8rem;
+}
+
+.gck-vacio {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #8fa6b8;
+    padding: 2.5rem 1rem;
+    font-size: 1rem;
+}
+
+.gck-card {
+    background: #1b2531;
+    border: 1px solid #2b3b4c;
+    border-left: 6px solid #6c757d;
+    border-radius: 0.45rem;
+    padding: 0.6rem 0.7rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.gck-card.gck-estado-fired {
+    border-left-color: #ffc107;
+}
+
+.gck-card.gck-estado-preparing {
+    border-left-color: #17a2b8;
+}
+
+.gck-card.gck-estado-ready {
+    border-left-color: #28a745;
+}
+
+.gck-card.gck-demora-media {
+    box-shadow: 0 0 0 1px rgba(255, 193, 7, 0.45);
+}
+
+.gck-card.gck-demora-alta {
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.65);
+}
+
+.gck-card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.gck-card-mesa {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.gck-card-tiempo {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #ffd95e;
+    white-space: nowrap;
+}
+
+.gck-demora-alta .gck-card-tiempo {
+    color: #ff8f99;
+}
+
+.gck-card-sub {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin: 0.35rem 0;
+}
+
+.gck-badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 0.25rem;
+    background: #24313f;
+    color: #cfe3ef;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.gck-badge-postres {
+    background: #6f42c1;
+    color: #fff;
+}
+
+.gck-badge-estado {
+    background: #1a6b9a;
+    color: #fff;
+}
+
+.gck-card-obs {
+    background: #3a2f12;
+    color: #ffd95e;
+    border-radius: 0.25rem;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.8rem;
+    margin-bottom: 0.35rem;
+}
+
+.gck-lineas {
+    list-style: none;
+    margin: 0 0 0.5rem;
+    padding: 0;
+    flex: 1 1 auto;
+}
+
+.gck-linea {
+    border-top: 1px solid #2b3b4c;
+    padding: 0.4rem 0;
+}
+
+.gck-linea:first-child {
+    border-top: 0;
+}
+
+.gck-linea-head {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+
+.gck-linea-txt {
+    min-width: 0;
+}
+
+.gck-linea-cant {
+    font-weight: 800;
+    color: #ffd95e;
+}
+
+.gck-linea-desc {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    word-break: break-word;
+}
+
+.gck-linea-obs {
+    font-size: 0.78rem;
+    color: #ffd95e;
+    margin-top: 0.15rem;
+}
+
+.gck-plato-foto {
+    width: 52px;
+    height: 52px;
+    object-fit: cover;
+    border-radius: 0.3rem;
+    flex: 0 0 52px;
+    background: #24313f;
+}
+
+.gck-insumo-foto {
+    width: 22px;
+    height: 22px;
+    object-fit: cover;
+    border-radius: 0.2rem;
+    flex: 0 0 22px;
+    background: #24313f;
+}
+
+.gck-sinfoto {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #6f8599;
+}
+
+.gck-opcionales {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+}
+
+.gck-opcional {
+    font-size: 0.75rem;
+    background: #143b2a;
+    color: #9be7b4;
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+}
+
+.gck-insumos {
+    list-style: none;
+    margin: 0.35rem 0 0 3.25rem;
+    padding: 0;
+}
+
+.gck-insumos li {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    color: #b7c8d6;
+    padding: 0.1rem 0;
+}
+
+.gck-insumo-cant {
+    font-weight: 700;
+    color: #e8edf3;
+    min-width: 2.2rem;
+    text-align: right;
+}
+
+.gck-insumo-desc {
+    word-break: break-word;
+}
+
+.gck-card-acciones {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+}
+
+.gck-card-acciones .btn {
+    flex: 1 1 auto;
+    font-weight: 600;
+}

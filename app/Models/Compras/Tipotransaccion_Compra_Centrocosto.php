@@ -4,9 +4,11 @@ namespace App\Models\Compras;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Contable\Centrocosto;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Tipotransaccion_Compra_Centrocosto extends Model
+class Tipotransaccion_Compra_Centrocosto extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['tipotransaccion_compra_id', 'centrocosto_id'];
     protected $table = 'tipotransaccion_compra_centrocosto';
 

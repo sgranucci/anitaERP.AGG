@@ -6,9 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Unidadmedida extends Model
+class Unidadmedida extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['id', 'nombre', 'abreviatura', 'codigo'];
     protected $table = 'unidadmedida';
     protected $tableAnita = 'stkumd';

@@ -50,11 +50,14 @@ use App\Support\Stock\DepmaeListadoFiltros;
                     'queryparams' => $filtrosQuery ?? [],
                 ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width20">ID</th>
                             <th>Descripci&oacute;n</th>
                             <th>Empresa</th>
+                            @if (!empty($esCrown))
+                            <th>Sala</th>
+                            @endif
                             <th>Tipo de dep&oacute;sito</th>
                             <th>C&oacute;digo ANITA</th>
                             <th class="width120" data-orderable="false"></th>
@@ -66,6 +69,15 @@ use App\Support\Stock\DepmaeListadoFiltros;
                             <td>{{ $data->id }}</td>
                             <td>{{ $data->nombre }}</td>
                             <td>{{ optional($data->empresas)->nombre ?? '—' }}</td>
+                            @if (!empty($esCrown))
+                            <td>
+                                @if ($data->salas)
+                                    {{ $data->salas->codigo }} — {{ $data->salas->nombre }}
+                                @else
+                                    —
+                                @endif
+                            </td>
+                            @endif
                             <td>{{ Depmae::etiquetaTipoDeposito($data->tipodeposito) ?: '—' }}</td>
                             <td>{{ $data->codigo }}</td>
                             <td class="text-nowrap">

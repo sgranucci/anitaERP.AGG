@@ -33,6 +33,14 @@ final class DescuentoFieldMapper
     {
         $tipo = strtoupper(trim((string) ($row->dto_tipo_valor ?? '')));
 
+        // Crown/cncadmin: 1 = porcentaje, 2 = importe (además de P/I/A alfabéticos).
+        $tipo = match ($tipo) {
+            '1' => DescuentoGastronomia::TIPO_PORCENTAJE,
+            '2' => DescuentoGastronomia::TIPO_IMPORTE,
+            '3' => DescuentoGastronomia::TIPO_APLICA,
+            default => $tipo,
+        };
+
         if (in_array($tipo, [
             DescuentoGastronomia::TIPO_PORCENTAJE,
             DescuentoGastronomia::TIPO_IMPORTE,
@@ -41,7 +49,7 @@ final class DescuentoFieldMapper
             return $tipo;
         }
 
-        throw new \InvalidArgumentException("tipo de valor inválido «{$tipo}» (se espera P, I o A).");
+        throw new \InvalidArgumentException("tipo de valor inválido «{$tipo}» (se espera P, I, A o 1/2/3).");
     }
 
     public static function mapValor(object $row): float

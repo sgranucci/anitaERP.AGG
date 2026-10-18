@@ -4,13 +4,17 @@ namespace App\Console\Commands;
 
 use App\Models\Seguridad\Usuario;
 use App\Services\Compras\RequisicionImportarFaltantesDesdeAnitaService;
+use App\Support\Compras\AnitaSync\Requisicion\RequisicionAnitaEsquemaSupport;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Auth;
 
 class RequisicionImportarFaltantesAnitaCommand extends Command
 {
     protected $signature = 'requisicion:importar-faltantes-anita
-                            {--anio=2026 : Año de reqm_fecha a importar}
+                            {--anio= : Año completo de reqm_fecha (compat AGG; ignorado si hay --desde)}
+                            {--desde= : Fecha desde Y-m-d o Ymd}
+                            {--hasta= : Fecha hasta Y-m-d o Ymd (default hoy)}
                             {--usuario= : ID usuario ERP para creousuario_id}
                             {--dry-run : Solo informa, no escribe}
                             {--anita-todas : Reescribe penmp/penvp_requisicion en Anita para todas las OC vinculadas}
@@ -20,7 +24,6 @@ class RequisicionImportarFaltantesAnitaCommand extends Command
 
     public function handle(RequisicionImportarFaltantesDesdeAnitaService $service): int
     {
-        $anio = (int) $this->option('anio');
         $dryRun = (bool) $this->option('dry-run');
         $usuarioOpt = $this->option('usuario');
         $usuarioId = ($usuarioOpt !== null && $usuarioOpt !== '')
@@ -33,8 +36,12 @@ class RequisicionImportarFaltantesAnitaCommand extends Command
             return self::FAILURE;
         }
 
+        [$desdeYmd, $hastaYmd, $anio] = $this->resolverRango();
+
         $numerosOcAnita = null;
-        if (! $this->option('anita-todas')) {
+        if (! RequisicionAnitaEsquemaSupport::escribeVinculosOcEnAnita()) {
+            $numerosOcAnita = [];
+        } elseif (! $this->option('anita-todas')) {
             $ocOpt = $this->option('oc');
             $numerosOcAnita = is_array($ocOpt) && $ocOpt !== []
                 ? array_values(array_filter(array_map('intval', $ocOpt)))
@@ -42,15 +49,17 @@ class RequisicionImportarFaltantesAnitaCommand extends Command
         }
 
         $this->info(sprintf(
-            'Año %d | usuario %d | %s | Anita OC: %s',
-            $anio,
+            'Rango %d–%d | usuario %d | %s | Crown=%s | Anita OC: %s',
+            $desdeYmd,
+            $hastaYmd,
             $usuarioId,
             $dryRun ? 'SIMULACIÓN' : 'escritura',
-            $numerosOcAnita === null ? 'todas las vinculadas' : implode(', ', $numerosOcAnita)
+            RequisicionAnitaEsquemaSupport::esCrown() ? 'sí' : 'no',
+            $numerosOcAnita === null ? 'todas las vinculadas' : ($numerosOcAnita === [] ? 'omitido' : implode(', ', $numerosOcAnita))
         ));
 
         try {
-            $stats = $service->ejecutar($anio, $usuarioId, $dryRun, $numerosOcAnita);
+            $stats = $service->ejecutar($anio, $usuarioId, $dryRun, $numerosOcAnita, $desdeYmd, $hastaYmd);
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
 
@@ -58,6 +67,8 @@ class RequisicionImportarFaltantesAnitaCommand extends Command
         }
 
         $this->table(['Métrica', 'Cantidad'], [
+            ['Desde Ymd', (string) ($stats['desde_ymd'] ?? $desdeYmd)],
+            ['Hasta Ymd', (string) ($stats['hasta_ymd'] ?? $hastaYmd)],
             ['Lecturas bridge', (string) $stats['lecturas_bridge']],
             ['Cabeceras Anita', (string) $stats['anita_cabeceras']],
             ['Líneas Anita', (string) $stats['anita_lineas']],
@@ -83,5 +94,50 @@ class RequisicionImportarFaltantesAnitaCommand extends Command
         return ($stats['errores_import'] !== [] || $stats['errores_oc'] !== [])
             ? self::FAILURE
             : self::SUCCESS;
+    }
+
+    /**
+     * @return array{0: int, 1: int, 2: int}
+     */
+    private function resolverRango(): array
+    {
+        $desdeOpt = trim((string) $this->option('desde'));
+        $hastaOpt = trim((string) $this->option('hasta'));
+        $anioOpt = $this->option('anio');
+
+        if ($desdeOpt !== '') {
+            $desdeYmd = $this->parseFechaYmd($desdeOpt);
+            $hastaYmd = $hastaOpt !== ''
+                ? $this->parseFechaYmd($hastaOpt)
+                : (int) Carbon::today()->format('Ymd');
+            $anio = intdiv($desdeYmd, 10000);
+
+            return [$desdeYmd, $hastaYmd, $anio];
+        }
+
+        if (RequisicionAnitaEsquemaSupport::esCrown() && ($anioOpt === null || $anioOpt === '')) {
+            $desdeYmd = 20250101;
+            $hastaYmd = (int) Carbon::today()->format('Ymd');
+
+            return [$desdeYmd, $hastaYmd, 2025];
+        }
+
+        $anio = (int) ($anioOpt !== null && $anioOpt !== '' ? $anioOpt : 2026);
+
+        return [$anio * 10000 + 101, $anio * 10000 + 1231, $anio];
+    }
+
+    private function parseFechaYmd(string $valor): int
+    {
+        $digitos = preg_replace('/\D+/', '', $valor) ?? '';
+        if (strlen($digitos) === 8) {
+            return (int) $digitos;
+        }
+
+        try {
+            return (int) Carbon::parse($valor)->format('Ymd');
+        } catch (\Throwable $e) {
+            throw new \InvalidArgumentException("Fecha inválida: {$valor}");
+        }
     }
 }

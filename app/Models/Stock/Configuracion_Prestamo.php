@@ -3,13 +3,15 @@
 namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Configuración global del módulo de préstamos. Se mantiene una única
  * fila con id = 1 (creada por la migración correspondiente).
  */
-class Configuracion_Prestamo extends Model
+class Configuracion_Prestamo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'configuracion_prestamo';
 
     protected $fillable = [

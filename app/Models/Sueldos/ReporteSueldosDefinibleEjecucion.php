@@ -6,9 +6,11 @@ use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ReporteSueldosDefinibleEjecucion extends Model
+class ReporteSueldosDefinibleEjecucion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_PENDIENTE = 'pendiente';
 
     public const ESTADO_PROCESANDO = 'procesando';

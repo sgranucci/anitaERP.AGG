@@ -43,6 +43,11 @@ final class ListadoVistaMenuSupport
             'icono' => 'fa-bookmark',
             'etiqueta_padre' => 'Ingresos y egresos',
         ],
+        'contable.bien_uso' => [
+            'url_base' => 'contable/bien-uso',
+            'icono' => 'fa-bookmark',
+            'etiqueta_padre' => 'Bienes de uso',
+        ],
     ];
 
     public static function columnaMenuDisponible(): bool

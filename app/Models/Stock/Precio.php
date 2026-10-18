@@ -10,9 +10,11 @@ use App\Models\Seguridad\Usuario;
 use App\Models\Configuracion\Moneda;
 use Carbon\Carbon;
 use Auth;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Precio extends Model
+class Precio extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['articulo_id', 'combinacion_id', 'listaprecio_id', 'fechavigencia', 'moneda_id', 'precio', 'precioanterior', 'usuarioultcambio_id'];
     protected $table = 'precio';
     protected $tableAnita = 'stkpre';

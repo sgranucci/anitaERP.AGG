@@ -3,6 +3,7 @@
 namespace App\Support\Compras;
 
 use App\Models\Compras\Requisicion_Estado;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Carbon\Carbon;
@@ -86,14 +87,21 @@ class RequisicionListadoFiltros
         'vacio' => 'Sin fecha',
     ];
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
-    {
+    public static function resolverDesdeRequest(
+        Request $request,
+        ?string $busquedaRuta = null,
+        ?int $empresaDefault = null,
+        ?int $salaDefault = null
+    ): array {
         [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+        [$salaId, $salaScope] = self::resolverSalaExterna($request, $salaDefault);
 
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
             return array_merge(self::filtrosVacios(), [
                 'empresa_id' => $empresaId,
                 'empresa_scope' => $empresaScope,
+                'sala_id' => $salaId,
+                'sala_scope' => $salaScope,
                 'estado' => self::normalizarEstadoExterno($request->input('estado')),
             ]);
         }
@@ -130,6 +138,8 @@ class RequisicionListadoFiltros
             'busqueda_rapida' => $busquedaRapida,
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
+            'sala_id' => $salaId,
+            'sala_scope' => $salaScope,
             'estado' => self::normalizarEstadoExterno($request->input('estado')),
         ];
     }
@@ -149,6 +159,7 @@ class RequisicionListadoFiltros
 
     /**
      * Filtro externo del index: empresa (default primera asignada) o todas (`empresa_todas=1`).
+     * Crown también usa empresa cuando hay más de una asignada; convive con el chip de sala.
      *
      * @return array{0:?int,1:string}  [empresa_id, empresa_scope]
      */
@@ -162,6 +173,29 @@ class RequisicionListadoFiltros
         }
         if ($empresaDefault !== null && $empresaDefault > 0) {
             return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
+    }
+
+    /**
+     * Filtro externo Crown: sala (default primera) o todas (`sala_todas=1`).
+     *
+     * @return array{0:?int,1:string}  [sala_id, sala_scope]
+     */
+    private static function resolverSalaExterna(Request $request, ?int $salaDefault): array
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return [null, 'todas'];
+        }
+        if ($request->boolean('sala_todas') || $request->input('sala_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('sala_id')) {
+            return [(int) $request->input('sala_id'), 'una'];
+        }
+        if ($salaDefault !== null && $salaDefault > 0) {
+            return [$salaDefault, 'una'];
         }
 
         return [null, 'todas'];
@@ -214,6 +248,8 @@ class RequisicionListadoFiltros
             'busqueda' => '',
             'empresa_id' => null,
             'empresa_scope' => 'una',
+            'sala_id' => null,
+            'sala_scope' => 'todas',
             'estado' => '',
         ];
     }
@@ -284,6 +320,13 @@ class RequisicionListadoFiltros
     public static function paraQueryStringEmpresa(array $filtros): array
     {
         $params = [];
+        if (EntornoEmpresaSupport::esCrown()) {
+            if (($filtros['sala_scope'] ?? 'todas') === 'todas') {
+                $params['sala_todas'] = 1;
+            } elseif (! empty($filtros['sala_id'])) {
+                $params['sala_id'] = (int) $filtros['sala_id'];
+            }
+        }
         if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
             $params['empresa_todas'] = 1;
         } elseif (! empty($filtros['empresa_id'])) {
@@ -303,6 +346,11 @@ class RequisicionListadoFiltros
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
+        if (EntornoEmpresaSupport::esCrown()
+            && ! empty($filtros['sala_id'])
+            && ($filtros['sala_scope'] ?? 'una') !== 'todas') {
+            $query->where('requisicion.sala_id', (int) $filtros['sala_id']);
+        }
         if (! empty($filtros['empresa_id'])) {
             $query->where('requisicion.empresa_id', (int) $filtros['empresa_id']);
         }

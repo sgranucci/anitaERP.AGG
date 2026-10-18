@@ -3,9 +3,11 @@
 namespace App\Models\Compras;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Validacion_Abono_Plantilla extends Model
+class Validacion_Abono_Plantilla extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'validacion_abono_plantilla';
 
     protected $fillable = ['codigo', 'nombre', 'activo'];

@@ -66,6 +66,65 @@ final class GastronomiaFacturacionService
             }
         }
 
+        return $this->emitirComprobanteConContexto(
+            $payload,
+            $contextoDescuento,
+            (int) $cuenta->empresa_id,
+            app(GastronomiaReceptorFacturacionService::class)->facturaComoConsumidorFinal($cuenta),
+            $preservarFechasExplicitas,
+        );
+    }
+
+    /**
+     * Emisión gastronómica para POS sin `CuentaGastronomia` (Crown): mismas opciones de emisión,
+     * reglas de receptor CF / Factura B y normalización de cortesía que el POS AGG.
+     *
+     * El descuento de cabecera llega ya resuelto en el payload (`descuentopie` / `descuentoimportepie`):
+     * Crown guarda un porcentaje en la cuenta, no una `DescuentoGastronomia`.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array{factura?:string,error?:string,venta_id?:int,sin_cobranza?:bool,factura_cortesia_total?:bool,cae_pendiente?:array,anita_pendiente?:array}
+     */
+    public function emitirComprobanteSinCuentaGastronomia(
+        array $payload,
+        int $empresaId,
+        bool $facturaComoConsumidorFinal,
+        bool $preservarFechasExplicitas = false,
+    ): array {
+        $contextoDescuento = [
+            'descuentopie' => (float) ($payload['descuentopie'] ?? 0),
+            'descuentoimportepie' => (float) ($payload['descuentoimportepie'] ?? 0),
+            'factura_cortesia_total' => (bool) ($payload['factura_cortesia_total'] ?? false),
+            'sin_cobranza' => (bool) ($payload['factura_cortesia_total'] ?? false),
+        ];
+
+        if ($contextoDescuento['factura_cortesia_total']) {
+            $payload = $this->aplicarReglasCortesiaEnPayload($payload);
+        }
+
+        return $this->emitirComprobanteConContexto(
+            $payload,
+            $contextoDescuento,
+            $empresaId,
+            $facturaComoConsumidorFinal,
+            $preservarFechasExplicitas,
+        );
+    }
+
+    /**
+     * Tramo común de emisión: fechas, opciones gastronomía, receptor/impuestos y post-proceso.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array{descuentopie:float,descuentoimportepie:float,factura_cortesia_total:bool,sin_cobranza:bool}  $contextoDescuento
+     * @return array<string, mixed>
+     */
+    private function emitirComprobanteConContexto(
+        array $payload,
+        array $contextoDescuento,
+        int $empresaId,
+        bool $facturaComoConsumidorFinal,
+        bool $preservarFechasExplicitas,
+    ): array {
         if ($preservarFechasExplicitas) {
             $fechaFactura = trim((string) ($payload['fechafactura'] ?? ''));
             $fechaJornada = trim((string) ($payload['fechajornada'] ?? ''));
@@ -78,7 +137,7 @@ final class GastronomiaFacturacionService
             }
         } else {
             try {
-                $payload = $this->jornadaService->aplicarFechasAlPayload($payload, (int) $cuenta->empresa_id);
+                $payload = $this->jornadaService->aplicarFechasAlPayload($payload, $empresaId);
             } catch (InvalidArgumentException $e) {
                 return ['error' => $e->getMessage(), 'mensaje' => $e->getMessage()];
             }
@@ -94,9 +153,14 @@ final class GastronomiaFacturacionService
             $opciones['omitir_sincronizacion_anita'] = true;
             unset($payload['_omitir_sincronizacion_anita']);
         }
+        if (! empty($payload['_asiento_medios_pago']) && is_array($payload['_asiento_medios_pago'])) {
+            // Contado POS: asiento VTA imputa medios (como Facturación Local Ferli).
+            $opciones['asiento_medios_pago'] = $payload['_asiento_medios_pago'];
+            unset($payload['_asiento_medios_pago']);
+        }
         $payload['opciones_emision'] = $opciones;
-        $payload = $this->asegurarVentaReceptorSinClienteMaestro($payload, $cuenta);
-        $payload = $this->aplicarReglasImpuestoEmisionGastronomia($payload, $cuenta);
+        $payload = $this->asegurarVentaReceptorSinClienteMaestro($payload, $facturaComoConsumidorFinal);
+        $payload = $this->aplicarReglasImpuestoEmisionGastronomia($payload, $facturaComoConsumidorFinal);
 
         $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
 
@@ -321,7 +385,10 @@ final class GastronomiaFacturacionService
             ];
         }
 
-        $payload = $this->aplicarReglasImpuestoEmisionGastronomia($payload, $cuenta);
+        $payload = $this->aplicarReglasImpuestoEmisionGastronomia(
+            $payload,
+            app(GastronomiaReceptorFacturacionService::class)->facturaComoConsumidorFinal($cuenta),
+        );
 
         $calculo = $this->facturacionService->calculaFacturaGeneral($payload);
 
@@ -468,11 +535,14 @@ final class GastronomiaFacturacionService
      */
     private function opcionesEmisionGastronomia(): array
     {
+        $omitirAnita = ! config('gastronomia.sincronizar_anita_al_facturar', true)
+            || ! filter_var(config('anita.escritura_habilitada', true), FILTER_VALIDATE_BOOLEAN);
+
         return [
             'omitir_movimiento_stock' => true,
             'omitir_contabilidad' => ! config('gastronomia.genera_contabilidad_al_facturar', true),
             'omitir_cuenta_corriente' => true,
-            'omitir_sincronizacion_anita' => ! config('gastronomia.sincronizar_anita_al_facturar', true),
+            'omitir_sincronizacion_anita' => $omitirAnita,
             'anita_modo_minimo' => (bool) config('gastronomia.anita_modo_minimo', true),
             'omitir_stkmov_anita' => filter_var(config('gastronomia.anita_omitir_stkmov', true), FILTER_VALIDATE_BOOLEAN),
             // CAE en el proceso gastronómico (misma transacción); el POS aplica ingredientes después del CAE.
@@ -549,13 +619,13 @@ final class GastronomiaFacturacionService
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    private function asegurarVentaReceptorSinClienteMaestro(array $payload, CuentaGastronomia $cuenta): array
+    private function asegurarVentaReceptorSinClienteMaestro(array $payload, bool $facturaComoConsumidorFinal): array
     {
-        $receptor = app(GastronomiaReceptorFacturacionService::class);
-        if (! $receptor->facturaComoConsumidorFinal($cuenta)) {
+        if (! $facturaComoConsumidorFinal) {
             return $payload;
         }
 
+        $receptor = app(GastronomiaReceptorFacturacionService::class);
         $nombre = trim((string) ($payload['venta_receptor']['nombre'] ?? ''));
         if ($nombre === '') {
             $payload['venta_receptor'] = $receptor->datosVentaReceptorConsumidorFinal();
@@ -571,11 +641,11 @@ final class GastronomiaFacturacionService
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    private function aplicarReglasImpuestoEmisionGastronomia(array $payload, CuentaGastronomia $cuenta): array
+    private function aplicarReglasImpuestoEmisionGastronomia(array $payload, bool $facturaComoConsumidorFinal): array
     {
         $receptorSvc = app(GastronomiaReceptorFacturacionService::class);
 
-        if ($receptorSvc->facturaComoConsumidorFinal($cuenta)) {
+        if ($facturaComoConsumidorFinal) {
             $payload['omitir_percepciones'] = true;
         }
 

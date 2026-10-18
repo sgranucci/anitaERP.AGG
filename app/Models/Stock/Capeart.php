@@ -7,9 +7,11 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
 use Auth;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Capeart extends Model
+class Capeart extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['articulo_id', 'combinacion_id', 'material_id', 'color_id', 'piezas', 'tipo', 'tipocalculo', 'consumo1', 'consumo2', 'consumo3', 'consumo4', 'usuarioultcambio_id'];
     protected $table = 'capeart';
     protected $keyField = 'id';

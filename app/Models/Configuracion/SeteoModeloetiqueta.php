@@ -5,9 +5,11 @@ namespace App\Models\Configuracion;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class SeteoModeloetiqueta extends Model
+class SeteoModeloetiqueta extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['usuario_id', 'modeloetiqueta_id', 'programa'];
     protected $table = 'seteomodeloetiqueta';
     protected $keyField = 'id';

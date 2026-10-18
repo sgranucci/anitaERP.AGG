@@ -4,9 +4,11 @@ namespace App\Models\Compras;
 
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ConfiguracionPropuestaPago extends Model
+class ConfiguracionPropuestaPago extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'configuracion_propuesta_pago';
 
     protected $fillable = [

@@ -4,13 +4,18 @@ namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Formapago extends Model
+class Formapago extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'abreviatura'];
     protected $table = 'formapago';
 
-    /** Abreviatura de la forma de pago Transferencia. */
+    /** Abreviatura Anita/Crown (propago.def PROP_CHEQUE). */
+    public const ABREVIATURA_CHEQUE = 'C';
+
+    /** Abreviatura de la forma de pago Transferencia (propago.def PROP_TRANSFERENCIA). */
     public const ABREVIATURA_TRANSFERENCIA = 'T';
 
     /**

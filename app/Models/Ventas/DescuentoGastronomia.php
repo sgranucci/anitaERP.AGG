@@ -2,8 +2,10 @@
 
 namespace App\Models\Ventas;
 
+use App\Models\Configuracion\Sala;
 use App\Models\Ventas\Cliente;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class DescuentoGastronomia extends Model implements Auditable
@@ -20,9 +22,14 @@ class DescuentoGastronomia extends Model implements Auditable
 
     public const TIPO_CONSUMO_INVITACION = 'invitacion';
 
-    protected $fillable = ['nombre', 'codigo', 'tipovalor', 'valor', 'tipo_consumo', 'cliente_id'];
+    protected $fillable = ['nombre', 'codigo', 'tipovalor', 'valor', 'tipo_consumo', 'cliente_id', 'sala_id'];
 
     protected $table = 'descuento_gastronomia';
+
+    public function sala(): BelongsTo
+    {
+        return $this->belongsTo(Sala::class, 'sala_id');
+    }
 
     /**
      * @return array<string, string>

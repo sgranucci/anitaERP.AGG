@@ -7,9 +7,11 @@ use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CumplimientoRequisicionSala extends Model
+class CumplimientoRequisicionSala extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_ACTIVO = 'A';
 
     public const ESTADO_REVERTIDO = 'R';

@@ -4,9 +4,11 @@ namespace App\Models\Sueldos;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Solicitud_Prenda_Sueldos extends Model
+class Solicitud_Prenda_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'solicitud_prenda_sueldos';
 
     public const BORRADOR = 'BORRADOR';

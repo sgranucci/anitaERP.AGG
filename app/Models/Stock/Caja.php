@@ -7,9 +7,11 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
 use App\Models\Stock\Articulo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Caja extends Model
+class Caja extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre','desdenro','hastanro','articulo_id'];
     protected $table = 'cajaproducto';
     protected $tableAnita = 'numcaja';

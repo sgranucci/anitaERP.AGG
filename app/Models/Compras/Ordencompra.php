@@ -4,14 +4,17 @@ namespace App\Models\Compras;
 
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
+use App\Models\Configuracion\Sala;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\Transporte;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Ordencompra extends Model
+class Ordencompra extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     /** Tratamiento de pago / anticipo (órdenes de compra). */
     public static $enumTratamientoCompra = [
         ['id' => '1', 'nombre' => 'NO ANTICIPADA'],
@@ -37,7 +40,9 @@ class Ordencompra extends Model
     protected $table = 'ordencompra';
 
     protected $fillable = [
-        'fecha', 'fechaentrega', 'empresa_id', 'numeroordencompra', 'requisicion_id', 'centrocosto_id',
+        'fecha', 'fechaentrega', 'empresa_id', 'sala_id', 'numeroordencompra',
+        'anita_tipo', 'anita_letra', 'anita_sucursal',
+        'requisicion_id', 'centrocosto_id',
         'comentario', 'nota_legajo', 'detalle', 'lugarentrega', 'transporte_id', 'tratamiento', 'proveedor_id',
         'condicioncompra_id', 'condicionentrega_id', 'condicionpago_id', 'descuento', 'descuento_tipo', 'estadoordencompra', 'sector_legajocompra_id',
         'condiciones_contratacion', 'creousuario_id', 'solicitante_usuario_id',
@@ -75,6 +80,11 @@ class Ordencompra extends Model
     public function empresas()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function salas()
+    {
+        return $this->belongsTo(Sala::class, 'sala_id');
     }
 
     public function centrocostos()

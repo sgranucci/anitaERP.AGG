@@ -58,9 +58,45 @@ $(function () {
         });
     }
 
+    function rellenarPlanos(items) {
+        const $tbody = $('#tabla-planos-pc tbody');
+        if (!$tbody.length) {
+            return;
+        }
+        $tbody.empty();
+        if (!items || !items.length) {
+            $tbody.append(
+                $('<tr>').append(
+                    $('<td colspan="4" class="text-muted text-center py-2">')
+                        .text('No hay planos cargados para esta empresa.')
+                )
+            );
+            return;
+        }
+        items.forEach(function (item) {
+            const idCheck = 'plano_id_' + item.id;
+            const $check = $('<div class="custom-control custom-checkbox">')
+                .append($('<input type="checkbox" class="custom-control-input" name="plano_ids[]">')
+                    .attr('id', idCheck).attr('value', item.id))
+                .append($('<label class="custom-control-label">').attr('for', idCheck).html('&nbsp;'));
+            const $orden = $('<input type="number" class="form-control form-control-sm" min="0" max="999">')
+                .attr('name', 'plano_orden[' + item.id + ']')
+                .val(item.orden || 0);
+
+            $tbody.append(
+                $('<tr>')
+                    .append($('<td class="text-center">').append($check))
+                    .append($('<td>').text(item.label))
+                    .append($('<td>').text(item.sala || ''))
+                    .append($('<td>').append($orden))
+            );
+        });
+    }
+
     function cargarSelectsPorEmpresa(empresaId) {
         if (!empresaId) {
             limpiarSelectsPorEmpresa();
+            rellenarPlanos([]);
             return;
         }
 
@@ -71,6 +107,7 @@ $(function () {
                 rellenarUbicaciones(data.ubicaciones);
                 rellenarDepositos(data.depositos);
                 rellenarMesasWaitry(data.mesas_waitry);
+                rellenarPlanos(data.planos);
             })
             .fail(function () {
                 limpiarSelectsPorEmpresa();

@@ -23,6 +23,7 @@ class DepmaeListadoFiltros
         'nombre' => ['column' => 'depmae.nombre', 'type' => 'texto', 'label' => 'Descripción'],
         'tipodeposito' => ['column' => 'depmae.tipodeposito', 'type' => 'texto', 'label' => 'Tipo de depósito'],
         'empresa' => ['column' => 'empresa.nombre', 'type' => 'texto', 'label' => 'Empresa'],
+        'sala' => ['column' => 'sala.nombre', 'type' => 'texto', 'label' => 'Sala'],
     ];
 
     /** @var list<string> */
@@ -30,6 +31,8 @@ class DepmaeListadoFiltros
         'depmae.codigo',
         'depmae.nombre',
         'empresa.nombre',
+        'sala.nombre',
+        'sala.codigo',
     ];
 
     /** @var array<string, string> */
@@ -208,6 +211,8 @@ class DepmaeListadoFiltros
                 'depmae.nombre',
                 'depmae.tipodeposito',
                 'empresa.nombre',
+                'sala.nombre',
+                'sala.codigo',
             ];
             foreach ($textCols as $col) {
                 $q->orWhere($col, 'like', $like);

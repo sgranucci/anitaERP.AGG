@@ -7,12 +7,14 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Arr;
 use App\Traits\Compras\Tipotransaccion_CompraTrait;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Tipotransaccion_Compra extends Model
+class Tipotransaccion_Compra extends Model implements Auditable
 {
     use SoftDeletes;
 	use Tipotransaccion_CompraTrait;
 
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'operacion', 'abreviatura', 'codigoafip', 'signo', 'subdiario', 
                             'asientocontable', 'retieneiva', 'retieneganancia', 'retieneIIBB', 'estado'];
     protected $table = 'tipotransaccion_compra';

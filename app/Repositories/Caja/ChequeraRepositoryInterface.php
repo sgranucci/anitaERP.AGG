@@ -17,5 +17,8 @@ interface ChequeraRepositoryInterface extends RepositoryInterface
 	public function eliminarAnita($id);
     public function findPorCodigo($codigo);
 
+    /** Chequera de la cuenta cuyo rango incluye el número (para CHP Anita con cpro_modelo=0). */
+    public function findPorCuentaYNumero(int $cuentacajaId, int $numeroCheque): ?\App\Models\Caja\Chequera;
+
 }
 

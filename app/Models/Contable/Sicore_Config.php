@@ -7,9 +7,11 @@ namespace App\Models\Contable;
 use App\Models\Contable\Cuentacontable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Sicore_Config extends Model
+class Sicore_Config extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'sicore_config';
 
     protected $fillable = [

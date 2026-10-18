@@ -4,9 +4,11 @@ namespace App\Models\Contable;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ReporteContableLayoutColumna extends Model
+class ReporteContableLayoutColumna extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'reporte_contable_layout_columna';
 
     protected $fillable = [

@@ -27,20 +27,34 @@ final class DepmaeAnitaBridgeSupport
     }
 
     /**
+     * @param  array{servidor?: string, path_sistema?: string, sistema?: string, ifx_server?: string}|null  $override
      * @return array{servidor?: string, path_sistema?: string, sistema: string, ifx_server?: string}
      */
-    public static function parametrosBridge(int $empresaId): array
+    public static function parametrosBridge(int $empresaId, ?array $override = null): array
     {
-        return StockAnitaBridgeSupport::parametrosBridge(max(1, $empresaId));
+        $params = StockAnitaBridgeSupport::parametrosBridge(max(1, $empresaId));
+        if ($override === null || $override === []) {
+            return $params;
+        }
+
+        foreach (['sistema', 'path_sistema', 'ifx_server', 'servidor'] as $clave) {
+            $valor = trim((string) ($override[$clave] ?? ''));
+            if ($valor !== '') {
+                $params[$clave] = $clave === 'path_sistema' ? rtrim($valor, '/') : $valor;
+            }
+        }
+
+        return $params;
     }
 
     /**
+     * @param  array{servidor?: string, path_sistema?: string, sistema?: string, ifx_server?: string}|null  $override
      * @return list<object>
      */
-    public static function listar(int $empresaId, ?string $whereArmado = null): array
+    public static function listar(int $empresaId, ?string $whereArmado = null, ?array $override = null): array
     {
         $api = new ApiAnita;
-        $payload = array_merge(self::parametrosBridge($empresaId), [
+        $payload = array_merge(self::parametrosBridge($empresaId, $override), [
             'acc' => 'list',
             'tabla' => self::tabla(),
             'campos' => self::camposListado(),
@@ -122,6 +136,11 @@ final class DepmaeAnitaBridgeSupport
 
         if (config('app.empresa') === 'AGG') {
             return 'depm_deposito,depm_desc,depm_maneja_part,depm_tipo_deposito';
+        }
+
+        // CROWN: depmae sin cta/tipo; tiene depm_dep_arion. depm_desc al final (bridge CSV).
+        if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+            return 'depm_deposito,depm_maneja_part,depm_dep_arion,depm_desc';
         }
 
         // INTERFORMING y otros: Informix sin depm_tipo_deposito ni depm_cta_contable.

@@ -12,9 +12,11 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Seguridad\Usuario;
 use App\Services\Compras\ContratoValidacionAbonoService;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Recepcion_Proveedor extends Model
+class Recepcion_Proveedor extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const TIPO_RECEPCION = 'RECEPCION';
 
     public const TIPO_DEVOLUCION = 'DEVOLUCION';

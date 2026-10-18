@@ -4,9 +4,11 @@ namespace App\Models\Ventas;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class TickettarjetaGastronomia extends Model
+class TickettarjetaGastronomia extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_CANJEADO = 'C';
 
     public const ESTADO_PENDIENTE = 'P';

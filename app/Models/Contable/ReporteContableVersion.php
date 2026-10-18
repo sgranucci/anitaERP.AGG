@@ -5,9 +5,11 @@ namespace App\Models\Contable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Seguridad\Usuario;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ReporteContableVersion extends Model
+class ReporteContableVersion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'reporte_contable_version';
 
     protected $fillable = [

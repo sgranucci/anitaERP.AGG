@@ -13,6 +13,7 @@ use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
+use App\Support\Stock\RecepcionProveedorAnitaEsquemaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use App\Support\Stock\RecepcionProveedorDepositoAnitaSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
@@ -44,6 +45,12 @@ class RecepcionProveedorImportarDesdeAnitaService
 
     /** @var array<string, int|null> */
     private array $cacheDeposito = [];
+
+    /** @var array<int, int|null> */
+    private array $cacheUnidadmedida = [];
+
+    /** @var array<string, array{numero_oc: int, sucursal_oc: int}>|null */
+    private ?array $mapaOcAplicped = null;
 
     /**
      * Importa una COM/X puntual desde Anita.
@@ -302,9 +309,11 @@ class RecepcionProveedorImportarDesdeAnitaService
             'importadas' => 0,
             'omitidas' => 0,
             'sin_oc' => 0,
+            'con_oc' => 0,
             'sin_proveedor' => 0,
             'sin_empresa' => 0,
             'lineas' => 0,
+            'errores' => [],
         ];
 
         $usuarioId = (int) (Usuario::query()->orderBy('id')->value('id') ?? 1);
@@ -313,19 +322,30 @@ class RecepcionProveedorImportarDesdeAnitaService
         $lineasPorRecepcion = $this->cargarLineasAgrupadas($fechaDesdeAnita, $fechaHastaAnita);
         $cabeceras = RecepcionProveedorAnitaImportSupport::listarRecepmae($fechaDesdeAnita, $fechaHastaAnita);
 
+        if (RecepcionProveedorAnitaEsquemaSupport::esCrown()) {
+            $clavesCom = [];
+            foreach ($cabeceras as $cabPre) {
+                $sucPre = (int) ($cabPre->recm_sucursal ?? 0);
+                $nroPre = (int) ($cabPre->recm_nro ?? 0);
+                if ($nroPre > 0 && RecepcionProveedorAnitaEsquemaSupport::sucursalValida($sucPre)) {
+                    $clavesCom[] = $sucPre.'-'.$nroPre;
+                }
+            }
+            $this->mapaOcAplicped = RecepcionProveedorAnitaImportSupport::mapaOcDesdeAplicpedPorCom($clavesCom);
+        }
+
         foreach ($cabeceras as $cab) {
             $sucursal = (int) ($cab->recm_sucursal ?? 0);
             $nro = (int) ($cab->recm_nro ?? 0);
-            $numeroOc = RecepcionProveedorAnitaImportSupport::numeroOrdencompraDesdeCabecera($cab);
             $codProveedor = trim((string) ($cab->recm_proveedor ?? ''));
 
-            if ($nro <= 0 || $sucursal <= 0) {
+            if ($nro <= 0 || ! RecepcionProveedorAnitaEsquemaSupport::sucursalValida($sucursal)) {
                 $stats['omitidas']++;
 
                 continue;
             }
 
-            $empresaId = $this->resolverEmpresaId($sucursal);
+            $empresaId = $this->resolverEmpresaIdDesdeCabecera($cab, $sucursal);
             if (! $empresaId) {
                 $stats['sin_empresa']++;
 
@@ -333,9 +353,14 @@ class RecepcionProveedorImportarDesdeAnitaService
             }
 
             if (Recepcion_Proveedor::query()
-                ->where('empresa_id', $empresaId)
-                ->where('numerorecepcion', $nro)
-                ->exists()) {
+                ->where('anita_sucursal', $sucursal)
+                ->where('anita_nro', $nro)
+                ->exists()
+                || Recepcion_Proveedor::query()
+                    ->where('empresa_id', $empresaId)
+                    ->where('numerorecepcion', $nro)
+                    ->where('anita_sucursal', $sucursal)
+                    ->exists()) {
                 $stats['omitidas']++;
 
                 continue;
@@ -348,13 +373,15 @@ class RecepcionProveedorImportarDesdeAnitaService
                 continue;
             }
 
+            [$numeroOc, $sucursalOc] = $this->resolverNumeroOcYSucursal($cab, $sucursal, $nro);
             $ordencompraId = null;
             $ocCentrocostoId = null;
             if ($numeroOc > 0) {
-                $oc = $this->resolverOrdencompra($numeroOc, $empresaId);
+                $oc = $this->resolverOrdencompra($numeroOc, $empresaId, $sucursalOc);
                 if ($oc) {
                     $ordencompraId = $oc->id;
                     $ocCentrocostoId = (int) ($oc->centrocosto_id ?? 0) ?: null;
+                    $stats['con_oc']++;
                 } else {
                     $stats['sin_oc']++;
                 }
@@ -403,7 +430,8 @@ class RecepcionProveedorImportarDesdeAnitaService
                         'anita_nro' => $nro,
                         'origen_carga' => 'ANITA_IMPORT',
                         'creousuario_id' => $usuarioId,
-                        'centrocosto_id' => RecepcionProveedorVisibilidadSupport::resolverCentrocostoCarga($usuarioId),
+                        'centrocosto_id' => RecepcionProveedorVisibilidadSupport::resolverCentrocostoCarga($usuarioId)
+                            ?? $ocCentrocostoId,
                     ]);
 
                     $lineasGrabadas = $this->grabarLineasDesdeAnita(
@@ -418,8 +446,17 @@ class RecepcionProveedorImportarDesdeAnitaService
 
                     $stats['importadas']++;
                 });
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
                 $stats['omitidas']++;
+                $stats['errores'] = $stats['errores'] ?? [];
+                if (count($stats['errores']) < 20) {
+                    $stats['errores'][] = "COM/X/{$sucursal}/{$nro}: ".$e->getMessage();
+                }
+                \Log::warning('RecepcionAnitaImport: '.$e->getMessage(), [
+                    'sucursal' => $sucursal,
+                    'nro' => $nro,
+                    'exception' => $e,
+                ]);
             }
         }
 
@@ -501,6 +538,11 @@ class RecepcionProveedorImportarDesdeAnitaService
                     ->value('id') ?: 0) ?: null;
             }
 
+            $unidadmedidaId = $this->resolverUnidadmedidaId($articuloId);
+            if (! $unidadmedidaId) {
+                continue;
+            }
+
             Recepcion_Proveedor_Articulo::create([
                 'recepcion_proveedor_id' => $recepcion->id,
                 'orden' => $orden,
@@ -508,6 +550,7 @@ class RecepcionProveedorImportarDesdeAnitaService
                 'tipo_linea' => 'OC',
                 'articulo_id' => $articuloId,
                 'ordencompra_articulo_id' => $ocArtId,
+                'unidadmedida_id' => $unidadmedidaId,
                 'cantidad' => $cantidad,
                 'cantidad_stock' => $cantidad,
                 'precio' => (float) ($lin->recv_precio ?? 0),
@@ -554,6 +597,48 @@ class RecepcionProveedorImportarDesdeAnitaService
         }
 
         return $this->cacheEmpresa[$key];
+    }
+
+    /**
+     * Crown: recm_sucursal = casino (no empresa); recm_empresa suele 0 → empresa 1.
+     */
+    private function resolverEmpresaIdDesdeCabecera(object $cab, int $sucursal): ?int
+    {
+        if (! RecepcionProveedorAnitaEsquemaSupport::esCrown()) {
+            return $this->resolverEmpresaId($sucursal);
+        }
+
+        $codEmp = (int) ($cab->recm_empresa ?? 0);
+        if ($codEmp > 0) {
+            $id = $this->resolverEmpresaId($codEmp);
+            if ($id) {
+                return $id;
+            }
+        }
+
+        return (int) (Empresa::query()->orderBy('id')->value('id') ?: 0) ?: null;
+    }
+
+    /**
+     * @return array{0: int, 1: int|null} [numeroOc, sucursalOc]
+     */
+    private function resolverNumeroOcYSucursal(object $cab, int $sucursalCom, int $nroCom): array
+    {
+        $numeroOc = RecepcionProveedorAnitaImportSupport::numeroOrdencompraDesdeCabecera($cab);
+        if ($numeroOc > 0) {
+            return [$numeroOc, null];
+        }
+
+        if ($this->mapaOcAplicped === null && RecepcionProveedorAnitaEsquemaSupport::esCrown()) {
+            $this->mapaOcAplicped = RecepcionProveedorAnitaImportSupport::mapaOcDesdeAplicpedPorCom();
+        }
+
+        $info = $this->mapaOcAplicped[$sucursalCom.'-'.$nroCom] ?? null;
+        if ($info === null) {
+            return [0, null];
+        }
+
+        return [(int) $info['numero_oc'], (int) $info['sucursal_oc']];
     }
 
     private function resolverProveedorId(string $codigo): ?int
@@ -643,15 +728,21 @@ class RecepcionProveedorImportarDesdeAnitaService
         return ['estado' => 'vinculada', 'mensaje' => 'COM existente vinculada a OC '.$numeroOc];
     }
 
-    private function resolverOrdencompra(int $numeroOc, int $empresaId): ?Ordencompra
+    private function resolverOrdencompra(int $numeroOc, int $empresaId, ?int $anitaSucursal = null): ?Ordencompra
     {
-        $key = $empresaId.'-'.$numeroOc;
+        $key = $empresaId.'-'.$numeroOc.'-'.($anitaSucursal ?? 'x');
         if (! array_key_exists($key, $this->cacheOc)) {
             $query = Ordencompra::query()->where('numeroordencompra', $numeroOc);
-            if ($empresaId > 0) {
+            if ($anitaSucursal !== null && RecepcionProveedorAnitaEsquemaSupport::esCrown()) {
+                $query->where('anita_sucursal', $anitaSucursal);
+            } elseif ($empresaId > 0 && ! RecepcionProveedorAnitaEsquemaSupport::esCrown()) {
                 $query->where('empresa_id', $empresaId);
             }
             $id = $query->value('id');
+            if (! $id && $anitaSucursal !== null) {
+                // Fallback: mismo nro sin filtrar sucursal (OC importadas sin clave).
+                $id = Ordencompra::query()->where('numeroordencompra', $numeroOc)->value('id');
+            }
             $this->cacheOc[$key] = $id ? (int) $id : null;
         }
 
@@ -677,6 +768,17 @@ class RecepcionProveedorImportarDesdeAnitaService
         }
 
         return $this->cacheArticulo[$sku];
+    }
+
+    private function resolverUnidadmedidaId(int $articuloId): ?int
+    {
+        if (! array_key_exists($articuloId, $this->cacheUnidadmedida)) {
+            $this->cacheUnidadmedida[$articuloId] = (int) (Articulo::query()
+                ->whereKey($articuloId)
+                ->value('unidadmedida_id') ?: 0) ?: null;
+        }
+
+        return $this->cacheUnidadmedida[$articuloId];
     }
 
     private function resolverCentrocostoId(int $codigo): ?int

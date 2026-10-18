@@ -1044,6 +1044,7 @@ class RequisicionService
             'fecha' => $data['fecha'] ?? null,
             'fechaentrega' => $data['fechaentrega'] ?? null,
             'empresa_id' => $data['empresa_id'] ?? null,
+            'sala_id' => ! empty($data['sala_id']) ? (int) $data['sala_id'] : null,
             'centrocosto_id' => $data['centrocosto_id'] ?? null,
             'oficinacompra_id' => $data['oficinacompra_id'] ?? null,
             'comentario' => $data['comentario'] ?? '',

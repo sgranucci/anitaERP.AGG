@@ -30,7 +30,7 @@
 @endphp
 <div class="card-body py-2 border-bottom bg-white">
     <div class="d-flex flex-wrap align-items-center justify-content-between">
-        @if (($empresa_query ?? collect())->count() > 1)
+        @if (\App\Support\Configuracion\EmpresaFiltroExternoSupport::mostrarChips())
             <div class="mb-1 mr-3">
                 <span class="text-muted small mr-2"><i class="fa fa-building"></i> Empresa:</span>
                 <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtro de empresa">

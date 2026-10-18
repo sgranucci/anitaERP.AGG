@@ -5,9 +5,11 @@ namespace App\Models\Compras;
 use App\Models\Configuracion\Moneda;
 use App\Models\Ventas\Formapago;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Comprobante_Proveedor_Cuota extends Model
+class Comprobante_Proveedor_Cuota extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'comprobante_proveedor_cuota';
 
     protected $fillable = [

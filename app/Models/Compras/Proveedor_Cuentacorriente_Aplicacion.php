@@ -5,9 +5,11 @@ namespace App\Models\Compras;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Proveedor_Cuentacorriente_Aplicacion extends Model
+class Proveedor_Cuentacorriente_Aplicacion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'proveedor_cuentacorriente_aplicacion';
 
     protected $fillable = [

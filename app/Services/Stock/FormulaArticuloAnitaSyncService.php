@@ -101,12 +101,12 @@ class FormulaArticuloAnitaSyncService
      */
     public function listarStkcmaeDesdeAnita(): array
     {
-        $payload = [
+        $payload = $this->payloadBridgeFormula([
             'acc' => 'list',
             'tabla' => 'stkcmae',
             'campos' => $this->camposStkcmae(),
             'orderBy' => 'stkcm_formula',
-        ];
+        ]);
         return $this->normalizarFilasStkcmae($this->decodificarRespuestaList($this->apiAnita->apiCall($payload)));
     }
 
@@ -115,12 +115,12 @@ class FormulaArticuloAnitaSyncService
      */
     public function listarStkcmovDesdeAnita(): array
     {
-        $payload = [
+        $payload = $this->payloadBridgeFormula([
             'acc' => 'list',
             'tabla' => 'stkcmov',
             'campos' => $this->camposStkcmov(),
             'orderBy' => 'stkcv_formula, stkcv_linea',
-        ];
+        ]);
 
         return $this->normalizarFilasStkcmov($this->decodificarRespuestaList($this->apiAnita->apiCall($payload)));
     }
@@ -148,12 +148,12 @@ class FormulaArticuloAnitaSyncService
         if ($anitaFormula <= 0) {
             return [];
         }
-        $payload = [
+        $payload = $this->payloadBridgeFormula([
             'acc' => 'list',
             'tabla' => 'stkcmae',
             'campos' => $this->camposStkcmae(),
             'whereArmado' => " WHERE stkcm_formula = {$anitaFormula} ",
-        ];
+        ]);
 
         return $this->normalizarFilasStkcmae($this->decodificarRespuestaList($this->apiAnita->apiCall($payload)));
     }
@@ -168,15 +168,39 @@ class FormulaArticuloAnitaSyncService
         if ($anitaFormula <= 0) {
             return [];
         }
-        $payload = [
+        $payload = $this->payloadBridgeFormula([
             'acc' => 'list',
             'tabla' => 'stkcmov',
             'campos' => $this->camposStkcmov(),
             'whereArmado' => " WHERE stkcv_formula = {$anitaFormula} ",
             'orderBy' => 'stkcv_linea',
-        ];
+        ]);
 
         return $this->normalizarFilasStkcmov($this->decodificarRespuestaList($this->apiAnita->apiCall($payload)));
+    }
+
+    /**
+     * Override de bridge para fórmulas (CROWN: casino remoto vía INFORMIXSERVER).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function payloadBridgeFormula(array $payload): array
+    {
+        $ifx = trim((string) config('stock.formula_anita_ifx_server', ''));
+        if ($ifx !== '') {
+            $payload['ifx_server'] = $ifx;
+        }
+        $path = rtrim(trim((string) config('stock.formula_anita_path_sistema', '')), '/');
+        if ($path !== '') {
+            $payload['path_sistema'] = $path;
+        }
+        $sistema = trim((string) config('stock.formula_anita_sistema', ''));
+        if ($sistema !== '') {
+            $payload['sistema'] = $sistema;
+        }
+
+        return $payload;
     }
 
     /**
@@ -474,6 +498,12 @@ class FormulaArticuloAnitaSyncService
             foreach ($mae as $cab) {
                 $anitaF = (int) $cab['stkcm_formula'];
                 if ($anitaF <= 0) {
+                    continue;
+                }
+                // CROWN: fila basura en stkcmae (id enorme / detalle corruptos).
+                if (EntornoEmpresaSupport::esCrown() && ($anitaF > 999999 || str_contains((string) ($cab['stkcm_detalle'] ?? ''), '#####'))) {
+                    $advertencias[] = "Fórmula Anita {$anitaF} omitida (fila basura Crown).";
+
                     continue;
                 }
 

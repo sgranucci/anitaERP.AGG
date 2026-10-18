@@ -5,12 +5,14 @@ namespace App\Models\Sueldos;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Otro empleador / entidad (pluriempleo) informado en una presentación F572.
  */
-class Siradig_Otro_Empleador_Sueldos extends Model
+class Siradig_Otro_Empleador_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'siradig_otro_empleador_sueldos';
 
     protected $fillable = [

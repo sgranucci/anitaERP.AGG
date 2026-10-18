@@ -4,9 +4,11 @@ namespace App\Models\Compras;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Pagoproveedor_Correo extends Model
+class Pagoproveedor_Correo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'pagoproveedor_correo';
 
     protected $fillable = [

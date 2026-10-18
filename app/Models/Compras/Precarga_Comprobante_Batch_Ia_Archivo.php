@@ -4,10 +4,12 @@ namespace App\Models\Compras;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /** Auditoría y dedupe de la carpeta caliente BATCH_IA. */
-class Precarga_Comprobante_Batch_Ia_Archivo extends Model
+class Precarga_Comprobante_Batch_Ia_Archivo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_ENCOLADO = 'ENCOLADO';
     public const ESTADO_PROCESANDO = 'PROCESANDO';
     public const ESTADO_PROCESADO = 'PROCESADO';

@@ -253,8 +253,8 @@ final class ChequeAnitaSyncSupport
             return (int) $cuentacaja->empresa_id;
         }
 
-        // Solo Ferli: cuentas multiempresa + Anita sin cpro/cter_empresa.
-        if (EntornoEmpresaSupport::esFerli()) {
+        // Ferli / Crown: cuentas multiempresa + Anita sin cpro/cter_empresa.
+        if (EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esCrown()) {
             return self::empresaPrincipalId();
         }
 

@@ -4,9 +4,11 @@ namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CotGuiaLinea extends Model
+class CotGuiaLinea extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'cot_guia_linea';
 
     protected $fillable = [

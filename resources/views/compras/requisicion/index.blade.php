@@ -86,12 +86,16 @@ Requisiciones
             @include('compras.requisicion.partials.filtros_externos', [
                 'exportRuta' => 'listar_requisicion',
                 'exportQueryparams' => $filtrosQuery ?? [],
+                'sala_query' => $sala_query ?? collect(),
             ])
 
             <form method="get" action="{{ route('consultar_requisicion') }}" id="form-filtros-requisicion" class="mb-0">
                 @include('compras.requisicion.partials.filtros_listado')
             </form>
 
+            @php
+                $esCrownIndex = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown();
+            @endphp
             <div class="table-responsive p-0">
                 <table class="table table-hover oc-grilla mb-0" id="tabla-paginada">
                     <thead>
@@ -99,7 +103,7 @@ Requisiciones
                             <th>Número</th>
                             <th>Solicitante</th>
                             <th>Fecha</th>
-                            <th>Empresa</th>
+                            <th>{{ $esCrownIndex ? 'Sala' : 'Empresa' }}</th>
                             <th>Centro costo</th>
                             <th>Proveedor</th>
                             <th>Estado</th>
@@ -127,7 +131,13 @@ Requisiciones
                                 </td>
                                 <td>{{ $data->nombreusuario ?? '—' }}</td>
                                 <td class="text-nowrap">{{ $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '—' }}</td>
-                                <td>{{ $data->nombreempresa }}</td>
+                                <td>
+                                    @if ($esCrownIndex)
+                                        {{ $data->codigosala ? ($data->codigosala.' — '.($data->nombresala ?? '')) : '—' }}
+                                    @else
+                                        {{ $data->nombreempresa }}
+                                    @endif
+                                </td>
                                 <td>{{ $data->nombrecentrocosto }}</td>
                                 <td class="oc-proveedor">{{ $data->nombreproveedor ?: '—' }}</td>
                                 <td>

@@ -769,17 +769,23 @@ class ClienteController extends Controller
             ? (int) $request->input('condicioniva_id')
             : null;
 
-        $bloqueo = ArcaPadronClienteOperacionValidacionSupport::bloqueoOperacion($cliente, $condicionivaId);
+        $resultado = ArcaPadronClienteOperacionValidacionSupport::evaluarOperacion($cliente, $condicionivaId);
 
-        if ($bloqueo !== null) {
+        if (! ($resultado['ok'] ?? false)) {
             return response()->json([
                 'ok' => false,
-                'message' => $bloqueo['error'],
-                'validacion' => $bloqueo['validacion'] ?? null,
+                'message' => $resultado['error'] ?? 'Problemas en ARCA: el cliente no cumple la validación del padrón.',
+                'validacion' => $resultado['validacion'] ?? null,
             ], 422);
         }
 
-        return response()->json(['ok' => true]);
+        return response()->json([
+            'ok' => true,
+            'aviso' => $resultado['aviso'] ?? null,
+            'error_servicio' => (bool) ($resultado['error_servicio'] ?? false),
+            'skipped' => (bool) ($resultado['skipped'] ?? false),
+            'regularizado' => (bool) ($resultado['regularizado'] ?? false),
+        ]);
     }
 
     /**

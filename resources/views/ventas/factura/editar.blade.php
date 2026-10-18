@@ -19,7 +19,7 @@
     window.FL_FACTURA_LAYOUT_PEDIDO = @json($layoutItemsPedido);
     window.FACTURA_CONCEPTO_OBLIGATORIO_SIN_ARTICULO = @json((bool) config('facturacion.CONCEPTO_OBLIGATORIO_SIN_ARTICULO', false));
 </script>
-<script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/padron-operacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/padron-operacion.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 @php

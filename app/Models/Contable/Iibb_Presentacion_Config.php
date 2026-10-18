@@ -8,9 +8,11 @@ use App\Models\Configuracion\Provincia;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Iibb_Presentacion_Config extends Model
+class Iibb_Presentacion_Config extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'iibb_presentacion_config';
 
     protected $fillable = [

@@ -45,6 +45,7 @@
                         @include('compras.proveedor.arca-padron-modals')
                     @endif
                     @include('compras.proveedor.form3')
+                    @include('compras.proveedor.form9')
                     @include('compras.proveedor.form4')
                     @include('compras.proveedor.form5')
                     @include('compras.proveedor.form6')

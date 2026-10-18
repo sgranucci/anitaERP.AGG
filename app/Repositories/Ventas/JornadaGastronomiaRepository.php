@@ -3,6 +3,7 @@
 namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\JornadaGastronomia;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 class JornadaGastronomiaRepository implements JornadaGastronomiaRepositoryInterface
@@ -12,31 +13,40 @@ class JornadaGastronomiaRepository implements JornadaGastronomiaRepositoryInterf
     ) {
     }
 
-    public function jornadaAbiertaPorEmpresa(int $empresaId): ?JornadaGastronomia
+    public function jornadaAbiertaPorEmpresa(int $empresaId, ?int $salaId = null): ?JornadaGastronomia
     {
-        return $this->model->newQuery()
-            ->with(['usuarioApertura', 'empresa'])
-            ->where('empresa_id', $empresaId)
-            ->where('estado', JornadaGastronomia::ESTADO_ABIERTA)
+        return $this->aplicarSala(
+            $this->model->newQuery()
+                ->with(['usuarioApertura', 'empresa', 'sala'])
+                ->where('empresa_id', $empresaId)
+                ->where('estado', JornadaGastronomia::ESTADO_ABIERTA),
+            $salaId,
+        )
             ->orderByDesc('id')
             ->first();
     }
 
-    public function ultimaJornadaPorEmpresa(int $empresaId): ?JornadaGastronomia
+    public function ultimaJornadaPorEmpresa(int $empresaId, ?int $salaId = null): ?JornadaGastronomia
     {
-        return $this->model->newQuery()
-            ->with(['usuarioApertura', 'empresa'])
-            ->where('empresa_id', $empresaId)
+        return $this->aplicarSala(
+            $this->model->newQuery()
+                ->with(['usuarioApertura', 'empresa', 'sala'])
+                ->where('empresa_id', $empresaId),
+            $salaId,
+        )
             ->orderByDesc('fecha_jornada')
             ->orderByDesc('id')
             ->first();
     }
 
-    public function historialPorEmpresa(int $empresaId, int $limite = 30): Collection
+    public function historialPorEmpresa(int $empresaId, int $limite = 30, ?int $salaId = null): Collection
     {
-        return $this->model->newQuery()
-            ->with(['usuarioApertura', 'usuarioCierre', 'cierreTotem'])
-            ->where('empresa_id', $empresaId)
+        return $this->aplicarSala(
+            $this->model->newQuery()
+                ->with(['usuarioApertura', 'usuarioCierre', 'cierreTotem', 'sala'])
+                ->where('empresa_id', $empresaId),
+            $salaId,
+        )
             ->orderByDesc('fecha_jornada')
             ->orderByDesc('id')
             ->limit($limite)
@@ -61,5 +71,18 @@ class JornadaGastronomiaRepository implements JornadaGastronomiaRepositoryInterf
     public function delete(int $id): bool
     {
         return (bool) $this->model->findOrFail($id)->delete();
+    }
+
+    /**
+     * @param  Builder<JornadaGastronomia>  $query
+     * @return Builder<JornadaGastronomia>
+     */
+    private function aplicarSala(Builder $query, ?int $salaId): Builder
+    {
+        if ($salaId !== null && $salaId > 0) {
+            $query->where('sala_id', $salaId);
+        }
+
+        return $query;
     }
 }

@@ -9,9 +9,11 @@ use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\Puntoventa;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class RendicionEstacionamientoCaja extends Model
+class RendicionEstacionamientoCaja extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const TIPO_TURNO = 'turno';
 
     public const TIPO_JORNADA = 'jornada';

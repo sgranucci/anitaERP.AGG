@@ -8,14 +8,17 @@ use App\Http\Requests\ValidacionConfiguracionPuntoventaGastronomia;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Listaprecio;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
+use App\Models\Ventas\GastronomiaCrown\GastroPlanoMesa;
 use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\WaitryMesaGastronomia;
+use App\Models\Configuracion\Sala;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\SalidaRepositoryInterface;
 use App\Repositories\Ventas\ConfiguracionPuntoventaGastronomiaRepositoryInterface;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\UbicacionGastronomiaRepositoryInterface;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -59,6 +62,9 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             $mesas_waitry_query,
             $empresaId
         );
+        $sala_query = $this->salaQuery();
+        $plano_query = $this->planoQuery($empresaId);
+        $planos_asignados = [];
 
         return view('ventas.configuracion_puntoventa_gastronomia.crear', compact(
             'data',
@@ -73,12 +79,16 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             'tipotransaccion_caja_query',
             'deposito_query',
             'mesas_waitry_query',
+            'sala_query',
+            'plano_query',
+            'planos_asignados',
         ));
     }
 
     public function guardar(ValidacionConfiguracionPuntoventaGastronomia $request)
     {
-        $this->repository->create($request->all());
+        $config = $this->repository->create($request->all());
+        $this->sincronizarPlanos($config, $request);
 
         return redirect('ventas/configuracion-puntoventa-gastronomia')
             ->with('mensaje', 'Configuración creada con éxito');
@@ -103,6 +113,12 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             $mesas_waitry_query,
             (int) $data->empresa_id
         );
+        $sala_query = $this->salaQuery();
+        $plano_query = $this->planoQuery((int) $data->empresa_id);
+        $planos_asignados = $data->planos()
+            ->pluck('configuracion_puntoventa_gastronomia_plano.orden', 'gastro_plano_mesa.id')
+            ->map(fn ($orden) => (int) $orden)
+            ->all();
 
         return view('ventas.configuracion_puntoventa_gastronomia.editar', compact(
             'data',
@@ -117,6 +133,9 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             'tipotransaccion_caja_query',
             'deposito_query',
             'mesas_waitry_query',
+            'sala_query',
+            'plano_query',
+            'planos_asignados',
         ));
     }
 
@@ -124,6 +143,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
     {
         can('actualizar-configuracion-puntoventa-gastronomia');
         $this->repository->update($request->all(), $id);
+        $this->sincronizarPlanos($this->repository->findOrFail($id), $request);
 
         return redirect('ventas/configuracion-puntoventa-gastronomia')
             ->with('mensaje', 'Configuración actualizada con éxito');
@@ -158,6 +178,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
                 'ubicaciones' => [],
                 'depositos' => [],
                 'mesas_waitry' => [],
+                'planos' => [],
             ]);
         }
 
@@ -185,6 +206,15 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             ),
             'mesas_waitry' => $this->mesasWaitryPorEmpresa($empresaId)
                 ->map(fn (WaitryMesaGastronomia $mesa) => ['id' => $mesa->id, 'label' => $mesa->etiqueta()])
+                ->values()
+                ->all(),
+            'planos' => $this->planoQuery($empresaId)
+                ->map(fn (GastroPlanoMesa $plano) => [
+                    'id' => (int) $plano->id,
+                    'label' => $plano->etiqueta(),
+                    'sala' => trim((string) (optional($plano->sala)->codigo.' '.optional($plano->sala)->nombre)),
+                    'orden' => (int) $plano->orden,
+                ])
                 ->values()
                 ->all(),
         ]);
@@ -275,5 +305,68 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
         if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
             abort(403);
         }
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Sala>
+     */
+    private function salaQuery()
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return collect();
+        }
+
+        $q = Sala::query()->orderBy('codigo')->orderBy('nombre');
+        $ids = \App\Support\Ventas\UsuarioSalaAsignadaSupport::idsDesdeSesion();
+        if (count($ids) >= 1) {
+            $q->whereIn('id', $ids);
+        }
+
+        return $q->get(['id', 'codigo', 'nombre']);
+    }
+
+    /**
+     * Planos de mesas disponibles para asignar a la PC (solo Crown).
+     *
+     * @return \Illuminate\Support\Collection<int, GastroPlanoMesa>
+     */
+    private function planoQuery(?int $empresaId)
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return collect();
+        }
+
+        return GastroPlanoMesa::query()
+            ->with('sala:id,codigo,nombre')
+            ->when($empresaId !== null && $empresaId > 0, fn ($q) => $q->where('empresa_id', $empresaId))
+            ->orderBy('orden')
+            ->orderBy('nombre')
+            ->get();
+    }
+
+    /**
+     * Sincroniza el pivot `configuracion_puntoventa_gastronomia_plano` conservando el orden del formulario.
+     */
+    private function sincronizarPlanos(ConfiguracionPuntoventaGastronomia $config, Request $request): void
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return;
+        }
+        if (! $request->has('plano_ids') && ! $request->has('plano_orden')) {
+            return;
+        }
+
+        $ordenPorPlano = (array) $request->input('plano_orden', []);
+        $idsValidos = GastroPlanoMesa::query()
+            ->whereIn('id', array_map('intval', (array) $request->input('plano_ids', [])))
+            ->where('empresa_id', $config->empresa_id)
+            ->pluck('id');
+
+        $sync = [];
+        foreach ($idsValidos as $planoId) {
+            $sync[(int) $planoId] = ['orden' => (int) ($ordenPorPlano[$planoId] ?? 0)];
+        }
+
+        $config->planos()->sync($sync);
     }
 }

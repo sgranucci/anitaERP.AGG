@@ -239,6 +239,16 @@ final class ArticuloStkmaeAnitaBridgeSupport
 				stkm_cod_mon_co3';
         }
 
+        // CROWN: stkmae gastronomía sin extras AGG (tiempo_entr etc. viven en stkmgastro).
+        // CAMPOS_BASE ya incluye stkm_fecha_alta.
+        if (EntornoEmpresaSupport::esCrown()) {
+            return self::CAMPOS_BASE.',
+				stkm_tipo_articulo,
+				stkm_codigo_menu,
+				stkm_area,
+				stkm_desc_det';
+        }
+
         return self::CAMPOS_BASE.',
 				stkm_fecha_alta,
 				stkm_cod_nomencl,
@@ -304,6 +314,7 @@ final class ArticuloStkmaeAnitaBridgeSupport
         if ($empresaIdBridge !== null && $empresaIdBridge > 0) {
             $payload = StockAnitaBridgeSupport::mergePayload($payload, $empresaIdBridge);
         }
+        $payload = self::mergeBridgeCasinoOpcional($payload);
 
         $respuesta = $apiAnita->apiCall($payload);
         $filas = \App\ApiAnita::decodificarListaFilas(is_string($respuesta) ? $respuesta : null);
@@ -326,6 +337,30 @@ final class ArticuloStkmaeAnitaBridgeSupport
         }
 
         return ' AND '.self::keyField().' IN ('.implode(',', $literales).') ';
+    }
+
+    /**
+     * Override casino (CROWN insumos I0* en cancadmin/cncadmin).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public static function mergeBridgeCasinoOpcional(array $payload): array
+    {
+        $ifx = trim((string) config('stock.articulo_anita_ifx_server', ''));
+        if ($ifx !== '') {
+            $payload['ifx_server'] = $ifx;
+        }
+        $path = rtrim(trim((string) config('stock.articulo_anita_path_sistema', '')), '/');
+        if ($path !== '') {
+            $payload['path_sistema'] = $path;
+        }
+        $sistema = trim((string) config('stock.articulo_anita_sistema', ''));
+        if ($sistema !== '') {
+            $payload['sistema'] = $sistema;
+        }
+
+        return $payload;
     }
 
     /**

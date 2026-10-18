@@ -6,9 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use App\ApiAnita;
 use App\Models\Ventas\Condicionventacuota;
 use Carbon\Carbon;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Condicionventa extends Model
+class Condicionventa extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'codigo'];
     protected $table = 'condicionventa';
     protected $tableAnita = ['condmae','condmov'];

@@ -6,7 +6,7 @@
     $campoActivo = $f['campo'] ?? 'uid';
     $operadorActivo = $f['operador'] ?? 'contiene';
     $operadoresJson = [];
-    foreach (BienUsoListadoFiltros::CAMPOS as $key => $meta) {
+    foreach (BienUsoListadoFiltros::campos() as $key => $meta) {
         $operadoresJson[$key] = BienUsoListadoFiltros::operadoresParaCampo($key);
     }
     $tieneCriteriosPanel = BienUsoListadoFiltros::tieneCriteriosAplicados($f);
@@ -52,7 +52,7 @@
             <div class="form-group col-md-2 col-sm-6 mb-2 filtro-campo-wrap" style="{{ $modo !== BienUsoListadoFiltros::MODO_CAMPO ? 'display:none' : '' }}">
                 <label class="small mb-1" for="filtro_campo">Campo</label>
                 <select name="filtro_campo" id="filtro_campo" class="form-control form-control-sm">
-                    @foreach($camposFiltro ?? BienUsoListadoFiltros::CAMPOS as $key => $meta)
+                    @foreach($camposFiltro ?? BienUsoListadoFiltros::campos() as $key => $meta)
                         <option value="{{ $key }}" data-type="{{ $meta['type'] }}" {{ $campoActivo === $key ? 'selected' : '' }}>{{ $meta['label'] }}</option>
                     @endforeach
                 </select>

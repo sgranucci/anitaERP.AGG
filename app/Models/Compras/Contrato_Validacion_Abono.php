@@ -8,9 +8,11 @@ use App\Support\Compras\ContratoValidacionAbonoDocumentoSupport;
 use App\Support\Compras\ContratoValidacionAbonoEstados;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Contrato_Validacion_Abono extends Model
+class Contrato_Validacion_Abono extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'contrato_validacion_abono';
 
     protected $fillable = [

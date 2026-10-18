@@ -5,12 +5,14 @@ namespace App\Models\Compras;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Factura del portal pedida al dueño cuando un cargo de tarjeta se asocia a la suscripción.
  */
-class Suscripcion_Comprobante extends Model
+class Suscripcion_Comprobante extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_PENDIENTE = 'PENDIENTE';
 
     public const ESTADO_CARGADO = 'CARGADO';

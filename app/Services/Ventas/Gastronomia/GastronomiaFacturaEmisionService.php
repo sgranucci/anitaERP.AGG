@@ -349,6 +349,11 @@ final class GastronomiaFacturaEmisionService
             return ['error' => $e->getMessage()];
         }
 
+        // Asiento VTA contado: contrapartida = medios de pago (estilo Ferli locales).
+        if ($mediosPago !== [] && config('gastronomia.genera_contabilidad_al_facturar', true)) {
+            $payload['_asiento_medios_pago'] = $mediosPago;
+        }
+
         try {
             $this->preflightEmisionService->exigirListoParaEmitir(
                 $cuenta,

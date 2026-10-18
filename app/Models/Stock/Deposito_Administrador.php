@@ -4,9 +4,11 @@ namespace App\Models\Stock;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Deposito_Administrador extends Model
+class Deposito_Administrador extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'deposito_administrador';
 
     protected $fillable = [

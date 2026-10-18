@@ -4,9 +4,11 @@ namespace App\Models\Ticket;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Subcategoria_Ticket extends Model
+class Subcategoria_Ticket extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = [
                             'nombre', 'categoria_ticket_id'
                         ];

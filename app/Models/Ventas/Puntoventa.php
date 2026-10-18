@@ -11,12 +11,14 @@ use App\Models\Configuracion\Pais;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Actividad_Arca;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Puntoventa extends Model
+class Puntoventa extends Model implements Auditable
 {
     use SoftDeletes;
 	use PuntoventaTrait;
 
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'codigo', 'empresa_id', 'domicilio', 'localidad_id', 
                             'provincia_id', 'pais_id', 'codigopostal', 'email', 'telefono', 
                             'leyenda', 'modofacturacion', 'estado', 'webservice', 'iva_ventas', 'pathafip', 'actividad_arca_id',

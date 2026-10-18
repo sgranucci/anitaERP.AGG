@@ -7,16 +7,25 @@ use App\Support\Configuracion\ParametroSistemaSupport;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Flags de UI/validación de orden de compra por entorno (.env).
+ * Flags de UI/validación de orden de compra / requisición por entorno.
  *
- * AGG: pedir partida/CAPEX = true, mostrar peso = false, entrega semanal = false.
- * El Bierzo: pedir partida/CAPEX = false, mostrar peso = true, entrega semanal = true.
+ * Partida/CAPEX: Configuración general (`oc_pedir_partida_capex`).
+ * Default: TRUE solo en AGG; el resto FALSE.
+ *
+ * El Bierzo: mostrar peso = true, entrega semanal = true (vía .env).
  */
 final class OrdencompraUiConfigSupport
 {
+    /**
+     * Partida presupuesto + CAPEX en líneas de OC y requisición (grilla + validación).
+     * Prioridad: parametro_sistema → default por instalación (solo AGG = true).
+     */
     public static function pedirPartidaCapex(): bool
     {
-        return (bool) config('compras.oc_pedir_partida_capex', true);
+        return ParametroSistemaSupport::boolean(
+            ParametroSistemaSupport::CLAVE_OC_PEDIR_PARTIDA_CAPEX,
+            EntornoEmpresaSupport::esAgg()
+        );
     }
 
     public static function mostrarPesoArticulo(): bool

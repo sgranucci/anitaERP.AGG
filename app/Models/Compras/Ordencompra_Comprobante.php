@@ -7,9 +7,11 @@ use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\OrdencompraComprobanteEstados;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Ordencompra_Comprobante extends Model
+class Ordencompra_Comprobante extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'ordencompra_comprobante';
 
     protected $fillable = [

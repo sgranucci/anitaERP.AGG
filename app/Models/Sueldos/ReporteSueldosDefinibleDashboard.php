@@ -6,9 +6,11 @@ use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ReporteSueldosDefinibleDashboard extends Model
+class ReporteSueldosDefinibleDashboard extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'reporte_sueldos_definible_dashboard';
 
     protected $fillable = [

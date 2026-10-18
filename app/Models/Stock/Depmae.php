@@ -3,6 +3,7 @@
 namespace App\Models\Stock;
 
 use App\Models\Configuracion\Empresa;
+use App\Models\Configuracion\Sala;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
@@ -11,18 +12,25 @@ use App\Services\Stock\DepmaeAnitaSyncService;
 use App\Support\Stock\DepmaeAnitaExclusionSupport;
 use App\Traits\Stock\DepmaeTrait;
 use App\ApiAnita;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Depmae extends Model
+class Depmae extends Model implements Auditable
 {
     use DepmaeTrait;
 
-    protected $fillable = ['nombre', 'tipodeposito', 'codigo', 'empresa_id'];
+    use \OwenIt\Auditing\Auditable;
+    protected $fillable = ['nombre', 'tipodeposito', 'codigo', 'empresa_id', 'sala_id'];
     protected $table = 'depmae';
     protected $keyField = 'depm_deposito';
 
     public function empresas()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function salas()
+    {
+        return $this->belongsTo(Sala::class, 'sala_id');
     }
 
     /**
@@ -36,6 +44,19 @@ class Depmae extends Model
         }
 
         return $query->where('empresa_id', $empresaId);
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<self>
+     */
+    public function scopeParaSala($query, ?int $salaId)
+    {
+        if ($salaId === null || $salaId <= 0) {
+            return $query;
+        }
+
+        return $query->where('sala_id', $salaId);
     }
 
     /**

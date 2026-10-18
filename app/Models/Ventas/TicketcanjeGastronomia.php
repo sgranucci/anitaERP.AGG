@@ -5,9 +5,11 @@ namespace App\Models\Ventas;
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Articulo;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class TicketcanjeGastronomia extends Model
+class TicketcanjeGastronomia extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'ticketcanje_gastronomia';
 
     protected $fillable = [

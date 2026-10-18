@@ -7,9 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CotSesionEnvio extends Model
+class CotSesionEnvio extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'cot_sesion_envio';
 
     protected $fillable = [

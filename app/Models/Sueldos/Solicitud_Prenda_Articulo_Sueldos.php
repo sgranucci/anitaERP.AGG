@@ -6,9 +6,11 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Color;
 use App\Models\Stock\Talle;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Solicitud_Prenda_Articulo_Sueldos extends Model
+class Solicitud_Prenda_Articulo_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'solicitud_prenda_articulo_sueldos';
 
     protected $fillable = [

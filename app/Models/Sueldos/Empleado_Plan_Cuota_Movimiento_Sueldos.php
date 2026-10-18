@@ -4,13 +4,15 @@ namespace App\Models\Sueldos;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Movimiento (cuota) de un plan en una corrida de liquidación.
  * pendiente al calcular; confirmado al cerrar la corrida.
  */
-class Empleado_Plan_Cuota_Movimiento_Sueldos extends Model
+class Empleado_Plan_Cuota_Movimiento_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_PENDIENTE = 'pendiente';
 
     public const ESTADO_CONFIRMADO = 'confirmado';

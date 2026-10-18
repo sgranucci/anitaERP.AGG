@@ -4,9 +4,11 @@ namespace App\Models\Configuracion;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ModuloAvisoTipo extends Model
+class ModuloAvisoTipo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'modulo_aviso_tipo';
 
     protected $fillable = [

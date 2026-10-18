@@ -4,9 +4,11 @@ namespace App\Models\Compras;
 
 use App\Models\Configuracion\Moneda;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class PropuestaPagoLinea extends Model
+class PropuestaPagoLinea extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'propuesta_pago_linea';
 
     protected $fillable = [

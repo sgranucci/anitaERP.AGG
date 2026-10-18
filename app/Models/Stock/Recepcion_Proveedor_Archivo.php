@@ -3,9 +3,11 @@
 namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Recepcion_Proveedor_Archivo extends Model
+class Recepcion_Proveedor_Archivo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const TIPO_ADJUNTO = 'ADJUNTO';
 
     public const TIPO_OCR = 'OCR';

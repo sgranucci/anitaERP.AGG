@@ -18,6 +18,10 @@ final class ClienteCuentacorrienteAnitaImportVentaMatchSupport
      */
     public static function indexarVentasPorClaves(array $claves): array
     {
+        if ($claves === [] || ! Venta::query()->exists()) {
+            return [];
+        }
+
         $porTipoNro = [];
         foreach ($claves as $c) {
             $tipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo($c['tipo']);
@@ -31,47 +35,66 @@ final class ClienteCuentacorrienteAnitaImportVentaMatchSupport
             return [];
         }
 
-        $query = Venta::query()
-            ->from('venta as v')
-            ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
-            ->join('tipotransaccion as t', 't.id', '=', 'v.tipotransaccion_id')
-            ->leftJoin('empresa as e', 'e.id', '=', 'pv.empresa_id')
-            ->select([
-                'v.id',
-                'v.codigo',
-                'v.numerocomprobante',
-                'v.cliente_id',
-                'v.fecha',
-                'v.moneda_id',
-                'v.cotizacion',
-                'v.puntoventa_id',
-                'v.tipotransaccion_id',
-                'pv.codigo as puntoventa_codigo',
-                'pv.empresa_id',
-                't.abreviatura',
-                't.signo',
-            ]);
-
-        $query->where(function ($q) use ($porTipoNro) {
-            foreach ($porTipoNro as $tipo => $nrosMap) {
-                $nros = array_map('intval', array_keys($nrosMap));
-                foreach (array_chunk($nros, 500) as $chunk) {
-                    $q->orWhere(function ($qq) use ($tipo, $chunk) {
-                        $qq->where('t.abreviatura', $tipo)
-                            ->whereIn('v.numerocomprobante', $chunk);
-                    });
+        // MySQL ~65535 placeholders: no armar un solo WHERE con todos los nros.
+        $lotes = [];
+        $loteActual = [];
+        $placeholders = 0;
+        foreach ($porTipoNro as $tipo => $nrosMap) {
+            $nros = array_map('intval', array_keys($nrosMap));
+            foreach (array_chunk($nros, 400) as $chunk) {
+                $costo = 1 + count($chunk);
+                if ($loteActual !== [] && ($placeholders + $costo) > 5000) {
+                    $lotes[] = $loteActual;
+                    $loteActual = [];
+                    $placeholders = 0;
                 }
+                $loteActual[] = ['tipo' => $tipo, 'nros' => $chunk];
+                $placeholders += $costo;
             }
-        });
+        }
+        if ($loteActual !== []) {
+            $lotes[] = $loteActual;
+        }
 
         $out = [];
-        foreach ($query->get() as $venta) {
-            $tipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo((string) $venta->abreviatura);
-            $letra = self::letraDesdeCodigoVenta((string) $venta->codigo);
-            $suc = (int) $venta->puntoventa_codigo;
-            $nro = (int) $venta->numerocomprobante;
-            $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveDocumento($tipo, $letra, $suc, $nro);
-            $out[$clave][] = $venta;
+        foreach ($lotes as $lote) {
+            $query = Venta::query()
+                ->from('venta as v')
+                ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
+                ->join('tipotransaccion as t', 't.id', '=', 'v.tipotransaccion_id')
+                ->select([
+                    'v.id',
+                    'v.codigo',
+                    'v.numerocomprobante',
+                    'v.cliente_id',
+                    'v.fecha',
+                    'v.moneda_id',
+                    'v.cotizacion',
+                    'v.puntoventa_id',
+                    'v.tipotransaccion_id',
+                    'pv.codigo as puntoventa_codigo',
+                    'pv.empresa_id',
+                    't.abreviatura',
+                    't.signo',
+                ]);
+
+            $query->where(function ($q) use ($lote) {
+                foreach ($lote as $parte) {
+                    $q->orWhere(function ($qq) use ($parte) {
+                        $qq->where('t.abreviatura', $parte['tipo'])
+                            ->whereIn('v.numerocomprobante', $parte['nros']);
+                    });
+                }
+            });
+
+            foreach ($query->get() as $venta) {
+                $tipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo((string) $venta->abreviatura);
+                $letra = self::letraDesdeCodigoVenta((string) $venta->codigo);
+                $suc = (int) $venta->puntoventa_codigo;
+                $nro = (int) $venta->numerocomprobante;
+                $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveDocumento($tipo, $letra, $suc, $nro);
+                $out[$clave][] = $venta;
+            }
         }
 
         return $out;

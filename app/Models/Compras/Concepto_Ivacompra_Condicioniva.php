@@ -4,9 +4,11 @@ namespace App\Models\Compras;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Concepto_Ivacompra_Condicioniva extends Model
+class Concepto_Ivacompra_Condicioniva extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = [
                             'concepto_ivacompra_id', 'condicioniva_id'
                         ];

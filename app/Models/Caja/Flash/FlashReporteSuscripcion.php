@@ -7,9 +7,11 @@ use App\Support\Caja\Flash\FlashReporteAggPerfilVistaSupport;
 use App\Support\Caja\Flash\FlashReporteAggSmtpReintentoSupport;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class FlashReporteSuscripcion extends Model
+class FlashReporteSuscripcion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const PERIODICIDAD_MENSUAL = 'mensual';
 
     public const PERIODICIDAD_SEMANAL = 'semanal';

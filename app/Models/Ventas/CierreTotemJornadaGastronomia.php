@@ -5,9 +5,11 @@ namespace App\Models\Ventas;
 use App\Models\Configuracion\Empresa;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CierreTotemJornadaGastronomia extends Model
+class CierreTotemJornadaGastronomia extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'cierre_totem_jornada_gastronomia';
 
     protected $fillable = [

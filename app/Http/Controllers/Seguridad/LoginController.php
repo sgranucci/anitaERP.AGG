@@ -45,7 +45,13 @@ class LoginController extends Controller
         $roles = $user->roles()->get();
         $empresas = $user->usuario_empresas()->get();
         if ($roles->isNotEmpty()) {
-            $user->loadMissing(['centrocostos', 'sectorLegajocompra', 'depositosAutorizados', 'tipotransaccionesStockAutorizadas']);
+            $user->loadMissing([
+                'centrocostos',
+                'sectorLegajocompra',
+                'depositosAutorizados',
+                'tipotransaccionesStockAutorizadas',
+                'usuario_salas',
+            ]);
             $user->setSession($roles->toArray(), $empresas->toArray());
 
             return redirect()->intended(route('inicio'));

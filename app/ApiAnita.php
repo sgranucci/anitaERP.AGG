@@ -107,6 +107,20 @@ class ApiAnita
     {
         $acc = (string) ($data['acc'] ?? '');
 
+        if (in_array($acc, ['insert', 'update', 'delete'], true)
+            && ! filter_var(config('anita.escritura_habilitada', true), FILTER_VALIDATE_BOOLEAN)
+        ) {
+            Log::info('anita_bridge.escritura_bloqueada', [
+                'acc' => $acc,
+                'tabla' => $data['tabla'] ?? null,
+                'sistema' => $data['sistema'] ?? null,
+            ]);
+
+            return json_encode([
+                'Error' => 'Escritura Anita bridge deshabilitada (ANITA_BRIDGE_ESCRITURA_HABILITADA=false).',
+            ]);
+        }
+
         if (isset($data['servidor'])) {
             $this->servidorAnita = self::resolverHost((string) $data['servidor']);
         }

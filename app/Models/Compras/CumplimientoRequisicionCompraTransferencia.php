@@ -5,9 +5,11 @@ namespace App\Models\Compras;
 use App\Models\Stock\Transferencia_Mercaderia;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CumplimientoRequisicionCompraTransferencia extends Model
+class CumplimientoRequisicionCompraTransferencia extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'cumplimiento_requisicion_compra_transferencia';
 
     protected $fillable = [

@@ -26,6 +26,8 @@ final class EntornoEmpresaSupport
     /** Laboratorio PostgreSQL aislado (`EMPRESA=LAB_PG`). No es un cliente productivo. */
     public const LAB_PG = 'LAB_PG';
 
+    public const CROWN = 'CROWN';
+
     public static function codigo(): string
     {
         return strtoupper(trim((string) config('app.empresa')));
@@ -66,5 +68,10 @@ final class EntornoEmpresaSupport
     public static function esFerli(): bool
     {
         return self::es(self::FERLI);
+    }
+
+    public static function esCrown(): bool
+    {
+        return self::es(self::CROWN);
     }
 }

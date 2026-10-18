@@ -6,6 +6,7 @@ use App\ApiAnita;
 use App\Models\Ventas\DescuentoGastronomia;
 use App\Repositories\Ventas\DescuentoGastronomiaRepositoryInterface;
 use App\Support\Stock\AnitaSync\Descuento\DescuentoFieldMapper;
+use App\Support\Ventas\GastronomiaSalaSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -79,16 +80,12 @@ class DescuentoGastronomiaAnitaSyncService
     public function listarDescuentosDesdeAnita(): array
     {
         $api = new ApiAnita;
-        $payload = [
+        $payload = $this->payloadBridgeDescuento([
             'acc' => 'list',
             'tabla' => config('descuento_gastronomia_anita.tabla', 'descuento'),
             'campos' => config('descuento_gastronomia_anita.campos_listado'),
             'orderBy' => 'dto_codigo',
-        ];
-        $sistema = config('descuento_gastronomia_anita.sistema');
-        if ($sistema !== null && $sistema !== '') {
-            $payload['sistema'] = $sistema;
-        }
+        ]);
 
         $rows = json_decode($api->apiCall($payload));
 
@@ -98,20 +95,38 @@ class DescuentoGastronomiaAnitaSyncService
     private function leerDescuentoEnAnita(int $dtoCodigo): ?object
     {
         $api = new ApiAnita;
-        $payload = [
+        $payload = $this->payloadBridgeDescuento([
             'acc' => 'list',
             'tabla' => config('descuento_gastronomia_anita.tabla', 'descuento'),
             'campos' => config('descuento_gastronomia_anita.campos_listado'),
             'whereArmado' => " WHERE dto_codigo={$dtoCodigo}",
-        ];
-        $sistema = config('descuento_gastronomia_anita.sistema');
-        if ($sistema !== null && $sistema !== '') {
-            $payload['sistema'] = $sistema;
-        }
+        ]);
 
         $rows = json_decode($api->apiCall($payload));
 
         return (is_array($rows) && count($rows) > 0) ? $rows[0] : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function payloadBridgeDescuento(array $payload): array
+    {
+        $sistema = config('descuento_gastronomia_anita.sistema');
+        if ($sistema !== null && $sistema !== '') {
+            $payload['sistema'] = $sistema;
+        }
+        $ifx = trim((string) config('descuento_gastronomia_anita.ifx_server', ''));
+        if ($ifx !== '') {
+            $payload['ifx_server'] = $ifx;
+        }
+        $path = rtrim(trim((string) config('descuento_gastronomia_anita.path_sistema', '')), '/');
+        if ($path !== '') {
+            $payload['path_sistema'] = $path;
+        }
+
+        return $payload;
     }
 
     /**
@@ -122,15 +137,26 @@ class DescuentoGastronomiaAnitaSyncService
         $payload = DescuentoFieldMapper::mapAll($row);
         $this->validarPayloadMinimo($payload, $codigoAnita);
 
+        $salaId = GastronomiaSalaSupport::idPorCodigo(
+            (string) config('descuento_gastronomia_anita.sala_codigo', '')
+        );
+
         $datos = [
             'codigo' => $payload['codigo'],
             'nombre' => $payload['nombre'],
             'tipovalor' => $payload['tipovalor'],
             'valor' => $payload['valor'],
             'cliente_id' => $payload['cliente_id'] ?? null,
+            'sala_id' => $salaId,
         ];
 
-        $existente = DescuentoGastronomia::query()->where('codigo', $codigoAnita)->first();
+        $existenteQuery = DescuentoGastronomia::query()->where('codigo', $codigoAnita);
+        if ($salaId) {
+            $existenteQuery->where(function ($q) use ($salaId) {
+                $q->where('sala_id', $salaId)->orWhereNull('sala_id');
+            });
+        }
+        $existente = $existenteQuery->orderByRaw('sala_id is null')->first();
 
         DB::beginTransaction();
         try {

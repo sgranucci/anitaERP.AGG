@@ -4,9 +4,11 @@ namespace App\Models\Sueldos;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ReporteSueldosDefinibleAlerta extends Model
+class ReporteSueldosDefinibleAlerta extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const TIPO_SIN_FILAS = 'sin_filas';
 
     public const TIPO_FILAS_MAYOR = 'filas_mayor';

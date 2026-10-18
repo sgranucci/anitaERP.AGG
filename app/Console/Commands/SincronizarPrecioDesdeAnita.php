@@ -46,13 +46,15 @@ class SincronizarPrecioDesdeAnita extends Command
             ? (int) preg_replace('/\D/', '', $desdeOpt)
             : PrecioAnitaFechaSupport::fechaDesdeConfig();
 
-        if ($fechaDesde < 19000000) {
-            $this->error('Fecha --desde inválida (use Ymd, ej. 20250101).');
+        if ($fechaDesde < 0 || ($fechaDesde > 0 && $fechaDesde < 19000000)) {
+            $this->error('Fecha --desde inválida (use Ymd, ej. 20250101; o 0 = todas las filas).');
 
             return self::FAILURE;
         }
 
-        $this->info("Sincronizando stkpre desde Anita (stkp_fe_ult_act >= {$fechaDesde})…");
+        $this->info($fechaDesde > 0
+            ? "Sincronizando stkpre desde Anita (stkp_fe_ult_act >= {$fechaDesde})…"
+            : 'Sincronizando stkpre desde Anita (sin filtro de fecha)…');
 
         try {
             $ret = $sync->sincronizarDesdeAnita(

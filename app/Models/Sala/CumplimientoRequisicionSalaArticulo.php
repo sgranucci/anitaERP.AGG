@@ -6,9 +6,11 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CumplimientoRequisicionSalaArticulo extends Model
+class CumplimientoRequisicionSalaArticulo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'cumplimiento_requisicion_sala_articulo';
 
     protected $fillable = [

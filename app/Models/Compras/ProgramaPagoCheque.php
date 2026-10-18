@@ -5,9 +5,11 @@ namespace App\Models\Compras;
 use App\Models\Caja\Cheque;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ProgramaPagoCheque extends Model
+class ProgramaPagoCheque extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'programa_pago_cheque';
 
     protected $fillable = [

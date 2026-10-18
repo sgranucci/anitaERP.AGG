@@ -4,9 +4,11 @@ namespace App\Models\Ticket;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Ticket_Configuracion_Areadestino extends Model
+class Ticket_Configuracion_Areadestino extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const MODO_DISPATCH = 'dispatch';
 
     public const MODO_CLAIM = 'claim';

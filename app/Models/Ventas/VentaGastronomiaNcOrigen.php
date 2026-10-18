@@ -6,9 +6,11 @@ namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class VentaGastronomiaNcOrigen extends Model
+class VentaGastronomiaNcOrigen extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'venta_gastronomia_nc_origen';
 
     protected $fillable = [

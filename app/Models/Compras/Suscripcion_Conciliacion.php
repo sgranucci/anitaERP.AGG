@@ -8,12 +8,14 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Período importado del resumen de tarjeta corporativa (una cabecera por empresa y mes).
  */
-class Suscripcion_Conciliacion extends Model
+class Suscripcion_Conciliacion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_ABIERTA = 'ABIERTA';
 
     public const ESTADO_CERRADA = 'CERRADA';

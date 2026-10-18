@@ -1180,12 +1180,52 @@ Route::put('contable/centrocosto/{id}', 'Contable\CentrocostoController@actualiz
 Route::delete('contable/centrocosto/{id}', 'Contable\CentrocostoController@eliminar')->name('eliminar_centrocosto');
 
 Route::get('contable/bien-uso', 'Contable\BienUsoController@index')->name('bien_uso');
+Route::post('contable/bien-uso/workbench/vista', 'Contable\BienUsoController@guardarVistaListado')->name('guardar_vista_listado_bien_uso');
+Route::delete('contable/bien-uso/workbench/vista/{id}', 'Contable\BienUsoController@eliminarVistaListado')->name('eliminar_vista_listado_bien_uso');
+Route::post('contable/bien-uso/workbench/columnas', 'Contable\BienUsoController@guardarColumnasListado')->name('guardar_columnas_listado_bien_uso');
+Route::post('contable/bien-uso/workbench/etiquetas', 'Contable\BienUsoController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_bien_uso');
+Route::post('contable/bien-uso/workbench/preview', 'Contable\BienUsoController@previewWorkbench')->name('preview_workbench_bien_uso');
 Route::get('contable/listabienuso/{formato?}/{busqueda?}', 'Contable\BienUsoController@listar')->name('lista_bien_uso');
 Route::get('contable/bien-uso/crear', 'Contable\BienUsoController@crear')->name('crear_bien_uso');
 Route::post('contable/bien-uso', 'Contable\BienUsoController@guardar')->name('guardar_bien_uso');
+Route::post('contable/bien-uso/consulta', 'Contable\BienUsoController@consulta')->name('consulta_bien_uso');
+Route::get('contable/bien-uso/resolver', 'Contable\BienUsoController@resolver')->name('resolver_bien_uso');
 Route::get('contable/bien-uso/{id}/editar', 'Contable\BienUsoController@editar')->name('editar_bien_uso')->middleware('modo.consulta');
 Route::put('contable/bien-uso/{id}', 'Contable\BienUsoController@actualizar')->name('actualizar_bien_uso')->middleware('modo.consulta');
 Route::delete('contable/bien-uso/{id}', 'Contable\BienUsoController@eliminar')->name('eliminar_bien_uso');
+
+Route::get('contable/bien-uso-rubro', 'Contable\BienUsoRubroController@index')->name('bien_uso_rubro');
+Route::get('contable/bien-uso-rubro/crear', 'Contable\BienUsoRubroController@crear')->name('crear_bien_uso_rubro');
+Route::post('contable/bien-uso-rubro', 'Contable\BienUsoRubroController@guardar')->name('guardar_bien_uso_rubro');
+Route::post('contable/bien-uso-rubro/consulta', 'Contable\BienUsoRubroController@consulta')->name('consulta_bien_uso_rubro');
+Route::get('contable/bien-uso-rubro/resolver', 'Contable\BienUsoRubroController@resolver')->name('resolver_bien_uso_rubro');
+Route::get('contable/bien-uso-rubro/{id}/editar', 'Contable\BienUsoRubroController@editar')->name('editar_bien_uso_rubro')->middleware('modo.consulta');
+Route::put('contable/bien-uso-rubro/{id}', 'Contable\BienUsoRubroController@actualizar')->name('actualizar_bien_uso_rubro')->middleware('modo.consulta');
+Route::delete('contable/bien-uso-rubro/{id}', 'Contable\BienUsoRubroController@eliminar')->name('eliminar_bien_uso_rubro');
+
+Route::get('contable/bien-uso-subrubro', 'Contable\BienUsoSubrubroController@index')->name('bien_uso_subrubro');
+Route::get('contable/bien-uso-subrubro/crear', 'Contable\BienUsoSubrubroController@crear')->name('crear_bien_uso_subrubro');
+Route::post('contable/bien-uso-subrubro', 'Contable\BienUsoSubrubroController@guardar')->name('guardar_bien_uso_subrubro');
+Route::post('contable/bien-uso-subrubro/consulta', 'Contable\BienUsoSubrubroController@consulta')->name('consulta_bien_uso_subrubro');
+Route::get('contable/bien-uso-subrubro/resolver', 'Contable\BienUsoSubrubroController@resolver')->name('resolver_bien_uso_subrubro');
+Route::get('contable/bien-uso-subrubro/{id}/editar', 'Contable\BienUsoSubrubroController@editar')->name('editar_bien_uso_subrubro')->middleware('modo.consulta');
+Route::put('contable/bien-uso-subrubro/{id}', 'Contable\BienUsoSubrubroController@actualizar')->name('actualizar_bien_uso_subrubro')->middleware('modo.consulta');
+Route::delete('contable/bien-uso-subrubro/{id}', 'Contable\BienUsoSubrubroController@eliminar')->name('eliminar_bien_uso_subrubro');
+
+Route::get('contable/bien-uso-indice', 'Contable\BienUsoIndiceController@index')->name('bien_uso_indice');
+Route::get('contable/bien-uso-indice/crear', 'Contable\BienUsoIndiceController@crear')->name('crear_bien_uso_indice');
+Route::post('contable/bien-uso-indice', 'Contable\BienUsoIndiceController@guardar')->name('guardar_bien_uso_indice');
+Route::post('contable/bien-uso-indice/consulta', 'Contable\BienUsoIndiceController@consulta')->name('consulta_bien_uso_indice');
+Route::get('contable/bien-uso-indice/resolver', 'Contable\BienUsoIndiceController@resolver')->name('resolver_bien_uso_indice');
+Route::get('contable/bien-uso-indice/{id}/editar', 'Contable\BienUsoIndiceController@editar')->name('editar_bien_uso_indice')->middleware('modo.consulta');
+Route::put('contable/bien-uso-indice/{id}', 'Contable\BienUsoIndiceController@actualizar')->name('actualizar_bien_uso_indice')->middleware('modo.consulta');
+Route::delete('contable/bien-uso-indice/{id}', 'Contable\BienUsoIndiceController@eliminar')->name('eliminar_bien_uso_indice');
+
+Route::get('contable/bien-uso-revaluo', 'Contable\BienUsoRevaluoReporteController@index')->name('bien_uso_revaluo');
+Route::get('contable/listar-bien-uso-revaluo/{formato?}', 'Contable\BienUsoRevaluoReporteController@exportar')->name('listar_bien_uso_revaluo');
+
+Route::get('contable/bien-uso-asiento', 'Contable\BienUsoAsientoController@index')->name('bien_uso_asiento');
+Route::post('contable/bien-uso-asiento/confirmar', 'Contable\BienUsoAsientoController@confirmar')->name('confirmar_bien_uso_asiento');
 
 /*
  * Cuentas contables
@@ -2179,6 +2219,7 @@ Route::get('ventas/configuracion-puntoventa-gastronomia/api/selects-por-empresa/
  * Gastronomía — ABM y proceso
  */
 Route::get('ventas/mesa-gastronomia', 'Ventas\MesaGastronomiaController@index')->name('consultar_mesa_gastronomia');
+Route::get('ventas/listamesagastronomia/{formato?}/{busqueda?}', 'Ventas\MesaGastronomiaController@listar')->name('lista_mesa_gastronomia');
 Route::get('ventas/mesa-gastronomia/crear', 'Ventas\MesaGastronomiaController@crear')->name('crear_mesa_gastronomia');
 Route::post('ventas/mesa-gastronomia', 'Ventas\MesaGastronomiaController@guardar')->name('guardar_mesa_gastronomia');
 Route::post('ventas/mesa-gastronomia/sincronizar-anita', 'Ventas\MesaGastronomiaController@sincronizarDesdeAnita')->name('sincronizar_mesa_gastronomia_anita');
@@ -2279,6 +2320,7 @@ Route::get('ventas/gastronomia/maquinas-vending/rendiciones/api/maquina/{maquina
 Route::get('ventas/gastronomia/maquinas-vending/rendiciones/api/cuentas-caja', 'Ventas\MaquinavendingRendicionController@apiCuentasCaja')->name('maquinavending_rendicion_api_cuentas_caja');
 
 Route::get('ventas/mozo-gastronomia', 'Ventas\MozoGastronomiaController@index')->name('consultar_mozo_gastronomia');
+Route::get('ventas/listamozogastronomia/{formato?}/{busqueda?}', 'Ventas\MozoGastronomiaController@listar')->name('lista_mozo_gastronomia');
 Route::get('ventas/mozo-gastronomia/crear', 'Ventas\MozoGastronomiaController@crear')->name('crear_mozo_gastronomia');
 Route::get('ventas/mozo-gastronomia/proximo-codigo', 'Ventas\MozoGastronomiaController@proximoCodigo')->name('proximo_codigo_mozo_gastronomia');
 Route::post('ventas/mozo-gastronomia', 'Ventas\MozoGastronomiaController@guardar')->name('guardar_mozo_gastronomia');
@@ -2355,6 +2397,56 @@ Route::put('ventas/categoria-fidelidad-gastronomia/{id}', 'Ventas\Categoriafidel
 Route::delete('ventas/categoria-fidelidad-gastronomia/{id}', 'Ventas\CategoriafidelidadGastronomiaController@eliminar')->name('eliminar_categoria_fidelidad_gastronomia');
 
 Route::get('ventas/gastronomia/proceso-facturacion', 'Ventas\GastronomiaProcesoFacturacionController@index')->name('gastronomia_proceso_facturacion');
+
+// POS Crown (módulo aislado; no usa Waitry)
+Route::get('ventas/gastronomia-crown/pos', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@index')->name('gastronomia_crown_pos');
+Route::get('ventas/gastronomia-crown/api/config', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiConfig')->name('gastronomia_crown_api_config');
+Route::get('ventas/gastronomia-crown/api/mesas', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiMesas')->name('gastronomia_crown_api_mesas');
+Route::get('ventas/gastronomia-crown/api/cuentas', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiCuentasActivas')->name('gastronomia_crown_api_cuentas');
+Route::post('ventas/gastronomia-crown/api/abrir-mesa', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiAbrirMesa')->name('gastronomia_crown_api_abrir_mesa');
+Route::post('ventas/gastronomia-crown/api/abrir-cuenta', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiAbrirCuenta')->name('gastronomia_crown_api_abrir_cuenta');
+Route::get('ventas/gastronomia-crown/api/cuenta/{id}', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiCuentaVer')->name('gastronomia_crown_api_cuenta_ver');
+Route::post('ventas/gastronomia-crown/api/cuenta/{id}/linea', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiAgregarLinea')->name('gastronomia_crown_api_agregar_linea');
+Route::post('ventas/gastronomia-crown/api/cuenta/{cuentaId}/linea/{lineaId}/marcar', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiMarcarLinea')->name('gastronomia_crown_api_marcar_linea');
+Route::post('ventas/gastronomia-crown/api/cuenta/{cuentaId}/linea/{lineaId}/observacion', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiObservacionLinea')->name('gastronomia_crown_api_obs_linea');
+Route::post('ventas/gastronomia-crown/api/cuenta/{cuentaId}/linea/{lineaId}/void', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiVoidLinea')->name('gastronomia_crown_api_void_linea');
+Route::post('ventas/gastronomia-crown/api/cuenta/{id}/separador', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiSeparador')->name('gastronomia_crown_api_separador');
+Route::post('ventas/gastronomia-crown/api/cuenta/{id}/anular', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiAnularCuenta')->name('gastronomia_crown_api_anular');
+Route::post('ventas/gastronomia-crown/api/cuenta/{id}/marcha', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiMarcha')->name('gastronomia_crown_api_marcha');
+Route::post('ventas/gastronomia-crown/api/cuenta/{id}/obs-mesa', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiObsMesa')->name('gastronomia_crown_api_obs_mesa');
+Route::get('ventas/gastronomia-crown/api/articulo', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiArticulo')->name('gastronomia_crown_api_articulo');
+Route::post('ventas/gastronomia-crown/api/cuenta/{id}/descuento', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiDescuento')->name('gastronomia_crown_api_descuento');
+Route::post('ventas/gastronomia-crown/api/cuenta/{id}/cliente', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiCliente')->name('gastronomia_crown_api_cliente');
+Route::post('ventas/gastronomia-crown/api/cuenta/{id}/transferir', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiTransferir')->name('gastronomia_crown_api_transferir');
+Route::post('ventas/gastronomia-crown/api/cuenta/{id}/cobrar', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiCobrar')->name('gastronomia_crown_api_cobrar');
+Route::get('ventas/gastronomia-crown/api/areas-kds', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiAreasKds')->name('gastronomia_crown_api_areas_kds');
+Route::post('ventas/gastronomia-crown/api/cuenta/{cuentaId}/linea/{lineaId}/destino', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiDestinoLinea')->name('gastronomia_crown_api_destino_linea');
+Route::post('ventas/gastronomia-crown/api/cuenta/{id}/lista-precio', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiListaPrecio')->name('gastronomia_crown_api_lista_precio');
+Route::get('ventas/gastronomia-crown/api/opcionales-articulo/{articuloId}', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiOpcionalesArticulo')->name('gastronomia_crown_api_opcionales_articulo');
+Route::post('ventas/gastronomia-crown/api/cuenta/{cuentaId}/linea/{lineaId}/opcionales', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiOpcionalesLinea')->name('gastronomia_crown_api_opcionales_linea');
+Route::get('ventas/gastronomia-crown/api/articulo/{articuloId}/receta', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiRecetaArticulo')->name('gastronomia_crown_api_receta_articulo');
+
+// KDS visual por sala (cocina)
+Route::get('ventas/gastronomia-crown/kds', 'Ventas\GastronomiaCrown\GastronomiaCrownKdsController@index')->name('gastronomia_crown_kds');
+Route::get('ventas/gastronomia-crown/kds/api/estado', 'Ventas\GastronomiaCrown\GastronomiaCrownKdsController@apiEstado')->name('gastronomia_crown_kds_api_estado');
+Route::post('ventas/gastronomia-crown/kds/api/comanda/{comandaId}/estado', 'Ventas\GastronomiaCrown\GastronomiaCrownKdsController@apiCambiarEstado')->name('gastronomia_crown_kds_api_cambiar_estado');
+
+// Planos de mesas (ABM con editor gráfico Konva) + estado de planos para el POS
+Route::get('ventas/gastronomia-crown/plano-mesa', 'Ventas\GastronomiaCrown\GastronomiaCrownPlanoMesaController@index')->name('consultar_plano_mesa_gastronomia_crown');
+Route::get('ventas/gastronomia-crown/plano-mesa/crear', 'Ventas\GastronomiaCrown\GastronomiaCrownPlanoMesaController@crear')->name('crear_plano_mesa_gastronomia_crown');
+Route::get('ventas/gastronomia-crown/listaplanomesa/{formato?}/{busqueda?}', 'Ventas\GastronomiaCrown\GastronomiaCrownPlanoMesaController@listar')->name('lista_plano_mesa_gastronomia_crown');
+Route::post('ventas/gastronomia-crown/plano-mesa', 'Ventas\GastronomiaCrown\GastronomiaCrownPlanoMesaController@guardar')->name('guardar_plano_mesa_gastronomia_crown');
+Route::get('ventas/gastronomia-crown/plano-mesa/api/mesas-sala', 'Ventas\GastronomiaCrown\GastronomiaCrownPlanoMesaController@apiMesasSala')->name('gastronomia_crown_plano_api_mesas_sala');
+Route::get('ventas/gastronomia-crown/plano-mesa/{id}/editar', 'Ventas\GastronomiaCrown\GastronomiaCrownPlanoMesaController@editar')->name('editar_plano_mesa_gastronomia_crown');
+Route::put('ventas/gastronomia-crown/plano-mesa/{id}', 'Ventas\GastronomiaCrown\GastronomiaCrownPlanoMesaController@actualizar')->name('actualizar_plano_mesa_gastronomia_crown');
+Route::delete('ventas/gastronomia-crown/plano-mesa/{id}', 'Ventas\GastronomiaCrown\GastronomiaCrownPlanoMesaController@eliminar')->name('eliminar_plano_mesa_gastronomia_crown');
+Route::post('ventas/gastronomia-crown/plano-mesa/{id}/layout', 'Ventas\GastronomiaCrown\GastronomiaCrownPlanoMesaController@apiGuardarLayout')->name('gastronomia_crown_plano_api_guardar_layout');
+Route::get('ventas/gastronomia-crown/api/planos-estado', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiPlanosEstado')->name('gastronomia_crown_api_planos_estado');
+
+// Cierre X por mozo → rendición de tesorería (Crown)
+Route::get('ventas/gastronomia-crown/cierre-x', 'Ventas\GastronomiaCrown\GastronomiaCrownCierreXController@index')->name('gastronomia_crown_cierre_x');
+Route::post('ventas/gastronomia-crown/cierre-x/rendicion', 'Ventas\GastronomiaCrown\GastronomiaCrownCierreXController@crearRendicion')->name('gastronomia_crown_cierre_x_crear_rendicion');
+
 Route::get('ventas/gastronomia/api/config', 'Ventas\GastronomiaProcesoFacturacionController@apiConfig')->name('gastronomia_api_config');
 Route::get('ventas/gastronomia/api/turno-estado', 'Ventas\GastronomiaProcesoFacturacionController@apiTurnoEstado')->name('gastronomia_api_turno_estado');
 Route::post('ventas/gastronomia/api/cierre-parcial-turno', 'Ventas\GastronomiaProcesoFacturacionController@apiCierreParcialTurno')->name('gastronomia_api_cierre_parcial_turno');
@@ -3496,6 +3588,7 @@ Route::get('caja/leertipotransaccion_caja/{id}', 'Caja\Tipotransaccion_CajaContr
  */
 
 Route::get('caja/caja', 'Caja\CajaController@index')->name('consulta_caja');
+Route::get('caja/listacaja/{formato?}/{busqueda?}', 'Caja\CajaController@listar')->name('lista_caja');
 Route::get('caja/caja/crear', 'Caja\CajaController@crear')->name('crea_caja');
 Route::post('caja/caja', 'Caja\CajaController@guardar')->name('guarda_caja');
 Route::get('caja/caja/{id}/editar', 'Caja\CajaController@editar')->name('edita_caja');

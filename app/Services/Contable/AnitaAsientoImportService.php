@@ -2002,28 +2002,28 @@ final class AnitaAsientoImportService
             $total['tipos_faltantes'][$abr] = ($total['tipos_faltantes'][$abr] ?? 0) + (int) $cant;
         }
 
-        $total['documentos_linea_detalle'] = array_merge(
-            $total['documentos_linea_detalle'] ?? [],
-            $bloque['documentos_linea_detalle'] ?? [],
-        );
-        $total['pendientes_crear'] = array_merge(
-            $total['pendientes_crear'] ?? [],
-            $bloque['pendientes_crear'] ?? [],
-        );
-        $total['pendientes_reemplazar'] = array_merge(
-            $total['pendientes_reemplazar'] ?? [],
-            $bloque['pendientes_reemplazar'] ?? [],
-        );
-        $total['duplicados_detalle'] = array_merge(
-            $total['duplicados_detalle'] ?? [],
-            $bloque['duplicados_detalle'] ?? [],
-        );
-        $total['resumen_sin_detalle_detalle'] = array_merge(
-            $total['resumen_sin_detalle_detalle'] ?? [],
-            $bloque['resumen_sin_detalle_detalle'] ?? [],
-        );
+        // Muestras acotadas: en rangos largos (Crown ~70k filas/mes) acumular todos
+        // los pendientes_crear agota la memoria del dry-run.
+        $this->mergeMuestraAcotada($total, 'documentos_linea_detalle', $bloque['documentos_linea_detalle'] ?? [], 40);
+        $this->mergeMuestraAcotada($total, 'pendientes_crear', $bloque['pendientes_crear'] ?? [], 50);
+        $this->mergeMuestraAcotada($total, 'pendientes_reemplazar', $bloque['pendientes_reemplazar'] ?? [], 50);
+        $this->mergeMuestraAcotada($total, 'duplicados_detalle', $bloque['duplicados_detalle'] ?? [], 50);
+        $this->mergeMuestraAcotada($total, 'resumen_sin_detalle_detalle', $bloque['resumen_sin_detalle_detalle'] ?? [], 80);
         $total['errores'] = array_merge($total['errores'] ?? [], $bloque['errores'] ?? []);
         $total['timings'] = array_merge($total['timings'] ?? [], $bloque['timings'] ?? []);
+    }
+
+    /**
+     * @param  array<string, mixed>  $total
+     * @param  list<mixed>  $nuevos
+     */
+    private function mergeMuestraAcotada(array &$total, string $clave, array $nuevos, int $max): void
+    {
+        $actual = $total[$clave] ?? [];
+        if (count($actual) >= $max) {
+            return;
+        }
+        $total[$clave] = array_slice(array_merge($actual, $nuevos), 0, $max);
     }
 
     private function log(?callable $logger, string $mensaje): void

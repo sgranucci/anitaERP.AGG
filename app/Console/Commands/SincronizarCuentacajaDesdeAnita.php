@@ -58,7 +58,11 @@ class SincronizarCuentacajaDesdeAnita extends Command
     {
         $this->warn('DRY-RUN: no se graba nada. Maestro Anita: tesmae (tesmov es movimiento, no el catálogo).');
 
-        $campos = 'tesm_cuenta, tesm_desc, tesm_nro_cbu, tesm_codigo_banco, tesm_cta_contable, tesm_cod_mon';
+        // Crown tesmae no tiene tesm_nro_cbu; AGG/Ferli sí (o vía tesmcbu).
+        $esCrown = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown();
+        $campos = $esCrown
+            ? 'tesm_cuenta, tesm_desc, tesm_codigo_banco, tesm_cta_contable, tesm_cod_mon, tesm_tipo_cuenta'
+            : 'tesm_cuenta, tesm_desc, tesm_nro_cbu, tesm_codigo_banco, tesm_cta_contable, tesm_cod_mon';
         $data = [
             'acc' => 'list',
             'sistema' => 'che_ban',
@@ -66,7 +70,10 @@ class SincronizarCuentacajaDesdeAnita extends Command
             'campos' => $campos,
         ];
         if ($codigo !== null && $codigo !== '') {
-            $key = str_pad(ltrim($codigo, '0'), 8, '0', STR_PAD_LEFT);
+            $codigo = trim($codigo);
+            $key = preg_match('/^\d+$/', $codigo) === 1
+                ? str_pad(ltrim($codigo, '0') === '' ? '0' : ltrim($codigo, '0'), 8, '0', STR_PAD_LEFT)
+                : substr(str_pad($codigo, 8, ' ', STR_PAD_RIGHT), 0, 8);
             $data['whereArmado'] = " WHERE tesm_cuenta = '".$key."' ";
         }
 
@@ -85,19 +92,30 @@ class SincronizarCuentacajaDesdeAnita extends Command
         }
 
         $locales = Cuentacaja::query()->pluck('codigo')->all();
-        $localesNorm = array_map(static fn ($c) => ltrim((string) $c, '0'), $locales);
+        $localesNorm = array_map(static function ($c) {
+            $c = trim((string) $c);
+            if (preg_match('/^\d+$/', $c) === 1) {
+                $s = ltrim($c, '0');
+
+                return $s === '' ? '0' : $s;
+            }
+
+            return $c;
+        }, $locales);
 
         $aCrear = [];
         $omitidas = 0;
         $conCbu = 0;
         foreach ($filas as $fila) {
-            $codigoAnita = (string) ($fila->tesm_cuenta ?? '');
-            $codigoLocal = ltrim($codigoAnita, '0');
+            $codigoAnita = trim((string) ($fila->tesm_cuenta ?? ''));
+            $codigoLocal = preg_match('/^\d+$/', $codigoAnita) === 1
+                ? (ltrim($codigoAnita, '0') === '' ? '0' : ltrim($codigoAnita, '0'))
+                : $codigoAnita;
             $cbu = trim((string) ($fila->tesm_nro_cbu ?? ''));
             $row = [
                 $codigoAnita,
                 (string) ($fila->tesm_desc ?? ''),
-                $cbu,
+                $esCrown ? (string) ($fila->tesm_tipo_cuenta ?? '') : $cbu,
                 (string) ($fila->tesm_codigo_banco ?? ''),
                 (string) ($fila->tesm_cta_contable ?? ''),
                 (string) ($fila->tesm_cod_mon ?? ''),
@@ -112,7 +130,8 @@ class SincronizarCuentacajaDesdeAnita extends Command
             $aCrear[] = $row;
         }
 
-        $this->info('En tesmae: '.count($filas).'; a crear en ERP: '.count($aCrear).'; ya en ERP: '.$omitidas.'; de las nuevas con CBU: '.$conCbu.'.');
+        $this->info('En tesmae: '.count($filas).'; a crear en ERP: '.count($aCrear).'; ya en ERP: '.$omitidas
+            .($esCrown ? '' : '; de las nuevas con CBU: '.$conCbu).'.');
 
         if ($aCrear === []) {
             $this->info('Nada para importar.');
@@ -121,7 +140,7 @@ class SincronizarCuentacajaDesdeAnita extends Command
         }
 
         $this->table(
-            ['tesm_cuenta', 'tesm_desc', 'CBU', 'banco', 'cta_contable', 'mon'],
+            ['tesm_cuenta', 'tesm_desc', $esCrown ? 'tipo' : 'CBU', 'banco', 'cta_contable', 'mon'],
             $aCrear
         );
 

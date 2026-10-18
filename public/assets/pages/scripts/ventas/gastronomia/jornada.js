@@ -18,7 +18,9 @@
     var cierreTotemHabilitado = app.getAttribute('data-cierre-totem-habilitado') === '1';
     var jornadaAbierta = app.getAttribute('data-jornada-abierta') === '1';
 
+    var esCrown = app.getAttribute('data-es-crown') === '1';
     var selectEmpresa = document.getElementById('empresa_id');
+    var selectSala = document.getElementById('sala_id');
     var btnAbrir = document.getElementById('btn-abrir-jornada');
     var btnCerrar = document.getElementById('btn-cerrar-jornada');
     var btnCerrarHtmlOriginal = btnCerrar ? btnCerrar.innerHTML : '';
@@ -34,7 +36,46 @@
         return fromCfg > 0 ? fromCfg : 0;
     }
 
+    // Crown abre jornada por empresa + sala; AGG no tiene selector de sala.
+    function salaId() {
+        if (!esCrown) {
+            return 0;
+        }
+        var fromSelect = selectSala ? parseInt(selectSala.value, 10) || 0 : 0;
+        if (fromSelect > 0) {
+            return fromSelect;
+        }
+        var fromCfg = window.JORNADA_GASTRONOMIA && parseInt(window.JORNADA_GASTRONOMIA.salaId, 10);
+        return fromCfg > 0 ? fromCfg : 0;
+    }
+
+    function conSala(body) {
+        var sid = salaId();
+        if (sid > 0) {
+            body.sala_id = sid;
+        }
+        return body;
+    }
+
+    function queryStringSala() {
+        var sid = salaId();
+        return sid > 0 ? '?sala_id=' + sid : '';
+    }
+
     var waitryPreviewCargaEnCurso = false;
+
+    if (selectSala) {
+        selectSala.addEventListener('change', function () {
+            var form = document.getElementById('form-empresa-jornada');
+            if (form) {
+                form.submit();
+                return;
+            }
+            var url = new URL(window.location.href);
+            url.searchParams.set('sala_id', String(selectSala.value || ''));
+            window.location.href = url.toString();
+        });
+    }
 
     if (selectEmpresa) {
         selectEmpresa.addEventListener('change', function () {
@@ -54,7 +95,7 @@
         if (!base) {
             return '';
         }
-        return base.replace('__EMPRESA_ID__', String(empresaIdParam));
+        return base.replace('__EMPRESA_ID__', String(empresaIdParam)) + queryStringSala();
     }
 
     function formatearMonto(n) {
@@ -1302,11 +1343,11 @@
 
             btnAbrir.disabled = true;
 
-            postJson(apiAbrir, {
+            postJson(apiAbrir, conSala({
                 empresa_id: empresaId(),
                 fecha_jornada: fechaInput ? fechaInput.value : '',
                 observacion: obsInput ? obsInput.value : '',
-            }).then(function (res) {
+            })).then(function (res) {
                 if (res.ok && res.data.ok) {
                     alertar(res.data.mensaje || 'Jornada abierta.', false);
                     window.location.reload();
@@ -1389,10 +1430,10 @@
             var obsInput = document.getElementById('observacion_cerrar');
             mostrarCierreJornadaEnProgreso(true);
 
-            var bodyCerrar = {
+            var bodyCerrar = conSala({
                 empresa_id: empresaId(),
                 observacion: obsInput ? obsInput.value : '',
-            };
+            });
             var informeZTotems = recolectarInformeZPreviewParaCierre();
             if (informeZTotems) {
                 bodyCerrar.informe_z_totems = informeZTotems;

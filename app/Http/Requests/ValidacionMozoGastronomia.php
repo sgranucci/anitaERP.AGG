@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -18,7 +19,7 @@ class ValidacionMozoGastronomia extends FormRequest
         $empresaId = (int) $this->input('empresa_id');
         $esAlta = ! $id;
 
-        return [
+        $rules = [
             'nombre' => 'required|max:255',
             'codigo' => [
                 'nullable',
@@ -30,6 +31,14 @@ class ValidacionMozoGastronomia extends FormRequest
             'empresa_id' => 'required|exists:empresa,id',
             'clave' => ($esAlta ? 'required' : 'nullable').'|string|min:4|max:60',
         ];
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            $rules['sala_id'] = 'required|exists:sala,id';
+        } else {
+            $rules['sala_id'] = 'nullable|exists:sala,id';
+        }
+
+        return $rules;
     }
 
     public function messages()
@@ -37,6 +46,7 @@ class ValidacionMozoGastronomia extends FormRequest
         return [
             'codigo.unique' => 'El código ya está en uso para esta empresa.',
             'clave.required' => 'Indique la clave POS para el facturador de canjes marketing.',
+            'sala_id.required' => 'Debe seleccionar la sala.',
         ];
     }
 }

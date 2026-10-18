@@ -5,12 +5,14 @@ namespace App\Models\Sueldos;
 use App\Support\Sueldos\SiradigTablas;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Dato adicional de una presentación F572 (DatoAdicionalType, Tabla 11).
  */
-class Siradig_Dato_Adicional_Sueldos extends Model
+class Siradig_Dato_Adicional_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'siradig_dato_adicional_sueldos';
 
     protected $fillable = [

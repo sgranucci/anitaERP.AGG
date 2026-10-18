@@ -4,9 +4,11 @@ namespace App\Models\Uif;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class UifConciliacionWigosTito extends Model
+class UifConciliacionWigosTito extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'uif_conciliacion_wigos_tito';
 
     protected $fillable = [

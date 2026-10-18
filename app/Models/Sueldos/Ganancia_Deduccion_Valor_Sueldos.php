@@ -3,9 +3,11 @@
 namespace App\Models\Sueldos;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Ganancia_Deduccion_Valor_Sueldos extends Model
+class Ganancia_Deduccion_Valor_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'ganancia_deduccion_valor_sueldos';
 
     protected $fillable = [

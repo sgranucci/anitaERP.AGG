@@ -50,6 +50,8 @@ class RendicionGastronomiaCajaService
                 'turnoOperativo.turno:id,nombre',
                 'turnoOperativo.jornada:id,fecha_jornada',
                 'jornada:id,fecha_jornada,estado',
+                'mozo:id,codigo,nombre',
+                'sala:id,codigo,nombre',
                 'jornada.cierreTotem:id,jornada_gastronomia_id',
                 'cierreTotemJornada:id,jornada_gastronomia_id',
                 'creousuario:id,nombre',
@@ -667,6 +669,8 @@ class RendicionGastronomiaCajaService
                 'jornada.usuarioCierre',
                 'jornada.cierreTotem',
                 'cierreTotemJornada',
+                'mozo',
+                'sala',
                 'movimientos.cuentacaja',
                 'creousuario',
             ])
@@ -686,7 +690,9 @@ class RendicionGastronomiaCajaService
 
         $totalesTurno = null;
         $totalesDia = null;
-        if ($data->esRendicionJornada()) {
+        if ($data->esRendicionCierreX()) {
+            // Cierre X: los totales son los de la cabecera (total X por mozo).
+        } elseif ($data->esRendicionJornada()) {
             try {
                 $datosJornada = $this->datosDesdeJornada((int) $data->jornada_gastronomia_id, $id);
                 $totalesDia = $datosJornada['totales_dia'] ?? null;
@@ -747,10 +753,11 @@ class RendicionGastronomiaCajaService
             $totalesDia = null;
         }
 
-        $fechaJornadaStr = $esJornada
+        $fechasDesdeJornada = $esJornada || $esCierreX;
+        $fechaJornadaStr = $fechasDesdeJornada
             ? ($jornada?->fecha_jornada?->format('d/m/Y') ?? '')
             : ($turno?->jornada?->fecha_jornada?->format('d/m/Y') ?? '');
-        $fechaJornadaIso = $esJornada
+        $fechaJornadaIso = $fechasDesdeJornada
             ? ($jornada?->fecha_jornada?->format('Y-m-d') ?? '')
             : ($turno?->jornada?->fecha_jornada?->format('Y-m-d') ?? '');
         $fechaRegistroCaja = $r->fecharendicion;
@@ -759,30 +766,52 @@ class RendicionGastronomiaCajaService
             && $fechaJornadaIso === $fechaRegistroCaja->format('Y-m-d');
         $obsHabilitacion = GastronomiaTurnoObservacionHabilitacionSupport::parse($turno?->observacion_habilitacion);
 
-        $subtitulo = $esJornada
-            ? 'Ticket '.$r->codigo.' — Jornada #'.$r->jornada_gastronomia_id
-                .' · Waitry hasta '.((int) $r->waitry_order_id_hasta > 0 ? (string) $r->waitry_order_id_hasta : '—')
-            : 'Ticket '.$r->codigo.' — Turno operativo #'.$r->turno_operativo_gastronomia_id;
+        $esCierreX = $r->esRendicionCierreX();
+        if ($esCierreX) {
+            $r->loadMissing(['mozo', 'sala', 'jornada']);
+            $subtitulo = 'Ticket '.$r->codigo.' — Cierre X jornada #'.$r->jornada_gastronomia_id
+                .' · Mozo '.($r->mozo?->nombre ?? '#'.$r->mozo_gastronomia_id)
+                .($r->sala?->nombre !== null ? ' · Sala '.$r->sala->nombre : '');
+        } elseif ($esJornada) {
+            $subtitulo = 'Ticket '.$r->codigo.' — Jornada #'.$r->jornada_gastronomia_id
+                .' · Waitry hasta '.((int) $r->waitry_order_id_hasta > 0 ? (string) $r->waitry_order_id_hasta : '—');
+        } else {
+            $subtitulo = 'Ticket '.$r->codigo.' — Turno operativo #'.$r->turno_operativo_gastronomia_id;
+        }
 
         return [
             'tipo' => 'rendicion',
-            'tipo_rendicion' => $esJornada ? RendicionGastronomiaCaja::TIPO_JORNADA : RendicionGastronomiaCaja::TIPO_TURNO,
-            'titulo' => $esJornada ? 'Rendición gastronomía — jornada (caja)' : 'Rendición gastronomía — caja',
+            'tipo_rendicion' => match (true) {
+                $esCierreX => RendicionGastronomiaCaja::TIPO_CIERRE_X,
+                $esJornada => RendicionGastronomiaCaja::TIPO_JORNADA,
+                default => RendicionGastronomiaCaja::TIPO_TURNO,
+            },
+            'titulo' => match (true) {
+                $esCierreX => 'Rendición gastronomía — cierre X por mozo (caja)',
+                $esJornada => 'Rendición gastronomía — jornada (caja)',
+                default => 'Rendición gastronomía — caja',
+            },
             'subtitulo' => $subtitulo,
             'logo' => EmpresaLogoArchivo::dataUriDesdeNombre($empresaNombre),
             'empresa_nombre' => $empresaNombre,
-            'identificador_pc' => $esJornada ? 'Todas las terminales' : (string) ($turno?->identificador_pc ?? ''),
-            'turno_catalogo' => $esJornada ? 'Cierre de jornada' : (string) ($turno?->turno?->nombre ?? ''),
+            'identificador_pc' => $esJornada || $esCierreX
+                ? 'Todas las terminales'
+                : (string) ($turno?->identificador_pc ?? ''),
+            'turno_catalogo' => match (true) {
+                $esCierreX => 'Cierre X — '.($r->mozo?->nombre ?? 'mozo #'.$r->mozo_gastronomia_id),
+                $esJornada => 'Cierre de jornada',
+                default => (string) ($turno?->turno?->nombre ?? ''),
+            },
             'turno_horario' => $esJornada ? '' : ($turno?->turno?->etiquetaHorario() ?? ''),
             'fecha_jornada' => $fechaJornadaStr,
             'fecha_jornada_iso' => $fechaJornadaIso,
             'fecha_registro_caja' => $fechaRegistroCaja?->format('d/m/Y H:i') ?? '',
             'fecha_registro_caja_solo_fecha' => $fechaRegistroCaja?->format('d/m/Y') ?? '',
             'fechas_mismo_dia' => $fechasMismoDia,
-            'habilitacion_en' => $esJornada
+            'habilitacion_en' => $fechasDesdeJornada
                 ? ($jornada?->apertura_en?->format('d/m/Y H:i') ?? '')
                 : ($turno?->habilitacion_en?->format('d/m/Y H:i') ?? ''),
-            'cierre_en' => $esJornada
+            'cierre_en' => $fechasDesdeJornada
                 ? ($jornada?->cierre_en?->format('d/m/Y H:i') ?? '')
                 : ($turno?->cierre_en?->format('d/m/Y H:i') ?? ''),
             'usuario_habilita' => (string) ($turno?->usuarioHabilitacion?->nombre ?? ''),
@@ -903,6 +932,10 @@ class RendicionGastronomiaCajaService
                 return $this->guardarRendicionJornada($cabecera, $movimientos);
             }
 
+            if ($tipo === RendicionGastronomiaCaja::TIPO_CIERRE_X) {
+                return $this->guardarRendicionCierreX($cabecera, $movimientos);
+            }
+
             $turnoId = (int) ($cabecera['turno_operativo_gastronomia_id'] ?? 0);
             if ($turnoId <= 0) {
                 throw new InvalidArgumentException('Debe seleccionar un cierre de turno.');
@@ -988,6 +1021,57 @@ class RendicionGastronomiaCajaService
     }
 
     /**
+     * Cierre X (Crown): una rendición por mozo de la jornada de la sala. Es presentación ERP
+     * (no se sincroniza a rendgastro) igual que la rendición por jornada.
+     *
+     * @param  array<string, mixed>  $cabecera
+     * @param  list<array{cuentacaja_id:int, monto:float, cotizacion:float}>  $movimientos
+     */
+    private function guardarRendicionCierreX(array $cabecera, array $movimientos): RendicionGastronomiaCaja
+    {
+        $jornadaId = (int) ($cabecera['jornada_gastronomia_id'] ?? 0);
+        $mozoId = (int) ($cabecera['mozo_gastronomia_id'] ?? 0);
+
+        if ($jornadaId <= 0) {
+            throw new InvalidArgumentException('Debe indicar la jornada del cierre X.');
+        }
+        if ($mozoId <= 0) {
+            throw new InvalidArgumentException('Debe indicar el mozo del cierre X.');
+        }
+        if ($this->cierreXYaRendido($jornadaId, $mozoId)) {
+            throw new InvalidArgumentException(
+                'El mozo ya tiene una rendición de cierre X para la jornada #'.$jornadaId.'.'
+            );
+        }
+
+        $cabecera['tipo'] = RendicionGastronomiaCaja::TIPO_CIERRE_X;
+        $cabecera['turno_operativo_gastronomia_id'] = null;
+        $cabecera['nro_oper_anita'] = null;
+        $cabecera['fuente_nro_oper'] = null;
+        $cabecera['anita_sincronizado_en'] = null;
+        $cabecera['creousuario_id'] = (int) Auth::id();
+
+        $rendicion = RendicionGastronomiaCaja::create($cabecera);
+        $this->persistirMovimientos($rendicion, $movimientos);
+
+        return $rendicion->fresh(['movimientos.cuentacaja', 'jornada', 'mozo', 'sala']);
+    }
+
+    public function cierreXYaRendido(int $jornadaId, int $mozoId, ?int $exceptoRendicionId = null): bool
+    {
+        if ($jornadaId <= 0 || $mozoId <= 0) {
+            return false;
+        }
+
+        return RendicionGastronomiaCaja::query()
+            ->where('tipo', RendicionGastronomiaCaja::TIPO_CIERRE_X)
+            ->where('jornada_gastronomia_id', $jornadaId)
+            ->where('mozo_gastronomia_id', $mozoId)
+            ->when($exceptoRendicionId, fn ($q) => $q->where('id', '!=', $exceptoRendicionId))
+            ->exists();
+    }
+
+    /**
      * @param  array<string, mixed>  $cabecera
      * @param  list<array{cuentacaja_id:int, monto:float, cotizacion:float}>  $movimientos
      */
@@ -1012,6 +1096,20 @@ class RendicionGastronomiaCajaService
                 $cabecera['waitry_order_id_hasta'] = (int) ($marcadores['waitry_order_id_hasta'] ?? 0);
                 $cabecera['cierre_totem_jornada_gastronomia_id'] = $marcadores['cierre_totem_jornada_gastronomia_id'] ?? null;
                 $cabecera['numeracion_comprobantes_json'] = $marcadores['numeracion_comprobantes_json'] ?? null;
+                $cabecera['turno_operativo_gastronomia_id'] = null;
+            } elseif ($tipo === RendicionGastronomiaCaja::TIPO_CIERRE_X) {
+                $jornadaId = (int) ($cabecera['jornada_gastronomia_id'] ?? $rendicion->jornada_gastronomia_id ?? 0);
+                $mozoId = (int) ($cabecera['mozo_gastronomia_id'] ?? $rendicion->mozo_gastronomia_id ?? 0);
+                if ($jornadaId <= 0 || $mozoId <= 0) {
+                    throw new InvalidArgumentException('El cierre X necesita jornada y mozo.');
+                }
+                if ($this->cierreXYaRendido($jornadaId, $mozoId, $id)) {
+                    throw new InvalidArgumentException(
+                        'Otra rendición ya cubre el mozo en la jornada #'.$jornadaId.'.'
+                    );
+                }
+                $cabecera['jornada_gastronomia_id'] = $jornadaId;
+                $cabecera['mozo_gastronomia_id'] = $mozoId;
                 $cabecera['turno_operativo_gastronomia_id'] = null;
             } else {
                 $this->exigirRendicionTurnoModificablePorTurnoId(
@@ -1044,7 +1142,7 @@ class RendicionGastronomiaCajaService
                 DB::afterCommit(function () use ($jornadaId) {
                     $this->anitaSyncService->reaplicarTotalZPorPcEnJornada($jornadaId);
                 });
-            } else {
+            } elseif ($tipo !== RendicionGastronomiaCaja::TIPO_CIERRE_X) {
                 $this->encolarSincronizacionAnitaTrasCommit($rendicion->id);
             }
 
@@ -1066,7 +1164,7 @@ class RendicionGastronomiaCajaService
             );
             $esPresentacionJornada = $rendicion->esRendicionJornada();
 
-            if (! $esPresentacionJornada) {
+            if (! $esPresentacionJornada && ! $rendicion->esRendicionCierreX()) {
                 $this->exigirRendicionTurnoModificablePorTurnoId(
                     (int) ($rendicion->turno_operativo_gastronomia_id ?? 0),
                 );
@@ -1202,6 +1300,12 @@ class RendicionGastronomiaCajaService
             if (! empty($validated['informe_z_totems']) && is_array($validated['informe_z_totems'])) {
                 $cabecera['informe_z_totems'] = $validated['informe_z_totems'];
             }
+        } elseif ($tipo === RendicionGastronomiaCaja::TIPO_CIERRE_X) {
+            $cabecera['jornada_gastronomia_id'] = (int) ($validated['jornada_gastronomia_id'] ?? 0);
+            $cabecera['turno_operativo_gastronomia_id'] = null;
+            $cabecera['sala_id'] = (int) ($validated['sala_id'] ?? 0) ?: null;
+            $cabecera['mozo_gastronomia_id'] = (int) ($validated['mozo_gastronomia_id'] ?? 0) ?: null;
+            $cabecera['total_x'] = round((float) ($validated['total_x'] ?? 0), 2);
         } else {
             $cabecera['turno_operativo_gastronomia_id'] = (int) ($validated['turno_operativo_gastronomia_id'] ?? 0);
             $cabecera['jornada_gastronomia_id'] = null;

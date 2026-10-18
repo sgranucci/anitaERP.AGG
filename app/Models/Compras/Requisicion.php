@@ -7,6 +7,7 @@ use OwenIt\Auditing\Contracts\Auditable;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
 use App\Models\Configuracion\Oficinacompra;
+use App\Models\Configuracion\Sala;
 use App\Models\Contable\Centrocosto;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\Formapago;
@@ -18,7 +19,7 @@ class Requisicion extends Model implements Auditable
     use RequisicionTrait;
 
     protected $fillable = [
-        'fecha', 'fechaentrega', 'empresa_id', 'numerorequisicion', 'centrocosto_id', 'centrocostodestino_arbol_id', 'comentario', 'detalle', 
+        'fecha', 'fechaentrega', 'empresa_id', 'sala_id', 'numerorequisicion', 'centrocosto_id', 'centrocostodestino_arbol_id', 'comentario', 'detalle',
         'tratamiento', 'motivotratamiento', 'contrataciondirecta', 'proveedor_id', 'formapago_id',
         'estado', 'creousuario_id', 'oficinacompra_id',
         'anita_sync_estado', 'anita_sync_error', 'anita_sync_at',
@@ -49,6 +50,11 @@ class Requisicion extends Model implements Auditable
     public function empresas()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function salas()
+    {
+        return $this->belongsTo(Sala::class, 'sala_id');
     }
 
     public function centrocostos()

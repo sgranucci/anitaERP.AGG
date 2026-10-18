@@ -1,6 +1,7 @@
 @php
     $mostrarIngresos = !empty($mostrar_solapa_ingresos);
     $cantTickets = ($tickets_ingreso ?? collect())->count();
+    $mostrarSalasCrown = !empty($mostrar_solapa_salas);
 @endphp
 <div class="text-center py-2 border-bottom rounded-top bg-white">
     <button type="button" id="botonform1" class="btn btn-primary btn-sm mx-1 prov-tab-solapa font-weight-bold">
@@ -12,6 +13,11 @@
     <button type="button" id="botonform3" class="btn btn-info btn-sm mx-1 prov-tab-solapa">
         <span class="fa fa-truck"></span> Formas de pago
     </button>
+    @if ($mostrarSalasCrown)
+        <button type="button" id="botonform9" class="btn btn-info btn-sm mx-1 prov-tab-solapa">
+            <span class="fa fa-building"></span> Salas
+        </button>
+    @endif
     <button type="button" id="botonform4" class="btn btn-info btn-sm mx-1 prov-tab-solapa">
         <span class="fa fa-comment"></span> Leyendas
     </button>

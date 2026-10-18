@@ -9,11 +9,13 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Caja\Conceptogasto;
 use App\Traits\Contable\AjustamonedaextranjeraTrait;
 use Auth;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Cuentacontable extends Model
+class Cuentacontable extends Model implements Auditable
 {
     use AjustamonedaextranjeraTrait;
 
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['empresa_id', 'rubrocontable_id', 'parent_id', 'nivel',
                             'nombre', 'codigo', 'tipocuenta', 'monetaria', 'manejaccosto',
                             'usuarioultcambio_id', 'ajustamonedaextranjera', 'conceptogasto_id',

@@ -296,10 +296,45 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
 
     /**
      * Lista cabeceras Anita `venta` por rango de ven_fecha (YYYYMMDD).
+     * Trocea por mes: rangos largos (p.ej. año) el bridge puede devolver vacío.
      *
      * @return list<array<string, mixed>>
      */
     public function listarVentaPorRangoFecha(int $desdeYmd, int $hastaYmd): array
+    {
+        if ($desdeYmd <= 0 || $hastaYmd <= 0 || $desdeYmd > $hastaYmd) {
+            return [];
+        }
+
+        $desde = \Carbon\Carbon::createFromFormat('Ymd', sprintf('%08d', $desdeYmd))->startOfDay();
+        $hasta = \Carbon\Carbon::createFromFormat('Ymd', sprintf('%08d', $hastaYmd))->startOfDay();
+        if (! $desde || ! $hasta) {
+            return [];
+        }
+
+        // Mismo mes: una sola lectura.
+        if ($desde->format('Ym') === $hasta->format('Ym')) {
+            return $this->listarVentaPorRangoFechaUnaPasada($desdeYmd, $hastaYmd);
+        }
+
+        $out = [];
+        $cursor = $desde->copy()->startOfMonth();
+        while ($cursor->lte($hasta)) {
+            $mesDesde = max((int) $cursor->format('Ymd'), $desdeYmd);
+            $mesHasta = min((int) $cursor->copy()->endOfMonth()->format('Ymd'), $hastaYmd);
+            foreach ($this->listarVentaPorRangoFechaUnaPasada($mesDesde, $mesHasta) as $fila) {
+                $out[] = $fila;
+            }
+            $cursor->addMonthNoOverflow()->startOfMonth();
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function listarVentaPorRangoFechaUnaPasada(int $desdeYmd, int $hastaYmd): array
     {
         $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
         $campos = implode(',', [
@@ -364,6 +399,46 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
                 (int) ($fila['venc_sucursal'] ?? 0),
                 (int) ($fila['venc_nro'] ?? 0),
             );
+            $out[$clave] = $fila;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Una sola lectura de vencae y filtro en memoria por claves de venta.
+     * Preferible a indexarVencaePorClaves cuando el rango tiene miles de docs
+     * y vencae es chico (caso Crown / CAE escaso).
+     *
+     * @param  list<string>  $clavesDocumento
+     * @return array<string, array<string, mixed>>
+     */
+    public function indexarVencaeBulkFiltrado(array $clavesDocumento): array
+    {
+        $clavesDocumento = array_values(array_unique(array_filter($clavesDocumento)));
+        if ($clavesDocumento === []) {
+            return [];
+        }
+        $permitidas = array_fill_keys($clavesDocumento, true);
+        $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $filas = $this->listar(
+            'vencae',
+            'venc_tipo,venc_letra,venc_sucursal,venc_nro,venc_nro_cae,venc_fecha_vto',
+            ' WHERE venc_nro > 0 ',
+            'venc_tipo, venc_sucursal, venc_nro',
+            $perfil
+        );
+        $out = [];
+        foreach ($filas as $fila) {
+            $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveDocumento(
+                (string) ($fila['venc_tipo'] ?? ''),
+                (string) ($fila['venc_letra'] ?? ''),
+                (int) ($fila['venc_sucursal'] ?? 0),
+                (int) ($fila['venc_nro'] ?? 0),
+            );
+            if (! isset($permitidas[$clave])) {
+                continue;
+            }
             $out[$clave] = $fila;
         }
 

@@ -5,9 +5,11 @@ namespace App\Models\Ticket;
 use App\Models\Contable\Centrocosto;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Ticket_Configuracion_Centrocosto extends Model
+class Ticket_Configuracion_Centrocosto extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'ticket_configuracion_centrocosto';
 
     protected $fillable = [

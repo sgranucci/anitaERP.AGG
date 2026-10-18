@@ -5,12 +5,14 @@ namespace App\Models\Stock;
 use App\ApiAnita;
 use App\Support\Stock\InterformingSifabSupport;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Maestro Anita ubicacion (sistema ventas) — INTERFORMING.
  */
-class Ubicacion extends Model
+class Ubicacion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_ACTIVA = ' ';
 
     public const ESTADO_INACTIVA = 'I';

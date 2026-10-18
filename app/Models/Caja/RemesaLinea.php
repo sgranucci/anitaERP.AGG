@@ -6,9 +6,11 @@ namespace App\Models\Caja;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class RemesaLinea extends Model
+class RemesaLinea extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'remesa_linea';
 
     protected $fillable = [

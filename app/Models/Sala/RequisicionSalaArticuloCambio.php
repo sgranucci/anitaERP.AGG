@@ -6,9 +6,11 @@ use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Articulo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class RequisicionSalaArticuloCambio extends Model
+class RequisicionSalaArticuloCambio extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'requisicion_sala_articulo_cambio';
 
     protected $fillable = [

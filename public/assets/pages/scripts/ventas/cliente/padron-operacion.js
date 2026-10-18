@@ -349,6 +349,17 @@
         }
     };
 
+    window.notificarAvisoPadronCliente = function (message) {
+        if (!message) {
+            return;
+        }
+        if (window.toastr) {
+            toastr.warning(message, 'Padr\u00f3n ARCA', { timeOut: 12000, closeButton: true, progressBar: true });
+        } else {
+            alert(message);
+        }
+    };
+
     window.ejecutarValidacionPadronOperacion = function (clienteId, opts) {
         opts = opts || {};
         var id = parseInt(clienteId, 10);
@@ -416,12 +427,20 @@
         actualizarBotonesFacturaSegunPadron();
 
         return window.validarPadronClienteOperacion(id, opts)
-            .done(function () {
+            .done(function (json) {
                 estadoPadron.clienteId = id;
                 estadoPadron.ok = true;
                 estadoPadron.mensaje = null;
                 aplicarBloqueoCargaVentas(false);
-                actualizarAvisoPadronOperacion('', null);
+                var aviso = json && json.aviso ? String(json.aviso) : '';
+                if (aviso) {
+                    actualizarAvisoPadronOperacion(aviso, 'aviso');
+                    if (postCarga) {
+                        window.notificarAvisoPadronCliente(aviso);
+                    }
+                } else {
+                    actualizarAvisoPadronOperacion('', null);
+                }
                 actualizarBotonesFacturaSegunPadron();
             })
             .fail(function (xhr) {

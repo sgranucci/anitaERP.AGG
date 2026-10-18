@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Log;
  * Calzados Ferli (verificado 14/sep/2026 contra bridge /usr2/ferli):
  * - ctamov sin ctav_o_compra ni ctav_usuario_umod
  * - subdiario/subhist sin columna empresa usable (igual El Bierzo) ni *_usuario
+ * Crown (verificado 17/oct/2026): mismo esquema reducido que Ferli en ctamov/subdiario/subhist.
  * AGG conserva las listas completas.
  */
 final class AnitaAsientoImportBridgeReader
@@ -143,18 +144,26 @@ final class AnitaAsientoImportBridgeReader
 
     private function ctamovCampos(): string
     {
-        return EntornoEmpresaSupport::esFerli()
+        return $this->esquemaCtamovReducido()
             ? self::CTAMOV_CAMPOS_FERLI
             : self::CTAMOV_CAMPOS;
     }
 
+    /** Ferli / Crown: sin ctav_o_compra ni ctav_usuario_umod. */
+    private function esquemaCtamovReducido(): bool
+    {
+        return EntornoEmpresaSupport::esFerli()
+            || EntornoEmpresaSupport::esCrown();
+    }
+
     /**
-     * Ferli / El Bierzo: UNLOAD/WHERE sobre subd_empresa (y subh_empresa) no es usable.
+     * Ferli / El Bierzo / Crown: UNLOAD/WHERE sobre subd_empresa (y subh_empresa) no es usable.
      */
     private function subdiarioUsaColumnaEmpresa(): bool
     {
         return ! EntornoEmpresaSupport::esElBierzo()
-            && ! EntornoEmpresaSupport::esFerli();
+            && ! EntornoEmpresaSupport::esFerli()
+            && ! EntornoEmpresaSupport::esCrown();
     }
 
     /**

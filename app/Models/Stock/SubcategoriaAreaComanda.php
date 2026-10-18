@@ -4,9 +4,11 @@ namespace App\Models\Stock;
 
 use App\Models\Ventas\AreaComandaGastronomia;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class SubcategoriaAreaComanda extends Model
+class SubcategoriaAreaComanda extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'subcategoria_area_comanda';
 
     protected $fillable = ['subcategoria_id', 'area_comanda_gastronomia_id'];

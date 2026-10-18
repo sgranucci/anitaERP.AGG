@@ -3,9 +3,11 @@
 namespace App\Models\Compras;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Ordencompra_Articulo_Entrega extends Model
+class Ordencompra_Articulo_Entrega extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'ordencompra_articulo_entrega';
 
     protected $fillable = [

@@ -2,6 +2,11 @@
 
 namespace App\Models\Compras;
 
+use App\Models\Caja\Banco;
+use App\Models\Caja\Mediopago;
+use App\Models\Caja\Tipocuentacaja;
+use App\Models\Configuracion\Moneda;
+use App\Models\Ventas\Formapago;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 

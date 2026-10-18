@@ -7,9 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Subcategoria extends Model
+class Subcategoria extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'codigo'];
     protected $table = 'subcategoria';
     protected $keyField = 'subc_id';

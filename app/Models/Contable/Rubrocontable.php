@@ -7,9 +7,11 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
 use App\Models\Contable\cuentacontable;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Rubrocontable extends Model
+class Rubrocontable extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre'];
     protected $table = 'rubrocontable';
 

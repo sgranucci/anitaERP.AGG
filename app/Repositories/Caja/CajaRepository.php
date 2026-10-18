@@ -3,61 +3,84 @@
 namespace App\Repositories\Caja;
 
 use App\Models\Caja\Caja;
+use App\Support\Caja\CajaListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Auth;
 
 class CajaRepository implements CajaRepositoryInterface
 {
     protected $model;
 
-    /**
-     * PostRepository constructor.
-     *
-     * @param Post $post
-     */
-    public function __construct(Caja $caja
-                                )
+    public function __construct(Caja $caja)
     {
         $this->model = $caja;
     }
 
     public function all($estado = null)
     {
-        $caja = $this->model;
+        return $this->leeCaja(CajaListadoFiltros::filtrosVacios(), false);
+    }
 
-        if ($estado)
-            $caja = $caja->wherein('estado', $estado);
-        
-        return $caja->get();
+    /**
+     * {@inheritdoc}
+     */
+    public function leeCaja($filtros, ?bool $flPaginando = null)
+    {
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = array_merge(CajaListadoFiltros::filtrosVacios(), [
+                'modo' => CajaListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'busqueda' => $texto,
+                'sala_scope' => 'todas',
+            ]);
+        } elseif (! is_array($filtros)) {
+            $filtros = CajaListadoFiltros::filtrosVacios();
+        }
+
+        $query = $this->model->newQuery()
+            ->select('caja.*')
+            ->leftJoin('sala', 'sala.id', '=', 'caja.sala_id')
+            ->with('sala');
+
+        CajaListadoFiltros::aplicar($query, $filtros);
+
+        $query
+            ->orderByRaw('caja.sala_id is null')
+            ->orderBy('caja.sala_id')
+            ->orderByRaw('CAST(IFNULL(caja.codigo, \'0\') AS UNSIGNED), caja.codigo')
+            ->orderBy('caja.nombre');
+
+        if ($flPaginando === true) {
+            return $query->paginate(10);
+        }
+
+        return $query->get();
     }
 
     public function create(array $data)
     {
-        $caja = $this->model->create($data);
-
-        return($caja);
+        return $this->model->create($data);
     }
 
     public function update(array $data, $id)
     {
-        $caja = $this->model->findOrFail($id)->update($data);
-
-		return $caja;
+        return $this->model->findOrFail($id)->update($data);
     }
 
     public function delete($id)
     {
-    	$caja = $this->model->find($id);
+        $this->model->find($id);
 
-        $caja = $this->model->destroy($id);
-
-		return $caja;
+        return $this->model->destroy($id);
     }
 
     public function find($id)
     {
-        if (null == $caja = $this->model->find($id)) {
-            throw new ModelNotFoundException("Registro no encontrado");
+        $caja = $this->model->with('sala')->find($id);
+        if ($caja === null) {
+            throw new ModelNotFoundException('Registro no encontrado');
         }
 
         return $caja;
@@ -65,11 +88,6 @@ class CajaRepository implements CajaRepositoryInterface
 
     public function findOrFail($id)
     {
-        if (null == $caja = $this->model->findOrFail($id)) {
-            throw new ModelNotFoundException("Registro no encontrado");
-        }
-
-        return $caja;
+        return $this->model->with('sala')->findOrFail($id);
     }
-
 }

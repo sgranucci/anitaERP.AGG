@@ -3,6 +3,7 @@
 namespace App\Models\Ventas;
 
 use App\Models\Configuracion\Empresa;
+use App\Models\Configuracion\Salida;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -10,12 +11,17 @@ class AreaComandaGastronomia extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
 
-    protected $fillable = ['nombre', 'codigo', 'empresa_id'];
+    protected $fillable = ['nombre', 'codigo', 'empresa_id', 'salida_id'];
 
     protected $table = 'area_comanda_gastronomia';
 
     public function empresa()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function salida()
+    {
+        return $this->belongsTo(Salida::class, 'salida_id');
     }
 }

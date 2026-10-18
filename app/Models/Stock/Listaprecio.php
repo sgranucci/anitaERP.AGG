@@ -10,9 +10,11 @@ use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Tiponumeracion;
 use Carbon\Carbon;
 use Auth;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Listaprecio extends Model
+class Listaprecio extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'formula', 'incluyeimpuesto', 'codigo', 'desdetalle', 'hastatalle', 
                             'tiponumeracion_id', 'usuarioultcambio_id'];
     protected $table = 'listaprecio';

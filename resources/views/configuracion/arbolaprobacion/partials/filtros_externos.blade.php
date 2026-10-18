@@ -22,7 +22,7 @@
     };
 @endphp
 <div class="anita-arbol-empresa-filter">
-    @if (($empresa_query ?? collect())->count() > 1)
+    @if (\App\Support\Configuracion\EmpresaFiltroExternoSupport::mostrarChips())
     <div class="d-flex flex-wrap align-items-center mb-2">
         <span class="text-muted small mr-2 mb-1"><i class="fa fa-building"></i> Empresa</span>
         <div class="btn-group btn-group-sm flex-wrap mb-1" role="group" aria-label="Filtro de empresa">

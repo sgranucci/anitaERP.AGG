@@ -829,6 +829,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Compras\Proveedor_SalaRepositoryInterface',
+            'App\Repositories\Compras\Proveedor_SalaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Compras\Proveedor_ServicioRepositoryInterface',
             'App\Repositories\Compras\Proveedor_ServicioRepository',
         );

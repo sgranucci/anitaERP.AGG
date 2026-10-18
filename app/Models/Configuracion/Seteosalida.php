@@ -5,9 +5,11 @@ namespace App\Models\Configuracion;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Seteosalida extends Model
+class Seteosalida extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['usuario_id', 'salida_id', 'programa', 'disparar_al_grabar'];
 
     protected $casts = [

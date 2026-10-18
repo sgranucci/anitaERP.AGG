@@ -13,7 +13,9 @@ use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportBridgeReader;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportClaveSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportVentaMatchSupport;
+use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Importa cabeceras Anita `venta` (+ CAE de vencae + desglose IVA) → ERP `venta`.
@@ -250,6 +252,8 @@ class VentaDeudaImportarDesdeAnitaService
      * Importa comprobantes Anita del rango (ven_fecha) que falten en ERP.
      *
      * @param  list<string>|null  $tipos  null = TIPOS_IVA_VENTAS
+     * @param  bool  $vencaeBulk  true = una sola lectura de vencae (recomendado en rangos grandes / Crown)
+     * @param  bool  $commitPorFila  true = sin transacción global (Crown: un unique no revierte el mes)
      * @return array<string, mixed>
      */
     public function importarPorRangoFecha(
@@ -259,6 +263,8 @@ class VentaDeudaImportarDesdeAnitaService
         int $usuarioId = 1,
         ?array $tipos = null,
         string $leyenda = self::LEYENDA_IVA,
+        bool $vencaeBulk = false,
+        bool $commitPorFila = false,
     ): array {
         $desdeYmd = ClienteCuentacorrienteAnitaImportClaveSupport::fechaAnitaDesdeIso($desdeIso);
         $hastaYmd = ClienteCuentacorrienteAnitaImportClaveSupport::fechaAnitaDesdeIso($hastaIso);
@@ -290,9 +296,11 @@ class VentaDeudaImportarDesdeAnitaService
             $anita[$clave] = $fila;
         }
         $stats['anita_venta'] = count($anita);
-        $vencae = $this->reader->indexarVencaePorClaves(array_keys($anita));
+        $vencae = $vencaeBulk
+            ? $this->reader->indexarVencaeBulkFiltrado(array_keys($anita))
+            : $this->reader->indexarVencaePorClaves(array_keys($anita));
 
-        return $this->procesarFilasAnita($anita, $vencae, $dryRun, $usuarioId, $leyenda, $stats);
+        return $this->procesarFilasAnita($anita, $vencae, $dryRun, $usuarioId, $leyenda, $stats, $commitPorFila);
     }
 
     /**
@@ -376,6 +384,7 @@ class VentaDeudaImportarDesdeAnitaService
         int $usuarioId,
         string $leyenda,
         array $stats,
+        bool $commitPorFila = false,
     ): array {
         $clavesMatch = [];
         foreach (array_keys($anita) as $clave) {
@@ -409,21 +418,44 @@ class VentaDeudaImportarDesdeAnitaService
         }
 
         $stats['a_crear'] = count($plan);
+        $stats['omitidas_unique'] = $stats['omitidas_unique'] ?? 0;
         $stats['muestra'] = array_map(static fn (array $p) => $p['resumen'], array_slice($plan, 0, 25));
 
         if ($dryRun) {
             return $stats;
         }
 
-        return DB::transaction(function () use ($plan, $stats, $usuarioId) {
+        $persistirLote = function () use ($plan, &$stats, $usuarioId, $commitPorFila) {
             foreach ($plan as $item) {
-                $this->persistir($item, $usuarioId);
-                $stats['creadas']++;
+                try {
+                    $this->persistir($item, $usuarioId);
+                    $stats['creadas']++;
+                } catch (Throwable $e) {
+                    if ($commitPorFila && $this->esViolacionUnicidadVenta($e)) {
+                        $stats['omitidas_unique']++;
+                        $stats['ya_en_erp']++;
+
+                        continue;
+                    }
+                    throw $e;
+                }
             }
             $stats['modo'] = 'ejecutar';
 
             return $stats;
-        });
+        };
+
+        return $commitPorFila ? $persistirLote() : DB::transaction($persistirLote);
+    }
+
+    private function esViolacionUnicidadVenta(Throwable $e): bool
+    {
+        $msg = $e->getMessage();
+
+        return str_contains($msg, 'venta_codigo_afip_puntoventa_numerocomprobante_unique')
+            || str_contains($msg, '1062')
+            || str_contains($msg, 'Duplicate entry')
+            || str_contains($msg, 'UNIQUE constraint');
     }
 
     /**
@@ -436,6 +468,7 @@ class VentaDeudaImportarDesdeAnitaService
             'anita_rango' => 0,
             'anita_venta' => 0,
             'omitidas_tipo' => 0,
+            'omitidas_unique' => 0,
             'ya_en_erp' => 0,
             'a_crear' => 0,
             'creadas' => 0,
@@ -506,6 +539,18 @@ class VentaDeudaImportarDesdeAnitaService
         $condIvaAnita = (int) ($fila['ven_cond_iva_cli'] ?? 0);
         $condicionivaId = $this->mapCondicionIvaAnita($condIvaAnita) ?? ($cliente->condicioniva_id ?? null);
 
+        // AFIP efectivo por tipo+letra (FAC B=6, FAC A=1). No usar solo tipotransaccion.codigo.
+        $codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipDesdeAnitaTipoLetra($tipo, $letra);
+        if ($codigoAfip <= 0) {
+            $codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipParaEmision(
+                (string) ($tipoModel?->codigo ?? '0'),
+                $letra
+            );
+        }
+        if ($codigoAfip <= 0) {
+            $codigoAfip = (int) preg_replace('/\D+/', '', (string) ($tipoModel?->codigo ?? '0'));
+        }
+
         return [
             'estado' => 'ok',
             'fila_anita' => $fila,
@@ -515,7 +560,7 @@ class VentaDeudaImportarDesdeAnitaService
                 'tipotransaccion_id' => $tipoId,
                 'puntoventa_id' => $pvId,
                 'numerocomprobante' => $nro,
-                'codigo_afip' => $tipoModel?->codigo,
+                'codigo_afip' => $codigoAfip > 0 ? $codigoAfip : null,
                 'cliente_id' => $clienteId,
                 'condicionventa_id' => $this->resolverCondicionventaId((int) ($fila['ven_cond_venta'] ?? 0)),
                 'vendedor_id' => $this->resolverVendedorId((string) ($fila['ven_vendedor'] ?? '')),
@@ -683,6 +728,14 @@ class VentaDeudaImportarDesdeAnitaService
             return $this->clienteCfId;
         }
         $id = Cliente::query()->where('codigo', '0')->value('id');
+        if ($id) {
+            return $this->clienteCfId = (int) $id;
+        }
+        // Crown (y otros): CF puede vivir con otro código (ej. 1007) y nombre CONSUMIDOR FINAL.
+        $id = Cliente::query()
+            ->where('nombre', 'like', 'CONSUMIDOR FINAL%')
+            ->orderBy('id')
+            ->value('id');
         if ($id) {
             return $this->clienteCfId = (int) $id;
         }

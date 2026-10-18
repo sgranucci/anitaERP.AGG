@@ -16,7 +16,9 @@ use App\Support\Compras\AnitaSync\AnitaUsuarioBridgeSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaWhereSupport;
 use App\Support\Compras\AnitaSync\Requisicion\RequisicionAnitaAprobcompMapper;
+use App\Support\Compras\AnitaSync\Requisicion\RequisicionAnitaEsquemaSupport;
 use App\Support\Compras\AnitaSync\Requisicion\RequisicionAnitaEstadoMapper;
+use App\Support\Compras\AnitaSync\Requisicion\RequisicionSalaAnitaSupport;
 use App\Support\Compras\RequisicionAnitaSyncEstado;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use Carbon\Carbon;
@@ -46,9 +48,17 @@ class RequisicionImportarFaltantesDesdeAnitaService
      */
     /**
      * @param  list<int>|null  $numerosOcAnita  Si se informa, solo esas OC se reescriben en Anita.
+     * @param  int|null  $desdeYmd  Si se informa, prevalece sobre $anio (Ymd inclusive).
+     * @param  int|null  $hastaYmd  Default fin de $anio o hoy si hay rango libre.
      */
-    public function ejecutar(int $anio, int $usuarioId, bool $dryRun = false, ?array $numerosOcAnita = null): array
-    {
+    public function ejecutar(
+        int $anio,
+        int $usuarioId,
+        bool $dryRun = false,
+        ?array $numerosOcAnita = null,
+        ?int $desdeYmd = null,
+        ?int $hastaYmd = null
+    ): array {
         $stats = [
             'anita_cabeceras' => 0,
             'anita_lineas' => 0,
@@ -65,10 +75,18 @@ class RequisicionImportarFaltantesDesdeAnitaService
             'errores_oc' => [],
             'lecturas_bridge' => 0,
             'escrituras_bridge' => 0,
+            'desde_ymd' => 0,
+            'hasta_ymd' => 0,
         ];
 
-        $desdeYmd = $anio * 10000 + 101;
-        $hastaYmd = $anio * 10000 + 1231;
+        if ($desdeYmd === null || $desdeYmd <= 0) {
+            $desdeYmd = $anio * 10000 + 101;
+        }
+        if ($hastaYmd === null || $hastaYmd <= 0) {
+            $hastaYmd = $anio * 10000 + 1231;
+        }
+        $stats['desde_ymd'] = $desdeYmd;
+        $stats['hasta_ymd'] = $hastaYmd;
         $lote = $this->leerLoteAnita($desdeYmd, $hastaYmd);
         $stats['lecturas_bridge'] = $lote['lecturas'];
         $stats['anita_cabeceras'] = count($lote['cabeceras']);
@@ -147,24 +165,26 @@ class RequisicionImportarFaltantesDesdeAnitaService
             $stats['lineas_completadas'] = 0;
         }
 
-        $vinculos = $this->vincularOcsSinRequisicion($dryRun);
-        $stats['oc_vinculadas'] = $vinculos['vinculadas'];
-        $stats['errores_oc'] = array_merge($stats['errores_oc'], $vinculos['errores']);
+        if (RequisicionAnitaEsquemaSupport::escribeVinculosOcEnAnita()) {
+            $vinculos = $this->vincularOcsSinRequisicion($dryRun);
+            $stats['oc_vinculadas'] = $vinculos['vinculadas'];
+            $stats['errores_oc'] = array_merge($stats['errores_oc'], $vinculos['errores']);
 
-        $paraAnita = $vinculos['para_anita'];
-        if ($numerosOcAnita !== null) {
-            $filtro = array_fill_keys($numerosOcAnita, true);
-            $paraAnita = array_values(array_filter(
-                $paraAnita,
-                static fn (array $par) => isset($filtro[$par['oc']])
-            ));
-        }
+            $paraAnita = $vinculos['para_anita'];
+            if ($numerosOcAnita !== null) {
+                $filtro = array_fill_keys($numerosOcAnita, true);
+                $paraAnita = array_values(array_filter(
+                    $paraAnita,
+                    static fn (array $par) => isset($filtro[$par['oc']])
+                ));
+            }
 
-        if (! $dryRun && $paraAnita !== []) {
-            $escrito = $this->escribirRequisicionEnAnita($paraAnita);
-            $stats['oc_anita'] = $escrito['ok'];
-            $stats['escrituras_bridge'] = $escrito['escrituras'];
-            $stats['errores_oc'] = array_merge($stats['errores_oc'], $escrito['errores']);
+            if (! $dryRun && $paraAnita !== []) {
+                $escrito = $this->escribirRequisicionEnAnita($paraAnita);
+                $stats['oc_anita'] = $escrito['ok'];
+                $stats['escrituras_bridge'] = $escrito['escrituras'];
+                $stats['errores_oc'] = array_merge($stats['errores_oc'], $escrito['errores']);
+            }
         }
 
         return $stats;
@@ -299,7 +319,7 @@ class RequisicionImportarFaltantesDesdeAnitaService
             'acc' => 'list',
             'sistema' => 'compras',
             'tabla' => 'reqmae',
-            'campos' => 'reqm_nro, reqm_fecha, reqm_fecha_ent, reqm_ccosto, reqm_estado, reqm_leyenda, reqm_empresa, reqm_proveedor, reqm_cod_mon, reqm_ccosto_dest, reqm_cond_pago, reqm_es_urgente, reqm_mot_urgencia, reqm_cont_directa, reqm_usuario, reqm_fecha_ing, reqm_hora_ing',
+            'campos' => RequisicionAnitaEsquemaSupport::camposReqmaeLectura(),
             'whereArmado' => ' WHERE reqm_nro IN ('.$in.')',
         ]);
         $this->assertListOk($rawMae, 'reqmae nros');
@@ -315,7 +335,7 @@ class RequisicionImportarFaltantesDesdeAnitaService
             'acc' => 'list',
             'sistema' => 'compras',
             'tabla' => 'reqmov',
-            'campos' => 'reqv_nro, reqv_nro_orden, reqv_articulo, reqv_desc, reqv_cantidad, reqv_precio, reqv_fecha_ent, reqv_ccosto, reqv_cant_unid, reqv_nro_interno, reqv_precio_ori, reqv_motivo_ahorro, reqv_proveedor',
+            'campos' => RequisicionAnitaEsquemaSupport::camposReqmovLectura(),
             'whereArmado' => ' WHERE reqv_nro IN ('.$in.')',
         ]);
         $this->assertListOk($rawMov, 'reqmov nros');
@@ -327,23 +347,27 @@ class RequisicionImportarFaltantesDesdeAnitaService
             }
         }
 
-        $rawRef = $api->apiCall([
-            'acc' => 'list',
-            'sistema' => 'compras',
-            'tabla' => 'reqmref',
-            'campos' => 'reqr_nro_requi, reqr_partida, reqr_proyecto',
-            'whereArmado' => ' WHERE reqr_nro_requi IN ('.$in.')',
-        ]);
-        $this->assertListOk($rawRef, 'reqmref nros');
         $refs = [];
-        foreach (ApiAnita::decodificarListaFilas($rawRef) as $fila) {
-            $nro = (int) ($fila->reqr_nro_requi ?? 0);
-            if ($nro > 0 && ! isset($refs[$nro])) {
-                $refs[$nro] = $fila;
+        if (RequisicionAnitaEsquemaSupport::leeReqmref()) {
+            $rawRef = $api->apiCall([
+                'acc' => 'list',
+                'sistema' => 'compras',
+                'tabla' => 'reqmref',
+                'campos' => 'reqr_nro_requi, reqr_partida, reqr_proyecto',
+                'whereArmado' => ' WHERE reqr_nro_requi IN ('.$in.')',
+            ]);
+            $this->assertListOk($rawRef, 'reqmref nros');
+            foreach (ApiAnita::decodificarListaFilas($rawRef) as $fila) {
+                $nro = (int) ($fila->reqr_nro_requi ?? 0);
+                if ($nro > 0 && ! isset($refs[$nro])) {
+                    $refs[$nro] = $fila;
+                }
             }
         }
 
-        $aprobcomp = $this->leerAprobcompPorNros(array_keys($cabeceras));
+        $aprobcomp = RequisicionAnitaEsquemaSupport::leeAprobcomp()
+            ? $this->leerAprobcompPorNros(array_keys($cabeceras))
+            : [];
 
         return compact('cabeceras', 'lineas', 'refs', 'aprobcomp');
     }
@@ -360,7 +384,7 @@ class RequisicionImportarFaltantesDesdeAnitaService
             'acc' => 'list',
             'sistema' => 'compras',
             'tabla' => 'reqmae',
-            'campos' => 'reqm_nro, reqm_fecha, reqm_fecha_ent, reqm_ccosto, reqm_estado, reqm_leyenda, reqm_empresa, reqm_proveedor, reqm_cod_mon, reqm_ccosto_dest, reqm_cond_pago, reqm_es_urgente, reqm_mot_urgencia, reqm_cont_directa, reqm_usuario, reqm_fecha_ing, reqm_hora_ing',
+            'campos' => RequisicionAnitaEsquemaSupport::camposReqmaeLectura(),
             'whereArmado' => ' WHERE reqm_fecha BETWEEN '.$desdeYmd.' AND '.$hastaYmd,
         ]);
         $lecturas++;
@@ -379,7 +403,7 @@ class RequisicionImportarFaltantesDesdeAnitaService
             'acc' => 'list',
             'sistema' => 'compras',
             'tabla' => 'reqmov',
-            'campos' => 'reqv_nro, reqv_nro_orden, reqv_articulo, reqv_desc, reqv_cantidad, reqv_precio, reqv_fecha_ent, reqv_ccosto, reqv_cant_unid, reqv_nro_interno, reqv_precio_ori, reqv_motivo_ahorro, reqv_proveedor',
+            'campos' => RequisicionAnitaEsquemaSupport::camposReqmovLectura(),
             'whereArmado' => $whereNros,
         ]);
         $lecturas++;
@@ -393,26 +417,31 @@ class RequisicionImportarFaltantesDesdeAnitaService
             }
         }
 
-        $rawRef = $api->apiCall([
-            'acc' => 'list',
-            'sistema' => 'compras',
-            'tabla' => 'reqmref',
-            'campos' => 'reqr_nro_requi, reqr_partida, reqr_proyecto',
-            'whereArmado' => $this->whereNrosEnRangos(array_keys($cabeceras), 'reqr_nro_requi'),
-        ]);
-        $lecturas++;
-        $this->assertListOk($rawRef, 'reqmref');
-
         $refs = [];
-        foreach (ApiAnita::decodificarListaFilas($rawRef) as $fila) {
-            $nro = (int) ($fila->reqr_nro_requi ?? 0);
-            if ($nro > 0 && ! isset($refs[$nro])) {
-                $refs[$nro] = $fila;
+        if (RequisicionAnitaEsquemaSupport::leeReqmref()) {
+            $rawRef = $api->apiCall([
+                'acc' => 'list',
+                'sistema' => 'compras',
+                'tabla' => 'reqmref',
+                'campos' => 'reqr_nro_requi, reqr_partida, reqr_proyecto',
+                'whereArmado' => $this->whereNrosEnRangos(array_keys($cabeceras), 'reqr_nro_requi'),
+            ]);
+            $lecturas++;
+            $this->assertListOk($rawRef, 'reqmref');
+
+            foreach (ApiAnita::decodificarListaFilas($rawRef) as $fila) {
+                $nro = (int) ($fila->reqr_nro_requi ?? 0);
+                if ($nro > 0 && ! isset($refs[$nro])) {
+                    $refs[$nro] = $fila;
+                }
             }
         }
 
-        $aprobcomp = $this->leerAprobcompPorNros(array_keys($cabeceras));
-        $lecturas++;
+        $aprobcomp = [];
+        if (RequisicionAnitaEsquemaSupport::leeAprobcomp()) {
+            $aprobcomp = $this->leerAprobcompPorNros(array_keys($cabeceras));
+            $lecturas++;
+        }
 
         return [
             'cabeceras' => $cabeceras,
@@ -562,7 +591,7 @@ class RequisicionImportarFaltantesDesdeAnitaService
         }
 
         $api = new ApiAnita;
-        $campos = 'reqv_nro, reqv_nro_orden, reqv_articulo, reqv_desc, reqv_cantidad, reqv_precio, reqv_fecha_ent, reqv_ccosto, reqv_cant_unid, reqv_nro_interno, reqv_precio_ori, reqv_motivo_ahorro, reqv_proveedor';
+        $campos = RequisicionAnitaEsquemaSupport::camposReqmovLectura();
         $lecturas = 0;
 
         $prioritarias = array_values(array_intersect($nrosVacios, [231019, 231020, 231057]));
@@ -639,8 +668,7 @@ class RequisicionImportarFaltantesDesdeAnitaService
                 continue;
             }
             $ref = $lote['refs'][$nro] ?? null;
-            $monAnita = trim((string) ($cab->reqm_cod_mon ?? ''));
-            $monedaId = $monAnita !== '' ? ($mapas['monedas'][$monAnita] ?? null) : null;
+            $monedaId = $this->resolverMonedaId($cab->reqm_cod_mon ?? '', $mapas);
             $ccAnita = (int) ($cab->reqm_ccosto ?? 0);
             $partidaId = $ref ? ($mapas['partidas'][(int) ($ref->reqr_partida ?? 0)] ?? null) : null;
             $capexId = $ref ? ($mapas['capex'][(int) ($ref->reqr_proyecto ?? 0)] ?? null) : null;
@@ -842,13 +870,27 @@ class RequisicionImportarFaltantesDesdeAnitaService
         $nro = (int) $cab->reqm_nro;
         $proveedorCod = ltrim((string) ($cab->reqm_proveedor ?? ''), '0');
         $ccAnita = (int) ($cab->reqm_ccosto ?? 0);
-        $monAnita = trim((string) ($cab->reqm_cod_mon ?? ''));
         $creousuarioId = $this->usuarioErpDesdeAnita($cab, $mapas, $usuarioId);
+        $centrocostoId = $this->resolverCentrocostoId($cab, $lineas, $mapas);
+        if ($centrocostoId === null) {
+            throw new \RuntimeException("centro de costo Anita {$ccAnita} no existe en ERP");
+        }
 
-        DB::transaction(function () use ($cab, $lineas, $ref, $aprobcomp, $mapas, $usuarioId, $nro, $proveedorCod, $ccAnita, $monAnita, $creousuarioId) {
+        $empresaId = (int) ($cab->reqm_empresa ?? 0) ?: 1;
+        $salaId = null;
+        if (RequisicionAnitaEsquemaSupport::esCrown()) {
+            $resuelto = RequisicionSalaAnitaSupport::resolverDesdeNumeroRequisicion($nro, $empresaId);
+            $salaId = $resuelto['sala_id'];
+            $empresaId = $resuelto['empresa_id'];
+        }
+
+        $monedaId = $this->resolverMonedaId($cab->reqm_cod_mon ?? '', $mapas);
+
+        DB::transaction(function () use ($cab, $lineas, $ref, $aprobcomp, $mapas, $usuarioId, $nro, $proveedorCod, $ccAnita, $creousuarioId, $centrocostoId, $empresaId, $salaId, $monedaId) {
             $req = Requisicion::query()->create([
-                'empresa_id' => (int) ($cab->reqm_empresa ?? 0) ?: 1,
-                'centrocosto_id' => $mapas['ccostos'][$ccAnita] ?? null,
+                'empresa_id' => $empresaId,
+                'sala_id' => $salaId,
+                'centrocosto_id' => $centrocostoId,
                 'fecha' => $this->ymdAFecha((string) ($cab->reqm_fecha ?? '')),
                 'fechaentrega' => $this->ymdAFecha((string) ($cab->reqm_fecha_ent ?? $cab->reqm_fecha ?? '')),
                 'numerorequisicion' => $nro,
@@ -867,7 +909,6 @@ class RequisicionImportarFaltantesDesdeAnitaService
                 'anita_sync_at' => now(),
             ]);
 
-            $monedaId = $monAnita !== '' ? ($mapas['monedas'][$monAnita] ?? null) : null;
             $partidaId = $ref ? ($mapas['partidas'][(int) ($ref->reqr_partida ?? 0)] ?? null) : null;
             $capexId = $ref ? ($mapas['capex'][(int) ($ref->reqr_proyecto ?? 0)] ?? null) : null;
 
@@ -913,6 +954,52 @@ class RequisicionImportarFaltantesDesdeAnitaService
         }
 
         return Carbon::createFromFormat('Ymd', substr($ymd, 0, 8))->toDateString();
+    }
+
+    /**
+     * Crown suele traer reqm_cod_mon vacío; moneda_id de línea es NOT NULL → PESOS (codigo 1).
+     *
+     * @param  array<string, mixed>  $mapas
+     */
+    private function resolverMonedaId(mixed $codAnita, array $mapas): int
+    {
+        $cod = trim((string) $codAnita);
+        if ($cod !== '' && isset($mapas['monedas'][$cod])) {
+            return (int) $mapas['monedas'][$cod];
+        }
+
+        if (isset($mapas['monedas']['1'])) {
+            return (int) $mapas['monedas']['1'];
+        }
+
+        $primero = reset($mapas['monedas']);
+
+        return $primero !== false ? (int) $primero : 1;
+    }
+
+    /**
+     * Cabecera → ccosto destino → primera línea con ccosto válido en ERP.
+     *
+     * @param  list<object>  $lineas
+     * @param  array<string, mixed>  $mapas
+     */
+    private function resolverCentrocostoId(object $cab, array $lineas, array $mapas): ?int
+    {
+        $candidatos = [
+            (int) ($cab->reqm_ccosto ?? 0),
+            (int) ($cab->reqm_ccosto_dest ?? 0),
+        ];
+        foreach ($lineas as $linea) {
+            $candidatos[] = (int) ($linea->reqv_ccosto ?? 0);
+        }
+
+        foreach ($candidatos as $codigo) {
+            if ($codigo > 0 && isset($mapas['ccostos'][$codigo])) {
+                return (int) $mapas['ccostos'][$codigo];
+            }
+        }
+
+        return null;
     }
 
     /**

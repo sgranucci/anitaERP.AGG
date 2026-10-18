@@ -1,3 +1,7 @@
+@php
+    use App\Support\Configuracion\EntornoEmpresaSupport;
+    $esCrown = EntornoEmpresaSupport::esCrown();
+@endphp
 <div class="form-group row">
     <label for="nombre" class="col-lg-3 col-form-label requerido">Nombre</label>
     <div class="col-lg-8">
@@ -30,8 +34,19 @@
         <small class="form-text text-muted">Corresponde a mes_codigo en Anita (clave de sincronización).</small>
     </div>
 </div>
-@include('includes.form-empresa-asignada', [
-    'empresa_query' => $empresa_query,
-    'empresa_id' => $data->empresa_id ?? null,
-    'col_input' => 'col-lg-8',
-])
+@if ($esCrown)
+    @include('includes.form-sala-asignada', [
+        'sala_query' => $sala_query ?? [],
+        'sala_id' => $data->sala_id ?? null,
+        'required' => true,
+        'col_input' => 'col-lg-8',
+        'ayuda' => 'En Crown la mesa se asocia a la sala (casino). La empresa se mantiene en segundo plano.',
+    ])
+    <input type="hidden" name="empresa_id" value="{{ old('empresa_id', $data->empresa_id ?? ($empresa_default_id ?? 1)) }}">
+@else
+    @include('includes.form-empresa-asignada', [
+        'empresa_query' => $empresa_query,
+        'empresa_id' => $data->empresa_id ?? null,
+        'col_input' => 'col-lg-8',
+    ])
+@endif

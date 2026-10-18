@@ -6,9 +6,11 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Stock\Depmae;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Configuracion\SalaRepositoryInterface;
 use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Exports\Stock\DepmaeListadoExport;
 use App\Http\Requests\ValidacionDepmae;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\DepmaeListadoFiltros;
@@ -16,12 +18,14 @@ use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\RecepcionProveedorIntercompanySupport;
 use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
+use App\Support\Ventas\GastronomiaSalaSupport;
 
 class DepmaeController extends Controller
 {
     public function __construct(
         private readonly DepmaeRepositoryInterface $depmaeRepository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
+        private readonly SalaRepositoryInterface $salaRepository,
     ) {}
 
     private function puedeConsultarDeposito(): bool
@@ -105,6 +109,7 @@ class DepmaeController extends Controller
 
         $datas = $this->depmaeRepository->leeDepmae($filtros, true);
         $tipodeposito_enum = Depmae::$enumTipoDeposito;
+        $esCrown = EntornoEmpresaSupport::esCrown();
 
         return view('stock.depmae.index', [
             'datas' => $datas,
@@ -112,6 +117,8 @@ class DepmaeController extends Controller
             'filtros' => $filtros,
             'filtrosQuery' => DepmaeListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => DepmaeListadoFiltros::CAMPOS,
+            'esCrown' => $esCrown,
+            'sala_query' => $esCrown ? $this->salaRepository->allFiltrado() : collect(),
         ]);
     }
 
@@ -164,9 +171,18 @@ class DepmaeController extends Controller
         $tipodeposito_enum = Depmae::$enumTipoDeposito;
         $data = new Depmae();
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $esCrown = EntornoEmpresaSupport::esCrown();
+        $sala_query = $esCrown ? $this->salaRepository->allFiltrado() : collect();
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, DepmaeListadoFiltros::class);
 
-        return view('stock.depmae.crear', compact('tipodeposito_enum', 'data', 'empresa_query', 'filtrosQuery'));
+        return view('stock.depmae.crear', compact(
+            'tipodeposito_enum',
+            'data',
+            'empresa_query',
+            'sala_query',
+            'esCrown',
+            'filtrosQuery'
+        ));
     }
 
     /**
@@ -179,7 +195,11 @@ class DepmaeController extends Controller
     {
         can('crear-depositos');
 
-        Depmae::create($request->only(['codigo', 'nombre', 'tipodeposito', 'empresa_id']));
+        $campos = ['codigo', 'nombre', 'tipodeposito', 'empresa_id'];
+        if (EntornoEmpresaSupport::esCrown()) {
+            $campos[] = 'sala_id';
+        }
+        Depmae::create($request->only($campos));
 
         return redirect()->route('depmae', QueryRetornoListado::desdeRequest($request, DepmaeListadoFiltros::class))
             ->with('mensaje', 'Deposito creado con exito');
@@ -206,6 +226,8 @@ class DepmaeController extends Controller
         $data = Depmae::findOrFail($id);
         $tipodeposito_enum = Depmae::$enumTipoDeposito;
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $esCrown = EntornoEmpresaSupport::esCrown();
+        $sala_query = $esCrown ? $this->salaRepository->allFiltrado() : collect();
         $ocultarVolver = $soloConsulta;
         $puedeActualizarDeposito = can('actualizar-depositos', false);
 
@@ -215,6 +237,8 @@ class DepmaeController extends Controller
             'data',
             'tipodeposito_enum',
             'empresa_query',
+            'sala_query',
+            'esCrown',
             'soloConsulta',
             'ocultarVolver',
             'puedeActualizarDeposito',
@@ -262,8 +286,12 @@ class DepmaeController extends Controller
             ->all();
         $empresaId = (int) $request->input('empresa_id', 0);
 
-        $query = Depmae::query()->select('id', 'codigo', 'nombre', 'tipodeposito', 'empresa_id')
-            ->with('empresas:id,nombre');
+        $salaId = (int) $request->input('sala_id', 0);
+        $esCrown = EntornoEmpresaSupport::esCrown();
+        $mostrarSala = $esCrown;
+
+        $query = Depmae::query()->select('id', 'codigo', 'nombre', 'tipodeposito', 'empresa_id', 'sala_id')
+            ->with(['empresas:id,nombre', 'salas:id,codigo,nombre']);
 
         if (! $intercompany) {
             if ($empresaIds !== []) {
@@ -273,6 +301,10 @@ class DepmaeController extends Controller
             } else {
                 $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
             }
+        }
+
+        if ($esCrown) {
+            GastronomiaSalaSupport::aplicarFiltroSiCorresponde($query, $salaId > 0 ? $salaId : null);
         }
 
         if (! $omitirFiltroUsuario) {
@@ -286,11 +318,15 @@ class DepmaeController extends Controller
                     ->orWhere('tipodeposito', 'LIKE', '%'.$consulta.'%')
                     ->orWhereHas('empresas', function ($eq) use ($consulta) {
                         $eq->where('nombre', 'LIKE', '%'.$consulta.'%');
+                    })
+                    ->orWhereHas('salas', function ($sq) use ($consulta) {
+                        $sq->where('codigo', 'LIKE', '%'.$consulta.'%')
+                            ->orWhere('nombre', 'LIKE', '%'.$consulta.'%');
                     });
             });
         }
 
-        if ($intercompany || $empresaIds !== [] || $empresaId > 0) {
+        if ($intercompany || $empresaIds !== [] || $empresaId > 0 || $salaId > 0) {
             $query->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->orderBy('nombre');
         } else {
             $query->orderBy('nombre');
@@ -299,18 +335,30 @@ class DepmaeController extends Controller
         $data = $query->limit(200)->get();
         $puedeAbrirAbmDeposito = can('editar-depositos', false) || can('listar-depositos', false);
         $mostrarEmpresa = MovimientosArticuloDepositoSupport::mostrarEmpresaConsultaDeposito();
-        $colspanVacio = $mostrarEmpresa ? 6 : 5;
+        $colspanVacio = 5 + ($mostrarEmpresa ? 1 : 0) + ($mostrarSala ? 1 : 0);
 
-        $output = ['data' => '', 'mostrar_empresa' => $mostrarEmpresa];
+        $output = [
+            'data' => '',
+            'mostrar_empresa' => $mostrarEmpresa,
+            'mostrar_sala' => $mostrarSala,
+        ];
         if ($data->isEmpty()) {
             $output['data'] = '<tr><td colspan="'.$colspanVacio.'">Sin resultados</td></tr>';
         } else {
             foreach ($data as $row) {
+                $salaEtiqueta = '';
+                if ($row->salas) {
+                    $salaEtiqueta = trim(($row->salas->codigo ?? '').' — '.($row->salas->nombre ?? ''), ' —');
+                }
                 $output['data'] .= '<tr>';
                 $output['data'] .= '<td class="id">'.e($row->id).'</td>';
                 $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
                 $output['data'] .= '<td class="descripcion">'.e($row->nombre).'</td>';
                 $output['data'] .= '<td class="tipodeposito">'.e($row->tipodeposito).'</td>';
+                if ($mostrarSala) {
+                    $output['data'] .= '<td class="sala-nombre">'.e($salaEtiqueta).'</td>';
+                }
+                $output['data'] .= '<td class="sala-id d-none">'.e($row->sala_id ?? '').'</td>';
                 if ($mostrarEmpresa) {
                     $output['data'] .= '<td class="empresa-nombre">'.e(optional($row->empresas)->nombre ?? '').'</td>';
                 }
@@ -345,10 +393,14 @@ class DepmaeController extends Controller
             ->values()
             ->all();
         $empresaId = (int) $request->input('empresa_id', 0);
+        $salaId = (int) $request->input('sala_id', 0);
         $omitirFiltroUsuario = $request->boolean('omitir_filtro_usuario');
         $intercompany = $this->consultaDepositoIntercompany($request);
+        $esCrown = EntornoEmpresaSupport::esCrown();
 
-        $query = Depmae::query()->where('codigo', trim($codigo))->with('empresas:id,nombre');
+        $query = Depmae::query()
+            ->where('codigo', trim($codigo))
+            ->with(['empresas:id,nombre', 'salas:id,codigo,nombre']);
 
         if (! $intercompany) {
             if ($empresaIds !== []) {
@@ -360,15 +412,27 @@ class DepmaeController extends Controller
             }
         }
 
+        if ($esCrown) {
+            GastronomiaSalaSupport::aplicarFiltroSiCorresponde($query, $salaId > 0 ? $salaId : null);
+        }
+
         if (! $omitirFiltroUsuario) {
             UsuarioDepositoAutorizado::aplicarFiltroQuery($query, $intercompany ? null : ($empresaId > 0 ? $empresaId : null));
         }
 
-        $deposito = $query->first();
-
-        if (! $deposito) {
+        $matches = $query->limit(5)->get();
+        if ($matches->isEmpty()) {
             return response()->json(['error' => 'Depósito no encontrado'], 404);
         }
+
+        if ($esCrown && $salaId <= 0 && $matches->count() > 1) {
+            return response()->json([
+                'error' => 'Hay varios depósitos con ese código en distintas salas. Indicá la sala o elegí desde el modal.',
+                'ambiguo' => true,
+            ], 409);
+        }
+
+        $deposito = $matches->first();
 
         return response()->json([
             'id' => $deposito->id,
@@ -377,6 +441,9 @@ class DepmaeController extends Controller
             'tipodeposito' => $deposito->tipodeposito,
             'empresa_id' => $deposito->empresa_id,
             'empresa_nombre' => optional($deposito->empresas)->nombre,
+            'sala_id' => $deposito->sala_id,
+            'sala_nombre' => optional($deposito->salas)->nombre,
+            'sala_codigo' => optional($deposito->salas)->codigo,
         ]);
     }
 
@@ -390,7 +457,11 @@ class DepmaeController extends Controller
     public function actualizar(ValidacionDepmae $request, $id)
     {
         can('actualizar-depositos');
-        Depmae::findOrFail($id)->update($request->only(['codigo', 'nombre', 'tipodeposito', 'empresa_id']));
+        $campos = ['codigo', 'nombre', 'tipodeposito', 'empresa_id'];
+        if (EntornoEmpresaSupport::esCrown()) {
+            $campos[] = 'sala_id';
+        }
+        Depmae::findOrFail($id)->update($request->only($campos));
 
         if ($request->input('origen') === 'modal_consulta') {
             return redirect()

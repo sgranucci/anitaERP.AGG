@@ -5,9 +5,11 @@ namespace App\Models\Compras;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Centrocosto;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Configuracion_ComprobanteProveedorTolerancia extends Model
+class Configuracion_ComprobanteProveedorTolerancia extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'configuracion_comprobante_proveedor_tolerancia';
 
     protected $fillable = [

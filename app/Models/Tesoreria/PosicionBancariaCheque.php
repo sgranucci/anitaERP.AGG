@@ -6,9 +6,11 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class PosicionBancariaCheque extends Model
+class PosicionBancariaCheque extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'posicion_bancaria_cheque';
 
     protected $fillable = [

@@ -4,12 +4,14 @@ namespace App\Models\Sueldos;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Detalle nombre/valor de un concepto F572 (DetalleType).
  */
-class Siradig_Concepto_Detalle_Sueldos extends Model
+class Siradig_Concepto_Detalle_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'siradig_concepto_detalle_sueldos';
 
     protected $fillable = [

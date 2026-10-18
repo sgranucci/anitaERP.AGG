@@ -4,9 +4,11 @@ namespace App\Models\Sueldos;
 
 use App\Models\Stock\Color;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Prenda_Agrupamiento_Sueldos extends Model
+class Prenda_Agrupamiento_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'prenda_agrupamiento_sueldos';
 
     public const SEXOS = [

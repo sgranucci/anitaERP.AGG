@@ -923,4 +923,31 @@ return [
         return $map;
     })(),
 
+    /**
+     * POS Crown (empresa CROWN): emisión fiscal ARCA al cobrar.
+     */
+    'crown' => [
+        /**
+         * false: el cobro solo cierra la cuenta (sin venta ni ARCA). Usar en entornos sin PV electrónico cargado.
+         */
+        'emision_fiscal_habilitada' => filter_var(
+            env('GASTRONOMIA_CROWN_EMISION_FISCAL_HABILITADA', true),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
+
+        /**
+         * Tipos de cobro que además registran cobranza en la cuenta de caja de efectivo de la empresa.
+         * Interna y hotel facturan sin cobranza (consumo interno / cargo a la habitación).
+         */
+        'tipos_cobro_con_cobranza_efectivo' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('GASTRONOMIA_CROWN_TIPOS_COBRO_CON_COBRANZA', 'efectivo,factura_sola')),
+        ))),
+
+        /**
+         * Segundos entre refrescos automáticos de la pantalla KDS por sala (mínimo 3).
+         */
+        'kds_refresco_segundos' => (int) env('GASTRONOMIA_CROWN_KDS_REFRESCO_SEGUNDOS', 5),
+    ],
+
 ];

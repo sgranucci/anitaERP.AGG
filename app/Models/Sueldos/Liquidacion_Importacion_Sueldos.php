@@ -3,12 +3,14 @@
 namespace App\Models\Sueldos;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Bitácora de importación de nómina confidencial (auxconf/auxconfh).
  */
-class Liquidacion_Importacion_Sueldos extends Model
+class Liquidacion_Importacion_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'liquidacion_importacion_sueldos';
 
     protected $fillable = [

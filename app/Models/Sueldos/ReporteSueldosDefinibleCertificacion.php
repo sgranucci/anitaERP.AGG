@@ -5,9 +5,11 @@ namespace App\Models\Sueldos;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ReporteSueldosDefinibleCertificacion extends Model
+class ReporteSueldosDefinibleCertificacion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_CERTIFICADA = 'certificada';
 
     public const ESTADO_REVOCADA = 'revocada';

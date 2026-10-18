@@ -9,10 +9,12 @@ use App\Models\Configuracion\Provincia;
 use App\Models\Configuracion\Condicioniva;
 use App\Models\Stock\Depmae;
 use App\Traits\Ventas\TransporteTrait;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Transporte extends Model
+class Transporte extends Model implements Auditable
 {
     use TransporteTrait;
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'codigo', 'domicilio', 'provincia_id', 'localidad_id', 'codigopostal', 'telefono', 'email', 'nroinscripcion', 'condicioniva_id', 'patentevehiculo', 'patenteacoplado', 'cuit_chofer', 'horarioentrega',
                             'tipoexpreso', 'copiaremito', 'copiapedido', 'deposito_id'];
 

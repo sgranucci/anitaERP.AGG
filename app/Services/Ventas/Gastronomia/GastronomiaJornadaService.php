@@ -8,10 +8,12 @@ use App\Models\Caja\RendicionGastronomiaCaja;
 use App\Services\Caja\RendicionGastronomiaAnitaSyncService;
 use App\Models\Ventas\CierreTotemJornadaGastronomia;
 use App\Models\Ventas\CuentaGastronomia;
+use App\Models\Ventas\GastronomiaCrown\GastroCrownCuenta;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\DbContencionSupport;
 use App\Support\Database\EloquentActualizacionPorLotesSupport;
 use App\Support\Ventas\GastronomiaAutoDescarteVaciasSupport;
@@ -37,21 +39,25 @@ final class GastronomiaJornadaService
     ) {
     }
 
-    public function jornadaAbierta(int $empresaId): ?JornadaGastronomia
+    /**
+     * `$salaId` null = jornada por empresa (AGG). `$salaId > 0` = jornada de esa sala (Crown).
+     */
+    public function jornadaAbierta(int $empresaId, ?int $salaId = null): ?JornadaGastronomia
     {
         if ($empresaId <= 0) {
             return null;
         }
 
-        return $this->jornadaRepository->jornadaAbiertaPorEmpresa($empresaId);
+        return $this->jornadaRepository->jornadaAbiertaPorEmpresa($empresaId, $salaId);
     }
 
-    public function exigirJornadaAbierta(int $empresaId): JornadaGastronomia
+    public function exigirJornadaAbierta(int $empresaId, ?int $salaId = null): JornadaGastronomia
     {
-        $jornada = $this->jornadaAbierta($empresaId);
+        $jornada = $this->jornadaAbierta($empresaId, $salaId);
         if ($jornada === null) {
             throw new InvalidArgumentException(
-                'No hay jornada abierta para esta empresa. Abra la jornada en Ventas → Gastronomía → Jornada.'
+                'No hay jornada abierta para esta '.($salaId > 0 ? 'sala' : 'empresa')
+                .'. Abra la jornada en Ventas → Gastronomía → Jornada.'
             );
         }
 
@@ -61,9 +67,9 @@ final class GastronomiaJornadaService
     /**
      * @return array{fechafactura:string,fechajornada:string,jornada_id:int}
      */
-    public function fechasParaEmision(int $empresaId): array
+    public function fechasParaEmision(int $empresaId, ?int $salaId = null): array
     {
-        $jornada = $this->exigirJornadaAbierta($empresaId);
+        $jornada = $this->exigirJornadaAbierta($empresaId, $salaId);
 
         return [
             'fechafactura' => Carbon::today()->format('Y-m-d'),
@@ -76,9 +82,9 @@ final class GastronomiaJornadaService
      * Vigencia de lista de precios en el POS: fecha de la jornada abierta;
      * si no hay jornada, cae a la fecha calendario de hoy.
      */
-    public function fechaVigenciaListaPrecio(int $empresaId): string
+    public function fechaVigenciaListaPrecio(int $empresaId, ?int $salaId = null): string
     {
-        $jornada = $this->jornadaAbierta($empresaId);
+        $jornada = $this->jornadaAbierta($empresaId, $salaId);
         if ($jornada?->fecha_jornada !== null) {
             return $jornada->fecha_jornada->format('Y-m-d');
         }
@@ -90,9 +96,9 @@ final class GastronomiaJornadaService
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    public function aplicarFechasAlPayload(array $payload, int $empresaId): array
+    public function aplicarFechasAlPayload(array $payload, int $empresaId, ?int $salaId = null): array
     {
-        $fechas = $this->fechasParaEmision($empresaId);
+        $fechas = $this->fechasParaEmision($empresaId, $salaId);
         $payload['fechafactura'] = $fechas['fechafactura'];
         $payload['fechajornada'] = $fechas['fechajornada'];
         $payload['jornada_gastronomia_id'] = $fechas['jornada_id'];
@@ -104,9 +110,9 @@ final class GastronomiaJornadaService
     /**
      * @return array<string, mixed>
      */
-    public function estadoParaEmpresa(int $empresaId): array
+    public function estadoParaEmpresa(int $empresaId, ?int $salaId = null): array
     {
-        $abierta = $this->jornadaAbierta($empresaId);
+        $abierta = $this->jornadaAbierta($empresaId, $salaId);
         $hoy = Carbon::today()->format('Y-m-d');
 
         $cuentasAbiertasConItems = $abierta !== null
@@ -116,7 +122,7 @@ final class GastronomiaJornadaService
             ? $this->contarCuentasAbiertasVaciasPorEmpresa($empresaId)
             : 0;
 
-        $ultimaJornada = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId);
+        $ultimaJornada = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId, $salaId);
         $fechasApertura = $this->fechasSugeridasApertura($ultimaJornada);
         $fechaJornadaMinimaAbrir = $abierta !== null ? null : $fechasApertura['minima'];
         $fechaJornadaSugeridaAbrir = $abierta !== null && $abierta->fecha_jornada !== null
@@ -125,6 +131,8 @@ final class GastronomiaJornadaService
 
         return [
             'empresa_id' => $empresaId,
+            'sala_id' => $salaId !== null && $salaId > 0 ? $salaId : null,
+            'sala_nombre' => $abierta?->sala?->nombre,
             'jornada_abierta' => $abierta !== null,
             'jornada_id' => $abierta?->id,
             'fecha_jornada' => $abierta?->fecha_jornada?->format('Y-m-d'),
@@ -145,7 +153,7 @@ final class GastronomiaJornadaService
                 ? $this->describirJornadaAbierta($abierta)
                 : null,
             'errores_cierre' => $abierta !== null
-                ? $this->erroresAntesDeCerrar($empresaId)
+                ? $this->erroresAntesDeCerrar($empresaId, $salaId)
                 : [],
             'turnos_habilitados' => $abierta !== null
                 ? $this->detalleTurnosHabilitadosJornada($empresaId, $abierta)
@@ -164,7 +172,7 @@ final class GastronomiaJornadaService
     /**
      * Valida reglas de negocio antes de abrir; lanza InvalidArgumentException con detalle.
      */
-    public function validarApertura(int $empresaId, string $fechaJornada): string
+    public function validarApertura(int $empresaId, string $fechaJornada, ?int $salaId = null): string
     {
         if ($empresaId <= 0) {
             throw new InvalidArgumentException(
@@ -189,7 +197,7 @@ final class GastronomiaJornadaService
             );
         }
 
-        $abierta = $this->jornadaAbierta($empresaId);
+        $abierta = $this->jornadaAbierta($empresaId, $salaId);
         if ($abierta !== null) {
             throw new InvalidArgumentException(
                 'No puede abrir la jornada del '.$fechaFmt.': '.$this->describirJornadaAbierta($abierta)
@@ -220,7 +228,7 @@ final class GastronomiaJornadaService
             }
         }
 
-        $ultima = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId);
+        $ultima = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId, $salaId);
         if ($ultima !== null) {
             $ultimaFecha = $ultima->fecha_jornada->format('Y-m-d');
             if ($fecha <= $ultimaFecha) {
@@ -239,9 +247,13 @@ final class GastronomiaJornadaService
         return $fecha;
     }
 
-    public function abrir(int $empresaId, string $fechaJornada, ?string $observacion = null): JornadaGastronomia
-    {
-        $fecha = $this->validarApertura($empresaId, $fechaJornada);
+    public function abrir(
+        int $empresaId,
+        string $fechaJornada,
+        ?string $observacion = null,
+        ?int $salaId = null,
+    ): JornadaGastronomia {
+        $fecha = $this->validarApertura($empresaId, $fechaJornada, $salaId);
 
         if (Auth::id() === null) {
             throw new InvalidArgumentException(
@@ -249,12 +261,15 @@ final class GastronomiaJornadaService
             );
         }
 
+        $salaId = $salaId !== null && $salaId > 0 ? $salaId : null;
+
         try {
-            return DB::transaction(function () use ($empresaId, $fecha, $observacion) {
+            return DB::transaction(function () use ($empresaId, $fecha, $observacion, $salaId) {
                 $existente = JornadaGastronomia::query()
-                    ->with(['usuarioApertura', 'empresa'])
+                    ->with(['usuarioApertura', 'empresa', 'sala'])
                     ->where('empresa_id', $empresaId)
                     ->where('estado', JornadaGastronomia::ESTADO_ABIERTA)
+                    ->when($salaId !== null, fn ($q) => $q->where('sala_id', $salaId))
                     ->lockForUpdate()
                     ->first();
 
@@ -268,6 +283,7 @@ final class GastronomiaJornadaService
 
                 return $this->jornadaRepository->create([
                     'empresa_id' => $empresaId,
+                    'sala_id' => $salaId,
                     'fecha_jornada' => $fecha,
                     'estado' => JornadaGastronomia::ESTADO_ABIERTA,
                     'usuario_apertura_id' => Auth::id(),
@@ -287,11 +303,12 @@ final class GastronomiaJornadaService
         ?string $observacion = null,
         ?array $informeZTotems = null,
         ?array $cierreTotemSnapshot = null,
+        ?int $salaId = null,
     ): JornadaGastronomia
     {
-        $jornada = $this->exigirJornadaAbierta($empresaId);
+        $jornada = $this->exigirJornadaAbierta($empresaId, $salaId);
 
-        $errores = $this->erroresAntesDeCerrar($empresaId);
+        $errores = $this->erroresAntesDeCerrar($empresaId, $salaId);
         if ($errores !== []) {
             throw new InvalidArgumentException(implode(' ', $errores));
         }
@@ -412,9 +429,13 @@ final class GastronomiaJornadaService
      *
      * @return list<string>
      */
-    public function erroresAntesDeCerrar(int $empresaId): array
+    public function erroresAntesDeCerrar(int $empresaId, ?int $salaId = null): array
     {
         $errores = [];
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            return $this->erroresAntesDeCerrarCrown($empresaId, $salaId);
+        }
 
         $cuentasAbiertasConItems = $this->contarCuentasAbiertasConItemsPorEmpresa($empresaId);
 
@@ -438,6 +459,30 @@ final class GastronomiaJornadaService
         }
 
         return $errores;
+    }
+
+    /**
+     * Crown no usa turnos ni `cuenta_gastronomia`: lo que bloquea el cierre son las cuentas
+     * del POS Crown (mesas abiertas o en cobro) de la empresa + sala de la jornada.
+     *
+     * @return list<string>
+     */
+    private function erroresAntesDeCerrarCrown(int $empresaId, ?int $salaId = null): array
+    {
+        $abiertas = GastroCrownCuenta::query()
+            ->where('empresa_id', $empresaId)
+            ->whereIn('estado', [GastroCrownCuenta::ESTADO_ABIERTA, GastroCrownCuenta::ESTADO_COBRANDO])
+            ->when($salaId !== null && $salaId > 0, fn ($q) => $q->where('sala_id', $salaId))
+            ->count();
+
+        if ($abiertas <= 0) {
+            return [];
+        }
+
+        return [
+            'Hay '.$abiertas.' cuenta(s) de mesa abierta(s) o en cobro en el POS. '
+            .'Cóbrelas o anúlelas antes de cerrar la jornada.',
+        ];
     }
 
     /**
@@ -599,7 +644,10 @@ final class GastronomiaJornadaService
         $turnos = $this->contarTurnosOperativosJornada($jornada);
         $ventas = $this->contarVentasGastronomiaJornada($jornada);
         $rendicionCaja = RendicionGastronomiaCaja::query()
-            ->where('tipo', RendicionGastronomiaCaja::TIPO_JORNADA)
+            ->whereIn('tipo', [
+                RendicionGastronomiaCaja::TIPO_JORNADA,
+                RendicionGastronomiaCaja::TIPO_CIERRE_X,
+            ])
             ->where('jornada_gastronomia_id', (int) $jornada->id)
             ->exists();
 
@@ -683,13 +731,13 @@ final class GastronomiaJornadaService
      *
      * @return array<string, mixed>|null
      */
-    public function cierreAnulableParaEmpresa(int $empresaId): ?array
+    public function cierreAnulableParaEmpresa(int $empresaId, ?int $salaId = null): ?array
     {
-        if ($empresaId <= 0 || $this->jornadaAbierta($empresaId) !== null) {
+        if ($empresaId <= 0 || $this->jornadaAbierta($empresaId, $salaId) !== null) {
             return null;
         }
 
-        $ultima = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId);
+        $ultima = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId, $salaId);
         if ($ultima === null || $ultima->estado !== JornadaGastronomia::ESTADO_CERRADA) {
             return null;
         }
@@ -712,12 +760,17 @@ final class GastronomiaJornadaService
             return $errores;
         }
 
-        if ($this->jornadaAbierta((int) $jornada->empresa_id) !== null) {
+        $salaJornada = $jornada->sala_id !== null ? (int) $jornada->sala_id : null;
+
+        if ($this->jornadaAbierta((int) $jornada->empresa_id, $salaJornada) !== null) {
             $errores[] = 'Hay una jornada abierta para esta empresa. No puede anular el cierre mientras exista otra jornada activa.';
         }
 
         if (RendicionGastronomiaCaja::query()
-            ->where('tipo', RendicionGastronomiaCaja::TIPO_JORNADA)
+            ->whereIn('tipo', [
+                RendicionGastronomiaCaja::TIPO_JORNADA,
+                RendicionGastronomiaCaja::TIPO_CIERRE_X,
+            ])
             ->where('jornada_gastronomia_id', (int) $jornada->id)
             ->exists()) {
             $errores[] = 'La jornada tiene una rendición de tesorería en caja. Elimine la rendición antes de anular el cierre.';
@@ -727,7 +780,7 @@ final class GastronomiaJornadaService
             $errores[] = 'Ya existe una jornada posterior para esta empresa. No puede anular este cierre.';
         }
 
-        $ultima = $this->jornadaRepository->ultimaJornadaPorEmpresa((int) $jornada->empresa_id);
+        $ultima = $this->jornadaRepository->ultimaJornadaPorEmpresa((int) $jornada->empresa_id, $salaJornada);
         if ($ultima !== null && (int) $ultima->id !== (int) $jornada->id) {
             $errores[] = 'Solo puede anular el cierre de la última jornada cerrada de la empresa (más reciente: #'.$ultima->id.').';
         }
@@ -783,6 +836,7 @@ final class GastronomiaJornadaService
 
         return JornadaGastronomia::query()
             ->where('empresa_id', $empresaId)
+            ->when($jornada->sala_id !== null, fn ($q) => $q->where('sala_id', (int) $jornada->sala_id))
             ->where('id', '!=', (int) $jornada->id)
             ->where(function ($q) use ($jornada) {
                 $q->whereDate('fecha_jornada', '>', $jornada->fecha_jornada->format('Y-m-d'))
@@ -820,13 +874,13 @@ final class GastronomiaJornadaService
         }
     }
 
-    public function exigirJornadaSiConfigurada(int $empresaId): void
+    public function exigirJornadaSiConfigurada(int $empresaId, ?int $salaId = null): void
     {
         if (! config('gastronomia.jornada_obligatoria', true)) {
             return;
         }
 
-        $this->exigirJornadaAbierta($empresaId);
+        $this->exigirJornadaAbierta($empresaId, $salaId);
     }
 
     public static function mensajeDesdeExcepcion(Throwable $e): string
@@ -909,16 +963,19 @@ final class GastronomiaJornadaService
 
     private function describirJornadaAbierta(JornadaGastronomia $jornada): string
     {
-        $jornada->loadMissing(['usuarioApertura', 'empresa']);
+        $jornada->loadMissing(['usuarioApertura', 'empresa', 'sala']);
 
         $fecha = $jornada->fecha_jornada
             ? $this->formatearFechaHumana($jornada->fecha_jornada->format('Y-m-d'))
             : '(sin fecha)';
         $empresa = $jornada->empresa?->nombre ?? ('empresa #'.$jornada->empresa_id);
+        $sala = $jornada->sala?->nombre;
         $usuario = $jornada->usuarioApertura?->nombre ?? 'usuario desconocido';
         $cuando = $jornada->apertura_en?->format('d/m/Y H:i') ?? 'fecha no registrada';
 
-        return 'ya hay una jornada abierta del '.$fecha.' ('.$empresa.', id '.$jornada->id
+        return 'ya hay una jornada abierta del '.$fecha.' ('.$empresa
+            .($sala !== null && $sala !== '' ? ', sala '.$sala : '')
+            .', id '.$jornada->id
             .', abierta por '.$usuario.' el '.$cuando.').';
     }
 

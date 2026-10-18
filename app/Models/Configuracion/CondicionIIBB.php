@@ -6,11 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Arr;
 use App\Traits\Configuracion\CondicionIIBBTrait;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CondicionIIBB extends Model
+class CondicionIIBB extends Model implements Auditable
 {
 	use CondicionIIBBTrait;
 
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'formacalculo', 'estado'];
     protected $table = 'condicionIIBB';
 

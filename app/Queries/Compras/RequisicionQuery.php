@@ -10,6 +10,7 @@ use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Compras\RequisicionVisibilidadSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -82,6 +83,8 @@ class RequisicionQuery implements RequisicionQueryInterface
             $filtros = RequisicionListadoFiltros::filtrosVacios();
         }
 
+        $esCrown = EntornoEmpresaSupport::esCrown();
+
         $select = [
             'requisicion.id as id',
             'requisicion.fecha as fecha',
@@ -103,6 +106,11 @@ class RequisicionQuery implements RequisicionQueryInterface
             'formapago.nombre as nombreformapago',
         ];
 
+        if ($esCrown && Schema::hasColumn($this->model->getTable(), 'sala_id')) {
+            $select[] = 'sala.codigo as codigosala';
+            $select[] = 'sala.nombre as nombresala';
+        }
+
         if (Schema::hasColumn($this->model->getTable(), 'nroinscripcion')) {
             $select[] = 'requisicion.nroinscripcion as nroinscripcion';
         }
@@ -116,6 +124,10 @@ class RequisicionQuery implements RequisicionQueryInterface
             ->leftJoin('oficinacompra', 'oficinacompra.id', '=', 'requisicion.oficinacompra_id')
             ->leftJoin('formapago', 'formapago.id', '=', 'requisicion.formapago_id')
             ->join('usuario', 'usuario.id', '=', 'requisicion.creousuario_id');
+
+        if ($esCrown && Schema::hasColumn($this->model->getTable(), 'sala_id')) {
+            $q->leftJoin('sala', 'sala.id', '=', 'requisicion.sala_id');
+        }
 
         RequisicionVisibilidadSupport::aplicarFiltroListado($q);
 

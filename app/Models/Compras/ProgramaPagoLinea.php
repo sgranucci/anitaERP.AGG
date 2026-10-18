@@ -5,9 +5,11 @@ namespace App\Models\Compras;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ProgramaPagoLinea extends Model
+class ProgramaPagoLinea extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'programa_pago_linea';
 
     protected $fillable = [

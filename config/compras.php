@@ -73,6 +73,8 @@ return [
     | Default true = AGG (columnas visibles + validación contra presupuesto vigente).
     | El Bierzo: false (no pide ni valida; permite operar sin presupuestos cargados).
     */
+    // Legacy .env (fallback solo si no hay fila en parametro_sistema).
+    // Fuente operativa: Configuración general → oc_pedir_partida_capex (TRUE solo AGG).
     'oc_pedir_partida_capex' => filter_var(env('ORDENCOMPRA_PEDIR_PARTIDA_CAPEX', true), FILTER_VALIDATE_BOOLEAN),
 
     /*

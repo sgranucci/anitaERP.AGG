@@ -4,9 +4,11 @@ namespace App\Models\Sueldos;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ReporteSueldosDefinibleWebhook extends Model
+class ReporteSueldosDefinibleWebhook extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const EVENTO_OK = 'ejecucion.ok';
 
     public const EVENTO_ERROR = 'ejecucion.error';

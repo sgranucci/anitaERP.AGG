@@ -5,9 +5,11 @@ namespace App\Models\Compras;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Precarga_Comprobante_Recepcion_Error extends Model
+class Precarga_Comprobante_Recepcion_Error extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'precarga_comprobante_recepcion_error';
 
     protected $fillable = [

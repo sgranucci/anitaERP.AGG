@@ -193,6 +193,7 @@ $(function () {
             @include('compras.ordencompra.partials.filtros_externos', [
                 'exportRuta' => 'listar_ordencompra',
                 'exportQueryparams' => $filtrosQuery ?? [],
+                'sala_query' => $sala_query ?? collect(),
             ])
 
             <form method="get" action="{{ route('consultar_ordencompra') }}" id="form-filtros-ordencompra" class="mb-0">
@@ -206,7 +207,7 @@ $(function () {
                             <th>Número</th>
                             <th>Solicitante</th>
                             <th>Fecha</th>
-                            <th>Empresa</th>
+                            <th>{{ \App\Support\Configuracion\EntornoEmpresaSupport::esCrown() ? 'Sala' : 'Empresa' }}</th>
                             <th>Centro costo</th>
                             <th>Proveedor</th>
                             <th>Sector</th>
@@ -241,7 +242,13 @@ $(function () {
                                 </td>
                                 <td>{{ $row->nombreusuario ?? '—' }}</td>
                                 <td class="text-nowrap">{{ $row->fecha ? date('d/m/Y', strtotime($row->fecha)) : '—' }}</td>
-                                <td>{{ $row->nombreempresa }}</td>
+                                <td>
+                                    @if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown())
+                                        {{ $row->codigosala ? ($row->codigosala.' — '.($row->nombresala ?? '')) : '—' }}
+                                    @else
+                                        {{ $row->nombreempresa }}
+                                    @endif
+                                </td>
                                 <td>{{ $row->nombrecentrocosto }}</td>
                                 <td class="oc-proveedor">{{ $row->nombreproveedor }}</td>
                                 <td>{{ $row->nombresector ?? '—' }}</td>

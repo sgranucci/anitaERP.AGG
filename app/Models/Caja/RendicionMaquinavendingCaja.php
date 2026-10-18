@@ -10,9 +10,11 @@ use App\Models\Ventas\MaquinavendingRendicion;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class RendicionMaquinavendingCaja extends Model
+class RendicionMaquinavendingCaja extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'rendicion_maquinavending_caja';
 
     protected $fillable = [

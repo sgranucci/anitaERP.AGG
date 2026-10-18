@@ -33,6 +33,9 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
         $rendicionId = (int) ($this->route('id') ?? 0);
         $tipo = (string) $this->input('tipo', RendicionGastronomiaCaja::TIPO_TURNO);
         $esJornada = $tipo === RendicionGastronomiaCaja::TIPO_JORNADA;
+        // Cierre X Crown: una rendición por mozo de la jornada de la sala.
+        $esCierreX = $tipo === RendicionGastronomiaCaja::TIPO_CIERRE_X;
+        $sinTurno = $esJornada || $esCierreX;
 
         $codigoRules = $rendicionId > 0
             ? ['required', 'string', 'max:50']
@@ -40,16 +43,27 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
 
         if ($esJornada) {
             $codigoRules = ['required', 'string', 'max:80'];
+        } elseif ($esCierreX) {
+            $codigoRules = ['required', 'string', 'max:50'];
         }
 
         return [
-            'tipo' => ['required', Rule::in([RendicionGastronomiaCaja::TIPO_TURNO, RendicionGastronomiaCaja::TIPO_JORNADA])],
+            'tipo' => ['required', Rule::in([
+                RendicionGastronomiaCaja::TIPO_TURNO,
+                RendicionGastronomiaCaja::TIPO_JORNADA,
+                RendicionGastronomiaCaja::TIPO_CIERRE_X,
+            ])],
             'codigo' => $codigoRules,
             'empresa_id' => ['required', 'integer', 'exists:empresa,id'],
+            'sala_id' => ['nullable', 'integer', 'exists:sala,id'],
+            'mozo_gastronomia_id' => $esCierreX
+                ? ['required', 'integer', 'exists:mozo_gastronomia,id']
+                : ['nullable', 'integer'],
+            'total_x' => ['nullable', 'numeric'],
             'puntoventa_cae_id' => ['required', 'integer', 'exists:puntoventa,id'],
             'puntoventa_caea_id' => ['required', 'integer', 'exists:puntoventa,id'],
             'caja_id' => ['required', 'integer', 'min:1', 'exists:caja,id'],
-            'turno_operativo_gastronomia_id' => $esJornada
+            'turno_operativo_gastronomia_id' => $sinTurno
                 ? ['nullable', 'integer']
                 : [
                     'required',
@@ -58,16 +72,27 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
                     Rule::unique('rendicion_gastronomia_caja', 'turno_operativo_gastronomia_id')
                         ->ignore($rendicionId),
                 ],
-            'jornada_gastronomia_id' => $esJornada
-                ? [
+            'jornada_gastronomia_id' => match (true) {
+                $esJornada => [
                     'required',
                     'integer',
                     'exists:jornada_gastronomia,id',
                     Rule::unique('rendicion_gastronomia_caja', 'jornada_gastronomia_id')
                         ->where('tipo', RendicionGastronomiaCaja::TIPO_JORNADA)
                         ->ignore($rendicionId),
-                ]
-                : ['nullable', 'integer'],
+                ],
+                // Cierre X: una rendición por jornada + mozo (no una por jornada).
+                $esCierreX => [
+                    'required',
+                    'integer',
+                    'exists:jornada_gastronomia,id',
+                    Rule::unique('rendicion_gastronomia_caja', 'jornada_gastronomia_id')
+                        ->where('tipo', RendicionGastronomiaCaja::TIPO_CIERRE_X)
+                        ->where('mozo_gastronomia_id', (int) $this->input('mozo_gastronomia_id', 0))
+                        ->ignore($rendicionId),
+                ],
+                default => ['nullable', 'integer'],
+            },
             'iniciodelfondo' => ['required', 'numeric'],
             'totalfactura' => ['required', 'numeric'],
             'totalcobrado' => ['required', 'numeric'],
@@ -101,6 +126,8 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
             'caja_id' => 'caja',
             'turno_operativo_gastronomia_id' => 'cierre de turno',
             'jornada_gastronomia_id' => 'cierre de jornada',
+            'mozo_gastronomia_id' => 'mozo',
+            'total_x' => 'total X a rendir',
             'iniciodelfondo' => 'inicio del fondo',
             'totalredondeo' => 'redondeo rendición',
             'totalredondeoinvitacion' => 'redondeo invitaciones',

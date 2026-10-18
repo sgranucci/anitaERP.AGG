@@ -14,9 +14,12 @@ class DescuentoGastronomiaRepository implements DescuentoGastronomiaRepositoryIn
         $this->model = $descuentoGastronomia;
     }
 
-    public function all()
+    public function all(?int $salaId = null)
     {
-        return $this->model->with('cliente')->orderBy('nombre')->orderBy('codigo')->get();
+        $query = $this->model->with(['cliente', 'sala'])->orderBy('nombre')->orderBy('codigo');
+        \App\Support\Ventas\GastronomiaSalaSupport::aplicarFiltroSiCorresponde($query, $salaId);
+
+        return $query->get();
     }
 
     public function create(array $data)

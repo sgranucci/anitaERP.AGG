@@ -17,7 +17,8 @@ return [
      * Calzados Ferli: esquema Anita sin vend_email/vend_estado (UNLOAD falla con el default AGG).
      */
     'campos_listado' => env('VENDEDOR_SYNC_ANITA_CAMPOS_LISTADO') ?: (
-        str_contains(strtoupper((string) env('EMPRESA', '')), 'FERLI')
+        (str_contains(strtoupper((string) env('EMPRESA', '')), 'FERLI')
+            || strtoupper((string) env('EMPRESA', '')) === 'CROWN')
             ? 'vend_codigo,vend_nombre,vend_comision_vta,vend_comision_cob,vend_aplicacion,vend_empresa,vend_legajo'
             : 'vend_codigo,vend_nombre,vend_comision_vta,vend_comision_cob,vend_aplicacion,vend_empresa,vend_legajo,vend_email,vend_estado'
     ),

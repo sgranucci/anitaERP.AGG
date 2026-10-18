@@ -11,6 +11,7 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraUiConfigSupport;
@@ -224,6 +225,9 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
                 'busqueda' => $texto,
                 'empresa_id' => null,
                 'empresa_scope' => 'todas',
+                'sala_id' => null,
+                'sala_scope' => 'todas',
+                'presupuesto' => '',
                 'estado' => '',
             ];
         }
@@ -239,22 +243,28 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
     {
         $filtros = $this->normalizarFiltros($filtros);
 
+        $select = [
+            'ordencompra.id',
+            'ordencompra.numeroordencompra',
+            'ordencompra.fecha',
+            'ordencompra.estadoordencompra',
+            'ordencompra.requisicion_id',
+            'ordencompra.proveedor_id',
+            'ordencompra.sector_legajocompra_id',
+            'ordencompra.creousuario_id',
+            'empresa.nombre as nombreempresa',
+            'centrocosto.nombre as nombrecentrocosto',
+            'proveedor.nombre as nombreproveedor',
+            $this->expresionNombreSolicitanteListado(),
+            'sector_legajocompra.nombre as nombresector',
+        ];
+        if (EntornoEmpresaSupport::esCrown() && Schema::hasColumn('ordencompra', 'sala_id')) {
+            $select[] = 'sala.codigo as codigosala';
+            $select[] = 'sala.nombre as nombresala';
+        }
+
         $q = $this->model->query()
-            ->select([
-                'ordencompra.id',
-                'ordencompra.numeroordencompra',
-                'ordencompra.fecha',
-                'ordencompra.estadoordencompra',
-                'ordencompra.requisicion_id',
-                'ordencompra.proveedor_id',
-                'ordencompra.sector_legajocompra_id',
-                'ordencompra.creousuario_id',
-                'empresa.nombre as nombreempresa',
-                'centrocosto.nombre as nombrecentrocosto',
-                'proveedor.nombre as nombreproveedor',
-                $this->expresionNombreSolicitanteListado(),
-                'sector_legajocompra.nombre as nombresector',
-            ])
+            ->select($select)
             ->leftJoin('empresa', 'empresa.id', '=', 'ordencompra.empresa_id')
             ->leftJoin('centrocosto', 'centrocosto.id', '=', 'ordencompra.centrocosto_id')
             ->leftJoin('proveedor', 'proveedor.id', '=', 'ordencompra.proveedor_id')
@@ -262,8 +272,11 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         $this->unirSolicitanteListado($q);
         $q->leftJoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'ordencompra.sector_legajocompra_id')
             ->leftJoin('condicioncompra', 'condicioncompra.id', '=', 'ordencompra.condicioncompra_id')
-            ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id')
-            ->orderByDesc('ordencompra.fecha')
+            ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id');
+        if (EntornoEmpresaSupport::esCrown() && Schema::hasColumn('ordencompra', 'sala_id')) {
+            $q->leftJoin('sala', 'sala.id', '=', 'ordencompra.sala_id');
+        }
+        $q->orderByDesc('ordencompra.fecha')
             ->orderByDesc('ordencompra.id');
 
         $this->aplicarFiltrosListado($q, $filtros, $sectorUsuarioId);

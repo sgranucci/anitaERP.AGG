@@ -5,11 +5,13 @@ namespace App\Models\Receptivo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use App\Traits\Receptivo\ServicioterrestreTrait;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Servicioterrestre extends Model
+class Servicioterrestre extends Model implements Auditable
 {
 	use ServicioterrestreTrait;
 
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = [
 						 'nombre', 'codigo', 'tiposervicioterrestre_id', 'moneda_id', 'observacion', 
 						 'abreviatura', 'ubicacion', 'impuesto_id', 'precioindividual', 'monedacosto_id',

@@ -6,6 +6,7 @@ use App\Models\Contable\Centrocosto;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use Illuminate\Support\Facades\Schema;
 
 class CentrocostoRepository implements CentrocostoRepositoryInterface
 {
@@ -150,6 +151,58 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
             ]);
             $datosLocalArray[] = $codigo;
         }
+
+        $this->aplicarGruposDesdeAnita();
+    }
+
+    /**
+     * Crown: ccosgrupo + ccos_grupo. No pisa centros que no estén en Anita.
+     *
+     * @return array{grupos: int, centros: int}
+     */
+    public function aplicarGruposDesdeAnita(): array
+    {
+        if (! EntornoEmpresaSupport::esCrown() || ! Schema::hasColumn('centrocosto', 'grupo_codigo')) {
+            return ['grupos' => 0, 'centros' => 0];
+        }
+
+        $apiAnita = new ApiAnita();
+        $grupos = ApiAnita::parsearRespuestaLista($apiAnita->apiCall([
+            'acc' => 'list',
+            'sistema' => 'contab',
+            'tabla' => 'ccosgrupo',
+            'campos' => 'ccosg_grupo, ccosg_desc',
+        ]));
+        $nombrePorGrupo = [];
+        foreach ($grupos['filas'] as $grupo) {
+            $codigoGrupo = trim((string) ($grupo->ccosg_grupo ?? ''));
+            if ($codigoGrupo === '') {
+                continue;
+            }
+            $nombrePorGrupo[$codigoGrupo] = trim((string) ($grupo->ccosg_desc ?? ''));
+            $nombrePorGrupo[ltrim($codigoGrupo, '0')] = trim((string) ($grupo->ccosg_desc ?? ''));
+        }
+
+        $centros = ApiAnita::parsearRespuestaLista($apiAnita->apiCall([
+            'acc' => 'list',
+            'sistema' => 'contab',
+            'tabla' => 'ccosto',
+            'campos' => 'ccos_codigo, ccos_grupo',
+        ]));
+        $actualizados = 0;
+        foreach ($centros['filas'] as $row) {
+            $codigo = trim((string) ($row->ccos_codigo ?? ''));
+            $grupo = trim((string) ($row->ccos_grupo ?? ''));
+            if ($codigo === '') {
+                continue;
+            }
+            $actualizados += Centrocosto::query()->where('codigo', $codigo)->update([
+                'grupo_codigo' => $grupo !== '' ? $grupo : null,
+                'grupo_nombre' => $nombrePorGrupo[$grupo] ?? $nombrePorGrupo[ltrim($grupo, '0')] ?? null,
+            ]);
+        }
+
+        return ['grupos' => count($grupos['filas']), 'centros' => $actualizados];
     }
 
     public function traerRegistroDeAnita($key){
@@ -201,7 +254,8 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
     {
         return EntornoEmpresaSupport::esElBierzo()
             || EntornoEmpresaSupport::esInterforming()
-            || EntornoEmpresaSupport::esFerli();
+            || EntornoEmpresaSupport::esFerli()
+            || EntornoEmpresaSupport::esCrown();
     }
 
 	public function guardarAnita($request) {

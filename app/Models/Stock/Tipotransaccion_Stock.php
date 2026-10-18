@@ -6,12 +6,14 @@ use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use App\Traits\Stock\Tipotransaccion_StockTrait;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Tipotransaccion_Stock extends Model
+class Tipotransaccion_Stock extends Model implements Auditable
 {
     use SoftDeletes;
     use Tipotransaccion_StockTrait;
 
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = [
         'nombre',
         'operacion',

@@ -7,9 +7,11 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Ordencompra_Articulo_Precio_Historia extends Model
+class Ordencompra_Articulo_Precio_Historia extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'ordencompra_articulo_precio_historia';
 
     protected $fillable = [

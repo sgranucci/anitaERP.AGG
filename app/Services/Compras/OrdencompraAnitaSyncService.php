@@ -28,6 +28,7 @@ use App\Support\Compras\AnitaSync\Ordencompra\CabeceraFieldMapper;
 use App\Support\Compras\AnitaSync\Ordencompra\ComprobanteCuotaFieldMapper;
 use App\Support\Compras\AnitaSync\Ordencompra\ComprobanteFieldMapper;
 use App\Support\Compras\AnitaSync\Ordencompra\HistoriaFieldMapper;
+use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaEsquemaSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaEstadosSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaSyncContext;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
@@ -81,7 +82,7 @@ class OrdencompraAnitaSyncService
         $api = new ApiAnita;
         $lista = json_decode($api->apiCall([
             'acc' => 'list',
-            'campos' => 'penmp_nro',
+            'campos' => 'penmp_tipo, penmp_letra, penmp_sucursal, penmp_nro',
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
             'sistema' => 'compras',
             'whereArmado' => $where,
@@ -101,29 +102,50 @@ class OrdencompraAnitaSyncService
             return $ret;
         }
 
-        $nros = [];
+        /** @var list<AnitaOcClave> $claves */
+        $claves = [];
+        $vistos = [];
         foreach ($lista as $item) {
-            $nro = (int) ($item->penmp_nro ?? 0);
-            if ($nro > 0) {
-                $nros[] = $nro;
+            $clave = AnitaOcClave::desdePendmaep($item);
+            if ($clave->nro <= 0) {
+                continue;
             }
+            $k = $clave->tipo.'/'.$clave->letra.'/'.$clave->sucursal.'/'.$clave->nro;
+            if (isset($vistos[$k])) {
+                continue;
+            }
+            $vistos[$k] = true;
+            $claves[] = $clave;
         }
-        $nros = array_values(array_unique($nros));
 
+        $nros = array_values(array_unique(array_map(static fn (AnitaOcClave $c) => $c->nro, $claves)));
         $existentes = Ordencompra::query()
             ->whereIn('numeroordencompra', $nros ?: [0])
-            ->get(['id', 'numeroordencompra', 'comentario', 'requisicion_id']);
-        $porNumero = $existentes->keyBy(static fn (Ordencompra $oc) => (int) $oc->numeroordencompra);
+            ->get(['id', 'numeroordencompra', 'comentario', 'requisicion_id', 'anita_tipo', 'anita_letra', 'anita_sucursal']);
 
-        $total = count($nros);
+        $porClave = [];
+        $porNumeroSolo = [];
+        foreach ($existentes as $oc) {
+            $nro = (int) $oc->numeroordencompra;
+            $suc = $oc->anita_sucursal;
+            if ($suc !== null && $oc->anita_tipo !== null && $oc->anita_letra !== null) {
+                $porClave[$oc->anita_tipo.'/'.$oc->anita_letra.'/'.(int) $suc.'/'.$nro] = $oc;
+            }
+            $porNumeroSolo[$nro] = $oc;
+        }
+
+        $total = count($claves);
         $i = 0;
-        foreach ($nros as $nro) {
+        foreach ($claves as $clave) {
             $i++;
+            $nro = $clave->nro;
+            $claveStr = $clave->tipo.'/'.$clave->letra.'/'.$clave->sucursal.'/'.$nro;
             if ($onProgreso !== null && ($i === 1 || $i % 25 === 0 || $i === $total)) {
                 $onProgreso($i, $total, $nro);
             }
             try {
-                $existente = $porNumero->get($nro);
+                $existente = $porClave[$claveStr]
+                    ?? ((! OrdencompraAnitaEsquemaSupport::esCrown()) ? ($porNumeroSolo[$nro] ?? null) : null);
                 if ($existente !== null) {
                     if (! $this->ordencompraNacioEnAnita($existente)) {
                         $ret['omitidos_erp_nativas']++;
@@ -143,7 +165,7 @@ class OrdencompraAnitaSyncService
                     continue;
                 }
 
-                $r = $this->traerRegistroDeAnita($nro, $ctx);
+                $r = $this->traerRegistroDeAnitaPorClave($clave, $ctx);
                 if ($r === 'importado') {
                     $ret['importados']++;
                 } elseif ($r === 'lineas_completadas') {
@@ -152,7 +174,7 @@ class OrdencompraAnitaSyncService
                     $ret['omitidos']++;
                 }
             } catch (\Throwable $e) {
-                $msg = "OC {$nro}: ".$e->getMessage();
+                $msg = "OC {$claveStr}: ".$e->getMessage();
                 $ret['errores'][] = $msg;
                 Log::warning('OrdencompraAnitaSync: '.$msg, ['exception' => $e]);
             }
@@ -236,13 +258,32 @@ class OrdencompraAnitaSyncService
     {
         $ctx ??= $this->nuevoContexto((int) (Auth::id() ?? 1));
 
-        if ($ctx->existeOrdencompraPorNumero($numeroOc)) {
+        $cabecera = $this->leerPendmaep($numeroOc);
+        if ($cabecera === null) {
+            return 'sin_datos';
+        }
+
+        return $this->traerRegistroDeAnitaPorClave(AnitaOcClave::desdePendmaep($cabecera), $ctx, $cabecera);
+    }
+
+    /**
+     * @return 'importado'|'omitido'|'lineas_completadas'|'sin_datos'
+     */
+    public function traerRegistroDeAnitaPorClave(
+        AnitaOcClave $clave,
+        ?OrdencompraAnitaSyncContext $ctx = null,
+        ?object $cabecera = null,
+    ): string {
+        $ctx ??= $this->nuevoContexto((int) (Auth::id() ?? 1));
+        $numeroOc = $clave->nro;
+
+        if ($this->existeOrdencompraPorClave($clave)) {
             $completadas = $this->completarLineasFaltantesDesdeAnita($numeroOc, $ctx);
 
             return $completadas > 0 ? 'lineas_completadas' : 'omitido';
         }
 
-        $cabecera = $this->leerPendmaep($numeroOc);
+        $cabecera ??= $this->leerPendmaepPorClave($clave);
         if ($cabecera === null) {
             return 'sin_datos';
         }
@@ -250,7 +291,6 @@ class OrdencompraAnitaSyncService
         $payload = CabeceraFieldMapper::mapAll($cabecera, $ctx);
         $this->validarCabeceraMinima($payload, $numeroOc);
 
-        $clave = AnitaOcClave::desdePendmaep($cabecera);
         $lineas = $this->leerPendmovp($clave);
         $payload['estadoordencompra'] = OrdencompraAnitaEstadosSupport::haciaEstadoErpImportacion(
             $cabecera->penmp_estado ?? '0',
@@ -259,6 +299,7 @@ class OrdencompraAnitaSyncService
         if ($lineas === []) {
             Log::warning('OrdencompraAnitaSync: importación OC sin líneas pendmovp (posible fallo del bridge Anita)', [
                 'numero_oc' => $numeroOc,
+                'clave' => $clave->tipo.'/'.$clave->letra.'/'.$clave->sucursal.'/'.$clave->nro,
             ]);
         }
         $movpresupPorInterno = $this->indexarMovpresup($clave);
@@ -303,6 +344,18 @@ class OrdencompraAnitaSyncService
         }
 
         return 'importado';
+    }
+
+    private function existeOrdencompraPorClave(AnitaOcClave $clave): bool
+    {
+        $q = Ordencompra::query()->where('numeroordencompra', $clave->nro);
+        if (OrdencompraAnitaEsquemaSupport::esCrown()) {
+            $q->where('anita_tipo', $clave->tipo)
+                ->where('anita_letra', $clave->letra)
+                ->where('anita_sucursal', $clave->sucursal);
+        }
+
+        return $q->exists();
     }
 
     private function ordencompraNacioEnAnita(Ordencompra $oc): bool
@@ -416,17 +469,22 @@ class OrdencompraAnitaSyncService
             'acc' => 'list',
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
             'sistema' => 'compras',
-            'campos' => implode(', ', [
-                'penmp_proveedor', 'penmp_tipo', 'penmp_letra', 'penmp_sucursal', 'penmp_nro',
-                'penmp_fecha', 'penmp_fecha_ent', 'penmp_cond_compra', 'penmp_cond_entrega', 'penmp_cond_pago',
-                'penmp_entrega', 'penmp_dto', 'penmp_expreso', 'penmp_razon_susp', 'penmp_cod_mon', 'penmp_cotizacion',
-                'penmp_fecha_ing', 'penmp_hora_ing', 'penmp_estado', 'penmp_requisicion',
-                'penmp_ccosto', 'penmp_legajo', 'penmp_empresa', 'penmp_usuario_ini', 'penmp_estado_aprob',
-                'penmp_fecha_aprob', 'penmp_hora_aprob', 'penmp_usu_aprob', 'penmp_ccosto_dest', 'penmp_es_anticipo',
-                // Último: si la leyenda trae "|" el UNLOAD parte la fila; el resto de columnas ya quedó leído.
-                'penmp_leyenda',
-            ]),
+            'campos' => OrdencompraAnitaEsquemaSupport::camposPendmaepLectura(),
             'whereArmado' => " WHERE penmp_nro={$numeroOc}",
+        ]));
+
+        return (is_array($rows) && count($rows) > 0) ? $rows[0] : null;
+    }
+
+    private function leerPendmaepPorClave(AnitaOcClave $clave): ?object
+    {
+        $api = new ApiAnita;
+        $rows = json_decode($api->apiCall([
+            'acc' => 'list',
+            'tabla' => config('ordencompra_anita.tablas.cabecera'),
+            'sistema' => 'compras',
+            'campos' => OrdencompraAnitaEsquemaSupport::camposPendmaepLectura(),
+            'whereArmado' => $clave->wherePendmaep(),
         ]));
 
         return (is_array($rows) && count($rows) > 0) ? $rows[0] : null;
@@ -442,13 +500,7 @@ class OrdencompraAnitaSyncService
             'acc' => 'list',
             'tabla' => config('ordencompra_anita.tablas.linea'),
             'sistema' => 'compras',
-            'campos' => implode(', ', [
-                'penvp_proveedor', 'penvp_tipo', 'penvp_letra', 'penvp_sucursal', 'penvp_nro', 'penvp_orden',
-                'penvp_articulo', 'penvp_desc', 'penvp_agrupacion', 'penvp_unidad_med', 'penvp_cantidad',
-                'penvp_cantentr', 'penvp_cantfact', 'penvp_precio', 'penvp_dto_art', 'penvp_deposito',
-                'penvp_tipo_iva', 'penvp_fecha', 'penvp_incl_imp', 'penvp_cod_mon', 'penvp_partida',
-                'penvp_fecha_ent', 'penvp_ccosto', 'penvp_requisicion', 'penvp_empresa', 'penvp_nro_interno',
-            ]),
+            'campos' => OrdencompraAnitaEsquemaSupport::camposPendmovpLectura(),
             'whereArmado' => $clave->wherePendmovp(),
         ]));
 
@@ -460,6 +512,10 @@ class OrdencompraAnitaSyncService
      */
     private function indexarMovpresup(AnitaOcClave $clave): array
     {
+        if (! OrdencompraAnitaEsquemaSupport::leeMovpresup()) {
+            return [];
+        }
+
         $api = new ApiAnita;
         $rows = json_decode($api->apiCall([
             'acc' => 'list',
@@ -510,6 +566,10 @@ class OrdencompraAnitaSyncService
      */
     private function leerOccuota(AnitaOcClave $clave): array
     {
+        if (! OrdencompraAnitaEsquemaSupport::leeOccuota()) {
+            return [];
+        }
+
         $api = new ApiAnita;
         $rows = json_decode($api->apiCall([
             'acc' => 'list',
@@ -527,6 +587,10 @@ class OrdencompraAnitaSyncService
      */
     private function leerLegcompra(int $numeroOc): array
     {
+        if (! OrdencompraAnitaEsquemaSupport::leeLegcompra()) {
+            return [];
+        }
+
         $api = new ApiAnita;
         $rows = json_decode($api->apiCall([
             'acc' => 'list',

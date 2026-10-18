@@ -2,6 +2,9 @@
     $lbl = 'col-lg-4 control-label text-right pr-2';
     $inp = 'col-lg-7';
 @endphp
+@if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown())
+    @include('ventas.configuracion_puntoventa_gastronomia.partials.form_modos_crown')
+@endif
 <div class="form-group row">
     <label for="identificador_pc" class="{{ $lbl }} requerido">Identificador de PC</label>
     <div class="{{ $inp }}">

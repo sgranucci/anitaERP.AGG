@@ -366,7 +366,10 @@
 
     function tipoActual() {
         if (inpTipo) {
-            return inpTipo.value === 'jornada' ? 'jornada' : 'turno';
+            if (inpTipo.value === 'jornada' || inpTipo.value === 'cierre_x') {
+                return inpTipo.value;
+            }
+            return 'turno';
         }
         return 'turno';
     }
@@ -1551,6 +1554,23 @@
         habilitarVerificacionCajero(false);
     }
 
+    // Cierre X Crown: los totales vienen de la cabecera; solo se cargan los medios rendidos.
+    function initEdicionCierreX() {
+        panelDatos.classList.remove('d-none');
+        var tituloFact = document.getElementById('titulo-panel-facturacion');
+        if (tituloFact) {
+            tituloFact.textContent = 'Cierre X por mozo (total a rendir antes del Z)';
+        }
+        renderResumenTurnoHtml(null);
+        cuentacajaEfectivoId = parseInt(inicial.cuentacaja_efectivo_id, 10) || cuentacajaEfectivoId;
+        if (inicial.movimientos) {
+            esperadosSistema = mapaEsperadosDesdeMovimientos(inicial.movimientos);
+        }
+        renderMovimientos(inicial.movimientos || []);
+        recalcularDiferencias();
+        habilitarVerificacionCajero(false);
+    }
+
     function aplicarTipoUi(tipo) {
         if (inpTipo) {
             inpTipo.value = tipo;
@@ -1789,6 +1809,8 @@
             renderMovimientos(inicial.movimientos || []);
             recalcularDiferencias();
             habilitarVerificacionCajero(true);
+        } else if (inicial.tipo === 'cierre_x') {
+            initEdicionCierreX();
         } else {
             initEdicionLocal();
         }

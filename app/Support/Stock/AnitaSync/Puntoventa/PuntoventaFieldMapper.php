@@ -28,6 +28,15 @@ final class PuntoventaFieldMapper
         return EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esInterforming();
     }
 
+    /**
+     * Crown: E = electrónica CAE local (no exportación); F/N = manual;
+     * nombres «CAEA …» → modo A aunque Anita marque F.
+     */
+    private static function usaMapaFiscalCrown(): bool
+    {
+        return EntornoEmpresaSupport::esCrown();
+    }
+
     public static function mapCodigo(object $row): ?string
     {
         $n = (int) ($row->suc_numero ?? 0);
@@ -82,6 +91,25 @@ final class PuntoventaFieldMapper
     public static function mapModoFacturacion(object $row): string
     {
         $fiscal = strtoupper(trim((string) ($row->suc_fiscal ?? '')));
+        $nombre = strtoupper(trim((string) ($row->suc_empresa ?? '')));
+
+        if (self::usaMapaFiscalCrown()) {
+            if (str_contains($nombre, 'CAEA')) {
+                return 'A';
+            }
+
+            return match ($fiscal) {
+                'E' => 'C',
+                'A' => 'A',
+                'L' => 'C',
+                'R' => 'R',
+                'M' => 'L',
+                'O' => 'O',
+                'I' => 'I',
+                'N', 'F', '' => 'M',
+                default => 'M',
+            };
+        }
 
         if (self::usaMapaFiscalExportacion()) {
             return match ($fiscal) {
@@ -293,10 +321,13 @@ final class PuntoventaFieldMapper
             'modofacturacion' => self::mapModoFacturacion($row),
             'estado' => self::mapEstado($row),
             'webservice' => self::mapWebservice($row),
-            // Legacy afip.php: no mapear emails de suc_leyenda2 en Ferli (SOAP no usa pathafip).
-            'pathafip' => EntornoEmpresaSupport::esFerli()
-                ? null
-                : (self::strProp($row, 'suc_leyenda2') ?: null),
+            // Crown: path real en suc_ubic_afip; leyenda2 es numerador interno.
+            // Ferli: SOAP no usa pathafip. AGG legado: suc_leyenda2.
+            'pathafip' => EntornoEmpresaSupport::esCrown()
+                ? (self::strProp($row, 'suc_ubic_afip') ?: null)
+                : (EntornoEmpresaSupport::esFerli()
+                    ? null
+                    : (self::strProp($row, 'suc_leyenda2') ?: null)),
             'actividad_arca_id' => self::mapActividadArcaId($row),
             'division' => $division,
             'numeropoliza' => $numeropoliza,

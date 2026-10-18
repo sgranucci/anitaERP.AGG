@@ -4,12 +4,14 @@ namespace App\Models\Sueldos;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Período mensual de un concepto F572 (PeriodoType).
  */
-class Siradig_Concepto_Periodo_Sueldos extends Model
+class Siradig_Concepto_Periodo_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'siradig_concepto_periodo_sueldos';
 
     protected $fillable = [

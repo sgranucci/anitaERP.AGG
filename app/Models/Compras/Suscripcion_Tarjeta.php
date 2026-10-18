@@ -8,12 +8,14 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Tarjeta corporativa con la que se pagan las suscripciones.
  */
-class Suscripcion_Tarjeta extends Model
+class Suscripcion_Tarjeta extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'suscripcion_tarjeta';
 
     protected $fillable = [

@@ -104,12 +104,15 @@ class RequisicionController extends Controller
             $this->requisicionService->sincronizarConAnita();
         }
 
-        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
-        $empresaDefault = $empresaDefault ? (int) $empresaDefault : null;
+        $empresaDefault = \App\Support\Configuracion\EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
+        $salaQuery = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            : collect();
+        $salaDefault = $salaQuery->isNotEmpty() ? (int) $salaQuery->first()->id : null;
 
         if ($request->boolean('limpiar_filtros')) {
             RequisicionListadoFiltros::olvidar();
-            $filtrosEmpresa = RequisicionListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
+            $filtrosEmpresa = RequisicionListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault, $salaDefault);
 
             return redirect()->route(
                 'consultar_requisicion',
@@ -118,7 +121,7 @@ class RequisicionController extends Controller
         }
 
         if (QueryRetornoListado::requestTraeContextoIndex($request)) {
-            $filtros = RequisicionListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
+            $filtros = RequisicionListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault, $salaDefault);
             $filtrosQuery = RequisicionListadoFiltros::paraQueryString($filtros);
             $page = (int) $request->query('page', 0);
             if ($page > 1) {
@@ -130,7 +133,7 @@ class RequisicionController extends Controller
             if ($guardados !== []) {
                 return redirect()->route('consultar_requisicion', $guardados);
             }
-            $filtros = RequisicionListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
+            $filtros = RequisicionListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault, $salaDefault);
             $filtrosQuery = RequisicionListadoFiltros::paraQueryString($filtros);
         }
 
@@ -146,6 +149,7 @@ class RequisicionController extends Controller
             'resumen' => $resumen,
             'camposFiltro' => RequisicionListadoFiltros::CAMPOS,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'sala_query' => $salaQuery,
             'estado_enum' => Requisicion_Estado::$enumEstado,
             'estado_en_compras' => Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
             'estado_en_arbol_aprobacion' => Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
@@ -209,11 +213,16 @@ class RequisicionController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $empresaDefault = \App\Support\Configuracion\EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
+        $salaQuery = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            : collect();
+        $salaDefault = $salaQuery->isNotEmpty() ? (int) $salaQuery->first()->id : null;
         $filtros = RequisicionListadoFiltros::resolverDesdeRequest(
             $request,
             $busqueda,
-            $empresaDefault ? (int) $empresaDefault : null
+            $empresaDefault,
+            $salaDefault
         );
 
         switch ($formato) {
@@ -250,6 +259,9 @@ class RequisicionController extends Controller
         can('crear-requisicion');
 
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $sala_query = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            : collect();
         $centrocosto_query = $this->centrocostoRepository->all();
         $formapago_query = $this->formapagoRepository->all();
         $moneda_query = $this->monedaRepository->all();
@@ -268,6 +280,7 @@ class RequisicionController extends Controller
         return view('compras.requisicion.crear', compact(
             'data',
             'empresa_query',
+            'sala_query',
             'centrocosto_query',
             'formapago_query',
             'moneda_query',
@@ -474,6 +487,9 @@ class RequisicionController extends Controller
         }
 
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $sala_query = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            : collect();
         $centrocosto_query = $this->centrocostoRepository->all();
         $formapago_query = $this->formapagoRepository->all();
         $moneda_query = $this->monedaRepository->all();
@@ -510,6 +526,7 @@ class RequisicionController extends Controller
         return view('compras.requisicion.editar', compact(
             'data',
             'empresa_query',
+            'sala_query',
             'centrocosto_query',
             'formapago_query',
             'moneda_query',
@@ -1214,6 +1231,9 @@ class RequisicionController extends Controller
 
             $data = $this->requisicionRepository->find($id);
             $empresa_query = $this->empresaRepository->allFiltrado();
+            $sala_query = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
+                ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+                : collect();
             $centrocosto_query = $this->centrocostoRepository->all();
             $formapago_query = $this->formapagoRepository->all();
             $moneda_query = $this->monedaRepository->all();
@@ -1243,6 +1263,7 @@ class RequisicionController extends Controller
             return view('compras.requisicion.editar', compact(
                 'data',
                 'empresa_query',
+                'sala_query',
                 'centrocosto_query',
                 'formapago_query',
                 'moneda_query',

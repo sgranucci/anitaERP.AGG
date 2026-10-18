@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\SuitecrmPermiso;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
@@ -58,6 +59,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (! EntornoEmpresaSupport::esAgg()) {
+            return;
+        }
+
         $rolOrigenId = (int) (DB::table('rol')->where('nombre', self::ROL_ORIGEN)->value('id') ?? 0);
         if ($rolOrigenId <= 0) {
             // Entornos sin Op-tesoreria (ej. Bierzo): no aplica esta carga Flash.
@@ -75,6 +80,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! EntornoEmpresaSupport::esAgg()) {
+            return;
+        }
+
         $rolOrigenId = (int) (DB::table('rol')->where('nombre', self::ROL_ORIGEN)->value('id') ?? 0);
         $rolNuevoId = (int) (DB::table('rol')->where('nombre', self::ROL_NUEVO)->value('id') ?? 0);
 

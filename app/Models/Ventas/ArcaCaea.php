@@ -7,9 +7,11 @@ use App\Models\Seguridad\Usuario;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ArcaCaea extends Model
+class ArcaCaea extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_OK = 'ok';
 
     public const ESTADO_OBSERVACION = 'observacion';

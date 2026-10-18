@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionUsuario;
 use App\Models\Admin\Rol;
 use App\Models\Compras\SectorLegajocompra;
+use App\Models\Configuracion\Sala;
 use App\Models\Seguridad\Usuario;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Support\Seguridad\UsuarioOperativoSupport;
@@ -13,6 +14,7 @@ use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Http\EliminacionRegistroSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
@@ -61,8 +63,9 @@ class UsuarioController extends Controller
         $centrocosto_query = $this->centrocostoRepository->all()->toArray();
         $oficinacompra_query = $this->oficinacompraRepository->all()->pluck('nombre', 'id')->toArray();
         $sector_legajocompra_query = SectorLegajocompra::orderBy('nombre')->get();
+        $sala_query = $this->salasParaAsignacion();
 
-        return view('admin.usuario.crear', compact('rols', 'empresa_query', 'centrocosto_query', 'oficinacompra_query', 'sector_legajocompra_query'));
+        return view('admin.usuario.crear', compact('rols', 'empresa_query', 'centrocosto_query', 'oficinacompra_query', 'sector_legajocompra_query', 'sala_query'));
     }
 
     public function guardar(ValidacionUsuario $request)
@@ -88,6 +91,7 @@ class UsuarioController extends Controller
 
         // Actualiza las empresas
         $usuario->auditSync('usuario_empresas', $request->empresa_ids);
+        $this->sincronizarSalasAsignadas($usuario, $request);
         $this->sincronizarCatalogoCuentasAutomaticas($request);
 
         $this->sincronizarDepositosAutorizados($usuario, $request);
@@ -99,13 +103,21 @@ class UsuarioController extends Controller
     public function editar($id)
     {
         $rols = Rol::orderBy('id')->pluck('nombre', 'id')->toArray();
-        $data = Usuario::with(['roles', 'usuario_empresas', 'depositosAutorizados.empresas', 'tipotransaccionesStockAutorizadas', 'vendedores'])->findOrFail($id);
+        $data = Usuario::with([
+            'roles',
+            'usuario_empresas',
+            'usuario_salas',
+            'depositosAutorizados.empresas',
+            'tipotransaccionesStockAutorizadas',
+            'vendedores',
+        ])->findOrFail($id);
         $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
         $centrocosto_query = $this->centrocostoRepository->all()->toArray();
         $oficinacompra_query = $this->oficinacompraRepository->all()->pluck('nombre', 'id')->toArray();
         $sector_legajocompra_query = SectorLegajocompra::orderBy('nombre')->get();
+        $sala_query = $this->salasParaAsignacion();
 
-        return view('admin.usuario.editar', compact('data', 'rols', 'empresa_query', 'centrocosto_query', 'oficinacompra_query', 'sector_legajocompra_query'));
+        return view('admin.usuario.editar', compact('data', 'rols', 'empresa_query', 'centrocosto_query', 'oficinacompra_query', 'sector_legajocompra_query', 'sala_query'));
     }
 
     public function actualizar(ValidacionUsuario $request, $id)
@@ -154,6 +166,7 @@ class UsuarioController extends Controller
 
         // Actualiza las empresas
         $usuario->auditSync('usuario_empresas', $request->empresa_ids);
+        $this->sincronizarSalasAsignadas($usuario, $request);
         $this->sincronizarCatalogoCuentasAutomaticas($request);
 
         $this->sincronizarDepositosAutorizados($usuario, $request);
@@ -177,6 +190,9 @@ class UsuarioController extends Controller
 
             $usuario->auditDetach('roles');
             $usuario->auditDetach('usuario_empresas');
+            if (EntornoEmpresaSupport::esCrown()) {
+                $usuario->auditDetach('usuario_salas');
+            }
             $usuario->auditDetach('depositosAutorizados');
             $usuario->auditDetach('tipotransaccionesStockAutorizadas');
 
@@ -356,5 +372,31 @@ class UsuarioController extends Controller
         }
 
         $this->cuentaAutomaticaSeedService->asegurarCatalogoEmpresas($empresaIds);
+    }
+
+    private function sincronizarSalasAsignadas(Usuario $usuario, Request $request): void
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return;
+        }
+
+        $salaIds = array_values(array_unique(array_filter(array_map(
+            'intval',
+            (array) $request->input('sala_ids', [])
+        ))));
+
+        $usuario->auditSync('usuario_salas', $salaIds);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Sala>
+     */
+    private function salasParaAsignacion()
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return collect();
+        }
+
+        return Sala::query()->orderBy('codigo')->orderBy('nombre')->get(['id', 'nombre', 'codigo']);
     }
 }

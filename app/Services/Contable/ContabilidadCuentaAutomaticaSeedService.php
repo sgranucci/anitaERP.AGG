@@ -73,6 +73,8 @@ class ContabilidadCuentaAutomaticaSeedService
         CuentaAutomaticaClaves::SUELDOS_GASTO_CONTRIBUCION => '521060006',
         CuentaAutomaticaClaves::SUELDOS_PASIVO_RETENCION => '213010002',
         CuentaAutomaticaClaves::SUELDOS_PASIVO_CONTRIBUCION => '213010002',
+        // Anita shared.impcont clave 301 → Amortizaciones (Crown/AGG 718510000).
+        CuentaAutomaticaClaves::BIEN_USO_GASTO_AMORTIZACION => '718510000',
     ];
 
     /**

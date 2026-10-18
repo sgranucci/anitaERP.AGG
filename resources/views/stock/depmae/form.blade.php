@@ -7,6 +7,17 @@
     'empresa_id' => $data->empresa_id ?? null,
 ])
 
+@if (!empty($esCrown))
+    @include('includes.form-sala-asignada', [
+        'sala_query' => $sala_query ?? collect(),
+        'sala_id' => $data->sala_id ?? null,
+        'required' => true,
+        'col_label' => 'col-lg-3 col-form-label',
+        'col_input' => 'col-lg-4',
+        'ayuda' => 'En Crown el código del depósito es único por sala (puede repetirse entre salas).',
+    ])
+@endif
+
 <div class="form-group row">
     <label for="codigo" class="col-lg-3 col-form-label requerido">Código</label>
     <div class="col-lg-2">

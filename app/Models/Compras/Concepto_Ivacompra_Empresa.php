@@ -5,9 +5,11 @@ namespace App\Models\Compras;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Cuentacontable;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Concepto_Ivacompra_Empresa extends Model
+class Concepto_Ivacompra_Empresa extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'concepto_ivacompra_empresa';
 
     protected $fillable = [

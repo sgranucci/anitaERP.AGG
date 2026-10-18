@@ -5,9 +5,11 @@ namespace App\Models\Configuracion;
 use App\ApiAnita;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Pais extends Model
+class Pais extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     /** null = aún no consultado; true/false según exista pais_cod_afip en Informix ventas. */
     private static ?bool $informixTieneCodigoAfip = null;
 

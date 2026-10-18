@@ -5,9 +5,11 @@ namespace App\Models\Listado;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ListadoEnvioProgramado extends Model
+class ListadoEnvioProgramado extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'listado_envio_programado';
 
     protected $fillable = [

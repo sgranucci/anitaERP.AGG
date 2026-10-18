@@ -88,4 +88,32 @@ class ProveedorAnitaEsquemaSupportTest extends TestCase
         $this->assertNull(ProveedorAnitaEsquemaSupport::columnasPromaePermitidasEnEscritura());
         $this->assertTrue(ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg());
     }
+
+    public function test_crown_promae_base_con_propago_y_procasino_sin_hijas_agg(): void
+    {
+        config(['app.empresa' => EntornoEmpresaSupport::CROWN]);
+        config(['proveedor.filtro_empresa' => false]);
+
+        $this->assertSame(ProveedorAnitaEsquemaSupport::VARIANTE_CROWN, ProveedorAnitaEsquemaSupport::variante());
+        $this->assertTrue(ProveedorAnitaEsquemaSupport::esCrown());
+        $this->assertFalse(ProveedorAnitaEsquemaSupport::esEsquemaAgg());
+        $this->assertFalse(ProveedorAnitaEsquemaSupport::leeTablasHijasAgg());
+        $this->assertFalse(ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg());
+        $this->assertTrue(ProveedorAnitaEsquemaSupport::leePropago());
+        $this->assertTrue(ProveedorAnitaEsquemaSupport::escribePropago());
+        $this->assertFalse(ProveedorAnitaEsquemaSupport::propagoTieneOffset());
+        $this->assertTrue(ProveedorAnitaEsquemaSupport::leeProcasino());
+        $this->assertTrue(ProveedorAnitaEsquemaSupport::escribeProcasino());
+
+        $campos = ProveedorAnitaEsquemaSupport::camposPromaeLectura();
+        $this->assertStringContainsString('prom_cod_ret_suss', $campos);
+        $this->assertStringNotContainsString('prom_cta_cont_me', $campos);
+        $this->assertStringNotContainsString('prom_ag_perc_iva', $campos);
+        $this->assertStringNotContainsString('prom_concepto', $campos);
+
+        $permitidas = ProveedorAnitaEsquemaSupport::columnasPromaePermitidasEnEscritura();
+        $this->assertCount(46, $permitidas);
+        $this->assertNotContains('prom_cta_cont_me', $permitidas);
+        $this->assertContains('prom_cta_cont_me', ProveedorAnitaEsquemaSupport::columnasPromaeOmitidasEnEscritura());
+    }
 }

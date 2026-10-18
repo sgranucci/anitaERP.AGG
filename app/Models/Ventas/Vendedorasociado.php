@@ -8,10 +8,12 @@ use App\Models\Configuracion\Empresa;
 use Illuminate\Support\Str;
 use App\Traits\Ventas\VendedorTrait;
 use App\ApiAnita;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Vendedorasociado extends Model
+class Vendedorasociado extends Model implements Auditable
 {
     use VendedorTrait;
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['vendedor_id', 'vendedorasociado_id'];
     protected $table = 'vendedorasociado';
 

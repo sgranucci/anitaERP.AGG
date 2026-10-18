@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Ventas;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface;
+use App\Models\Configuracion\Sala;
 use App\Models\Ventas\CierreTotemJornadaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Caja\Usocuentacaja;
@@ -12,6 +13,8 @@ use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemInformeZService;
 use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemJornadaService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\UsuarioSalaAsignadaSupport;
 use App\Support\Ventas\Waitry\WaitryCobrosPostCierreJornadaSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZTransmisionFaltanteSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
@@ -41,9 +44,22 @@ class JornadaGastronomiaController extends Controller
         $empresaId = (int) $request->input('empresa_id', $empresas->first()->id ?? 0);
         $this->assertAccesoEmpresa($empresaId);
 
-        $estado = $empresaId > 0 ? $this->jornadaService->estadoParaEmpresa($empresaId) : null;
-        $historial = $empresaId > 0
-            ? $this->jornadaRepository->historialPorEmpresa($empresaId, 40)
+        // Crown abre/cierra jornada por empresa + sala; AGG sigue siendo una jornada por empresa.
+        $esCrown = EntornoEmpresaSupport::esCrown();
+        $salas = $esCrown ? $this->salasParaFiltro() : collect();
+        $salaId = 0;
+        if ($esCrown) {
+            $salaId = (int) $request->input('sala_id', $salas->count() === 1 ? ($salas->first()->id ?? 0) : 0);
+            $this->assertAccesoSala($salaId);
+        }
+        $salaFiltro = $salaId > 0 ? $salaId : null;
+        $faltaElegirSala = $esCrown && $salaFiltro === null;
+
+        $estado = $empresaId > 0 && ! $faltaElegirSala
+            ? $this->jornadaService->estadoParaEmpresa($empresaId, $salaFiltro)
+            : null;
+        $historial = $empresaId > 0 && ! $faltaElegirSala
+            ? $this->jornadaRepository->historialPorEmpresa($empresaId, 40, $salaFiltro)
             : collect();
 
         $eliminacionPorJornada = [];
@@ -71,12 +87,16 @@ class JornadaGastronomiaController extends Controller
         return view('ventas.gastronomia.jornada.index', [
             'empresas' => $empresas,
             'empresa_id' => $empresaId,
+            'es_crown' => $esCrown,
+            'salas' => $salas,
+            'sala_id' => $salaId,
+            'falta_elegir_sala' => $faltaElegirSala,
             'estado' => $estado,
             'historial' => $historial,
             'eliminacion_por_jornada' => $eliminacionPorJornada,
             'anulacion_cierre_por_jornada' => $anulacionCierrePorJornada,
-            'cierre_anulable' => $puedeAnularCierre && $empresaId > 0
-                ? $this->jornadaService->cierreAnulableParaEmpresa($empresaId)
+            'cierre_anulable' => $puedeAnularCierre && $empresaId > 0 && ! $faltaElegirSala
+                ? $this->jornadaService->cierreAnulableParaEmpresa($empresaId, $salaFiltro)
                 : null,
             'puede_anular_cierre' => $puedeAnularCierre,
             'fecha_hoy' => $estado['fecha_jornada_sugerida_abrir'] ?? now()->format('Y-m-d'),
@@ -344,7 +364,49 @@ class JornadaGastronomiaController extends Controller
         }
     }
 
-    public function apiEstado(int $empresaId)
+    private function assertAccesoSala(int $salaId): void
+    {
+        if ($salaId > 0 && ! UsuarioSalaAsignadaSupport::salaIdPermitida($salaId)) {
+            abort(403, 'Sala no permitida para su usuario.');
+        }
+    }
+
+    /**
+     * Salas habilitadas al usuario (Crown). Sin asignación: todas.
+     *
+     * @return \Illuminate\Support\Collection<int, Sala>
+     */
+    private function salasParaFiltro()
+    {
+        $q = Sala::query()->orderBy('codigo')->orderBy('nombre');
+        $ids = UsuarioSalaAsignadaSupport::idsDesdeSesion();
+        if (count($ids) >= 1) {
+            $q->whereIn('id', $ids);
+        }
+
+        return $q->get(['id', 'codigo', 'nombre']);
+    }
+
+    /**
+     * `sala_id` del request solo tiene efecto en Crown; en AGG la jornada es por empresa.
+     */
+    private function salaDesdeRequest(Request $request): ?int
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return null;
+        }
+
+        $salaId = (int) $request->input('sala_id', 0);
+        if ($salaId <= 0) {
+            return null;
+        }
+
+        $this->assertAccesoSala($salaId);
+
+        return $salaId;
+    }
+
+    public function apiEstado(Request $request, int $empresaId)
     {
         can('gestionar-jornada-gastronomia');
 
@@ -356,11 +418,11 @@ class JornadaGastronomiaController extends Controller
 
         return response()->json([
             'ok' => true,
-            ...$this->jornadaService->estadoParaEmpresa($empresaId),
+            ...$this->jornadaService->estadoParaEmpresa($empresaId, $this->salaDesdeRequest($request)),
         ]);
     }
 
-    public function apiPreviewCierreTotem(int $empresaId)
+    public function apiPreviewCierreTotem(Request $request, int $empresaId)
     {
         can('gestionar-jornada-gastronomia');
 
@@ -370,7 +432,7 @@ class JornadaGastronomiaController extends Controller
 
         $this->assertAccesoEmpresa($empresaId);
 
-        $jornada = $this->jornadaService->jornadaAbierta($empresaId);
+        $jornada = $this->jornadaService->jornadaAbierta($empresaId, $this->salaDesdeRequest($request));
         if ($jornada === null) {
             return response()->json([
                 'ok' => true,
@@ -416,8 +478,22 @@ class JornadaGastronomiaController extends Controller
 
         $this->assertAccesoEmpresa($empresaId);
 
+        $salaId = $this->salaDesdeRequest($request);
+        if (EntornoEmpresaSupport::esCrown() && $salaId === null) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Debe elegir la sala para abrir la jornada.',
+                'motivo' => 'validacion',
+            ], 422);
+        }
+
         try {
-            $jornada = $this->jornadaService->abrir($empresaId, $fechaJornada, is_string($observacion) ? $observacion : null);
+            $jornada = $this->jornadaService->abrir(
+                $empresaId,
+                $fechaJornada,
+                is_string($observacion) ? $observacion : null,
+                $salaId,
+            );
 
             return response()->json([
                 'ok' => true,
@@ -468,6 +544,7 @@ class JornadaGastronomiaController extends Controller
                 is_string($observacion) ? $observacion : null,
                 $informeZTotemsArr,
                 $cierreTotemSnapshot,
+                $this->salaDesdeRequest($request),
             );
 
             $jornada->load('cierreTotem');

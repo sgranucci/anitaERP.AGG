@@ -4,9 +4,11 @@ namespace App\Models\Sueldos;
 
 use App\Models\Stock\Talle;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Empleado_Talle_Sueldos extends Model
+class Empleado_Talle_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'empleado_talle_sueldos';
 
     protected $fillable = [

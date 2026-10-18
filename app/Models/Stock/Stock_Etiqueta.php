@@ -5,9 +5,11 @@ namespace App\Models\Stock;
 use App\Models\Configuracion\Empresa;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Stock_Etiqueta extends Model
+class Stock_Etiqueta extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'stock_etiqueta';
 
     protected $fillable = [

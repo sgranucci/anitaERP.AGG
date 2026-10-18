@@ -4,9 +4,11 @@ namespace App\Models\Sueldos;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Aprobacion_Indumentaria_Nivel_Sueldos extends Model
+class Aprobacion_Indumentaria_Nivel_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'aprobacion_indumentaria_nivel_sueldos';
 
     protected $fillable = [

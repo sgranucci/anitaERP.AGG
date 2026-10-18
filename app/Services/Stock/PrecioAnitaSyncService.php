@@ -176,7 +176,10 @@ class PrecioAnitaSyncService
      */
     private function listarStkpreDesdeAnita(int $fechaDesdeAnita, ?string $codigoListaAnita = null): array
     {
-        $where = " WHERE stkp_fe_ult_act >= {$fechaDesdeAnita} ";
+        // fechaDesdeAnita <= 0: sin filtro de fecha (Crown: muchas filas con stkp_fe_ult_act = 0).
+        $where = $fechaDesdeAnita > 0
+            ? " WHERE stkp_fe_ult_act >= {$fechaDesdeAnita} "
+            : ' WHERE 1=1 ';
         $codigoListaAnita = trim((string) ($codigoListaAnita ?? ''));
         if ($codigoListaAnita !== '') {
             $where .= " AND stkp_lista = '".addslashes($codigoListaAnita)."' ";
@@ -196,6 +199,7 @@ class PrecioAnitaSyncService
             'whereArmado' => $where,
             'orderBy' => 'stkp_fe_ult_act desc',
         ];
+        $payload = $this->mergeBridgeCasinoOpcional($payload);
 
         $respuesta = $this->apiAnita->apiCall($payload);
         if ($respuesta === false || $respuesta === '' || str_contains((string) $respuesta, 'Error')) {
@@ -293,5 +297,27 @@ class PrecioAnitaSyncService
         }
 
         return array_values($out);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function mergeBridgeCasinoOpcional(array $payload): array
+    {
+        $ifx = trim((string) config('stock.precio_anita_ifx_server', ''));
+        if ($ifx !== '') {
+            $payload['ifx_server'] = $ifx;
+        }
+        $path = rtrim(trim((string) config('stock.precio_anita_path_sistema', '')), '/');
+        if ($path !== '') {
+            $payload['path_sistema'] = $path;
+        }
+        $sistema = trim((string) config('stock.precio_anita_sistema', ''));
+        if ($sistema !== '') {
+            $payload['sistema'] = $sistema;
+        }
+
+        return $payload;
     }
 }

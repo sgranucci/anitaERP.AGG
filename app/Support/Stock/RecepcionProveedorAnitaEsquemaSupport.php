@@ -5,15 +5,24 @@ namespace App\Support\Stock;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
- * recepmae / aplicped de El Bierzo (/usr2/bierzo compras, 5/oct/2026):
- * no tienen recm_com_*, recm_documentoid ni aplp_nro_interno.
- * AGG sí. La vinculación ERP↔Anita en Bierzo es por clave COM (tipo/letra/sucursal/nro).
+ * recepmae / aplicped según instalación.
+ *
+ * - AGG: recm_com_* + documentoid; aplicped con aplp_nro_interno.
+ * - El Bierzo: sin recm_com_* ni documentoid; sin aplp_nro_interno.
+ * - Crown (/usr2/casino, verificado 17/oct/2026): igual que Bierzo en recepmae
+ *   (sin recm_com_*); OC se resuelve por aplicped (aplp_ref_* = PEP).
+ *   recm_sucursal = casino (puede ser 0 = Adm.Central).
  */
 final class RecepcionProveedorAnitaEsquemaSupport
 {
+    public static function esCrown(): bool
+    {
+        return EntornoEmpresaSupport::esCrown();
+    }
+
     public static function esquemaReducido(): bool
     {
-        return EntornoEmpresaSupport::esElBierzo();
+        return EntornoEmpresaSupport::esElBierzo() || self::esCrown();
     }
 
     /**
@@ -38,9 +47,40 @@ final class RecepcionProveedorAnitaEsquemaSupport
         return ['aplp_nro_interno'];
     }
 
+    /**
+     * Crown recepmov: sin recv_empresa ni recv_cotizacion (verificado 17/oct/2026).
+     *
+     * @return list<string>
+     */
+    public static function columnasRecepmovAusentes(): array
+    {
+        if (! self::esCrown()) {
+            return [];
+        }
+
+        return ['recv_empresa', 'recv_cotizacion'];
+    }
+
     public static function camposRecepmae(string $campos): string
     {
         return self::filtrarCampos($campos, self::columnasRecepmaeAusentes());
+    }
+
+    public static function camposRecepmov(string $campos): string
+    {
+        return self::filtrarCampos($campos, self::columnasRecepmovAusentes());
+    }
+
+    /**
+     * Crown/Bierzo: sucursal 0 es válida (Adm.Central).
+     */
+    public static function sucursalValida(int $sucursal): bool
+    {
+        if (self::esCrown() || EntornoEmpresaSupport::esElBierzo()) {
+            return $sucursal >= 0;
+        }
+
+        return $sucursal > 0;
     }
 
     /**

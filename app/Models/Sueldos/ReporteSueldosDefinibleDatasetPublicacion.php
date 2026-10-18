@@ -5,9 +5,11 @@ namespace App\Models\Sueldos;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ReporteSueldosDefinibleDatasetPublicacion extends Model
+class ReporteSueldosDefinibleDatasetPublicacion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'reporte_sueldos_definible_dataset_publicacion';
 
     protected $fillable = [

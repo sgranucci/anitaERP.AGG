@@ -10,6 +10,7 @@ use App\Support\Stock\ArticuloImpuestoAnitaSupport;
 use App\Support\Stock\ArticuloStkmaeAnitaBridgeSupport;
 use App\Support\Stock\StockAnitaBridgeSupport;
 use App\Support\Stock\InterformingArticuloAnitaMapperSupport;
+use App\Support\Stock\TipoarticuloDefaultSupport;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
@@ -761,6 +762,69 @@ class Articulo extends Model implements Auditable
             $formulaErpId = $this->formulaIdDesdeCodigoAnita($data->stkm_formula ?? 0);
 
             switch (config('app.empresa')) {
+                case 'CROWN':
+                    // Gastronomía Crown: sin stcustom; detalle en stkm_desc_det; usoarticulo vacío en ERP.
+                    $detalle = trim((string) ($data->stkm_desc_det ?? ''));
+                    if ($detalle === '') {
+                        $detalle = (string) ($data->stkm_desc ?? '');
+                    }
+
+                    $tipoarticulo = Tipoarticulo::select('id')->where('abreviatura', $data->stkm_tipo_articulo ?? '')->first();
+                    $tipoarticulo_id = $tipoarticulo?->id ?? TipoarticuloDefaultSupport::idParaImportacionAnita();
+
+                    $estado = 'ACTIVO';
+                    switch ((string) ($data->stkm_fl_no_factura ?? '0')) {
+                        case '0':
+                            $noFactura = '0';
+                            $estado = 'ACTIVO';
+                            break;
+                        case '1':
+                        case 'N':
+                            $noFactura = '1';
+                            $estado = 'ACTIVO';
+                            break;
+                        case 'I':
+                            $noFactura = '1';
+                            $estado = 'INACTIVO';
+                            break;
+                        default:
+                            $noFactura = '0';
+                            $estado = 'ACTIVO';
+                            break;
+                    }
+
+                    $arrayCampos = [
+                        'descripcion' => $data->stkm_desc,
+                        'sku' => ltrim($data->stkm_articulo, '0'),
+                        'detalle' => $detalle,
+                        'empresa_id' => \App\Support\Stock\ArticuloListadoFiltros::empresaIdDesdeSyncAnita(),
+                        'unidadesxenvase' => $data->stkm_unidad_xenv,
+                        'skualternativo' => $data->stkm_articulo_prod,
+                        'categoria_id' => $categoria_id > 0 ? $categoria_id : null,
+                        'subcategoria_id' => null,
+                        'linea_id' => $linea_id,
+                        'mventa_id' => $mventa_id,
+                        'peso' => $data->stkm_peso_aprox,
+                        'nofactura' => $noFactura,
+                        'impuesto_id' => $impuesto_id,
+                        'formula' => $formulaErpId,
+                        'foto' => $data->stkm_nombre_foto,
+                        'unidadmedida_id' => $unidadmedida_id > 0 ? $unidadmedida_id : null,
+                        'unidadmedidaalternativa_id' => $unidadmedidaalternativa_id > 0 ? $unidadmedidaalternativa_id : null,
+                        'cuentacontableventa_id' => $cuentacontableventa_id > 0 ? $cuentacontableventa_id : null,
+                        'cuentacontablecompra_id' => $cuentacontablecompra_id > 0 ? $cuentacontablecompra_id : null,
+                        'cuentacontableimpinterno_id' => $cuentacontableimpinterno_id > 0 ? $cuentacontableimpinterno_id : null,
+                        'ppp' => $data->stkm_ppp,
+                        'usuario_id' => $usuario_id,
+                        'fechaultimacompra' => $fechaultimacompra,
+                        'usoarticulo_id' => null,
+                        'tipoarticulo_id' => $tipoarticulo_id,
+                        'leyenda' => '',
+                        'coeficienteconversion' => $data->stkm_peso_aprox,
+                        'estado' => $estado,
+                    ];
+                    break;
+
                 case 'AGG':
                     // Leer stcustom
                     self::leeStCustom($data->stkm_articulo, $oficinacompra_id, $cuentaContableGasto_id,

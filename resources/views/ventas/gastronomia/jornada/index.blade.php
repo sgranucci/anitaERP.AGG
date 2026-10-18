@@ -23,6 +23,8 @@
     window.JORNADA_GASTRONOMIA = {
         csrf: @json(csrf_token()),
         empresaId: @json((int) $empresa_id),
+        esCrown: @json((bool) ($es_crown ?? false)),
+        salaId: @json((int) ($sala_id ?? 0)),
         usocuentacajaGastronomiaId: @json((int) ($usocuentacaja_gastronomia_id ?? 0)),
         urlCuentacajaPorCodigoBase: @json(url('ventas/gastronomia/api/cuentacaja-por-codigo')),
         urlComprobanteTotemBase: @json(route('gastronomia_jornada_comprobante_cierre_totem', ['jornadaId' => '__JORNADA_ID__', 'inline' => 1])),
@@ -45,6 +47,8 @@
      data-api-eliminar="{{ url('ventas/gastronomia/jornada/api/eliminar') }}"
      data-api-anular-cierre="{{ route('gastronomia_jornada_api_anular_cierre') }}"
      data-cierre-totem-habilitado="{{ ! empty($cierre_totem_habilitado) ? '1' : '0' }}"
+     data-es-crown="{{ ! empty($es_crown) ? '1' : '0' }}"
+     data-sala-id="{{ (int) ($sala_id ?? 0) }}"
      data-csrf="{{ csrf_token() }}"
      data-puede-abrir="{{ $puede_abrir ? '1' : '0' }}"
      data-puede-cerrar="{{ $puede_cerrar ? '1' : '0' }}"
@@ -61,8 +65,12 @@
             <div class="card-body">
                 <p class="text-muted mb-3">
                     La <strong>fecha de factura</strong> de cada comprobante es siempre el día calendario real.
-                    La <strong>fecha de jornada</strong> es la del turno abierto y se graba en <code>venta.fechajornada</code>
-                    para todas las terminales de la empresa.
+                    La <strong>fecha de jornada</strong> es la de la jornada abierta y se graba en <code>venta.fechajornada</code>
+                    @if (! empty($es_crown))
+                        para todas las terminales de la <strong>sala</strong> elegida. Cada sala abre y cierra su propia jornada.
+                    @else
+                        para todas las terminales de la empresa.
+                    @endif
                 </p>
                 @if (! empty($cierre_totem_habilitado))
                     <p class="text-muted small mb-3">
@@ -89,13 +97,35 @@
                         'required' => true,
                         'permite_todas' => false,
                     ])
+                    @if (! empty($es_crown))
+                        <div class="form-group mb-0 ml-2">
+                            <label for="sala_id" class="mr-1 mb-0">Sala</label>
+                            <select name="sala_id" id="sala_id" class="form-control form-control-sm">
+                                <option value="">— Elija la sala —</option>
+                                @foreach (($salas ?? collect()) as $sala)
+                                    <option value="{{ $sala->id }}" {{ (int) ($sala_id ?? 0) === (int) $sala->id ? 'selected' : '' }}>
+                                        {{ trim(($sala->codigo ? $sala->codigo.' — ' : '').$sala->nombre) }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @endif
                 </form>
+
+                @if (! empty($falta_elegir_sala))
+                    <div class="alert alert-info">
+                        Elija la <strong>sala</strong> para ver el estado de su jornada.
+                    </div>
+                @endif
 
                 @if ($estado)
                     <div id="jornada-estado-panel" class="mb-4">
                         @if ($estado['jornada_abierta'])
                             <div class="alert alert-success">
                                 <strong>Jornada abierta</strong>
+                                @if (! empty($estado['sala_nombre']))
+                                    — Sala: <strong>{{ $estado['sala_nombre'] }}</strong>
+                                @endif
                                 — Fecha jornada:
                                 <span id="lbl-fecha-jornada">{{ $estado['fecha_jornada_fmt'] ?? $estado['fecha_jornada'] }}</span>
                                 · Facturas de hoy usan fecha
@@ -129,7 +159,7 @@
                             </div>
                         @else
                             <div class="alert alert-warning">
-                                <strong>Sin jornada abierta</strong> para esta empresa.
+                                <strong>Sin jornada abierta</strong> para esta {{ ! empty($es_crown) ? 'sala' : 'empresa' }}.
                                 Las terminales de facturación no podrán emitir comprobantes hasta abrir la jornada.
                             </div>
                         @endif
@@ -289,7 +319,9 @@
                     @endif
                 </div>
                 <p class="text-muted small mb-2">
-                    Reimprima el comprobante de ingresos tótem desde la columna <strong>Comprobante</strong> de cualquier jornada cerrada.
+                    @if (! empty($cierre_totem_habilitado))
+                        Reimprima el comprobante de ingresos tótem desde la columna <strong>Comprobante</strong> de cualquier jornada cerrada.
+                    @endif
                     @if ($puede_anular_cierre ?? false)
                         Si cerró por error y <strong>no</strong> presentó en caja, puede anular el cierre y dejar la jornada abierta de nuevo.
                     @endif
@@ -300,6 +332,9 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Fecha jornada</th>
+                                @if (! empty($es_crown))
+                                    <th>Sala</th>
+                                @endif
                                 <th>Estado</th>
                                 <th>Apertura</th>
                                 <th>Cierre</th>
@@ -323,6 +358,9 @@
                                 <tr>
                                     <td>{{ $j->id }}</td>
                                     <td>{{ $j->fecha_jornada->format('d/m/Y') }}</td>
+                                    @if (! empty($es_crown))
+                                        <td>{{ $j->sala->nombre ?? '—' }}</td>
+                                    @endif
                                     <td>{{ ucfirst($j->estado) }}</td>
                                     <td>{{ $j->apertura_en?->format('d/m/Y H:i') }}</td>
                                     <td>{{ $j->cierre_en?->format('d/m/Y H:i') ?? '—' }}</td>
@@ -399,7 +437,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="{{ 7 + (! empty($cierre_totem_habilitado) ? 2 : 0) + ((($puede_eliminar ?? false) || ($puede_anular_cierre ?? false)) ? 1 : 0) }}" class="text-center text-muted">Sin registros.</td>
+                                    <td colspan="{{ 7 + (! empty($es_crown) ? 1 : 0) + (! empty($cierre_totem_habilitado) ? 2 : 0) + ((($puede_eliminar ?? false) || ($puede_anular_cierre ?? false)) ? 1 : 0) }}" class="text-center text-muted">Sin registros.</td>
                                 </tr>
                             @endforelse
                         </tbody>

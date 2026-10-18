@@ -6,9 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Models\Produccion\Tarea;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Articulo_Costo extends Model
+class Articulo_Costo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['articulo_id', 'tarea_id', 'costo', 'fechavigencia'];
     protected $table = 'articulo_costo';
 	protected $casts = [

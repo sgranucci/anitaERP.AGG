@@ -50,7 +50,9 @@ class RecepcionProveedorAnitaImportSupport
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
-            'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac',
+            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae(
+                'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac'
+            ),
             'orderBy' => 'recm_fecha, recm_sucursal, recm_nro',
             'whereArmado' => $where,
         ];
@@ -76,7 +78,9 @@ class RecepcionProveedorAnitaImportSupport
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_linea', 'recepmov'),
-            'campos' => 'recv_orden,recv_articulo,recv_cantidad,recv_precio,recv_dto_art,recv_deposito,recv_fecha,recv_cod_mon,recv_ccosto,recv_empresa,recv_cotizacion',
+            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmov(
+                'recv_orden,recv_articulo,recv_cantidad,recv_precio,recv_dto_art,recv_deposito,recv_fecha,recv_cod_mon,recv_ccosto,recv_empresa,recv_cotizacion'
+            ),
             'orderBy' => 'recv_orden',
             'whereArmado' => $where,
         ]));
@@ -95,7 +99,9 @@ class RecepcionProveedorAnitaImportSupport
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
-            'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac',
+            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae(
+                'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac'
+            ),
             'whereArmado' => $where,
             'limit' => 'FIRST 1',
         ]));
@@ -121,7 +127,9 @@ class RecepcionProveedorAnitaImportSupport
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
-            'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac',
+            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae(
+                'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac'
+            ),
             'orderBy' => 'recm_sucursal, recm_nro',
             'whereArmado' => $where,
         ]));
@@ -129,6 +137,7 @@ class RecepcionProveedorAnitaImportSupport
 
     /**
      * Número OC Anita desde recepmae: recm_com_nro o recm_nro_fac (PEP/FIB en recm_tipo_fac).
+     * Crown: sin recm_com_*; usar mapa aplicped (ver {@see mapaOcDesdeAplicpedPorCom}).
      */
     public static function numeroOrdencompraDesdeCabecera(object $cabecera): int
     {
@@ -149,8 +158,90 @@ class RecepcionProveedorAnitaImportSupport
     {
         $nro = (int) $numeroOc;
 
+        if (RecepcionProveedorAnitaEsquemaSupport::esquemaReducido()) {
+            // Crown/Bierzo: sin recm_com_*; el vínculo OC vive en aplicped.
+            return " WHERE recm_tipo = 'COM' AND recm_letra = 'X' AND recm_nro_fac = {$nro}";
+        }
+
         return " WHERE recm_tipo = 'COM' AND recm_letra = 'X'"
             ." AND (recm_com_nro = {$nro} OR recm_nro_fac = {$nro})";
+    }
+
+    /**
+     * Mapa COM (sucursal-nro) → OC Anita (nro + sucursal PEP) desde aplicped.
+     * Crown: el UNLOAD sin filtro por sucursal vuelve []; se parte por sucursal
+     * y, si se pasan claves del período, solo se piden esos nros (IN por lotes).
+     *
+     * @param  list<string>|null  $clavesCom  Claves "sucursal-nro" a resolver (ej. del recepmae del período).
+     * @return array<string, array{numero_oc: int, sucursal_oc: int}>
+     */
+    public static function mapaOcDesdeAplicpedPorCom(?array $clavesCom = null): array
+    {
+        $porSucursal = [];
+        if ($clavesCom !== null) {
+            foreach ($clavesCom as $clave) {
+                $partes = explode('-', (string) $clave, 2);
+                if (count($partes) !== 2) {
+                    continue;
+                }
+                $suc = (int) $partes[0];
+                $nro = (int) $partes[1];
+                if ($nro <= 0 || ! RecepcionProveedorAnitaEsquemaSupport::sucursalValida($suc)) {
+                    continue;
+                }
+                $porSucursal[$suc][] = $nro;
+            }
+        } else {
+            foreach ([0, 1, 2, 3, 4, 5, 6, 7, 8] as $suc) {
+                $porSucursal[$suc] = [];
+            }
+        }
+
+        $mapa = [];
+        $api = new ApiAnita;
+        $tabla = config('recepcion_proveedor.anita.tablas.aplicacion_oc', 'aplicped');
+
+        foreach ($porSucursal as $sucursal => $nros) {
+            $nros = array_values(array_unique($nros));
+            if ($clavesCom !== null && $nros === []) {
+                continue;
+            }
+
+            $lotes = $clavesCom !== null ? array_chunk($nros, 400) : [null];
+            foreach ($lotes as $lote) {
+                $where = " WHERE aplp_tipo = 'COM' AND aplp_ref_tipo = 'PEP' AND aplp_sucursal = ".(int) $sucursal;
+                if (is_array($lote) && $lote !== []) {
+                    $where .= ' AND aplp_nro IN ('.implode(',', $lote).')';
+                }
+
+                $filas = ApiAnita::decodificarListaFilas($api->apiCall([
+                    'acc' => 'list',
+                    'sistema' => self::sistemaCompras(),
+                    'tabla' => $tabla,
+                    'campos' => 'aplp_sucursal,aplp_nro,aplp_ref_tipo,aplp_ref_letra,aplp_ref_sucursal,aplp_ref_nro',
+                    'whereArmado' => $where,
+                ]));
+
+                foreach ($filas as $fila) {
+                    $suc = (int) ($fila->aplp_sucursal ?? -1);
+                    $nro = (int) ($fila->aplp_nro ?? 0);
+                    $nroOc = (int) ($fila->aplp_ref_nro ?? 0);
+                    if ($nro <= 0 || $nroOc <= 0 || ! RecepcionProveedorAnitaEsquemaSupport::sucursalValida($suc)) {
+                        continue;
+                    }
+                    $key = $suc.'-'.$nro;
+                    if (isset($mapa[$key])) {
+                        continue;
+                    }
+                    $mapa[$key] = [
+                        'numero_oc' => $nroOc,
+                        'sucursal_oc' => (int) ($fila->aplp_ref_sucursal ?? 0),
+                    ];
+                }
+            }
+        }
+
+        return $mapa;
     }
 
     public static function whereAplicpedPorOrdencompra(int $numeroOc): string
@@ -175,12 +266,19 @@ class RecepcionProveedorAnitaImportSupport
             return [];
         }
 
+        if (RecepcionProveedorAnitaEsquemaSupport::esquemaReducido()) {
+            // Crown/Bierzo: el vínculo OC→COM está en aplicped, no en recepmae.
+            return [];
+        }
+
         $api = new ApiAnita;
         $filas = ApiAnita::decodificarListaFilas($api->apiCall([
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
-            'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac',
+            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae(
+                'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac'
+            ),
             'orderBy' => 'recm_sucursal, recm_nro',
             'whereArmado' => self::whereRecepmaePorOrdencompra($numeroOc),
         ]));
@@ -235,7 +333,7 @@ class RecepcionProveedorAnitaImportSupport
         foreach ($cabeceras as $cab) {
             $sucursal = (int) ($cab->recm_sucursal ?? 0);
             $nro = (int) ($cab->recm_nro ?? 0);
-            if ($sucursal <= 0 || $nro <= 0) {
+            if ($nro <= 0 || ! RecepcionProveedorAnitaEsquemaSupport::sucursalValida($sucursal)) {
                 continue;
             }
             $claves[$sucursal.'-'.$nro] = [
@@ -248,7 +346,7 @@ class RecepcionProveedorAnitaImportSupport
         foreach ($aplicped as $apl) {
             $sucursal = (int) ($apl->aplp_sucursal ?? 0);
             $nro = (int) ($apl->aplp_nro ?? 0);
-            if ($sucursal <= 0 || $nro <= 0) {
+            if ($nro <= 0 || ! RecepcionProveedorAnitaEsquemaSupport::sucursalValida($sucursal)) {
                 continue;
             }
             $claves[$sucursal.'-'.$nro] = [
@@ -316,7 +414,9 @@ class RecepcionProveedorAnitaImportSupport
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_linea', 'recepmov'),
-            'campos' => 'recv_tipo,recv_letra,recv_sucursal,recv_nro,recv_orden,recv_articulo,recv_cantidad,recv_precio,recv_dto_art,recv_deposito,recv_fecha,recv_cod_mon,recv_ccosto,recv_empresa,recv_cotizacion',
+            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmov(
+                'recv_tipo,recv_letra,recv_sucursal,recv_nro,recv_orden,recv_articulo,recv_cantidad,recv_precio,recv_dto_art,recv_deposito,recv_fecha,recv_cod_mon,recv_ccosto,recv_empresa,recv_cotizacion'
+            ),
             'orderBy' => 'recv_sucursal, recv_nro, recv_orden',
             'whereArmado' => $where,
         ]));
@@ -332,7 +432,7 @@ class RecepcionProveedorAnitaImportSupport
         foreach ($lineas as $lin) {
             $suc = (int) ($lin->recv_sucursal ?? 0);
             $nro = (int) ($lin->recv_nro ?? 0);
-            if ($nro <= 0 || $suc <= 0) {
+            if ($nro <= 0 || ! RecepcionProveedorAnitaEsquemaSupport::sucursalValida($suc)) {
                 continue;
             }
             $key = $suc.'-'.$nro;

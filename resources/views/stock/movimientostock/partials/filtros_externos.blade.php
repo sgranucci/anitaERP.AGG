@@ -17,7 +17,7 @@
         return route($rutaIndex, $q);
     };
 @endphp
-@if (! $modoSurmar && ($empresa_query ?? collect())->count() > 1)
+@if (! $modoSurmar && \App\Support\Configuracion\EmpresaFiltroExternoSupport::mostrarChips())
 <div class="card-body py-2 border-bottom bg-white">
     <div class="d-flex flex-wrap align-items-center">
         <div class="mb-1">

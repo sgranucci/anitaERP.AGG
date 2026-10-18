@@ -8,9 +8,11 @@ use App\Models\Seguridad\Usuario;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class PeriodoCierreProgramado extends Model
+class PeriodoCierreProgramado extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const ESTADO_PENDIENTE = 'pendiente';
 
     public const ESTADO_EJECUTADO = 'ejecutado';

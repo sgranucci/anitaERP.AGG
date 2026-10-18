@@ -4,9 +4,11 @@ namespace App\Models\Compras;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Comprobante_Proveedor_Estado extends Model
+class Comprobante_Proveedor_Estado extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'comprobante_proveedor_estado';
 
     protected $fillable = [

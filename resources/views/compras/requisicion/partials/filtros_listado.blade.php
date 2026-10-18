@@ -12,10 +12,19 @@
     $limpiarUrlPanel = $limpiarUrl ?? route('consultar_requisicion', RequisicionListadoFiltros::paraQueryStringEmpresa($f));
     $fScope = $f['empresa_scope'] ?? 'una';
     $fEmp = $f['empresa_id'] ?? null;
+    $fSalaScope = $f['sala_scope'] ?? 'todas';
+    $fSala = $f['sala_id'] ?? null;
+    $esCrownFiltros = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown();
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-requisicion" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
-    {{-- Persistencia del filtro externo de empresa al buscar por texto o aplicar el panel --}}
+    @if ($esCrownFiltros)
+        @if ($fSalaScope === 'todas')
+            <input type="hidden" name="sala_todas" value="1">
+        @elseif (! empty($fSala))
+            <input type="hidden" name="sala_id" value="{{ $fSala }}">
+        @endif
+    @endif
     @if ($fScope === 'todas')
         <input type="hidden" name="empresa_todas" value="1">
     @elseif (! empty($fEmp))

@@ -5,9 +5,11 @@ namespace App\Models\Ventas;
 use App\Models\Stock\Articulo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CertificadoSanitarioArticulo extends Model
+class CertificadoSanitarioArticulo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'certificado_sanitario_articulo';
 
     protected $fillable = [

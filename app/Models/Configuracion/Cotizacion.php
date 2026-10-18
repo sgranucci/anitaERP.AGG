@@ -4,9 +4,11 @@ namespace App\Models\Configuracion;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Cotizacion extends Model
+class Cotizacion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['fecha', 'usuario_id'];
     protected $table = 'cotizacion';
 

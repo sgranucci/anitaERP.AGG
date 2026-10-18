@@ -4,9 +4,11 @@ namespace App\Models\Contable;
 
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Contabilidad_CuentaAutomaticaDetalle extends Model
+class Contabilidad_CuentaAutomaticaDetalle extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'contabilidad_cuenta_automatica_detalle';
 
     protected $fillable = [

@@ -2,12 +2,18 @@
 
 namespace App\Http\Controllers\Ventas;
 
+use App\Exports\Ventas\MozoGastronomiaListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionMozoGastronomia;
+use App\Models\Configuracion\Sala;
 use App\Models\Ventas\MozoGastronomia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\MozoGastronomiaRepositoryInterface;
 use App\Services\Ventas\MozoGastronomiaAnitaSyncService;
+use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Listado\QueryRetornoListado;
+use App\Support\Ventas\MozoGastronomiaListadoFiltros;
+use App\Support\Ventas\UsuarioSalaAsignadaSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -20,7 +26,7 @@ class MozoGastronomiaController extends Controller
     ) {
     }
 
-    public function index()
+    public function index(Request $request)
     {
         can('listar-mozo-gastronomia');
 
@@ -29,13 +35,67 @@ class MozoGastronomiaController extends Controller
             $this->mozoGastronomiaAnitaSyncService->sincronizarConAnita();
         }
 
-        $datas = $this->repository->all();
-        $sinMozosCargados = $datas->isEmpty();
+        $filtros = MozoGastronomiaListadoFiltros::resolverDesdeRequest($request);
+        $filtrosQuery = MozoGastronomiaListadoFiltros::paraQueryString($filtros);
+        $datas = $this->repository->leeMozoGastronomia($filtros, true);
+        if ($datas instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator) {
+            $datas->appends($filtrosQuery);
+        }
+        $sinMozosCargados = $datas->total() === 0 && ! MozoGastronomiaListadoFiltros::tieneCriteriosAplicados($filtros);
+        $esCrown = EntornoEmpresaSupport::esCrown();
+        $sala_query = $esCrown ? $this->salasParaFiltro() : collect();
 
-        return view('ventas.mozo_gastronomia.index', compact('datas', 'sinMozosCargados'));
+        return view('ventas.mozo_gastronomia.index', [
+            'datas' => $datas,
+            'sinMozosCargados' => $sinMozosCargados,
+            'esCrown' => $esCrown,
+            'sala_query' => $sala_query,
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'camposFiltro' => MozoGastronomiaListadoFiltros::CAMPOS,
+        ]);
     }
 
-    public function crear()
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-mozo-gastronomia');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = MozoGastronomiaListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $esCrown = EntornoEmpresaSupport::esCrown();
+
+        switch ($formato) {
+            case 'PDF':
+                $datas = $this->repository->leeMozoGastronomia($filtros, false);
+                $view = \View::make('ventas.mozo_gastronomia.listado', compact('datas', 'esCrown', 'filtros'))->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombre_pdf = 'listado_mozo_gastronomia';
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
+
+            case 'EXCEL':
+                return (new MozoGastronomiaListadoExport($this->repository))
+                    ->parametros($filtros)
+                    ->download('mozo_gastronomia.xlsx');
+
+            case 'CSV':
+                return (new MozoGastronomiaListadoExport($this->repository))
+                    ->parametros($filtros)
+                    ->download('mozo_gastronomia.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return redirect()->route('consultar_mozo_gastronomia', MozoGastronomiaListadoFiltros::paraQueryString($filtros));
+    }
+
+    public function crear(Request $request)
     {
         can('crear-mozo-gastronomia');
         $data = new MozoGastronomia();
@@ -43,8 +103,14 @@ class MozoGastronomiaController extends Controller
         $empresaIdSugerencia = $this->resolverEmpresaIdSugerenciaCodigo($empresa_query);
 
         $data->codigo = $this->repository->proximoCodigoLocal($empresaIdSugerencia);
+        $esCrown = EntornoEmpresaSupport::esCrown();
+        $sala_query = $esCrown ? $this->salasParaFiltro() : collect();
+        $empresa_default_id = (int) (config('mozo_gastronomia_anita.empresa_default_id') ?: $empresaIdSugerencia ?: 1);
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, MozoGastronomiaListadoFiltros::class);
 
-        return view('ventas.mozo_gastronomia.crear', compact('data', 'empresa_query'));
+        return view('ventas.mozo_gastronomia.crear', compact(
+            'data', 'empresa_query', 'sala_query', 'empresa_default_id', 'filtrosQuery'
+        ));
     }
 
     public function guardar(ValidacionMozoGastronomia $request)
@@ -70,7 +136,8 @@ class MozoGastronomiaController extends Controller
 
         $this->repository->create($data);
 
-        return redirect('ventas/mozo-gastronomia')->with('mensaje', 'Mozo creado con éxito');
+        return redirect()->route('consultar_mozo_gastronomia', QueryRetornoListado::desdeRequest($request, MozoGastronomiaListadoFiltros::class))
+            ->with('mensaje', 'Mozo creado con éxito');
     }
 
     public function proximoCodigo(Request $request)
@@ -87,13 +154,30 @@ class MozoGastronomiaController extends Controller
         ]);
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-mozo-gastronomia');
         $data = $this->repository->findOrFail($id);
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $esCrown = EntornoEmpresaSupport::esCrown();
+        $sala_query = $esCrown ? $this->salasParaFiltro() : collect();
+        $empresa_default_id = (int) ($data->empresa_id ?: (config('mozo_gastronomia_anita.empresa_default_id') ?: 1));
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, MozoGastronomiaListadoFiltros::class);
 
-        return view('ventas.mozo_gastronomia.editar', compact('data', 'empresa_query'));
+        return view('ventas.mozo_gastronomia.editar', compact(
+            'data', 'empresa_query', 'sala_query', 'empresa_default_id', 'filtrosQuery'
+        ));
+    }
+
+    private function salasParaFiltro()
+    {
+        $q = Sala::query()->orderBy('codigo')->orderBy('nombre');
+        $ids = UsuarioSalaAsignadaSupport::idsDesdeSesion();
+        if (count($ids) >= 1) {
+            $q->whereIn('id', $ids);
+        }
+
+        return $q->get(['id', 'nombre', 'codigo']);
     }
 
     public function actualizar(ValidacionMozoGastronomia $request, $id)
@@ -111,7 +195,8 @@ class MozoGastronomiaController extends Controller
 
         $this->repository->update($data, $id);
 
-        return redirect('ventas/mozo-gastronomia')->with('mensaje', 'Mozo actualizado con éxito');
+        return redirect()->route('consultar_mozo_gastronomia', QueryRetornoListado::desdeRequest($request, MozoGastronomiaListadoFiltros::class))
+            ->with('mensaje', 'Mozo actualizado con éxito');
     }
 
     public function eliminar(Request $request, $id)
@@ -135,6 +220,8 @@ class MozoGastronomiaController extends Controller
      */
     public function consultaMozo(Request $request)
     {
+        $salaId = $request->filled('sala_id') ? (int) $request->get('sala_id') : null;
+
         if ($request->filled('empresa_id')) {
             can('usar-proceso-facturacion-gastronomia');
             $empresaId = (int) $request->get('empresa_id');
@@ -143,6 +230,7 @@ class MozoGastronomiaController extends Controller
                 (string) ($request->get('consulta') ?? ''),
                 $empresaId,
                 false,
+                $salaId,
             );
         }
 
@@ -152,6 +240,7 @@ class MozoGastronomiaController extends Controller
             (string) ($request->get('consulta') ?? ''),
             0,
             true,
+            $salaId,
         );
     }
 
@@ -160,7 +249,8 @@ class MozoGastronomiaController extends Controller
         can('usar-proceso-facturacion-gastronomia');
 
         $empresaId = (int) ($request->get('empresa_id') ?: config('cliente.EMPRESA_DEFAULT_ID'));
-        $mozo = $this->repository->findPorCodigo($codigo, $empresaId, false);
+        $salaId = $request->filled('sala_id') ? (int) $request->get('sala_id') : null;
+        $mozo = $this->repository->findPorCodigo($codigo, $empresaId, false, $salaId);
 
         if (! $mozo) {
             return response()->json(['error' => 'Mozo no encontrado'], 404);
@@ -170,6 +260,7 @@ class MozoGastronomiaController extends Controller
             'id' => $mozo->id,
             'codigo' => $mozo->codigo,
             'nombre' => $mozo->nombre,
+            'sala_id' => $mozo->sala_id,
         ]);
     }
 

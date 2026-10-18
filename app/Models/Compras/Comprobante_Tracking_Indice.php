@@ -3,6 +3,7 @@
 namespace App\Models\Compras;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Índice materializado del tracking: PDF, fecha de carga real y estado de pago.
@@ -11,8 +12,9 @@ use Illuminate\Database\Eloquent\Model;
  * el puente Anita o no los trajo la importación—, y consultarlos por fila haría
  * inusable la grilla. Se resuelven en el backfill y la grilla sólo lee acá.
  */
-class Comprobante_Tracking_Indice extends Model
+class Comprobante_Tracking_Indice extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'comprobante_tracking_indice';
 
     protected $fillable = [

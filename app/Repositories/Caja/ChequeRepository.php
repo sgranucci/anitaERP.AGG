@@ -1471,18 +1471,25 @@ class ChequeRepository implements ChequeRepositoryInterface
         $negociableIn = strtoupper(trim((string) ($data->cpro_negociable ?? '')));
         $negociable = in_array($negociableIn, ['E', 'N'], true) ? $negociableIn : 'N';
 
-        $codigoModelo = ltrim((string) ($data->cpro_modelo ?? ''), '0');
-        $chequera = $codigoModelo !== ''
-            ? $this->chequeraRepository->findPorCodigo($codigoModelo)
-            : null;
-        $chequera_id = $chequera ? $chequera->id : null;
-
-        $codigoCuenta = ltrim((string) ($data->cpro_cuenta ?? ''), '0');
+        $codigoCuenta = trim((string) ($data->cpro_cuenta ?? ''));
         $cuentacaja = $codigoCuenta !== ''
             ? $this->cuentacajaRepository->findPorCodigo($codigoCuenta)
             : null;
         $cuentacaja_id = $cuentacaja ? $cuentacaja->id : null;
         $banco_id = $cuentacaja && ! empty($cuentacaja->banco_id) ? (int) $cuentacaja->banco_id : null;
+
+        $codigoModelo = ltrim((string) ($data->cpro_modelo ?? ''), '0');
+        $chequera = $codigoModelo !== ''
+            ? $this->chequeraRepository->findPorCodigo($codigoModelo)
+            : null;
+        // Crown: cpro_modelo suele venir 0 → ubicar chequera por cuenta + nro en rango.
+        if (! $chequera && $cuentacaja_id && ! empty($data->cpro_nro_cheque)) {
+            $chequera = $this->chequeraRepository->findPorCuentaYNumero(
+                (int) $cuentacaja_id,
+                (int) preg_replace('/\D/', '', (string) $data->cpro_nro_cheque)
+            );
+        }
+        $chequera_id = $chequera ? $chequera->id : null;
 
         $empresa_id = $this->resolverEmpresaIdDesdeAnita(
             $data->cpro_empresa ?? null,

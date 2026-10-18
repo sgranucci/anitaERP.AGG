@@ -9,4 +9,10 @@ interface BienUsoRepositoryInterface extends RepositoryInterface
      * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Contable\BienUso>
      */
     public function leeBienUso($filtros, ?bool $flPaginando = null);
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesBienUso(array $filtros): array;
 }

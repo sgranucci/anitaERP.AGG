@@ -44,9 +44,13 @@ class DepmaeRepository implements DepmaeRepositoryInterface
         $query = $this->model->newQuery()
             ->select('depmae.*')
             ->join('empresa', 'empresa.id', '=', 'depmae.empresa_id')
-            ->with('empresas:id,nombre');
+            ->leftJoin('sala', 'sala.id', '=', 'depmae.sala_id')
+            ->with(['empresas:id,nombre', 'salas:id,codigo,nombre']);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'depmae.empresa_id');
+        if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+            \App\Support\Ventas\UsuarioSalaAsignadaSupport::aplicarFiltro($query, 'depmae.sala_id');
+        }
         UsuarioDepositoAutorizado::aplicarFiltroQuery($query);
 
         if (DepmaeListadoFiltros::tieneCriteriosAplicados($filtros)) {

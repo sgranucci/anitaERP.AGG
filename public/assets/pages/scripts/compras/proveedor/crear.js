@@ -379,7 +379,7 @@
         });
 
         function mostrarSolapaProveedor(n) {
-            for (var i = 1; i <= 8; i++) {
+            for (var i = 1; i <= 9; i++) {
                 $(".form" + i).toggle(i === n);
             }
             $(".prov-tab-solapa").removeClass("btn-primary font-weight-bold").addClass("btn-info");
@@ -433,6 +433,10 @@
 
         $("#botonform8").click(function(){
             mostrarSolapaProveedor(8);
+        });
+
+        $("#botonform9").click(function(){
+            mostrarSolapaProveedor(9);
         });
 
         $(document).on('click', '.eliminar-documento-fiscal-proveedor', function () {

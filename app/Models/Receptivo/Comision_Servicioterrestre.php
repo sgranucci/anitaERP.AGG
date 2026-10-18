@@ -6,11 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Ventas\Formapago;
 use App\Traits\Receptivo\Comision_ServicioterrestreTrait;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Comision_Servicioterrestre extends Model
+class Comision_Servicioterrestre extends Model implements Auditable
 {
 	use Comision_ServicioterrestreTrait;
 
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = [
 						 'servicioterrestre_id', 'tipocomision', 'formapago_id', 'porcentajecomision'
 						];

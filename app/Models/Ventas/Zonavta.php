@@ -7,9 +7,11 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use App\ApiAnita;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Zonavta extends Model
+class Zonavta extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'codigo'];
     protected $table = 'zonavta';
     protected $keyField = 'zonv_codigo';

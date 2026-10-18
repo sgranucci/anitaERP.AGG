@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Models\Configuracion;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ConfiguracionPercepcionNoCategorizado extends Model
+class ConfiguracionPercepcionNoCategorizado extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'configuracion_percepcion_no_categorizado';
 
     protected $fillable = [

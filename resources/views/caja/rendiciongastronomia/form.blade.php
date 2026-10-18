@@ -32,8 +32,11 @@
     }
     $tipoSel = old('tipo', $esEdicion ? ($data->tipo ?? 'turno') : 'turno');
     $esJornada = $tipoSel === 'jornada';
-    $turnoSel = old('turno_operativo_gastronomia_id', $esEdicion && ! $esJornada ? $data->turno_operativo_gastronomia_id : '');
-    $jornadaSel = old('jornada_gastronomia_id', $esEdicion && $esJornada ? $data->jornada_gastronomia_id : '');
+    // Cierre X Crown: rendición por mozo de la jornada de la sala (sin turno operativo).
+    $esCierreX = $tipoSel === 'cierre_x';
+    $sinTurno = $esJornada || $esCierreX;
+    $turnoSel = old('turno_operativo_gastronomia_id', $esEdicion && ! $sinTurno ? $data->turno_operativo_gastronomia_id : '');
+    $jornadaSel = old('jornada_gastronomia_id', $esEdicion && $sinTurno ? $data->jornada_gastronomia_id : '');
     $empresaSel = old('empresa_id', $esEdicion ? $data->empresa_id : ($empresa_default_id ?? ''));
     $cuentacajaEfectivoId = (int) (GastronomiaCuentacajaEfectivo::idParaEmpresa((int) $empresaSel) ?? 0);
 
@@ -56,7 +59,7 @@
     $auditoriaJornada = $auditoriaJornada ?? null;
     $fechaJornadaDisplay = '—';
     if ($esEdicion) {
-        $fechaJornadaDisplay = $esJornada
+        $fechaJornadaDisplay = $sinTurno
             ? ($data->jornada?->fecha_jornada?->format('d/m/Y') ?? '—')
             : ($data->turnoOperativo?->jornada?->fecha_jornada?->format('d/m/Y') ?? '—');
     }
@@ -91,7 +94,7 @@
         'usuario_habilitado' => $esEdicion ? ($data->turnoOperativo?->usuarioHabilitado?->nombre ?? '') : '',
         'usuario_cierre' => $esEdicion ? ($data->turnoOperativo?->usuarioCierre?->nombre ?? '') : '',
         'monto_habilitacion' => $esEdicion ? round((float) ($data->turnoOperativo?->monto_habilitacion ?? 0), 2) : 0,
-        'url_comprobante_cierre' => ($esEdicion && ! $esJornada && can('ver-comprobante-cierre-turno-gastronomia', false))
+        'url_comprobante_cierre' => ($esEdicion && ! $sinTurno && can('ver-comprobante-cierre-turno-gastronomia', false))
             ? route('gastronomia_cierre_turno_comprobante_cierre', ['id' => $data->turno_operativo_gastronomia_id, 'inline' => 1])
             : '',
         'movimientos' => $movimientosIniciales,
@@ -211,10 +214,32 @@
             @else
             <p class="mb-2">
                 <span class="text-muted">Tipo:</span>
-                <strong>{{ $esJornada ? 'Cierre de jornada (solo ERP)' : 'Cierre de turno' }}</strong>
+                <strong>
+                    @if ($esCierreX)
+                        Cierre X por mozo (solo ERP)
+                    @elseif ($esJornada)
+                        Cierre de jornada (solo ERP)
+                    @else
+                        Cierre de turno
+                    @endif
+                </strong>
             </p>
-            @if ($esJornada)
+            @if ($sinTurno)
             <input type="hidden" name="jornada_gastronomia_id" value="{{ $jornadaSel }}"/>
+            @endif
+            @if ($esCierreX)
+            <input type="hidden" name="sala_id" value="{{ old('sala_id', $data->sala_id) }}"/>
+            <input type="hidden" name="mozo_gastronomia_id" value="{{ old('mozo_gastronomia_id', $data->mozo_gastronomia_id) }}"/>
+            <input type="hidden" name="total_x" value="{{ old('total_x', round((float) ($data->total_x ?? 0), 2)) }}"/>
+            <p class="mb-2">
+                <span class="text-muted">Mozo:</span>
+                <strong>{{ $data->mozo?->nombre ?? ('#'.$data->mozo_gastronomia_id) }}</strong>
+                @if ($data->sala?->nombre)
+                    · <span class="text-muted">Sala:</span> <strong>{{ $data->sala->nombre }}</strong>
+                @endif
+                · <span class="text-muted">Total X a rendir:</span>
+                <strong>{{ number_format((float) ($data->total_x ?? 0), 2, ',', '.') }}</strong>
+            </p>
             @endif
             @endif
             <div class="form-row">
@@ -265,14 +290,22 @@
 
     <div class="card card-outline card-info mb-3" id="card-seleccion-cierre">
         <div class="card-header py-2 d-flex justify-content-between align-items-center">
-            <strong id="titulo-seleccion-cierre">{{ $esJornada ? 'Cierre de jornada a rendir' : 'Cierre de turno a rendir' }}</strong>
+            <strong id="titulo-seleccion-cierre">
+                @if ($esCierreX)
+                    Cierre X por mozo a rendir
+                @elseif ($esJornada)
+                    Cierre de jornada a rendir
+                @else
+                    Cierre de turno a rendir
+                @endif
+            </strong>
             <a href="#" id="link-comprobante-cierre" class="btn btn-danger btn-sm d-none" target="_blank" rel="noopener">
                 <i class="fa fa-file-pdf-o"></i> Ver comprobante gastronomía
             </a>
         </div>
         <div class="card-body py-2">
-            <div id="bloque-seleccion-turno" class="{{ $esJornada && ! $esEdicion ? 'd-none' : '' }}">
-            @if ($esEdicion && ! $esJornada)
+            <div id="bloque-seleccion-turno" class="{{ ($sinTurno && ! $esEdicion) || $esCierreX ? 'd-none' : '' }}">
+            @if ($esEdicion && ! $sinTurno)
                 <input type="hidden" name="turno_operativo_gastronomia_id" id="turno_operativo_gastronomia_id" value="{{ $turnoSel }}"/>
                 <p class="mb-0"><span class="text-muted">Turno operativo:</span> <strong id="lbl-turno-seleccionado">{{ $turnoEtiqueta }}</strong></p>
             @elseif (! $esEdicion)
@@ -296,8 +329,8 @@
                 <small class="text-muted">Seleccione la empresa, cargue el cierre y verifique los datos de gastronomía antes de rendir en caja.</small>
             @endif
             </div>
-            <div id="bloque-seleccion-jornada" class="{{ ! $esJornada && ! $esEdicion ? 'd-none' : '' }}">
-            @if ($esEdicion && $esJornada)
+            <div id="bloque-seleccion-jornada" class="{{ ! $sinTurno && ! $esEdicion ? 'd-none' : '' }}">
+            @if ($esEdicion && $sinTurno)
                 <p class="mb-0"><span class="text-muted">Jornada:</span> <strong id="lbl-jornada-seleccionada">#{{ $jornadaSel }} — {{ $data->jornada?->fecha_jornada?->format('d/m/Y') }}</strong></p>
                 @if ((int) ($data->waitry_order_id_hasta ?? 0) > 0)
                 <p class="mb-0 small text-info"><i class="fa fa-flag"></i> Último comprobante Waitry incluido: <strong>{{ $data->waitry_order_id_hasta }}</strong></p>
@@ -376,7 +409,15 @@
         </div>
 
         <div class="card card-outline card-info mb-3">
-            <div class="card-header py-2"><strong id="titulo-panel-datos">{{ $esJornada ? 'Datos de la jornada rendida' : 'Datos del turno rendido' }}</strong></div>
+            <div class="card-header py-2"><strong id="titulo-panel-datos">
+                @if ($esCierreX)
+                    Datos del cierre X rendido
+                @elseif ($esJornada)
+                    Datos de la jornada rendida
+                @else
+                    Datos del turno rendido
+                @endif
+            </strong></div>
             <div class="card-body py-2 small">
                 <div class="row">
                     <div class="col-md-3">

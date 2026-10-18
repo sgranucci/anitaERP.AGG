@@ -2,6 +2,8 @@
 
 namespace App\Support\Compras\AnitaSync\Ordencompra;
 
+use App\Support\Compras\AnitaSync\Requisicion\RequisicionSalaAnitaSupport;
+
 /**
  * Mapeo campo a campo: pendmaep → ordencompra.
  */
@@ -76,7 +78,43 @@ final class CabeceraFieldMapper
 
     public static function mapTratamiento(object $row, OrdencompraAnitaSyncContext $ctx): string
     {
-        return $ctx->mapTratamientoAnticipo($row->penmp_es_anticipo ?? 'N');
+        if (! isset($row->penmp_es_anticipo)) {
+            return 'NO ANTICIPADA';
+        }
+
+        return $ctx->mapTratamientoAnticipo($row->penmp_es_anticipo);
+    }
+
+    public static function mapSalaId(object $row): ?int
+    {
+        if (! OrdencompraAnitaEsquemaSupport::esCrown()) {
+            return null;
+        }
+
+        return RequisicionSalaAnitaSupport::salaIdDesdeCasinoAnita((int) ($row->penmp_sucursal ?? -1));
+    }
+
+    public static function mapAnitaTipo(object $row): ?string
+    {
+        $v = trim((string) ($row->penmp_tipo ?? ''));
+
+        return $v !== '' ? $v : null;
+    }
+
+    public static function mapAnitaLetra(object $row): ?string
+    {
+        $v = trim((string) ($row->penmp_letra ?? ''));
+
+        return $v !== '' ? $v : null;
+    }
+
+    public static function mapAnitaSucursal(object $row): ?int
+    {
+        if (! isset($row->penmp_sucursal)) {
+            return null;
+        }
+
+        return (int) $row->penmp_sucursal;
     }
 
     public static function mapProveedorId(object $row, OrdencompraAnitaSyncContext $ctx): ?int
@@ -133,6 +171,10 @@ final class CabeceraFieldMapper
             'fecha' => self::mapFecha($row, $ctx),
             'fechaentrega' => self::mapFechaentrega($row, $ctx),
             'empresa_id' => self::mapEmpresaId($row),
+            'sala_id' => self::mapSalaId($row),
+            'anita_tipo' => self::mapAnitaTipo($row),
+            'anita_letra' => self::mapAnitaLetra($row),
+            'anita_sucursal' => self::mapAnitaSucursal($row),
             'requisicion_id' => self::mapRequisicionId($row, $ctx),
             'centrocosto_id' => self::mapCentrocostoId($row, $ctx),
             'detalle' => self::mapDetalle($row),

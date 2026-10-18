@@ -8,9 +8,11 @@ use Illuminate\Support\Str;
 use App\Models\Ventas\Ordentrabajo;
 use App\Models\Ventas\Venta;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Articulo_Movimiento extends Model
+class Articulo_Movimiento extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = ['fecha','fechajornada', 'tipotransaccion_id', 'tipotransaccion_stock_id', 'venta_id', 'venta_emision_id', 'movimientostock_id',
                         'pedido_combinacion_id', 'ordentrabajo_id', 'lote', 'articulo_id', 'color_id', 'talle_id', 'numeroparte', 'combinacion_id', 
                         'concepto', 'modulo_id', 'cantidad', 'caja', 'pieza', 

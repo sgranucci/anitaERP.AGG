@@ -4,9 +4,11 @@ namespace App\Models\Caja\Bingo;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CierreParcialTurnoBingo extends Model
+class CierreParcialTurnoBingo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public $timestamps = false;
 
     protected $table = 'cierre_parcial_turno_bingo';

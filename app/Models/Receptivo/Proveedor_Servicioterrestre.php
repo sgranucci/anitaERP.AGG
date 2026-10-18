@@ -6,9 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Compras\Proveedor;
 use App\Models\Configuracion\Moneda;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Proveedor_Servicioterrestre extends Model
+class Proveedor_Servicioterrestre extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $fillable = [
 						 'proveedor_id', 'servicioterrestre_id', 'costo', 'moneda_id'
 						];

@@ -7,12 +7,14 @@ use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Línea del resumen de tarjeta y su resultado de cruce contra la OC de suscripción.
  */
-class Suscripcion_Cargo extends Model
+class Suscripcion_Cargo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     /** El cargo cae dentro del tope autorizado de su suscripción. */
     public const ESTADO_CONCILIADO = 'CONCILIADO';
 

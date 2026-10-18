@@ -7,9 +7,11 @@ use App\Models\Caja\InterbankingTransferencia;
 use App\Models\Configuracion\Empresa;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class ClearingBancarioSugerencia extends Model
+class ClearingBancarioSugerencia extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'clearing_bancario_sugerencia';
 
     protected $fillable = [

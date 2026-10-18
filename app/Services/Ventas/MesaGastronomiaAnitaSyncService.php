@@ -8,6 +8,7 @@ use App\Models\Ventas\MesaGastronomia;
 use App\Repositories\Ventas\MesaGastronomiaRepositoryInterface;
 use App\Repositories\Ventas\UbicacionGastronomiaRepositoryInterface;
 use App\Support\Stock\AnitaSync\Mesa\MesaFieldMapper;
+use App\Support\Ventas\GastronomiaSalaSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -82,16 +83,12 @@ class MesaGastronomiaAnitaSyncService
     public function listarMesasDesdeAnita(): array
     {
         $api = new ApiAnita;
-        $payload = [
+        $payload = $this->payloadBridgeMesa([
             'acc' => 'list',
             'tabla' => config('mesa_gastronomia_anita.tabla', 'mesa'),
             'campos' => config('mesa_gastronomia_anita.campos_listado'),
             'orderBy' => 'mes_codigo',
-        ];
-        $sistema = config('mesa_gastronomia_anita.sistema');
-        if ($sistema !== null && $sistema !== '') {
-            $payload['sistema'] = $sistema;
-        }
+        ]);
 
         $rows = json_decode($api->apiCall($payload));
 
@@ -101,20 +98,38 @@ class MesaGastronomiaAnitaSyncService
     private function leerMesaEnAnita(int $mesCodigo): ?object
     {
         $api = new ApiAnita;
-        $payload = [
+        $payload = $this->payloadBridgeMesa([
             'acc' => 'list',
             'tabla' => config('mesa_gastronomia_anita.tabla', 'mesa'),
             'campos' => config('mesa_gastronomia_anita.campos_listado'),
             'whereArmado' => " WHERE mes_codigo={$mesCodigo}",
-        ];
-        $sistema = config('mesa_gastronomia_anita.sistema');
-        if ($sistema !== null && $sistema !== '') {
-            $payload['sistema'] = $sistema;
-        }
+        ]);
 
         $rows = json_decode($api->apiCall($payload));
 
         return (is_array($rows) && count($rows) > 0) ? $rows[0] : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function payloadBridgeMesa(array $payload): array
+    {
+        $sistema = config('mesa_gastronomia_anita.sistema');
+        if ($sistema !== null && $sistema !== '') {
+            $payload['sistema'] = $sistema;
+        }
+        $ifx = trim((string) config('mesa_gastronomia_anita.ifx_server', ''));
+        if ($ifx !== '') {
+            $payload['ifx_server'] = $ifx;
+        }
+        $path = rtrim(trim((string) config('mesa_gastronomia_anita.path_sistema', '')), '/');
+        if ($path !== '') {
+            $payload['path_sistema'] = $path;
+        }
+
+        return $payload;
     }
 
     /**
@@ -130,15 +145,24 @@ class MesaGastronomiaAnitaSyncService
             (int) $payload['empresa_id'],
         );
 
+        $salaId = GastronomiaSalaSupport::idPorCodigo(
+            (string) config('mesa_gastronomia_anita.sala_codigo', '')
+        );
+
         $datosMesa = [
             'codigo' => $payload['codigo'],
             'nombre' => $payload['nombre'],
             'ubicacion_id' => $ubicacionId,
             'numeromesa' => $payload['numeromesa'],
             'empresa_id' => $payload['empresa_id'],
+            'sala_id' => $salaId,
         ];
 
-        $existente = MesaGastronomia::query()->where('codigo', $codigoAnita)->first();
+        $existente = MesaGastronomia::query()
+            ->where('codigo', $codigoAnita)
+            ->when($salaId !== null, fn ($q) => $q->where('sala_id', $salaId))
+            ->when($salaId === null, fn ($q) => $q->whereNull('sala_id'))
+            ->first();
 
         DB::beginTransaction();
         try {

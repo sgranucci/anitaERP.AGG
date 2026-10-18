@@ -7,9 +7,11 @@ use App\Models\Seguridad\Usuario;
 use App\Support\Caja\CotizacionTesoreriaMonedasSupport;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CotizacionTesoreria extends Model
+class CotizacionTesoreria extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'cotizacion_tesoreria';
 
     protected $fillable = [

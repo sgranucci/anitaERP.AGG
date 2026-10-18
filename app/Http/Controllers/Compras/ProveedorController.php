@@ -40,7 +40,10 @@ use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
+use App\Repositories\Compras\Proveedor_SalaRepositoryInterface;
+use App\Support\Compras\ProveedorSalaAnitaSupport;
 use App\Support\Configuracion\AnitaSyncIndexSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Models\Compras\Sector_Legajocompra;
 use App\Support\Compras\OrdencompraEstados;
@@ -93,6 +96,7 @@ class ProveedorController extends Controller
 	private $proveedor_documento_fiscalRepository;
     private $proveedor_formapagoRepository;
     private $proveedor_servicioRepository;
+    private $proveedor_salaRepository;
     private $proveedor_encuestaRepository;
     private $proveedor_encuesta_preguntaRepository;
     private $proveedor_cuentacorrienteRepository;
@@ -143,6 +147,7 @@ class ProveedorController extends Controller
 		Proveedor_ExclusionRepositoryInterface $proveedor_exclusionrepository, 
         Proveedor_FormapagoRepositoryInterface $proveedor_formapagorepository,
         Proveedor_ServicioRepositoryInterface $proveedor_serviciorepository,
+        Proveedor_SalaRepositoryInterface $proveedor_salarepository,
 		Proveedor_ArchivoRepositoryInterface $proveedor_archivorepository,
         Proveedor_Documento_FiscalRepositoryInterface $proveedor_documento_fiscalrepository,
         Proveedor_EncuestaRepositoryInterface $proveedor_encuestarepository, 
@@ -163,6 +168,7 @@ class ProveedorController extends Controller
         $this->proveedor_encuesta_preguntaRepository = $proveedor_encuesta_preguntarepository;
         $this->proveedor_formapagoRepository = $proveedor_formapagorepository;
         $this->proveedor_servicioRepository = $proveedor_serviciorepository;
+        $this->proveedor_salaRepository = $proveedor_salarepository;
         $this->proveedor_cuentacorrienteRepository = $proveedor_cuentacorrienterepository;
         $this->tiposuspensionproveedorRepository = $tiposuspensionproveedorrepository;
         $this->tipoempresaRepository = $tipoempresarepository;
@@ -607,6 +613,11 @@ class ProveedorController extends Controller
             ? app(EmpresaRepositoryInterface::class)->allFiltrado()
             : collect();
 
+        $mostrar_solapa_salas = EntornoEmpresaSupport::esCrown();
+        $sala_query = $mostrar_solapa_salas
+            ? ProveedorSalaAnitaSupport::salasParaSelector()
+            : collect();
+
         return view('compras.proveedor.crear', compact('pais_query', 'provincia_query', 'tipoempresa_query',
 			'condicioniva_query', 'condicionIIBB_query',
             'retencionganancia_query', 'retencioniva_query', 'retencionsuss_query',
@@ -617,7 +628,7 @@ class ProveedorController extends Controller
             'estado_enum', 'tasaarba', 'tasacaba', 'tipoalta', 'semaforo_enum',
             'formapago_query', 'tipocuentacaja_query', 'moneda_query', 'banco_query', 'mediopago_query',
             'tiporetencion_enum', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum', 'filtrosQuery',
-            'empresa_query'));
+            'empresa_query', 'mostrar_solapa_salas', 'sala_query'));
     }
 
     /**
@@ -641,6 +652,9 @@ class ProveedorController extends Controller
                 $proveedor_exclusion = $this->proveedor_exclusionRepository->create($request->all(), $proveedor->id);
                 $proveedor_formapago = $this->proveedor_formapagoRepository->create($request->all(), $proveedor->id);
                 $this->proveedor_servicioRepository->create($request->all(), $proveedor->id);
+                if (EntornoEmpresaSupport::esCrown()) {
+                    $this->proveedor_salaRepository->create($request->all(), (int) $proveedor->id);
+                }
                 $proveedor_archivo = $this->proveedor_archivoRepository->create($request, $proveedor->id);
                 $this->proveedor_documento_fiscalRepository->sincronizarDesdeRequest((int) $proveedor->id, $request);
                 if ($request->has('integrantes_presentes')) {
@@ -714,6 +728,11 @@ class ProveedorController extends Controller
             'proveedor_id' => $data->id,
         ]);
 
+        $mostrar_solapa_salas = EntornoEmpresaSupport::esCrown();
+        $sala_query = $mostrar_solapa_salas
+            ? ProveedorSalaAnitaSupport::salasParaSelector()
+            : collect();
+
         return view('compras.proveedor.editar', compact('data', 'pais_query', 'provincia_query', 'tipoempresa_query',
 			'condicioniva_query', 'condicionIIBB_query',
             'retencionganancia_query', 'retencioniva_query', 'retencionsuss_query',
@@ -725,7 +744,8 @@ class ProveedorController extends Controller
 		    'tiposuspensionproveedor_query', 'agentepercepcioniva_enum', 'agentepercepcionIIBB_enum',
             'formapago_query', 'tipocuentacaja_query', 'moneda_query', 'banco_query', 'mediopago_query',
             'tiporetencion_enum', 'tipoconsulta', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum', 'filtrosQuery',
-            'empresa_query', 'mostrar_solapa_ingresos', 'tickets_ingreso', 'url_nuevo_ticket_ingreso'));
+            'empresa_query', 'mostrar_solapa_ingresos', 'tickets_ingreso', 'url_nuevo_ticket_ingreso',
+            'mostrar_solapa_salas', 'sala_query'));
     }
 
     /**
@@ -753,6 +773,10 @@ class ProveedorController extends Controller
 
             // Graba servicios / medidores
             $this->proveedor_servicioRepository->update($request->all(), $id);
+
+            if (EntornoEmpresaSupport::esCrown()) {
+                $this->proveedor_salaRepository->update($request->all(), (int) $id);
+            }
 
             // Graba archivos asociados
             $this->proveedor_archivoRepository->update($request, $id);

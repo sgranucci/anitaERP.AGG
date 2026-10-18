@@ -85,6 +85,11 @@ class Proveedor extends Model implements Auditable
     	return $this->hasMany(Proveedor_Servicio::class, 'proveedor_id');
 	}
 
+	public function proveedor_salas()
+	{
+		return $this->hasMany(Proveedor_Sala::class, 'proveedor_id');
+	}
+
     public function tipossuspensionproveedores()
     {
         return $this->belongsTo(Tiposuspensionproveedor::class, 'tiposuspension_id');

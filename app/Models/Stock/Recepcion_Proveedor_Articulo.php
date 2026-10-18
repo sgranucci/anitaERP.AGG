@@ -7,9 +7,11 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Impuesto;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Recepcion_Proveedor_Articulo extends Model
+class Recepcion_Proveedor_Articulo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'recepcion_proveedor_articulo';
 
     protected $fillable = [

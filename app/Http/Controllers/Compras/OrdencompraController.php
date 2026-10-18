@@ -99,11 +99,16 @@ class OrdencompraController extends Controller
             $this->ordencompraAnitaSyncService->sincronizarConAnita((int) Auth::id());
         }
 
-        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $empresaDefault = \App\Support\Configuracion\EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
+        $salaQuery = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            : collect();
+        $salaDefault = $salaQuery->isNotEmpty() ? (int) $salaQuery->first()->id : null;
         $filtros = OrdencompraListadoFiltros::resolverDesdeRequest(
             $request,
             null,
-            $empresaDefault ? (int) $empresaDefault : null
+            $empresaDefault,
+            $salaDefault
         );
         $sectorId = OrdencompraSectorVisibilidadSupport::idSectorParaFiltro();
         $ordencompra = $this->ordencompraRepository->listadoIndex(
@@ -122,6 +127,7 @@ class OrdencompraController extends Controller
             'filtrosQuery' => OrdencompraListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => OrdencompraListadoFiltros::CAMPOS,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'sala_query' => $salaQuery,
             'estados' => $estados,
             'sectores' => $sectores,
             'sectorUsuario' => ($sectorId !== null && $sectorId > 0) ? $sectorId : null,
@@ -228,11 +234,16 @@ class OrdencompraController extends Controller
         can('listar-ordencompra');
 
         $sectorId = OrdencompraSectorVisibilidadSupport::idSectorParaFiltro();
-        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $empresaDefault = \App\Support\Configuracion\EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
+        $salaQuery = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            : collect();
+        $salaDefault = $salaQuery->isNotEmpty() ? (int) $salaQuery->first()->id : null;
         $filtros = OrdencompraListadoFiltros::resolverDesdeRequest(
             $request,
             $busqueda,
-            $empresaDefault ? (int) $empresaDefault : null
+            $empresaDefault,
+            $salaDefault
         );
 
         if (in_array($formato, ['PDF', 'EXCEL', 'CSV'], true)) {

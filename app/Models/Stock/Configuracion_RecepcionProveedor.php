@@ -5,9 +5,11 @@ namespace App\Models\Stock;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Cuentacontable;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Configuracion_RecepcionProveedor extends Model
+class Configuracion_RecepcionProveedor extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'configuracion_recepcion_proveedor';
 
     protected $fillable = [

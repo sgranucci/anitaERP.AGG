@@ -5,9 +5,11 @@ namespace App\Models\Contable;
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class AjusteInflacionConfiguracion extends Model
+class AjusteInflacionConfiguracion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'ajuste_inflacion_configuracion';
 
     protected $fillable = [

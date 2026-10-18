@@ -5,6 +5,8 @@ namespace App\Repositories\Ventas;
 use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\MozoGastronomia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Ventas\GastronomiaSalaSupport;
+use App\Support\Ventas\MozoGastronomiaListadoFiltros;
 
 class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
 {
@@ -19,12 +21,46 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
         $this->model = $mozoGastronomia;
     }
 
-    public function all()
+    public function all(?int $salaId = null)
     {
-        $query = $this->model->with('empresa')->orderBy('nombre')->orderBy('codigo');
+        $query = $this->model->with(['empresa', 'sala'])->orderBy('nombre')->orderBy('codigo');
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
+        GastronomiaSalaSupport::aplicarFiltroSiCorresponde($query, $salaId);
 
         return $query->get();
+    }
+
+    public function leeMozoGastronomia($filtros, bool $flPaginando = true)
+    {
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = array_merge(MozoGastronomiaListadoFiltros::filtrosVacios(), [
+                'modo' => MozoGastronomiaListadoFiltros::MODO_TODOS,
+                'valor' => $texto,
+                'busqueda' => $texto,
+            ]);
+        } elseif (! is_array($filtros)) {
+            $filtros = MozoGastronomiaListadoFiltros::filtrosVacios();
+        }
+
+        $query = $this->model->newQuery()
+            ->select('mozo_gastronomia.*')
+            ->leftJoin('sala', 'sala.id', '=', 'mozo_gastronomia.sala_id')
+            ->leftJoin('empresa', 'empresa.id', '=', 'mozo_gastronomia.empresa_id')
+            ->with(['empresa', 'sala']);
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'mozo_gastronomia.empresa_id');
+
+        $salaId = (($filtros['sala_scope'] ?? 'todas') === 'una' && ! empty($filtros['sala_id']))
+            ? (int) $filtros['sala_id']
+            : null;
+        GastronomiaSalaSupport::aplicarFiltroSiCorresponde($query, $salaId);
+
+        MozoGastronomiaListadoFiltros::aplicar($query, $filtros);
+
+        $query->orderBy('mozo_gastronomia.nombre')->orderBy('mozo_gastronomia.codigo');
+
+        return $flPaginando ? $query->paginate(10) : $query->get();
     }
 
     public function create(array $data)
@@ -69,7 +105,7 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
         return $this->model->query()->exists();
     }
 
-    public function consultaMozo(string $consulta, int $empresaId, bool $filtrarEmpresasAsignadas = false): string
+    public function consultaMozo(string $consulta, int $empresaId, bool $filtrarEmpresasAsignadas = false, ?int $salaId = null): string
     {
         $columns = ['mozo_gastronomia.id', 'mozo_gastronomia.nombre', 'mozo_gastronomia.codigo'];
         $columnsOut = ['id', 'nombre', 'codigo'];
@@ -81,6 +117,7 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
         } else {
             $query->where('empresa_id', $empresaId);
         }
+        \App\Support\Ventas\GastronomiaSalaSupport::aplicarFiltroSiCorresponde($query, $salaId);
         if ($consulta !== '') {
             $query->where(function ($q) use ($consulta, $columns) {
                 foreach ($columns as $col) {
@@ -108,14 +145,14 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
         return json_encode($output, JSON_UNESCAPED_UNICODE);
     }
 
-    public function findPorCodigo(string $codigo, int $empresaId, bool $filtrarEmpresasAsignadas = false): ?MozoGastronomia
+    public function findPorCodigo(string $codigo, int $empresaId, bool $filtrarEmpresasAsignadas = false, ?int $salaId = null): ?MozoGastronomia
     {
         $codigo = trim($codigo);
         if ($codigo === '') {
             return null;
         }
 
-        $mozo = $this->buscarMozoPorCodigoQuery($codigo, $empresaId, $filtrarEmpresasAsignadas)->first();
+        $mozo = $this->buscarMozoPorCodigoQuery($codigo, $empresaId, $filtrarEmpresasAsignadas, $salaId)->first();
 
         if ($mozo) {
             return $mozo;
@@ -123,13 +160,13 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
 
         $alt = ltrim($codigo, '0');
         if ($alt !== '' && $alt !== $codigo) {
-            return $this->buscarMozoPorCodigoQuery($alt, $empresaId, $filtrarEmpresasAsignadas)->first();
+            return $this->buscarMozoPorCodigoQuery($alt, $empresaId, $filtrarEmpresasAsignadas, $salaId)->first();
         }
 
         return null;
     }
 
-    private function buscarMozoPorCodigoQuery(string $codigo, int $empresaId, bool $filtrarEmpresasAsignadas)
+    private function buscarMozoPorCodigoQuery(string $codigo, int $empresaId, bool $filtrarEmpresasAsignadas, ?int $salaId = null)
     {
         $query = $this->model->newQuery()->where('codigo', $codigo);
         if ($filtrarEmpresasAsignadas) {
@@ -137,20 +174,23 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
         } else {
             $query->where('empresa_id', $empresaId);
         }
+        \App\Support\Ventas\GastronomiaSalaSupport::aplicarFiltroSiCorresponde($query, $salaId);
 
         return $query;
     }
 
-    public function findPorId(int $id, int $empresaId): ?MozoGastronomia
+    public function findPorId(int $id, int $empresaId, ?int $salaId = null): ?MozoGastronomia
     {
         if ($id <= 0) {
             return null;
         }
 
-        return $this->model->newQuery()
+        $query = $this->model->newQuery()
             ->where('id', $id)
-            ->where('empresa_id', $empresaId)
-            ->first();
+            ->where('empresa_id', $empresaId);
+        \App\Support\Ventas\GastronomiaSalaSupport::aplicarFiltroSiCorresponde($query, $salaId);
+
+        return $query->first();
     }
 
     public function proximoCodigoLocal(int $empresaId): string

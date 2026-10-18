@@ -5,9 +5,11 @@ namespace App\Models\Stock;
 use App\Models\Ventas\Cliente;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CertificadoSenasaSurmarCliente extends Model
+class CertificadoSenasaSurmarCliente extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'certificado_senasa_surmar_cliente';
 
     protected $fillable = [

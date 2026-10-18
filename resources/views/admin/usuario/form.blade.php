@@ -138,6 +138,10 @@
     </div>
 </div>
 
+@include('admin.usuario.partials.asignacion_salas_crown', [
+    'sala_query' => $sala_query ?? [],
+])
+
 <div class="card card-outline card-secondary mb-0">
     <div class="card-header py-2">
         <strong class="text-dark"><i class="fas fa-briefcase mr-1"></i> Asignaciones operativas</strong>

@@ -6,6 +6,7 @@ use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
 use Exception;
 use SoapClient;
+use Throwable;
 
 class ConstanciaInscripcionService
 {
@@ -86,14 +87,30 @@ class ConstanciaInscripcionService
             'exceptions' => true,
             'cache_wsdl' => WSDL_CACHE_DISK,
             'connection_timeout' => $timeout,
-            'stream_context' => stream_context_create([
-                'http' => [
-                    'timeout' => $timeout,
-                ],
-            ]),
+            'stream_context' => $this->soapStreamContext($timeout),
         ]);
 
         return $this->clientePadron;
+    }
+
+    /**
+     * OpenSSL 3: sin SECLEVEL=1 AFIP/ARCA suele fallar con "dh key too small".
+     *
+     * @return resource
+     */
+    private function soapStreamContext(int $timeout)
+    {
+        return stream_context_create([
+            'http' => [
+                'timeout' => $timeout,
+                'user_agent' => 'anitaERP-ARCA-padron',
+            ],
+            'ssl' => [
+                'verify_peer' => true,
+                'verify_peer_name' => true,
+                'ciphers' => 'DEFAULT@SECLEVEL=1',
+            ],
+        ]);
     }
 
     /**
@@ -127,12 +144,66 @@ class ConstanciaInscripcionService
     private function wsdl(): string
     {
         $env = (string) config('arca.env', 'homo');
-        $wsdl = config("arca.padron.ws_sr_constancia_inscripcion.{$env}.wsdl");
-        if (! is_string($wsdl) || $wsdl === '') {
+
+        $override = env('ARCA_PADRON_WSDL_LOCAL');
+        if (is_string($override) && $override !== '' && is_readable($override)) {
+            return $override;
+        }
+
+        $local = config("arca.padron.ws_sr_constancia_inscripcion.{$env}.wsdl_local");
+        if (is_string($local) && $local !== '' && is_readable($local)) {
+            return $local;
+        }
+
+        $remote = config("arca.padron.ws_sr_constancia_inscripcion.{$env}.wsdl");
+        if (! is_string($remote) || $remote === '') {
             throw new Exception("WSDL no configurado para env={$env}");
         }
 
-        return $wsdl;
+        if (is_string($local) && $local !== '' && $this->tryCacheWsdlFromRemote($remote, $local)) {
+            return $local;
+        }
+
+        return $remote;
+    }
+
+    private function tryCacheWsdlFromRemote(string $remoteUrl, string $localPath): bool
+    {
+        try {
+            $dir = dirname($localPath);
+            if (! is_dir($dir) && ! @mkdir($dir, 0755, true) && ! is_dir($dir)) {
+                return false;
+            }
+
+            $timeout = max(10, (int) config('arca.padron.soap_timeout', 25));
+            $body = @file_get_contents($remoteUrl, false, $this->soapStreamContext($timeout));
+            if (is_string($body) && $body !== '' && stripos($body, 'definitions') !== false
+                && @file_put_contents($localPath, $body) !== false) {
+                return is_readable($localPath);
+            }
+
+            return $this->tryCacheWsdlViaCurl($remoteUrl, $localPath, $timeout);
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function tryCacheWsdlViaCurl(string $remoteUrl, string $localPath, int $timeout): bool
+    {
+        if (! function_exists('exec')) {
+            return false;
+        }
+
+        $cmd = sprintf(
+            'curl -fsSL --max-time %d --ciphers %s %s -o %s 2>/dev/null',
+            $timeout,
+            escapeshellarg('DEFAULT@SECLEVEL=1'),
+            escapeshellarg($remoteUrl),
+            escapeshellarg($localPath)
+        );
+        @exec($cmd, $out, $code);
+
+        return $code === 0 && is_readable($localPath) && filesize($localPath) > 0;
     }
 
     private function normalizarPersonaReturn(object $personaReturn): array

@@ -37,6 +37,9 @@ $resolveArcaWsfeEmpresas = static function (): array {
             1 => 'ferli',
             3 => 'ferli',
         ],
+        'CROWN' => [
+            1 => 'crown',
+        ],
     ];
 
     $empresaInstalacion = trim((string) env('EMPRESA', 'AGG'), " \t\n\r\0\x0B'\"");
@@ -134,6 +137,9 @@ return [
         'Calzados Ferli' => [
             1 => 'ferli',
             3 => 'ferli',
+        ],
+        'CROWN' => [
+            1 => 'crown',
         ],
     ],
 

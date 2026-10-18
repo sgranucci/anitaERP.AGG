@@ -9,13 +9,44 @@ function esFormularioDepmaeAbm() {
         && $('#tipodeposito[name="tipodeposito"]').length;
 }
 
-function descripcionDepositoConEmpresa(descripcion, empresaNombre) {
+function descripcionDepositoConEmpresa(descripcion, empresaNombre, salaNombre) {
     var desc = (descripcion || '').trim();
     var emp = (empresaNombre || '').trim();
+    var sala = (salaNombre || '').trim();
+    var extras = [];
+    if ($('#consultadeposito-mostrar-sala').val() === '1' && sala) {
+        extras.push(sala);
+    }
     if ($('#consultadeposito-mostrar-empresa').val() === '1' && emp) {
-        return desc + ' (' + emp + ')';
+        extras.push(emp);
+    }
+    if (extras.length) {
+        return desc + ' (' + extras.join(' · ') + ')';
     }
     return desc;
+}
+
+function salaIdParaConsultaDeposito() {
+    if (esFormularioDepmaeAbm()) {
+        return '';
+    }
+    var $sala = $();
+    if (ptrDeposito_id && ptrDeposito_id.length) {
+        var $form = ptrDeposito_id.closest('form');
+        if ($form.length) {
+            $sala = $form.find('#sala_id').first();
+        }
+        if (!$sala.length) {
+            $sala = ptrDeposito_id.closest('.card, .modal-content, .row, body').find('#sala_id').first();
+        }
+    }
+    if (!$sala.length) {
+        $sala = $('#sala_id').first();
+    }
+    if (!$sala.length) {
+        return '';
+    }
+    return String($sala.val() || '').trim();
 }
 
 /** Resuelve hidden/código/descripción según convención del partial campo_consulta_deposito ({inputId}_codigo). */
@@ -170,6 +201,10 @@ function buscar_datos_deposito(consulta) {
     if (empresaId && !payload.empresa_ids && !payload.intercompany) {
         payload.empresa_id = empresaId;
     }
+    var salaId = salaIdParaConsultaDeposito();
+    if (salaId && !payload.sala_id) {
+        payload.sala_id = salaId;
+    }
 
     $.ajax({
         url: carpetaBase + '/stock/depmae/consultadeposito',
@@ -194,7 +229,14 @@ function buscar_datos_deposito(consulta) {
             $('#datosdeposito').html(html);
         })
         .fail(function () {
-            $('#datosdeposito').html('<tr><td colspan="5">Error al consultar depósitos</td></tr>');
+            var cols = 5;
+            if ($('#consultadeposito-mostrar-empresa').val() === '1') {
+                cols += 1;
+            }
+            if ($('#consultadeposito-mostrar-sala').val() === '1') {
+                cols += 1;
+            }
+            $('#datosdeposito').html('<tr><td colspan="' + cols + '">Error al consultar depósitos</td></tr>');
         });
 }
 
@@ -388,7 +430,9 @@ function activa_eventos_consultadeposito() {
             var tipodeposito = $tr.find('.tipodeposito').html() || '';
             var empresaIdDep = $tr.find('.empresa-id').html() || '';
             var empresaNombreDep = $tr.find('.empresa-nombre').html() || '';
-            descripcion = descripcionDepositoConEmpresa(descripcion, empresaNombreDep);
+            var salaIdDep = $tr.find('.sala-id').html() || '';
+            var salaNombreDep = $tr.find('.sala-nombre').html() || '';
+            descripcion = descripcionDepositoConEmpresa(descripcion, empresaNombreDep, salaNombreDep);
 
             if (esFormularioDepmaeAbm()
                 && typeof window.aplicarDepositoEnFormularioAbm === 'function') {
@@ -450,6 +494,8 @@ function activa_eventos_consultadeposito() {
                 tipodeposito: tipodeposito,
                 empresa_id: parseInt(empresaIdDep, 10) || 0,
                 empresa_nombre: empresaNombreDep,
+                sala_id: parseInt(salaIdDep, 10) || 0,
+                sala_nombre: salaNombreDep,
             };
             $('#consultadepositoModal').one('hidden.bs.modal.depAplicadoRecuento', function () {
                 notificarDepositoAplicado($ctxDep, payloadDep);
@@ -506,6 +552,12 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
     } else if (empresaId && !(extraPayload.empresa_ids && extraPayload.empresa_ids.length)) {
         leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'empresa_id=' + encodeURIComponent(empresaId);
     }
+    var salaId = salaIdParaConsultaDeposito();
+    if (extraPayload.sala_id) {
+        leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'sala_id=' + encodeURIComponent(extraPayload.sala_id);
+    } else if (salaId) {
+        leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'sala_id=' + encodeURIComponent(salaId);
+    }
 
     $.get(leerUrl)
         .done(function (data) {
@@ -541,7 +593,13 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
                 $ctx.find('.deposito_id').val(data.id);
                 $ctx.find('.codigodeposito').val(data.codigo);
                 $ctx.find('.descripciondeposito').val(
-                    descripcionDepositoConEmpresa(data.descripcion, data.empresa_nombre)
+                    descripcionDepositoConEmpresa(
+                        data.descripcion,
+                        data.empresa_nombre,
+                        data.sala_codigo
+                            ? (data.sala_codigo + (data.sala_nombre ? ' — ' + data.sala_nombre : ''))
+                            : (data.sala_nombre || '')
+                    )
                 );
                 actualizarLinkEditarDeposito($ctx, data.id);
                 aplicarEmpresaDesdeDeposito(data.empresa_id);

@@ -4,9 +4,11 @@ namespace App\Models\Stock;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Recuento_Estado extends Model
+class Recuento_Estado extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public $timestamps = false;
 
     protected $table = 'recuento_estado';

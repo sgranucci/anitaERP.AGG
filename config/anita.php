@@ -12,6 +12,15 @@ return [
 
     'bridge_type' => env('ANITA_BRIDGE_TYPE', 'HTTP'),
 
+    /**
+     * Si false, ApiAnita rechaza insert/update/delete (Crown: solo lectura).
+     * Las lecturas (list/customSql) siguen habilitadas.
+     */
+    'escritura_habilitada' => filter_var(
+        env('ANITA_BRIDGE_ESCRITURA_HABILITADA', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
     'api_script' => env('ANITA_API_SCRIPT', 'apiERP.php'),
 
     'bdd' => env('ANITA_BDD', 'ventas'),

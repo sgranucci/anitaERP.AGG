@@ -4,9 +4,11 @@ namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class TiendanubePedidoVenta extends Model
+class TiendanubePedidoVenta extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'tiendanube_pedido_venta';
 
     protected $fillable = [

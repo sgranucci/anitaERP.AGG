@@ -30,6 +30,9 @@ final class ParametroSistemaSupport
 
     public const CLAVE_OC_SOLICITANTE_EDITABLE = 'oc_solicitante_editable';
 
+    /** Pedir partida presupuesto + CAPEX en líneas de OC y requisición. */
+    public const CLAVE_OC_PEDIR_PARTIDA_CAPEX = 'oc_pedir_partida_capex';
+
     public const CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD = 'recepcion_no_precargar_cantidad';
 
     public const CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID = 'ndr_cheque_concepto_ivacompra_id';
@@ -81,6 +84,13 @@ final class ParametroSistemaSupport
                 'tipo' => 'select',
                 'orden' => 50,
                 'opciones' => self::opcionesDiaEscalamientoSuscripcion(),
+            ],
+            self::CLAVE_OC_PEDIR_PARTIDA_CAPEX => [
+                'grupo' => 'Compras',
+                'etiqueta' => 'Pedir partida de presupuesto y CAPEX',
+                'ayuda' => 'Si está activo, en orden de compra y requisición se muestran y validan partida de presupuesto y CAPEX en cada línea. Default: solo AGG activo; el resto de instalaciones arranca apagado.',
+                'tipo' => 'boolean',
+                'orden' => 55,
             ],
             self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => [
                 'grupo' => 'Recepción de proveedor',
@@ -418,6 +428,7 @@ final class ParametroSistemaSupport
                 'ultimo'
             ),
             self::CLAVE_OC_SOLICITANTE_EDITABLE => EntornoEmpresaSupport::esElBierzo() ? '1' : '0',
+            self::CLAVE_OC_PEDIR_PARTIDA_CAPEX => EntornoEmpresaSupport::esAgg() ? '1' : '0',
             self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => '0',
             self::CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID => '',
             self::CLAVE_NDR_CHEQUE_PUNTOVENTA_ID => (string) self::ndrChequePuntoventaIdFallback(),

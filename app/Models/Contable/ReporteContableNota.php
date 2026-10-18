@@ -5,12 +5,14 @@ namespace App\Models\Contable;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Nota al pie de una línea del informe. Las ediciones no sobrescriben: versionan.
  */
-class ReporteContableNota extends Model
+class ReporteContableNota extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'reporte_contable_nota';
 
     protected $fillable = [

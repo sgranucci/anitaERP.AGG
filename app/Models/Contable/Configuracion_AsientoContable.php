@@ -3,13 +3,15 @@
 namespace App\Models\Contable;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Configuración global del circuito de aprobación de asientos contables.
  * Una sola fila operativa (id = 1).
  */
-class Configuracion_AsientoContable extends Model
+class Configuracion_AsientoContable extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     public const FORMATO_IMPRESION_PDF = 'pdf';
     public const FORMATO_IMPRESION_EXCEL = 'excel';
     public const FORMATO_IMPRESION_NINGUNO = 'ninguno';

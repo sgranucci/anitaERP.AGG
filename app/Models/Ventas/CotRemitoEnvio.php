@@ -4,9 +4,11 @@ namespace App\Models\Ventas;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class CotRemitoEnvio extends Model
+class CotRemitoEnvio extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'cot_remito_envio';
 
     protected $fillable = [

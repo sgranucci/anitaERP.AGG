@@ -5,9 +5,11 @@ namespace App\Models\Sueldos;
 use App\Support\Sueldos\ConceptoElegibilidadCatalogo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Concepto_Elegibilidad_Sueldos extends Model
+class Concepto_Elegibilidad_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'concepto_elegibilidad_sueldos';
 
     protected $fillable = [

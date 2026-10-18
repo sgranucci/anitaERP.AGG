@@ -6,6 +6,7 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
 use App\Support\Caja\CuentacajaListadoFiltros;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Caja\BancoRepositoryInterface;
@@ -215,7 +216,32 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
     public function findPorCodigo($codigo)
     {
-        return $this->model->where('codigo', $codigo)->first();
+        $codigo = trim((string) $codigo);
+        if ($codigo === '') {
+            return null;
+        }
+
+        $hit = $this->model->where('codigo', $codigo)->first();
+        if ($hit) {
+            return $hit;
+        }
+
+        // Solo numéricos: tolerar ceros a la izquierda (Anita char(8) vs ERP).
+        if (preg_match('/^\d+$/', $codigo) === 1) {
+            $norm = self::normalizarCodigoCuentaAnita($codigo);
+            if ($norm !== $codigo) {
+                $hit = $this->model->where('codigo', $norm)->first();
+                if ($hit) {
+                    return $hit;
+                }
+            }
+            $padded = self::claveTesmaeAnita($codigo);
+            if ($padded !== $codigo && $padded !== $norm) {
+                return $this->model->where('codigo', $padded)->first();
+            }
+        }
+
+        return null;
     }
 
     public function sincronizarConAnita(?string $codigo = null, bool $sincronizarCbu = true): array
@@ -230,7 +256,8 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         ];
 
         if ($codigo !== null && $codigo !== '') {
-            $codigoNorm = ltrim($codigo, '0');
+            $codigoNorm = self::normalizarCodigoCuentaAnita($codigo);
+            $claveAnita = self::claveTesmaeAnita($codigo);
             if ($this->model->where('codigo', $codigoNorm)->exists()) {
                 $ret['en_anita'] = 1;
                 $ret['omitidos'] = 1;
@@ -240,9 +267,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
             $ret['en_anita'] = 1;
             try {
-                $estado = $this->traerRegistroDeAnita(
-                    str_pad($codigoNorm, 8, '0', STR_PAD_LEFT)
-                );
+                $estado = $this->traerRegistroDeAnita($claveAnita);
                 if ($estado === 'importado') {
                     $ret['importados'] = 1;
                 } else {
@@ -273,14 +298,14 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         $datosLocal = Cuentacaja::pluck($this->keyField)->all();
 
         foreach ($dataAnita as $value) {
-            $codigoLocal = ltrim($value->{$this->keyField}, '0');
+            $codigoLocal = self::normalizarCodigoCuentaAnita((string) $value->{$this->keyField});
             if (in_array($codigoLocal, $datosLocal, true)) {
                 $ret['omitidos']++;
                 continue;
             }
 
             try {
-                $estado = $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+                $estado = $this->traerRegistroDeAnita((string) $value->{$this->keyFieldAnita});
                 if ($estado === 'importado') {
                     $ret['importados']++;
                     $datosLocal[] = $codigoLocal;
@@ -357,6 +382,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
     public function traerRegistroDeAnita($key): string
     {
         $apiAnita = new ApiAnita();
+        // Crown /usr2/casino che_ban.tesmae: 12 cols (sin tesm_nro_cbu ni tesm_empresa).
         $camposTesmae = '
                     tesm_cuenta,
                     tesm_codigo_banco,
@@ -373,7 +399,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         if (self::usaTablaTesmcbu()) {
             $camposTesmae .= ',
                     tesm_empresa';
-        } else {
+        } elseif (self::tesmaeTieneColumnaCbu()) {
             $camposTesmae .= ',
                     tesm_nro_cbu';
         }
@@ -397,7 +423,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
         $arr_campos = [
             "nombre" => $data->tesm_desc,
-            "codigo" => ltrim($data->tesm_cuenta, '0'),
+            "codigo" => self::normalizarCodigoCuentaAnita((string) $data->tesm_cuenta),
             "tipocuenta" => $tipoCuenta,
             "banco_id" => $banco_id,
             "empresa_id" => $empresa_id,
@@ -469,7 +495,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                         tesm_cta_contable               = '".$cuentaContable."' ,
                         tesm_cod_mon                    = '".$moneda."' ,
                         tesm_empresa 	                = '".$empresa."' ";
-        if (! self::usaTablaTesmcbu()) {
+        if (! self::usaTablaTesmcbu() && self::tesmaeTieneColumnaCbu()) {
             $valoresTesmae .= ",
                         tesm_nro_cbu                    = '".($request['cbu'] ?? '')."' ";
         }
@@ -627,6 +653,44 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         return config('app.empresa') === 'AGG';
     }
 
+    /** Ferli/AGG con CBU en tesmae; Crown no tiene la columna. */
+    private static function tesmaeTieneColumnaCbu(): bool
+    {
+        return ! EntornoEmpresaSupport::esCrown();
+    }
+
+    /**
+     * Crown usa códigos con barra (ej. 071080/1); no aplicar ltrim de ceros ahí.
+     */
+    private static function normalizarCodigoCuentaAnita(string $cuenta): string
+    {
+        $cuenta = trim($cuenta);
+        if ($cuenta === '') {
+            return '0';
+        }
+        if (preg_match('/^\d+$/', $cuenta) === 1) {
+            $sinCeros = ltrim($cuenta, '0');
+
+            return $sinCeros === '' ? '0' : $sinCeros;
+        }
+
+        return $cuenta;
+    }
+
+    /** Clave Informix tesm_cuenta (char 8). */
+    private static function claveTesmaeAnita(string $codigo): string
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return str_repeat('0', 8);
+        }
+        if (preg_match('/^\d+$/', $codigo) === 1) {
+            return str_pad(ltrim($codigo, '0') === '' ? '0' : ltrim($codigo, '0'), 8, '0', STR_PAD_LEFT);
+        }
+
+        return substr(str_pad($codigo, 8, ' ', STR_PAD_RIGHT), 0, 8);
+    }
+
     private static function leerCbuDesdeAnita(ApiAnita $apiAnita, string $codigoCuenta, $dataTesmae = null): string
     {
         if (self::usaTablaTesmcbu()) {
@@ -643,6 +707,10 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                 return trim($dataAnita[0]->tesmc_nro_cbu ?? '');
             }
 
+            return '';
+        }
+
+        if (! self::tesmaeTieneColumnaCbu()) {
             return '';
         }
 

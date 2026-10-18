@@ -28,7 +28,8 @@ class ImportarAsientosAnitaCommand extends Command
 
     public function handle(AnitaAsientoImportService $service): int
     {
-        ini_set('memory_limit', '1024M');
+        // Crown/Ferli: subhist ~50–70k filas/mes; bloques multi-mes piden más RAM.
+        ini_set('memory_limit', '8192M');
         ini_set('max_execution_time', '0');
 
         $desde = trim((string) $this->option('desde'));

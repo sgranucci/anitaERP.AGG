@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Configuracion\Sala;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ValidacionRequisicion extends FormRequest
@@ -11,9 +13,26 @@ class ValidacionRequisicion extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return;
+        }
+
+        $salaId = (int) $this->input('sala_id', 0);
+        if ($salaId <= 0) {
+            return;
+        }
+
+        $empresaId = (int) (Sala::query()->whereKey($salaId)->value('empresa_id') ?? 0);
+        if ($empresaId > 0) {
+            $this->merge(['empresa_id' => $empresaId]);
+        }
+    }
+
     public function rules()
     {
-        return [
+        $rules = [
             'empresa_id' => 'required|integer',
             'fecha' => 'required|date',
             'fechaentrega' => 'required|date',
@@ -28,5 +47,13 @@ class ValidacionRequisicion extends FormRequest
             'motivotratamiento' => 'nullable|string|max:255',
             'contrataciondirecta' => 'nullable|string|max:50',
         ];
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            $rules['sala_id'] = 'required|integer|exists:sala,id';
+        } else {
+            $rules['sala_id'] = 'nullable|integer|exists:sala,id';
+        }
+
+        return $rules;
     }
 }

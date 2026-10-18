@@ -6,9 +6,11 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Configuracion\Empresa;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class LoteBancario extends Model
+class LoteBancario extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'lote_bancario';
 
     protected $fillable = [

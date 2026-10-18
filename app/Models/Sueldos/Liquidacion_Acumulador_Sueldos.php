@@ -3,13 +3,15 @@
 namespace App\Models\Sueldos;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Valor historico de un acumulador para un empleado en un periodo. Alimenta las
  * funciones "hacia atras" del motor (SAC, proporcionales, liquidacion final).
  */
-class Liquidacion_Acumulador_Sueldos extends Model
+class Liquidacion_Acumulador_Sueldos extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'liquidacion_acumulador_sueldos';
 
     protected $fillable = [

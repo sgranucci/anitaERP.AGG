@@ -4,9 +4,11 @@ namespace App\Models\Caja\Estacionamiento;
 
 use App\Models\Ventas\Venta;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class VentaEstacionamientoEmision extends Model
+class VentaEstacionamientoEmision extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     protected $table = 'venta_estacionamiento_emision';
 
     protected $primaryKey = 'venta_id';
