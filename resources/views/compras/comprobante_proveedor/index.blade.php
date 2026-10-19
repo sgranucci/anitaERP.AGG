@@ -236,6 +236,11 @@
                                     <i class="fa fa-edit"></i>
                                 </a>
                                 @endif
+                                @if (can('editar-plan-cuotas-comprobante-proveedor', false))
+                                <a href="{{ route('editar_plan_cuotas_comprobante_proveedor', $data->id) }}" class="btn-accion-tabla tooltipsC" title="Plan de cuotas">
+                                    <i class="fa fa-calendar"></i>
+                                </a>
+                                @endif
                                 @if (can('listar-comprobante-proveedor', false) || can('editar-comprobante-proveedor', false))
                                 <button type="button"
                                         class="btn-accion-tabla tooltipsC text-primary js-circuito-documentos-relacionados"

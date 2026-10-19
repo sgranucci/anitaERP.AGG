@@ -3965,6 +3965,9 @@ Route::post('compras/comprobante-proveedor/workbench/preview', 'Compras\Comproba
 Route::get('compras/comprobante-proveedor/opciones-carga', 'Compras\Comprobante_ProveedorController@opcionesCarga')->name('comprobante_proveedor_opciones_carga');
 Route::get('compras/comprobante-proveedor/resolver-oc', 'Compras\Comprobante_ProveedorController@resolverOrdencompraParaAlta')->name('comprobante_proveedor_resolver_oc');
 Route::get('compras/lista_comprobante_proveedor/{formato?}/{busqueda?}', 'Compras\Comprobante_ProveedorController@listar')->name('lista_comprobante_proveedor');
+Route::get('compras/comprobante-proveedor/plan-cuotas', 'Compras\ComprobanteProveedorPlanCuotasController@index')->name('plan_cuotas_comprobante_proveedor');
+Route::get('compras/comprobante-proveedor/plan-cuotas/{id}', 'Compras\ComprobanteProveedorPlanCuotasController@editar')->name('editar_plan_cuotas_comprobante_proveedor')->whereNumber('id');
+Route::post('compras/comprobante-proveedor/plan-cuotas/{id}', 'Compras\ComprobanteProveedorPlanCuotasController@actualizar')->name('actualizar_plan_cuotas_comprobante_proveedor')->whereNumber('id');
 Route::get('compras/comprobante-proveedor/crear', 'Compras\Comprobante_ProveedorController@crear')->name('crear_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/api/cotizacion-moneda-fecha', 'Compras\Comprobante_ProveedorController@apiCotizacionMonedaFecha')->name('comprobante_proveedor_cotizacion_moneda_fecha');
 Route::get('compras/comprobante-proveedor/api/aviso-factura-anita', 'Compras\Comprobante_ProveedorController@apiAvisoFacturaYaEnAnita')->name('comprobante_proveedor_aviso_factura_anita');

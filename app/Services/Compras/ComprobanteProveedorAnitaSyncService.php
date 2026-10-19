@@ -121,6 +121,35 @@ class ComprobanteProveedorAnitaSyncService
     }
 
     /**
+     * Regraba condición de la compra y el plan de cuotas (promov).
+     * No toca concmov, aplicped ni el asiento.
+     */
+    public function resyncPlanCuotas(Comprobante_Proveedor $comprobante): void
+    {
+        $comprobante->loadMissing([
+            'comprobante_proveedor_cuotas',
+            'empresas', 'proveedores', 'condicionpagos',
+            'tipotransaccion_compras', 'monedas', 'provinciaDestino',
+            'ordencompras',
+        ]);
+
+        if (! $comprobante->anita_nro_interno) {
+            return;
+        }
+
+        $ctx = new ComprobanteProveedorAnitaContext($comprobante, (int) $comprobante->anita_nro_interno);
+        $this->updateCompra($ctx);
+        $this->deletePromov($ctx);
+        $this->syncPromov($ctx);
+
+        $comprobante->forceFill([
+            'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::SYNC_OK,
+            'anita_sync_error' => null,
+            'anita_sync_at' => now(),
+        ])->save();
+    }
+
+    /**
      * Regraba solo aplicped (factura → PEP). No toca compra / concmov / promov.
      */
     public function resyncAplicped(Comprobante_Proveedor $comprobante): void
