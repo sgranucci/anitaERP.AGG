@@ -5,13 +5,22 @@
 
 @section('scripts')
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<script>
+    window.REPORTE_FILTROS_RESULTADO = {
+        formId: 'form-proyeccion-pagos',
+        panelId: 'panel-filtros-proyeccion',
+    };
+</script>
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/listado-filtros.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/includes/reporte-filtros-resultado.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/reporte-filtros-resultado.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proyeccion_pagos_reporte/filtro.js') }}"></script>
 @endsection
 
 @section('contenido')
 @php
     use App\Support\Compras\ProyeccionPagosReporteFiltros as FiltrosProy;
+    use App\Support\Compras\ProyeccionPagosReporteTextoSupport;
 
     $colLabel = 'col-lg-2 control-label text-right pr-2';
     $colInput = 'col-lg-4';
@@ -20,6 +29,7 @@
     $tramosDef = $resultado['tramos'] ?? [];
     $porMes = ($filtros['tipo_vencimiento'] ?? '') === FiltrosProy::VENCIMIENTO_MES;
     $gruposPanel = collect($panel_columnas ?? [])->groupBy('grupo');
+    $tieneFiltrosTexto = ! empty($tiene_filtros_texto);
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -316,6 +326,19 @@
                         </div>
                     </div>
                 </div>
+
+                @if ($consultado ?? false)
+                    @include('includes.reportes.filtros_resultado_texto', [
+                        'filtros' => $filtros,
+                        'camposTexto' => ProyeccionPagosReporteTextoSupport::CAMPOS_TEXTO,
+                        'tiene_filtros_texto' => $tieneFiltrosTexto,
+                        'limpiar_filtros_texto_url' => $limpiar_filtros_texto_url ?? null,
+                        'formId' => 'form-proyeccion-pagos',
+                        'panelId' => 'panel-filtros-proyeccion',
+                        'campoDefault' => 'proveedor_nombre',
+                        'placeholder' => 'Buscar proveedor, comprobante, concepto…',
+                    ])
+                @endif
             </form>
 
             @if ($consultado ?? false)

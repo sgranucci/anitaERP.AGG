@@ -10,6 +10,7 @@ use App\Support\Compras\ProyeccionPagosColumnasSupport;
 use App\Support\Compras\ProyeccionPagosFechaSupport;
 use App\Support\Compras\ProyeccionPagosMedioPagoSupport;
 use App\Support\Compras\ProyeccionPagosReporteFiltros;
+use App\Support\Compras\ProyeccionPagosReporteTextoSupport;
 use App\Support\Compras\ProyeccionPagosTramosSupport;
 use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Database\SqlDialectSupport;
@@ -57,10 +58,16 @@ class ProyeccionPagosReporteService
             : true;
 
         if ($consolidar || count($empresaIds) <= 1) {
-            return $this->generarConsolidado($filtros);
+            return ProyeccionPagosReporteTextoSupport::aplicar(
+                $this->generarConsolidado($filtros),
+                $filtros
+            );
         }
 
-        return $this->generarPorEmpresa($filtros, $empresaIds);
+        return ProyeccionPagosReporteTextoSupport::aplicar(
+            $this->generarPorEmpresa($filtros, $empresaIds),
+            $filtros
+        );
     }
 
     /**

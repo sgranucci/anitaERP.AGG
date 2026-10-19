@@ -43,34 +43,18 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Deuda / ficha de cuenta corriente de proveedores</h3>
-                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
-                    @include('includes.listado.filtros_toolbar', [
-                        'filtroValor' => $filtros['filtro_valor'] ?? '',
-                        'tieneCriterios' => $tieneFiltrosTexto,
-                        'limpiarUrl' => $limpiar_filtros_texto_url
-                            ?? route('proveedor_cuentacorriente_reporte'),
-                        'placeholder' => 'Buscar proveedor, comprobante…',
-                        'toggleTarget' => '#panel-filtros-cc-proveedores',
-                        'formId' => 'form-cc-proveedores-reporte',
-                        'inputId' => 'filtro_valor',
-                        'toggleLabel' => 'Filtros',
-                        'toggleLabelOculto' => 'Ocultar filtros',
-                    ])
-                    <a href="{{ route('proveedor_cuentacorriente_reporte') }}" class="btn btn-outline-secondary btn-sm ml-1" title="Limpiar todo">
+                <div class="card-tools">
+                    <a href="{{ route('proveedor_cuentacorriente_reporte') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar todo">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>
                 </div>
             </div>
 
             <form method="get" action="{{ route('proveedor_cuentacorriente_reporte') }}" id="form-cc-proveedores-reporte" class="mb-0">
-                @include('compras.proveedor_cuentacorriente_reporte.partials.filtros_texto', [
-                    'filtros' => $filtros,
-                    'tiene_filtros_texto' => $tieneFiltrosTexto,
-                ])
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
                         Consultá la <strong>deuda pendiente</strong> o la <strong>ficha corrida</strong> de uno, varios o todos los proveedores.
-                        Con <strong>Todos</strong>, usá la caja de búsqueda o el panel Filtros (arriba a la derecha) para acotar por proveedor, comprobante, etc.
+                        Después de consultar, podés filtrar el listado con la barra <strong>Filtrar resultado</strong>.
                     </p>
 
                     @include('includes.reportes.asignacion_empresas_checkboxes', [
@@ -185,6 +169,14 @@
                         </div>
                     </div>
                 </div>
+
+                @if ($consultado ?? false)
+                    @include('compras.proveedor_cuentacorriente_reporte.partials.filtros_texto', [
+                        'filtros' => $filtros,
+                        'tiene_filtros_texto' => $tieneFiltrosTexto,
+                        'limpiar_filtros_texto_url' => $limpiar_filtros_texto_url ?? null,
+                    ])
+                @endif
             </form>
 
             @if ($consultado ?? false)

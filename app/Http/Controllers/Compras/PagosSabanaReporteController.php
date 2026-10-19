@@ -71,6 +71,9 @@ class PagosSabanaReporteController extends Controller
             $filas->appends($filtrosQuery);
         }
 
+        $tieneFiltrosTexto = PagosSabanaReporteFiltros::tieneFiltrosTextoAplicados($filtros);
+        $limpiarTexto = PagosSabanaReporteFiltros::paraQueryStringSinTexto($filtros);
+
         return view('compras.pagos_sabana_reporte.index', [
             'empresa_query' => $empresaQuery,
             'filtros' => $filtros,
@@ -80,6 +83,10 @@ class PagosSabanaReporteController extends Controller
             'columnas' => $resultado['columnas'],
             'filas' => $filas,
             'filasVista' => $filasVista,
+            'tiene_filtros_texto' => $tieneFiltrosTexto,
+            'limpiar_filtros_texto_url' => $consultado
+                ? route('reporte_pagos_sabana', $limpiarTexto)
+                : route('reporte_pagos_sabana'),
             'subtitulo' => $this->service->subtituloFiltros($filtros, $empresaQuery),
             'puede_ver_proveedor' => can('editar-proveedor', false) || can('listar-proveedor', false),
             'puede_ver_pagoproveedor' => can('editar-pagoproveedor', false) || can('listar-pagoproveedor', false),

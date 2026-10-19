@@ -29,6 +29,7 @@ use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
+use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
@@ -988,6 +989,13 @@ class ComprobanteProveedorAsientoService
                 'avisos' => [],
                 'lineas' => [],
             ];
+        }
+
+        // Import Anita con asiento enganchado: devolver el grabado, no un borrador de regeneración.
+        if ($existente
+            && (int) ($existente->asiento_id ?? 0) > 0
+            && (string) ($existente->origen_entrada ?? '') === ComprobanteProveedorOrigenEntrada::ANITA_IMPORT) {
+            return $this->previewAsientoGrabado($existente);
         }
 
         $preview = $this->previewBorrador($comprobante);

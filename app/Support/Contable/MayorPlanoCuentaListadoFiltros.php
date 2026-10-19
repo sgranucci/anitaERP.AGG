@@ -4,6 +4,7 @@ namespace App\Support\Contable;
 
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaModuloFiltroSupport;
+use App\Support\Listado\ReporteResultadoTextoSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -15,6 +16,22 @@ class MayorPlanoCuentaListadoFiltros
     public const PRESENTACION_TOTALES = 'totales';
 
     public const PRESENTACION_MOVIMIENTOS = 'movimientos';
+
+    /** @var array<string, array{prop: string, type: string, label: string, flexible?: bool}> */
+    public const CAMPOS_TEXTO = [
+        'cuenta_codigo' => ['prop' => 'cuenta_codigo', 'type' => 'texto', 'label' => 'Código cuenta', 'flexible' => true],
+        'cuenta_nombre' => ['prop' => 'cuenta_nombre', 'type' => 'texto', 'label' => 'Nombre cuenta', 'flexible' => true],
+        'centrocosto_codigo' => ['prop' => 'centrocosto_codigo', 'type' => 'texto', 'label' => 'Código CC'],
+        'centrocosto_nombre' => ['prop' => 'centrocosto_nombre', 'type' => 'texto', 'label' => 'Nombre CC', 'flexible' => true],
+        'comprobante' => ['prop' => 'comprobante', 'type' => 'texto', 'label' => 'Comprobante', 'flexible' => true],
+        'descripcion' => ['prop' => 'descripcion', 'type' => 'texto', 'label' => 'Descripción', 'flexible' => true],
+        'emisor' => ['prop' => 'emisor', 'type' => 'texto', 'label' => 'Emisor', 'flexible' => true],
+        'emisor_nombre' => ['prop' => 'emisor_nombre', 'type' => 'texto', 'label' => 'Nombre emisor', 'flexible' => true],
+        'nro_oc' => ['prop' => 'nro_oc', 'type' => 'texto', 'label' => 'Nº OC'],
+        'nro_asiento' => ['prop' => 'nro_asiento', 'type' => 'texto', 'label' => 'Nº asiento'],
+        'nombreempresa' => ['prop' => 'nombreempresa', 'type' => 'texto', 'label' => 'Empresa', 'flexible' => true],
+        'cuit' => ['prop' => 'cuit', 'type' => 'texto', 'label' => 'CUIT'],
+    ];
 
     /**
      * @return array<string, mixed>
@@ -88,7 +105,6 @@ class MayorPlanoCuentaListadoFiltros
                 ? $request->boolean('incluir_sin_cc')
                 : null,
             'incluir_sin_cc_manual' => $request->boolean('incluir_sin_cc_manual'),
-            'filtro_texto' => trim((string) $request->input('filtro_texto', '')),
             'excel_solapas_separadas' => $request->boolean('excel_solapas_separadas'),
             'mostrar_columna_centrocosto' => $request->has('mostrar_columna_centrocosto')
                 ? $request->boolean('mostrar_columna_centrocosto')
@@ -98,12 +114,42 @@ class MayorPlanoCuentaListadoFiltros
             ),
         ];
 
+        $texto = ReporteResultadoTextoSupport::resolverParamsConLegadoTexto(
+            $request,
+            'descripcion',
+            array_keys(self::CAMPOS_TEXTO)
+        );
+        $filtros = array_merge($filtros, $texto);
+        // Compatibilidad: el service / firma siguen leyendo filtro_texto.
+        $filtros['filtro_texto'] = trim((string) ($filtros['filtro_valor'] ?? ''));
+
         // ERP nativo ya trae los asientos importados de subdiario; el tilde no aplica.
         if ($filtros['fuente_mayor'] === MayorFuenteConsultaSupport::MODO_ERP) {
             $filtros['incluye_subdiario'] = true;
         }
 
         return $filtros;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function tieneFiltrosTextoAplicados(array $filtros): bool
+    {
+        return ReporteResultadoTextoSupport::tieneAplicados($filtros)
+            || trim((string) ($filtros['filtro_texto'] ?? '')) !== '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function paraQueryStringSinTexto(array $filtros): array
+    {
+        $copia = ReporteResultadoTextoSupport::sinTexto($filtros);
+        $copia['filtro_texto'] = '';
+
+        return self::paraQueryString($copia);
     }
 
     /**
@@ -349,7 +395,8 @@ class MayorPlanoCuentaListadoFiltros
             $out['incluir_sin_cc_manual'] = 1;
         }
 
-        $texto = trim((string) ($filtros['filtro_texto'] ?? ''));
+        $out = ReporteResultadoTextoSupport::mergeParaQueryString($out, $filtros);
+        $texto = trim((string) ($filtros['filtro_valor'] ?? $filtros['filtro_texto'] ?? ''));
         if ($texto !== '') {
             $out['filtro_texto'] = $texto;
         }
@@ -376,6 +423,10 @@ class MayorPlanoCuentaListadoFiltros
         $base = self::paraQueryString($filtros);
         unset(
             $base['filtro_texto'],
+            $base['filtro_valor'],
+            $base['filtro_modo'],
+            $base['filtro_campo'],
+            $base['filtro_operador'],
             $base['excel_solapas_separadas'],
             $base['mostrar_columna_centrocosto'],
             // La presentación no cambia el cálculo: totales y detalle salen del mismo cache.
@@ -415,41 +466,47 @@ class MayorPlanoCuentaListadoFiltros
 
     /**
      * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, mixed>|string  $filtrosOTexto  Filtros completos o string legado
      * @return list<array<string, mixed>>
      */
-    public static function aplicarFiltroTexto(array $filas, string $texto): array
+    public static function aplicarFiltroTexto(array $filas, array|string $filtrosOTexto): array
     {
-        $texto = mb_strtolower(trim($texto));
-        if ($texto === '') {
+        if (is_string($filtrosOTexto)) {
+            $filtros = [
+                'filtro_modo' => ReporteResultadoTextoSupport::MODO_TODOS,
+                'filtro_operador' => 'contiene',
+                'filtro_valor' => $filtrosOTexto,
+                'filtro_campo' => 'descripcion',
+            ];
+        } else {
+            $filtros = $filtrosOTexto;
+            if (trim((string) ($filtros['filtro_valor'] ?? '')) === ''
+                && trim((string) ($filtros['filtro_texto'] ?? '')) !== ''
+            ) {
+                $filtros['filtro_valor'] = trim((string) $filtros['filtro_texto']);
+            }
+        }
+
+        if (! self::tieneFiltrosTextoAplicados($filtros)) {
             return $filas;
         }
 
-        return array_values(array_filter($filas, function (array $fila) use ($texto) {
+        // Conserva cabeceras/totales; solo decide detalle por el criterio de texto.
+        return array_values(array_filter($filas, function (array $fila) use ($filtros) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
                 return true;
             }
 
-            $campos = [
-                $fila['cuenta_codigo'] ?? '',
-                $fila['cuenta_nombre'] ?? '',
-                $fila['fecha_fmt'] ?? '',
-                $fila['nro_asiento_fmt'] ?? (string) ($fila['nro_asiento'] ?? ''),
-                $fila['tipo_comp'] ?? '',
-                $fila['comprobante'] ?? '',
-                $fila['emisor'] ?? '',
-                $fila['emisor_nombre'] ?? '',
-                $fila['cuit'] ?? '',
-                $fila['descripcion'] ?? '',
-                (string) ($fila['nro_oc'] ?? ''),
-                $fila['moneda_abrev'] ?? '',
-                $fila['nombreempresa'] ?? '',
-                $fila['centrocosto_codigo'] ?? '',
-                $fila['centrocosto_nombre'] ?? '',
-            ];
+            $filaNorm = $fila;
+            if (! isset($filaNorm['nro_asiento']) && isset($filaNorm['nro_asiento_fmt'])) {
+                $filaNorm['nro_asiento'] = $filaNorm['nro_asiento_fmt'];
+            }
 
-            $blob = mb_strtolower(implode(' ', $campos));
-
-            return str_contains($blob, $texto);
+            return ReporteResultadoTextoSupport::filaCoincide(
+                $filaNorm,
+                $filtros,
+                self::CAMPOS_TEXTO
+            );
         }));
     }
 }

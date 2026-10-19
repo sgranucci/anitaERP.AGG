@@ -15,6 +15,7 @@ use App\Support\Ventas\ClienteCuentacorrienteRemitoInternoSupport;
 use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
 use App\Support\Ventas\ClienteCuentacorrienteReporteClienteSupport;
 use App\Support\Ventas\ClienteCuentacorrienteReporteFiltros;
+use App\Support\Ventas\ClienteCuentacorrienteReporteTextoSupport;
 use App\Support\Ventas\ClienteCuentacorrienteReporteVendedorSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -42,10 +43,13 @@ class ClienteCuentacorrienteReporteService
             $resultado = $this->generarInterno($filtros);
             $resultado['secciones'] = [];
 
-            return $resultado;
+            return ClienteCuentacorrienteReporteTextoSupport::aplicar($resultado, $filtros);
         }
 
-        return $this->generarPorEmpresa($filtros, $empresaIds);
+        return ClienteCuentacorrienteReporteTextoSupport::aplicar(
+            $this->generarPorEmpresa($filtros, $empresaIds),
+            $filtros
+        );
     }
 
     /**

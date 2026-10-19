@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras;
 
+use App\Support\Listado\ReporteResultadoTextoSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -24,7 +25,7 @@ final class PagosSabanaReporteFiltros
             ->values()
             ->all();
 
-        return [
+        return array_merge([
             'empresa_ids' => $empresaIds,
             'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
             'fecha_desde' => self::fechaOpcional($request->input('fecha_desde')) ?? $defaults['fecha_desde'],
@@ -34,7 +35,28 @@ final class PagosSabanaReporteFiltros
                 (bool) config('compras.pagos_sabana_anita_habilitada', false)
             ),
             'consultar' => $request->boolean('consultar'),
-        ];
+        ], ReporteResultadoTextoSupport::resolverParams(
+            $request,
+            'proveedor_nombre',
+            array_keys(PagosSabanaReporteTextoSupport::CAMPOS_TEXTO)
+        ));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function tieneFiltrosTextoAplicados(array $filtros): bool
+    {
+        return ReporteResultadoTextoSupport::tieneAplicados($filtros);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function paraQueryStringSinTexto(array $filtros): array
+    {
+        return self::paraQueryString(ReporteResultadoTextoSupport::sinTexto($filtros));
     }
 
     /** @return array<string, mixed> */
@@ -80,7 +102,7 @@ final class PagosSabanaReporteFiltros
             $query['incluir_anita'] = 0;
         }
 
-        return $query;
+        return ReporteResultadoTextoSupport::mergeParaQueryString($query, $filtros);
     }
 
     /** @param array<string, mixed> $filtros */

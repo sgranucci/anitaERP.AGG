@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Ventas;
 
+use App\Support\Listado\ReporteResultadoTextoSupport;
 use Illuminate\Http\Request;
 
 /**
@@ -28,6 +29,21 @@ final class ClienteCuentacorrienteReporteFiltros
     public const COTIZACION_COMPROBANTE_O_DIA = 'comprobante_o_dia';
 
     public const COTIZACION_DIA = 'dia';
+
+    /** @var array<string, array{prop: string, type: string, label: string, flexible?: bool}> */
+    public const CAMPOS_TEXTO = [
+        'cliente_codigo' => ['prop' => 'cliente_codigo', 'type' => 'texto', 'label' => 'Código cliente', 'flexible' => true],
+        'cliente_nombre' => ['prop' => 'cliente_nombre', 'type' => 'texto', 'label' => 'Nombre cliente', 'flexible' => true],
+        'vendedor_codigo' => ['prop' => 'vendedor_codigo', 'type' => 'texto', 'label' => 'Código vendedor', 'flexible' => true],
+        'vendedor_nombre' => ['prop' => 'vendedor_nombre', 'type' => 'texto', 'label' => 'Nombre vendedor', 'flexible' => true],
+        'nombreempresa' => ['prop' => 'nombreempresa', 'type' => 'texto', 'label' => 'Empresa', 'flexible' => true],
+        'fecha' => ['prop' => 'fecha', 'type' => 'texto', 'label' => 'Fecha'],
+        'fechavencimiento' => ['prop' => 'fechavencimiento', 'type' => 'texto', 'label' => 'Vencimiento'],
+        'comprobante' => ['prop' => 'comprobante', 'type' => 'texto', 'label' => 'Comprobante', 'flexible' => true],
+        'abreviatura' => ['prop' => 'abreviatura', 'type' => 'texto', 'label' => 'Moneda'],
+        'importe' => ['prop' => 'importe', 'type' => 'texto', 'label' => 'Importe'],
+        'saldo_pendiente' => ['prop' => 'saldo_pendiente', 'type' => 'texto', 'label' => 'Saldo pendiente'],
+    ];
 
     /**
      * @return array<string, mixed>
@@ -67,8 +83,13 @@ final class ClienteCuentacorrienteReporteFiltros
 
         $clienteIds = self::parseIdsCsv($request->input('cliente_ids', ''));
         $vendedorIds = self::parseIdsCsv($request->input('vendedor_ids', ''));
+        $texto = ReporteResultadoTextoSupport::resolverParams(
+            $request,
+            'cliente_nombre',
+            array_keys(self::CAMPOS_TEXTO)
+        );
 
-        return [
+        return array_merge([
             'empresa_ids' => $empresaIds,
             'empresa_id' => $empresaIds[0] ?? null,
             'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
@@ -87,7 +108,24 @@ final class ClienteCuentacorrienteReporteFiltros
             'solo_totales' => $request->boolean('solo_totales'),
             'expresion' => $expresion,
             'cotizacion_modo' => $cotizacionModo,
-        ];
+        ], $texto);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function tieneFiltrosTextoAplicados(array $filtros): bool
+    {
+        return ReporteResultadoTextoSupport::tieneAplicados($filtros);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function paraQueryStringSinTexto(array $filtros): array
+    {
+        return self::paraQueryString(ReporteResultadoTextoSupport::sinTexto($filtros));
     }
 
     /**
@@ -180,7 +218,7 @@ final class ClienteCuentacorrienteReporteFiltros
             $out['vendedor_codigo_hasta'] = $vendedorHasta;
         }
 
-        return $out;
+        return ReporteResultadoTextoSupport::mergeParaQueryString($out, $filtros);
     }
 
     /**

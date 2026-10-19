@@ -305,9 +305,7 @@ class MayorPlanoCuentaReporteService
     public function aplanarYPaginarParaPantalla(array $resultado, array $filtros, int $perPage): LengthAwarePaginator
     {
         $perPage = max(10, min(200, $perPage));
-        $filtroTexto = trim((string) ($filtros['filtro_texto'] ?? ''));
-
-        if ($filtroTexto !== '') {
+        if (MayorPlanoCuentaListadoFiltros::tieneFiltrosTextoAplicados($filtros)) {
             return $this->paginarFilas($this->aplanarFilas($resultado, $filtros, true), $perPage);
         }
 
@@ -421,11 +419,8 @@ class MayorPlanoCuentaReporteService
         $filas = $this->completarNroOcDesdeIds($filas);
         $filas = $this->emisorEnricher->enriquecer($filas);
 
-        if ($filtros !== []) {
-            $filas = MayorPlanoCuentaListadoFiltros::aplicarFiltroTexto(
-                $filas,
-                (string) ($filtros['filtro_texto'] ?? ''),
-            );
+        if ($filtros !== [] && MayorPlanoCuentaListadoFiltros::tieneFiltrosTextoAplicados($filtros)) {
+            $filas = MayorPlanoCuentaListadoFiltros::aplicarFiltroTexto($filas, $filtros);
         }
 
         return $filas;

@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras;
 
+use App\Support\Listado\ReporteResultadoTextoSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -214,7 +215,28 @@ final class ProyeccionPagosReporteFiltros
             'agrupacion' => $agrupacion,
             'orden' => $orden,
             'columnas' => trim((string) $request->input('columnas', '')),
-        ];
+        ] + ReporteResultadoTextoSupport::resolverParams(
+            $request,
+            'proveedor_nombre',
+            array_keys(ProyeccionPagosReporteTextoSupport::CAMPOS_TEXTO)
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function tieneFiltrosTextoAplicados(array $filtros): bool
+    {
+        return ReporteResultadoTextoSupport::tieneAplicados($filtros);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function paraQueryStringSinTexto(array $filtros): array
+    {
+        return self::paraQueryString(ReporteResultadoTextoSupport::sinTexto($filtros));
     }
 
     /** @return array<string, mixed> */
@@ -300,7 +322,7 @@ final class ProyeccionPagosReporteFiltros
         // trae consultar=1, el export lo lee como apagado y el Excel sale «Sin adelantos».
         $query['incluir_adelantos'] = empty($filtros['incluir_adelantos']) ? 0 : 1;
 
-        return $query;
+        return ReporteResultadoTextoSupport::mergeParaQueryString($query, $filtros);
     }
 
     /** @param array<string, mixed> $filtros */

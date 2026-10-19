@@ -68,6 +68,9 @@ class ProyeccionPagosReporteController extends Controller
             $filas->appends($filtrosQuery);
         }
 
+        $tieneFiltrosTexto = ProyeccionPagosReporteFiltros::tieneFiltrosTextoAplicados($filtros);
+        $limpiarTexto = ProyeccionPagosReporteFiltros::paraQueryStringSinTexto($filtros);
+
         return view('compras.proyeccion_pagos_reporte.index', [
             'empresa_query' => $empresaQuery,
             'moneda_query' => DB::table('moneda')->orderBy('id')->get(),
@@ -94,6 +97,10 @@ class ProyeccionPagosReporteController extends Controller
             ),
             'filas' => $filas,
             'filasVista' => $filasVista,
+            'tiene_filtros_texto' => $tieneFiltrosTexto,
+            'limpiar_filtros_texto_url' => $consultado
+                ? route('reporte_proyeccion_pagos', $limpiarTexto)
+                : route('reporte_proyeccion_pagos'),
             'subtitulo' => $this->service->subtituloFiltros($filtros, $empresaQuery),
             'puede_ver_proveedor' => can('editar-proveedores', false) || can('listar-proveedores', false),
             'puede_ver_comprobante' => can('editar-comprobante-proveedor', false)

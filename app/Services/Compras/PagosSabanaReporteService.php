@@ -9,6 +9,7 @@ use App\Support\Compras\PagosSabanaAnitaArmadoSupport;
 use App\Support\Compras\PagosSabanaAnitaBridgeReader;
 use App\Support\Compras\PagosSabanaColumnasSupport;
 use App\Support\Compras\PagosSabanaReporteFiltros;
+use App\Support\Compras\PagosSabanaReporteTextoSupport;
 use App\Support\Compras\PagoproveedorListadoFila;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -56,14 +57,17 @@ class PagosSabanaReporteService
     public function generar(array $filtros): array
     {
         if (self::usarAnita($filtros)) {
-            return $this->generarDesdeAnita($filtros);
+            return PagosSabanaReporteTextoSupport::aplicar(
+                $this->generarDesdeAnita($filtros),
+                $filtros
+            );
         }
 
         $resultado = $this->generarDesdeErp($filtros);
         $resultado['fuente'] = 'erp';
         $resultado['anita_errores'] = [];
 
-        return $resultado;
+        return PagosSabanaReporteTextoSupport::aplicar($resultado, $filtros);
     }
 
     /**

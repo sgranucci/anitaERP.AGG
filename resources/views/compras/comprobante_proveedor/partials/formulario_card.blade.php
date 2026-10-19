@@ -134,7 +134,8 @@
                 @if ($esEdicion && ($data->id ?? null))
                 data-comprobante-id="{{ (int) $data->id }}"
                 @endif
-                data-contabilizado="{{ ! empty($bloqueado_edicion) ? '1' : '0' }}"
+                {{-- Asiento grabado / import Anita: no pisar la solapa con preview AJAX --}}
+                data-contabilizado="{{ ! empty($congelar_preview_asiento) ? '1' : '0' }}"
                 data-preview-url="{{ ($esEdicion && ($data->id ?? null)) ? route('preview_asiento_comprobante_proveedor', ['id' => $data->id]) : route('preview_asiento_comprobante_proveedor_nuevo') }}"
                 data-puede-editar-concepto-iva="{{ can('editar-concepto-iva-compra', false) ? '1' : '0' }}"
                 data-url-editar-concepto-iva="{{ url('compras/concepto_ivacompra/__ID__/editar') }}"

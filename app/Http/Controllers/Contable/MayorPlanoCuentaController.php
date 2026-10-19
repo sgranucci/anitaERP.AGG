@@ -138,6 +138,15 @@ class MayorPlanoCuentaController extends Controller
             $filas->appends($filtrosQuery);
         }
 
+        $tieneFiltrosTexto = MayorPlanoCuentaListadoFiltros::tieneFiltrosTextoAplicados($filtros);
+        $limpiarTexto = array_merge(
+            MayorPlanoCuentaListadoFiltros::paraQueryStringSinTexto($filtros),
+            ['consultar' => 1]
+        );
+        if (isset($filtrosQuery['per_page'])) {
+            $limpiarTexto['per_page'] = $filtrosQuery['per_page'];
+        }
+
         $moneda = $this->monedaRepository->find((int) ($filtros['moneda_id'] ?? 1));
         $empresaRefId = (int) (($filtros['empresa_ids'] ?? [])[0] ?? 0);
 
@@ -146,6 +155,10 @@ class MayorPlanoCuentaController extends Controller
             'moneda_query' => $monedaQuery,
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
+            'tiene_filtros_texto' => $tieneFiltrosTexto,
+            'limpiar_filtros_texto_url' => $consultado
+                ? route('mayor_plano_cuenta', $limpiarTexto)
+                : route('mayor_plano_cuenta'),
             'consultado' => $consultado,
             'filas' => $filas,
             'resumen' => $resumen,

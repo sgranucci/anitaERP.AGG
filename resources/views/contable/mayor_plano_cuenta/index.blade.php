@@ -19,9 +19,17 @@
 })();
 </script>
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<script>
+    window.REPORTE_FILTROS_RESULTADO = {
+        formId: 'form-mayor-plano-cuenta-filtro',
+        panelId: 'panel-filtros-mayor-plano',
+    };
+</script>
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/mayor_plano_cuenta/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/mayor_plano_cuenta/filtro.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/listado-filtros.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/reporte-filtros-resultado.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/reporte-filtros-resultado.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
 
@@ -286,8 +294,15 @@
                     </div>
 
                     @if (empty($solo_totales_modulo))
-                    <form method="get" action="{{ route('mayor_plano_cuenta') }}" id="form-mayor-plano-cuenta-filtro" class="px-3 py-2 border-bottom bg-light">
-                        @foreach ($filtrosQuery ?? [] as $key => $val)
+                    @php
+                        $tieneFiltrosTexto = ! empty($tiene_filtros_texto);
+                        $filtrosQuerySinTexto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::paraQueryStringSinTexto($filtros ?? []);
+                        if (isset(($filtrosQuery ?? [])['per_page'])) {
+                            $filtrosQuerySinTexto['per_page'] = $filtrosQuery['per_page'];
+                        }
+                    @endphp
+                    <form method="get" action="{{ route('mayor_plano_cuenta') }}" id="form-mayor-plano-cuenta-filtro">
+                        @foreach ($filtrosQuerySinTexto as $key => $val)
                             @if (is_array($val))
                                 @foreach ($val as $v)
                                     <input type="hidden" name="{{ $key }}" value="{{ $v }}">
@@ -297,21 +312,16 @@
                             @endif
                         @endforeach
                         <input type="hidden" name="consultar" value="1">
-                        <div class="form-row align-items-center">
-                            <div class="col-auto">
-                                <label for="filtro_texto" class="col-form-label col-form-label-sm">Buscar en listado</label>
-                            </div>
-                            <div class="col-md-4">
-                                <input type="text" name="filtro_texto" id="filtro_texto" class="form-control form-control-sm"
-                                    placeholder="Cuenta, centro de costo, comprobante, descripción, OC…"
-                                    value="{{ $filtros['filtro_texto'] ?? '' }}">
-                            </div>
-                            <div class="col-auto">
-                                <button type="submit" class="btn btn-outline-primary btn-sm">
-                                    <i class="fa fa-filter"></i> Filtrar
-                                </button>
-                            </div>
-                        </div>
+                        @include('includes.reportes.filtros_resultado_texto', [
+                            'filtros' => $filtros,
+                            'camposTexto' => \App\Support\Contable\MayorPlanoCuentaListadoFiltros::CAMPOS_TEXTO,
+                            'tiene_filtros_texto' => $tieneFiltrosTexto,
+                            'limpiar_filtros_texto_url' => $limpiar_filtros_texto_url ?? null,
+                            'formId' => 'form-mayor-plano-cuenta-filtro',
+                            'panelId' => 'panel-filtros-mayor-plano',
+                            'campoDefault' => 'descripcion',
+                            'placeholder' => 'Cuenta, centro de costo, comprobante, descripción, OC…',
+                        ])
                     </form>
                     @endif
 

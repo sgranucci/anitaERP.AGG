@@ -14,7 +14,15 @@
         consultado: @json(! empty($consultado)),
     };
 </script>
+<script>
+    window.REPORTE_FILTROS_RESULTADO = {
+        formId: 'form-cc-clientes-reporte',
+        panelId: 'panel-filtros-cc-clientes',
+    };
+</script>
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/listado-filtros.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/reporte-filtros-resultado.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/reporte-filtros-resultado.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/vendedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/vendedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente_cuentacorriente_reporte/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente_cuentacorriente_reporte/filtro.js')) ?: time() }}" type="text/javascript"></script>
@@ -27,6 +35,7 @@
     $colLabel = 'col-lg-2 control-label text-right pr-2';
     $modoDeuda = ($filtros['modo'] ?? ClienteCuentacorrienteReporteFiltros::MODO_DEUDA)
         !== ClienteCuentacorrienteReporteFiltros::MODO_FICHA;
+    $tieneFiltrosTexto = ! empty($tiene_filtros_texto);
 @endphp
 
 @include('includes.proceso_overlay_aviso', [
@@ -54,7 +63,8 @@
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
                         Consultá la <strong>deuda pendiente</strong> o la <strong>ficha corrida</strong> de uno, varios o todos los clientes.
-                        Podés acotar por <strong>vendedor</strong> (todos, lista o rango de códigos). El resto de filtros se aplica igual en todos los casos.
+                        Podés acotar por <strong>vendedor</strong> (todos, lista o rango de códigos).
+                        Después de consultar, usá <strong>Filtrar resultado</strong> para acotar el listado.
                     </p>
 
                     @include('includes.reportes.asignacion_empresas_checkboxes', [
@@ -179,6 +189,19 @@
                         </div>
                     </div>
                 </div>
+
+                @if ($consultado ?? false)
+                    @include('includes.reportes.filtros_resultado_texto', [
+                        'filtros' => $filtros,
+                        'camposTexto' => ClienteCuentacorrienteReporteFiltros::CAMPOS_TEXTO,
+                        'tiene_filtros_texto' => $tieneFiltrosTexto,
+                        'limpiar_filtros_texto_url' => $limpiar_filtros_texto_url ?? null,
+                        'formId' => 'form-cc-clientes-reporte',
+                        'panelId' => 'panel-filtros-cc-clientes',
+                        'campoDefault' => 'cliente_nombre',
+                        'placeholder' => 'Buscar cliente, comprobante, vendedor…',
+                    ])
+                @endif
             </form>
 
             @if ($consultado ?? false)

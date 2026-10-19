@@ -1470,7 +1470,17 @@ class Comprobante_ProveedorController extends Controller
             }
 
             $asientoPreview = $this->asientoService->previewParaVista($data);
-            if (! $bloqueadoEdicion) {
+            $tieneAsientoGrabado = (int) ($data->asiento_id ?? 0) > 0;
+            $asientoImportAnita = $tieneAsientoGrabado
+                && (string) ($data->origen_entrada ?? '') === ComprobanteProveedorOrigenEntrada::ANITA_IMPORT;
+            // Con asiento enganchado (p. ej. import Anita): mostrar el real, sin avisos de borrador COM/provisión.
+            if ($bloqueadoEdicion || $tieneAsientoGrabado) {
+                $asientoPreview = $this->asientoPreviewSoloLectura($asientoPreview);
+                if ($asientoImportAnita) {
+                    $asientoPreview['avisos'] = [];
+                    unset($asientoPreview['error']);
+                }
+            } else {
                 $data->loadMissing([
                     'comprobante_proveedor_conceptos.concepto_ivacompras',
                     'proveedores',
@@ -1480,8 +1490,6 @@ class Comprobante_ProveedorController extends Controller
                     $this->asientoPreviewSupport->avisosFaltantes($data),
                     $asientoPreview['error'] ?? null
                 );
-            } else {
-                $asientoPreview = $this->asientoPreviewSoloLectura($asientoPreview);
             }
         }
 
@@ -1545,15 +1553,19 @@ class Comprobante_ProveedorController extends Controller
                 ];
             }
 
+            // No pisar modo_carga de imports Anita contabilizados (vienen SIN_RECEPCION).
+            $esImportAnitaContabilizado = $contabilizado
+                && (string) ($data->origen_entrada ?? '') === ComprobanteProveedorOrigenEntrada::ANITA_IMPORT;
             $modoSugerido = ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido(
                 $comPolitica,
                 (string) ($data->modo_carga ?? '')
             );
-            if ($comObligatoria
-                || ($comPolitica['permite_factura_anticipada'] ?? false)
-                || ($comPolitica['contrato_vigente'] ?? false)
-                || ($comPolitica['sin_com_por_tipo'] ?? false)
-                || $primeraAnticipadaSinCom) {
+            if (! $esImportAnitaContabilizado
+                && ($comObligatoria
+                    || ($comPolitica['permite_factura_anticipada'] ?? false)
+                    || ($comPolitica['contrato_vigente'] ?? false)
+                    || ($comPolitica['sin_com_por_tipo'] ?? false)
+                    || $primeraAnticipadaSinCom)) {
                 $data->modo_carga = $modoSugerido;
             }
         }
@@ -1706,6 +1718,13 @@ class Comprobante_ProveedorController extends Controller
                 ? $this->pagosVisiblesDelComprobante((int) $comprobanteId)
                 : [],
             'bloqueado_edicion' => $bloqueadoEdicion,
+            // Evita que el JS reemplace el asiento grabado por un preview de regeneración.
+            'congelar_preview_asiento' => $bloqueadoEdicion
+                || (int) ($data?->asiento_id ?? 0) > 0
+                || (
+                    $contabilizado
+                    && (string) ($data?->origen_entrada ?? '') === ComprobanteProveedorOrigenEntrada::ANITA_IMPORT
+                ),
             'puede_actualizar' => $puedeActualizar,
             'puede_excluir_circuito_pago' => can('excluir-circuito-pago-comprobante-proveedor', false),
             'mostrarSolapaCom' => ! ($comPolitica['sin_com_por_tipo'] ?? false)

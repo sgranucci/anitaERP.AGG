@@ -5,17 +5,27 @@
 
 @section('scripts')
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<script>
+    window.REPORTE_FILTROS_RESULTADO = {
+        formId: 'form-pagos-sabana',
+        panelId: 'panel-filtros-sabana',
+    };
+</script>
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/listado-filtros.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/includes/reporte-filtros-resultado.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/reporte-filtros-resultado.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagos_sabana_reporte/filtro.js') }}"></script>
 @endsection
 
 @section('contenido')
 @php
     use App\Support\Compras\PagosSabanaReporteFiltros as Filtros;
+    use App\Support\Compras\PagosSabanaReporteTextoSupport;
 
     $colLabel = 'col-lg-2 control-label text-right pr-2';
     $colInput = 'col-lg-4';
     $totales = $resultado['totales'] ?? [];
+    $tieneFiltrosTexto = ! empty($tiene_filtros_texto);
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -90,6 +100,19 @@
                         </div>
                     </div>
                 </div>
+
+                @if ($consultado)
+                    @include('includes.reportes.filtros_resultado_texto', [
+                        'filtros' => $filtros,
+                        'camposTexto' => PagosSabanaReporteTextoSupport::CAMPOS_TEXTO,
+                        'tiene_filtros_texto' => $tieneFiltrosTexto,
+                        'limpiar_filtros_texto_url' => $limpiar_filtros_texto_url ?? null,
+                        'formId' => 'form-pagos-sabana',
+                        'panelId' => 'panel-filtros-sabana',
+                        'campoDefault' => 'proveedor_nombre',
+                        'placeholder' => 'Buscar proveedor, OP, banco, comprobante…',
+                    ])
+                @endif
             </form>
 
             @if ($consultado)

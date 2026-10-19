@@ -67,6 +67,11 @@ class ClienteCuentacorrienteReporteController extends Controller
 
         $clientesIniciales = $this->clientesInicialesParaVista($filtros, $resultado);
         $vendedoresIniciales = $this->vendedoresInicialesParaVista($filtros, $resultado);
+        $tieneFiltrosTexto = ClienteCuentacorrienteReporteFiltros::tieneFiltrosTextoAplicados($filtros);
+        $limpiarTexto = array_merge(
+            ClienteCuentacorrienteReporteFiltros::paraQueryStringSinTexto($filtros),
+            ['consultar' => 1]
+        );
 
         return view('ventas.cliente_cuentacorriente_reporte.index', [
             'filtros' => $filtros,
@@ -78,6 +83,10 @@ class ClienteCuentacorrienteReporteController extends Controller
             'filasVista' => $filasVista,
             'clientes_iniciales' => $clientesIniciales,
             'vendedores_iniciales' => $vendedoresIniciales,
+            'tiene_filtros_texto' => $tieneFiltrosTexto,
+            'limpiar_filtros_texto_url' => $consultado
+                ? route('cliente_cuentacorriente_reporte', $limpiarTexto)
+                : route('cliente_cuentacorriente_reporte'),
             'subtitulo' => ClienteCuentacorrienteReporteFiltros::armarSubtitulo(
                 $filtros,
                 $this->textoEmpresas($filtros, $empresaQuery),
