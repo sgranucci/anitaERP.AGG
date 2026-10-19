@@ -183,16 +183,9 @@ final class WaitryOrdenEstadoSupport
      */
     public static function montoBrutoWaitry(array $orden): float
     {
-        if (isset($orden['totalAmount']) && is_numeric($orden['totalAmount'])) {
-            return round((float) $orden['totalAmount'], 2);
-        }
-
-        if (isset($orden['total_amount_waitry']) && is_numeric($orden['total_amount_waitry'])) {
-            return round((float) $orden['total_amount_waitry'], 2);
-        }
-
-        if (isset($orden['total']) && is_numeric($orden['total']) && ! isset($orden['total_neto_waitry'])) {
-            return round((float) $orden['total'], 2);
+        $explicito = self::montoCabeceraExplicitaWaitry($orden);
+        if ($explicito > self::TOLERANCIA_NETO) {
+            return $explicito;
         }
 
         $cart = $orden['cart'] ?? null;
@@ -208,12 +201,23 @@ final class WaitryOrdenEstadoSupport
                     if (! is_array($price)) {
                         continue;
                     }
-                    $totalPrice = $price['total_price']['amount'] ?? $price['unit_price']['amount'] ?? null;
-                    if (! is_numeric($totalPrice)) {
+                    $unit = isset($price['unit_price']['amount']) && is_numeric($price['unit_price']['amount'])
+                        ? (float) $price['unit_price']['amount']
+                        : null;
+                    $totalPrice = isset($price['total_price']['amount']) && is_numeric($price['total_price']['amount'])
+                        ? (float) $price['total_price']['amount']
+                        : ($unit);
+                    if ($totalPrice === null) {
                         continue;
                     }
-                    $qty = max(1, (int) ($item['quantity'] ?? $item['count'] ?? 1));
-                    $suma += (float) $totalPrice * $qty;
+                    $qty = max(1.0, (float) ($item['quantity'] ?? $item['count'] ?? 1));
+                    // Misma semántica que el extractor: total≈unit×qty → ya es total de línea;
+                    // si no, total_price es unitario de paquete.
+                    if ($unit !== null && $totalPrice + 0.01 >= $unit * $qty) {
+                        $suma += $totalPrice;
+                    } else {
+                        $suma += $totalPrice * $qty;
+                    }
                 }
                 if ($suma > self::TOLERANCIA_NETO) {
                     return round($suma, 2);
@@ -221,16 +225,63 @@ final class WaitryOrdenEstadoSupport
             }
         }
 
-        $charges = $orden['charges'] ?? null;
-        if (is_array($charges)) {
-            foreach ($charges as $charge) {
-                if (is_array($charge) && isset($charge['amount']) && is_numeric($charge['amount'])) {
-                    return round((float) $charge['amount'], 2);
-                }
+        return round((float) ($orden['total'] ?? 0), 2);
+    }
+
+    /**
+     * Importe de cabecera Waitry sin reconstruir desde ítems (para cuadrar líneas).
+     *
+     * @param  array<string, mixed>  $orden
+     */
+    public static function montoCabeceraExplicitaWaitry(array $orden): float
+    {
+        if (isset($orden['totalAmount']) && is_numeric($orden['totalAmount'])) {
+            return round((float) $orden['totalAmount'], 2);
+        }
+
+        if (isset($orden['total_amount_waitry']) && is_numeric($orden['total_amount_waitry'])) {
+            return round((float) $orden['total_amount_waitry'], 2);
+        }
+
+        if (isset($orden['total']) && is_numeric($orden['total']) && ! isset($orden['total_neto_waitry'])) {
+            return round((float) $orden['total'], 2);
+        }
+
+        $desdeCabecera = self::primerMontoListaWaitry($orden['subtotal'] ?? null);
+        if ($desdeCabecera > self::TOLERANCIA_NETO) {
+            return round($desdeCabecera, 2);
+        }
+
+        $desdeCabecera = self::primerMontoListaWaitry($orden['charges'] ?? null);
+        if ($desdeCabecera > self::TOLERANCIA_NETO) {
+            return round($desdeCabecera, 2);
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * @param  mixed  $lista  p.ej. subtotal/charges: list&lt;array{amount:float}&gt; o un solo amount
+     */
+    private static function primerMontoListaWaitry(mixed $lista): float
+    {
+        if (is_numeric($lista)) {
+            return (float) $lista;
+        }
+        if (! is_array($lista) || $lista === []) {
+            return 0.0;
+        }
+
+        foreach ($lista as $fila) {
+            if (is_numeric($fila)) {
+                return (float) $fila;
+            }
+            if (is_array($fila) && isset($fila['amount']) && is_numeric($fila['amount'])) {
+                return (float) $fila['amount'];
             }
         }
 
-        return round((float) ($orden['total'] ?? 0), 2);
+        return 0.0;
     }
 
     /**

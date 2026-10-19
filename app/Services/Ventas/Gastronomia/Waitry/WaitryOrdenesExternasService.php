@@ -15,6 +15,7 @@ use App\Support\Ventas\Waitry\WaitryDisplayIdSupport;
 use App\Support\Ventas\Waitry\WaitryFacturacionDuplicadosSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\Waitry\WaitryOpcionalesPendientesSupport;
+use App\Support\Ventas\Waitry\WaitryOrdenEstadoSupport;
 use App\Support\Ventas\Waitry\WaitryTotemImporteFacturaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -1471,6 +1472,8 @@ final class WaitryOrdenesExternasService
             return $this->extraerLineasFormatoPush($orden['orderItems'], $incluirItemsPagados);
         }
 
+        $this->cuadrarPreciosLineasConCabeceraOrden($orden, $lineas);
+
         return $lineas;
     }
 
@@ -1692,6 +1695,15 @@ final class WaitryOrdenesExternasService
     }
 
     /**
+     * Precio unitario a facturar desde un ítem getOrdersPOS.
+     *
+     * Semántica Waitry observada:
+     * - {@code unit_price}: precio del SKU base (sin modificadores).
+     * - {@code total_price}: unitario del paquete (SKU + modificadores de 1 ud.). No es el total de línea × qty
+     *   cuando hay extras (ej. burger 12500 + papas/gaseosa 8000 → total_price 20500 con quantity 4).
+     * - Si {@code total_price ≈ unit_price × quantity}, entonces sí es total de línea y se divide.
+     * - Si {@code total_price === unit_price} con qty &gt; 1, Waitry repitió el unitario (no dividir).
+     *
      * @param  array<string, mixed>  $row
      */
     private function precioUnitarioDesdeItemWaitry(array $row, float $cantidad): float
@@ -1719,17 +1731,20 @@ final class WaitryOrdenesExternasService
                 return round($unit, 4);
             }
 
+            // total_price es el importe de toda la línea (unit × qty, con o sin extras prorrateados).
             if ($total + 0.01 >= $unit * $qty) {
                 return round($total / $qty, 4);
             }
 
-            if ($qty <= 1.) {
-                return round($total, 4);
-            }
+            // total_price es el unitario a cobrá (paquete con modificadores, o neto con descuento/cortesía).
+            // No dividir por qty. Ej. Rebisco 19332064: unit 12500, total 20500, qty 4 → 20500.
+            // Cortesía: unit 6200, total 0.01 → 0.01 (no el unitario de lista).
+            return round($total, 4);
         }
 
+        // Sin unit_price: total_price se trata como unitario del paquete.
         if ($total !== null) {
-            return round($total / $qty, 4);
+            return round($total, 4);
         }
 
         if ($unit !== null) {
@@ -1737,6 +1752,141 @@ final class WaitryOrdenesExternasService
         }
 
         return 0.0;
+    }
+
+    /**
+     * Si la suma de líneas no cuadra con subtotal/charges de la orden, reintenta interpretaciones
+     * de {@code total_price} hasta alinear (o deja las líneas y loguea).
+     *
+     * @param  array<string, mixed>  $orden
+     * @param  list<array{sku:string,titulo:string,cantidad:float,precio_unitario:float}>  $lineas
+     */
+    private function cuadrarPreciosLineasConCabeceraOrden(array $orden, array &$lineas): void
+    {
+        if ($lineas === []) {
+            return;
+        }
+
+        // Solo cuadrar contra cabecera explícita (subtotal/charges/totalAmount).
+        // Si no hay, montoBrutoWaitry puede reconstruir desde ítems y “realinear” mal.
+        $cabecera = WaitryOrdenEstadoSupport::montoCabeceraExplicitaWaitry($orden);
+        if ($cabecera <= 0.0001) {
+            return;
+        }
+
+        $suma = $this->sumaImporteLineasWaitry($lineas);
+        if (abs($suma - $cabecera) <= WaitryTotemImporteFacturaSupport::TOLERANCIA_PESOS) {
+            return;
+        }
+
+        $items = $orden['cart']['items'] ?? $orden['items'] ?? null;
+        if (! is_array($items) || $items === []) {
+            Log::warning('waitry.precios_no_cuadran_cabecera', [
+                'waitry_order_id' => $orden['id'] ?? $orden['orderId'] ?? null,
+                'cabecera' => $cabecera,
+                'suma_lineas' => $suma,
+                'motivo' => 'sin_cart_items_para_reintentar',
+            ]);
+
+            return;
+        }
+
+        foreach (['paquete_unitario', 'linea_dividida', 'unit_price'] as $modo) {
+            $candidatas = $this->extraerLineasCartConModoPrecio($items, $modo);
+            if ($candidatas === [] || count($candidatas) !== count($lineas)) {
+                continue;
+            }
+            $sumaAlt = $this->sumaImporteLineasWaitry($candidatas);
+            if (abs($sumaAlt - $cabecera) <= WaitryTotemImporteFacturaSupport::TOLERANCIA_PESOS) {
+                Log::info('waitry.precios_realineados_cabecera', [
+                    'waitry_order_id' => $orden['id'] ?? $orden['orderId'] ?? null,
+                    'modo' => $modo,
+                    'cabecera' => $cabecera,
+                    'suma_previa' => $suma,
+                    'suma_alineada' => $sumaAlt,
+                ]);
+                $lineas = $candidatas;
+
+                return;
+            }
+        }
+
+        Log::warning('waitry.precios_no_cuadran_cabecera', [
+            'waitry_order_id' => $orden['id'] ?? $orden['orderId'] ?? null,
+            'cabecera' => $cabecera,
+            'suma_lineas' => $suma,
+            'lineas' => $lineas,
+        ]);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array{sku:string,titulo:string,cantidad:float,precio_unitario:float}>
+     */
+    private function extraerLineasCartConModoPrecio(array $items, string $modo): array
+    {
+        $lineas = [];
+        foreach ($items as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $sku = $this->extraerSkuWaitryDesdeFila($row);
+            if ($sku === '') {
+                continue;
+            }
+            $cantidad = (float) ($row['quantity'] ?? $row['count'] ?? 1);
+            if ($cantidad <= 0.) {
+                continue;
+            }
+
+            $price = $row['price'] ?? null;
+            $unit = null;
+            $total = null;
+            if (is_numeric($price)) {
+                $total = (float) $price;
+            } elseif (is_array($price)) {
+                $unit = isset($price['unit_price']['amount']) && is_numeric($price['unit_price']['amount'])
+                    ? (float) $price['unit_price']['amount']
+                    : null;
+                $total = isset($price['total_price']['amount']) && is_numeric($price['total_price']['amount'])
+                    ? (float) $price['total_price']['amount']
+                    : null;
+            }
+
+            $qty = max(1.0, $cantidad);
+            $precio = match ($modo) {
+                'paquete_unitario' => $total ?? $unit ?? 0.0,
+                'linea_dividida' => $total !== null ? ($total / $qty) : ($unit ?? 0.0),
+                'unit_price' => $unit ?? $total ?? 0.0,
+                default => 0.0,
+            };
+
+            if ($precio < 0.) {
+                continue;
+            }
+
+            $lineas[] = [
+                'sku' => $sku,
+                'titulo' => $this->extraerTituloWaitryDesdeFila($row, $sku),
+                'cantidad' => $cantidad,
+                'precio_unitario' => round($precio, 4),
+            ];
+        }
+
+        return $lineas;
+    }
+
+    /**
+     * @param  list<array{cantidad?:float|int|string,precio_unitario?:float|int|string}>  $lineas
+     */
+    private function sumaImporteLineasWaitry(array $lineas): float
+    {
+        $suma = 0.0;
+        foreach ($lineas as $ln) {
+            $suma += (float) ($ln['cantidad'] ?? 0) * (float) ($ln['precio_unitario'] ?? 0);
+        }
+
+        return round($suma, 2);
     }
 
     private function resolverArticuloPorCodigoWaitry(ConfiguracionPuntoventaGastronomia $cfg, string $codigo): ?Articulo

@@ -95,6 +95,29 @@ final class WaitryOrdenEstadoSupportTest extends TestCase
         $this->assertSame(7800.0, WaitryOrdenEstadoSupport::montoDescuentoWaitry($orden));
     }
 
+    /** getOrdersPOS: subtotal/charges de cabecera mandan sobre sumar ítems. */
+    public function test_monto_bruto_prioriza_subtotal_cabecera(): void
+    {
+        $orden = [
+            'id' => 19332064,
+            'subtotal' => [['amount' => 82000, 'currency_code' => 'ARS']],
+            'charges' => [['amount' => 82000, 'currency_code' => 'ARS']],
+            'cart' => [
+                'items' => [
+                    [
+                        'quantity' => 4,
+                        'price' => [
+                            'unit_price' => ['amount' => 12500],
+                            'total_price' => ['amount' => 20500],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $this->assertSame(82000.0, WaitryOrdenEstadoSupport::montoBrutoWaitry($orden));
+    }
+
     public function test_total_discount_igual_total_amount_es_precio_pleno_sin_descuento(): void
     {
         $orden = [

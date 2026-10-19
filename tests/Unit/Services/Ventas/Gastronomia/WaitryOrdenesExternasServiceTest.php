@@ -82,6 +82,104 @@ class WaitryOrdenesExternasServiceTest extends TestCase
         $this->assertSame(3400.0, $lineas[0]['precio_unitario']);
     }
 
+    /**
+     * Regresión Rebisco 19/10/2026 pedido 19332064: total_price es unitario del paquete
+     * (burger + modificador), no el total de línea. Antes daba 5125 (= 20500/4).
+     */
+    public function test_extraer_lineas_total_price_es_unitario_paquete_con_modificadores_y_qty(): void
+    {
+        $svc = $this->app->make(WaitryOrdenesExternasService::class);
+        $orden = [
+            'id' => 19332064,
+            'subtotal' => [['amount' => 82000, 'currency_code' => 'ARS']],
+            'charges' => [['amount' => 82000, 'currency_code' => 'ARS']],
+            'cart' => [
+                'items' => [
+                    [
+                        'external_id' => 'V0236',
+                        'quantity' => 4,
+                        'title' => 'Cheeseburger Doble',
+                        'price' => [
+                            'unit_price' => ['amount' => 12500],
+                            'total_price' => ['amount' => 20500],
+                        ],
+                        'selected_modifier_groups' => [
+                            [
+                                'title' => 'Mini porcion de fritas + gaseosa',
+                                'price' => [
+                                    'unit_price' => ['amount' => 8000],
+                                    'total_price' => ['amount' => 8000],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $lineas = $svc->extraerLineasDesdeOrden($orden);
+
+        $this->assertCount(1, $lineas);
+        $this->assertSame(4.0, $lineas[0]['cantidad']);
+        $this->assertSame(20500.0, $lineas[0]['precio_unitario']);
+        $this->assertSame(82000.0, round(4.0 * 20500.0, 2));
+    }
+
+    /** Cortesía / descuento: total_price neto manda aunque sea menor que unit_price. */
+    public function test_extraer_lineas_respeta_total_price_neto_menor_que_unit(): void
+    {
+        $svc = $this->app->make(WaitryOrdenesExternasService::class);
+        $orden = [
+            'id' => 1,
+            'subtotal' => [['amount' => 0.01]],
+            'cart' => [
+                'items' => [
+                    [
+                        'external_id' => 'V0633',
+                        'quantity' => 1,
+                        'title' => 'Cortesía',
+                        'price' => [
+                            'unit_price' => ['amount' => 6200],
+                            'total_price' => ['amount' => 0.01],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $lineas = $svc->extraerLineasDesdeOrden($orden);
+
+        $this->assertSame(0.01, $lineas[0]['precio_unitario']);
+    }
+
+    /** Si el extractor falla, la cuadratura elige el modo que cierra con la cabecera. */
+    public function test_extraer_lineas_realinea_contra_subtotal_cabecera(): void
+    {
+        $svc = $this->app->make(WaitryOrdenesExternasService::class);
+        $orden = [
+            'id' => 999001,
+            'subtotal' => [['amount' => 41000]],
+            'cart' => [
+                'items' => [
+                    [
+                        'external_id' => 'V0236',
+                        'quantity' => 2,
+                        'title' => 'Combo',
+                        'price' => [
+                            'unit_price' => ['amount' => 10000],
+                            'total_price' => ['amount' => 20500],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $lineas = $svc->extraerLineasDesdeOrden($orden);
+
+        $this->assertSame(20500.0, $lineas[0]['precio_unitario']);
+        $this->assertSame(41000.0, round($lineas[0]['cantidad'] * $lineas[0]['precio_unitario'], 2));
+    }
+
     public function test_extraer_lineas_incluye_items_pagados_en_order_items(): void
     {
         $svc = $this->app->make(WaitryOrdenesExternasService::class);
