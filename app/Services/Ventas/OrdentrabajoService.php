@@ -622,42 +622,126 @@ class OrdentrabajoService
 		return($ret);
 	}
 
+	private function esEtiquetaSinOt(array $data): bool
+	{
+		return ($data['modo'] ?? 'ot') === 'manual';
+	}
+
+	/**
+	 * Líneas a imprimir: las de la OT, o una línea armada con los datos del formulario.
+	 *
+	 * @return list<iterable<int, object>>|\Illuminate\Http\RedirectResponse
+	 */
+	private function gruposParaEtiqueta(array $data)
+	{
+		if ($this->esEtiquetaSinOt($data)) {
+			[$ot, $error] = $this->lineaEtiquetaSinOt($data);
+			if ($error !== null) {
+				return $error;
+			}
+
+			return [$ot];
+		}
+
+		$ordenes = explode(',', (string) ($data['ordenestrabajo'] ?? ''));
+		$grupos = [];
+		foreach ($ordenes as $id) {
+			$id = trim($id);
+			if ($id === '') {
+				continue;
+			}
+			if (($data['origen'] ?? '') === 'ANITA') {
+				$ot = $this->ordentrabajoQuery->traeOrdentrabajoPorId($id);
+			} else {
+				$ot = $this->ordentrabajoQuery->traeOrdentrabajoPorIdERP($id);
+			}
+			$grupos[] = is_iterable($ot) ? $ot : [];
+		}
+
+		return $grupos;
+	}
+
+	/**
+	 * @return array{0: \Illuminate\Support\Collection<int, object>, 1: ?\Illuminate\Http\RedirectResponse}
+	 */
+	private function lineaEtiquetaSinOt(array $data): array
+	{
+		$articulo = Articulo::query()->find((int) ($data['articulo_id'] ?? 0));
+		if (! $articulo) {
+			return [collect(), redirect()->back()->with('errores', ['Elija el artículo de la etiqueta.'])];
+		}
+
+		$combinacion = Combinacion::query()
+			->where('articulo_id', $articulo->id)
+			->whereKey((int) ($data['combinacion_id'] ?? 0))
+			->first();
+		if (! $combinacion) {
+			return [collect(), redirect()->back()->with('errores', ['Elija una combinación de ese artículo.'])];
+		}
+
+		$tipo = (string) ($data['tipoetiqueta'] ?? '');
+		$medida = '';
+		if ($tipo !== 'CUIT') {
+			$talle = Talle::query()->find((int) ($data['talle_id'] ?? 0));
+			if (! $talle) {
+				return [collect(), redirect()->back()->with('errores', ['Elija el talle.'])];
+			}
+			$medida = (string) ($talle->nombre !== '' && $talle->nombre !== null ? $talle->nombre : $talle->codigo);
+		}
+
+		$cantidad = (int) ($data['cantidad'] ?? 0);
+		if ($cantidad < 1 || $cantidad > 500) {
+			return [collect(), redirect()->back()->with('errores', ['La cantidad debe estar entre 1 y 500.'])];
+		}
+
+		$item = (object) [
+			'ordtm_nro_orden' => trim((string) ($data['nro_referencia'] ?? '')),
+			'ordtv_cantidad' => $cantidad,
+			'ordtv_articulo' => $articulo->sku,
+			'ordtm_capellada' => $combinacion->codigo,
+			'ordtv_medida' => $medida,
+		];
+
+		return [collect([$item]), null];
+	}
+
 	public function listaEtiquetaCuit(array $data)
 	{
 		// Arma nombre de archivo
 		$nombreEtiqueta = "tmp/etiCUIT-" . Str::random(10) . '.txt';
 
-		$ordenes = explode(',', $data['ordenestrabajo']);
+		$grupos = $this->gruposParaEtiqueta($data);
+		if ($grupos instanceof \Illuminate\Http\RedirectResponse) {
+			return $grupos;
+		}
 
 		$etiqueta = "";
 		//$pos = [44,66,88,110,132,154];
 		$pos = [25,46,68,90,112,134];
 
-		foreach($ordenes as $id)
+		foreach ($grupos as $ot)
 		{
-			// Verifica origen
-			if ($data['origen'] == 'ANITA')
-	    		$ot = $this->ordentrabajoQuery->traeOrdentrabajoPorId($id);
-			else
-				$ot = $this->ordentrabajoQuery->traeOrdentrabajoPorIdERP($id);
-
 			if (isset($ot[0]))
 			{
-				$buff = [];
-				$buff[] = " ";
-				$buff[] = " ";
-				$buff[] = "Nro. O.T.: ".$ot[0]->ordtm_nro_orden;
-
-				if ($etiqueta == "")
-					$etiqueta = "\nN\n";
-
-				for ($i = 0; $i < count($buff); $i++)
+				$nroOt = trim((string) ($ot[0]->ordtm_nro_orden ?? ''));
+				if ($nroOt !== '')
 				{
-					$salida = sprintf("%-43.43s%-43.43s", $buff[$i], " ");
-					$etiqueta .= "A30,".$pos[$i].",0,1,1,2,N,\"".$salida."\"\n";
+					$buff = [];
+					$buff[] = " ";
+					$buff[] = " ";
+					$buff[] = "Nro. O.T.: ".$nroOt;
+
+					if ($etiqueta == "")
+						$etiqueta = "\nN\n";
+
+					for ($i = 0; $i < count($buff); $i++)
+					{
+						$salida = sprintf("%-43.43s%-43.43s", $buff[$i], " ");
+						$etiqueta .= "A30,".$pos[$i].",0,1,1,2,N,\"".$salida."\"\n";
+					}
+
+					$etiqueta .= "P1\n";
 				}
-		
-				$etiqueta .= "P1\n";
 
 				$buffpar = [];
 				$buffimpar = [];
@@ -767,16 +851,14 @@ class OrdentrabajoService
 		// Arma nombre de archivo
 		$nombreEtiqueta = "tmp/etiCAJA-" . Str::random(10) . '.txt';
 
-		$ordenes = explode(',', $data['ordenestrabajo']);
+		$grupos = $this->gruposParaEtiqueta($data);
+		if ($grupos instanceof \Illuminate\Http\RedirectResponse) {
+			return $grupos;
+		}
 
 		$etiqueta = "";
-		foreach($ordenes as $id)
+		foreach ($grupos as $ot)
 		{
-			// Verifica origen
-			if ($data['origen'] == 'ANITA')
-				$ot = $this->ordentrabajoQuery->traeOrdentrabajoPorId($id);
-			else
-				$ot = $this->ordentrabajoQuery->traeOrdentrabajoPorIdERP($id);
 			foreach($ot as $item)
 			{
 				// Gira por cada unidad en funcion de la cantidad del item
@@ -881,17 +963,14 @@ class OrdentrabajoService
 		// Arma nombre de archivo
 		$nombreEtiqueta = "tmp/etiCAJA-" . Str::random(10) . '.txt';
 
-		$ordenes = explode(',', $data['ordenestrabajo']);
+		$grupos = $this->gruposParaEtiqueta($data);
+		if ($grupos instanceof \Illuminate\Http\RedirectResponse) {
+			return $grupos;
+		}
 
 		$etiqueta = "";
-		foreach($ordenes as $id)
+		foreach ($grupos as $ot)
 		{
-			// Verifica origen
-			if ($data['origen'] == 'ANITA')
-				$ot = $this->ordentrabajoQuery->traeOrdentrabajoPorId($id);
-			else
-				$ot = $this->ordentrabajoQuery->traeOrdentrabajoPorIdERP($id);
-
 			foreach($ot as $item)
 			{
 				// Gira por cada unidad en funcion de la cantidad del item

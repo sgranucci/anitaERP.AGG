@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Ventas\Tiendanube;
 
+use App\Models\Configuracion\Feriado;
 use App\Exports\Ventas\TiendanubeStockSubidaLineaExport;
 use App\Http\Controllers\Controller;
 use App\Models\Ventas\TiendanubeStockSubida;
@@ -11,6 +12,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubeStockCatalogoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubeTiendasSupport;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
@@ -59,6 +61,7 @@ class TiendanubeStockSubidaController extends Controller
             'tiendas' => TiendanubeTiendasSupport::paraVista(),
             'nombresTienda' => $nombres,
             'enCurso' => TiendanubeStockCatalogoSupport::haySubidaEnCurso(),
+            'feriadosMes' => $this->feriadosDelMes($request),
         ]);
     }
 
@@ -156,7 +159,67 @@ class TiendanubeStockSubidaController extends Controller
 
     public function subir(Request $request)
     {
-        return $this->lanzar(TiendanubeStockSubida::ORIGEN_MANUAL, 'La subida arrancó. La grilla muestra el avance al actualizar.');
+        return $this->lanzar(
+            TiendanubeStockSubida::ORIGEN_MANUAL,
+            'stock',
+            'La subida de stock arrancó. No manda precios. La grilla muestra el avance al actualizar.'
+        );
+    }
+
+    public function subirPrecios(Request $request)
+    {
+        return $this->lanzar(
+            TiendanubeStockSubida::ORIGEN_MANUAL,
+            'precios',
+            'La subida de precios arrancó. No manda stock. La grilla muestra el avance al actualizar.'
+        );
+    }
+
+    public function guardarFeriados(Request $request)
+    {
+        $this->autorizar();
+
+        $mes = $this->mesPedido($request);
+        $inicio = $mes->copy()->startOfMonth();
+        $fin = $mes->copy()->endOfMonth();
+        $marcadas = [];
+        foreach ((array) $request->input('fechas', []) as $fecha) {
+            $texto = trim((string) $fecha);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $texto) !== 1) {
+                continue;
+            }
+            $dia = Carbon::parse($texto);
+            if ($dia->lt($inicio) || $dia->gt($fin) || $dia->isWeekend()) {
+                continue;
+            }
+            $marcadas[$dia->toDateString()] = true;
+        }
+
+        $existentes = Feriado::query()
+            ->where('tipo', 'tienda')
+            ->whereBetween('fecha', [$inicio->toDateString(), $fin->toDateString()])
+            ->get();
+        foreach ($existentes as $feriado) {
+            $fecha = Carbon::parse($feriado->fecha)->toDateString();
+            if (! isset($marcadas[$fecha])) {
+                $feriado->delete();
+            }
+            unset($marcadas[$fecha]);
+        }
+        foreach (array_keys($marcadas) as $fecha) {
+            if (Feriado::query()->where('fecha', $fecha)->exists()) {
+                continue;
+            }
+            Feriado::query()->create([
+                'nombre' => 'Sin subida de stock a Tiendanube',
+                'fecha' => $fecha,
+                'tipo' => 'tienda',
+            ]);
+        }
+
+        return redirect()
+            ->route('tiendanube_stock_subidas', ['mes' => $mes->format('Y-m')])
+            ->with('mensaje', 'Feriados de '.$mes->locale('es')->isoFormat('MMMM Y').' guardados. Esos días no se sube el stock solo.');
     }
 
     public function previsualizar(TiendanubeStockSubidaService $servicio)
@@ -190,7 +253,65 @@ class TiendanubeStockSubidaController extends Controller
         return redirect()->route('ver_tiendanube_stock_subida', $id);
     }
 
-    private function lanzar(string $origen, string $mensaje)
+    /**
+     * @return array{mes:string, titulo:string, anterior:string, siguiente:string, dias:list<array{fecha:string, etiqueta:string, marcado:bool, otro:string}>}
+     */
+    private function feriadosDelMes(Request $request): array
+    {
+        $mes = $this->mesPedido($request);
+        $inicio = $mes->copy()->startOfMonth();
+        $fin = $mes->copy()->endOfMonth();
+        $filas = Feriado::query()
+            ->whereBetween('fecha', [$inicio->toDateString(), $fin->toDateString()])
+            ->get();
+        $tienda = [];
+        $otros = [];
+        foreach ($filas as $feriado) {
+            $fecha = Carbon::parse($feriado->fecha)->toDateString();
+            if ((string) $feriado->tipo === 'tienda') {
+                $tienda[$fecha] = true;
+            } else {
+                $otros[$fecha] = trim((string) $feriado->nombre);
+            }
+        }
+        $dias = [];
+        for ($dia = $inicio->copy(); $dia->lte($fin); $dia->addDay()) {
+            if ($dia->isWeekend()) {
+                continue;
+            }
+            $fecha = $dia->toDateString();
+            $dias[] = [
+                'fecha' => $fecha,
+                'etiqueta' => $dia->locale('es')->isoFormat('ddd D'),
+                'marcado' => isset($tienda[$fecha]) || isset($otros[$fecha]),
+                'otro' => $otros[$fecha] ?? '',
+            ];
+        }
+
+        return [
+            'mes' => $mes->format('Y-m'),
+            'titulo' => ucfirst($mes->locale('es')->isoFormat('MMMM Y')),
+            'anterior' => $mes->copy()->subMonth()->format('Y-m'),
+            'siguiente' => $mes->copy()->addMonth()->format('Y-m'),
+            'dias' => $dias,
+        ];
+    }
+
+    private function mesPedido(Request $request): Carbon
+    {
+        $texto = trim((string) $request->input('mes', ''));
+        if (preg_match('/^(\d{4})-(\d{2})$/', $texto, $m) === 1) {
+            $anio = (int) $m[1];
+            $numero = (int) $m[2];
+            if ($anio >= 2000 && $anio <= 2100 && $numero >= 1 && $numero <= 12) {
+                return Carbon::create($anio, $numero, 1)->startOfDay();
+            }
+        }
+
+        return Carbon::now()->startOfMonth();
+    }
+
+    private function lanzar(string $origen, string $que, string $mensaje)
     {
         $this->autorizar();
 
@@ -212,10 +333,11 @@ class TiendanubeStockSubidaController extends Controller
         }
         $log = storage_path('logs/tiendanube-stock-subida.log');
         $cmd = sprintf(
-            'nohup %s %s tiendanube:subir-stock --origen=%s --usuario=%d >> %s 2>&1 &',
+            'nohup %s %s tiendanube:subir-stock --origen=%s --que=%s --usuario=%d >> %s 2>&1 &',
             escapeshellarg($php),
             escapeshellarg(base_path('artisan')),
             escapeshellarg($origen),
+            escapeshellarg($que),
             (int) Auth::id(),
             escapeshellarg($log)
         );

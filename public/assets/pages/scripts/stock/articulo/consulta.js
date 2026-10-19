@@ -77,6 +77,66 @@ window.mensajeErrorListaprecioArticuloVentas = function (sku, numeroItem) {
     return 'El artículo ' + etiqueta + sufijo + ' no tiene lista de precios asignada.';
 };
 
+/** Si el renglón no trae lista, la busca (cliente y, si no, una lista con precio). No pisa un precio ya cargado. */
+window.resolverListaprecioLineaVentas = function ($tr) {
+    var diferido = $.Deferred();
+    if (!$tr || !$tr.length) {
+        diferido.resolve(false);
+        return diferido.promise();
+    }
+    if (window.listaprecioIdEsValidoLineaVentas($tr.find('.listaprecio_id').val())) {
+        diferido.resolve(true);
+        return diferido.promise();
+    }
+
+    var articuloId = parseInt($tr.find('.articulo_id').val() || '0', 10) || 0;
+    var codigoCliente = ($('#codigocliente').val() || '').toString().trim();
+    var clienteId = ($('#cliente_id').val() || '').toString().trim();
+    var claveCliente = codigoCliente || clienteId;
+    if (articuloId <= 0 || !claveCliente) {
+        diferido.resolve(false);
+        return diferido.promise();
+    }
+
+    $.get(carpetaBase + '/stock/asignapreciocliente/' + articuloId + '/' + encodeURIComponent(claveCliente))
+        .done(function (data) {
+            var lista = 0;
+            var precio = null;
+            var incluye = '';
+            var moneda = '';
+            $.each(data || [], function (_, value) {
+                lista = value.listaprecio_id;
+                precio = value.precio;
+                incluye = value.incluyeimpuesto;
+                moneda = value.moneda_id;
+            });
+            if (!window.listaprecioIdEsValidoLineaVentas(lista)) {
+                diferido.resolve(false);
+                return;
+            }
+            $tr.find('.listaprecio_id').val(lista);
+            var precioActual = $.trim($tr.find('.precio').val() || '');
+            if (precioActual === '' && precio != null && precio !== '') {
+                var precioNum = parseFloat(precio);
+                $tr.find('.precio').val(typeof redondearDecimales === 'function' && !isNaN(precioNum)
+                    ? redondearDecimales(precioNum, 2)
+                    : precio);
+            }
+            if ($.trim($tr.find('.incluyeimpuesto').val() || '') === '' && incluye != null && incluye !== '') {
+                $tr.find('.incluyeimpuesto').val(incluye);
+            }
+            if (!window.listaprecioIdEsValidoLineaVentas($tr.find('.moneda_id').val()) && moneda) {
+                $tr.find('.moneda_id').val(moneda);
+            }
+            diferido.resolve(true);
+        })
+        .fail(function () {
+            diferido.resolve(false);
+        });
+
+    return diferido.promise();
+};
+
 function esLineaFacturaMostrador($tr) {
     return $tr && $tr.length && $tr.closest('#formgeneral[data-factura-proceso]').length > 0;
 }

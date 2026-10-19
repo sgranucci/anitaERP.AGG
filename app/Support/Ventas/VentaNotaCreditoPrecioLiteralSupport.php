@@ -41,7 +41,7 @@ final class VentaNotaCreditoPrecioLiteralSupport
         }
         // Canje POS (+1/−1): el renglón que entra ya trae su precio. La NC total sigue copiando la FAC.
         $opciones = is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : [];
-        if (! empty($opciones['canje_pos'])) {
+        if (! empty($opciones['canje_pos']) || ! empty($opciones['respetar_precios_enviados'])) {
             return;
         }
         if (! isset($data['precios']) || ! is_array($data['precios']) || $data['precios'] === []) {

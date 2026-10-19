@@ -18,9 +18,17 @@ use Throwable;
 final class TiendanubeStockSubidaService
 {
     /**
+     * @param  bool  $incluirPrecios  El cron y la subida de stock no mandan precios. El botón de precios sí.
      * @return array{ok:bool, mensaje:string, subidas:list<int>}
      */
-    public function ejecutar(string $origen, ?int $usuarioId = null, ?string $storeId = null, bool $soloHoraActual = false): array
+    public function ejecutar(
+        string $origen,
+        ?int $usuarioId = null,
+        ?string $storeId = null,
+        bool $soloHoraActual = false,
+        bool $incluirPrecios = false,
+        bool $incluirStock = true,
+    ): array
     {
         $this->cerrarCorridasColgadas();
 
@@ -57,7 +65,7 @@ final class TiendanubeStockSubidaService
                 if ($origen === TiendanubeStockSubida::ORIGEN_CRON && $this->cronYaCorrioHoy($tienda)) {
                     continue;
                 }
-                $ids[] = $this->subirTienda($tienda, $origen, $usuarioId);
+                $ids[] = $this->subirTienda($tienda, $origen, $usuarioId, $incluirPrecios, $incluirStock);
             }
         } finally {
             $lock->release();
@@ -83,7 +91,13 @@ final class TiendanubeStockSubidaService
      *   listaprecio_oferta_id:int
      * }  $tienda
      */
-    private function subirTienda(array $tienda, string $origen, ?int $usuarioId): int
+    private function subirTienda(
+        array $tienda,
+        string $origen,
+        ?int $usuarioId,
+        bool $incluirPrecios = false,
+        bool $incluirStock = true,
+    ): int
     {
         $subida = TiendanubeStockSubida::query()->create([
             'store_id' => $tienda['store_id'],
@@ -101,8 +115,13 @@ final class TiendanubeStockSubidaService
 
                 return (int) $subida->id;
             }
-            if ($tienda['listaprecio_precio_id'] <= 0) {
+            if ($incluirPrecios && $tienda['listaprecio_precio_id'] <= 0) {
                 $this->cerrar($subida, TiendanubeStockSubida::ESTADO_ERROR, 'Falta la lista de precio.');
+
+                return (int) $subida->id;
+            }
+            if (! $incluirStock && ! $incluirPrecios) {
+                $this->cerrar($subida, TiendanubeStockSubida::ESTADO_ERROR, 'No hay nada para subir.');
 
                 return (int) $subida->id;
             }
@@ -116,11 +135,13 @@ final class TiendanubeStockSubidaService
 
             $ids = array_keys($articulos);
             $stock = TiendanubeStockCatalogoSupport::stockPorVariante($tienda['deposito_ids'], $ids);
-            $precios = TiendanubeStockCatalogoSupport::precios(
-                $ids,
-                $tienda['listaprecio_precio_id'],
-                $tienda['listaprecio_oferta_id']
-            );
+            $precios = ($incluirPrecios || $origen === TiendanubeStockSubida::ORIGEN_SIMULACION)
+                ? TiendanubeStockCatalogoSupport::precios(
+                    $ids,
+                    $tienda['listaprecio_precio_id'],
+                    $tienda['listaprecio_oferta_id']
+                )
+                : [];
             if ($origen === TiendanubeStockSubida::ORIGEN_SIMULACION) {
                 $this->previsualizarDesdeErp($subida, $articulos, $stock, $precios);
                 $this->cerrarConConteos($subida);
@@ -138,8 +159,13 @@ final class TiendanubeStockSubidaService
                     (int) $articuloId,
                     $articulo,
                     $stock,
-                    $precios[(int) $articuloId] ?? ['precio' => null, 'oferta' => null],
-                    $conocidos[(int) $articuloId] ?? []
+                    $incluirPrecios
+                        ? ($precios[(int) $articuloId] ?? ['precio' => null, 'oferta' => null])
+                        : ['precio' => null, 'oferta' => null],
+                    $conocidos[(int) $articuloId] ?? [],
+                    false,
+                    $incluirStock,
+                    $incluirPrecios,
                 );
             }
 
@@ -283,6 +309,8 @@ final class TiendanubeStockSubidaService
         array $precio,
         array $skusConocidos,
         bool $simular = false,
+        bool $incluirStock = true,
+        bool $incluirPrecios = true,
     ): void {
         $sku = trim($articulo['sku']);
         $combinaciones = $articulo['combinaciones'];
@@ -331,30 +359,33 @@ final class TiendanubeStockSubidaService
             $claveStock = TiendanubeStockCatalogoSupport::claveStock($articuloId, $partes['combinacion'], $partes['talle']);
             [$unidades, $avisoStock] = self::stockNoNegativo((int) ($stock[$claveStock] ?? 0));
             $cubiertas[$claveStock] = true;
-            $item = [
-                'id' => $variantId,
-                'inventory_levels' => [['stock' => $unidades]],
-            ];
+            $item = ['id' => $variantId];
+            if ($incluirStock) {
+                $item['inventory_levels'] = [['stock' => $unidades]];
+            }
             $precioTxt = null;
             $ofertaTxt = null;
             $aviso = null;
-            if ($precio['precio'] !== null) {
+            if ($incluirPrecios && $precio['precio'] !== null) {
                 $precioTxt = number_format((float) $precio['precio'], 2, '.', '');
                 $ofertaTxt = number_format((float) ($precio['oferta'] ?? 0), 2, '.', '');
                 $item['price'] = $precioTxt;
                 $item['compare_at_price'] = $precioTxt;
                 $item['promotional_price'] = $ofertaTxt;
-            } else {
+            } elseif ($incluirPrecios) {
                 $aviso = $simular
-                    ? 'Sin precio en la lista; se enviaría solo el stock.'
-                    : 'Sin precio en la lista; se actualizó solo el stock.';
+                    ? 'Sin precio en la lista; no se enviaría el precio.'
+                    : 'Sin precio en la lista; no se actualizó el precio.';
             }
             if ($simular) {
                 $hoy = self::textoHoyEnTienda($variante);
                 $aviso = trim($hoy.($aviso !== null ? ' '.$aviso : '').' No se envió.');
             }
-            if ($avisoStock !== null) {
+            if ($incluirStock && $avisoStock !== null) {
                 $aviso = trim(($aviso !== null ? $aviso.' ' : '').$avisoStock);
+            }
+            if (! isset($item['inventory_levels']) && ! isset($item['price'])) {
+                continue;
             }
             $payload[] = $item;
             $previstas[] = [
@@ -363,7 +394,7 @@ final class TiendanubeStockSubidaService
                 'variante_sku' => $skuVariante,
                 'combinacion_codigo' => $partes['combinacion'],
                 'talle' => $partes['talle'],
-                'stock' => $unidades,
+                'stock' => $incluirStock ? $unidades : null,
                 'precio' => $precioTxt,
                 'precio_promocional' => $ofertaTxt,
                 'mensaje' => $aviso,

@@ -100,9 +100,17 @@ final class ComprobanteProveedorPdfIaService
         try {
             $resuelto = $this->resolverDesdeExtraccion($extraido, $numeroOc);
         } catch (RuntimeException $e) {
+            if ($this->esOcInexistente($e->getMessage())) {
+                return $this->previewIgnorandoOcInexistente(
+                    $extraido,
+                    $numeroOc,
+                    $sinCentroCostoQuedaParaRevisar,
+                );
+            }
+
             return [
                 'ok' => false,
-                'oc_requerida' => $this->debeSolicitarOcManual($e->getMessage()),
+                'oc_requerida' => true,
                 'permite_continuar_sin_oc' => true,
                 'message' => $e->getMessage(),
                 'extraccion' => $extraido,
@@ -1295,17 +1303,47 @@ final class ComprobanteProveedorPdfIaService
         }
     }
 
-    private function debeSolicitarOcManual(string $mensaje): bool
-    {
-        $msg = mb_strtolower($mensaje);
+    /**
+     * La OC leída del PDF (o tipeada) no está en Anita: la precarga sigue sin OC.
+     *
+     * @param  array<string, mixed>  $extraido
+     * @return array<string, mixed>
+     */
+    private function previewIgnorandoOcInexistente(
+        array $extraido,
+        string $numeroOc,
+        bool $sinCentroCostoQuedaParaRevisar,
+    ): array {
+        $extraidoSinOc = $extraido;
+        unset($extraidoSinOc['numero_oc'], $extraidoSinOc['numero_oc_origen']);
+        $extraidoSinOc['numero_oc_descartada'] = $numeroOc;
 
-        if (str_contains($msg, 'oc inexistente') || str_contains($msg, 'no corresponde con el cuit')) {
-            return false;
+        try {
+            $resuelto = $this->resolverDesdeExtraccion($extraidoSinOc, null, $sinCentroCostoQuedaParaRevisar);
+        } catch (RuntimeException $e) {
+            return [
+                'ok' => false,
+                'oc_requerida' => true,
+                'permite_continuar_sin_oc' => false,
+                'message' => 'La OC '.$numeroOc.' no existe. '.$e->getMessage(),
+                'extraccion' => $extraidoSinOc,
+                'extraccion_meta' => $extraidoSinOc['_meta'] ?? [],
+                'numero_oc_intentado' => $numeroOc,
+                'decision_id' => $this->decisionIdDeExtraccion($extraidoSinOc),
+            ];
         }
 
-        return str_contains($msg, 'orden de compra')
-            || str_contains($msg, 'no se detectó')
-            || str_contains($msg, 'ingrese el número de oc')
-            || str_contains($msg, 'falta número de orden');
+        $aviso = 'La OC '.$numeroOc.' no existe en Anita. Se continúa sin orden de compra, con el centro de costo de compra del proveedor.';
+        $resuelto['advertencias'] = array_values(array_merge(
+            [$aviso],
+            is_array($resuelto['advertencias'] ?? null) ? $resuelto['advertencias'] : [],
+        ));
+
+        return $this->empaquetarPreviewOk($extraidoSinOc, $resuelto);
+    }
+
+    private function esOcInexistente(string $mensaje): bool
+    {
+        return str_contains(mb_strtolower($mensaje), 'oc inexistente');
     }
 }

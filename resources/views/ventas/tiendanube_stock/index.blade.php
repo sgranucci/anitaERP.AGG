@@ -19,9 +19,9 @@
                 <div class="border rounded p-3 mb-4 bg-light">
                     <h5 class="mb-2">Armar o enviar</h5>
                     <p class="mb-3">
-                        El stock sale de los depósitos configurados y los precios de las dos listas.
-                        A la hora configurada se envía sola, de lunes a viernes. Los sábados, domingos y feriados no se envía sola.
-                        Estos botones son para hacerlo a mano.
+                        El stock sale de los depósitos configurados. A la hora configurada se envía solo, de lunes a viernes, y no manda precios.
+                        Los sábados, domingos y los días marcados abajo no se envía solo.
+                        Los precios se suben cuando se los pide con el botón correspondiente.
                     </p>
                     <div class="d-flex flex-wrap align-items-center" style="gap:.75rem 1rem;">
                         @if ($enCurso)
@@ -34,18 +34,56 @@
                                 </button>
                             </form>
                             <form action="{{ route('subir_tiendanube_stock') }}" method="POST" class="m-0"
-                                onsubmit="return confirm('Se van a subir stock y precios a las tiendas que tienen la subida activa. ¿Continuar?');">
+                                onsubmit="return confirm('Se va a subir solo el stock. Los precios de la tienda no cambian. ¿Continuar?');">
                                 @csrf
                                 <button type="submit" class="btn btn-success">
-                                    <i class="fa fa-upload"></i> Subir ahora
+                                    <i class="fa fa-upload"></i> Subir stock
+                                </button>
+                            </form>
+                            <form action="{{ route('subir_tiendanube_precios') }}" method="POST" class="m-0"
+                                onsubmit="return confirm('Se van a subir los precios de lista. El stock de la tienda no cambia. ¿Continuar?');">
+                                @csrf
+                                <button type="submit" class="btn btn-outline-success">
+                                    <i class="fa fa-tags"></i> Subir precios
                                 </button>
                             </form>
                         @endif
                     </div>
                     <p class="text-muted mb-0 mt-2">
-                        <strong>Previsualizar</strong> genera una fila nueva en el historial para revisar stock y precios. No toca Tiendanube.
-                        <strong>Subir ahora</strong> envía esos datos a la tienda.
+                        <strong>Previsualizar</strong> arma el listado para revisar. No toca Tiendanube.
+                        <strong>Subir stock</strong> manda cantidades.
+                        <strong>Subir precios</strong> manda la lista y la oferta.
                     </p>
+                </div>
+
+                <div class="border rounded p-3 mb-4">
+                    <h5 class="mb-2">Días sin subida automática</h5>
+                    <p class="text-muted">
+                        Marcá los feriados del mes, también los que se mueven. Esos días hábiles no se sube el stock solo.
+                    </p>
+                    <div class="d-flex align-items-center mb-3" style="gap:.5rem;">
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ route('tiendanube_stock_subidas', ['mes' => $feriadosMes['anterior']]) }}">Mes anterior</a>
+                        <strong>{{ $feriadosMes['titulo'] }}</strong>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ route('tiendanube_stock_subidas', ['mes' => $feriadosMes['siguiente']]) }}">Mes siguiente</a>
+                    </div>
+                    <form action="{{ route('guardar_feriados_tiendanube_stock') }}" method="POST">
+                        @csrf
+                        <input type="hidden" name="mes" value="{{ $feriadosMes['mes'] }}">
+                        <div class="d-flex flex-wrap" style="gap:.35rem .9rem;">
+                            @foreach ($feriadosMes['dias'] as $dia)
+                                <label class="mb-0">
+                                    <input type="checkbox" name="fechas[]" value="{{ $dia['fecha'] }}"
+                                        @if ($dia['marcado']) checked @endif
+                                        @if ($dia['otro'] !== '') disabled @endif>
+                                    {{ $dia['etiqueta'] }}
+                                    @if ($dia['otro'] !== '')
+                                        <span class="text-muted">({{ $dia['otro'] }})</span>
+                                    @endif
+                                </label>
+                            @endforeach
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm mt-3">Guardar feriados del mes</button>
+                    </form>
                 </div>
 
                 <h5 class="mb-2">Historial</h5>

@@ -46,6 +46,8 @@ final class FacturacionLocalNotaCreditoService
      * }|null  $opciones  Solo Facturación Local / marketplace Ferli (no gastronomía).
      *   venta_emision_ids limita la NC a esos ítems (cambio: solo lo devuelto).
      *   precios_por_emision reemplaza el precio de la factura (precio editado en el legajo).
+     *   Con ese array se marca respetar_precios_enviados: si no, calculaFacturaGeneral
+     *   vuelve a copiar el precio pagado de la factura (2x1 / promo de Tiendanube).
      * @return array{ok:bool,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string,warn?:string,error?:string}
      */
     public function generarDesdeFactura(
@@ -530,6 +532,8 @@ final class FacturacionLocalNotaCreditoService
                 'omitir_solicitud_arca_cae' => true,
                 // Si no hay asiento FAC para invertir, imputar medios de la cobranza (no deudores).
                 'asiento_medios_pago' => $this->cobranzaService->mediosDesdeVentaFac((int) $ventaOrigen->id),
+                // El legajo manda el precio (lista / corregido). Sin esto se pisa con el pagado en la FAC.
+                'respetar_precios_enviados' => $preciosPorEmision !== null,
             ],
             '_descuentos_linea_item' => $descuentos,
         ];

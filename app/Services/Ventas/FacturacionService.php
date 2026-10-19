@@ -2980,11 +2980,19 @@ class FacturacionService
 				}
 			}
 
-			$listaprecio_id = 1;
+			$listaprecio_id = 0;
 			if (is_array($listaspreciosIds) && isset($listaspreciosIds[$offItem]) && (string) $listaspreciosIds[$offItem] !== '') {
 				$listaprecio_id = (int) $listaspreciosIds[$offItem];
 			} elseif ($listaprecioGlobalId) {
 				$listaprecio_id = $listaprecioGlobalId;
+			}
+
+			if ($articulo_id && ! \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::listaprecioIdValido($listaprecio_id)) {
+				$listaprecio_id = \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::resolverFallback(
+					(int) $articulo_id,
+					(int) $cliente_id,
+					$fechaFactura,
+				);
 			}
 
 			if ($articulo_id && ! \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::listaprecioIdValido($listaprecio_id)) {

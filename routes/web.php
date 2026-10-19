@@ -930,6 +930,8 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
 
     Route::get('ventas/tiendanube-stock', 'Ventas\Tiendanube\TiendanubeStockSubidaController@index')->name('tiendanube_stock_subidas');
     Route::post('ventas/tiendanube-stock/subir', 'Ventas\Tiendanube\TiendanubeStockSubidaController@subir')->name('subir_tiendanube_stock');
+    Route::post('ventas/tiendanube-stock/subir-precios', 'Ventas\Tiendanube\TiendanubeStockSubidaController@subirPrecios')->name('subir_tiendanube_precios');
+    Route::post('ventas/tiendanube-stock/feriados', 'Ventas\Tiendanube\TiendanubeStockSubidaController@guardarFeriados')->name('guardar_feriados_tiendanube_stock');
     Route::post('ventas/tiendanube-stock/previsualizar', 'Ventas\Tiendanube\TiendanubeStockSubidaController@previsualizar')->name('previsualizar_tiendanube_stock');
     Route::get('ventas/tiendanube-stock/{id}/listar/{formato}', 'Ventas\Tiendanube\TiendanubeStockSubidaController@exportar')
         ->name('listar_tiendanube_stock_subida')

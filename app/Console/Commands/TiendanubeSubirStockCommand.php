@@ -12,9 +12,10 @@ class TiendanubeSubirStockCommand extends Command
     protected $signature = 'tiendanube:subir-stock
                             {--store= : Store id. Vacío = todas las tiendas con la subida activa}
                             {--origen=cron : cron, manual o simulacion}
-                            {--usuario= : Usuario que disparó la subida manual}';
+                            {--usuario= : Usuario que disparó la subida manual}
+                            {--que=stock : stock, precios o ambos}';
 
-    protected $description = 'Sube stock y precios a Tiendanube de los artículos del marketplace configurado.';
+    protected $description = 'Sube stock a Tiendanube. Los precios salen solo con --que=precios o --que=ambos.';
 
     public function handle(TiendanubeStockSubidaService $servicio): int
     {
@@ -36,18 +37,31 @@ class TiendanubeSubirStockCommand extends Command
         $store = trim((string) $this->option('store'));
         $usuario = (int) $this->option('usuario');
         $soloHora = $origen === TiendanubeStockSubida::ORIGEN_CRON;
+        $que = strtolower(trim((string) $this->option('que')));
+        if (! in_array($que, ['stock', 'precios', 'ambos'], true)) {
+            $que = 'stock';
+        }
+        if ($origen === TiendanubeStockSubida::ORIGEN_CRON) {
+            $que = 'stock';
+        }
+        $incluirStock = $que !== 'precios';
+        $incluirPrecios = $que !== 'stock';
 
-        $this->info(match ($origen) {
-            TiendanubeStockSubida::ORIGEN_MANUAL => 'Subiendo stock y precios a Tiendanube (manual)…',
-            TiendanubeStockSubida::ORIGEN_SIMULACION => 'Previsualizando stock y precios. No se escribe en Tiendanube…',
-            default => 'Subiendo stock y precios a Tiendanube…',
+        $this->info(match ($que) {
+            'precios' => 'Subiendo precios a Tiendanube…',
+            'ambos' => 'Subiendo stock y precios a Tiendanube…',
+            default => $origen === TiendanubeStockSubida::ORIGEN_SIMULACION
+                ? 'Previsualizando stock y precios. No se escribe en Tiendanube…'
+                : 'Subiendo stock a Tiendanube…',
         });
 
         $resultado = $servicio->ejecutar(
             $origen,
             $usuario > 0 ? $usuario : null,
             $store !== '' ? $store : null,
-            $soloHora
+            $soloHora,
+            $incluirPrecios,
+            $incluirStock,
         );
 
         $this->line($resultado['mensaje']);

@@ -3,6 +3,9 @@
 namespace App\Support\Ventas;
 
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Listaprecio;
+use App\Models\Stock\Precio;
+use App\Models\Ventas\Cliente;
 
 /**
  * Valida que cada ítem con artículo tenga lista de precios asignada (pedidos / facturación).
@@ -16,6 +19,80 @@ final class ArticuloListaprecioLineaVentasSupport
         }
 
         return (int) $listaprecioId > 0;
+    }
+
+    /**
+     * Lista a usar cuando el renglón no trae una. Primero la del cliente, después la default,
+     * y si el artículo tiene precio vigente en otra lista, esa.
+     */
+    public static function resolverFallback(int $articuloId, ?int $clienteId, mixed $fecha = null): int
+    {
+        if ($articuloId <= 0) {
+            return 0;
+        }
+
+        $fechaYmd = self::fechaYmd($fecha);
+        $candidatos = [];
+
+        if ($clienteId !== null && $clienteId > 0) {
+            $listaCliente = (int) Cliente::query()->whereKey($clienteId)->value('listaprecio_id');
+            if ($listaCliente > 0 && Listaprecio::query()->whereKey($listaCliente)->exists()) {
+                $candidatos[] = $listaCliente;
+            }
+        }
+
+        $listaDefault = (int) config('precio.listaprecio_default_id');
+        if ($listaDefault > 0 && ! in_array($listaDefault, $candidatos, true)) {
+            $candidatos[] = $listaDefault;
+        }
+
+        foreach ($candidatos as $listaId) {
+            if (self::tienePrecioVigente($articuloId, $listaId, $fechaYmd)) {
+                return $listaId;
+            }
+        }
+
+        $listaConPrecio = Precio::query()
+            ->where('articulo_id', $articuloId)
+            ->where('listaprecio_id', '>', 0)
+            ->where('fechavigencia', '<=', $fechaYmd)
+            ->where('precio', '>', 0)
+            ->orderByDesc('fechavigencia')
+            ->orderBy('listaprecio_id')
+            ->value('listaprecio_id');
+
+        return (int) $listaConPrecio;
+    }
+
+    private static function tienePrecioVigente(int $articuloId, int $listaId, string $fechaYmd): bool
+    {
+        if ($listaId <= 0) {
+            return false;
+        }
+
+        return Precio::query()
+            ->where('articulo_id', $articuloId)
+            ->where('listaprecio_id', $listaId)
+            ->where('fechavigencia', '<=', $fechaYmd)
+            ->where('precio', '>', 0)
+            ->exists();
+    }
+
+    private static function fechaYmd(mixed $fecha): string
+    {
+        $texto = trim((string) ($fecha ?? ''));
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $texto) === 1) {
+            return substr($texto, 0, 10);
+        }
+
+        $dma = \DateTime::createFromFormat('d/m/Y', substr($texto, 0, 10));
+        if ($dma instanceof \DateTime) {
+            return $dma->format('Y-m-d');
+        }
+
+        $timestamp = $texto !== '' ? strtotime($texto) : false;
+
+        return $timestamp ? date('Y-m-d', $timestamp) : date('Y-m-d');
     }
 
     /**

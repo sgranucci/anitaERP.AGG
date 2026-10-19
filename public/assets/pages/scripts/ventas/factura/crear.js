@@ -612,6 +612,7 @@
         // Controla datos correctos
 		var item = 0;
 		var flError = false;
+		var filasSinLista = [];
 		var selectorRenglones = window.FL_FACTURA_LAYOUT_PEDIDO
 			? '#tbody-tabla tr.item-pedido'
 			: '#tbody-tabla tr.item-factura, #tbody-tabla tr.item-pedido';
@@ -669,18 +670,49 @@
 			var listaprecioId = $tr.find('.listaprecio_id').val();
 			if (articulo_id && typeof window.listaprecioIdEsValidoLineaVentas === 'function'
 				&& !window.listaprecioIdEsValidoLineaVentas(listaprecioId)) {
-				alert(window.mensajeErrorListaprecioArticuloVentas(codigo, item));
-				flError = true;
-				return false;
+				filasSinLista.push({ $tr: $tr, item: item, codigo: codigo });
 			}
 		});
 
-		if (!flError) {
-			// Pasar por onsubmit: padrón una sola vez, luego AJAX con overlay.
-			var form = document.getElementById('formgeneral');
-			if (form) {
-				$(form).trigger('submit');
-			}
+		if (flError) {
+			return;
+		}
+
+		if (filasSinLista.length && typeof window.resolverListaprecioLineaVentas === 'function') {
+			var busquedas = $.map(filasSinLista, function (fila) {
+				return window.resolverListaprecioLineaVentas(fila.$tr);
+			});
+			$.when.apply($, busquedas).always(function () {
+				var pendiente = null;
+				$.each(filasSinLista, function (_, fila) {
+					if (pendiente) {
+						return;
+					}
+					if (!window.listaprecioIdEsValidoLineaVentas(fila.$tr.find('.listaprecio_id').val())) {
+						pendiente = fila;
+					}
+				});
+				if (pendiente) {
+					alert(window.mensajeErrorListaprecioArticuloVentas(pendiente.codigo, pendiente.item));
+					return;
+				}
+				continuarSubmitFactura();
+			});
+			return;
+		}
+
+		if (filasSinLista.length) {
+			alert(window.mensajeErrorListaprecioArticuloVentas(filasSinLista[0].codigo, filasSinLista[0].item));
+			return;
+		}
+
+		continuarSubmitFactura();
+	}
+
+	function continuarSubmitFactura() {
+		var form = document.getElementById('formgeneral');
+		if (form) {
+			$(form).trigger('submit');
 		}
 	}
 
@@ -1835,17 +1867,23 @@
 			$(cantidad).parents('tr').find('.medidas').val(jsonString);
 
 			// Asigna variables de precio
-			var pre = fNumero(dpr[off], 2);
-			var lis = fNumero(dlp[off], 0);
-			var inc = fNumero(dii[off], 0);
-			var mon = fNumero(dmo[off], 0);
-			if (pre === 'NaN' || pre < 0 || pre > 9999999999)
-			  	pre = 0;
-	
-			$(cantidad).parents('tr').find('.precio').val(pre);
-			$(cantidad).parents('tr').find('.listaprecio_id').val(lis);
-			$(cantidad).parents('tr').find('.incluyeimpuesto').val(inc);
-			$(cantidad).parents('tr').find('.moneda_id').val(mon);
+			var $trPrecio = $(cantidad).parents('tr');
+			var preNum = parseFloat(dpr[off]);
+			var lisNum = parseInt(dlp[off], 10);
+			if (!isNaN(preNum) && preNum >= 0 && preNum <= 9999999999) {
+				$trPrecio.find('.precio').val(fNumero(preNum, 2));
+			}
+			if (lisNum > 0) {
+				$trPrecio.find('.listaprecio_id').val(lisNum);
+			}
+			var incNum = parseInt(dii[off], 10);
+			var monNum = parseInt(dmo[off], 10);
+			if (!isNaN(incNum)) {
+				$trPrecio.find('.incluyeimpuesto').val(incNum);
+			}
+			if (monNum > 0) {
+				$trPrecio.find('.moneda_id').val(monNum);
+			}
 	
         	}, 300);
 

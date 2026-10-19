@@ -14,6 +14,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.6-rc.0/js/select2.min.js"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/salida.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_salida.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/stock/combinacion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/combinacion/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/stock/talle/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/talle/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/repetiquetaot/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/repetiquetaot/form.js')) ?: time() }}"></script>
 
 <script>
     window.resolverSeteoSalidaPrograma = function () {
@@ -42,7 +46,6 @@
             $('.mi-selector').select2();
         });
     });
-    $("#ordenestrabajo").focus();
 </script>
 
 @endsection
@@ -86,4 +89,7 @@
         </div>
     </div>
 </div>
+@include('includes.stock.modalconsultaarticulo')
+@include('includes.stock.modalconsultacombinacion')
+@include('includes.stock.modalconsultatalle')
 @endsection

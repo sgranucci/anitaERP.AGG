@@ -405,6 +405,18 @@ class PrecioController extends Controller
 
         $precio = $this->precioService->asignaPrecioPorLista($articulo_id, $listaprecio_id, $fechaHoy);
 
+        if (count($precio) === 0) {
+            $listaFallback = \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::resolverFallback(
+                (int) $articulo_id,
+                $cliente ? (int) $cliente->id : null,
+                $fechaHoy->toDateString(),
+            );
+            if ($listaFallback > 0 && $listaFallback !== (int) $listaprecio_id) {
+                $listaprecio_id = $listaFallback;
+                $precio = $this->precioService->asignaPrecioPorLista($articulo_id, $listaprecio_id, $fechaHoy);
+            }
+        }
+
         if (count($precio) > 0) {
             $vigente = end($precio);
             $precio_talle = $vigente['precio'];
@@ -413,7 +425,9 @@ class PrecioController extends Controller
             $incluyeimpuesto = $vigente['incluyeimpuesto'];
         } else {
             $precio_talle = 0;
-            $listaprecio_id = 0;
+            $listaprecio_id = \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::listaprecioIdValido($listaprecio_id)
+                ? (int) $listaprecio_id
+                : 0;
             $moneda_id = 1;
             $incluyeimpuesto = 1;
         }
