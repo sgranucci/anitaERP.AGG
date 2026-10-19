@@ -139,8 +139,9 @@
             @endforeach
         </select>
         <small class="form-text text-muted">
-            <strong>Todas</strong> trae solo tareas cuya fecha de inicio est&aacute; en el rango:
-            las que siguen abiertas (en secci&oacute;n) y las que tambi&eacute;n cerraron dentro de esas fechas.
+            <strong>Todas</strong> trae las tareas cuya fecha de inicio est&aacute; en el rango,
+            est&eacute;n abiertas o hayan cerrado despu&eacute;s. Use <strong>Cumplidas</strong>
+            si solo quiere las que terminaron en esas fechas.
         </small>
     </div>
 </div>

@@ -310,15 +310,9 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 			break;
 		case 'TODAS':
 		default:
-			// Inicio dentro del rango. Si ya cerró, el cierre también tiene que caer ahí.
-			// Así no entran tareas que empezaron antes y solo terminaron en la fecha.
-			$data = $data->whereBetween('ordentrabajo_tarea.desdefecha', [$desdefecha, $hastafecha])
-				->where(function ($q) use ($desdefecha, $hastafecha) {
-					$q->whereBetween('ordentrabajo_tarea.hastafecha', [$desdefecha, $hastafecha])
-						->orWhere(function ($q2) {
-							OrdentrabajoTareaFechaSupport::aplicarSinFechaFin($q2, 'ordentrabajo_tarea.hastafecha');
-						});
-				});
+			// Todas las iniciadas en el rango, estén abiertas o hayan cerrado después.
+			// (CUMPLIDA ya cubre "terminaron en la fecha"; PENDIENTE, solo abiertas.)
+			$data = $data->whereBetween('ordentrabajo_tarea.desdefecha', [$desdefecha, $hastafecha]);
 			break;
 		}
 
