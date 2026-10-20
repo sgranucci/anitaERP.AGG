@@ -16,6 +16,8 @@ use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\TransporteRepositoryInterface;
 use App\Services\Ventas\OrdentrabajoService;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
+use App\Support\Ventas\QuitarTerminadaStockOtSupport;
+use RuntimeException;
 
 /**
  * OT Ferli (combinación / módulo / transporte L8).
@@ -192,5 +194,22 @@ class OrdentrabajoFerliController extends OrdentrabajoController
         }
 
         $combinacion_query = Combinacion::where('articulo_id', $articulo_id)->get();
+    }
+
+    public function quitarTerminadaStock($id)
+    {
+        can('editar-ordenes-de-trabajo');
+
+        try {
+            $mensaje = app(QuitarTerminadaStockOtSupport::class)->quitar((int) $id);
+        } catch (RuntimeException $e) {
+            return redirect()
+                ->route('editar_ordentrabajo', ['id' => $id])
+                ->with('mensaje-error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('editar_ordentrabajo', ['id' => $id])
+            ->with('mensaje', $mensaje);
     }
 }

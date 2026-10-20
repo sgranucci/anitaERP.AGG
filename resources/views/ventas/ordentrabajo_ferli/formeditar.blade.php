@@ -141,6 +141,18 @@
        	</table>
 	</div>
     <div class="card-body col-sm-5">
+        @php
+            $mostrarQuitarTerminadaStock = can('editar-ordenes-de-trabajo', false)
+                && app(\App\Support\Ventas\QuitarTerminadaStockOtSupport::class)->sePuedeQuitar($ordentrabajo);
+        @endphp
+        @if ($mostrarQuitarTerminadaStock)
+            <div class="alert alert-warning py-2 px-3">
+                Esta OT figura como <strong>Terminada stock</strong> y sigue en fabricación.
+                <button type="submit" form="form-quitar-terminada-stock" class="btn btn-outline-danger btn-sm ml-2">
+                    Quitar Terminada stock
+                </button>
+            </div>
+        @endif
     	<table class="table table-hover" id="tareasordentrabajo-table">
     		<thead>
     			<tr>

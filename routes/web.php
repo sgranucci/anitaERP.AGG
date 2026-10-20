@@ -2813,6 +2813,10 @@ Route::get('ventas/controlaordentrabajostock/{id}/{articulo_id}/{combinacion_id}
 Route::post('ventas/ordenestrabajo/limpiafiltro', $ordentrabajoCtrl.'@limpiafiltro')->name('ordentrabajo.limpiafiltro');
 Route::get('ventas/listaordentrabajo/{formato?}/{busqueda?}', $ordentrabajoCtrl.'@lista')->name('lista_ordentrabajo');
 Route::post('ventas/ordenestrabajo/borrarOt', $ordentrabajoCtrl.'@borrarOt')->name('borrar_ot');
+if ((string) config('app.empresa') === 'Calzados Ferli') {
+    Route::post('ventas/ordenestrabajo/{id}/quitar-terminada-stock', $ordentrabajoCtrl.'@quitarTerminadaStock')
+        ->name('quitar_terminada_stock_ordentrabajo');
+}
 
 /*
  * Comprobantes de venta

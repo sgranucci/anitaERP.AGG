@@ -50,6 +50,15 @@
                     </div>
                 </div>
             </form>
+            @php
+                $mostrarQuitarTerminadaStock = can('editar-ordenes-de-trabajo', false)
+                    && app(\App\Support\Ventas\QuitarTerminadaStockOtSupport::class)->sePuedeQuitar($ordentrabajo);
+            @endphp
+            @if ($mostrarQuitarTerminadaStock)
+                <form id="form-quitar-terminada-stock" action="{{ route('quitar_terminada_stock_ordentrabajo', ['id' => $ordentrabajo->id]) }}" method="POST" class="d-none" onsubmit="return confirm('¿Quitar Terminada stock? La OT vuelve a figurar en fabricación.');">
+                    @csrf
+                </form>
+            @endif
         </div>
     </div>
 </div>
