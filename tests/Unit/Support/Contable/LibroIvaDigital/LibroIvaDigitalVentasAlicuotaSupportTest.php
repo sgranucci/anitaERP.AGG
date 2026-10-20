@@ -723,7 +723,7 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         );
     }
 
-    public function test_redondeo_de_alicuota_ajusta_neto_sin_romper_el_total(): void
+    public function test_un_centavo_de_alicuota_queda_como_la_factura_electronica(): void
     {
         $registro = LibroIvaDigitalComprasImportesSupport::reconciliarAlicuotasRedondeo([
             'cabecera' => [
@@ -737,8 +737,31 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
             ]],
         ]);
 
-        $this->assertEqualsWithDelta(100.0, $registro['alicuotas'][0]['neto_gravado'], 0.001);
-        $this->assertEqualsWithDelta(0.05, $registro['cabecera']['otros_tributos'], 0.001);
+        $this->assertEqualsWithDelta(100.05, $registro['alicuotas'][0]['neto_gravado'], 0.001);
+        $this->assertEqualsWithDelta(21.0, $registro['alicuotas'][0]['impuesto_liquidado'], 0.001);
+        $this->assertArrayNotHasKey('otros_tributos', $registro['cabecera']);
+        $this->assertEqualsWithDelta(0.0, $registro['cabecera']['no_integra_neto'], 0.001);
+    }
+
+    public function test_factura_b_informa_el_neto_de_arca_sin_no_gravado(): void
+    {
+        $registro = LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => $this->cabeceraFacturaBExenta([
+                'importe_total' => 55000.0,
+                'operaciones_exentas' => 0.0,
+                'cantidad_alicuotas' => 1,
+            ]),
+            'alicuotas' => [[
+                'neto_gravado' => 45454.55,
+                'alicuota_iva' => '0005',
+                'impuesto_liquidado' => 9545.45,
+            ]],
+        ]);
+
+        $this->assertEqualsWithDelta(45454.55, $registro['alicuotas'][0]['neto_gravado'], 0.001);
+        $this->assertEqualsWithDelta(9545.45, $registro['alicuotas'][0]['impuesto_liquidado'], 0.001);
+        $this->assertEqualsWithDelta(0.0, $registro['cabecera']['no_integra_neto'], 0.001);
+        $this->assertEqualsWithDelta(0.0, $registro['cabecera']['operaciones_exentas'], 0.001);
         $this->assertEqualsWithDelta(
             0.0,
             LibroIvaDigitalComprasImportesSupport::residualCabecera($registro['cabecera'], $registro['alicuotas']),

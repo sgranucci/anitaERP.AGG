@@ -296,7 +296,12 @@ final class LibroIvaDigitalComprasImportesSupport
     }
 
     /**
-     * Ajuste fino de neto para que IVA = alícuota × neto (redondeo de agrupación / FX).
+     * Ajuste fino de neto cuando el IVA no cierra con la alícuota (agrupación / cotización).
+     *
+     * Hasta 1 centavo se deja como vino la factura electrónica: ARCA ya autorizó ese
+     * neto e IVA, y reescribir el neto como IVA / alícuota mete 2 o 3 centavos en
+     * «no gravado» que el comprobante no tiene. Un desvío mayor sí ajusta el neto
+     * y pasa la diferencia a la cabecera para que el total siga cerrando.
      * Si la tasa implícita no es la de la alícuota, no toca: es error de armado.
      *
      * @param  array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}  $registro
@@ -317,10 +322,11 @@ final class LibroIvaDigitalComprasImportesSupport
                 continue;
             }
             $esperado = round($neto * $tasa / 100, 2);
-            $diff = abs($esperado - $iva);
+            $diff = round(abs($esperado - $iva), 2);
             $tasaImplicita = abs($neto) > 0.0001 ? abs($iva / $neto * 100) : 0.0;
             $tasaCercana = abs($tasaImplicita - $tasa) <= 0.5;
-            if ($diff <= 0.001 || ! $tasaCercana) {
+            // Misma tolerancia que la factura electrónica: 1 centavo.
+            if ($diff <= 0.01 || ! $tasaCercana) {
                 continue;
             }
             $netoAjustado = round($iva * 100 / $tasa, 2);
