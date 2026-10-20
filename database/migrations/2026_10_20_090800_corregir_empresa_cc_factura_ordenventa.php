@@ -18,15 +18,14 @@ return new class extends Migration
             return;
         }
 
-        DB::statement('
-            UPDATE cliente_cuentacorriente cc
-            INNER JOIN venta v ON v.id = cc.venta_id
-            INNER JOIN puntoventa pv ON pv.id = v.puntoventa_id
-            SET cc.empresa_id = pv.empresa_id
-            WHERE cc.cobranza_id IS NULL
-              AND v.ordenventa_id IS NOT NULL
-              AND cc.empresa_id <> pv.empresa_id
-        ');
+        // Query Builder: MySQL arma INNER JOIN y PostgreSQL arma UPDATE … FROM.
+        DB::table('cliente_cuentacorriente as cc')
+            ->join('venta as v', 'v.id', '=', 'cc.venta_id')
+            ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
+            ->whereNull('cc.cobranza_id')
+            ->whereNotNull('v.ordenventa_id')
+            ->whereColumn('cc.empresa_id', '<>', 'pv.empresa_id')
+            ->update(['cc.empresa_id' => DB::raw('pv.empresa_id')]);
     }
 
     public function down(): void
