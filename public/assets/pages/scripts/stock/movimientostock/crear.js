@@ -162,23 +162,24 @@
 
 		// Solo el flag C (Todas las combinaciones) amplía a inactivas.
 		// El flag A (Todos los artículos) no debe mezclarse con el filtro de combinaciones.
-		if (fl_todas_las_combinaciones == 'on' || flsinfiltro) {
-			var url_comb = carpetaBase+'/stock/leercombinaciones/'+articulo_id;
-		} else {
-			var url_comb = carpetaBase+'/stock/leercombinacionesactivas/'+articulo_id;
+		// Si el artículo no tiene ningún color activo, se listan los inactivos: si no, no se puede cargar el movimiento.
+		var urlTodas = carpetaBase+'/stock/leercombinaciones/'+articulo_id;
+		var urlActivas = urlTodas;
+		if (!(fl_todas_las_combinaciones == 'on' || flsinfiltro)) {
+			urlActivas = carpetaBase+'/stock/leercombinacionesactivas/'+articulo_id;
 			if (window.movimientoStockModoFerli) {
 				var ambitoComb = (window.movimientoStockAmbitoCatalogo || 'FABRICA').toString().toUpperCase();
-				url_comb += '?ambito=' + encodeURIComponent(ambitoComb);
+				urlActivas += '?ambito=' + encodeURIComponent(ambitoComb);
 				var depComb = typeof window.msDepositoOperativoId === 'function'
 					? (parseInt(window.msDepositoOperativoId(), 10) || 0)
 					: 0;
 				if (depComb > 0) {
-					url_comb += '&deposito_id=' + encodeURIComponent(String(depComb));
+					urlActivas += '&deposito_id=' + encodeURIComponent(String(depComb));
 				}
 			}
 		}
 
-        $.get(url_comb, function(data){
+        function pintarCombinaciones(data) {
             var comb = $.map(data || [], function(value){
                 return [value];
             });
@@ -221,6 +222,17 @@
 			if (typeof window.msAplicarModoLineaFerli === 'function') {
 				window.msAplicarModoLineaFerli($tr, esArticuloVenta);
 			}
+        }
+
+        $.get(urlActivas, function (data) {
+            var comb = $.map(data || [], function (value) {
+                return [value];
+            });
+            if (comb.length === 0 && urlActivas !== urlTodas) {
+                $.get(urlTodas, pintarCombinaciones);
+                return;
+            }
+            pintarCombinaciones(data);
         });
     }
 

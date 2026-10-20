@@ -1591,18 +1591,27 @@ class ArticuloController extends Controller
             \App\Support\Sala\RequisicionSalaArticuloCatalogoSupport::aplicarFiltroArticulo($query);
         }
 
-        \App\Support\Stock\ArticuloSeleccionOperativaSupport::aplicarSoloActivos($query);
+        // Movimientos de stock: el artículo se puede cargar aunque el maestro o los
+        // colores estén inactivos (ajuste / alta de saldo). El resto de pantallas sigue
+        // viendo solo activos.
+        $incluirInactivosMovimiento = self::consultaArticuloIncluyeInactivosMovimiento($request);
+
+        if (! $incluirInactivosMovimiento) {
+            \App\Support\Stock\ArticuloSeleccionOperativaSupport::aplicarSoloActivos($query);
+        }
 
         // deposito_id manda (mov. stock / TRA Ferli): canal del depósito + calzado con
         // combinación activa O insumos sin combinación. Canal=LOCAL suelto queda para facturación local.
         if ($request->filled('deposito_id')
-            && \App\Support\Stock\MovimientoStockFerliSupport::usaCanales()) {
+            && \App\Support\Stock\MovimientoStockFerliSupport::usaCanales()
+            && ! $incluirInactivosMovimiento) {
             $depId = (int) $request->input('deposito_id');
             \App\Support\Stock\MovimientoStockFerliSupport::aplicarFiltroCatalogo(
                 $query,
                 $depId > 0 ? $depId : null
             );
-        } elseif (strtoupper(trim((string) $request->input('canal', ''))) === \App\Models\Ventas\Canal::CODIGO_LOCAL
+        } elseif (! $incluirInactivosMovimiento
+            && strtoupper(trim((string) $request->input('canal', ''))) === \App\Models\Ventas\Canal::CODIGO_LOCAL
             && \App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva()) {
             \App\Support\Stock\ArticuloEstadoCanalSupport::aplicarSoloActivosEnCanal(
                 $query,
@@ -1726,6 +1735,24 @@ class ArticuloController extends Controller
         }
 
         return response()->json($output, 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * El formulario de movimientos de stock pide incluir inactivos. Pedidos, OC y
+     * facturación no mandan el flag: siguen viendo solo artículos y colores activos.
+     */
+    private static function consultaArticuloIncluyeInactivosMovimiento(Request $request): bool
+    {
+        if (! filter_var($request->input('incluir_inactivos'), FILTER_VALIDATE_BOOLEAN)) {
+            return false;
+        }
+
+        if (! \App\Support\Stock\MovimientoStockFerliSupport::usaCanales()) {
+            return false;
+        }
+
+        return \App\Support\Stock\Surmar\MovimientoSurmarPermisoSupport::puedeCrear(false)
+            || \App\Support\Stock\Surmar\MovimientoSurmarPermisoSupport::puedeEditar(false);
     }
 
     public function leeUnArticulo($articulo_id)
@@ -1858,11 +1885,15 @@ class ArticuloController extends Controller
         }
         $articulo = $this->articuloRepository->findPorSku($sku, $empresaId);
 
-        if (! \App\Support\Stock\ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
+        $incluirInactivosMovimiento = self::consultaArticuloIncluyeInactivosMovimiento($request);
+
+        if (! $incluirInactivosMovimiento
+            && ! \App\Support\Stock\ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
             return response()->json(null);
         }
 
         if ($articulo
+            && ! $incluirInactivosMovimiento
             && $request->filled('deposito_id')
             && \App\Support\Stock\MovimientoStockFerliSupport::usaCanales()) {
             $depId = (int) $request->query('deposito_id', $request->input('deposito_id'));
@@ -1874,7 +1905,7 @@ class ArticuloController extends Controller
             if (! $ok->exists()) {
                 return response()->json(null);
             }
-        } elseif ($articulo
+        } elseif ($articulo && ! $incluirInactivosMovimiento
             && strtoupper(trim((string) $request->query('canal', $request->input('canal', '')))) === \App\Models\Ventas\Canal::CODIGO_LOCAL
             && \App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva()
             && ! \App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport::articuloOperativoLocal((int) $articulo->id)) {

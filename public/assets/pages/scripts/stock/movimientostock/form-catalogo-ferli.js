@@ -23,6 +23,7 @@
         }
         $modal.data('articuloCanal', window.movimientoStockCanalCatalogo);
         $modal.data('articuloOcultarPrecio', 1);
+        $modal.data('articuloIncluirInactivos', 1);
         if (depositoId > 0) {
             $modal.data('articuloDepositoId', depositoId);
         } else {

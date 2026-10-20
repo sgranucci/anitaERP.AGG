@@ -16,9 +16,10 @@ use Illuminate\Support\Facades\Schema;
  * - Depósito ligado a local_venta → catálogo LOCAL (tiendas).
  * - Resto (Fábrica, Junín, Tal-*, etc.) → catálogo FÁBRICA (importaciones, insumos).
  * - TRA fábrica→local / local→fábrica: manda el depósito de origen (de dónde se saca).
- * - Calzado: combinaciones activas del canal, o activas en el otro canal (estado legacy).
- * - Insumos: sin combinaciones, igual seleccionables.
- * - Si el depósito tiene saldo distinto de cero, el artículo entra igual (ajuste de colores inactivos).
+     * - Calzado: combinaciones activas del canal, o activas en el otro canal (estado legacy).
+     * - Insumos: sin combinaciones, igual seleccionables.
+     * - Si el depósito tiene saldo distinto de cero, el artículo entra igual (ajuste de colores inactivos).
+     * - En el alta del movimiento se puede incluir el artículo aunque el maestro o los colores estén inactivos.
  */
 final class MovimientoStockFerliSupport
 {
@@ -94,10 +95,15 @@ final class MovimientoStockFerliSupport
      * Fuera de Ferli: solo activos operativos (sin filtro de canal/combinación).
      *
      * @param  Builder<Articulo>  $query
+     * @param  bool  $incluirInactivos  Alta de stock: no exige artículo ni color activo.
      * @return Builder<Articulo>
      */
-    public static function aplicarFiltroCatalogo(Builder $query, ?int $depositoId = null): Builder
+    public static function aplicarFiltroCatalogo(Builder $query, ?int $depositoId = null, bool $incluirInactivos = false): Builder
     {
+        if ($incluirInactivos) {
+            return $query;
+        }
+
         if (! self::usaCanales()) {
             return ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo($query);
         }

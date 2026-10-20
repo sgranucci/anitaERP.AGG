@@ -56,6 +56,9 @@ function urlLeerArticuloPorSku(sku, queryExtra) {
     if ($('#consultaarticuloModal').data('articuloOcultarPrecio')) {
         parts.push('ocultar_precio=1');
     }
+    if ($('#consultaarticuloModal').data('articuloIncluirInactivos')) {
+        parts.push('incluir_inactivos=1');
+    }
     if (parts.length) {
         url += '?' + parts.join('&');
     }
@@ -557,6 +560,9 @@ function buscar_datos_articulo(consulta) {
     }
     if ($('#consultaarticuloModal').data('articuloOcultarPrecio')) {
         postData.ocultar_precio = 1;
+    }
+    if ($('#consultaarticuloModal').data('articuloIncluirInactivos')) {
+        postData.incluir_inactivos = 1;
     }
     var empresaIdConsulta = empresaIdConsultaArticulo();
     if (empresaIdConsulta !== '') {
