@@ -5,8 +5,9 @@ namespace App\Support\Compras;
 use Illuminate\Http\Request;
 
 /**
- * Si se entra a cargar la FC desde legajo, OC o precarga, al terminar se vuelve ahí
- * (salvo grabación provisoria desde precarga, que va al listado de comprobantes).
+ * Si se entra a cargar la FC desde legajo, OC, precarga o el índice de comprobantes,
+ * al terminar se vuelve ahí (salvo grabación provisoria desde precarga, que va al
+ * listado de comprobantes).
  */
 final class ComprobanteProveedorRetornoLegajoSupport
 {
@@ -16,11 +17,19 @@ final class ComprobanteProveedorRetornoLegajoSupport
 
     public const ORIGEN_PRECARGA = 'precarga';
 
+    /** Alta abierta desde Comprobantes de proveedor (opciones de carga / PDF+IA). */
+    public const ORIGEN_COMPROBANTE = 'comprobante';
+
     public static function origenDesdeRequest(Request $request): ?string
     {
         $origen = trim((string) $request->input('origen', $request->query('origen', '')));
 
-        return in_array($origen, [self::ORIGEN_BANDEJA, self::ORIGEN_OC, self::ORIGEN_PRECARGA], true)
+        return in_array($origen, [
+            self::ORIGEN_BANDEJA,
+            self::ORIGEN_OC,
+            self::ORIGEN_PRECARGA,
+            self::ORIGEN_COMPROBANTE,
+        ], true)
             ? $origen
             : null;
     }
@@ -48,7 +57,7 @@ final class ComprobanteProveedorRetornoLegajoSupport
             return [];
         }
         $params = ['origen' => $origen];
-        if ($origen === self::ORIGEN_PRECARGA) {
+        if ($origen === self::ORIGEN_PRECARGA || $origen === self::ORIGEN_COMPROBANTE) {
             return $params;
         }
         $ocId = self::ordencompraIdDesdeRequest($request, $ordencompraId);
@@ -67,6 +76,9 @@ final class ComprobanteProveedorRetornoLegajoSupport
         }
         if ($origen === self::ORIGEN_PRECARGA) {
             return route('precarga_comprobante_proveedor');
+        }
+        if ($origen === self::ORIGEN_COMPROBANTE) {
+            return route('comprobante_proveedor');
         }
         $ocId = self::ordencompraIdDesdeRequest($request, $ordencompraId);
         if ($origen === self::ORIGEN_OC && $ocId > 0) {
@@ -100,7 +112,11 @@ final class ComprobanteProveedorRetornoLegajoSupport
         return [
             'origen' => $origen,
             'url' => $url,
-            'etiqueta' => $origen === self::ORIGEN_PRECARGA ? 'Volver a precargas' : 'Volver al legajo',
+            'etiqueta' => match ($origen) {
+                self::ORIGEN_PRECARGA => 'Volver a precargas',
+                self::ORIGEN_COMPROBANTE => 'Volver a comprobantes',
+                default => 'Volver al legajo',
+            },
         ];
     }
 }

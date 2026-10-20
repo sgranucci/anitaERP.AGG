@@ -590,6 +590,10 @@ $(function () {
         fd.append('_token', csrf);
         fd.append('payload', JSON.stringify(previewPayload));
         fd.append('pdf', fileInput.files[0]);
+        var retorno = String($modal.data('retorno') || '').trim();
+        if (retorno) {
+            fd.append('retorno', retorno);
+        }
         agregarProveedorPortal(fd);
         mostrarOverlay('Grabando la precarga y abriendo la factura…');
 

@@ -3,6 +3,7 @@
      data-resolver-oc-url="{{ $pdfIaResolverOcUrl ?? route('precarga_comprobante_proveedor_pdf_ia_resolver_oc') }}"
      data-resolver-sin-oc-url="{{ $pdfIaResolverSinOcUrl ?? route('precarga_comprobante_proveedor_pdf_ia_resolver_sin_oc') }}"
      data-confirmar-url="{{ $pdfIaConfirmarUrl ?? route('precarga_comprobante_proveedor_pdf_ia_confirmar') }}"
+     data-retorno="{{ $pdfIaRetorno ?? '' }}"
      data-descartar-url="{{ $pdfIaDescartarUrl ?? route('descartar_ai_decision') }}"
      data-proveedor-id-selector="{{ $pdfIaProveedorIdSelector ?? '' }}"
      data-overlay-id="{{ $pdfIaOverlayId ?? '' }}">

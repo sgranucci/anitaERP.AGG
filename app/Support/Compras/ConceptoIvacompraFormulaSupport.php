@@ -108,6 +108,17 @@ final class ConceptoIvacompraFormulaSupport
             }
         }
 
+        foreach ($meta as $id => $fila) {
+            $tipoTributo = self::tipoconceptoTributoSiMaestroEnNeto(
+                (string) ($fila['tipoconcepto'] ?? ''),
+                (string) ($fila['nombre'] ?? ''),
+                (int) ($fila['cuenta_debe_id'] ?? 0) > 0,
+            );
+            if ($tipoTributo !== null) {
+                $meta[$id]['tipoconcepto'] = $tipoTributo;
+            }
+        }
+
         return $meta;
     }
 
@@ -152,6 +163,73 @@ final class ConceptoIvacompraFormulaSupport
                 $base->setAttribute('_tasa_formula', round($parsed['coeficiente'] * 100, 3));
             }
         }
+
+        foreach ($conceptos as $concepto) {
+            $tipoTributo = self::tipoconceptoTributoSiMaestroEnNeto(
+                (string) ($concepto->tipoconcepto ?? ''),
+                (string) ($concepto->nombre ?? ''),
+                (int) ($concepto->cuentacontabledebe_id ?? 0) > 0
+                    || (int) $concepto->cuentacontableDebeIdParaEmpresa(null) > 0,
+            );
+            if ($tipoTributo !== null) {
+                $concepto->setAttribute('tipoconcepto', $tipoTributo);
+            }
+        }
+    }
+
+    /**
+     * Anita deja casi todo en tipoconcepto N. La fórmula reclasifica el IVA;
+     * percepción, retención e impuestos sin fórmula siguen en N y el asiento
+     * los trata como neto (pide cuenta de gasto). Si el maestro ya tiene cuenta
+     * DEBE, esa manda y el renglón no se edita.
+     */
+    public static function tipoconceptoTributoSiMaestroEnNeto(
+        ?string $tipo,
+        ?string $nombre,
+        bool $tieneCuentaDebe,
+    ): ?string {
+        $tipo = strtoupper(trim((string) $tipo));
+        if (! $tieneCuentaDebe || ! in_array($tipo, ['', 'N'], true)) {
+            return null;
+        }
+
+        $n = self::foldNombre((string) $nombre);
+        if ($n === '') {
+            return null;
+        }
+
+        if (str_contains($n, 'sircreb')) {
+            return ComprobanteProveedorConceptoIvaTipos::PERCEPCION_SIRCREB;
+        }
+
+        $esPercep = str_contains($n, 'percep');
+        $esRet = (bool) preg_match('/\bret(\.|encion|\b)/', $n);
+        $esIibb = (bool) preg_match('/i\.?\s*b\.?\b|iibb|\bibr\b|ingresos brutos/', $n);
+        $esIva = (bool) preg_match('/\biva\b|i\.v\.a/', $n);
+
+        if ($esPercep && ($esIva || str_contains($n, 'import'))) {
+            return ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IVA;
+        }
+        if ($esIibb && $esPercep) {
+            return ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IIBB;
+        }
+        if ($esRet) {
+            return 'V';
+        }
+        if ($esIva || str_contains($n, 'impuesto')) {
+            return 'I';
+        }
+
+        return null;
+    }
+
+    private static function foldNombre(string $nombre): string
+    {
+        $n = mb_strtolower(trim($nombre));
+
+        return strtr($n, [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u',
+        ]);
     }
 
     public static function tasaEfectiva(Concepto_Ivacompra $concepto): float

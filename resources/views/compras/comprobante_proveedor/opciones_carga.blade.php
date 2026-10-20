@@ -5,7 +5,7 @@
 
 @section("scripts")
 @if (!empty($pdfIaHabilitado) && can('crear-precarga-proveedores', false))
-<script src="{{ asset('assets/pages/scripts/compras/precarga_comprobante_proveedor/pdf_ia.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/precarga_comprobante_proveedor/pdf_ia.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/precarga_comprobante_proveedor/pdf_ia.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 @if (can('crear-comprobante-proveedor', false))
 <script src="{{ asset('assets/pages/scripts/compras/comprobante_proveedor/opciones_carga.js') }}" type="text/javascript"></script>
@@ -137,6 +137,7 @@
 @if (!empty($pdfIaHabilitado) && can('crear-precarga-proveedores', false))
     @include('compras.precarga_comprobante_proveedor.partials.modal_pdf_ia', [
         'pdfIaOverlayId' => 'precarga-pdf-ia-proceso-overlay',
+        'pdfIaRetorno' => \App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport::ORIGEN_COMPROBANTE,
     ])
     @include('includes.proceso_overlay_aviso', [
         'overlayId' => 'precarga-pdf-ia-proceso-overlay',

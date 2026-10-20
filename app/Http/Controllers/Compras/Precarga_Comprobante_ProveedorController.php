@@ -266,11 +266,16 @@ class Precarga_Comprobante_ProveedorController extends Controller
             $mensaje = (string) ($resultado['message'] ?? 'Precarga registrada desde PDF+IA.');
             // La precarga queda registrada. El alta de la factura se abre precargada:
             // sin OC falta la cuenta de gasto; Contabilizar termina la grabación.
+            $paramsAlta = ['precarga_id' => $precargaId];
+            $retorno = trim((string) $request->input('retorno', ''));
+            if (in_array($retorno, [
+                ComprobanteProveedorRetornoLegajoSupport::ORIGEN_PRECARGA,
+                ComprobanteProveedorRetornoLegajoSupport::ORIGEN_COMPROBANTE,
+            ], true)) {
+                $paramsAlta['origen'] = $retorno;
+            }
             $redirect = can('crear-comprobante-proveedor', false)
-                ? route('crear_comprobante_proveedor', [
-                    'precarga_id' => $precargaId,
-                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_PRECARGA,
-                ])
+                ? route('crear_comprobante_proveedor', $paramsAlta)
                 : route('editar_precarga_comprobante_proveedor', ['id' => $precargaId]);
             if (can('crear-comprobante-proveedor', false)) {
                 $mensaje .= ' Se abrió la carga de la factura. Sin OC indique la cuenta de gasto y pulse Contabilizar.';

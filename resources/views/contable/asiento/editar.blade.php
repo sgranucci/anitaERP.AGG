@@ -148,9 +148,15 @@
                         <i class="fas fa-file-excel"></i> Emitir Excel
                     </a>
                     @endif
+                    @if (request()->input('vista') === 'consulta')
+                    <button type="button" class="btn btn-outline-light btn-sm" onclick="window.close()">
+                        <i class="fa fa-fw fa-times"></i> Cerrar solapa
+                    </button>
+                    @else
                     <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
+                    @endif
                     @if (can('crear-asiento', false))
                         <button type="button" id="botonform3" class="btn btn-info btn-sm">
                             <span class="fa fa-copy"></span> Copiar asiento

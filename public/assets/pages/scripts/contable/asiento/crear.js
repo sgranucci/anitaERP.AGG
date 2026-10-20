@@ -1181,6 +1181,15 @@
 		else
 			url = carpetaBase+"/contable/asiento";
 
+		function salirTrasGrabarAsiento() {
+			if (document.body && document.body.classList.contains('modo-consulta')
+				&& typeof window.cerrarSolapaConsulta === 'function') {
+				window.cerrarSolapaConsulta();
+				return;
+			}
+			window.location.href = carpetaBase+'/contable/asiento';
+		}
+
 		$.ajaxSetup({
 			beforeSend: BeforeSend,
 			complete: CompleteFunc,
@@ -1203,7 +1212,7 @@
 						window.open(data.url_impresion_asiento, '_blank', 'noopener');
 					}
 					alert("Asiento guardado en estado PENDIENTE (Nº "+data.numeroasiento+"). Contaduría fue notificada para su aprobación.");
-					window.location.href = carpetaBase+'/contable/asiento';
+					salirTrasGrabarAsiento();
 					return;
 				}
 				if (data.mensaje == 'ok') {
@@ -1211,7 +1220,7 @@
 						window.open(data.url_impresion_asiento, '_blank', 'noopener');
 					}
 					alert("Se grabó el asiento con éxito");
-					window.location.href = carpetaBase+'/contable/asiento';
+					salirTrasGrabarAsiento();
 					return;
 				}
 				if (data.errores)

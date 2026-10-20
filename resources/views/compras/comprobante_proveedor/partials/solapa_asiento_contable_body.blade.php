@@ -90,7 +90,8 @@
         @endif
     </div>
     @if($urlAsiento)
-    <a href="{{ $urlAsiento }}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" title="Consultar asiento contable (sin menú)">
+    <a href="{{ $urlAsiento }}" class="btn btn-sm btn-outline-primary" title="Consultar asiento contable (sin menú)"
+       onclick="window.open(this.href, '_blank'); return false;">
         <i class="fa fa-external-link"></i> Abrir asiento
     </a>
     @endif

@@ -2,7 +2,6 @@
 
 namespace App\Services\Ventas;
 
-use App\Models\Stock\Articulo_Movimiento;
 use Illuminate\Support\Facades\DB;
 
 class RepArticuloVendidoFerliService
@@ -28,7 +27,8 @@ class RepArticuloVendidoFerliService
 
         foreach ($data as $movimiento) {
             $cantidadPos = abs((float) $movimiento->cantidad);
-            $cantidad = -$cantidadPos;
+            // La venta sale de stock (negativa). La nota de crédito (signo < 0) vuelve a entrar.
+            $cantidad = ((int) ($movimiento->signo ?? 1)) < 0 ? $cantidadPos : -$cantidadPos;
             $precio = (float) $movimiento->precio;
             $importe = $cantidad * $precio;
             $codigoArticulo = str_pad($movimiento->sku, 13, '0', STR_PAD_LEFT);
@@ -84,6 +84,9 @@ class RepArticuloVendidoFerliService
         $desdelinea_id, $hastalinea_id,
         $mventa_id)
     {
+        // El comprobante manda. Hay facturas y remitos sin movimiento de stock
+        // (no se grabó el consumo de OT): un inner join contra articulo_movimiento
+        // las dejaba afuera y el listado no cerraba con los pedidos facturados.
         $ventaEmisionAgg = DB::table('venta_emision')
             ->select(
                 'venta_id',
@@ -92,36 +95,56 @@ class RepArticuloVendidoFerliService
                 'combinacion_id',
                 DB::raw('SUM(cantidad) as cantidad'),
                 DB::raw('MAX(precio) as precio'),
-                DB::raw('COALESCE(MAX(loteimportacion_id), 0) as loteimportacion_ve')
+                DB::raw('COALESCE(MAX(NULLIF(loteimportacion_id, 0)), 0) as loteimportacion_ve')
             )
             ->groupBy('venta_id', 'pedido_combinacion_id', 'articulo_id', 'combinacion_id');
 
-        $loteimportacionExpr = 'COALESCE(NULLIF(articulo_movimiento.loteimportacion_id, 0), venta_emision_agg.loteimportacion_ve, 0)';
+        $lotesMovimiento = DB::table('articulo_movimiento')
+            ->select(
+                'venta_id',
+                'pedido_combinacion_id',
+                'articulo_id',
+                'combinacion_id',
+                DB::raw('COALESCE(MAX(NULLIF(loteimportacion_id, 0)), 0) as loteimportacion_mov')
+            )
+            ->whereNotNull('venta_id')
+            ->groupBy('venta_id', 'pedido_combinacion_id', 'articulo_id', 'combinacion_id');
 
-        $query = Articulo_Movimiento::query()->select(
-            'articulo_movimiento.id as id',
-            'venta.fecha as fecha',
-            'articulo_movimiento.articulo_id as articulo_id',
-            'venta_emision_agg.cantidad as cantidad',
-            'venta_emision_agg.precio as precio',
-            'articulo.sku as sku',
-            'articulo.descripcion as nombrearticulo',
-            'categoria.codigo as agrupacion',
-            'unidadmedida.nombre as unidadmedida',
-            'tipotransaccion.abreviatura as tipocomprobante',
-            'venta.codigo as codigoventa',
-            'venta.numerocomprobante as numerocomprobante',
-            'puntoventa.codigo as puntoventa',
-            'cliente.codigo as codigocliente',
-            'cliente.nombre as nombrecliente',
-            'lote_importacion.numerodespacho as numerodespacho')
-            ->joinSub($ventaEmisionAgg, 'venta_emision_agg', function ($join) {
-                $join->on('venta_emision_agg.pedido_combinacion_id', 'articulo_movimiento.pedido_combinacion_id')
-                    ->on('venta_emision_agg.articulo_id', 'articulo_movimiento.articulo_id')
-                    ->on('venta_emision_agg.combinacion_id', 'articulo_movimiento.combinacion_id');
+        $loteimportacionExpr = 'COALESCE(NULLIF(lotes_mov.loteimportacion_mov, 0), NULLIF(venta_emision_agg.loteimportacion_ve, 0), 0)';
+
+        $query = DB::query()->fromSub($ventaEmisionAgg, 'venta_emision_agg')
+            ->select(
+                'venta.fecha as fecha',
+                'venta_emision_agg.articulo_id as articulo_id',
+                'venta_emision_agg.cantidad as cantidad',
+                'venta_emision_agg.precio as precio',
+                'tipotransaccion.signo as signo',
+                'articulo.sku as sku',
+                'articulo.descripcion as nombrearticulo',
+                'categoria.codigo as agrupacion',
+                'unidadmedida.nombre as unidadmedida',
+                'tipotransaccion.abreviatura as tipocomprobante',
+                'venta.codigo as codigoventa',
+                'venta.numerocomprobante as numerocomprobante',
+                'puntoventa.codigo as puntoventa',
+                'cliente.codigo as codigocliente',
+                'cliente.nombre as nombrecliente',
+                'lote_importacion.numerodespacho as numerodespacho'
+            )
+            ->leftJoinSub($lotesMovimiento, 'lotes_mov', function ($join) {
+                $join->on('lotes_mov.venta_id', '=', 'venta_emision_agg.venta_id')
+                    ->on('lotes_mov.articulo_id', '=', 'venta_emision_agg.articulo_id')
+                    ->on('lotes_mov.combinacion_id', '=', 'venta_emision_agg.combinacion_id')
+                    ->where(function ($mismoPedido) {
+                        $mismoPedido->whereColumn('lotes_mov.pedido_combinacion_id', 'venta_emision_agg.pedido_combinacion_id')
+                            ->orWhere(function ($ambosNulos) {
+                                $ambosNulos->whereNull('lotes_mov.pedido_combinacion_id')
+                                    ->whereNull('venta_emision_agg.pedido_combinacion_id');
+                            });
+                    });
             })
             ->join('venta', 'venta.id', 'venta_emision_agg.venta_id')
-            ->join('articulo', 'articulo.id', 'articulo_movimiento.articulo_id')
+            ->join('articulo', 'articulo.id', 'venta_emision_agg.articulo_id')
             ->join('categoria', 'categoria.id', 'articulo.categoria_id')
             ->leftJoin('unidadmedida', 'unidadmedida.id', 'articulo.unidadmedida_id')
             ->join('tipotransaccion', 'tipotransaccion.id', 'venta.tipotransaccion_id')
@@ -130,7 +153,7 @@ class RepArticuloVendidoFerliService
             ->leftJoin('lote as lote_importacion', function ($join) use ($loteimportacionExpr) {
                 $join->on('lote_importacion.id', '=', DB::raw('('.$loteimportacionExpr.')'));
             })
-            ->whereNotNull('articulo_movimiento.pedido_combinacion_id')
+            ->whereIn('tipotransaccion.operacionstock', ['O', 'E'])
             ->whereBetween('venta.fecha', [$desdefecha, $hastafecha])
             ->whereBetween('articulo.id', [$desdearticulo_id, $hastaarticulo_id])
             ->whereBetween('cliente.id', [$desdecliente_id, $hastacliente_id])
