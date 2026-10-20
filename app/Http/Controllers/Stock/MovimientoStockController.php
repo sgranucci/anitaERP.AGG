@@ -402,9 +402,11 @@ class MovimientoStockController extends Controller
         $talle_query = \App\Models\Stock\Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
 
         $etiquetasSurmarPorLinea = [];
+        $etiquetasSurmarHijas = [];
         if (SurmarSupport::esEmpresaSurmar((int) $empresa_id)) {
-            $etiquetasSurmarPorLinea = app(MovimientoStockSurmarEtiquetaService::class)
-                ->consumosPayloadPorLineaProducto((int) $movimientostock->id);
+            $surmarEtiquetas = app(MovimientoStockSurmarEtiquetaService::class);
+            $etiquetasSurmarPorLinea = $surmarEtiquetas->consumosPayloadPorLineaProducto((int) $movimientostock->id);
+            $etiquetasSurmarHijas = $surmarEtiquetas->hijasEmitidasPayload((int) $movimientostock->id);
         }
 
         $movimientoStockCanalCatalogo = MovimientoStockFerliSupport::codigoCanal(
@@ -421,7 +423,7 @@ class MovimientoStockController extends Controller
             'empresa_query', 'empresa_id', 'centrocosto_query', 'asientoPreview', 'mostrarSolapaAsiento',
             'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
             'puedeModificarVentana', 'controlVentanaActivo',
-            'color_query', 'talle_query', 'etiquetasSurmarPorLinea',
+            'color_query', 'talle_query', 'etiquetasSurmarPorLinea', 'etiquetasSurmarHijas',
             'movimientoStockCanalCatalogo', 'movimientoStockAmbitoCatalogo') + [
             'modo_surmar' => $modoSurmar,
             'ruta_index_movimientostock' => $modoSurmar ? 'movimiento_surmar' : 'movimientostock',

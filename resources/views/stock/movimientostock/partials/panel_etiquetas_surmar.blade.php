@@ -47,7 +47,7 @@
                     <th>SKU</th>
                     <th class="text-right">Neto</th>
                     <th>Lote</th>
-                    <th class="text-center" style="width:2.5rem;"></th>
+                    <th class="text-center" style="width:4.5rem;"></th>
                 </tr>
                 </thead>
                 <tbody id="ms-tbody-etiquetas-surmar">
@@ -65,6 +65,26 @@
             </table>
         </div>
         <div id="ms-etiquetas-consumo-hiddens" class="d-none"></div>
+        <div id="ms-etiquetas-emitidas-wrap" class="mt-2" style="display:none;">
+            <p class="small mb-1"><strong>Etiquetas emitidas</strong> por este movimiento. Reimprimir no genera etiquetas nuevas.</p>
+            <div class="table-responsive" style="max-height: 180px; overflow:auto;">
+                <table class="table table-sm table-bordered mb-1">
+                    <thead style="background:#85C1E9;color:#17202A;">
+                    <tr>
+                        <th>ID</th>
+                        <th>SKU</th>
+                        <th class="text-right">Neto</th>
+                        <th>Lote</th>
+                        <th class="text-center" style="width:2.5rem;"></th>
+                    </tr>
+                    </thead>
+                    <tbody id="ms-tbody-etiquetas-emitidas"></tbody>
+                </table>
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="ms_etiqueta_reimprimir_emitidas">
+                <i class="fa fa-print"></i> Reimprimir etiquetas emitidas
+            </button>
+        </div>
         <div class="form-check mt-2 mb-0">
             <input type="checkbox" class="form-check-input" name="imprimir_etiquetas_surmar" id="imprimir_etiquetas_surmar" value="1" checked>
             <label class="form-check-label small" for="imprimir_etiquetas_surmar">Imprimir etiquetas nuevas (ZPL) al guardar</label>
@@ -74,6 +94,7 @@
 <input type="hidden" id="ms-resolver-etiqueta-surmar-url" value="{{ route('movimientostock_resolver_etiqueta_surmar') }}">
 <input type="hidden" id="ms-zpl-etiquetas-surmar-url" value="{{ route('movimientostock_zpl_etiquetas_surmar') }}">
 <script type="application/json" id="ms-etiquetas-surmar-inicial">@json($etiquetasSurmarInicial)</script>
+<script type="application/json" id="ms-etiquetas-surmar-hijas">@json($etiquetasSurmarHijas ?? [])</script>
 
 <style>
     #ms-surmar-workbench.ms-surmar-activo #tabla-items-movimientostock tbody tr.item-pedido {
