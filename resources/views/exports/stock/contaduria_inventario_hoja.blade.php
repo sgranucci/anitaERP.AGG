@@ -25,6 +25,11 @@
     <tr>
         <td colspan="{{ $colspan }}" style="font-size: 10pt; color: #444;">{{ $subtitulo ?? '' }} · Valorizado a precio de última compra</td>
     </tr>
+    @if (trim((string) ($origen ?? '')) !== '')
+        <tr>
+            <td colspan="{{ $colspan }}" style="font-size: 10pt; color: #444;">{{ $origen }}</td>
+        </tr>
+    @endif
     @if (($modo ?? '') === 'subtotal')
         <tr>
             <th>Rubro</th>

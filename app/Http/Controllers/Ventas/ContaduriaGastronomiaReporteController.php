@@ -57,6 +57,7 @@ class ContaduriaGastronomiaReporteController extends Controller
             'mes' => $mes,
             'fecha_cierre' => $fechaCierre,
             'depositos' => $depositos,
+            'origen_inventario' => $this->origenInventario($request),
         ]);
     }
 
@@ -73,7 +74,7 @@ class ContaduriaGastronomiaReporteController extends Controller
 
         if ($empresaId <= 0 || ! preg_match('/^\d{4}-\d{2}$/', $mes)) {
             return redirect()
-                ->route('gastronomia_reporte_contaduria', $request->only(['empresa_id', 'mes', 'fecha_cierre', 'depositos']))
+                ->route('gastronomia_reporte_contaduria', $request->only(['empresa_id', 'mes', 'fecha_cierre', 'depositos', 'origen_inventario']))
                 ->with('errores', ['Seleccione la empresa y el mes.']);
         }
 
@@ -113,11 +114,12 @@ class ContaduriaGastronomiaReporteController extends Controller
         $empresaId = (int) $request->input('empresa_id', 0);
         $fecha = trim((string) $request->input('fecha_cierre', ''));
         $depositos = $this->normalizarDepositos((string) $request->input('depositos', '1, 8'));
+        $origen = $this->origenInventario($request);
         $this->assertAccesoEmpresa($empresaId);
 
         if ($empresaId <= 0 || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) || $depositos === '') {
             return redirect()
-                ->route('gastronomia_reporte_contaduria', $request->only(['empresa_id', 'mes', 'fecha_cierre', 'depositos']))
+                ->route('gastronomia_reporte_contaduria', $request->only(['empresa_id', 'mes', 'fecha_cierre', 'depositos', 'origen_inventario']))
                 ->with('errores', ['Seleccione la empresa, la fecha de cierre y los depósitos.']);
         }
 
@@ -127,11 +129,12 @@ class ContaduriaGastronomiaReporteController extends Controller
             'fecha_hasta' => $fecha,
             'depositos_filtro' => $depositos,
             'solo_con_saldo' => true,
+            'origen' => $origen,
         ]);
 
         if (($armado['error'] ?? null) !== null) {
             return redirect()
-                ->route('gastronomia_reporte_contaduria', $request->only(['empresa_id', 'mes', 'fecha_cierre', 'depositos']))
+                ->route('gastronomia_reporte_contaduria', $request->only(['empresa_id', 'mes', 'fecha_cierre', 'depositos', 'origen_inventario']))
                 ->with('errores', [$armado['error']]);
         }
 
@@ -140,8 +143,18 @@ class ContaduriaGastronomiaReporteController extends Controller
         $titulo = 'Inventario existencias finales';
         $subtitulo = $empresaNombre.' · Cierre '.Carbon::parse($fecha)->format('d/m/Y').' · Depósitos '.implode(', ', $codigos);
 
-        return (new ContaduriaInventarioWorkbookExport($armado, $titulo, $subtitulo, $empresaNombre))
-            ->download('reporte_contaduria_inventario_'.$fecha.'.xlsx');
+        return (new ContaduriaInventarioWorkbookExport(
+            $armado,
+            $titulo,
+            $subtitulo,
+            $empresaNombre,
+            (string) ($armado['origen_etiqueta'] ?? ''),
+        ))->download('reporte_contaduria_inventario_'.$fecha.'.xlsx');
+    }
+
+    private function origenInventario(Request $request): string
+    {
+        return $request->input('origen_inventario') === 'saldo' ? 'saldo' : 'recuento';
     }
 
     private function normalizarDepositos(string $valor): string

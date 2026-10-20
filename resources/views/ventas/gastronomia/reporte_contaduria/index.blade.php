@@ -68,6 +68,20 @@
                         </div>
                     </div>
 
+                    <div class="form-group row">
+                        <label for="origen_inventario" class="col-lg-2 control-label text-right pr-2 requerido">Origen</label>
+                        <div class="col-lg-5">
+                            <select name="origen_inventario" id="origen_inventario" class="form-control">
+                                <option value="recuento" @selected(($origen_inventario ?? 'recuento') === 'recuento')>&Uacute;ltimo recuento de cada dep&oacute;sito</option>
+                                <option value="saldo" @selected(($origen_inventario ?? '') === 'saldo')>Saldo vigente</option>
+                            </select>
+                            <small class="form-text text-muted">
+                                Saldo vigente es la existencia del sistema a la fecha de cierre.
+                                &Uacute;ltimo recuento toma la cantidad contada de los recuentos cerrados de la fecha m&aacute;s reciente de cada dep&oacute;sito, hasta esa fecha. Si ese d&iacute;a hay varios, entran todos. El Excel dice cu&aacute;l us&oacute;.
+                            </small>
+                        </div>
+                    </div>
+
                     <div class="form-group row mb-2">
                         <div class="col-lg-8 offset-lg-2">
                             <button type="submit"
@@ -78,7 +92,7 @@
                             <p class="text-muted small mb-0 mt-2">
                                 Otro Excel: subtotal por rubro y cada dep&oacute;sito abierto en solapa
                                 (alimento, bebidas, cigarrillos, descartables, farmacia, librer&iacute;a y limpieza),
-                                valorizado al precio de &uacute;ltima compra.
+                                valorizado al precio de &uacute;ltima compra. El encabezado indica si sali&oacute; del saldo vigente o del &uacute;ltimo recuento.
                             </p>
                         </div>
                     </div>

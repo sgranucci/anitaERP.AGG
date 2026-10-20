@@ -30,6 +30,7 @@ class ContaduriaInventarioHojaExport implements FromView, ShouldAutoSize, WithEv
         private readonly string $titulo,
         private readonly string $subtitulo,
         private readonly string $empresaNombre,
+        private readonly string $origen = '',
     ) {}
 
     public function view(): View
@@ -46,6 +47,7 @@ class ContaduriaInventarioHojaExport implements FromView, ShouldAutoSize, WithEv
             'titulo' => $this->titulo,
             'titulo_solapa' => $this->tituloHoja,
             'subtitulo' => $this->subtitulo,
+            'origen' => $this->origen,
             'reservarFilaLogoExcel' => $this->hayFilaLogo,
         ]);
     }
@@ -61,7 +63,16 @@ class ContaduriaInventarioHojaExport implements FromView, ShouldAutoSize, WithEv
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
                 $ultima = $sheet->getHighestColumn();
-                $filaCabecera = ($this->hayFilaLogo ? 1 : 0) + 5;
+                $filasMeta = $this->origen !== '' ? 6 : 5;
+                $filaCabecera = ($this->hayFilaLogo ? 1 : 0) + $filasMeta;
+
+                if ($this->origen !== '') {
+                    $filaOrigen = $filaCabecera - 1;
+                    $sheet->getStyle('A'.$filaOrigen.':'.$ultima.$filaOrigen)
+                        ->getAlignment()
+                        ->setWrapText(true);
+                    $sheet->getRowDimension($filaOrigen)->setRowHeight(32);
+                }
 
                 if ($this->hayFilaLogo) {
                     $sheet->getRowDimension(1)->setRowHeight(54);

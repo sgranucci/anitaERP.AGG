@@ -17,6 +17,7 @@ class ContaduriaInventarioWorkbookExport implements WithMultipleSheets
         private readonly string $titulo,
         private readonly string $subtitulo,
         private readonly string $empresaNombre,
+        private readonly string $origen = '',
     ) {}
 
     public function sheets(): array
@@ -33,6 +34,7 @@ class ContaduriaInventarioWorkbookExport implements WithMultipleSheets
                 $this->titulo,
                 $this->subtitulo,
                 $this->empresaNombre,
+                $this->origen,
             ),
         ];
 
@@ -44,6 +46,7 @@ class ContaduriaInventarioWorkbookExport implements WithMultipleSheets
                 $this->titulo,
                 $this->subtitulo,
                 $this->empresaNombre,
+                $this->origen,
             );
         }
 
