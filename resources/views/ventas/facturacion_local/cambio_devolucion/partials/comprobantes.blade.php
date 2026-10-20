@@ -59,6 +59,27 @@
                     @endif
                 </td>
             </tr>
+            <tr>
+                <td>OPP reembolso</td>
+                <td>
+                    @if ($tiene && $data->caja_movimiento_id)
+                        @php
+                            $opp = $data->relationLoaded('cajaMovimiento') ? $data->cajaMovimiento : null;
+                            $oppNro = $opp->numerotransaccion ?? ('#'.$data->caja_movimiento_id);
+                            $oppTipo = $opp->tipotransaccioncajas->abreviatura ?? 'OPP';
+                        @endphp
+                        {{ $oppTipo }} {{ $oppNro }}
+                    @else
+                        —
+                    @endif
+                </td>
+                <td>
+                    @if ($tiene && $data->caja_movimiento_id)
+                        <a class="text-primary" target="_blank" rel="noopener"
+                           href="{{ route('imprimir_opp_cambio_devolucion_marketplace', $data->id) }}">Ver PDF</a>
+                    @endif
+                </td>
+            </tr>
         </tbody>
     </table>
 </div>

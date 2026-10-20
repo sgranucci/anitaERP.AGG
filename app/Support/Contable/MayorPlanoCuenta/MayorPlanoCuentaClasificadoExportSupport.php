@@ -20,6 +20,7 @@ final class MayorPlanoCuentaClasificadoExportSupport
     public static function cabeceras(array $filtros): array
     {
         $mostrarCc = MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros);
+        $mostrarMonRef = MayorPlanoCuentaListadoFiltros::mostrarColumnaMonedaReferencia($filtros);
         $multiempresa = self::esMultiempresa($filtros);
 
         $cols = [
@@ -39,7 +40,11 @@ final class MayorPlanoCuentaClasificadoExportSupport
             'O.Compra',
             'Mon',
             'Cotiz.',
-            'Mon. Ref.',
+        ]);
+        if ($mostrarMonRef) {
+            $cols[] = 'Mon. Ref.';
+        }
+        $cols = array_merge($cols, [
             'Debe',
             'Haber',
             'Saldo del mes',
@@ -62,13 +67,15 @@ final class MayorPlanoCuentaClasificadoExportSupport
     public static function filaAColumnas(array $fila, array $filtros): array
     {
         $mostrarCc = MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros);
+        $mostrarMonRef = MayorPlanoCuentaListadoFiltros::mostrarColumnaMonedaReferencia($filtros);
         $multiempresa = self::esMultiempresa($filtros);
-        $nCols = count(self::cabeceras($filtros));
+        $cabeceras = self::cabeceras($filtros);
+        $nCols = count($cabeceras);
         $tipo = (string) ($fila['tipo_fila'] ?? 'detalle');
 
-        $idxDebe = $mostrarCc ? 13 : 12;
-        $idxHaber = $idxDebe + 1;
-        $idxSaldoEjerc = $mostrarCc ? 16 : 15;
+        $idxDebe = (int) array_search('Debe', $cabeceras, true);
+        $idxHaber = (int) array_search('Haber', $cabeceras, true);
+        $idxSaldoEjerc = (int) array_search('Saldo ejerc.', $cabeceras, true);
         $idxEmpresa = $multiempresa ? $nCols - 1 : null;
 
         $vacio = array_fill(0, $nCols, '');
@@ -136,7 +143,9 @@ final class MayorPlanoCuentaClasificadoExportSupport
         $row[] = ((int) ($fila['nro_oc'] ?? 0) > 0) ? $fila['nro_oc'] : '';
         $row[] = (string) ($fila['moneda_abrev'] ?? '');
         $row[] = self::numeroOVacio($fila['cotizacion'] ?? null);
-        $row[] = self::numeroOVacio($fila['mon_referencia'] ?? null);
+        if ($mostrarMonRef) {
+            $row[] = self::numeroOVacio($fila['mon_referencia'] ?? null);
+        }
         $row[] = self::numeroOVacio($fila['debe'] ?? null);
         $row[] = self::numeroOVacio($fila['haber'] ?? null);
         $row[] = self::numeroOVacio($fila['saldo_mes'] ?? null);
@@ -301,14 +310,14 @@ final class MayorPlanoCuentaClasificadoExportSupport
      */
     public static function filaTotalGeneral(array $resultado, array $filtros): array
     {
-        $mostrarCc = MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros);
-        $idxDebe = $mostrarCc ? 13 : 12;
-        $idxHaber = $idxDebe + 1;
+        $cabeceras = self::cabeceras($filtros);
+        $idxDebe = (int) array_search('Debe', $cabeceras, true);
+        $idxHaber = (int) array_search('Haber', $cabeceras, true);
         $debe = round((float) ($resultado['totales']['debe'] ?? 0), 2);
         $haber = round((float) ($resultado['totales']['haber'] ?? 0), 2);
         $diferencia = round($debe - $haber, 2);
 
-        $fila = array_fill(0, count(self::cabeceras($filtros)), '');
+        $fila = array_fill(0, count($cabeceras), '');
         $fila[0] = 'Total general · Diferencia (D-H) '.number_format($diferencia, 2, ',', '.');
         $fila[$idxDebe] = $debe;
         $fila[$idxHaber] = $haber;

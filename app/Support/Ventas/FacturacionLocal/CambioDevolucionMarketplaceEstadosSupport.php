@@ -54,7 +54,8 @@ final class CambioDevolucionMarketplaceEstadosSupport
     /** @var array<string, list<string>> */
     private const TRANSICIONES = [
         self::BORRADOR => [self::ABIERTO, self::ANULADO],
-        self::ABIERTO => [self::FACTURA_REEMPLAZO, self::ANULADO],
+        // FACTURA_REEMPLAZO = cambio con par nuevo; AGUARDANDO_RECEPCION = solo devolución (reembolso).
+        self::ABIERTO => [self::FACTURA_REEMPLAZO, self::AGUARDANDO_RECEPCION, self::ANULADO],
         self::FACTURA_REEMPLAZO => [self::AGUARDANDO_RECEPCION],
         self::AGUARDANDO_RECEPCION => [self::RECIBIDO, self::ANULADO],
         self::RECIBIDO => [self::NC_ORIGINAL],

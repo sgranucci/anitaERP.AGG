@@ -2,6 +2,7 @@
 
 namespace App\Models\Ventas;
 
+use App\Models\Caja\Caja_Movimiento;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
@@ -25,6 +26,7 @@ class CambioDevolucionMarketplace extends Model implements Auditable
         'venta_original_id',
         'venta_reemplazo_id',
         'venta_nc_id',
+        'caja_movimiento_id',
         'cliente_id',
         'receptor_nombre',
         'receptor_documento',
@@ -49,6 +51,7 @@ class CambioDevolucionMarketplace extends Model implements Auditable
         'venta_original_id' => 'integer',
         'venta_reemplazo_id' => 'integer',
         'venta_nc_id' => 'integer',
+        'caja_movimiento_id' => 'integer',
         'cliente_id' => 'integer',
         'motivo_devolucion_id' => 'integer',
         'diferencia_importe' => 'float',
@@ -83,6 +86,11 @@ class CambioDevolucionMarketplace extends Model implements Auditable
     public function ventaNc()
     {
         return $this->belongsTo(Venta::class, 'venta_nc_id');
+    }
+
+    public function cajaMovimiento()
+    {
+        return $this->belongsTo(Caja_Movimiento::class, 'caja_movimiento_id');
     }
 
     public function cliente()

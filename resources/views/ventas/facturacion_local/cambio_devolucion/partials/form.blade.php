@@ -239,8 +239,9 @@
         <p class="text-muted small">
             Al elegir la factura se cargan las líneas a devolver con el artículo, el talle y el color o la combinación.
             El precio inicial es el de la factura. Si lo cambian (descuento por transferencia: mismo importe del producto en devolver y en reemplazo), la nota de crédito sale por ese precio.
-            El reemplazo se elige con lupa o F1. Enter en el SKU lo resuelve.
+            Cambio: cargar el reemplazo con lupa o F1. Solo reembolso: dejar solo líneas «A devolver» (sin reemplazo) y usar «Continuar sin reemplazo».
             El calzado pide talle y, según el artículo, color o combinación. Si no maneja variante, esos campos quedan en «No aplica».
+            Buscar factura: también atajos tipo A26-146 o 23-45335.
         </p>
         <div class="table-responsive">
             <table class="table table-sm table-bordered" id="cdm-lineas-table">

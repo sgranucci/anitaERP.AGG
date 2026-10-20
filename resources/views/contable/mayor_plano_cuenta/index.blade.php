@@ -191,6 +191,14 @@
                                             Mostrar columna centro de costo
                                         </label>
                                     </div>
+                                    <div class="form-check">
+                                        <input type="hidden" name="mostrar_columna_moneda_referencia" value="0">
+                                        <input class="form-check-input" type="checkbox" name="mostrar_columna_moneda_referencia" id="mostrar_columna_moneda_referencia" value="1"
+                                            @checked(\App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaMonedaReferencia($filtros ?? []))>
+                                        <label class="form-check-label" for="mostrar_columna_moneda_referencia">
+                                            Mostrar columna moneda de referencia
+                                        </label>
+                                    </div>
                                     <div class="d-flex flex-wrap align-items-center mt-2">
                                         <div class="form-check mb-0">
                                             <input type="hidden" name="mostrar_titulo_cuenta" value="0">
@@ -219,7 +227,7 @@
                                         Con un m&oacute;dulo elegido se usa ese subdiario (V ventas, C compras, T caja;
                                         cuentas a pagar = &oacute;rdenes de pago) m&aacute;s el ctamov de origen ERP, sin saldo anterior.
                                         Totales agrupa por cuenta; Movimientos muestra cada imputaci&oacute;n.
-                                        La columna de centro de costo, el t&iacute;tulo de cuenta y si va en una sola l&iacute;nea quedan grabados como preferencia del usuario.
+                                        La columna de centro de costo, la de moneda de referencia, el t&iacute;tulo de cuenta y si va en una sola l&iacute;nea quedan grabados como preferencia del usuario.
                                     </small>
                                 </div>
                             </div>

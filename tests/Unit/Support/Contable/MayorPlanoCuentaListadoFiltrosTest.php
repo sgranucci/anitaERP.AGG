@@ -96,6 +96,33 @@ class MayorPlanoCuentaListadoFiltrosTest extends TestCase
         );
     }
 
+    public function test_mostrar_columna_moneda_referencia_default_y_query(): void
+    {
+        $conDefault = MayorPlanoCuentaListadoFiltros::resolverDesdeRequest(
+            Request::create('/contable/mayor-plano-cuenta', 'GET', [])
+        );
+        $this->assertTrue(MayorPlanoCuentaListadoFiltros::mostrarColumnaMonedaReferencia($conDefault));
+        $this->assertSame(
+            1,
+            MayorPlanoCuentaListadoFiltros::paraQueryString($conDefault)['mostrar_columna_moneda_referencia']
+        );
+
+        $oculto = MayorPlanoCuentaListadoFiltros::resolverDesdeRequest(
+            Request::create('/contable/mayor-plano-cuenta', 'GET', [
+                'mostrar_columna_moneda_referencia' => 0,
+            ])
+        );
+        $this->assertFalse(MayorPlanoCuentaListadoFiltros::mostrarColumnaMonedaReferencia($oculto));
+        $this->assertSame(
+            0,
+            MayorPlanoCuentaListadoFiltros::paraQueryString($oculto)['mostrar_columna_moneda_referencia']
+        );
+        $this->assertSame(
+            MayorPlanoCuentaListadoFiltros::firma($conDefault),
+            MayorPlanoCuentaListadoFiltros::firma($oculto)
+        );
+    }
+
     public function test_sin_modulo_la_presentacion_no_pasa_a_totales(): void
     {
         $filtros = MayorPlanoCuentaListadoFiltros::resolverDesdeRequest(

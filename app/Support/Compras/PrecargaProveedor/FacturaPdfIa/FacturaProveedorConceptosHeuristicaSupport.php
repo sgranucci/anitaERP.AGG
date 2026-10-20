@@ -151,15 +151,17 @@ final class FacturaProveedorConceptosHeuristicaSupport
             ['patron' => '/\bimporte\s+exento/u', 'tipo' => 'exento', 'alicuota' => 0.0],
             ['patron' => '/\bimp\.?\s*exento/u', 'tipo' => 'exento', 'alicuota' => 0.0],
             ['patron' => '/\bno\s+gravado/u', 'tipo' => 'no_gravado', 'alicuota' => 0.0],
-            // RG 5329 / Perc. IVA 3% (nombre_ia del concepto 103).
-            ['patron' => '/\brg\s*5329\b/u', 'tipo' => 'percepcion_iva', 'alicuota' => 3.0],
-            ['patron' => '/\bpercep(?:ci[oó]n)?\s+(?:iva|i\.v\.a)/u', 'tipo' => 'percepcion_iva', 'alicuota' => null],
+            // RG 5329 / 3337 / Perc. IVA 3% (concepto 103). «Percepción de IVA» AFIP.
+            ['patron' => '/\brg\s*(?:5329|3337)\b/u', 'tipo' => 'percepcion_iva', 'alicuota' => 3.0],
+            ['patron' => '/\bpercep(?:ci[oó]n)?\s+(?:de\s+)?(?:iva|i\.?\s*v\.?\s*a)/u', 'tipo' => 'percepcion_iva', 'alicuota' => null],
+            ['patron' => '/\bperc\.?\s*iva\b/u', 'tipo' => 'percepcion_iva', 'alicuota' => null],
             ['patron' => '/\bpercep(?:\.|\s)*(?:ii\.?\s*bb\.?|iibb|i\.i\.b\.b|ingresos\s+brutos)/u', 'tipo' => 'percepcion_iibb', 'alicuota' => null],
             ['patron' => '/\bpercep(?:ci[oó]n)?\s+(?:ganancias|gan\.)/u', 'tipo' => 'percepcion_ganancias', 'alicuota' => null],
             ['patron' => '/\bimpuestos?\s+internos/u', 'tipo' => 'interno', 'alicuota' => null],
             ['patron' => '/\bimp\.?\s*internos/u', 'tipo' => 'interno', 'alicuota' => null],
             ['patron' => '/\bsub\s*total\b/u', 'tipo' => 'neto', 'alicuota' => null],
             ['patron' => '/\bimporte\s+neto\b/u', 'tipo' => 'neto', 'alicuota' => null],
+            // Solo si no es el renglón de percepción (ya matcheó arriba).
             ['patron' => '/\botros?\s+tributos/u', 'tipo' => 'otro_tributo', 'alicuota' => null],
             ['patron' => '/\bretenc(?:i[oó]n)?\s+iva/u', 'tipo' => 'retencion_iva', 'alicuota' => null],
             ['patron' => '/\bretenc(?:i[oó]n)?\s+iibb/u', 'tipo' => 'retencion_iibb', 'alicuota' => null],
@@ -211,10 +213,15 @@ final class FacturaProveedorConceptosHeuristicaSupport
                 $linea['alicuota_iva'] = $alic;
             }
 
-            $clave = ($linea['tipo'] ?? '').'|'.($linea['alicuota_iva'] ?? 'x').'|'.mb_strtolower($linea['descripcion']);
+            // Clave por tipo+alícuota (no descripción): ORIGINAL/DUPLICADO repiten el mismo renglón.
+            $clave = ($linea['tipo'] ?? '').'|'.($linea['alicuota_iva'] ?? 'x');
             if (! isset($mapa[$clave])) {
                 $mapa[$clave] = $linea;
+            } elseif (abs((float) $mapa[$clave]['importe'] - (float) $linea['importe']) <= 0.02) {
+                // Misma copia repetida: no sumar.
+                continue;
             } else {
+                // Mismo tipo con importes distintos (ej. dos gravados): sumar.
                 $mapa[$clave]['importe'] = round((float) $mapa[$clave]['importe'] + (float) $linea['importe'], 2);
             }
         }
@@ -243,9 +250,10 @@ final class FacturaProveedorConceptosHeuristicaSupport
             ['regex' => '/neto\s+gravado\s+10[,.]5\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'neto', 'alicuota' => 10.5, 'desc' => 'Neto gravado 10,5%'],
             ['regex' => '/neto\s+gravado\s+27\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'neto', 'alicuota' => 27.0, 'desc' => 'Neto gravado 27%'],
             ['regex' => '/operaciones\s+exentas\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'exento', 'alicuota' => 0.0, 'desc' => 'Operaciones exentas'],
-            ['regex' => '/rg\s*5329[^0-9\n]{0,80}?((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'percepcion_iva', 'alicuota' => 3.0, 'desc' => 'RG 5329'],
+            ['regex' => '/rg\s*(?:5329|3337)[^0-9\n]{0,80}?((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'percepcion_iva', 'alicuota' => 3.0, 'desc' => 'Percepción IVA'],
             ['regex' => '/percep(?:\.|\s)*(?:ii\.?\s*bb\.?|iibb)[^0-9\n]{0,30}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2}|\$?\s*\d[\d.,]+)/iu', 'tipo' => 'percepcion_iibb', 'alicuota' => null, 'desc' => 'PERCEP II.BB.'],
-            ['regex' => '/percep(?:ci[oó]n)?\s+iva[^0-9\n]{0,30}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2}|\$?\s*\d[\d.,]+)/iu', 'tipo' => 'percepcion_iva', 'alicuota' => null, 'desc' => 'Percepción IVA'],
+            ['regex' => '/percep(?:ci[oó]n)?\s+(?:de\s+)?(?:iva|i\.?\s*v\.?\s*a)[^0-9\n]{0,40}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2}|\$?\s*\d[\d.,]+)/iu', 'tipo' => 'percepcion_iva', 'alicuota' => null, 'desc' => 'Percepción IVA'],
+            ['regex' => '/perc\.?\s*iva[^0-9\n]{0,40}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'percepcion_iva', 'alicuota' => null, 'desc' => 'Percepción IVA'],
             ['regex' => '/impuestos?\s+internos[^0-9\n]{0,20}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2}|\$?\s*\d[\d.,]+)/iu', 'tipo' => 'interno', 'alicuota' => null, 'desc' => 'IMPUESTOS INTERNOS'],
         ];
 

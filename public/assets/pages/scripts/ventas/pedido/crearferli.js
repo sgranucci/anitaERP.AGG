@@ -114,6 +114,9 @@
 	var descuentoCliente;
 	
 	function completarCliente_Entrega(cliente_id){
+		if (!cliente_id || !$.isNumeric(cliente_id) || parseInt(cliente_id, 10) <= 0) {
+			return;
+		}
         var loc_id;
 		var lugarentrega = $("#lugarentrega").val();
         $.get(''+carpetaBase+'/ventas/leercliente_entrega/'+cliente_id, function(data){
@@ -1413,7 +1416,10 @@
 		}
 
 		cliente_id = $("#cliente_id").val();
-		nombrecliente = $("#cliente_id option:selected").text();
+		nombrecliente = ($("#nombrecliente").val() || '').toString().trim();
+		if (!nombrecliente) {
+			nombrecliente = ($("#codigocliente").val() || '').toString().trim();
+		}
 		descuentoCliente = $('#descuento').val();
 
 		// Acumula filas válidas; completarTalles es async (leertalles) y no puede
@@ -1758,7 +1764,25 @@
 		});
 	}
 
+	function completaDatosCliente()
+	{
+		var clienteId = $("#cliente_id").val();
+
+		if (!clienteId || !$.isNumeric(clienteId) || parseInt(clienteId, 10) <= 0) {
+			return;
+		}
+
+		completarCliente_Entrega(clienteId);
+		asignaDatosCliente(clienteId, true);
+		setTimeout(function () {
+			muestraTipoSuspension();
+		}, 1500);
+	}
+
    	function asignaDatosCliente(cliente_id, flCambioCliente){
+		if (!cliente_id || !$.isNumeric(cliente_id) || parseInt(cliente_id, 10) <= 0) {
+			return;
+		}
         $.get(''+carpetaBase+'/ventas/leercliente/'+cliente_id, function(data){
             var datoscli = $.map(data, function(value, index){
                 return [value];
@@ -1781,10 +1805,6 @@
 				window.clientePoliticaComercial.setActual(data.politica_comercial);
 			}
 		});
-		
-        setTimeout(() => {
-			
-        }, 3000);
     }
 
     function muestraTipoSuspension()

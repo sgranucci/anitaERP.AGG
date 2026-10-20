@@ -8,15 +8,8 @@
 		<div class="form-group row" id="div-cliente">
 			<label for="cliente" class="col-lg-3 col-form-label">Cliente</label>
 			<input type="hidden" class="col-lg-2" id="cliente_id" name="cliente_id" value="{{$pedido->cliente_id??''}}" >
-			@php
-				$codigoClientePedidoForm = trim((string) ($pedido->clientes->codigo ?? ''));
-				$nombreClientePedidoForm = trim((string) ($pedido->clientes->nombre ?? ''));
-				$nombreClientePedidoDisplay = $codigoClientePedidoForm !== '' && $nombreClientePedidoForm !== ''
-					? $codigoClientePedidoForm.' - '.$nombreClientePedidoForm
-					: $nombreClientePedidoForm;
-			@endphp
 			<input type="text" class="col-lg-2 codigocliente" id="codigocliente" name="codigocliente" value="{{$pedido->clientes->codigo??''}}" placeholder="N&ordm;" title="C&oacute;digo; Enter valida; F1 consulta">
-			<input type="text" class="col-lg-5 form-control" id="nombrecliente" name="nombrecliente" value="{{ $nombreClientePedidoDisplay }}" readonly>
+			<input type="text" class="col-lg-5 form-control" id="nombrecliente" name="nombrecliente" value="{{ $pedido->clientes->nombre ?? '' }}" readonly>
 			<div class="form-group boton-alta-cliente" style="display: none">
 				<button type="button" id="botonaltacliente" class="btn btn-primary btn-sm">
 					<i class="fa fa-user"></i>Alta Cliente

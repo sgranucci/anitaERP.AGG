@@ -5,6 +5,7 @@ namespace App\Services\Compras;
 use App\ApiAnita;
 use App\Queries\Compras\ProveedorQueryInterface;
 use App\Support\Compras\AnitaSync\Ordencompra\AnitaOcClave;
+use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaEsquemaSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCentrocostoDestinoSupport;
 use Illuminate\Support\Facades\Log;
 
@@ -49,15 +50,7 @@ class OrdencompraService
 			'acc' => 'list',
 			'sistema' => 'compras',
 			'tabla' => 'pendmaep',
-			'campos' => implode(', ', [
-				'penmp_proveedor',
-				'penmp_ccosto',
-				'penmp_ccosto_dest',
-				'penmp_tipo',
-				'penmp_letra',
-				'penmp_sucursal',
-				'penmp_nro',
-			]),
+			'campos' => OrdencompraAnitaEsquemaSupport::camposPendmaepPrecarga(),
 			'whereArmado' => " WHERE penmp_nro={$numeroOc}",
 		];
 
@@ -101,18 +94,18 @@ class OrdencompraService
 	 */
 	private function consultarItemsOrdenCompra(AnitaOcClave $claveOc): array
 	{
+		$esquema = OrdencompraAnitaEsquemaSupport::camposPendmovpPrecarga();
+		$where = $claveOc->wherePendmovp();
+		if (! empty($esquema['join_stkmae'])) {
+			$where .= ' AND penvp_articulo=stkm_articulo';
+		}
+
 		$payload = [
 			'acc' => 'list',
 			'sistema' => 'compras',
-			'tabla' => 'pendmovp,stkmae',
-			'campos' => '
-				penvp_articulo,
-				penvp_cantidad,
-				penvp_ccosto,
-				stkm_tipo_articulo,
-				stkm_agrupacion
-			',
-			'whereArmado' => $claveOc->wherePendmovp().' AND penvp_articulo=stkm_articulo',
+			'tabla' => $esquema['tabla'],
+			'campos' => $esquema['campos'],
+			'whereArmado' => $where,
 		];
 
 		return $this->listAnitaConReintento($payload, 'ordencompra.pendmovp', $claveOc->nro);

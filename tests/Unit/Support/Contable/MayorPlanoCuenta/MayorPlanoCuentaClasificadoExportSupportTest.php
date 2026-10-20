@@ -176,4 +176,19 @@ class MayorPlanoCuentaClasificadoExportSupportTest extends TestCase
         $this->assertSame('saldo', MayorPlanoCuentaClasificadoExportSupport::estiloFilaExcel(['tipo_fila' => 'saldo_inicial']));
         $this->assertNull(MayorPlanoCuentaClasificadoExportSupport::estiloFilaExcel(['tipo_fila' => 'detalle']));
     }
+
+    public function test_cabeceras_sin_moneda_referencia(): void
+    {
+        $cols = MayorPlanoCuentaClasificadoExportSupport::cabeceras([
+            'mostrar_columna_centrocosto' => false,
+            'mostrar_columna_moneda_referencia' => false,
+            'empresa_ids' => [1],
+            'consolidar_empresas' => true,
+        ]);
+
+        $this->assertNotContains('Mon. Ref.', $cols);
+        $this->assertSame('Debe', $cols[11]);
+        $this->assertSame('Haber', $cols[12]);
+        $this->assertCount(15, $cols);
+    }
 }

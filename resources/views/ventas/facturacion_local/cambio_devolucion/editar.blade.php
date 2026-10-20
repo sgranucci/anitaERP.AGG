@@ -4,13 +4,28 @@
 @endsection
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cuentacaja/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/facturacion_local/cambio_devolucion_opp.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/facturacion_local/cambio_devolucion_opp.js')) ?: time() }}" type="text/javascript"></script>
 @include('ventas.facturacion_local.cambio_devolucion.partials.scripts_form', ['editable' => $editable ?? false])
+@if (session('abrir_pdf_opp'))
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    window.open(@json(session('abrir_pdf_opp')), '_blank', 'noopener');
+});
+</script>
+@endif
 @endsection
 
 @php
     use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceEstadosSupport;
+    use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceLiquidacionSupport;
     $estado = (string) $data->estado;
     $puedeActualizar = $editable && can('actualizar-cambio-devolucion-marketplace-facturacion-local', false);
+    $puedeCerrarOpp = $estado === CambioDevolucionMarketplaceEstadosSupport::PENDIENTE_COMPENSACION
+        && (string) $data->diferencia_sentido === CambioDevolucionMarketplaceLiquidacionSupport::SENTIDO_FERLI_ACREDITA
+        && (float) $data->diferencia_importe >= 0.01
+        && (int) ($data->caja_movimiento_id ?? 0) <= 0
+        && can('registrar-compensacion-cambio-devolucion-marketplace-facturacion-local', false);
 @endphp
 
 @section('contenido')
@@ -59,12 +74,20 @@
                     </form>
                 @endif
 
-                @if ($estado === CambioDevolucionMarketplaceEstadosSupport::ABIERTO && can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
-                    <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1"
-                          onsubmit="return confirm('¿Emitir FAC de reemplazo con medio puente NCD? Debe haber turno abierto en el local.');">
-                        @csrf
-                        <button type="submit" class="btn btn-warning">Emitir FAC reemplazo (NCD)</button>
-                    </form>
+                @if ($estado === CambioDevolucionMarketplaceEstadosSupport::ABIERTO)
+                    @if (!empty($esSoloDevolucion) && can('actualizar-cambio-devolucion-marketplace-facturacion-local', false))
+                        <form method="POST" action="{{ route('continuar_solo_devolucion_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1"
+                              onsubmit="return confirm('¿Continuar como solo devolución (reembolso), sin emitir factura de reemplazo?');">
+                            @csrf
+                            <button type="submit" class="btn btn-info">Continuar sin reemplazo (reembolso)</button>
+                        </form>
+                    @elseif (can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
+                        <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1"
+                              onsubmit="return confirm('¿Emitir FAC de reemplazo con medio puente NCD? Debe haber turno abierto en el local.');">
+                            @csrf
+                            <button type="submit" class="btn btn-warning">Emitir FAC reemplazo (NCD)</button>
+                        </form>
+                    @endif
                 @endif
 
                 @if ($estado === CambioDevolucionMarketplaceEstadosSupport::AGUARDANDO_RECEPCION && can('registrar-recepcion-cambio-devolucion-marketplace-facturacion-local', false))
@@ -89,13 +112,26 @@
                     </form>
                 @endif
 
+                @if ($puedeCerrarOpp)
+                    <button type="button" class="btn btn-success btn-sm mr-2 mb-1" data-toggle="modal" data-target="#modal-cdm-cerrar-opp">
+                        <i class="fa fa-money"></i> Cerrar con OPP (reembolso)
+                    </button>
+                @endif
+
                 @if ($estado === CambioDevolucionMarketplaceEstadosSupport::PENDIENTE_COMPENSACION && can('registrar-compensacion-cambio-devolucion-marketplace-facturacion-local', false))
                     <form method="POST" action="{{ route('registrar_compensacion_cambio_devolucion_marketplace', $data->id) }}" class="form-inline mr-2 mb-1">
                         @csrf
                         <input type="text" name="compensacion_observacion" class="form-control form-control-sm mr-1" required
                                placeholder="Cómo se compensó (medio, importe…)" style="min-width:260px">
-                        <button type="submit" class="btn btn-success btn-sm">Cerrar con compensación</button>
+                        <button type="submit" class="btn btn-outline-success btn-sm">Cerrar con compensación</button>
                     </form>
+                @endif
+
+                @if ((int) ($data->caja_movimiento_id ?? 0) > 0)
+                    <a href="{{ route('imprimir_opp_cambio_devolucion_marketplace', $data->id) }}"
+                       class="btn btn-outline-primary btn-sm mr-2 mb-1" target="_blank" rel="noopener">
+                        <i class="fa fa-file-pdf-o"></i> PDF OPP
+                    </a>
                 @endif
 
                 @if (in_array($estado, [
@@ -115,4 +151,59 @@
         </div>
     </div>
 </div>
+
+@if ($puedeCerrarOpp)
+<div class="modal fade" id="modal-cdm-cerrar-opp" tabindex="-1" role="dialog" aria-labelledby="modal-cdm-cerrar-opp-label" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <form method="POST" action="{{ route('cerrar_con_opp_cambio_devolucion_marketplace', $data->id) }}" id="form-cdm-cerrar-opp">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-cdm-cerrar-opp-label">Cerrar legajo con OPP (reembolso)</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">
+                        Se emite una <strong>OPP sin proveedor</strong> por
+                        <strong>$ {{ number_format((float) $data->diferencia_importe, 2, ',', '.') }}</strong>
+                        (Ferli acredita), contra el puente NCD y el medio de pago elegido.
+                        Al finalizar se cierra el legajo y se abre el PDF.
+                    </p>
+                    @include('caja.partials.campo_consulta_cuentacaja', [
+                        'prefix' => 'cdm_opp_medio',
+                        'layout' => 'form_row',
+                        'label' => 'Medio de pago',
+                        'inputName' => 'cuentacaja_id',
+                        'inputId' => 'cdm_opp_cuentacaja_id',
+                        'cuentacajaId' => '',
+                        'codigo' => '',
+                        'nombre' => '',
+                        'required' => true,
+                        'mostrar_editar' => false,
+                        'col_label' => 'col-lg-3 col-form-label',
+                        'col_input' => 'col-lg-9',
+                        'ayuda' => 'Cuenta de caja distinta al puente NCD (Aplicación de crédito local).',
+                    ])
+                    <div class="form-group row">
+                        <label for="cdm_opp_detalle_extra" class="col-lg-3 col-form-label">Detalle extra</label>
+                        <div class="col-lg-9">
+                            <input type="text" name="detalle_extra" id="cdm_opp_detalle_extra" class="form-control"
+                                   maxlength="120" placeholder="Opcional (ej. transferencia, efectivo…)">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success" id="btn-cdm-cerrar-opp-submit">
+                        Emitir OPP y cerrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@include('includes.caja.modalconsultacuentacaja')
+@endif
 @endsection

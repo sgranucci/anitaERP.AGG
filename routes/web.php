@@ -884,9 +884,12 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::put('ventas/facturacion-local/cambios-devolucion/{id}', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@actualizar')->name('actualizar_cambio_devolucion_marketplace');
     Route::post('ventas/facturacion-local/cambios-devolucion/{id}/confirmar', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@confirmar')->name('confirmar_cambio_devolucion_marketplace');
     Route::post('ventas/facturacion-local/cambios-devolucion/{id}/emitir-fac', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@emitirFac')->name('emitir_fac_cambio_devolucion_marketplace');
+    Route::post('ventas/facturacion-local/cambios-devolucion/{id}/continuar-solo-devolucion', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@continuarSoloDevolucion')->name('continuar_solo_devolucion_cambio_devolucion_marketplace');
     Route::post('ventas/facturacion-local/cambios-devolucion/{id}/registrar-recepcion', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@registrarRecepcion')->name('registrar_recepcion_cambio_devolucion_marketplace');
     Route::post('ventas/facturacion-local/cambios-devolucion/{id}/emitir-nc', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@emitirNc')->name('emitir_nc_cambio_devolucion_marketplace');
     Route::post('ventas/facturacion-local/cambios-devolucion/{id}/registrar-compensacion', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@registrarCompensacion')->name('registrar_compensacion_cambio_devolucion_marketplace');
+    Route::post('ventas/facturacion-local/cambios-devolucion/{id}/cerrar-con-opp', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@cerrarConOpp')->name('cerrar_con_opp_cambio_devolucion_marketplace');
+    Route::get('ventas/facturacion-local/cambios-devolucion/{id}/imprimir-opp', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@imprimirOpp')->name('imprimir_opp_cambio_devolucion_marketplace');
     Route::post('ventas/facturacion-local/cambios-devolucion/{id}/anular', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@anular')->name('anular_cambio_devolucion_marketplace');
     Route::get('ventas/facturacion-local/cambios-devolucion/{id}/archivo/{archivoId}', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@descargarArchivo')->name('descargar_archivo_cambio_devolucion_marketplace');
 

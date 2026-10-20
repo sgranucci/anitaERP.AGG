@@ -9,6 +9,7 @@ use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorExtraccio
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorMonedaOcrSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorNombreArchivoParserSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorNumeroComprobanteSupport;
+use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorOcrCopiasAfipSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorOllamaStructurerSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorPieTotalesSupport;
 use App\Support\Stock\RecepcionProveedorOcr\RecepcionProveedorOcrTextoExtractor;
@@ -44,6 +45,8 @@ final class ComprobanteProveedorPdfIaPipelineService
 
         try {
             $textoOcr = $this->extraerTexto($rutaAbsoluta, (string) $pdf->getMimeType());
+            // ORIGINAL/DUPLICADO/TRIPLICADO: una sola copia (si no, neto/IVA se triplican).
+            $textoOcr = FacturaProveedorOcrCopiasAfipSupport::quedarseConPrimeraCopia($textoOcr);
             $chars = mb_strlen(trim($textoOcr));
 
             if ($chars < (int) config('comprobante_proveedor_pdf_ia.ocr.min_chars', 30)) {
@@ -67,9 +70,22 @@ final class ComprobanteProveedorPdfIaPipelineService
                 'articulos' => $this->articulosHeuristica->extraer($textoOcr),
             ]);
 
+            // Si el pie AFIP cierra contra el total, Ollama no aporta y en CPU tarda minutos.
             $ollama = null;
-            if (config('comprobante_proveedor_pdf_ia.ollama.habilitado', true)) {
+            $pieCierra = $this->pieCierraContraTotal($pie);
+            $ollamaHabilitado = (bool) config('comprobante_proveedor_pdf_ia.ollama.habilitado', true);
+            $soloSiIncompleta = (bool) config(
+                'comprobante_proveedor_pdf_ia.ollama.solo_si_heuristica_incompleta',
+                true
+            );
+            if ($ollamaHabilitado && (! $soloSiIncompleta || ! $pieCierra)) {
                 $ollama = $this->ollamaStructurer->estructurar($textoOcr, $heuristica);
+            } elseif ($pieCierra) {
+                Log::channel($this->logChannel())->info('pdf_ia.ollama_omitido_pie_coherente', [
+                    'total' => $pie['total'] ?? null,
+                    'origen' => $pie['origen'] ?? null,
+                    'lineas' => count($pie['lineas'] ?? []),
+                ]);
             }
 
             $resultado = $this->fusion->fusionar($heuristica, $ollama);
@@ -439,6 +455,27 @@ final class ComprobanteProveedorPdfIaPipelineService
         }
 
         return $data;
+    }
+
+    /**
+     * Pie usable: hay total y la suma de líneas (neto+IVA+percs) cierra.
+     *
+     * @param  array<string, mixed>  $pie
+     */
+    private function pieCierraContraTotal(array $pie): bool
+    {
+        $total = (float) ($pie['total'] ?? 0);
+        $lineas = is_array($pie['lineas'] ?? null) ? $pie['lineas'] : [];
+        if ($total <= 0 || $lineas === []) {
+            return false;
+        }
+
+        $suma = round(array_sum(array_map(
+            static fn ($l): float => abs((float) (is_array($l) ? ($l['importe'] ?? 0) : 0)),
+            $lineas
+        )), 2);
+
+        return abs($suma - $total) <= 0.05;
     }
 
     private function extraerTexto(string $rutaAbsoluta, string $mime): string

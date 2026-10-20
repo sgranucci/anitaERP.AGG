@@ -31,21 +31,20 @@
 	}
 
     $(function () {
-        $("#cliente_id").change(function(){
-            var cliente_id = $(this).val();
-            completarCliente_Entrega(cliente_id);
-            asignaDatosCliente(cliente_id, true);
-            setTimeout(() => {
-                muestraTipoSuspension();			
-            }, 1500);
-        });
-
 		$("#divlugar").show();
 		$("#divcodigoentrega").hide();
 
         var cliente_id = $("#cliente_id").val();
-		if (cliente_id > 0)
+		if (cliente_id > 0) {
         	completarCliente_Entrega(cliente_id);
+			asignaDatosCliente(cliente_id, false);
+			setTimeout(function () {
+				muestraTipoSuspension();
+			}, 1000);
+		}
+		setTimeout(function () {
+			$('#codigocliente').trigger('focus');
+		}, 0);
 	  });
 
 </script>

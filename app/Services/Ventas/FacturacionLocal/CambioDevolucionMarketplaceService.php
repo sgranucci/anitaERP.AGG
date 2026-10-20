@@ -105,8 +105,8 @@ final class CambioDevolucionMarketplaceService
     {
         $this->assertTransicion($cambio, CambioDevolucionMarketplaceEstadosSupport::ABIERTO);
         $cambio->loadMissing('lineas');
-        if ($cambio->lineas->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)->isEmpty()) {
-            throw new InvalidArgumentException('Debe cargar al menos una línea de reemplazo antes de confirmar.');
+        if ($cambio->lineas->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER)->isEmpty()) {
+            throw new InvalidArgumentException('Debe cargar al menos una línea «A devolver» antes de confirmar.');
         }
         if ((int) $cambio->venta_original_id <= 0) {
             throw new InvalidArgumentException('Debe indicar la factura original.');
@@ -115,9 +115,43 @@ final class CambioDevolucionMarketplaceService
             throw new InvalidArgumentException('Elegí un motivo de devolución activo.');
         }
 
+        $soloDevolucion = CambioDevolucionMarketplaceCatalogoSupport::esSoloDevolucion($cambio->lineas);
         $cambio->estado = CambioDevolucionMarketplaceEstadosSupport::ABIERTO;
         $cambio->save();
-        $this->registrarEstado($cambio, CambioDevolucionMarketplaceEstadosSupport::ABIERTO, 'Legajo confirmado');
+        $this->registrarEstado(
+            $cambio,
+            CambioDevolucionMarketplaceEstadosSupport::ABIERTO,
+            $soloDevolucion
+                ? 'Legajo confirmado (solo devolución / reembolso)'
+                : 'Legajo confirmado (cambio con reemplazo)'
+        );
+
+        return $cambio->fresh();
+    }
+
+    /**
+     * Solo devolución: saltea la FAC de reemplazo y pasa a aguardar la mercadería a devolver.
+     */
+    public function continuarSoloDevolucion(CambioDevolucionMarketplace $cambio): CambioDevolucionMarketplace
+    {
+        $this->assertTransicion($cambio, CambioDevolucionMarketplaceEstadosSupport::AGUARDANDO_RECEPCION);
+        $cambio->loadMissing('lineas');
+        if (! CambioDevolucionMarketplaceCatalogoSupport::esSoloDevolucion($cambio->lineas)) {
+            throw new InvalidArgumentException(
+                'Este legajo tiene líneas de reemplazo. Emití la FAC de reemplazo o quitá esas líneas.'
+            );
+        }
+        if ($cambio->lineas->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER)->isEmpty()) {
+            throw new InvalidArgumentException('Debe haber al menos una línea «A devolver».');
+        }
+
+        $cambio->estado = CambioDevolucionMarketplaceEstadosSupport::AGUARDANDO_RECEPCION;
+        $cambio->save();
+        $this->registrarEstado(
+            $cambio,
+            CambioDevolucionMarketplaceEstadosSupport::AGUARDANDO_RECEPCION,
+            'Solo devolución: aguardando recepción (sin FAC de reemplazo)'
+        );
 
         return $cambio->fresh();
     }
@@ -128,6 +162,12 @@ final class CambioDevolucionMarketplaceService
     public function emitirFacReemplazo(CambioDevolucionMarketplace $cambio): array
     {
         $this->assertTransicion($cambio, CambioDevolucionMarketplaceEstadosSupport::FACTURA_REEMPLAZO);
+        $cambio->loadMissing('lineas');
+        if ($cambio->lineas->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)->isEmpty()) {
+            throw new InvalidArgumentException(
+                'No hay líneas de reemplazo. Si es solo devolución, usá «Continuar sin reemplazo».'
+            );
+        }
         $resultado = $this->emisionService->emitirFacReemplazo($cambio);
         if (empty($resultado['ok'])) {
             return $resultado;

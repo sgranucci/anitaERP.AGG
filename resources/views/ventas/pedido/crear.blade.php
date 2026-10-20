@@ -89,6 +89,10 @@
         var cliente_id = $("#cliente_id").val();
 		if (cliente_id > 0)
         	completarCliente_Entrega(cliente_id, false);
+
+		setTimeout(function () {
+			$('#codigocliente').trigger('focus');
+		}, 0);
 	  });
 
 </script>

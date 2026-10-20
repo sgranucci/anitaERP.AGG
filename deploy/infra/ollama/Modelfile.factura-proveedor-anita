@@ -3,7 +3,7 @@
 FROM qwen2.5:3b-instruct
 
 PARAMETER temperature 0.05
-PARAMETER num_predict 4096
+PARAMETER num_predict 768
 PARAMETER top_p 0.9
 PARAMETER repeat_penalty 1.1
 

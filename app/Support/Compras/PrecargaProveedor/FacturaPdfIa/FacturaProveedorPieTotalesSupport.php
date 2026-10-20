@@ -18,6 +18,9 @@ final class FacturaProveedorPieTotalesSupport
     /** Números de resoluciones frecuentes: no son montos. */
     private const NUMEROS_RG = [5329, 3337, 2408, 2126];
 
+    /** Rótulos de percepción IVA (incluye «Percepción de IVA» / Perc. IVA RG3337). */
+    private const PATRON_PERCEPCION_IVA = '/per\.?\s*(?:de\s+)?[il1]\.?\s*v[,.\s]*a|rg\s*(?:5329|3337)|percep(?:ci[oó]n)?\s+(?:de\s+)?(?:iva|i\.?\s*v\.?\s*a)/iu';
+
     public function __construct(
         private FacturaProveedorImporteParserSupport $importeParser,
     ) {}
@@ -433,7 +436,7 @@ final class FacturaProveedorPieTotalesSupport
             'subtotal' => '/(?:sub\s*totals?\s*\d*|neto(?:\s+gravado)?)\b/iu',
             'iva' => '/\b[il1]\.?\s*v\.?\s*a\.?v?(?:\s*inscripto)?\b/iu',
             'impuestos_internos' => '/imp(?:uestos?)?\s*\.?\s*int(?:ernos)?\b/iu',
-            'percepcion_iva' => '/(?:per\.?\s*[il1]\.?\s*v[,.\s]*a\.?|rg\s*5329|percepcion\s+iva)\b/iu',
+            'percepcion_iva' => self::PATRON_PERCEPCION_IVA,
             'percepcion_iibb' => '/per\.?\s*[il1]+\.?\s*b+\.?|percepcion\s+iibb|percep\s*ii\.?\s*bb/iu',
             default => null,
         };
@@ -508,7 +511,7 @@ final class FacturaProveedorPieTotalesSupport
         if (preg_match('/per\.?\s*[il1]+\.?\s*b{1,2}|percepcion\s+iibb|percep\s*ii\.?\s*bb/iu', $l)) {
             return 'percepcion_iibb';
         }
-        if (preg_match('/per\.?\s*[il1]\.?\s*v[,.\s]*a|rg\s*5329|percepcion\s+iva/iu', $l)) {
+        if (preg_match(self::PATRON_PERCEPCION_IVA, $l)) {
             return 'percepcion_iva';
         }
         // Imp. Int no debe “robar” el monto de Per.IVA en la línea siguiente.

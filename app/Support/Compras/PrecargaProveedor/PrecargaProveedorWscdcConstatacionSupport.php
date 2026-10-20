@@ -51,6 +51,18 @@ final class PrecargaProveedorWscdcConstatacionSupport
 
         try {
             $respuesta = $this->wscdcService->comprobanteConstatar($cmpReq);
+            $recuperado = $this->recuperarPvNumeroSiArcaRechaza($cmpReq, $respuesta, $extraido);
+            if ($recuperado !== null) {
+                $cmpReq = $recuperado['cmp_req'];
+                $respuesta = $recuperado['respuesta'];
+                $resuelto['sucursal'] = (int) $cmpReq['pto_vta'];
+                $resuelto['numero_factura'] = (int) $cmpReq['cbte_nro'];
+                $resuelto['advertencias'] = $this->agregarAdvertencia(
+                    $resuelto['advertencias'] ?? [],
+                    'ARCA validó PV '.$cmpReq['pto_vta'].' / nro '.$cmpReq['cbte_nro']
+                    .' (el OCR había leído otros valores; se corrigió con el nombre del archivo / reintento).'
+                );
+            }
         } catch (Throwable $e) {
             Log::channel(config('comprobante_proveedor_pdf_ia.log_channel', 'stack'))
                 ->warning('WSCDC precarga: fallo de constatación', [
@@ -188,6 +200,16 @@ final class PrecargaProveedorWscdcConstatacionSupport
 
         if ($resultado === 'R') {
             $discrepancias[] = 'ARCA rechazó la constatación del comprobante.';
+            foreach ($respuesta['observaciones'] ?? [] as $obs) {
+                if (! is_array($obs)) {
+                    continue;
+                }
+                $code = $obs['code'] ?? '?';
+                $msg = trim((string) ($obs['msg'] ?? ''));
+                if ($msg !== '') {
+                    $discrepancias[] = '[ARCA '.$code.'] '.$msg;
+                }
+            }
         }
 
         $totalIa = round((float) ($extraido['total'] ?? $resuelto['total'] ?? 0), 2);
@@ -279,6 +301,83 @@ final class PrecargaProveedorWscdcConstatacionSupport
     {
         return filter_var(config('arca_wscdc.habilitado', true), FILTER_VALIDATE_BOOLEAN)
             && filter_var(config('arca_wscdc.precarga.habilitado', true), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Si ARCA responde 104/105 (PV o número no matchean el CAE), reintenta con el nro del
+     * nombre de archivo y otros puntos de venta acotados.
+     *
+     * @param  array<string, mixed>  $cmpReq
+     * @param  array<string, mixed>  $respuesta
+     * @param  array<string, mixed>  $extraido
+     * @return array{cmp_req: array<string, mixed>, respuesta: array<string, mixed>}|null
+     */
+    private function recuperarPvNumeroSiArcaRechaza(array $cmpReq, array $respuesta, array $extraido): ?array
+    {
+        if (strtoupper((string) ($respuesta['resultado'] ?? '')) !== 'R') {
+            return null;
+        }
+
+        $codes = [];
+        foreach ($respuesta['observaciones'] ?? [] as $obs) {
+            if (is_array($obs) && isset($obs['code'])) {
+                $codes[] = (int) $obs['code'];
+            }
+        }
+        if (! in_array(104, $codes, true) && ! in_array(105, $codes, true)) {
+            return null;
+        }
+
+        $nroActual = (int) ($cmpReq['cbte_nro'] ?? 0);
+        $pvActual = (int) ($cmpReq['pto_vta'] ?? 0);
+        $numeros = [$nroActual];
+        $archivo = is_array($extraido['_archivo'] ?? null) ? $extraido['_archivo'] : [];
+        $nroArchivo = (int) ($archivo['numero_factura'] ?? 0);
+        if ($nroArchivo > 0) {
+            array_unshift($numeros, $nroArchivo);
+        }
+        $numeros = array_values(array_unique(array_filter($numeros, static fn (int $n): bool => $n > 0)));
+
+        $puntosVenta = range(1, 12);
+        if ($pvActual > 12) {
+            $puntosVenta[] = $pvActual;
+        }
+
+        $intentos = 0;
+        $maxIntentos = 24;
+        foreach ($numeros as $nro) {
+            foreach ($puntosVenta as $pv) {
+                if ($nro === $nroActual && $pv === $pvActual) {
+                    continue;
+                }
+                if ($intentos >= $maxIntentos) {
+                    break 2;
+                }
+                $intentos++;
+                $intento = $cmpReq;
+                $intento['pto_vta'] = $pv;
+                $intento['cbte_nro'] = $nro;
+                try {
+                    $resp = $this->wscdcService->comprobanteConstatar($intento);
+                } catch (Throwable) {
+                    continue;
+                }
+                if (strtoupper((string) ($resp['resultado'] ?? '')) === 'A') {
+                    Log::channel(config('comprobante_proveedor_pdf_ia.log_channel', 'stack'))
+                        ->info('WSCDC precarga: recuperó PV/número tras rechazo 104/105', [
+                            'pv_original' => $pvActual,
+                            'nro_original' => $nroActual,
+                            'pv' => $pv,
+                            'nro' => $nro,
+                            'intentos' => $intentos,
+                        ]);
+
+                    return ['cmp_req' => $intento, 'respuesta' => $resp];
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

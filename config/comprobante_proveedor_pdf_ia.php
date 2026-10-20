@@ -19,6 +19,11 @@ return [
 
     'ollama' => [
         'habilitado' => filter_var(env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        // Si el pie AFIP cierra (neto+IVA+percs ≈ total), no llamar al modelo (rápido en CPU).
+        'solo_si_heuristica_incompleta' => filter_var(
+            env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_SOLO_SI_INCOMPLETA', true),
+            FILTER_VALIDATE_BOOLEAN
+        ),
         'url' => env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_URL', 'http://127.0.0.1:11434'),
         'model' => env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_MODEL', 'factura-proveedor-anita'),
         'timeout' => (int) env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_TIMEOUT', 180),

@@ -30,6 +30,32 @@ final class CambioDevolucionMarketplaceCatalogoSupport
         self::TIPO_REEMPLAZO => 'Reemplazo',
     ];
 
+    /**
+     * @param  iterable<mixed>  $lineas  Filas con atributo/clave tipo
+     */
+    public static function tieneLineasTipo(iterable $lineas, string $tipo): bool
+    {
+        foreach ($lineas as $linea) {
+            $valor = is_array($linea) ? ($linea['tipo'] ?? '') : ($linea->tipo ?? '');
+            if ((string) $valor === $tipo) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Solo devolución/reembolso: hay líneas a devolver y ninguna de reemplazo.
+     *
+     * @param  iterable<mixed>  $lineas
+     */
+    public static function esSoloDevolucion(iterable $lineas): bool
+    {
+        return self::tieneLineasTipo($lineas, self::TIPO_DEVOLVER)
+            && ! self::tieneLineasTipo($lineas, self::TIPO_REEMPLAZO);
+    }
+
     /** @var array<string, string> */
     public const MOTIVOS = [
         'cambio_talle' => 'Cambio de talle',

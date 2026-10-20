@@ -77,9 +77,46 @@
         return 'El cliente no puede realizar esta operación (' + etiqueta + ').';
     }
 
-    function setActual(payload) {
+    /** Evita repetir el mismo cartel si setActual corre dos veces (init + leercliente). */
+    var ultimoMensajeAvisado = null;
+
+    /**
+     * Aviso informativo al cargar el cliente en pedido (no corta la carga).
+     * Solo topes posteriores al pedido: moroso (boleta) / proforma (factura).
+     * Si no permite pedido, el rechazo lo maneja consulta.js (sin duplicar cartel).
+     */
+    function mensajeAvisoCarga(payload) {
+        var p = payload || payloadActual();
+        if (!p || !p.mensajes || p.mensajes.pedido) {
+            return null;
+        }
+        return p.mensajes.boleta || p.mensajes.factura || null;
+    }
+
+    function avisarRestricciones(payload) {
+        var msg = mensajeAvisoCarga(payload);
+        if (!msg) {
+            ultimoMensajeAvisado = null;
+            return false;
+        }
+        if (msg === ultimoMensajeAvisado) {
+            return false;
+        }
+        ultimoMensajeAvisado = msg;
+        // Diferir: no bloquear pintura del banner ni el cierre del modal de consulta.
+        setTimeout(function () {
+            alert(msg);
+        }, 0);
+        return true;
+    }
+
+    function setActual(payload, opciones) {
         window.__clientePoliticaActual = payload && payload.politica ? payload : payloadVacio();
         pintarBanner();
+        var avisar = !opciones || opciones.avisar !== false;
+        if (avisar && contextoActual() === 'pedido') {
+            avisarRestricciones(window.__clientePoliticaActual);
+        }
         return window.__clientePoliticaActual;
     }
 
@@ -119,6 +156,8 @@
         normalizarOperacion: normalizarOperacion,
         permiteOperacion: permiteOperacion,
         mensaje: mensaje,
+        mensajeAvisoCarga: mensajeAvisoCarga,
+        avisarRestricciones: avisarRestricciones,
         setActual: setActual,
         payloadActual: payloadActual,
         pintarBanner: pintarBanner

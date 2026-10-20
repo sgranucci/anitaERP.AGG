@@ -25,6 +25,10 @@ Pasar `contexto` (`pedido` / `boleta` / `factura` / `cobranza` / `consultar`). V
 
 No usar `scopeActivos()` para elegir cliente en un proceso. Cobranza lista a todos (incluido bloqueado).
 
+## Aviso al cargar cliente en pedido
+
+En contexto `pedido`, `clientePoliticaComercial.setActual()` muestra el mismo cartel (motivo + leyenda) que al tildar ítem para facturar cuando hay tope **posterior** al pedido (`mensajes.boleta` o `mensajes.factura`: moroso / proforma). No avisa si `mensajes.pedido` (bloqueado: lo corta `consulta.js`). Banner bajo el cliente sigue aparte. Deduplica si `setActual` corre dos veces (init + `leercliente`).
+
 ## Backend
 
 ```php

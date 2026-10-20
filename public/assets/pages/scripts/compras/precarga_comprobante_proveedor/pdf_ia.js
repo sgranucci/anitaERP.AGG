@@ -263,9 +263,29 @@ $(function () {
             if (res.pararevisar) {
                 constHtml += ' — <span class="font-weight-bold">Precarga con errores (para revisar)</span>';
             }
+            var detalleConst = [];
             if (constArca.discrepancias && constArca.discrepancias.length) {
+                constArca.discrepancias.forEach(function (d) { detalleConst.push(d); });
+            }
+            if (constArca.observaciones && constArca.observaciones.length) {
+                constArca.observaciones.forEach(function (o) {
+                    var txt = (o && o.msg) ? ('[ARCA ' + (o.code || '?') + '] ' + o.msg) : String(o || '');
+                    if (txt && detalleConst.indexOf(txt) === -1) {
+                        detalleConst.push(txt);
+                    }
+                });
+            }
+            if (constArca.errores && constArca.errores.length) {
+                constArca.errores.forEach(function (o) {
+                    var txt = (o && o.msg) ? ('[ARCA error ' + (o.code || '?') + '] ' + o.msg) : String(o || '');
+                    if (txt && detalleConst.indexOf(txt) === -1) {
+                        detalleConst.push(txt);
+                    }
+                });
+            }
+            if (detalleConst.length) {
                 constHtml += '<ul class="mb-0 pl-3 mt-1">';
-                constArca.discrepancias.forEach(function (d) {
+                detalleConst.forEach(function (d) {
                     constHtml += '<li>' + $('<div>').text(d).html() + '</li>';
                 });
                 constHtml += '</ul>';

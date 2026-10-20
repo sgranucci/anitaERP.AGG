@@ -83,11 +83,12 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             if ($tipoConcepto === '0' || $tipoConcepto === '') {
                 continue;
             }
-            if (! $this->tipoConceptoCompatibleConLinea($tipoLinea, $tipoConcepto)) {
+            $nombre = $this->normalizar((string) ($candidato['nombre'] ?? ''));
+            $codigo = (string) ($candidato['id_concepto'] ?? $candidato['codigo'] ?? '');
+            if (! $this->tipoConceptoCompatibleConLinea($tipoLinea, $tipoConcepto, $nombre, $codigo)) {
                 continue;
             }
 
-            $nombre = $this->normalizar((string) ($candidato['nombre'] ?? ''));
             $aliases = $this->aliasesDescripcionIa((string) ($candidato['descripcion_ai'] ?? ''));
             if ($nombre !== '') {
                 $aliases[] = $nombre;
@@ -95,7 +96,8 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             $aliases = array_values(array_unique(array_filter($aliases)));
 
             $score = $this->mejorScoreAlias($descLinea, $aliases);
-            $score += $this->scorePorTipoLinea($tipoLinea, $tipoConcepto);
+            $score += $this->scorePorTipoLinea($tipoLinea, $tipoConcepto, $nombre);
+            $score += $this->scoreNombreParaLinea($tipoLinea, $nombre, $descLinea);
 
             if (str_contains($descLinea, 'exent') && $tipoConcepto === 'E') {
                 $score += 40;
@@ -210,7 +212,7 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
         ], true);
     }
 
-    private function scorePorTipoLinea(string $tipoLinea, string $tipoConcepto): int
+    private function scorePorTipoLinea(string $tipoLinea, string $tipoConcepto, string $nombre = ''): int
     {
         $mapa = [
             // Primero los tipos específicos: "percepcion_iva" también contiene "iva".
@@ -234,6 +236,13 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             }
         }
 
+        // Ferli/Anita: tipoconcepto N genérico — bonificar por nombre de percepción.
+        if ((str_contains($tipoLinea, 'percepcion_iva') || str_contains($tipoLinea, 'otro_tributo'))
+            && $tipoConcepto === 'N'
+            && $this->nombreSugierePercepcionIva($nombre)) {
+            return 50;
+        }
+
         if (str_contains($tipoLinea, 'percepc') && in_array($tipoConcepto, ['P', 'B'], true)) {
             return 30;
         }
@@ -241,18 +250,88 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
         return 0;
     }
 
+    private function scoreNombreParaLinea(string $tipoLinea, string $nombre, string $descLinea): int
+    {
+        if ($nombre === '') {
+            return 0;
+        }
+
+        // Nunca asignar «RESP. MONOTRIBUTO» a percepción / otros tributos AFIP.
+        if (str_contains($nombre, 'monotribut')) {
+            if (str_contains($tipoLinea, 'percepcion')
+                || str_contains($tipoLinea, 'otro_tributo')
+                || str_contains($descLinea, 'percep')
+                || str_contains($descLinea, 'tributo')
+                || str_contains($descLinea, 'rg ')) {
+                return -80;
+            }
+        }
+
+        if ((str_contains($tipoLinea, 'percepcion_iva') || str_contains($tipoLinea, 'otro_tributo'))
+            && $this->nombreSugierePercepcionIva($nombre)) {
+            return 70;
+        }
+
+        if (str_contains($tipoLinea, 'iva') && ! str_contains($tipoLinea, 'percepcion')
+            && preg_match('/\biva\b/u', $nombre) && ! str_contains($nombre, 'percep')) {
+            return 25;
+        }
+
+        if ((str_contains($tipoLinea, 'neto') || str_contains($tipoLinea, 'subtotal'))
+            && preg_match('/\bcompras?\b|\bgravado\b/u', $nombre)) {
+            return 25;
+        }
+
+        return 0;
+    }
+
+    private function nombreSugierePercepcionIva(string $nombre): bool
+    {
+        if ($nombre === '') {
+            return false;
+        }
+        if (str_contains($nombre, 'iibb') || str_contains($nombre, 'ibr') || str_contains($nombre, 'sircreb')) {
+            return false;
+        }
+
+        return (bool) preg_match('/percep.*iva|iva.*percep|rg\s*5329|rg\s*3337/u', $nombre);
+    }
+
     /**
      * Las percepciones detectadas explícitamente no pueden degradar a otro tipo
      * por similitud de nombre o por falta de un candidato con buen puntaje.
      */
-    private function tipoConceptoCompatibleConLinea(string $tipoLinea, string $tipoConcepto): bool
-    {
+    private function tipoConceptoCompatibleConLinea(
+        string $tipoLinea,
+        string $tipoConcepto,
+        string $nombre = '',
+        string $codigo = '',
+    ): bool {
         if (str_contains($tipoLinea, 'percepcion_iibb')) {
-            return $tipoConcepto === ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IIBB;
+            return $tipoConcepto === ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IIBB
+                || ($tipoConcepto === 'N' && (bool) preg_match('/iibb|ibr|sircreb|arba|agip/u', $nombre));
         }
 
         if (str_contains($tipoLinea, 'percepcion_iva')) {
-            return $tipoConcepto === ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IVA;
+            if ($tipoConcepto === ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IVA) {
+                return true;
+            }
+            // Código Anita 103 / nombre «Percepcion IVA» aunque el maestro diga N.
+            if ($tipoConcepto === 'N' && ($codigo === '103' || $this->nombreSugierePercepcionIva($nombre))) {
+                return true;
+            }
+
+            return false;
+        }
+
+        // Monotributo no compite por neto/IVA/percepción.
+        if (str_contains($nombre, 'monotribut')
+            && (str_contains($tipoLinea, 'neto')
+                || str_contains($tipoLinea, 'iva')
+                || str_contains($tipoLinea, 'percepcion')
+                || str_contains($tipoLinea, 'otro_tributo')
+                || str_contains($tipoLinea, 'subtotal'))) {
+            return false;
         }
 
         return true;

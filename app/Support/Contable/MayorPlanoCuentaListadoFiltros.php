@@ -109,6 +109,9 @@ class MayorPlanoCuentaListadoFiltros
             'mostrar_columna_centrocosto' => $request->has('mostrar_columna_centrocosto')
                 ? $request->boolean('mostrar_columna_centrocosto')
                 : true,
+            'mostrar_columna_moneda_referencia' => $request->has('mostrar_columna_moneda_referencia')
+                ? $request->boolean('mostrar_columna_moneda_referencia')
+                : true,
             'mostrar_titulo_cuenta' => $request->has('mostrar_titulo_cuenta')
                 ? $request->boolean('mostrar_titulo_cuenta')
                 : true,
@@ -177,6 +180,11 @@ class MayorPlanoCuentaListadoFiltros
     public static function mostrarColumnaCentrocosto(array $filtros): bool
     {
         return ($filtros['mostrar_columna_centrocosto'] ?? true) !== false;
+    }
+
+    public static function mostrarColumnaMonedaReferencia(array $filtros): bool
+    {
+        return ($filtros['mostrar_columna_moneda_referencia'] ?? true) !== false;
     }
 
     public static function mostrarTituloCuenta(array $filtros): bool
@@ -425,6 +433,7 @@ class MayorPlanoCuentaListadoFiltros
         }
 
         $out['mostrar_columna_centrocosto'] = self::mostrarColumnaCentrocosto($filtros) ? 1 : 0;
+        $out['mostrar_columna_moneda_referencia'] = self::mostrarColumnaMonedaReferencia($filtros) ? 1 : 0;
         $out['mostrar_titulo_cuenta'] = self::mostrarTituloCuenta($filtros) ? 1 : 0;
         $out['titulo_cuenta_combinado'] = self::tituloCuentaCombinado($filtros) ? 1 : 0;
 
@@ -447,6 +456,7 @@ class MayorPlanoCuentaListadoFiltros
             $base['filtro_operador'],
             $base['excel_solapas_separadas'],
             $base['mostrar_columna_centrocosto'],
+            $base['mostrar_columna_moneda_referencia'],
             $base['mostrar_titulo_cuenta'],
             $base['titulo_cuenta_combinado'],
             // La presentación no cambia el cálculo: totales y detalle salen del mismo cache.

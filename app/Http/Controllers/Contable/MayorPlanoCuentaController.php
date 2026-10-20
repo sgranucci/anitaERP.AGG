@@ -71,6 +71,11 @@ class MayorPlanoCuentaController extends Controller
             );
             ReportePreferenciasUsuario::persistirBool(
                 self::PREFERENCIAS_CLAVE,
+                'mostrar_columna_moneda_referencia',
+                MayorPlanoCuentaListadoFiltros::mostrarColumnaMonedaReferencia($filtros),
+            );
+            ReportePreferenciasUsuario::persistirBool(
+                self::PREFERENCIAS_CLAVE,
                 'mostrar_titulo_cuenta',
                 MayorPlanoCuentaListadoFiltros::mostrarTituloCuenta($filtros),
             );
@@ -228,6 +233,13 @@ class MayorPlanoCuentaController extends Controller
             $filtros['mostrar_columna_centrocosto'] = ReportePreferenciasUsuario::leerBool(
                 self::PREFERENCIAS_CLAVE,
                 'mostrar_columna_centrocosto',
+                true,
+            );
+        }
+        if (! $request->has('mostrar_columna_moneda_referencia')) {
+            $filtros['mostrar_columna_moneda_referencia'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'mostrar_columna_moneda_referencia',
                 true,
             );
         }
@@ -823,6 +835,14 @@ class MayorPlanoCuentaController extends Controller
             $filtros['mostrar_columna_centrocosto'] = ReportePreferenciasUsuario::leerBool(
                 self::PREFERENCIAS_CLAVE,
                 'mostrar_columna_centrocosto',
+                true,
+            );
+        }
+
+        if (! $request->has('mostrar_columna_moneda_referencia')) {
+            $filtros['mostrar_columna_moneda_referencia'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'mostrar_columna_moneda_referencia',
                 true,
             );
         }

@@ -38,6 +38,16 @@ final class FacturaProveedorNombreArchivoParserSupport
             $out['numero_factura'] = (int) ltrim($m[4], '0');
         }
 
+        // "SKINMAX FAC 1528", "Factura-1528", "FAC_00001528" (sin PV en el nombre)
+        if ($out['numero_factura'] === null
+            && preg_match('/\b(?:fac(?:tura)?|fc|nc|nd|rec)\s*[-_. ]\s*(\d{3,8})\b/iu', $base, $m)
+        ) {
+            $nro = (int) ltrim($m[1], '0');
+            if ($nro > 0) {
+                $out['numero_factura'] = $nro;
+            }
+        }
+
         // oc 220146 / oc220146 / OC-220146 / orden_220146
         if (preg_match('/\b(?:oc|o\.?\s*c\.?|orden(?:\s*de\s*compra)?)\s*[-_]?\s*(\d{4,8})\b/iu', $base, $m)) {
             $oc = (int) ltrim($m[1], '0');

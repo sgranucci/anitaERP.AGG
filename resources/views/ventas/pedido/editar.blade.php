@@ -96,6 +96,10 @@
         setTimeout(() => {
             muestraTipoSuspension();
         }, 1000);
+
+		setTimeout(function () {
+			$('#codigocliente').trigger('focus');
+		}, 0);
 	  });
 </script>
 @endsection

@@ -4,10 +4,16 @@ namespace App\Http\Controllers\Ventas\FacturacionLocal;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionCambioDevolucionMarketplace;
+use App\Models\Caja\Caja_Movimiento;
 use App\Models\Stock\Articulo;
 use App\Models\Ventas\CambioDevolucionMarketplace;
 use App\Models\Ventas\LocalVenta;
+use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
+use App\Services\Ventas\FacturacionLocal\CambioDevolucionMarketplaceOppDevolucionService;
 use App\Services\Ventas\FacturacionLocal\CambioDevolucionMarketplaceService;
+use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
+use App\Support\Caja\IngresoEgresoImputacionDiariaSupport;
+use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceCatalogoSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioArticuloSupport;
@@ -17,9 +23,11 @@ use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceLiquidacionSu
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePuenteSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceVentaConsultaSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\View;
 use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * Legajo cambio/devolución marketplace — solo Facturación Local Ferli.
@@ -29,6 +37,8 @@ class CambioDevolucionMarketplaceController extends Controller
 {
     public function __construct(
         private readonly CambioDevolucionMarketplaceService $service,
+        private readonly CambioDevolucionMarketplaceOppDevolucionService $oppDevolucionService,
+        private readonly Caja_MovimientoRepositoryInterface $cajaMovimientoRepository,
     ) {
     }
 
@@ -130,6 +140,7 @@ class CambioDevolucionMarketplaceController extends Controller
                 'ventaOriginal',
                 'ventaReemplazo',
                 'ventaNc',
+                'cajaMovimiento.tipotransaccioncajas',
                 'tiendanubePedido',
                 'motivoDevolucion',
             ])
@@ -194,6 +205,24 @@ class CambioDevolucionMarketplaceController extends Controller
         return redirect()
             ->route('editar_cambio_devolucion_marketplace', $id)
             ->with('mensaje', $resultado['mensaje'] ?? 'FAC emitida.');
+    }
+
+    public function continuarSoloDevolucion($id)
+    {
+        $this->assertFerli();
+        can('actualizar-cambio-devolucion-marketplace-facturacion-local');
+
+        try {
+            $cambio = $this->service->continuarSoloDevolucion(
+                CambioDevolucionMarketplace::query()->findOrFail($id)
+            );
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('editar_cambio_devolucion_marketplace', $cambio->id)
+            ->with('mensaje', 'Legajo en aguardando recepción (solo devolución, sin FAC de reemplazo).');
     }
 
     public function registrarRecepcion(Request $request, $id)
@@ -261,6 +290,109 @@ class CambioDevolucionMarketplaceController extends Controller
         return redirect()
             ->route('editar_cambio_devolucion_marketplace', $cambio->id)
             ->with('mensaje', 'Compensación registrada. Legajo cerrado.');
+    }
+
+    public function cerrarConOpp(Request $request, $id)
+    {
+        $this->assertFerli();
+        can('registrar-compensacion-cambio-devolucion-marketplace-facturacion-local');
+
+        $cuentacajaId = (int) $request->input('cuentacaja_id', 0);
+        if ($cuentacajaId <= 0) {
+            return back()->with('error', 'Elegí el medio de pago (cuenta de caja) para la OPP de reembolso.');
+        }
+
+        $detalleExtra = trim((string) $request->input('detalle_extra', ''));
+
+        try {
+            $resultado = $this->oppDevolucionService->cerrarConOpp(
+                CambioDevolucionMarketplace::query()->findOrFail($id),
+                $cuentacajaId,
+                $detalleExtra !== '' ? $detalleExtra : null
+            );
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $numero = (string) ($resultado['numerotransaccion'] ?? '');
+        $mensaje = $numero !== ''
+            ? 'Legajo cerrado con OPP '.$numero.'.'
+            : 'Legajo cerrado con OPP de reembolso.';
+
+        return redirect()
+            ->route('editar_cambio_devolucion_marketplace', $id)
+            ->with('mensaje', $mensaje)
+            ->with('abrir_pdf_opp', route('imprimir_opp_cambio_devolucion_marketplace', $id));
+    }
+
+    public function imprimirOpp($id)
+    {
+        $this->assertFerli();
+        can('ver-cambio-devolucion-marketplace-facturacion-local');
+
+        $cambio = CambioDevolucionMarketplace::query()->findOrFail($id);
+        $cajaMovimientoId = (int) ($cambio->caja_movimiento_id ?? 0);
+        if ($cajaMovimientoId <= 0) {
+            return redirect()
+                ->route('editar_cambio_devolucion_marketplace', $id)
+                ->with('error', 'El legajo no tiene OPP de reembolso asociada.');
+        }
+
+        /** @var Caja_Movimiento $movimiento */
+        $movimiento = $this->cajaMovimientoRepository->find($cajaMovimientoId);
+        $movimiento->loadMissing([
+            'solicitudpagos.conceptos',
+            'solicitudpagos.centrocostos',
+            'solicitudpagos.monedas',
+            'solicitudpagos.cuentas.centrocostos',
+            'empresas.localidad',
+            'proveedores.condicionivas',
+            'proveedores.condicionIIBBs',
+            'usuarios',
+            'tipotransaccioncajas',
+            'caja_movimiento_cuentacajas.cuentacajas',
+            'caja_movimiento_cuentacajas.monedas',
+            'cheques.bancos',
+            'cheques.monedas',
+            'asientos.asiento_movimientos.cuentacontables',
+            'asientos.asiento_movimientos.centrocostos',
+            'clientes',
+        ]);
+
+        $pdf = Pdf::loadView('caja.ingresoegreso.comprobante', [
+            'movimiento' => $movimiento,
+        ])->setPaper('a4');
+
+        $dir = storage_path('pdf/ingresoegreso');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+        if (! is_writable($dir)) {
+            @chmod($dir, 0775);
+        }
+        $path = $dir.'/op_cdm_'.$cambio->id.'_'.$movimiento->id.'.pdf';
+        $pdf->save($path);
+
+        $tipoCaja = $movimiento->tipotransaccioncajas ?? null;
+        $abrevArchivo = strtoupper(trim((string) ($tipoCaja->abreviatura ?? '')));
+        $abrev3 = IngresoEgresoImputacionDiariaSupport::tipoDesdeAbreviatura($abrevArchivo);
+        if (IngresoEgresoTransferenciaSupport::esTransferencia($tipoCaja)) {
+            $nombreArchivo = 'transferencia_'.$movimiento->numerotransaccion.'.pdf';
+        } elseif (IngresoEgresoCanjeChequeSupport::esCanje($tipoCaja)) {
+            $nombreArchivo = 'canje_'.$movimiento->numerotransaccion.'.pdf';
+        } elseif (IngresoEgresoImputacionDiariaSupport::esTipoOppIe($abrev3)) {
+            $nombreArchivo = 'orden_pago_'.$movimiento->numerotransaccion.'.pdf';
+        } else {
+            $slug = $abrevArchivo !== '' ? strtolower($abrevArchivo) : 'ingreso_egreso';
+            $nombreArchivo = $slug.'_'.$movimiento->numerotransaccion.'.pdf';
+        }
+
+        return response()->file($path, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$nombreArchivo.'"',
+        ]);
     }
 
     public function anular(Request $request, $id)
@@ -354,6 +486,8 @@ class CambioDevolucionMarketplaceController extends Controller
         $editable = ! $data->exists
             || CambioDevolucionMarketplaceEstadosSupport::esEditable((string) $data->estado);
         $puente = CambioDevolucionMarketplacePuenteSupport::resolverCuentacaja();
+        $data->loadMissing('lineas');
+        $esSoloDevolucion = CambioDevolucionMarketplaceCatalogoSupport::esSoloDevolucion($data->lineas);
 
         return [
             'data' => $data,
@@ -366,6 +500,7 @@ class CambioDevolucionMarketplaceController extends Controller
             'sentidoEtiquetas' => CambioDevolucionMarketplaceLiquidacionSupport::ETIQUETAS_SENTIDO,
             'editable' => $editable,
             'puenteCuentacaja' => $puente,
+            'esSoloDevolucion' => $esSoloDevolucion,
         ];
     }
 

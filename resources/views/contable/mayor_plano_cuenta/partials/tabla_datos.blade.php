@@ -17,11 +17,14 @@
     $puedeVerCuentacaja = $puede_ver_cuentacaja ?? false;
     $mostrarEmpresa = $multiempresa ?? false;
     $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
+    $mostrarMonReferencia = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaMonedaReferencia($filtros ?? []);
     $mostrarTituloCuenta = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarTituloCuenta($filtros ?? []);
     $tituloCuentaCombinado = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::tituloCuentaCombinado($filtros ?? []);
-    $totalColumnas = ($mostrarEmpresa ? 18 : 17) - ($mostrarCentrocosto ? 0 : 1);
-    $colSpanAntesImportes = $mostrarCentrocosto ? 13 : 12;
-    $colSpanSaldoInicialVacias = $mostrarCentrocosto ? 15 : 14;
+    $totalColumnas = ($mostrarEmpresa ? 18 : 17)
+        - ($mostrarCentrocosto ? 0 : 1)
+        - ($mostrarMonReferencia ? 0 : 1);
+    $colSpanAntesImportes = $totalColumnas - 4 - ($mostrarEmpresa ? 1 : 0);
+    $colSpanSaldoInicialVacias = $totalColumnas - 2 - ($mostrarEmpresa ? 1 : 0);
 @endphp
 <thead>
     <tr>
@@ -39,7 +42,9 @@
         <th>O.Compra</th>
         <th>Mon</th>
         <th class="text-right">Cotiz.</th>
-        <th class="text-right">Mon.Referencia</th>
+        @if ($mostrarMonReferencia)
+            <th class="text-right">Mon.Referencia</th>
+        @endif
         <th class="text-right">Debe</th>
         <th class="text-right">Haber</th>
         <th class="text-right">Saldo del mes</th>
@@ -322,7 +327,9 @@
                         {{ number_format((float) $fila['cotizacion'], 4, ',', '.') }}
                     @endif
                 </td>
-                <td class="text-right">{{ $formatearMonto($fila['mon_referencia'] ?? null) }}</td>
+                @if ($mostrarMonReferencia)
+                    <td class="text-right">{{ $formatearMonto($fila['mon_referencia'] ?? null) }}</td>
+                @endif
                 <td class="text-right">{{ $formatearMonto($fila['debe'] ?? null) }}</td>
                 <td class="text-right">{{ $formatearMonto($fila['haber'] ?? null) }}</td>
                 <td class="text-right">{{ $formatearMonto($fila['saldo_mes'] ?? null, true) }}</td>

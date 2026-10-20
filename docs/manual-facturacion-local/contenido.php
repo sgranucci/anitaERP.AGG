@@ -14,8 +14,8 @@ return [
         [
             'titulo' => '1. Para qué sirve el legajo',
             'parrafos' => [
-                'El legajo de cambios y devoluciones registra un cambio de un pedido de tienda (Tienda Nube, Mercado Libre o carga manual). El cliente devuelve un par y se lleva otro. El circuito emite dos comprobantes distintos y deja la diferencia anotada para compensarla a mano.',
-                'La factura nueva cubre solo el par que se lleva. La nota de crédito cubre solo lo marcado como «A devolver», al precio de esa línea en la grilla. El resto de la factura (otro par, flete, cupón de otro artículo) no se vuelve a facturar ni se acredita.',
+                'El legajo registra un cambio o una devolución de un pedido de tienda (Tienda Nube, Mercado Libre o carga manual). En un cambio el cliente devuelve un par y se lleva otro: se emiten factura de reemplazo y nota de crédito, y la diferencia se compensa a mano. En una solo devolución (reembolso) no hay línea de reemplazo: se saltea la factura nueva y solo se emite la nota de crédito de lo marcado como «A devolver».',
+                'La factura nueva (si hay reemplazo) cubre solo el par que se lleva. La nota de crédito cubre solo lo marcado como «A devolver», al precio de esa línea en la grilla. El resto de la factura (otro par, flete, cupón de otro artículo) no se vuelve a facturar ni se acredita.',
             ],
         ],
         [
@@ -27,9 +27,9 @@ return [
                 'caption' => 'Pasos del legajo',
                 'headers' => ['Paso', 'Estado', 'Qué hace'],
                 'rows' => [
-                    ['1. Armar el legajo', 'Borrador', 'Elegir la factura original. Quedan las líneas del pedido. Dejar en «A devolver» solo el par que vuelve. Cargar el reemplazo (SKU, combinación y talle). El precio del reemplazo sale de la lista del local.'],
-                    ['2. Confirmar', 'Abierto', 'No emite comprobante. Exige factura original, un motivo y al menos una línea de reemplazo. Las líneas se pueden seguir corrigiendo.'],
-                    ['3. Factura de reemplazo', 'Aguardando recepción', 'Botón «Emitir FAC reemplazo (NCD)». Factura solo las líneas Reemplazo, al precio de la grilla, a nombre del mismo cliente. El par que se lleva sale de stock. El PDF queda en la solapa Comprobantes.'],
+                    ['1. Armar el legajo', 'Borrador', 'Elegir la factura original (también con atajos tipo A26-146). Dejar en «A devolver» solo el par que vuelve. Si es cambio, cargar el reemplazo (SKU, combinación y talle). Si es solo reembolso, no cargar reemplazo.'],
+                    ['2. Confirmar', 'Abierto', 'No emite comprobante. Exige factura original, un motivo y al menos una línea «A devolver». Las líneas se pueden seguir corrigiendo.'],
+                    ['3. Factura de reemplazo o solo devolución', 'Aguardando recepción', 'Con reemplazo: botón «Emitir FAC reemplazo (NCD)». Sin reemplazo: botón «Continuar sin reemplazo (reembolso)». Luego se registra la recepción y la NC de lo devuelto.'],
                     ['4. Recepción', 'Recibido', 'Cuando llega el par, se elige la disposición (reventa, deterioro o no recibido) y una observación. Todavía no mueve stock.'],
                     ['5. Nota de crédito', 'NC emitida', 'Botón «Emitir NC de lo devuelto (NCD)». Solo las líneas «A devolver», al precio cargado en la grilla. Si no se tocó, es el de la factura. Si se igualó al importe del producto (descuento por transferencia), la nota sale por ese importe. El motivo define si ese par vuelve al stock vendible.'],
                     ['6. Diferencia', 'Cerrado o Pendiente compensación', 'Compara el total de la factura de reemplazo con el total de la nota de crédito. Si son iguales, el legajo se cierra. Si no, queda pendiente y se cierra con un texto de cómo se compensó (efectivo, transferencia, etc.). Ese texto no genera otro comprobante.'],

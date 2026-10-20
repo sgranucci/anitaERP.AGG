@@ -1,24 +1,28 @@
 <div class="row">
 	<div class="col-sm-6" id="datosfactura" data-puntoventa="{{$puntoventa_query}}" data-tipotransaccion="{{$tipotransaccion_query}}" data-incoterm="{{$incoterm_query}}" data-formapago="{{$formapago_query}}">
         <input type="hidden" id="codigopedido" class="form-control" value="{{old('codigopedido', $pedido->codigo ?? '')}}" />
-		<div class="form-group row">
-   			<label for="cliente" class="col-lg-3 col-form-label requerido">Cliente</label>
-        	<select name="cliente_id" id="cliente_id" data-placeholder="Cliente" class="col-lg-8 form-control required" data-fouc>
-        		<option value="">-- Seleccionar cliente --</option>
-        		@foreach($cliente_query as $key => $value)
-        			@if( (int) $value->id == (int) old('cliente_id', $pedido->cliente_id ?? ''))
-        				<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-        			@else
-        				<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-        			@endif
-        		@endforeach
-        	</select>
+		@php
+			$clienteIdPedidoFerli = (int) old('cliente_id', $pedido->cliente_id ?? 0);
+			$codigoClientePedidoFerli = old('codigocliente', $pedido->clientes->codigo ?? '');
+			$nombreClientePedidoFerli = old('nombrecliente', $pedido->clientes->nombre ?? '');
+		@endphp
+		<div class="form-group row tm-cliente-campo" id="div-cliente">
+			<label for="codigocliente" class="col-lg-3 col-form-label requerido">Cliente</label>
+			<input type="hidden" class="cliente_id" id="cliente_id" name="cliente_id" value="{{ $clienteIdPedidoFerli > 0 ? $clienteIdPedidoFerli : '' }}">
+			<button type="button" title="Consulta clientes (F1)" class="btn-accion-tabla consultacliente tooltipsC">
+				<i class="fa fa-search text-primary"></i>
+			</button>
 			@if ($datos['funcion'] == 'crear')
-				<a href="{{route('crear_cliente', ['tipoalta' => 'P'])}}" id="clienteprovisorio" class="btn-accion-tabla tooltipsC" title="Crear cliente provisorio">
-                	<i class="fa fa-user"></i>
-            	</a>
+				<a href="{{ route('crear_cliente', ['tipoalta' => 'P']) }}" id="clienteprovisorio" class="btn-accion-tabla tooltipsC" title="Crear cliente provisorio">
+					<i class="fa fa-user"></i>
+				</a>
 			@endif
-			<label for="Tiposuspension" id="nombretiposuspension" style="padding: 0px;" class="col-form-label text-danger"></label>
+			<input type="text" class="col-lg-2 form-control codigocliente" id="codigocliente" name="codigocliente"
+				value="{{ $codigoClientePedidoFerli }}" placeholder="N&ordm;" autocomplete="off"
+				title="C&oacute;digo; Enter valida; F1 consulta" required>
+			<input type="text" class="col-lg-5 form-control nombrecliente" id="nombrecliente" name="nombrecliente"
+				value="{{ $nombreClientePedidoFerli }}" readonly placeholder="Descripci&oacute;n">
+			<label id="nombretiposuspension" class="col-form-label text-danger mb-0 pl-2"></label>
 		</div>
 		<div class="form-group row">
    			<label for="vendedor" class="col-lg-3 col-form-label requerido">Vendedor</label>
@@ -68,58 +72,66 @@
         </div>
 	</div>
 	<div class="col-sm-6">
-		<div class="form-group row">
+		<div class="form-group row align-items-center">
     		<label for="fecha" class="col-lg-3 col-form-label requerido">Fecha</label>
-    		<div class="col-lg-3">
+    		<div class="col-lg-4">
     			<input type="date" name="fecha" id="fecha" class="form-control" value="{{substr(old('fecha', $pedido->fecha ?? date('Y-m-d')),0,10)}}" required>
     		</div>
 		</div>
-		<div class="form-group row">
+		<div class="form-group row align-items-center">
     		<label for="fechaentrega" class="col-lg-3 col-form-label">Entrega</label>
-    		<div class="col-lg-3 row">
+    		<div class="col-lg-4">
     			<input type="date" name="fechaentrega" id="fechaentrega" class="form-control" value="{{substr(old('fechaentrega', $pedido->fechaentrega ?? date('Y-m-d')),0,10)}}">
     		</div>
-			<div class="col-lg-6 row" id="divlote">
-				<label for="lote" class="col-lg-2 col-form-label">Lote</label>
-				<select name="lote_id" id="lote_id" data-placeholder="Lote de stock" class="col-lg-5 form-control" data-fouc>
-					<option value="">-- Seleccionar lote --</option>
-					@foreach($lote_query as $key => $value)
-						@if( (int) $value->id == (int) old('lote_id', $pedido->pedido_combinaciones[0]->lotes->id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{ $value->numerodespacho }}</option>    
-						@else
-							<option value="{{ $value->id }}">{{ $value->numerodespacho}}</option>    
-						@endif
-					@endforeach
-        		</select>				
+			<div class="col-lg-5" id="divlote">
+				<div class="d-flex align-items-center" style="gap: 0.5rem;">
+					<label for="lote_id" class="col-form-label mb-0 text-nowrap">Lote</label>
+					<select name="lote_id" id="lote_id" data-placeholder="Lote de stock" class="form-control" data-fouc>
+						<option value="">-- Seleccionar lote --</option>
+						@foreach($lote_query as $key => $value)
+							@if( (int) $value->id == (int) old('lote_id', $pedido->pedido_combinaciones[0]->lotes->id ?? ''))
+								<option value="{{ $value->id }}" selected="select">{{ $value->numerodespacho }}</option>
+							@else
+								<option value="{{ $value->id }}">{{ $value->numerodespacho}}</option>
+							@endif
+						@endforeach
+					</select>
+				</div>
 			</div>
 		</div>
-		<div class="form-group row">
-   			<label for="condicionventa" class="col-lg-3 col-form-label requerido">Cond. de Vta.</label>
-        	<select name="condicionventa_id" id="condicionventa_id" data-placeholder="Condicion de Venta" class="col-lg-8 form-control required" data-fouc>
-        		<option value="">-- Seleccionar cond. de vta.  --</option>
-        		@foreach($condicionventa_query as $key => $value)
-        			@if( (int) $value->id == (int) old('condicionventa_id', $pedido->condicionventa_id ?? ''))
-        				<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-        			@else
-        				<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-        			@endif
-        		@endforeach
-        	</select>
+		<div class="form-group row align-items-center">
+   			<label for="condicionventa_id" class="col-lg-3 col-form-label requerido">Cond. de Vta.</label>
+			<div class="col-lg-8">
+				<select name="condicionventa_id" id="condicionventa_id" data-placeholder="Condicion de Venta" class="form-control required" data-fouc>
+					<option value="">-- Seleccionar cond. de vta.  --</option>
+					@foreach($condicionventa_query as $key => $value)
+						@if( (int) $value->id == (int) old('condicionventa_id', $pedido->condicionventa_id ?? ''))
+							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
+						@else
+							<option value="{{ $value->id }}">{{ $value->nombre }}</option>
+						@endif
+					@endforeach
+				</select>
+			</div>
 		</div>
-		<div class="form-group row" id="marca" data-articulo="{{$articulo_query}}" data-articuloall="{{$articuloall_query}}">
-   			<label for="mventa" class="col-lg-3 col-form-label requerido">Marca</label>
-        	<select name="mventa_id" id="mventa_id" data-placeholder="Marca de Venta" class="col-lg-3 form-control required" data-fouc>
-        		<option value="">-- Seleccionar marca --</option>
-        		@foreach($mventa_query as $key => $value)
-        			@if( (int) $value->id == (int) old('mventa_id', $pedido->mventa_id ?? ''))
-        				<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-        			@else
-        				<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-        			@endif
-        		@endforeach
-        	</select>
-   			<label for="descuento" class="col-lg-3 col-form-label requerido">Descuento</label>
-            <input type="text" id="descuento" name="descuento" class="form-control col-lg-2" value="{{number_format(old('descuento', $pedido->descuento ?? '0'),2)}}" />
+		<div class="form-group row align-items-center" id="marca" data-articulo="{{$articulo_query}}" data-articuloall="{{$articuloall_query}}">
+   			<label for="mventa_id" class="col-lg-3 col-form-label requerido">Marca</label>
+			<div class="col-lg-4">
+				<select name="mventa_id" id="mventa_id" data-placeholder="Marca de Venta" class="form-control required" data-fouc>
+					<option value="">-- Seleccionar marca --</option>
+					@foreach($mventa_query as $key => $value)
+						@if( (int) $value->id == (int) old('mventa_id', $pedido->mventa_id ?? ''))
+							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
+						@else
+							<option value="{{ $value->id }}">{{ $value->nombre }}</option>
+						@endif
+					@endforeach
+				</select>
+			</div>
+   			<label for="descuento" class="col-lg-2 col-form-label requerido text-right mb-0">Descuento</label>
+			<div class="col-lg-2">
+            	<input type="text" id="descuento" name="descuento" class="form-control" value="{{number_format(old('descuento', $pedido->descuento ?? '0'),2)}}" />
+			</div>
 		</div>
 	</div>
 </div>

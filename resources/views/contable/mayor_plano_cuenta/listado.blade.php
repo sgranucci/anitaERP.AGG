@@ -170,7 +170,11 @@
         ])
         @php
             $mostrarCcDetallePdf = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
-            $colSpanAntesImportesPdf = $mostrarCcDetallePdf ? 13 : 12;
+            $mostrarMonRefDetallePdf = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaMonedaReferencia($filtros ?? []);
+            $totalColumnasDetallePdf = ($multiempresa ? 18 : 17)
+                - ($mostrarCcDetallePdf ? 0 : 1)
+                - ($mostrarMonRefDetallePdf ? 0 : 1);
+            $colSpanAntesImportesPdf = $totalColumnasDetallePdf - 4 - ($multiempresa ? 1 : 0);
             $totalDebePdf = (float) ($tot['total_debe'] ?? 0);
             $totalHaberPdf = (float) ($tot['total_haber'] ?? 0);
             $diferenciaPdf = round($totalDebePdf - $totalHaberPdf, 2);

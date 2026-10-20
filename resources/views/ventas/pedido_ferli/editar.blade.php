@@ -56,33 +56,26 @@
     }
 
     $(function () {
-        $("#cliente_id").change(function(){
-            var cliente_id = $(this).val();
-            completarCliente_Entrega(cliente_id);
-
-            asignaDatosCliente(cliente_id, true);
-
-            setTimeout(() => {
-                muestraTipoSuspension();			
-            }, 1500);
-    	});
-       
 		$("#divlugar").show();
 		$("#divcodigoentrega").hide();
 
         var cliente_id = $("#cliente_id").val();
-        completarCliente_Entrega(cliente_id);
-        asignaDatosCliente(cliente_id, false);
-
-        setTimeout(() => {
-            muestraTipoSuspension();
-        }, 1000);
+		if (cliente_id > 0) {
+			completarCliente_Entrega(cliente_id);
+			asignaDatosCliente(cliente_id, false);
+			setTimeout(function () {
+				muestraTipoSuspension();
+			}, 1000);
+		}
 
         if ($("#cliente_entrega_id_previa").val() != "") {
-            setTimeout(() => {
-                    $("#cliente_entrega_id").val($("#cliente_entrega_id_previa").val());
+            setTimeout(function () {
+				$("#cliente_entrega_id").val($("#cliente_entrega_id_previa").val());
             }, 1000);
         }
+		setTimeout(function () {
+			$('#codigocliente').trigger('focus');
+		}, 0);
 	  });
 </script>
 @endsection

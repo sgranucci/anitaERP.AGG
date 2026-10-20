@@ -32,12 +32,30 @@ final class CambioDevolucionMarketplaceVentaConsultaSupport
             return [];
         }
 
+        $parsed = self::parsearCodigoAbreviado($q);
+
         $ventas = Venta::query()
             ->with(['clientes:id,nombre,numerodocumento'])
-            ->where(function ($builder) use ($q) {
+            ->where(function ($builder) use ($q, $parsed) {
                 $builder->where('codigo', 'like', '%'.$q.'%');
                 if (ctype_digit($q)) {
-                    $builder->orWhere('id', (int) $q);
+                    $builder->orWhere('id', (int) $q)
+                        ->orWhere('numerocomprobante', (int) $q);
+                }
+                foreach (self::likesCodigoNormalizado($parsed) as $like) {
+                    $builder->orWhere('codigo', 'like', $like);
+                }
+                if ($parsed !== null) {
+                    $builder->orWhere(function ($inner) use ($parsed) {
+                        $inner->where('numerocomprobante', $parsed['numero']);
+                        $sucPad = str_pad((string) $parsed['sucursal'], 5, '0', STR_PAD_LEFT);
+                        $inner->whereHas('puntoventas', static function ($pq) use ($sucPad) {
+                            $pq->where('codigo', $sucPad);
+                        });
+                        if ($parsed['letra'] !== '') {
+                            $inner->where('codigo', 'like', '% '.$parsed['letra'].'-%');
+                        }
+                    });
                 }
             })
             ->orderByDesc('id')
@@ -52,6 +70,46 @@ final class CambioDevolucionMarketplaceVentaConsultaSupport
         }
 
         return self::mapear($ventas);
+    }
+
+    /**
+     * Acepta atajos tipo A26-146, B23-45335, 26-146 → FAC A-00026-00000146.
+     *
+     * @return array{letra:string,sucursal:int,numero:int}|null
+     */
+    public static function parsearCodigoAbreviado(string $q): ?array
+    {
+        $norm = preg_replace('/\s+/', '', strtoupper(trim($q))) ?? '';
+        $norm = preg_replace('/^(FAC|NCD|NDB|NCA|NDA)/', '', $norm) ?? $norm;
+        if (! preg_match('/^([A-Z])?(\d{1,5})[-_\/](\d{1,8})$/', $norm, $m)) {
+            return null;
+        }
+
+        return [
+            'letra' => (string) ($m[1] ?? ''),
+            'sucursal' => (int) $m[2],
+            'numero' => (int) $m[3],
+        ];
+    }
+
+    /**
+     * @param  array{letra:string,sucursal:int,numero:int}|null  $parsed
+     * @return list<string>
+     */
+    private static function likesCodigoNormalizado(?array $parsed): array
+    {
+        if ($parsed === null) {
+            return [];
+        }
+        $suc = str_pad((string) $parsed['sucursal'], 5, '0', STR_PAD_LEFT);
+        $nro = str_pad((string) $parsed['numero'], 8, '0', STR_PAD_LEFT);
+        $likes = ['%-'.$suc.'-'.$nro];
+        if ($parsed['letra'] !== '') {
+            $likes[] = '% '.$parsed['letra'].'-'.$suc.'-'.$nro;
+            $likes[] = '%'.$parsed['letra'].'-'.$suc.'-'.$nro;
+        }
+
+        return $likes;
     }
 
     /**

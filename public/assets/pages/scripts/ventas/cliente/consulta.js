@@ -49,12 +49,21 @@ function enfocarCampoTrasClienteCargado() {
         $('#fce_comprobante_referenciado').focus();
         return;
     }
+    // Pedido / factura: después del cliente sigue el vendedor.
+    if ($('#codigovendedor').length && $('#codigovendedor').is(':visible')) {
+        $('#codigovendedor').trigger('focus');
+        return;
+    }
+    if ($('#vendedor_id').length && $('#vendedor_id').is(':visible')) {
+        $('#vendedor_id').trigger('focus');
+        return;
+    }
     if ($('#codigotransporte').length > 0) {
-        $('#codigotransporte').focus();
+        $('#codigotransporte').trigger('focus');
         return;
     }
     if ($('#acc-workbench').length && $('#acc-fecha').length) {
-        $('#acc-fecha').focus();
+        $('#acc-fecha').trigger('focus');
     }
 }
 
@@ -126,9 +135,7 @@ function leerFilaClienteConsulta($link) {
 function nombreClienteDisplayConCodigo(codigo, nombre) {
     codigo = codigo != null ? String(codigo).trim() : '';
     nombre = nombre != null ? String(nombre).trim() : '';
-    if ($('#codigopedido').length && codigo !== '' && nombre !== '') {
-        return codigo + ' - ' + nombre;
-    }
+    // Descripción readonly: solo nombre (el código va en su propio input).
     return nombre || codigo;
 }
 
