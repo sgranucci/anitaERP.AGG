@@ -184,6 +184,18 @@ class MayorPlanoCuentaSupport
     }
 
     /**
+     * Ferli: Mon.Referencia repite el Debe (positivo) o el Haber (negativo)
+     * en la misma moneda de esas columnas, para fórmulas y filtros de Excel.
+     */
+    public static function importeMonedaReferenciaMismaMoneda(float $debe, float $haber, string $dh): float
+    {
+        $dhNorm = strtoupper(trim($dh));
+        $monto = $dhNorm === 'H' ? $haber : $debe;
+
+        return self::firmarImporteDh($monto, $dhNorm);
+    }
+
+    /**
      * True si Mon.Referencia necesita cotización (conversión pesos↔extranjera).
      */
     public static function monReferenciaNecesitaCotizacion(int $monedaAsientoId, int $monedaReporteId): bool

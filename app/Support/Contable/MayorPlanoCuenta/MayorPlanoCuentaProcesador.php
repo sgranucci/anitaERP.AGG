@@ -3,6 +3,7 @@
 namespace App\Support\Contable\MayorPlanoCuenta;
 
 use App\Services\Contable\AnitaAsientoImportService;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
 use App\Support\Contable\MayorFuenteConsultaSupport;
@@ -1203,29 +1204,34 @@ class MayorPlanoCuentaProcesador
             } else {
                 $importeNativo = 0.0;
             }
-            // Mon.Referencia = moneda complementaria al reporte (Debe/Haber):
-            // mayor en pesos → moneda original del asiento (USD si el asiento es pesos);
-            // mayor en extranjera → pesos.
             $dhMov = (string) ($mov['dh'] ?? '');
-            $cotizRef = $cotizMov;
-            if (MayorPlanoCuentaSupport::monReferenciaNecesitaCotizacion($monedaAsientoId, $monedaReporteId)
-                && $cotizRef < 0.01) {
-                $importeRefAbs = $monedaConverter->convertirImporte(
-                    abs($importeNativo),
-                    $codMonMov,
-                    0.0,
-                    $fecha,
-                    MayorPlanoCuentaSupport::monedaReferenciaId($monedaReporteId),
-                );
-                $monRef = MayorPlanoCuentaSupport::firmarImporteDh($importeRefAbs, $dhMov);
+            if (EntornoEmpresaSupport::esFerli()) {
+                // Misma moneda que Debe/Haber: positivo al Debe, negativo al Haber.
+                $monRef = MayorPlanoCuentaSupport::importeMonedaReferenciaMismaMoneda($debe, $haber, $dhMov);
             } else {
-                $monRef = MayorPlanoCuentaSupport::importeMonedaReferencia(
-                    $importeNativo,
-                    $dhMov,
-                    $monedaAsientoId,
-                    $cotizRef,
-                    $monedaReporteId,
-                );
+                // Mon.Referencia = moneda complementaria al reporte (Debe/Haber):
+                // mayor en pesos → moneda original del asiento (USD si el asiento es pesos);
+                // mayor en extranjera → pesos.
+                $cotizRef = $cotizMov;
+                if (MayorPlanoCuentaSupport::monReferenciaNecesitaCotizacion($monedaAsientoId, $monedaReporteId)
+                    && $cotizRef < 0.01) {
+                    $importeRefAbs = $monedaConverter->convertirImporte(
+                        abs($importeNativo),
+                        $codMonMov,
+                        0.0,
+                        $fecha,
+                        MayorPlanoCuentaSupport::monedaReferenciaId($monedaReporteId),
+                    );
+                    $monRef = MayorPlanoCuentaSupport::firmarImporteDh($importeRefAbs, $dhMov);
+                } else {
+                    $monRef = MayorPlanoCuentaSupport::importeMonedaReferencia(
+                        $importeNativo,
+                        $dhMov,
+                        $monedaAsientoId,
+                        $cotizRef,
+                        $monedaReporteId,
+                    );
+                }
             }
 
             $nroAsiento = (int) ($mov['nro_asiento'] ?? 0);
