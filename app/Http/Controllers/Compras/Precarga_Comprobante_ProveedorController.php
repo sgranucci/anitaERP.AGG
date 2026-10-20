@@ -264,7 +264,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
             $resultado = $this->pdfIaService->confirmar($payload, $request->file('pdf'));
             $precargaId = (int) $resultado['precarga_id'];
             $mensaje = (string) ($resultado['message'] ?? 'Precarga registrada desde PDF+IA.');
-            // No grabar comprobante hasta Guardar: abrir alta prellenada desde la precarga.
+            // La precarga queda registrada. El alta de la factura se abre precargada:
+            // sin OC falta la cuenta de gasto; Contabilizar termina la grabación.
             $redirect = can('crear-comprobante-proveedor', false)
                 ? route('crear_comprobante_proveedor', [
                     'precarga_id' => $precargaId,
@@ -272,7 +273,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
                 ])
                 : route('editar_precarga_comprobante_proveedor', ['id' => $precargaId]);
             if (can('crear-comprobante-proveedor', false)) {
-                $mensaje .= ' Se abrió el alta del comprobante (no se graba hasta Guardar).';
+                $mensaje .= ' Se abrió la carga de la factura. Sin OC indique la cuenta de gasto y pulse Contabilizar.';
             }
 
             return response()->json([

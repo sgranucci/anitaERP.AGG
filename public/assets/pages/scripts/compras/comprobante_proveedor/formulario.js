@@ -4354,6 +4354,11 @@ $(function () {
         // Alta vacía: no preview ni badge hasta que haya proveedor o montos (evita banner y robo de foco).
         aplicarAvisosProveedor([{ tipo: 'proveedor_sin_seleccionar' }]);
         renderBannerAvisos([], null);
+        if (String($form.attr('data-pide-cuenta-gasto') || '0') === '1') {
+            mostrarSolapa('#cp-solapa-asiento-contable');
+            marcarTabActivo('cp-boton-asiento-contable');
+            pendienteFocoCuentaAsientoVacia = true;
+        }
         if (!formularioSinDatosParaAsiento()) {
             programarPreviewAsiento();
         } else {

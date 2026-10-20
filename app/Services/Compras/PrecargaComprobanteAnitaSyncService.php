@@ -39,8 +39,20 @@ class PrecargaComprobanteAnitaSyncService
     ) {
     }
 
+    /**
+     * La precarga se persiste en el ERP. Informix precarga/precargaconc ya no se escribe.
+     */
+    public function sincronizacionHabilitada(): bool
+    {
+        return (bool) config('precarga_comprobante.anita_sync_habilitada', false);
+    }
+
     public function insertCabecera(int $precargaId, array $payload): void
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
         $payload = $this->enriquecerPayloadParaAnita($payload);
 
         $this->escribirConVerificacion(
@@ -80,6 +92,10 @@ class PrecargaComprobanteAnitaSyncService
 
     public function updateCabecera(int $precargaId, array $payload): void
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
         $payload = $this->enriquecerPayloadParaAnita($payload);
 
         $api = new ApiAnita;
@@ -97,6 +113,10 @@ class PrecargaComprobanteAnitaSyncService
      */
     public function syncCabecera(int $precargaId, array $payload): void
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
         $payload = $this->enriquecerPayloadParaAnita($payload);
 
         if ($this->existsCabeceraEnAnita($precargaId)) {
@@ -111,6 +131,10 @@ class PrecargaComprobanteAnitaSyncService
      */
     public function syncConcepto(Precarga_Comprobante_Proveedor_Concepto $linea, array $payload = []): void
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
         $preccId = (int) $linea->id;
         $precargaId = (int) $linea->precarga_comprobante_proveedor_id;
         $payload = array_merge([
@@ -161,6 +185,15 @@ class PrecargaComprobanteAnitaSyncService
      */
     public function resincronizarErpEnAnita(?int $precargaId = null, ?callable $onError = null): array
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return [
+                'procesadas' => 0,
+                'resincronizadas' => 0,
+                'conceptos' => 0,
+                'errores' => 0,
+            ];
+        }
+
         $stats = [
             'procesadas' => 0,
             'resincronizadas' => 0,
@@ -289,6 +322,10 @@ class PrecargaComprobanteAnitaSyncService
 
     public function existsCabeceraEnAnita(int $precargaId): bool
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return false;
+        }
+
         return $this->listarUnaVez(
             self::TABLA_CABECERA,
             'prec_id',
@@ -298,6 +335,10 @@ class PrecargaComprobanteAnitaSyncService
 
     public function deleteCabecera(int $precargaId): void
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
         $this->deleteConceptosPorPrecarga($precargaId);
 
         $api = new ApiAnita;
@@ -314,6 +355,10 @@ class PrecargaComprobanteAnitaSyncService
      */
     public function insertConcepto(Precarga_Comprobante_Proveedor_Concepto $linea, array $payload = []): void
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
         $preccId = (int) $linea->id;
         $precargaId = (int) $linea->precarga_comprobante_proveedor_id;
         $codigoAnita = $this->resolverCodigoConceptoAnita(
@@ -361,6 +406,10 @@ class PrecargaComprobanteAnitaSyncService
      */
     public function asegurarConceptoEnAnita(Precarga_Comprobante_Proveedor_Concepto $linea, array $payload = []): void
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
         $preccId = (int) $linea->id;
         if ($this->existsConceptoEnAnita($preccId)) {
             return;
@@ -371,6 +420,10 @@ class PrecargaComprobanteAnitaSyncService
 
     public function updateConcepto(int $preccId, int $precargaId, array $payload): void
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
         $codigoAnita = $this->resolverCodigoConceptoAnita(
             $payload['concepto_ivacompra_id'] ?? null,
             $payload['codigo_concepto_anita'] ?? null
@@ -392,6 +445,10 @@ class PrecargaComprobanteAnitaSyncService
 
     public function deleteConcepto(int $preccId): void
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
         $api = new ApiAnita;
         $api->apiCallEscritura([
             'acc' => 'delete',
@@ -403,6 +460,10 @@ class PrecargaComprobanteAnitaSyncService
 
     public function deleteConceptosPorPrecarga(int $precargaId): void
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
         $api = new ApiAnita;
         $api->apiCallEscritura([
             'acc' => 'delete',
@@ -414,6 +475,10 @@ class PrecargaComprobanteAnitaSyncService
 
     public function existsConceptoEnAnita(int $preccId): bool
     {
+        if (! $this->sincronizacionHabilitada()) {
+            return false;
+        }
+
         return $this->listarUnaVez(
             self::TABLA_CONCEPTO,
             'precc_id',

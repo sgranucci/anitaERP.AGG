@@ -30,8 +30,15 @@ return [
     'anita_list_espera_ms' => (int) env('PRECARGA_ANITA_LIST_ESPERA_MS', 250),
 
     /*
+    | Escritura de precarga/precargaconc en Informix vía bridge.
+    | La precarga vive en el ERP; Anita ya no tiene esas tablas en instalaciones actuales.
+    */
+    'anita_sync_habilitada' => filter_var(env('PRECARGA_ANITA_SYNC_HABILITADA', false), FILTER_VALIDATE_BOOLEAN),
+
+    /*
     | Reintentos al grabar precarga/precargaconc: el bridge a veces responde [] sin persistir.
     | Tras cada insert se verifica con list; si no aparece, se reintenta el insert.
+    | Solo aplica si anita_sync_habilitada es true.
     */
     'anita_write_reintentos' => (int) env('PRECARGA_ANITA_WRITE_REINTENTOS', 3),
     'anita_write_espera_ms' => (int) env('PRECARGA_ANITA_WRITE_ESPERA_MS', 300),

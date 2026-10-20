@@ -591,7 +591,7 @@ $(function () {
         fd.append('payload', JSON.stringify(previewPayload));
         fd.append('pdf', fileInput.files[0]);
         agregarProveedorPortal(fd);
-        mostrarOverlay('Creando precarga…');
+        mostrarOverlay('Grabando la precarga y abriendo la factura…');
 
         $.ajax({
             url: confirmarUrl,

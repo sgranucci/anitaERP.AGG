@@ -15,6 +15,10 @@
     $rutaContabilizar = ($esEdicion ?? false)
         ? route('contabilizar_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery)
         : null;
+    $origenPrecarga = (string) (optional($data->precarga_comprobante_proveedores)->origen_entrada ?? '');
+    $desdeIaErp = ! ($esEdicion ?? false)
+        && \App\Support\Compras\PrecargaComprobanteOrigenEntrada::esLecturaIa($origenPrecarga);
+    $pideCuentaGastoIa = $desdeIaErp && (int) ($data->ordencompra_id ?? 0) <= 0;
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -22,6 +26,16 @@
         @include('compras.comprobante_proveedor.partials.aviso_error_contabilizar')
         @include('includes.mensaje')
         @include('compras.precarga_comprobante_proveedor.partials.aviso_ya_en_anita')
+        @if ($desdeIaErp)
+        <div class="alert {{ $pideCuentaGastoIa ? 'alert-warning' : 'alert-info' }} py-2">
+            @if ($pideCuentaGastoIa)
+            La factura quedó precargada desde PDF+IA, igual que si viniera del agente.
+            No hay orden de compra: indique la <strong>cuenta de gasto</strong> en Asiento contable y pulse <strong>Contabilizar</strong>.
+            @else
+            La factura quedó precargada desde PDF+IA con su orden de compra. Revise los datos y pulse <strong>Contabilizar</strong>.
+            @endif
+        </div>
+        @endif
         <div id="cp-aviso-duplicado-cabecera-slot"></div>
         <div id="cp-aviso-anita-async-slot"></div>
         <div id="cp-sync-oc-com-banner" class="alert alert-info py-2 d-none" role="status">
@@ -146,6 +160,7 @@
                 data-contrato-cuentacontable-id="{{ (int) ($com_politica['contrato_cuentacontable_id'] ?? 0) }}"
                 data-contrato-cuentacontable-codigo="{{ optional($data->ordencompras->contrato_cuentacontables ?? null)->codigo ?? '' }}"
                 data-contrato-cuentacontable-nombre="{{ optional($data->ordencompras->contrato_cuentacontables ?? null)->nombre ?? '' }}"
+                data-pide-cuenta-gasto="{{ $pideCuentaGastoIa ? '1' : '0' }}"
                 data-precarga-id="{{ (int) ($data->precarga_comprobante_proveedor_id ?? 0) }}"
                 data-precarga-total="{{ number_format((float) (optional($data->precarga_comprobante_proveedores)->total ?? 0), 2, '.', '') }}"
                 data-ordencompra-id="{{ (int) ($data->ordencompra_id ?? 0) }}"

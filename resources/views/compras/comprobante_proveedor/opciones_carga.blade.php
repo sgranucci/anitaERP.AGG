@@ -106,9 +106,8 @@
                                 <h5 class="card-title text-primary"><i class="fa fa-magic"></i> PDF — IA Anita</h5>
                                 <p class="card-text small flex-grow-1">
                                     Suba el PDF; el modelo identifica empresa, proveedor, conceptos y alícuotas.
-                                    La OC es opcional: sin OC usa el centro de costo del proveedor.
-                                    Si no tiene centro de costo, la precarga queda para revisar.
-                                    Crea una precarga para revisar antes de facturar.
+                                    Graba la precarga y abre la carga de la factura ya completa.
+                                    Sin orden de compra pide la cuenta de gasto y se termina con Contabilizar.
                                 </p>
                                 <button type="button" class="btn btn-primary btn-sm mt-auto" data-toggle="modal" data-target="#modal-precarga-pdf-ia">
                                     Cargar PDF con IA
