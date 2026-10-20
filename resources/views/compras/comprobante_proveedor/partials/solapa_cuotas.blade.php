@@ -1,4 +1,11 @@
 <h4 class="mb-3">Plan de cuotas</h4>
+@if (($esEdicion ?? false) && can('editar-plan-cuotas-comprobante-proveedor', false))
+    <p>
+        <a class="btn btn-primary btn-sm" href="{{ route('editar_plan_cuotas_comprobante_proveedor', $data->id) }}">
+            <i class="fa fa-calendar"></i> Unificar o rearmar cuotas
+        </a>
+    </p>
+@endif
 @if ($cuotas_escaladas ?? false)
     <div class="alert alert-warning">Las cuotas fueron escaladas desde la OC porque el total de la factura difiere del comprobante a venir.</div>
 @endif

@@ -25,12 +25,14 @@
                {{ $readonlyCalculo ? 'readonly' : '' }}>
     </div>
     <div class="col-lg-6">
+        @if (empty($flashBloqueado))
         <button type="button" class="btn btn-outline-primary btn-sm mt-1" id="btn-flash-calcular">
             <i class="fa fa-calculator"></i> Calcular desde ERP/Wigos
         </button>
         <button type="button" class="btn btn-outline-secondary btn-sm mt-1 ml-1" id="btn-flash-desglose-wigos">
             <i class="fa fa-list-alt"></i> Desglose Wigos
         </button>
+        @endif
     </div>
 </div>
 

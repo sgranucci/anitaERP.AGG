@@ -350,6 +350,9 @@ final class PagoproveedorAsientoArmadoSupport
             $dcLinea = isset($comp->diferencias_cambio)
                 ? (float) $comp->diferencias_cambio
                 : (isset($comp->diferencia_cambio) ? (float) $comp->diferencia_cambio : $liq['dc']);
+            if (! $liq['cruzada'] && ProveedorCuentacorrienteAplicacionLiquidacionSupport::esLocal($monedaDeudaId)) {
+                $dcLinea = 0.0;
+            }
 
             // Moneda de la operación: importe en moneda del pago.
             // Cruzada hacia MN → valor libro (la DC completa hasta liquidación).

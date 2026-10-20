@@ -762,9 +762,50 @@
         }, 450);
     }
 
+    var winOnlineSeq = 0;
+
+    function pintarWinOnline(data) {
+        var hay = !!(data && data.hay_flash);
+        document.querySelectorAll('.js-win-online-slots').forEach(function (el) {
+            el.textContent = hay ? ('$' + fmtMoney(data.slots)) : '—';
+        });
+        document.querySelectorAll('.js-win-online-ruletas').forEach(function (el) {
+            el.textContent = hay ? ('$' + fmtMoney(data.ruletas)) : '—';
+        });
+        document.querySelectorAll('.js-win-online-total').forEach(function (el) {
+            el.textContent = hay ? ('$' + fmtMoney(data.total)) : 'Sin flash';
+        });
+        document.querySelectorAll('.js-win-online-estado').forEach(function (el) {
+            el.textContent = hay ? (data.validado ? 'Validado' : 'Sin validar') : '';
+        });
+    }
+
+    function refrescarWinOnline() {
+        var seq = ++winOnlineSeq;
+        var empresaId = getEmpresaId();
+        var fecha = getFecha();
+        if (!app.dataset.apiWinOnline || empresaId <= 0 || !fecha) {
+            pintarWinOnline(null);
+            return;
+        }
+        postJson(app.dataset.apiWinOnline, { empresa_id: empresaId, fecha: fecha })
+            .then(function (data) {
+                if (seq !== winOnlineSeq) {
+                    return;
+                }
+                pintarWinOnline(data && data.ok ? data.win_online : null);
+            })
+            .catch(function () {
+                if (seq !== winOnlineSeq) {
+                    return;
+                }
+            });
+    }
+
     function recargarLineasPorEmpresa() {
         var empresaId = getEmpresaId();
         app.dataset.empresaId = String(empresaId);
+        refrescarWinOnline();
         marcarWigosLeido(false);
         if (esAlta) {
             blanquearTotales();
@@ -1290,6 +1331,7 @@
     document.getElementById('empresa_id')?.addEventListener('change', recargarLineasPorEmpresa);
     document.getElementById('fecha_rendicion')?.addEventListener('change', function () {
         app.dataset.fecha = getFecha();
+        refrescarWinOnline();
         marcarWigosLeido(false);
         identidadCierreBase = null;
         if (esAlta) {

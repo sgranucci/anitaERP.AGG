@@ -5,6 +5,7 @@ namespace App\Repositories\Stock;
 use App\Models\Stock\Articulo_Caja;
 use App\Models\Stock\Articulo;
 use App\Support\Stock\ArticuloListadoColumnas;
+use App\Support\Stock\ArticuloListadoCuentasSupport;
 use App\Support\Stock\ArticuloListadoFiltros;
 use App\Models\Stock\Color;
 use App\Models\Stock\Tipoliquido;
@@ -160,6 +161,17 @@ class ArticuloRepository implements ArticuloRepositoryInterface
             ->leftJoin('tipoarticulo', 'articulo.tipoarticulo_id', '=', 'tipoarticulo.id')
             ->leftJoin('usoarticulo', 'articulo.usoarticulo_id', '=', 'usoarticulo.id')
             ->leftJoin('empresa', 'empresa.id', '=', 'articulo.empresa_id');
+
+        if (ArticuloListadoCuentasSupport::debeAplicar($filtros)) {
+            $empresaCuentas = null;
+            if (ArticuloListadoFiltros::filtroEmpresaActivo() && ($filtros['empresa_scope'] ?? 'una') !== 'todas') {
+                $empresaCuentas = (int) ($filtros['empresa_id'] ?? 0);
+                if ($empresaCuentas <= 0) {
+                    $empresaCuentas = null;
+                }
+            }
+            ArticuloListadoCuentasSupport::aplicar($articulo, $empresaCuentas);
+        }
 
         ArticuloListadoFiltros::aplicar($articulo, $filtros);
         ArticuloListadoFiltros::aplicarOrden($articulo, $filtros);

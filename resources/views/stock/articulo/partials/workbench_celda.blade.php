@@ -86,4 +86,9 @@
     @case('fecha_modificacion')
         <td>{{ $articulo->updated_at ? \Carbon\Carbon::parse($articulo->updated_at)->format('d/m/Y') : '' }}</td>
         @break
+    @case('cuentaventa')
+    @case('cuentacompra')
+    @case('cuentagasto')
+        <td title="{{ $articulo->{$key} ?? '' }}">{{ $articulo->{$key} ?? '' }}</td>
+        @break
 @endswitch

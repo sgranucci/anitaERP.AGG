@@ -2571,6 +2571,9 @@ Route::get('ventas/gastronomia/articulos-vendidos', 'Ventas\GastronomiaArticulos
 Route::get('ventas/gastronomia/insumos-tipoarticulo-reporte', 'Ventas\GastronomiaInsumosTipoarticuloReporteController@index')->name('gastronomia_insumos_tipoarticulo_reporte')->middleware('modo.consulta');
 Route::get('ventas/listar-gastronomia-insumos-tipoarticulo/{formato}', 'Ventas\GastronomiaInsumosTipoarticuloReporteController@exportar')->name('listar_gastronomia_insumos_tipoarticulo');
 Route::get('ventas/listar-gastronomia-control-contable-cigarrillos/{formato}', 'Ventas\GastronomiaInsumosTipoarticuloReporteController@exportarControlContable')->name('listar_gastronomia_control_contable_cigarrillos');
+Route::get('ventas/gastronomia/reporte-contaduria', 'Ventas\ContaduriaGastronomiaReporteController@index')->name('gastronomia_reporte_contaduria')->middleware('modo.consulta');
+Route::get('ventas/gastronomia/reporte-contaduria/descuentos', 'Ventas\ContaduriaGastronomiaReporteController@descargarDescuentos')->name('gastronomia_reporte_contaduria_descuentos');
+Route::get('ventas/gastronomia/reporte-contaduria/inventario', 'Ventas\ContaduriaGastronomiaReporteController@descargarInventario')->name('gastronomia_reporte_contaduria_inventario');
 Route::get('ventas/gastronomia/descuento-reporte', 'Ventas\GastronomiaDescuentoReporteController@index')->name('gastronomia_descuento_reporte')->middleware('modo.consulta');
 Route::post('ventas/gastronomia/descuento-reporte/consulta-facturas', 'Ventas\GastronomiaDescuentoReporteController@consultaFacturasBloque')->name('gastronomia_descuento_reporte_consulta_facturas');
 Route::post('ventas/gastronomia/descuento-reporte/consulta-mozo', 'Ventas\GastronomiaDescuentoReporteController@consultaMozo')->name('gastronomia_descuento_reporte_consulta_mozo');
@@ -3321,6 +3324,10 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/flash/{id}/editar', 'Caja\Flash\FlashCajaController@editar')->name('editar_flash_caja');
     Route::post('caja/flash/{id}/validar', 'Caja\Flash\FlashCajaController@validar')->name('validar_flash_caja');
     Route::post('caja/flash/{id}/quitar-validacion', 'Caja\Flash\FlashCajaController@quitarValidacion')->name('quitar_validacion_flash_caja');
+    Route::post('caja/flash/{id}/solicitar-modificacion', 'Caja\Flash\FlashCajaController@solicitarModificacion')->name('solicitar_modificacion_flash_caja');
+    Route::get('caja/flash/modificacion/{id}/habilitar', 'Caja\Flash\FlashCajaController@habilitarModificacion')
+        ->middleware('auth')
+        ->name('habilitar_flash_caja_modificacion');
     Route::put('caja/flash/{id}', 'Caja\Flash\FlashCajaController@actualizar')->name('actualizar_flash_caja');
     Route::delete('caja/flash/{id}', 'Caja\Flash\FlashCajaController@eliminar')->name('eliminar_flash_caja');
     Route::get('caja/flash/{id}/reporte/{formato?}', 'Caja\Flash\FlashCajaController@reporte')->name('flash_caja_reporte');
@@ -3381,6 +3388,7 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::post('caja/rendicion-maquina/api/guardar', 'Caja\RendicionMaquinaController@apiGuardar')->name('rendicion_maquina_api_guardar');
     Route::post('caja/rendicion-maquina/api/traer-wigos', 'Caja\RendicionMaquinaController@apiTraerWigos')->name('rendicion_maquina_api_traer_wigos');
     Route::post('caja/rendicion-maquina/api/lineas-empresa', 'Caja\RendicionMaquinaController@apiLineasEmpresa')->name('rendicion_maquina_api_lineas_empresa');
+    Route::post('caja/rendicion-maquina/api/win-online', 'Caja\RendicionMaquinaController@apiWinOnline')->name('rendicion_maquina_api_win_online');
     Route::match(['get', 'post'], 'caja/rendicion-maquina/api/ajustes', 'Caja\RendicionMaquinaController@apiAjustes')->name('rendicion_maquina_api_ajustes');
     Route::delete('caja/rendicion-maquina/{id}', 'Caja\RendicionMaquinaController@eliminar')->name('eliminar_rendicion_maquina');
 

@@ -546,6 +546,9 @@ function buscar_datos_articulo(consulta) {
     if ($('#consultaarticuloModal').data('articuloSoloInsumoGastronomia')) {
         postData.solo_insumo_gastronomia = 1;
     }
+    if ($('#consultaarticuloModal').data('articuloExcluirInsumoVenta')) {
+        postData.excluir_insumo_venta = 1;
+    }
     if (consultaArticuloFiltrarDepositosUsuario()) {
         postData.filtrar_depositos_usuario = 1;
     }
@@ -687,6 +690,12 @@ function activa_eventos_consultaarticulo()
             $('#consultaarticuloModal').removeData('articuloSoloFacturable');
         }
 
+        if ($(this).closest('#tabla-articulos-requisicion').length) {
+            $('#consultaarticuloModal').data('articuloExcluirInsumoVenta', 1);
+        } else {
+            $('#consultaarticuloModal').removeData('articuloExcluirInsumoVenta');
+        }
+
         var $ctxInsumo = $(this).closest('[data-articulo-solo-insumo-gastronomia="1"]');
         if ($ctxInsumo.length) {
             $('#consultaarticuloModal').data('articuloSoloInsumoGastronomia', 1);
@@ -751,6 +760,7 @@ function activa_eventos_consultaarticulo()
         $('#consultaarticuloModal').removeData('articuloListaprecioNombre');
         $('#consultaarticuloModal').removeData('articuloSoloFacturable');
         $('#consultaarticuloModal').removeData('articuloSoloInsumoGastronomia');
+        $('#consultaarticuloModal').removeData('articuloExcluirInsumoVenta');
     });
 
     $('#consultaarticuloModal').off('shown.bs.modal.consultaArt').on('shown.bs.modal.consultaArt', function () {
@@ -934,10 +944,25 @@ function activa_eventos_consultaarticulo()
             return;
         }
 
-        let url_res = urlLeerArticuloPorSku(sku, consultaArticuloRequiereSoloFacturable($tr) ? 'solo_facturable=1' : '');
+        var extrasSku = [];
+        if (consultaArticuloRequiereSoloFacturable($tr)) {
+            extrasSku.push('solo_facturable=1');
+        }
+        if ($tr.closest('#tabla-articulos-requisicion').length) {
+            extrasSku.push('excluir_insumo_venta=1');
+        }
+        let url_res = urlLeerArticuloPorSku(sku, extrasSku.join('&'));
 
         $.get(url_res, function (data) {
             if (!data || !data.id) {
+                if ($tr.closest('#tabla-articulos-requisicion').length && data && data.excluido) {
+                    $tr.find('.articulo_id').val('');
+                    $tr.find('.descripcionarticulo').val('');
+                    $tr.find('.codigoarticulo, .codigoarticulolocal').val('');
+                    alert(data.mensaje || 'Ese artículo no se puede cargar en una requisición.');
+                    $tr.find('.codigoarticulo').first().trigger('change').trigger('focus');
+                    return;
+                }
                 avisarArticuloSkuNoEncontrado($tr, $(ptrrenglon), consultaArticuloRequiereSoloFacturable($tr)
                     ? 'No se encontró artículo facturable con ese SKU.'
                     : 'No se encontró artículo con ese SKU.');

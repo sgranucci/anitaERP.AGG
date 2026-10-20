@@ -147,7 +147,9 @@
                     '<td>' + $('<div>').text(e.sku || '').html() + '</td>' +
                     '<td class="text-right">' + (parseFloat(e.peso_neto) || 0).toFixed(2) + '</td>' +
                     '<td>' + $('<div>').text(e.lote_proveedor || '—').html() + '</td>' +
-                    '<td class="text-center">' +
+                    '<td class="text-center text-nowrap">' +
+                    '<button type="button" class="btn-accion-tabla ms-etiq-reimprimir" title="Reimprimir" data-id="' + e.etiqueta_id + '">' +
+                    '<i class="fa fa-print"></i></button>' +
                     '<button type="button" class="btn-accion-tabla ms-etiq-quitar" title="Quitar" data-id="' + e.etiqueta_id + '">' +
                     '<i class="fa fa-times-circle text-danger"></i></button></td></tr>'
                 );
@@ -179,10 +181,11 @@
         $('#ms_etiqueta_scan, #ms_etiqueta_agregar').prop('disabled', !on || !uidActivo);
     }
 
-    function seleccionar($tr) {
+    function seleccionar($tr, opts) {
         if (!$tr || !$tr.length || !debeMostrar()) {
             return;
         }
+        opts = opts || {};
         ensureAllUids();
         uidActivo = ensureUid($tr);
         filasItems().removeClass('ms-linea-activa');
@@ -190,7 +193,11 @@
         setScanEnabled(true);
         renderPanel();
         setMsg('');
-        $('#ms_etiqueta_scan').trigger('focus');
+        // El foco del renglón (SKU, kilos, F1) no se mueve al lector.
+        // Solo al hacer clic en la fila, fuera de un campo, se prepara el escaneo.
+        if (opts.enfocarScan) {
+            $('#ms_etiqueta_scan').trigger('focus');
+        }
     }
 
     function seleccionarPrimeraSiHaceFalta() {
@@ -243,6 +250,7 @@
             return;
         }
         toggleLayout(show);
+        renderHijas();
         if (!show) {
             porLinea = {};
             syncHiddens();
@@ -403,6 +411,113 @@
         return e;
     }
 
+    var hijasEmitidas = [];
+
+    function descargarZpl(zpl) {
+        var blob = new Blob([zpl], { type: 'text/plain' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'etiqueta_surmar.zpl';
+        a.click();
+    }
+
+    function enviarZpl(zpl) {
+        if (!zpl) {
+            return;
+        }
+        if (window.BrowserPrint) {
+            try {
+                BrowserPrint.getDefaultDevice('printer', function (device) {
+                    if (device) {
+                        device.send(zpl);
+                    } else {
+                        descargarZpl(zpl);
+                    }
+                }, function () { descargarZpl(zpl); });
+                return;
+            } catch (e) {}
+        }
+        descargarZpl(zpl);
+    }
+
+    function reimprimirIds(ids) {
+        ids = (ids || []).map(function (id) { return parseInt(id, 10); }).filter(function (id) { return id > 0; });
+        if (!ids.length) {
+            setMsg('No hay etiquetas para reimprimir', false);
+            return;
+        }
+        var url = $('#ms-zpl-etiquetas-surmar-url').val();
+        if (!url) {
+            setMsg('URL de impresión no configurada', false);
+            return;
+        }
+        setMsg('Armando etiquetas…', true);
+        $.ajax({
+            url: url,
+            method: 'POST',
+            data: {
+                _token: $('#csrf_token').val() || $('meta[name="csrf-token"]').attr('content'),
+                ids: ids
+            },
+            success: function (resp) {
+                if (!resp || !resp.ok || !resp.etiquetas || !resp.etiquetas.length) {
+                    setMsg((resp && resp.message) || 'Sin etiquetas para imprimir', false);
+                    return;
+                }
+                resp.etiquetas.forEach(function (e) { enviarZpl(e.zpl); });
+                setMsg('Reimpresión enviada (' + resp.etiquetas.length + ')', true);
+            },
+            error: function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'No se pudo reimprimir';
+                setMsg(msg, false);
+            }
+        });
+    }
+
+    function renderHijas() {
+        var $wrap = $('#ms-etiquetas-emitidas-wrap');
+        var $tb = $('#ms-tbody-etiquetas-emitidas');
+        if (!$wrap.length) {
+            return;
+        }
+        if (!debeMostrar() || !hijasEmitidas.length) {
+            $wrap.hide();
+            return;
+        }
+        $wrap.show();
+        $tb.empty();
+        hijasEmitidas.forEach(function (e) {
+            $tb.append(
+                '<tr>' +
+                '<td>' + e.etiqueta_id + '</td>' +
+                '<td>' + $('<div>').text(e.sku || '').html() + '</td>' +
+                '<td class="text-right">' + (parseFloat(e.peso_neto) || 0).toFixed(2) + '</td>' +
+                '<td>' + $('<div>').text(e.lote_proveedor || '—').html() + '</td>' +
+                '<td class="text-center">' +
+                '<button type="button" class="btn-accion-tabla ms-etiq-reimprimir" title="Reimprimir" data-id="' + e.etiqueta_id + '">' +
+                '<i class="fa fa-print"></i></button></td></tr>'
+            );
+        });
+    }
+
+    function hidratarHijas() {
+        var raw = $('#ms-etiquetas-surmar-hijas').text();
+        hijasEmitidas = [];
+        if (!raw) {
+            renderHijas();
+            return;
+        }
+        try {
+            var data = JSON.parse(raw);
+            if (Array.isArray(data)) {
+                hijasEmitidas = data.map(normalizarPayload).filter(Boolean);
+            }
+        } catch (e) {
+            hijasEmitidas = [];
+        }
+        renderHijas();
+    }
+
     function limpiarUidEliminado(uid) {
         if (uid && porLinea[uid]) {
             delete porLinea[uid];
@@ -418,6 +533,7 @@
         }
 
         hidratarInicial();
+        hidratarHijas();
         togglePanel();
         syncHiddens();
 
@@ -428,17 +544,15 @@
             if (!debeMostrar()) {
                 return;
             }
-            if ($(e.target).closest('button, a, .eliminar, .consultaarticulo, .btn-saldos-articulo-linea').length) {
-                return;
-            }
-            seleccionar($(this));
+            var enCampo = $(e.target).closest('input, select, textarea, button, a, .eliminar, .consultaarticulo, .btn-saldos-articulo-linea').length > 0;
+            seleccionar($(this), { enfocarScan: !enCampo });
         });
 
         $(document).on('focusin', '#tabla-items-movimientostock tbody tr.item-pedido', function () {
             if (!debeMostrar()) {
                 return;
             }
-            seleccionar($(this));
+            seleccionar($(this), { enfocarScan: false });
         });
 
         $(document).on('click', '#agrega_renglon', function () {
@@ -449,7 +563,7 @@
                 ensureAllUids();
                 var $last = filasItems().last();
                 if ($last.length) {
-                    seleccionar($last);
+                    seleccionar($last, { enfocarScan: false });
                 }
                 syncHiddens();
             }, 0);
@@ -476,6 +590,15 @@
                 e.preventDefault();
                 agregar();
             }
+        });
+        $(document).on('click', '.ms-etiq-reimprimir', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            reimprimirIds([$(this).data('id')]);
+        });
+        $('#ms_etiqueta_reimprimir_emitidas').on('click', function (e) {
+            e.preventDefault();
+            reimprimirIds(hijasEmitidas.map(function (x) { return x.etiqueta_id; }));
         });
         $(document).on('click', '.ms-etiq-quitar', function () {
             if (!uidActivo) {

@@ -18,6 +18,7 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
@@ -51,6 +52,8 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
+    private ?string $tituloHoja = null;
+
     public function __construct(
         private readonly GastronomiaDescuentoReporteService $reporteService,
     ) {
@@ -80,6 +83,12 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
         return $this;
     }
 
+    public function setTitle(string $tituloHoja): void
+    {
+        $tituloHoja = trim($tituloHoja);
+        $this->tituloHoja = $tituloHoja !== '' ? self::sanitizarNombreHoja($tituloHoja) : null;
+    }
+
     public function view(): View
     {
         $coleccionLogo = $this->empresaNombre !== ''
@@ -95,6 +104,7 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
                 'resultado' => $this->resultado,
                 'empresa_nombre' => $this->empresaNombre,
                 'titulo' => $this->titulo !== '' ? $this->titulo : 'Reporte descuentos gastronomía',
+                'titulo_solapa' => $this->tituloHoja,
                 'subtitulo' => $this->subtitulo,
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
                 'formatoNumero' => $formatoNumero,
@@ -107,6 +117,9 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
             count($bloques) > 0,
             count($bloques) > 0,
         );
+        if ($this->tituloHoja !== null) {
+            $filasMeta++;
+        }
         $this->layout = new GastronomiaDescuentoReporteExcelLayout(
             $this->hayFilaLogos,
             $filasMeta,
@@ -114,11 +127,12 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
             1,
         );
         $this->filaSubtituloExcel = trim($this->subtitulo) !== ''
-            ? $this->layout->filaInicioMeta() + 2
+            ? $this->layout->filaInicioMeta() + ($this->tituloHoja !== null ? 3 : 2)
             : 0;
 
         return view('exports.ventas.gastronomia_descuento_reporteindex', [
             'resultado' => $this->resultado,
+            'titulo_solapa' => $this->tituloHoja,
             'filtros' => $this->filtros,
             'titulo' => $this->titulo,
             'subtitulo' => $this->subtitulo,
@@ -195,6 +209,10 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
 
     public function title(): string
     {
+        if ($this->tituloHoja !== null) {
+            return $this->tituloHoja;
+        }
+
         if ($this->soloTotales) {
             return 'TOTALES';
         }
@@ -257,6 +275,21 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
     {
         if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
             $sheet->getRowDimension(1)->setRowHeight(54);
+            foreach ($this->rutasLogosExcel as $idx => $ruta) {
+                if (! is_string($ruta) || ! is_readable($ruta)) {
+                    continue;
+                }
+                $drawing = new Drawing;
+                $drawing->setName('Logo');
+                $drawing->setDescription('Logo empresa');
+                $drawing->setPath($ruta);
+                $drawing->setResizeProportional(true);
+                $drawing->setHeight(46);
+                $drawing->setCoordinates('A1');
+                $drawing->setOffsetX(6 + $idx * 160);
+                $drawing->setOffsetY(4);
+                $drawing->setWorksheet($sheet);
+            }
         }
 
         $sheet->mergeCells('B3:E3');

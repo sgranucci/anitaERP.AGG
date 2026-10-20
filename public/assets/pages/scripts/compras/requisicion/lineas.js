@@ -393,10 +393,13 @@
 
 	function pintarCuentaArticulo($row, payload) {
 		var $el = $row.find('.req-cuenta-articulo');
+		var artId = parseInt($row.find('.articulo_id').val(), 10) || 0;
+		var exige = !!(payload && payload.exige_capex);
+		$row.attr('data-exige-capex', exige ? '1' : '0');
+		refrescarMarcaCapexPuente($row);
 		if (!$el.length) {
 			return;
 		}
-		var artId = parseInt($row.find('.articulo_id').val(), 10) || 0;
 		if (!artId) {
 			$el.addClass('d-none').removeClass('is-vacia').text('').removeAttr('title');
 			return;
@@ -413,6 +416,75 @@
 		var texto = codigo && nombre ? (codigo + ' · ' + nombre) : (codigo || nombre);
 		var rotulo = tipo === 'GASTOS' ? 'Cuenta de gastos' : 'Cuenta de compras';
 		$el.removeClass('d-none is-vacia').text(texto).attr('title', rotulo + ' de la empresa: ' + texto);
+	}
+
+	function filaExigeCapexPuente($row) {
+		return String($row.attr('data-exige-capex') || '') === '1';
+	}
+
+	function capexAsignadoEnFila($row) {
+		var id = String($row.find('.capex_id').val() || '').trim();
+		return id !== '' && id !== '0';
+	}
+
+	function refrescarMarcaCapexPuente($row) {
+		var $inp = $row.find('.codigocapex');
+		if (!$inp.length) {
+			return;
+		}
+		var vacio = filaExigeCapexPuente($row) && !capexAsignadoEnFila($row);
+		$inp.toggleClass('req-capex-obligatorio', vacio);
+		if (filaExigeCapexPuente($row)) {
+			$inp.attr('title', 'Este artículo imputa a la cuenta puente de bienes de uso. Hay que asignar un CAPEX.');
+		}
+	}
+
+	function registrarCapexCuentaPuente() {
+		$(SELECTOR_TABLA).find(SELECTOR_FILA).each(function () {
+			refrescarMarcaCapexPuente($(this));
+		});
+
+		$(document)
+			.off('change.reqCapexPuente input.reqCapexPuente', SELECTOR_TABLA + ' .capex_id, ' + SELECTOR_TABLA + ' .codigocapex')
+			.on('change.reqCapexPuente input.reqCapexPuente', SELECTOR_TABLA + ' .capex_id, ' + SELECTOR_TABLA + ' .codigocapex', function () {
+				refrescarMarcaCapexPuente($(this).closest(SELECTOR_FILA));
+			});
+
+		$(document)
+			.off('submit.reqCapexPuente', '#form-general')
+			.on('submit.reqCapexPuente', '#form-general', function (e) {
+				if (window.requisicionModoProvisorio) {
+					return;
+				}
+				if ($(SELECTOR_TABLA).attr('data-req-pedir-partida-capex') !== '1') {
+					return;
+				}
+				var faltan = [];
+				$(SELECTOR_TABLA).find(SELECTOR_FILA).each(function (idx) {
+					var $row = $(this);
+					var cant = parseFloat($row.find('.cantidad-linea').val()) || 0;
+					if (!filaExigeCapexPuente($row) || cant <= 0 || capexAsignadoEnFila($row)) {
+						return;
+					}
+					var sku = String($row.find('.codigoarticulo').val() || '').trim();
+					faltan.push('línea ' + (idx + 1) + (sku ? ' (' + sku + ')' : ''));
+				});
+				if (!faltan.length) {
+					return;
+				}
+				e.preventDefault();
+				e.stopImmediatePropagation();
+				alert('La cuenta puente de bienes de uso exige un CAPEX. Falta en: ' + faltan.join('; ') + '.');
+				var $primero = $(SELECTOR_TABLA).find(SELECTOR_FILA).filter(function () {
+					var $row = $(this);
+					var cant = parseFloat($row.find('.cantidad-linea').val()) || 0;
+					return filaExigeCapexPuente($row) && cant > 0 && !capexAsignadoEnFila($row);
+				}).first().find('.codigocapex');
+				if ($primero.length) {
+					$primero.trigger('focus');
+				}
+				return false;
+			});
 	}
 
 	function cargarCuentaArticuloFila($row) {
@@ -841,6 +913,7 @@
 		registrarCambiosPatron();
 		registrarEventoArticuloCargado();
 		registrarCuentaArticulo();
+		registrarCapexCuentaPuente();
 		registrarAtajosF1();
 		registrarEnterLineas();
 		registrarDetalleLineaModal();

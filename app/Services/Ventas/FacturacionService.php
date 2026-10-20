@@ -2333,7 +2333,6 @@ class FacturacionService
             			'numeroremito' => 0,
 						'cantidadbulto' => 1,
 						'ordenventa_id' => $ordenventa_id,
-						'empresa_id' => 1
 					];	
 
 					// Graba venta
@@ -2390,7 +2389,7 @@ class FacturacionService
 							'cotizacion' => $cotizacion,
 							'venta_id' => $vta->id,
 							'cobranza_id' => null,
-							'empresa_id' => 1
+							'empresa_id' => $puntoventa->empresa_id
 						];
 						$this->cliente_cuentacorrienteRepository->create($data);
 					}

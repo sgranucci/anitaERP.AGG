@@ -3,6 +3,8 @@
 namespace App\Support\Caja\Flash;
 
 use App\Models\Caja\Flash\FlashCaja;
+use Carbon\Carbon;
+use InvalidArgumentException;
 
 /**
  * Validación manual del flash diario (tilde verde en Contable).
@@ -107,6 +109,23 @@ final class FlashCajaValidacionSupport
         return $out;
     }
 
+    /**
+     * El cierre de máquinas no corre si el flash de esa jornada no tiene el tilde verde.
+     */
+    public static function assertValidadoParaCierre(int $empresaId, string $fechaDia): void
+    {
+        $fecha = Carbon::parse($fechaDia)->toDateString();
+        $mapa = self::mapaValidadoPorFecha($empresaId, $fecha, $fecha);
+        if (! empty($mapa[$fecha])) {
+            return;
+        }
+
+        throw new InvalidArgumentException(
+            'El flash del '.Carbon::parse($fecha)->format('d/m/Y')
+            .' no tiene el tilde verde. Hay que validarlo en Caja antes de cerrar máquinas.'
+        );
+    }
+
     public static function marcarValidado(FlashCaja $flash, int $usuarioId): void
     {
         $flash->validado = true;
@@ -117,9 +136,14 @@ final class FlashCajaValidacionSupport
 
     public static function quitarValidacion(FlashCaja $flash): void
     {
+        FlashCajaModificacionSupport::assertPuedeModificar($flash);
+        $habiaHabilitacion = FlashCajaModificacionSupport::habilitacionVigente((int) $flash->id) !== null;
         $flash->validado = false;
         $flash->validado_en = null;
         $flash->validado_usuario_id = null;
         $flash->save();
+        if ($habiaHabilitacion) {
+            FlashCajaModificacionSupport::consumirHabilitacion((int) $flash->id);
+        }
     }
 }

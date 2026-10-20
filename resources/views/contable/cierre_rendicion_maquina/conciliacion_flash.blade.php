@@ -36,6 +36,7 @@
                 <div class="alert alert-info py-2 small mb-3">
                     Compara <strong>win_ol_slot + win_ol_rul</strong> del m&oacute;dulo flash ERP con la recaudaci&oacute;n online de rendiciones turno C.
                     El tilde verde a la derecha del monto indica que el flash de esa jornada fue validado.
+                    Sin ese tilde no se puede cerrar la jornada.
                     Tolerancia: {{ number_format($tolConfig, 2, ',', '.') }}.
                 </div>
                 <form method="get" action="{{ route('cierre_rendicion_maquina_conciliacion_flash') }}" class="mb-4">
@@ -111,17 +112,39 @@
                             @endif
                             @if (can('ejecutar-cierre-rendicion-maquina-contable', false)
                                 && (int) ($resumen['total_grupos_pendientes'] ?? 0) > 0)
-                                <button type="button"
-                                        class="btn btn-success btn-sm mb-1"
-                                        id="btn-cerrar-periodo-conc"
-                                        data-empresa-id="{{ (int) ($resultado['empresa_id'] ?? 0) }}"
-                                        data-fecha-desde="{{ $resultado['fecha_desde'] ?? '' }}"
-                                        data-fecha-hasta="{{ $resultado['fecha_hasta'] ?? '' }}"
-                                        data-grupos="{{ (int) ($resumen['total_grupos_pendientes'] ?? 0) }}"
-                                        data-pendientes="{{ (int) ($resumen['total_pendiente_cierre'] ?? 0) }}"
-                                        title="Generar cierres pendientes del periodo">
-                                    <i class="fa fa-lock"></i> Cerrar periodo completo
-                                </button>
+                                @php
+                                    $fechasSinTildeConc = [];
+                                    foreach ($dias ?? [] as $diaPend) {
+                                        if ((int) ($diaPend['cantidad_grupos_pendientes'] ?? 0) <= 0) {
+                                            continue;
+                                        }
+                                        if (! empty($diaPend['flash_validado'])) {
+                                            continue;
+                                        }
+                                        $fmtSinTilde = (string) ($diaPend['fecha_fmt'] ?? '');
+                                        if ($fmtSinTilde !== '') {
+                                            $fechasSinTildeConc[] = $fmtSinTilde;
+                                        }
+                                    }
+                                @endphp
+                                @if ($fechasSinTildeConc === [])
+                                    <button type="button"
+                                            class="btn btn-success btn-sm mb-1"
+                                            id="btn-cerrar-periodo-conc"
+                                            data-empresa-id="{{ (int) ($resultado['empresa_id'] ?? 0) }}"
+                                            data-fecha-desde="{{ $resultado['fecha_desde'] ?? '' }}"
+                                            data-fecha-hasta="{{ $resultado['fecha_hasta'] ?? '' }}"
+                                            data-grupos="{{ (int) ($resumen['total_grupos_pendientes'] ?? 0) }}"
+                                            data-pendientes="{{ (int) ($resumen['total_pendiente_cierre'] ?? 0) }}"
+                                            title="Generar cierres pendientes del periodo">
+                                        <i class="fa fa-lock"></i> Cerrar periodo completo
+                                    </button>
+                                @else
+                                    <button type="button" class="btn btn-outline-secondary btn-sm mb-1" disabled
+                                            title="Falta el tilde verde del flash: {{ implode(', ', $fechasSinTildeConc) }}.">
+                                        <i class="fa fa-lock"></i> Cerrar periodo completo
+                                    </button>
+                                @endif
                             @endif
                         </div>
                     </div>
@@ -202,15 +225,22 @@
                                             <td class="text-center p-1">
                                                 @if (can('ejecutar-cierre-rendicion-maquina-contable', false)
                                                     && (int) ($dia['cantidad_grupos_pendientes'] ?? 0) > 0)
-                                                    <button type="button"
-                                                            class="btn btn-success btn-sm js-cerrar-jornada-conc"
-                                                            data-empresa-id="{{ (int) ($resultado['empresa_id'] ?? 0) }}"
-                                                            data-fecha-dia="{{ $dia['fecha'] ?? '' }}"
-                                                            data-fecha-fmt="{{ $dia['fecha_fmt'] ?? '' }}"
-                                                            data-grupos="{{ (int) ($dia['cantidad_grupos_pendientes'] ?? 0) }}"
-                                                            data-pendientes="{{ (int) ($dia['cantidad_pendiente'] ?? 0) }}">
-                                                        <i class="fa fa-lock"></i> Cerrar
-                                                    </button>
+                                                    @if (! empty($dia['flash_validado']))
+                                                        <button type="button"
+                                                                class="btn btn-success btn-sm js-cerrar-jornada-conc"
+                                                                data-empresa-id="{{ (int) ($resultado['empresa_id'] ?? 0) }}"
+                                                                data-fecha-dia="{{ $dia['fecha'] ?? '' }}"
+                                                                data-fecha-fmt="{{ $dia['fecha_fmt'] ?? '' }}"
+                                                                data-grupos="{{ (int) ($dia['cantidad_grupos_pendientes'] ?? 0) }}"
+                                                                data-pendientes="{{ (int) ($dia['cantidad_pendiente'] ?? 0) }}">
+                                                            <i class="fa fa-lock"></i> Cerrar
+                                                        </button>
+                                                    @else
+                                                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled
+                                                                title="El flash de esta jornada no tiene el tilde verde.">
+                                                            <i class="fa fa-lock"></i> Cerrar
+                                                        </button>
+                                                    @endif
                                                 @else
                                                     —
                                                 @endif

@@ -169,6 +169,13 @@ final class FlashCajaCalculoDiarioService
                 }
 
                 unset($payload['comentario'], $payload['att'], $payload['cotizacion'], $payload['pos_online']);
+                if (\App\Support\Caja\Flash\FlashCajaModificacionSupport::estaBloqueado($actual)) {
+                    return $base + [
+                        'estado' => self::ESTADO_OMITIDO_USUARIO,
+                        'flash_id' => $actual->id,
+                        'mensaje' => 'El flash tiene tilde verde y cierre contable. No se recalcula.',
+                    ];
+                }
                 $this->repository->update($payload, $actual->id);
 
                 return $base + [

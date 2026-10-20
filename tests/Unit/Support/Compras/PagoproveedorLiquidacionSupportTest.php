@@ -3,7 +3,7 @@
 namespace Tests\Unit\Support\Compras;
 
 use App\Support\Compras\PagoproveedorLiquidacionSupport;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 class PagoproveedorLiquidacionSupportTest extends TestCase
 {
@@ -14,6 +14,15 @@ class PagoproveedorLiquidacionSupportTest extends TestCase
         $this->assertFalse($liq['cruzada']);
         $this->assertSame(1000.0, $liq['equivalente_pago']);
         $this->assertSame(100000.0, $liq['dc']);
+    }
+
+    public function test_pesos_contra_pesos_no_toma_el_dolar_de_referencia_como_dc(): void
+    {
+        $liq = PagoproveedorLiquidacionSupport::calcular(348691.75, 1, 1, 1, 1530);
+
+        $this->assertFalse($liq['cruzada']);
+        $this->assertSame(0.0, $liq['dc']);
+        $this->assertSame(348691.75, $liq['valor_local_deuda']);
     }
 
     public function test_pago_ars_factura_usd(): void

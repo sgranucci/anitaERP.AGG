@@ -4,13 +4,17 @@
     $modoDefault = RecuentoModoCierreSupport::modoPorDefecto($recuento);
     $textos = RecuentoModoCierreSupport::textosImplicancias();
     $fechaRecuentoFmt = optional($recuento->fecha)->format('d/m/Y');
-    $diasAntiguedad = RecuentoModoCierreSupport::diasAntiguedadFecha($recuento->fecha);
     $avisoFechaAntigua = RecuentoModoCierreSupport::debeAvisarFechaAntigua($recuento->fecha);
-    $bloqueaFechaAntigua = RecuentoModoCierreSupport::bloqueaCierrePorFechaAntigua(
-        $recuento->fecha,
-        RecuentoModoCierreSupport::MODO_FECHA_RECUENTO
-    );
-    $diasBloqueo = RecuentoModoCierreSupport::diasBloqueoFechaAntigua();
+    $resumenPosteriores = ($recuento->fecha && $recuento->deposito_id)
+        ? RecuentoModoCierreSupport::resumenMovimientosPosteriores(
+            (int) $recuento->deposito_id,
+            $recuento->fecha->toDateString()
+        )
+        : ['movimientos' => 0, 'articulos' => 0];
+    $bloqueaSaldoActual = ($resumenPosteriores['movimientos'] ?? 0) > 0;
+    $modoInicial = $bloqueaSaldoActual
+        ? RecuentoModoCierreSupport::MODO_FECHA_RECUENTO
+        : $modoDefault;
     $puedeCerrarParcial = in_array($recuento->estado, ['PENDIENTE', 'SUSPENDIDO'], true)
         && can('cerrar-recuento-parcial', false);
     $puedeCerrarTotal = in_array($recuento->estado, ['PENDIENTE', 'SUSPENDIDO'], true)
@@ -32,13 +36,17 @@
             <div class="alert alert-warning py-2 px-3 small" id="aviso-fecha-antigua-recuento">
                 <i class="fa fa-exclamation-triangle"></i>
                 {{ RecuentoModoCierreSupport::mensajeAvisoFechaAntigua($recuento) }}
-                @if ($bloqueaFechaAntigua)
+                @if ($bloqueaSaldoActual)
                     <br>
                     <strong>
-                        Con más de {{ $diasBloqueo }} días de antigüedad no se permite cerrar
-                        «a fecha del recuento». Corrija la fecha o use «Al saldo actual».
+                        {{ RecuentoModoCierreSupport::mensajeBloqueoSaldoActualConMovimientosPosteriores($recuento, (int) $resumenPosteriores['movimientos'], (int) $resumenPosteriores['articulos']) }}
                     </strong>
                 @endif
+            </div>
+        @elseif ($bloqueaSaldoActual)
+            <div class="alert alert-warning py-2 px-3 small" id="aviso-movimientos-posteriores-recuento">
+                <i class="fa fa-exclamation-triangle"></i>
+                {{ RecuentoModoCierreSupport::mensajeBloqueoSaldoActualConMovimientosPosteriores($recuento, (int) $resumenPosteriores['movimientos'], (int) $resumenPosteriores['articulos']) }}
             </div>
         @endif
 
@@ -47,13 +55,9 @@
                 <input type="radio" id="modo_cierre_fecha" name="modo_cierre_selector"
                     class="custom-control-input modo-cierre-radio"
                     value="{{ RecuentoModoCierreSupport::MODO_FECHA_RECUENTO }}"
-                    @checked($modoDefault === RecuentoModoCierreSupport::MODO_FECHA_RECUENTO && ! $bloqueaFechaAntigua)
-                    @disabled($bloqueaFechaAntigua)>
+                    @checked($modoInicial === RecuentoModoCierreSupport::MODO_FECHA_RECUENTO)>
                 <label class="custom-control-label font-weight-bold" for="modo_cierre_fecha">
                     A fecha del recuento ({{ $fechaRecuentoFmt }})
-                    @if ($bloqueaFechaAntigua)
-                        <span class="text-danger">(bloqueado por fecha antigua)</span>
-                    @endif
                 </label>
             </div>
             <div class="alert alert-info py-2 px-3 small mb-3" id="help-modo-fecha">
@@ -64,9 +68,13 @@
                 <input type="radio" id="modo_cierre_actual" name="modo_cierre_selector"
                     class="custom-control-input modo-cierre-radio"
                     value="{{ RecuentoModoCierreSupport::MODO_SALDO_ACTUAL }}"
-                    @checked($modoDefault === RecuentoModoCierreSupport::MODO_SALDO_ACTUAL || $bloqueaFechaAntigua)>
+                    @checked($modoInicial === RecuentoModoCierreSupport::MODO_SALDO_ACTUAL)
+                    @disabled($bloqueaSaldoActual)>
                 <label class="custom-control-label font-weight-bold" for="modo_cierre_actual">
                     Al saldo actual (hoy)
+                    @if ($bloqueaSaldoActual)
+                        <span class="text-danger">(bloqueado: hay movimientos posteriores)</span>
+                    @endif
                 </label>
             </div>
             <div class="alert alert-secondary py-2 px-3 small mb-0" id="help-modo-actual">
@@ -80,9 +88,9 @@
                 class="form-cierre-recuento d-inline"
                 data-confirm="¿Cerrar parcialmente? Se ajustará el stock de las líneas contadas con diferencia según el modo elegido."
                 data-aviso-fecha="{{ $avisoFechaAntigua ? RecuentoModoCierreSupport::mensajeAvisoFechaAntigua($recuento) : '' }}"
-                data-bloquea-fecha="{{ $bloqueaFechaAntigua ? '1' : '0' }}">
+                data-bloquea-saldo-actual="{{ $bloqueaSaldoActual ? '1' : '0' }}">
                 @csrf
-                <input type="hidden" name="modo_cierre" class="modo-cierre-input" value="{{ $bloqueaFechaAntigua ? RecuentoModoCierreSupport::MODO_SALDO_ACTUAL : $modoDefault }}">
+                <input type="hidden" name="modo_cierre" class="modo-cierre-input" value="{{ $modoInicial }}">
                 <button type="submit" class="btn btn-info btn-sm">
                     <i class="fa fa-check"></i> Cerrar parcial
                 </button>
@@ -94,9 +102,9 @@
                 class="form-cierre-recuento d-inline"
                 data-confirm="¿Cerrar totalmente? Se ajustará todo el depósito (líneas contadas y artículos con saldo sin contar) según el modo elegido."
                 data-aviso-fecha="{{ $avisoFechaAntigua ? RecuentoModoCierreSupport::mensajeAvisoFechaAntigua($recuento) : '' }}"
-                data-bloquea-fecha="{{ $bloqueaFechaAntigua ? '1' : '0' }}">
+                data-bloquea-saldo-actual="{{ $bloqueaSaldoActual ? '1' : '0' }}">
                 @csrf
-                <input type="hidden" name="modo_cierre" class="modo-cierre-input" value="{{ $bloqueaFechaAntigua ? RecuentoModoCierreSupport::MODO_SALDO_ACTUAL : $modoDefault }}">
+                <input type="hidden" name="modo_cierre" class="modo-cierre-input" value="{{ $modoInicial }}">
                 <button type="submit" class="btn btn-success btn-sm">
                     <i class="fa fa-check-double"></i> Cerrar total
                 </button>
@@ -109,8 +117,8 @@
 <script>
 (function () {
     var MODO_FECHA = @json(RecuentoModoCierreSupport::MODO_FECHA_RECUENTO);
-    var BLOQUEA_FECHA = @json($bloqueaFechaAntigua);
-    var DIAS_ANTIGUEDAD = @json($diasAntiguedad);
+    var MODO_ACTUAL = @json(RecuentoModoCierreSupport::MODO_SALDO_ACTUAL);
+    var BLOQUEA_SALDO_ACTUAL = @json($bloqueaSaldoActual);
 
     function modoSeleccionado() {
         var el = document.querySelector('.modo-cierre-radio:checked');
@@ -129,11 +137,10 @@
         form.addEventListener('submit', function (e) {
             sincronizarModoCierre();
             var modo = modoSeleccionado();
-            if (BLOQUEA_FECHA && modo === MODO_FECHA) {
+            if (BLOQUEA_SALDO_ACTUAL && modo === MODO_ACTUAL) {
                 e.preventDefault();
                 window.alert(
-                    'No se puede cerrar a fecha del recuento: la fecha tiene '
-                    + DIAS_ANTIGUEDAD + ' días de antigüedad. Corrija la fecha o use «Al saldo actual».'
+                    'No se puede cerrar al saldo actual: hay movimientos de stock posteriores a la fecha del recuento. Cierre a fecha del recuento.'
                 );
                 return;
             }

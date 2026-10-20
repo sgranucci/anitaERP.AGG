@@ -4,7 +4,7 @@
     $puedePdfRend = CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionMaquina();
 @endphp
 <tr class="grupo-detalle collapse" id="detalle-grupo-{{ $grupoId }}" data-parent="#tabla-paginada">
-    <td colspan="10" class="p-0 bg-light">
+    <td colspan="11" class="p-0 bg-light">
         <table class="table table-sm table-bordered mb-0">
             <thead class="thead-light">
                 <tr>

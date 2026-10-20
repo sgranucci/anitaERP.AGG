@@ -429,10 +429,20 @@
                                 Detalle
                             </button>
                         @endif
-                        @if (!empty($p['url_ver']))
+                        @if (!empty($p['url_erp']))
+                            <a href="{{ $p['url_erp'] }}"
+                               class="anita-inbox-btn anita-inbox-btn--ghost"
+                               target="_blank"
+                               rel="noopener"
+                               title="Abre el comprobante en otra solapa, sin menú, igual que el enlace Visualizar del correo.">
+                                {{ $p['etiqueta_erp'] ?? 'Ver en el ERP' }}
+                            </a>
+                        @endif
+                        @if (!empty($p['url_ver']) && ($p['url_ver'] ?? null) !== ($p['url_erp'] ?? null))
                             <a href="{{ $p['url_ver'] }}"
                                class="anita-inbox-btn anita-inbox-btn--ghost anita-inbox-btn--mobile-hide"
-                               @if ($fuente === 'arbol') target="_blank" rel="noopener" @endif>
+                               @if ($fuente === 'arbol') target="_blank" rel="noopener" @endif
+                               title="Abre la ficha del módulo. Pide permiso de edición o de consulta del ABM; no es el enlace del correo.">
                                 Abrir
                             </a>
                         @endif
@@ -691,8 +701,11 @@
                     var token = document.querySelector('meta[name="csrf-token"]');
                     var csrf = token ? token.getAttribute('content') : '';
                     var actions = '';
-                    if (d.url_ver) {
-                        actions += '<a class="anita-inbox-btn anita-inbox-btn--ghost" href="' + esc(d.url_ver) + '" target="_blank" rel="noopener">Abrir documento</a>';
+                    if (d.url_erp) {
+                        actions += '<a class="anita-inbox-btn anita-inbox-btn--ghost" href="' + esc(d.url_erp) + '" target="_blank" rel="noopener" title="Abre el comprobante en otra solapa, sin menú, igual que el enlace Visualizar del correo.">' + esc(d.etiqueta_erp || 'Ver en el ERP') + '</a>';
+                    }
+                    if (d.url_ver && d.url_ver !== d.url_erp) {
+                        actions += '<a class="anita-inbox-btn anita-inbox-btn--ghost" href="' + esc(d.url_ver) + '" target="_blank" rel="noopener" title="Abre la ficha del módulo. Pide permiso de edición o de consulta del ABM; no es el enlace del correo.">Abrir documento</a>';
                     }
                     if (d.puede_aprobar && d.url_aprobar) {
                         actions += '<form method="post" action="' + esc(d.url_aprobar) + '" class="anita-inbox-action-form anita-inbox-action-form--primary" onsubmit="return confirm(\'¿Aprobar este pendiente?\');">'

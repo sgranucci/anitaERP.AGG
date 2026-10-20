@@ -53,6 +53,8 @@ use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
+use App\Support\Compras\RequisicionArticuloCatalogoSupport;
+use App\Support\Compras\RequisicionCapexCuentaPuenteSupport;
 use App\Support\Stock\ArticuloCuentaCompraGastoSupport;
 use App\Support\Stock\ArticuloEstadoCanalSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuRangoSupport;
@@ -70,6 +72,7 @@ use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Stock\ArticuloMarketplaceGrillaSupport;
 use App\Support\Stock\ArticuloListadoColumnas;
+use App\Support\Stock\ArticuloListadoCuentasSupport;
 use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Stock\ArticuloListadoPreferenciasUsuario;
 use App\Support\Stock\ArticuloProveedorLineasSupport;
@@ -298,6 +301,7 @@ class ArticuloController extends Controller
             $columnasVisibles = array_values(array_filter($columnasVisibles, static fn ($key) => $key !== 'empresa'));
         }
         $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+        $filtros = ArticuloListadoCuentasSupport::marcarColumnas($filtros, $columnasVisibles);
 
         $articulos = $this->articuloRepository->leeArticulo($filtros, true);
 
@@ -330,6 +334,7 @@ class ArticuloController extends Controller
         }
         $filtrosQuery = ArticuloListadoFiltros::paraQueryString($filtros);
         $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
+        unset($filtros['_columnas']);
         $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
         if ($vistaActiva) {
             $filtrosQuery['vista_id'] = $vistaActiva->id;
@@ -472,11 +477,28 @@ class ArticuloController extends Controller
         ini_set('max_execution_time', '0');
 
         $filtros = $this->resolverFiltrosListado($request, $busqueda);
+        $columnasRequest = $request->input('columnas');
+        if (is_string($columnasRequest)) {
+            $columnasRequest = array_values(array_filter(array_map('trim', explode(',', $columnasRequest))));
+        }
+        $columnasVisibles = ArticuloListadoPreferenciasUsuario::resolverColumnas(
+            is_array($columnasRequest) ? $columnasRequest : null
+        );
+        $filtros = ArticuloListadoCuentasSupport::marcarColumnas($filtros, $columnasVisibles);
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ArticuloListadoColumnas::RECURSO,
+            ArticuloListadoColumnas::catalogoActivo()
+        );
 
         switch ($formato) {
             case 'PDF':
                 $articulos = $this->articuloRepository->leeArticulo($filtros, false);
-                $view = \View::make('stock.articulo.listado', compact('articulos'))->render();
+                $view = \View::make('stock.articulo.listado', [
+                    'articulos' => $articulos,
+                    'columnasVisibles' => $columnasVisibles,
+                    'etiquetasColumnas' => $etiquetas,
+                    'filtros' => $filtros,
+                ])->render();
                 $rutaPdf = storage_path('pdf/listados/listado_articulo.pdf');
                 DompdfListadoSupport::guardarLegalLandscape($view, $rutaPdf, [
                     'titulo_corto' => 'Listado de artículos',
@@ -490,15 +512,13 @@ class ArticuloController extends Controller
 
             case 'EXCEL':
                 return (new ArticuloExport($this->articuloRepository))
-                    ->parametros($filtros)
+                    ->parametros($filtros, $columnasVisibles, $etiquetas)
                     ->download('articulo.xlsx');
-                break;
 
             case 'CSV':
                 return (new ArticuloExport($this->articuloRepository))
-                    ->parametros($filtros)
+                    ->parametros($filtros, $columnasVisibles, $etiquetas)
                     ->download('articulo.csv', \Maatwebsite\Excel\Excel::CSV);
-                break;
         }
 
         return redirect()->route('articulo', ArticuloListadoFiltros::paraQueryString($filtros));
@@ -512,6 +532,10 @@ class ArticuloController extends Controller
         $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
         $layout = ArticuloListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
         $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $filtros = ArticuloListadoCuentasSupport::marcarColumnas(
+            $filtros,
+            ListadoGrillaConfigSupport::keysVisibles($layout)
+        );
         $page = $this->articuloRepository->leeArticulo($filtros, true);
         $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
         $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
@@ -1587,6 +1611,10 @@ class ArticuloController extends Controller
             }
         }
 
+        if (filter_var($request->input('excluir_insumo_venta'), FILTER_VALIDATE_BOOLEAN)) {
+            RequisicionArticuloCatalogoSupport::aplicarExclusion($query);
+        }
+
         if (filter_var($request->input('filtrar_depositos_usuario'), FILTER_VALIDATE_BOOLEAN)) {
             \App\Support\Sala\RequisicionSalaArticuloCatalogoSupport::aplicarFiltroArticulo($query);
         }
@@ -1866,6 +1894,7 @@ class ArticuloController extends Controller
             'codigo' => '',
             'nombre' => '',
             'tipo' => '',
+            'exige_capex' => false,
         ];
         if ($articulo_id <= 0 || $empresaId <= 0) {
             return response()->json($vacia);
@@ -1873,8 +1902,12 @@ class ArticuloController extends Controller
 
         $articulo = Articulo::query()->find($articulo_id);
         $cuenta = ArticuloCuentaCompraGastoSupport::resolver($articulo, $empresaId);
+        if ($cuenta === null) {
+            return response()->json($vacia, 200, [], JSON_UNESCAPED_UNICODE);
+        }
+        $cuenta['exige_capex'] = RequisicionCapexCuentaPuenteSupport::cuentaExigeCapex($cuenta);
 
-        return response()->json($cuenta ?? $vacia, 200, [], JSON_UNESCAPED_UNICODE);
+        return response()->json($cuenta, 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function leeUnArticuloPorSku($sku, Request $request)
@@ -1921,6 +1954,17 @@ class ArticuloController extends Controller
             $depositoEntregaId = (int) ($articulo->depositoentrega_id ?? 0);
             if (! \App\Support\Sala\RequisicionSalaArticuloCatalogoSupport::articuloPermitido($depositoEntregaId)) {
                 return response()->json(null);
+            }
+        }
+
+        if ($articulo && filter_var($request->input('excluir_insumo_venta'), FILTER_VALIDATE_BOOLEAN)) {
+            $mensajeExclusion = RequisicionArticuloCatalogoSupport::mensajeExclusion($articulo);
+            if ($mensajeExclusion !== null) {
+                return response()->json([
+                    'id' => null,
+                    'excluido' => true,
+                    'mensaje' => $mensajeExclusion,
+                ], 200, [], JSON_UNESCAPED_UNICODE);
             }
         }
 

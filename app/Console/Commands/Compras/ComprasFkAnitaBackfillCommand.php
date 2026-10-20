@@ -116,6 +116,7 @@ class ComprasFkAnitaBackfillCommand extends Command
             $this->table(['Métrica asiento↔pago', 'Cantidad'], [
                 ['Asientos T OPP/OPA sin FK', $plan['stats']['candidatos']],
                 ['Match 1:1 vincular', $plan['stats']['vincular']],
+                ['De ellos, sin letra en el subdiario', $plan['stats']['via_sin_letra'] ?? 0],
                 ['Ambiguo (omitidos)', $plan['stats']['ambiguo']],
                 ['Sin match (falta doc)', $plan['stats']['sin_match']],
             ]);

@@ -127,6 +127,13 @@ final class FlashCajaAybRecalculoService
                 'mensaje' => 'No hay flash para esa empresa/fecha; no se toca AyB.',
             ];
         }
+        if (\App\Support\Caja\Flash\FlashCajaModificacionSupport::estaBloqueado($flash)) {
+            return $base + [
+                'estado' => self::ESTADO_OMITIDO_IGUAL,
+                'flash_id' => (int) $flash->id,
+                'mensaje' => 'El flash tiene tilde verde y cierre contable. No se modifica AyB.',
+            ];
+        }
 
         $aybAnterior = round((float) $flash->ayb, 2);
         $aybNuevo = $this->calculoService->totalAyB($empresaId, $fechaSql)['neto'];

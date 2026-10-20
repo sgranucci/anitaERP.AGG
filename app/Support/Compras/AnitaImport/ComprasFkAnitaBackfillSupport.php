@@ -437,22 +437,26 @@ final class ComprasFkAnitaBackfillSupport
         $stats = [
             'candidatos' => 0,
             'vincular' => 0,
+            'via_sin_letra' => 0,
             'ambiguo' => 0,
             'sin_match' => 0,
         ];
         $vincular = [];
 
         $pagoIndex = [];
+        $pagoSinLetra = [];
         foreach (DB::table('pagoproveedor')
             ->whereBetween('fecha', [$desde, $hasta])
             ->whereIn('tipocomprobante', ['OPP', 'OPA'])
             ->get(['id', 'empresa_id', 'tipocomprobante', 'letra', 'sucursal', 'numerotransaccion']) as $p) {
+            $tipo = strtoupper(trim((string) $p->tipocomprobante));
             $k = (int) $p->empresa_id.'|'
-                .strtoupper(trim((string) $p->tipocomprobante)).'|'
+                .$tipo.'|'
                 .trim((string) $p->letra).'|'
                 .(int) $p->sucursal.'|'
                 .(int) $p->numerotransaccion;
             $pagoIndex[$k][] = $p;
+            $pagoSinLetra[(int) $p->empresa_id.'|'.$tipo.'|'.(int) $p->sucursal.'|'.(int) $p->numerotransaccion][] = $p;
         }
 
         $asientos = DB::table('asiento')
@@ -477,12 +481,24 @@ final class ComprasFkAnitaBackfillSupport
 
         foreach ($asiPorClave as $k => $asis) {
             $pagos = $pagoIndex[$k] ?? [];
+            $sinLetra = false;
+            if ($pagos === []) {
+                // El subdiario a veces no trae letra y la OP quedó con otra (p. ej. "2").
+                // Solo si hay un único pago para empresa + tipo + sucursal + número.
+                $partes = explode('|', (string) $k);
+                $kSin = ($partes[0] ?? '').'|'.($partes[1] ?? '').'|'.($partes[3] ?? '').'|'.($partes[4] ?? '');
+                $pagos = $pagoSinLetra[$kSin] ?? [];
+                $sinLetra = true;
+            }
             // 1 pago + N asientos (típico: dos nro_operacion del mismo OPP en subdiario):
             // se vinculan todos al mismo pagoproveedor. Solo se omite si hay varios pagos.
             if (count($pagos) === 1 && count($asis) >= 1) {
                 $pagoId = (int) $pagos[0]->id;
                 foreach ($asis as $a) {
                     $stats['vincular']++;
+                    if ($sinLetra) {
+                        $stats['via_sin_letra']++;
+                    }
                     $vincular[] = [
                         'asiento_id' => (int) $a->id,
                         'pago_id' => $pagoId,

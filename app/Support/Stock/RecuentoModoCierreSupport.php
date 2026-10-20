@@ -7,6 +7,7 @@ use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 final class RecuentoModoCierreSupport
 {
@@ -117,6 +118,52 @@ final class RecuentoModoCierreSupport
     }
 
     /**
+     * Movimientos del depósito con fecha posterior a la del recuento.
+     * Si $articuloIds es null, cuenta todo el depósito (cierre total).
+     *
+     * @param  list<int>|null  $articuloIds
+     * @return array{movimientos:int, articulos:int}
+     */
+    public static function resumenMovimientosPosteriores(int $depositoId, string $fechaRecuento, ?array $articuloIds = null): array
+    {
+        if ($articuloIds !== null && $articuloIds === []) {
+            return ['movimientos' => 0, 'articulos' => 0];
+        }
+
+        $query = DB::table('articulo_movimiento')
+            ->where('deposito_id', $depositoId)
+            ->where('fecha', '>', $fechaRecuento);
+
+        if ($articuloIds !== null) {
+            $query->whereIn('articulo_id', array_values(array_unique(array_map('intval', $articuloIds))));
+        }
+
+        $fila = $query->selectRaw('COUNT(*) as movimientos, COUNT(DISTINCT articulo_id) as articulos')->first();
+
+        return [
+            'movimientos' => (int) ($fila->movimientos ?? 0),
+            'articulos' => (int) ($fila->articulos ?? 0),
+        ];
+    }
+
+    /**
+     * @param  list<int>|null  $articuloIds
+     */
+    public static function bloqueaSaldoActualPorMovimientosPosteriores(
+        ?Carbon $fechaRecuento,
+        int $depositoId,
+        ?array $articuloIds = null,
+    ): bool {
+        if (! $fechaRecuento || $depositoId <= 0) {
+            return false;
+        }
+
+        $resumen = self::resumenMovimientosPosteriores($depositoId, $fechaRecuento->toDateString(), $articuloIds);
+
+        return $resumen['movimientos'] > 0;
+    }
+
+    /**
      * Fecha del movimiento de cierre (o la del recuento si no hubo ajuste).
      * Es la que se compara con el cierre contable del módulo de stock.
      */
@@ -178,10 +225,8 @@ final class RecuentoModoCierreSupport
 
         return "No se puede cerrar «a fecha del recuento» con fecha {$fechaFmt} "
             ."({$dias} días atrás; máximo permitido {$max}). "
-            .'Corrija la fecha del recuento (debe coincidir con el día del conteo) '
-            .'o cierre con el modo «Al saldo actual». '
-            .'Una fecha vieja reaplica el ajuste histórico y deja mal el stock vigente '
-            .'si ya hubo movimientos posteriores.';
+            .'Corrija la fecha del recuento para que coincida con el día del conteo. '
+            .'Si la fecha es la real y ya hubo movimientos posteriores, el cierre tiene que imputarse a esa fecha.';
     }
 
     public static function mensajeAvisoFechaAntigua(Recuento $recuento): string
@@ -190,8 +235,19 @@ final class RecuentoModoCierreSupport
         $fechaFmt = optional($recuento->fecha)->format('d/m/Y') ?: '—';
 
         return "La fecha del recuento ({$fechaFmt}) tiene {$dias} días de antigüedad. "
-            .'Verifique que sea el día real del conteo. Si el conteo refleja el stock de hoy, '
-            .'use «Al saldo actual»; si pone una fecha vieja por error, el cierre puede dejar saldos negativos.';
+            .'Verifique que sea el día real del conteo. '
+            .'Si después de esa fecha hubo movimientos, el cierre se imputa a la fecha del recuento: '
+            .'el saldo de hoy queda como lo contado más esos movimientos. '
+            .'«Al saldo actual» no está disponible en ese caso, porque pisaría el saldo de hoy.';
+    }
+
+    public static function mensajeBloqueoSaldoActualConMovimientosPosteriores(Recuento $recuento, int $movimientos, int $articulos): string
+    {
+        $fechaFmt = optional($recuento->fecha)->format('d/m/Y') ?: '—';
+
+        return "No se puede cerrar «al saldo actual». Después del {$fechaFmt} hay {$movimientos} movimientos "
+            ."de stock ({$articulos} artículos). Ese modo iguala el saldo de hoy a lo contado y descarta esos movimientos. "
+            .'Cierre «a fecha del recuento» para que el saldo vigente quede como lo contado más los movimientos posteriores.';
     }
 
     public static function etiqueta(?string $modo): string
@@ -219,7 +275,8 @@ final class RecuentoModoCierreSupport
             self::MODO_SALDO_ACTUAL => 'Compara lo contado con el saldo vigente hoy en el depósito. '
                 .'El ajuste se registra con la fecha de hoy. '
                 .'Use esta opción si el conteo refleja lo que hay físicamente ahora y desea '
-                .'igualar el sistema al conteo actual, sin reconstruir el saldo histórico.',
+                .'igualar el sistema al conteo actual, sin reconstruir el saldo histórico. '
+                .'No está disponible si ya hubo movimientos con fecha posterior a la del recuento.',
         ];
     }
 
@@ -315,7 +372,7 @@ final class RecuentoModoCierreSupport
         return "No se puede cerrar «a fecha del recuento» ({$fechaFmt}): "
             .'hay movimientos posteriores que dejarían saldo vigente negativo. '
             .'Ejemplos: '.implode('; ', $partes).$extra.'. '
-            .'Corrija esos movimientos, cambie la fecha del recuento, o cierre con «Al saldo actual».';
+            .'Corrija el conteo o esos movimientos. Cerrar al saldo actual no sirve: pisaría el saldo de hoy.';
     }
 
     /**

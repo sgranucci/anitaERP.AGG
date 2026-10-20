@@ -15,6 +15,7 @@ use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 use App\Support\Compras\AnitaImport\ProveedorCuentacorrienteAnitaImportFormatoSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Compras\PagoproveedorAnitaAuditoriaCompareSupport as Compare;
+use App\Support\Compras\PagoproveedorDevolucionRetencionSupport;
 use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Carbon\Carbon;
@@ -216,7 +217,10 @@ final class PagoproveedorAnitaAuditoriaDiariaService
 
         $this->auditarAsientoErp($pago, $problemas);
         $this->auditarCtamovAnita($pago, $tipo, $nro, $empresaAnita, $problemas);
-        $this->auditarPromovAnita($pago, $tipo, $nro, $empresaAnita, $problemas);
+        // DEV RET desembolsa retenciones (banco / impuestos). No tiene cuenta corriente ni promov.
+        if (! PagoproveedorDevolucionRetencionSupport::esDevolucion($pago)) {
+            $this->auditarPromovAnita($pago, $tipo, $nro, $empresaAnita, $problemas);
+        }
 
         if (! IngresoEgresoAnitaTesmovSupport::estaHabilitada()) {
             $problemas[] = 'Escritura tesorería Anita deshabilitada (no se verifica pago/tesmov)';

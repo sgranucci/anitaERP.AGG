@@ -29,11 +29,14 @@ final class ArticuloListadoColumnas
         'empresa' => ['label' => 'Empresa', 'default' => true, 'type' => 'texto', 'source' => 'empresa.nombre', 'attr' => 'nombreempresa', 'group' => 'clasificacion'],
         'numeroparte' => ['label' => 'Nro. parte', 'default' => true, 'type' => 'texto', 'source' => 'articulo.numeroparte', 'attr' => 'numeroparte', 'group' => 'partes'],
         'ubicacionparte' => ['label' => 'Ubic. parte', 'default' => true, 'type' => 'texto', 'source' => 'articulo.ubicacionparte', 'attr' => 'ubicacionparte', 'group' => 'partes'],
-        'saldo' => ['label' => 'Saldo dep.', 'default' => true, 'type' => 'texto', 'source' => '', 'attr' => 'saldo', 'group' => 'stock'],
+        'saldo' => ['label' => 'Saldo dep.', 'default' => true, 'export' => false, 'type' => 'texto', 'source' => '', 'attr' => 'saldo', 'group' => 'stock'],
         'nofactura' => ['label' => 'Facturable', 'default' => true, 'type' => 'texto', 'source' => 'articulo.nofactura', 'attr' => 'nofactura', 'group' => 'clasificacion'],
         'estado' => ['label' => 'Estado', 'default' => true, 'type' => 'texto', 'source' => 'articulo.estado', 'attr' => 'estado', 'group' => 'clasificacion'],
         'fecha_alta' => ['label' => 'Fecha de alta', 'default' => false, 'type' => 'fecha', 'source' => 'articulo.created_at', 'attr' => 'created_at', 'group' => 'fechas'],
         'fecha_modificacion' => ['label' => 'Fecha de modificación', 'default' => false, 'type' => 'fecha', 'source' => 'articulo.updated_at', 'attr' => 'updated_at', 'group' => 'fechas'],
+        'cuentaventa' => ['label' => 'Cta. contable venta', 'default' => false, 'export' => true, 'type' => 'texto', 'source' => 'cta_cuentaventa.etiqueta', 'attr' => 'cuentaventa', 'group' => 'contable'],
+        'cuentacompra' => ['label' => 'Cta. contable compra', 'default' => false, 'export' => true, 'type' => 'texto', 'source' => 'cta_cuentacompra.etiqueta', 'attr' => 'cuentacompra', 'group' => 'contable'],
+        'cuentagasto' => ['label' => 'Cta. contable gasto', 'default' => false, 'export' => true, 'type' => 'texto', 'source' => 'cta_cuentagasto.etiqueta', 'attr' => 'cuentagasto', 'group' => 'contable'],
     ];
 
     /** @return array<string, array{label: string, default: bool, type: string, source: string, attr: string, group: string}> */
@@ -99,8 +102,44 @@ final class ArticuloListadoColumnas
             'fecha_alta' => ListadoQbeSupport::formatearFecha(self::primero($data, 'fecha_alta', 'created_at')),
             'fecha_modificacion' => ListadoQbeSupport::formatearFecha(self::primero($data, 'fecha_modificacion', 'updated_at')),
             'saldo' => '',
+            'cuentaventa', 'cuentacompra', 'cuentagasto' => trim((string) ($data->{$key} ?? '')),
             default => (string) ($data->{$key} ?? ''),
         };
+    }
+
+    /**
+     * Columnas que salen en PDF y Excel. El saldo de depósito se arma en pantalla desde Anita.
+     *
+     * @param  list<string>  $keys
+     * @return list<string>
+     */
+    public static function columnasExportables(array $keys): array
+    {
+        $catalogo = self::catalogoActivo();
+        $out = [];
+        foreach ($keys as $key) {
+            if (! isset($catalogo[$key]) || in_array($key, $out, true)) {
+                continue;
+            }
+            if (array_key_exists('export', $catalogo[$key]) && ! $catalogo[$key]['export']) {
+                continue;
+            }
+            $out[] = $key;
+        }
+
+        if ($out !== []) {
+            return $out;
+        }
+
+        $defaults = [];
+        foreach (self::defaultsVisibles() as $key) {
+            if (array_key_exists('export', $catalogo[$key] ?? []) && ! $catalogo[$key]['export']) {
+                continue;
+            }
+            $defaults[] = $key;
+        }
+
+        return $defaults;
     }
 
     /**

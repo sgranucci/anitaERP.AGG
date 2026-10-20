@@ -59,6 +59,11 @@
         border-color: #5dade2;
         background: #ebf5fb;
     }
+    .rendmaq-acciones-fijas .tot-item.is-informativo {
+        border-style: dashed;
+        border-color: #1abc9c;
+        background: #e8f8f5;
+    }
     .rendmaq-acciones-fijas .lbl {
         font-size: 0.62rem;
         color: #566573;
@@ -232,6 +237,7 @@
      data-api-guardar="{{ route('rendicion_maquina_api_guardar') }}"
      data-api-traer-wigos="{{ route('rendicion_maquina_api_traer_wigos') }}"
      data-api-lineas-empresa="{{ route('rendicion_maquina_api_lineas_empresa') }}"
+     data-api-win-online="{{ route('rendicion_maquina_api_win_online') }}"
      data-api-ajustes="{{ route('rendicion_maquina_api_ajustes') }}"
      data-csrf="{{ csrf_token() }}"
      data-rendicion-id="{{ (int) ($rendicion_id ?? 0) }}"
@@ -298,6 +304,33 @@
                 </div>
             </div>
             <div class="card-body pb-0 @if($soloLectura) pe-none @endif" @if($soloLectura) style="opacity:.92" @endif>
+                @php
+                    $winOnline = is_array($d['win_online'] ?? null)
+                        ? $d['win_online']
+                        : ['hay_flash' => false, 'validado' => false, 'slots' => 0, 'ruletas' => 0, 'total' => 0];
+                    $winOnlineHay = ! empty($winOnline['hay_flash']);
+                    $fmtWinOnline = function ($n) {
+                        return '$'.number_format((float) $n, 2, ',', '.');
+                    };
+                @endphp
+                <div class="alert py-2 px-3 mb-3" id="bloque-win-online" style="background:#e8f8f5;border:1px dashed #1abc9c;color:#17202A;">
+                    <div class="d-flex flex-wrap align-items-baseline justify-content-between">
+                        <strong>Win online del flash</strong>
+                        <span class="small text-muted">Informativo, de esta empresa y fecha. El cierre de contadur&iacute;a usa este importe. No se guarda en la rendici&oacute;n.</span>
+                    </div>
+                    <div class="d-flex flex-wrap mt-1" style="gap:1.25rem;">
+                        <span>Slots <strong class="js-win-online-slots">{{ $winOnlineHay ? $fmtWinOnline($winOnline['slots'] ?? 0) : '—' }}</strong></span>
+                        <span>Ruletas <strong class="js-win-online-ruletas">{{ $winOnlineHay ? $fmtWinOnline($winOnline['ruletas'] ?? 0) : '—' }}</strong></span>
+                        <span>Total <strong class="js-win-online-total">{{ $winOnlineHay ? $fmtWinOnline($winOnline['total'] ?? 0) : 'Sin flash' }}</strong></span>
+                        <span class="js-win-online-estado small">
+                            @if ($winOnlineHay && ! empty($winOnline['validado']))
+                                Validado
+                            @elseif ($winOnlineHay)
+                                Sin validar
+                            @endif
+                        </span>
+                    </div>
+                </div>
                 @if (! $modoEdicion)
                     <div class="alert alert-info py-2 px-3" id="aviso-wigos-progreso" role="status">
                         <i class="fa fa-spinner fa-spin"></i>

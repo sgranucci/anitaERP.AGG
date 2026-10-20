@@ -3,6 +3,7 @@
 namespace App\Services\Compras;
 
 use App\Mail\Compras\ProveedorCuentacorrienteConciliacionDiaria;
+use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
@@ -85,6 +86,15 @@ class ProveedorCuentacorrienteConciliacionDiariaService
             ->orderBy('id')
             ->get();
 
+        $pagoIds = $filas->pluck('pagoproveedor_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values();
+        $asientoPorPago = $pagoIds->isEmpty()
+            ? collect()
+            : Pagoproveedor::query()->whereIn('id', $pagoIds)->pluck('asiento_id', 'id');
+
         foreach ($filas as $apl) {
             $par = Proveedor_Cuentacorriente_Aplicacion::query()
                 ->where('proveedor_cuentacorriente_id', (int) ($apl->proveedor_cuentacorriente_aplicado_id ?? 0))
@@ -118,11 +128,13 @@ class ProveedorCuentacorrienteConciliacionDiariaService
                     'total' => (float) $apl->total,
                     'moneda_id' => (int) $apl->moneda_id,
                     'cotizacion' => (float) ($apl->cotizacion ?? 1),
+                    'cotizacion_liquidacion' => (float) ($apl->cotizacion_liquidacion ?? 0),
                 ],
                 [
                     'total' => (float) $par->total,
                     'moneda_id' => (int) $par->moneda_id,
                     'cotizacion' => (float) ($par->cotizacion ?? 1),
+                    'cotizacion_liquidacion' => (float) ($par->cotizacion_liquidacion ?? 0),
                 ]
             );
             $dcGuardada = (float) ($apl->diferencia_cambio ?? 0);
@@ -143,7 +155,11 @@ class ProveedorCuentacorrienteConciliacionDiariaService
             if (ProveedorCuentacorrienteAplicacionLiquidacionSupport::esCruzada((int) $apl->moneda_id, (int) $par->moneda_id)
                 || abs($dcGuardada) >= 0.01
                 || abs($esperada) >= 0.01) {
-                if ((int) ($apl->asiento_id ?? 0) <= 0 && abs($esperada) >= 0.01) {
+                $asientoId = (int) ($apl->asiento_id ?? 0);
+                if ($asientoId <= 0) {
+                    $asientoId = (int) ($asientoPorPago[(int) ($apl->pagoproveedor_id ?? 0)] ?? 0);
+                }
+                if ($asientoId <= 0 && abs($esperada) >= 0.01) {
                     $informe['resumen']['dc_sin_asiento']++;
                     $informe['alertas'][] = [
                         'tipo' => 'dc_sin_asiento',

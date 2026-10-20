@@ -111,6 +111,8 @@
                 <p class="small text-muted px-3 pt-2 mb-0">
                     Un cierre diario por <strong>empresa + fecha jornada</strong>.
                     Genera FSL exenta en ventas ERP (PV por empresa) y asientos MAQ → ctamov Anita.
+                    El cierre exige el tilde verde del flash de esa jornada.
+                    <strong>Win online</strong> es el del flash (slots + ruletas): el mismo importe que entra al asiento.
                     Use <i class="fa fa-chevron-down"></i> para consultar las rendiciones del d&iacute;a (PDF o Excel).
                 </p>
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
@@ -122,6 +124,7 @@
                             <th>PV FSL</th>
                             <th class="text-center">Rend.</th>
                             <th class="text-right">Recaudaci&oacute;n</th>
+                            <th class="text-right" title="Win online del flash del día (slots + ruletas). El asiento de cierre usa este importe.">Win online</th>
                             <th>FSL</th>
                             <th>Estado cierre</th>
                             <th>Asiento</th>
@@ -159,6 +162,19 @@
                                 @endif
                             </td>
                             <td class="text-right text-nowrap">{{ number_format((float) ($grupo['total_resultado'] ?? 0), 2, ',', '.') }}</td>
+                            <td class="text-right text-nowrap" title="Mismo valor del flash. Slots y ruletas por separado.">
+                                @if (! empty($grupo['win_online_hay_flash']))
+                                    {{ number_format((float) ($grupo['win_online_total'] ?? 0), 2, ',', '.') }}
+                                    @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($grupo['flash_validado'])])
+                                    <br>
+                                    <small class="text-muted">
+                                        slots {{ number_format((float) ($grupo['win_online_slots'] ?? 0), 2, ',', '.') }}
+                                        · rul. {{ number_format((float) ($grupo['win_online_ruletas'] ?? 0), 2, ',', '.') }}
+                                    </small>
+                                @else
+                                    <span class="text-muted">Sin flash</span>
+                                @endif
+                            </td>
                             <td><small>{{ $grupo['factura_label'] ?? '—' }}</small></td>
                             <td>
                                 @if ($estado === CierreRendicionMaquinaGrupoSupport::ESTADO_CERRADA)
@@ -188,10 +204,18 @@
                             </td>
                             <td class="text-nowrap">
                                 @if (! empty($grupo['puede_cerrar']) && can('ejecutar-cierre-rendicion-maquina-contable', false))
-                                    <button type="button" class="btn btn-success btn-sm js-cerrar-grupo"
-                                            title="Generar cierre contable + FSL">
-                                        <i class="fa fa-lock"></i>
-                                    </button>
+                                    @if (! empty($grupo['flash_validado']))
+                                        <button type="button" class="btn btn-success btn-sm js-cerrar-grupo"
+                                                title="Generar cierre contable + FSL">
+                                            <i class="fa fa-lock"></i>
+                                        </button>
+                                    @else
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled
+                                                title="El flash de esta jornada no tiene el tilde verde.">
+                                            <i class="fa fa-lock"></i>
+                                        </button>
+                                        <small class="d-block text-muted">Sin tilde</small>
+                                    @endif
                                 @endif
                                 @if (! empty($grupo['puede_anular']) && can('anular-cierre-rendicion-maquina-contable', false))
                                     <button type="button" class="btn btn-outline-danger btn-sm js-anular-grupo"
@@ -207,7 +231,7 @@
                         ])
                         @empty
                         <tr>
-                            <td colspan="10" class="text-center text-muted py-4">Sin rendiciones de m&aacute;quinas (turno C) confirmadas.</td>
+                            <td colspan="11" class="text-center text-muted py-4">Sin rendiciones de m&aacute;quinas (turno C) confirmadas.</td>
                         </tr>
                         @endforelse
                     </tbody>

@@ -49,8 +49,8 @@ return [
         'limite_cuenta_analitico_control' => (int) preg_replace('/\D/', '', (string) env('MAYOR_CONCEPTO_LIMITE_CUENTA_ANALITICO_CONTROL', '112010008')),
         // Documenta hasta cuándo hay import ERP (informativo). Ya no hay híbrido por fecha.
         'fuente_erp_hasta' => env('MAYOR_CONCEPTO_FUENTE_ERP_HASTA', ''),
-        // UI + consulta: si false, solo Anita (bridge). Reactivar cuando el motor ERP cuadre.
-        'fuente_erp_habilitada' => filter_var(env('MAYOR_CONCEPTO_FUENTE_ERP_HABILITADA', false), FILTER_VALIDATE_BOOLEAN),
+        // UI + consulta: radio ERP / Anita. El motor ERP usa el mismo criterio de concepto que Anita.
+        'fuente_erp_habilitada' => filter_var(env('MAYOR_CONCEPTO_FUENTE_ERP_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
         // Excepción puntual: asientos que se reflejan con las dos patas (traspaso interno de
         // disponibilidad, neto cero) aunque la contrapartida esté por encima del límite
         // caja/banco. Formato "empresa:nro_asiento" separado por comas. No cambia la regla

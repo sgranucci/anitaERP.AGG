@@ -76,7 +76,7 @@ Grilla (orden por defecto; el diseñador lo cambia, ver «Orden físico de las c
 
 Acciones de fila, todas con su permiso: Editar, etiqueta QR (Ferli combinación/talle, o NPU, o cantidad), precios, saldos por depósito, kardex (o kardex por combinación), recepciones de proveedor, historial de precios de compra, Eliminar. Modales y overlays de impresión se conservan.
 
-Fechas de alta y modificación entran al QBE y quedan ocultas hasta que el diseñador las muestre. Cuentas contables de venta, compra y gasto siguen filtrables por código o nombre.
+Fechas de alta y modificación entran al QBE y quedan ocultas hasta que el diseñador las muestre. Cuentas contables de venta, compra y gasto se filtran por código o nombre y también son columnas del diseñador (ocultas hasta que la vista las muestre). El join va agrupado por artículo (`ArticuloListadoCuentasSupport`): una fila de la grilla, texto `código — nombre`; si el código difiere entre empresas, se listan los distintos.
 - Filtros externos que ya existían se conservan y quedan **por encima** del QBE, combinados con AND. Proveedores: botones de empresa (`filtros_externos`). Clientes no tenían barra de estado (verificado en git `5fc87fd7` / proveedores `b9ef3608`): el panel «Buscar en / Campo / Condición» lo reemplaza el QBE. Una barra Activo/Suspendido/Todos estilo artículos solo si se pide.
 - Al cambiar de vista, conservar en la URL los filtros externos (`filtro_estado`, `filtro_codigo`, `empresa_id`, `empresa_todas`).
 

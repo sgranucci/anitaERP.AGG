@@ -110,6 +110,10 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 $dc = $liq['dc'];
                 $cotAplicada = $liq['cotizacion_aplicada'];
             }
+            if (ProveedorCuentacorrienteAplicacionLiquidacionSupport::esLocal($monedaId)
+                && ProveedorCuentacorrienteAplicacionLiquidacionSupport::esLocal((int) ($pago->moneda_id ?? 1))) {
+                $dc = 0.0;
+            }
 
             $codigoComp = self::codigoComprobante($deuda);
             $importesCc = PagoproveedorAplicacionLadoSupport::importesAplicacionOp($deuda, $monto);

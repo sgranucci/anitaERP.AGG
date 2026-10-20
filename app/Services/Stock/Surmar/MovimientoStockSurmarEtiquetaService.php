@@ -697,6 +697,30 @@ class MovimientoStockSurmarEtiquetaService
     }
 
     /**
+     * Etiquetas hijas ya emitidas por el movimiento (AP/DES/TRA), para reimprimir sin volver a guardar.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function hijasEmitidasPayload(int $movimientoId): array
+    {
+        if ($movimientoId <= 0 || ! SurmarSupport::esEmpresaSurmar(SurmarSupport::EMPRESA_ID)) {
+            return [];
+        }
+
+        return Stock_Etiqueta::query()
+            ->with(['articulos:id,sku,descripcion,grupocarne,tipocarne', 'depositos:id,codigo,nombre', 'unidadesmedida:id,abreviatura,nombre'])
+            ->where('empresa_id', SurmarSupport::EMPRESA_ID)
+            ->where('origen_id', $movimientoId)
+            ->whereIn('origen_tipo', [SurmarSupport::ORIGEN_AP, SurmarSupport::ORIGEN_DES, SurmarSupport::ORIGEN_TRA])
+            ->where('estado', '!=', SurmarSupport::ESTADO_ANULADA)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Stock_Etiqueta $eti) => SurmarEtiquetaLookupSupport::payload($eti))
+            ->values()
+            ->all();
+    }
+
+    /**
      * @param  array<int, mixed>  $idsPorLinea
      * @return list<list<array<string, mixed>>>
      */

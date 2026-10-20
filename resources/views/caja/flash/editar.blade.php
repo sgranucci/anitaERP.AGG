@@ -53,9 +53,13 @@ window.flashAvisoAybWaitryInicial = @json($avisoAybWaitry ?? null);
                             @if ($data->validadoUsuario)
                                 por {{ $data->validadoUsuario->usuario ?? $data->validadoUsuario->nombre }}
                             @endif.
-                            Si guarda cambios se quitará la validación.
+                            @if (! empty($flashBloqueado))
+                                No se puede modificar: la jornada tiene cierre contable.
+                            @else
+                                Si guarda cambios se quitará la validación.
+                            @endif
                         </div>
-                        @if (! empty($puedeValidarFlash))
+                        @if (! empty($puedeValidarFlash) && empty($flashBloqueado))
                             @include('caja.flash.partials.boton_validar', [
                                 'flash' => $data,
                                 'puedeValidarFlash' => true,
@@ -76,20 +80,30 @@ window.flashAvisoAybWaitryInicial = @json($avisoAybWaitry ?? null);
                     </div>
                 </div>
             @endif
-            <form action="{{ route('actualizar_flash_caja', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            @include('caja.flash.partials.modificacion_cierre', [
+                'data' => $data,
+                'filtrosQuery' => $filtrosQuery ?? [],
+                'flashBloqueado' => $flashBloqueado ?? false,
+                'habilitacionVigente' => $habilitacionVigente ?? null,
+                'solicitudPendiente' => $solicitudPendiente ?? null,
+                'destinatariosModificacion' => $destinatariosModificacion ?? [],
+            ])
+            <form action="{{ route('actualizar_flash_caja', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-general" class="form-horizontal form--label-right {{ ! empty($flashBloqueado) ? 'pe-none' : '' }}" method="POST" autocomplete="off">
                 @csrf
                 @method('PUT')
                 <div class="card-body">
                     @include('caja.flash.form')
                 </div>
-                <div class="card-footer">
-                    <div class="row">
-                        <div class="col-lg-3"></div>
-                        <div class="col-lg-6">
-                            @include('includes.boton-form-editar')
+                @if (empty($flashBloqueado))
+                    <div class="card-footer">
+                        <div class="row">
+                            <div class="col-lg-3"></div>
+                            <div class="col-lg-6">
+                                @include('includes.boton-form-editar')
+                            </div>
                         </div>
                     </div>
-                </div>
+                @endif
             </form>
         </div>
     </div>

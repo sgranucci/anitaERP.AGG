@@ -55,6 +55,13 @@ final class FlashCajaVendingRecalculoService
                 'mensaje' => 'No hay flash para esa empresa/fecha; no se toca vending.',
             ];
         }
+        if (\App\Support\Caja\Flash\FlashCajaModificacionSupport::estaBloqueado($flash)) {
+            return $base + [
+                'estado' => self::ESTADO_OMITIDO_IGUAL,
+                'flash_id' => (int) $flash->id,
+                'mensaje' => 'El flash tiene tilde verde y cierre contable. No se modifica vending.',
+            ];
+        }
 
         $vendingAnterior = round((float) $flash->vending, 2);
         $vendingNuevo = $this->calculoService->detalleVending($empresaId, $fechaSql)['total'];

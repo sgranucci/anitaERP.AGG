@@ -20,6 +20,8 @@ use App\Repositories\Presupuesto\CapexRepositoryInterface;
 use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Compras\RequisicionAnitaColisionSupport;
+use App\Support\Compras\RequisicionArticuloCatalogoSupport;
+use App\Support\Compras\RequisicionCapexCuentaPuenteSupport;
 use App\Support\Compras\RequisicionAnitaSyncEstado;
 use App\Support\Compras\RequisicionCentrocostoArbolOrigenSupport;
 use App\Support\Compras\RequisicionLineasOcSupport;
@@ -105,6 +107,7 @@ class RequisicionService
 
         try {
             $data['oficinacompra_id'] = $this->validaYCalculaOficinaCompraIdDesdeArticulos($data);
+            RequisicionArticuloCatalogoSupport::validarPayload($data);
             if (! $modoProvisorio) {
                 $resolucionCc = $this->resolverCentrocostoArbolParaGrabacion($data);
                 if (($resolucionCc['mensaje'] ?? '') === 'seleccionar_centrocosto') {
@@ -122,6 +125,7 @@ class RequisicionService
         if (! $modoProvisorio) {
             try {
                 ValidacionPresupuestoPartidaCapexLineas::validar($data);
+                RequisicionCapexCuentaPuenteSupport::validar($data);
             } catch (\InvalidArgumentException $e) {
                 return ['mensaje' => 'error', 'errores' => $e->getMessage()];
             }
@@ -251,6 +255,8 @@ class RequisicionService
             $this->arbolaprobacionService->validaRequisicionModeloContraArbol($existente);
             $payloadValidacion = $this->payloadValidacionLineasDesdeModelo($existente);
             ValidacionPresupuestoPartidaCapexLineas::validar($payloadValidacion);
+            RequisicionCapexCuentaPuenteSupport::validar($payloadValidacion);
+            RequisicionArticuloCatalogoSupport::validarPayload($payloadValidacion);
         } catch (\RuntimeException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         } catch (\InvalidArgumentException $e) {
@@ -459,8 +465,12 @@ class RequisicionService
         }
 
         try {
+            RequisicionCapexCuentaPuenteSupport::validar($this->payloadValidacionLineasDesdeModelo($req));
+            RequisicionArticuloCatalogoSupport::validarPayload($this->payloadValidacionLineasDesdeModelo($req));
             $preview = $this->arbolaprobacionService->firmantesRetomeArbolRequisicion($req, $centrocostoArbolId);
         } catch (\RuntimeException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
@@ -718,6 +728,11 @@ class RequisicionService
         }
 
         $data = $request->all();
+        try {
+            RequisicionArticuloCatalogoSupport::validarPayload($data);
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
         $data['oficinacompra_id'] = $this->validaYCalculaOficinaCompraIdDesdeArticulos($data);
 
         $pendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
@@ -762,6 +777,7 @@ class RequisicionService
                     $data,
                     ValidacionPresupuestoPartidaCapexLineas::idsAsignadosDesdeLineas($existente->requisicion_articulos ?? [])
                 );
+                RequisicionCapexCuentaPuenteSupport::validar($data);
             } catch (\InvalidArgumentException $e) {
                 return ['mensaje' => 'error', 'errores' => $e->getMessage()];
             }

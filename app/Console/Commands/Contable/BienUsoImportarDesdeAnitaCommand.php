@@ -12,7 +12,7 @@ class BienUsoImportarDesdeAnitaCommand extends Command
                             {--ejecutar : Persiste en ERP (lee Anita, no escribe Anita)}
                             {--solo-cuenta : Solo sincroniza cuenta automática desde impcont 301}';
 
-    protected $description = 'Importa bienes de uso desde Anita acncadmin (biemae/bierub/biesubr/indmae/indmov/amormov/revmov/bieubic) y carga cuenta impcont 301';
+    protected $description = 'Importa bienes de uso desde Anita (biemae/bierub/biesubr/indmae/indmov/amormov/revmov/bieubic) y carga cuenta impcont 301';
 
     public function handle(BienUsoAnitaImportService $service): int
     {
@@ -25,7 +25,7 @@ class BienUsoImportarDesdeAnitaCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info(($dryRun ? 'DRY-RUN' : 'EJECUTAR').' import bienes de uso desde Anita (acncadmin)');
+        $this->info(($dryRun ? 'DRY-RUN' : 'EJECUTAR').' import bienes de uso desde Anita');
 
         if ((bool) $this->option('solo-cuenta')) {
             $ret = $service->sincronizarCuentaAmortizacionDesdeImpcont(
@@ -57,6 +57,16 @@ class BienUsoImportarDesdeAnitaCommand extends Command
             ['Revaluos', $stats['revaluos']['leidos'], $stats['revaluos']['upsert'], $stats['revaluos']['omitidos']],
             ['Ubicaciones', $stats['ubicaciones']['leidos'], $stats['ubicaciones']['upsert'], $stats['ubicaciones']['omitidos']],
         ]);
+
+        $bienes = $stats['bienes'] ?? [];
+        $this->info(sprintf(
+            'Bienes: %d nuevos, %d unidos a los ya cargados, %d omitidos (sin empresa o sin centro de costo), %d con serie repetida (se importan aparte), %d actuales sin par en Anita',
+            (int) ($bienes['nuevos'] ?? 0),
+            (int) ($bienes['vinculados'] ?? 0),
+            (int) ($bienes['omitidos'] ?? 0),
+            (int) ($bienes['conflictos'] ?? 0),
+            (int) ($bienes['sin_par'] ?? 0)
+        ));
 
         $this->info(sprintf(
             'Cuenta automática impcont 301 → %s (%s) | empresas: %d | reemplazos: %d',

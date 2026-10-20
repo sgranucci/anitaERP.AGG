@@ -21,6 +21,7 @@
     @include('exports.ventas.partials.gastronomia_descuento_reporte_encabezado_meta', [
         'colspan' => $colspan,
         'titulo' => $titulo ?? 'Reporte descuentos gastronomía',
+        'titulo_solapa' => $titulo_solapa ?? '',
         'subtitulo' => $subtitulo ?? '',
         'reservarFilaLogoExcel' => $reservarFilaLogoExcel ?? false,
         'resumen_totales' => $resumenTotales,

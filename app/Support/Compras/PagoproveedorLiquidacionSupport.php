@@ -36,7 +36,10 @@ final class PagoproveedorLiquidacionSupport
         $cruzada = $monedaDeuda !== $monedaPago;
 
         if (! $cruzada) {
-            $dc = ProveedorCuentacorrienteAplicacionDcSupport::calcular($montoDeuda, $cotDeuda, $cotApl);
+            // En pesos la cotización es el dólar de referencia: no genera diferencia de cambio.
+            $dc = ProveedorCuentacorrienteAplicacionLiquidacionSupport::esLocal($monedaDeuda)
+                ? 0.0
+                : ProveedorCuentacorrienteAplicacionDcSupport::calcular($montoDeuda, $cotDeuda, $cotApl);
 
             return [
                 'cruzada' => false,

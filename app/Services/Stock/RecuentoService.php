@@ -195,7 +195,11 @@ class RecuentoService
         }
 
         $modo = RecuentoModoCierreSupport::resolverModo($modoCierre);
-        $this->assertFechaCierrePermitida($recuento, $modo);
+        $this->assertFechaCierrePermitida(
+            $recuento,
+            $modo,
+            $items->pluck('articulo_id')->map(static fn ($id) => (int) $id)->all()
+        );
         $this->assertCierreFechaNoDejaNegativos(
             $recuento,
             $modo,
@@ -268,7 +272,7 @@ class RecuentoService
         }
 
         $modo = RecuentoModoCierreSupport::resolverModo($modoCierre);
-        $this->assertFechaCierrePermitida($recuento, $modo);
+        $this->assertFechaCierrePermitida($recuento, $modo, null);
 
         $conteos = [];
         $modoCt = null;
@@ -1018,11 +1022,34 @@ class RecuentoService
         return $deposito;
     }
 
-    private function assertFechaCierrePermitida(Recuento $recuento, string $modoCierre): void
+    /**
+     * @param  list<int>|null  $articuloIdsAlcance  null = todo el depósito (cierre total)
+     */
+    private function assertFechaCierrePermitida(Recuento $recuento, string $modoCierre, ?array $articuloIdsAlcance = null): void
     {
-        if (RecuentoModoCierreSupport::bloqueaCierrePorFechaAntigua($recuento->fecha, $modoCierre)) {
-            throw new \RuntimeException(RecuentoModoCierreSupport::mensajeBloqueoFechaAntigua($recuento));
+        if (RecuentoModoCierreSupport::resolverModo($modoCierre) !== RecuentoModoCierreSupport::MODO_SALDO_ACTUAL) {
+            return;
         }
+        if (! $recuento->fecha) {
+            return;
+        }
+
+        $resumen = RecuentoModoCierreSupport::resumenMovimientosPosteriores(
+            (int) $recuento->deposito_id,
+            $recuento->fecha->toDateString(),
+            $articuloIdsAlcance
+        );
+        if ($resumen['movimientos'] <= 0) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            RecuentoModoCierreSupport::mensajeBloqueoSaldoActualConMovimientosPosteriores(
+                $recuento,
+                $resumen['movimientos'],
+                $resumen['articulos']
+            )
+        );
     }
 
     /**

@@ -538,6 +538,31 @@ class MayorConceptoMemoriaMotor
     }
 
     /**
+     * Concepto colgado de Proveedores (211010-001). En el plan es «CHQ EMITIDO NO ENTREGADO».
+     * No hay un circuito de entrega: un cheque que sale se clasifica como la OP, no con este concepto.
+     */
+    public function conceptoPuenteChequeEmitido(int $empresaId): int
+    {
+        $concepto = $this->conceptoDeCuenta($empresaId, 211010001);
+        if ($concepto > 0) {
+            return $concepto;
+        }
+
+        return $this->conceptoDeCuenta($empresaId, 211010002);
+    }
+
+    public function esConceptoPuenteChequeEmitido(int $empresaId, int $conceptoId): bool
+    {
+        if ($conceptoId <= 0) {
+            return false;
+        }
+
+        $puente = $this->conceptoPuenteChequeEmitido($empresaId);
+
+        return $puente > 0 && $conceptoId === $puente;
+    }
+
+    /**
      * Cuenta puente 150000-xxx (transferencias OPV/OPP sin proveedor 211).
      * Mismo rol que contrapartida en ING/EGR: aporta el concepto, no es pago a proveedor.
      */

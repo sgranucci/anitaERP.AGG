@@ -4,9 +4,9 @@ namespace App\Support\Contable;
 
 use App\ApiAnita;
 use App\Models\Caja\AperturaGastoEmpresa;
-use App\Models\Caja\Flash\FlashCaja;
 use App\Models\Caja\RendicionMaquina;
 use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
+use App\Support\Caja\RendicionMaquina\RendicionMaquinaWinOnlineFlashSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaTurno;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaValoresCuentacajaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
@@ -54,15 +54,7 @@ final class CierreRendicionMaquinaTotalesSupport
             2,
         );
 
-        $flash = FlashCaja::query()
-            ->where('empresa_id', $empresaId)
-            ->whereDate('fecha', Carbon::parse($fechaDia)->toDateString())
-            ->first(['win_ol_slot', 'win_ol_rul']);
-
-        $tot['maquinas_online'] = round((float) ($flash?->win_ol_slot ?? 0), 2);
-        $tot['ruletas_online'] = round((float) ($flash?->win_ol_rul ?? 0), 2);
-        $tot['resultado_online'] = round($tot['maquinas_online'] + $tot['ruletas_online'], 2);
-        $tot['fsl_monto'] = $tot['resultado_online'];
+        self::aplicarWinOnlineFlash($tot, $empresaId, $fechaDia);
         $tot['gastos_apertura'] = array_values($gastosApertura);
 
         $resultadoReal = round($tot['maquinas_real'] + $tot['ruletas_real'], 2);
@@ -574,15 +566,20 @@ final class CierreRendicionMaquinaTotalesSupport
     private static function estructuraVacia(int $empresaId, string $fechaDia): array
     {
         $tot = self::inicializarAcumuladores();
-        $flash = FlashCaja::query()
-            ->where('empresa_id', $empresaId)
-            ->whereDate('fecha', Carbon::parse($fechaDia)->toDateString())
-            ->first(['win_ol_slot', 'win_ol_rul']);
-        $tot['maquinas_online'] = round((float) ($flash?->win_ol_slot ?? 0), 2);
-        $tot['ruletas_online'] = round((float) ($flash?->win_ol_rul ?? 0), 2);
-        $tot['resultado_online'] = round($tot['maquinas_online'] + $tot['ruletas_online'], 2);
-        $tot['fsl_monto'] = $tot['resultado_online'];
+        self::aplicarWinOnlineFlash($tot, $empresaId, $fechaDia);
 
         return $tot;
+    }
+
+    /**
+     * @param  array<string, mixed>  $tot
+     */
+    private static function aplicarWinOnlineFlash(array &$tot, int $empresaId, string $fechaDia): void
+    {
+        $online = RendicionMaquinaWinOnlineFlashSupport::leer($empresaId, $fechaDia);
+        $tot['maquinas_online'] = $online['slots'];
+        $tot['ruletas_online'] = $online['ruletas'];
+        $tot['resultado_online'] = $online['total'];
+        $tot['fsl_monto'] = $online['total'];
     }
 }

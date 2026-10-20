@@ -28,6 +28,14 @@
         width: 1%;
         white-space: nowrap;
     }
+    .lw-workbench.lw-cp-grilla #tabla-paginada th.cp-col-acciones,
+    .lw-workbench.lw-cp-grilla #tabla-paginada td.cp-col-acciones {
+        width: 11rem;
+        min-width: 11rem;
+        white-space: nowrap;
+        overflow: visible;
+        vertical-align: middle;
+    }
 </style>
 @endsection
 
@@ -88,6 +96,11 @@
             <div class="card-header lw-header d-flex flex-wrap align-items-center justify-content-between">
                 <h3 class="card-title mb-0">Comprobantes de proveedor</h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end" style="gap:.4rem;">
+                    @if (can('editar-plan-cuotas-comprobante-proveedor', false))
+                    <a href="{{ route('plan_cuotas_comprobante_proveedor') }}" class="btn btn-light btn-sm">
+                        <i class="fa fa-calendar"></i> Plan de cuotas
+                    </a>
+                    @endif
                     @if (can('editar-configuracion-comprobante-proveedor', false))
                     <a href="{{ route('configuracion_comprobante_proveedor') }}" class="btn btn-outline-secondary btn-sm">
                         <i class="fa fa-cog"></i> Configuración
@@ -209,7 +222,7 @@
                             @foreach ($columnasVisibles as $keyColumna)
                                 @include('compras.comprobante_proveedor.partials.workbench_th', ['key' => $keyColumna])
                             @endforeach
-                            <th class="width120" data-orderable="false"></th>
+                            <th class="cp-col-acciones" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -230,14 +243,14 @@
                                     'retornoListadoQuery' => $retornoListadoQuery,
                                 ])
                             @endforeach
-                            <td class="text-nowrap">
+                            <td class="cp-col-acciones text-nowrap">
                                 @if (can('editar-comprobante-proveedor', false))
                                 <a href="{{ route('editar_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                     <i class="fa fa-edit"></i>
                                 </a>
                                 @endif
                                 @if (can('editar-plan-cuotas-comprobante-proveedor', false))
-                                <a href="{{ route('editar_plan_cuotas_comprobante_proveedor', $data->id) }}" class="btn-accion-tabla tooltipsC" title="Plan de cuotas">
+                                <a href="{{ route('editar_plan_cuotas_comprobante_proveedor', $data->id) }}" class="btn-accion-tabla tooltipsC" title="Unificar o rearmar cuotas">
                                     <i class="fa fa-calendar"></i>
                                 </a>
                                 @endif

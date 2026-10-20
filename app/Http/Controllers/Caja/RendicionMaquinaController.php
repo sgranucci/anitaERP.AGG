@@ -11,6 +11,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\RendicionMaquina\RendicionMaquinaService;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaAjusteWigosSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaTurno;
+use App\Support\Caja\RendicionMaquina\RendicionMaquinaWinOnlineFlashSupport;
 use App\Support\Caja\RendicionMaquinaListadoFiltros;
 use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
 use App\Support\Listado\QueryRetornoListado;
@@ -342,6 +343,34 @@ class RendicionMaquinaController extends Controller
             'ok' => true,
             'cuentas_valor' => $lineas['cuentas_valor'],
             'gastos' => $lineas['gastos'],
+        ]);
+    }
+
+    public function apiWinOnline(Request $request)
+    {
+        if (! can('crear-rendicion-maquina', false)
+            && ! can('actualizar-rendicion-maquina', false)
+            && ! can('editar-rendicion-maquina', false)
+            && ! can('listar-rendicion-maquina', false)
+            && ! CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionMaquina()
+        ) {
+            abort(403);
+        }
+
+        $request->validate([
+            'empresa_id' => ['required', 'integer', 'min:1'],
+            'fecha' => ['required', 'date'],
+        ]);
+
+        $empresaId = (int) $request->input('empresa_id');
+        $this->assertAccesoEmpresa($empresaId);
+
+        return response()->json([
+            'ok' => true,
+            'win_online' => RendicionMaquinaWinOnlineFlashSupport::leer(
+                $empresaId,
+                (string) $request->input('fecha'),
+            ),
         ]);
     }
 

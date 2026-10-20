@@ -2,6 +2,7 @@
 
 namespace App\Services\Contable;
 
+use App\Models\Caja\Cheque;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\InterbankingMovimiento;
 use App\Support\Caja\InterbankingSaldoResolverSupport;
@@ -22,6 +23,7 @@ use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMatcher;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMovimientoBancoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendienteSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendientesCpromaeSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaReclaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaReferenciaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
@@ -202,16 +204,20 @@ class ConciliacionBancariaService
         );
         $partBanco = ConciliacionBancariaPendienteSupport::particionarBanco($pendientesBanco);
 
-        // Pendientes Contaduría: cpromae (semilla Excel o Ch: del mayor + snapshot previo).
+        // Stock de cheques: snapshot del mes anterior más los emitidos en el ERP desde ese cierre.
         $armPendientes = $this->armarPendientesCpromae(
             (string) $cuentacaja->codigo,
             $empresaId,
             $cuentacajaId,
             $fechaHasta,
             $pendientesContables,
-            $opciones,
         );
-        // Firmado carátula (cheques restan): -suma vencimientos del mes.
+        $armPendientes = $this->aplicarReclaCheques(
+            $armPendientes,
+            (int) $cuentaContable->id,
+            $fechaHasta,
+        );
+        // Firmado carátula (cheques restan): -neto (stock − RECLA, o F.Dev del mes hasta mayo).
         $sumaPendContCaratula = round(-1 * (float) $armPendientes['suma_caratula'], 2);
         $sumaPendBancoCaratula = $partBanco['suma_caratula'];
 
@@ -319,6 +325,8 @@ class ConciliacionBancariaService
                 'pendientes_cheques_caratula' => count($armPendientes['caratula']),
                 'pendientes_cheques_fuente' => $armPendientes['fuente'],
                 'suma_cheques_caratula' => $armPendientes['suma_caratula'],
+                'recla_cheques' => $armPendientes['recla_cheques'] ?? null,
+                'altas_cheques_erp' => $armPendientes['altas_cheques_erp'] ?? 0,
                 'codigos_saldo_excel' => $codigosSaldoExcel,
                 'gastos_resumen' => $gastosResumen,
             ],
@@ -630,7 +638,7 @@ class ConciliacionBancariaService
 
     /**
      * Compara la carátula ERP contra el Excel de Contaduría.
-     * Si la corrida no usó semilla Excel, rearma Pendientes/carátula desde la solapa Pendientes.
+     * El stock armado en el ERP no se reemplaza por la solapa Pendientes del Excel.
      *
      * @param  array<string, mixed>  $resultado
      * @return array<string, mixed>
@@ -641,7 +649,7 @@ class ConciliacionBancariaService
         $detalle = ConciliacionBancariaExcelReferenciaSupport::leerPendientesDetalle($rutaExcel);
 
         $fuenteActual = (string) ($resultado['pendientes_cheques_fuente'] ?? '');
-        if ($fuenteActual !== 'cpromae_semilla_excel') {
+        if (! str_contains($fuenteActual, 'erp') && $fuenteActual !== 'cpromae_semilla_excel') {
             $cc = $resultado['cuentacaja'] ?? null;
             $fechaHasta = Carbon::parse((string) ($resultado['fecha_hasta'] ?? 'now'));
             $semilla = ConciliacionBancariaPendientesCpromaeSupport::semillaDesdeExcelDetalle($detalle['cheques']);
@@ -653,6 +661,8 @@ class ConciliacionBancariaService
                 $semilla,
                 false,
             );
+            $cuentaId = (int) ($resultado['cuenta_contable']->id ?? 0);
+            $arm = $this->aplicarReclaCheques($arm, $cuentaId, $fechaHasta);
             $resultado['pendientes_cheques_cpromae'] = $arm['pendientes'];
             $resultado['pendientes_cheques_caratula'] = $arm['caratula'];
             $resultado['pendientes_cheques_fuente'] = $arm['fuente'];
@@ -797,29 +807,21 @@ class ConciliacionBancariaService
         int $cuentacajaId,
         Carbon $fechaCorte,
         array $pendientesContables,
-        array $opciones,
     ): array {
         $support = new ConciliacionBancariaPendientesCpromaeSupport();
-        $semilla = [];
-        $origenSemilla = 'ninguna';
-        $rutaExcel = trim((string) ($opciones['pendientes_excel'] ?? ''));
-        if ($rutaExcel !== '') {
-            $detalle = ConciliacionBancariaExcelReferenciaSupport::leerPendientesDetalle($rutaExcel);
-            $semilla = ConciliacionBancariaPendientesCpromaeSupport::semillaDesdeExcelDetalle($detalle['cheques']);
-            if ($semilla !== []) {
-                $origenSemilla = 'excel';
-            }
-        }
-
-        if ($semilla === []) {
-            $semilla = $this->semillaDesdeSnapshotPrevio(
-                $empresaId,
-                $cuentacajaId,
-                (int) $fechaCorte->month,
-                (int) $fechaCorte->year,
-            );
-            if ($semilla !== []) {
-                $origenSemilla = 'snapshot';
+        $snap = $this->snapshotPrevio($empresaId, $cuentacajaId, (int) $fechaCorte->month, (int) $fechaCorte->year);
+        $semilla = $snap['semilla'];
+        $altas = 0;
+        $periodoSnap = ((int) $snap['anio'] * 100) + (int) $snap['mes'];
+        $periodoCorte = ((int) $fechaCorte->year * 100) + (int) $fechaCorte->month;
+        if ($semilla !== [] && $periodoSnap > 0 && $periodoSnap < $periodoCorte) {
+            $desde = Carbon::create((int) $snap['anio'], (int) $snap['mes'], 1)->endOfMonth();
+            foreach ($this->chequesEmitidosErp($empresaId, $cuentacajaId, $desde, $fechaCorte) as $nro => $seed) {
+                if (isset($semilla[$nro])) {
+                    continue;
+                }
+                $semilla[$nro] = $seed;
+                $altas++;
             }
         }
 
@@ -842,39 +844,33 @@ class ConciliacionBancariaService
             $semilla,
             $semilla === [],
         );
+        $arm['altas_cheques_erp'] = $altas;
 
-        // Distinguir Excel vs snapshot vs ERP: no pisar fuente erp_* con cpromae_*.
-        $fuenteBase = (string) ($arm['fuente'] ?? '');
-        if (str_starts_with($fuenteBase, 'erp')) {
-            if ($origenSemilla === 'excel') {
-                $arm['fuente'] = 'erp_semilla_excel';
-            } elseif ($origenSemilla === 'snapshot') {
-                $arm['fuente'] = 'erp_semilla_snapshot';
+        if ($semilla !== []) {
+            $arm['fuente'] = 'erp_stock';
+            if ($fechaCorte->gte(Carbon::parse('2026-06-01'))) {
+                foreach ($arm['pendientes'] as &$fila) {
+                    $fila['incluye_caratula'] = true;
+                }
+                unset($fila);
+                $arm['caratula'] = $arm['pendientes'];
+                $arm['suma_caratula'] = (float) $arm['suma_pendientes'];
             }
-        } elseif ($origenSemilla === 'excel') {
-            $arm['fuente'] = 'cpromae_semilla_excel';
-        } elseif ($origenSemilla === 'snapshot') {
-            $arm['fuente'] = 'cpromae_semilla_snapshot';
         }
 
         return $arm;
     }
 
     /**
-     * Semilla Contaduría desde la última ejecución con cheques persistidos.
-     * Evita ejecuciones vacías (export sin persistir) y prioriza solapa Excel del mismo período
-     * frente a corridas armadas solo con Ch: del mayor (que desplazan la carátula ~millones).
+     * Último stock de cheques guardado en el ERP, el período más cercano al corte (mismo mes o el anterior).
      *
-     * @return array<string, array{tip: string, importe: float, fecha_emision?: string|null, fecha_cheque?: string|null}>
+     * @return array{semilla: array<string, array{tip: string, importe: float, fecha_emision?: string|null, fecha_cheque?: string|null}>, mes: int, anio: int}
      */
-    private function semillaDesdeSnapshotPrevio(
-        int $empresaId,
-        int $cuentacajaId,
-        ?int $mes = null,
-        ?int $anio = null,
-    ): array {
+    private function snapshotPrevio(int $empresaId, int $cuentacajaId, ?int $mes, ?int $anio): array
+    {
+        $vacio = ['semilla' => [], 'mes' => 0, 'anio' => 0];
         if (! \Illuminate\Support\Facades\Schema::hasTable('conciliacion_bancaria_cheque_pendiente')) {
-            return [];
+            return $vacio;
         }
 
         $candidatos = ConciliacionBancariaEjecucion::query()
@@ -883,35 +879,35 @@ class ConciliacionBancariaService
             ->whereHas('chequesPendientes')
             ->orderByDesc('id')
             ->limit(40)
-            ->get(['id', 'mes', 'anio', 'resumen_json']);
+            ->get(['id', 'mes', 'anio']);
 
         if ($candidatos->isEmpty()) {
-            return [];
+            return $vacio;
         }
 
-        $mejor = $candidatos->sortBy(function (ConciliacionBancariaEjecucion $e) use ($mes, $anio): array {
-            $resumen = is_array($e->resumen_json) ? $e->resumen_json : [];
-            $fuente = (string) ($resumen['pendientes_cheques_fuente'] ?? '');
-            $mismoPeriodo = ($mes && $anio && (int) $e->mes === $mes && (int) $e->anio === $anio) ? 0 : 1;
-            $prioFuente = match ($fuente) {
-                'cpromae_semilla_excel', 'erp_semilla_excel' => 0,
-                'cpromae_semilla_snapshot', 'erp_semilla_snapshot' => 1,
-                'erp_cuenta', 'erp_por_numeros' => 2,
-                default => 3,
-            };
+        $pedido = ($mes && $anio) ? ($anio * 100 + $mes) : null;
+        $mejor = $candidatos->sortBy(function (ConciliacionBancariaEjecucion $e) use ($pedido): array {
+            $periodo = ((int) $e->anio * 100) + (int) $e->mes;
+            if ($pedido === null) {
+                $dist = 0;
+            } elseif ($periodo <= $pedido) {
+                $dist = $pedido - $periodo;
+            } else {
+                $dist = 10000 + ($periodo - $pedido);
+            }
 
-            return [$mismoPeriodo, $prioFuente, -1 * (int) $e->id];
+            return [$dist, -1 * (int) $e->id];
         })->first();
 
         if (! $mejor) {
-            return [];
+            return $vacio;
         }
 
         $rows = ConciliacionBancariaChequePendiente::query()
             ->where('ejecucion_id', $mejor->id)
             ->get();
         if ($rows->isEmpty()) {
-            return [];
+            return $vacio;
         }
 
         $out = [];
@@ -925,6 +921,48 @@ class ConciliacionBancariaService
                 'importe' => abs((float) $row->importe),
                 'fecha_emision' => optional($row->fecha_emision)?->toDateString(),
                 'fecha_cheque' => optional($row->fecha_cheque)?->toDateString(),
+            ];
+        }
+
+        return [
+            'semilla' => $out,
+            'mes' => (int) $mejor->mes,
+            'anio' => (int) $mejor->anio,
+        ];
+    }
+
+    /**
+     * Cheques propios emitidos en el ERP después del último corte, todavía no anulados.
+     *
+     * @return array<string, array{tip: string, importe: float, fecha_emision: ?string, fecha_cheque: ?string, detalle: string}>
+     */
+    private function chequesEmitidosErp(int $empresaId, int $cuentacajaId, Carbon $desde, Carbon $hasta): array
+    {
+        $rows = Cheque::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where('origen', 'E')
+            ->where(function ($q): void {
+                $q->whereNull('estado')->orWhere('estado', '<>', 'A');
+            })
+            ->whereDate('fechaemision', '>', $desde->toDateString())
+            ->whereDate('fechaemision', '<=', $hasta->toDateString())
+            ->get(['numerocheque', 'monto', 'fechaemision', 'fechapago', 'anombrede']);
+
+        $out = [];
+        foreach ($rows as $row) {
+            $n = ltrim((string) preg_replace('/\D/', '', (string) $row->numerocheque), '0');
+            if ($n === '' || $n === '0') {
+                continue;
+            }
+            $emision = $row->fechaemision;
+            $pago = $row->fechapago;
+            $out[$n] = [
+                'tip' => 'CHP',
+                'importe' => abs((float) $row->monto),
+                'fecha_emision' => $emision instanceof \DateTimeInterface ? $emision->format('Y-m-d') : ($emision ? substr((string) $emision, 0, 10) : null),
+                'fecha_cheque' => $pago instanceof \DateTimeInterface ? $pago->format('Y-m-d') : ($pago ? substr((string) $pago, 0, 10) : null),
+                'detalle' => (string) ($row->anombrede ?? ''),
             ];
         }
 
@@ -974,5 +1012,30 @@ class ConciliacionBancariaService
             }
             ConciliacionBancariaChequePendiente::query()->insert($rows);
         }
+    }
+
+    /**
+     * Desde junio 2026 la carátula resta el asiento RECLA del cierre al stock de Pendientes.
+     *
+     * @param  array<string, mixed>  $arm
+     * @return array<string, mixed>
+     */
+    private function aplicarReclaCheques(array $arm, int $cuentacontableId, Carbon $fechaCorte): array
+    {
+        $recla = ConciliacionBancariaReclaSupport::netaAlCierre($cuentacontableId, $fechaCorte);
+        $arm['recla_cheques'] = $recla;
+        if (abs($recla) < 0.5) {
+            return $arm;
+        }
+
+        $stock = (float) ($arm['suma_pendientes'] ?? 0);
+        if ($stock < 0.5) {
+            return $arm;
+        }
+
+        $arm['suma_caratula'] = round($stock - $recla, 2);
+        $arm['fuente'] = (string) ($arm['fuente'] ?? '').'+recla';
+
+        return $arm;
     }
 }

@@ -11,6 +11,7 @@
                 <div id="modal-preview-asiento-advertencias" class="alert alert-warning d-none"></div>
                 <p id="modal-preview-grupo-info" class="small text-muted d-none mb-2"></p>
                 <p id="modal-preview-fsl-info" class="small text-info d-none mb-2"></p>
+                <p id="modal-preview-win-online" class="small text-muted d-none mb-2"></p>
                 <div class="form-group row mb-2">
                     <label class="col-lg-2 col-form-label">Fecha asiento</label>
                     <div class="col-lg-3">
