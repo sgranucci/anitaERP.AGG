@@ -16,6 +16,13 @@
         <strong style="font-size: 16pt;">{{ $titulo ?? 'Reporte descuentos gastronomía' }}</strong>
     </td>
 </tr>
+@if (! empty($titulo_solapa))
+    <tr>
+        <td colspan="{{ $colspan }}">
+            <strong style="font-size: 13pt;">{{ $titulo_solapa }}</strong>
+        </td>
+    </tr>
+@endif
 <tr>
     <td colspan="{{ $colspan }}" style="font-size: 10pt; color: #444;">
         Generado {{ date('d/m/Y H:i') }}

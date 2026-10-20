@@ -54,6 +54,39 @@ final class SqlDialectSupport
     }
 
     /**
+     * Concatena expresiones ya armadas (identificadores o literales entre comillas).
+     * MySQL: CONCAT(a, b). PostgreSQL y SQLite: a || b.
+     */
+    public static function concatenar(string ...$partes): string
+    {
+        if ($partes === []) {
+            return "''";
+        }
+        if (self::esPostgres() || self::driver() === 'sqlite') {
+            return implode(' || ', $partes);
+        }
+
+        return 'CONCAT('.implode(', ', $partes).')';
+    }
+
+    /**
+     * Agrega textos distintos de un grupo, en orden, separados por $separador.
+     * MySQL: GROUP_CONCAT DISTINCT. PostgreSQL: string_agg DISTINCT.
+     */
+    public static function textosDistintos(string $expresion, string $separador = ' | '): string
+    {
+        $sep = str_replace("'", "''", $separador);
+        if (self::esPostgres()) {
+            return 'string_agg(DISTINCT ('.$expresion."), '".$sep."' ORDER BY (".$expresion.'))';
+        }
+        if (self::driver() === 'sqlite') {
+            return 'group_concat(DISTINCT '.$expresion.", '".$sep."')";
+        }
+
+        return 'GROUP_CONCAT(DISTINCT '.$expresion.' ORDER BY '.$expresion." SEPARATOR '".$sep."')";
+    }
+
+    /**
      * Columna coincide con regex (usar con binding `?`).
      * MySQL: col REGEXP ? — PostgreSQL: col ~ ?
      * El patrón debe ser POSIX simple compatible (ej. ^[0-9]+$).

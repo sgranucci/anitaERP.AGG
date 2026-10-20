@@ -134,13 +134,12 @@ final class RepararDevolucionRetencion125506Command extends Command
                 'fecha' => now(),
                 'estado' => 'CONFIRMADA',
                 'usuario_id' => (int) ($hija->usuario_id ?: 0) ?: null,
-                'observacion' => 'Reparación DEV RET 125506 → OP 125457',
+                'observacion' => $leyenda,
             ]);
 
             $detG = is_array($retG->detalle_calculo) ? $retG->detalle_calculo : [];
             $detG['origen_retencion_id'] = (int) $retG->id;
             $detG['devolucion'] = true;
-            $detG['reparacion_125506'] = true;
 
             Pagoproveedor_Retencion::query()->create([
                 'pagoproveedor_id' => (int) $hija->id,
@@ -155,7 +154,7 @@ final class RepararDevolucionRetencion125506Command extends Command
                 'moneda_id' => (int) ($retG->moneda_id ?: 1),
                 'cotizacion' => (float) ($retG->cotizacion ?: 1),
                 'detalle_calculo' => $detG,
-                'motivo' => 'devolucion_retencion_reparacion',
+                'motivo' => 'devolucion_retencion',
             ]);
 
             $cloneG = $retG->replicate();
@@ -166,7 +165,6 @@ final class RepararDevolucionRetencion125506Command extends Command
                 $detB = is_array($retB->detalle_calculo) ? $retB->detalle_calculo : [];
                 $detB['origen_retencion_id'] = (int) $retB->id;
                 $detB['devolucion'] = true;
-                $detB['reparacion_125506'] = true;
 
                 Pagoproveedor_Retencion::query()->create([
                     'pagoproveedor_id' => (int) $hija->id,
@@ -181,7 +179,7 @@ final class RepararDevolucionRetencion125506Command extends Command
                     'moneda_id' => (int) ($retB->moneda_id ?: 1),
                     'cotizacion' => (float) ($retB->cotizacion ?: 1),
                     'detalle_calculo' => $detB,
-                    'motivo' => 'devolucion_retencion_reparacion',
+                    'motivo' => 'devolucion_retencion',
                 ]);
 
                 $cloneB = $retB->replicate();

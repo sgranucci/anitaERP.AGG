@@ -855,6 +855,13 @@ class ArticuloListadoFiltros
         $out = [];
         foreach (self::CAMPOS as $key => $meta) {
             if (($meta['type'] ?? '') === 'cuenta_imputacion') {
+                $out[$key] = [
+                    'column' => ArticuloListadoCuentasSupport::columnaSql($key),
+                    'type' => 'texto',
+                    'label' => $meta['label'],
+                    'attr' => $key,
+                ];
+
                 continue;
             }
             if ($key === 'empresa' && ! self::filtroEmpresaActivo()) {

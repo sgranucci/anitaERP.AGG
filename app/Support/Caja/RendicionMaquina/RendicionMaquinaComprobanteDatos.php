@@ -73,6 +73,29 @@ final class RendicionMaquinaComprobanteDatos
 
         $totales[] = ['etiqueta' => 'WIN', 'valor' => self::win($inp, $calc), 'destacar' => true];
 
+        $online = RendicionMaquinaWinOnlineFlashSupport::leer(
+            (int) $rendicion->empresa_id,
+            optional($rendicion->fecha)->format('Y-m-d') ?? '',
+        );
+        $marcaFlash = $online['hay_flash']
+            ? ($online['validado'] ? 'flash validado' : 'flash sin validar')
+            : 'sin flash';
+        $totales[] = [
+            'etiqueta' => 'Win online slots ('.$marcaFlash.')',
+            'valor' => $online['slots'],
+            'destacar' => true,
+        ];
+        $totales[] = [
+            'etiqueta' => 'Win online ruletas ('.$marcaFlash.')',
+            'valor' => $online['ruletas'],
+            'destacar' => true,
+        ];
+        $totales[] = [
+            'etiqueta' => 'Win online ('.$marcaFlash.')',
+            'valor' => $online['total'],
+            'destacar' => true,
+        ];
+
         $principales = [];
         foreach (self::conceptosPrincipales() as $clave => $etiqueta) {
             $valor = match ($clave) {

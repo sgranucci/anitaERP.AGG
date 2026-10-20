@@ -18,6 +18,7 @@ use App\Support\Caja\RendicionMaquina\RendicionMaquinaValorQrPrecargaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaValoresCuentacajaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaVariables;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaWigosLeeOnlineSupport;
+use App\Support\Caja\RendicionMaquina\RendicionMaquinaWinOnlineFlashSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -273,6 +274,7 @@ final class RendicionMaquinaService
             'campos_wigos_ajustables' => RendicionMaquinaAjusteWigosSupport::camposAjustables(),
             'campos_manuales' => $this->camposManualesInputs(),
             'previas' => $previas,
+            'win_online' => RendicionMaquinaWinOnlineFlashSupport::leer($empresaId, $fechaYmd),
         ];
     }
 

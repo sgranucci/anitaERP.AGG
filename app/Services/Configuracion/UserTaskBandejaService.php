@@ -246,6 +246,8 @@ class UserTaskBandejaService
             'sla_label' => $item['sla_label'] ?? null,
             'sla_estado' => $item['sla_estado'] ?? null,
             'url_ver' => $item['url_ver'] ?? null,
+            'url_erp' => $item['url_erp'] ?? null,
+            'etiqueta_erp' => $item['etiqueta_erp'] ?? null,
             'url_aprobar' => $item['url_aprobar'] ?? null,
             'url_rechazar' => $item['url_rechazar'] ?? null,
             'puede_aprobar' => ! empty($item['puede_aprobar']),

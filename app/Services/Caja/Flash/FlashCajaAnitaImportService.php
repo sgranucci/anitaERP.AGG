@@ -119,7 +119,7 @@ final class FlashCajaAnitaImportService
 
                         return 'creado';
                     }
-                    if ($soloFaltantes) {
+                    if ($soloFaltantes || \App\Support\Caja\Flash\FlashCajaModificacionSupport::estaBloqueado($existente)) {
                         return 'omitido';
                     }
                     // Vending solo vive en anitaERP: no pisar con el 0 del bridge Anita.

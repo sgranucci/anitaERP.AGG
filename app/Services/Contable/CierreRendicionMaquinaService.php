@@ -17,6 +17,8 @@ use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
 use App\Support\Contable\CierreRendicionMaquinaGrupoSupport;
 use App\Support\Contable\CierreRendicionMaquinaListadoFiltros;
 use App\Support\Contable\CierreRendicionMaquinaVentaListadoSupport;
+use App\Support\Caja\Flash\FlashCajaValidacionSupport;
+use App\Support\Caja\RendicionMaquina\RendicionMaquinaWinOnlineFlashSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\MaquinaFslTipoSupport;
 use App\Services\Ventas\CierreSalaExentaEmisionService;
@@ -74,6 +76,8 @@ class CierreRendicionMaquinaService
         $grupos = CierreRendicionMaquinaGrupoSupport::agrupar(
             new EloquentCollection($rendiciones->all()),
         );
+        $grupos = $this->marcarFlashValidadoEnGrupos($grupos);
+        $grupos = RendicionMaquinaWinOnlineFlashSupport::adjuntarAGrupos($grupos);
 
         if (! $paginar) {
             return $grupos;
@@ -96,6 +100,7 @@ class CierreRendicionMaquinaService
         }
 
         $this->assertCorrelatividadCierre($empresaId, $fechaDia);
+        FlashCajaValidacionSupport::assertValidadoParaCierre($empresaId, $fechaDia);
 
         $config = CierreRendicionMaquinaConfigSupport::paraEmpresa($empresaId);
 
@@ -150,6 +155,7 @@ class CierreRendicionMaquinaService
         }
 
         $this->assertCorrelatividadCierre($empresaId, $fechaDia);
+        FlashCajaValidacionSupport::assertValidadoParaCierre($empresaId, $fechaDia);
 
         $config = CierreRendicionMaquinaConfigSupport::paraEmpresa($empresaId);
 
@@ -578,6 +584,19 @@ class CierreRendicionMaquinaService
             return strcmp((string) ($a['fecha_dia'] ?? ''), (string) ($b['fecha_dia'] ?? ''));
         });
 
+        $mapaFlash = FlashCajaValidacionSupport::mapaValidadoPorFecha($empresaId, $desde, $hasta);
+        $fechasSinTilde = [];
+        foreach ($grupos as &$grupo) {
+            $fechaGrupo = (string) ($grupo['fecha_dia'] ?? '');
+            $flashValidado = $fechaGrupo !== '' && ! empty($mapaFlash[$fechaGrupo]);
+            $grupo['flash_validado'] = $flashValidado;
+            if (! $flashValidado && $fechaGrupo !== '') {
+                $fechasSinTilde[$fechaGrupo] = Carbon::parse($fechaGrupo)->format('d/m/Y');
+            }
+        }
+        unset($grupo);
+        ksort($fechasSinTilde);
+
         return [
             'empresa_id' => $empresaId,
             'fecha_desde' => $desde,
@@ -587,6 +606,7 @@ class CierreRendicionMaquinaService
             'total_cobrado' => $total,
             'por_dia' => array_values($porDia),
             'grupos' => $grupos,
+            'fechas_sin_tilde' => array_values($fechasSinTilde),
         ];
     }
 
@@ -632,6 +652,8 @@ class CierreRendicionMaquinaService
         usort($grupos, static function (array $a, array $b): int {
             return strcmp((string) ($a['fecha_dia'] ?? ''), (string) ($b['fecha_dia'] ?? ''));
         });
+
+        $this->assertFlashValidadoEnGrupos($empresaId, $grupos);
 
         $ok = [];
         $errores = [];
@@ -704,6 +726,78 @@ class CierreRendicionMaquinaService
         $desde = Carbon::today()->startOfMonth()->toDateString();
 
         return ['desde' => $desde, 'hasta' => $hasta];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $grupos
+     */
+    private function assertFlashValidadoEnGrupos(int $empresaId, array $grupos): void
+    {
+        $fechas = [];
+        foreach ($grupos as $grupo) {
+            $fecha = (string) ($grupo['fecha_dia'] ?? '');
+            if ($fecha !== '') {
+                $fechas[$fecha] = true;
+            }
+        }
+        if ($fechas === []) {
+            return;
+        }
+
+        $claves = array_keys($fechas);
+        sort($claves);
+        $mapa = FlashCajaValidacionSupport::mapaValidadoPorFecha($empresaId, $claves[0], $claves[array_key_last($claves)]);
+        $faltan = [];
+        foreach ($claves as $fecha) {
+            if (empty($mapa[$fecha])) {
+                $faltan[] = Carbon::parse($fecha)->format('d/m/Y');
+            }
+        }
+        if ($faltan === []) {
+            return;
+        }
+
+        throw new InvalidArgumentException(
+            'No se puede cerrar: el flash de '.implode(', ', $faltan)
+            .' no tiene el tilde verde.'
+        );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $grupos
+     * @return list<array<string, mixed>>
+     */
+    private function marcarFlashValidadoEnGrupos(array $grupos): array
+    {
+        /** @var array<int, array<string, true>> $porEmpresa */
+        $porEmpresa = [];
+        foreach ($grupos as $grupo) {
+            $empresaId = (int) ($grupo['empresa_id'] ?? 0);
+            $fecha = (string) ($grupo['fecha_dia'] ?? '');
+            if ($empresaId > 0 && $fecha !== '') {
+                $porEmpresa[$empresaId][$fecha] = true;
+            }
+        }
+
+        $mapas = [];
+        foreach ($porEmpresa as $empresaId => $fechas) {
+            $claves = array_keys($fechas);
+            sort($claves);
+            $mapas[$empresaId] = FlashCajaValidacionSupport::mapaValidadoPorFecha(
+                (int) $empresaId,
+                $claves[0],
+                $claves[array_key_last($claves)],
+            );
+        }
+
+        foreach ($grupos as &$grupo) {
+            $empresaId = (int) ($grupo['empresa_id'] ?? 0);
+            $fecha = (string) ($grupo['fecha_dia'] ?? '');
+            $grupo['flash_validado'] = $fecha !== '' && ! empty($mapas[$empresaId][$fecha]);
+        }
+        unset($grupo);
+
+        return $grupos;
     }
 
     public function assertCorrelatividadCierre(int $empresaId, string $fechaDia): void

@@ -768,7 +768,10 @@ class MayorConceptoPeriodoProcesador
 
         $imputoGastoDesdeFacturas = false;
 
-        if ($this->debeImputarChequeProveedor($totalMediosBancarios, $totalFacturas, $totalBancoHaber, $auxpag)) {
+        // Con facturas aplicadas, el cheque sale por el mismo desglose que una OP
+        // (gasto de la factura). El atajo a 117010 / concepto de proveedores solo
+        // queda cuando la OP no tiene comprobante para clasificar.
+        if ($facturas === [] && $this->debeImputarChequeProveedor($totalMediosBancarios, $totalFacturas, $totalBancoHaber, $auxpag)) {
             foreach ($mediosBancarios as $cheque) {
                 $monto = (float) ($cheque->axp_monto_ap ?? 0);
                 if ($monto <= 0) {
@@ -784,13 +787,13 @@ class MayorConceptoPeriodoProcesador
                 $lineas[] = $this->lineaReporte(
                     $lineaBanco ?? $lineaRef,
                     $cuentaCheque,
-                    $this->conceptoImputacionGasto($empresaId, $cuentaCheque, $tipoMedio),
+                    $this->conceptoImputacionGasto($empresaId, $cuentaCheque, $tipoMedio, 0, '', $cheque),
                     $monto,
                     'D',
                     $monedaConverter,
                     $monedaReporteId,
                     'OPP medio '.$tipoMedio,
-                    $this->metaPagoProveedor($empresaId, $cheque, null, $cuentaBanco),
+                    $this->metaPagoProveedor($empresaId, $cheque, null, $cuentaBanco, $nroChequeOp),
                 );
             }
         } elseif ($facturas !== []) {
@@ -1191,6 +1194,39 @@ class MayorConceptoPeriodoProcesador
             }
 
             $lineas = $this->ajustarPercepcionesFacturaOp($lineas, $indicePrimeraLineaFactura, $totalBancoHaber);
+
+            // La factura no dejó gasto imputable: el cheque igual sale, con el concepto
+            // de la OP (factura), no con el de «cheque emitido» de proveedores.
+            $netoFacturas = 0.0;
+            foreach ($lineas as $lineaGasto) {
+                $netoFacturas += (float) ($lineaGasto['debe'] ?? 0) - (float) ($lineaGasto['haber'] ?? 0);
+            }
+            if ($netoFacturas < 0.05 && $mediosBancarios !== []) {
+                $imputoGastoDesdeFacturas = false;
+                $facturaRef = $facturas[0];
+                foreach ($mediosBancarios as $cheque) {
+                    $monto = (float) ($cheque->axp_monto_ap ?? 0);
+                    if ($monto <= 0) {
+                        continue;
+                    }
+                    $cuentaCheque = $this->cuentaChequeMayorConcepto($cheque, $auxpag, $empresaId, $lineasOp);
+                    $tipoMedio = strtoupper(trim((string) ($cheque->axp_tipo_ap ?? 'CHP')));
+                    if ($tipoMedio === '') {
+                        $tipoMedio = 'CHP';
+                    }
+                    $lineas[] = $this->lineaReporte(
+                        $lineaBanco ?? $lineaRef,
+                        $cuentaCheque,
+                        $this->conceptoImputacionGasto($empresaId, $cuentaCheque, $tipoMedio, 0, '', $facturaRef),
+                        $monto,
+                        'D',
+                        $monedaConverter,
+                        $monedaReporteId,
+                        'OPP medio '.$tipoMedio,
+                        $this->metaPagoProveedor($empresaId, $cheque, null, $cuentaBanco, $nroChequeOp),
+                    );
+                }
+            }
         }
 
         // Retenciones (RTP/RGP/…) no se suman al desglose del cheque: el mayor por
@@ -5031,12 +5067,13 @@ class MayorConceptoPeriodoProcesador
         }
 
         $concepto = $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
-        if ($concepto > 0) {
+        if ($concepto > 0 && ! $this->motor->esConceptoPuenteChequeEmitido($empresaId, $concepto)) {
             return $concepto;
         }
 
-        // 117010 u otras sin concepto residuales (si no entraron al branch solo-117010).
-        if ($cuenta >= 117010000 && $cuenta < 118000000) {
+        // 117010, proveedores (concepto del cheque emitido) u otras sin concepto de gasto:
+        // mismo criterio que una OP, no el concepto puente de 211010.
+        if (($cuenta >= 117010000 && $cuenta < 118000000) || $this->motor->esProveedor($cuenta)) {
             return $this->conceptoReclasificacionCuentaTransitoria($empresaId, $aplicacion, $cuenta);
         }
 
@@ -5057,7 +5094,9 @@ class MayorConceptoPeriodoProcesador
         }
 
         $axp = (int) ($aplicacion->axp_concepto ?? 0);
-        if ($axp > 0) {
+        // axp_concepto del CHP suele ser el de «cheque emitido» (cuenta proveedores).
+        // No es un concepto de gasto: la OP se clasifica por la factura.
+        if ($axp > 0 && ! $this->motor->esConceptoPuenteChequeEmitido($empresaId, $axp)) {
             return $axp;
         }
 
@@ -5077,7 +5116,7 @@ class MayorConceptoPeriodoProcesador
                 continue;
             }
             $concepto = $this->motor->conceptoDeCuenta($empresaId, $cuenta);
-            if ($concepto > 0) {
+            if ($concepto > 0 && ! $this->motor->esConceptoPuenteChequeEmitido($empresaId, $concepto)) {
                 return $concepto;
             }
         }

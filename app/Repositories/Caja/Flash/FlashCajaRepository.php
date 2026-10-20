@@ -5,6 +5,7 @@ namespace App\Repositories\Caja\Flash;
 use App\Models\Caja\Flash\FlashCaja;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\Flash\FlashCajaListadoFiltros;
+use App\Support\Caja\Flash\FlashCajaModificacionSupport;
 
 class FlashCajaRepository implements FlashCajaRepositoryInterface
 {
@@ -65,6 +66,8 @@ class FlashCajaRepository implements FlashCajaRepositoryInterface
     public function update(array $data, $id)
     {
         $flash = $this->model->findOrFail($id);
+        FlashCajaModificacionSupport::assertPuedeModificar($flash);
+        $habiaHabilitacion = FlashCajaModificacionSupport::habilitacionVigente((int) $flash->id) !== null;
         // Cualquier cambio de datos (ABM, cron, import) quita la validación.
         if ($flash->estaValidado() && ! array_key_exists('validado', $data)) {
             $data['validado'] = false;
@@ -72,11 +75,21 @@ class FlashCajaRepository implements FlashCajaRepositoryInterface
             $data['validado_usuario_id'] = null;
         }
 
-        return $flash->update($data);
+        $ok = $flash->update($data);
+        if ($habiaHabilitacion) {
+            FlashCajaModificacionSupport::consumirHabilitacion((int) $flash->id);
+        }
+
+        return $ok;
     }
 
     public function delete($id)
     {
+        $flash = $this->model->find($id);
+        if ($flash !== null) {
+            FlashCajaModificacionSupport::assertPuedeModificar($flash);
+        }
+
         return $this->model->destroy($id);
     }
 

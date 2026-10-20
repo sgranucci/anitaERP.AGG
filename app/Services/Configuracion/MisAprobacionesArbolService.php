@@ -554,6 +554,8 @@ class MisAprobacionesArbolService
             'puede_aprobar' => true,
             'url_ver' => $urlVer,
             'url_editar' => $urlVer,
+            'url_erp' => $urlVer,
+            'etiqueta_erp' => $urlVer ? $this->etiquetaVerErp('RS') : null,
             'url_aprobar' => url('mis-aprobaciones/requisicion-sala/'.$req->id.'/aprobar'),
             'url_rechazar' => url('mis-aprobaciones/requisicion-sala/'.$req->id.'/rechazar'),
             'url_descartar' => null,
@@ -691,15 +693,25 @@ class MisAprobacionesArbolService
         }
         // Suscripciones: Ver apunta al módulo dedicado si existe la ruta.
         if ($documentoExiste
-            && $ref['tipo'] === 'OC'
-            && $documento instanceof \App\Models\Compras\Ordencompra
-            && (bool) ($documento->es_suscripcion ?? false)
+            && (
+                $ref['tipo'] === 'SU'
+                || (
+                    $ref['tipo'] === 'OC'
+                    && $documento instanceof \App\Models\Compras\Ordencompra
+                    && (bool) ($documento->es_suscripcion ?? false)
+                )
+            )
             && Route::has('ver_suscripcion')
         ) {
-            $urlEditar = route('ver_suscripcion', $ref['comprobante_id']);
+            $urlEditar = ModoConsultaUrlSupport::route('ver_suscripcion', [
+                'id' => $ref['comprobante_id'],
+            ]);
         }
         // Bandeja autenticada: Ver = editar en modo consulta (2ª solapa sin menú).
+        // Exige permiso del ABM; no es el enlace Visualizar del correo.
         $urlVer = $urlEditar;
+        $tipoBandeja = $this->tipoBandejaDesdeReferencia($ref, $documento);
+        $urlErp = $this->urlErpComoMail($mov, $ref, $tipoBandeja) ?? $urlVer;
 
         $monedaAbrev = '';
         if ($documento && isset($documento->monedas)) {
@@ -729,7 +741,7 @@ class MisAprobacionesArbolService
 
         return [
             'movimiento_id' => (int) $mov->id,
-            'tipo' => $this->tipoBandejaDesdeReferencia($ref, $documento),
+            'tipo' => $tipoBandeja,
             'etiqueta_tipo' => $snapshot['etiqueta_tipo']
                 ?? ArbolAprobacionContextoSupport::etiquetaTipo($ref['tipo']),
             'comprobante_id' => $ref['comprobante_id'],
@@ -745,6 +757,8 @@ class MisAprobacionesArbolService
             'puede_aprobar' => $documentoExiste && ! $esAvisoPago,
             'url_ver' => $urlVer,
             'url_editar' => $urlEditar,
+            'url_erp' => $urlErp,
+            'etiqueta_erp' => $urlErp ? $this->etiquetaVerErp($tipoBandeja) : null,
             'url_aprobar' => url('mis-aprobaciones/'.$mov->id.'/aprobar'),
             'url_rechazar' => url('mis-aprobaciones/'.$mov->id.'/rechazar'),
             'url_descartar' => url('mis-aprobaciones/'.$mov->id.'/descartar-huerfano'),
@@ -910,6 +924,70 @@ class MisAprobacionesArbolService
             'fecha_limite' => $limite->format('Y-m-d'),
             'dias_para_vencer' => $diasParaVencer,
         ];
+    }
+
+    /**
+     * Misma pantalla que el enlace «Visualizar» del correo, en modo consulta (sin menú).
+     * Solo cuando esa ruta existe. Pedido y propuesta de pago no tienen visualizar por hash.
+     *
+     * @param  array{tipo: string, comprobante_id: int, ruta_visualizar: string, ruta_editar: ?string}  $ref
+     */
+    private function urlErpComoMail(Arbolaprobacion_Movimiento $mov, array $ref, string $tipoBandeja): ?string
+    {
+        if ($tipoBandeja === 'SU' && Route::has('ver_suscripcion')) {
+            return ModoConsultaUrlSupport::route('ver_suscripcion', [
+                'id' => (int) $ref['comprobante_id'],
+            ]);
+        }
+
+        $hash = trim((string) ($mov->hashvisualizar ?? ''));
+        $id = (int) $ref['comprobante_id'];
+        if ($hash === '' || $id <= 0) {
+            return null;
+        }
+
+        try {
+            $url = match ($tipoBandeja) {
+                'RE' => Route::has('visualizar_requisicion')
+                    ? route('visualizar_requisicion', ['id' => $id, 'hash' => $hash])
+                    : null,
+                'OC' => Route::has('visualizar_ordencompra')
+                    ? route('visualizar_ordencompra', ['id' => $id, 'hash' => $hash])
+                    : null,
+                'RS' => Route::has('visualizar_requisicion_sala')
+                    ? route('visualizar_requisicion_sala', ['id' => $id, 'hash' => $hash])
+                    : null,
+                'SP' => Route::has('visualizar_solicitudpago')
+                    ? route('visualizar_solicitudpago', ['id' => $id, 'hash' => $hash])
+                    : null,
+                'OV' => url('ordenventa/visualizar/'.$id.'/'.rawurlencode($hash)),
+                default => null,
+            };
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (! is_string($url) || $url === '') {
+            return null;
+        }
+
+        return ModoConsultaUrlSupport::appendQueryToUrl($url);
+    }
+
+    private function etiquetaVerErp(string $tipo): string
+    {
+        return match (strtoupper(trim($tipo))) {
+            'RE' => 'Ver requisición',
+            'OC' => 'Ver orden de compra',
+            'SU' => 'Ver suscripción',
+            'SP' => 'Ver solicitud de pago',
+            'RS' => 'Ver requisición de sala',
+            'OV' => 'Ver orden de venta',
+            'PE' => 'Ver pedido',
+            'PP' => 'Ver propuesta',
+            'AR' => 'Ver artículo',
+            default => 'Ver en el ERP',
+        };
     }
 
     /**

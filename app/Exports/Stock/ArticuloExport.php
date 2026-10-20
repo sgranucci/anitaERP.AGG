@@ -4,45 +4,57 @@ namespace App\Exports\Stock;
 
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoExportPresentacionSupport;
+use App\Support\Stock\ArticuloListadoColumnas;
 use App\Support\Stock\ArticuloListadoFiltros;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class ArticuloExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
 
     private ArticuloRepositoryInterface $articuloRepository;
 
-    private function colUltima(): string
-    {
-        return ArticuloListadoFiltros::filtroEmpresaActivo() ? 'I' : 'H';
-    }
-
     /** @var array<string, mixed>|string|null */
     private $filtros;
 
+    /** @var list<string> */
+    private array $columnas = [];
+
+    /** @var array<string, string> */
+    private array $etiquetas = [];
+
     private bool $hayFilaLogos = false;
 
-    private int $filaCabecerasExcel = 3;
+    private int $filaCabecerasExcel = 4;
 
-    private int $filaPrimeraDatosExcel = 4;
+    private int $filaPrimeraDatosExcel = 5;
 
     private int $filaTituloExcel = 1;
 
+    private string $colUltima = 'A';
+
     /** @var list<string> */
     private array $rutasLogosExcel = [];
+
+    /** @var list<array{fila: int, nivel: int}> */
+    private array $filasGrupoExcel = [];
 
     public function __construct(ArticuloRepositoryInterface $articuloRepository)
     {
@@ -51,36 +63,64 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
 
     public function view(): View
     {
-        $articulos = $this->articuloRepository->leeArticulo($this->filtros, false);
+        $columnasExport = $this->columnasEfectivasExport();
+        $etiquetas = $this->etiquetas !== []
+            ? $this->etiquetas
+            : ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+                ArticuloListadoColumnas::RECURSO,
+                ArticuloListadoColumnas::catalogoActivo()
+            );
+        $filtros = is_array($this->filtros) ? $this->filtros : [];
+        $campos = ArticuloListadoFiltros::camposOrdenables();
+        $articulos = $this->articuloRepository->leeArticulo($filtros, false);
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        $filas = ListadoAgrupacionSupport::segmentar(
+            $articulos,
+            $agrupar,
+            static fn (object $row, string $campo): string => ArticuloListadoColumnas::valorCelda($row, $campo),
+            $etiquetas
+        );
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion(collect());
-        $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
-        // logo? + título + generado → thead
-        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-        $filaGenerado = $this->filaTituloExcel + 1;
-        $this->filaCabecerasExcel = $filaGenerado + 1;
+        $this->hayFilaLogos = $this->rutasLogosExcel !== [];
+        $subtitulo = ListadoExportPresentacionSupport::subtitulo($filtros, $etiquetas, $campos);
+        $filasMeta = 2 + ($subtitulo !== '' ? 1 : 0);
+        $offsetLogo = $this->hayFilaLogos ? 1 : 0;
+        $this->filaTituloExcel = $offsetLogo + 1;
+        $this->filaCabecerasExcel = $offsetLogo + $filasMeta + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+        $this->colUltima = ListadoExportPresentacionSupport::columnaLetra(max(0, count($columnasExport) - 1));
+
+        $this->filasGrupoExcel = [];
+        $fila = $this->filaPrimeraDatosExcel;
+        foreach ($filas as $item) {
+            if (($item['type'] ?? '') === 'header') {
+                $this->filasGrupoExcel[] = [
+                    'fila' => $fila,
+                    'nivel' => (int) ($item['nivel'] ?? 0),
+                ];
+            }
+            $fila++;
+        }
 
         return view('exports.stock.articuloindex', [
             'articulos' => $articulos,
+            'filasSegmentadas' => $filas,
+            'columnasVisibles' => $columnasExport,
+            'etiquetasColumnas' => $etiquetas,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'subtitulo' => $subtitulo,
+            'totalFilas' => is_countable($articulos) ? count($articulos) : 0,
         ]);
     }
 
     public function columnFormats(): array
     {
-        $formats = [
-            'A' => NumberFormat::FORMAT_TEXT,
-            'B' => NumberFormat::FORMAT_TEXT,
-            'C' => NumberFormat::FORMAT_TEXT,
-            'D' => NumberFormat::FORMAT_TEXT,
-            'E' => NumberFormat::FORMAT_TEXT,
-            'F' => NumberFormat::FORMAT_TEXT,
-            'G' => NumberFormat::FORMAT_TEXT,
-            'H' => NumberFormat::FORMAT_TEXT,
-        ];
-        if (ArticuloListadoFiltros::filtroEmpresaActivo()) {
-            $formats['I'] = NumberFormat::FORMAT_TEXT;
+        $formats = [];
+        foreach ($this->columnasEfectivasExport() as $i => $key) {
+            if (in_array($key, ['sku', 'codigobarra', 'numeroparte', 'cuentaventa', 'cuentacompra', 'cuentagasto'], true)) {
+                $formats[ListadoExportPresentacionSupport::columnaLetra($i)] = NumberFormat::FORMAT_TEXT;
+            }
         }
 
         return $formats;
@@ -97,7 +137,7 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
                     'name' => 'Arial',
                 ],
                 'fill' => [
-                    'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                    'fillType' => Fill::FILL_SOLID,
                     'color' => ['rgb' => '85C1E9'],
                 ],
             ],
@@ -106,18 +146,14 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
 
     public function columnWidths(): array
     {
-        $widths = [
-            'A' => 14,
-            'B' => 40,
-            'C' => 14,
-            'D' => 18,
-            'E' => 18,
-            'F' => 14,
-            'G' => 14,
-            'H' => 12,
-        ];
-        if (ArticuloListadoFiltros::filtroEmpresaActivo()) {
-            $widths['I'] = 16;
+        $widths = [];
+        foreach ($this->columnasEfectivasExport() as $i => $key) {
+            $widths[ListadoExportPresentacionSupport::columnaLetra($i)] = match ($key) {
+                'descripcion' => 40,
+                'cuentaventa', 'cuentacompra', 'cuentagasto' => 36,
+                'sku', 'codigobarra' => 16,
+                default => 18,
+            };
         }
 
         return $widths;
@@ -128,16 +164,15 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
+                $col = $this->colUltima;
 
-                if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
+                if ($this->hayFilaLogos) {
                     $sheet->getRowDimension(1)->setRowHeight(54);
-                    $offsetXp = 6;
-                    $saltoXp = 160;
+                    $offsetX = 6;
                     foreach ($this->rutasLogosExcel as $idx => $ruta) {
                         if (! is_string($ruta) || ! is_readable($ruta)) {
                             continue;
                         }
-
                         $drawing = new Drawing;
                         $drawing->setName('Logo');
                         $drawing->setDescription('Logo empresa');
@@ -145,35 +180,48 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
                         $drawing->setResizeProportional(true);
                         $drawing->setHeight(46);
                         $drawing->setCoordinates('A1');
-                        $drawing->setOffsetX($offsetXp + $idx * $saltoXp);
+                        $drawing->setOffsetX($offsetX + $idx * 160);
                         $drawing->setOffsetY(4);
                         $drawing->setWorksheet($sheet);
                     }
                 }
 
-                $colUltima = $this->colUltima();
-                $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.$colUltima.$filaTit);
-                $sheet->getRowDimension($filaTit)->setRowHeight(28);
-                $sheet->getStyle('A'.$filaTit.':'.$colUltima.$filaTit)->applyFromArray([
-                    'font' => [
-                        'bold' => true,
-                        'size' => 16,
-                        'name' => 'Arial',
-                        'color' => ['rgb' => '17202A'],
+                $ultimaMeta = $this->filaCabecerasExcel - 1;
+                for ($f = $this->filaTituloExcel; $f <= $ultimaMeta; $f++) {
+                    $sheet->mergeCells('A'.$f.':'.$col.$f);
+                }
+                $sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
+                $sheet->getStyle('A'.$this->filaTituloExcel)->applyFromArray([
+                    'font' => ['bold' => true, 'size' => 16, 'name' => 'Arial', 'color' => ['rgb' => '17202A']],
+                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
+                ]);
+                if ($ultimaMeta > $this->filaTituloExcel) {
+                    $sheet->getStyle('A'.($this->filaTituloExcel + 1).':'.$col.$ultimaMeta)->applyFromArray([
+                        'font' => ['size' => 10, 'name' => 'Arial', 'color' => ['rgb' => '444444']],
+                        'alignment' => ['wrapText' => true, 'vertical' => Alignment::VERTICAL_CENTER],
+                    ]);
+                }
+
+                $last = $sheet->getHighestRow();
+                $sheet->getStyle('A'.$this->filaCabecerasExcel.':'.$col.$last)->applyFromArray([
+                    'borders' => [
+                        'allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'CCCCCC']],
                     ],
+                    'font' => ['name' => 'Arial', 'size' => 10],
+                ]);
+                $sheet->getStyle('A'.$this->filaCabecerasExcel.':'.$col.$this->filaCabecerasExcel)->applyFromArray([
+                    'font' => ['bold' => true, 'color' => ['rgb' => '17202A'], 'size' => 11, 'name' => 'Arial'],
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '85C1E9']],
                 ]);
 
-                $filaGen = $filaTit + 1;
-                $sheet->mergeCells('A'.$filaGen.':'.$colUltima.$filaGen);
-                $sheet->getStyle('A'.$filaGen.':'.$colUltima.$filaGen)->applyFromArray([
-                    'font' => [
-                        'bold' => true,
-                        'size' => 10,
-                        'name' => 'Arial',
-                        'color' => ['rgb' => '444444'],
-                    ],
-                ]);
+                foreach ($this->filasGrupoExcel as $grupo) {
+                    $rgb = ($grupo['nivel'] ?? 0) === 0 ? 'D6EAF8' : 'EAF2F8';
+                    $sheet->mergeCells('A'.$grupo['fila'].':'.$col.$grupo['fila']);
+                    $sheet->getStyle('A'.$grupo['fila'].':'.$col.$grupo['fila'])->applyFromArray([
+                        'font' => ['bold' => true, 'color' => ['rgb' => '1B4F72'], 'name' => 'Arial'],
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => $rgb]],
+                    ]);
+                }
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },
@@ -187,11 +235,27 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
 
     /**
      * @param  array<string, mixed>|string|null  $filtros
+     * @param  list<string>|null  $columnas
+     * @param  array<string, string>|null  $etiquetas
      */
-    public function parametros($filtros)
+    public function parametros($filtros, ?array $columnas = null, ?array $etiquetas = null)
     {
         $this->filtros = $filtros;
+        $this->columnas = is_array($columnas) ? $columnas : [];
+        $this->etiquetas = is_array($etiquetas) ? $etiquetas : [];
 
         return $this;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function columnasEfectivasExport(): array
+    {
+        $columnas = $this->columnas !== []
+            ? ArticuloListadoColumnas::normalizarVisibles($this->columnas)
+            : ArticuloListadoColumnas::defaultsVisibles();
+
+        return ArticuloListadoColumnas::columnasExportables($columnas);
     }
 }

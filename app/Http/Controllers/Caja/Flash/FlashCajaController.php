@@ -17,6 +17,7 @@ use App\Services\Caja\Flash\FlashCajaCalculoService;
 use App\Support\Caja\Flash\FlashCajaAybCierreWaitrySupport;
 use App\Support\Caja\Flash\FlashCajaHistoricoFiltros;
 use App\Support\Caja\Flash\FlashCajaListadoFiltros;
+use App\Support\Caja\Flash\FlashCajaModificacionSupport;
 use App\Support\Caja\Flash\FlashCajaValidacionSupport;
 use App\Support\Caja\Flash\FlashCajaOrigenTotalSupport;
 use App\Support\Caja\Flash\FlashCajaReporteSupport;
@@ -24,6 +25,7 @@ use App\Support\Listado\QueryRetornoListado;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 use Jurosh\PDFMerge\PDFMerger;
 use Maatwebsite\Excel\Excel;
 
@@ -139,6 +141,10 @@ class FlashCajaController extends Controller
             'empresa_query' => $empresa_query,
             'filtrosQuery' => $filtrosQuery,
             'puedeValidarFlash' => FlashCajaValidacionSupport::usuarioPuedeValidar(),
+            'flashBloqueado' => FlashCajaModificacionSupport::estaBloqueado($data),
+            'habilitacionVigente' => FlashCajaModificacionSupport::habilitacionVigente((int) $data->id),
+            'solicitudPendiente' => FlashCajaModificacionSupport::solicitudPendiente((int) $data->id),
+            'destinatariosModificacion' => FlashCajaModificacionSupport::destinatarios(),
             'avisoAybWaitry' => $this->aybRecalculoService->estadoFormulario(
                 (int) $data->empresa_id,
                 (string) $data->fecha?->format('Y-m-d'),
@@ -168,9 +174,61 @@ class FlashCajaController extends Controller
         $data = $this->repository->findOrFail($id);
         $this->assertAccesoEmpresa((int) $data->empresa_id);
 
-        FlashCajaValidacionSupport::quitarValidacion($data);
+        try {
+            FlashCajaValidacionSupport::quitarValidacion($data);
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return $this->redirigirTrasValidacion($request, 'Se quitó la validación del flash.');
+    }
+
+    public function solicitarModificacion(Request $request, $id)
+    {
+        can('actualizar-flash-caja');
+
+        $data = $this->repository->findOrFail($id);
+        $this->assertAccesoEmpresa((int) $data->empresa_id);
+
+        $request->validate([
+            'motivo' => 'required|string|min:10|max:2000',
+        ]);
+
+        try {
+            FlashCajaModificacionSupport::solicitar(
+                $data,
+                (int) (session('usuario_id') ?? auth()->id() ?? 0),
+                (string) $request->input('motivo'),
+            );
+        } catch (InvalidArgumentException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
+
+        return back()->with('mensaje', 'Se envió el pedido a contaduría. El flash sigue bloqueado hasta que habiliten el cambio.');
+    }
+
+    public function habilitarModificacion(Request $request, int $id)
+    {
+        if (! $request->hasValidSignature()) {
+            return redirect()
+                ->route('flash_caja')
+                ->with('error', 'El enlace de habilitación es inválido o expiró.');
+        }
+
+        try {
+            $solicitud = FlashCajaModificacionSupport::habilitar(
+                $id,
+                (int) (session('usuario_id') ?? auth()->id() ?? 0),
+            );
+        } catch (InvalidArgumentException $e) {
+            return redirect()->route('flash_caja')->with('error', $e->getMessage());
+        }
+
+        $solicitud->loadMissing(['flash.empresa', 'solicitante']);
+
+        return view('caja.flash.modificacion_habilitada', [
+            'solicitud' => $solicitud,
+        ]);
     }
 
     public function actualizar(ValidacionFlashCaja $request, $id)
@@ -185,7 +243,11 @@ class FlashCajaController extends Controller
         $payload = $ajusteAyb['payload'];
         $empresaAnterior = (int) $data->empresa_id;
         $fechaAnterior = $data->fecha?->format('Y-m-d');
-        $this->repository->update($payload, $id);
+        try {
+            $this->repository->update($payload, $id);
+        } catch (InvalidArgumentException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
         $flash = $this->repository->findOrFail($id);
         $syncAnita = $this->exportAnitaService->enviarModificacionEnAnita($flash, $empresaAnterior, $fechaAnterior);
         $mensaje = 'Flash diario actualizado con éxito';
@@ -211,7 +273,13 @@ class FlashCajaController extends Controller
                 $this->assertAccesoEmpresa((int) $data->empresa_id);
             }
 
-            if ($this->repository->delete($id)) {
+            try {
+                $borro = $this->repository->delete($id);
+            } catch (InvalidArgumentException $e) {
+                return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()]);
+            }
+
+            if ($borro) {
                 return response()->json(['mensaje' => 'ok']);
             }
 

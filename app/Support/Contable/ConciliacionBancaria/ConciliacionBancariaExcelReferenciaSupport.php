@@ -11,6 +11,12 @@ use Throwable;
  */
 final class ConciliacionBancariaExcelReferenciaSupport
 {
+    /** Solapa del mes en el Excel de Contaduría (MAYO, JUNIO, …). */
+    private const HOJAS_MES = [
+        'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
+        'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE',
+    ];
+
     /**
      * @return array{
      *   archivo: string,
@@ -38,8 +44,11 @@ final class ConciliacionBancariaExcelReferenciaSupport
         $vals = self::extraerDesdeHoja($libro, 'CARATULA');
         $fuente = 'CARATULA';
         if ($vals['saldo_banco_extracto'] === null) {
-            $vals = self::extraerDesdeHoja($libro, 'MAYO');
-            $fuente = 'MAYO';
+            $hojaMes = self::hojaMes($libro);
+            if ($hojaMes !== null) {
+                $fuente = (string) $hojaMes->getTitle();
+                $vals = self::extraerDesdeHoja($libro, $fuente);
+            }
         }
 
         // Algunas carátulas dejan "pendientes soporte" en 0 aunque el saldo ajustado
@@ -178,11 +187,10 @@ final class ConciliacionBancariaExcelReferenciaSupport
             }
         }
 
-        // MAYO: primera cifra grande ~ saldo extracto en fila "Saldo del Banco al"
-        if ($nombre === 'MAYO' && $out['saldo_banco_extracto'] === null) {
+        if (in_array($nombre, self::HOJAS_MES, true) && $out['saldo_banco_extracto'] === null) {
             $out['saldo_banco_extracto'] = self::primerNumeroFilaConTexto($hoja, 'saldo del banco al');
         }
-        if ($nombre === 'MAYO' && $out['cheques_no_acreditados'] === null) {
+        if (in_array($nombre, self::HOJAS_MES, true) && $out['cheques_no_acreditados'] === null) {
             $out['cheques_no_acreditados'] = self::primerNumeroFilaConTexto($hoja, 'cheques emitidos');
         }
 
@@ -274,7 +282,7 @@ final class ConciliacionBancariaExcelReferenciaSupport
 
         $bancoPend = [];
         $sumaB = 0.0;
-        $hojaMayo = $libro->getSheetByName('MAYO');
+        $hojaMayo = self::hojaMes($libro);
         if ($hojaMayo !== null) {
             $enBloque = false;
             $max = min(120, (int) $hojaMayo->getHighestRow());
@@ -384,19 +392,18 @@ final class ConciliacionBancariaExcelReferenciaSupport
             $reader->setReadDataOnly(true);
         }
         if (method_exists($reader, 'setLoadSheetsOnly')) {
-            $reader->setLoadSheetsOnly([
-                'CARATULA',
-                'Saldo',
-                'MAYO',
-                'Pendientes',
-                'PENDIENTES',
-                'EXTRACTO',
-                'Extracto.',
-                'ING-GTOS DIARIOS',
-            ]);
+            $reader->setLoadSheetsOnly(array_merge(
+                ['CARATULA', 'Saldo', 'Pendientes', 'PENDIENTES', 'EXTRACTO', 'Extracto.', 'ING-GTOS DIARIOS'],
+                self::HOJAS_MES,
+            ));
         }
 
         return $reader->load($ruta);
+    }
+
+    private static function hojaMes($libro)
+    {
+        return self::hojaPorNombres($libro, self::HOJAS_MES);
     }
 
     /**

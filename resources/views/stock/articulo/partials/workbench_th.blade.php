@@ -16,6 +16,9 @@
         'estado' => 'Estado',
         'fecha_alta' => 'Fecha de alta',
         'fecha_modificacion' => 'Fecha de modificación',
+        'cuentaventa' => 'Cta. contable venta',
+        'cuentacompra' => 'Cta. contable compra',
+        'cuentagasto' => 'Cta. contable gasto',
     ];
     $titulo = ($etiquetasColumnas ?? [])[$key] ?? ($titulos[$key] ?? $key);
     $alineacion = $key === 'saldo' ? 'text-right' : '';

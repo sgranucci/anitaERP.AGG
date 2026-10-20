@@ -129,7 +129,7 @@ function activa_eventos_consultacapex() {
 		var codigo = $tr.find('td.codigo').text().trim();
 		var concepto = $tr.find('td.concepto').text().trim();
 
-		$(ptrCapexId).val(id);
+		$(ptrCapexId).val(id).trigger('change');
 		$(ptrCodigoCapex).val(codigo);
 		$(ptrDetalleCapex).val(concepto);
 
@@ -154,7 +154,7 @@ function activa_eventos_consultacapex() {
 		var ccDest = centrocostoFiltroDesdeFilaCapex($row);
 
 		if (!codigo) {
-			$row.find('.capex_id').val('');
+			$row.find('.capex_id').val('').trigger('change');
 			$row.find('.descripcioncapex').val('');
 			$inp.trigger('req:codigo-validado', [true]);
 			return;
@@ -179,19 +179,19 @@ function activa_eventos_consultacapex() {
 		})
 			.done(function (res) {
 				if (res && res.ok) {
-					$row.find('.capex_id').val(res.id);
+					$row.find('.capex_id').val(res.id).trigger('change');
 					$inp.val(res.codigo);
 					$row.find('.descripcioncapex').val(res.descripcion || '');
 					$inp.trigger('req:codigo-validado', [true]);
 				} else {
-					$row.find('.capex_id').val('');
+					$row.find('.capex_id').val('').trigger('change');
 					$row.find('.descripcioncapex').val('');
 					alert((res && res.mensaje) ? res.mensaje : 'CAPEX no encontrado.');
 					$inp.trigger('req:codigo-validado', [false]);
 				}
 			})
 			.fail(function (xhr) {
-				$row.find('.capex_id').val('');
+				$row.find('.capex_id').val('').trigger('change');
 				$row.find('.descripcioncapex').val('');
 				var msg = 'CAPEX no encontrado o no disponible para el centro de costo / presupuesto actual.';
 				if (xhr.responseJSON && xhr.responseJSON.mensaje) {

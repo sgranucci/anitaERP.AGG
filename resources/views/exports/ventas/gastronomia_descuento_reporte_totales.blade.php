@@ -12,7 +12,7 @@
     <tr>
         <td></td>
         <td colspan="4" style="font-size: 18px; font-weight: bold; text-align: center;">
-            {{ $titulo ?? 'Reporte descuentos gastronomía' }} — TOTALES
+            {{ $titulo ?? 'Reporte descuentos gastronomía' }}@if (! empty($titulo_solapa)) — {{ $titulo_solapa }}@else — TOTALES @endif
         </td>
         <td colspan="2"></td>
     </tr>

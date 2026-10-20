@@ -411,6 +411,10 @@
             color: #b9770e;
             font-style: italic;
         }
+        #tabla-articulos-requisicion .codigocapex.req-capex-obligatorio {
+            border-color: #c0392b;
+            background: #fdedec;
+        }
         #tabla-articulos-requisicion .codigoarticulo {
             width: 7.5rem !important;
             max-width: 9rem !important;
@@ -511,9 +515,12 @@
                     $_cuentaArtTitulo = 'Este artículo no tiene cuenta de compras ni de gastos para la empresa de la requisición.';
                 }
                 $_cuentaArtVacia = $_cuentaArtTexto === 'Sin cuenta de compras/gastos';
+                $_exigeCapex = $reqPedirPartidaCapex
+                    && \App\Support\Compras\RequisicionCapexCuentaPuenteSupport::cuentaExigeCapex(is_array($_cuentaArt) ? $_cuentaArt : null);
             @endphp
             <tr class="item-requisicion-articulo{{ $_lineaCerrada ? ' req-requisicion-linea-cerrada' : '' }}"@if($_lineaCerrada) title="{{ e($_etiqCierre) }}"@endif
-                data-maneja-stock-color-talle="{{ $_manejaColorTalle ? '1' : '0' }}">
+                data-maneja-stock-color-talle="{{ $_manejaColorTalle ? '1' : '0' }}"
+                data-exige-capex="{{ $_exigeCapex ? '1' : '0' }}">
                 <td>
                     <input type="hidden" class="requisicion_articulo_id" name="requisicion_articulo_ids[]" value="{{ old('requisicion_articulo_ids.'.$idx, $linea->id ?? '') }}">
                     <input type="hidden" name="cantidadalternativas[]" class="req-cantidadalternativa" value="{{ $_cantAltShow }}">

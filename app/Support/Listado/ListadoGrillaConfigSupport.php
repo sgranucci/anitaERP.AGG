@@ -233,6 +233,7 @@ final class ListadoGrillaConfigSupport
             'numerodocumento', 'codigopostal', 'telefono' => 96,
             'cbu' => 160,
             'alias_cbu' => 110,
+            'cuentaventa', 'cuentacompra', 'cuentagasto' => 220,
             'nombre' => 150,
             'fantasia', 'domicilio' => 120,
             'leyenda', 'email', 'emailoc' => 140,

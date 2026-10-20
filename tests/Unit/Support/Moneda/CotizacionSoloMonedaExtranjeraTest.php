@@ -72,10 +72,11 @@ class CotizacionSoloMonedaExtranjeraTest extends TestCase
         ));
 
         $liquidacion = PagoproveedorLiquidacionSupport::calcular(
-            self::MONTO, self::PESOS, self::COTIZACION, self::PESOS, self::COTIZACION
+            self::MONTO, self::PESOS, self::COTIZACION, self::PESOS, 1
         );
         $this->assertSinReescalar((float) $liquidacion['valor_local_deuda']);
         $this->assertSinReescalar((float) $liquidacion['equivalente_pago']);
+        $this->assertSame(0.0, (float) $liquidacion['dc']);
     }
 
     public function test_ingresos_y_egresos_en_pesos_no_se_reescala(): void

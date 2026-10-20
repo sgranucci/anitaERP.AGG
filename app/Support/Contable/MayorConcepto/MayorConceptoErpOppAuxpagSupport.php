@@ -271,7 +271,7 @@ final class MayorConceptoErpOppAuxpagSupport
                 'nro_asiento' => $nroAsiento,
                 'tipo_comp' => 'OPP',
                 'comprobante' => $this->formatearComprobante($asiento),
-                'cheque' => '',
+                'cheque' => $this->numeroChequeDesdeAuxpag($auxpag),
                 'nro_oc' => 0,
                 'emisor' => trim((string) ($asiento->anita_emisor ?? '')),
                 'cuit' => '',
@@ -422,13 +422,13 @@ final class MayorConceptoErpOppAuxpagSupport
     private function conceptoParaCuentaGasto(int $empresaId, int $cuenta, object $factura): int
     {
         $concepto = $this->memoriaMotor->conceptoImputacionCuenta($empresaId, $cuenta);
-        if ($concepto > 0) {
+        if ($concepto > 0 && ! $this->memoriaMotor->esConceptoPuenteChequeEmitido($empresaId, $concepto)) {
             return $concepto;
         }
 
-        // Puentes 114040 / 117010: axp_concepto o concepto de otra pierna del comprobante.
+        // Puentes 114040 / 117010 / proveedores: axp_concepto de la factura, no el del cheque emitido.
         $axp = (int) ($factura->axp_concepto ?? 0);
-        if ($axp > 0) {
+        if ($axp > 0 && ! $this->memoriaMotor->esConceptoPuenteChequeEmitido($empresaId, $axp)) {
             return $axp;
         }
 
@@ -442,7 +442,7 @@ final class MayorConceptoErpOppAuxpagSupport
                 continue;
             }
             $c = $this->memoriaMotor->conceptoDeCuenta($empresaId, $cta);
-            if ($c > 0) {
+            if ($c > 0 && ! $this->memoriaMotor->esConceptoPuenteChequeEmitido($empresaId, $c)) {
                 return $c;
             }
         }
@@ -982,8 +982,11 @@ final class MayorConceptoErpOppAuxpagSupport
                 $tipoMedio = 'CHP';
             }
             $conceptoId = $this->memoriaMotor->conceptoImputacionCuenta($empresaId, $cuentaCheque);
-            if ($conceptoId <= 0) {
-                $conceptoId = (int) ($medio->axp_concepto ?? 0);
+            if ($conceptoId <= 0 || $this->memoriaMotor->esConceptoPuenteChequeEmitido($empresaId, $conceptoId)) {
+                $axp = (int) ($medio->axp_concepto ?? 0);
+                $conceptoId = ($axp > 0 && ! $this->memoriaMotor->esConceptoPuenteChequeEmitido($empresaId, $axp))
+                    ? $axp
+                    : 0;
             }
 
             $lineas[] = [
@@ -999,7 +1002,9 @@ final class MayorConceptoErpOppAuxpagSupport
                 'nro_asiento' => $nroAsiento,
                 'tipo_comp' => 'OPP',
                 'comprobante' => $this->formatearComprobante($asiento),
-                'cheque' => '',
+                'cheque' => $this->numeroChequeDesdeAplicacion($medio) !== ''
+                    ? $this->numeroChequeDesdeAplicacion($medio)
+                    : $this->numeroChequeDesdeAuxpag($auxpag),
                 'nro_oc' => 0,
                 'emisor' => trim((string) ($asiento->anita_emisor ?? '')),
                 'cuit' => '',
@@ -1134,6 +1139,37 @@ final class MayorConceptoErpOppAuxpagSupport
             $fechaYmd,
             $monedaReporteId,
         ));
+    }
+
+    /**
+     * Número de cheque propio (CHP) en auxpag. axp_nro; axp_banco es la cuenta, no el número.
+     *
+     * @param  list<object>  $auxpag
+     */
+    private function numeroChequeDesdeAuxpag(array $auxpag): string
+    {
+        foreach ($auxpag as $fila) {
+            $nro = $this->numeroChequeDesdeAplicacion($fila);
+            if ($nro !== '') {
+                return $nro;
+            }
+        }
+
+        return '';
+    }
+
+    private function numeroChequeDesdeAplicacion(object $aplicacion): string
+    {
+        if (strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? ''))) !== 'CHP') {
+            return '';
+        }
+
+        $nro = trim((string) ($aplicacion->axp_nro ?? ''));
+        if ($nro === '' || $nro === '0') {
+            return '';
+        }
+
+        return $nro;
     }
 
     private function formatearComprobante(object $asiento): string

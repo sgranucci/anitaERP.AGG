@@ -7,6 +7,7 @@ use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
+use App\Support\Compras\PagoproveedorDevolucionRetencionSupport;
 use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\AplicacionCuentacorrienteAnitaLadoSupport;
 use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\AplmovpAnitaMapper;
 use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\PromovPagadoAnitaMapper;
@@ -52,6 +53,11 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
     public function syncPorPagoproveedor(int $pagoproveedorId): void
     {
         if ($pagoproveedorId <= 0) {
+            return;
+        }
+
+        $pago = Pagoproveedor::query()->find($pagoproveedorId);
+        if ($pago !== null && PagoproveedorDevolucionRetencionSupport::esDevolucion($pago)) {
             return;
         }
 

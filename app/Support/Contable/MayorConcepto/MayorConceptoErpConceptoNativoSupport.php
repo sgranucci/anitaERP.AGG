@@ -206,6 +206,10 @@ final class MayorConceptoErpConceptoNativoSupport
                 if (($ref['origen'] ?? '') !== '') {
                     $ln['origen'] = $ref['origen'];
                 }
+                $chequeRef = trim((string) ($ref['cheque'] ?? ''));
+                if ($chequeRef !== '') {
+                    $ln['cheque'] = $chequeRef;
+                }
             }
             $salida[] = $ln;
         }

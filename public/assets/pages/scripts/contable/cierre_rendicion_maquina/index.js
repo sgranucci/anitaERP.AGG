@@ -119,6 +119,20 @@
                 infoFbi.textContent = '';
             }
         }
+
+        var infoOnline = document.getElementById('modal-preview-win-online');
+        if (infoOnline) {
+            var totOnline = preview.totales || {};
+            var slotsOl = Number(totOnline.maquinas_online || 0);
+            var rulOl = Number(totOnline.ruletas_online || 0);
+            var totalOl = totOnline.resultado_online != null
+                ? Number(totOnline.resultado_online)
+                : slotsOl + rulOl;
+            infoOnline.textContent = 'Win online del flash (informativo, el mismo que entra a ventas): slots $ '
+                + formatoNumero(slotsOl) + ' · ruletas $ ' + formatoNumero(rulOl)
+                + ' · total $ ' + formatoNumero(totalOl) + '.';
+            infoOnline.classList.remove('d-none');
+        }
     }
 
     function abrirPreviewGrupo(grupo) {
@@ -342,9 +356,13 @@
             return;
         }
         var cantGrupos = preview.cantidad_grupos || 0;
+        var sinTilde = preview.fechas_sin_tilde || [];
         resumen.textContent = (preview.cantidad || 0) + ' rendición(es) pendiente(s) → '
             + cantGrupos + ' cierre(s) a generar. Recaudación: '
             + formatoNumero(preview.total_cobrado || 0);
+        if (sinTilde.length) {
+            resumen.textContent += ' Falta el tilde verde del flash: ' + sinTilde.join(', ') + '.';
+        }
 
         tbody.innerHTML = '';
         (preview.grupos || []).forEach(function (g, idx) {
@@ -410,7 +428,16 @@
         }
 
         box.classList.remove('d-none');
-        if (btnEj && cantGrupos > 0) {
+        if (sinTilde.length) {
+            var errTilde = document.getElementById('rango-error-box');
+            if (errTilde) {
+                errTilde.textContent = 'No se puede cerrar el rango: el flash de '
+                    + sinTilde.join(', ')
+                    + ' no tiene el tilde verde.';
+                errTilde.classList.remove('d-none');
+            }
+        }
+        if (btnEj && cantGrupos > 0 && sinTilde.length === 0) {
             btnEj.classList.remove('d-none');
         }
     }

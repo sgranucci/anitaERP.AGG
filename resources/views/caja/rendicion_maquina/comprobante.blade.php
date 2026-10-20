@@ -8,11 +8,15 @@
     <style>
         .tabla-cuenta thead th { background: #85C1E9; color: #17202A; }
         .fila-total td { background: #e8f4fc; font-weight: bold; }
-        .totales-box { margin-top: 4px; }
-        .totales-box td.lbl { width: 45%; background: #f0f0f0; font-weight: bold; }
-        .dos-cols { width: 100%; border: none !important; margin-bottom: 8px; }
-        .dos-cols > tbody > tr > td { border: none !important; vertical-align: top; width: 50%; padding: 0 4px 0 0; }
-        .dos-cols > tbody > tr > td + td { padding: 0 0 0 4px; }
+        .totales-box { margin-top: 4px; table-layout: fixed; }
+        .totales-box td.lbl { width: 58%; background: #f0f0f0; font-weight: bold; white-space: nowrap; }
+        .totales-box td.num { width: 42%; }
+        .dos-cols { width: 100%; border: none !important; margin-bottom: 8px; table-layout: fixed; }
+        .dos-cols > tbody > tr > td { border: none !important; vertical-align: top; width: 64%; padding: 0 8px 0 0; }
+        .dos-cols > tbody > tr > td + td { width: 36%; padding: 0 0 0 4px; }
+        .dos-cols .tabla-cuenta { table-layout: fixed; }
+        .dos-cols .tabla-cuenta th.num,
+        .dos-cols .tabla-cuenta td.num { width: 46%; }
     </style>
 </head>
 <body>
