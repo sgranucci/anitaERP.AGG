@@ -182,6 +182,44 @@ return [
             'permiso' => 'listar/ejecutar-propuesta-pago',
         ],
     ],
+    'op_devolver_retenciones' => [
+        [
+            'herramienta' => 'Devolver retenciones (↩)',
+            'ubicacion' => 'Listado OP — columna acciones',
+            'accion' => 'Abre el modal de devolución parcial sobre la OP confirmada',
+            'permiso' => 'devolver-retenciones-pagoproveedor',
+        ],
+        [
+            'herramienta' => 'Devolver retenciones',
+            'ubicacion' => 'Edición de OP — pie de card',
+            'accion' => 'Misma herramienta desde la ficha de la OP',
+            'permiso' => 'devolver-retenciones-pagoproveedor',
+        ],
+        [
+            'herramienta' => 'Checklist retenciones + monto',
+            'ubicacion' => 'Modal',
+            'accion' => 'Elige qué retenciones devolver y por cuánto (hasta el disponible)',
+            'permiso' => 'devolver-retenciones-pagoproveedor',
+        ],
+        [
+            'herramienta' => 'Medio transferencia / CHP',
+            'ubicacion' => 'Modal',
+            'accion' => 'Define cómo se paga al proveedor el importe retenido de más',
+            'permiso' => 'devolver-retenciones-pagoproveedor',
+        ],
+        [
+            'herramienta' => 'Confirmar devolución',
+            'ubicacion' => 'Modal — pie',
+            'accion' => 'Genera OP hija DEV RET, caja, asiento, Anita e impresión',
+            'permiso' => 'devolver-retenciones-pagoproveedor',
+        ],
+        [
+            'herramienta' => 'Revertir (↺)',
+            'ubicacion' => 'Listado / edición OP',
+            'accion' => 'AOP total: no usar para retención parcial mal practicada',
+            'permiso' => 'revertir-pagoproveedor',
+        ],
+    ],
     'proyeccion' => [
         [
             'herramienta' => 'Consultar',

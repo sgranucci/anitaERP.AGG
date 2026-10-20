@@ -126,7 +126,14 @@
         @include('includes.mensaje')
         <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Editar Asiento — {{ $data->tipoasientos->nombre ?? '' }} N° {{ $data->numeroasiento }}</h3>
+                <h3 class="card-title">
+                    Editar Asiento — {{ $data->tipoasientos->nombre ?? '' }} N° {{ $data->numeroasiento }}
+                    @if (! empty($data->copia_de_numeroasiento))
+                        <span class="ml-2" style="font-size: 0.75rem; font-weight: normal; opacity: .75;" title="Copiado del asiento {{ $data->copia_de_numeroasiento }}">
+                            <i class="fa fa-copy"></i> {{ $data->copia_de_numeroasiento }}
+                        </span>
+                    @endif
+                </h3>
                 <div class="card-tools">
                     @if (can('crear-asiento', false))
                         <a href="{{ route('crear_importacion_asiento') }}" class="btn btn-outline-success btn-sm" title="Importar asientos desde Excel">

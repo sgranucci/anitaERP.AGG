@@ -23,6 +23,19 @@
         </div>
     </div>
 </div>
+@if (($tipo ?? '') === 'motivo')
+    <div class="form-group row">
+        <label class="col-lg-3 control-label text-right pr-2">Exige OC</label>
+        <div class="col-lg-6">
+            <div class="form-check">
+                <input type="hidden" name="exige_oc" value="0">
+                <input type="checkbox" name="exige_oc" id="exige_oc" value="1" class="form-check-input"
+                       {{ old('exige_oc', $data->exige_oc ?? false) ? 'checked' : '' }}>
+                <label class="form-check-label" for="exige_oc">Obliga a informar la orden de compra (contrato / abono) al cargar el ingreso</label>
+            </div>
+        </div>
+    </div>
+@endif
 @if (($tipo ?? '') === 'area')
     <div class="card card-outline card-info mt-3">
         <div class="card-header">

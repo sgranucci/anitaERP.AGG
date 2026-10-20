@@ -3,6 +3,11 @@
         <div class="card-header py-2">
             <h3 class="card-title mb-0">
                 <i class="fa fa-book mr-1"></i> Datos del asiento
+                @if (! empty($data->copia_de_numeroasiento))
+                    <span class="text-muted ml-2" style="font-size: 0.75rem; font-weight: normal;" title="Copiado del asiento {{ $data->copia_de_numeroasiento }}">
+                        <i class="fa fa-copy"></i> {{ $data->copia_de_numeroasiento }}
+                    </span>
+                @endif
             </h3>
         </div>
         <div class="card-body">

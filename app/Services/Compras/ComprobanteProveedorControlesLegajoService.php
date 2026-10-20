@@ -122,6 +122,15 @@ class ComprobanteProveedorControlesLegajoService
         );
 
         if ($politica['sin_com_por_tipo'] ?? false) {
+            // NC/ND u otro tipo sin COM: no conservar ids de recepción del form (modo gasto).
+            $resultado['recepcion_ids_efectivos'] = [];
+            $idsIgnorados = collect($recepcionIds)
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => $id > 0)
+                ->isNotEmpty();
+            if ($idsIgnorados) {
+                $resultado['avisos'][] = 'El tipo de comprobante no usa recepción COM: se ignoró la selección de COM del legajo.';
+            }
             $this->validarImputacionContratoSinRecepcion($resultado, $politica, $ordencompra, $conceptos);
 
             return $resultado;

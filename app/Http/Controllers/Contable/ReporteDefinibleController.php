@@ -610,6 +610,7 @@ class ReporteDefinibleController extends Controller
             $pdf = \PDF::loadView('contable.reporte_definible.listado', [
                 'reporte' => $reporte,
                 'resultado' => $resultado,
+                'filtros' => (array) ($publicacion->filtros ?? []),
                 'periodo_texto' => (string) $publicacion->periodo_texto,
                 'publicacion' => $publicacion,
             ])->setPaper('legal', 'landscape');

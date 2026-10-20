@@ -1771,6 +1771,8 @@ Route::get('stock/informes-de-stock/movimientos-por-articulo', 'Stock\Movimiento
 Route::get('stock/listar-reporte-movimientos-stock-articulo/{formato?}', 'Stock\MovimientoStockArticuloReporteController@exportar')->name('listar_reporte_movimientos_stock_articulo');
 Route::get('stock/reporte-recepcion-proveedor', 'Stock\RecepcionProveedorReporteController@index')->name('reporte_recepcion_proveedor');
 Route::get('stock/listar-reporte-recepcion-proveedor/{formato?}', 'Stock\RecepcionProveedorReporteController@exportar')->name('listar_reporte_recepcion_proveedor');
+Route::get('stock/informes-de-stock/control-inventario-items', 'Stock\ControlInventarioItemsReporteController@index')->name('reporte_control_inventario_items');
+Route::get('stock/listar-reporte-control-inventario-items/{formato?}', 'Stock\ControlInventarioItemsReporteController@exportar')->name('listar_reporte_control_inventario_items');
 
 if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('stock/picking-pedido', 'Stock\PickingPedidoFerliController@index')->name('picking_pedido');
@@ -3643,6 +3645,7 @@ Route::post('caja/ingresoegreso/comprobante-iva/pdf-ia-preview', 'Caja\IngresoEg
 Route::post('caja/ingresoegreso/comprobante-iva/validar-totales', 'Caja\IngresoEgresoController@validarTotalesComprobantesIva')->name('ingresoegreso_comprobante_iva_validar_totales');
 Route::post('caja/ingresoegreso/comprobante-iva/validar-duplicado', 'Caja\IngresoEgresoController@validarDuplicadoComprobanteIva')->name('ingresoegreso_comprobante_iva_validar_duplicado');
 Route::post('caja/ingresoegreso/comprobante-iva/banco-cuenta', 'Caja\IngresoEgresoController@resolverBancoGastoComprobanteIva')->name('ingresoegreso_comprobante_iva_banco_cuenta');
+Route::post('caja/ingresoegreso/comprobante-iva/excel-preview', 'Caja\IngresoEgresoController@previewExcelComprobanteIva')->name('ingresoegreso_comprobante_iva_excel_preview');
 Route::post('caja/ingresoegreso/buscar-cheque', 'Caja\IngresoEgresoController@buscarCheque')->name('ingresoegreso_buscar_cheque');
 Route::post('caja/ingresoegreso/sugerir-detalle-canje-cheque', 'Caja\IngresoEgresoController@sugerirDetalleCanjeCheque')->name('ingresoegreso_sugerir_detalle_canje_cheque');
 
@@ -4019,6 +4022,8 @@ Route::post('compras/pagoproveedor/{id}/confirmar', 'Compras\PagoproveedorContro
 Route::delete('compras/pagoproveedor/{id}', 'Compras\PagoproveedorController@eliminar')->name('eliminar_pagoproveedor');
 Route::post('compras/pagoproveedor/{id}/anular', 'Compras\PagoproveedorController@anularFisicamente')->name('anular_pagoproveedor');
 Route::post('compras/pagoproveedor/{id}/revertir', 'Compras\PagoproveedorController@revertir')->name('revertir_pagoproveedor');
+Route::get('compras/pagoproveedor/{id}/devolver-retenciones/datos', 'Compras\PagoproveedorController@datosDevolverRetenciones')->name('datos_devolver_retenciones_pagoproveedor');
+Route::post('compras/pagoproveedor/{id}/devolver-retenciones', 'Compras\PagoproveedorController@devolverRetenciones')->name('devolver_retenciones_pagoproveedor');
 Route::post('compras/pagoproveedor/{id}/marcar-pagada', 'Compras\PagoproveedorController@marcarPagada')->name('marcar_pagada_pagoproveedor');
 Route::post('compras/pagoproveedor/{id}/marcar-conciliada', 'Compras\PagoproveedorController@marcarConciliada')->name('marcar_conciliada_pagoproveedor');
 Route::get('compras/pagoproveedor/api/deuda-proveedor', 'Compras\PagoproveedorController@apiDeudaProveedor')->name('api_deuda_pagoproveedor');
@@ -4543,6 +4548,7 @@ Route::get('ticket/areadestino/crear', 'Ticket\AreadestinoController@crear')->na
 Route::post('ticket/areadestino', 'Ticket\AreadestinoController@guardar')->name('guarda_areadestino');
 Route::get('ticket/areadestino/{id}/editar', 'Ticket\AreadestinoController@editar')->name('edita_areadestino');
 Route::put('ticket/areadestino/{id}', 'Ticket\AreadestinoController@actualizar')->name('actualiza_areadestino');
+Route::put('ticket/areadestino/{id}/suspender', 'Ticket\AreadestinoController@suspender')->name('suspende_areadestino');
 Route::delete('ticket/areadestino/{id}', 'Ticket\AreadestinoController@eliminar')->name('elimina_areadestino');
 
 /*
@@ -6008,6 +6014,8 @@ Route::get('seguridad/reporte-ingresos-planta', 'Seguridad\IngresoProveedorPlant
 Route::get('seguridad/listar-reporte-ingresos-planta/{formato?}', 'Seguridad\IngresoProveedorPlantaReporteController@exportar')->name('listar_reporte_ingresos_planta');
 Route::get('seguridad/reporte-abono-sin-ingresos', 'Seguridad\IngresoProveedorAbonoReporteController@index')->name('reporte_abono_sin_ingresos');
 Route::get('seguridad/listar-reporte-abono-sin-ingresos/{formato?}', 'Seguridad\IngresoProveedorAbonoReporteController@exportar')->name('listar_reporte_abono_sin_ingresos');
+Route::get('seguridad/reporte-visitas-oc-cruce', 'Seguridad\VisitasOcCruceReporteController@index')->name('reporte_visitas_oc_cruce');
+Route::get('seguridad/listar-reporte-visitas-oc-cruce/{formato?}', 'Seguridad\VisitasOcCruceReporteController@exportar')->name('listar_reporte_visitas_oc_cruce');
 
 Route::get('seguridad/ingreso-proveedor', 'Seguridad\IngresoProveedorController@index')->name('ingreso_proveedor');
 Route::get('seguridad/lista-ingreso-proveedor/{formato?}/{busqueda?}', 'Seguridad\IngresoProveedorController@listar')->name('lista_ingreso_proveedor');

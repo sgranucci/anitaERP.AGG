@@ -69,6 +69,18 @@ class ReporteDefinibleReporteService
 
     public function formatearPeriodoTexto(array $filtros): string
     {
+        if (($filtros['modo_periodo'] ?? '') === \App\Support\Contable\ReporteDefinible\ReporteDefinibleSupport::MODO_MESES) {
+            $periodos = \App\Support\Contable\ReporteDefinibleListadoFiltros::normalizarListaPeriodos($filtros['periodos'] ?? []);
+            if ($periodos !== []) {
+                $partes = array_map(
+                    static fn (int $p) => sprintf('%02d/%04d', $p % 100, intdiv($p, 100)),
+                    $periodos
+                );
+
+                return implode(', ', $partes);
+            }
+        }
+
         if (($filtros['modo_periodo'] ?? '') === \App\Support\Contable\SumasSaldosListadoFiltros::MODO_RANGO) {
             $fd = trim((string) ($filtros['fecha_desde'] ?? ''));
             $fh = trim((string) ($filtros['fecha_hasta'] ?? ''));

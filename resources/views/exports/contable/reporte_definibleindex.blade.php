@@ -7,6 +7,14 @@
     $fmtMonto = \App\Support\Export\ExcelFormatoNumero::formateadorMonto($formatoExcel, 2);
     $notas = $resultado['notas'] ?? [];
     $marcasNota = $resultado['notas_marcas'] ?? [];
+    $gruposColumna = [];
+    foreach (($resultado['columnas'] ?? []) as $colGrupo) {
+        $nombreGrupo = trim((string) ($colGrupo['grupo'] ?? ''));
+        if ($nombreGrupo !== '') {
+            $gruposColumna[$nombreGrupo] = true;
+        }
+    }
+    $mostrarGrupos = count($gruposColumna) > 1;
 @endphp
 <table>
     @if (!empty($hayFilaLogos))
@@ -28,6 +36,15 @@
         </tr>
     @endif
     <thead>
+        @if ($mostrarGrupos)
+            <tr>
+                <th></th>
+                <th></th>
+                @foreach (($resultado['columnas'] ?? []) as $col)
+                    <th>{{ $col['grupo'] ?? '' }}</th>
+                @endforeach
+            </tr>
+        @endif
         <tr>
             <th>Código</th>
             <th>Concepto</th>

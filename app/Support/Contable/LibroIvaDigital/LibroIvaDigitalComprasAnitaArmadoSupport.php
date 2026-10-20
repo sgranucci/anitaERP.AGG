@@ -71,13 +71,15 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         $codigoMoneda = self::codigoMonedaAnita((string) ($compra['com_cod_mon'] ?? '1'));
         $cotizacion = (float) ($compra['com_cotizacion'] ?? 1);
         $coeficiente = self::coeficienteMoneda($codigoMoneda, $cotizacion);
+        $cuit = preg_replace('/\D+/', '', (string) ($compra['com_cuit_prov'] ?? '')) ?? '';
         $totales = self::desglosarConcmov(
             $conceptos,
             $letra,
             $coeficiente,
             trim((string) ($compra['com_nombre_prov'] ?? '')),
+            $tipoAbrev,
+            $cuit,
         );
-        $cuit = preg_replace('/\D+/', '', (string) ($compra['com_cuit_prov'] ?? '')) ?? '';
         $fechaComprobante = self::fechaArchivoCompras(
             $compra['com_fecha'] ?? null,
             $compra['com_fecha_iva'] ?? null,
@@ -162,7 +164,11 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         string $letra,
         float $coeficiente = 1.0,
         string $nombreVendedor = '',
+        string $abreviatura = '',
+        string $cuitVendedor = '',
     ): array {
+        $conceptos = LibroIvaDigitalComprasImportesSupport::conceptosSinDuplicar($conceptos);
+        $esGastoBancario = in_array(self::normalizarAbreviaturaTipo($abreviatura), ['ICO', 'IDO'], true);
         $noIntegra = 0.0;
         $exento = 0.0;
         $percIva = 0.0;
@@ -189,12 +195,19 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
 
             $clas = LibroIvaDigitalComprasConceptoClasificacionSupport::clasificar($concepto, $nombreVendedor);
             $destino = $clas['destino'];
+            $nombreConcepto = (string) ($concepto->nombre ?? '');
+            if ($esGastoBancario) {
+                $destino = LibroIvaDigitalComprasImportesSupport::destinoRubroIco(
+                    $cuitVendedor,
+                    $nombreConcepto,
+                    $destino,
+                );
+            }
             if ($destino === '') {
                 continue;
             }
             $tasa = $clas['tasa'];
             $key = (string) round($tasa, 3);
-            $nombreConcepto = (string) ($concepto->nombre ?? '');
             $conceptoIvaSimple = LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre($nombreConcepto);
 
             switch ($destino) {
@@ -297,6 +310,13 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         string $codigoAfip,
         string $letra,
     ): bool {
+        $abrevNorm = self::normalizarAbreviaturaTipo($abreviatura);
+        if (in_array($abrevNorm, ['ICO', 'IDO'], true)) {
+            $let = strtoupper(substr(trim($letra), 0, 1));
+
+            return $let !== '' && $let !== 'E';
+        }
+
         if (ComprobanteProveedorInternoTipos::esInterno($abreviatura)) {
             return false;
         }
@@ -333,8 +353,10 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
     public static function restringirQueryTiposInformables(Builder $query): Builder
     {
         return $query->whereHas('tipotransaccion_compras', function (Builder $q): void {
-            $q->whereIn('subdiario', ['C', 'G'])
-                ->whereNotIn('abreviatura', ComprobanteProveedorInternoTipos::abreviaturas());
+            $q->where(function (Builder $informables): void {
+                $informables->whereIn('subdiario', ['C', 'G'])
+                    ->whereNotIn('abreviatura', ComprobanteProveedorInternoTipos::abreviaturas());
+            })->orWhereIn('abreviatura', ['ICO', 'IDO']);
         });
     }
 

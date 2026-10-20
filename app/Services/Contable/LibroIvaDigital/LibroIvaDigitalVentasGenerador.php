@@ -314,7 +314,11 @@ class LibroIvaDigitalVentasGenerador
                 $totales,
             );
 
-        $signo = (int) IvaVentasDesgloseSupport::signoVenta($venta);
+        $signoDocumento = (float) IvaVentasDesgloseSupport::signoVenta($venta);
+        $esNotaCredito = LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipoComprobante)
+            || (int) ($venta->tipotransacciones?->getRawOriginal('signo') ?? 1) < 0;
+        // RG 4597: la NC va en positivo. Una factura con total negativo conserva el signo.
+        $signo = $esNotaCredito ? 1.0 : $signoDocumento;
         $codigoMoneda = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
             $venta->monedas->codigo ?? null,
             $venta->monedas->nombre ?? null,
@@ -364,7 +368,7 @@ class LibroIvaDigitalVentasGenerador
             'cabecera' => $cabecera,
             'alicuotas' => $alicuotas,
         ]);
-        $registro['iva_simple'] = $this->metaIvaSimpleVenta($venta, $signo < 0);
+        $registro['iva_simple'] = $this->metaIvaSimpleVenta($venta, $esNotaCredito);
 
         return $registro;
     }
@@ -381,6 +385,10 @@ class LibroIvaDigitalVentasGenerador
         $codigo = LibroIvaDigitalIvaSimpleSupport::normalizarCodigoActividad(
             (string) ($actividad->codigoarca ?? '0'),
         );
+
+        if ($restitucion) {
+            $codigo = LibroIvaDigitalIvaSimpleSupport::ACTIVIDAD_NC_VENTAS;
+        }
 
         return [
             'actividad_codigo' => $codigo,

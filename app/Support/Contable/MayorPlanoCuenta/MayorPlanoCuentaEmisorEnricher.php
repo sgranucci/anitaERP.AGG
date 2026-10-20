@@ -109,9 +109,154 @@ class MayorPlanoCuentaEmisorEnricher
             $filas[$idx] = $this->aplicarEmisor($fila, $entidad, $codigo, $registro);
         }
 
-        return $this->completarEmisorYDescripcionIngresoEgreso(
-            $this->completarCuitGastoBancario($filas)
+        return $this->reemplazarTipoImpuestoIngresoEgreso(
+            $this->completarEmisorYDescripcionIngresoEgreso(
+                $this->completarCuitGastoBancario($filas)
+            )
         );
+    }
+
+    /**
+     * ICO/IDO es el comprobante de impuesto del ingreso/egreso, no la operación.
+     * En el mayor se ve el tipo del movimiento (EGR, ING, …) o, si ese movimiento
+     * tiene un único comprobante que no es el impuesto, la sigla de ese comprobante.
+     *
+     * @param  list<string>  $tiposDocumentos
+     */
+    public static function tipoVisibleImpuestoIngresoEgreso(string $tipoActual, string $tipoCaja, array $tiposDocumentos): string
+    {
+        $tipo = strtoupper(substr(trim($tipoActual), 0, 3));
+        if (! in_array($tipo, ['ICO', 'IDO'], true)) {
+            return strtoupper(trim($tipoActual));
+        }
+
+        $documentos = [];
+        foreach ($tiposDocumentos as $abreviatura) {
+            $abreviatura = strtoupper(trim((string) $abreviatura));
+            if ($abreviatura === '' || in_array($abreviatura, ['ICO', 'IDO'], true)) {
+                continue;
+            }
+            $documentos[$abreviatura] = $abreviatura;
+        }
+        if (count($documentos) === 1) {
+            return array_values($documentos)[0];
+        }
+
+        $tipoCaja = strtoupper(trim($tipoCaja));
+        if ($tipoCaja !== '' && ! in_array($tipoCaja, ['ICO', 'IDO'], true)) {
+            return $tipoCaja;
+        }
+
+        return $tipo === 'IDO' ? 'ING' : 'EGR';
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function reemplazarTipoImpuestoIngresoEgreso(array $filas): array
+    {
+        $cajaIds = [];
+        foreach ($filas as $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+            $tipo = strtoupper(substr(trim((string) ($fila['tipo_comp'] ?? '')), 0, 3));
+            if (! in_array($tipo, ['ICO', 'IDO'], true)) {
+                continue;
+            }
+            $cajaId = (int) ($fila['caja_movimiento_id'] ?? 0);
+            if ($cajaId > 0) {
+                $cajaIds[$cajaId] = $cajaId;
+            }
+        }
+
+        $tiposCaja = $this->tiposCajaDeMovimientos(array_values($cajaIds));
+        $tiposDocumentos = $this->tiposComprobanteDeMovimientos(array_values($cajaIds));
+
+        foreach ($filas as $idx => $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+            $tipo = strtoupper(substr(trim((string) ($fila['tipo_comp'] ?? '')), 0, 3));
+            if (! in_array($tipo, ['ICO', 'IDO'], true)) {
+                continue;
+            }
+            $cajaId = (int) ($fila['caja_movimiento_id'] ?? 0);
+            $filas[$idx]['tipo_comp'] = self::tipoVisibleImpuestoIngresoEgreso(
+                $tipo,
+                (string) ($tiposCaja[$cajaId] ?? ''),
+                $tiposDocumentos[$cajaId] ?? [],
+            );
+        }
+
+        return $filas;
+    }
+
+    /**
+     * @param  list<int>  $movimientoIds
+     * @return array<int, string>
+     */
+    private function tiposCajaDeMovimientos(array $movimientoIds): array
+    {
+        if ($movimientoIds === []
+            || ! Schema::hasTable('caja_movimiento')
+            || ! Schema::hasTable('tipotransaccion_caja')
+            || ! Schema::hasColumn('tipotransaccion_caja', 'abreviatura')) {
+            return [];
+        }
+
+        $out = [];
+        $filas = DB::table('caja_movimiento as cm')
+            ->leftJoin('tipotransaccion_caja as tt', 'tt.id', '=', 'cm.tipotransaccion_caja_id')
+            ->whereIn('cm.id', $movimientoIds)
+            ->get(['cm.id', 'tt.abreviatura']);
+        foreach ($filas as $row) {
+            $out[(int) $row->id] = strtoupper(trim((string) ($row->abreviatura ?? '')));
+        }
+
+        return $out;
+    }
+
+    /**
+     * Comprobantes cargados en el ingreso/egreso, sin el ICO/IDO del impuesto.
+     *
+     * @param  list<int>  $movimientoIds
+     * @return array<int, list<string>>
+     */
+    private function tiposComprobanteDeMovimientos(array $movimientoIds): array
+    {
+        if ($movimientoIds === []
+            || ! Schema::hasTable('comprobante_proveedor')
+            || ! Schema::hasTable('tipotransaccion_compra')
+            || ! Schema::hasColumn('comprobante_proveedor', 'caja_movimiento_id')
+            || ! Schema::hasColumn('comprobante_proveedor', 'tipotransaccion_compra_id')
+            || ! Schema::hasColumn('tipotransaccion_compra', 'abreviatura')) {
+            return [];
+        }
+
+        $query = DB::table('comprobante_proveedor as cp')
+            ->join('tipotransaccion_compra as tt', 'tt.id', '=', 'cp.tipotransaccion_compra_id')
+            ->whereIn('cp.caja_movimiento_id', $movimientoIds);
+        if (Schema::hasColumn('comprobante_proveedor', 'origen_entrada')) {
+            $query->where('cp.origen_entrada', 'INGRESO_EGRESO');
+        }
+
+        $out = [];
+        foreach ($query->get(['cp.caja_movimiento_id', 'tt.abreviatura']) as $row) {
+            $abreviatura = strtoupper(trim((string) ($row->abreviatura ?? '')));
+            if ($abreviatura === '' || in_array($abreviatura, ['ICO', 'IDO'], true)) {
+                continue;
+            }
+            $out[(int) $row->caja_movimiento_id][$abreviatura] = $abreviatura;
+        }
+
+        $listas = [];
+        foreach ($out as $id => $abreviaturas) {
+            $listas[$id] = array_values($abreviaturas);
+        }
+
+        return $listas;
     }
 
     /**

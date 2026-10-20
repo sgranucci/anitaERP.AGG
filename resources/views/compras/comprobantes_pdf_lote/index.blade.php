@@ -30,8 +30,10 @@
             <form method="get" action="{{ route('comprobantes_pdf_lote') }}" id="form-comprobantes-pdf-lote" class="mb-0">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        Lista los comprobantes de proveedor de una empresa, uno o más proveedores y un rango de fechas.
-                        El PDF de cada uno sale de la precarga (agente IA o scan), de Facturas_scan o de la carpeta histórica de escaneo.
+                        Lista, para una empresa, uno o más proveedores y un rango de fechas, las facturas y los documentos que marque:
+                        OC, COM, OPP y OPA. Puede tildar uno o varios: el listado y el ZIP los juntan.
+                        El PDF de la factura sale de la precarga, de Facturas_scan o del escaneo histórico.
+                        OC, COM, OPP y OPA se arman al verlos o al bajar el lote.
                     </p>
 
                     @php
@@ -78,6 +80,21 @@
                         'proveedoresIniciales' => $proveedores_iniciales ?? [],
                     ])
 
+                    <div class="form-group row">
+                        <label class="{{ $colLabel }} requerido">Incluir</label>
+                        <div class="col-lg-10 pt-1">
+                            <input type="hidden" name="tipos_enviados" value="1">
+                            @foreach (\App\Support\Compras\ComprobantesPdfLoteFiltros::TIPOS as $tipoClave => $tipoNombre)
+                                <label class="mr-3 mb-1" style="font-weight: normal;">
+                                    <input type="checkbox" name="tipos[]" value="{{ $tipoClave }}"
+                                        @checked(in_array($tipoClave, $filtros['tipos'] ?? ['fac'], true))>
+                                    {{ $tipoNombre }}
+                                </label>
+                            @endforeach
+                            <p class="small text-muted mb-0">Las tildes se acumulan: puede marcar solo facturas, solo órdenes de pago, o todas juntas.</p>
+                        </div>
+                    </div>
+
                     <div class="form-group row mb-0">
                         <div class="{{ $colLabel }} d-none d-lg-block"></div>
                         <div class="col-lg-10">
@@ -102,24 +119,46 @@
                 <div class="card-body p-0 border-top">
                     <div class="d-flex flex-wrap align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
                         <div class="small mb-1 mb-md-0">
-                            <span class="text-muted">Comprobantes:</span>
+                            <span class="text-muted">Documentos:</span>
                             <strong>{{ $filas ? $filas->total() : 0 }}</strong>
                             · {{ \Carbon\Carbon::parse($filtros['fecha_desde'])->format('d/m/Y') }}
                             al {{ \Carbon\Carbon::parse($filtros['fecha_hasta'])->format('d/m/Y') }}
                         </div>
                         @if ($filas && $filas->total() > 0)
-                            <a href="{{ route('comprobantes_pdf_lote_zip', $filtrosQuery ?? []) }}"
-                               class="btn btn-success btn-sm js-descargar-zip"
-                               title="Baja un ZIP con el PDF de cada comprobante del lote">
-                                <i class="fa fa-file-archive"></i> Descargar lote en ZIP
-                            </a>
+                            <div class="d-flex flex-wrap" style="gap: 6px;">
+                                <button type="submit" form="form-zip-marcados" class="btn btn-success btn-sm"
+                                    title="ZIP con los documentos tildados de esta página">
+                                    <i class="fa fa-check-square"></i> Descargar marcados
+                                </button>
+                                <a href="{{ route('comprobantes_pdf_lote_zip', $filtrosQuery ?? []) }}"
+                                   class="btn btn-outline-success btn-sm js-descargar-zip"
+                                   title="ZIP con todos los documentos de los tipos tildados, no solo esta página">
+                                    <i class="fa fa-file-archive"></i> Descargar todo el lote
+                                </a>
+                            </div>
                         @endif
                     </div>
+
+                    @if ($filas && $filas->total() > 0)
+                        <form method="get" action="{{ route('comprobantes_pdf_lote_zip') }}" id="form-zip-marcados" class="d-none">
+                            <input type="hidden" name="empresa_id" value="{{ (int) ($filtros['empresa_id'] ?? 0) }}">
+                            <input type="hidden" name="fecha_desde" value="{{ $filtros['fecha_desde'] ?? '' }}">
+                            <input type="hidden" name="fecha_hasta" value="{{ $filtros['fecha_hasta'] ?? '' }}">
+                            <input type="hidden" name="proveedor_ids" value="{{ implode(',', $filtros['proveedor_ids'] ?? []) }}">
+                            <input type="hidden" name="tipos_enviados" value="1">
+                            @foreach ($filtros['tipos'] ?? [] as $tipoMarcado)
+                                <input type="hidden" name="tipos[]" value="{{ $tipoMarcado }}">
+                            @endforeach
+                        </form>
+                    @endif
 
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered table-hover mb-0" style="font-size: 0.85rem;">
                             <thead style="background:#85C1E9;color:#17202A;">
                                 <tr>
+                                    <th class="text-center" style="width: 36px;" title="Marcar los de esta página">
+                                        <input type="checkbox" id="marcar-todos-pdf-lote">
+                                    </th>
                                     <th>Fecha</th>
                                     <th>Proveedor</th>
                                     <th>Tipo</th>
@@ -131,37 +170,34 @@
                             </thead>
                             <tbody>
                                 @forelse ($filas ?? [] as $fila)
-                                    @php
-                                        $pdf = $pdfs[(int) $fila->id] ?? null;
-                                        $tienePdf = $pdf && filled($pdf->ruta);
-                                        $suc = str_pad((string) ((int) ($fila->sucursal ?? 0)), 4, '0', STR_PAD_LEFT);
-                                        $nro = str_pad((string) ((int) ($fila->numerocomprobante ?? 0)), 8, '0', STR_PAD_LEFT);
-                                        $numero = trim((string) ($fila->letra ?? '').' '.$suc.'-'.$nro);
-                                    @endphp
                                     <tr>
-                                        <td>{{ $fila->fechacomprobante?->format('d/m/Y') }}</td>
-                                        <td>{{ trim(($fila->proveedores->codigo ?? '').' '.($fila->proveedores->nombre ?? '')) }}</td>
-                                        <td>{{ $fila->tipotransaccion_compras->abreviatura ?? $fila->tipotransaccion_compras->nombre ?? '' }}</td>
-                                        <td>{{ $numero }}</td>
-                                        <td class="text-right">{{ number_format((float) ($fila->total ?? 0), 2, ',', '.') }}</td>
+                                        <td class="text-center">
+                                            <input type="checkbox" class="js-clave-pdf-lote" value="{{ $fila->clave }}"
+                                                title="Incluir en el ZIP de marcados">
+                                        </td>
+                                        <td>{{ $fila->fecha }}</td>
+                                        <td>{{ $fila->proveedor }}</td>
+                                        <td>{{ $fila->tipoEtiqueta }}</td>
+                                        <td>{{ $fila->numero }}</td>
+                                        <td class="text-right">{{ number_format((float) $fila->total, 2, ',', '.') }}</td>
                                         <td>
-                                            @if ($tienePdf)
-                                                <span class="badge badge-info">{{ $pdf->etiqueta() }}</span>
+                                            @if ($fila->tienePdf)
+                                                <span class="badge badge-info">{{ $fila->pdfEtiqueta }}</span>
                                             @else
                                                 <span class="badge badge-secondary">Sin PDF</span>
                                             @endif
                                         </td>
                                         <td class="text-center text-nowrap">
-                                            @if ($puede_editar ?? false)
+                                            @if (($puede_editar ?? false) && $fila->editarUrl)
                                                 <a class="btn-accion-tabla tooltipsC" title="Editar"
-                                                   href="{{ route('editar_comprobante_proveedor', ['id' => $fila->id]) }}"
+                                                   href="{{ $fila->editarUrl }}"
                                                    target="_blank" rel="noopener">
                                                     <i class="fa fa-edit"></i>
                                                 </a>
                                             @endif
-                                            @if ($tienePdf)
+                                            @if ($fila->tienePdf && $fila->pdfUrl)
                                                 <a class="btn-accion-tabla tooltipsC" title="Ver PDF"
-                                                   href="{{ route('comprobante_proveedor_factura_pdf', ['id' => $fila->id, 'inline' => 1]) }}"
+                                                   href="{{ $fila->pdfUrl }}"
                                                    target="_blank" rel="noopener">
                                                     <i class="fa fa-file-pdf"></i>
                                                 </a>
@@ -170,7 +206,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-3">No hay comprobantes para esos filtros.</td>
+                                        <td colspan="8" class="text-center text-muted py-3">No hay documentos para esos filtros.</td>
                                     </tr>
                                 @endforelse
                             </tbody>

@@ -3,6 +3,7 @@
 namespace App\Support\Contable\MayorPlanoCuenta;
 
 use App\Services\Contable\MayorPlanoCuentaReporteService;
+use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use App\Support\Export\XlsxStreamWriter;
 
@@ -170,6 +171,9 @@ final class MayorPlanoCuentaClasificadoExportSupport
 
         $n = 0;
         foreach ($reporteService->iterarFilasClasificadas($resultado, $filtros) as $fila) {
+            if (! self::incluirFilaExport($fila, $filtros)) {
+                continue;
+            }
             fputcsv($out, self::filaAColumnas($fila, $filtros), ';');
             $n++;
             if ($n % 2000 === 0) {
@@ -203,9 +207,17 @@ final class MayorPlanoCuentaClasificadoExportSupport
         string $nombreHoja = 'Mayor por cuenta',
     ): array {
         $writer = new XlsxStreamWriter($rutaAbsoluta, $nombreHoja);
+        $logos = self::rutasLogo($reporteService, $filtros);
+        $writer->setEncabezadoReporte(
+            self::lineasEncabezado($reporteService, $resultado, $filtros),
+            $logos[0] ?? null,
+        );
         $writer->escribirCabecera(self::cabeceras($filtros));
 
         foreach ($reporteService->iterarFilasClasificadas($resultado, $filtros) as $fila) {
+            if (! self::incluirFilaExport($fila, $filtros)) {
+                continue;
+            }
             $writer->escribirFila(
                 self::filaAColumnas($fila, $filtros),
                 self::estiloFilaExcel($fila),
@@ -215,6 +227,69 @@ final class MayorPlanoCuentaClasificadoExportSupport
         $writer->escribirFila(self::filaTotalGeneral($resultado, $filtros), 'total');
 
         return $writer->cerrar();
+    }
+
+    /**
+     * Mismas líneas que el Excel chico: título, fecha, período y totales.
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $filtros
+     * @return list<string>
+     */
+    public static function lineasEncabezado(
+        MayorPlanoCuentaReporteService $reporteService,
+        array $resultado,
+        array $filtros,
+    ): array {
+        $lineas = [
+            MayorPlanoCuentaModuloFiltroSupport::tituloConsulta(
+                MayorPlanoCuentaListadoFiltros::moduloMovimientos($filtros)
+            ),
+            'Generado '.date('d/m/Y H:i'),
+        ];
+
+        $subtitulo = trim(implode(' · ', array_filter([
+            $reporteService->formatearEmpresasTexto($filtros),
+            $reporteService->formatearPeriodoTexto($filtros),
+            $reporteService->formatearInclusionAsientosTexto($filtros),
+            $reporteService->formatearCentrocostosTexto($filtros),
+            $reporteService->formatearOrigenMovimientosTexto($filtros),
+        ], fn ($parte) => trim((string) $parte) !== '')));
+        if ($subtitulo !== '') {
+            $lineas[] = $subtitulo;
+        }
+
+        $cantidad = (int) ($resultado['totales']['lineas'] ?? 0);
+        if ($cantidad > 0) {
+            $debe = (float) ($resultado['totales']['debe'] ?? 0);
+            $haber = (float) ($resultado['totales']['haber'] ?? 0);
+            $diferencia = round($debe - $haber, 2);
+            $lineas[] = $cantidad.' movimiento(s)'
+                .' · Debe '.number_format($debe, 2, ',', '.')
+                .' · Haber '.number_format($haber, 2, ',', '.')
+                .' · Diferencia (D−H) '.number_format($diferencia, 2, ',', '.')
+                .' · '.(int) ($resultado['totales']['cuentas'] ?? 0).' cuenta(s)';
+        }
+
+        return $lineas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<string>
+     */
+    private static function rutasLogo(MayorPlanoCuentaReporteService $reporteService, array $filtros): array
+    {
+        $texto = $reporteService->formatearEmpresasTexto($filtros);
+        $registros = [];
+        foreach ($texto === '' ? [] : explode(' · ', $texto) as $nombre) {
+            $nombre = trim($nombre);
+            if ($nombre !== '') {
+                $registros[] = ['nombreempresa' => $nombre];
+            }
+        }
+
+        return EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($registros);
     }
 
     /**
@@ -243,7 +318,17 @@ final class MayorPlanoCuentaClasificadoExportSupport
 
     /**
      * @param  array<string, mixed>  $fila
+     * @param  array<string, mixed>  $filtros
      */
+    public static function incluirFilaExport(array $fila, array $filtros): bool
+    {
+        if ((string) ($fila['tipo_fila'] ?? '') !== 'header_cuenta') {
+            return true;
+        }
+
+        return MayorPlanoCuentaListadoFiltros::mostrarTituloCuenta($filtros);
+    }
+
     public static function estiloFilaExcel(array $fila): ?string
     {
         return match ((string) ($fila['tipo_fila'] ?? 'detalle')) {

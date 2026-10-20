@@ -231,4 +231,64 @@ class LibroIvaDigitalIvaSimpleSupportTest extends TestCase
         $this->assertSame(10.5, $armado['total_iva_nc']);
         $this->assertSame(31.5, $armado['total_iva_portal']);
     }
+
+    public function test_restitucion_exenta_informa_el_monto_en_el_campo_7(): void
+    {
+        $armado = LibroIvaDigitalIvaSimpleSupport::debitoDesdeRegistrosLibro([
+            [
+                'iva_simple' => [
+                    'actividad_codigo' => '524120',
+                    'actividad_nombre' => 'Estacionamiento',
+                    'tipo_sujeto' => 1,
+                    'restitucion' => true,
+                ],
+                'cabecera' => [
+                    'operaciones_exentas' => 1500.5,
+                ],
+                'alicuotas' => [],
+            ],
+        ]);
+
+        $this->assertCount(1, $armado['detalle_restitucion']);
+        $this->assertSame('561012', $armado['detalle_restitucion'][0]['actividad_codigo']);
+        $this->assertSame(
+            '561012;2;;;;;1500,50;',
+            LibroIvaDigitalIvaSimpleSupport::lineaDebitoFiscal($armado['detalle_restitucion'][0], true),
+        );
+        $this->assertSame(
+            '',
+            LibroIvaDigitalIvaSimpleSupport::lineaDebitoFiscal([
+                'actividad_codigo' => '920009',
+                'tipo_operacion' => '2',
+                'exento' => 0,
+            ], true),
+        );
+    }
+
+    public function test_factura_b_negativa_resta_el_exento_del_debito(): void
+    {
+        $armado = LibroIvaDigitalIvaSimpleSupport::debitoDesdeRegistrosLibro([
+            [
+                'iva_simple' => [
+                    'actividad_codigo' => '561012',
+                    'tipo_sujeto' => 3,
+                    'restitucion' => false,
+                ],
+                'cabecera' => ['operaciones_exentas' => 1000.0],
+                'alicuotas' => [],
+            ],
+            [
+                'iva_simple' => [
+                    'actividad_codigo' => '561012',
+                    'tipo_sujeto' => 3,
+                    'restitucion' => false,
+                ],
+                'cabecera' => ['operaciones_exentas' => -400.0],
+                'alicuotas' => [],
+            ],
+        ]);
+
+        $this->assertCount(1, $armado['detalle']);
+        $this->assertSame(600.0, $armado['detalle'][0]['exento']);
+    }
 }

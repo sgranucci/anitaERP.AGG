@@ -24,6 +24,15 @@ final class XlsxStreamWriter
 
     private bool $sheetDataAbierto = false;
 
+    private bool $prologoEscrito = false;
+
+    /** @var list<string> */
+    private array $lineasTitulo = [];
+
+    private ?string $rutaLogo = null;
+
+    private int $filasAntesCabecera = 0;
+
     public function __construct(
         private readonly string $rutaXlsx,
         private readonly string $nombreHoja = 'Hoja1',
@@ -51,13 +60,25 @@ final class XlsxStreamWriter
 
         fwrite($this->sheetHandle, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
-            .' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            .'<sheetViews><sheetView workbookViewId="0" tabSelected="1">'
-            .'<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>'
-            // Sin este selection, Excel abre la hoja como varias selecciones
-            // (panel congelado + filtro) y no deja copiarla a un libro vacío.
-            .'<selection pane="bottomLeft" activeCell="A2" sqref="A2"/>'
-            .'</sheetView></sheetViews>');
+            .' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">');
+    }
+
+    /**
+     * Título del reporte (y logo) encima de los nombres de columna.
+     * Hay que llamarlo antes de escribirCabecera.
+     *
+     * @param  list<string>  $lineas
+     */
+    public function setEncabezadoReporte(array $lineas, ?string $rutaLogo = null): void
+    {
+        $this->lineasTitulo = [];
+        foreach ($lineas as $linea) {
+            $texto = trim((string) $linea);
+            if ($texto !== '') {
+                $this->lineasTitulo[] = $texto;
+            }
+        }
+        $this->rutaLogo = ($rutaLogo !== null && is_file($rutaLogo)) ? $rutaLogo : null;
     }
 
     /**
@@ -70,8 +91,15 @@ final class XlsxStreamWriter
         foreach ($cabeceras as $i => $titulo) {
             $this->columnaNumerica[$i] = $this->esTituloNumerico((string) $titulo);
         }
-        $this->escribirAnchosColumna($cabeceras);
+        $this->filasAntesCabecera = ($this->rutaLogo !== null ? 1 : 0) + count($this->lineasTitulo);
+        $this->escribirPrologo($cabeceras);
         $this->asegurarSheetData();
+        if ($this->rutaLogo !== null) {
+            $this->escribirFilaPresentacion('', 54, null);
+        }
+        foreach ($this->lineasTitulo as $i => $linea) {
+            $this->escribirFilaPresentacion($linea, $i === 0 ? 28 : 18, $i === 0 ? 10 : 11);
+        }
         $this->escribirFilaXml($cabeceras, true);
     }
 
@@ -98,8 +126,19 @@ final class XlsxStreamWriter
         $datos = max(1, $this->filaActual);
         fwrite($this->sheetHandle, '</sheetData>');
         if ($this->columnas > 0) {
-            $ref = 'A1:'.$this->ultimaColumna.$datos;
+            $filaCabecera = $this->filasAntesCabecera + 1;
+            $ref = 'A'.$filaCabecera.':'.$this->ultimaColumna.$datos;
             fwrite($this->sheetHandle, '<autoFilter ref="'.$ref.'"/>');
+        }
+        if ($this->filasAntesCabecera > 0 && $this->columnas > 0) {
+            fwrite($this->sheetHandle, '<mergeCells count="'.$this->filasAntesCabecera.'">');
+            for ($fila = 1; $fila <= $this->filasAntesCabecera; $fila++) {
+                fwrite($this->sheetHandle, '<mergeCell ref="A'.$fila.':'.$this->ultimaColumna.$fila.'"/>');
+            }
+            fwrite($this->sheetHandle, '</mergeCells>');
+        }
+        if ($this->rutaLogo !== null) {
+            fwrite($this->sheetHandle, '<drawing r:id="rId1"/>');
         }
         fwrite($this->sheetHandle, '</worksheet>');
         fclose($this->sheetHandle);
@@ -111,7 +150,7 @@ final class XlsxStreamWriter
 
         return [
             'path' => $this->rutaXlsx,
-            'filas' => max(0, $this->filaActual - 1),
+            'filas' => max(0, $this->filaActual - 1 - $this->filasAntesCabecera),
             'bytes' => (int) filesize($this->rutaXlsx),
         ];
     }
@@ -281,10 +320,53 @@ final class XlsxStreamWriter
         return $valor !== '' && preg_match('/^-?\d+$/', $valor) === 1;
     }
 
+    /**
+     * @param  list<string>  $cabeceras
+     */
+    private function escribirPrologo(array $cabeceras): void
+    {
+        if ($this->prologoEscrito) {
+            return;
+        }
+        $filaCabecera = $this->filasAntesCabecera + 1;
+        $siguiente = $filaCabecera + 1;
+        fwrite($this->sheetHandle, '<sheetViews><sheetView workbookViewId="0" tabSelected="1">'
+            .'<pane ySplit="'.$filaCabecera.'" topLeftCell="A'.$siguiente.'" activePane="bottomLeft" state="frozen"/>'
+            // Sin este selection, Excel abre la hoja como varias selecciones
+            // (panel congelado + filtro) y no deja copiarla a un libro vacío.
+            .'<selection pane="bottomLeft" activeCell="A'.$siguiente.'" sqref="A'.$siguiente.'"/>'
+            .'</sheetView></sheetViews>');
+        $this->escribirAnchosColumna($cabeceras);
+        $this->prologoEscrito = true;
+    }
+
+    private function escribirFilaPresentacion(string $texto, int $alto, ?int $estilo): void
+    {
+        $this->filaActual++;
+        $r = $this->filaActual;
+        $xml = '<row r="'.$r.'" ht="'.$alto.'" customHeight="1">';
+        $n = max(1, $this->columnas);
+        for ($i = 0; $i < $n; $i++) {
+            $ref = self::columnaExcel($i + 1).$r;
+            $attrEstilo = $estilo !== null ? ' s="'.$estilo.'"' : '';
+            if ($i === 0 && $texto !== '') {
+                $xml .= '<c r="'.$ref.'" t="inlineStr"'.$attrEstilo.'><is><t xml:space="preserve">'
+                    .self::xml($texto).'</t></is></c>';
+            } else {
+                $xml .= '<c r="'.$ref.'"'.$attrEstilo.'/>';
+            }
+        }
+        $xml .= '</row>';
+        fwrite($this->sheetHandle, $xml);
+    }
+
     private function asegurarSheetData(): void
     {
         if ($this->sheetDataAbierto) {
             return;
+        }
+        if (! $this->prologoEscrito) {
+            $this->escribirPrologo([]);
         }
         fwrite($this->sheetHandle, '<sheetData>');
         $this->sheetDataAbierto = true;
@@ -384,11 +466,29 @@ final class XlsxStreamWriter
         }
 
         $hoja = self::xml($this->nombreHojaSanitizado());
+        $tiposExtra = '';
+        if ($this->rutaLogo !== null) {
+            $ext = strtolower(pathinfo($this->rutaLogo, PATHINFO_EXTENSION));
+            $mime = match ($ext) {
+                'jpg', 'jpeg' => 'image/jpeg',
+                'gif' => 'image/gif',
+                default => 'image/png',
+            };
+            if ($ext === 'jpeg') {
+                $ext = 'jpg';
+            }
+            if (! in_array($ext, ['png', 'jpg', 'gif'], true)) {
+                $ext = 'png';
+            }
+            $tiposExtra = '<Default Extension="'.$ext.'" ContentType="'.$mime.'"/>'
+                .'<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>';
+        }
         $zip->addFromString('[Content_Types].xml',
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
             .'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
             .'<Default Extension="xml" ContentType="application/xml"/>'
+            .$tiposExtra
             .'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
             .'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
             .'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
@@ -418,13 +518,15 @@ final class XlsxStreamWriter
         $zip->addFromString('xl/styles.xml',
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-            .'<fonts count="6">'
+            .'<fonts count="8">'
             .'<font><sz val="11"/><name val="Calibri"/></font>'
             .'<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FF17202A"/></font>'
             .'<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>'
             .'<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FF6E2C00"/></font>'
             .'<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FF145A32"/></font>'
             .'<font><i/><sz val="11"/><name val="Calibri"/><color rgb="FF546E7A"/></font>'
+            .'<font><b/><sz val="16"/><name val="Calibri"/><color rgb="FF17202A"/></font>'
+            .'<font><b/><sz val="10"/><name val="Calibri"/><color rgb="FF444444"/></font>'
             .'</fonts>'
             .'<fills count="8">'
             .'<fill><patternFill patternType="none"/></fill>'
@@ -438,7 +540,7 @@ final class XlsxStreamWriter
             .'</fills>'
             .'<borders count="1"><border/></borders>'
             .'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-            .'<cellXfs count="10">'
+            .'<cellXfs count="12">'
             // 0 default
             .'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
             // 1 header columnas
@@ -459,9 +561,61 @@ final class XlsxStreamWriter
             .'<xf numFmtId="0" fontId="5" fillId="7" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
             // 9 saldo inicial número
             .'<xf numFmtId="4" fontId="5" fillId="7" borderId="0" xfId="0" applyFont="1" applyFill="1" applyNumberFormat="1"/>'
+            // 10 título del reporte
+            .'<xf numFmtId="0" fontId="6" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>'
+            // 11 meta (generado / período)
+            .'<xf numFmtId="0" fontId="7" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>'
             .'</cellXfs>'
             .'</styleSheet>'
         );
+        if ($this->rutaLogo !== null) {
+            $ext = strtolower(pathinfo($this->rutaLogo, PATHINFO_EXTENSION));
+            if ($ext === 'jpeg') {
+                $ext = 'jpg';
+            }
+            if (! in_array($ext, ['png', 'jpg', 'gif'], true)) {
+                $ext = 'png';
+            }
+            $zip->addFile($this->rutaLogo, 'xl/media/logo.'.$ext);
+            $zip->addFromString('xl/worksheets/_rels/sheet1.xml.rels',
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                .'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>'
+                .'</Relationships>'
+            );
+            $medidas = @getimagesize($this->rutaLogo);
+            $anchoPx = (int) ($medidas[0] ?? 160);
+            $altoPx = (int) ($medidas[1] ?? 46);
+            if ($altoPx > 46 && $altoPx > 0) {
+                $anchoPx = (int) max(1, round($anchoPx * 46 / $altoPx));
+                $altoPx = 46;
+            }
+            $cx = $anchoPx * 9525;
+            $cy = $altoPx * 9525;
+            $zip->addFromString('xl/drawings/_rels/drawing1.xml.rels',
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                .'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/logo.'.$ext.'"/>'
+                .'</Relationships>'
+            );
+            $zip->addFromString('xl/drawings/drawing1.xml',
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                .'<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"'
+                .' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+                .' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                .'<xdr:oneCellAnchor>'
+                .'<xdr:from><xdr:col>0</xdr:col><xdr:colOff>95250</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>38100</xdr:rowOff></xdr:from>'
+                .'<xdr:ext cx="'.$cx.'" cy="'.$cy.'"/>'
+                .'<xdr:pic>'
+                .'<xdr:nvPicPr><xdr:cNvPr id="2" name="Logo"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>'
+                .'<xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'
+                .'<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>'
+                .'</xdr:pic>'
+                .'<xdr:clientData/>'
+                .'</xdr:oneCellAnchor>'
+                .'</xdr:wsDr>'
+            );
+        }
         if (! $zip->addFile($this->sheetPath, 'xl/worksheets/sheet1.xml')) {
             $zip->close();
             throw new \RuntimeException('No se pudo empaquetar la hoja Excel.');

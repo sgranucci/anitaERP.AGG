@@ -51,7 +51,7 @@ class Tecnico_TicketController extends Controller
     {
         can('crear-tecnico-ticket');
 
-        $areadestino_query = $this->areadestinoRepository->all();
+        $areadestino_query = $this->areadestinoRepository->allParaSeleccion();
         $usuario_query = $this->usuarioRepository->listadoOperativoParaSelector(
             with: ['roles:id,nombre']
         );
@@ -83,7 +83,7 @@ class Tecnico_TicketController extends Controller
     {
         can('editar-tecnico-ticket');
         $data = $this->repository->findOrFail($id);
-        $areadestino_query = $this->areadestinoRepository->all();
+        $areadestino_query = $this->areadestinoRepository->allParaSeleccion($data->areadestino_id);
         $usuario_query = $this->usuarioRepository->listadoOperativoParaSelector(
             with: ['roles:id,nombre']
         );

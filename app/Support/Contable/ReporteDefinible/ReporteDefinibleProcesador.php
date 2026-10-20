@@ -2,11 +2,13 @@
 
 namespace App\Support\Contable\ReporteDefinible;
 
+use App\Models\Configuracion\Empresa;
 use App\Models\Contable\ReporteContable;
 use App\Models\Contable\ReporteContableCuenta;
 use App\Models\Contable\ReporteContableRubro;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
+use App\Support\Contable\ReporteDefinibleListadoFiltros;
 use App\Support\Contable\SumasSaldos\SumasSaldosProcesador;
 use App\Support\Contable\SumasSaldosListadoFiltros;
 use App\Support\Navegacion\ModoConsultaUrlSupport;
@@ -43,7 +45,11 @@ class ReporteDefinibleProcesador
         }
 
         $modo = (string) ($filtros['modo_periodo'] ?? SumasSaldosListadoFiltros::MODO_PERIODOS);
-        if (! in_array($modo, [SumasSaldosListadoFiltros::MODO_PERIODOS, SumasSaldosListadoFiltros::MODO_RANGO], true)) {
+        if (! in_array($modo, [
+            SumasSaldosListadoFiltros::MODO_PERIODOS,
+            SumasSaldosListadoFiltros::MODO_RANGO,
+            ReporteDefinibleSupport::MODO_MESES,
+        ], true)) {
             $modo = SumasSaldosListadoFiltros::MODO_PERIODOS;
         }
 
@@ -54,6 +60,9 @@ class ReporteDefinibleProcesador
 
         $layoutId = (int) ($filtros['layout_id'] ?? 0);
         $layoutModel = $layoutId > 0 ? $this->layoutResolver->find($layoutId) : null;
+        if ($layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
+            $layoutModel = null;
+        }
 
         [$fechaDesde, $fechaHasta, $periodos, $advFechas] = $this->resolverVentana($modo, $filtros);
         if ($fechaDesde === '' || $fechaHasta === '') {
@@ -100,6 +109,7 @@ class ReporteDefinibleProcesador
             || $usaCcostoDef
             || $filtroCcosto !== null
             || $layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO
+            || $layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES
             || $layout === ReporteDefinibleSupport::LAYOUT_CCOSTO
             || ! empty($filtros['incluir_presupuesto']);
 
@@ -173,6 +183,9 @@ class ReporteDefinibleProcesador
                 $filtroCcosto, $directoActual, $detalleCuentas
             );
         } elseif ($layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO) {
+            if ($modo === ReporteDefinibleSupport::MODO_MESES && count($periodos) > 1) {
+                $advertencias[] = 'Este layout suma desde el primer mes elegido hasta el último, incluidos los del medio. Para una columna por mes usá «Mes a mes · año ant. / mes / presupuesto».';
+            }
             $columnas = [
                 ['key' => 'actual', 'label' => 'Actual', 'tipo' => 'actual', 'fecha_desde' => $fechaDesde, 'fecha_hasta' => $fechaHasta],
                 ['key' => 'plan', 'label' => 'Plan', 'tipo' => 'plan', 'fecha_desde' => $fechaDesde, 'fecha_hasta' => $fechaHasta],
@@ -194,43 +207,62 @@ class ReporteDefinibleProcesador
                 $filtroCcosto, $directoActual, $detalleCuentas
             );
 
-            $fuentePlan = (string) ($filtros['fuente_plan'] ?? ReporteDefinibleDimensionSupport::FUENTE_PLAN_PARTIDAGASTO);
-            if (! isset(ReporteDefinibleDimensionSupport::fuentesPlan()[$fuentePlan])) {
-                $fuentePlan = ReporteDefinibleDimensionSupport::FUENTE_PLAN_PARTIDAGASTO;
-            }
-
-            if ($fuentePlan === ReporteDefinibleDimensionSupport::FUENTE_PLAN_PARTIDAGASTO) {
-                $pdYm = ReporteDefiniblePartidaPlanReader::periodoYmDesdeFecha($fdMov);
-                $phYm = ReporteDefiniblePartidaPlanReader::periodoYmDesdeFecha($fhMov);
-                if ($baseSaldo === ReporteDefinibleSupport::BASE_SALDO_EJERCICIO) {
-                    $pdYm = sprintf('%04d-01', (int) substr($fdMov, 0, 4));
-                }
-                $planPack = $this->partidaPlanReader->listarMovimientosPlan(
-                    $empresaIds,
-                    $pdYm,
-                    $phYm,
-                    $this->codigosDelReporte($reporte, ReporteDefinibleSupport::ORIGEN_REAL) ?: $codigos,
-                    isset($filtros['presupuesto_escenario_id']) ? (int) $filtros['presupuesto_escenario_id'] : null,
-                    $monedaId,
-                );
-                foreach ($planPack['advertencias'] as $msg) {
-                    $advertencias[] = $msg;
-                }
-                $this->cargarDirectosDesdeMovimientos(
-                    $reporte,
-                    $planPack['movimientos'],
-                    'plan',
-                    ReporteDefinibleSupport::ORIGEN_REAL,
-                    $filtroCcosto,
-                    $directoPlan,
-                    $detalleCuentas
-                );
-            } else {
-                $this->cargarDirectosDesdeMovimientos(
-                    $reporte, $movs, 'plan', ReporteDefinibleSupport::ORIGEN_PRESUPUESTO,
-                    $filtroCcosto, $directoPlan, $detalleCuentas
-                );
-            }
+            $fuentePlan = $this->fuentePlan($filtros);
+            $codigosPlan = $this->codigosDelReporte($reporte, ReporteDefinibleSupport::ORIGEN_REAL) ?: $codigos;
+            $movsPlan = $this->movimientosDePlan(
+                $fuentePlan,
+                $empresaIds,
+                $fdMov,
+                $fhMov,
+                $codigosPlan,
+                $modoAsientos,
+                $monedaId,
+                $soloOrigen,
+                $fechaCierreFx,
+                $reglasEli,
+                $factoresPart,
+                isset($filtros['presupuesto_escenario_id']) ? (int) $filtros['presupuesto_escenario_id'] : null,
+                $baseSaldo,
+                $advertencias,
+                $movs
+            );
+            $origenPlan = $fuentePlan === ReporteDefinibleDimensionSupport::FUENTE_PLAN_ASIGNACION_P
+                ? ReporteDefinibleSupport::ORIGEN_PRESUPUESTO
+                : ReporteDefinibleSupport::ORIGEN_REAL;
+            $this->cargarDirectosDesdeMovimientos(
+                $reporte,
+                $movsPlan,
+                'plan',
+                $origenPlan,
+                $filtroCcosto,
+                $directoPlan,
+                $detalleCuentas
+            );
+        } elseif ($layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
+            $fuente = 'asientos';
+            $advertencias[] = 'Comparativo mes a mes: año anterior, el mes, presupuesto y diferencias.';
+            $this->cargarLayoutComparativoMeses(
+                $reporte,
+                $filtros,
+                $modo,
+                $periodos,
+                $fechaDesde,
+                $fechaHasta,
+                $baseSaldo,
+                $empresaIds,
+                $codigos,
+                $modoAsientos,
+                $monedaId,
+                $soloOrigen,
+                $fechaCierreFx,
+                $reglasEli,
+                $factoresPart,
+                $filtroCcosto,
+                $columnas,
+                $directoActual,
+                $detalleCuentas,
+                $advertencias
+            );
         } elseif ($modo === SumasSaldosListadoFiltros::MODO_RANGO) {
             $columnas[] = [
                 'key' => 'rango',
@@ -314,7 +346,13 @@ class ReporteDefinibleProcesador
 
         $keysRollup = [];
         foreach ($columnas as $col) {
-            if (in_array($col['tipo'], ['actual', 'plan', 'ytd', 'anio_ant'], true)) {
+            // El plan vive en $directoPlan. Si se acumula acá queda en 0 y tapa el presupuesto del rubro.
+            $tiposRollup = ['actual', 'ytd', 'anio_ant'];
+            if ($layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
+                $tiposRollup[] = 'plan';
+                $tiposRollup[] = 'periodo_offset';
+            }
+            if (in_array($col['tipo'], $tiposRollup, true)) {
                 $keysRollup[] = $col['key'];
             }
         }
@@ -326,6 +364,9 @@ class ReporteDefinibleProcesador
             : [];
 
         $this->aplicarFormulas($reporte, $totalesActual, $totalesPlan, $layout);
+        if ($layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
+            $this->aplicarColumnasDerivadas($columnas, $totalesActual);
+        }
 
         $filas = [];
         $this->emitir(
@@ -574,42 +615,38 @@ class ReporteDefinibleProcesador
             $metaCol = is_array($col['meta'] ?? null) ? $col['meta'] : [];
 
             if ($tipo === ReporteDefinibleLayoutResolver::TIPO_PLAN) {
-                $fuentePlan = (string) ($filtros['fuente_plan'] ?? ReporteDefinibleDimensionSupport::FUENTE_PLAN_PARTIDAGASTO);
-                if ($fuentePlan === ReporteDefinibleDimensionSupport::FUENTE_PLAN_ASIGNACION_P) {
-                    $movs = $this->cargarMovimientosConsolidados(
-                        $empresaIds, $fdMov, $fh, $codigos, $modoAsientos, $monedaId, $soloOrigen,
-                        $fechaCierreFx, $reglasEli, $factoresPart
-                    );
-                    $this->cargarDirectosDesdeMovimientos(
-                        $reporte, $movs, $key, ReporteDefinibleSupport::ORIGEN_PRESUPUESTO,
-                        $filtroCcosto, $directoActual, $detalleCuentas
-                    );
-                } else {
-                    $pdYm = ReporteDefiniblePartidaPlanReader::periodoYmDesdeFecha($fdMov);
-                    $phYm = ReporteDefiniblePartidaPlanReader::periodoYmDesdeFecha($fh);
-                    $escenarioId = null;
-                    if (! empty($metaCol['presupuesto_escenario_id'])) {
-                        $escenarioId = (int) $metaCol['presupuesto_escenario_id'];
-                    } elseif (isset($filtros['presupuesto_escenario_id'])) {
-                        $escenarioId = (int) $filtros['presupuesto_escenario_id'];
-                    }
-                    $planPack = $this->partidaPlanReader->listarMovimientosPlan(
-                        $empresaIds,
-                        $pdYm,
-                        $phYm,
-                        $this->codigosDelReporte($reporte, ReporteDefinibleSupport::ORIGEN_REAL) ?: $codigos,
-                        $escenarioId && $escenarioId > 0 ? $escenarioId : null,
-                        $monedaId,
-                    );
-                    foreach ($planPack['advertencias'] as $msg) {
-                        $advertencias[] = $msg;
-                    }
-                    // Plan de partidas: no se eliminan (presupuesto operativo)
-                    $this->cargarDirectosDesdeMovimientos(
-                        $reporte, $planPack['movimientos'], $key, ReporteDefinibleSupport::ORIGEN_REAL,
-                        $filtroCcosto, $directoActual, $detalleCuentas
-                    );
+                $fuentePlan = $this->fuentePlan($filtros);
+                $escenarioId = null;
+                if (! empty($metaCol['presupuesto_escenario_id'])) {
+                    $escenarioId = (int) $metaCol['presupuesto_escenario_id'];
+                } elseif (isset($filtros['presupuesto_escenario_id'])) {
+                    $escenarioId = (int) $filtros['presupuesto_escenario_id'];
                 }
+                $codigosPlan = $this->codigosDelReporte($reporte, ReporteDefinibleSupport::ORIGEN_REAL) ?: $codigos;
+                $movsPlan = $this->movimientosDePlan(
+                    $fuentePlan,
+                    $empresaIds,
+                    $fdMov,
+                    $fh,
+                    $codigosPlan,
+                    $modoAsientos,
+                    $monedaId,
+                    $soloOrigen,
+                    $fechaCierreFx,
+                    $reglasEli,
+                    $factoresPart,
+                    $escenarioId,
+                    $baseSaldo,
+                    $advertencias,
+                    null
+                );
+                $origenPlan = $fuentePlan === ReporteDefinibleDimensionSupport::FUENTE_PLAN_ASIGNACION_P
+                    ? ReporteDefinibleSupport::ORIGEN_PRESUPUESTO
+                    : ReporteDefinibleSupport::ORIGEN_REAL;
+                $this->cargarDirectosDesdeMovimientos(
+                    $reporte, $movsPlan, $key, $origenPlan,
+                    $filtroCcosto, $directoActual, $detalleCuentas
+                );
             } else {
                 // actual, ytd, anio_ant, periodo_offset, valuacion
                 $val = $this->valuacionColumna($metaCol, $tipo, $modoAsientos, $monedaId, $soloOrigen);
@@ -809,6 +846,21 @@ class ReporteDefinibleProcesador
                 ReporteDefinibleLayoutResolver::TIPO_FORMULA_COL,
             ], true)) {
                 $keysKeep[$k] = true;
+            }
+        }
+        $gruposKeep = [];
+        foreach ($columnas as $col) {
+            $grupo = trim((string) ($col['grupo'] ?? ''));
+            if ($grupo !== '' && isset($keysKeep[(string) ($col['key'] ?? '')])) {
+                $gruposKeep[$grupo] = true;
+            }
+        }
+        if ($gruposKeep !== []) {
+            foreach ($columnas as $col) {
+                $grupo = trim((string) ($col['grupo'] ?? ''));
+                if ($grupo !== '' && isset($gruposKeep[$grupo])) {
+                    $keysKeep[(string) ($col['key'] ?? '')] = true;
+                }
             }
         }
         $columnasFiltradas = array_values(array_filter(
@@ -1298,7 +1350,7 @@ class ReporteDefinibleProcesador
             return [];
         }
 
-        if ($layout === 'diseñado') {
+        if ($layout === 'diseñado' || $layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
             $vals = $actual;
             foreach ($plan as $pk => $pv) {
                 if (! array_key_exists($pk, $vals)) {
@@ -1440,11 +1492,24 @@ class ReporteDefinibleProcesador
         $fd = (string) ($filtros['fecha_desde'] ?? '');
         $fh = (string) ($filtros['fecha_hasta'] ?? '');
         if ($fd === '' || $fh === '') {
+            $fdsActual = [];
+            $fhsActual = [];
             foreach ($columnas as $col) {
-                if (! empty($col['fecha_desde'])) {
-                    $fd = (string) $col['fecha_desde'];
-                    $fh = (string) ($col['fecha_hasta'] ?? $col['fecha_desde']);
-                    break;
+                if (($col['tipo'] ?? '') === 'actual' && ! empty($col['grupo']) && ! empty($col['fecha_desde'])) {
+                    $fdsActual[] = (string) $col['fecha_desde'];
+                    $fhsActual[] = (string) ($col['fecha_hasta'] ?? $col['fecha_desde']);
+                }
+            }
+            if ($fdsActual !== []) {
+                $fd = min($fdsActual);
+                $fh = max($fhsActual);
+            } else {
+                foreach ($columnas as $col) {
+                    if (! empty($col['fecha_desde'])) {
+                        $fd = (string) $col['fecha_desde'];
+                        $fh = (string) ($col['fecha_hasta'] ?? $col['fecha_desde']);
+                        break;
+                    }
                 }
             }
         }
@@ -1540,11 +1605,333 @@ class ReporteDefinibleProcesador
     }
 
     /**
+     * Un bloque por mes: año anterior, el mes, presupuesto, dif. vs presupuesto y dif. vs año anterior.
+     *
+     * @param  list<int>  $periodosVentana
+     * @param  list<int>  $empresaIds
+     * @param  list<int>  $codigos
+     * @param  list<array<string, mixed>>  $reglas
+     * @param  array<int, float>  $factores
+     * @param  array{desde: int, hasta: int}|null  $filtroCcosto
+     * @param  list<array<string, mixed>>  $columnas
+     * @param  array<int, array<string, float>>  $directoActual
+     * @param  array<int, array<string, array<int, float>>>  $detalleCuentas
+     * @param  list<string>  $advertencias
+     * @param  array<string, mixed>  $filtros
+     */
+    private function cargarLayoutComparativoMeses(
+        ReporteContable $reporte,
+        array $filtros,
+        string $modo,
+        array $periodosVentana,
+        string $fechaDesde,
+        string $fechaHasta,
+        string $baseSaldo,
+        array $empresaIds,
+        array $codigos,
+        string $modoAsientos,
+        int $monedaId,
+        bool $soloOrigen,
+        ?string $fechaCierreFx,
+        array $reglas,
+        array $factores,
+        ?array $filtroCcosto,
+        array &$columnas,
+        array &$directoActual,
+        array &$detalleCuentas,
+        array &$advertencias,
+    ): void {
+        if ($modo === ReporteDefinibleSupport::MODO_MESES) {
+            $periodos = ReporteDefinibleListadoFiltros::normalizarListaPeriodos($filtros['periodos'] ?? $periodosVentana);
+        } elseif ($modo === SumasSaldosListadoFiltros::MODO_RANGO) {
+            $periodos = $this->expandirPeriodosDesdeFechas($fechaDesde, $fechaHasta);
+            $advertencias[] = 'Este layout abre los meses calendario que cubre el rango de fechas.';
+        } else {
+            $periodos = $periodosVentana;
+        }
+
+        $periodos = array_values(array_unique(array_map('intval', $periodos)));
+        sort($periodos);
+        if (count($periodos) > ReporteDefinibleSupport::MAX_MESES_COMPARATIVO) {
+            $advertencias[] = sprintf(
+                'Se muestran los primeros %d meses. Acotá el rango o la lista.',
+                ReporteDefinibleSupport::MAX_MESES_COMPARATIVO
+            );
+            $periodos = array_slice($periodos, 0, ReporteDefinibleSupport::MAX_MESES_COMPARATIVO);
+        }
+        if ($periodos === []) {
+            $advertencias[] = 'No hay meses para abrir en columnas.';
+
+            return;
+        }
+
+        $ejercicio = $baseSaldo === ReporteDefinibleSupport::BASE_SALDO_EJERCICIO;
+        $fdCarga = null;
+        $fhCarga = null;
+        $fdPlan = null;
+        $fhPlan = null;
+        /** @var array<int, array{fd: string, fh: string, fdAnt: string, fhAnt: string}> $ventanas */
+        $ventanas = [];
+        foreach ($periodos as $periodo) {
+            [$fd, $fh] = ReporteDefinibleSaldoReader::fechasDesdePeriodo($periodo);
+            $periodoAnt = (intdiv($periodo, 100) - 1) * 100 + ($periodo % 100);
+            [$fdAnt, $fhAnt] = ReporteDefinibleSaldoReader::fechasDesdePeriodo($periodoAnt);
+            $periodoMes = $this->periodoMesAnterior($periodo);
+            [$fdMes, $fhMes] = ReporteDefinibleSaldoReader::fechasDesdePeriodo($periodoMes);
+            $fdMov = $ejercicio ? sprintf('%04d-01-01', intdiv($periodo, 100)) : $fd;
+            $fdAntMov = $ejercicio ? sprintf('%04d-01-01', intdiv($periodoAnt, 100)) : $fdAnt;
+            $fdMesMov = $ejercicio ? sprintf('%04d-01-01', intdiv($periodoMes, 100)) : $fdMes;
+            $ventanas[$periodo] = [
+                'fd' => $fdMov,
+                'fh' => $fh,
+                'fdAnt' => $fdAntMov,
+                'fhAnt' => $fhAnt,
+                'fdMes' => $fdMesMov,
+                'fhMes' => $fhMes,
+            ];
+            $fdCarga = $fdCarga === null || $fdAntMov < $fdCarga ? $fdAntMov : $fdCarga;
+            $fdCarga = $fdMesMov < $fdCarga ? $fdMesMov : $fdCarga;
+            $fhCarga = $fhCarga === null || $fh > $fhCarga ? $fh : $fhCarga;
+            $fdPlan = $fdPlan === null || $fdMov < $fdPlan ? $fdMov : $fdPlan;
+            $fhPlan = $fhPlan === null || $fh > $fhPlan ? $fh : $fhPlan;
+        }
+
+        $movs = $this->cargarMovimientosConsolidados(
+            $empresaIds, (string) $fdCarga, (string) $fhCarga, $codigos, $modoAsientos, $monedaId, $soloOrigen,
+            $fechaCierreFx, $reglas, $factores
+        );
+        $fuentePlan = $this->fuentePlan($filtros);
+        $codigosPlan = $this->codigosDelReporte($reporte, ReporteDefinibleSupport::ORIGEN_REAL) ?: $codigos;
+        $movsPlan = $this->movimientosDePlan(
+            $fuentePlan,
+            $empresaIds,
+            (string) $fdPlan,
+            (string) $fhPlan,
+            $codigosPlan,
+            $modoAsientos,
+            $monedaId,
+            $soloOrigen,
+            $fechaCierreFx,
+            $reglas,
+            $factores,
+            isset($filtros['presupuesto_escenario_id']) ? (int) $filtros['presupuesto_escenario_id'] : null,
+            $baseSaldo,
+            $advertencias,
+            $movs
+        );
+        $origenPlan = $fuentePlan === ReporteDefinibleDimensionSupport::FUENTE_PLAN_ASIGNACION_P
+            ? ReporteDefinibleSupport::ORIGEN_PRESUPUESTO
+            : ReporteDefinibleSupport::ORIGEN_REAL;
+
+        $varios = count($periodos) > 1;
+        foreach ($periodos as $periodo) {
+            $v = $ventanas[$periodo];
+            $etiqueta = $this->labelMesLargo($periodo);
+            $grupo = $varios ? $etiqueta : '';
+            $keyAnt = $periodo.'_ant';
+            $keyMes = $periodo.'_mesant';
+            $keyAct = $periodo.'_act';
+            $keyPlan = $periodo.'_plan';
+            $columnas[] = [
+                'key' => $keyAnt,
+                'label' => 'Año anterior',
+                'tipo' => 'anio_ant',
+                'grupo' => $grupo,
+                'periodo' => $periodo,
+                'fecha_desde' => $v['fdAnt'],
+                'fecha_hasta' => $v['fhAnt'],
+            ];
+            $columnas[] = [
+                'key' => $keyMes,
+                'label' => 'Mes anterior',
+                'tipo' => 'periodo_offset',
+                'grupo' => $grupo,
+                'periodo' => $periodo,
+                'fecha_desde' => $v['fdMes'],
+                'fecha_hasta' => $v['fhMes'],
+            ];
+            $columnas[] = [
+                'key' => $keyAct,
+                'label' => $etiqueta,
+                'tipo' => 'actual',
+                'grupo' => $grupo,
+                'periodo' => $periodo,
+                'fecha_desde' => $v['fd'],
+                'fecha_hasta' => $v['fh'],
+            ];
+            $columnas[] = [
+                'key' => $keyPlan,
+                'label' => 'Presupuesto',
+                'tipo' => 'plan',
+                'grupo' => $grupo,
+                'periodo' => $periodo,
+                'fecha_desde' => $v['fd'],
+                'fecha_hasta' => $v['fh'],
+            ];
+            $columnas[] = [
+                'key' => $periodo.'_dif_pre',
+                'label' => 'Dif.Act./Pre.',
+                'tipo' => 'var',
+                'grupo' => $grupo,
+                'periodo' => $periodo,
+                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyPlan],
+            ];
+            $columnas[] = [
+                'key' => $periodo.'_pct_pre',
+                'label' => '%Dif.',
+                'tipo' => 'var_pct',
+                'grupo' => $grupo,
+                'periodo' => $periodo,
+                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyPlan],
+            ];
+            $columnas[] = [
+                'key' => $periodo.'_dif_ant',
+                'label' => 'Dif.Act./Ant.',
+                'tipo' => 'var',
+                'grupo' => $grupo,
+                'periodo' => $periodo,
+                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyAnt],
+            ];
+            $columnas[] = [
+                'key' => $periodo.'_pct_ant',
+                'label' => '%Dif.',
+                'tipo' => 'var_pct',
+                'grupo' => $grupo,
+                'periodo' => $periodo,
+                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyAnt],
+            ];
+            $columnas[] = [
+                'key' => $periodo.'_dif_mes',
+                'label' => 'Dif.Act./Mes ant.',
+                'tipo' => 'var',
+                'grupo' => $grupo,
+                'periodo' => $periodo,
+                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyMes],
+            ];
+            $columnas[] = [
+                'key' => $periodo.'_pct_mes',
+                'label' => '%Dif.',
+                'tipo' => 'var_pct',
+                'grupo' => $grupo,
+                'periodo' => $periodo,
+                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyMes],
+            ];
+
+            $this->cargarDirectosDesdeMovimientos(
+                $reporte,
+                $this->filtrarMovimientosPorFecha($movs, $v['fdAnt'], $v['fhAnt']),
+                $keyAnt,
+                ReporteDefinibleSupport::ORIGEN_REAL,
+                $filtroCcosto,
+                $directoActual,
+                $detalleCuentas
+            );
+            $this->cargarDirectosDesdeMovimientos(
+                $reporte,
+                $this->filtrarMovimientosPorFecha($movs, $v['fdMes'], $v['fhMes']),
+                $keyMes,
+                ReporteDefinibleSupport::ORIGEN_REAL,
+                $filtroCcosto,
+                $directoActual,
+                $detalleCuentas
+            );
+            $this->cargarDirectosDesdeMovimientos(
+                $reporte,
+                $this->filtrarMovimientosPorFecha($movs, $v['fd'], $v['fh']),
+                $keyAct,
+                ReporteDefinibleSupport::ORIGEN_REAL,
+                $filtroCcosto,
+                $directoActual,
+                $detalleCuentas
+            );
+            $this->cargarDirectosDesdeMovimientos(
+                $reporte,
+                $this->filtrarMovimientosPorFecha($movsPlan, $v['fd'], $v['fh']),
+                $keyPlan,
+                $origenPlan,
+                $filtroCcosto,
+                $directoActual,
+                $detalleCuentas
+            );
+        }
+    }
+
+    /**
+     * @param  list<array{codigo: int, ccosto: int, monto: float, fecha: string}>  $movimientos
+     * @return list<array{codigo: int, ccosto: int, monto: float, fecha: string}>
+     */
+    private function filtrarMovimientosPorFecha(array $movimientos, string $desde, string $hasta): array
+    {
+        $desde = substr($desde, 0, 10);
+        $hasta = substr($hasta, 0, 10);
+
+        return array_values(array_filter(
+            $movimientos,
+            static function (array $mov) use ($desde, $hasta): bool {
+                $fecha = substr((string) ($mov['fecha'] ?? ''), 0, 10);
+
+                return $fecha >= $desde && $fecha <= $hasta;
+            }
+        ));
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function expandirPeriodosDesdeFechas(string $fechaDesde, string $fechaHasta): array
+    {
+        $desde = \DateTime::createFromFormat('Y-m-d', substr($fechaDesde, 0, 10));
+        $hasta = \DateTime::createFromFormat('Y-m-d', substr($fechaHasta, 0, 10));
+        if (! $desde || ! $hasta) {
+            return [];
+        }
+
+        return $this->expandirPeriodos(
+            (int) $desde->format('Ym'),
+            (int) $hasta->format('Ym')
+        );
+    }
+
+    private function periodoMesAnterior(int $periodo): int
+    {
+        $anio = intdiv($periodo, 100);
+        $mes = $periodo % 100;
+        if ($mes <= 1) {
+            return ($anio - 1) * 100 + 12;
+        }
+
+        return $anio * 100 + ($mes - 1);
+    }
+
+    private function labelMesLargo(int $periodo): string
+    {
+        $nombres = [
+            1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril',
+            5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
+            9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
+        ];
+        $mes = $periodo % 100;
+        $anio = intdiv($periodo, 100) % 100;
+
+        return sprintf('%s/%02d', $nombres[$mes] ?? sprintf('%02d', $mes), $anio);
+    }
+
+    /**
      * @param  array<string, mixed>  $filtros
      * @return array{0: string, 1: string, 2: list<int>, 3: list<string>}
      */
     private function resolverVentana(string $modo, array $filtros): array
     {
+        if ($modo === ReporteDefinibleSupport::MODO_MESES) {
+            $periodos = ReporteDefinibleListadoFiltros::normalizarListaPeriodos($filtros['periodos'] ?? []);
+            if ($periodos === []) {
+                return ['', '', [], ['Elegí al menos un mes.']];
+            }
+            [$fd] = ReporteDefinibleSaldoReader::fechasDesdePeriodo($periodos[0]);
+            [, $fh] = ReporteDefinibleSaldoReader::fechasDesdePeriodo($periodos[count($periodos) - 1]);
+
+            return [$fd, $fh, $periodos, []];
+        }
         if ($modo === SumasSaldosListadoFiltros::MODO_RANGO) {
             [$fd, $fh] = SumasSaldosListadoFiltros::normalizarRangoFechas(
                 (string) ($filtros['fecha_desde'] ?? ''),
@@ -1741,6 +2128,138 @@ class ReporteDefinibleProcesador
      * @param  array<int, float>  $factores
      * @return list<array{codigo: int, ccosto: int, monto: float, fecha: string, empresa_id?: int}>
      */
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function fuentePlan(array $filtros): string
+    {
+        $fuente = (string) ($filtros['fuente_plan'] ?? ReporteDefinibleDimensionSupport::FUENTE_PLAN_EMPRESA_PRESUPUESTO);
+        if (! isset(ReporteDefinibleDimensionSupport::fuentesPlan()[$fuente])) {
+            return ReporteDefinibleDimensionSupport::FUENTE_PLAN_EMPRESA_PRESUPUESTO;
+        }
+
+        return $fuente;
+    }
+
+    /**
+     * Plan del comparativo.
+     * empresa_presupuesto: asientos de la empresa código+10 (Anita «Compara con presup.»).
+     * asignacion_p: mismas empresas, cuentas origen P de la definición.
+     * partidagasto: partidas de gasto del módulo de presupuesto.
+     *
+     * @param  list<int>  $empresaIds
+     * @param  list<int>  $codigos
+     * @param  list<array<string, mixed>>  $reglas
+     * @param  array<int, float>  $factores
+     * @param  list<string>  $advertencias
+     * @param  list<array<string, mixed>>|null  $movsOperativos
+     * @return list<array{codigo: int, ccosto: int, monto: float, fecha: string}>
+     */
+    private function movimientosDePlan(
+        string $fuentePlan,
+        array $empresaIds,
+        string $fdMov,
+        string $fhMov,
+        array $codigos,
+        string $modoAsientos,
+        int $monedaId,
+        bool $soloOrigen,
+        ?string $fechaCierre,
+        array $reglas,
+        array $factores,
+        ?int $escenarioId,
+        string $baseSaldo,
+        array &$advertencias,
+        ?array $movsOperativos,
+    ): array {
+        if ($fuentePlan === ReporteDefinibleDimensionSupport::FUENTE_PLAN_EMPRESA_PRESUPUESTO) {
+            [$ids, $avisos] = $this->idsEmpresasPresupuesto($empresaIds);
+            foreach ($avisos as $aviso) {
+                $advertencias[] = $aviso;
+            }
+            if ($ids === [] || $codigos === []) {
+                return [];
+            }
+            $movs = $this->saldoReader->listarMovimientos(
+                $ids, $fdMov, $fhMov, $codigos, $modoAsientos, $monedaId, $soloOrigen, $fechaCierre
+            );
+            if ($movs === []) {
+                $advertencias[] = 'La empresa presupuesto no tiene movimientos de estas cuentas en el período.';
+            }
+
+            return $movs;
+        }
+
+        if ($fuentePlan === ReporteDefinibleDimensionSupport::FUENTE_PLAN_ASIGNACION_P) {
+            $advertencias[] = 'Plan = cuentas con origen Presupuesto en la definición, sobre las empresas elegidas.';
+            if ($movsOperativos !== null) {
+                return $movsOperativos;
+            }
+
+            return $this->cargarMovimientosConsolidados(
+                $empresaIds, $fdMov, $fhMov, $codigos, $modoAsientos, $monedaId, $soloOrigen,
+                $fechaCierre, $reglas, $factores
+            );
+        }
+
+        $pdYm = ReporteDefiniblePartidaPlanReader::periodoYmDesdeFecha($fdMov);
+        $phYm = ReporteDefiniblePartidaPlanReader::periodoYmDesdeFecha($fhMov);
+        if ($baseSaldo === ReporteDefinibleSupport::BASE_SALDO_EJERCICIO) {
+            $pdYm = sprintf('%04d-01', (int) substr($fdMov, 0, 4));
+        }
+        $planPack = $this->partidaPlanReader->listarMovimientosPlan(
+            $empresaIds,
+            $pdYm,
+            $phYm,
+            $codigos,
+            $escenarioId && $escenarioId > 0 ? $escenarioId : null,
+            $monedaId,
+        );
+        foreach ($planPack['advertencias'] as $msg) {
+            $advertencias[] = $msg;
+        }
+
+        return $planPack['movimientos'];
+    }
+
+    /**
+     * Anita: el presupuesto de la empresa N está en la empresa N+10.
+     *
+     * @param  list<int>  $empresaIds
+     * @return array{0: list<int>, 1: list<string>}
+     */
+    private function idsEmpresasPresupuesto(array $empresaIds): array
+    {
+        $operativas = Empresa::query()
+            ->whereIn('id', $empresaIds)
+            ->get(['id', 'codigo', 'nombre']);
+        $ids = [];
+        $avisos = [];
+        foreach ($operativas as $empresa) {
+            $codigoPresupuesto = (int) $empresa->codigo + 10;
+            $presupuesto = Empresa::query()
+                ->where('codigo', $codigoPresupuesto)
+                ->first(['id', 'codigo', 'nombre']);
+            if ($presupuesto === null) {
+                $avisos[] = sprintf(
+                    'No hay empresa presupuesto código %d para %s.',
+                    $codigoPresupuesto,
+                    $empresa->nombre
+                );
+                continue;
+            }
+            $ids[] = (int) $presupuesto->id;
+            $avisos[] = sprintf(
+                'Presupuesto de %s leído en %s (código %s).',
+                $empresa->nombre,
+                $presupuesto->nombre,
+                $presupuesto->codigo
+            );
+        }
+
+        return [array_values(array_unique($ids)), $avisos];
+    }
+
     private function cargarMovimientosConsolidados(
         array $empresaIds,
         string $fdMov,

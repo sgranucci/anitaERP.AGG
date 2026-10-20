@@ -25,6 +25,7 @@ class ValidacionAreadestino  extends FormRequest
     {
         return [
             'nombre' => 'required|max:255|unique:areadestino,nombre,' . $this->route('id'),
+            'suspendido' => 'nullable|boolean',
         ];
     }
 }

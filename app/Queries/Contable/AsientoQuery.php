@@ -52,6 +52,7 @@ class AsientoQuery implements AsientoQueryInterface
             'tipoasiento.nombre as nombretipoasiento',
             'asiento.fecha as fecha',
             'asiento.observacion as observacion',
+            'asiento.copia_de_numeroasiento as copia_de_numeroasiento',
             'asiento.estado_aprobacion as estado_aprobacion'
         )
             ->join('tipoasiento', 'tipoasiento.id', '=', 'asiento.tipoasiento_id')

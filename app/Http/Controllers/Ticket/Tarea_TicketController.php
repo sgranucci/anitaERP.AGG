@@ -46,7 +46,7 @@ class Tarea_TicketController extends Controller
     {
         can('crear-tarea-ticket');
 
-        $areadestino_query = $this->areadestinoRepository->all();
+        $areadestino_query = $this->areadestinoRepository->allParaSeleccion();
         $tipotarea_enum = Tarea_Ticket::$enumTipoTarea;
         $enviacorreo_enum = Tarea_Ticket::$enumEnviaCorreo;
 
@@ -78,7 +78,7 @@ class Tarea_TicketController extends Controller
         can('editar-tarea-ticket');
         $data = $this->repository->findOrFail($id);
 
-        $areadestino_query = $this->areadestinoRepository->all();
+        $areadestino_query = $this->areadestinoRepository->allParaSeleccion($data->areadestino_id);
         $tipotarea_enum = Tarea_Ticket::$enumTipoTarea;
         $enviacorreo_enum = Tarea_Ticket::$enumEnviaCorreo;
 

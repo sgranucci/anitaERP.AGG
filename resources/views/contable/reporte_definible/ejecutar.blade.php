@@ -29,10 +29,13 @@
 (function () {
     function toggleModo() {
         var rango = document.getElementById('modo_rango') && document.getElementById('modo_rango').checked;
+        var meses = document.getElementById('modo_meses') && document.getElementById('modo_meses').checked;
         var pPer = document.getElementById('panel-periodos-rd');
         var pRan = document.getElementById('panel-rango-rd');
-        if (pPer) pPer.style.display = rango ? 'none' : '';
+        var pMes = document.getElementById('panel-meses-rd');
+        if (pPer) pPer.style.display = (rango || meses) ? 'none' : '';
         if (pRan) pRan.style.display = rango ? '' : 'none';
+        if (pMes) pMes.style.display = meses ? '' : 'none';
     }
     document.querySelectorAll('input[name="modo_periodo"]').forEach(function (el) {
         el.addEventListener('change', toggleModo);
@@ -44,6 +47,10 @@
         var hasDesigned = layoutId && layoutId.value;
         var sel = document.getElementById('rd_columnas_layout');
         var layout = sel ? sel.value : 'periodos';
+        if (layout === 'comparativo_meses' && layoutId && layoutId.value) {
+            layoutId.value = '';
+            hasDesigned = false;
+        }
         var pPlan = document.getElementById('panel-plan-rd');
         var pCc = document.getElementById('panel-ccosto-cols-rd');
         var showPlan = false;
@@ -51,10 +58,12 @@
             var opt = layoutId.options[layoutId.selectedIndex];
             showPlan = opt && opt.getAttribute('data-usa-plan') === '1';
         } else {
-            showPlan = layout === 'comparativo';
+            showPlan = layout === 'comparativo' || layout === 'comparativo_meses';
         }
         if (pPlan) pPlan.style.display = showPlan ? '' : 'none';
         if (pCc) pCc.style.display = (!hasDesigned && layout === 'ccosto') ? '' : 'none';
+        var pMesesLay = document.getElementById('ayuda-comparativo-meses-rd');
+        if (pMesesLay) pMesesLay.style.display = (!hasDesigned && layout === 'comparativo_meses') ? '' : 'none';
         toggleFuentePlan();
     }
     function toggleFuentePlan() {
@@ -79,6 +88,35 @@
         fuenteSel.addEventListener('change', toggleFuentePlan);
     }
     toggleLayout();
+
+    var listaMeses = document.getElementById('rd-meses-lista');
+    var btnAgregarMes = document.getElementById('rd-agregar-mes');
+    function filaMes(valor) {
+        var row = document.createElement('div');
+        row.className = 'input-group mb-1 rd-mes-item';
+        row.innerHTML = '<input type="month" name="periodos[]" class="form-control" min="2000-01" max="2100-12" value="' + (valor || '') + '">'
+            + '<div class="input-group-append"><button type="button" class="btn btn-outline-secondary rd-quitar-mes" title="Quitar mes">&times;</button></div>';
+        return row;
+    }
+    if (btnAgregarMes && listaMeses) {
+        btnAgregarMes.addEventListener('click', function () {
+            if (listaMeses.querySelectorAll('.rd-mes-item').length >= 12) {
+                return;
+            }
+            listaMeses.appendChild(filaMes(''));
+        });
+        listaMeses.addEventListener('click', function (ev) {
+            var btn = ev.target.closest('.rd-quitar-mes');
+            if (!btn) return;
+            var items = listaMeses.querySelectorAll('.rd-mes-item');
+            if (items.length <= 1) {
+                var input = items[0].querySelector('input');
+                if (input) input.value = '';
+                return;
+            }
+            btn.closest('.rd-mes-item').remove();
+        });
+    }
 
     var btnVar = document.getElementById('rd_btn_guardar_variante');
     if (btnVar) {
@@ -125,6 +163,22 @@
             var formEl = document.getElementById('form-reporte-definible-ejecutar');
             if (!formEl) return;
             Object.keys(filtros).forEach(function (k) {
+                if (k === 'modo_periodo') {
+                    formEl.querySelectorAll('input[name="modo_periodo"]').forEach(function (r) {
+                        r.checked = String(r.value) === String(filtros[k]);
+                    });
+                    return;
+                }
+                if (k === 'periodos' && Array.isArray(filtros[k]) && listaMeses) {
+                    listaMeses.innerHTML = '';
+                    var lista = filtros[k].length ? filtros[k] : [''];
+                    lista.forEach(function (p) {
+                        var s = String(p).replace(/\D/g, '');
+                        var valor = s.length >= 6 ? s.slice(0, 4) + '-' + s.slice(4, 6) : '';
+                        listaMeses.appendChild(filaMes(valor));
+                    });
+                    return;
+                }
                 if (k === 'empresa_ids' && Array.isArray(filtros[k])) {
                     formEl.querySelectorAll('input[name="empresa_ids[]"]').forEach(function (cb) {
                         cb.checked = filtros[k].map(String).indexOf(String(cb.value)) >= 0;
@@ -233,7 +287,7 @@
                 <div class="alert alert-light border">
                     Períodos usan saldos mensuales (rápido). <strong>Entre fechas</strong> y filtros de
                     <strong>c.costo</strong> leen asientos. Layout <strong>Actual / Plan / Var / %</strong>
-                    separa cuentas reales vs presupuesto del diseño. El ícono Mayor abre el mayor plano.
+                    compara contra el presupuesto: por defecto la empresa de código + 10 (Anita). El ícono Mayor abre el mayor plano.
                 </div>
 
                 <form method="get" action="{{ route('ejecutar_reporte_definible', ['id' => $reporte->id ?? null]) }}"
@@ -279,8 +333,13 @@
                             <div class="mt-1">
                                 <div class="custom-control custom-radio custom-control-inline">
                                     <input type="radio" id="modo_periodos" name="modo_periodo" value="periodos" class="custom-control-input"
-                                           @if (($filtros['modo_periodo'] ?? 'periodos') !== 'rango') checked @endif>
-                                    <label class="custom-control-label" for="modo_periodos">Por períodos</label>
+                                           @if (!in_array($filtros['modo_periodo'] ?? 'periodos', ['rango', 'meses'], true)) checked @endif>
+                                    <label class="custom-control-label" for="modo_periodos">Rango de meses</label>
+                                </div>
+                                <div class="custom-control custom-radio custom-control-inline">
+                                    <input type="radio" id="modo_meses" name="modo_periodo" value="meses" class="custom-control-input"
+                                           @if (($filtros['modo_periodo'] ?? '') === 'meses') checked @endif>
+                                    <label class="custom-control-label" for="modo_meses">Meses en particular</label>
                                 </div>
                                 <div class="custom-control custom-radio custom-control-inline">
                                     <input type="radio" id="modo_rango" name="modo_periodo" value="rango" class="custom-control-input"
@@ -312,6 +371,11 @@
                                     <option value="{{ $lk }}" @if (($filtros['columnas_layout'] ?? 'periodos') === $lk) selected @endif>{{ $ll }}</option>
                                 @endforeach
                             </select>
+                            <p class="text-muted small mb-0 mt-1" id="ayuda-comparativo-meses-rd" style="display:none">
+                                Cada mes sale en su bloque: año anterior, mes anterior, el mes, presupuesto y las diferencias contra presupuesto, contra el año anterior y contra el mes anterior. Si pedís septiembre, el mes anterior es agosto.
+                                Con rango de meses abre todos los del desde/hasta. Con meses en particular, solo los que cargues (aunque no sean seguidos).
+                                Dejá «Layout de columnas» en Legacy para usar esta opción.
+                            </p>
                         </div>
                         <div class="form-group col-md-4">
                             <label>TC consolidación (FX)</label>
@@ -326,12 +390,12 @@
                         </div>
                     </div>
 
-                    <div class="form-row" id="panel-plan-rd" style="@if (($filtros['columnas_layout'] ?? '') !== 'comparativo') display:none @endif">
+                    <div class="form-row" id="panel-plan-rd" style="@if (!in_array($filtros['columnas_layout'] ?? '', ['comparativo', 'comparativo_meses'], true)) display:none @endif">
                         <div class="form-group col-md-4">
                             <label>Fuente del Plan</label>
                             <select name="fuente_plan" id="rd_fuente_plan" class="form-control">
                                 @foreach (\App\Support\Contable\ReporteDefinible\ReporteDefinibleDimensionSupport::fuentesPlan() as $fk => $fl)
-                                    <option value="{{ $fk }}" @if (($filtros['fuente_plan'] ?? 'partidagasto') === $fk) selected @endif>{{ $fl }}</option>
+                                    <option value="{{ $fk }}" @if (($filtros['fuente_plan'] ?? 'empresa_presupuesto') === $fk) selected @endif>{{ $fl }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -349,7 +413,8 @@
                         </div>
                         <div class="form-group col-md-4">
                             <label class="d-block text-muted small mt-4">
-                                Plan = suma de <strong>partidagasto_monto</strong> por cuenta y c.costo (estado ACTIVA), mismo filtro de c.costo que Actual.
+                                Empresa presupuesto lee los asientos de la empresa código + 10, con el mismo filtro de c.costo que Actual.
+                                Partidas de gasto usa el módulo de presupuesto. Origen P solo suma las cuentas marcadas así en el informe.
                             </label>
                         </div>
                     </div>
@@ -406,6 +471,36 @@
                             <label>Año hasta</label>
                             <input type="number" name="anio_hasta" class="form-control" min="2000" max="2100"
                                    value="{{ $filtros['anio_hasta'] ?? $anio_actual }}">
+                        </div>
+                    </div>
+
+                    <div class="form-row" id="panel-meses-rd" style="display:none">
+                        <div class="form-group col-md-4">
+                            <label>Meses</label>
+                            <div id="rd-meses-lista">
+                                @php
+                                    $periodosUi = $filtros['periodos'] ?? [];
+                                    if ($periodosUi === []) {
+                                        $periodosUi = [sprintf('%04d-%02d', (int) $anio_actual, (int) $mes_actual)];
+                                    }
+                                @endphp
+                                @foreach ($periodosUi as $periodoUi)
+                                    @php
+                                        $digitosPeriodo = preg_replace('/\D/', '', (string) $periodoUi) ?? '';
+                                        $valorMes = strlen($digitosPeriodo) >= 6
+                                            ? substr($digitosPeriodo, 0, 4).'-'.substr($digitosPeriodo, 4, 2)
+                                            : '';
+                                    @endphp
+                                    <div class="input-group mb-1 rd-mes-item">
+                                        <input type="month" name="periodos[]" class="form-control" min="2000-01" max="2100-12" value="{{ $valorMes }}">
+                                        <div class="input-group-append">
+                                            <button type="button" class="btn btn-outline-secondary rd-quitar-mes" title="Quitar mes">&times;</button>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                            <button type="button" class="btn btn-link btn-sm px-0" id="rd-agregar-mes">Agregar mes</button>
+                            <p class="text-muted small mb-0">Hasta 12. Podés mezclar meses que no sean consecutivos, por ejemplo agosto y septiembre.</p>
                         </div>
                     </div>
 
@@ -513,6 +608,18 @@
                         @endphp
                         <div class="d-flex flex-wrap align-items-start justify-content-between mb-2">
                             <div class="mb-2 mr-3">
+                                @php
+                                    $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion(
+                                        \App\Services\Contable\ReporteDefinibleParidadService::coleccionEmpresasParaLogos((array) ($filtros['empresa_ids'] ?? []))
+                                    );
+                                @endphp
+                                @if (count($logosVista) > 0)
+                                    <div class="d-flex flex-wrap align-items-center mb-2">
+                                        @foreach ($logosVista as $logo)
+                                            <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" class="mr-2" style="max-height: 48px; max-width: 140px;">
+                                        @endforeach
+                                    </div>
+                                @endif
                                 <h4 class="mb-0">{{ $reporte->titulo1 ?: $reporte->nombre }}</h4>
                                 @if ($reporte->titulo2)
                                     <div class="text-muted">{{ $reporte->titulo2 }}</div>

@@ -81,7 +81,12 @@
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombreempresa}}</td>
-                            <td>{{$data->numeroasiento}}</td>
+                            <td>
+                                {{$data->numeroasiento}}
+                                @if (! empty($data->copia_de_numeroasiento))
+                                    <i class="fa fa-copy text-muted" style="font-size: 0.75rem;" title="Copiado del asiento {{ $data->copia_de_numeroasiento }}"></i>
+                                @endif
+                            </td>
                             <td>{{date("d/m/Y", strtotime($data->fecha ?? ''))}}</td>
                             <td>{{$data->nombretipoasiento}}</td>
                             <td>

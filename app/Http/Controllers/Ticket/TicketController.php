@@ -187,7 +187,7 @@ class TicketController extends Controller
             abort(403, 'No tiene acceso a este ticket.');
         }
         $data->loadMissing('salas');
-        $areadestino_query = $this->areadestinoRepository->allParaPedido();
+        $areadestino_query = $this->areadestinoRepository->allParaPedido($data->areadestino_id);
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
         $estado_enum = Ticket_Estado::$enumEstado;

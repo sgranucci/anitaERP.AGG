@@ -226,8 +226,10 @@ class ReporteDefinibleSaldoReader
         if ($carga === ReporteDefinibleSupport::CCOSTO_SIN) {
             return true;
         }
+        // Anita l-infomae valida_ccosto: si la cuenta pide rango o particular
+        // pero no tiene filas en infoccos, el movimiento entra igual.
         if ($rangos === []) {
-            return false;
+            return true;
         }
         foreach ($rangos as $r) {
             if ($this->pasaRango($ccosto, (int) $r['desde'], (int) $r['hasta'])) {

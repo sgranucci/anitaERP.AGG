@@ -145,7 +145,7 @@
                 </div>
 
                 <div class="form-group row ingreso-campo-contrato" @if($esVisitante) style="display:none" @endif>
-                    <label for="numero_contrato" class="col-lg-4 control-label text-right pr-2">Contrato / Abono</label>
+                    <label for="numero_contrato" class="col-lg-4 control-label text-right pr-2" id="label-contrato">Contrato / Abono</label>
                     <div class="col-lg-8">
                         <div class="d-flex flex-wrap align-items-center">
                             <input type="text" class="form-control mr-2" id="numero_contrato" name="numero_contrato"
@@ -162,7 +162,8 @@
                                 </button>
                             @endunless
                         </div>
-                        <small class="text-muted">Opcional. Solo OC contrato aprobada/cumplida y vigente.</small>
+                        <small class="text-muted ingreso-ayuda-contrato-opcional">Opcional. Solo OC contrato aprobada/cumplida y vigente.</small>
+                        <small class="text-muted ingreso-ayuda-contrato-obligatorio" style="display:none">Obligatorio para este motivo. Hay que informar el n&uacute;mero de OC al proveedor antes de la visita.</small>
                     </div>
                 </div>
 
@@ -187,7 +188,7 @@
                         <select name="motivo_id" id="motivo_id" class="form-control" required>
                             <option value="">-- Seleccionar motivo --</option>
                             @foreach ($motivos as $item)
-                                <option value="{{ $item->id }}" data-codigo="{{ $item->codigo }}"
+                                <option value="{{ $item->id }}" data-codigo="{{ $item->codigo }}" data-exige-oc="{{ !empty($item->exige_oc) ? '1' : '0' }}"
                                     {{ (string) old('motivo_id', $data->motivo_id ?? '') === (string) $item->id ? 'selected' : '' }}>{{ $item->nombre }}</option>
                             @endforeach
                         </select>

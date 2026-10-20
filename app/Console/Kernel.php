@@ -459,6 +459,28 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/comprobante-proveedor-imputacion-ap-schedule.log'))
             ->when(fn () => (bool) config('comprobante_proveedor_anita.imputacion_ap_diaria.habilitada', true));
 
+        // Auditores Contaduría solo-ERP (mes calendario en curso vía default del comando).
+        $schedule->command('comprobante-proveedor:auditar-far-diferencia')
+            ->dailyAt((string) config('comprobante_proveedor_auditoria_erp.far_diferencia.hora', '08:55'))
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/comprobante-proveedor-auditor-far-diferencia-schedule.log'))
+            ->when(fn () => (bool) config('comprobante_proveedor_auditoria_erp.far_diferencia.habilitada', true));
+
+        $schedule->command('comprobante-proveedor:auditar-iva-tipo')
+            ->dailyAt((string) config('comprobante_proveedor_auditoria_erp.iva_fuera_tipo.hora', '09:00'))
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/comprobante-proveedor-auditor-iva-tipo-schedule.log'))
+            ->when(fn () => (bool) config('comprobante_proveedor_auditoria_erp.iva_fuera_tipo.habilitada', true));
+
+        $schedule->command('comprobante-proveedor:auditar-anticipo-bsuso-capex')
+            ->dailyAt((string) config('comprobante_proveedor_auditoria_erp.anticipo_bsuso_sin_capex.hora', '09:05'))
+            ->runInBackground()
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/comprobante-proveedor-auditor-bsuso-capex-schedule.log'))
+            ->when(fn () => (bool) config('comprobante_proveedor_auditoria_erp.anticipo_bsuso_sin_capex.habilitada', true));
+
         $ventanaImputacionOp = max(1, (int) config('pagoproveedor.imputacion_ap_diaria.ventana_dias', 7));
         $schedule->command('pagoproveedor:auditar-imputacion-ap', [
             '--desde' => Carbon::today()->subDays($ventanaImputacionOp - 1)->toDateString(),

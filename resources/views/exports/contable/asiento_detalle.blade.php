@@ -26,7 +26,7 @@
         </tr>
         <tr>
             <td colspan="{{ $colspan }}">
-                Generado {{ date('d/m/Y H:i') }}
+                Generado {{ date('d/m/Y H:i') }}@if (! empty($data->copia_de_numeroasiento)) · origen {{ $data->copia_de_numeroasiento }}@endif
             </td>
         </tr>
         <tr>

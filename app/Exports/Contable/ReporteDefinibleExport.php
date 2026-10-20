@@ -3,6 +3,7 @@
 namespace App\Exports\Contable;
 
 use App\Models\Contable\ReporteContable;
+use App\Services\Contable\ReporteDefinibleParidadService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleLayoutResolver;
 use App\Support\Export\ExcelFormatoNumero;
@@ -19,6 +20,7 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\Hyperlink;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class ReporteDefinibleExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
@@ -37,7 +39,12 @@ class ReporteDefinibleExport implements FromView, WithColumnFormatting, WithColu
 
     private int $filaPrimeraDatosExcel = 4;
 
+    private bool $tieneGruposColumna = false;
+
     private bool $esCsv = false;
+
+    /** @var list<string> */
+    private array $rutasLogosExcel = [];
 
     public function parametros(array $filtros, array $resultado, ReporteContable $reporte, bool $esCsv = false): self
     {
@@ -51,13 +58,25 @@ class ReporteDefinibleExport implements FromView, WithColumnFormatting, WithColu
 
     public function view(): View
     {
-        $filasLogo = collect([(object) ['nombreempresa' => '']]);
-        $logos = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($filasLogo);
+        $logos = $this->esCsv
+            ? []
+            : EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion(
+                ReporteDefinibleParidadService::coleccionEmpresasParaLogos((array) ($this->filtros['empresa_ids'] ?? []))
+            );
+        $this->rutasLogosExcel = $logos;
         $hayLogos = count($logos) > 0;
         // Filas meta de la vista: [logo] + titulo1 + generado + [titulo2]
         $filasMeta = 2 + ($hayLogos ? 1 : 0) + (trim((string) ($this->reporte->titulo2 ?? '')) !== '' ? 1 : 0);
+        $grupos = [];
+        foreach ($this->resultado['columnas'] ?? [] as $col) {
+            $nombreGrupo = trim((string) ($col['grupo'] ?? ''));
+            if ($nombreGrupo !== '') {
+                $grupos[$nombreGrupo] = true;
+            }
+        }
+        $this->tieneGruposColumna = count($grupos) > 1;
         $this->filaCabecerasExcel = $filasMeta + 1;
-        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + ($this->tieneGruposColumna ? 2 : 1);
 
         return view('exports.contable.reporte_definibleindex', [
             'reporte' => $this->reporte,
@@ -134,8 +153,25 @@ class ReporteDefinibleExport implements FromView, WithColumnFormatting, WithColu
 
     public function styles(Worksheet $sheet)
     {
-        $fila = $this->filaCabecerasExcel;
+        $fila = $this->tieneGruposColumna ? $this->filaCabecerasExcel + 1 : $this->filaCabecerasExcel;
         $lastCol = $sheet->getHighestColumn();
+        if ($this->tieneGruposColumna) {
+            $filaGrupo = $this->filaCabecerasExcel;
+            $sheet->getStyle("A{$filaGrupo}:{$lastCol}{$filaGrupo}")->applyFromArray([
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => 'D4E6F1'],
+                ],
+                'font' => [
+                    'bold' => true,
+                    'name' => 'Arial',
+                    'size' => 11,
+                ],
+                'alignment' => [
+                    'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                ],
+            ]);
+        }
         $sheet->getStyle("A{$fila}:{$lastCol}{$fila}")->applyFromArray([
             'fill' => [
                 'fillType' => Fill::FILL_SOLID,
@@ -160,7 +196,48 @@ class ReporteDefinibleExport implements FromView, WithColumnFormatting, WithColu
         return [
             AfterSheet::class => function (AfterSheet $event) use (&$filaDatos, &$filas) {
                 $sheet = $event->sheet->getDelegate();
+                if (! $this->esCsv && $this->rutasLogosExcel !== []) {
+                    $sheet->getRowDimension(1)->setRowHeight(54);
+                    $offsetX = 6;
+                    foreach ($this->rutasLogosExcel as $idx => $ruta) {
+                        if (! is_string($ruta) || ! is_readable($ruta)) {
+                            continue;
+                        }
+                        $drawing = new Drawing;
+                        $drawing->setName('Logo');
+                        $drawing->setDescription('Logo empresa');
+                        $drawing->setPath($ruta);
+                        $drawing->setResizeProportional(true);
+                        $drawing->setHeight(46);
+                        $drawing->setCoordinates('A1');
+                        $drawing->setOffsetX($offsetX + $idx * 160);
+                        $drawing->setOffsetY(4);
+                        $drawing->setWorksheet($sheet);
+                    }
+                }
                 $sheet->freezePane('A'.$filaDatos);
+                if ($this->tieneGruposColumna) {
+                    $columnas = $filas['columnas'] ?? [];
+                    $filaGrupo = $this->filaCabecerasExcel;
+                    $i = 0;
+                    $total = count($columnas);
+                    while ($i < $total) {
+                        $grupo = trim((string) ($columnas[$i]['grupo'] ?? ''));
+                        $j = $i;
+                        while (
+                            $j + 1 < $total
+                            && trim((string) ($columnas[$j + 1]['grupo'] ?? '')) === $grupo
+                        ) {
+                            $j++;
+                        }
+                        if ($grupo !== '' && $j > $i) {
+                            $desde = Coordinate::stringFromColumnIndex($i + 3).$filaGrupo;
+                            $hasta = Coordinate::stringFromColumnIndex($j + 3).$filaGrupo;
+                            $sheet->mergeCells($desde.':'.$hasta);
+                        }
+                        $i = $j + 1;
+                    }
+                }
 
                 $row = $filaDatos;
                 foreach ($filas['filas'] ?? [] as $fila) {

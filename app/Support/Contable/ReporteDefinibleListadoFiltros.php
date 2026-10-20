@@ -122,7 +122,11 @@ class ReporteDefinibleListadoFiltros
         }
 
         $modo = trim((string) $request->input('modo_periodo', SumasSaldosListadoFiltros::MODO_PERIODOS));
-        if (! in_array($modo, [SumasSaldosListadoFiltros::MODO_PERIODOS, SumasSaldosListadoFiltros::MODO_RANGO], true)) {
+        if (! in_array($modo, [
+            SumasSaldosListadoFiltros::MODO_PERIODOS,
+            SumasSaldosListadoFiltros::MODO_RANGO,
+            ReporteDefinibleSupport::MODO_MESES,
+        ], true)) {
             $modo = SumasSaldosListadoFiltros::MODO_PERIODOS;
         }
 
@@ -156,10 +160,10 @@ class ReporteDefinibleListadoFiltros
 
         $fuentePlan = trim((string) $request->input(
             'fuente_plan',
-            ReporteDefinibleDimensionSupport::FUENTE_PLAN_PARTIDAGASTO
+            ReporteDefinibleDimensionSupport::FUENTE_PLAN_EMPRESA_PRESUPUESTO
         ));
         if (! isset(ReporteDefinibleDimensionSupport::fuentesPlan()[$fuentePlan])) {
-            $fuentePlan = ReporteDefinibleDimensionSupport::FUENTE_PLAN_PARTIDAGASTO;
+            $fuentePlan = ReporteDefinibleDimensionSupport::FUENTE_PLAN_EMPRESA_PRESUPUESTO;
         }
 
         return [
@@ -168,6 +172,7 @@ class ReporteDefinibleListadoFiltros
             'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
             'moneda_id' => max(1, (int) $request->input('moneda_id', 1)),
             'modo_periodo' => $modo,
+            'periodos' => self::normalizarListaPeriodos($request->input('periodos', [])),
             'mes_desde' => $mesDesde,
             'anio_desde' => $anioDesde,
             'mes_hasta' => $mesHasta,
@@ -209,6 +214,9 @@ class ReporteDefinibleListadoFiltros
         $out = [
             'consultar' => 1,
             'modo_periodo' => $filtros['modo_periodo'] ?? SumasSaldosListadoFiltros::MODO_PERIODOS,
+            'periodos' => ($filtros['modo_periodo'] ?? '') === ReporteDefinibleSupport::MODO_MESES
+                ? array_values($filtros['periodos'] ?? [])
+                : null,
             'mes_desde' => $filtros['mes_desde'] ?? null,
             'anio_desde' => $filtros['anio_desde'] ?? null,
             'mes_hasta' => $filtros['mes_hasta'] ?? null,
@@ -254,6 +262,38 @@ class ReporteDefinibleListadoFiltros
             $out['empresa_ids'][] = (int) $id;
         }
 
-        return array_filter($out, fn ($v) => $v !== null && $v !== '');
+        return array_filter($out, fn ($v) => $v !== null && $v !== '' && $v !== []);
+    }
+
+    /**
+     * Acepta 202608, "2026-08" o "2026/08". Devuelve YYYYMM únicos, ordenados.
+     *
+     * @return list<int>
+     */
+    public static function normalizarListaPeriodos(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            $raw = ($raw === null || $raw === '') ? [] : [$raw];
+        }
+
+        $out = [];
+        foreach ($raw as $item) {
+            $digitos = preg_replace('/\D/', '', (string) $item) ?? '';
+            if (strlen($digitos) < 6) {
+                continue;
+            }
+            $periodo = (int) substr($digitos, 0, 6);
+            $anio = intdiv($periodo, 100);
+            $mes = $periodo % 100;
+            if ($anio < 2000 || $anio > 2100 || $mes < 1 || $mes > 12) {
+                continue;
+            }
+            $out[$periodo] = $periodo;
+        }
+
+        $lista = array_values($out);
+        sort($lista);
+
+        return $lista;
     }
 }

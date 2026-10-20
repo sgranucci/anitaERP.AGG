@@ -4,6 +4,8 @@
     $resumen = is_array($resumen ?? null) ? $resumen : [];
     $mostrarCcResumen = collect($resumen)->contains(fn ($row) => array_key_exists('centrocosto_codigo', $row));
     $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
+    $mostrarTituloCuenta = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarTituloCuenta($filtros ?? []);
+    $tituloCuentaCombinado = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::tituloCuentaCombinado($filtros ?? []);
     $colSpan = $soloVentas
         ? (8 + ($mostrarCcResumen ? 1 : 0))
         : (($multiempresa ? 18 : 17) - ($mostrarCentrocosto ? 0 : 1));
@@ -180,9 +182,16 @@
             <tr>
                 <td colspan="{{ $colSpan }}">Empresa: {{ $fila['nombreempresa'] ?? '' }}</td>
             </tr>
-        @elseif ($tipo === 'header_cuenta')
+        @elseif ($tipo === 'header_cuenta' && $mostrarTituloCuenta && $tituloCuentaCombinado)
             <tr>
                 <td colspan="{{ $colSpan }}">Cuenta: {{ $fila['cuenta_codigo'] ?? '' }} {{ $fila['cuenta_nombre'] ?? '' }}</td>
+            </tr>
+        @elseif ($tipo === 'header_cuenta' && $mostrarTituloCuenta)
+            <tr>
+                <td>Cuenta: {{ $fila['cuenta_codigo'] ?? '' }} {{ $fila['cuenta_nombre'] ?? '' }}</td>
+                @for ($colCuenta = 1; $colCuenta < $colSpan; $colCuenta++)
+                    <td></td>
+                @endfor
             </tr>
         @elseif ($tipo === 'header_cc')
             <tr>

@@ -115,12 +115,63 @@ final class LibroIvaDigitalComprasImportesSupport
         }
 
         $campo = self::campoAjusteCabecera($registro);
-        $registro['cabecera'][$campo] = round(
-            (float) ($registro['cabecera'][$campo] ?? 0) + $residual,
-            2,
-        );
+        $nuevo = round((float) ($registro['cabecera'][$campo] ?? 0) + $residual, 2);
+        if ($campo === 'otros_tributos' && $nuevo < -0.001) {
+            return $registro;
+        }
+        $registro['cabecera'][$campo] = $nuevo;
 
         return $registro;
+    }
+
+    /**
+     * ICO/IDO: Ret.IIBB y O.Conceptos no siguen el rubro del concepto.
+     * El destino depende del CUIT del banco (liquidación 08 y 09/2026).
+     */
+    public static function destinoRubroIco(string $cuit, string $nombreConcepto, string $destinoActual): string
+    {
+        $d = preg_replace('/\D+/', '', $cuit) ?? '';
+        $n = strtoupper($nombreConcepto);
+        $esRetIibb = str_contains($n, 'RET')
+            && (str_contains($n, 'IIBB') || str_contains($n, 'I.B') || str_contains($n, 'IBR'));
+        $esOtrosConceptos = str_contains($n, 'CONCEPTO');
+
+        if ($esRetIibb) {
+            if (in_array($d, ['30580189411', '30703088534'], true)) {
+                return 'no_integra';
+            }
+            if (in_array($d, ['30500010084', '33999242109', '30522714417'], true)) {
+                return 'perc_iibb';
+            }
+        }
+
+        if ($esOtrosConceptos) {
+            return $d === '30500010912' ? 'perc_nacional' : 'perc_municipal';
+        }
+
+        return $destinoActual;
+    }
+
+    /**
+     * El mismo concepto+importe repetido (join por número de comprobante) duplica la alícuota.
+     *
+     * @param  list<array{concepto?: int, importe?: float}>  $conceptos
+     * @return list<array{concepto?: int, importe?: float}>
+     */
+    public static function conceptosSinDuplicar(array $conceptos): array
+    {
+        $vistos = [];
+        $unicos = [];
+        foreach ($conceptos as $linea) {
+            $clave = ((int) ($linea['concepto'] ?? 0)).'|'.number_format((float) ($linea['importe'] ?? 0), 2, '.', '');
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            $unicos[] = $linea;
+        }
+
+        return $unicos;
     }
 
     /**

@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.1',
+    'version' => '1.2',
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Cuentas a pagar / Propuesta de pagos y tesorería AP',
 
@@ -74,6 +74,26 @@ return [
             'archivo' => 'auditoria.svg',
             'titulo' => 'Pack de auditoría / compliance',
             'seccion' => '16. Auditoría y compliance',
+        ],
+        'op_listado_devolver' => [
+            'archivo' => 'op-listado-devolver.png',
+            'titulo' => 'Listado de órdenes de pago — acción Devolver retenciones',
+            'seccion' => '17. Devolución de retenciones (herramienta OP)',
+        ],
+        'op_modal_devolver' => [
+            'archivo' => 'op-modal-devolver.png',
+            'titulo' => 'Modal Devolver retenciones — selección, monto y medio',
+            'seccion' => '17.b Pantallas del modal y de la edición',
+        ],
+        'op_editar_devolver' => [
+            'archivo' => 'op-editar-devolver.png',
+            'titulo' => 'Edición de OP — botón Devolver retenciones',
+            'seccion' => '17.b Pantallas del modal y de la edición',
+        ],
+        'ddjj_impacto' => [
+            'archivo' => 'ddjj-impacto.png',
+            'titulo' => 'Impacto de la devolución en declaraciones juradas',
+            'seccion' => '18. Impacto en declaraciones juradas de impuestos',
         ],
     ],
 ];

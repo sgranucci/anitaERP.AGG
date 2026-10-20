@@ -205,6 +205,12 @@ class ReporteDefiniblePublicacionSupport
             'solo_moneda_origen', 'columnas_layout', 'layout_id', 'nivel_max', 'mostrar_cuentas',
             'incluir_presupuesto', 'presupuesto_escenario_id', 'ccosto_desde', 'ccosto_hasta',
         ];
+        if (($filtros['modo_periodo'] ?? '') === ReporteDefinibleSupport::MODO_MESES) {
+            $claves[] = 'periodos';
+        }
+        if (($filtros['columnas_layout'] ?? '') === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
+            $claves[] = 'fuente_plan';
+        }
 
         $out = [];
         foreach ($claves as $clave) {
@@ -215,6 +221,10 @@ class ReporteDefiniblePublicacionSupport
         if (isset($out['empresa_ids']) && is_array($out['empresa_ids'])) {
             $out['empresa_ids'] = array_values(array_map('intval', $out['empresa_ids']));
             sort($out['empresa_ids']);
+        }
+        if (isset($out['periodos']) && is_array($out['periodos'])) {
+            $out['periodos'] = array_values(array_map('intval', $out['periodos']));
+            sort($out['periodos']);
         }
 
         return $out;

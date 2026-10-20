@@ -9,6 +9,9 @@ use App\Models\Contable\Centrocosto;
  */
 class ReporteDefinibleDimensionSupport
 {
+    /** Asientos de la empresa presupuesto (código operativo + 10), como Anita «Compara con presup.». */
+    public const FUENTE_PLAN_EMPRESA_PRESUPUESTO = 'empresa_presupuesto';
+
     /** Cuentas origen P de la definición (mismo libro Real). */
     public const FUENTE_PLAN_ASIGNACION_P = 'asignacion_p';
 
@@ -23,6 +26,7 @@ class ReporteDefinibleDimensionSupport
     public static function fuentesPlan(): array
     {
         return [
+            self::FUENTE_PLAN_EMPRESA_PRESUPUESTO => 'Empresa presupuesto (código + 10)',
             self::FUENTE_PLAN_PARTIDAGASTO => 'Partidas de gasto (cuenta + c.costo)',
             self::FUENTE_PLAN_ASIGNACION_P => 'Cuentas origen P de la definición',
         ];

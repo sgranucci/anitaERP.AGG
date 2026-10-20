@@ -206,11 +206,41 @@
                 $('#codigoproveedor_pdf_lote').focus();
                 return;
             }
-            mostrarOverlay('Consultando comprobantes…');
+            if ($('#form-comprobantes-pdf-lote input[name="tipos[]"]:checked').length === 0) {
+                e.preventDefault();
+                alert('Marque al menos un tipo: facturas, OC, COM, OPP u OPA.');
+                return;
+            }
+            mostrarOverlay('Consultando documentos…');
+        });
+
+        $('#marcar-todos-pdf-lote').on('change', function () {
+            $('.js-clave-pdf-lote').prop('checked', $(this).is(':checked'));
+        });
+
+        $(document).on('change', '.js-clave-pdf-lote', function () {
+            var todos = $('.js-clave-pdf-lote').length;
+            var marcados = $('.js-clave-pdf-lote:checked').length;
+            $('#marcar-todos-pdf-lote').prop('checked', todos > 0 && marcados === todos);
+        });
+
+        $('#form-zip-marcados').on('submit', function (e) {
+            var claves = $('.js-clave-pdf-lote:checked');
+            if (claves.length === 0) {
+                e.preventDefault();
+                alert('Marque al menos un documento de la lista, o use Descargar todo el lote.');
+                return;
+            }
+            var $form = $(this);
+            $form.find('input[name="claves[]"]').remove();
+            claves.each(function () {
+                $form.append($('<input type="hidden" name="claves[]">').val($(this).val()));
+            });
+            mostrarOverlay('Armando el ZIP de los marcados…');
         });
 
         $('.js-descargar-zip').on('click', function () {
-            mostrarOverlay('Armando el ZIP de comprobantes…');
+            mostrarOverlay('Armando el ZIP del lote…');
         });
     });
 })(jQuery);

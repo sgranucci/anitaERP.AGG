@@ -23,7 +23,7 @@ class IngresoProveedorListadoExport implements FromView, ShouldAutoSize, WithCol
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'L';
+    private const COL_ULTIMA = 'M';
 
     /** @var array<string, mixed>|string|null */
     private $filtros;
@@ -116,16 +116,17 @@ class IngresoProveedorListadoExport implements FromView, ShouldAutoSize, WithCol
         return [
             'A' => 8,
             'B' => 12,
-            'C' => 28,
-            'D' => 12,
-            'E' => 28,
-            'F' => 22,
-            'G' => 16,
-            'H' => 18,
-            'I' => 16,
-            'J' => 14,
-            'K' => 28,
-            'L' => 32,
+            'C' => 22,
+            'D' => 28,
+            'E' => 12,
+            'F' => 28,
+            'G' => 22,
+            'H' => 16,
+            'I' => 18,
+            'J' => 16,
+            'K' => 14,
+            'L' => 28,
+            'M' => 32,
         ];
     }
 

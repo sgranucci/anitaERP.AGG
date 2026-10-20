@@ -30,6 +30,7 @@
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
+                            <th>Estado</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -39,11 +40,26 @@
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>
+                                @if ($data->suspendido)
+                                    <span class="badge badge-warning">Suspendida</span>
+                                @else
+                                    <span class="badge badge-success">Activa</span>
+                                @endif
+                            </td>
+                            <td>
                        			@if (can('editar-area-destino', false))
                                 	<a href="{{route('edita_areadestino', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
+                                @if (can('actualizar-area-destino', false))
+                                <form action="{{ route('suspende_areadestino', ['id' => $data->id]) }}" class="d-inline" method="POST">
+                                    @csrf @method('put')
+                                    <button type="submit" class="btn-accion-tabla tooltipsC" title="{{ $data->suspendido ? 'Reactivar esta área' : 'Suspender esta área' }}">
+                                        <i class="fa {{ $data->suspendido ? 'fa-play-circle text-success' : 'fa-pause-circle text-warning' }}"></i>
+                                    </button>
+                                </form>
+                                @endif
                        			@if (can('borrar-area-destino', false))
                                 <form action="{{route('elimina_areadestino', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")

@@ -11,9 +11,10 @@ class IngresoProveedorMotivo extends Model implements Auditable
 
     protected $table = 'ingreso_proveedor_motivo';
 
-    protected $fillable = ['codigo', 'nombre', 'activo'];
+    protected $fillable = ['codigo', 'nombre', 'activo', 'exige_oc'];
 
     protected $casts = [
         'activo' => 'boolean',
+        'exige_oc' => 'boolean',
     ];
 }

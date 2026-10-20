@@ -69,6 +69,16 @@ class MayorPlanoCuentaController extends Controller
                 'mostrar_columna_centrocosto',
                 MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros),
             );
+            ReportePreferenciasUsuario::persistirBool(
+                self::PREFERENCIAS_CLAVE,
+                'mostrar_titulo_cuenta',
+                MayorPlanoCuentaListadoFiltros::mostrarTituloCuenta($filtros),
+            );
+            ReportePreferenciasUsuario::persistirBool(
+                self::PREFERENCIAS_CLAVE,
+                'titulo_cuenta_combinado',
+                MayorPlanoCuentaListadoFiltros::tituloCuentaCombinado($filtros),
+            );
         }
 
         $consultado = false;
@@ -218,6 +228,20 @@ class MayorPlanoCuentaController extends Controller
             $filtros['mostrar_columna_centrocosto'] = ReportePreferenciasUsuario::leerBool(
                 self::PREFERENCIAS_CLAVE,
                 'mostrar_columna_centrocosto',
+                true,
+            );
+        }
+        if (! $request->has('mostrar_titulo_cuenta')) {
+            $filtros['mostrar_titulo_cuenta'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'mostrar_titulo_cuenta',
+                true,
+            );
+        }
+        if (! $request->has('titulo_cuenta_combinado')) {
+            $filtros['titulo_cuenta_combinado'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'titulo_cuenta_combinado',
                 true,
             );
         }
@@ -799,6 +823,22 @@ class MayorPlanoCuentaController extends Controller
             $filtros['mostrar_columna_centrocosto'] = ReportePreferenciasUsuario::leerBool(
                 self::PREFERENCIAS_CLAVE,
                 'mostrar_columna_centrocosto',
+                true,
+            );
+        }
+
+        if (! $request->has('mostrar_titulo_cuenta')) {
+            $filtros['mostrar_titulo_cuenta'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'mostrar_titulo_cuenta',
+                true,
+            );
+        }
+
+        if (! $request->has('titulo_cuenta_combinado')) {
+            $filtros['titulo_cuenta_combinado'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'titulo_cuenta_combinado',
                 true,
             );
         }

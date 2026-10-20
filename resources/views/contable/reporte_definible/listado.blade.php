@@ -23,7 +23,9 @@
 </head>
 <body>
 @php
-    $logos = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion(collect([(object)['nombreempresa'=>'']]));
+    $logos = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion(
+        \App\Services\Contable\ReporteDefinibleParidadService::coleccionEmpresasParaLogos((array) ($filtros['empresa_ids'] ?? []))
+    );
     $columnas = $resultado['columnas'] ?? [];
     $filas = $resultado['filas'] ?? [];
     $notas = $resultado['notas'] ?? [];
@@ -49,7 +51,38 @@
     @endif
 </div>
 <table class="data">
+    @php
+        $gruposPdf = [];
+        foreach ($columnas as $colGrupo) {
+            $nombreGrupo = trim((string) ($colGrupo['grupo'] ?? ''));
+            if ($nombreGrupo !== '') {
+                $gruposPdf[$nombreGrupo] = true;
+            }
+        }
+        $mostrarGruposPdf = count($gruposPdf) > 1;
+    @endphp
     <thead>
+        @if ($mostrarGruposPdf)
+            <tr>
+                <th></th>
+                <th></th>
+                @php $indiceGrupo = 0; @endphp
+                @while ($indiceGrupo < count($columnas))
+                    @php
+                        $nombreGrupo = trim((string) ($columnas[$indiceGrupo]['grupo'] ?? ''));
+                        $spanGrupo = 1;
+                        while (
+                            $indiceGrupo + $spanGrupo < count($columnas)
+                            && trim((string) ($columnas[$indiceGrupo + $spanGrupo]['grupo'] ?? '')) === $nombreGrupo
+                        ) {
+                            $spanGrupo++;
+                        }
+                    @endphp
+                    <th class="right" colspan="{{ $spanGrupo }}">{{ $nombreGrupo }}</th>
+                    @php $indiceGrupo += $spanGrupo; @endphp
+                @endwhile
+            </tr>
+        @endif
         <tr>
             <th>Código</th>
             <th>Concepto</th>

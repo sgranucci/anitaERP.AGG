@@ -79,7 +79,7 @@ final class SicoreComprasDatosService
 
         $out = array_merge(
             $out,
-            $this->desdeDevolucionesChequeSubdiario($empresaId, $fechaDesde, $fechaHasta, $config),
+            $this->desdeDevolucionesRetencionSubdiario($empresaId, $fechaDesde, $fechaHasta, $config, $out),
         );
 
         return array_merge(
@@ -261,44 +261,48 @@ final class SicoreComprasDatosService
     }
 
     /**
-     * Devoluciones de retención de ganancias pagadas con cheque propio (CHP) que imputan
-     * la cuenta configurada (ej. 214010013). No generan AOP en retmov; el mayor las ve
-     * como Debe sobre el pasivo. En SICORE proveedores: cod_comp=3 (NC) e importes positivos.
+     * Devoluciones de retención de ganancias (CHP u OPP) que imputan la cuenta configurada
+     * (ej. 214010013) con efecto Debe. No generan AOP en retmov; el mayor las ve como
+     * Debe sobre el pasivo. En SICORE proveedores: cod_comp=3 (NC).
      *
+     * @param  list<array<string, mixed>>  $yaPresentes  Filas retmov/AOP ya armadas (dedupe).
      * @return list<array<string, mixed>>
      */
-    private function desdeDevolucionesChequeSubdiario(
+    private function desdeDevolucionesRetencionSubdiario(
         int $empresaId,
         string $fechaDesde,
         string $fechaHasta,
         Sicore_Config $config,
+        array $yaPresentes = [],
     ): array {
         $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
         $codigosCuenta = $this->codigosCuentaConfig($config, $empresaId);
-        $cheques = $this->listarDevolucionesChequeSubdiario(
+        $movimientos = $this->listarDevolucionesRetencionSubdiario(
             $empresaAnita,
             $fechaDesde,
             $fechaHasta,
             $codigosCuenta,
         );
 
-        if ($cheques === []) {
+        if ($movimientos === []) {
             return [];
         }
 
+        $clavesYa = SicoreErpComplementoSupport::claves($yaPresentes);
+
         $this->proveedorSupport->precargar(array_map(
             static fn (array $ch) => (string) ($ch['emisor'] ?? ''),
-            $cheques,
+            $movimientos,
         ));
         $emisoresOk = $this->proveedorSupport->indicesExistentes(array_map(
             static fn (array $ch) => (string) ($ch['emisor'] ?? ''),
-            $cheques,
+            $movimientos,
         ));
 
         $regimenPorCodigo = $this->mapaRegimenGanancias();
         $out = [];
 
-        foreach ($cheques as $ch) {
+        foreach ($movimientos as $ch) {
             $emisorNorm = SicoreMayorComparableSupport::normalizarEmisor((string) ($ch['emisor'] ?? ''));
             if ($emisorNorm === '' || ! isset($emisoresOk[$emisorNorm])) {
                 continue;
@@ -306,6 +310,12 @@ final class SicoreComprasDatosService
 
             $importeAbs = round((float) ($ch['importe'] ?? 0), 2);
             if ($importeAbs < 0.001) {
+                continue;
+            }
+
+            $nroComp = (int) ($ch['nro'] ?? 0);
+            // Ya salió por retmov AOP / retención del mismo nro → no duplicar NC.
+            if ($this->yaTieneRegistroSicore($clavesYa, $nroComp, $importeAbs)) {
                 continue;
             }
 
@@ -333,15 +343,16 @@ final class SicoreComprasDatosService
                 'retv_cuit_prov',
             );
 
+            $tipoMov = strtoupper(trim((string) ($ch['tipo'] ?? 'CHP')));
             $out[] = [
-                'origen' => 'compras_ganancias_dev_cheque',
+                'origen' => $tipoMov === 'OPP' ? 'compras_ganancias_dev_opp' : 'compras_ganancias_dev_cheque',
                 'sicore_config_id' => (int) $config->id,
                 'cod_regimen' => $regimen,
                 'cod_impuesto' => (int) $config->codigo_impuesto,
                 'cod_operacion' => (int) ($config->codigo_operacion ?? 1),
                 'cod_comp' => SicoreFormatoV8Support::COD_COMP_NOTA_CREDITO,
                 'fecha_comp' => $fechaIso,
-                'nro_comp' => (int) ($ch['nro'] ?? 0),
+                'nro_comp' => $nroComp,
                 'importe_comp' => $pagoActual > 0.001 ? $pagoActual : $importeAbs,
                 'base_calculo' => $importeAbs,
                 'fecha_retencion' => $fechaIso,
@@ -356,8 +367,9 @@ final class SicoreComprasDatosService
                 'codigo_proveedor' => $proveedor['codigo_proveedor'],
                 'razon_social' => substr($proveedor['nombre'], 0, 30),
                 'referencia' => sprintf(
-                    'Dev.GC CHP #%d %s',
-                    (int) ($ch['nro'] ?? 0),
+                    'Dev.GC %s #%d %s',
+                    $tipoMov,
+                    $nroComp,
                     $proveedor['codigo_proveedor'],
                 ),
             ];
@@ -367,12 +379,34 @@ final class SicoreComprasDatosService
     }
 
     /**
-     * CHP del período que tocan las cuentas de retención con efecto Debe (devolución).
+     * @param  array<string, true>  $clavesYa
+     */
+    private function yaTieneRegistroSicore(array $clavesYa, int $nroComp, float $importeAbs): bool
+    {
+        if ($nroComp <= 0 || $importeAbs < 0.001) {
+            return false;
+        }
+
+        $probe = [
+            'nro_comp' => $nroComp,
+            'nro_cert' => 0,
+            'importe' => $importeAbs,
+        ];
+
+        return SicoreErpComplementoSupport::estaEnClaves($probe, $clavesYa)
+            || SicoreErpComplementoSupport::estaEnClaves(
+                ['nro_comp' => $nroComp, 'nro_cert' => 0, 'importe' => -$importeAbs],
+                $clavesYa,
+            );
+    }
+
+    /**
+     * CHP/OPP del período que tocan las cuentas de retención con efecto Debe (devolución).
      *
      * @param  list<int>  $codigosCuenta
      * @return list<array{tipo: string, letra: string, sucursal: int, nro: int, empresa: int, emisor: string, fecha: string, importe: float}>
      */
-    private function listarDevolucionesChequeSubdiario(
+    private function listarDevolucionesRetencionSubdiario(
         int $empresaAnita,
         string $fechaDesde,
         string $fechaHasta,
@@ -403,7 +437,7 @@ final class SicoreComprasDatosService
             ),
             'whereArmado' => ' WHERE '.$this->filtroEmpresaSubdiario($empresaAnita)
                 .'subd_fecha BETWEEN '.$desdeAnita.' AND '.$hastaAnita
-                .' AND subd_tipo="CHP"'
+                .' AND subd_tipo IN ("CHP","OPP")'
                 .' AND ('.implode(' OR ', $cuentasOr).')',
             'orderBy' => 'subd_fecha, subd_nro',
         ]));
@@ -413,7 +447,7 @@ final class SicoreComprasDatosService
         foreach ($filas as $fila) {
             $fila = (array) $fila;
             $tipo = strtoupper(trim((string) ($fila['subd_tipo'] ?? '')));
-            if (! SicoreMayorComparableSupport::esTipoDevolucionCheque($tipo)) {
+            if (! SicoreMayorComparableSupport::esTipoDevolucionRetencion($tipo)) {
                 continue;
             }
 

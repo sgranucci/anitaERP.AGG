@@ -28,6 +28,9 @@
                 <th>ID</th>
                 <th>Código</th>
                 <th>Nombre</th>
+                @if (($tipo ?? '') === 'motivo')
+                    <th>Exige OC</th>
+                @endif
                 <th>Activo</th>
             </tr>
         </thead>
@@ -37,6 +40,9 @@
                     <td>{{ $data->id }}</td>
                     <td>{{ $data->codigo }}</td>
                     <td>{{ $data->nombre }}</td>
+                    @if (($tipo ?? '') === 'motivo')
+                        <td>{{ $data->exige_oc ? 'Sí' : 'No' }}</td>
+                    @endif
                     <td>{{ $data->activo ? 'Sí' : 'No' }}</td>
                 </tr>
             @endforeach

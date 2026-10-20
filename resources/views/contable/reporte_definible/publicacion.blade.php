@@ -31,6 +31,18 @@
     <div class="col-md-12">
         <div class="card card-info">
             <div class="card-header">
+                @php
+                    $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion(
+                        \App\Services\Contable\ReporteDefinibleParidadService::coleccionEmpresasParaLogos((array) (($publicacion->filtros ?? [])['empresa_ids'] ?? []))
+                    );
+                @endphp
+                @if (count($logosVista) > 0)
+                    <div class="d-flex flex-wrap align-items-center mb-2">
+                        @foreach ($logosVista as $logo)
+                            <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" class="mr-2" style="max-height: 48px; max-width: 140px;">
+                        @endforeach
+                    </div>
+                @endif
                 <h3 class="card-title">{{ $publicacion->nombre }}</h3>
                 <div class="card-tools">
                     <a href="{{ route('ver_publicacion_reporte_definible', ['id' => $reporte->id, 'publicacionId' => $publicacion->id, 'formato' => 'PDF']) }}"

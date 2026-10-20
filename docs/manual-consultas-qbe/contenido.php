@@ -26,6 +26,7 @@ return [
                 'Arriba está el selector de vista, Diseñar vista, QBE, Visual y Defaults instalación. A la derecha, la caja Texto o número, Limpiar y, si hay un orden memorizado, Quitar orden.',
                 'QBE abre la consulta avanzada. Visual abre el gráfico, el color de fila y las columnas calculadas. Los dos paneles arrancan cerrados para dejar la grilla a la vista. Si el botón QBE está relleno, hay una consulta aplicada aunque el panel esté cerrado.',
                 'Nueva OP abre una orden de pago del circuito. Pago vía IE abre ingresos y egresos con el tipo orden de pago, si el usuario tiene permiso.',
+                'En el listado de Pago a proveedores (no en esta consulta QBE) está la herramienta Devolver retenciones: sirve cuando hay que devolver al proveedor una retención mal practicada sin revertir toda la OP. El detalle operativo y el impacto en SICORE, IIBB, SUSS e IVA están en el Manual de Propuesta de pagos / Tesorería AP (capítulos 17 y 18).',
             ],
             'items' => [
                 'Texto o número busca en todos los campos de texto y número. Enter o la lupa lanzan esa búsqueda y dejan de lado los criterios de la consulta avanzada.',

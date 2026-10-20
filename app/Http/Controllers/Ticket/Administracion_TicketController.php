@@ -529,7 +529,7 @@ class Administracion_TicketController extends Controller
     {
         can('crear-ticket');
 
-        $areadestino_query = $this->areadestinoRepository->all();
+        $areadestino_query = $this->areadestinoRepository->allParaSeleccion();
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
         $turno_query = $this->turno_ticketRepository->all();
@@ -582,7 +582,7 @@ class Administracion_TicketController extends Controller
 
 		$data = $this->ticketRepository->find($id);
         $data->loadMissing('salas');
-        $areadestino_query = $this->areadestinoRepository->all();
+        $areadestino_query = $this->areadestinoRepository->allParaSeleccion($data->areadestino_id);
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
         $turno_query = $this->turno_ticketRepository->all();

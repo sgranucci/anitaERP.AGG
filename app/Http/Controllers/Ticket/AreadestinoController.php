@@ -89,6 +89,21 @@ class AreadestinoController extends Controller
         return redirect('ticket/areadestino')->with('mensaje', 'Area de destino actualizada con éxito');
     }
 
+    public function suspender($id)
+    {
+        can('actualizar-area-destino');
+
+        $area = $this->repository->findOrFail($id);
+        $suspendido = ! $area->suspendido;
+        $this->repository->update(['suspendido' => $suspendido], $id);
+
+        $mensaje = $suspendido
+            ? 'Área de destino suspendida. No se ofrece al cargar tickets.'
+            : 'Área de destino reactivada.';
+
+        return redirect('ticket/areadestino')->with('mensaje', $mensaje);
+    }
+
     /**
      * Remove the specified resource from storage.
      *

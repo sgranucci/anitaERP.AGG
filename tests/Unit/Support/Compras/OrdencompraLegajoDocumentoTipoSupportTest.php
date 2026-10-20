@@ -65,6 +65,31 @@ final class OrdencompraLegajoDocumentoTipoSupportTest extends TestCase
         ));
     }
 
+    public function test_fns_nombre_n_c_no_computable_sigue_siendo_factura(): void
+    {
+        $tipo = new \App\Models\Compras\Tipotransaccion_Compra([
+            'abreviatura' => 'FNS',
+            'nombre' => 'Factura N/C Servicios',
+            'signo' => 'S',
+            'codigoafip' => null,
+        ]);
+
+        $this->assertSame('FC', OrdencompraLegajoDocumentoTipoSupport::desdeTipotransaccion($tipo));
+        $this->assertTrue(OrdencompraLegajoDocumentoTipoSupport::exigeCom('FC'));
+    }
+
+    public function test_abreviatura_c_con_nombre_nota_credito_es_nc(): void
+    {
+        $tipo = new \App\Models\Compras\Tipotransaccion_Compra([
+            'abreviatura' => 'CIS',
+            'nombre' => 'Nota de Crédito Servicios',
+            'signo' => 'R',
+            'codigoafip' => null,
+        ]);
+
+        $this->assertSame('NC', OrdencompraLegajoDocumentoTipoSupport::desdeTipotransaccion($tipo));
+    }
+
     public function test_informe_recepcion_com_no_es_nota_credito(): void
     {
         $this->assertSame('FC', OrdencompraLegajoDocumentoTipoSupport::desdeAbreviatura('COM'));

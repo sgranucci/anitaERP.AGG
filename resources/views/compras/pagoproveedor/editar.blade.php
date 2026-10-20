@@ -17,6 +17,8 @@
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/cheques.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/cheques.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/form.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/crear.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/devolver-retenciones.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/devolver-retenciones.js')) ?: time() }}" type="text/javascript"></script>
 @include('compras.pagoproveedor.partials.documentos_relacionados_script')
 <script>
     @php
@@ -58,6 +60,11 @@
     $puedeRevertir = can('revertir-pagoproveedor', false)
         && ! $opSoloLectura
         && in_array($estado, ['CONFIRMADA', 'PAGADA', 'CONCILIADA'], true);
+    $puedeDevolverRetenciones = can('devolver-retenciones-pagoproveedor', false)
+        && ! $opSoloLectura
+        && empty($data->pagoproveedor_origen_id)
+        && in_array($estado, ['CONFIRMADA', 'PAGADA', 'CONCILIADA'], true)
+        && ($data->pagoproveedor_retenciones?->where('importe', '>', 0)->count() ?? 0) > 0;
     $puedePagada = can('marcar-pagada-pagoproveedor', false) && ! $opSoloLectura && $estado === 'CONFIRMADA';
     $puedeConciliada = can('marcar-conciliada-pagoproveedor', false)
         && ! $opSoloLectura
@@ -158,6 +165,13 @@
                         <button type="submit" class="btn btn-outline-info"><i class="fa fa-balance-scale"></i> Marcar conciliada</button>
                     </form>
                 @endif
+                @if ($puedeDevolverRetenciones)
+                    <button type="button"
+                        class="btn btn-outline-info js-op-devolver-retenciones"
+                        data-pagoproveedor-id="{{ $data->id }}">
+                        <i class="fa fa-reply"></i> Devolver retenciones
+                    </button>
+                @endif
                 @if ($puedeRevertir)
                     <form action="{{ route('revertir_pagoproveedor', $data->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Revertir esta OP (compensatoria)?');">
                         @csrf
@@ -196,4 +210,5 @@
 @include('includes.caja.modalconsultacuentacaja')
 @include('includes.contable.modalconsultacuentacontable')
 @include('compras.pagoproveedor.partials.documentos_relacionados_modal')
+@include('compras.pagoproveedor.partials.modal_devolver_retenciones')
 @endsection

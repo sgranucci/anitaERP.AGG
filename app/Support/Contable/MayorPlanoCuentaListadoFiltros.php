@@ -109,6 +109,12 @@ class MayorPlanoCuentaListadoFiltros
             'mostrar_columna_centrocosto' => $request->has('mostrar_columna_centrocosto')
                 ? $request->boolean('mostrar_columna_centrocosto')
                 : true,
+            'mostrar_titulo_cuenta' => $request->has('mostrar_titulo_cuenta')
+                ? $request->boolean('mostrar_titulo_cuenta')
+                : true,
+            'titulo_cuenta_combinado' => $request->has('titulo_cuenta_combinado')
+                ? $request->boolean('titulo_cuenta_combinado')
+                : true,
             'fuente_mayor' => MayorFuenteConsultaSupport::normalizarModo(
                 $request->input('fuente_mayor', MayorFuenteConsultaSupport::MODO_ERP)
             ),
@@ -171,6 +177,16 @@ class MayorPlanoCuentaListadoFiltros
     public static function mostrarColumnaCentrocosto(array $filtros): bool
     {
         return ($filtros['mostrar_columna_centrocosto'] ?? true) !== false;
+    }
+
+    public static function mostrarTituloCuenta(array $filtros): bool
+    {
+        return ($filtros['mostrar_titulo_cuenta'] ?? true) !== false;
+    }
+
+    public static function tituloCuentaCombinado(array $filtros): bool
+    {
+        return ($filtros['titulo_cuenta_combinado'] ?? true) !== false;
     }
 
     public static function moduloMovimientos(array $filtros): string
@@ -409,6 +425,8 @@ class MayorPlanoCuentaListadoFiltros
         }
 
         $out['mostrar_columna_centrocosto'] = self::mostrarColumnaCentrocosto($filtros) ? 1 : 0;
+        $out['mostrar_titulo_cuenta'] = self::mostrarTituloCuenta($filtros) ? 1 : 0;
+        $out['titulo_cuenta_combinado'] = self::tituloCuentaCombinado($filtros) ? 1 : 0;
 
         $fuenteMayor = MayorFuenteConsultaSupport::normalizarModo(
             $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
@@ -429,6 +447,8 @@ class MayorPlanoCuentaListadoFiltros
             $base['filtro_operador'],
             $base['excel_solapas_separadas'],
             $base['mostrar_columna_centrocosto'],
+            $base['mostrar_titulo_cuenta'],
+            $base['titulo_cuenta_combinado'],
             // La presentación no cambia el cálculo: totales y detalle salen del mismo cache.
             $base['presentacion_modulo'],
         );

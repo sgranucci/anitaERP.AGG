@@ -2015,5 +2015,32 @@ var montoPendienteSp = 0;
 
 		var inicial = $root.attr('data-flujo-inicial') || ($hidden.val() || 'general');
 		aplicar(inicial);
+
+		var $empresaIe = $('#empresa_id');
+		$empresaIe.data('empresa-prev', $empresaIe.val());
+		$empresaIe.on('change', function () {
+			if ($empresaIe.data('empresa-restaurando')) {
+				return;
+			}
+			var previa = String($empresaIe.data('empresa-prev') || '');
+			var actual = String($empresaIe.val() || '');
+			if (previa === actual) {
+				return;
+			}
+			var hayCuenta = false;
+			$('.cuentacaja_id, .cuentacaja_emitido_id, .cuentacaja_reemplazo_id').each(function () {
+				if (parseInt($(this).val() || '0', 10) > 0) {
+					hayCuenta = true;
+				}
+			});
+			if (!hayCuenta) {
+				$empresaIe.data('empresa-prev', actual);
+				return;
+			}
+			$empresaIe.data('empresa-restaurando', true);
+			$empresaIe.val(previa).trigger('change');
+			$empresaIe.data('empresa-restaurando', false);
+			alert('Quite las cuentas de caja antes de cambiar de empresa. Un movimiento no puede mezclar cuentas de otra empresa.');
+		});
 	}
 

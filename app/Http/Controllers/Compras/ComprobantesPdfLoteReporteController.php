@@ -45,7 +45,6 @@ class ComprobantesPdfLoteReporteController extends Controller
 
         $consultado = false;
         $filas = null;
-        $pdfs = [];
         $proveedoresIniciales = $this->proveedoresIniciales($filtros['proveedor_ids'] ?? []);
 
         if ($request->boolean('consultar') && ComprobantesPdfLoteFiltros::tieneCriteriosAplicados($filtros)) {
@@ -55,7 +54,6 @@ class ComprobantesPdfLoteReporteController extends Controller
             $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
             $page = max(1, (int) $request->input('page', 1));
             $filas = $this->reporteService->paginar($filtros, $perPage, $page);
-            $pdfs = $this->reporteService->resolverPdfs($filas->getCollection());
             $consultado = true;
         }
 
@@ -74,7 +72,6 @@ class ComprobantesPdfLoteReporteController extends Controller
             'proveedores_iniciales' => $proveedoresIniciales,
             'consultado' => $consultado,
             'filas' => $filas,
-            'pdfs' => $pdfs,
             'puede_editar' => true,
         ]);
     }
@@ -96,7 +93,8 @@ class ComprobantesPdfLoteReporteController extends Controller
             return redirect()->route('comprobantes_pdf_lote');
         }
 
-        $zip = $this->reporteService->armarZip($filtros);
+        $claves = ComprobantesPdfLoteFiltros::clavesDesdeRequest($request);
+        $zip = $this->reporteService->armarZip($filtros, $claves);
         $nombre = 'comprobantes_'.$filtros['fecha_desde'].'_'.$filtros['fecha_hasta'].'.zip';
 
         return response()->download($zip['ruta'], $nombre)->deleteFileAfterSend(true);

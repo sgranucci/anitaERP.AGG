@@ -55,6 +55,9 @@
             <td style="text-align: right;">
                 <h1 style="margin-top: 0;">Asiento contable Nº {{ $data->numeroasiento }}</h1>
                 <p class="muted" style="margin: 0;">Generado el {{ date('d/m/Y H:i') }}</p>
+                @if (! empty($data->copia_de_numeroasiento))
+                    <p class="muted" style="margin: 2px 0 0; font-size: 9px;">origen {{ $data->copia_de_numeroasiento }}</p>
+                @endif
             </td>
         </tr>
     </table>

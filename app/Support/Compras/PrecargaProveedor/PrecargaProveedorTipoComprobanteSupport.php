@@ -69,7 +69,9 @@ final class PrecargaProveedorTipoComprobanteSupport
         if (preg_match('/\bN\s*[.\/]?\s*D\.?\b|NOTA\s+DE\s+DEBITO|DEBIT\s*NOTE|\bND\b/', $t)) {
             return 'ND';
         }
-        if (preg_match('/\bN\s*[.\/]?\s*C\.?\b|NOTA\s+DE\s+CREDITO|CREDIT\s*NOTE|\bNC\b/', $t)) {
+        // "N/C" en nombres de factura (FNS/FNL/…) = no computable, no nota de crédito.
+        // Solo tipificar NC si es nota de crédito explícita o un token suelto N/C|NC.
+        if (self::textoEsNotaCredito($t)) {
             return 'NC';
         }
         if (preg_match('/\bRECIBO\b|\bREC\b/', $t)) {
@@ -80,6 +82,28 @@ final class PrecargaProveedorTipoComprobanteSupport
         }
 
         return 'FC';
+    }
+
+    /**
+     * ¿El texto tipifica una nota de crédito (no un IVA «N/C» = no computable)?
+     */
+    private static function textoEsNotaCredito(string $t): bool
+    {
+        if (preg_match('/NOTA\s+DE\s+CREDITO|CREDIT\s*NOTE/', $t)) {
+            return true;
+        }
+
+        // Token suelto (campo tipo = "NC" / "N/C" / "N.C.").
+        if (preg_match('/^(N\s*[.\/]?\s*C\.?|NC)$/', $t)) {
+            return true;
+        }
+
+        // "Factura N/C Servicios" / "FACTURA NO COMPUTABLE…" no son notas de crédito.
+        if (preg_match('/\bFACTURA\b|\bFAC\b/', $t)) {
+            return false;
+        }
+
+        return (bool) preg_match('/\bN\s*[.\/]?\s*C\.?\b|\bNC\b/', $t);
     }
 
     public static function etiqueta(string $tipo): string

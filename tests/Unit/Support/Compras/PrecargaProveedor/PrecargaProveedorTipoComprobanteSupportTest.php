@@ -21,4 +21,20 @@ class PrecargaProveedorTipoComprobanteSupportTest extends TestCase
         $this->assertSame('NC', PrecargaProveedorTipoComprobanteSupport::desdeCtipoScan('03'));
         $this->assertSame('FC', PrecargaProveedorTipoComprobanteSupport::desdeCtipoScan('FC'));
     }
+
+    public function test_factura_n_c_no_computable_es_factura_no_nota_credito(): void
+    {
+        $this->assertSame('FC', PrecargaProveedorTipoComprobanteSupport::normalizar('Factura N/C Servicios'));
+        $this->assertSame('FC', PrecargaProveedorTipoComprobanteSupport::normalizar('Factura N/C Locaciones'));
+        $this->assertSame('FC', PrecargaProveedorTipoComprobanteSupport::normalizar('FACTURA NO COMPUTABLE SERVICIOS'));
+        $this->assertSame('FC', PrecargaProveedorTipoComprobanteSupport::normalizar('FNS'));
+    }
+
+    public function test_nota_credito_sigue_siendo_nc(): void
+    {
+        $this->assertSame('NC', PrecargaProveedorTipoComprobanteSupport::normalizar('Nota de Crédito'));
+        $this->assertSame('NC', PrecargaProveedorTipoComprobanteSupport::normalizar('N/C'));
+        $this->assertSame('NC', PrecargaProveedorTipoComprobanteSupport::normalizar('NC'));
+        $this->assertSame('NC', PrecargaProveedorTipoComprobanteSupport::normalizar('Credit Note'));
+    }
 }

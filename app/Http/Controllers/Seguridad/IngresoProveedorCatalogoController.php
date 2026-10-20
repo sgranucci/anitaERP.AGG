@@ -62,7 +62,7 @@ class IngresoProveedorCatalogoController extends Controller
                 }
                 $datas = $query->orderBy('nombre')->get();
                 $titulo = $def['titulo'];
-                $view = \View::make('seguridad.ingreso_proveedor_catalogo.listado', compact('datas', 'titulo'))->render();
+                $view = \View::make('seguridad.ingreso_proveedor_catalogo.listado', compact('datas', 'titulo', 'tipo'))->render();
                 $path = storage_path('pdf/listados');
                 if (! is_dir($path)) {
                     mkdir($path, 0755, true);
@@ -176,11 +176,16 @@ class IngresoProveedorCatalogoController extends Controller
             'activo' => 'nullable|boolean',
         ]);
 
-        return [
+        $data = [
             'codigo' => $validated['codigo'] ?? null,
             'nombre' => $validated['nombre'],
             'activo' => $request->boolean('activo', true),
         ];
+        if (IngresoProveedorCatalogoSupport::tipoDesdeRequest($request) === 'motivo') {
+            $data['exige_oc'] = $request->boolean('exige_oc');
+        }
+
+        return $data;
     }
 
     private function rutaIndex(string $tipo): string

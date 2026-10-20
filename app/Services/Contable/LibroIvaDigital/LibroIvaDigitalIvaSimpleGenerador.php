@@ -110,10 +110,10 @@ class LibroIvaDigitalIvaSimpleGenerador
             $ventasDebito['lineas'],
             array_map(fn (array $fila) => LibroIvaDigitalIvaSimpleSupport::lineaDebitoFiscal($fila), $ajustes['detalle_debito']),
         );
-        $filasRestitucionDebito = array_merge(
+        $filasRestitucionDebito = array_values(array_filter(array_merge(
             $ventasRestitucion['lineas'],
             array_map(fn (array $fila) => LibroIvaDigitalIvaSimpleSupport::lineaDebitoFiscal($fila, true), $ajustes['detalle_restitucion_debito']),
-        );
+        ), static fn (string $linea): bool => $linea !== ''));
 
         $acumCredito = [];
         $acumRestitucionCredito = [];

@@ -10,8 +10,8 @@ use App\Support\Compras\ProveedorExclusionAnitaSupport;
  * Separa del mayor las líneas comparables con el archivo SICORE (generación/anulación
  * de retención en pago a proveedores) de pagos DDJJ, compensaciones y reclasificaciones.
  *
- * Comparable: OPP/AOP/OPA/OPV y devoluciones por cheque propio (CHP) que imputan la
- * cuenta de retención, con subd_emisor presente en el maestro de proveedores.
+ * Comparable: OPP/AOP/OPA/OPV y devoluciones (CHP u OPP con Debe en cuenta de retención)
+ * con subd_emisor presente en el maestro de proveedores.
  */
 final class SicoreMayorComparableSupport
 {
@@ -19,11 +19,12 @@ final class SicoreMayorComparableSupport
     private const TIPOS_PAGO_PROVEEDOR = ['OPP', 'AOP', 'OPA', 'OPV'];
 
     /**
-     * Devolución de retención pagada con cheque (banco vs cuenta 214…), sin AOP en retmov.
+     * Devolución de retención (banco/CHP vs cuenta 214…) sin AOP en retmov.
+     * El filtro Debe sobre la cuenta RGP vive en SicoreComprasDatosService.
      *
      * @var list<string>
      */
-    private const TIPOS_DEVOLUCION_CHEQUE = ['CHP'];
+    private const TIPOS_DEVOLUCION_RETENCION = ['CHP', 'OPP'];
 
     /**
      * Detalles del mayor que no representan retención generada en pago a proveedor.
@@ -149,12 +150,18 @@ final class SicoreMayorComparableSupport
         $tipo = strtoupper(trim($tipo));
 
         return in_array($tipo, self::TIPOS_PAGO_PROVEEDOR, true)
-            || in_array($tipo, self::TIPOS_DEVOLUCION_CHEQUE, true);
+            || in_array($tipo, self::TIPOS_DEVOLUCION_RETENCION, true);
     }
 
+    public static function esTipoDevolucionRetencion(string $tipo): bool
+    {
+        return in_array(strtoupper(trim($tipo)), self::TIPOS_DEVOLUCION_RETENCION, true);
+    }
+
+    /** @deprecated Usar {@see esTipoDevolucionRetencion()} */
     public static function esTipoDevolucionCheque(string $tipo): bool
     {
-        return in_array(strtoupper(trim($tipo)), self::TIPOS_DEVOLUCION_CHEQUE, true);
+        return self::esTipoDevolucionRetencion($tipo);
     }
 
     /**
@@ -168,7 +175,7 @@ final class SicoreMayorComparableSupport
         }
 
         $tipo = strtoupper(trim((string) ($mov['subd_tipo'] ?? $mov['tipo_comp'] ?? '')));
-        // CHP con proveedor válido ya pasó esLineaPagoProveedor (devolución comparable).
+        // CHP/OPP de devolución con proveedor válido ya pasó esLineaPagoProveedor.
         // Otros cheques (sin emisor proveedor) no entran al SICORE.
         if ($tipo === 'CHP' || str_starts_with($tipo, 'CH')) {
             return 'cheque_no_pago_proveedor';

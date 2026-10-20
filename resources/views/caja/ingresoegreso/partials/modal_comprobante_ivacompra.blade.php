@@ -8,7 +8,21 @@
         ->values();
 @endphp
 <style>
-    #modal-ie-comprobante-iva .ie-cp-dialog { max-width: 1180px; }
+    #modal-ie-comprobante-iva .ie-cp-dialog { max-width: 1280px; }
+    #modal-ie-comprobante-iva .ie-cp-col-conceptos { border-right: 1px solid #d5d8dc; }
+    #modal-ie-comprobante-iva .ie-cp-col-titulo {
+        background: #D4E6F1;
+        color: #1B4F72;
+        font-size: .75rem;
+        font-weight: 700;
+        letter-spacing: .03em;
+        text-transform: uppercase;
+        padding: .35rem .6rem;
+    }
+    #modal-ie-comprobante-iva .ie-cp-total-col {
+        background: #E8F8F5;
+        font-weight: 700;
+    }
     #modal-ie-comprobante-iva .modal-header { border-bottom: 0; padding-bottom: .35rem; }
     #modal-ie-comprobante-iva .ie-cp-subtitulo { opacity: .85; font-size: .8rem; font-weight: 400; }
     #modal-ie-comprobante-iva .modal-body { padding: 0; background: #f4f6f7; }
@@ -57,7 +71,7 @@
         color: #1B4F72;
         border: 1px solid #85C1E9;
     }
-    #modal-ie-comprobante-iva #ie-cp-conceptos-scroll { max-height: 320px; overflow-y: auto; }
+    #modal-ie-comprobante-iva .ie-cp-conceptos-scroll { max-height: 320px; overflow-y: auto; }
     #modal-ie-comprobante-iva #ie-cp-preview-scroll { max-height: 320px; overflow-y: auto; }
     #modal-ie-comprobante-iva .ie-cp-resumen {
         background: #EAF2F8;
@@ -71,6 +85,7 @@
      data-pdf-ia-url="{{ route('ingresoegreso_comprobante_iva_pdf_ia_preview') }}"
      data-duplicado-url="{{ route('ingresoegreso_comprobante_iva_validar_duplicado') }}"
      data-banco-url="{{ route('ingresoegreso_comprobante_iva_banco_cuenta') }}"
+     data-excel-url="{{ route('ingresoegreso_comprobante_iva_excel_preview') }}"
      data-descartar-url="{{ route('descartar_ai_decision') }}">
     <div class="modal-dialog modal-xl modal-dialog-scrollable ie-cp-dialog" role="document">
         <div class="modal-content">
@@ -241,29 +256,67 @@
                 </div>
 
                 <div class="row mx-2 mb-2">
-                    <div class="col-lg-5 px-2">
+                    <div class="col-12 px-2">
                         <div class="ie-cp-bloque mb-2" style="margin:0;">
                             <div class="ie-cp-bloque-head ie-cp-head-conceptos d-flex justify-content-between align-items-center">
                                 <span>Conceptos IVA</span>
-                                <button type="button" class="btn btn-sm btn-light py-0" id="ie-cp-agregar-concepto">
-                                    <i class="fa fa-plus"></i> Agregar
+                                <button type="button" class="btn btn-sm btn-light py-0" id="ie-cp-btn-excel">
+                                    <i class="fa fa-file-excel"></i> Importar Excel
                                 </button>
                             </div>
                             <div id="ie-cp-conceptos-tipo-aviso" class="alert alert-info d-none small mb-0 rounded-0 py-2"></div>
                             <div id="ie-cp-conceptos-coherencia-error" class="alert alert-danger d-none small mb-0 rounded-0 py-2"></div>
                             <div id="ie-cp-conceptos-coherencia-aviso" class="alert alert-info d-none small mb-0 rounded-0 py-2"></div>
                             <div id="ie-cp-asiento-avisos" class="alert alert-warning d-none small mb-0 rounded-0 py-2"></div>
-                            <div class="table-responsive" id="ie-cp-conceptos-scroll">
-                                <table class="table table-sm table-bordered mb-0" id="ie-cp-conceptos-table">
-                                    <thead style="background:#85C1E9;color:#17202A;">
-                                        <tr>
-                                            <th>Concepto</th>
-                                            <th style="width: 8rem;" class="text-right">Importe</th>
-                                            <th style="width: 2rem;"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="ie-cp-tbody-conceptos"></tbody>
-                                </table>
+                            <div class="row no-gutters" id="ie-cp-tbody-conceptos">
+                                <div class="col-md-6 ie-cp-col-conceptos">
+                                    <div class="ie-cp-col-titulo d-flex justify-content-between align-items-center">
+                                        <span>Netos / exentos</span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary py-0 ie-cp-agregar-concepto" data-columna="netos">
+                                            <i class="fa fa-plus"></i> Agregar
+                                        </button>
+                                    </div>
+                                    <div class="table-responsive ie-cp-conceptos-scroll">
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead style="background:#85C1E9;color:#17202A;">
+                                                <tr>
+                                                    <th>Concepto</th>
+                                                    <th style="width: 7.5rem;" class="text-right">Importe</th>
+                                                    <th style="width: 2rem;"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="ie-cp-tbody-netos"></tbody>
+                                        </table>
+                                    </div>
+                                    <div class="ie-cp-total-col d-flex justify-content-between px-2 py-1 border-top">
+                                        <span>Total netos / exentos</span>
+                                        <span id="ie-cp-total-netos">0.00</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="ie-cp-col-titulo d-flex justify-content-between align-items-center">
+                                        <span>Impuestos (puestos)</span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary py-0 ie-cp-agregar-concepto" data-columna="puestos">
+                                            <i class="fa fa-plus"></i> Agregar
+                                        </button>
+                                    </div>
+                                    <div class="table-responsive ie-cp-conceptos-scroll">
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead style="background:#85C1E9;color:#17202A;">
+                                                <tr>
+                                                    <th>Concepto</th>
+                                                    <th style="width: 7.5rem;" class="text-right">Importe</th>
+                                                    <th style="width: 2rem;"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="ie-cp-tbody-puestos"></tbody>
+                                        </table>
+                                    </div>
+                                    <div class="ie-cp-total-col d-flex justify-content-between px-2 py-1 border-top">
+                                        <span>Total impuestos</span>
+                                        <span id="ie-cp-total-puestos">0.00</span>
+                                    </div>
+                                </div>
                             </div>
                             <div class="ie-cp-resumen d-flex justify-content-between align-items-center">
                                 <span>Suma conceptos: <strong id="ie-cp-suma-conceptos">0.00</strong></span>
@@ -297,7 +350,7 @@
                             </template>
                         </div>
                     </div>
-                    <div class="col-lg-7 px-2">
+                    <div class="col-12 px-2 mt-2">
                         <div class="ie-cp-bloque mb-2" style="margin:0;">
                             <div class="ie-cp-bloque-head ie-cp-head-asiento">Vista previa del asiento</div>
                             <div class="px-3 pt-2">
@@ -365,6 +418,47 @@
                 <button type="button" class="btn btn-info" id="ie-cp-pdf-procesar">
                     <i class="fa fa-upload"></i> Procesar PDF
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-ie-comprobante-iva-excel" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fa fa-file-excel"></i> Importar conceptos desde Excel</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">
+                    Planilla de gastos: código corto o porcentaje, cuenta contable (por ejemplo 214010-005), descripción e importes.
+                    La vista previa indica si cada dato es cuenta contable o código de concepto, y con qué concepto se vincula.
+                    Los importes se cargan en valor absoluto.
+                </p>
+                <input type="file" id="ie-cp-excel-archivo" class="form-control-file" accept=".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv">
+                <div id="ie-cp-excel-error" class="alert alert-danger d-none mt-2"></div>
+                <div id="ie-cp-excel-aviso" class="alert alert-info d-none mt-2 small"></div>
+                <div class="table-responsive mt-2 d-none" id="ie-cp-excel-tabla-wrap">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead style="background:#1B4F72;color:#fff;">
+                            <tr>
+                                <th></th>
+                                <th>Fila</th>
+                                <th>Qué se detectó</th>
+                                <th>Cuenta / código</th>
+                                <th>Concepto</th>
+                                <th class="text-right">Importe</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ie-cp-excel-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-outline-success" id="ie-cp-excel-previsualizar">Ver vinculación</button>
+                <button type="button" class="btn btn-success" id="ie-cp-excel-aplicar" disabled>Aplicar importes</button>
             </div>
         </div>
     </div>

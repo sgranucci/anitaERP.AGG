@@ -38,6 +38,25 @@
     function sincronizarMotivoOtro() {
         var codigo = String($('#motivo_id option:selected').data('codigo') || $('#ingreso-modal-motivo_id option:selected').data('codigo') || '').toUpperCase();
         $('.ingreso-campo-motivo-otro').toggle(codigo === 'OTRO');
+        sincronizarExigeOc();
+    }
+
+    function sincronizarExigeOc() {
+        var $opt = $('#motivo_id option:selected');
+        var exige = String($opt.data('exigeOc') || $opt.attr('data-exige-oc') || '') === '1';
+        var $visitante = $('#es_visitante');
+        if (exige && $visitante.length && $visitante.is(':checked')) {
+            $visitante.prop('checked', false);
+            sincronizarVisitante(true);
+        }
+        if ($visitante.length) {
+            $visitante.prop('disabled', exige);
+        }
+        var obligatorio = exige && !($visitante.length && $visitante.is(':checked'));
+        $('#label-contrato').toggleClass('requerido', obligatorio);
+        $('#numero_contrato').prop('required', obligatorio && $('.ingreso-campo-contrato').is(':visible'));
+        $('.ingreso-ayuda-contrato-opcional').toggle(!obligatorio);
+        $('.ingreso-ayuda-contrato-obligatorio').toggle(obligatorio);
     }
 
     function payloadContrato() {
@@ -111,6 +130,7 @@
     $(function () {
         $('#es_visitante').on('change', function () {
             sincronizarVisitante(true);
+            sincronizarExigeOc();
         });
         sincronizarVisitante(false);
         $('#motivo_id, #ingreso-modal-motivo_id').on('change', sincronizarMotivoOtro);

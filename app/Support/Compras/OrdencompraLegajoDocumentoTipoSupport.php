@@ -73,11 +73,21 @@ final class OrdencompraLegajoDocumentoTipoSupport
             return 'FC';
         }
 
-        $abrev = (string) ($tipo->abreviatura ?? '');
+        $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
         $codigo = $tipo->codigoafip !== null ? (string) $tipo->codigoafip : null;
         $desdeAbrev = self::desdeAbreviatura($abrev, $codigo);
         if ($desdeAbrev !== 'FC') {
             return $desdeAbrev;
+        }
+
+        // Anita F** = factura. El nombre "Factura N/C …" es IVA no computable, no nota de crédito:
+        // no dejar que normalizar(nombre) pise la abreviatura.
+        if (strlen($abrev) >= 3 && $abrev[0] === 'F') {
+            if ((string) ($tipo->signo ?? 'S') === 'R') {
+                return 'NC';
+            }
+
+            return 'FC';
         }
 
         $porNombre = PrecargaProveedorTipoComprobanteSupport::normalizar((string) ($tipo->nombre ?? ''));

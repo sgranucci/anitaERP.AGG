@@ -67,6 +67,12 @@ class ValidacionIngresoEgreso extends FormRequest
             }
 
             try {
+                IngresoEgresoTransferenciaSupport::assertCuentasDeLaEmpresa($this->all());
+            } catch (InvalidArgumentException $e) {
+                $validator->errors()->add('cuentacaja_ids', $e->getMessage());
+            }
+
+            try {
                 IngresoEgresoTransferenciaSupport::assertBalanceado($this->all());
             } catch (InvalidArgumentException $e) {
                 $validator->errors()->add('tipotransaccion_caja_id', $e->getMessage());

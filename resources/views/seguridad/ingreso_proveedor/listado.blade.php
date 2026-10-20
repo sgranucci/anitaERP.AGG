@@ -46,6 +46,7 @@
             <tr>
                 <th>ID</th>
                 <th>Fecha</th>
+                <th>Empresa</th>
                 <th>Proveedor / Visitante</th>
                 <th>OC</th>
                 <th>Motivo de visita</th>
@@ -63,6 +64,7 @@
                 <tr>
                     <td>{{ $data->id }}</td>
                     <td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
+                    <td>{{ $data->empresas->nombre ?? ($data->nombreempresa ?? '') }}</td>
                     <td>{{ \App\Support\Seguridad\IngresoProveedorVisitanteSupport::etiquetaOrigen($data) }}{{ \App\Support\Seguridad\IngresoProveedorVisitanteSupport::esVisitante($data) ? ' (Visitante)' : '' }}</td>
                     <td>{{ $data->ordencompras->numeroordencompra ?? '' }}</td>
                     <td>{{ $data->motivos->nombre ?? '' }}</td>

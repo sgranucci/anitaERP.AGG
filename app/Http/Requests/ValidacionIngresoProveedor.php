@@ -82,10 +82,18 @@ class ValidacionIngresoProveedor extends FormRequest
             }
 
             $motivoId = (int) $this->input('motivo_id');
-            if ($motivoId > 0) {
-                $codigo = strtoupper((string) (IngresoProveedorMotivo::query()->whereKey($motivoId)->value('codigo') ?? ''));
+            $motivo = $motivoId > 0 ? IngresoProveedorMotivo::query()->find($motivoId) : null;
+            if ($motivo) {
+                $codigo = strtoupper((string) ($motivo->codigo ?? ''));
                 if ($codigo === 'OTRO' && trim((string) $this->input('motivo_otro', '')) === '') {
                     $v->errors()->add('motivo_otro', 'Indique el motivo cuando elige Otro.');
+                }
+                if ($motivo->exige_oc) {
+                    if ($this->boolean('es_visitante')) {
+                        $v->errors()->add('motivo_id', 'Este motivo exige una orden de compra. No se puede cargar como visitante.');
+                    } elseif ((int) $this->input('ordencompra_id') <= 0) {
+                        $v->errors()->add('ordencompra_id', 'Este motivo exige informar el número de OC (contrato / abono) antes de la visita.');
+                    }
                 }
             }
 

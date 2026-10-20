@@ -40,6 +40,25 @@ class MayorPlanoCuentaClasificadoExportSupportTest extends TestCase
         $this->assertCount(16, $row);
     }
 
+    public function test_fila_header_cuenta_sin_combinar_deja_el_nombre_en_la_cuenta(): void
+    {
+        $filtros = [
+            'mostrar_columna_centrocosto' => false,
+            'titulo_cuenta_combinado' => false,
+            'empresa_ids' => [1],
+            'consolidar_empresas' => true,
+        ];
+        $row = MayorPlanoCuentaClasificadoExportSupport::filaAColumnas([
+            'tipo_fila' => 'header_cuenta',
+            'cuenta_codigo' => '211010-001',
+            'cuenta_nombre' => 'Proveedores',
+        ], $filtros);
+
+        $this->assertSame('Cuenta: 211010-001 Proveedores', $row[0]);
+        $this->assertSame('', $row[7]);
+        $this->assertSame('', $row[1]);
+    }
+
     public function test_fila_total_cuenta_pone_debe_y_haber(): void
     {
         $filtros = [

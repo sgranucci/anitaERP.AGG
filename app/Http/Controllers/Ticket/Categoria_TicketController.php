@@ -50,7 +50,7 @@ class Categoria_TicketController extends Controller
     public function crear()
     {
         can('crear-categoria-ticket');
-        $areadestino_query = $this->areadestinoRepository->all();
+        $areadestino_query = $this->areadestinoRepository->allParaSeleccion();
 
         return view('ticket.categoria_ticket.crear', compact('areadestino_query'));
     }
@@ -97,7 +97,7 @@ class Categoria_TicketController extends Controller
         can('editar-categoria-ticket');
 
 		$data = $this->categoria_ticketRepository->find($id);
-        $areadestino_query = $this->areadestinoRepository->all();
+        $areadestino_query = $this->areadestinoRepository->allParaSeleccion($data->areadestino_id);
 
         return view('ticket.categoria_ticket.editar', compact('data', 'areadestino_query'));
     }

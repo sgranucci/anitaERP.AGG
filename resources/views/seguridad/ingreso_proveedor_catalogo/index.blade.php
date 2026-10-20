@@ -55,6 +55,9 @@
                             @if ($tipo === 'area')
                                 <th>Correos de aviso</th>
                             @endif
+                            @if ($tipo === 'motivo')
+                                <th>Exige OC</th>
+                            @endif
                             <th>Activo</th>
                             <th class="text-nowrap" style="width:80px" data-orderable="false"></th>
                         </tr>
@@ -83,6 +86,9 @@
                                         @empty
                                         @endforelse
                                     </td>
+                                @endif
+                                @if ($tipo === 'motivo')
+                                    <td>{{ $data->exige_oc ? 'Sí' : 'No' }}</td>
                                 @endif
                                 <td>{{ $data->activo ? 'Sí' : 'No' }}</td>
                                 <td class="text-nowrap align-middle">

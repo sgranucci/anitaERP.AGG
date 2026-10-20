@@ -127,14 +127,24 @@ function addWordTable($section, array $tabla): void
 
 function capturasParaSeccion(array $sec, array $capturasCfg): array
 {
-    $out = [];
-    foreach ($capturasCfg as $cap) {
+    $ids = [];
+    foreach ($capturasCfg as $key => $cap) {
         if (($cap['seccion'] ?? '') === ($sec['titulo'] ?? '')) {
-            $out[] = $cap;
+            $ids[] = $key;
         }
     }
     if (! empty($sec['captura_id']) && isset($capturasCfg[$sec['captura_id']])) {
-        $out[] = $capturasCfg[$sec['captura_id']];
+        $ids[] = $sec['captura_id'];
+    }
+    foreach ((array) ($sec['capturas_extra'] ?? []) as $extraId) {
+        if (isset($capturasCfg[$extraId])) {
+            $ids[] = $extraId;
+        }
+    }
+
+    $out = [];
+    foreach (array_values(array_unique($ids)) as $id) {
+        $out[] = $capturasCfg[$id];
     }
 
     return $out;

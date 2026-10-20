@@ -47,4 +47,44 @@ class XlsxStreamWriterTest extends TestCase
             @unlink($path.'.sheet.xml');
         }
     }
+
+    public function test_encabezado_de_reporte_lleva_titulo_y_logo(): void
+    {
+        $path = sys_get_temp_dir().'/mayor-plano-'.uniqid('', true).'.xlsx';
+        $logo = sys_get_temp_dir().'/mayor-logo-'.uniqid('', true).'.png';
+        file_put_contents($logo, base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+        ));
+
+        try {
+            $writer = new XlsxStreamWriter($path, 'Mayor por cuenta');
+            $writer->setEncabezadoReporte([
+                'Mayor analítico por cuenta contable',
+                'Generado 19/10/2026 16:30',
+            ], $logo);
+            $writer->escribirCabecera(['Fecha', 'Debe']);
+            $writer->escribirFila(['01/01/2026', 10]);
+            $info = $writer->cerrar();
+
+            $this->assertSame(1, $info['filas']);
+
+            $zip = new ZipArchive;
+            $this->assertTrue($zip->open($path) === true);
+            $sheet = (string) $zip->getFromName('xl/worksheets/sheet1.xml');
+            $this->assertNotFalse($zip->getFromName('xl/media/logo.png'));
+            $this->assertNotFalse($zip->getFromName('xl/drawings/drawing1.xml'));
+            $zip->close();
+
+            $this->assertStringContainsString('Mayor analítico por cuenta contable', $sheet);
+            $this->assertStringContainsString('Generado 19/10/2026 16:30', $sheet);
+            $this->assertStringContainsString('ySplit="4"', $sheet);
+            $this->assertStringContainsString('activeCell="A5"', $sheet);
+            $this->assertStringContainsString('autoFilter ref="A4:', $sheet);
+            $this->assertStringContainsString('<drawing r:id="rId1"/>', $sheet);
+        } finally {
+            @unlink($path);
+            @unlink($path.'.sheet.xml');
+            @unlink($logo);
+        }
+    }
 }

@@ -39,7 +39,15 @@ class ReporteDefinibleSupport
 
     public const LAYOUT_COMPARATIVO = 'comparativo';
 
+    /** Un bloque de columnas por mes: año anterior, mes, presupuesto y diferencias. */
+    public const LAYOUT_COMPARATIVO_MESES = 'comparativo_meses';
+
     public const LAYOUT_CCOSTO = 'ccosto';
+
+    /** Meses sueltos (no hace falta que sean consecutivos). */
+    public const MODO_MESES = 'meses';
+
+    public const MAX_MESES_COMPARATIVO = 12;
 
     /**
      * @return array<string, string>
@@ -49,6 +57,7 @@ class ReporteDefinibleSupport
         return [
             self::LAYOUT_PERIODOS => 'Por período / rango',
             self::LAYOUT_COMPARATIVO => 'Actual / Plan / Var / %',
+            self::LAYOUT_COMPARATIVO_MESES => 'Mes a mes · año ant. / mes / presupuesto',
             self::LAYOUT_CCOSTO => 'Centros de costo en columnas',
         ];
     }

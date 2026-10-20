@@ -77,6 +77,7 @@ final class PercepcionSufridaArchivoSupport
             if (abs($importe) < 0.009) {
                 continue;
             }
+            $cuit = self::cuitAgentePercepcionIva($cuit);
             $tipo = self::tipoComprobanteIva((string) ($linea['tipo'] ?? ''), $importe);
             $nro = self::numeroComprobanteIva(
                 $tipo,
@@ -133,8 +134,19 @@ final class PercepcionSufridaArchivoSupport
             str_starts_with($t, 'NC') => 3,
             str_starts_with($t, 'ND') => 4,
             in_array($t, ['REC', 'ING'], true) => 2,
-            in_array($t, ['FAC', 'FIS', 'FGA', 'FCP', 'FAE'], true) => 1,
+            in_array($t, ['FAC', 'FIS', 'FGA', 'FCP', 'FAE', 'FDT', 'FIB', 'FOV'], true) => 1,
             default => 5,
+        };
+    }
+
+    /**
+     * Itaú fue absorbido por Macro: el padrón ARCA rechaza 30-58018941-1.
+     */
+    public static function cuitAgentePercepcionIva(string $cuit): string
+    {
+        return match ($cuit) {
+            '30580189411' => '30500010084',
+            default => $cuit,
         };
     }
 
@@ -149,11 +161,8 @@ final class PercepcionSufridaArchivoSupport
 
             return sprintf('%05d-%08d', $sucursal % 100000, $nro % 100000000);
         }
-        if ($sucursal > 0) {
-            return $sucursal.'-'.$nro;
-        }
 
-        return (string) $nro;
+        return sprintf('%016d', $nro % 10000000000000000);
     }
 
     public static function cuitConGuiones(string $cuit): string

@@ -696,6 +696,13 @@ function mayorPlanoAgregarCcDesdeCampo() {
 }
 
 $(function () {
+    function mayorPlanoSincronizarTituloCuenta() {
+        var visible = $('#mostrar_titulo_cuenta').is(':checked');
+        $('#mpc-titulo-cuenta-combinado-wrap').toggleClass('d-none', !visible);
+    }
+    $('#mostrar_titulo_cuenta').on('change', mayorPlanoSincronizarTituloCuenta);
+    mayorPlanoSincronizarTituloCuenta();
+
     activaEventosMayorPlanoCuentaFiltro();
     mayorPlanoCargarCentrocostosDesdeDom();
 

@@ -30,6 +30,7 @@
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/workbench.js') }}?v={{ file_exists($workbenchJs) ? filemtime($workbenchJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/devolver-retenciones.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/devolver-retenciones.js')) ?: time() }}" type="text/javascript"></script>
 @include('compras.pagoproveedor.partials.documentos_relacionados_script')
 @php
     $graficoSeriesJs = array_values(array_filter($graficoSeries ?? [], static fn ($serie) => ($serie['labels'] ?? []) !== []));
@@ -430,6 +431,18 @@
                                             </button>
                                         @endif
                                         @if (
+                                            can('devolver-retenciones-pagoproveedor', false)
+                                            && $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
+                                            && $fila->revertible
+                                        )
+                                            <button type="button"
+                                                class="btn-accion-tabla tooltipsC js-op-devolver-retenciones text-info"
+                                                title="Devolver retenciones (parcial)"
+                                                data-pagoproveedor-id="{{ $fila->id }}">
+                                                <i class="fa fa-reply"></i>
+                                            </button>
+                                        @endif
+                                        @if (
                                             can('revertir-pagoproveedor', false)
                                             && $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
                                             && $fila->revertible
@@ -460,5 +473,6 @@
 </div>
 @include('compras.pagoproveedor.partials.workbench_modales')
 @include('compras.pagoproveedor.partials.modal_enviar_proveedor')
+@include('compras.pagoproveedor.partials.modal_devolver_retenciones')
 @include('compras.pagoproveedor.partials.documentos_relacionados_modal')
 @endsection

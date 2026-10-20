@@ -59,6 +59,8 @@ class LibroIvaDigitalComprasGenerador
         $clavesUsadas = [];
         /** @var array<int, true> $nrosInternosUsados */
         $nrosInternosUsados = [];
+        /** @var array<string, true> $cbtesUsados */
+        $cbtesUsados = [];
 
         // Anita es el libro de compras (Portal). El ERP solo aporta lo que no está en Anita:
         // si se prioriza ERP, un comprobante con conceptos incompletos tapa el concmov de Anita
@@ -147,11 +149,11 @@ class LibroIvaDigitalComprasGenerador
                     $totalImporte,
                     $totalIva,
                 );
+                $cbtesUsados[$this->claveCbte($registro)] = true;
                 $conteoAnita++;
             }
         }
 
-        if (! $completarAnita) {
         $this->queryCompras($empresaId, $desde, $hasta)
             ->with([
                 'proveedores.tipoempresas',
@@ -172,6 +174,7 @@ class LibroIvaDigitalComprasGenerador
                 &$totalIva,
                 &$clavesUsadas,
                 &$nrosInternosUsados,
+                &$cbtesUsados,
                 $prorrateoGlobal,
                 &$registros,
                 &$omitidosSinCuit,
@@ -190,6 +193,9 @@ class LibroIvaDigitalComprasGenerador
 
                 $registro = $this->armarRegistroCompra($cp, $prorrateoGlobal);
                 if ($registro === null) {
+                    return;
+                }
+                if (isset($cbtesUsados[$this->claveCbte($registro)])) {
                     return;
                 }
 
@@ -243,8 +249,8 @@ class LibroIvaDigitalComprasGenerador
                     $totalImporte,
                     $totalIva,
                 );
+                $cbtesUsados[$this->claveCbte($registro)] = true;
             });
-        }
 
         $totalesPortal = LibroIvaDigitalIvaSimpleSupport::creditoDesdeRegistrosLibro($registros, $prorrateoGlobal);
 
@@ -318,6 +324,16 @@ class LibroIvaDigitalComprasGenerador
             'tipo_abrev' => $tipoAbrev,
             'letra' => strtoupper(substr(trim($letra), 0, 1)),
         ];
+    }
+
+    private function claveCbte(array $registro): string
+    {
+        $cab = $registro['cabecera'] ?? [];
+
+        return str_pad((string) ($cab['tipo_comprobante'] ?? ''), 3, '0', STR_PAD_LEFT)
+            .'|'.(int) ($cab['punto_venta'] ?? 0)
+            .'|'.(int) ($cab['numero_comprobante'] ?? 0)
+            .'|'.preg_replace('/\D+/', '', (string) ($cab['numero_identificacion'] ?? ''));
     }
 
     private function queryCompras(int $empresaId, string $desde, string $hasta): Builder

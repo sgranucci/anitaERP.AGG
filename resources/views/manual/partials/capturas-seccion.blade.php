@@ -11,6 +11,11 @@
     if (! empty($sec['captura_id']) && isset($capturasCfg[$sec['captura_id']])) {
         $ids[] = $sec['captura_id'];
     }
+    foreach ((array) ($sec['capturas_extra'] ?? []) as $extraId) {
+        if (isset($capturasCfg[$extraId])) {
+            $ids[] = $extraId;
+        }
+    }
     $ids = array_values(array_unique($ids));
     $imgDir = public_path($imgPublicPrefix);
 @endphp

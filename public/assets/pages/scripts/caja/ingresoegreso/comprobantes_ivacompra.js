@@ -25,6 +25,8 @@
     var iaDecisionPendienteModal = false;
     var bancoGastoActual = null;
     var bancoGastoSeq = 0;
+    var excelPreviewFilas = [];
+    var TIPOS_PUESTO_IE = { I: 1, P: 1, B: 1, M: 1, T: 1, S: 1, A: 1, V: 1 };
 
     function parseJsonEl(id, fallback) {
         try {
@@ -394,7 +396,7 @@
         };
     }
 
-    function agregarFilaConcepto(data) {
+    function agregarFilaConcepto(data, columna) {
         var $tpl = $($('#ie-cp-template-concepto').html());
         if (data) {
             var conceptoId = parseInt(data.concepto_ivacompra_id || '0', 10) || 0;
@@ -422,8 +424,44 @@
                 };
             }
         }
-        $('#ie-cp-tbody-conceptos').append($tpl);
+        ubicarFilaConcepto($tpl, columna || columnaDesdeData(data));
         return $tpl;
+    }
+
+    function esConceptoPuestoIe(tipo) {
+        return !!TIPOS_PUESTO_IE[String(tipo || '').toUpperCase()];
+    }
+
+    function columnaDesdeData(data) {
+        if (!data) {
+            return 'netos';
+        }
+        var tipo = String(data.tipoconcepto || '');
+        if (!tipo && data.concepto_ivacompra_id) {
+            tipo = String((conceptosMeta[String(data.concepto_ivacompra_id)] || {}).tipoconcepto || '');
+        }
+        return esConceptoPuestoIe(tipo) ? 'puestos' : 'netos';
+    }
+
+    function vaciarListasConceptos() {
+        $('#ie-cp-tbody-netos, #ie-cp-tbody-puestos').empty();
+    }
+
+    function ubicarFilaConcepto($row, columnaForzada) {
+        var columna = columnaForzada || 'netos';
+        if (!columnaForzada) {
+            var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+            var tipo = String((conceptosMeta[String(conceptoId)] || {}).tipoconcepto || '');
+            if (tipo) {
+                columna = esConceptoPuestoIe(tipo) ? 'puestos' : 'netos';
+            } else if ($row.closest('#ie-cp-tbody-puestos').length) {
+                columna = 'puestos';
+            }
+        }
+        var $dest = columna === 'puestos' ? $('#ie-cp-tbody-puestos') : $('#ie-cp-tbody-netos');
+        if ($dest.length && $row.parent()[0] !== $dest[0]) {
+            $dest.append($row);
+        }
     }
 
     function refrescarCuentaFila($row) {
@@ -530,7 +568,7 @@
         iaSugerenciaHash = null;
         iaDecisionPendienteModal = false;
         $('#ie-cp-edit-index').val('');
-        $('#ie-cp-tbody-conceptos').empty();
+        vaciarListasConceptos();
         agregarFilaConcepto(null);
         $('#ie-cp-tipo-tesoreria').val('FONDO_FIJO');
         aplicarTipoComprobanteEnModal(0, false);
@@ -685,7 +723,7 @@
         var seq = ++precargaTipoSeq;
         if (id <= 0) {
             if (!conceptosTienenMontos()) {
-                $('#ie-cp-tbody-conceptos').empty();
+                vaciarListasConceptos();
                 agregarFilaConcepto(null);
                 $('#ie-cp-conceptos-tipo-aviso').addClass('d-none').empty();
             }
@@ -710,7 +748,7 @@
                 debitosGastoTocados = false;
                 debitosGastoSemilla = null;
                 cuentasGastoManual = {};
-                $('#ie-cp-tbody-conceptos').empty();
+                vaciarListasConceptos();
                 if (!lista.length) {
                     agregarFilaConcepto(null);
                     var abrevVacio = abreviaturaTipoActual();
@@ -773,6 +811,16 @@
             suma += parseFloat($(this).val() || '0') || 0;
         });
         $('#ie-cp-suma-conceptos').text(formatoNumero(suma));
+        var sumaNetos = 0;
+        var sumaPuestos = 0;
+        $('#ie-cp-tbody-netos .ie-cp-monto').each(function () {
+            sumaNetos += parseFloat($(this).val() || '0') || 0;
+        });
+        $('#ie-cp-tbody-puestos .ie-cp-monto').each(function () {
+            sumaPuestos += parseFloat($(this).val() || '0') || 0;
+        });
+        $('#ie-cp-total-netos').text(formatoNumero(sumaNetos));
+        $('#ie-cp-total-puestos').text(formatoNumero(sumaPuestos));
         var total = parseFloat($('#ie-cp-total').val() || '0') || 0;
         var $dif = $('#ie-cp-dif-conceptos');
         if (!$dif.length) {
@@ -812,6 +860,28 @@
         return Math.round(suma * 100) / 100;
     }
 
+    function totalOperacionPrincipalIe() {
+        var debe = parseFloat($('#totaldebe').val() || '0') || 0;
+        var haber = parseFloat($('#totalhaber').val() || '0') || 0;
+        return Math.round((debe > haber ? debe : haber) * 100) / 100;
+    }
+
+    function sumaComprobantesCargados(excluirIdx) {
+        var suma = 0;
+        comprobantesIva.forEach(function (c, i) {
+            if (excluirIdx !== null && excluirIdx !== undefined && i === excluirIdx) {
+                return;
+            }
+            suma += parseFloat(c && c.total) || 0;
+        });
+        return Math.round(suma * 100) / 100;
+    }
+
+    function saldoPendienteComprobanteIe(excluirIdx) {
+        var resto = totalOperacionPrincipalIe() - sumaComprobantesCargados(excluirIdx);
+        return Math.round(resto * 100) / 100;
+    }
+
     function abrirModal(idx) {
         limpiarModal();
         if (idx !== null && idx !== undefined && comprobantesIva[idx]) {
@@ -843,7 +913,7 @@
             iaDecisionId = c.ai_decision_id || null;
             iaSugerenciaHash = c.ai_sugerencia_hash || null;
             iaDecisionPendienteModal = false;
-            $('#ie-cp-tbody-conceptos').empty();
+            vaciarListasConceptos();
             (c.conceptos || []).forEach(function (concepto) {
                 agregarFilaConcepto(concepto);
             });
@@ -860,6 +930,11 @@
             }
         } else {
             $('#modal-ie-comprobante-iva-titulo').text('Nuevo comprobante IVA');
+            var saldo = saldoPendienteComprobanteIe(null);
+            if (saldo > 0.009) {
+                $('#ie-cp-total').val(saldo.toFixed(2));
+                actualizarSumaConceptos();
+            }
         }
         $('#modal-ie-comprobante-iva')
             .off('shown.bs.modal.ieCpFocoTipo')
@@ -1865,7 +1940,7 @@
             $('#ie-cp-cae').val(cab.numerocae || '');
             $('#ie-cp-tipo-autorizacion').val(cab.tipo_autorizacion || (cab.numerocae ? 'CAE' : ''));
             actualizarFilaAutorizacion();
-            $('#ie-cp-tbody-conceptos').empty();
+            vaciarListasConceptos();
             (data.conceptos || []).forEach(function (c) {
                 agregarFilaConcepto(c);
             });
@@ -1885,6 +1960,191 @@
         });
     }
 
+    function etiquetaDetectadoExcel(fila) {
+        var map = {
+            cuenta_contable: 'Cuenta contable',
+            codigo_concepto: 'Código de concepto',
+            ambos: 'Cuenta y código',
+            ambiguo: 'Revisar',
+            cuenta_sin_concepto: 'Cuenta sin concepto',
+            codigo_sin_concepto: 'Código sin concepto',
+            sin_vinculo: 'Sin vínculo',
+        };
+        return fila.detectado_etiqueta || map[fila.detectado] || 'Sin vínculo';
+    }
+
+    function renderPreviewExcel(filas) {
+        excelPreviewFilas = filas || [];
+        var $tbody = $('#ie-cp-excel-tbody');
+        $tbody.empty();
+        excelPreviewFilas.forEach(function (fila, idx) {
+            var opciones = '';
+            (fila.alternativas || []).forEach(function (alt) {
+                var via = alt.via === 'cuenta_contable' ? 'cuenta' : (alt.via === 'codigo_concepto' ? 'código' : '');
+                var texto = (alt.codigo || '') + ' ' + (alt.nombre || '');
+                if (via) {
+                    texto += ' (' + via + ')';
+                }
+                opciones += '<option value="' + alt.id + '"' + (parseInt(alt.id, 10) === parseInt(fila.concepto_id, 10) ? ' selected' : '') + '>'
+                    + $('<div>').text(texto).html() + '</option>';
+            });
+            var conceptoHtml = opciones
+                ? '<select class="form-control form-control-sm ie-cp-excel-concepto" data-idx="' + idx + '">' + opciones + '</select>'
+                : '<span class="text-muted">Sin concepto</span>';
+            var cuentaTxt = fila.valor_cuenta
+                ? (fila.valor_cuenta + (fila.cuenta_nombre ? ' · ' + fila.cuenta_nombre : ''))
+                : (fila.valor_codigo || '—');
+            var clase = fila.detectado === 'ambiguo' || fila.detectado === 'cuenta_sin_concepto' || fila.detectado === 'codigo_sin_concepto' || fila.detectado === 'sin_vinculo'
+                ? 'table-warning' : '';
+            $tbody.append(
+                '<tr class="' + clase + '">' +
+                '<td><input type="checkbox" class="ie-cp-excel-aplicar" data-idx="' + idx + '"' + (fila.aplicar ? ' checked' : '') + (fila.concepto_id ? '' : ' disabled') + '></td>' +
+                '<td>' + fila.fila + '</td>' +
+                '<td>' + $('<div>').text(etiquetaDetectadoExcel(fila)).html() +
+                    (fila.descripcion ? '<div class="small text-muted">' + $('<div>').text(fila.descripcion).html() + '</div>' : '') +
+                '</td>' +
+                '<td>' + $('<div>').text(cuentaTxt).html() + '</td>' +
+                '<td>' + conceptoHtml + '</td>' +
+                '<td class="text-right">' + formatoNumero(fila.importe) + '</td>' +
+                '</tr>'
+            );
+        });
+        $('#ie-cp-excel-tabla-wrap').toggleClass('d-none', excelPreviewFilas.length === 0);
+        $('#ie-cp-excel-aplicar').prop('disabled', excelPreviewFilas.length === 0);
+    }
+
+    function aplicarPreviewExcel() {
+        var porConcepto = {};
+        $('#ie-cp-excel-tbody .ie-cp-excel-aplicar:checked').each(function () {
+            var idx = parseInt($(this).data('idx'), 10);
+            var fila = excelPreviewFilas[idx];
+            if (!fila) {
+                return;
+            }
+            var conceptoId = parseInt(fila.concepto_id || '0', 10) || 0;
+            var $sel = $('#ie-cp-excel-tbody .ie-cp-excel-concepto[data-idx="' + idx + '"]');
+            if ($sel.length) {
+                conceptoId = parseInt($sel.val() || '0', 10) || 0;
+            }
+            if (conceptoId <= 0) {
+                return;
+            }
+            var alt = null;
+            (fila.alternativas || []).forEach(function (item) {
+                if (parseInt(item.id, 10) === conceptoId) {
+                    alt = item;
+                }
+            });
+            if (!porConcepto[conceptoId]) {
+                porConcepto[conceptoId] = {
+                    concepto_ivacompra_id: conceptoId,
+                    concepto_codigo: (alt && alt.codigo) || fila.concepto_codigo || '',
+                    concepto_nombre: (alt && alt.nombre) || fila.concepto_nombre || '',
+                    tipoconcepto: (alt && alt.tipoconcepto) || fila.tipoconcepto || '',
+                    cuenta_debe_id: (alt && alt.cuenta_debe_id) || fila.cuenta_debe_id || 0,
+                    cuenta_debe_codigo: (alt && alt.cuenta_debe_codigo) || fila.cuenta_debe_codigo || '',
+                    cuenta_debe_nombre: (alt && alt.cuenta_debe_nombre) || fila.cuenta_debe_nombre || '',
+                    monto: 0,
+                };
+            }
+            porConcepto[conceptoId].monto += parseFloat(fila.importe) || 0;
+        });
+
+        var ids = Object.keys(porConcepto);
+        if (!ids.length) {
+            alert('No hay filas con concepto para aplicar.');
+            return;
+        }
+        ids.forEach(function (id) {
+            var info = porConcepto[id];
+            info.monto = Math.round(info.monto * 100) / 100;
+            incorporarMetaConceptoTipo({
+                id: info.concepto_ivacompra_id,
+                codigo: info.concepto_codigo,
+                nombre: info.concepto_nombre,
+                tipoconcepto: info.tipoconcepto,
+                cuenta_debe_id: info.cuenta_debe_id,
+                cuenta_debe_codigo: info.cuenta_debe_codigo,
+                cuenta_debe_nombre: info.cuenta_debe_nombre,
+            });
+            var $row = $('#ie-cp-tbody-conceptos .ie-cp-fila-concepto').filter(function () {
+                return parseInt($(this).find('.concepto_ivacompra_id').val() || '0', 10) === parseInt(id, 10);
+            }).first();
+            if (!$row.length) {
+                $row = agregarFilaConcepto({
+                    concepto_ivacompra_id: info.concepto_ivacompra_id,
+                    concepto_codigo: info.concepto_codigo,
+                    concepto_nombre: info.concepto_nombre,
+                    tipoconcepto: info.tipoconcepto,
+                    monto: info.monto.toFixed(2),
+                    cuentacontabledebe_id: info.cuenta_debe_id,
+                    cuenta_codigo: info.cuenta_debe_codigo,
+                    cuenta_nombre: info.cuenta_debe_nombre,
+                });
+            } else {
+                $row.find('.ie-cp-monto').val(info.monto.toFixed(2));
+                ubicarFilaConcepto($row);
+            }
+        });
+        $('#ie-cp-tbody-netos .ie-cp-fila-concepto, #ie-cp-tbody-puestos .ie-cp-fila-concepto').each(function () {
+            var id = parseInt($(this).find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+            var monto = parseFloat($(this).find('.ie-cp-monto').val() || '0') || 0;
+            if (id <= 0 && Math.abs(monto) < 0.0001) {
+                $(this).remove();
+            }
+        });
+        aplicarIvaDesdeGravados();
+        actualizarSumaConceptos();
+        programarPreview();
+        $('#modal-ie-comprobante-iva-excel').modal('hide');
+    }
+
+    function previsualizarExcelIe() {
+        var input = document.getElementById('ie-cp-excel-archivo');
+        var archivo = input && input.files && input.files[0];
+        var $error = $('#ie-cp-excel-error');
+        $error.addClass('d-none').text('');
+        if (!archivo) {
+            $error.removeClass('d-none').text('Seleccione un archivo Excel.');
+            return;
+        }
+        var empresaId = parseInt($('#empresa_id').val() || '0', 10) || 0;
+        if (empresaId <= 0) {
+            $error.removeClass('d-none').text('Seleccione la empresa del ingreso o egreso antes de importar.');
+            return;
+        }
+        var url = $('#modal-ie-comprobante-iva').data('excel-url');
+        var datos = new FormData();
+        datos.append('archivo', archivo);
+        datos.append('empresa_id', String(empresaId));
+        datos.append('_token', $('meta[name="csrf-token"]').attr('content') || '');
+        $('#ie-cp-excel-previsualizar, #ie-cp-excel-aplicar').prop('disabled', true);
+        $.ajax({
+            url: url,
+            method: 'POST',
+            data: datos,
+            processData: false,
+            contentType: false,
+            dataType: 'json',
+        }).done(function (res) {
+            if (!res || res.mensaje !== 'ok') {
+                $error.removeClass('d-none').text((res && res.error) || 'No se pudo leer el archivo.');
+                return;
+            }
+            $('#ie-cp-excel-aviso').removeClass('d-none').text(res.aviso || '');
+            renderPreviewExcel(res.filas || []);
+            if (!(res.filas || []).length) {
+                $error.removeClass('d-none').text('El archivo no tiene filas con cuenta, código o importe.');
+            }
+        }).fail(function (xhr) {
+            var msg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'No se pudo leer el archivo.';
+            $error.removeClass('d-none').text(msg);
+        }).always(function () {
+            $('#ie-cp-excel-previsualizar').prop('disabled', false);
+            $('#ie-cp-excel-aplicar').prop('disabled', excelPreviewFilas.length === 0);
+        });
+    }
+
     $(function () {
         init();
 
@@ -1899,8 +2159,37 @@
         });
 
         $('#ie-cp-pdf-procesar').on('click', procesarPdf);
-        $('#ie-cp-agregar-concepto').on('click', function () {
-            agregarFilaConcepto(null);
+        $('#ie-cp-btn-excel').on('click', function () {
+            $('#ie-cp-excel-archivo').val('');
+            $('#ie-cp-excel-error').addClass('d-none').text('');
+            $('#ie-cp-excel-aviso').addClass('d-none').text('');
+            $('#ie-cp-excel-tbody').empty();
+            $('#ie-cp-excel-tabla-wrap').addClass('d-none');
+            $('#ie-cp-excel-aplicar').prop('disabled', true);
+            excelPreviewFilas = [];
+            $('#modal-ie-comprobante-iva-excel').modal('show');
+        });
+        $('#ie-cp-excel-previsualizar').on('click', previsualizarExcelIe);
+        $('#ie-cp-excel-aplicar').on('click', aplicarPreviewExcel);
+        $('#modal-ie-comprobante-iva-excel').on('hidden.bs.modal', function () {
+            if ($('#modal-ie-comprobante-iva').hasClass('show')) {
+                $('body').addClass('modal-open');
+            }
+        });
+        $(document).on('change', '.ie-cp-excel-concepto', function () {
+            var idx = parseInt($(this).data('idx'), 10);
+            if (excelPreviewFilas[idx]) {
+                excelPreviewFilas[idx].concepto_id = parseInt($(this).val() || '0', 10) || 0;
+                excelPreviewFilas[idx].aplicar = excelPreviewFilas[idx].concepto_id > 0;
+            }
+            var $check = $('#ie-cp-excel-tbody .ie-cp-excel-aplicar[data-idx="' + idx + '"]');
+            $check.prop('disabled', !(parseInt($(this).val() || '0', 10) > 0));
+            if (parseInt($(this).val() || '0', 10) > 0) {
+                $check.prop('checked', true);
+            }
+        });
+        $(document).on('click', '.ie-cp-agregar-concepto', function () {
+            agregarFilaConcepto(null, $(this).data('columna') === 'puestos' ? 'puestos' : 'netos');
         });
 
         $('#ie-cp-tipo-tesoreria').on('change', aplicarModoProveedor);
@@ -2050,6 +2339,10 @@
                 }).last();
             }
             if ($row && $row.length) {
+                if (data && data.id) {
+                    incorporarMetaConceptoTipo(data);
+                }
+                ubicarFilaConcepto($row);
                 aplicarIvaDesdeGravados();
             }
             programarPreview();

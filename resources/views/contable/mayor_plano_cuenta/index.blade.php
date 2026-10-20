@@ -191,6 +191,24 @@
                                             Mostrar columna centro de costo
                                         </label>
                                     </div>
+                                    <div class="d-flex flex-wrap align-items-center mt-2">
+                                        <div class="form-check mb-0">
+                                            <input type="hidden" name="mostrar_titulo_cuenta" value="0">
+                                            <input class="form-check-input" type="checkbox" name="mostrar_titulo_cuenta" id="mostrar_titulo_cuenta" value="1"
+                                                @checked(\App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarTituloCuenta($filtros ?? []))>
+                                            <label class="form-check-label" for="mostrar_titulo_cuenta">
+                                                Mostrar t&iacute;tulo de cuenta
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-0 ml-3{{ \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarTituloCuenta($filtros ?? []) ? '' : ' d-none' }}" id="mpc-titulo-cuenta-combinado-wrap">
+                                            <input type="hidden" name="titulo_cuenta_combinado" value="0">
+                                            <input class="form-check-input" type="checkbox" name="titulo_cuenta_combinado" id="titulo_cuenta_combinado" value="1"
+                                                @checked(\App\Support\Contable\MayorPlanoCuentaListadoFiltros::tituloCuentaCombinado($filtros ?? []))>
+                                            <label class="form-check-label" for="titulo_cuenta_combinado">
+                                                T&iacute;tulo en una sola l&iacute;nea
+                                            </label>
+                                        </div>
+                                    </div>
                                     <small class="text-muted d-block mt-2">
                                         <span id="mpc-ayuda-subdiario-anita" class="{{ $ocultarIncluyeSubdiario ? 'd-none' : '' }}">
                                             Fuente Anita: el subdiario Informix completa imputaciones que no est&aacute;n en ctamov.
@@ -201,7 +219,7 @@
                                         Con un m&oacute;dulo elegido se usa ese subdiario (V ventas, C compras, T caja;
                                         cuentas a pagar = &oacute;rdenes de pago) m&aacute;s el ctamov de origen ERP, sin saldo anterior.
                                         Totales agrupa por cuenta; Movimientos muestra cada imputaci&oacute;n.
-                                        La columna de centro de costo queda grabada como preferencia del usuario.
+                                        La columna de centro de costo, el t&iacute;tulo de cuenta y si va en una sola l&iacute;nea quedan grabados como preferencia del usuario.
                                     </small>
                                 </div>
                             </div>
@@ -448,6 +466,10 @@
                         #tabla-mayor-plano tbody tr.mpc-fila-cuenta .mpc-cuenta-nombre {
                             font-weight: 600;
                             opacity: 0.95;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-cuenta-separada > td {
+                            border-right: 1px solid rgba(255, 255, 255, 0.28);
+                            white-space: nowrap;
                         }
                         #tabla-mayor-plano tbody tr.mpc-fila-cc > td {
                             background: #d5f5e3 !important;

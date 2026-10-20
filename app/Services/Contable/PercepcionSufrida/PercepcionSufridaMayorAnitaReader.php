@@ -55,6 +55,7 @@ final class PercepcionSufridaMayorAnitaReader
         );
 
         $out = [];
+        $icoPorAsiento = $this->icoPorAsiento($subdiario);
         foreach ($ctamov as $fila) {
             $imp = AnitaSubdiarioMayorSupport::imputacionLineaCtamov($fila);
             if ($imp === null || (int) $imp['cuenta'] !== $cuenta) {
@@ -66,7 +67,17 @@ final class PercepcionSufridaMayorAnitaReader
                 continue;
             }
             $tipo = strtoupper(trim((string) ($fila->ctav_tipo ?? '')));
-            if ($this->esProvisionCierre($fila->ctav_tipo_asiento ?? '', (int) ($fila->ctav_nro ?? 0))) {
+            $nro = (int) ($fila->ctav_nro ?? 0);
+            $sucursal = (int) ($fila->ctav_sucursal ?? 0);
+            $letra = (string) ($fila->ctav_letra ?? '');
+            if ($tipo === 'EGR' && isset($icoPorAsiento[$nro])) {
+                $ref = $icoPorAsiento[$nro];
+                $tipo = $ref['tipo'];
+                $nro = $ref['nro'];
+                $sucursal = $ref['sucursal'];
+                $letra = $ref['letra'];
+            }
+            if ($this->esProvisionCierre($fila->ctav_tipo_asiento ?? '', $nro)) {
                 continue;
             }
             $sistema = strtoupper(trim((string) ($fila->ctav_sistema ?? '')));
@@ -75,9 +86,9 @@ final class PercepcionSufridaMayorAnitaReader
             $out[] = PercepcionSufridaLineaSupport::armar([
                 'fecha' => $this->fecha((int) ($fila->ctav_fecha ?? 0)),
                 'tipo' => $tipo,
-                'letra' => (string) ($fila->ctav_letra ?? ''),
-                'sucursal' => (int) ($fila->ctav_sucursal ?? 0),
-                'nro' => (int) ($fila->ctav_nro ?? 0),
+                'letra' => $letra,
+                'sucursal' => $sucursal,
+                'nro' => $nro,
                 'emisor' => $emisor['entidad'] === MayorPlanoCuentaEmisorSupport::ENTIDAD_PROVEEDOR ? $emisor['codigo'] : '',
                 'descripcion' => $desc,
                 'importe' => $importe,
@@ -127,6 +138,33 @@ final class PercepcionSufridaMayorAnitaReader
         }
 
         return $this->sinDuplicar($out);
+    }
+
+    /**
+     * Un EGR del mayor trae el número de asiento. La ICO referenciada en el subdiario es el comprobante.
+     *
+     * @param  list<object>  $subdiario
+     * @return array<int, array{tipo: string, nro: int, sucursal: int, letra: string}>
+     */
+    private function icoPorAsiento(array $subdiario): array
+    {
+        $map = [];
+        foreach ($subdiario as $fila) {
+            $asiento = (int) ($fila->subd_nro ?? 0);
+            $refTipo = strtoupper(substr(trim((string) ($fila->subd_ref_tipo ?? '')), 0, 3));
+            $refNro = (int) ($fila->subd_ref_nro ?? 0);
+            if ($asiento <= 0 || $refNro <= 0 || ! in_array($refTipo, ['ICO', 'IDO'], true)) {
+                continue;
+            }
+            $map[$asiento] = [
+                'tipo' => $refTipo,
+                'nro' => $refNro,
+                'sucursal' => (int) ($fila->subd_ref_sucursal ?? 0),
+                'letra' => (string) ($fila->subd_ref_letra ?? ''),
+            ];
+        }
+
+        return $map;
     }
 
     /**

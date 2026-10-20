@@ -69,4 +69,17 @@ class LibroIvaDigitalComprasAnitaArmadoSupportTest extends TestCase
             LibroIvaDigitalComprasAnitaArmadoSupport::esInformableIvaCompras('REC', 'C', '04', 'A'),
         );
     }
+
+    public function test_ico_e_ido_informan_aunque_el_subdiario_no_sea_compras(): void
+    {
+        $this->assertTrue(
+            LibroIvaDigitalComprasAnitaArmadoSupport::esInformableIvaCompras('ICO', 'N', '02', 'A'),
+        );
+        $this->assertTrue(
+            LibroIvaDigitalComprasAnitaArmadoSupport::esInformableIvaCompras('IDO', 'G', '03', 'A'),
+        );
+        $this->assertFalse(
+            LibroIvaDigitalComprasAnitaArmadoSupport::esInformableIvaCompras('ICO', 'C', '02', 'E'),
+        );
+    }
 }

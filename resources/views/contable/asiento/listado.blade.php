@@ -82,7 +82,12 @@
 						@if ($flPrimerMovimiento)
 							<td>{{$data->id}}</td>
 							<td>{{$data->nombreempresa}}</td>
-							<td>{{$data->numeroasiento}}</td>
+							<td>
+								{{$data->numeroasiento}}
+								@if (! empty($data->copia_de_numeroasiento))
+									<small title="Copiado del asiento {{ $data->copia_de_numeroasiento }}">· {{ $data->copia_de_numeroasiento }}</small>
+								@endif
+							</td>
 							<td>{{date("d/m/Y", strtotime($data->fecha ?? ''))}}</td>
 							<td>{{$data->nombretipoasiento}}</td>
 							<td>{{$data->observacion ?? ''}}</td>

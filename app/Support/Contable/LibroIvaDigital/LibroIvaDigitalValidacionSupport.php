@@ -350,6 +350,13 @@ final class LibroIvaDigitalValidacionSupport
                 + LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 194, 15))
                 + LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 209, 15))
                 + LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 254, 15));
+            $otros = LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 254, 15));
+            if ($otros < -0.001) {
+                self::agregar(
+                    $avisos,
+                    'COMPRAS_CBTE línea '.($i + 1).': Otros tributos no puede ser negativo.',
+                );
+            }
             if (abs($suma - $total) > 0.05) {
                 $desbalance++;
                 $ejDesbalance ??= sprintf(

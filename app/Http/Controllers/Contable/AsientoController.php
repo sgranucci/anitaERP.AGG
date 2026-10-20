@@ -562,8 +562,13 @@ class AsientoController extends Controller
                     'haberes' => $haberes
                     ];
 
-        // Modifica la observacion
-        $data['observacion'] = ($flRevierte ? 'Revierte asiento ' : 'Copiado de ').$data['numeroasiento'].' '.$data['observacion'];
+        $numeroOrigen = $data['numeroasiento'];
+        if ($flRevierte) {
+            $data['observacion'] = 'Revierte asiento '.$numeroOrigen.' '.$data['observacion'];
+            $data['copia_de_numeroasiento'] = null;
+        } else {
+            $data['copia_de_numeroasiento'] = $numeroOrigen;
+        }
 
         if (! empty($fechacopia)) {
             $data['fecha'] = $fechacopia;

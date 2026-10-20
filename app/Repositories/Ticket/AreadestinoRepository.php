@@ -28,7 +28,11 @@ class AreadestinoRepository implements AreadestinoRepositoryInterface
     public function all()
     {
         $areadestino = $this->model;
-        
+
+        if (session()->get('rol_nombre') === 'administrador') {
+            return $areadestino->orderBy('nombre')->get();
+        }
+
         $permiso = chequeaPermisoTicket();
 
         // Lee el area de destino
@@ -55,10 +59,34 @@ class AreadestinoRepository implements AreadestinoRepositoryInterface
     /**
      * Carga de Tickets: el usuario pide trabajo a un área (Tecnología, laboratorio, etc.).
      * No se filtra por tecnico_ticket: un técnico de Sistemas también puede pedir a otras áreas.
+     * Las áreas suspendidas no se ofrecen, salvo el id actual de un ticket ya cargado.
      */
-    public function allParaPedido()
+    public function allParaPedido($incluirId = null)
     {
-        return $this->model->orderBy('nombre')->get();
+        $incluirId = (int) $incluirId;
+
+        return $this->model->newQuery()
+            ->where(function ($query) use ($incluirId) {
+                $query->where('suspendido', false);
+                if ($incluirId > 0) {
+                    $query->orWhere('id', $incluirId);
+                }
+            })
+            ->orderBy('nombre')
+            ->get();
+    }
+
+    /**
+     * Selectores de ABM (categoría, técnico, tarea, administración).
+     * Respeta el recorte por área del técnico y omite las suspendidas.
+     */
+    public function allParaSeleccion($incluirId = null)
+    {
+        $incluirId = (int) $incluirId;
+
+        return $this->all()->filter(function ($area) use ($incluirId) {
+            return ! $area->suspendido || (int) $area->id === $incluirId;
+        })->values();
     }
 
     public function create(array $data)

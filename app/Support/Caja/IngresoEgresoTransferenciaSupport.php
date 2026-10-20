@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support\Caja;
 
+use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Tipotransaccion_Caja;
+use App\Models\Configuracion\Empresa;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use InvalidArgumentException;
 
@@ -164,6 +166,62 @@ final class IngresoEgresoTransferenciaSupport
                 .' / Asiento: '.number_format($totalDebe, 2, ',', '.')
             );
         }
+    }
+
+    /**
+     * Las cuentas de caja del movimiento tienen que ser de la empresa del encabezado
+     * (o multiempresa). Cambiar el selector de empresa no habilita cuentas de otra.
+     *
+     * @param  array<string, mixed>  $data
+     *
+     * @throws InvalidArgumentException
+     */
+    public static function assertCuentasDeLaEmpresa(array $data): void
+    {
+        $empresaId = (int) ($data['empresa_id'] ?? 0);
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        $ids = [];
+        foreach (['cuentacaja_ids', 'cuentacaja_emitido_ids', 'cuentacaja_reemplazo_ids'] as $campo) {
+            foreach ((array) ($data[$campo] ?? []) as $id) {
+                $id = (int) $id;
+                if ($id > 0) {
+                    $ids[$id] = $id;
+                }
+            }
+        }
+        if ($ids === []) {
+            return;
+        }
+
+        $cuentas = Cuentacaja::query()
+            ->with('empresas:id,nombre')
+            ->whereIn('id', array_values($ids))
+            ->get();
+
+        $encontradas = $cuentas->map(fn (Cuentacaja $c) => (int) $c->id)->all();
+        if (array_diff(array_values($ids), $encontradas) !== []) {
+            throw new InvalidArgumentException('Hay cuentas de caja que no existen.');
+        }
+
+        $ajenas = $cuentas->filter(fn (Cuentacaja $c) => ! $c->perteneceAEmpresa($empresaId))->values();
+        if ($ajenas->isEmpty()) {
+            return;
+        }
+
+        $nombreMov = (string) (Empresa::query()->whereKey($empresaId)->value('nombre') ?: 'la empresa del movimiento');
+        $lista = $ajenas->map(function (Cuentacaja $c) {
+            $duena = trim((string) ($c->empresas->nombre ?? 'otra empresa'));
+
+            return trim((string) $c->codigo.' '.$c->nombre).' ('.$duena.')';
+        })->implode(', ');
+
+        throw new InvalidArgumentException(
+            'No se puede grabar el movimiento con cuentas de otra empresa. Es de '.$nombreMov
+            .' y estas cuentas no le pertenecen: '.$lista.'.'
+        );
     }
 
     private static function parseMonto(mixed $valor): float

@@ -23,6 +23,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Services\Compras\PagoproveedorAnularRevertirService;
 use App\Services\Compras\PagoproveedorComprobantePdfService;
+use App\Services\Compras\PagoproveedorDevolverRetencionesService;
 use App\Services\Compras\PagoproveedorEnvioProveedorService;
 use App\Services\Compras\PagoproveedorService;
 use App\Services\Compras\ProveedorCuentacorrienteImportarDesdeAnitaService;
@@ -63,6 +64,7 @@ class PagoproveedorController extends Controller
         private PagoproveedorRepositoryInterface $pagoproveedorRepository,
         private PagoproveedorService $pagoproveedorService,
         private PagoproveedorAnularRevertirService $anularRevertirService,
+        private PagoproveedorDevolverRetencionesService $devolverRetencionesService,
         private EmpresaRepositoryInterface $empresaRepository,
         private MonedaRepositoryInterface $monedaRepository,
         private CajaRepositoryInterface $cajaRepository,
@@ -435,6 +437,94 @@ class PagoproveedorController extends Controller
             return redirect()->route('pagoproveedor')->with('mensaje', $mensaje);
         } catch (\Throwable $e) {
             if ($request->ajax()) {
+                return response()->json(['mensaje' => $e->getMessage()], 422);
+            }
+
+            return redirect()->back()->with('mensaje', $e->getMessage());
+        }
+    }
+
+    public function datosDevolverRetenciones(int $id)
+    {
+        can('devolver-retenciones-pagoproveedor');
+
+        try {
+            $datos = $this->devolverRetencionesService->datos($id);
+            $empresaId = (int) (Pagoproveedor::query()->whereKey($id)->value('empresa_id') ?? 0);
+            $datos['cuentacajas'] = \App\Models\Caja\Cuentacaja::query()
+                ->when($empresaId > 0, fn ($q) => $q->where('empresa_id', $empresaId))
+                ->orderBy('nombre')
+                ->get(['id', 'nombre', 'codigo', 'empresa_id'])
+                ->map(fn ($c) => [
+                    'id' => (int) $c->id,
+                    'nombre' => trim((string) (($c->codigo ? $c->codigo.' — ' : '').$c->nombre)),
+                ])
+                ->values()
+                ->all();
+            $datos['chequeras'] = \App\Models\Caja\Chequera::query()
+                ->with('cuentacajas:id,nombre,codigo')
+                ->when($empresaId > 0, function ($q) use ($empresaId) {
+                    $q->whereHas('cuentacajas', fn ($c) => $c->where('empresa_id', $empresaId));
+                })
+                ->orderBy('id')
+                ->get()
+                ->map(function ($ch) {
+                    $cuenta = $ch->cuentacajas;
+                    $etiquetaCuenta = $cuenta
+                        ? trim((string) (($cuenta->codigo ? $cuenta->codigo.' — ' : '').$cuenta->nombre))
+                        : '';
+
+                    return [
+                        'id' => (int) $ch->id,
+                        'nombre' => trim('Chequera '.($ch->codigo ?: '#'.$ch->id)
+                            .($etiquetaCuenta !== '' ? ' ('.$etiquetaCuenta.')' : '')),
+                        'cuentacaja_id' => (int) ($ch->cuentacaja_id ?: 0),
+                    ];
+                })
+                ->values()
+                ->all();
+
+            return response()->json(['mensaje' => 'ok', 'datos' => $datos]);
+        } catch (\Throwable $e) {
+            return response()->json(['mensaje' => $e->getMessage()], 422);
+        }
+    }
+
+    public function devolverRetenciones(Request $request, int $id)
+    {
+        can('devolver-retenciones-pagoproveedor');
+
+        try {
+            $resultado = $this->devolverRetencionesService->devolver($id, $request->all());
+
+            $mensaje = 'Devolución de retenciones grabada. OPP N° '.$resultado['numerotransaccion'].'.';
+            if (! empty($resultado['aviso'])) {
+                $mensaje .= ' '.$resultado['aviso'];
+            }
+
+            $devolucionId = (int) ($resultado['pagoproveedor_devolucion_id'] ?? 0);
+            $imprimirUrl = $devolucionId > 0
+                ? route('imprimir_pagoproveedor', $devolucionId)
+                : null;
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'mensaje' => 'ok',
+                    'resultado' => $resultado,
+                    'texto' => $mensaje,
+                    'imprimir_url' => $imprimirUrl,
+                ]);
+            }
+
+            $redirect = redirect()->route('pagoproveedor')->with('mensaje', $mensaje);
+            if ($imprimirUrl !== null) {
+                $redirect->with('imprimir_pagoproveedor_url', $imprimirUrl)
+                    ->with('imprimir_comprobante_label', 'Imprimir orden de pago (devolución)');
+            }
+
+            return $redirect;
+        } catch (\Throwable $e) {
+            if ($request->ajax() || $request->wantsJson()) {
                 return response()->json(['mensaje' => $e->getMessage()], 422);
             }
 

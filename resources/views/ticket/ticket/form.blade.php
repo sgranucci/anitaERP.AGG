@@ -101,9 +101,9 @@
                     <option value="">-- Seleccionar --</option>
                     @foreach($areadestino_query as $key => $value)
                         @if( (int) $value->id == (int) old('areadestino_id', $data->areadestino_id ?? ''))
-                            <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
+                            <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}{{ $value->suspendido ? ' (suspendida)' : '' }}</option>
                         @else
-                            <option value="{{ $value->id }}">{{ $value->nombre }}</option>
+                            <option value="{{ $value->id }}">{{ $value->nombre }}{{ $value->suspendido ? ' (suspendida)' : '' }}</option>
                         @endif
                     @endforeach
                 </select>

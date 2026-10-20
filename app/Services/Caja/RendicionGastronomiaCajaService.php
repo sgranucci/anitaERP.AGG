@@ -740,6 +740,7 @@ class RendicionGastronomiaCajaService
         $jornada = $r->jornada;
         $empresaNombre = (string) ($r->empresa?->nombre ?? '');
         $esJornada = $r->esRendicionJornada();
+        $esCierreX = $r->esRendicionCierreX();
 
         if ($esJornada) {
             $totalesDia = is_array($totalesDia) && $totalesDia !== []
@@ -766,7 +767,6 @@ class RendicionGastronomiaCajaService
             && $fechaJornadaIso === $fechaRegistroCaja->format('Y-m-d');
         $obsHabilitacion = GastronomiaTurnoObservacionHabilitacionSupport::parse($turno?->observacion_habilitacion);
 
-        $esCierreX = $r->esRendicionCierreX();
         if ($esCierreX) {
             $r->loadMissing(['mozo', 'sala', 'jornada']);
             $subtitulo = 'Ticket '.$r->codigo.' — Cierre X jornada #'.$r->jornada_gastronomia_id

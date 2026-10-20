@@ -11,7 +11,9 @@ use App\Models\Configuracion\Provincia;
 use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
+use App\Support\Contable\IngresosBrutos\IngresosBrutosRetencionSignoSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
+use App\Support\Contable\Sicore\SicoreErpComplementoSupport;
 use App\Support\Contable\Sicore\SicoreProveedorErpSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -50,16 +52,24 @@ final class IngresosBrutosRetencionesDatosService
         $this->ultimaAdvertencia = null;
 
         $anita = $this->desdeRetibrmovAnita($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
-        if ($anita !== []) {
+        $erp = $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
+
+        // Anita puede traer la OPP original y faltar la devolución solo-ERP (DEV RET).
+        // Se mergea como en SICORE: Anita primero, ERP solo lo que no está.
+        if ($anita === [] && $erp === []) {
+            return [];
+        }
+        if ($anita === []) {
+            return $erp;
+        }
+        if ($erp === []) {
             return $anita;
         }
 
-        $erp = $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
-        if ($erp !== []) {
-            return $erp;
-        }
-
-        return [];
+        return array_merge(
+            $anita,
+            SicoreErpComplementoSupport::soloNuevos($erp, $anita),
+        );
     }
 
     /**
@@ -167,7 +177,7 @@ final class IngresosBrutosRetencionesDatosService
             $tipoComp = strtoupper(trim((string) ($fila['retibr_tipo_comp'] ?? '')));
             $sujeto = (float) ($fila['retibr_sujeto'] ?? 0);
             $retencion = (float) ($fila['retibr_retencion'] ?? 0);
-            if (self::movimientoResta($tipoMov)
+            if (IngresosBrutosRetencionSignoSupport::movimientoResta($tipoMov)
                 || ($retencion > 0 && $this->esNotaCreditoCompra($tipoComp))) {
                 $sujeto = -abs($sujeto);
                 $retencion = -abs($retencion);
@@ -296,7 +306,11 @@ final class IngresosBrutosRetencionesDatosService
             }
             $tipoPago = strtoupper(substr(trim((string) ($pago->tipocomprobante ?? '')), 0, 3));
             $base = (float) $ret->base_calculo;
-            if (self::movimientoResta($tipoPago) || ($importe > 0 && $this->esNotaCreditoCompra($tipoPago))) {
+            // Importe ya negativo (DEV RET) o AOP/NC / detalle DEV RET → resta en archivo.
+            if ($importe < 0
+                || IngresosBrutosRetencionSignoSupport::esDevolucionRetencionPago($pago)
+                || IngresosBrutosRetencionSignoSupport::movimientoResta($tipoPago)
+                || ($importe > 0 && $this->esNotaCreditoCompra($tipoPago))) {
                 $importe = -abs($importe);
                 $base = -abs($base);
             }
@@ -323,17 +337,6 @@ final class IngresosBrutosRetencionesDatosService
         }
 
         return $out;
-    }
-
-    /**
-     * Anulación de orden de pago y nota de crédito del pago: restan la retención.
-     * En Anita (p-ingbruto, ARCIBA) el tipo que empieza con NC se resta.
-     */
-    private static function movimientoResta(string $tipo): bool
-    {
-        $tipo = strtoupper(trim($tipo));
-
-        return str_starts_with($tipo, 'NC') || str_starts_with($tipo, 'AOP');
     }
 
     /**

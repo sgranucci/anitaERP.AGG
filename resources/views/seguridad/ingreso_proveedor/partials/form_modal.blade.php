@@ -96,7 +96,7 @@
             <select name="motivo_id" id="ingreso-modal-motivo_id" class="form-control" required>
                 <option value="">-- Seleccionar motivo --</option>
                 @foreach ($motivos as $item)
-                    <option value="{{ $item->id }}" data-codigo="{{ $item->codigo }}" @selected((string) old('motivo_id', $data->motivo_id ?? '') === (string) $item->id)>{{ $item->nombre }}</option>
+                    <option value="{{ $item->id }}" data-codigo="{{ $item->codigo }}" data-exige-oc="{{ !empty($item->exige_oc) ? '1' : '0' }}" @selected((string) old('motivo_id', $data->motivo_id ?? '') === (string) $item->id)>{{ $item->nombre }}</option>
                 @endforeach
             </select>
         </div>

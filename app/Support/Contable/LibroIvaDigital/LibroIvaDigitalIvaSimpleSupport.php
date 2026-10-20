@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class LibroIvaDigitalIvaSimpleSupport
 {
+    /** NC de ventas de la liquidación BIYEMAS: restaurante, no el punto de venta de origen. */
+    public const ACTIVIDAD_NC_VENTAS = '561012';
+
     public static function normalizarCodigoActividad(string $codigo): string
     {
         return str_pad(preg_replace('/\D+/', '', $codigo) ?: '0', 6, '0', STR_PAD_LEFT);
@@ -19,20 +22,41 @@ final class LibroIvaDigitalIvaSimpleSupport
      */
     public static function lineaDebitoFiscal(array $fila, bool $restitucion = false): string
     {
+        $tipoOperacion = (string) ($fila['tipo_operacion'] ?? '1');
+        if ($restitucion && $tipoOperacion === '2') {
+            $exento = LibroIvaDigitalMapeosSupport::importeCsvIvaSimple((float) ($fila['exento'] ?? 0));
+            if ($exento === '') {
+                return '';
+            }
+
+            return self::normalizarCodigoActividad((string) ($fila['actividad_codigo'] ?? '0'))
+                .';2;;;;;'.$exento.';';
+        }
+
+        $neto = LibroIvaDigitalMapeosSupport::importeCsvIvaSimple((float) ($fila['neto'] ?? 0));
+        $iva = LibroIvaDigitalMapeosSupport::importeCsvIvaSimple((float) ($fila['iva'] ?? 0));
+        $exento = LibroIvaDigitalMapeosSupport::importeCsvIvaSimple((float) ($fila['exento'] ?? 0));
+        if (! $restitucion && $neto === '' && $iva === '' && $exento === '') {
+            return '';
+        }
+        if ($restitucion && $neto === '' && $iva === '') {
+            return '';
+        }
+
         $campos = [
             self::normalizarCodigoActividad((string) ($fila['actividad_codigo'] ?? '0')),
-            (string) ($fila['tipo_operacion'] ?? '1'),
+            $tipoOperacion,
             (string) ($fila['tipo_sujeto'] ?? ''),
             (string) ($fila['alicuota_codigo'] ?? ''),
-            LibroIvaDigitalMapeosSupport::importeCsvIvaSimple((float) ($fila['neto'] ?? 0)),
-            LibroIvaDigitalMapeosSupport::importeCsvIvaSimple((float) ($fila['iva'] ?? 0)),
+            $neto,
+            $iva,
         ];
 
         if (! $restitucion) {
             $campos[] = LibroIvaDigitalMapeosSupport::importeCsvIvaSimple(
                 (float) ($fila['iva_computable'] ?? $fila['iva'] ?? 0),
             );
-            $campos[] = LibroIvaDigitalMapeosSupport::importeCsvIvaSimple((float) ($fila['exento'] ?? 0));
+            $campos[] = $exento;
         }
 
         return implode(';', $campos).';';
@@ -164,11 +188,16 @@ final class LibroIvaDigitalIvaSimpleSupport
             $sujeto = (int) ($meta['tipo_sujeto'] ?? 3);
             $restitucion = (bool) ($meta['restitucion'] ?? false);
             $cabecera = is_array($registro['cabecera'] ?? null) ? $registro['cabecera'] : [];
+            if ($restitucion) {
+                $actividad = self::ACTIVIDAD_NC_VENTAS;
+            }
 
             foreach ($registro['alicuotas'] ?? [] as $alicuota) {
-                $neto = abs((float) ($alicuota['neto_gravado'] ?? $alicuota['neto'] ?? 0));
-                $iva = abs((float) ($alicuota['impuesto_liquidado'] ?? $alicuota['iva'] ?? 0));
-                if ($neto <= 0.0001 && $iva <= 0.0001) {
+                $netoRaw = (float) ($alicuota['neto_gravado'] ?? $alicuota['neto'] ?? 0);
+                $ivaRaw = (float) ($alicuota['impuesto_liquidado'] ?? $alicuota['iva'] ?? 0);
+                $neto = $restitucion ? abs($netoRaw) : $netoRaw;
+                $iva = $restitucion ? abs($ivaRaw) : $ivaRaw;
+                if (abs($neto) <= 0.0001 && abs($iva) <= 0.0001) {
                     continue;
                 }
                 $codigoLid = (string) ($alicuota['alicuota_iva'] ?? $alicuota['codigo_lid'] ?? '');
@@ -202,8 +231,9 @@ final class LibroIvaDigitalIvaSimpleSupport
                 unset($destino);
             }
 
-            $exento = abs((float) ($cabecera['operaciones_exentas'] ?? 0));
-            if ($exento <= 0.0001) {
+            $exentoRaw = (float) ($cabecera['operaciones_exentas'] ?? 0);
+            $exento = $restitucion ? abs($exentoRaw) : $exentoRaw;
+            if (abs($exento) <= 0.0001) {
                 continue;
             }
             $destinoEx = &$acumExento;
@@ -328,14 +358,19 @@ final class LibroIvaDigitalIvaSimpleSupport
      */
     private static function redondearDetalleDebito(array $detalle): array
     {
-        return array_values(array_map(static function (array $fila): array {
+        $out = [];
+        foreach ($detalle as $fila) {
             $fila['neto'] = round((float) ($fila['neto'] ?? 0), 2);
             $fila['iva'] = round((float) ($fila['iva'] ?? 0), 2);
             $fila['iva_computable'] = round((float) ($fila['iva_computable'] ?? $fila['iva'] ?? 0), 2);
             $fila['exento'] = round((float) ($fila['exento'] ?? 0), 2);
+            if (abs($fila['neto']) <= 0.0001 && abs($fila['iva']) <= 0.0001 && abs($fila['exento']) <= 0.0001) {
+                continue;
+            }
+            $out[] = $fila;
+        }
 
-            return $fila;
-        }, $detalle));
+        return $out;
     }
 
     /**

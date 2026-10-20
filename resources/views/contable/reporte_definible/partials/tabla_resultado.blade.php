@@ -8,7 +8,19 @@
     $clsAcciones = $compacta ? '' : 'col-fija-der-1';
     $marcasNota = $resultado['notas_marcas'] ?? [];
     $colspan = 2 + count($columnas) + ($tieneAcciones ? 1 : 0);
+    $gruposColumna = [];
+    foreach ($columnas as $colGrupo) {
+        $nombreGrupo = trim((string) ($colGrupo['grupo'] ?? ''));
+        if ($nombreGrupo !== '') {
+            $gruposColumna[$nombreGrupo] = true;
+        }
+    }
+    $mostrarGrupos = count($gruposColumna) > 1;
 @endphp
+<style>
+.rd-grupo-a { background: #eaf3fb; }
+.rd-grupo-b { background: #f4f6f7; }
+</style>
 <div class="tabla-ancha-grilla{{ $compacta ? ' tabla-ancha--compacta' : '' }}" data-tabla-ancha style="--tabla-ancha-c1: 6rem; --tabla-ancha-c2: 18rem; --tabla-ancha-der: 4.5rem;">
     <div class="tabla-ancha-scroll-top" hidden>
         <div class="tabla-ancha-scroll-top-inner"></div>
@@ -16,16 +28,48 @@
     <div class="tabla-ancha-wrap">
         <table id="tabla-paginada" class="table table-sm table-hover mb-0 tabla-ancha">
             <thead>
-                <tr>
-                    <th class="col-fija-1">Código</th>
-                    <th class="col-fija-2">Concepto</th>
-                    @foreach ($columnas as $col)
-                        <th class="text-right rd-exec-col-importe">{{ $col['label'] }}</th>
-                    @endforeach
-                    @if ($tieneAcciones)
-                        <th class="text-center {{ $clsAcciones }}">Acciones</th>
-                    @endif
-                </tr>
+                @if ($mostrarGrupos)
+                    <tr>
+                        <th class="col-fija-1" rowspan="2">Código</th>
+                        <th class="col-fija-2" rowspan="2">Concepto</th>
+                        @php $indiceGrupo = 0; $nGrupo = 0; @endphp
+                        @while ($indiceGrupo < count($columnas))
+                            @php
+                                $nombreGrupo = trim((string) ($columnas[$indiceGrupo]['grupo'] ?? ''));
+                                $spanGrupo = 1;
+                                while (
+                                    $indiceGrupo + $spanGrupo < count($columnas)
+                                    && trim((string) ($columnas[$indiceGrupo + $spanGrupo]['grupo'] ?? '')) === $nombreGrupo
+                                ) {
+                                    $spanGrupo++;
+                                }
+                                $clsGrupo = ($nGrupo % 2 === 0) ? 'rd-grupo-a' : 'rd-grupo-b';
+                            @endphp
+                            <th colspan="{{ $spanGrupo }}" class="text-center {{ $clsGrupo }}">{{ $nombreGrupo !== '' ? $nombreGrupo : $columnas[$indiceGrupo]['label'] }}</th>
+                            @php $indiceGrupo += $spanGrupo; $nGrupo++; @endphp
+                        @endwhile
+                        @if ($tieneAcciones)
+                            <th class="text-center {{ $clsAcciones }}" rowspan="2">Acciones</th>
+                        @endif
+                    </tr>
+                    <tr>
+                        @foreach ($columnas as $col)
+                            @php $clsGrupo = (array_search(trim((string) ($col['grupo'] ?? '')), array_keys($gruposColumna), true) % 2 === 0) ? 'rd-grupo-a' : 'rd-grupo-b'; @endphp
+                            <th class="text-right rd-exec-col-importe {{ $clsGrupo }}">{{ $col['label'] }}</th>
+                        @endforeach
+                    </tr>
+                @else
+                    <tr>
+                        <th class="col-fija-1">Código</th>
+                        <th class="col-fija-2">Concepto</th>
+                        @foreach ($columnas as $col)
+                            <th class="text-right rd-exec-col-importe">{{ $col['label'] }}</th>
+                        @endforeach
+                        @if ($tieneAcciones)
+                            <th class="text-center {{ $clsAcciones }}">Acciones</th>
+                        @endif
+                    </tr>
+                @endif
             </thead>
             <tbody>
                 @forelse ($filas as $fila)

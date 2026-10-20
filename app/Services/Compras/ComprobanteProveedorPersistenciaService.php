@@ -1295,7 +1295,10 @@ class ComprobanteProveedorPersistenciaService
 
     private function sincronizarRecepciones(Request $request, Comprobante_Proveedor $comprobante): void
     {
-        $modoCarga = (string) $request->input('modo_carga', $comprobante->modo_carga ?? '');
+        // El modo ya corregido vive en el comprobante (payload post-controles).
+        // No usar el request crudo: FIS→FNS podía dejar ASIGNA en el form y SIN en DB,
+        // y se vinculaba COM con modo «gasto sin recepción».
+        $modoCarga = (string) ($comprobante->modo_carga ?? '');
         if ($modoCarga !== ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
             Comprobante_Proveedor_Recepcion::query()
                 ->where('comprobante_proveedor_id', $comprobante->id)
@@ -1398,8 +1401,13 @@ class ComprobanteProveedorPersistenciaService
         );
         $this->aplicarResultadoControles($resultadoControles);
 
+        // Alinear request con el modo ya corregido en payload (evita sync/preview con form viejo).
+        $request->merge(['modo_carga' => $modo]);
+
         $idsEfectivos = $resultadoControles['recepcion_ids_efectivos'] ?? [];
-        if (is_array($idsEfectivos) && $idsEfectivos !== []) {
+        if ($modo !== ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
+            $request->merge(['recepcion_proveedor_ids' => []]);
+        } elseif (is_array($idsEfectivos) && $idsEfectivos !== []) {
             $request->merge(['recepcion_proveedor_ids' => $idsEfectivos]);
         }
 

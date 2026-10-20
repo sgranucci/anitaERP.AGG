@@ -22,8 +22,6 @@ class IngresoProveedorCatalogoListadoExport implements FromView, ShouldAutoSize,
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'D';
-
     private string $tipo = 'motivo';
 
     /** @var array<string, mixed> */
@@ -64,6 +62,7 @@ class IngresoProveedorCatalogoListadoExport implements FromView, ShouldAutoSize,
         return view('exports.seguridad.ingreso_proveedor_catalogoindex', [
             'datas' => $datas,
             'titulo' => $def['titulo'],
+            'tipo' => $this->tipo,
         ]);
     }
 
@@ -73,7 +72,7 @@ class IngresoProveedorCatalogoListadoExport implements FromView, ShouldAutoSize,
             return [];
         }
         $cols = [];
-        foreach (range('A', self::COL_ULTIMA) as $c) {
+        foreach (range('A', $this->columnaUltima()) as $c) {
             $cols[$c] = NumberFormat::FORMAT_TEXT;
         }
 
@@ -104,12 +103,23 @@ class IngresoProveedorCatalogoListadoExport implements FromView, ShouldAutoSize,
 
     public function columnWidths(): array
     {
-        return [
+        $anchos = [
             'A' => 8,
             'B' => 14,
             'C' => 40,
             'D' => 10,
         ];
+        if ($this->tipo === 'motivo') {
+            $anchos['D'] = 12;
+            $anchos['E'] = 10;
+        }
+
+        return $anchos;
+    }
+
+    private function columnaUltima(): string
+    {
+        return $this->tipo === 'motivo' ? 'E' : 'D';
     }
 
     public function registerEvents(): array
@@ -121,9 +131,10 @@ class IngresoProveedorCatalogoListadoExport implements FromView, ShouldAutoSize,
                 }
                 $sheet = $event->sheet->getDelegate();
                 $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit);
+                $ultima = $this->columnaUltima();
+                $sheet->mergeCells('A'.$filaTit.':'.$ultima.$filaTit);
                 $sheet->getRowDimension($filaTit)->setRowHeight(30);
-                $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
+                $sheet->getStyle('A'.$filaTit.':'.$ultima.$filaTit)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 16,

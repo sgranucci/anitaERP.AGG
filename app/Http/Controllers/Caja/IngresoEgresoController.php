@@ -31,6 +31,7 @@ use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
 use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Caja\IngresoEgresoImputacionDiariaSupport;
+use App\Support\Caja\IngresoEgresoComprobanteIvaExcelSupport;
 use App\Support\Caja\IngresoEgresoGastoBancoSupport;
 use App\Support\Caja\IngresoEgresoListadoColumnas;
 use App\Support\Caja\IngresoEgresoListadoEnvioSupport;
@@ -910,6 +911,34 @@ class IngresoEgresoController extends Controller
             ['mensaje' => 'ok'],
             IngresoEgresoGastoBancoSupport::resolver($lineas, $elegida > 0 ? $elegida : null)
         ));
+    }
+
+    public function previewExcelComprobanteIva(Request $request)
+    {
+        can('crear-ingresos-egresos-caja', false);
+        can('editar-ingresos-egresos-caja', false);
+
+        $archivo = $request->file('archivo');
+        if ($archivo === null || ! $archivo->isValid()) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'Seleccione un archivo Excel.'], 422);
+        }
+        $extension = strtolower((string) $archivo->getClientOriginalExtension());
+        if (! in_array($extension, ['xlsx', 'xls', 'csv'], true)) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'El archivo tiene que ser .xlsx, .xls o .csv.'], 422);
+        }
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId <= 0) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'Seleccione la empresa del ingreso o egreso antes de importar.'], 422);
+        }
+
+        try {
+            return response()->json(
+                app(IngresoEgresoComprobanteIvaExcelSupport::class)->previsualizar($archivo->getRealPath(), $empresaId)
+            );
+        } catch (\Throwable $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'No se pudo leer el Excel. '.$e->getMessage()], 422);
+        }
     }
 
     /** @return array<string, mixed> */

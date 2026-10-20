@@ -17,6 +17,8 @@
     $puedeVerCuentacaja = $puede_ver_cuentacaja ?? false;
     $mostrarEmpresa = $multiempresa ?? false;
     $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
+    $mostrarTituloCuenta = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarTituloCuenta($filtros ?? []);
+    $tituloCuentaCombinado = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::tituloCuentaCombinado($filtros ?? []);
     $totalColumnas = ($mostrarEmpresa ? 18 : 17) - ($mostrarCentrocosto ? 0 : 1);
     $colSpanAntesImportes = $mostrarCentrocosto ? 13 : 12;
     $colSpanSaldoInicialVacias = $mostrarCentrocosto ? 15 : 14;
@@ -60,7 +62,7 @@
                     Empresa: {{ $fila['nombreempresa'] ?? '' }}
                 </td>
             </tr>
-        @elseif ($tipoFila === 'header_cuenta')
+        @elseif ($tipoFila === 'header_cuenta' && $mostrarTituloCuenta && $tituloCuentaCombinado)
             <tr class="mpc-fila-cuenta font-weight-bold">
                 <td colspan="{{ $totalColumnas }}">
                     <span class="mpc-etiqueta">Cuenta</span>
@@ -73,6 +75,25 @@
                         <span class="mpc-cuenta-codigo">{{ $fila['cuenta_codigo'] ?? '' }}</span>
                     @endif
                     <span class="mpc-cuenta-nombre">{{ $fila['cuenta_nombre'] ?? '' }}</span>
+                </td>
+            </tr>
+        @elseif ($tipoFila === 'header_cuenta' && $mostrarTituloCuenta)
+            <tr class="mpc-fila-cuenta mpc-fila-cuenta-separada font-weight-bold">
+                <td>
+                    <span class="mpc-etiqueta">Cuenta</span>
+                </td>
+                <td colspan="{{ max(1, $totalColumnas - 1) }}">
+                    @if ($puedeVerCuenta && (int) ($fila['cuentacontable_id'] ?? 0) > 0)
+                        <a href="{{ route('editar_cuentacontable', ['id' => $fila['cuentacontable_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                           target="_blank" rel="noopener" class="mpc-cuenta-link">
+                            {{ $fila['cuenta_codigo'] ?? '' }}
+                        </a>
+                    @else
+                        <span class="mpc-cuenta-codigo">{{ $fila['cuenta_codigo'] ?? '' }}</span>
+                    @endif
+                    @if (trim((string) ($fila['cuenta_nombre'] ?? '')) !== '')
+                        <span class="mpc-cuenta-nombre"> {{ $fila['cuenta_nombre'] }}</span>
+                    @endif
                 </td>
             </tr>
         @elseif ($tipoFila === 'header_cc')
