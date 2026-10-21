@@ -133,16 +133,19 @@ final class ComprobanteProveedorDebeGastoSupport
     }
 
     /**
+     * @param  bool  $conservarImportesCero  Preview: conservar el renglón en 0 al abrir otra cuenta sin prorratear.
      * @return list<array{cuentacontable_id:int, importe:float, centrocosto_id:int, orden:int}>
      */
-    public static function lineasDesdeComprobante(Comprobante_Proveedor $comprobante): array
-    {
+    public static function lineasDesdeComprobante(
+        Comprobante_Proveedor $comprobante,
+        bool $conservarImportesCero = false,
+    ): array {
         $out = [];
         $orden = 0;
         foreach ($comprobante->comprobante_proveedor_debe_gastos ?? [] as $fila) {
             $cuentaId = (int) ($fila->cuentacontable_id ?? 0);
             $importe = round((float) ($fila->importe ?? 0), 2);
-            if (abs($importe) < 0.0001) {
+            if (abs($importe) < 0.0001 && ! $conservarImportesCero) {
                 continue;
             }
             $orden++;
@@ -158,9 +161,11 @@ final class ComprobanteProveedorDebeGastoSupport
     }
 
     /**
+     * @param  bool  $conservarImportesCero  Preview: un renglón nuevo en 0 se muestra para cargarlo a mano.
+     *                                        El marcador vacío (un solo par en blanco) se descarta igual.
      * @return list<array{cuentacontable_id:int, importe:float, centrocosto_id:int, orden:int}>
      */
-    public static function lineasDesdeRequest(Request $request): array
+    public static function lineasDesdeRequest(Request $request, bool $conservarImportesCero = false): array
     {
         $cuentas = $request->input('debe_gasto_cuenta_ids', []);
         $importes = $request->input('debe_gasto_importes', []);
@@ -175,21 +180,39 @@ final class ComprobanteProveedorDebeGastoSupport
             $centros = [];
         }
 
-        $out = [];
-        $orden = 0;
         $n = max(count($cuentas), count($importes));
+        $crudas = [];
+        $hayImporte = false;
         for ($i = 0; $i < $n; $i++) {
             $cuentaId = (int) ($cuentas[$i] ?? 0);
-            $importe = MontoEsArSupport::parse($importes[$i] ?? 0);
-            // Preview: permitir renglón sin cuenta aún (importe > 0). Al contabilizar se exige cuenta.
+            $importe = round(abs(MontoEsArSupport::parse($importes[$i] ?? 0)), 2);
+            if (abs($importe) >= 0.0001) {
+                $hayImporte = true;
+            }
+            $crudas[] = [
+                'cuentacontable_id' => $cuentaId,
+                'importe' => $importe,
+                'centrocosto_id' => (int) ($centros[$i] ?? 0),
+            ];
+        }
+
+        $out = [];
+        $orden = 0;
+        foreach ($crudas as $cruda) {
+            $importe = (float) $cruda['importe'];
+            $cuentaId = (int) $cruda['cuentacontable_id'];
             if (abs($importe) < 0.0001) {
-                continue;
+                // Sin otro importe al lado, el 0 es el marcador «sin reparto», no una cuenta nueva.
+                $esMarcadorVacio = ! $hayImporte && ($cuentaId <= 0 || count($crudas) <= 1);
+                if (! $conservarImportesCero || $esMarcadorVacio) {
+                    continue;
+                }
             }
             $orden++;
             $out[] = [
                 'cuentacontable_id' => $cuentaId,
-                'importe' => round(abs($importe), 2),
-                'centrocosto_id' => (int) ($centros[$i] ?? 0),
+                'importe' => $importe,
+                'centrocosto_id' => (int) $cruda['centrocosto_id'],
                 'orden' => $orden,
             ];
         }
@@ -254,6 +277,13 @@ final class ComprobanteProveedorDebeGastoSupport
         $suma = self::sumaImportes($lineas);
         $neto = round(abs($netoEsperado), 2);
         $diff = round($suma - $neto, 2);
+        if ($diff > ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA) {
+            throw new \RuntimeException(
+                'El reparto de cuentas de gasto ('.number_format($suma, 2, ',', '.')
+                .') supera el neto del comprobante ('.number_format($neto, 2, ',', '.')
+                .'). Exceso: '.number_format($diff, 2, ',', '.').'.'
+            );
+        }
         if (abs($diff) > ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA) {
             throw new \RuntimeException(
                 'El reparto de cuentas de gasto ('.number_format($suma, 2, ',', '.')

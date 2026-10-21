@@ -47,6 +47,7 @@ use App\Support\Compras\OrdencompraComprobanteEstados;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosTipoImputadoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorIvaLineasDesdeOcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
@@ -656,7 +657,12 @@ class ComprobanteProveedorPersistenciaService
         );
         $payload['creousuario_id'] = Auth::id();
         $payload['estado'] = ComprobanteProveedorEstados::BORRADOR;
-        $payload['fechaiva'] = ComprobanteProveedorFechaContableSupport::fechaTopeEnCarga(null);
+        // Respeta la fecha que armó el prefill (en Ferli + IA, la de la factura).
+        // Vacía o posterior a hoy queda en el tope del alta.
+        $payload['fechaiva'] = ComprobanteProveedorFechaContableSupport::resolverEnCarga(
+            $data->fechaiva ?? null,
+            null,
+        );
 
         $this->assertPeriodoContablePermitido($payload);
         $this->assertFechaComprobanteCarga($payload);
@@ -1249,6 +1255,7 @@ class ComprobanteProveedorPersistenciaService
             isset($comprobante->condicionpago_id) ? (int) $comprobante->condicionpago_id : null,
             $fechaFactura,
         );
+        $cuotasNormalizadas = $this->vencimientoUnicoEnFechaFacturaFerliIa($comprobante, $cuotasNormalizadas, $fechaFactura);
 
         $previo = $this->vencimientoEdicionPrevio;
         if (is_array($previo) && (int) ($previo['cantidad'] ?? 0) === 1) {
@@ -1285,6 +1292,47 @@ class ComprobanteProveedorPersistenciaService
                 'ordencompra_comprobante_cuota_id' => $cuota['ordencompra_comprobante_cuota_id'] ?? null,
             ]);
         }
+    }
+
+    /**
+     * Ferli, factura leída por IA y sin vencimiento en la lectura: la única cuota
+     * vence el día de la factura. Un plan de varias cuotas sigue la condición de pago.
+     * Una edición posterior del operador se conserva en el paso siguiente.
+     *
+     * @param  list<array<string, mixed>>  $cuotas
+     * @return list<array<string, mixed>>
+     */
+    private function vencimientoUnicoEnFechaFacturaFerliIa(
+        Comprobante_Proveedor $comprobante,
+        array $cuotas,
+        string $fechaFactura,
+    ): array {
+        if (count($cuotas) !== 1 || ! EntornoEmpresaSupport::esFerli()) {
+            return $cuotas;
+        }
+
+        $precargaId = (int) ($comprobante->precarga_comprobante_proveedor_id ?? 0);
+        if ($precargaId <= 0) {
+            return $cuotas;
+        }
+
+        $precarga = Precarga_Comprobante_Proveedor::query()
+            ->whereKey($precargaId)
+            ->first(['origen_entrada', 'fechavencimiento']);
+        if ($precarga === null
+            || ! PrecargaComprobanteOrigenEntrada::esLecturaIa($precarga->origen_entrada ?? null)
+            || ComprobanteProveedorFechaContableSupport::formatear($precarga->fechavencimiento) !== null) {
+            return $cuotas;
+        }
+
+        $fecha = ComprobanteProveedorFechaContableSupport::formatear($fechaFactura);
+        if ($fecha === null) {
+            return $cuotas;
+        }
+
+        $cuotas[0]['fechavencimiento'] = $fecha;
+
+        return $cuotas;
     }
 
     /**

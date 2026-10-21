@@ -7,7 +7,7 @@
             'col_label' => 'col-lg-3',
             'col_input' => 'col-lg-7',
         ])
-        <input type="hidden" class="codigoempresa" id="codigoempresa" name="codigoempresa" value="{{ $data->empresas->codigo ?? '' }}" readonly>
+        <input type="hidden" class="codigoempresa" id="codigoempresa" name="codigoempresa" value="{{ $data?->empresas?->codigo ?? '' }}" readonly>
         <div class="form-group row align-items-center">
             <label for="tipotransaccion_compra" class="col-lg-3 col-form-label text-right pr-2">Tipo de transacci&oacute;n</label>
             <div class="col-lg-9 d-flex flex-nowrap align-items-center" style="gap: 4px;">
@@ -24,18 +24,19 @@
                         @endif
                     @endforeach
                 </select>
-                <input type="hidden" class="tipo" id="tipo" name="tipo" value="{{$data->tipotransaccion_compras->abreviatura ?? ''}}" readonly>
-                <input type="text" name="letra" id="letra" class="form-control" placeholder="Letra" aria-label="Letra" value="{{$data->letra ?? ''}}" readonly style="width: 3rem; flex-shrink: 0;">
+                <input type="hidden" class="tipo" id="tipo" name="tipo" value="{{ $data?->tipotransaccion_compras?->abreviatura ?? '' }}" readonly>
+                <input type="text" name="letra" id="letra" class="form-control text-uppercase" placeholder="Letra" aria-label="Letra" maxlength="1" value="{{ old('letra', $data->letra ?? '') }}" required style="width: 3rem; flex-shrink: 0;">
                 <span class="input-group-text flex-shrink-0">#</span>
-                <input type="text" name="sucursal" id="sucursal" class="form-control" placeholder="Suc." aria-label="Sucursal" value="{{$data->sucursal ?? ''}}" readonly style="width: 4rem; flex-shrink: 0;">
+                <input type="number" name="sucursal" id="sucursal" class="form-control" placeholder="Suc." aria-label="Sucursal" min="0" max="99999" value="{{ old('sucursal', $data->sucursal ?? '') }}" required style="width: 5.5rem; flex-shrink: 0;">
                 <span class="input-group-text flex-shrink-0">#</span>
-                <input type="text" name="numerocomprobante" id="numerocomprobante" class="form-control" placeholder="N&uacute;mero" aria-label="Numero de Comprobante" value="{{$data->numerocomprobante ?? ''}}" readonly style="width: 6.5rem; flex-shrink: 0;">
+                <input type="number" name="numerocomprobante" id="numerocomprobante" class="form-control" placeholder="N&uacute;mero" aria-label="Numero de Comprobante" min="1" value="{{ old('numerocomprobante', $data->numerocomprobante ?? '') }}" required style="width: 8rem; flex-shrink: 0;">
             </div>
         </div>
         <div class="form-group row mt-n2 mb-2">
             <div class="offset-lg-3 col-lg-9">
                 <small class="form-text text-muted">
                     En OC con varios centros de costo el tipo se arma con el primer CC (p. ej. FIB).
+                    Letra, sucursal y n&uacute;mero se cargan a mano.
                     Si es servicio/prepaga, cambi&aacute; a <strong>FIS</strong> (o FNS seg&uacute;n IVA).
                     Si corresponde gastronom&iacute;a, us&aacute; <strong>FGA</strong>
                     (en NC/ND: CGA / DGA).
@@ -73,9 +74,10 @@
 			</div>
 		</div>
         <div class="form-group row">
-            <label for="numeroordencompra" class="col-lg-4 col-form-label requerido">Orden de Compra</label>
+            <label for="numeroordencompra" class="col-lg-4 col-form-label text-right pr-2">Orden de compra</label>
             <div class="col-lg-6">
-                <input type="text" name="numeroordencompra" id="numeroordencompra" class="form-control" data-placeholder="Nombre para inteligencia artificial" value="{{old('numeroordencompra', $data->numeroordencompra ?? '')}}" required/>
+                <input type="text" name="numeroordencompra" id="numeroordencompra" class="form-control" value="{{old('numeroordencompra', $data->numeroordencompra ?? '')}}"/>
+                <small class="form-text text-muted">Vac&iacute;o si es una factura de servicio, sin orden de compra.</small>
             </div>
         </div>        
     </div>
@@ -141,9 +143,19 @@
     </div>
     <div class="col-sm-6">
         <div class="form-group row">
-			<label for="rutaalmacenamiento" class="col-lg-4 col-form-label requerido">Ruta del Archivo</label>
+			<label for="factura_pdf" class="col-lg-4 col-form-label text-right pr-2 requerido">Scan PDF</label>
 			<div class="col-lg-6">
-				<input type="text" name="rutaalmacenamiento" id="rutaalmacenamiento" class="form-control" value="{{$data->rutaalmacenamiento ?? ''}}" readonly>
+				<input type="file" name="factura_pdf" id="factura_pdf" class="form-control" accept="application/pdf,.pdf"
+                    @if (empty($data->rutaalmacenamiento)) required @endif>
+                <small class="form-text text-muted">
+                    PDF de la factura. Queda en la precarga y pasa al comprobante al cargarla.
+                    @if (! empty($data->rutaalmacenamiento))
+                        Si no eleg&iacute;s otro archivo, se conserva el actual.
+                    @endif
+                </small>
+                @if (! empty($data->rutaalmacenamiento))
+                    <input type="text" id="rutaalmacenamiento" class="form-control mt-1" value="{{ $data->rutaalmacenamiento }}" readonly>
+                @endif
 			</div>
             <div class="col-lg-2 d-flex align-items-center">
                 @include('compras.precarga_comprobante_proveedor.partials.boton_ver_factura_pdf', [
@@ -170,20 +182,22 @@
         </div>
         @endif       
     	<div class="form-group row">
-			<label for="Subtotal" class="col-lg-4 col-form-label">Subtotal</label>
+			<label for="subtotal" class="col-lg-4 col-form-label text-right pr-2">Subtotal</label>
             <div class="col-lg-3">
-			    <input type="text" id="subtotal" name="subtotal" class="form-control" value="{{ number_format((float) ($data->subtotal ?? 0), 2, ',', '.') }}">
+			    <input type="text" id="subtotal" name="subtotal" class="form-control" value="{{ old('subtotal', number_format((float) ($data->subtotal ?? 0), 2, ',', '.')) }}">
             </div>
 		</div>
 		<div class="form-group row">
-			<label for="Total" class="col-lg-4 col-form-label">Total</label>
+			<label for="total" class="col-lg-4 col-form-label text-right pr-2">Total</label>
             <div class="col-lg-3">
-			    <input type="text" id="total" name="total" class="form-control" value="{{ number_format((float) ($data->total ?? 0), 2, ',', '.') }}">
+			    <input type="text" id="total" name="total" class="form-control" value="{{ old('total', number_format((float) ($data->total ?? 0), 2, ',', '.')) }}">
+                <small class="form-text text-muted">Opcional. Si no los conoc&eacute;s, dej&aacute;los en 0: se completan al cargar la factura.</small>
             </div>
 		</div>              
     </div>
 </div>
 <h3>Conceptos</h3>
+<p class="text-muted">Opcional. Si no los carg&aacute;s ahora, se completan al generar la factura.</p>
 <div class="card-body">
     <table class="table" id="concepto-table">
         <thead>

@@ -4,24 +4,19 @@ namespace App\Http\Controllers\Caja;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionChequera;
 use App\Models\Caja\Chequera;
 use App\Repositories\Caja\ChequeraRepositoryInterface;
-use App\Repositories\Caja\CuentacajaRepositoryInterface;
 use App\Support\Caja\ChequeConsultaChequeraSupport;
 use App\Support\Caja\ChequePropioAnitaNumeracionSupport;
 
 class ChequeraController extends Controller
 {
 	private $repository;
-    private $cuentacajaRepository;
 
-    public function __construct(ChequeraRepositoryInterface $repository,
-                                CuentacajaRepositoryInterface $cuentacajarepository)
+    public function __construct(ChequeraRepositoryInterface $repository)
     {
         $this->repository = $repository;
-        $this->cuentacajaRepository = $cuentacajarepository;
     }
 
     /**
@@ -70,14 +65,17 @@ class ChequeraController extends Controller
     {
         can('crear-chequera');
 
-        $cuentacaja_query = $this->cuentacajaRepository->all();
         $tipochequera_enum = Chequera::$enumTipochequera;
         $tipocheque_enum = Chequera::$enumTipocheque;
         $estado_enum = Chequera::$enumEstado;
+        $codigoSugerido = $this->repository->proximoCodigo();
 
-        return view('caja.chequera.crear', compact('cuentacaja_query',
-                                                'tipochequera_enum', 'tipocheque_enum',
-                                                'estado_enum'));
+        return view('caja.chequera.crear', compact(
+            'tipochequera_enum',
+            'tipocheque_enum',
+            'estado_enum',
+            'codigoSugerido'
+        ));
     }
 
     /**
@@ -88,9 +86,22 @@ class ChequeraController extends Controller
      */
     public function guardar(ValidacionChequera $request)
     {
-		$this->repository->create($request->all());
+        can('crear-chequera');
 
-        return redirect('caja/chequera')->with('mensaje', 'Chequera creada con éxito');
+        try {
+            $chequera = $this->repository->create($request->validated());
+        } catch (\Throwable $e) {
+            return redirect()->back()
+                ->withInput()
+                ->with('mensaje_error', $e->getMessage());
+        }
+
+        $codigo = trim((string) ($chequera->codigo ?? ''));
+
+        return redirect('caja/chequera')->with(
+            'mensaje',
+            $codigo !== '' ? 'Chequera '.$codigo.' creada con éxito' : 'Chequera creada con éxito'
+        );
     }
 
 
@@ -104,15 +115,17 @@ class ChequeraController extends Controller
     {
         can('editar-chequera');
         $data = $this->repository->findOrFail($id);
-        
-        $cuentacaja_query = $this->cuentacajaRepository->all();
+
         $tipochequera_enum = Chequera::$enumTipochequera;
         $tipocheque_enum = Chequera::$enumTipocheque;
         $estado_enum = Chequera::$enumEstado;
 
-        return view('caja.chequera.editar', compact('data', 'cuentacaja_query',
-                                                'tipochequera_enum', 'tipocheque_enum',
-                                                'estado_enum'));
+        return view('caja.chequera.editar', compact(
+            'data',
+            'tipochequera_enum',
+            'tipocheque_enum',
+            'estado_enum'
+        ));
     }
 
     /**
@@ -126,7 +139,13 @@ class ChequeraController extends Controller
     {
         can('actualizar-chequera');
 
-        $this->repository->update($request->all(), $id);
+        try {
+            $this->repository->update($request->validated(), $id);
+        } catch (\Throwable $e) {
+            return redirect()->back()
+                ->withInput()
+                ->with('mensaje_error', $e->getMessage());
+        }
 
         return redirect('caja/chequera')->with('mensaje', 'Chequera actualizada con éxito');
     }

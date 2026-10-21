@@ -49,6 +49,48 @@ final class PagosSabanaAnitaBridgeReader
     }
 
     /**
+     * OPP/OPA anuladas en Anita: existe un AOP con el mismo pag_rec (la anulación
+     * puede ser otro día, por eso no se filtra por fecha).
+     *
+     * @param  list<int>  $empresasAnita
+     * @param  list<int>  $recs
+     * @param  list<string>  $errores
+     * @return array<string, true> clave empresaAnita|rec
+     */
+    public function mapaRecsAnuladosPorAop(array $empresasAnita, array $recs, array &$errores): array
+    {
+        $empresasAnita = array_values(array_unique(array_filter(array_map('intval', $empresasAnita))));
+        $recs = array_values(array_unique(array_filter(array_map('intval', $recs))));
+        if ($empresasAnita === [] || $recs === []) {
+            return [];
+        }
+
+        $mapa = [];
+        foreach (array_chunk($recs, 80) as $lote) {
+            $where = ' WHERE pag_empresa IN ('.implode(',', $empresasAnita).')'
+                ." AND pag_tipo = 'AOP'"
+                .' AND pag_rec IN ('.implode(',', $lote).')';
+            $filas = $this->listar(
+                'che_ban',
+                'pago',
+                'pag_empresa,pag_tipo,pag_rec',
+                $where,
+                $errores,
+                'pagos-sabana-aop',
+            );
+            foreach ($filas as $fila) {
+                $rec = (int) ($fila->pag_rec ?? 0);
+                $emp = (int) ($fila->pag_empresa ?? 0);
+                if ($rec > 0 && $emp > 0) {
+                    $mapa[$emp.'|'.$rec] = true;
+                }
+            }
+        }
+
+        return $mapa;
+    }
+
+    /**
      * @param  list<int>  $empresasAnita
      * @param  list<string>  $errores
      * @return list<object>

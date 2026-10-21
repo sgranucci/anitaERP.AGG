@@ -29,7 +29,7 @@ class PagosSabanaReporteExport implements FromView, WithColumnFormatting, WithCo
     private const CLAVES_TEXTO = [
         'proveedor_codigo', 'tip', 'numero_op', 'tipo_medio', 'comprobantes',
         'ch_prop_emi', 'fecha_cheque', 'banco', 'ch_terc_ent', 'doc_prop_emit', 'doc_terc_entr',
-        'centros_costo', 'ordenes_compra', 'detalle', 'empresa',
+        'centros_costo', 'ordenes_compra', 'detalle', 'empresa', 'anulado_ref',
     ];
 
     private bool $hayFilaLogos = false;
@@ -203,6 +203,27 @@ class PagosSabanaReporteExport implements FromView, WithColumnFormatting, WithCo
                             (string) ($columna['tipo'] ?? ''),
                         )
                     );
+                }
+
+                $indiceAnulado = null;
+                foreach ($this->columnas as $indice => $columna) {
+                    if (($columna['clave'] ?? '') === 'anulado_ref') {
+                        $indiceAnulado = $indice + 1;
+                        break;
+                    }
+                }
+                if ($indiceAnulado !== null) {
+                    $letraAnulado = Coordinate::stringFromColumnIndex($indiceAnulado);
+                    for ($filaExcel = $this->filaPrimeraDatosExcel; $filaExcel <= $ultimaFila; $filaExcel++) {
+                        $marca = strtoupper(trim((string) $sheet->getCell($letraAnulado.$filaExcel)->getValue()));
+                        if ($marca !== 'ANULADA') {
+                            continue;
+                        }
+                        $sheet->getStyle('A'.$filaExcel.':'.$colUltima.$filaExcel)->applyFromArray([
+                            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'F5B7B1']],
+                            'font' => ['color' => ['rgb' => '7B241C'], 'bold' => true],
+                        ]);
+                    }
                 }
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);

@@ -28,6 +28,26 @@ final class ComprobanteProveedorFechaContableSupport
     }
 
     /**
+     * Alta de factura. Por defecto el día de carga.
+     * En Ferli, cuando la factura entra por IA, la contabilización es la fecha impresa
+     * (sin pasar de hoy: hacia adelante el tope sigue siendo el día de carga).
+     */
+    public static function fechaContabilizacionEnAlta(
+        mixed $fechaFactura,
+        bool $usarFechaFactura,
+        ?string $hoy = null,
+    ): string {
+        $hoyYmd = self::formatear($hoy) ?? self::fechaCargaHoy();
+        if (! $usarFechaFactura) {
+            return $hoyYmd;
+        }
+
+        $factura = self::formatear($fechaFactura) ?? $hoyYmd;
+
+        return $factura <= $hoyYmd ? $factura : $hoyYmd;
+    }
+
+    /**
      * Vencimiento de pago ausente: el día de contabilización.
      * Una fecha ya leída (factura, cuota u orden de compra) se conserva.
      */

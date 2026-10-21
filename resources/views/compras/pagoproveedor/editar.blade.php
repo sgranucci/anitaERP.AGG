@@ -49,9 +49,11 @@
     $consultaSinEditar = ! empty($consultaSinEditar);
     $opSoloLectura = $consultaSinEditar
         || ! \App\Support\Compras\PagoproveedorEdicionCandadoSupport::esEditable($data);
-    $puedeActualizar = can('actualizar-pagoproveedor', false)
+    $puedeModificar = can('actualizar-pagoproveedor', false);
+    $puedeActualizar = $puedeModificar
         && ! $opSoloLectura
         && ! in_array($estado, \App\Models\Compras\Pagoproveedor::estadosFinalesBloqueados(), true);
+    $sinModificar = ! $consultaSinEditar && ! $opSoloLectura && ! $puedeModificar;
     $puedeConfirmar = can('confirmar-pagoproveedor', false) && ! $opSoloLectura && $estado === 'PRE CARGA';
     $puedeEliminar = can('borrar-pagoproveedor', false) && ! $opSoloLectura && $estado === 'PRE CARGA';
     $puedeAnular = can('anular-pagoproveedor', false)
@@ -87,6 +89,10 @@
                     <strong>Solo lectura:</strong> esta OP ya fue revertida y no se puede modificar.
                 @endif
             </div>
+        @elseif ($sinModificar)
+            <div class="alert alert-warning">
+                <strong>No se puede modificar</strong> esta orden de pago. Si hay un error, hay que revertirla.
+            </div>
         @endif
         <div class="card card-primary">
             <div class="card-header">
@@ -113,7 +119,17 @@
                     @endif
                 </div>
             </div>
-            <form action="{{ route('actualizar_pagoproveedor', $data->id) }}" method="POST" id="form-pagoproveedor" class="form-horizontal form--label-right" autocomplete="off" enctype="multipart/form-data">
+            @if ($sinModificar)
+                <style>
+                    form.pp-sin-modificar input,
+                    form.pp-sin-modificar select,
+                    form.pp-sin-modificar textarea,
+                    form.pp-sin-modificar button:not([id^="botonform"]):not(.pp-btn-ver-calculo-ret) {
+                        pointer-events: none;
+                    }
+                </style>
+            @endif
+            <form action="{{ route('actualizar_pagoproveedor', $data->id) }}" method="POST" id="form-pagoproveedor" class="form-horizontal form--label-right{{ $sinModificar ? ' pp-sin-modificar' : '' }}" autocomplete="off" enctype="multipart/form-data">
                 @csrf
                 @method('PUT')
                 <div align="center" style="margin: 5px;">

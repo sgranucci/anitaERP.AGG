@@ -24,7 +24,7 @@ Configuración general del sistema
                 <div class="card-body">
                     <div class="alert alert-info py-2">
                         Estos valores mandan sobre los defaults de <code>config/</code> y <code>.env</code>.
-                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos, umbrales de Compras / Suscripciones, la cantidad recibida de la recepción de proveedor, el concepto y la sucursal del débito por cheque rechazado, y la cuenta del neto de la nota de crédito por pronto pago.
+                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos, umbrales de Compras / Suscripciones, el correo de consultas del proveedor, la cantidad recibida de la recepción de proveedor, el concepto y la sucursal del débito por cheque rechazado, y la cuenta del neto de la nota de crédito por pronto pago.
                     </div>
 
                     @foreach ($grupos as $nombreGrupo => $parametros)
@@ -169,6 +169,24 @@ Configuración general del sistema
                                             <option value="1" @selected($valorBool === '1')>Activo</option>
                                             <option value="0" @selected($valorBool === '0')>Inactivo</option>
                                         </select>
+                                        <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
+                                    </div>
+                                </div>
+                            @elseif ($parametro['tipo'] === 'email')
+                                @php
+                                    $idCampo = 'param_'.$parametro['clave'];
+                                @endphp
+                                <div class="form-group row">
+                                    <label for="{{ $idCampo }}" class="col-lg-4 control-label text-right pr-2">{{ $parametro['etiqueta'] }}</label>
+                                    <div class="col-lg-7">
+                                        <input type="email"
+                                            class="form-control"
+                                            name="parametros[{{ $parametro['clave'] }}]"
+                                            id="{{ $idCampo }}"
+                                            maxlength="255"
+                                            value="{{ old('parametros.'.$parametro['clave'], $parametro['valor']) }}"
+                                            placeholder="consultas@empresa.com"
+                                            autocomplete="off">
                                         <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
                                     </div>
                                 </div>

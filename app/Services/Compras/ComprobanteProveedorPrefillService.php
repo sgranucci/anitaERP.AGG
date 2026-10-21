@@ -22,6 +22,7 @@ use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Compras\PrecargaProveedorMonedaFacturaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use Carbon\Carbon;
@@ -131,7 +132,11 @@ class ComprobanteProveedorPrefillService
         $fechacomprobante = $precarga->fechafactura
             ? Carbon::parse($precarga->fechafactura)->format('Y-m-d')
             : now()->format('Y-m-d');
-        $fechaContabilizacion = $this->fechaIvaDefaultAlta();
+        $usarFechaFactura = $this->usaFechaFacturaComoContabilizacion($precarga);
+        $fechaContabilizacion = ComprobanteProveedorFechaContableSupport::fechaContabilizacionEnAlta(
+            $fechacomprobante,
+            $usarFechaFactura,
+        );
         $fechaVencimientoLeida = $this->fechaYmdDesdePrecarga($precarga->fechavencimiento ?? null);
 
         $fecharecepcion = null;
@@ -353,7 +358,13 @@ class ComprobanteProveedorPrefillService
             $fechacomprobante,
         );
 
-        $prefill = $this->completarVencimientoAusente($prefill, $fechaVencimientoLeida, $fechaContabilizacion);
+        $anclaVencimiento = ($usarFechaFactura && $fechaVencimientoLeida === null)
+            ? $fechacomprobante
+            : $fechaContabilizacion;
+        $prefill = $this->completarVencimientoAusente($prefill, $fechaVencimientoLeida, $anclaVencimiento);
+        if ($usarFechaFactura && $fechaVencimientoLeida === null && count($prefill['cuotas'] ?? []) === 1) {
+            $prefill['cuotas'][0]['fechavencimiento'] = $fechacomprobante;
+        }
 
         return $this->anexarImputacionNc($prefill, $precarga, true);
     }
@@ -816,10 +827,19 @@ class ComprobanteProveedorPrefillService
         }, $cuotas);
     }
 
-    /** Fecha IVA = fecha de carga: siempre el día de alta; no se edita en el form. */
+    /** Fecha IVA por defecto en alta manual o sin lectura IA: el día de carga. */
     private function fechaIvaDefaultAlta(): string
     {
         return ComprobanteProveedorFechaContableSupport::fechaCargaHoy();
+    }
+
+    /**
+     * Ferli: la factura leída por IA se contabiliza en la fecha impresa.
+     */
+    private function usaFechaFacturaComoContabilizacion(Precarga_Comprobante_Proveedor $precarga): bool
+    {
+        return EntornoEmpresaSupport::esFerli()
+            && PrecargaComprobanteOrigenEntrada::esLecturaIa($precarga->origen_entrada ?? null);
     }
 
     private function fechaYmdDesdePrecarga(mixed $valor): ?string

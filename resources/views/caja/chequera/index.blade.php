@@ -25,16 +25,16 @@
                             </button>
                         </form>
                     @endif
-                    <a href="{{route('crear_chequera')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-chequera', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
+                    @if (can('crear-chequera', false))
+                        <a href="{{ route('crear_chequera') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa fa-fw fa-plus-circle"></i> Nueva chequera
+                        </a>
+                    @endif
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-striped table-bordered table-hover" id="tabla-data">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width20">ID</th>
                             <th>Tipo de chequera</th>
@@ -68,7 +68,14 @@
                             <td>{{$data->cuentacajas->nombre ?? ''}}</td>
                             <td>{{$data->desdenumerocheque}}</td>
                             <td>{{$data->hastanumerocheque}}</td>
-                            <td>{{date("d/m/Y", strtotime($data->fechauso ?? ''))}}</td>
+                            <td>
+                                @if (! empty($data->fechauso))
+                                    @php $tsFechaUso = strtotime((string) $data->fechauso); @endphp
+                                    @if ($tsFechaUso && (int) date('Y', $tsFechaUso) > 1971)
+                                        {{ date('d/m/Y', $tsFechaUso) }}
+                                    @endif
+                                @endif
+                            </td>
                             <td>@foreach($estado_enum as $estado)
 									@if ($estado['valor'] == $data->estado)
 										{{ $estado['nombre'] }}

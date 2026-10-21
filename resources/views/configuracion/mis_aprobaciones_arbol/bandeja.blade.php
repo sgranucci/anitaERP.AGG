@@ -363,7 +363,7 @@
                                 </span>
                             </div>
                             @if ($tieneResumenSp)
-                                <div class="anita-inbox-sp-summary" title="Resumen de la solicitud de pago">
+                                <div class="anita-inbox-sp-summary" title="{{ ($p['tipo'] ?? '') === 'SP' ? 'Resumen de la solicitud de pago' : 'Resumen del comprobante' }}">
                                     @if (!empty($p['proveedor']))
                                         <div class="anita-inbox-sp-line">
                                             <span class="anita-inbox-sp-label">Proveedor</span>

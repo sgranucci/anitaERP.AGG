@@ -14,6 +14,7 @@ final class PagosSabanaReporteTextoSupport
         'proveedor_nombre' => ['prop' => 'proveedor_nombre', 'type' => 'texto', 'label' => 'Nombre proveedor', 'flexible' => true],
         'tip' => ['prop' => 'tip', 'type' => 'texto', 'label' => 'Tipo OP'],
         'numero_op' => ['prop' => 'numero_op', 'type' => 'texto', 'label' => 'Número OP'],
+        'anulado_ref' => ['prop' => 'anulado_ref', 'type' => 'texto', 'label' => 'Anulado'],
         'fecha' => ['prop' => 'fecha', 'type' => 'texto', 'label' => 'Fecha'],
         'tipo_medio' => ['prop' => 'tipo_medio', 'type' => 'texto', 'label' => 'Tipo medio'],
         'comprobantes' => ['prop' => 'comprobantes', 'type' => 'texto', 'label' => 'Comprobantes', 'flexible' => true],
@@ -52,6 +53,10 @@ final class PagosSabanaReporteTextoSupport
         );
 
         $resultado['filas'] = $filasFiltradas;
+        $resultado['columnas'] = PagosSabanaColumnasSupport::asegurarColumnaAnulado(
+            $resultado['columnas'] ?? [],
+            $filasFiltradas,
+        );
         $resultado['totales'] = self::recalcularTotales($filasFiltradas, $resultado['columnas'] ?? []);
 
         if (! empty($resultado['secciones']) && is_array($resultado['secciones'])) {
@@ -83,7 +88,7 @@ final class PagosSabanaReporteTextoSupport
     /**
      * @param  list<array<string, mixed>>  $filas
      * @param  list<array<string, mixed>>  $columnas
-     * @return array{cantidad: int, importes: array<string, float>, total_pago: float}
+     * @return array{cantidad: int, anulados: int, importes: array<string, float>, total_pago: float}
      */
     private static function recalcularTotales(array $filas, array $columnas): array
     {
@@ -94,12 +99,18 @@ final class PagosSabanaReporteTextoSupport
             }
         }
         $cantidad = 0;
+        $anulados = 0;
         $totalPago = 0.0;
         foreach ($filas as $fila) {
             if (($fila['tipo_fila'] ?? '') !== 'detalle') {
                 continue;
             }
             $cantidad++;
+            if (! empty($fila['anulado'])) {
+                $anulados++;
+
+                continue;
+            }
             $totalPago += (float) ($fila['total_pago'] ?? 0);
             foreach ($importes as $clave => $_) {
                 $importes[$clave] = round($importes[$clave] + (float) ($fila[$clave] ?? 0), 2);
@@ -108,6 +119,7 @@ final class PagosSabanaReporteTextoSupport
 
         return [
             'cantidad' => $cantidad,
+            'anulados' => $anulados,
             'importes' => $importes,
             'total_pago' => round($totalPago, 2),
         ];

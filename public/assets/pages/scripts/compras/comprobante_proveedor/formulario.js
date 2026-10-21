@@ -1526,40 +1526,72 @@ $(function () {
         actualizarAvisoSumaDebeGasto();
     }
 
-    function actualizarAvisoSumaDebeGasto() {
-        var $aviso = $rootPreviewAsiento().find('#cp-debe-gasto-aviso-suma').first();
+    /**
+     * Destildado (default): no reparte el neto al agregar, quitar o editar cuentas.
+     * El tilde vive en los dos paneles; el valor persiste fuera del HTML que pisa el preview.
+     */
+    function recalcularProrrateoDebeGasto() {
+        return String($('#cp-debe-gasto-recalcular-prorrateo').val() || '0') === '1';
+    }
+
+    function aplicarEstadoRecalcularProrrateoEnPantalla() {
+        var on = recalcularProrrateoDebeGasto();
+        $('.cp-debe-gasto-recalcular-prorrateo').prop('checked', on);
+    }
+
+    function resumenSumaDebeGasto() {
         var $wrap = $wrapAsientoTabla();
-        if (!$aviso.length || !$wrap.length) {
-            actualizarTotalesAsientoEnVivo();
-            return false;
+        var neto = 0;
+        if ($wrap.length) {
+            neto = parseFloat($wrap.attr('data-neto-imputable-gasto') || $wrap.data('neto-imputable-gasto') || '0') || 0;
         }
-        var neto = parseFloat($wrap.attr('data-neto-imputable-gasto') || $wrap.data('neto-imputable-gasto') || '0') || 0;
-        // Leer siempre del DOM mientras se tipea (no cache pendiente desactualizado).
         var lineas = leerDebeGastoDesdeTabla();
         if (!lineas.length && debeGastoPendiente) {
             lineas = debeGastoPendiente;
         }
-        if (!lineas.length) {
-            $aviso.text('');
-            actualizarTotalesAsientoEnVivo();
-            return true;
-        }
         var suma = 0;
         lineas.forEach(function (l) { suma += l.importe; });
         suma = Math.round(suma * 100) / 100;
-        neto = Math.round(neto * 100) / 100;
-        var diff = Math.round((suma - neto) * 100) / 100;
-        if (Math.abs(diff) <= 0.05) {
-            $aviso.removeClass('text-danger').addClass('text-muted').text(
-                'Suma gasto: ' + fmtMontoLocal(suma) + ' (ok)'
+        neto = Math.round(Math.abs(neto) * 100) / 100;
+        return {
+            lineas: lineas,
+            suma: suma,
+            neto: neto,
+            diff: Math.round((suma - neto) * 100) / 100
+        };
+    }
+
+    function actualizarAvisoSumaDebeGasto() {
+        var $avisos = targetsPreviewAsiento().find('#cp-debe-gasto-aviso-suma');
+        var $wrap = $wrapAsientoTabla();
+        if (!$avisos.length || !$wrap.length) {
+            actualizarTotalesAsientoEnVivo();
+            return false;
+        }
+        var resumen = resumenSumaDebeGasto();
+        if (!resumen.lineas.length) {
+            $avisos.removeClass('text-danger').addClass('text-muted').text('');
+            actualizarTotalesAsientoEnVivo();
+            return true;
+        }
+        if (Math.abs(resumen.diff) <= 0.05) {
+            $avisos.removeClass('text-danger').addClass('text-muted').text(
+                'Suma gasto: ' + fmtMontoLocal(resumen.suma) + ' (ok)'
             );
             actualizarTotalesAsientoEnVivo();
             return true;
         }
-        $aviso.removeClass('text-muted').addClass('text-danger').text(
-            'Suma gasto: ' + fmtMontoLocal(suma) + ' ≠ neto ' + fmtMontoLocal(neto)
-            + ' (dif. ' + fmtMontoLocal(diff) + ')'
-        );
+        var texto;
+        if (resumen.diff > 0.05) {
+            texto = 'Suma gasto: ' + fmtMontoLocal(resumen.suma)
+                + ' supera el neto ' + fmtMontoLocal(resumen.neto)
+                + ' (exceso ' + fmtMontoLocal(resumen.diff) + ')';
+        } else {
+            texto = 'Suma gasto: ' + fmtMontoLocal(resumen.suma)
+                + ' — falta ' + fmtMontoLocal(Math.abs(resumen.diff))
+                + ' para el neto ' + fmtMontoLocal(resumen.neto);
+        }
+        $avisos.removeClass('text-muted').addClass('text-danger').text(texto);
         actualizarTotalesAsientoEnVivo();
         return false;
     }
@@ -1646,6 +1678,9 @@ $(function () {
         var $tabla = $inputEditado.closest('table');
         var $wrap = $inputEditado.closest('#cp-asiento-tabla-wrap');
         if (!$tabla.length || !$wrap.length) {
+            return false;
+        }
+        if (!recalcularProrrateoDebeGasto()) {
             return false;
         }
         var neto = parseFloat($wrap.attr('data-neto-imputable-gasto') || $wrap.data('neto-imputable-gasto') || '0') || 0;
@@ -1750,7 +1785,9 @@ $(function () {
             importe: 0,
             centrocosto_id: 0
         });
-        lineas = redistribuirImportesDebeGasto(lineas, neto);
+        if (recalcularProrrateoDebeGasto()) {
+            lineas = redistribuirImportesDebeGasto(lineas, neto);
+        }
         recordarCuentasDebeGastoDesdeLineas(lineas);
         debeGastoActivo = true;
         debeGastoPendiente = lineas;
@@ -1775,7 +1812,9 @@ $(function () {
         if (!lineas.length) {
             return;
         }
-        lineas = redistribuirImportesDebeGasto(lineas, neto);
+        if (recalcularProrrateoDebeGasto()) {
+            lineas = redistribuirImportesDebeGasto(lineas, neto);
+        }
         recordarCuentasDebeGastoDesdeLineas(lineas);
         debeGastoActivo = true;
         debeGastoPendiente = lineas;
@@ -1898,6 +1937,7 @@ $(function () {
 
     function trasRenderPreviewAsiento() {
         aplicarCuentasDebeGastoManualesEnEditores();
+        aplicarEstadoRecalcularProrrateoEnPantalla();
         debeGastoPendiente = null;
         sincronizarDebeGastoHiddenDesdeTabla();
         aplicarCentrosCostoEnPreview();
@@ -2566,6 +2606,11 @@ $(function () {
         window.refrescarPreviewAsiento(true);
     });
 
+    $(document).on('change', '.cp-debe-gasto-recalcular-prorrateo', function () {
+        $('#cp-debe-gasto-recalcular-prorrateo').val($(this).is(':checked') ? '1' : '0');
+        aplicarEstadoRecalcularProrrateoEnPantalla();
+    });
+
     $(document).on('click', '#cp-debe-gasto-agregar', function (e) {
         e.preventDefault();
         agregarCuentaDebeGasto();
@@ -2687,13 +2732,18 @@ $(function () {
             hoy = ymdFechaCarga(ivaEl.getAttribute('max')) || comp;
         }
         var topeIva = techoFechaContabilizacion(hoy, guardada, comp, minOp);
-        if (topeIva) {
+        // Reescribir max/min con el mismo valor reinicia el año en Chrome de Windows (queda 0004).
+        if (topeIva && ivaEl.max !== topeIva) {
             ivaEl.max = topeIva;
+        }
+        if (topeIva && compEl.max !== topeIva) {
             compEl.max = topeIva;
         }
         if (minOp && topeIva && minOp <= topeIva) {
-            ivaEl.min = minOp;
-        } else {
+            if (ivaEl.min !== minOp) {
+                ivaEl.min = minOp;
+            }
+        } else if (ivaEl.hasAttribute('min')) {
             ivaEl.removeAttribute('min');
         }
         var ivaFutura = !!(iva && topeIva && iva > topeIva);
@@ -2724,7 +2774,8 @@ $(function () {
         return '';
     }
 
-    $('#fechacomprobante, #fechaiva').on('change input', mensajeFechasCargaComprobante);
+    // Solo change: input corre en cada dígito del año y, en Chrome de Windows, deja el año en 000X.
+    $('#fechacomprobante, #fechaiva').on('change', mensajeFechasCargaComprobante);
     mensajeFechasCargaComprobante();
 
     $form.on('submit', function (e) {
@@ -2739,6 +2790,22 @@ $(function () {
         }
         sincronizarCuentasAsientoAConceptos();
         sincronizarDebeGastoHiddenDesdeTabla();
+
+        if (estadoRepartoGastoPantalla() === 'si') {
+            var resumenGasto = resumenSumaDebeGasto();
+            if (resumenGasto.lineas.length && resumenGasto.diff > 0.05) {
+                e.preventDefault();
+                mostrarSolapa('#cp-solapa-asiento-contable');
+                marcarTabActivo('cp-boton-asiento-contable');
+                actualizarAvisoSumaDebeGasto();
+                alert(
+                    'La suma de las cuentas de gasto (' + fmtMontoLocal(resumenGasto.suma)
+                    + ') supera el neto (' + fmtMontoLocal(resumenGasto.neto) + ').'
+                    + '\n\nAjustá los importes: con «Recalcular prorrateo» destildado no se reparten solos.'
+                );
+                return;
+            }
+        }
 
         var modo = $('#modo_carga').val();
         if (!tipoNoExigeCom() && modo === 'ASIGNA_RECEPCION' && $('#cp-bloque-recepciones-com').length) {

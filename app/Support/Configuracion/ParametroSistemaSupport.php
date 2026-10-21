@@ -47,6 +47,12 @@ final class ParametroSistemaSupport
     /** Pedido de ventas: imprimir IVA y percepciones de IIBB además de exento y descuentos. */
     public const CLAVE_PEDIDO_IMPRIME_IVA_IIBB = 'pedido_imprime_iva_iibb';
 
+    /**
+     * Casilla que sí se lee. Reply-To y leyenda de los mails de orden de pago
+     * y orden de compra. AnitaERP@ no recibe esas consultas.
+     */
+    public const CLAVE_MAIL_CONSULTA_PROVEEDOR = 'mail_consulta_proveedor';
+
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
     /**
@@ -97,6 +103,13 @@ final class ParametroSistemaSupport
                 'ayuda' => 'Si está activo, en orden de compra y requisición se muestran y validan partida de presupuesto y CAPEX en cada línea. Default: solo AGG activo; el resto de instalaciones arranca apagado.',
                 'tipo' => 'boolean',
                 'orden' => 55,
+            ],
+            self::CLAVE_MAIL_CONSULTA_PROVEEDOR => [
+                'grupo' => 'Compras',
+                'etiqueta' => 'Correo de consultas del proveedor',
+                'ayuda' => 'Casilla que sí se lee. Aparece en el mail de la orden de pago y de la orden de compra, y es adonde llega si el proveedor responde. La casilla AnitaERP no atiende esas consultas. Vacío: el mail avisa que no recibe respuestas, pero la respuesta sigue cayendo en AnitaERP.',
+                'tipo' => 'email',
+                'orden' => 56,
             ],
             self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => [
                 'grupo' => 'Recepción de proveedor',
@@ -339,6 +352,19 @@ final class ParametroSistemaSupport
         return self::boolean(self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB, false);
     }
 
+    /**
+     * Email de consultas del proveedor, o cadena vacía si no hay uno válido.
+     */
+    public static function mailConsultaProveedor(): string
+    {
+        $email = self::texto(self::CLAVE_MAIL_CONSULTA_PROVEEDOR, '');
+        if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            return '';
+        }
+
+        return $email;
+    }
+
     public static function suscripcionComprobanteDiaEscalamiento(): string
     {
         return self::texto(
@@ -403,6 +429,8 @@ final class ParametroSistemaSupport
                 }
             } elseif ($def['tipo'] === 'boolean') {
                 $valor = self::normalizarBooleanGuardar($valorRaw) ? '1' : '0';
+            } elseif ($def['tipo'] === 'email') {
+                $valor = strtolower(trim((string) $valorRaw));
             } elseif ($def['tipo'] === 'select') {
                 $valor = trim((string) $valorRaw);
                 $ops = $def['opciones'] ?? [];
@@ -490,6 +518,7 @@ final class ParametroSistemaSupport
             self::CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID => '',
             self::CLAVE_PROVEEDOR_ALTA_CUENTACONTABLE_ID => '',
             self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB => '0',
+            self::CLAVE_MAIL_CONSULTA_PROVEEDOR => '',
             default => '0',
         };
     }

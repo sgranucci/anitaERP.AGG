@@ -146,6 +146,32 @@ class OrdencompraLegajoFacturaPdfService
         return $this->precargaRepository->create($payload);
     }
 
+    /**
+     * Guarda el PDF de una precarga manual en Facturas_scan
+     * ({CUIT}/{Y-m}/{tipo-letra-suc-nro}.pdf).
+     */
+    public function publicarPdfFactura(
+        UploadedFile $pdf,
+        Proveedor $proveedor,
+        string $fechaYmd,
+        string $tipoAbreviatura,
+        string $letra,
+        int $sucursal,
+        int $numerocomprobante,
+    ): string {
+        $this->assertPdfValido($pdf);
+
+        return $this->guardarPdfCanonico(
+            $pdf,
+            $proveedor,
+            $this->normalizarFecha($fechaYmd),
+            $tipoAbreviatura,
+            OrdencompraLegajoFacturaArcaSupport::normalizarLetra($letra),
+            $sucursal,
+            $numerocomprobante,
+        );
+    }
+
     public function adjuntarPdfAlLegajo(Ordencompra $oc, UploadedFile $pdf): Precarga_Comprobante_Proveedor
     {
         $ext = strtolower((string) $pdf->getClientOriginalExtension());

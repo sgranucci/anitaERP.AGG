@@ -3,6 +3,7 @@
 namespace App\Mail\Compras;
 
 use App\Models\Compras\Pagoproveedor;
+use App\Support\Mail\CorreoProveedorNoResponderSupport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
@@ -19,6 +20,8 @@ class PagoproveedorOrdenPago extends Mailable
 
     public bool $incluyeArchivosAdicionales = false;
 
+    public string $emailConsulta = '';
+
     public function __construct(Pagoproveedor $pagoproveedor, ?string $mensajeAdicional = null)
     {
         $this->pagoproveedor = $pagoproveedor;
@@ -28,6 +31,8 @@ class PagoproveedorOrdenPago extends Mailable
 
     public function build(): self
     {
+        $this->emailConsulta = CorreoProveedorNoResponderSupport::aplicar($this);
+
         return $this->view('mails.compras.pagoproveedor_orden_pago');
     }
 }

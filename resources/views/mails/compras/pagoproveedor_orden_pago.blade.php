@@ -22,6 +22,7 @@
     @if (!empty($mensajeAdicional))
         <p>{!! nl2br(e($mensajeAdicional)) !!}</p>
     @endif
+    @include('mails.compras.partials.aviso_no_responder')
     <p>Saludos cordiales.</p>
 </body>
 </html>

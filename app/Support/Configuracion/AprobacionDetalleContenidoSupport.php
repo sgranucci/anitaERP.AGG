@@ -625,7 +625,7 @@ final class AprobacionDetalleContenidoSupport
         if ($model->relationLoaded($relation)) {
             return $model->getRelation($relation);
         }
-        if (! $model->exists) {
+        if (! $model->exists || ! $model->isRelation($relation)) {
             return null;
         }
         $model->loadMissing($relation);

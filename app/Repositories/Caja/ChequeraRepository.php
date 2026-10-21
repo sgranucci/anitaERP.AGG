@@ -45,49 +45,51 @@ class ChequeraRepository implements ChequeraRepositoryInterface
 
     public function create(array $data)
     {
+        $data = $this->normalizarDatos($data);
+        $data['codigo'] = $this->asignarCodigoLibre($data['codigo'] ?? null);
+
         DB::beginTransaction();
-        try 
-        {
+        try {
             $chequera = $this->model->create($data);
-
-            // Graba anita
-		    $anita = self::guardarAnita($data);
-
-
+            $this->guardarAnita($data);
             DB::commit();
-
-        } catch (\Exception $e) {
-
-            DB::rollback();
-
-            dd($e->getMessage());
-
-            return ['error' => $e->getMessage()];
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
         }
-        return($chequera);
+
+        return $chequera;
     }
 
     public function update(array $data, $id)
     {
+        $data = $this->normalizarDatos($data);
+
         DB::beginTransaction();
-        try 
-        {
-            $chequera = $this->model->findOrFail($id)->update($data);
-
-            // Actualiza anita
-		    $anita = self::actualizarAnita($data, $data['codigo']);
-
-
+        try {
+            $chequera = $this->model->findOrFail($id);
+            $data['codigo'] = $chequera->codigo;
+            $chequera->update($data);
+            $this->actualizarAnita($data, $chequera->codigo);
             DB::commit();
-
-        } catch (\Exception $e) {
-            
-            DB::rollback();
-
-            dd($e->getMessage());
-            return ['error' => $e->getMessage()];
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
         }
-        return($chequera);
+
+        return $chequera;
+    }
+
+    /**
+     * Próximo código numérico libre en el ERP y en Anita.
+     */
+    public function proximoCodigo(): string
+    {
+        try {
+            return $this->asignarCodigoLibre(null);
+        } catch (\Throwable $e) {
+            return (string) ($this->maxCodigoLocal() + 1);
+        }
     }
 
     public function delete($id)
@@ -420,6 +422,126 @@ class ChequeraRepository implements ChequeraRepositoryInterface
         return 'created';
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalizarDatos(array $data): array
+    {
+        $data['fechauso'] = $this->normalizarFechaUso($data['fechauso'] ?? null);
+        $data['desdenumerocheque'] = preg_replace('/\D+/', '', (string) ($data['desdenumerocheque'] ?? '')) ?? '';
+        $data['hastanumerocheque'] = preg_replace('/\D+/', '', (string) ($data['hastanumerocheque'] ?? '')) ?? '';
+        $estado = strtoupper(trim((string) ($data['estado'] ?? 'A')));
+        $data['estado'] = in_array($estado, ['A', 'T'], true) ? $estado : 'A';
+
+        return $data;
+    }
+
+    private function normalizarFechaUso(mixed $valor): ?string
+    {
+        $valor = trim((string) $valor);
+        if ($valor === '' || $valor === '0') {
+            return null;
+        }
+
+        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y'] as $formato) {
+            $fecha = \DateTime::createFromFormat('!'.$formato, $valor);
+            $errores = \DateTime::getLastErrors();
+            $invalida = is_array($errores) && (($errores['warning_count'] ?? 0) > 0 || ($errores['error_count'] ?? 0) > 0);
+            if ($fecha instanceof \DateTime && ! $invalida) {
+                return $fecha->format('Y-m-d');
+            }
+        }
+
+        return null;
+    }
+
+    private function fechaAnita(mixed $valor): string
+    {
+        $normalizada = $this->normalizarFechaUso($valor);
+
+        return $normalizada === null ? '0' : str_replace('-', '', $normalizada);
+    }
+
+    private function estadoAnita(mixed $estado): string
+    {
+        $estado = strtoupper(trim((string) $estado));
+
+        return in_array($estado, ['A', 'T'], true) ? $estado : 'A';
+    }
+
+    private function maxCodigoLocal(): int
+    {
+        $max = 0;
+        foreach ($this->model->newQuery()->pluck('codigo') as $codigo) {
+            $numero = $this->codigoNumerico($codigo);
+            if ($numero !== null && $numero > $max) {
+                $max = $numero;
+            }
+        }
+
+        return $max;
+    }
+
+    private function codigoNumerico(mixed $codigo): ?int
+    {
+        $codigo = trim((string) $codigo);
+        if ($codigo === '' || preg_match('/^\d+$/', $codigo) !== 1) {
+            return null;
+        }
+
+        return (int) $codigo;
+    }
+
+    private function asignarCodigoLibre(?string $preferido): string
+    {
+        $preferidoNum = $this->codigoNumerico($preferido);
+        if ($preferidoNum !== null && $preferidoNum > 0 && ! $this->codigoOcupado((string) $preferidoNum)) {
+            return (string) $preferidoNum;
+        }
+
+        $siguiente = max($this->maxCodigoLocal() + 1, ($preferidoNum ?? 0) + 1, 1);
+        for ($i = 0; $i < 40; $i++) {
+            $candidato = (string) ($siguiente + $i);
+            if (! $this->codigoOcupado($candidato)) {
+                return $candidato;
+            }
+        }
+
+        throw new \RuntimeException('No encontré un código de chequera libre. Sincronice desde Anita y vuelva a intentar.');
+    }
+
+    private function codigoOcupado(string $codigo): bool
+    {
+        if ($this->findPorCodigo($codigo)) {
+            return true;
+        }
+
+        return $this->existeEnAnita($codigo);
+    }
+
+    private function existeEnAnita(string $codigo): bool
+    {
+        if (preg_match('/^\d+$/', $codigo) !== 1) {
+            return false;
+        }
+
+        $apiAnita = new ApiAnita();
+        $raw = $apiAnita->apiCall([
+            'acc' => 'list',
+            'sistema' => 'che_ban',
+            'tabla' => $this->tableAnita,
+            'campos' => 'cproc_nro_chequera',
+            'whereArmado' => " WHERE cproc_nro_chequera = '".$codigo."' ",
+        ]);
+        $parsed = ApiAnita::parsearRespuestaLista(is_string($raw) ? $raw : null);
+        if ($parsed['error_lectura'] !== null) {
+            throw new \RuntimeException('No se pudo consultar el código en Anita: '.$parsed['error_lectura']);
+        }
+
+        return $parsed['filas'] !== [];
+    }
+
 	public function guardarAnita($request) {
         $apiAnita = new ApiAnita();
         
@@ -429,12 +551,9 @@ class ChequeraRepository implements ChequeraRepositoryInterface
         if ($cuentacaja)
             $codigo = $cuentacaja->codigo;
 
-        if ($request['fechauso'])
-            $fechaUso = date('Ymd',strtotime($request['fechauso']));
-        else    
-            $fechaUso = 0;
-
+        $fechaUso = $this->fechaAnita($request['fechauso'] ?? null);
         $fechaAlta = Carbon::now()->format('Ymd');
+        $estado = $this->estadoAnita($request['estado'] ?? 'A');
 
         $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
 			'sistema' => 'che_ban',
@@ -455,7 +574,7 @@ class ChequeraRepository implements ChequeraRepositoryInterface
                 '".$fechaUso."',
 				'".$request['desdenumerocheque']."',
                 '".$request['hastanumerocheque']."',
-                'A',
+                '".$estado."',
 				'".($request['tipocheque'] == 'C' ? 'N' : $request['tipocheque'])."' "
         );
         $anita = $apiAnita->apiCallEscritura($data);
@@ -472,11 +591,7 @@ class ChequeraRepository implements ChequeraRepositoryInterface
         if ($cuentacaja)
             $codigo = $cuentacaja->codigo;
 
-        if ($request['fechauso'])
-            $fechaUso = date('Ymd',strtotime($request['fechauso']));
-        else    
-            $fechaUso = 0;
-
+        $fechaUso = $this->fechaAnita($request['fechauso'] ?? null);
         $fechaAlta = Carbon::now()->format('Ymd');
 
         $data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 

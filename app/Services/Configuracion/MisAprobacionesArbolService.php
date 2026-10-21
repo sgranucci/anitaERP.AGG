@@ -2,6 +2,7 @@
 
 namespace App\Services\Configuracion;
 
+use App\Models\Compras\Ordencompra;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Configuracion\Arbolaprobacion_Nivel;
@@ -9,6 +10,7 @@ use App\Models\Sala\RequisicionSala;
 use App\Models\Sala\RequisicionSalaEstado;
 use App\Models\Solicitudpago\Solicitudpago;
 use App\Services\Sala\RequisicionSalaArbolIntegracionService;
+use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
 use App\Support\Configuracion\ArbolAprobacionContextoSupport;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Navegacion\ModoConsultaUrlSupport;
@@ -668,12 +670,15 @@ class MisAprobacionesArbolService
         $snapshot = null;
         try {
             $documento = $this->arbolaprobacionService->cargarDocumentoArbol($ref['tipo'], $ref['comprobante_id']);
-            $snapshot = $documento
-                ? $this->arbolaprobacionService->snapshotDocumentoArbol($ref['tipo'], $documento)
-                : null;
         } catch (\Throwable) {
             $documento = null;
-            $snapshot = null;
+        }
+        if ($documento) {
+            try {
+                $snapshot = $this->arbolaprobacionService->snapshotDocumentoArbol($ref['tipo'], $documento);
+            } catch (\Throwable) {
+                $snapshot = null;
+            }
         }
         $documentoExiste = $documento !== null;
 
@@ -738,6 +743,7 @@ class MisAprobacionesArbolService
         $sla = $this->calcularSlaArbol($mov, $fechaEnvio, $diasPendiente, $urgencia);
 
         $resumenSp = $this->resumenSolicitudpagoBandeja($ref['tipo'], $documento);
+        $resumenOc = $this->resumenOrdencompraBandeja($documento);
 
         return [
             'movimiento_id' => (int) $mov->id,
@@ -758,7 +764,9 @@ class MisAprobacionesArbolService
             'url_ver' => $urlVer,
             'url_editar' => $urlEditar,
             'url_erp' => $urlErp,
-            'etiqueta_erp' => $urlErp ? $this->etiquetaVerErp($tipoBandeja) : null,
+            'etiqueta_erp' => $urlErp
+                ? ($resumenOc['subtitulo'] ? 'Ver legajo' : $this->etiquetaVerErp($tipoBandeja))
+                : null,
             'url_aprobar' => url('mis-aprobaciones/'.$mov->id.'/aprobar'),
             'url_rechazar' => url('mis-aprobaciones/'.$mov->id.'/rechazar'),
             'url_descartar' => url('mis-aprobaciones/'.$mov->id.'/descartar-huerfano'),
@@ -770,9 +778,33 @@ class MisAprobacionesArbolService
             'sla_fecha_limite' => $sla['fecha_limite'],
             'dias_para_vencer' => $sla['dias_para_vencer'],
             'observacion' => $obs !== '' ? $obs : null,
-            'proveedor' => $resumenSp['proveedor'],
+            'proveedor' => $resumenSp['proveedor'] ?? $resumenOc['proveedor'],
             'concepto' => $resumenSp['concepto'],
             'detalle' => $resumenSp['detalle'],
+            'subtitulo' => $resumenOc['subtitulo'],
+        ];
+    }
+
+    /**
+     * Proveedor y rótulo del legajo de Gastronomía, para reconocerlo en la bandeja.
+     *
+     * @return array{proveedor: ?string, subtitulo: ?string}
+     */
+    private function resumenOrdencompraBandeja(mixed $documento): array
+    {
+        $vacio = ['proveedor' => null, 'subtitulo' => null];
+        if (! $documento instanceof Ordencompra) {
+            return $vacio;
+        }
+
+        $documento->loadMissing('proveedores:id,nombre');
+        $proveedor = trim((string) (optional($documento->proveedores)->nombre ?? ''));
+        $esLegajo = OrdencompraLegajoGastronomiaSupport::requiereCircuito($documento)
+            && OrdencompraLegajoGastronomiaSupport::esSectorGastronomia((int) ($documento->sector_legajocompra_id ?? 0));
+
+        return [
+            'proveedor' => $proveedor !== '' ? $proveedor : null,
+            'subtitulo' => $esLegajo ? 'Legajo Gastronomía' : null,
         ];
     }
 

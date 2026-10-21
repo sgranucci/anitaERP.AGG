@@ -33,6 +33,9 @@
                     Movimientos: {{ (int) ($total_lineas ?? 0) }}
                     &middot; Total pago:
                     {{ number_format((float) ($importesTotales['total_pago'] ?? $totales['total_pago'] ?? 0), 2, ',', '.') }}
+                    @if ((int) ($totales['anulados'] ?? 0) > 0)
+                        &middot; Anulados: {{ (int) $totales['anulados'] }} (no suman al total)
+                    @endif
                 </td>
             </tr>
         @endif

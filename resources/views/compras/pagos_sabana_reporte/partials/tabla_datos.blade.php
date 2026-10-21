@@ -84,6 +84,10 @@
                 </tr>
                 @continue
             @endif
+            @php
+                $filaAnulada = ! empty($fila['anulado']);
+                $estiloAnulada = $filaAnulada ? 'background:#F5B7B1;color:#7B241C;' : '';
+            @endphp
             <tr>
                 @foreach ($columnasLocal as $col)
                     @php
@@ -92,7 +96,7 @@
                         $esImporte = ($col['tipo'] ?? '') === Col::TIPO_IMPORTE;
                         $esFecha = ($col['tipo'] ?? '') === Col::TIPO_FECHA;
                     @endphp
-                    <td style="{{ $estiloCelda($col, $paraPdf) }}">
+                    <td style="{{ $estiloCelda($col, $paraPdf) }}{{ $estiloAnulada }}{{ ($clave === 'anulado_ref' && $filaAnulada) ? 'font-weight:700;' : '' }}">
                         @if ($clave === 'proveedor_codigo' && $puedeVerProveedor && ! empty($fila['proveedor_id']))
                             <a class="text-primary" target="_blank" rel="noopener"
                                href="{{ route('editar_proveedor', $fila['proveedor_id']) }}?origen=modal_consulta&vista=consulta">

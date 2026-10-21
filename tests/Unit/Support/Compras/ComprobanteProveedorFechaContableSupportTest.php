@@ -48,6 +48,54 @@ class ComprobanteProveedorFechaContableSupportTest extends TestCase
         $this->assertTrue(true);
     }
 
+    public function test_alta_ferli_ia_contabiliza_en_fecha_de_factura(): void
+    {
+        $this->assertSame(
+            '2026-10-02',
+            ComprobanteProveedorFechaContableSupport::fechaContabilizacionEnAlta(
+                '2026-10-02',
+                true,
+                '2026-10-21',
+            )
+        );
+    }
+
+    public function test_alta_ferli_ia_no_contabiliza_despues_de_hoy(): void
+    {
+        $this->assertSame(
+            '2026-10-21',
+            ComprobanteProveedorFechaContableSupport::fechaContabilizacionEnAlta(
+                '2026-10-25',
+                true,
+                '2026-10-21',
+            )
+        );
+    }
+
+    public function test_alta_sin_ferli_ia_contabiliza_hoy(): void
+    {
+        $this->assertSame(
+            '2026-10-21',
+            ComprobanteProveedorFechaContableSupport::fechaContabilizacionEnAlta(
+                '2026-10-02',
+                false,
+                '2026-10-21',
+            )
+        );
+    }
+
+    public function test_vencimiento_ausente_usa_el_ancla(): void
+    {
+        $this->assertSame(
+            '2026-10-02',
+            ComprobanteProveedorFechaContableSupport::vencimientoOContabilizacion(null, '2026-10-02')
+        );
+        $this->assertSame(
+            '2026-11-15',
+            ComprobanteProveedorFechaContableSupport::vencimientoOContabilizacion('2026-11-15', '2026-10-02')
+        );
+    }
+
     public function test_fecha_contabilizacion_hacia_atras_pasa(): void
     {
         $this->assertSame(

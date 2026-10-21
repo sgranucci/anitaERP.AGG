@@ -4,6 +4,8 @@
 
 {{-- Payload del reparto multi-cuenta (fuera del body AJAX para que sobreviva el refresh). --}}
 <div id="cp-debe-gasto-hidden" class="d-none" aria-hidden="true"></div>
+{{-- 0 = no reparte el neto al agregar o editar cuentas (default). 1 = prorrateo automático. --}}
+<input type="hidden" id="cp-debe-gasto-recalcular-prorrateo" value="0">
 
 <div id="cp-asiento-preview-body" class="cp-asiento-preview-target">
     @include('compras.comprobante_proveedor.partials.solapa_asiento_contable_body', [

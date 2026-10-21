@@ -126,7 +126,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
             return collect();
         }
 
-        $lineas = ComprobanteProveedorDebeGastoSupport::lineasDesdeRequest($request);
+        $lineas = ComprobanteProveedorDebeGastoSupport::lineasDesdeRequest($request, true);
         $out = collect();
         foreach ($lineas as $linea) {
             $modelo = new Comprobante_Proveedor_Debe_Gasto([

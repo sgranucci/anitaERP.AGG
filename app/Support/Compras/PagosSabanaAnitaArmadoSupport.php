@@ -121,6 +121,8 @@ final class PagosSabanaAnitaArmadoSupport
                 'ordenes_compra' => '',
                 'ordenes_compra_links' => [],
                 'detalle' => trim((string) ($pago->pag_leyenda ?? '')),
+                'anulado' => false,
+                'anulado_ref' => '',
                 'empresa_id' => $emp['id'] ?? $empresaAnita,
                 'empresa' => $emp['codigo'] ?? (string) $empresaAnita,
                 'empresa_nombre' => $emp['nombre'] ?? (string) $empresaAnita,

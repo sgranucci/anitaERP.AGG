@@ -101,6 +101,7 @@ class ValidacionConfiguracionGeneral extends FormRequest
                     },
                 ],
                 'boolean' => 'required|in:0,1',
+                'email' => 'nullable|email|max:255',
                 'select' => 'required|in:'.implode(',', array_keys($def['opciones'] ?? [])),
                 default => 'required|numeric|min:0',
             };

@@ -3590,6 +3590,13 @@ class ArbolaprobacionService
                 }
                 $totales = OrdencompraTotalesCabecera::desdeModelo($documento, $this->cotizacionQuery);
                 $esSuscripcion = $tipo === 'SU' || (bool) ($documento->es_suscripcion ?? false);
+                $centrocostoId = (int) ($documento->centrocosto_id ?? 0);
+                try {
+                    $centrocostoId = $this->centroCostoParaArbolAprobacionDesdeOrdencompra($documento);
+                } catch (\RuntimeException) {
+                    // Destinos distintos entre renglones (por ejemplo el flete). El circuito
+                    // del legajo usa el centro de la cabecera; el snapshot no puede ocultar el pendiente.
+                }
                 $monto = (float) ($totales['monto'] ?? 0);
                 if ($esSuscripcion && (float) ($documento->suscripcion_monto_periodo ?? 0) > 0) {
                     $monto = (float) $documento->suscripcion_monto_periodo;
@@ -3604,7 +3611,7 @@ class ArbolaprobacionService
                     'documento_id' => (int) $documento->id,
                     'numero' => $numero,
                     'empresa_id' => isset($documento->empresa_id) ? (int) $documento->empresa_id : null,
-                    'centrocosto_id' => $this->centroCostoParaArbolAprobacionDesdeOrdencompra($documento),
+                    'centrocosto_id' => $centrocostoId,
                     'fecha' => $documento->fecha,
                     'monto' => $monto,
                     'moneda_id' => $esSuscripcion && ! empty($documento->contrato_moneda_id)

@@ -127,7 +127,60 @@ final class PagosSabanaColumnasSupport
             }
         }
 
-        return array_merge($visibles, self::extras());
+        return self::asegurarColumnaAnulado(array_merge($visibles, self::extras()), $filas);
+    }
+
+    /**
+     * La columna aparece junto a la O.P. solo si hay algún pago anulado en el resultado.
+     *
+     * @param  list<array<string, mixed>>  $columnas
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array{clave: string, etiqueta: string, tipo: string, fijo: bool}>
+     */
+    public static function asegurarColumnaAnulado(array $columnas, array $filas): array
+    {
+        $hay = false;
+        foreach ($filas as $fila) {
+            if (($fila['tipo_fila'] ?? '') === 'header_empresa') {
+                continue;
+            }
+            if (! empty($fila['anulado'])) {
+                $hay = true;
+                break;
+            }
+        }
+
+        $sin = [];
+        foreach ($columnas as $col) {
+            if (($col['clave'] ?? '') === 'anulado_ref') {
+                continue;
+            }
+            $sin[] = $col;
+        }
+        if (! $hay) {
+            return $sin;
+        }
+
+        $columna = [
+            'clave' => 'anulado_ref',
+            'etiqueta' => 'Anulado',
+            'tipo' => self::TIPO_TEXTO,
+            'fijo' => true,
+        ];
+        $out = [];
+        $insertada = false;
+        foreach ($sin as $col) {
+            $out[] = $col;
+            if (($col['clave'] ?? '') === 'numero_op') {
+                $out[] = $columna;
+                $insertada = true;
+            }
+        }
+        if (! $insertada) {
+            $out[] = $columna;
+        }
+
+        return $out;
     }
 
     /**
@@ -135,7 +188,7 @@ final class PagosSabanaColumnasSupport
      */
     public static function alineacion(string $tipo, string $clave = ''): string
     {
-        if (in_array($clave, ['tip', 'tipo_medio', 'empresa'], true)) {
+        if (in_array($clave, ['tip', 'tipo_medio', 'empresa', 'anulado_ref'], true)) {
             return 'center';
         }
 
@@ -155,6 +208,7 @@ final class PagosSabanaColumnasSupport
             'proveedor_nombre' => 24,
             'tip' => 5,
             'numero_op' => 11,
+            'anulado_ref' => 11,
             'fecha' => 10,
             'fecha_cheque' => 12,
             'tipo_medio' => 6,

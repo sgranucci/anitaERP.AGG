@@ -254,7 +254,10 @@ class ComprobanteProveedorAsientoService
 
         $permiteRepartoGasto = ComprobanteProveedorDebeGastoSupport::permiteParaComprobante($comprobante);
         $lineasRepartoGasto = $permiteRepartoGasto
-            ? ComprobanteProveedorDebeGastoSupport::lineasDesdeComprobante($comprobante)
+            ? ComprobanteProveedorDebeGastoSupport::lineasDesdeComprobante(
+                $comprobante,
+                $permitirCuentasPendientes
+            )
             : [];
         if ($permiteRepartoGasto && $lineasRepartoGasto !== []) {
             $netoParaDepurar = ComprobanteProveedorDebeGastoSupport::totalNetoImputable($comprobante);

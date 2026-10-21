@@ -70,7 +70,7 @@
             @endif
         </div>
         @endif
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">{{ $soloLectura ? 'Consultar' : 'Editar' }} Precarga de Comprobantes de Proveedores</h3>&nbsp;ID:&nbsp;{{$data->id }}
                 <div class="card-tools">
@@ -91,7 +91,7 @@
                     @endif
                 </div>
             </div>
-            <form action="{{route('actualizar_precarga_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery)}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('actualizar_precarga_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery)}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf @method("put")
                 @if ($soloConsulta)
                     <input type="hidden" name="origen" value="modal_consulta">

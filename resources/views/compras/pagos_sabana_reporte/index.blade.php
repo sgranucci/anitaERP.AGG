@@ -126,6 +126,11 @@
                         <span class="badge badge-secondary mr-1">
                             Total pago: {{ number_format((float) ($totales['total_pago'] ?? 0), 2, ',', '.') }}
                         </span>
+                        @if ((int) ($totales['anulados'] ?? 0) > 0)
+                            <span class="badge badge-danger mr-1" title="Esas filas figuran en la grilla y no suman al total">
+                                Anulados: {{ (int) $totales['anulados'] }} (no suman)
+                            </span>
+                        @endif
                         @if (($resultado['fuente'] ?? '') === 'anita')
                             <span class="badge badge-warning mr-1" title="Fuente Anita che_ban">Fuente: Anita</span>
                         @else

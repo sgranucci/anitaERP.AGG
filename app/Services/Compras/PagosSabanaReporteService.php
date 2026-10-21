@@ -142,6 +142,7 @@ class PagosSabanaReporteService
         $filasDetalle = $this->enriquecerFilasAnitaConErp($filasDetalle, $filtros);
         $filasDetalle = $this->enriquecerFilasAnitaDesdeComprobantes($filasDetalle);
         $filasDetalle = $this->enriquecerFilasAnitaDesdeAplicped($filasDetalle, $errores);
+        $filasDetalle = $this->marcarAnuladasPorAopAnita($filasDetalle, $errores);
 
         $columnas = PagosSabanaColumnasSupport::resolverVisibles($filasDetalle);
         $totales = $this->calcularTotales($filasDetalle, $columnas);
@@ -365,6 +366,9 @@ class PagosSabanaReporteService
             }
             if (empty($fila['proveedor_id']) && ! empty($erpFila['proveedor_id'])) {
                 $fila['proveedor_id'] = $erpFila['proveedor_id'];
+            }
+            if (! empty($erpFila['anulado'])) {
+                $fila = $this->aplicarMarcaAnulada($fila);
             }
             $fechaErp = trim((string) ($erpFila['fecha_cheque'] ?? ''));
             if ($fechaErp !== '') {
@@ -833,7 +837,7 @@ class PagosSabanaReporteService
             ->leftJoin('empresa', 'empresa.id', '=', 'pp.empresa_id')
             ->leftJoin('proveedor', 'proveedor.id', '=', 'pp.proveedor_id')
             ->whereIn('pp.tipocomprobante', ['OPP', 'OPA'])
-            ->whereIn('pp.estado', self::ESTADOS_PP)
+            ->whereIn('pp.estado', array_merge(self::ESTADOS_PP, ['REVERTIDA']))
             ->whereBetween('pp.fecha', [$filtros['fecha_desde'], $filtros['fecha_hasta']])
             ->select([
                 DB::raw("'".PagoproveedorListadoFila::ORIGEN_PAGOPROVEEDOR."' as origen"),
@@ -857,6 +861,8 @@ class PagosSabanaReporteService
                            OR (pp.caja_movimiento_id IS NOT NULL AND cm.id = pp.caja_movimiento_id))
                     ORDER BY cm.id
                     LIMIT 1) as solicitudpago_id'),
+                'pp.estado',
+                'pp.pagoproveedor_revertido_por_id',
             ]);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'pp.empresa_id');
@@ -911,6 +917,8 @@ class PagosSabanaReporteService
                 'cm.proveedor_formapago_id',
                 DB::raw('cm.id as caja_movimiento_id'),
                 'cm.solicitudpago_id',
+                DB::raw('NULL as estado'),
+                DB::raw('NULL as pagoproveedor_revertido_por_id'),
             ]);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'cm.empresa_id');
@@ -1344,7 +1352,7 @@ class PagosSabanaReporteService
             }
         }
 
-        return array_merge([
+        $fila = array_merge([
             'tipo_fila' => 'detalle',
             'origen' => $origen,
             'pk_id' => $pkId,
@@ -1371,6 +1379,8 @@ class PagosSabanaReporteService
             'ordenes_compra' => $this->unirEtiquetas(array_column($ocs, 'numero')),
             'ordenes_compra_links' => $ocs,
             'detalle' => (string) ($cab->detalle ?? ''),
+            'anulado' => false,
+            'anulado_ref' => '',
             'empresa_id' => (int) ($cab->empresa_id ?? 0),
             'empresa' => (string) ($cab->empresa_codigo ?? $cab->empresa_id ?? ''),
             'empresa_nombre' => (string) ($cab->empresa_nombre ?? ''),
@@ -1391,6 +1401,14 @@ class PagosSabanaReporteService
             'varios' => $desglose['varios'],
             'intercompany' => $desglose['intercompany'],
         ]);
+
+        $revertida = strtoupper(trim((string) ($cab->estado ?? ''))) === 'REVERTIDA'
+            || (int) ($cab->pagoproveedor_revertido_por_id ?? 0) > 0;
+        if ($revertida) {
+            $fila = $this->aplicarMarcaAnulada($fila);
+        }
+
+        return $fila;
     }
 
     /**
@@ -1576,6 +1594,10 @@ class PagosSabanaReporteService
             $filas,
             static fn (array $f) => ($f['tipo_fila'] ?? '') !== 'header_empresa'
         ));
+        $vigentes = array_values(array_filter(
+            $detalle,
+            static fn (array $f) => empty($f['anulado'])
+        ));
 
         $importes = [];
         foreach ($columnas as $col) {
@@ -1585,20 +1607,87 @@ class PagosSabanaReporteService
             $clave = $col['clave'];
             $importes[$clave] = round(array_sum(array_map(
                 static fn (array $f) => (float) ($f[$clave] ?? 0),
-                $detalle
+                $vigentes
             )), 2);
         }
 
         return [
             'cantidad' => count($detalle),
+            'anulados' => count($detalle) - count($vigentes),
             'importes' => $importes,
             'total_pago' => $importes['total_pago'] ?? 0.0,
         ];
     }
 
+    /**
+     * Pagos que en Anita tienen un AOP del mismo número y todavía no salieron
+     * marcados por el estado REVERTIDA del ERP.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @param  list<string>  $errores
+     * @return list<array<string, mixed>>
+     */
+    private function marcarAnuladasPorAopAnita(array $filas, array &$errores): array
+    {
+        $recs = [];
+        $empresas = [];
+        foreach ($filas as $fila) {
+            if (! empty($fila['anulado']) || ($fila['tipo_fila'] ?? '') === 'header_empresa') {
+                continue;
+            }
+            $nro = (int) preg_replace('/\D+/', '', (string) ($fila['numero_op'] ?? ''));
+            $emp = (int) ($fila['anita_empresa'] ?? 0);
+            if ($nro <= 0 || $emp <= 0) {
+                continue;
+            }
+            $recs[$nro] = $nro;
+            $empresas[$emp] = $emp;
+        }
+        if ($recs === []) {
+            return $filas;
+        }
+
+        $mapa = $this->anitaReader->mapaRecsAnuladosPorAop(array_values($empresas), array_values($recs), $errores);
+        if ($mapa === []) {
+            return $filas;
+        }
+
+        foreach ($filas as &$fila) {
+            if (! empty($fila['anulado'])) {
+                continue;
+            }
+            $nro = (int) preg_replace('/\D+/', '', (string) ($fila['numero_op'] ?? ''));
+            $emp = (int) ($fila['anita_empresa'] ?? 0);
+            if ($emp > 0 && isset($mapa[$emp.'|'.$nro])) {
+                $fila = $this->aplicarMarcaAnulada($fila);
+            }
+        }
+        unset($fila);
+
+        return $filas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     * @return array<string, mixed>
+     */
+    private function aplicarMarcaAnulada(array $fila): array
+    {
+        $fila['anulado'] = true;
+        $fila['anulado_ref'] = 'ANULADA';
+        $detalle = trim((string) ($fila['detalle'] ?? ''));
+        if ($detalle === '') {
+            $fila['detalle'] = 'ANULADA';
+        } elseif (preg_match('/^(REVERTIDA|ANULAD|ANULA)\b/iu', $detalle) !== 1) {
+            $fila['detalle'] = 'ANULADA. '.$detalle;
+        }
+
+        return $fila;
+    }
+
     /** @return array<string, mixed> */
     private function totalesVacios(): array
     {
-        return ['cantidad' => 0, 'importes' => [], 'total_pago' => 0.0];
+        return ['cantidad' => 0, 'anulados' => 0, 'importes' => [], 'total_pago' => 0.0];
     }
 }

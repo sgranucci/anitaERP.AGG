@@ -9,15 +9,19 @@ use App\Repositories\Compras\Precarga_Comprobante_Proveedor_ConceptoRepositoryIn
 use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
+use App\Models\Compras\Proveedor;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Services\Compras\OrdencompraLegajoFacturaPdfService;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Services\Compras\PrecargaComprobanteMarcarCargadaAnitaService;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
 use App\Support\Compras\PrecargaRecepcionErrorRegistrar;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
+use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Compras\OrdencompraLegajoFacturaArcaSupport;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
@@ -44,6 +48,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
     private PrecargaComprobanteMarcarCargadaAnitaService $marcarCargadaAnitaService;
 
+    private OrdencompraLegajoFacturaPdfService $legajoFacturaPdfService;
+
 	public function __construct(Precarga_Comprobante_ProveedorRepositoryInterface $precarga_comprobante_proveedorRepository,
                                 Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface $precarga_comprobante_proveedor_conceptoRepository,
                                 EmpresaRepositoryInterface $empresaRepository,
@@ -54,6 +60,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
                                 PrecargaFacturaScanPathResolver $facturaScanPathResolver,
                                 ComprobanteProveedorPdfIaService $pdfIaService,
                                 PrecargaComprobanteMarcarCargadaAnitaService $marcarCargadaAnitaService,
+                                OrdencompraLegajoFacturaPdfService $legajoFacturaPdfService,
                                 )
     {
         $this->precarga_comprobante_proveedorRepository = $precarga_comprobante_proveedorRepository;
@@ -66,6 +73,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $this->facturaScanPathResolver = $facturaScanPathResolver;
         $this->pdfIaService = $pdfIaService;
         $this->marcarCargadaAnitaService = $marcarCargadaAnitaService;
+        $this->legajoFacturaPdfService = $legajoFacturaPdfService;
     }
 
     /**
@@ -398,13 +406,15 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $concepto_ivacompra_query = $this->concepto_ivacompraRepository->all();
         $moneda_query = $this->monedaRepository->all();
         $retornoListadoQuery = $this->queryRetornoListado($request);
+        $data = new Precarga_Comprobante_Proveedor;
 
         return view('compras.precarga_comprobante_proveedor.crear', compact(
             'empresa_query',
             'tipotransaccion_compra_query',
             'concepto_ivacompra_query',
             'moneda_query',
-            'retornoListadoQuery'
+            'retornoListadoQuery',
+            'data'
         ));
     }
 
@@ -420,10 +430,15 @@ class Precarga_Comprobante_ProveedorController extends Controller
             return redirect()->back()->withInput()->with('errores', [$motivo]);
         }
 
+        if ($errores = $this->erroresCargaManual($request, null)) {
+            return redirect()->back()->withInput()->with('errores', $errores);
+        }
+
         try {
             DB::transaction(function () use ($request) {
-                $payload = $this->precargaAnitaSync->enriquecerPayloadParaAnita($request->all());
+                $payload = $this->payloadCargaManual($request, null);
                 $payload['origen_entrada'] = \App\Support\Compras\PrecargaComprobanteOrigenEntrada::MANUAL;
+                $payload['estado'] = PrecargaComprobanteEstados::PENDIENTE;
                 $precarga = $this->precarga_comprobante_proveedorRepository->create($payload);
 
                 $this->guardarConceptosPrecarga($request, (int) $precarga->id);
@@ -584,9 +599,18 @@ class Precarga_Comprobante_ProveedorController extends Controller
             return redirect()->back()->withInput()->with('errores', [$motivo]);
         }
 
+        $precargaActual = Precarga_Comprobante_Proveedor::query()->find($id);
+        if (! $precargaActual) {
+            return redirect()->back()->with('errores', ['No se encontró la precarga.']);
+        }
+
+        if ($errores = $this->erroresCargaManual($request, $precargaActual->rutaalmacenamiento)) {
+            return redirect()->back()->withInput()->with('errores', $errores);
+        }
+
         try {
-            DB::transaction(function () use ($request, $id) {
-                $payload = $this->precargaAnitaSync->enriquecerPayloadParaAnita($request->all());
+            DB::transaction(function () use ($request, $id, $precargaActual) {
+                $payload = $this->payloadCargaManual($request, $precargaActual->rutaalmacenamiento);
                 $this->precarga_comprobante_proveedorRepository->update($payload, $id);
 
                 $this->precarga_comprobante_proveedor_conceptoRepository
@@ -602,6 +626,120 @@ class Precarga_Comprobante_ProveedorController extends Controller
         }
 
         return $this->redirectIndexConMensaje($request, 'Precarga actualizada y sincronizada con Anita.');
+    }
+
+    /**
+     * Datos de la factura en la precarga manual. Conceptos y totales pueden ir vacíos.
+     * La orden de compra es opcional (factura de servicio).
+     *
+     * @return list<string>
+     */
+    private function erroresCargaManual(Request $request, ?string $rutaExistente): array
+    {
+        $errores = [];
+
+        if ((int) $request->input('empresa_id') <= 0) {
+            $errores[] = 'Indicá la empresa.';
+        }
+        if ((int) $request->input('proveedor_id') <= 0) {
+            $errores[] = 'Indicá el proveedor.';
+        }
+        if ((int) $request->input('tipotransaccion_compra_id') <= 0) {
+            $errores[] = 'Indicá el tipo de transacción.';
+        }
+
+        $letra = OrdencompraLegajoFacturaArcaSupport::normalizarLetra((string) $request->input('letra'));
+        if (! in_array($letra, ['A', 'B', 'C', 'M', 'E'], true)) {
+            $errores[] = 'Indicá la letra (A, B, C, M o E).';
+        }
+
+        $sucursalRaw = trim((string) $request->input('sucursal', ''));
+        if ($sucursalRaw === '' || ! ctype_digit($sucursalRaw)) {
+            $errores[] = 'Indicá la sucursal.';
+        }
+
+        $numero = (int) $request->input('numerocomprobante');
+        if ($numero <= 0) {
+            $errores[] = 'Indicá el número de comprobante.';
+        }
+
+        $fecha = trim((string) $request->input('fechafactura'));
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}/', $fecha)) {
+            $errores[] = 'Indicá la fecha del comprobante.';
+        }
+
+        $pdf = $request->file('factura_pdf');
+        if (! $pdf && ! filled($rutaExistente)) {
+            $errores[] = 'Adjuntá el PDF de la factura.';
+        } elseif ($pdf) {
+            $ext = strtolower((string) $pdf->getClientOriginalExtension());
+            $mime = strtolower((string) $pdf->getMimeType());
+            if (! $pdf->isValid() || ($ext !== 'pdf' && ! str_contains($mime, 'pdf'))) {
+                $errores[] = 'El scan tiene que ser un PDF.';
+            } elseif ($pdf->getSize() > 20 * 1024 * 1024) {
+                $errores[] = 'El PDF supera los 20 MB.';
+            }
+        }
+
+        return $errores;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function payloadCargaManual(Request $request, ?string $rutaExistente): array
+    {
+        $payload = $this->precargaAnitaSync->enriquecerPayloadParaAnita(
+            $request->except(['factura_pdf'])
+        );
+        $payload['letra'] = OrdencompraLegajoFacturaArcaSupport::normalizarLetra((string) ($payload['letra'] ?? ''));
+        $payload['sucursal'] = (int) ($payload['sucursal'] ?? 0);
+        $payload['numerocomprobante'] = (int) ($payload['numerocomprobante'] ?? 0);
+        $payload['numeroordencompra'] = trim((string) ($payload['numeroordencompra'] ?? ''));
+
+        $pdf = $request->file('factura_pdf');
+        if ($pdf) {
+            $proveedor = Proveedor::query()->find((int) $request->input('proveedor_id'));
+            if (! $proveedor) {
+                throw new RuntimeException('Proveedor inexistente para guardar el scan.');
+            }
+
+            $cuit = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos((int) $proveedor->id, null);
+            $duplicada = ComprobanteProveedorUnicidadSupport::findDuplicadoPrecarga(
+                (int) $request->input('empresa_id'),
+                (int) $request->input('tipotransaccion_compra_id'),
+                $payload['letra'],
+                $payload['sucursal'],
+                $payload['numerocomprobante'],
+                $cuit,
+                $request->route('id') ? (int) $request->route('id') : null,
+            );
+            if ($duplicada) {
+                throw new RuntimeException(
+                    'Ya existe una precarga con esa factura'
+                    .($duplicada->numeroordencompra ? ' (OC '.$duplicada->numeroordencompra.')' : '')
+                    .'.'
+                );
+            }
+
+            $abrev = (string) (Tipotransaccion_Compra::query()
+                ->whereKey((int) $request->input('tipotransaccion_compra_id'))
+                ->value('abreviatura') ?? 'FAC');
+
+            $payload['rutaalmacenamiento'] = $this->legajoFacturaPdfService->publicarPdfFactura(
+                $pdf,
+                $proveedor,
+                (string) $request->input('fechafactura'),
+                $abrev,
+                $payload['letra'],
+                $payload['sucursal'],
+                $payload['numerocomprobante'],
+            );
+        } elseif (filled($rutaExistente)) {
+            $payload['rutaalmacenamiento'] = $rutaExistente;
+        }
+
+        return $payload;
     }
 
     private function guardarConceptosPrecarga(Request $request, int $precargaId): void

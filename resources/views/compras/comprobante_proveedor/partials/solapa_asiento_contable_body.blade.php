@@ -71,8 +71,10 @@
     @if($permiteRepartoGasto)
     <span class="d-block small mt-1">
         Gasto sin COM: puede repartir el Debe en varias cuentas con
-        <strong>+ Agregar cuenta de gasto</strong>. La suma debe coincidir con el neto
+        <strong>+ Agregar cuenta de gasto</strong>. La suma no puede superar el neto
         ({{ number_format($netoImputableGasto, 2, ',', '.') }}).
+        Por defecto no recalcula el prorrateo (cada importe queda como se carga, para abrir por centro de costo).
+        Tilde <strong>Recalcular prorrateo</strong> si quiere que el neto se reparta solo entre las cuentas.
     </span>
     @elseif(collect($preview['lineas'] ?? [])->contains(fn ($l) => ! empty($l['editable_cuenta'])))
     <span class="d-block small mt-1">La cuenta de un neto se precarga en los otros netos vacíos. Si una línea necesita otra cuenta, cámbiela en esa fila.</span>
@@ -185,10 +187,10 @@
                     @endif
                 </td>
                 <td class="text-right">
-                    @if($editableImporte && $debeVal !== null)
+                    @if($editableImporte)
                     <input type="text" inputmode="decimal"
                            class="form-control form-control-sm text-right js-monto-ar cp-debe-gasto-importe"
-                           value="{{ number_format($debeVal, 2, ',', '.') }}"
+                           value="{{ number_format((float) ($debeVal ?? 0), 2, ',', '.') }}"
                            title="Importe Debe de esta cuenta de gasto">
                     @elseif($debeVal !== null)
                     {{ number_format($debeVal, 2, ',', '.') }}
@@ -240,6 +242,10 @@
     <button type="button" class="btn btn-outline-primary btn-sm" id="cp-debe-gasto-agregar">
         <i class="fa fa-plus"></i> Agregar cuenta de gasto
     </button>
+    <label class="small mb-0 ml-3 align-middle font-weight-normal" title="Destildado: no reparte el neto entre las cuentas. La suma no puede superarlo.">
+        <input type="checkbox" class="cp-debe-gasto-recalcular-prorrateo align-middle mr-1">
+        Recalcular prorrateo
+    </label>
     <span class="small text-muted ml-2" id="cp-debe-gasto-aviso-suma"></span>
 </div>
 @endif
