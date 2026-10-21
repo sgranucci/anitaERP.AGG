@@ -6,6 +6,7 @@ use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Contable\Asiento;
 use App\Repositories\Compras\PagoproveedorRepositoryInterface;
+use App\Support\Compras\AnitaImport\PagoproveedorAnitaImpresionAuxpagMapper;
 use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
 use App\Support\Compras\PagoproveedorFirmaAgenteRetencionSupport;
 use App\Support\Compras\PagoproveedorRetencionCertificadoLineasSupport;
@@ -171,11 +172,17 @@ class PagoproveedorComprobantePdfService
         // Stub Anita: snapshot de auxpag si no hay apps/medios ERP.
         $snap = is_array($pago->anita_impresion_json) ? $pago->anita_impresion_json : null;
         if (is_array($snap)) {
-            if ($aplicaciones->isEmpty() && ! empty($snap['aplicaciones']) && is_array($snap['aplicaciones'])) {
-                $aplicaciones = collect($snap['aplicaciones']);
-            }
             if ($mediosCaja->isEmpty() && ! empty($snap['medios_caja']) && is_array($snap['medios_caja'])) {
                 $mediosCaja = collect($snap['medios_caja']);
+            }
+            if ($aplicaciones->isEmpty() && ! empty($snap['aplicaciones']) && is_array($snap['aplicaciones'])) {
+                [$comprobantesSnap, $mediosSinInterno] = PagoproveedorAnitaImpresionAuxpagMapper::separarSnapshotAplicaciones(
+                    $snap['aplicaciones']
+                );
+                $aplicaciones = collect($comprobantesSnap);
+                if ($mediosSinInterno !== []) {
+                    $mediosCaja = $mediosCaja->concat($mediosSinInterno)->values();
+                }
             }
             if ($cheques->isEmpty() && ! empty($snap['cheques']) && is_array($snap['cheques'])) {
                 $cheques = collect($snap['cheques'])->map(fn ($c) => (object) $c)->values();

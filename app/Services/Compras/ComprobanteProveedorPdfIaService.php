@@ -602,7 +602,22 @@ final class ComprobanteProveedorPdfIaService
         }
 
         // 3) Match contra conceptos (OC o CC del proveedor) usando nombre_ia (alias).
-        $conceptosAsignados = $this->conceptoMatcher->matchear($listaConceptos['conceptos'], $lineasIa);
+        $esMonotributo = $this->proveedorEsMonotributo((int) ($proveedor['proveedor_id'] ?? 0));
+        $conceptosAsignados = $this->conceptoMatcher->matchear(
+            $listaConceptos['conceptos'],
+            $lineasIa,
+            ['es_monotributo' => $esMonotributo],
+        );
+        if ($esMonotributo) {
+            foreach ($conceptosAsignados as $lineaAsignada) {
+                $nombreAsignado = mb_strtolower((string) ($lineaAsignada['concepto_nombre'] ?? ''));
+                if (str_contains($nombreAsignado, 'monotribut')) {
+                    $advertencias[] = 'Proveedor monotributista: el importe sin IVA se asignó a '
+                        .($lineaAsignada['concepto_nombre'] ?? 'RESP. MONOTRIBUTO').'.';
+                    break;
+                }
+            }
+        }
         $conceptosPermitidos = [];
         foreach ($listaConceptos['conceptos'] as $conceptoLista) {
             $id = (int) ($conceptoLista['concepto_ivacompra_id'] ?? 0);
@@ -1186,6 +1201,18 @@ final class ComprobanteProveedorPdfIaService
             'EUROS', 'EURO', 'EUR' => 3,
             default => 1,
         };
+    }
+
+    private function proveedorEsMonotributo(int $proveedorId): bool
+    {
+        if ($proveedorId <= 0) {
+            return false;
+        }
+
+        $condicionId = (int) Proveedor::query()->whereKey($proveedorId)->value('condicioniva_id');
+        $monotributoId = (int) config('arca.padron_validacion_proveedor.condicioniva_monotributo_id', 4);
+
+        return $monotributoId > 0 && $condicionId === $monotributoId;
     }
 
     /**

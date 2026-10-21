@@ -27,6 +27,16 @@ class NotaCreditoCompletaUnicaSupportTest extends TestCase
         $this->assertFalse(NotaCreditoCompletaUnicaSupport::esCompleta(10.0, 1500.0, 'N'));
     }
 
+    public function test_la_cobranza_no_es_nota_de_credito(): void
+    {
+        $this->assertFalse(NotaCreditoCompletaUnicaSupport::esAbreviaturaNotaCredito('COB'));
+        $this->assertFalse(NotaCreditoCompletaUnicaSupport::esAbreviaturaNotaCredito('COA'));
+        $this->assertFalse(NotaCreditoCompletaUnicaSupport::esAbreviaturaNotaCredito('FAN'));
+        $this->assertTrue(NotaCreditoCompletaUnicaSupport::esAbreviaturaNotaCredito('NCD'));
+        $this->assertTrue(NotaCreditoCompletaUnicaSupport::esAbreviaturaNotaCredito('CIM'));
+        $this->assertTrue(NotaCreditoCompletaUnicaSupport::esAbreviaturaNotaCredito('CFC'));
+    }
+
     public function test_mensaje_nombra_factura_y_nota(): void
     {
         $texto = NotaCreditoCompletaUnicaSupport::mensaje('FAC A-00001-00000010', 'NC A-00001-00000003');

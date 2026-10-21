@@ -11,10 +11,29 @@ use Illuminate\Support\Facades\DB;
  * Una factura de ventas de mostrador admite una sola nota de crédito completa.
  * Completa = anulación FCE (S) o importe ≥ 99,9 % del total de la factura.
  * Las notas parciales siguen permitidas.
+ *
+ * En Ferli la cobranza (COB/COA) también tiene operacion C. No es una nota de crédito:
+ * si se la cuenta, una factura paga queda bloqueada como si ya tuviera NC completa.
  */
 final class NotaCreditoCompletaUnicaSupport
 {
     public const FACTOR_COMPLETA = 0.999;
+
+    /** Importada y cancelación de factura de crédito: no empiezan con NC. */
+    private const ABREVIATURAS_NC_EXTRA = ['CIM', 'CFC'];
+
+    public static function esAbreviaturaNotaCredito(string $abreviatura): bool
+    {
+        $abrev = strtoupper(trim($abreviatura));
+        if ($abrev === '') {
+            return false;
+        }
+        if (str_starts_with($abrev, 'NC')) {
+            return true;
+        }
+
+        return in_array($abrev, self::ABREVIATURAS_NC_EXTRA, true);
+    }
 
     public static function esCompleta(float $totalNc, float $totalFactura, ?string $anulacionSn = null): bool
     {
@@ -145,6 +164,7 @@ final class NotaCreditoCompletaUnicaSupport
             ->from('venta as nc')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'nc.tipotransaccion_id')
             ->where('tt.operacion', 'C')
+            ->tap(static fn ($q) => self::aplicarSoloNotasCredito($q))
             ->whereIn('nc.venta_origen_id', $facturaIds)
             ->get([
                 'nc.id',
@@ -163,6 +183,7 @@ final class NotaCreditoCompletaUnicaSupport
             ->join('venta as nc', 'nc.id', '=', 'cc.venta_id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'nc.tipotransaccion_id')
             ->where('tt.operacion', 'C')
+            ->tap(static fn ($q) => self::aplicarSoloNotasCredito($q))
             ->whereIn('a.ventaaplicado_id', $facturaIds)
             ->whereColumn('nc.id', '!=', 'a.ventaaplicado_id')
             ->get([
@@ -178,6 +199,17 @@ final class NotaCreditoCompletaUnicaSupport
         }
 
         return $porFactura;
+    }
+
+    private static function aplicarSoloNotasCredito($query): void
+    {
+        $query->where(function ($q) {
+            $q->whereRaw('UPPER(TRIM(tt.abreviatura)) LIKE ?', ['NC%'])
+                ->orWhereIn(
+                    DB::raw('UPPER(TRIM(tt.abreviatura))'),
+                    self::ABREVIATURAS_NC_EXTRA
+                );
+        });
     }
 
     /**

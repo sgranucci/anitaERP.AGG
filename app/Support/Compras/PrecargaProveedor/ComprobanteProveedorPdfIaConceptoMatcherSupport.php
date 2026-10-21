@@ -10,13 +10,19 @@ use RuntimeException;
  */
 final class ComprobanteProveedorPdfIaConceptoMatcherSupport
 {
+    /** Proveedor monotributista: el total sin IVA va a RESP. MONOTRIBUTO, no a un impuesto. */
+    private bool $esMonotributo = false;
+
     /**
      * @param  list<array<string, mixed>>  $conceptosCandidatos
      * @param  list<array<string, mixed>>  $lineasIa
+     * @param  array{es_monotributo?: bool}  $opciones
      * @return list<array{id_concepto: int|string, importe: float, descripcion_ia: string, concepto_nombre: string}>
      */
-    public function matchear(array $conceptosCandidatos, array $lineasIa): array
+    public function matchear(array $conceptosCandidatos, array $lineasIa, array $opciones = []): array
     {
+        $this->esMonotributo = (bool) ($opciones['es_monotributo'] ?? false);
+
         if ($conceptosCandidatos === []) {
             throw new RuntimeException('No hay conceptos candidatos para la OC.');
         }
@@ -85,7 +91,7 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             }
             $nombre = $this->normalizar((string) ($candidato['nombre'] ?? ''));
             $codigo = (string) ($candidato['id_concepto'] ?? $candidato['codigo'] ?? '');
-            if (! $this->tipoConceptoCompatibleConLinea($tipoLinea, $tipoConcepto, $nombre, $codigo)) {
+            if (! $this->tipoConceptoCompatibleConLinea($tipoLinea, $tipoConcepto, $nombre, $codigo, $descLinea)) {
                 continue;
             }
 
@@ -183,7 +189,7 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
                     continue;
                 }
                 $utiles++;
-                if (str_contains($descLinea, $token)) {
+                if (str_contains($descLinea, $token) || $this->tokenEquivalente($token, $descLinea)) {
                     $hits++;
                     $hitsFuertes++;
                 }
@@ -196,10 +202,47 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             }
 
             similar_text($descLinea, $alias, $pct);
-            $mejor = max($mejor, (int) $pct);
+            $aporteSimilar = (int) $pct;
+            // Sin una palabra en común, el parecido de letras (p. ej. «desglose» contra
+            // «deb y cred») no puede ganarles a un concepto que sí nombra el impuesto.
+            if ($hitsFuertes === 0) {
+                $aporteSimilar = min(30, $aporteSimilar);
+            }
+            $mejor = max($mejor, $aporteSimilar);
         }
 
         return $mejor;
+    }
+
+    /**
+     * Total de una factura C de monotributista: no es percepción ni IVA discriminado.
+     */
+    private function lineaVaAMonotributo(string $tipoLinea, string $descLinea): bool
+    {
+        if (! $this->esMonotributo) {
+            return false;
+        }
+        foreach (['percepcion', 'retencion', 'otro_tributo', 'interno'] as $bloqueo) {
+            if (str_contains($tipoLinea, $bloqueo)) {
+                return false;
+            }
+        }
+        if (preg_match('/\biva\b/u', $tipoLinea) === 1) {
+            return false;
+        }
+
+        return str_contains($tipoLinea, 'exento')
+            || str_contains($tipoLinea, 'neto')
+            || str_contains($tipoLinea, 'no_gravado')
+            || str_contains($tipoLinea, 'subtotal')
+            || str_contains($descLinea, 'sin desglose')
+            || str_contains($descLinea, 'monotribut');
+    }
+
+    /** «exentas» del texto de la factura equivale al concepto «exento». */
+    private function tokenEquivalente(string $token, string $descLinea): bool
+    {
+        return $token === 'exento' && str_contains($descLinea, 'exent');
     }
 
     private function esTokenAliasDebil(string $token): bool
@@ -258,6 +301,9 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
 
         // Nunca asignar «RESP. MONOTRIBUTO» a percepción / otros tributos AFIP.
         if (str_contains($nombre, 'monotribut')) {
+            if ($this->lineaVaAMonotributo($tipoLinea, $descLinea)) {
+                return 120;
+            }
             if (str_contains($tipoLinea, 'percepcion')
                 || str_contains($tipoLinea, 'otro_tributo')
                 || str_contains($descLinea, 'percep')
@@ -306,6 +352,7 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
         string $tipoConcepto,
         string $nombre = '',
         string $codigo = '',
+        string $descLinea = '',
     ): bool {
         if (str_contains($tipoLinea, 'percepcion_iibb')) {
             return $tipoConcepto === ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IIBB
@@ -324,8 +371,10 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             return false;
         }
 
-        // Monotributo no compite por neto/IVA/percepción.
+        // Monotributo no compite por neto/IVA/percepción, salvo el total sin IVA
+        // de un proveedor monotributista (factura C).
         if (str_contains($nombre, 'monotribut')
+            && ! $this->lineaVaAMonotributo($tipoLinea, $descLinea)
             && (str_contains($tipoLinea, 'neto')
                 || str_contains($tipoLinea, 'iva')
                 || str_contains($tipoLinea, 'percepcion')

@@ -106,6 +106,58 @@ class PagoproveedorAnitaImpresionSupportTest extends TestCase
         $this->assertSame(200.0, $snap['cheques'][0]['monto']);
     }
 
+    public function test_fmp_sin_numero_interno_es_medio_y_fac_con_interno_es_factura(): void
+    {
+        $lineas = [
+            (object) [
+                'axp_tipo_ap' => 'FMP',
+                'axp_monto_ap' => 40629.86,
+                'axp_nro' => '42902',
+                'axp_letra_comp' => ' ',
+                'axp_sucursal' => 1,
+                'axp_nro_interno' => 0,
+                'axp_banco' => '00000024',
+                'axp_fecha_co' => '0',
+                'axp_fecha' => '20260915',
+                'axp_cod_mon_co' => 1,
+            ],
+            (object) [
+                'axp_tipo_ap' => 'FAC',
+                'axp_monto_ap' => 40629.86,
+                'axp_nro' => '8315',
+                'axp_letra_comp' => 'A',
+                'axp_sucursal' => 2,
+                'axp_nro_interno' => 117995,
+                'axp_fecha_co' => '20260914',
+                'axp_fecha' => '20260915',
+                'axp_cod_mon_co' => 1,
+            ],
+        ];
+
+        $snap = PagoproveedorAnitaImpresionAuxpagMapper::aSnapshot($lineas, [
+            '00000024' => 'FONDO FIJO MERCADOPAGO',
+        ]);
+
+        $this->assertCount(1, $snap['aplicaciones']);
+        $this->assertSame('FAC', $snap['aplicaciones'][0]['tipo']);
+        $this->assertSame('117995', $snap['aplicaciones'][0]['nro_int']);
+        $this->assertSame(40629.86, $snap['aplicaciones'][0]['monto_aplicado']);
+
+        $this->assertCount(1, $snap['medios_caja']);
+        $this->assertStringContainsString('FONDO FIJO MERCADOPAGO', $snap['medios_caja'][0]['cuenta']);
+        $this->assertStringContainsString('FMP', $snap['medios_caja'][0]['cuenta']);
+        $this->assertSame(40629.86, $snap['medios_caja'][0]['monto_abs']);
+
+        [$comprobantes, $medios] = PagoproveedorAnitaImpresionAuxpagMapper::separarSnapshotAplicaciones([
+            ['tipo' => 'FMP', 'nro_int' => '', 'monto_aplicado' => 40629.86, 'moneda' => 'ARS', 'cotizacion' => 1],
+            ['tipo' => 'FAC', 'nro_int' => '117995', 'monto_aplicado' => 40629.86, 'moneda' => 'ARS', 'cotizacion' => 1],
+        ]);
+        $this->assertCount(1, $comprobantes);
+        $this->assertSame('FAC', $comprobantes[0]['tipo']);
+        $this->assertCount(1, $medios);
+        $this->assertSame('FMP', $medios[0]['cuenta']);
+    }
+
     public function test_retencion_mapper_ganancias_e_iibb(): void
     {
         $filas = PagoproveedorAnitaImpresionRetencionMapper::aFilasPersistencia([

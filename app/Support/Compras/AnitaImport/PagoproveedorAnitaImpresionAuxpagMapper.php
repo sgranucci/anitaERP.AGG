@@ -162,20 +162,59 @@ final class PagoproveedorAnitaImpresionAuxpagMapper
         return (bool) preg_match('/^[VGTS]\d+$/', $tipoAp);
     }
 
+    /**
+     * Comprobante de compra aplicado al pago. Anita lo marca con axp_nro_interno:
+     * es com_nro_interno en el bridge y anita_nro_interno en comprobante_proveedor.
+     * Un tipo que empieza con F sin ese número (FMP = fondo Mercado Pago) es medio de pago.
+     */
     private static function esComprobanteAplicado(string $tipoAp, object $axp): bool
     {
-        if (str_starts_with($tipoAp, 'F') || in_array($tipoAp, ['ADP', 'ADT', 'FAC', 'FIS', 'CIS', 'NDP', 'NCP'], true)) {
-            return true;
+        if ((int) ($axp->axp_nro_interno ?? 0) <= 0) {
+            return false;
         }
 
-        $interno = (int) ($axp->axp_nro_interno ?? 0);
-
-        return $interno > 0
-            && ! in_array($tipoAp, self::MEDIOS_TRANSFERENCIA, true)
+        return ! in_array($tipoAp, self::MEDIOS_TRANSFERENCIA, true)
             && ! in_array($tipoAp, self::MEDIOS_EFECTIVO, true)
             && ! self::esRetencionAuxpag($tipoAp)
             && ! in_array($tipoAp, ['CHP', 'CPC', 'CPA', 'CHT', 'CTC', 'CTA', 'DOP', 'DPC', 'DOT', 'DTC', 'APA'], true)
             && ! in_array($tipoAp, self::INTERCOMPANY, true);
+    }
+
+    /**
+     * El snapshot ya grabado puede traer un medio (FMP) dentro de aplicaciones.
+     * Solo queda como factura la línea con número interno de compra.
+     *
+     * @param  list<array<string, mixed>>  $aplicaciones
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
+     */
+    public static function separarSnapshotAplicaciones(array $aplicaciones): array
+    {
+        $comprobantes = [];
+        $medios = [];
+        foreach ($aplicaciones as $apl) {
+            if (! is_array($apl)) {
+                continue;
+            }
+            if ((int) ($apl['nro_int'] ?? 0) > 0) {
+                $comprobantes[] = $apl;
+
+                continue;
+            }
+            $tipo = strtoupper(trim((string) ($apl['tipo'] ?? '')));
+            $monto = abs((float) ($apl['monto_aplicado'] ?? $apl['monto'] ?? 0));
+            if ($tipo === '' || $monto < 0.005) {
+                continue;
+            }
+            $medios[] = [
+                'cuenta' => $tipo,
+                'monto' => -round($monto, 2),
+                'monto_abs' => round($monto, 2),
+                'moneda' => (string) ($apl['moneda'] ?? 'ARS'),
+                'cotizacion' => (float) ($apl['cotizacion'] ?? 1),
+            ];
+        }
+
+        return [$comprobantes, $medios];
     }
 
     /**

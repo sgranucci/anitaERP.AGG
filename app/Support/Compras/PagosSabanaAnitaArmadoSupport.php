@@ -304,12 +304,10 @@ final class PagosSabanaAnitaArmadoSupport
                 continue;
             }
 
-            // Facturas / débitos aplicados → solo texto Comprobantes (no suman al total de medios).
-            if (
-                str_starts_with($tipoAp, 'F')
-                || in_array($tipoAp, ['ADP', 'ADT'], true)
-                || ((int) ($axp->axp_nro_interno ?? 0) > 0 && ! in_array($tipoAp, self::MEDIOS_TRANSFERENCIA, true))
-            ) {
+            // Factura de compra: solo con nro interno (compra del bridge / comprobante_proveedor).
+            // No alcanza con que el tipo empiece con F: FMP sin interno es el fondo Mercado Pago.
+            $nroInterno = (int) ($axp->axp_nro_interno ?? 0);
+            if ($nroInterno > 0 && ! in_array($tipoAp, self::MEDIOS_TRANSFERENCIA, true)) {
                 if ($nro !== '' && $nro !== '0') {
                     $etiqueta = trim($tipoAp.' '.$nro);
                     $out['comprobantes'][$etiqueta] = $etiqueta;
@@ -318,7 +316,7 @@ final class PagosSabanaAnitaArmadoSupport
                         'numero' => preg_replace('/\D+/', '', $nro) ?: $nro,
                         'letra' => strtoupper(trim((string) ($axp->axp_letra_comp ?? 'A'))) ?: 'A',
                         'sucursal' => (int) ($axp->axp_sucursal ?? 0),
-                        'nro_interno' => (int) ($axp->axp_nro_interno ?? 0),
+                        'nro_interno' => $nroInterno,
                         'etiqueta' => $etiqueta,
                     ];
                 }
