@@ -41,6 +41,9 @@ final class ParametroSistemaSupport
 
     public const CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID = 'ncp_pronto_pago_cuentacontable_id';
 
+    /** Cuenta contable que se propone al dar de alta un proveedor (Ferli). */
+    public const CLAVE_PROVEEDOR_ALTA_CUENTACONTABLE_ID = 'proveedor_alta_cuentacontable_id';
+
     /** Pedido de ventas: imprimir IVA y percepciones de IIBB además de exento y descuentos. */
     public const CLAVE_PEDIDO_IMPRIME_IVA_IIBB = 'pedido_imprime_iva_iibb';
 
@@ -142,6 +145,16 @@ final class ParametroSistemaSupport
                 'ayuda' => 'Si está activo, al cargar una OC el solicitante se elige con la consulta de usuarios. Arranca con quien carga la orden, o con el último solicitante que esa persona eligió. Si está inactivo, el solicitante es quien carga y no se puede cambiar.',
                 'tipo' => 'boolean',
                 'orden' => 60,
+            ];
+        }
+
+        if (EntornoEmpresaSupport::esFerli()) {
+            $defs[self::CLAVE_PROVEEDOR_ALTA_CUENTACONTABLE_ID] = [
+                'grupo' => 'Compras',
+                'etiqueta' => 'Cuenta de proveedores al alta',
+                'ayuda' => 'Cuenta contable que se propone al crear un proveedor, en pesos y en moneda extranjera. En el formulario se puede cambiar. En las otras empresas se usa el mismo código. F1 o la lupa abren la consulta.',
+                'tipo' => 'cuentacontable',
+                'orden' => 58,
             ];
         }
 
@@ -273,12 +286,36 @@ final class ParametroSistemaSupport
      */
     public static function ncpProntoPagoCuentaIdParaEmpresa(int $empresaId): int
     {
-        $id = self::ncpProntoPagoCuentacontableId();
-        if ($id <= 0 || $empresaId <= 0) {
+        return self::cuentaIdEnEmpresa(self::ncpProntoPagoCuentacontableId(), $empresaId);
+    }
+
+    /**
+     * Cuenta configurada para el alta de proveedor (id del plan elegido).
+     * 0 = todavía no se eligió en Configuración general.
+     */
+    public static function proveedorAltaCuentacontableId(): int
+    {
+        return max(0, (int) (self::mapa()[self::CLAVE_PROVEEDOR_ALTA_CUENTACONTABLE_ID] ?? 0));
+    }
+
+    /**
+     * Esa cuenta en el plan de $empresaId. Si se eligió en otra empresa, busca el mismo código.
+     */
+    public static function proveedorAltaCuentaIdParaEmpresa(int $empresaId): int
+    {
+        return self::cuentaIdEnEmpresa(self::proveedorAltaCuentacontableId(), $empresaId);
+    }
+
+    /**
+     * Id de la cuenta en el plan de $empresaId. Si el id guardado es de otra empresa, resuelve por código.
+     */
+    private static function cuentaIdEnEmpresa(int $cuentaId, int $empresaId): int
+    {
+        if ($cuentaId <= 0 || $empresaId <= 0) {
             return 0;
         }
 
-        $cuenta = Cuentacontable::query()->find($id);
+        $cuenta = Cuentacontable::query()->find($cuentaId);
         if (! $cuenta) {
             return 0;
         }
@@ -451,6 +488,7 @@ final class ParametroSistemaSupport
             self::CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID => '',
             self::CLAVE_NDR_CHEQUE_PUNTOVENTA_ID => (string) self::ndrChequePuntoventaIdFallback(),
             self::CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID => '',
+            self::CLAVE_PROVEEDOR_ALTA_CUENTACONTABLE_ID => '',
             self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB => '0',
             default => '0',
         };

@@ -28,6 +28,17 @@ final class ComprobanteProveedorFechaContableSupport
     }
 
     /**
+     * Vencimiento de pago ausente: el día de contabilización.
+     * Una fecha ya leída (factura, cuota u orden de compra) se conserva.
+     */
+    public static function vencimientoOContabilizacion(mixed $vencimiento, mixed $fechaContabilizacion): string
+    {
+        return self::formatear($vencimiento)
+            ?? self::formatear($fechaContabilizacion)
+            ?? self::fechaCargaHoy();
+    }
+
+    /**
      * Tope de la fecha de contabilización, sin pasar de hoy.
      * En edición arranca en la fecha ya grabada. Sube si la fecha impresa es posterior
      * (si no, el comprobante no se puede corregir) y si esa fecha cayó en un período

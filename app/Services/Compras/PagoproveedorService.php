@@ -36,11 +36,16 @@ use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Compras\PagoproveedorAsientoArmadoSupport;
 use App\Support\Compras\PagoproveedorLiquidacionSupport;
 use App\Support\Compras\PagoproveedorEdicionCandadoSupport;
+use App\Support\Compras\PagoproveedorMedioCajaTesoreriaSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Compras\Retencion\PagoproveedorRetencionPersistenciaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use App\Models\Compras\RetencionIIBB;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCargaManualSupport;
+use App\Support\Contable\CuentaAutomaticaClaves;
+use App\Support\Contable\CuentaAutomaticaResolver;
+use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use App\Support\Configuracion\SistemaNumeradorSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
@@ -377,6 +382,7 @@ class PagoproveedorService
             if (! $this->asientoFueEditadoManual($data)) {
                 $data = array_merge($data, $this->construirArraysAsientoDesdeOperacion($pago, $data));
             }
+            $this->assertHayMedioSiAsientoAcreditaTesoreria($pago, $data, $cajaMovimientoId);
             if (empty($data['cuentacontable_ids'])) {
                 throw new Exception('No se pudo armar el asiento contable de la OP (sin líneas).');
             }
@@ -392,6 +398,150 @@ class PagoproveedorService
         return AsientoCargaManualSupport::fueEditadoManual(
             $data['carga_cuentacontable_manuales'] ?? []
         );
+    }
+
+    /**
+     * Un haber contra fondo fijo / banco no reemplaza el medio de caja.
+     * Sin ese medio no se escribe pago/auxpag/tesmov en Anita.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function assertHayMedioSiAsientoAcreditaTesoreria(
+        Pagoproveedor $pago,
+        array $data,
+        int $cajaMovimientoId,
+    ): void {
+        if ((string) $pago->estado === 'PRE CARGA' || $cajaMovimientoId > 0) {
+            return;
+        }
+
+        $haberIds = [];
+        $cuentas = $data['cuentacontable_ids'] ?? [];
+        $haberes = $data['haberasientos'] ?? $data['haberes'] ?? [];
+        foreach ($cuentas as $i => $cuentaId) {
+            $haber = NumeroDecimalLocalSupport::aFloat($haberes[$i] ?? 0);
+            if ((int) $cuentaId > 0 && $haber > 0.009) {
+                $haberIds[] = (int) $cuentaId;
+            }
+        }
+
+        $tesoreria = PagoproveedorMedioCajaTesoreriaSupport::tesoreriaEnHaber(
+            (int) $pago->empresa_id,
+            $haberIds,
+        );
+        if ($tesoreria === []) {
+            return;
+        }
+
+        throw new Exception(PagoproveedorMedioCajaTesoreriaSupport::mensajeFaltaMedio($tesoreria));
+    }
+
+    /**
+     * Arma el movimiento de caja que faltó cuando el asiento acredita una sola
+     * cuenta de tesorería por haber. No toca aplicaciones ni el asiento.
+     * La réplica a Anita la hace el llamador, después del commit.
+     */
+    public function completarMedioCajaDesdeAsiento(Pagoproveedor $pago): int
+    {
+        $existente = (int) ($pago->caja_movimiento_id ?? 0);
+        if ($existente > 0) {
+            return $existente;
+        }
+
+        $asiento = null;
+        if ((int) ($pago->asiento_id ?? 0) > 0) {
+            $asiento = \App\Models\Contable\Asiento::query()
+                ->with('asiento_movimientos')
+                ->find((int) $pago->asiento_id);
+        }
+        if ($asiento === null) {
+            throw new Exception(
+                'La OP '.$pago->numerotransaccion.' no tiene asiento para armar el medio de caja.'
+            );
+        }
+
+        $cuentasRetencion = $this->idsCuentasRetencion((int) $pago->empresa_id);
+        $cotCabecera = (float) ($pago->cotizacion ?: 0);
+        if ($cotCabecera <= 0) {
+            $cotCabecera = 1.0;
+        }
+        $lineas = [];
+        foreach ($asiento->asiento_movimientos as $mov) {
+            $monto = (float) $mov->monto;
+            if ($monto >= -0.009) {
+                continue;
+            }
+            $cuentaId = (int) $mov->cuentacontable_id;
+            // La retención ya tiene certificado y auxpag propio. No es un medio de caja.
+            if (isset($cuentasRetencion[$cuentaId])) {
+                continue;
+            }
+            $cotMov = (float) ($mov->cotizacion ?? 0);
+            $lineas[] = [
+                'cuentacontable_id' => $cuentaId,
+                'importe' => round(abs($monto), 2),
+                'moneda_id' => (int) ($mov->moneda_id ?: $pago->moneda_id ?: 1),
+                'cotizacion' => $cotMov > 0 ? $cotMov : $cotCabecera,
+            ];
+        }
+
+        $tesoreria = PagoproveedorMedioCajaTesoreriaSupport::tesoreriaEnHaber(
+            (int) $pago->empresa_id,
+            array_map(static fn (array $lin): int => $lin['cuentacontable_id'], $lineas),
+        );
+        $porCuenta = [];
+        foreach ($tesoreria as $item) {
+            if (count($item['cuentas']) !== 1) {
+                $opciones = array_map(
+                    static fn (array $caja): string => trim($caja['codigo'].' '.$caja['nombre']),
+                    $item['cuentas'],
+                );
+                throw new Exception(
+                    'OP '.$pago->numerotransaccion
+                    .': el haber de tesorería coincide con más de una cuenta de caja ('
+                    .implode(', ', $opciones).'). Hay que elegir el medio a mano.'
+                );
+            }
+            $porCuenta[$item['cuentacontable_id']] = $item['cuentas'][0];
+        }
+
+        $data = [
+            'cuentacaja_ids' => [],
+            'montos' => [],
+            'moneda_ids' => [],
+            'cotizaciones' => [],
+            'observaciones' => [],
+            'numerocheque_emitidos' => [],
+            'numerocheque_recibidos' => [],
+        ];
+        $nombres = [];
+        foreach ($lineas as $lin) {
+            $caja = $porCuenta[$lin['cuentacontable_id']] ?? null;
+            if ($caja === null) {
+                continue;
+            }
+            $data['cuentacaja_ids'][] = $caja['id'];
+            $data['montos'][] = $lin['importe'];
+            $data['moneda_ids'][] = $lin['moneda_id'];
+            $data['cotizaciones'][] = $lin['cotizacion'];
+            $data['observaciones'][] = 'OP '.$pago->numerotransaccion;
+            $nombres[] = trim($caja['codigo'].' '.$caja['nombre']);
+        }
+        if ($data['cuentacaja_ids'] === []) {
+            throw new Exception(
+                'OP '.$pago->numerotransaccion.': el asiento no acredita una cuenta de tesorería.'
+            );
+        }
+
+        $cajaMovimientoId = $this->persistirCajaMovimiento($pago, $data, true, true);
+        $this->registrarEstado(
+            $pago->fresh(),
+            (string) $pago->estado,
+            'Se generó el movimiento de caja ('.implode(', ', array_unique($nombres))
+            .') que faltaba: el asiento acreditaba esa tesorería sin medio de pago.',
+        );
+
+        return $cajaMovimientoId;
     }
 
     /**
@@ -968,9 +1118,45 @@ class PagoproveedorService
     }
 
     /**
+     * Cuentas de retención (Ganancias, IVA, SUSS, IIBB). El haber de esas cuentas
+     * no es un desembolso de caja: el certificado se replica aparte.
+     *
+     * @return array<int, true>
+     */
+    private function idsCuentasRetencion(int $empresaId): array
+    {
+        $ids = [];
+        $claves = [
+            CuentaAutomaticaClaves::PAGO_RETENCION_GANANCIAS,
+            CuentaAutomaticaClaves::PAGO_RETENCION_IVA,
+            CuentaAutomaticaClaves::PAGO_RETENCION_SUSS,
+            CuentaAutomaticaClaves::PAGO_RETENCION_IIBB,
+        ];
+        foreach ($claves as $clave) {
+            $cuentaId = (int) (CuentaAutomaticaResolver::resolverId($empresaId, $clave) ?? 0);
+            if ($cuentaId > 0) {
+                $ids[$cuentaId] = true;
+                $ids[CuentacontableEmpresaHomologacionSupport::idParaEmpresa($cuentaId, $empresaId)] = true;
+            }
+        }
+        foreach (RetencionIIBB::query()->where('cuentacontable_id', '>', 0)->pluck('cuentacontable_id') as $cuentaId) {
+            $cuentaId = (int) $cuentaId;
+            $ids[$cuentaId] = true;
+            $ids[CuentacontableEmpresaHomologacionSupport::idParaEmpresa($cuentaId, $empresaId)] = true;
+        }
+
+        return $ids;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
-    private function persistirCajaMovimiento(Pagoproveedor $pago, array $data, bool $esAlta): int
+    private function persistirCajaMovimiento(
+        Pagoproveedor $pago,
+        array $data,
+        bool $esAlta,
+        bool $respetarCotizacion = false,
+    ): int
     {
         $cuentacajaIds = array_values(array_filter(
             $data['cuentacaja_ids'] ?? [],
@@ -997,18 +1183,32 @@ class PagoproveedorService
 
         // Una sola TC del pago (pago.c in_cotizacion) en medios de caja.
         $fechaPago = $pago->fecha?->format('Y-m-d') ?? date('Y-m-d');
-        $cotPago = PagoproveedorAsientoArmadoSupport::cotizacionUnicaDelPago(
-            (int) ($pago->moneda_id ?: 1),
-            (float) ($pago->cotizacion ?: 1),
-            $fechaPago
-        );
-        if (abs((float) $pago->cotizacion - $cotPago) > 0.0001) {
-            $pago->cotizacion = $cotPago;
-            $pago->save();
+        if ($respetarCotizacion) {
+            $cotPago = (float) ($pago->cotizacion ?: 1);
+            if ($cotPago <= 0) {
+                $cotPago = 1.0;
+            }
+        } else {
+            $cotPago = PagoproveedorAsientoArmadoSupport::cotizacionUnicaDelPago(
+                (int) ($pago->moneda_id ?: 1),
+                (float) ($pago->cotizacion ?: 1),
+                $fechaPago
+            );
+            if (abs((float) $pago->cotizacion - $cotPago) > 0.0001) {
+                $pago->cotizacion = $cotPago;
+                $pago->save();
+            }
         }
         $monedasCaja = array_values($payload['moneda_ids'] ?? []);
+        $cotizacionesPedidas = array_values($payload['cotizaciones'] ?? []);
         $cotsCaja = [];
         foreach (array_values($payload['cuentacaja_ids'] ?? []) as $i => $_cid) {
+            if ($respetarCotizacion) {
+                $cotLin = (float) ($cotizacionesPedidas[$i] ?? 0);
+                $cotsCaja[] = $cotLin > 0 ? $cotLin : $cotPago;
+
+                continue;
+            }
             $monLin = (int) ($monedasCaja[$i] ?? $pago->moneda_id ?? 1);
             $cotsCaja[] = PagoproveedorAsientoArmadoSupport::cotizacionParaLinea($monLin, $cotPago);
         }
@@ -1023,7 +1223,11 @@ class PagoproveedorService
         $payload['pagoproveedor_id'] = $pago->id;
         $payload['proveedor_id'] = $pago->proveedor_id;
         $payload['monto'] = $pago->monto;
-        $payload['usuario_id'] = Auth::id();
+        $usuarioId = (int) (Auth::id() ?: 0);
+        if ($usuarioId <= 0) {
+            $usuarioId = (int) ($pago->usuario_id ?: 0);
+        }
+        $payload['usuario_id'] = $usuarioId > 0 ? $usuarioId : null;
         $payload['tipotransaccion_caja_id'] = $tipoOppId;
         $payload['numerotransaccion'] = (string) $pago->numerotransaccion;
         $payload['proveedor_formapago_id'] = $pago->proveedor_formapago_id;

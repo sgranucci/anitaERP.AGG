@@ -115,6 +115,13 @@ function empresaIdParaConsultaCuentaContable($ctx) {
         }
     }
 
+    if (!empresaId && $ctx && $ctx.length) {
+        var $bloquePlan = $ctx.closest('.param-cuenta-contable-cfg');
+        if ($bloquePlan.length) {
+            empresaId = parseInt($bloquePlan.find('.empresa-plan-cuentacontable').val(), 10) || 0;
+        }
+    }
+
     if (!empresaId) {
         empresaId = parseInt($('#consultaempresa_id').val(), 10) || 0;
     }

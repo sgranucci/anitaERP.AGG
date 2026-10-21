@@ -173,6 +173,14 @@ final class PagoproveedorAnitaAuditoriaDiariaService
         }
 
         try {
+            if ((int) ($pago->caja_movimiento_id ?? 0) <= 0) {
+                try {
+                    $this->pagoproveedorService->completarMedioCajaDesdeAsiento($pago->fresh());
+                    $fila['acciones'][] = 'Creó el movimiento de caja desde el haber de tesorería';
+                } catch (Throwable $eMedio) {
+                    $fila['acciones'][] = 'No se pudo crear el medio de caja: '.$eMedio->getMessage();
+                }
+            }
             $this->pagoproveedorService->sincronizarAnitaTesoreria($pago->fresh(), true);
             $fila['acciones'][] = 'Resincronizó tesorería Anita';
             $pago->refresh()->load([

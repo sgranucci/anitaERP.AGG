@@ -249,12 +249,10 @@ class ChequeraRepository implements ChequeraRepositoryInterface
             return;
         }
 
-        $codigoCuenta = preg_replace('/\D+/', '', (string) ($cuenta->codigo ?? '')) ?? '';
-        $codigoCuenta = ltrim($codigoCuenta, '0');
-        if ($codigoCuenta === '') {
+        $cuentaPad = \App\Support\Caja\ChequePropioCpromaeAnitaMapper::cuentaTesmae((string) ($cuenta->codigo ?? ''));
+        if ($cuentaPad === '' || $cuentaPad === '00000000') {
             return;
         }
-        $cuentaPad = str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT);
 
         ini_set('max_execution_time', '120');
         $apiAnita = new ApiAnita();

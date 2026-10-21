@@ -3,6 +3,7 @@
 namespace App\Repositories\Caja;
 
 use App\Models\Caja\Cuentacaja;
+use App\Support\Caja\ChequePropioCpromaeAnitaMapper;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
 use App\Support\Caja\CuentacajaListadoFiltros;
@@ -226,18 +227,19 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             return $hit;
         }
 
-        // Solo numéricos: tolerar ceros a la izquierda (Anita char(8) vs ERP).
+        // tesmae guarda char(8): 1 → 00000001, 50563/5 → 050563/5.
+        $clave = self::claveTesmaeAnita($codigo);
+        if ($clave !== $codigo) {
+            $hit = $this->model->where('codigo', $clave)->first();
+            if ($hit) {
+                return $hit;
+            }
+        }
+
         if (preg_match('/^\d+$/', $codigo) === 1) {
             $norm = self::normalizarCodigoCuentaAnita($codigo);
-            if ($norm !== $codigo) {
-                $hit = $this->model->where('codigo', $norm)->first();
-                if ($hit) {
-                    return $hit;
-                }
-            }
-            $padded = self::claveTesmaeAnita($codigo);
-            if ($padded !== $codigo && $padded !== $norm) {
-                return $this->model->where('codigo', $padded)->first();
+            if ($norm !== $codigo && $norm !== $clave) {
+                return $this->model->where('codigo', $norm)->first();
             }
         }
 
@@ -258,7 +260,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         if ($codigo !== null && $codigo !== '') {
             $codigoNorm = self::normalizarCodigoCuentaAnita($codigo);
             $claveAnita = self::claveTesmaeAnita($codigo);
-            if ($this->model->where('codigo', $codigoNorm)->exists()) {
+            if ($this->model->where('codigo', $codigoNorm)->orWhere('codigo', $claveAnita)->exists()) {
                 $ret['en_anita'] = 1;
                 $ret['omitidos'] = 1;
 
@@ -295,11 +297,18 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
         $ret['en_anita'] = count($dataAnita);
 
-        $datosLocal = Cuentacaja::pluck($this->keyField)->all();
+        $presentes = [];
+        foreach (Cuentacaja::pluck($this->keyField) as $codigoLocalExistente) {
+            $codigoLocalExistente = trim((string) $codigoLocalExistente);
+            $presentes[$codigoLocalExistente] = true;
+            $presentes[self::claveTesmaeAnita($codigoLocalExistente)] = true;
+            $presentes[self::normalizarCodigoCuentaAnita($codigoLocalExistente)] = true;
+        }
 
         foreach ($dataAnita as $value) {
-            $codigoLocal = self::normalizarCodigoCuentaAnita((string) $value->{$this->keyField});
-            if (in_array($codigoLocal, $datosLocal, true)) {
+            $tesmCuenta = trim((string) $value->{$this->keyField});
+            $codigoLocal = self::normalizarCodigoCuentaAnita($tesmCuenta);
+            if (isset($presentes[$tesmCuenta]) || isset($presentes[$codigoLocal])) {
                 $ret['omitidos']++;
                 continue;
             }
@@ -308,7 +317,8 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                 $estado = $this->traerRegistroDeAnita((string) $value->{$this->keyFieldAnita});
                 if ($estado === 'importado') {
                     $ret['importados']++;
-                    $datosLocal[] = $codigoLocal;
+                    $presentes[$codigoLocal] = true;
+                    $presentes[trim((string) $value->{$this->keyFieldAnita})] = true;
                 } else {
                     $ret['errores'][] = "Cuenta Anita {$codigoLocal}: {$estado}.";
                 }
@@ -423,7 +433,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
         $arr_campos = [
             "nombre" => $data->tesm_desc,
-            "codigo" => self::normalizarCodigoCuentaAnita((string) $data->tesm_cuenta),
+            "codigo" => trim((string) $data->tesm_cuenta),
             "tipocuenta" => $tipoCuenta,
             "banco_id" => $banco_id,
             "empresa_id" => $empresa_id,
@@ -677,18 +687,10 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         return $cuenta;
     }
 
-    /** Clave Informix tesm_cuenta (char 8). */
+    /** Clave Informix tesm_cuenta (char 8). Conserva barra y guion. */
     private static function claveTesmaeAnita(string $codigo): string
     {
-        $codigo = trim($codigo);
-        if ($codigo === '') {
-            return str_repeat('0', 8);
-        }
-        if (preg_match('/^\d+$/', $codigo) === 1) {
-            return str_pad(ltrim($codigo, '0') === '' ? '0' : ltrim($codigo, '0'), 8, '0', STR_PAD_LEFT);
-        }
-
-        return substr(str_pad($codigo, 8, ' ', STR_PAD_RIGHT), 0, 8);
+        return ChequePropioCpromaeAnitaMapper::cuentaTesmae($codigo);
     }
 
     private static function leerCbuDesdeAnita(ApiAnita $apiAnita, string $codigoCuenta, $dataTesmae = null): string

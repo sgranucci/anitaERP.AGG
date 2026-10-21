@@ -80,6 +80,7 @@ class ComprobanteProveedorPrefillService
         $data = new Comprobante_Proveedor([
             'fechacomprobante' => now()->format('Y-m-d'),
             'fechaiva' => $this->fechaIvaDefaultAlta(),
+            'fechavencimiento' => $this->fechaIvaDefaultAlta(),
             'modo_carga' => ComprobanteProveedorModoCarga::SIN_RECEPCION,
             'estado' => ComprobanteProveedorEstados::BORRADOR,
             'subtotal' => 0,
@@ -130,6 +131,8 @@ class ComprobanteProveedorPrefillService
         $fechacomprobante = $precarga->fechafactura
             ? Carbon::parse($precarga->fechafactura)->format('Y-m-d')
             : now()->format('Y-m-d');
+        $fechaContabilizacion = $this->fechaIvaDefaultAlta();
+        $fechaVencimientoLeida = $this->fechaYmdDesdePrecarga($precarga->fechavencimiento ?? null);
 
         $fecharecepcion = null;
 
@@ -184,9 +187,9 @@ class ComprobanteProveedorPrefillService
             'sucursal' => $precarga->sucursal,
             'numerocomprobante' => $precarga->numerocomprobante,
             'fechacomprobante' => $fechacomprobante,
-            'fechaiva' => $this->fechaIvaDefaultAlta(),
+            'fechaiva' => $fechaContabilizacion,
             'fecharecepcion' => $fecharecepcion,
-            'fechavencimiento' => $this->fechaYmdDesdePrecarga($precarga->fechavencimiento ?? null),
+            'fechavencimiento' => $fechaVencimientoLeida,
             'fechavencimientocae' => $precarga->fechavencimientocaicae,
             'numerocae' => $precarga->numerocae,
             'tipo_autorizacion' => $precarga->tipo_autorizacion,
@@ -337,7 +340,7 @@ class ComprobanteProveedorPrefillService
 
         $prefill['cuotas'] = $this->aplicarVencimientoFacturaACuotas(
             $prefill['cuotas'] ?? [],
-            $this->fechaYmdDesdePrecarga($precarga->fechavencimiento ?? null),
+            $fechaVencimientoLeida,
             (float) ($prefill['data']->total ?? $precarga->total ?? 0),
             (int) ($prefill['data']->moneda_id ?: $monedaId),
             (float) ($prefill['data']->cotizacion ?: $cotizacion),
@@ -349,6 +352,8 @@ class ComprobanteProveedorPrefillService
             isset($prefill['data']->condicionpago_id) ? (int) $prefill['data']->condicionpago_id : null,
             $fechacomprobante,
         );
+
+        $prefill = $this->completarVencimientoAusente($prefill, $fechaVencimientoLeida, $fechaContabilizacion);
 
         return $this->anexarImputacionNc($prefill, $precarga, true);
     }
@@ -582,7 +587,7 @@ class ComprobanteProveedorPrefillService
             ];
         }
 
-        return $prefill;
+        return $this->completarVencimientoAusente($prefill, null, $this->fechaIvaDefaultAlta());
     }
 
     /** @return array<string, mixed> */
@@ -834,6 +839,37 @@ class ComprobanteProveedorPrefillService
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Sin vencimiento leído: la cabecera queda en el día de contabilización.
+     * Una cuota que ya trae fecha (condición de pago u OC) se conserva; si no tiene, usa ese mismo día.
+     *
+     * @param  array<string, mixed>  $prefill
+     * @return array<string, mixed>
+     */
+    private function completarVencimientoAusente(
+        array $prefill,
+        ?string $fechaVencimientoLeida,
+        string $fechaContabilizacion,
+    ): array {
+        $cuotas = is_array($prefill['cuotas'] ?? null) ? $prefill['cuotas'] : [];
+        foreach ($cuotas as $i => $cuota) {
+            if (! is_array($cuota)) {
+                continue;
+            }
+            $fecha = ComprobanteProveedorVencimientoCondicionSupport::fechaYmd($cuota['fechavencimiento'] ?? null);
+            if ($fecha === null) {
+                $cuotas[$i]['fechavencimiento'] = $fechaContabilizacion;
+            }
+        }
+        $prefill['cuotas'] = $cuotas;
+        $prefill['data']->fechavencimiento = ComprobanteProveedorFechaContableSupport::vencimientoOContabilizacion(
+            $fechaVencimientoLeida,
+            $fechaContabilizacion,
+        );
+
+        return $prefill;
     }
 
     /**

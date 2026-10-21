@@ -44,6 +44,7 @@ use App\Repositories\Compras\Proveedor_SalaRepositoryInterface;
 use App\Support\Compras\ProveedorSalaAnitaSupport;
 use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Models\Compras\Sector_Legajocompra;
 use App\Support\Compras\OrdencompraEstados;
@@ -617,6 +618,11 @@ class ProveedorController extends Controller
         $sala_query = $mostrar_solapa_salas
             ? ProveedorSalaAnitaSupport::salasParaSelector()
             : collect();
+        $cuentacontableDefaultId = 0;
+        if (EntornoEmpresaSupport::esFerli()) {
+            $empresaPlanId = (int) (optional($cuentacontable_query->first())->empresa_id ?? 0);
+            $cuentacontableDefaultId = ParametroSistemaSupport::proveedorAltaCuentaIdParaEmpresa($empresaPlanId);
+        }
 
         return view('compras.proveedor.crear', compact('pais_query', 'provincia_query', 'tipoempresa_query',
 			'condicioniva_query', 'condicionIIBB_query',
@@ -628,7 +634,7 @@ class ProveedorController extends Controller
             'estado_enum', 'tasaarba', 'tasacaba', 'tipoalta', 'semaforo_enum',
             'formapago_query', 'tipocuentacaja_query', 'moneda_query', 'banco_query', 'mediopago_query',
             'tiporetencion_enum', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum', 'filtrosQuery',
-            'empresa_query', 'mostrar_solapa_salas', 'sala_query'));
+            'empresa_query', 'mostrar_solapa_salas', 'sala_query', 'cuentacontableDefaultId'));
     }
 
     /**

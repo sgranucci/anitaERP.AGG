@@ -72,6 +72,9 @@ class ComprobanteProveedorPersistenciaService
      */
     private ?array $vencimientoEdicionPrevio = null;
 
+    /** El alta no traía vencimiento: se usó el día de contabilización y no se pisa con la cuota. */
+    private bool $vencimientoCabeceraEsFallback = false;
+
     public function __construct(
         private Comprobante_ProveedorRepositoryInterface $comprobanteRepository,
         private Comprobante_Proveedor_ConceptoRepositoryInterface $conceptoRepository,
@@ -269,11 +272,30 @@ class ComprobanteProveedorPersistenciaService
      */
     private function fijarFechaContabilizacion(array $payload, ?Comprobante_Proveedor $existente): array
     {
+        $vencimientoEnviado = ComprobanteProveedorFechaContableSupport::formatear(
+            $payload['fechavencimiento'] ?? null
+        );
         $payload['fechaiva'] = ComprobanteProveedorFechaContableSupport::resolverEnCarga(
             $payload['fechaiva'] ?? null,
             $existente,
             $payload['fechacomprobante'] ?? null,
         );
+
+        $precargaId = (int) ($payload['precarga_comprobante_proveedor_id'] ?? 0);
+        $vencimientoLeido = null;
+        if ($precargaId > 0) {
+            $vencimientoLeido = ComprobanteProveedorFechaContableSupport::formatear(
+                Precarga_Comprobante_Proveedor::query()->whereKey($precargaId)->value('fechavencimiento')
+            );
+        }
+        $this->vencimientoCabeceraEsFallback = $vencimientoLeido === null
+            && ($vencimientoEnviado === null || $vencimientoEnviado === $payload['fechaiva']);
+        if ($vencimientoEnviado === null) {
+            $payload['fechavencimiento'] = ComprobanteProveedorFechaContableSupport::vencimientoOContabilizacion(
+                null,
+                $payload['fechaiva'],
+            );
+        }
 
         return $payload;
     }
@@ -793,6 +815,10 @@ class ComprobanteProveedorPersistenciaService
             ]);
         }
 
+        $this->vencimientoCabeceraEsFallback = ComprobanteProveedorFechaContableSupport::formatear(
+            Precarga_Comprobante_Proveedor::query()->whereKey($precargaId)->value('fechavencimiento')
+        ) === null;
+
         $this->persistirCuotasDesdeArray($comprobante, $prefill['cuotas']);
         $this->vincularRecepcionesDesdePrefill($comprobante, $prefill);
         $this->registrarEstadoInicial($comprobante);
@@ -1120,14 +1146,20 @@ class ComprobanteProveedorPersistenciaService
         $detalles = $request->input('cuota_detalle', []);
         $ocCuotaIds = $request->input('cuota_ordencompra_comprobante_cuota_id', []);
 
+        $fechaContabilizacion = ComprobanteProveedorFechaContableSupport::fechaYmd($comprobante);
         $cuotas = [];
         for ($i = 0; $i < count($numeros); $i++) {
-            if (trim((string) ($vencimientos[$i] ?? '')) === '') {
-                continue;
+            $vencimiento = trim((string) ($vencimientos[$i] ?? ''));
+            $monto = (float) ($montos[$i] ?? 0);
+            if ($vencimiento === '') {
+                if (abs($monto) < 0.0001) {
+                    continue;
+                }
+                $vencimiento = $fechaContabilizacion;
             }
             $cuotas[] = [
                 'numero_cuota' => (int) ($numeros[$i] ?? ($i + 1)),
-                'fechavencimiento' => $vencimientos[$i],
+                'fechavencimiento' => $vencimiento,
                 'monto' => (float) ($montos[$i] ?? 0),
                 'moneda_id' => (int) ($monedaIds[$i] ?? $comprobante->moneda_id ?? 1),
                 'cotizacion' => isset($cotizaciones[$i]) ? (float) $cotizaciones[$i] : null,
@@ -1236,7 +1268,7 @@ class ComprobanteProveedorPersistenciaService
         );
 
         $primerVto = $cuotasNormalizadas[0]['fechavencimiento'] ?? null;
-        if ($primerVto) {
+        if ($primerVto && ! $this->vencimientoCabeceraEsFallback) {
             $comprobante->forceFill(['fechavencimiento' => $primerVto])->save();
         }
 

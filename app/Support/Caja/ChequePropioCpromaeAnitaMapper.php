@@ -55,8 +55,7 @@ final class ChequePropioCpromaeAnitaMapper
      */
     public static function mapear(array $in): array
     {
-        $cuenta = preg_replace('/\D+/', '', (string) ($in['cuenta'] ?? '')) ?? '';
-        $cuenta = str_pad(ltrim($cuenta, '0') === '' ? '0' : ltrim($cuenta, '0'), 8, '0', STR_PAD_LEFT);
+        $cuenta = self::cuentaTesmae((string) ($in['cuenta'] ?? ''));
         $nro = (int) preg_replace('/\D/', '', (string) ($in['nro'] ?? ''));
         $tipoChequera = strtoupper(trim((string) ($in['chequera_tipo'] ?? 'F')));
         $negociableIn = strtoupper(trim((string) ($in['negociable'] ?? '')));
@@ -145,6 +144,23 @@ final class ChequePropioCpromaeAnitaMapper
         }
 
         return '*';
+    }
+
+    /**
+     * Clave de tesmae (char 8). La barra o el guion se conservan: 50563/5 → 050563/5.
+     * Un código solo numérico se rellena con ceros: 127 → 00000127.
+     */
+    public static function cuentaTesmae(string $codigo): string
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return '00000000';
+        }
+        if (strlen($codigo) >= 8) {
+            return substr($codigo, 0, 8);
+        }
+
+        return str_pad($codigo, 8, '0', STR_PAD_LEFT);
     }
 
     public static function cotizacion(float $cotizacion): float

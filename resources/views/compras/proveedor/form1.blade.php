@@ -151,6 +151,12 @@
 			</div>
 		</div>
 		<div class='col-md-12'>
+			@php
+				$cuentaProveedorDefaultId = (int) ($cuentacontableDefaultId ?? 0);
+				$cuentaContableIdSel = (int) old('cuentacontable_id', $data->cuentacontable_id ?? $cuentaProveedorDefaultId);
+				$cuentaContableMeIdSel = (int) old('cuentacontableme_id', $data->cuentacontableme_id ?? $cuentaProveedorDefaultId);
+				$cuentaContableCompraIdSel = (int) old('cuentacontablecompra_id', $data->cuentacontablecompra_id ?? 0);
+			@endphp
         	<div class="row mt-0">
 				<div class="col-md-3">
 					<div class="form-group">
@@ -158,10 +164,10 @@
 						<select name="cuentacontable_id" id="cuentacontable_id" data-placeholder="Cuenta contable para imputaciones" class="form-control" data-fouc @if ($tipoalta != 'P') required @endif>
 							<option value="">-- Seleccionar Cta. Contable --</option>
 							@foreach($cuentacontable_query as $key => $value)
-								@if( (int) $value->id == (int) old('cuentacontable_id', $data->cuentacontable_id ?? ''))
-									<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+								@if((int) $value->id === $cuentaContableIdSel)
+									<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
 								@else
-									<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+									<option value="{{ $value->id }}">{{ $value->nombre }}</option>
 								@endif
 							@endforeach
 						</select>
@@ -173,10 +179,10 @@
 						<select name="cuentacontableme_id" id="cuentacontableme_id" data-placeholder="Cuenta contable para imputaciones moneda extranjera" class="form-control" data-fouc @if ($tipoalta != 'P') required @endif>
 							<option value="">-- Seleccionar Cta. Contable --</option>
 							@foreach($cuentacontable_query as $key => $value)
-								@if( (int) $value->id == (int) old('cuentacontable_id', $data->cuentacontableme_id ?? ''))
-									<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+								@if((int) $value->id === $cuentaContableMeIdSel)
+									<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
 								@else
-									<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+									<option value="{{ $value->id }}">{{ $value->nombre }}</option>
 								@endif
 							@endforeach
 						</select>
@@ -188,10 +194,10 @@
 						<select name="cuentacontablecompra_id" id="cuentacontablecompra_id" data-placeholder="Cuenta contable para compras" class="form-control" data-fouc>
 							<option value="">-- Seleccionar Cta. Contable --</option>
 							@foreach($cuentacontable_query as $key => $value)
-								@if( (int) $value->id == (int) old('cuentacontable_id', $data->cuentacontablecompra_id ?? ''))
-									<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+								@if((int) $value->id === $cuentaContableCompraIdSel)
+									<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
 								@else
-									<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+									<option value="{{ $value->id }}">{{ $value->nombre }}</option>
 								@endif
 							@endforeach
 						</select>

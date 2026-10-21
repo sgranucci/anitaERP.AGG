@@ -29,6 +29,9 @@ class ChequePropioCpromaeAnitaMapperTest extends TestCase
         ]);
 
         $this->assertSame('00000127', $out['cpro_cuenta']);
+        $this->assertSame('050563/5', ChequePropioCpromaeAnitaMapper::cuentaTesmae('50563/5'));
+        $this->assertSame('050563/5', ChequePropioCpromaeAnitaMapper::cuentaTesmae('050563/5'));
+        $this->assertSame('000625-9', ChequePropioCpromaeAnitaMapper::cuentaTesmae('625-9'));
         $this->assertSame('79030366', $out['cpro_nro_cheque']);
         $this->assertSame('20260918', $out['cpro_fecha_cheque']);
         $this->assertSame('20260910', $out['cpro_fecha_emision']);

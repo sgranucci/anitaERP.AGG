@@ -125,32 +125,35 @@ Configuración general del sistema
                                     if ($empresaPlanId <= 0) {
                                         $empresaPlanId = (int) (optional($empresasIibb->sortBy('id')->first())->id ?? 0);
                                     }
+                                    $empresaPlanSelectId = 'empresa_plan_'.$parametro['clave'];
                                 @endphp
-                                <div class="form-group row">
-                                    <label for="empresa_id" class="col-lg-4 control-label text-right pr-2">Empresa del plan</label>
-                                    <div class="col-lg-4">
-                                        <select class="form-control" id="empresa_id">
-                                            @foreach ($empresasIibb as $empresaPlan)
-                                                <option value="{{ (int) $empresaPlan->id }}" @selected((int) $empresaPlan->id === $empresaPlanId)>{{ $empresaPlan->nombre }}</option>
-                                            @endforeach
-                                        </select>
-                                        <small class="form-text text-muted">Solo para buscar la cuenta. Se guarda el código y en las otras empresas se usa el mismo.</small>
+                                <div class="param-cuenta-contable-cfg">
+                                    <div class="form-group row">
+                                        <label for="{{ $empresaPlanSelectId }}" class="col-lg-4 control-label text-right pr-2">Empresa del plan</label>
+                                        <div class="col-lg-4">
+                                            <select class="form-control empresa-plan-cuentacontable" id="{{ $empresaPlanSelectId }}">
+                                                @foreach ($empresasIibb as $empresaPlan)
+                                                    <option value="{{ (int) $empresaPlan->id }}" @selected((int) $empresaPlan->id === $empresaPlanId)>{{ $empresaPlan->nombre }}</option>
+                                                @endforeach
+                                            </select>
+                                            <small class="form-text text-muted">Solo para buscar la cuenta. Se guarda el código y en las otras empresas se usa el mismo.</small>
+                                        </div>
                                     </div>
-                                </div>
-                                @include('sueldos.partials.campo_consulta_cuentacontable', [
-                                    'label' => $parametro['etiqueta'],
-                                    'inputName' => 'parametros['.$parametro['clave'].']',
-                                    'inputId' => 'param_'.$parametro['clave'],
-                                    'cuentaId' => $cuentaContableOldId > 0 ? $cuentaContableOldId : '',
-                                    'codigo' => $cuentaContableCfg['codigo'] ?? '',
-                                    'descripcion' => $cuentaContableCfg['nombre'] ?? '',
-                                    'col_label' => 'col-lg-4 control-label text-right pr-2',
-                                    'col_input' => 'col-lg-7',
-                                    'required' => false,
-                                ])
-                                <div class="form-group row">
-                                    <div class="col-lg-7 offset-lg-4">
-                                        <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
+                                    @include('sueldos.partials.campo_consulta_cuentacontable', [
+                                        'label' => $parametro['etiqueta'],
+                                        'inputName' => 'parametros['.$parametro['clave'].']',
+                                        'inputId' => 'param_'.$parametro['clave'],
+                                        'cuentaId' => $cuentaContableOldId > 0 ? $cuentaContableOldId : '',
+                                        'codigo' => $cuentaContableCfg['codigo'] ?? '',
+                                        'descripcion' => $cuentaContableCfg['nombre'] ?? '',
+                                        'col_label' => 'col-lg-4 control-label text-right pr-2',
+                                        'col_input' => 'col-lg-7',
+                                        'required' => false,
+                                    ])
+                                    <div class="form-group row">
+                                        <div class="col-lg-7 offset-lg-4">
+                                            <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
+                                        </div>
                                     </div>
                                 </div>
                             @elseif ($parametro['tipo'] === 'boolean')
