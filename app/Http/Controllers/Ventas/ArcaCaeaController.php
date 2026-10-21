@@ -112,7 +112,7 @@ class ArcaCaeaController extends Controller
             && $this->anitaSync->estaHabilitado()
             && $registro->estaAutorizado();
         $puedeInformar = can('informar-arca-caea', false) && $registro->estaAutorizado();
-        $meta = $this->metaPantalla($registro, true);
+        $meta = $this->metaPantalla($registro);
         $resumenInforme = is_array($meta['resumen'] ?? null) ? $meta['resumen'] : [];
         $erroresInforme = [];
         if ($registro->estaAutorizado()) {
@@ -218,7 +218,10 @@ class ArcaCaeaController extends Controller
         $registro = $this->resolverRegistroPermitido($id);
         $resumen = [];
         if ($registro->estaAutorizado()) {
-            $resumen = $this->presentacionService->resumirPeriodoParaPantalla($registro, false);
+            $resumen = $this->presentacionService->resumirPeriodoParaPantalla(
+                $registro,
+                $this->incluirAnitaEnPantalla($registro),
+            );
         }
         $puedeBase = $registro->estaAutorizado()
             && ArcaCaeaInformeUiSupport::puedePresentarAhora($resumen);
@@ -455,6 +458,18 @@ class ArcaCaeaController extends Controller
         return response()->json($resultado, ($resultado['ok'] ?? false) ? 200 : 422);
     }
 
+    /**
+     * Anita entra en el recuento si la quincena sigue en plazo o el informe todavía no cerró.
+     */
+    private function incluirAnitaEnPantalla(ArcaCaea $registro): bool
+    {
+        return ArcaCaeaInformeUiSupport::incluirAnitaEnPantalla(
+            $registro->fecha_vigencia_hasta,
+            $registro->fecha_tope_informe,
+            $registro->informe_estado,
+        );
+    }
+
     private function resolverRegistroPermitido(int $id): ArcaCaea
     {
         $user = Auth::user();
@@ -516,7 +531,8 @@ class ArcaCaeaController extends Controller
     }
 
     /**
-     * Contadores para listado/detalle: ventas ERP ahora. Anita solo en el modal de una quincena abierta.
+     * Contadores en vivo: ventas del ERP y, si la quincena sigue en plazo o el informe
+     * no cerró, también los comprobantes CAEA que siguen solo en Anita.
      *
      * @return array{
      *   resumen: array<string, mixed>,
@@ -528,16 +544,15 @@ class ArcaCaeaController extends Controller
      *   badge: string
      * }
      */
-    private function metaPantalla(ArcaCaea $registro, bool $detalle = false): array
+    private function metaPantalla(ArcaCaea $registro): array
     {
         $registro->loadMissing('empresa');
         $resumen = [];
         if ($registro->estaAutorizado()) {
-            $incluirAnita = $detalle && CaeaQuincenaSupport::quincenaAbiertaEnPantalla(
-                $registro->fecha_vigencia_hasta,
-                $registro->fecha_tope_informe,
+            $resumen = $this->presentacionService->resumirPeriodoParaPantalla(
+                $registro,
+                $this->incluirAnitaEnPantalla($registro),
             );
-            $resumen = $this->presentacionService->resumirPeriodoParaPantalla($registro, $incluirAnita);
         }
 
         $procesoActivo = $registro->estaAutorizado()

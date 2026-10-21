@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Ventas;
 
 use App\Models\Ventas\ArcaCaea;
+use Carbon\Carbon;
 
 /**
  * Textos y flags de UI para presentación quincenal CAEA.
@@ -52,6 +53,26 @@ final class ArcaCaeaInformeUiSupport
         $ultimos = $resumen['ultimos_arca'] ?? [];
 
         return ! is_array($ultimos) || $ultimos === [];
+    }
+
+    /**
+     * Cuenta comprobantes que solo viven en Anita (bridge) en el listado y en el detalle.
+     * Quincena en plazo, o informe todavía sin cerrar (presentación fuera de término).
+     * Una quincena ya informada y vencida no vuelve a consultar Anita.
+     */
+    public static function incluirAnitaEnPantalla(
+        Carbon|string|null $vigenciaHasta,
+        Carbon|string|null $topeInforme,
+        ?string $informeEstado,
+        ?Carbon $hoy = null,
+    ): bool {
+        if (CaeaQuincenaSupport::quincenaAbiertaEnPantalla($vigenciaHasta, $topeInforme, $hoy)) {
+            return true;
+        }
+
+        $estado = trim((string) $informeEstado);
+
+        return $estado !== '' && $estado !== ArcaCaea::INFORME_ESTADO_OK;
     }
 
     /**

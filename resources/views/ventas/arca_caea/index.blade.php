@@ -29,7 +29,7 @@
             <div class="card-body">
                 <p class="text-muted small mb-3">
                     <i class="fa fa-info-circle"></i>
-                    Al entrar, los contadores se leen en vivo desde las facturas del ERP (el cierre Waitry suma comprobantes todos los días).
+                    Al entrar, los contadores se leen en vivo desde las facturas del ERP y, si la quincena sigue en plazo o el informe no cerró, también desde Anita.
                     El ícono <i class="fa fa-paper-plane text-primary"></i> encola la presentación de comprobantes pendientes o con error en ARCA (segundo plano).
                     @if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
                         Al presentar también se incluyen las facturas de Anita (bridge) de la sucursal 5 de Bierzo; Villafranca no se informa.
