@@ -36,10 +36,7 @@ class ContaduriaGastronomiaReporteController extends Controller
             $empresaId = (int) $empresaQuery->first()->id;
         }
 
-        $mes = trim((string) $request->input('mes', ''));
-        if ($mes === '') {
-            $mes = Carbon::today()->format('Y-m');
-        }
+        [$mes, $mesNum, $anio] = $this->resolverPeriodo($request);
 
         $fechaCierre = trim((string) $request->input('fecha_cierre', ''));
         if ($fechaCierre === '') {
@@ -55,6 +52,8 @@ class ContaduriaGastronomiaReporteController extends Controller
             'empresa_query' => $empresaQuery,
             'empresa_id' => $empresaId,
             'mes' => $mes,
+            'mes_num' => $mesNum,
+            'anio' => $anio,
             'fecha_cierre' => $fechaCierre,
             'depositos' => $depositos,
             'origen_inventario' => $this->origenInventario($request),
@@ -69,12 +68,12 @@ class ContaduriaGastronomiaReporteController extends Controller
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $empresaId = (int) $request->input('empresa_id', 0);
-        $mes = trim((string) $request->input('mes', ''));
+        [$mes] = $this->resolverPeriodo($request, false);
         $this->assertAccesoEmpresa($empresaId);
 
         if ($empresaId <= 0 || ! preg_match('/^\d{4}-\d{2}$/', $mes)) {
             return redirect()
-                ->route('gastronomia_reporte_contaduria', $request->only(['empresa_id', 'mes', 'fecha_cierre', 'depositos', 'origen_inventario']))
+                ->route('gastronomia_reporte_contaduria', $this->parametrosReporte($request))
                 ->with('errores', ['Seleccione la empresa y el mes.']);
         }
 
@@ -119,7 +118,7 @@ class ContaduriaGastronomiaReporteController extends Controller
 
         if ($empresaId <= 0 || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) || $depositos === '') {
             return redirect()
-                ->route('gastronomia_reporte_contaduria', $request->only(['empresa_id', 'mes', 'fecha_cierre', 'depositos', 'origen_inventario']))
+                ->route('gastronomia_reporte_contaduria', $this->parametrosReporte($request))
                 ->with('errores', ['Seleccione la empresa, la fecha de cierre y los depósitos.']);
         }
 
@@ -134,7 +133,7 @@ class ContaduriaGastronomiaReporteController extends Controller
 
         if (($armado['error'] ?? null) !== null) {
             return redirect()
-                ->route('gastronomia_reporte_contaduria', $request->only(['empresa_id', 'mes', 'fecha_cierre', 'depositos', 'origen_inventario']))
+                ->route('gastronomia_reporte_contaduria', $this->parametrosReporte($request))
                 ->with('errores', [$armado['error']]);
         }
 
@@ -150,6 +149,52 @@ class ContaduriaGastronomiaReporteController extends Controller
             $empresaNombre,
             (string) ($armado['origen_etiqueta'] ?? ''),
         ))->download('reporte_contaduria_inventario_'.$fecha.'.xlsx');
+    }
+
+    /**
+     * @return array{0:string,1:int,2:int}
+     */
+    private function resolverPeriodo(Request $request, bool $completarVacio = true): array
+    {
+        $hoy = Carbon::today();
+        $crudo = trim((string) $request->input('mes', ''));
+        $anio = (int) $request->input('anio', 0);
+        $mesNum = 0;
+
+        if (preg_match('/^(\d{4})-(\d{2})$/', $crudo, $partes)) {
+            $anio = (int) $partes[1];
+            $mesNum = (int) $partes[2];
+        } elseif ($crudo !== '') {
+            $mesNum = (int) $crudo;
+        }
+
+        $periodoValido = $mesNum >= 1 && $mesNum <= 12 && $anio >= 2000 && $anio <= 2100;
+        if (! $periodoValido) {
+            if (! $completarVacio) {
+                return ['', 0, 0];
+            }
+            $mesNum = (int) $hoy->month;
+            $anio = (int) $hoy->year;
+        }
+
+        return [sprintf('%04d-%02d', $anio, $mesNum), $mesNum, $anio];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function parametrosReporte(Request $request): array
+    {
+        [$mes, $mesNum, $anio] = $this->resolverPeriodo($request, false);
+
+        return [
+            'empresa_id' => $request->input('empresa_id'),
+            'mes' => $mesNum > 0 ? $mesNum : $mes,
+            'anio' => $anio > 0 ? $anio : $request->input('anio'),
+            'fecha_cierre' => $request->input('fecha_cierre'),
+            'depositos' => $request->input('depositos'),
+            'origen_inventario' => $request->input('origen_inventario'),
+        ];
     }
 
     private function origenInventario(Request $request): string

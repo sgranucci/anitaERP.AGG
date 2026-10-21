@@ -5192,6 +5192,9 @@ Route::get('sueldos/fallo-reporte', 'Sueldos\FalloReporte_SueldosController@inde
 Route::get('sueldos/listar-fallo-reporte/{formato}', 'Sueldos\FalloReporte_SueldosController@exportar')
     ->name('listar_fallo_reporte_sueldos');
 
+Route::get('sueldos/estructura-personal', 'Sueldos\EstructuraPersonalController@index')->name('estructura_personal_sueldos');
+Route::get('sueldos/estructura-personal/excel', 'Sueldos\EstructuraPersonalController@excel')->name('excel_estructura_personal_sueldos');
+
 /*
  * Agrupamientos de sueldos (Anita sueldos / agrupamiento). CRUD pesado: paginado + filtros + export.
  * Sync solo llenado inicial; CRUD vive en el ERP.

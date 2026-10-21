@@ -32,10 +32,38 @@
                         'col_input' => 'col-lg-4',
                     ])
 
+                    @php
+                        $mesesPeriodo = [
+                            1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril',
+                            5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
+                            9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
+                        ];
+                        $anioMin = 2015;
+                        $anioMax = (int) date('Y') + 1;
+                        $mesSeleccionado = (int) ($mes_num ?? 0);
+                        $anioSeleccionado = (int) ($anio ?? 0);
+                    @endphp
                     <div class="form-group row">
-                        <label for="mes" class="col-lg-2 control-label text-right pr-2 requerido">Mes</label>
-                        <div class="col-lg-3">
-                            <input type="month" name="mes" id="mes" class="form-control" value="{{ $mes ?? '' }}" required>
+                        <label class="col-lg-2 control-label text-right pr-2 requerido" for="mes">Mes / A&ntilde;o</label>
+                        <div class="col-lg-6">
+                            <div class="row">
+                                <div class="col-md-7">
+                                    <select name="mes" id="mes" class="form-control" required title="Mes" aria-label="Mes del per&iacute;odo">
+                                        @foreach ($mesesPeriodo as $num => $nombre)
+                                            <option value="{{ $num }}" @selected($mesSeleccionado === $num)>
+                                                {{ str_pad((string) $num, 2, '0', STR_PAD_LEFT) }} — {{ $nombre }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-5">
+                                    <select name="anio" id="anio" class="form-control" required title="A&ntilde;o" aria-label="A&ntilde;o del per&iacute;odo">
+                                        @for ($y = $anioMax; $y >= $anioMin; $y--)
+                                            <option value="{{ $y }}" @selected($anioSeleccionado === $y)>{{ $y }}</option>
+                                        @endfor
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

@@ -43,6 +43,45 @@ final class IngresoProveedorVinculoSupport
         return true;
     }
 
+    /**
+     * Estados con los que se puede informar la OC en el ticket de ingreso.
+     *
+     * @return list<string>
+     */
+    public static function estadosOcParaIngreso(): array
+    {
+        return [
+            OrdencompraEstados::PENDIENTE,
+            OrdencompraEstados::APROBADA,
+            OrdencompraEstados::CUMPLIDA,
+        ];
+    }
+
+    /**
+     * El ingreso informa el número de OC del proveedor.
+     * No exige que sea contrato ni que esté vigente: una OC pendiente también vale.
+     */
+    public static function ocPermiteVincularIngreso(?Ordencompra $oc, ?int $proveedorId = null, ?int $empresaId = null): bool
+    {
+        if (! $oc || ! $oc->id) {
+            return false;
+        }
+
+        $estado = strtoupper(trim((string) ($oc->estadoordencompra ?? '')));
+        if (! in_array($estado, self::estadosOcParaIngreso(), true)) {
+            return false;
+        }
+
+        if ($proveedorId && $proveedorId > 0 && (int) ($oc->proveedor_id ?? 0) !== $proveedorId) {
+            return false;
+        }
+        if ($empresaId && $empresaId > 0 && (int) ($oc->empresa_id ?? 0) !== $empresaId) {
+            return false;
+        }
+
+        return true;
+    }
+
     public static function correspondeOc(?Ordencompra $oc): bool
     {
         if (! $oc || ! $oc->id) {
@@ -72,6 +111,27 @@ final class IngresoProveedorVinculoSupport
                 $q->whereNull('contrato_vigencia_hasta')
                     ->orWhereDate('contrato_vigencia_hasta', '>=', $fecha);
             });
+
+        if ($proveedorId && $proveedorId > 0) {
+            $query->where('proveedor_id', $proveedorId);
+        }
+        if ($empresaId && $empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        return $query;
+    }
+
+    /**
+     * OC que se pueden elegir en el ticket: pendiente, aprobada o cumplida.
+     * Incluye contratos y órdenes comunes.
+     *
+     * @return Builder<Ordencompra>
+     */
+    public static function queryOrdenesParaIngreso(?int $proveedorId = null, ?int $empresaId = null): Builder
+    {
+        $query = Ordencompra::query()
+            ->whereIn('estadoordencompra', self::estadosOcParaIngreso());
 
         if ($proveedorId && $proveedorId > 0) {
             $query->where('proveedor_id', $proveedorId);

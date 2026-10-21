@@ -74,7 +74,8 @@
         var proveedorId = p.proveedor_id || p.proveedorId || '';
         $('#ordencompra_id').val(p.id);
         $('#numero_contrato').val(p.numero || '');
-        $('#descripcion_contrato').val((p.estado || '') + ' · Contrato');
+        var esContrato = p.es_contrato === true || p.es_contrato === 1 || p.esContrato === 1 || String(p.es_contrato || p.esContrato || '') === '1';
+        $('#descripcion_contrato').val((p.estado || '') + (esContrato ? ' · Contrato' : ''));
         if (proveedorId && !$('#proveedor_id').val()) {
             $('#proveedor_id').val(proveedorId);
             $('#codigoproveedor').val(p.proveedor_codigo || p.proveedorCodigo || '');
@@ -108,7 +109,7 @@
                 $('#ordencompra_id').val('');
                 $('#descripcion_contrato').val('');
                 if (avisar) {
-                    window.alert('No hay un contrato activo con ese número.');
+                    window.alert('No hay una orden de compra pendiente, aprobada o cumplida con ese número.');
                 }
             });
     }

@@ -277,10 +277,16 @@ class OrdencompraLegajoBandejaController extends Controller
             (int) $validated['precarga_id'],
             (string) $validated['tipo']
         );
+        $avisos = $this->paqueteService->ultimosAvisosConceptosTipo();
+        $mensaje = 'Tipo de comprobante actualizado.';
+        if ($avisos !== []) {
+            $mensaje .= ' '.implode(' ', $avisos);
+        }
 
         return response()->json([
             'ok' => true,
-            'mensaje' => 'Tipo de comprobante actualizado.',
+            'mensaje' => $mensaje,
+            'avisos' => $avisos,
             'paquete' => $this->paqueteService->paquete($oc),
         ]);
     }

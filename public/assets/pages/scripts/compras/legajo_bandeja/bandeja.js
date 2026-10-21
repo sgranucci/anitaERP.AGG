@@ -208,7 +208,40 @@
         return '<span class="bandeja-pagos-chip bandeja-pagos-chip-mute">—</span>';
     }
 
+    var legajoTipoEstado = { url: '', opciones: [] };
+
+    function htmlSelectorTipoLegajo(fac) {
+        if (!window.bandejaPuedeCorregirTipo || !fac || fac.cargado_cxp) {
+            return '';
+        }
+        if ((fac.origen || 'precarga') !== 'precarga' || !/^\d+$/.test(String(fac.id))) {
+            return '';
+        }
+        var tipoActual = String(fac.tipo_abrev || fac.tipo_label || fac.tipo || 'FC').toUpperCase();
+        var opciones = (legajoTipoEstado.opciones && legajoTipoEstado.opciones.length)
+            ? legajoTipoEstado.opciones.slice()
+            : [
+                { value: 'FC', label: 'FC — Factura' },
+                { value: 'NC', label: 'NC — Nota de crédito' },
+                { value: 'ND', label: 'ND — Nota de débito' },
+                { value: 'REC', label: 'REC — Recibo' }
+            ];
+        var tieneActual = opciones.some(function (opt) {
+            return String(opt.value || '').toUpperCase() === tipoActual;
+        });
+        if (tipoActual && !tieneActual) {
+            opciones.unshift({ value: tipoActual, label: tipoActual });
+        }
+        var optsHtml = opciones.map(function (opt) {
+            var val = String(opt.value || '').toUpperCase();
+            return '<option value="' + esc(val) + '"' + (val === tipoActual ? ' selected' : '') + '>' + esc(opt.label || val) + '</option>';
+        }).join('');
+        return '<select class="form-control form-control-sm mt-1 js-bandeja-asig-tipo" data-precarga-id="' + esc(String(fac.id)) + '"'
+            + ' title="Corregir el tipo si la IA lo tomó mal">' + optsHtml + '</select>';
+    }
+
     function renderFacturas(paquete) {
+        legajoTipoEstado.opciones = (paquete && paquete.tipos_opciones) || legajoTipoEstado.opciones;
         var $tb = $('#tablaBandejaFacturas tbody').empty();
         var $pdf = $('#bandejaFacturaPdf');
         var facs = (paquete && paquete.facturas) || [];
@@ -243,7 +276,7 @@
             $tr.attr('data-url-pdf', f.url_pdf || '');
             $tr.attr('data-url-cxp', f.url_comprobante || '');
             $tr.attr('data-fac-key', String(f.id));
-            $tr.append('<td>' + etiquetaHtml + escaneosDeFactura(f) + '</td>');
+            $tr.append('<td>' + etiquetaHtml + htmlSelectorTipoLegajo(f) + escaneosDeFactura(f) + '</td>');
             $tr.append('<td>' + esc(f.fecha || '') + '</td>');
             $tr.append('<td>' + esc(origen) + '</td>');
             $tr.append('<td>' + chipComFactura(f) + '</td>');
@@ -1464,7 +1497,7 @@
 
         $(document).on('click', '.js-bandeja-pdf-row', function (e) {
             // Los links y botones de la fila (ver escaneo, descartar) manejan su propio click.
-            if ($(e.target).closest('a, button').length) {
+            if ($(e.target).closest('a, button, select, option, label').length) {
                 return;
             }
             var url = $(this).data('url-pdf');
@@ -1484,6 +1517,7 @@
 
         $(document).on('click', '.js-bandeja-ver-legajo, .js-bandeja-ver-factura, .js-bandeja-ver-com', function () {
             var urlPaquete = $(this).data('url-paquete');
+            legajoTipoEstado.url = String(urlPaquete || '').replace(/\/paquete\/?(\?.*)?$/, '/corregir-tipo-documento');
             var numero = $(this).data('numero') || '';
             var tab = $(this).data('tab') || ($(this).hasClass('js-bandeja-ver-com') ? 'coms' : 'facturas');
             $('#bandejaLegajoTitulo').text('Legajo OC ' + numero);
@@ -1600,10 +1634,11 @@
             var $sel = $(this);
             var precargaId = parseInt($sel.data('precarga-id'), 10) || 0;
             var tipo = String($sel.val() || '').toUpperCase();
-            var url = asignarEstado.urlCorregirTipo || '';
+            var url = asignarEstado.urlCorregirTipo || legajoTipoEstado.url || '';
             if (!url || precargaId <= 0 || !tipo) {
                 return;
             }
+            var enListaLegajo = $sel.closest('#tablaBandejaFacturas').length > 0;
             $sel.prop('disabled', true);
             $.ajax({
                 url: url,
@@ -1611,15 +1646,23 @@
                 data: { precarga_id: precargaId, tipo: tipo },
                 headers: { 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' }
             }).done(function (resp) {
-                if (resp && resp.paquete) {
-                    var mapa = asignarEstado.mapa;
-                    var activo = asignarEstado.activo;
-                    renderAsignar(resp.paquete);
-                    asignarEstado.mapa = mapa;
-                    asignarEstado.activo = activo || asignarEstado.activo;
-                    renderAsignarListaDocs();
-                    renderAsignarComsActivo();
+                if (!(resp && resp.paquete)) {
+                    return;
                 }
+                if (resp.avisos && resp.avisos.length) {
+                    alert(resp.avisos.join('\n'));
+                }
+                if (enListaLegajo) {
+                    renderLegajo(resp.paquete, 'facturas');
+                    return;
+                }
+                var mapa = asignarEstado.mapa;
+                var activo = asignarEstado.activo;
+                renderAsignar(resp.paquete);
+                asignarEstado.mapa = mapa;
+                asignarEstado.activo = activo || asignarEstado.activo;
+                renderAsignarListaDocs();
+                renderAsignarComsActivo();
             }).fail(function (xhr) {
                 var msg = (xhr.responseJSON && (xhr.responseJSON.message || (xhr.responseJSON.errors && xhr.responseJSON.errors.tipo && xhr.responseJSON.errors.tipo[0]))) || 'No se pudo corregir el tipo.';
                 alert(msg);

@@ -11,7 +11,12 @@
     <tbody>
         @forelse ($contratos as $oc)
             <tr>
-                <td>{{ $oc->numeroordencompra }}</td>
+                <td>
+                    {{ $oc->numeroordencompra }}
+                    @if (!empty($oc->es_contrato))
+                        <span class="badge badge-info">Contrato</span>
+                    @endif
+                </td>
                 <td>{{ $oc->proveedores->nombre ?? '' }}</td>
                 <td>{{ $oc->estadoordencompra }}</td>
                 <td>
@@ -25,6 +30,7 @@
                             data-id="{{ $oc->id }}"
                             data-numero="{{ $oc->numeroordencompra }}"
                             data-estado="{{ $oc->estadoordencompra }}"
+                            data-es-contrato="{{ !empty($oc->es_contrato) ? '1' : '0' }}"
                             data-proveedor-id="{{ $oc->proveedor_id }}"
                             data-proveedor-codigo="{{ $oc->proveedores->codigo ?? '' }}"
                             data-proveedor-nombre="{{ $oc->proveedores->nombre ?? '' }}">
@@ -34,7 +40,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="5" class="text-center text-muted">No hay contratos activos para esos criterios.</td>
+                <td colspan="5" class="text-center text-muted">No hay órdenes de compra pendientes, aprobadas o cumplidas para esos criterios.</td>
             </tr>
         @endforelse
     </tbody>

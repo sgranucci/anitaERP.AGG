@@ -522,7 +522,7 @@ class IngresoProveedorController extends Controller
         $texto = trim((string) $request->input('busqueda', $request->input('texto', '')));
         $proveedorId = (int) $request->input('proveedor_id', 0);
         $empresaId = (int) $request->input('empresa_id', 0);
-        $query = IngresoProveedorVinculoSupport::queryContratosActivos(
+        $query = IngresoProveedorVinculoSupport::queryOrdenesParaIngreso(
             $proveedorId > 0 ? $proveedorId : null,
             $empresaId > 0 ? $empresaId : null
         )->with(['proveedores:id,codigo,nombre', 'empresas:id,nombre'])
@@ -557,7 +557,7 @@ class IngresoProveedorController extends Controller
         $numero = trim((string) $request->input('numero', $request->input('codigo', '')));
         $proveedorId = (int) $request->input('proveedor_id', 0);
         $empresaId = (int) $request->input('empresa_id', 0);
-        $query = IngresoProveedorVinculoSupport::queryContratosActivos(
+        $query = IngresoProveedorVinculoSupport::queryOrdenesParaIngreso(
             $proveedorId > 0 ? $proveedorId : null,
             $empresaId > 0 ? $empresaId : null
         )->with(['proveedores:id,codigo,nombre']);
@@ -567,7 +567,7 @@ class IngresoProveedorController extends Controller
             : ($numero !== '' ? (clone $query)->where('numeroordencompra', $numero)->first() : null);
 
         if (! $oc) {
-            return response()->json(['ok' => false, 'mensaje' => 'No hay un contrato activo con ese número.'], 404);
+            return response()->json(['ok' => false, 'mensaje' => 'No hay una orden de compra pendiente, aprobada o cumplida con ese número.'], 404);
         }
 
         return response()->json([
@@ -578,6 +578,7 @@ class IngresoProveedorController extends Controller
             'proveedor_codigo' => (string) ($oc->proveedores->codigo ?? ''),
             'proveedor_nombre' => (string) ($oc->proveedores->nombre ?? ''),
             'estado' => (string) $oc->estadoordencompra,
+            'es_contrato' => (bool) $oc->es_contrato,
             'exige_ingresos' => (bool) $oc->contrato_exige_ingresos,
         ]);
     }

@@ -145,25 +145,25 @@
                 </div>
 
                 <div class="form-group row ingreso-campo-contrato" @if($esVisitante) style="display:none" @endif>
-                    <label for="numero_contrato" class="col-lg-4 control-label text-right pr-2" id="label-contrato">Contrato / Abono</label>
+                    <label for="numero_contrato" class="col-lg-4 control-label text-right pr-2" id="label-contrato">Orden de compra</label>
                     <div class="col-lg-8">
                         <div class="d-flex flex-wrap align-items-center">
                             <input type="text" class="form-control mr-2" id="numero_contrato" name="numero_contrato"
                                    value="{{ old('numero_contrato', $ocForm->numeroordencompra ?? '') }}"
                                    style="width: 8rem;" placeholder="Nro."
                                    @if ($ordencompraLocked) readonly @endif
-                                   title="Contratos activos del proveedor (F1)">
+                                   title="OC del proveedor (F1)">
                             <input type="text" class="form-control mr-2" id="descripcion_contrato" readonly
                                    value="{{ $ocForm ? trim(($ocForm->estadoordencompra ?? '').((!empty($ocForm->es_contrato)) ? ' · Contrato' : '')) : '' }}"
-                                   placeholder="Solo contratos activos" style="min-width: 8rem; flex: 1;">
+                                   placeholder="Pendiente, aprobada o cumplida" style="min-width: 8rem; flex: 1;">
                             @unless ($ordencompraLocked)
-                                <button type="button" title="Consulta contratos activos (F1)" class="btn-accion-tabla consultacontrato tooltipsC flex-shrink-0">
+                                <button type="button" title="Consulta órdenes de compra (F1)" class="btn-accion-tabla consultacontrato tooltipsC flex-shrink-0">
                                     <i class="fa fa-search text-primary"></i>
                                 </button>
                             @endunless
                         </div>
-                        <small class="text-muted ingreso-ayuda-contrato-opcional">Opcional. Solo OC contrato aprobada/cumplida y vigente.</small>
-                        <small class="text-muted ingreso-ayuda-contrato-obligatorio" style="display:none">Obligatorio para este motivo. Hay que informar el n&uacute;mero de OC al proveedor antes de la visita.</small>
+                        <small class="text-muted ingreso-ayuda-contrato-opcional">Opcional. OC pendiente, aprobada o cumplida del proveedor. Si es contrato o abono, también se puede elegir.</small>
+                        <small class="text-muted ingreso-ayuda-contrato-obligatorio" style="display:none">Obligatorio para este motivo. Hay que informar el n&uacute;mero de OC antes de la visita.</small>
                     </div>
                 </div>
 

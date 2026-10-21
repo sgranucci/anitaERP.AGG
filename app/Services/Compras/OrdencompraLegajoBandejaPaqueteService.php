@@ -10,6 +10,7 @@ use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Comprobante;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
+use App\Models\Compras\Precarga_Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
@@ -38,6 +39,8 @@ use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorAbreviaturaTipoSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosTipoImputadoSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorIvaLineasDesdeOcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport;
 use Illuminate\Support\Facades\Auth;
@@ -51,10 +54,19 @@ use Illuminate\Validation\ValidationException;
  */
 class OrdencompraLegajoBandejaPaqueteService
 {
+    /** @var list<string> */
+    private array $ultimosAvisosConceptosTipo = [];
+
     public function __construct(
         private PrecargaFacturaScanPathResolver $scanPathResolver,
         private OrdencompraLegajoFacturaPdfService $facturaPdfService,
     ) {}
+
+    /** @return list<string> */
+    public function ultimosAvisosConceptosTipo(): array
+    {
+        return $this->ultimosAvisosConceptosTipo;
+    }
 
     public function encontrarOcVisible(int $id): Ordencompra
     {
@@ -2881,8 +2893,23 @@ class OrdencompraLegajoBandejaPaqueteService
         if ($this->alinearTipoCrearianDuplicado($precarga, $tipoId)) {
             return $precarga;
         }
-        $precarga->tipotransaccion_compra_id = $tipoId;
-        $precarga->save();
+        try {
+            DB::transaction(function () use ($precarga, $oc, $tipoId): void {
+                $precarga->tipotransaccion_compra_id = $tipoId;
+                $precarga->save();
+                $abrev = (string) (Tipotransaccion_Compra::query()->whereKey($tipoId)->value('abreviatura') ?? '');
+                $this->alinearConceptosPrecargaAlTipo($precarga, $oc, $tipoId, $abrev);
+            });
+        } catch (ValidationException $e) {
+            $precarga->refresh();
+            Log::warning('bandeja.alinear_tipo_scan_conceptos', [
+                'precarga' => (int) $precarga->id,
+                'tipo' => $tipoId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $precarga->fresh(['tipotransaccion_compras']) ?? $precarga;
+        }
 
         return $precarga->fresh(['tipotransaccion_compras']) ?? $precarga;
     }
@@ -2973,10 +3000,125 @@ class OrdencompraLegajoBandejaPaqueteService
                 'tipo' => $motivoProrrateo,
             ]);
         }
-        $precarga->tipotransaccion_compra_id = $tipoId;
-        $precarga->save();
+        $this->ultimosAvisosConceptosTipo = [];
+        DB::transaction(function () use ($precarga, $oc, $tipoId, $abrevAsignada): void {
+            $precarga->tipotransaccion_compra_id = $tipoId;
+            $precarga->save();
+            $this->alinearConceptosPrecargaAlTipo($precarga, $oc, $tipoId, $abrevAsignada);
+        });
 
         return $precarga->fresh(['tipotransaccion_compras']) ?? $precarga;
+    }
+
+    /**
+     * Misma regla que al grabar un comprobante de proveedor: el concepto que no está
+     * en el tipo nuevo pasa al equivalente de la misma clase y alícuota. Si el IVA
+     * no tiene equivalente único, el cambio de tipo no se graba.
+     */
+    private function alinearConceptosPrecargaAlTipo(
+        Precarga_Comprobante_Proveedor $precarga,
+        Ordencompra $oc,
+        int $tipoId,
+        string $abrev,
+    ): void {
+        $filas = Precarga_Comprobante_Proveedor_Concepto::query()
+            ->where('precarga_comprobante_proveedor_id', (int) $precarga->id)
+            ->orderBy('id')
+            ->get();
+        if ($filas->isEmpty() || $tipoId <= 0) {
+            return;
+        }
+
+        $lineas = [];
+        foreach ($filas as $fila) {
+            $lineas[] = [
+                'concepto_ivacompra_id' => (int) $fila->concepto_ivacompra_id,
+                'monto' => (float) $fila->monto,
+            ];
+        }
+
+        if (PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado($abrev)) {
+            $corr = app(PrecargaProveedorIvaLineasDesdeOcSupport::class)->corregir($lineas, $oc, $abrev);
+            if ($corr['cambio']) {
+                $this->persistirConceptosAlineados($precarga, $filas, $corr['lineas']);
+                $this->ultimosAvisosConceptosTipo = array_values($corr['avisos']);
+            }
+
+            return;
+        }
+
+        $res = PrecargaProveedorConceptosTipoImputadoSupport::reubicar($lineas, $tipoId, $abrev);
+        if ($res['reubico']) {
+            $this->persistirConceptosAlineados($precarga, $filas, $res['lineas']);
+            $this->ultimosAvisosConceptosTipo = array_values(array_filter(
+                $res['avisos'],
+                static fn (string $aviso): bool => str_contains($aviso, 'Se imputó')
+            ));
+        }
+
+        $idsConMonto = [];
+        foreach ($res['lineas'] as $linea) {
+            $id = (int) ($linea['concepto_ivacompra_id'] ?? 0);
+            if ($id > 0 && abs((float) ($linea['monto'] ?? 0)) >= 0.0001) {
+                $idsConMonto[] = $id;
+            }
+        }
+        $fuera = PrecargaProveedorConceptosTipoImputadoSupport::ivaFueraDelTipo($idsConMonto, $tipoId, $abrev);
+        if ($fuera->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'tipo' => ComprobanteProveedorPersistenciaService::mensajeIvaFueraDelTipo($fuera, $abrev),
+            ]);
+        }
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Precarga_Comprobante_Proveedor_Concepto>  $filas
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    private function persistirConceptosAlineados(
+        Precarga_Comprobante_Proveedor $precarga,
+        $filas,
+        array $lineas,
+    ): void {
+        $filas = $filas->values();
+        if (count($lineas) === $filas->count()) {
+            foreach ($filas as $i => $fila) {
+                $nuevoId = (int) ($lineas[$i]['concepto_ivacompra_id'] ?? 0);
+                $nuevoMonto = round((float) ($lineas[$i]['monto'] ?? 0), 4);
+                if ($nuevoId <= 0) {
+                    continue;
+                }
+                $dirty = false;
+                if ($nuevoId !== (int) $fila->concepto_ivacompra_id) {
+                    $fila->concepto_ivacompra_id = $nuevoId;
+                    $dirty = true;
+                }
+                if (abs((float) $fila->monto - $nuevoMonto) >= 0.0001) {
+                    $fila->monto = $nuevoMonto;
+                    $dirty = true;
+                }
+                if ($dirty) {
+                    $fila->save();
+                }
+            }
+
+            return;
+        }
+
+        Precarga_Comprobante_Proveedor_Concepto::query()
+            ->where('precarga_comprobante_proveedor_id', (int) $precarga->id)
+            ->delete();
+        foreach ($lineas as $linea) {
+            $id = (int) ($linea['concepto_ivacompra_id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            Precarga_Comprobante_Proveedor_Concepto::query()->create([
+                'precarga_comprobante_proveedor_id' => (int) $precarga->id,
+                'concepto_ivacompra_id' => $id,
+                'monto' => round((float) ($linea['monto'] ?? 0), 4),
+            ]);
+        }
     }
 
     /**

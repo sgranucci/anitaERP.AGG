@@ -116,10 +116,14 @@ class ValidacionIngresoProveedor extends FormRequest
                 $ticketId = (int) $this->route('id');
                 $yaVinculada = $ticketId > 0
                     && IngresoProveedor::query()->whereKey($ticketId)->where('ordencompra_id', $ocId)->exists();
-                if (! $yaVinculada && ! IngresoProveedorVinculoSupport::ocPermiteCargarPersonas($oc)) {
+                if (! $yaVinculada && ! IngresoProveedorVinculoSupport::ocPermiteVincularIngreso(
+                    $oc,
+                    (int) $this->input('proveedor_id') ?: null,
+                    (int) $this->input('empresa_id') ?: null,
+                )) {
                     $v->errors()->add(
                         'ordencompra_id',
-                        'Solo se puede vincular un contrato activo (aprobado o cumplido y vigente).'
+                        'La orden de compra tiene que estar pendiente, aprobada o cumplida, y ser del mismo proveedor y empresa.'
                     );
                 }
             }
