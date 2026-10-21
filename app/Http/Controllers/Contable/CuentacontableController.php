@@ -373,10 +373,12 @@ class CuentacontableController extends Controller
                 $centrocosto = $this->cuentacontable_centrocostoRepository->leeCuentacontable_Centrocosto($cuentacontable->id);
 
                 if (count($centrocosto) > 0) {
-                    return $this->incluirCentrocostoActualEnLista($centrocosto, (int) $request->query('incluir', 0));
+                    return $this->ordenarCentrosPorCodigo(
+                        $this->incluirCentrocostoActualEnLista($centrocosto, (int) $request->query('incluir', 0))
+                    );
                 }
 
-                return $this->centrocostoRepository->all();
+                return $this->ordenarCentrosPorCodigo($this->centrocostoRepository->all());
             }
 
             return 'No maneja centro de costo';
@@ -417,6 +419,19 @@ class CuentacontableController extends Controller
         ]);
 
         return $centrocostos;
+    }
+
+    /**
+     * El combo de la factura lista por código numérico (85, 88, 90…), no por nombre.
+     *
+     * @param  \Illuminate\Support\Collection<int, mixed>|\Illuminate\Database\Eloquent\Collection<int, mixed>  $centros
+     * @return \Illuminate\Support\Collection<int, mixed>
+     */
+    private function ordenarCentrosPorCodigo($centros)
+    {
+        return collect($centros)->sortBy(function ($cc) {
+            return [(int) ($cc->codigo ?? 0), (string) ($cc->nombre ?? '')];
+        })->values();
     }
 
     /**

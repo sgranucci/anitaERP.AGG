@@ -289,6 +289,14 @@ function llenarSelectCentrosCostoCuenta($sel, data, centrocostoId) {
             reales.push(value);
         }
     });
+    reales.sort(function (a, b) {
+        var ca = parseInt(a.codigo, 10) || 0;
+        var cb = parseInt(b.codigo, 10) || 0;
+        if (ca !== cb) {
+            return ca - cb;
+        }
+        return String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es');
+    });
 
     var elegido = 0;
     var auto = false;

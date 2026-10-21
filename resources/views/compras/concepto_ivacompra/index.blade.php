@@ -53,6 +53,7 @@
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
+                            <th>Nombre IA</th>
                             <th>Tipo</th>
                             <th>Columna IVA</th>
                             <th>Ret. Gan.</th>
@@ -67,6 +68,7 @@
                         <tr>
                             <td>{{ $data->id }}</td>
                             <td>{{ $data->nombre }}</td>
+                            <td>{{ $data->nombre_ia }}</td>
                             <td>{{ $data->desc_tipo_concepto }}</td>
                             <td>{{ $data->columna_ivacompras->nombre ?? '' }}</td>
                             <td>{{ $data->desc_retiene_ganancia }}</td>

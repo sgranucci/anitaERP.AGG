@@ -65,6 +65,24 @@ final class CuentaCentrocostoAsignadosSupport
     }
 
     /**
+     * Centro cargado en la cuenta aunque manejaccosto sea N.
+     * Un solo vínculo se usa. Varios no se eligen solos. Ninguno devuelve 0.
+     */
+    public static function unicoAsignado(int $cuentaId): int
+    {
+        if ($cuentaId <= 0) {
+            return 0;
+        }
+
+        $ids = self::idsVinculados($cuentaId);
+        if (count($ids) !== 1) {
+            return 0;
+        }
+
+        return $ids[0];
+    }
+
+    /**
      * @return array{maneja: bool, ids: list<int>}
      */
     private static function deCuenta(int $cuentaId): array
@@ -75,17 +93,7 @@ final class CuentaCentrocostoAsignadosSupport
 
         $flag = Cuentacontable::query()->whereKey($cuentaId)->value('manejaccosto');
         $maneja = AsientoCentrocostoObligatorioSupport::maneja($flag);
-        $ids = [];
-        if ($maneja) {
-            $ids = Cuentacontable_Centrocosto::query()
-                ->where('cuentacontable_id', $cuentaId)
-                ->orderBy('centrocosto_id')
-                ->pluck('centrocosto_id')
-                ->map(static fn ($id) => (int) $id)
-                ->filter(static fn (int $id) => $id > 0)
-                ->values()
-                ->all();
-        }
+        $ids = $maneja ? self::idsVinculados($cuentaId) : [];
 
         self::$cache[$cuentaId] = [
             'maneja' => $maneja,
@@ -93,5 +101,21 @@ final class CuentaCentrocostoAsignadosSupport
         ];
 
         return self::$cache[$cuentaId];
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function idsVinculados(int $cuentaId): array
+    {
+        return Cuentacontable_Centrocosto::query()
+            ->where('cuentacontable_id', $cuentaId)
+            ->orderBy('centrocosto_id')
+            ->pluck('centrocosto_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
     }
 }

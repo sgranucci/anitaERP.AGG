@@ -24,7 +24,7 @@
             $url = route($meta['route'], $params);
         }
         $chips[] = [
-            'label' => $meta['label'].' #'.$id,
+            'label' => \App\Support\Contable\AsientoOrigenProcesoSupport::etiqueta($fk, (int) $id).' #'.$id,
             'url' => $url,
         ];
     }

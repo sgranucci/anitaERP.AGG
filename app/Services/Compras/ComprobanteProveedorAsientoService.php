@@ -498,7 +498,8 @@ class ComprobanteProveedorAsientoService
                 );
             }
 
-            $ccLinea = $centrocostoId;
+            // Impuesto / percepción / IVA: no copiar el CC de compra del proveedor.
+            $ccLinea = ComprobanteProveedorCentrocostoSupport::paraCuentaSinGasto($cuentaId);
             if ($esNetoSinReferencia && $cuentaId > 0) {
                 $ccLinea = CuentaCentrocostoAsignadosSupport::resolver(
                     $cuentaId,
@@ -773,7 +774,7 @@ class ComprobanteProveedorAsientoService
         $lineasHaber = array_merge([[
             'cuentacontable_id' => $cuentaProveedor,
             'importe' => $totalComprobante,
-            'centrocosto_id' => $centrocostoId,
+            'centrocosto_id' => ComprobanteProveedorCentrocostoSupport::paraCuentaSinGasto($cuentaProveedor),
             'observacion' => $descLineaErp,
             'origen' => 'proveedor',
             'editable_cuenta' => false,

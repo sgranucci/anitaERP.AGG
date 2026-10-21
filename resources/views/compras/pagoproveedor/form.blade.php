@@ -90,26 +90,12 @@
         <hr>
         <div class="d-flex flex-wrap align-items-center justify-content-between mb-1">
             <h5 class="mb-0">Comprobantes a pagar</h5>
-            @if (\App\Support\Configuracion\EntornoEmpresaSupport::esAgg())
-                <button type="button"
-                        class="btn btn-outline-primary btn-sm"
-                        id="btn-importar-deuda-anita"
-                        title="Trae al ERP la deuda impaga de Anita del proveedor elegido y actualiza esta grilla">
-                    <i class="fa fa-download"></i> Completar desde Anita
-                </button>
-            @endif
         </div>
         <p class="text-muted small mb-2">
             El monto a aplicar va en moneda de la factura (alineado a la derecha, como el saldo). Si la OP está en otra moneda se convierte con la cotización de liquidación
             (factura o del día según el modo). La DC se asienta; no abre un ítem extra en pesos.
             Las notas de crédito y las OPA restan del total a desembolsar. Las NC también restan de Ganancias e IIBB; las OPA no, porque ya se retuvo al generarlas.
             Destildar limpia el aplicado. <strong>Aplicar por monto</strong> reparte secuencialmente sobre las deudas (no sobre NC/OPA).
-            @if (\App\Support\Configuracion\EntornoEmpresaSupport::esAgg())
-                <span class="d-block mt-1">
-                    <strong>Completar desde Anita</strong> trae deuda Anita del proveedor (empresas 1–3): altas nuevas con aplicaciones;
-                    facturas ya nativas del ERP no se pisan, solo se suman pagos/aplicaciones faltantes.
-                </span>
-            @endif
         </p>
         <div class="form-group row align-items-center mb-2 pp-aplicar-monto-toolbar">
             <label for="pp-monto-aplicar-secuencial" class="col-lg-2 col-form-label text-right mb-0">Aplicar por monto</label>

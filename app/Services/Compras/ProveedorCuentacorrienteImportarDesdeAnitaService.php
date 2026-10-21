@@ -627,7 +627,11 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         }
 
         $monto = round(abs((float) ($promov['prov_monto'] ?? $compra['com_monto'] ?? 0)), 4);
-        $pagado = round(abs((float) ($promov['prov_t_pagado'] ?? 0)), 4);
+        $pagado = ProveedorCuentacorrienteAnitaImportCcGuardSupport::pagadoAplicableACuota(
+            $monto,
+            (float) ($promov['prov_t_pagado'] ?? 0),
+            (float) $perfil['tolerancia_aplicado'],
+        );
         $pendienteAbs = round(max(0, $monto - $pagado), 4);
         $signo = ((string) $tipo->signo === 'R') ? -1 : 1;
         // CC nueva = monto original; el residual lo dan las aplicaciones aplmovp.

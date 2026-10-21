@@ -8,6 +8,7 @@
                 'id' => $row->id,
                 'codigo' => $row->codigo,
                 'nombre' => $row->nombre,
+                'nombre_ia' => $row->nombre_ia ?? '',
                 'tipo' => $row->desc_tipo_concepto,
                 'ret_gan' => $row->desc_retiene_ganancia,
                 'ret_iibb' => $row->desc_retiene_iibb,
@@ -25,6 +26,7 @@
                 'id' => $row->id,
                 'codigo' => $row->codigo,
                 'nombre' => $row->nombre,
+                'nombre_ia' => $row->nombre_ia ?? '',
                 'tipo' => $row->desc_tipo_concepto,
                 'ret_gan' => $row->desc_retiene_ganancia,
                 'ret_iibb' => $row->desc_retiene_iibb,
@@ -91,16 +93,17 @@
 	<table class="data">
 		<thead>
 			<tr>
-				<th style="width:5%;">ID</th>
-				<th style="width:7%;">Código</th>
-				<th style="width:16%;">Nombre</th>
-				<th style="width:10%;">Tipo</th>
-				<th style="width:6%;">Ret.Gan</th>
-				<th style="width:6%;">Ret.IIBB</th>
-				<th style="width:12%;">Empresa</th>
-				<th style="width:14%;">Cuenta Debe</th>
-				<th style="width:14%;">Cuenta Haber</th>
-				<th style="width:10%;">Columna</th>
+				<th style="width:4%;">ID</th>
+				<th style="width:6%;">Código</th>
+				<th style="width:11%;">Nombre</th>
+				<th style="width:22%;">Nombre IA</th>
+				<th style="width:7%;">Tipo</th>
+				<th style="width:5%;">Ret.Gan</th>
+				<th style="width:5%;">Ret.IIBB</th>
+				<th style="width:10%;">Empresa</th>
+				<th style="width:11%;">Cuenta Debe</th>
+				<th style="width:11%;">Cuenta Haber</th>
+				<th style="width:8%;">Columna</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -109,6 +112,7 @@
 					<td>{{ $fila->id }}</td>
 					<td>{{ $fila->codigo }}</td>
 					<td>{{ $fila->nombre }}</td>
+					<td>{{ $fila->nombre_ia }}</td>
 					<td>{{ $fila->tipo }}</td>
 					<td>{{ $fila->ret_gan }}</td>
 					<td>{{ $fila->ret_iibb }}</td>

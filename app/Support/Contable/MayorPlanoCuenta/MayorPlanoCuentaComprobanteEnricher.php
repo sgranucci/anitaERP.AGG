@@ -3,6 +3,7 @@
 namespace App\Support\Contable\MayorPlanoCuenta;
 
 use App\Support\Contable\AsientoOrigenProcesoSupport;
+use App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -61,6 +62,7 @@ class MayorPlanoCuentaComprobanteEnricher
         $solicitudpagoIds = [];
         $cpIds = [];
         $cobranzaIds = [];
+        $recepcionIds = [];
         foreach ($filas as $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
                 continue;
@@ -87,9 +89,14 @@ class MayorPlanoCuentaComprobanteEnricher
             if ($cobId > 0) {
                 $cobranzaIds[$cobId] = $cobId;
             }
+            $recId = (int) ($fks['recepcionproveedor_id'] ?? 0);
+            if ($recId > 0) {
+                $recepcionIds[$recId] = $recId;
+            }
         }
 
         $cobranzas = $this->cargarCobranzas(array_values($cobranzaIds));
+        $devoluciones = $this->comprobantesDevueltos(array_values($recepcionIds));
 
         $numerosRemesa = [];
         if ($remesaIds !== [] && Schema::hasTable('remesa')) {
@@ -156,6 +163,13 @@ class MayorPlanoCuentaComprobanteEnricher
                 $filas[$idx]['tipo_comp'] = $this->tipoCompDesdeFila($filas[$idx], $cobranzas);
             }
             $this->aplicarTipoCobranza($filas[$idx], $cobranzas);
+            $recIdFila = (int) ($filas[$idx]['recepcionproveedor_id'] ?? 0);
+            if ($recIdFila > 0 && array_key_exists($recIdFila, $devoluciones)) {
+                $filas[$idx]['descripcion'] = RecepcionProveedorAsientoDescripcionSupport::marcarTextoDevolucion(
+                    (string) ($filas[$idx]['descripcion'] ?? ''),
+                    (string) $devoluciones[$recIdFila]
+                );
+            }
         }
 
         return $filas;
@@ -178,6 +192,46 @@ class MayorPlanoCuentaComprobanteEnricher
         $row = $asientoId > 0 ? $mapa->get($asientoId) : null;
 
         return $row !== null ? array_map('intval', (array) $row) : [];
+    }
+
+    /**
+     * @param  list<int>  $recepcionIds
+     * @return array<int, string> id de la devolución => COM devuelto (vacío si no hay referencia)
+     */
+    private function comprobantesDevueltos(array $recepcionIds): array
+    {
+        $recepcionIds = array_values(array_filter(array_map('intval', $recepcionIds), fn (int $id) => $id > 0));
+        if ($recepcionIds === [] || ! Schema::hasTable('recepcion_proveedor')) {
+            return [];
+        }
+
+        $rows = DB::table('recepcion_proveedor as d')
+            ->leftJoin('recepcion_proveedor as o', 'o.id', '=', 'd.recepcion_referencia_id')
+            ->whereIn('d.id', $recepcionIds)
+            ->where('d.tipo', 'DEVOLUCION')
+            ->get([
+                'd.id',
+                'o.anita_tipo',
+                'o.anita_letra',
+                'o.anita_sucursal',
+                'o.anita_nro',
+                'o.numerorecepcion',
+            ]);
+
+        $out = [];
+        foreach ($rows as $row) {
+            $nro = (int) ($row->anita_nro ?: $row->numerorecepcion);
+            $tipo = trim((string) ($row->anita_tipo ?? ''));
+            $tipo = $tipo !== '' ? $tipo : 'COM';
+            $letra = trim((string) ($row->anita_letra ?? ''));
+            $letra = $letra !== '' ? $letra : 'X';
+            $sucursal = (int) ($row->anita_sucursal ?? 0);
+            $out[(int) $row->id] = $nro > 0
+                ? $tipo.' '.$letra.sprintf('%04d', $sucursal).'-'.sprintf('%08d', $nro)
+                : '';
+        }
+
+        return $out;
     }
 
     /**

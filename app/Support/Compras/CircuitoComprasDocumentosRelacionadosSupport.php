@@ -71,6 +71,15 @@ final class CircuitoComprasDocumentosRelacionadosSupport
         $bloqueOc = $oc ? self::bloqueOrdencompra($oc) : null;
         $bloqueCom = self::bloqueCom($rec);
         $comsCircuito = self::comsConOrigenDevolucion($rec, $bloqueCom);
+        if ($rec->tipo !== Recepcion_Proveedor::TIPO_DEVOLUCION) {
+            $comsCircuito = array_merge($comsCircuito, self::bloquesComDesdeColeccion(
+                Recepcion_Proveedor::query()
+                    ->where('tipo', Recepcion_Proveedor::TIPO_DEVOLUCION)
+                    ->where('recepcion_referencia_id', (int) $rec->id)
+                    ->orderBy('id')
+                    ->get()
+            ));
+        }
 
         if ($facturas->isEmpty()) {
             $filas = [[
@@ -325,11 +334,16 @@ final class CircuitoComprasDocumentosRelacionadosSupport
         $puedeVer = can('editar-recepcion-proveedor', false)
             || can('listar-recepcion-proveedor', false);
 
+        $numero = (string) ($rec->numerorecepcion ?? $id);
+        $esDevolucion = $rec->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION;
         $bloque = [
             'id' => $id,
-            'numero' => (string) ($rec->numerorecepcion ?? $id),
-            'etiqueta' => 'COM '.((string) ($rec->numerorecepcion ?? $id)),
+            'numero' => $numero,
+            'etiqueta' => $esDevolucion ? 'Devolución COM '.$numero : 'COM '.$numero,
         ];
+        if ($esDevolucion) {
+            $bloque['usar_etiqueta'] = true;
+        }
 
         if ($puedeVer) {
             $bloque['url_ver'] = route('editar_recepcion_proveedor', [
@@ -379,14 +393,78 @@ final class CircuitoComprasDocumentosRelacionadosSupport
      */
     public static function bloquesComDesdeColeccion($coms): array
     {
-        $out = [];
+        $lista = collect();
         foreach ($coms as $rec) {
             if ($rec instanceof Recepcion_Proveedor) {
-                $out[] = self::bloqueCom($rec);
+                $lista->push($rec);
             }
         }
 
+        $lista = self::agregarDevolucionesFaltantes($lista);
+        $lista = self::ordenarRecepcionesYDevoluciones($lista);
+
+        $out = [];
+        foreach ($lista as $rec) {
+            $out[] = self::bloqueCom($rec);
+        }
+
         return $out;
+    }
+
+    /**
+     * La factura suele vincular solo el COM recibido. La devolución de ese COM
+     * es otro documento del circuito y tiene que verse en la misma columna.
+     *
+     * @param  Collection<int, Recepcion_Proveedor>  $lista
+     * @return Collection<int, Recepcion_Proveedor>
+     */
+    private static function agregarDevolucionesFaltantes(Collection $lista): Collection
+    {
+        $ids = $lista
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+        if ($ids === []) {
+            return $lista;
+        }
+
+        $ya = array_fill_keys($ids, true);
+        $devoluciones = Recepcion_Proveedor::query()
+            ->where('tipo', Recepcion_Proveedor::TIPO_DEVOLUCION)
+            ->whereIn('recepcion_referencia_id', $ids)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($devoluciones as $devolucion) {
+            $id = (int) $devolucion->id;
+            if ($id <= 0 || isset($ya[$id])) {
+                continue;
+            }
+            $lista->push($devolucion);
+            $ya[$id] = true;
+        }
+
+        return $lista;
+    }
+
+    /**
+     * @param  Collection<int, Recepcion_Proveedor>  $lista
+     * @return Collection<int, Recepcion_Proveedor>
+     */
+    private static function ordenarRecepcionesYDevoluciones(Collection $lista): Collection
+    {
+        return $lista
+            ->sortBy(static function (Recepcion_Proveedor $rec): string {
+                $esDevolucion = $rec->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION;
+                $ancla = $esDevolucion
+                    ? (int) ($rec->recepcion_referencia_id ?? $rec->id)
+                    : (int) $rec->id;
+
+                return sprintf('%010d-%d-%010d', $ancla, $esDevolucion ? 1 : 0, (int) $rec->id);
+            })
+            ->values();
     }
 
     /**

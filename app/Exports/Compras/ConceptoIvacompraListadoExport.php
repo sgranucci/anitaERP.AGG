@@ -23,7 +23,7 @@ class ConceptoIvacompraListadoExport implements FromView, ShouldAutoSize, WithCo
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'J';
+    private const COL_ULTIMA = 'K';
 
     private Concepto_IvacompraRepositoryInterface $repository;
 
@@ -92,6 +92,7 @@ class ConceptoIvacompraListadoExport implements FromView, ShouldAutoSize, WithCo
                 'H' => NumberFormat::FORMAT_TEXT,
                 'I' => NumberFormat::FORMAT_TEXT,
                 'J' => NumberFormat::FORMAT_TEXT,
+                'K' => NumberFormat::FORMAT_TEXT,
             ];
         }
 
@@ -127,13 +128,14 @@ class ConceptoIvacompraListadoExport implements FromView, ShouldAutoSize, WithCo
                 'A' => 8,
                 'B' => 10,
                 'C' => 28,
-                'D' => 14,
-                'E' => 12,
+                'D' => 42,
+                'E' => 14,
                 'F' => 12,
-                'G' => 18,
-                'H' => 28,
+                'G' => 12,
+                'H' => 18,
                 'I' => 28,
-                'J' => 18,
+                'J' => 28,
+                'K' => 18,
             ];
         }
 
@@ -191,7 +193,7 @@ class ConceptoIvacompraListadoExport implements FromView, ShouldAutoSize, WithCo
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
 
                 $primera = $this->filaPrimeraDatosExcel;
-                $sheet->getStyle('C'.$primera.':I'.$sheet->getHighestRow())
+                $sheet->getStyle('C'.$primera.':'.self::COL_ULTIMA.$sheet->getHighestRow())
                     ->getAlignment()
                     ->setWrapText(true)
                     ->setVertical(Alignment::VERTICAL_TOP);

@@ -11,6 +11,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra;
 use App\Models\Ventas\Venta;
 use App\Models\Stock\MovimientoStock;
+use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Caja\Cobranza;
 use App\Models\Caja\Remesa;
 use App\Models\Seguridad\Usuario;
@@ -80,6 +81,11 @@ class Asiento extends Model implements Auditable
     public function ordencompras()
     {
         return $this->belongsTo(Ordencompra::class, 'ordencompra_id');
+    }
+
+    public function recepcionProveedor()
+    {
+        return $this->belongsTo(Recepcion_Proveedor::class, 'recepcionproveedor_id');
     }
 
     public function movimientostocks()

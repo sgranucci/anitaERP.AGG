@@ -1,4 +1,17 @@
 @php
+    use App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport;
+    $data->loadMissing('recepcionProveedor.recepcion_referencia');
+    $recepcionAsiento = $data->recepcionProveedor;
+    $esDevolucion = $recepcionAsiento
+        && RecepcionProveedorAsientoDescripcionSupport::esDevolucion($recepcionAsiento);
+    $tipoVisible = RecepcionProveedorAsientoDescripcionSupport::tipoAsientoVisible(
+        $recepcionAsiento,
+        optional($data->tipoasientos)->nombre
+    );
+    $observacionVisible = RecepcionProveedorAsientoDescripcionSupport::observacionCabeceraVisible(
+        $recepcionAsiento,
+        $data->observacion ?? null
+    );
     $colspan = 8;
     $totalDebe = 0.0;
     $totalHaber = 0.0;
@@ -32,7 +45,7 @@
         <tr>
             <td colspan="{{ $colspan }}">
                 Empresa: {{ optional($data->empresas)->nombre ?? '—' }}
-                | Tipo: {{ optional($data->tipoasientos)->nombre ?? '—' }}
+                | Tipo: {{ $tipoVisible }}
                 | Fecha: {{ $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '—' }}
                 | Generado por: {{ optional($data->usuarios)->nombre ?? optional($data->usuarios)->usuario ?? '—' }}
                 | ID: {{ $data->id }}
@@ -40,7 +53,7 @@
         </tr>
         <tr>
             <td colspan="{{ $colspan }}">
-                Observaciones: {{ $data->observacion !== null && $data->observacion !== '' ? $data->observacion : '—' }}
+                Observaciones: {{ $observacionVisible }}
             </td>
         </tr>
     </tbody>
@@ -74,7 +87,13 @@
                     @endif
                 </td>
                 <td>{{ (float) $movimiento->cotizacion }}</td>
-                <td>{{ $movimiento->observacion ?? '' }}</td>
+                <td>
+                    @if ($esDevolucion)
+                        {{ RecepcionProveedorAsientoDescripcionSupport::detalleLineaVisible($recepcionAsiento, (string) ($movimiento->observacion ?? '')) }}
+                    @else
+                        {{ $movimiento->observacion ?? '' }}
+                    @endif
+                </td>
             </tr>
         @endforeach
         <tr>

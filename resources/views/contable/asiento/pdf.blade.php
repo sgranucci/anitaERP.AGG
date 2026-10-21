@@ -31,6 +31,19 @@
 <body>
     @php
         use App\Support\Configuracion\EmpresaLogoArchivo;
+        use App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport;
+        $data->loadMissing('recepcionProveedor.recepcion_referencia');
+        $recepcionAsiento = $data->recepcionProveedor;
+        $esDevolucion = $recepcionAsiento
+            && RecepcionProveedorAsientoDescripcionSupport::esDevolucion($recepcionAsiento);
+        $tipoVisible = RecepcionProveedorAsientoDescripcionSupport::tipoAsientoVisible(
+            $recepcionAsiento,
+            optional($data->tipoasientos)->nombre
+        );
+        $observacionVisible = RecepcionProveedorAsientoDescripcionSupport::observacionCabeceraVisible(
+            $recepcionAsiento,
+            $data->observacion ?? null
+        );
         $nombreEmpresaLogo = optional($data->empresas)->nombre;
         $logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre($nombreEmpresaLogo);
         $logoEmpresaDataUri = $logoEmpresaDat['uri'] ?? null;
@@ -68,7 +81,7 @@
             <td class="lbl">Empresa</td>
             <td>{{ optional($data->empresas)->nombre ?? '—' }}</td>
             <td class="lbl">Tipo de asiento</td>
-            <td>{{ optional($data->tipoasientos)->nombre ?? '—' }}</td>
+            <td>{{ $tipoVisible }}</td>
         </tr>
         <tr>
             <td class="lbl">Fecha</td>
@@ -83,7 +96,7 @@
         </tr>
         <tr>
             <td class="lbl">Observaciones</td>
-            <td colspan="3">{{ $data->observacion ?? '—' }}</td>
+            <td colspan="3">{{ $observacionVisible }}</td>
         </tr>
     </table>
 
@@ -119,7 +132,13 @@
                         @endif
                     </td>
                     <td class="num">{{ number_format((float) $movimiento->cotizacion, 4, ',', '.') }}</td>
-                    <td>{{ $movimiento->observacion ?? '' }}</td>
+                    <td>
+                        @if ($esDevolucion)
+                            {{ RecepcionProveedorAsientoDescripcionSupport::detalleLineaVisible($recepcionAsiento, (string) ($movimiento->observacion ?? '')) }}
+                        @else
+                            {{ $movimiento->observacion ?? '' }}
+                        @endif
+                    </td>
                 </tr>
             @endforeach
         </tbody>

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support\Contable;
 
+use App\Models\Stock\Recepcion_Proveedor;
+use Illuminate\Support\Facades\DB;
+
 /**
  * FKs de asiento que apuntan a la operación de un subsistema.
  * Esos asientos no deben revertirse/borrarse desde el ABM de asientos:
@@ -99,6 +102,43 @@ final class AsientoOrigenProcesoSupport
     public static function columnasFk(): array
     {
         return array_keys(self::FKS);
+    }
+
+    /**
+     * Rótulo del chip de origen. Una recepción de tipo devolución no se muestra como recepción.
+     */
+    public static function etiqueta(string $fk, int $id): string
+    {
+        $label = (string) (self::FKS[$fk]['label'] ?? $fk);
+        if ($fk !== 'recepcionproveedor_id' || $id <= 0) {
+            return $label;
+        }
+
+        $tipo = DB::table('recepcion_proveedor as d')
+            ->leftJoin('recepcion_proveedor as o', 'o.id', '=', 'd.recepcion_referencia_id')
+            ->where('d.id', $id)
+            ->first([
+                'd.tipo',
+                'o.anita_tipo',
+                'o.anita_letra',
+                'o.anita_sucursal',
+                'o.anita_nro',
+                'o.numerorecepcion',
+            ]);
+        if ($tipo === null || strtoupper(trim((string) ($tipo->tipo ?? ''))) !== Recepcion_Proveedor::TIPO_DEVOLUCION) {
+            return $label;
+        }
+        $nro = (int) ($tipo->anita_nro ?: $tipo->numerorecepcion);
+        if ($nro <= 0) {
+            return 'Devolución proveedor';
+        }
+        $comprobanteTipo = trim((string) ($tipo->anita_tipo ?? ''));
+        $comprobanteTipo = $comprobanteTipo !== '' ? $comprobanteTipo : 'COM';
+        $letra = trim((string) ($tipo->anita_letra ?? ''));
+        $letra = $letra !== '' ? $letra : 'X';
+        $sucursal = (int) ($tipo->anita_sucursal ?? 0);
+
+        return 'Devolución del '.$comprobanteTipo.' '.$letra.sprintf('%04d', $sucursal).'-'.sprintf('%08d', $nro);
     }
 
     /**

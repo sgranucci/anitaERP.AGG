@@ -44,6 +44,22 @@ class ProveedorCuentacorrienteAnitaImportCcGuardSupportTest extends TestCase
         );
     }
 
+    public function test_pagado_mayor_que_la_cuota_no_la_da_por_cobrada(): void
+    {
+        $this->assertSame(
+            0.0,
+            ProveedorCuentacorrienteAnitaImportCcGuardSupport::pagadoAplicableACuota(36432581.21, 364325812.10)
+        );
+        $this->assertSame(
+            36432581.21,
+            ProveedorCuentacorrienteAnitaImportCcGuardSupport::pagadoAplicableACuota(36432581.21, 36432581.21)
+        );
+        $this->assertSame(
+            0.0,
+            ProveedorCuentacorrienteAnitaImportCcGuardSupport::pagadoAplicableACuota(36432581.21, 0)
+        );
+    }
+
     public function test_sql_and_solo_deuda_documento(): void
     {
         $this->assertSame(

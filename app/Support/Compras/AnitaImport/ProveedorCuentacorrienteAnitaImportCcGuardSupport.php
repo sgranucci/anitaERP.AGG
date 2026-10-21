@@ -60,6 +60,24 @@ final class ProveedorCuentacorrienteAnitaImportCcGuardSupport
         return ' AND '.$alias.'.pagoproveedor_id IS NULL';
     }
 
+    /**
+     * Pagado que corresponde a esta cuota.
+     *
+     * Si prov_t_pagado supera el monto de la cuota, Anita guardó el acumulado
+     * del comprobante (la suma de aplmovp) y no lo cobrado de esta cuota.
+     * Tratarlo como pagado deja el pendiente en cero y la orden de pago no la lista.
+     */
+    public static function pagadoAplicableACuota(float $montoCuota, float $pagadoAnita, float $tolerancia = 0.02): float
+    {
+        $montoCuota = round(abs($montoCuota), 4);
+        $pagadoAnita = round(abs($pagadoAnita), 4);
+        if ($montoCuota > 0.0001 && $pagadoAnita > $montoCuota + $tolerancia) {
+            return 0.0;
+        }
+
+        return $pagadoAnita;
+    }
+
     public static function tieneAplicacionOperativa(int $ccId): bool
     {
         if ($ccId <= 0) {

@@ -4,6 +4,7 @@ namespace App\Support\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra;
+use App\Support\Contable\CuentaCentrocostoAsignadosSupport;
 
 /**
  * Centro de costo de la factura / asiento de compras: destino de la OC.
@@ -49,5 +50,19 @@ final class ComprobanteProveedorCentrocostoSupport
         }
 
         return (int) ($oc->centrocosto_id ?? 0);
+    }
+
+    /**
+     * Impuestos, percepciones, IVA y la cuenta del proveedor.
+     *
+     * a-compprov.c graba la contrapartida del proveedor con subd_ccosto_contrap = 0.
+     * La cuenta del impuesto toma centro solo si CCOSV_asigna_ccosto le encuentra uno
+     * propio (ccosvalid), aunque el flag manejaccosto esté en N. Si no tiene ninguno,
+     * queda en 0. No hereda centrocostocompra del proveedor (en CABIFY ese default es
+     * 85 Gastronomía). IVA crédito fiscal indirecto no tiene centro en Anita.
+     */
+    public static function paraCuentaSinGasto(int $cuentaId): int
+    {
+        return CuentaCentrocostoAsignadosSupport::unicoAsignado($cuentaId);
     }
 }

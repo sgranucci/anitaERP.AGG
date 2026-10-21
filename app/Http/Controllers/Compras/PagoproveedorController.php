@@ -720,12 +720,21 @@ class PagoproveedorController extends Controller
     }
 
     /**
-     * AGG: importa deuda Anita impaga del proveedor elegido y deja lista la grilla ERP.
+     * Inactivo en AGG: el botón de la orden de pago dejó en cero cuotas impagas
+     * cuando Anita trae el pagado del documento entero en cada cuota.
+     * El resto del método queda para volver a habilitarlo.
      */
     public function apiImportarDeudaAnita(Request $request)
     {
+        if (EntornoEmpresaSupport::esAgg()) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Completar desde Anita está inactivo.',
+            ], 403);
+        }
+
         if (! EntornoEmpresaSupport::esAgg()) {
-            return response()->json(['error' => 'Solo disponible en AGG'], 404);
+            return response()->json(['ok' => false, 'error' => 'Solo disponible en AGG'], 404);
         }
         if (! can('crear-pagoproveedor', false) && ! can('editar-pagoproveedor', false)) {
             return response()->json(['error' => 'Sin permiso'], 403);

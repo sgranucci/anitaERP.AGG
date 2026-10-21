@@ -82,6 +82,22 @@
             <label for="observacion" class="col-lg-2 control-label text-right pr-2">Observaciones</label>
             <div class="col-lg-9">
                 <input type="text" name="observacion" id="observacion" class="form-control" value="{{old('observacion', $data->observacion ?? '')}}">
+                @php
+                    $recepcionAsientoForm = null;
+                    if (isset($data) && (int) ($data->recepcionproveedor_id ?? 0) > 0) {
+                        $data->loadMissing('recepcionProveedor.recepcion_referencia');
+                        $recepcionAsientoForm = $data->recepcionProveedor;
+                    }
+                    $leyendaDevolucionAsiento = $recepcionAsientoForm
+                        ? \App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport::observacionCabeceraVisible(
+                            $recepcionAsientoForm,
+                            null
+                        )
+                        : '';
+                @endphp
+                @if ($recepcionAsientoForm && \App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport::esDevolucion($recepcionAsientoForm))
+                    <small class="form-text text-primary">{{ $leyendaDevolucionAsiento }}</small>
+                @endif
             </div>
         </div>
         </div>
