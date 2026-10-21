@@ -1127,7 +1127,7 @@ class PedidoController extends Controller
 			return back()->with('errores', [$pedido['error']]);
 		}
 
-		$mensaje = "Pedido ".$request->codigo." actualizado con exito";
+		$mensaje = 'Pedido '.($pedido['codigo'] ?? $request->codigo).' actualizado con exito';
 
 		if ($request->input('origen') === 'modal_consulta') {
 			return redirect()

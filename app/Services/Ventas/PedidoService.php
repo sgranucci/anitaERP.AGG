@@ -13,9 +13,11 @@ use App\Repositories\Ventas\Ordentrabajo_TareaRepositoryInterface;
 use App\Repositories\Ventas\OrdentrabajoRepositoryInterface;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
 use App\Models\Configuracion\Salida;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Ventas\ClienteEntregaPedidoSupport;
+use App\Support\Ventas\PedidoBierzoAnitaNumeracionSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport;
@@ -685,12 +687,17 @@ class PedidoService
 		{
 			if ($funcion == 'create')
 			{
-				$id = $this->pedidoRepository->all()->last();
+				if (EntornoEmpresaSupport::esElBierzo()) {
+					$nroAnita = PedidoBierzoAnitaNumeracionSupport::reservarSiguiente();
+					$data['codigo'] = PedidoBierzoAnitaNumeracionSupport::formatearCodigo($nroAnita);
+				} else {
+					$id = $this->pedidoRepository->all()->last();
 
-				if ($id)
-					$data['codigo'] = $id->id + 1;
-				else
-					$data['codigo'] = 1;
+					if ($id)
+						$data['codigo'] = $id->id + 1;
+					else
+						$data['codigo'] = 1;
+				}
 				$data['nro'] = 0;
 
 				// Guarda maestro de pedidos 
@@ -888,6 +895,10 @@ class PedidoService
 				else
 				{
 					$pedido_articulo_caja = $this->pedido_articulo_cajaRepository->deletePorPedidoId($id);
+				}
+
+				if (EntornoEmpresaSupport::esElBierzo()) {
+					$data['codigo'] = app(PedidoBierzoAnitaBridgeService::class)->sincronizar((int) $id);
 				}
 			}
 
