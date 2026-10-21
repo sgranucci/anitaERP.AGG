@@ -2,6 +2,7 @@
 
 namespace App\Support\Caja;
 
+use App\Models\Configuracion\Actividad_Arca;
 use App\Models\Stock\Articulo;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
@@ -49,6 +50,44 @@ final class CobranzaDescuentoConfigSupport
         }
 
         return $id;
+    }
+
+    /**
+     * Punto de venta de la factura a la que se aplica el descuento.
+     */
+    public static function puntoventaIdDesdeFactura(int $puntoventaId): int
+    {
+        if ($puntoventaId <= 0 || ! Puntoventa::query()->whereKey($puntoventaId)->exists()) {
+            throw new InvalidArgumentException(
+                'La factura no tiene un punto de venta válido para emitir la nota de crédito.'
+            );
+        }
+
+        return $puntoventaId;
+    }
+
+    /**
+     * Actividad de la factura. Si el comprobante no la trae, la del mismo punto de venta.
+     */
+    public static function actividadArcaIdDesdeFactura(?int $actividadFacturaId, int $puntoventaFacturaId): int
+    {
+        if (self::actividadArcaExiste((int) ($actividadFacturaId ?? 0))) {
+            return (int) $actividadFacturaId;
+        }
+
+        $desdePv = (int) (Puntoventa::query()->whereKey($puntoventaFacturaId)->value('actividad_arca_id') ?? 0);
+        if (self::actividadArcaExiste($desdePv)) {
+            return $desdePv;
+        }
+
+        throw new InvalidArgumentException(
+            'La factura no tiene actividad ARCA y su punto de venta tampoco.'
+        );
+    }
+
+    private static function actividadArcaExiste(int $id): bool
+    {
+        return $id > 0 && Actividad_Arca::query()->whereKey($id)->exists();
     }
 
     public static function tipotransaccionNotaCreditoId(int $empresaId, ?string $letraFacturaOrigen = null): int

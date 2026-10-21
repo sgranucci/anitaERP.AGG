@@ -94,7 +94,9 @@ final class CobranzaDescuentoNotaCreditoService
         }
 
         $letra = CobranzaDescuentoConfigSupport::extraerLetraDesdeCodigoVenta($ventaOrigen->codigo);
-        $puntoventaId = CobranzaDescuentoConfigSupport::puntoventaIdParaEmpresa($empresaId);
+        $puntoventaId = CobranzaDescuentoConfigSupport::puntoventaIdDesdeFactura(
+            (int) ($ventaOrigen->puntoventa_id ?? 0)
+        );
         $tipoNcId = CobranzaDescuentoConfigSupport::tipotransaccionNotaCreditoId($empresaId, $letra);
         $articuloId = CobranzaDescuentoConfigSupport::articuloIdParaDescuento($empresaId);
 
@@ -123,7 +125,10 @@ final class CobranzaDescuentoNotaCreditoService
             'puntoventa_id' => $puntoventaId,
             'fechafactura' => $fechaCobranza,
             'leyendafactura' => $leyendaNc,
-            'actividad_arca_id' => (int) ($ventaOrigen->actividad_arca_id ?? 1),
+            'actividad_arca_id' => CobranzaDescuentoConfigSupport::actividadArcaIdDesdeFactura(
+                $ventaOrigen->actividad_arca_id !== null ? (int) $ventaOrigen->actividad_arca_id : null,
+                $puntoventaId,
+            ),
             'cliente_id' => (int) $ventaOrigen->cliente_id,
             'moneda_id' => (int) $ventaOrigen->moneda_id,
             'listaprecio_id' => 1,
