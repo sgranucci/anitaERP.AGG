@@ -498,6 +498,7 @@ final class ComprobanteProveedorPdfIaService
                 $extraido['cuit_destinatario_origen'] = 'ocr_corregido';
             }
             $proveedor = $this->resolucionSupport->resolverProveedorPorCuit($cuitProveedor);
+            $extraido = $this->aplicarCuitProveedorCorregido($extraido, $proveedor, $advertencias, $cuitProveedor);
             $tipoSolicitado = PrecargaProveedorTipoComprobanteSupport::desdeExtraccion($extraido);
             $codigoCc = $sinCentroCostoQuedaParaRevisar
                 ? $this->codigoCentroCostoCompraProveedorSiExiste((int) $proveedor['proveedor_id'])
@@ -563,6 +564,7 @@ final class ComprobanteProveedorPdfIaService
             }
 
             $proveedor = $this->resolucionSupport->resolverProveedorPorOc($cuitProveedor, $numeroOc);
+            $extraido = $this->aplicarCuitProveedorCorregido($extraido, $proveedor, $advertencias, $cuitProveedor);
 
             // FC / ND / NC (o REC/REM) desde OCR/LLM; el tipo fino (FIA, CGA…) lo arma listaConcepto + CC.
             $tipoSolicitado = PrecargaProveedorTipoComprobanteSupport::desdeExtraccion($extraido);
@@ -969,6 +971,35 @@ final class ComprobanteProveedorPdfIaService
             $extraido['numero_oc'] = $this->numeroOcSupport->normalizar($numeroOcManual);
             $extraido['numero_oc_origen'] = 'manual';
         }
+
+        return $extraido;
+    }
+
+    /**
+     * El OCR a veces lee mal solo el dígito verificador. Si el maestro confirma el CUIT, se usa ese.
+     *
+     * @param  array<string, mixed>  $extraido
+     * @param  array<string, mixed>  $proveedor
+     * @param  list<string>  $advertencias
+     * @return array<string, mixed>
+     */
+    private function aplicarCuitProveedorCorregido(
+        array $extraido,
+        array $proveedor,
+        array &$advertencias,
+        string &$cuitProveedor,
+    ): array {
+        if (empty($proveedor['cuit_corregido'])) {
+            return $extraido;
+        }
+
+        $leido = (string) ($proveedor['cuit_leido'] ?? $cuitProveedor);
+        $corregido = (string) $proveedor['cuit_corregido'];
+        $advertencias[] = 'CUIT proveedor corregido por dígito verificador: «'.$leido
+            .'» → «'.$corregido.'» ('.($proveedor['nombre'] ?? '').').';
+        $extraido['cuit_proveedor'] = $corregido;
+        $extraido['cuit_proveedor_origen'] = 'ocr_digito_verificador';
+        $cuitProveedor = $corregido;
 
         return $extraido;
     }

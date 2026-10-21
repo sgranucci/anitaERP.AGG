@@ -750,13 +750,9 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
 
         $faltantes = array_diff($tasasKeys, array_keys($resultado));
         if ($faltantes !== []) {
-            $tasasFaltantes = array_map(static fn (string $k): float => (float) $k, $faltantes);
             $query = Concepto_Ivacompra::query()
                 ->with('impuestos')
-                ->where('tipoconcepto', 'G')
-                ->whereHas('impuestos', static function ($q) use ($tasasFaltantes): void {
-                    $q->whereIn('valor', $tasasFaltantes);
-                });
+                ->where('tipoconcepto', 'G');
 
             if ($hayPermitidos) {
                 // Solo conceptos del tipo de comprobante / lista de la OC.

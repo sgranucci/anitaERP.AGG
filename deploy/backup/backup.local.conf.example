@@ -1,5 +1,17 @@
 # Copiar a backup.local.conf y ajustar por servidor (no versionar backup.local.conf).
 #
+# --- Crown / server1ng: binlogs al NAS vía ac-server1 (cada minuto) ---
+# 192.168.1.149:/server1-backups solo se exporta a .2 .9 .91 .250 y 172.25.3.2.
+# Este host (.3) no monta el NAS. ac-server1 (.2) ya lo tiene en /nas-backups.
+# NAS_SYNC_ENABLED=1
+# NAS_SSH_HOST="192.168.1.2"
+# NAS_SSH_USER="sergio"
+# NAS_SSH_KEY="/home/sergio/.ssh/id_rsa_ac-server1"
+# NAS_DIR="/nas-backups/anitaERP/server1ng/binlog"
+# GATEWAY_SYNC_ENABLED=0
+# BINLOG_RETENTION_DAYS=10
+# BINLOG_SHIP_LOG="/var/log/anitaERP-binlog-ship.log"
+#
 # --- AGG producción (.210 → réplica .211) ---
 # REMOTE_SYNC_ENABLED=1
 # REMOTE_HOST="10.20.30.211"

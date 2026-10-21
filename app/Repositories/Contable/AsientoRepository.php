@@ -14,6 +14,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\AsientoAlcanceCierreSupport;
 use App\Support\Ventas\PedidoFacturacionProfiler;
 use App\Support\Configuracion\MonedaAnitaCodigoSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\Anita\AsientoAnitaFerliSupport;
 use App\Support\Contable\Anita\AsientoAnitaInterformingSupport;
 use App\Support\Contable\AsientoAnitaNumeracionLock;
@@ -937,6 +938,25 @@ class AsientoRepository implements AsientoRepositoryInterface
 				}
 				$ocIns = $ocLineaAnita > 0 ? $ocLineaAnita : $numeroOrdenCompra;
 
+				$colaCamposCtamov = '';
+				$colaValoresCtamov = '';
+				if (! $esquemaCtamovReducido) {
+					$colaCamposCtamov = ',
+							ctav_usuario_umod,
+							ctav_fecha_umod,
+							ctav_hora_umod';
+					$colaValoresCtamov = ",
+						'".' '."',
+						'".'0'."',
+						'".' '."'";
+					if (! EntornoEmpresaSupport::esCrown()) {
+						$colaCamposCtamov .= ',
+							ctav_o_compra ';
+						$colaValoresCtamov .= ',
+						'.$ocIns.' ';
+					}
+				}
+
 				$data = array( 'tabla' => $this->tableAnita[0], 
 						'acc' => 'insert',
 						'sistema' => 'contab',
@@ -959,12 +979,8 @@ class AsientoRepository implements AsientoRepositoryInterface
 							ctav_balancea,
 							ctav_tipo_asiento,
 							ctav_asi_mon_ref,
-							ctav_ccosto'.($esquemaCtamovReducido ? '' : ',
-							ctav_usuario_umod,
-							ctav_fecha_umod,
-							ctav_hora_umod,
-							ctav_o_compra 
-						'),
+							ctav_ccosto'.$colaCamposCtamov.'
+						',
 						'valores' => " 
 						'".$codigoEmpresa."', 
 						'".$request['numeroasiento']."',
@@ -984,12 +1000,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 						'".'S'."',
 						'".$codigoTipoAsiento."',
 						'".'-1'."',
-						'".$codigoCentroCosto."'".($esquemaCtamovReducido ? "":
-						",
-						'".' '."',
-						'".'0'."',
-						'".' '."',
-						".$ocIns." ")
+						'".$codigoCentroCosto."'".$colaValoresCtamov
       			);
 				if (isset($this->path_sistema))
 					$data['path_sistema'] = $this->path_sistema;

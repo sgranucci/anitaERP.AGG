@@ -3,6 +3,7 @@
 namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 
 use App\ApiAnita;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -19,6 +20,10 @@ final class ComprobanteProveedorAnitaNroInternoSupport
         $lock = Cache::lock('comprobante_proveedor:numeracion:int', $segundos);
 
         return $lock->block($segundos, function (): int {
+            if (EntornoEmpresaSupport::esCrown()) {
+                return $this->siguienteDesdeNumeradorInt();
+            }
+
             $clave = $this->resolverClaveNumerador();
             $ultimoNumerador = $this->leerNumerador($clave);
             $maxCompra = $this->maxCampo('compra', 'com_nro_interno');
@@ -46,6 +51,26 @@ final class ComprobanteProveedorAnitaNroInternoSupport
 
             return $siguiente;
         });
+    }
+
+    /**
+     * Crown: t_comp clave INT apunta al numerador. No se recorre compra ni promov.
+     */
+    private function siguienteDesdeNumeradorInt(): int
+    {
+        $clave = $this->resolverClaveNumerador();
+        $ultimoNumerador = $this->leerNumerador($clave);
+        $siguiente = $ultimoNumerador + 1;
+        $this->actualizarNumerador($clave, $siguiente);
+
+        Log::info('comprobante_proveedor.anita_nro_interno.reservado', [
+            'clave_numerador' => $clave,
+            'ultimo_numerador' => $ultimoNumerador,
+            'asignado' => $siguiente,
+            'origen' => 't_comp_int',
+        ]);
+
+        return $siguiente;
     }
 
     public function resolverClaveNumerador(): string

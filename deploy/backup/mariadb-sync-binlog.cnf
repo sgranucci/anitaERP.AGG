@@ -1,0 +1,4 @@
+# Cada commit queda en disco en el binlog antes de responder al cliente.
+# Junto con ship-binlog-gateway.sh (cada minuto) permite recuperar al minuto.
+[mysqld]
+sync_binlog = 1

@@ -1,0 +1,6 @@
+# Envío incremental de binlogs MariaDB al gateway 192.168.1.1.
+# Instalado en /etc/cron.d/anitaERP-binlog-ship
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+* * * * * root /usr/bin/flock -n /run/lock/anitaERP-binlog-ship.lock /var/www/html/anitaERP/deploy/backup/ship-binlog-gateway.sh >> /var/log/anitaERP-binlog-ship.log 2>&1

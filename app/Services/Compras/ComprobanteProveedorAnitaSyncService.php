@@ -11,6 +11,7 @@ use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorAnita
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorConcmovPertenenciaSupport;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\ConcmovLineaAnitaMapper;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\PromovCuotaAnitaMapper;
+use App\Support\Compras\ComprobanteProveedorAnitaBridgeGate;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
@@ -34,6 +35,10 @@ class ComprobanteProveedorAnitaSyncService
 
     public function syncCreate(Comprobante_Proveedor $comprobante): void
     {
+        if (! ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada()) {
+            return;
+        }
+
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras',
             'comprobante_proveedor_cuotas',
@@ -67,6 +72,10 @@ class ComprobanteProveedorAnitaSyncService
 
     public function syncUpdate(Comprobante_Proveedor $comprobante): void
     {
+        if (! ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada()) {
+            return;
+        }
+
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras',
             'comprobante_proveedor_cuotas',
@@ -102,6 +111,10 @@ class ComprobanteProveedorAnitaSyncService
 
     public function syncDelete(Comprobante_Proveedor $comprobante): void
     {
+        if (! ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada()) {
+            return;
+        }
+
         if (! $comprobante->anita_nro_interno) {
             return;
         }
@@ -126,6 +139,10 @@ class ComprobanteProveedorAnitaSyncService
      */
     public function resyncPlanCuotas(Comprobante_Proveedor $comprobante): void
     {
+        if (! ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada()) {
+            return;
+        }
+
         $comprobante->loadMissing([
             'comprobante_proveedor_cuotas',
             'empresas', 'proveedores', 'condicionpagos',
@@ -154,6 +171,10 @@ class ComprobanteProveedorAnitaSyncService
      */
     public function resyncAplicped(Comprobante_Proveedor $comprobante): void
     {
+        if (! ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada()) {
+            return;
+        }
+
         $comprobante->loadMissing([
             'proveedores',
             'tipotransaccion_compras',

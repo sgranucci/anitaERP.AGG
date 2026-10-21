@@ -13,6 +13,7 @@ use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorAnitaBridgeGate;
 use App\Support\Compras\ComprobanteProveedorEscrituraLock;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
@@ -74,6 +75,7 @@ class ComprobanteProveedorEliminarService
         $anitaNro = (int) ($comprobante->anita_nro_interno ?? 0);
 
         // 1) Anita contable + compra (fuera del TX MySQL: API Informix).
+        if (ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada()) {
         try {
             if ($asientoId > 0 || $anitaNro > 0) {
                 $this->asientoService->eliminarCtamovAnitaDeComprobante(
@@ -93,6 +95,7 @@ class ComprobanteProveedorEliminarService
             throw new RuntimeException(
                 'No se pudo borrar en Anita: '.$e->getMessage()
             );
+        }
         }
 
         // 2) ERP: CC, asiento, hijas y hard-delete cabecera.

@@ -61,6 +61,7 @@ final class FacturaProveedorPieTotalesSupport
             if ($vals === null) {
                 continue;
             }
+            $vals = $this->aplicarIvasDiscriminados($vals, $texto);
             $vals = $this->completarTotalSiFalta($vals);
             if (! $this->esCoherente($vals)) {
                 continue;
@@ -919,6 +920,12 @@ final class FacturaProveedorPieTotalesSupport
             ];
         }
 
+        $ivas = is_array($vals['ivas'] ?? null) ? $vals['ivas'] : [];
+        unset($vals['ivas']);
+        if (count($ivas) >= 2) {
+            return $this->conLineasMultiAlicuota($vals, $ivas, $origen, $subtotal, $internos, $percIva, $percIibb);
+        }
+
         $lineas = [];
         if ($subtotal > 0) {
             $lineas[] = [
@@ -962,5 +969,141 @@ final class FacturaProveedorPieTotalesSupport
         }
 
         return $vals + ['lineas' => $lineas, 'origen' => $origen];
+    }
+
+    /**
+     * Pie con más de una alícuota (IVA 10,5% e IVA 21% en la misma factura).
+     * El campo iva queda como la suma para que el total cierre.
+     *
+     * @param  array<string, mixed>  $vals
+     * @return array<string, mixed>
+     */
+    private function aplicarIvasDiscriminados(array $vals, string $texto): array
+    {
+        $ivas = $this->ivasDiscriminados($texto);
+        if (count($ivas) < 2) {
+            return $vals;
+        }
+
+        $vals['iva'] = round(array_sum(array_column($ivas, 'importe')), 2);
+        $vals['ivas'] = $ivas;
+
+        return $vals;
+    }
+
+    /**
+     * Última aparición de cada alícuota (el pie está al final; los ítems no dicen «IVA 21%»).
+     *
+     * @return list<array{alicuota: float, importe: float}>
+     */
+    private function ivasDiscriminados(string $texto): array
+    {
+        if (! preg_match_all(
+            '/IVA\s*(10[.,]5|27|21|2[.,]5|5)\s*%\s*[:.]?\s*\$?\s*((?:\d{1,3}(?:\.\d{3})+|\d+),\d{2})/iu',
+            $texto,
+            $matches,
+            PREG_SET_ORDER
+        )) {
+            return [];
+        }
+
+        $porTasa = [];
+        foreach ($matches as $m) {
+            $importe = $this->importeParser->parsear($m[2]);
+            if ($importe === null || $importe <= 0) {
+                continue;
+            }
+            $tasa = (float) str_replace(',', '.', $m[1]);
+            $clave = number_format($tasa, 1, '.', '');
+            $porTasa[$clave] = ['alicuota' => $tasa, 'importe' => $importe];
+        }
+
+        return array_values($porTasa);
+    }
+
+    /**
+     * @param  array<string, mixed>  $vals
+     * @param  list<array{alicuota: float, importe: float}>  $ivas
+     * @return array<string, mixed>
+     */
+    private function conLineasMultiAlicuota(
+        array $vals,
+        array $ivas,
+        string $origen,
+        float $subtotal,
+        float $internos,
+        float $percIva,
+        float $percIibb,
+    ): array {
+        $netos = [];
+        $sumaNetos = 0.0;
+        foreach ($ivas as $iva) {
+            $tasa = (float) $iva['alicuota'];
+            $importeIva = round((float) $iva['importe'], 2);
+            $neto = $tasa > 0 ? round($importeIva / ($tasa / 100), 2) : 0.0;
+            $netos[] = ['alicuota' => $tasa, 'iva' => $importeIva, 'neto' => $neto];
+            $sumaNetos = round($sumaNetos + $neto, 2);
+        }
+
+        if ($subtotal > 0 && $netos !== [] && abs($sumaNetos - $subtotal) <= 0.05) {
+            $delta = round($subtotal - $sumaNetos, 2);
+            $ultimo = array_key_last($netos);
+            $netos[$ultimo]['neto'] = round($netos[$ultimo]['neto'] + $delta, 2);
+        }
+
+        $lineas = [];
+        foreach ($netos as $neto) {
+            $etiqueta = $this->etiquetaAlicuota((float) $neto['alicuota']);
+            $lineas[] = [
+                'descripcion' => 'Neto gravado '.$etiqueta,
+                'importe' => $neto['neto'],
+                'alicuota_iva' => $neto['alicuota'],
+                'tipo' => 'neto',
+            ];
+            $lineas[] = [
+                'descripcion' => 'IVA '.$etiqueta,
+                'importe' => $neto['iva'],
+                'alicuota_iva' => $neto['alicuota'],
+                'tipo' => 'iva',
+            ];
+        }
+        if ($internos > 0) {
+            $lineas[] = [
+                'descripcion' => 'IMPUESTOS INTERNOS',
+                'importe' => $internos,
+                'alicuota_iva' => null,
+                'tipo' => 'interno',
+            ];
+        }
+        if ($percIva > 0) {
+            $lineas[] = [
+                'descripcion' => 'Percepción IVA / RG 5329',
+                'importe' => $percIva,
+                'alicuota_iva' => 3.0,
+                'tipo' => 'percepcion_iva',
+            ];
+        }
+        if ($percIibb > 0) {
+            $lineas[] = [
+                'descripcion' => 'PERCEP II.BB.',
+                'importe' => $percIibb,
+                'alicuota_iva' => null,
+                'tipo' => 'percepcion_iibb',
+            ];
+        }
+
+        return $vals + ['lineas' => $lineas, 'origen' => $origen];
+    }
+
+    private function etiquetaAlicuota(float $tasa): string
+    {
+        if (abs($tasa - 10.5) < 0.01) {
+            return '10,5%';
+        }
+        if (abs($tasa - (int) $tasa) < 0.01) {
+            return ((int) $tasa).'%';
+        }
+
+        return str_replace('.', ',', (string) $tasa).'%';
     }
 }

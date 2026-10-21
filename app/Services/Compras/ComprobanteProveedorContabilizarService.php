@@ -8,6 +8,7 @@ use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor_Cuentacorriente;
+use App\Support\Compras\ComprobanteProveedorAnitaBridgeGate;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
@@ -299,8 +300,12 @@ class ComprobanteProveedorContabilizarService
         // Antes de asentar ERP: si Anita ya tiene la misma clave fiscal, no confirmar.
         ComprobanteProveedorAnitaCompraExistenciaSupport::assertDesdeComprobante($comprobante);
 
+        $escribeAnita = $this->anitaEscrituraHabilitada();
+
         // Limpia ctamov huérfanos de intentos previos (mismo patrón que recepción COM).
-        $this->asientoService->eliminarCtamovAnitaDeComprobante($comprobante);
+        if ($escribeAnita) {
+            $this->asientoService->eliminarCtamovAnitaDeComprobante($comprobante);
+        }
 
         $numeroAsientoAnita = null;
         $anitaNroInternoEscrito = null;
@@ -348,6 +353,21 @@ class ComprobanteProveedorContabilizarService
 
             $comprobante = Comprobante_Proveedor::query()->findOrFail($comprobanteId);
             $numeroAsientoAnita = $resultadoErp['numeroasiento'];
+
+            if (! $escribeAnita) {
+                $comprobante->forceFill([
+                    'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::OMITIDO,
+                    'anita_sync_error' => null,
+                    'anita_sync_at' => now(),
+                ])->save();
+
+                $this->enviarLegajoAPagosTrasContabilizar($comprobante);
+
+                app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
+                    ->marcarContabilizado($comprobante, (int) ($resultadoErp['asiento_id'] ?? 0));
+
+                return $comprobante->fresh();
+            }
 
             // 2) Anita compra/concmov/promov (fuera del TX MySQL: si falla, compensamos abajo).
             $paraAnita = $comprobante->fresh([
@@ -550,25 +570,27 @@ class ComprobanteProveedorContabilizarService
             : '';
         $anitaNro = (int) ($comprobante->anita_nro_interno ?? 0);
 
-        try {
-            if ($asientoId > 0 || $anitaNro > 0) {
-                $this->asientoService->eliminarCtamovAnitaDeComprobante(
-                    $comprobante,
-                    $numeroAsiento !== '' ? $numeroAsiento : null
+        if ($this->anitaEscrituraHabilitada()) {
+            try {
+                if ($asientoId > 0 || $anitaNro > 0) {
+                    $this->asientoService->eliminarCtamovAnitaDeComprobante(
+                        $comprobante,
+                        $numeroAsiento !== '' ? $numeroAsiento : null
+                    );
+                }
+                if ($anitaNro > 0) {
+                    $this->anitaSyncService->syncDelete($comprobante);
+                }
+            } catch (Throwable $e) {
+                Log::error('comprobante_proveedor.descontabilizar_anita_fallo', [
+                    'comprobante_id' => $comprobanteId,
+                    'anita_nro_interno' => $anitaNro,
+                    'error' => $e->getMessage(),
+                ]);
+                throw new RuntimeException(
+                    'No se pudo revertir en Anita antes de editar: '.$e->getMessage()
                 );
             }
-            if ($anitaNro > 0) {
-                $this->anitaSyncService->syncDelete($comprobante);
-            }
-        } catch (Throwable $e) {
-            Log::error('comprobante_proveedor.descontabilizar_anita_fallo', [
-                'comprobante_id' => $comprobanteId,
-                'anita_nro_interno' => $anitaNro,
-                'error' => $e->getMessage(),
-            ]);
-            throw new RuntimeException(
-                'No se pudo revertir en Anita antes de editar: '.$e->getMessage()
-            );
         }
 
         $this->revertirErpTrasFalloAnita($comprobante, true);
@@ -663,5 +685,10 @@ class ComprobanteProveedorContabilizarService
                 );
             }
         }
+    }
+
+    private function anitaEscrituraHabilitada(): bool
+    {
+        return ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada();
     }
 }

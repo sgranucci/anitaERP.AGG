@@ -20,6 +20,8 @@ final class PrecargaProveedorResolucionSupport
     /**
      * Biyemas / Rebisco / Kandiko: empresa operativa con codigo &lt; 5.
      * Si el CUIT OCR no matchea exacto, tolera 1 dígito erróneo (ej. 36-68240367-1 → 30-68240367-1).
+     * Si tampoco, prueba cambiar ceros leídos por ochos (el 8 del escaneo sale como 0) y acepta
+     * solo si una única empresa conocida coincide.
      *
      * @return array{
      *   empresa_id: int,
@@ -114,7 +116,9 @@ final class PrecargaProveedorResolucionSupport
 
     /**
      * Corrige CUITs mal leídos por OCR contra las empresas operativas conocidas.
-     * Solo acepta un único candidato a distancia de Hamming ≤ 1 (11 dígitos).
+     * Primero un único candidato a distancia de Hamming 1 (11 dígitos).
+     * Si no hay ninguno, prueba reemplazar ceros del leído por ochos: el 8 del escaneo
+     * suele salir como 0 (ej. 30-70022205-9 → 30-70822285-9). Acepta solo un candidato.
      *
      * @return array{
      *   empresa_id: int,
@@ -131,41 +135,95 @@ final class PrecargaProveedorResolucionSupport
             return null;
         }
 
-        $candidatos = [];
         $empresas = $soloCodigoMenorA5
             ? $this->empresasOperativasConCuit()
             : $this->empresasConCuit();
+
+        $candidatos = [];
         foreach ($empresas as $empresa) {
             $conocido = preg_replace('/\D/', '', (string) $empresa->nroinscripcion) ?? '';
             if (strlen($conocido) !== 11 || ! ctype_digit($conocido)) {
                 continue;
             }
 
-            $distancia = $this->distanciaHammingDigitos($leido, $conocido);
-            if ($distancia === 1) {
+            if ($this->distanciaHammingDigitos($leido, $conocido) === 1) {
                 $candidatos[] = [
                     'empresa' => $empresa,
                     'cuit' => $conocido,
-                    'distancia' => $distancia,
                 ];
             }
         }
 
-        if (count($candidatos) !== 1) {
+        if (count($candidatos) === 1) {
+            return $this->empaquetarEmpresaCuitCorregido($candidatos[0]['empresa'], $candidatos[0]['cuit'], $leido);
+        }
+
+        if ($candidatos !== []) {
             return null;
         }
 
-        $mejor = $candidatos[0];
-        $empresa = $mejor['empresa'];
-        $cuitCorregido = substr($mejor['cuit'], 0, 2).'-'.substr($mejor['cuit'], 2, 8).'-'.substr($mejor['cuit'], 10, 1);
-        $cuitLeido = substr($leido, 0, 2).'-'.substr($leido, 2, 8).'-'.substr($leido, 10, 1);
+        $porCeros = [];
+        foreach ($empresas as $empresa) {
+            $conocido = preg_replace('/\D/', '', (string) $empresa->nroinscripcion) ?? '';
+            if (! $this->cuitConocidoSaleDeCerosComoOchos($leido, $conocido)) {
+                continue;
+            }
 
+            $porCeros[] = [
+                'empresa' => $empresa,
+                'cuit' => $conocido,
+            ];
+        }
+
+        if (count($porCeros) !== 1) {
+            return null;
+        }
+
+        return $this->empaquetarEmpresaCuitCorregido($porCeros[0]['empresa'], $porCeros[0]['cuit'], $leido);
+    }
+
+    /**
+     * El CUIT conocido se obtiene cambiando uno o más ceros del leído por ochos, sin otro dígito distinto.
+     */
+    private function cuitConocidoSaleDeCerosComoOchos(string $leido, string $conocido): bool
+    {
+        if (strlen($leido) !== 11 || strlen($conocido) !== 11 || ! ctype_digit($conocido)) {
+            return false;
+        }
+
+        $cambios = 0;
+        for ($i = 0; $i < 11; $i++) {
+            if ($leido[$i] === $conocido[$i]) {
+                continue;
+            }
+
+            if ($leido[$i] !== '0' || $conocido[$i] !== '8') {
+                return false;
+            }
+
+            $cambios++;
+        }
+
+        return $cambios >= 1;
+    }
+
+    /**
+     * @return array{
+     *   empresa_id: int,
+     *   codigo: string,
+     *   nombre: string,
+     *   cuit_corregido: string,
+     *   cuit_leido: string
+     * }
+     */
+    private function empaquetarEmpresaCuitCorregido(object $empresa, string $cuitConocido, string $cuitLeido): array
+    {
         return [
             'empresa_id' => (int) $empresa->id,
             'codigo' => (string) $empresa->codigo,
             'nombre' => (string) $empresa->nombre,
-            'cuit_corregido' => $cuitCorregido,
-            'cuit_leido' => $cuitLeido,
+            'cuit_corregido' => $this->formatearCuit11($cuitConocido),
+            'cuit_leido' => $this->formatearCuit11($cuitLeido),
         ];
     }
 
@@ -287,31 +345,50 @@ final class PrecargaProveedorResolucionSupport
 
         $this->assertProveedorHabilitado($proveedor);
 
-        return [
+        $resultado = [
             'proveedor_id' => (int) $proveedor->id,
             'codigo' => (string) $proveedor->codigo,
             'nombre' => (string) $proveedor->nombre,
         ];
+
+        $cuitMaestro = (string) ($proveedor->nroinscripcion ?? '');
+        if ($cuitMaestro !== ''
+            && ! PrecargaProveedorCuitCoincidenciaSupport::digitoVerificadorValido($cuitProveedor)
+            && PrecargaProveedorCuitCoincidenciaSupport::coinciden($cuitMaestro, $cuitProveedor)
+        ) {
+            $resultado['cuit_corregido'] = PrecargaProveedorCuitCoincidenciaSupport::corregirDigitoVerificador($cuitProveedor)
+                ?? $cuitMaestro;
+            $resultado['cuit_leido'] = $this->formatearCuit11($cuitProveedor);
+        }
+
+        return $resultado;
     }
 
     /**
-     * @return array{proveedor_id: int, codigo: string, nombre: string}
+     * @return array{
+     *   proveedor_id: int,
+     *   codigo: string,
+     *   nombre: string,
+     *   cuit_corregido?: string,
+     *   cuit_leido?: string
+     * }
      */
     public function resolverProveedorPorCuit(string $cuit): array
     {
-        foreach ($this->variantesDocumento($cuit) as $documento) {
-            $proveedores = $this->proveedorRepository->findPorDocumento($documento);
-            if (! $proveedores || $proveedores->isEmpty()) {
-                continue;
-            }
+        $hallado = $this->buscarProveedorHabilitado($cuit);
+        if ($hallado !== null) {
+            return $hallado;
+        }
 
-            foreach ($proveedores as $proveedor) {
-                if ($this->proveedorEstaHabilitado($proveedor)) {
-                    return [
-                        'proveedor_id' => (int) $proveedor->id,
-                        'codigo' => (string) $proveedor->codigo,
-                        'nombre' => (string) $proveedor->nombre,
-                    ];
+        if (! PrecargaProveedorCuitCoincidenciaSupport::digitoVerificadorValido($cuit)) {
+            $corregido = PrecargaProveedorCuitCoincidenciaSupport::corregirDigitoVerificador($cuit);
+            if ($corregido !== null) {
+                $hallado = $this->buscarProveedorHabilitado($corregido);
+                if ($hallado !== null) {
+                    $hallado['cuit_corregido'] = $corregido;
+                    $hallado['cuit_leido'] = $this->formatearCuit11($cuit);
+
+                    return $hallado;
                 }
             }
         }
@@ -332,6 +409,41 @@ final class PrecargaProveedorResolucionSupport
     {
         return in_array((string) ($proveedor->estado ?? ''), ['0', '3'], true)
             || in_array($proveedor->estado ?? '', ['Activo', 'Regularizado'], true);
+    }
+
+    /**
+     * @return array{proveedor_id: int, codigo: string, nombre: string}|null
+     */
+    private function buscarProveedorHabilitado(string $cuit): ?array
+    {
+        foreach ($this->variantesDocumento($cuit) as $documento) {
+            $proveedores = $this->proveedorRepository->findPorDocumento($documento);
+            if (! $proveedores || $proveedores->isEmpty()) {
+                continue;
+            }
+
+            foreach ($proveedores as $proveedor) {
+                if ($this->proveedorEstaHabilitado($proveedor)) {
+                    return [
+                        'proveedor_id' => (int) $proveedor->id,
+                        'codigo' => (string) $proveedor->codigo,
+                        'nombre' => (string) $proveedor->nombre,
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function formatearCuit11(string $cuit): string
+    {
+        $digitos = preg_replace('/\D/', '', $cuit) ?? '';
+        if (strlen($digitos) !== 11) {
+            return $cuit;
+        }
+
+        return substr($digitos, 0, 2).'-'.substr($digitos, 2, 8).'-'.substr($digitos, 10, 1);
     }
 
     /** @return list<string> */

@@ -134,7 +134,13 @@
 
                 <ul class="cp-flujo-card__bullets text-left mb-0">
                     <li>Ideal si la empresa no opera recepción de stock en el legajo</li>
-                    <li>Si aparece una COM disponible, igual se pide asociarla</li>
+                    <li>
+                        @if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown())
+                            La recepción COM es optativa: no hace falta asignarla para guardar la factura
+                        @else
+                            Si aparece una COM disponible, igual se pide asociarla
+                        @endif
+                    </li>
                     <li>No bloquea facturas sin recepción</li>
                 </ul>
             </button>

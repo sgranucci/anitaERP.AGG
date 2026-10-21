@@ -7,6 +7,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Configuracion\Empresa;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -164,13 +165,14 @@ final class ComprobanteProveedorAnitaCompraExistenciaSupport
         }
 
         $empresaCodigo = self::empresaCodigoAnita($empresaId);
+        $filtraEmpresa = $empresaCodigo !== null && ! EntornoEmpresaSupport::esCrown();
 
         $where = " WHERE com_proveedor = '".$proveedorCodigo."'"
             ." AND com_letra = '".$letraNorm."'"
             .' AND com_sucursal = '.(int) $sucursal
             .' AND com_nro = '.(int) $numerocomprobante;
 
-        if ($empresaCodigo !== null) {
+        if ($filtraEmpresa) {
             $where .= ' AND com_empresa = '.(int) $empresaCodigo;
         }
 
@@ -191,7 +193,7 @@ final class ComprobanteProveedorAnitaCompraExistenciaSupport
             'com_nro',
             'com_nro_interno',
             'com_fecha',
-            'com_empresa',
+            ...($filtraEmpresa ? ['com_empresa'] : []),
             'com_monto',
             'com_cuit_prov',
             'com_nombre_prov',

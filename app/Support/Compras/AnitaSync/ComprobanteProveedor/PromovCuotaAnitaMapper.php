@@ -3,6 +3,7 @@
 namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
+use App\Support\Compras\AnitaSync\ComprobanteProveedor\Crown\PromovCuotaAnitaCrownMapper;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\Ferli\PromovCuotaAnitaFerliMapper;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
@@ -18,7 +19,7 @@ use Carbon\Carbon;
  * El total pagado (prov_t_pagado) y aplmovp los actualiza
  * ProveedorCuentacorrienteAplicacionAnitaSyncService al aplicar CC.
  *
- * Ferli: PromovCuotaAnitaFerliMapper (sin empresa ni *_marca).
+ * Ferli: PromovCuotaAnitaFerliMapper. Crown: PromovCuotaAnitaCrownMapper.
  */
 final class PromovCuotaAnitaMapper
 {
@@ -26,6 +27,10 @@ final class PromovCuotaAnitaMapper
     {
         if (EntornoEmpresaSupport::esFerli()) {
             return PromovCuotaAnitaFerliMapper::camposInsert();
+        }
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            return PromovCuotaAnitaCrownMapper::camposInsert();
         }
 
         return '
@@ -60,6 +65,10 @@ final class PromovCuotaAnitaMapper
     ): string {
         if (EntornoEmpresaSupport::esFerli()) {
             return PromovCuotaAnitaFerliMapper::valoresInsert($ctx, $cuota);
+        }
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            return PromovCuotaAnitaCrownMapper::valoresInsert($ctx, $cuota);
         }
 
         $vto = $cuota->fechavencimiento

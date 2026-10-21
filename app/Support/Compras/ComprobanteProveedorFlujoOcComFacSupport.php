@@ -4,6 +4,7 @@ namespace App\Support\Compras;
 
 use App\Models\Compras\Configuracion_ComprobanteProveedor;
 use App\Models\Compras\Ordencompra;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
  * Política de flujo OC → COM → factura por empresa (configuración comprobante proveedor).
@@ -13,6 +14,19 @@ use App\Models\Compras\Ordencompra;
  */
 final class ComprobanteProveedorFlujoOcComFacSupport
 {
+    /**
+     * Instalaciones donde una COM existente no obliga a vincularla a la factura.
+     * El test unitario corre sin Laravel: si no hay config, se mantiene la regla general.
+     */
+    private static function comDisponibleNoObligaAsignacion(): bool
+    {
+        try {
+            return EntornoEmpresaSupport::esCrown();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     /**
      * Empresa con flujo estricto (estilo Biyemas): COM obligatoria salvo OC anticipada sin COM aún.
      */
@@ -109,7 +123,8 @@ final class ComprobanteProveedorFlujoOcComFacSupport
                 $debeAsignarCom = true;
             }
         } else {
-            $debeAsignarCom = $tieneComDisponibles;
+            // Crown: COM optativa aunque exista en el legajo. El resto, si hay COM, hay que asignarla.
+            $debeAsignarCom = $tieneComDisponibles && ! self::comDisponibleNoObligaAsignacion();
             if ($anticipada && $tieneComDisponibles && ! self::permiteAsignarComEnLegajoAnticipado($oc)) {
                 $debeAsignarCom = false;
                 $permiteAnticipada = true;

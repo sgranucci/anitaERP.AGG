@@ -208,6 +208,30 @@ class ComprobanteProveedorComLegajoResolucionService
             ]);
         }
 
+        $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
+            $ordencompra,
+            true,
+            $fechaFactura,
+            OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($precarga),
+        );
+        if (! ($politica['debe_asignar_com'] ?? false)) {
+            if ($idsBandeja !== []) {
+                $data->modo_carga = ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+            }
+
+            return array_merge($prefill, [
+                'recepciones_disponibles' => $resolucion['recepciones_disponibles'],
+                'recepciones_seleccionadas' => $idsBandeja,
+                'com_resolucion' => [
+                    'ambigua' => false,
+                    'mensaje' => null,
+                    'importe_comparacion' => (float) ($resolucion['com_resolucion']['importe_comparacion'] ?? 0),
+                    'importe_comparacion_etiqueta' => (string) ($resolucion['com_resolucion']['importe_comparacion_etiqueta'] ?? ''),
+                    'ordencompra_id' => $ordencompraId > 0 ? $ordencompraId : null,
+                ],
+            ]);
+        }
+
         $data->modo_carga = ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
         $seleccionadas = $idsBandeja !== []
             ? $idsBandeja

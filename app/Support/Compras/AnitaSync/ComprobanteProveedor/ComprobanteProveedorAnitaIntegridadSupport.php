@@ -5,6 +5,7 @@ namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 use App\ApiAnita;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Contable\Asiento;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
 
 /**
@@ -87,10 +88,11 @@ final class ComprobanteProveedorAnitaIntegridadSupport
                 'nro' => $ctx->numero(),
             ];
             $whereAplic = RecepcionProveedorAnitaWhereSupport::aplicpedCom($ctx->proveedorCodigo(), $claveFac);
-            $aplicped = self::contar(self::SISTEMA_COMPRAS, $tablaAplic, 'aplp_nro_interno', $whereAplic);
+            $campoAplic = EntornoEmpresaSupport::esCrown() ? 'aplp_proveedor' : 'aplp_nro_interno';
+            $aplicped = self::contar(self::SISTEMA_COMPRAS, $tablaAplic, $campoAplic, $whereAplic);
             if ($aplicped <= 0) {
                 $problemas[] = 'Falta aplicped (factura→PEP)';
-            } else {
+            } elseif (! EntornoEmpresaSupport::esCrown()) {
                 $filas = self::listar(
                     self::SISTEMA_COMPRAS,
                     $tablaAplic,

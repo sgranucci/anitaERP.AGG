@@ -11,6 +11,7 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Services\Stock\RecepcionProveedorAsientoService;
+use App\Support\Compras\ComprobanteProveedorAnitaBridgeGate;
 use App\Support\Compras\ComprobanteProveedorAsientoCuadreSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoDescripcionSupport;
 use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
@@ -131,6 +132,10 @@ class ComprobanteProveedorAsientoService
      */
     public function sincronizarCtamovAnita(Comprobante_Proveedor $comprobante, array $payloadAnita): void
     {
+        if (! ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada()) {
+            return;
+        }
+
         $this->eliminarCtamovAnitaDeComprobante($comprobante, null);
 
         // ERP guarda la descripción completa; ctamov Informix solo admite 30 (a-compprov.c).
@@ -151,6 +156,10 @@ class ComprobanteProveedorAsientoService
         Comprobante_Proveedor $comprobante,
         ?string $numeroAsiento = null,
     ): void {
+        if (! ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada()) {
+            return;
+        }
+
         $comprobante->loadMissing('tipotransaccion_compras');
 
         $tipo = substr((string) ($comprobante->tipotransaccion_compras?->abreviatura ?? ''), 0, 3);

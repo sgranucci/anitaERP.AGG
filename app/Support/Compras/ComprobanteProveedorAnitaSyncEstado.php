@@ -13,6 +13,9 @@ final class ComprobanteProveedorAnitaSyncEstado
     /** Importado desde Anita; no reenviar al bridge. */
     public const IMPORTADO = 'IMPORTADO';
 
+    /** Instalación con bridge en solo lectura: el asiento queda en el ERP y no se graba Anita. */
+    public const OMITIDO = 'OMITIDO';
+
     /** @return list<string> */
     public static function todos(): array
     {
@@ -21,6 +24,7 @@ final class ComprobanteProveedorAnitaSyncEstado
             self::SYNC_OK,
             self::ERROR,
             self::IMPORTADO,
+            self::OMITIDO,
         ];
     }
 }

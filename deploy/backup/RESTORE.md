@@ -245,6 +245,26 @@ sudo visudo -c
 
 Log en AGG: `storage/logs/backup-db.log` si está definido en `backup.local.conf`; si no, `backups/backup-db.log`.
 
+## Crown / server1ng — binlogs al gateway
+
+En este host el binary log vivo está en `/var/lib/mysql-binlog` (`sync_binlog=1`),
+en su propio disco. Las facturas van a `/srv/facturas_scan`. La copia de los
+binlogs va al disco de scan, `/srv/scan/anitaERP/binlog`.
+
+El NAS `192.168.1.149:/server1-backups` no exporta a `192.168.1.3`. Cada minuto
+`ship-binlog-gateway.sh` también manda la cola por SSH a `ac-server1` (`192.168.1.2`),
+que tiene el NAS montado. Esa segunda copia queda en:
+
+`/nas-backups/anitaERP/server1ng/binlog`
+
+La posición ya copiada queda en `binlog_position.txt` de esa carpeta.
+
+Recuperar hasta un minuto (sobre un dump restaurado):
+
+```bash
+mysqlbinlog --stop-datetime="AAAA-MM-DD HH:MM:SS" mysql-bin.00000N [mysql-bin.00000M ...] | mysql anitaERP
+```
+
 ## Checklist post-incidente
 
 - [ ] `./setup-ssh-replica.sh` ejecutado (sync .211)

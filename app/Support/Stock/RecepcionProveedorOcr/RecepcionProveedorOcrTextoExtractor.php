@@ -37,8 +37,10 @@ class RecepcionProveedorOcrTextoExtractor
 
     private function extraerPdfConPdftotext(string $rutaPdf): string
     {
-        $bin = (string) config('recepcion_proveedor.ocr.pdftotext_bin', 'pdftotext');
-        $this->assertBinario($bin, 'pdftotext');
+        $bin = $this->binario(
+            (string) config('recepcion_proveedor.ocr.pdftotext_bin', 'pdftotext'),
+            'pdftotext'
+        );
 
         $tmp = RecepcionProveedorOcrTempSupport::archivo('ocr_', 'txt');
 
@@ -68,8 +70,10 @@ class RecepcionProveedorOcrTextoExtractor
     /** @return list<string> rutas PNG generadas */
     private function pdfAPng(string $rutaPdf): array
     {
-        $bin = (string) config('recepcion_proveedor.ocr.pdftoppm_bin', 'pdftoppm');
-        $this->assertBinario($bin, 'pdftoppm');
+        $bin = $this->binario(
+            (string) config('recepcion_proveedor.ocr.pdftoppm_bin', 'pdftoppm'),
+            'pdftoppm'
+        );
 
         $dir = RecepcionProveedorOcrTempSupport::directorio().'/ocr_pdf_'.uniqid('', true);
         File::ensureDirectoryExists($dir);
@@ -109,8 +113,10 @@ class RecepcionProveedorOcrTextoExtractor
      */
     private function extraerConTesseract(string|array $entrada): string
     {
-        $bin = (string) config('recepcion_proveedor.ocr.tesseract_bin', 'tesseract');
-        $this->assertBinario($bin, 'tesseract');
+        $bin = $this->binario(
+            (string) config('recepcion_proveedor.ocr.tesseract_bin', 'tesseract'),
+            'tesseract'
+        );
 
         $lang = (string) config('recepcion_proveedor.ocr.tesseract_lang', 'spa');
         $archivos = is_array($entrada) ? $entrada : [$entrada];
@@ -166,7 +172,7 @@ class RecepcionProveedorOcrTextoExtractor
     private function ejecutarTesseractPagina(string $bin, string $lang, string $archivo, int $psm): string
     {
         $tmp = RecepcionProveedorOcrTempSupport::base('ocr_');
-        $args = [$bin, $archivo, $tmp, '-l', $lang, '-psm', (string) $psm];
+        $args = [$bin, $archivo, $tmp, '-l', $lang, '--psm', (string) $psm];
 
         $process = new Process($args);
         $process->setTimeout((int) config('recepcion_proveedor.ocr.timeout_segundos', 120));
@@ -211,21 +217,52 @@ class RecepcionProveedorOcrTextoExtractor
         return implode("\n", $salida);
     }
 
-    private function assertBinario(string $bin, string $nombre): void
+    /**
+     * php-fpm arranca con el entorno vacío (clear_env), así que `which` no ve /usr/bin.
+     */
+    private function binario(string $bin, string $nombre): string
     {
-        $process = new Process(['which', $bin]);
-        $process->run();
-        if ($process->isSuccessful()) {
-            return;
-        }
-
-        if (is_executable($bin)) {
-            return;
+        $resuelto = $this->resolverBinario($bin);
+        if ($resuelto !== null) {
+            return $resuelto;
         }
 
         throw new \RuntimeException(
             "Dependencia OCR '{$nombre}' no encontrada ({$bin}). "
             .'Instale el paquete del sistema o configure la ruta en .env.'
         );
+    }
+
+    private function resolverBinario(string $bin): ?string
+    {
+        $bin = trim($bin);
+        if ($bin === '') {
+            return null;
+        }
+
+        if (str_contains($bin, '/') && is_file($bin) && is_executable($bin)) {
+            return $bin;
+        }
+
+        $directorios = ['/usr/bin', '/usr/local/bin', '/bin'];
+        $path = getenv('PATH');
+        if (is_string($path) && $path !== '') {
+            foreach (explode(PATH_SEPARATOR, $path) as $dir) {
+                $dir = trim($dir);
+                if ($dir !== '') {
+                    $directorios[] = $dir;
+                }
+            }
+        }
+
+        $nombre = basename(str_replace('\\', '/', $bin));
+        foreach ($directorios as $dir) {
+            $candidato = rtrim($dir, '/').'/'.$nombre;
+            if (is_file($candidato) && is_executable($candidato)) {
+                return $candidato;
+            }
+        }
+
+        return null;
     }
 }

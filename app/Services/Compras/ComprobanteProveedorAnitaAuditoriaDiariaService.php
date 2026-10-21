@@ -8,6 +8,7 @@ use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
 use App\Repositories\Contable\AsientoRepository;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorAnitaIntegridadSupport;
+use App\Support\Compras\ComprobanteProveedorAnitaBridgeGate;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use Carbon\Carbon;
@@ -36,6 +37,27 @@ final class ComprobanteProveedorAnitaAuditoriaDiariaService
         bool $enviarMail = true,
         ?bool $autoReparar = null,
     ): array {
+        if (! ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada()) {
+            return [
+                'fecha_calendario' => '',
+                'fecha_desde' => $fechaDesde,
+                'fecha_hasta' => $fechaHasta,
+                'auto_reparar' => false,
+                'total' => 0,
+                'ok' => 0,
+                'reparadas' => 0,
+                'discrepancias' => [],
+                'filas_reparadas' => [],
+                'errores' => [],
+                'filas' => [],
+                'requiere_alerta' => false,
+                'mail_enviado' => false,
+                'mail_destino' => null,
+                'mail_error' => null,
+                'omitida' => 'bridge de facturas de proveedor deshabilitado en esta instalación',
+            ];
+        }
+
         $config = config('comprobante_proveedor_anita.auditoria_diaria', []);
         $autoReparar ??= filter_var($config['auto_reparar'] ?? true, FILTER_VALIDATE_BOOLEAN);
 
@@ -77,7 +99,10 @@ final class ComprobanteProveedorAnitaAuditoriaDiariaService
             ->whereNotNull('asiento_id')
             ->where(function ($q) {
                 $q->whereNull('anita_sync_estado')
-                    ->orWhere('anita_sync_estado', '!=', ComprobanteProveedorAnitaSyncEstado::IMPORTADO);
+                    ->orWhereNotIn('anita_sync_estado', [
+                        ComprobanteProveedorAnitaSyncEstado::IMPORTADO,
+                        ComprobanteProveedorAnitaSyncEstado::OMITIDO,
+                    ]);
             })
             ->whereDate('fechacomprobante', '>=', $desde)
             ->whereDate('fechacomprobante', '<=', $hasta)

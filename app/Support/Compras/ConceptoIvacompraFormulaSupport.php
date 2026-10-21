@@ -243,6 +243,44 @@ final class ConceptoIvacompraFormulaSupport
             return $desdeAttr;
         }
 
-        return self::tasaPorcentajeDesdeFormula((string) ($concepto->formula ?? ''));
+        $desdeFormula = self::tasaPorcentajeDesdeFormula((string) ($concepto->formula ?? ''));
+        if ($desdeFormula > 0) {
+            return $desdeFormula;
+        }
+
+        return self::tasaPorcentajeDesdeNombre(
+            (string) ($concepto->nombre ?? ''),
+            (string) ($concepto->nombre_ia ?? ''),
+        );
+    }
+
+    /**
+     * Muchos gravados de Anita no tienen impuesto ni fórmula (el IVA sí: con(50)*0.21).
+     * La alícuota queda en el nombre: "Gravado Bienes L.21", "Gravado al 10.5", "Gravado 21%".
+     */
+    public static function tasaPorcentajeDesdeNombre(string $nombre, string $nombreIa = ''): float
+    {
+        $texto = trim($nombre.' '.$nombreIa);
+        if ($texto === '') {
+            return 0.0;
+        }
+
+        if (preg_match('/10[.,]5/u', $texto)) {
+            return 10.5;
+        }
+        if (preg_match('/(?:^|[^\d])27(?:\s*%|\b)/u', $texto)) {
+            return 27.0;
+        }
+        if (preg_match('/(?:^|[^\d])21(?:\s*%|\b)/u', $texto)) {
+            return 21.0;
+        }
+        if (preg_match('/(?:^|[^\d])2[.,]5(?:\s*%|\b)/u', $texto)) {
+            return 2.5;
+        }
+        if (preg_match('/(?:^|[^\d])5\s*%/u', $texto)) {
+            return 5.0;
+        }
+
+        return 0.0;
     }
 }

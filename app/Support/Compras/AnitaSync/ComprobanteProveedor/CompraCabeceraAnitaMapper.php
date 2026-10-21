@@ -5,12 +5,13 @@ namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
+use App\Support\Compras\AnitaSync\ComprobanteProveedor\Crown\CompraCabeceraAnitaCrownMapper;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\Ferli\CompraCabeceraAnitaFerliMapper;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
  * Cabecera tabla Informix compra (esquema real: 26 columnas, sin com_subtotal/com_total).
- * Ferli: CompraCabeceraAnitaFerliMapper (columnas reducidas).
+ * Ferli: CompraCabeceraAnitaFerliMapper. Crown: CompraCabeceraAnitaCrownMapper.
  */
 final class CompraCabeceraAnitaMapper
 {
@@ -18,6 +19,10 @@ final class CompraCabeceraAnitaMapper
     {
         if (EntornoEmpresaSupport::esFerli()) {
             return CompraCabeceraAnitaFerliMapper::camposInsert();
+        }
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            return CompraCabeceraAnitaCrownMapper::camposInsert();
         }
 
         return '
@@ -56,6 +61,10 @@ final class CompraCabeceraAnitaMapper
             return CompraCabeceraAnitaFerliMapper::valoresInsert($ctx);
         }
 
+        if (EntornoEmpresaSupport::esCrown()) {
+            return CompraCabeceraAnitaCrownMapper::valoresInsert($ctx);
+        }
+
         return "
             '".$ctx->proveedorCodigo()."',
             '".$ctx->tipoComprobante()."',
@@ -90,6 +99,10 @@ final class CompraCabeceraAnitaMapper
     {
         if (EntornoEmpresaSupport::esFerli()) {
             return CompraCabeceraAnitaFerliMapper::valoresUpdate($ctx);
+        }
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            return CompraCabeceraAnitaCrownMapper::valoresUpdate($ctx);
         }
 
         return "
