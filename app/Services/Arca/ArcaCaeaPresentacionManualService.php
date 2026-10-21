@@ -14,6 +14,7 @@ use App\Support\Ventas\ArcaCaeaSucursalesInformeSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
 use App\Support\Ventas\ArcaCaeaAnitaVencaeConsultaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeAnitaSupport;
+use App\Support\Ventas\ArcaCaeaInformeObservacionSupport;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeVentaSupport;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
@@ -258,6 +259,21 @@ class ArcaCaeaPresentacionManualService
                 $estado,
                 (string) ($resultado['observaciones'] ?? 'Informado manualmente'),
             );
+        }
+
+        $obs = trim((string) ($resultado['observaciones'] ?? ''));
+        if ($obs !== '') {
+            ArcaCaeaInformeObservacionSupport::registrar($registro, [
+                'fuente' => (string) ($resolucion['fuente'] ?? 'erp'),
+                'venta_id' => ($resolucion['venta'] ?? null) instanceof Venta ? (int) $resolucion['venta']->id : null,
+                'pto_vta' => $ptoVta,
+                'tipo_afip' => $tipoAfip,
+                'tipo_anita' => $tipoAnita,
+                'letra' => $letra,
+                'numero' => $numero,
+                'fecha_comprobante' => $datos['fechacomprobante'] ?? null,
+                'texto' => $obs,
+            ]);
         }
 
         Log::info('arca:caea-informe-manual — comprobante informado', [

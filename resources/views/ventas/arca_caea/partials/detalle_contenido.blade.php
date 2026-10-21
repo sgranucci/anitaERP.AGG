@@ -228,6 +228,10 @@
                                 </table>
                             </details>
                         @endif
+                        @include('ventas.arca_caea.partials.observaciones_recientes', [
+                            'observacionesCaea' => $observacionesCaea ?? collect(),
+                            'tituloObservaciones' => 'Observaciones de esta quincena',
+                        ])
                     </td>
                 </tr>
             @endif

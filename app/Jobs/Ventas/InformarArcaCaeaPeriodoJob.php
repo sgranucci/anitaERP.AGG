@@ -123,6 +123,7 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
         $sincronizados = 0;
         $omitidosHueco = 0;
         $conObservaciones = 0;
+        $observaciones = [];
         $lotes = 0;
         $ultimo = null;
         $okGlobal = true;
@@ -142,6 +143,11 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
             $sincronizados += (int) ($detalle['sincronizados_arca'] ?? 0);
             $omitidosHueco += (int) ($detalle['omitidos_hueco_numeracion'] ?? 0);
             $conObservaciones += (int) ($detalle['con_observaciones'] ?? 0);
+            foreach ($detalle['observaciones'] ?? [] as $filaObs) {
+                if (is_array($filaObs) && trim((string) ($filaObs['texto'] ?? '')) !== '') {
+                    $observaciones[] = $filaObs;
+                }
+            }
 
             $this->guardarProgreso($registro, [
                 'fase' => 'lote',
@@ -177,6 +183,7 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
         $detalleFinal['sincronizados_arca'] = $sincronizados;
         $detalleFinal['omitidos_hueco_numeracion'] = $omitidosHueco;
         $detalleFinal['con_observaciones'] = $conObservaciones;
+        $detalleFinal['observaciones'] = $observaciones;
         $detalleFinal['lotes'] = $lotes;
 
         // Reconsultar ARCA al cerrar: el resumen del último lote suele traer ultimo_arca del inicio.

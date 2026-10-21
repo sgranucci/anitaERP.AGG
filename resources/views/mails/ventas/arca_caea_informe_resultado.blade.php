@@ -82,6 +82,20 @@
         @endif
     @endif
 
+    @if (! empty($detalle['observaciones']) && is_array($detalle['observaciones']))
+        <p style="margin:0 0 6px 0;"><strong>Observaciones por comprobante:</strong></p>
+        <ul style="margin:0 0 16px 18px; padding:0;">
+            @foreach ($detalle['observaciones'] as $obs)
+                @if (is_array($obs) && trim((string) ($obs['texto'] ?? '')) !== '')
+                    <li style="margin:0 0 6px 0;">
+                        <strong>{{ $obs['etiqueta'] ?? 'Comprobante' }}</strong>
+                        — {{ $obs['texto'] }}
+                    </li>
+                @endif
+            @endforeach
+        </ul>
+    @endif
+
     @php
         $cierre = is_array($detalle['cierre_quincena'] ?? null) ? $detalle['cierre_quincena'] : null;
         $proximo = is_array($cierre['proximo'] ?? null) ? $cierre['proximo'] : null;

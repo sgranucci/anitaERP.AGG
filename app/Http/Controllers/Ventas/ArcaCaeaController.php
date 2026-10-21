@@ -10,6 +10,7 @@ use App\Services\Arca\ArcaCaeaPresentacionManualService;
 use App\Services\Arca\ArcaCaeaPresentacionService;
 use App\Services\Arca\ArcaCaeaQuincenalOrquestadorService;
 use App\Support\Ventas\ArcaCaeaInformeColaSupport;
+use App\Support\Ventas\ArcaCaeaInformeObservacionSupport;
 use App\Support\Ventas\ArcaCaeaInformeUiSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Auth;
@@ -85,6 +86,7 @@ class ArcaCaeaController extends Controller
         $puedeInformar = can('informar-arca-caea', false);
         $puedeGrabarAnita = $puedeSolicitar && $this->anitaSync->estaHabilitado();
         $filtrosQuery = $this->filtrosIndexParaQuery($filtrosIndex);
+        $observacionesCaea = ArcaCaeaInformeObservacionSupport::listar($empresaIdsPermitidas);
 
         return view('ventas.arca_caea.index', compact(
             'registros',
@@ -98,6 +100,7 @@ class ArcaCaeaController extends Controller
             'puedeInformar',
             'puedeGrabarAnita',
             'filasMeta',
+            'observacionesCaea',
         ));
     }
 
@@ -125,6 +128,10 @@ class ArcaCaeaController extends Controller
         $erroresAgrupados = $registro->estaAutorizado()
             ? $this->presentacionService->agruparErroresInforme($registro, 15)
             : [];
+        $observacionesCaea = ArcaCaeaInformeObservacionSupport::listar(
+            [(int) $registro->empresa_id],
+            (int) $registro->id,
+        );
 
         if ($request->ajax()) {
             $filtrosQuery = $this->filtrosIndexParaQuery($this->resolverFiltrosIndex($request));
@@ -141,6 +148,7 @@ class ArcaCaeaController extends Controller
                 'leyendaInforme',
                 'erroresInforme',
                 'erroresAgrupados',
+                'observacionesCaea',
                 'filtrosQuery',
             ));
         }

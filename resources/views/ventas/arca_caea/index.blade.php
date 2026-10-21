@@ -43,6 +43,10 @@
                     Use <i class="fa fa-calculator text-secondary"></i> solo para consultar el último autorizado en ARCA (no hace falta para ver las facturas nuevas).
                     En el detalle (ojo) hay una herramienta para presentar un comprobante suelto (ERP o Anita), útil para FCE.
                 </p>
+                @include('ventas.arca_caea.partials.observaciones_recientes', [
+                    'observacionesCaea' => $observacionesCaea ?? collect(),
+                    'tituloObservaciones' => 'Observaciones ARCA de los últimos 3 meses',
+                ])
                 <form method="get" action="{{ route('arca_caea') }}" class="d-flex flex-wrap align-items-end mb-3">
                     @include('includes.listado.filtro_empresa_asignada_campo', [
                         'empresas' => $empresas,

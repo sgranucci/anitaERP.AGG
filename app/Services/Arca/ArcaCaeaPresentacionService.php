@@ -14,6 +14,7 @@ use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
 use App\Support\Ventas\ArcaCaeaAnitaVencaeConsultaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeAnitaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeVentaSupport;
+use App\Support\Ventas\ArcaCaeaInformeObservacionSupport;
 use App\Support\Ventas\ArcaCaeaSucursalesInformeSupport;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
@@ -809,6 +810,7 @@ class ArcaCaeaPresentacionService
         $omitidosHueco = 0;
         $ultimoError = '';
         $erroresLote = [];
+        $observacionesLote = [];
         $detenidoPorError = false;
 
         foreach ($lote as $item) {
@@ -825,6 +827,9 @@ class ArcaCaeaPresentacionService
             $informados += (int) ($resultadoItem['informados'] ?? 0);
             $conObs += (int) ($resultadoItem['con_obs'] ?? 0);
             $conError += (int) ($resultadoItem['errores'] ?? 0);
+            if (is_array($resultadoItem['observacion'] ?? null)) {
+                $observacionesLote[] = $resultadoItem['observacion'];
+            }
             if (($resultadoItem['error_fila'] ?? null) !== null) {
                 $erroresLote[] = $resultadoItem['error_fila'];
             }
@@ -843,6 +848,7 @@ class ArcaCaeaPresentacionService
         $detalle = [
             'informados' => $informados,
             'con_observaciones' => $conObs,
+            'observaciones' => $observacionesLote,
             'errores_lote' => $conError,
             'omitidos_ya_en_arca' => $omitidosArca,
             'omitidos_hueco_numeracion' => $omitidosHueco,
@@ -2055,10 +2061,20 @@ class ArcaCaeaPresentacionService
         $estado = $resArca === 'P' || $obs !== '' ? 'observacion' : 'ok';
         $this->marcarVentaInforme($venta, $estado, null, $obs !== '' ? $obs : null);
         $ultimosMemoria[$claveGrupo] = $numero;
+        $observacion = $this->guardarObservacion($registro, [
+            'fuente' => 'erp',
+            'venta_id' => (int) $venta->id,
+            'pto_vta' => $ptoVta,
+            'tipo_afip' => $cbteTipo,
+            'numero' => $numero,
+            'fecha_comprobante' => $venta->fecha,
+            'texto' => $obs,
+        ]);
 
         return [
             'informados' => 1,
             'con_obs' => $estado === 'observacion' ? 1 : 0,
+            'observacion' => $observacion,
         ];
     }
 
@@ -2186,10 +2202,51 @@ class ArcaCaeaPresentacionService
         $obs = trim((string) ($resultado['observaciones'] ?? ''));
         $estado = $resArca === 'P' || $obs !== '' ? 'observacion' : 'ok';
         $ultimosMemoria[$claveGrupo] = $numero;
+        $observacion = $this->guardarObservacion($registro, [
+            'fuente' => 'anita',
+            'pto_vta' => $ptoVta,
+            'tipo_afip' => $tipoAfip,
+            'tipo_anita' => $tipoAnita,
+            'letra' => $letra,
+            'numero' => $numero,
+            'fecha_comprobante' => $datos['fechacomprobante'] ?? null,
+            'texto' => $obs,
+        ]);
 
         return [
             'informados' => 1,
             'con_obs' => $estado === 'observacion' ? 1 : 0,
+            'observacion' => $observacion,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $datos
+     * @return array{etiqueta: string, texto: string}|null
+     */
+    private function guardarObservacion(ArcaCaea $registro, array $datos): ?array
+    {
+        $texto = trim((string) ($datos['texto'] ?? ''));
+        if ($texto === '') {
+            return null;
+        }
+
+        ArcaCaeaInformeObservacionSupport::registrar($registro, $datos);
+        $tipo = trim((string) ($datos['tipo_anita'] ?? ''));
+        $letra = trim((string) ($datos['letra'] ?? ''));
+        $prefijo = trim($tipo.' '.$letra);
+        if ($prefijo === '') {
+            $prefijo = 'T'.(int) ($datos['tipo_afip'] ?? 0);
+        }
+
+        return [
+            'etiqueta' => sprintf(
+                '%s %05d #%d',
+                $prefijo,
+                (int) ($datos['pto_vta'] ?? 0),
+                (int) ($datos['numero'] ?? 0),
+            ),
+            'texto' => $texto,
         ];
     }
 
