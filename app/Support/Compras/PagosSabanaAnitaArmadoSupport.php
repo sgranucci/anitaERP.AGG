@@ -166,6 +166,18 @@ final class PagosSabanaAnitaArmadoSupport
     }
 
     /**
+     * Mismos cortes que la sábana (efectivo, varios, comprobantes, …).
+     *
+     * @param  list<object>  $lineas
+     * @param  array<string, string>  $tesmae
+     * @return array<string, mixed>
+     */
+    public static function desgloseMedios(array $lineas, array $tesmae): array
+    {
+        return self::desglosar($lineas, $tesmae);
+    }
+
+    /**
      * @param  list<object>  $lineas
      * @param  array<string, string>  $tesmae
      * @return array<string, mixed>

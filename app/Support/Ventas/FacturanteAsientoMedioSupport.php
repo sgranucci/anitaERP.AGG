@@ -15,7 +15,7 @@ final class FacturanteAsientoMedioSupport
 {
     /**
      * Código mediopago Facturante → código cuentacaja ERP.
-     * Coincide con generaCuenta() / generaFactura() (Anita 00000608 → 608, etc.).
+     * Coincide con generaCuenta() / generaFactura() (Anita 00000608 o 608, etc.).
      *
      * @var array<string, string>
      */
@@ -61,7 +61,7 @@ final class FacturanteAsientoMedioSupport
             );
         }
 
-        $cuenta = self::buscarCuentacaja($codigo);
+        $cuenta = self::encontrarCuentacaja($codigo);
         if (! $cuenta) {
             throw new InvalidArgumentException(
                 'No existe la cuenta de caja '.$codigo.' para el medio Facturante '.$mediopago.'.'
@@ -108,24 +108,48 @@ final class FacturanteAsientoMedioSupport
         return self::lineasAsientoMedios($mediopago, $total);
     }
 
-    private static function buscarCuentacaja(string $codigo): ?Cuentacaja
+    /**
+     * El maestro de Ferli guarda el código Anita de 8 posiciones (00000608, 004781/5).
+     * El mapeo del medio usa la forma corta (608, 4781/5).
+     */
+    public static function encontrarCuentacaja(string $codigo): ?Cuentacaja
     {
-        $codigo = trim($codigo);
-        if ($codigo === '') {
+        $variantes = self::variantesCodigo($codigo);
+        if ($variantes === []) {
             return null;
         }
 
-        $cuenta = Cuentacaja::query()->where('codigo', $codigo)->first();
-        if ($cuenta) {
-            return $cuenta;
+        $cuentas = Cuentacaja::query()->whereIn('codigo', $variantes)->get();
+        if ($cuentas->isEmpty()) {
+            return null;
         }
 
-        // Anita a veces manda 00000608; en ERP está 608.
+        $buscado = trim($codigo);
+        $exacta = $cuentas->first(
+            static fn (Cuentacaja $cuenta) => (string) $cuenta->codigo === $buscado
+        );
+
+        return $exacta ?? $cuentas->first();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function variantesCodigo(string $codigo): array
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return [];
+        }
+
         $sinCeros = ltrim($codigo, '0');
-        if ($sinCeros !== '' && $sinCeros !== $codigo) {
-            return Cuentacaja::query()->where('codigo', $sinCeros)->first();
-        }
+        $sinCeros = $sinCeros === '' ? '0' : $sinCeros;
 
-        return null;
+        return array_values(array_unique(array_filter([
+            $codigo,
+            $sinCeros,
+            str_pad($codigo, 8, '0', STR_PAD_LEFT),
+            str_pad($sinCeros, 8, '0', STR_PAD_LEFT),
+        ], static fn ($valor) => $valor !== '')));
     }
 }

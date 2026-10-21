@@ -6,6 +6,7 @@ namespace App\Services\Ventas\FacturacionLocal;
 
 use App\Models\Contable\Asiento_Movimiento;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\FacturanteAsientoMedioSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -215,7 +216,7 @@ final class FacturacionLocalReclasificarDeudoresAMedioService
         $porId = [];
 
         foreach (self::PV_A_CUENTACAJA as $prefijo => $codigoCaja) {
-            $cuentaCaja = DB::table('cuentacaja')->where('codigo', $codigoCaja)->first();
+            $cuentaCaja = FacturanteAsientoMedioSupport::encontrarCuentacaja($codigoCaja);
             if (! $cuentaCaja || (int) ($cuentaCaja->cuentacontable_id ?? 0) <= 0) {
                 throw new RuntimeException('Falta cuentacaja '.$codigoCaja.' o su cuenta contable.');
             }

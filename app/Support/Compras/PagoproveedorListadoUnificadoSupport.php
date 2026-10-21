@@ -190,7 +190,7 @@ final class PagoproveedorListadoUnificadoSupport
                 'pp.empresa_id',
                 'empresa.nombre as nombreempresa',
                 'pp.proveedor_id',
-                'proveedor.nombre as nombreproveedor',
+                DB::raw("CASE WHEN pp.tipocomprobante = 'OPV' AND proveedor.codigo IN ('0', '000000') THEN COALESCE(NULLIF(TRIM(pp.detalle), ''), proveedor.nombre) ELSE proveedor.nombre END as nombreproveedor"),
                 'pp.monto',
                 'pp.moneda_id',
                 'moneda.abreviatura as moneda_abrev',
@@ -438,6 +438,7 @@ final class PagoproveedorListadoUnificadoSupport
         );
         // AOP compensatorio: cheques y cuentacaja quedan en la OPP original.
         $cuentasPp = $this->completarCuentasDesdeOrigenAop($filas, $cuentasPp, $ppIds);
+        $cuentasPp = $this->completarCuentasDesdeOpvImportada($cuentasPp, $ppIds);
 
         $cuentasIe = $this->fusionarCuentasCajaYCheques(
             $this->mapCuentasCajaIeOpp($ieIds),
@@ -521,6 +522,43 @@ final class PagoproveedorListadoUnificadoSupport
                 continue;
             }
             $cuentasPp[(int) $aopId] = $textoOrigen;
+        }
+
+        return $cuentasPp;
+    }
+
+    /**
+     * OPV importadas no tienen movimiento de caja. La cuenta sale del asiento Anita guardado en el documento.
+     *
+     * @param  array<int, string>  $cuentasPp
+     * @param  list<int>  $ppIds
+     * @return array<int, string>
+     */
+    private function completarCuentasDesdeOpvImportada(array $cuentasPp, array $ppIds): array
+    {
+        $vacios = [];
+        foreach ($ppIds as $id) {
+            if (trim((string) ($cuentasPp[(int) $id] ?? '')) === '') {
+                $vacios[] = (int) $id;
+            }
+        }
+        if ($vacios === []) {
+            return $cuentasPp;
+        }
+
+        foreach (array_chunk($vacios, 500) as $lote) {
+            $filas = DB::table('pagoproveedor')
+                ->whereIn('id', $lote)
+                ->where('tipocomprobante', 'OPV')
+                ->get(['id', 'anita_impresion_json']);
+            foreach ($filas as $fila) {
+                $raw = $fila->anita_impresion_json;
+                $json = is_array($raw) ? $raw : json_decode((string) $raw, true);
+                $cuenta = trim((string) (is_array($json) ? ($json['cuenta_contable'] ?? '') : ''));
+                if ($cuenta !== '') {
+                    $cuentasPp[(int) $fila->id] = $cuenta;
+                }
+            }
         }
 
         return $cuentasPp;

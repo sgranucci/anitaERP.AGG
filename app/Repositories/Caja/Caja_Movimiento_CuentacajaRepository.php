@@ -88,6 +88,8 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 			$cotizaciones = NumeroDecimalLocalSupport::listaAFloat($data['cotizaciones'] ?? [], 1.0);
 			$observaciones = $data['observaciones'] ?? [];
 			$fecha = $data['fecha'];
+			// Anulación: el importe ya viene con el signo opuesto al original.
+			$montosFirmados = ! empty($data['montos_firmados']);
 			
 			if ($funcion == 'update')
 			{
@@ -105,13 +107,11 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 				{
 					if ($i < count($cuentacaja_ids))
 					{
-						$monto = 0;
-						if (($montos[$i] ?? 0) != 0) {
-							$monto = IngresoEgresoCajaMontoSignoSupport::aBaseDatos(
-								(float) $montos[$i],
-								$tipotransaccion_caja
-							);
-						}
+						$monto = $this->montoAGrabar(
+							(float) ($montos[$i] ?? 0),
+							$tipotransaccion_caja,
+							$montosFirmados
+						);
 
 						$caja_movimiento_cuentacaja = $this->model->findOrFail($_id[$i])->update([
 									"caja_movimiento_id" => $id,
@@ -135,13 +135,11 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 				{
 					if (!isset($observaciones[$i_movimiento]))
 						$observaciones[$i_movimiento] = ' ';
-					$monto = 0;
-					if (($montos[$i_movimiento] ?? 0) != 0) {
-						$monto = IngresoEgresoCajaMontoSignoSupport::aBaseDatos(
-							(float) $montos[$i_movimiento],
-							$tipotransaccion_caja
-						);
-					}
+					$monto = $this->montoAGrabar(
+						(float) ($montos[$i_movimiento] ?? 0),
+						$tipotransaccion_caja,
+						$montosFirmados
+					);
 					$caja_movimiento_cuentacaja = $this->model->create([
 						"caja_movimiento_id" => $id,
 						"fecha" => $fecha,
@@ -160,5 +158,21 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 		}
 
 		return $caja_movimiento_cuentacaja;
+	}
+
+	/**
+	 * El alta normal firma el importe según el tipo. La anulación ya trae el
+	 * opuesto del monto grabado: volver a firmarlo lo deja del mismo lado.
+	 */
+	private function montoAGrabar(float $monto, $tipotransaccionCaja, bool $montosFirmados): float
+	{
+		if (abs($monto) < 0.0000001) {
+			return 0.0;
+		}
+		if ($montosFirmados) {
+			return round($monto, 2);
+		}
+
+		return IngresoEgresoCajaMontoSignoSupport::aBaseDatos($monto, $tipotransaccionCaja);
 	}
 }

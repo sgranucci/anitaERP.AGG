@@ -71,6 +71,7 @@ final class PagosSabanaColumnasSupport
             ['clave' => 'ch_terc_ent', 'etiqueta' => 'Ch.Terc.Ent.', 'tipo' => self::TIPO_TEXTO, 'fijo' => false],
             ['clave' => 'doc_prop_emit', 'etiqueta' => 'D.Prop.Emit.', 'tipo' => self::TIPO_TEXTO, 'fijo' => false],
             ['clave' => 'doc_terc_entr', 'etiqueta' => 'D.Terc.Entr.', 'tipo' => self::TIPO_TEXTO, 'fijo' => false],
+            ['clave' => 'cuenta_contable', 'etiqueta' => 'Cuenta contable', 'tipo' => self::TIPO_TEXTO, 'fijo' => false],
         ];
     }
 

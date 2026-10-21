@@ -33,17 +33,29 @@ final class PagosSabanaAnitaBridgeReader
      * @param  list<string>  $errores
      * @return list<object>
      */
-    public function listarPagos(array $empresasAnita, int $fechaDesdeYmd, int $fechaHastaYmd, array &$errores): array
-    {
+    /**
+     * @param  list<string>  $tipos
+     */
+    public function listarPagos(
+        array $empresasAnita,
+        int $fechaDesdeYmd,
+        int $fechaHastaYmd,
+        array &$errores,
+        array $tipos = ['OPP', 'OPA'],
+    ): array {
         // Crown mono: pag_empresa=0 (no filtrar con > 0).
         $empresasAnita = array_values(array_unique(array_map('intval', $empresasAnita)));
         if ($empresasAnita === []) {
             return [];
         }
+        $tiposSql = self::tiposSql($tipos);
+        if ($tiposSql === '') {
+            return [];
+        }
 
         $where = ' WHERE pag_empresa IN ('.implode(',', $empresasAnita).')'
             .' AND pag_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
-            ." AND pag_tipo IN ('OPP','OPA')";
+            .' AND pag_tipo IN ('.$tiposSql.')';
 
         return $this->listar('che_ban', 'pago', self::PAGO_CAMPOS, $where, $errores, 'pagos-sabana-pago');
     }
@@ -95,8 +107,16 @@ final class PagosSabanaAnitaBridgeReader
      * @param  list<string>  $errores
      * @return list<object>
      */
-    public function listarAuxpag(array $empresasAnita, int $fechaDesdeYmd, int $fechaHastaYmd, array &$errores): array
-    {
+    /**
+     * @param  list<string>  $tipos
+     */
+    public function listarAuxpag(
+        array $empresasAnita,
+        int $fechaDesdeYmd,
+        int $fechaHastaYmd,
+        array &$errores,
+        array $tipos = ['OPP', 'OPA'],
+    ): array {
         $tieneEmpresa = PagoproveedorAnitaImportEmpresaSupport::auxpagTieneEmpresa();
         $empresasAnita = array_values(array_unique(array_map('intval', $empresasAnita)));
         if ($tieneEmpresa && $empresasAnita === []) {
@@ -110,12 +130,17 @@ final class PagosSabanaAnitaBridgeReader
                 .'axp_monto_ap,axp_cod_mon_co,axp_banco,axp_letra_comp,axp_sucursal,axp_sucursal_cob,'
                 .'axp_nro_interno,axp_fecha_co';
 
+        $tiposSql = self::tiposSql($tipos);
+        if ($tiposSql === '') {
+            return [];
+        }
+
         $where = $tieneEmpresa
             ? ' WHERE axp_empresa IN ('.implode(',', $empresasAnita).')'
                 .' AND axp_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
-                ." AND axp_tipo IN ('OPP','OPA')"
+                .' AND axp_tipo IN ('.$tiposSql.')'
             : ' WHERE axp_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
-                ." AND axp_tipo IN ('OPP','OPA')";
+                .' AND axp_tipo IN ('.$tiposSql.')';
 
         $filas = $this->listar('che_ban', 'auxpag', $campos, $where, $errores, 'pagos-sabana-auxpag');
         if ($tieneEmpresa) {
@@ -218,6 +243,48 @@ final class PagosSabanaAnitaBridgeReader
         }
 
         return $mapa;
+    }
+
+    /**
+     * Piernas de subdiario de un tipo (OPV, OPP, …) en el rango. Solo lectura.
+     *
+     * @param  list<string>  $errores
+     * @return list<object>
+     */
+    public function listarSubdiarioTipo(string $tipo, int $fechaDesdeYmd, int $fechaHastaYmd, array &$errores): array
+    {
+        $tipo = strtoupper(trim($tipo));
+        if (! in_array($tipo, ['OPP', 'OPA', 'OPV', 'AOP'], true) || $fechaDesdeYmd <= 0 || $fechaHastaYmd <= 0) {
+            return [];
+        }
+
+        $where = " WHERE subd_tipo = '".$tipo."'"
+            .' AND subd_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd;
+
+        return $this->listar(
+            'contab',
+            'subdiario',
+            'subd_fecha,subd_tipo,subd_nro,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_importe',
+            $where,
+            $errores,
+            'subdiario-'.$tipo,
+        );
+    }
+
+    /**
+     * @param  list<string>  $tipos
+     */
+    private static function tiposSql(array $tipos): string
+    {
+        $ok = [];
+        foreach ($tipos as $tipo) {
+            $t = strtoupper(trim((string) $tipo));
+            if (in_array($t, ['OPP', 'OPA', 'OPV', 'AOP'], true)) {
+                $ok[$t] = "'".$t."'";
+            }
+        }
+
+        return implode(',', $ok);
     }
 
     /**

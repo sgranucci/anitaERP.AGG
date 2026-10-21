@@ -56,31 +56,98 @@ final class CobranzaDescuentoConfigSupport
         $mapaLetra = config('cobranza.nc_tipotransaccion_por_letra', []);
         $letra = strtoupper(trim((string) $letraFacturaOrigen));
         if ($letra !== '' && isset($mapaLetra[$letra])) {
-            return (int) $mapaLetra[$letra];
+            $porLetra = self::tipoNotaCreditoCobranza((int) $mapaLetra[$letra]);
+            if ($porLetra) {
+                return (int) $porLetra->id;
+            }
+
+            throw new InvalidArgumentException(self::mensajeTipoNcInvalido((int) $mapaLetra[$letra], $letra));
         }
 
         $id = (int) config('cobranza.nc_tipotransaccion_id', 0);
+        $tipo = self::tipoNotaCreditoCobranza($id);
+        if ($tipo) {
+            return (int) $tipo->id;
+        }
+
+        $ncp = self::tipoNcpPorAbreviatura();
+        if ($ncp) {
+            return (int) $ncp->id;
+        }
+
+        throw new InvalidArgumentException(self::mensajeTipoNcInvalido($id, null));
+    }
+
+    /**
+     * Nota de crédito usable en el descuento: activa, operación devolución y signo Resta.
+     * El default 4 de AGG en Ferli es CONOT (consumo de OT) y además queda oculto
+     * para Eloquent porque deleted_at es 0000-00-00.
+     */
+    private static function tipoNotaCreditoCobranza(int $id): ?Tipotransaccion
+    {
         if ($id <= 0) {
-            throw new InvalidArgumentException(
-                'Configure COBRANZA_NC_TIPOTRANSACCION_ID o COBRANZA_NC_TIPOTRANSACCION_POR_LETRA en .env.'
-            );
+            return null;
         }
 
         $tipo = Tipotransaccion::query()->find($id);
-        if (! $tipo || $tipo->signo !== 'R') {
-            throw new InvalidArgumentException(
-                'El tipo de transacción id '.$id.' no es una nota de crédito válida (signo Resta).'
-            );
+        if (! $tipo || ! $tipo->esNotaCredito() || $tipo->signo !== 'R') {
+            return null;
+        }
+        if (($tipo->estado ?? 'A') === 'S') {
+            return null;
         }
 
-        return $id;
+        return $tipo;
+    }
+
+    private static function tipoNcpPorAbreviatura(): ?Tipotransaccion
+    {
+        $tipo = Tipotransaccion::query()
+            ->where('abreviatura', 'NCP')
+            ->where('operacion', 'C')
+            ->where('estado', 'A')
+            ->orderBy('id')
+            ->first();
+
+        if (! $tipo || $tipo->signo !== 'R') {
+            return null;
+        }
+
+        return $tipo;
+    }
+
+    private static function mensajeTipoNcInvalido(int $id, ?string $letra): string
+    {
+        $prefijo = $letra !== null && $letra !== ''
+            ? 'La nota de crédito letra '.$letra.' (tipo id '.$id.') no es válida.'
+            : 'No hay una nota de crédito válida para el descuento de cobranza.';
+
+        if ($id <= 0) {
+            return $prefijo.' Configure COBRANZA_NC_TIPOTRANSACCION_ID con el tipo NCP.';
+        }
+
+        $crudo = Tipotransaccion::withTrashed()->find($id);
+        if (! $crudo) {
+            return $prefijo.' No existe el tipo de transacción id '.$id.'.';
+        }
+
+        $baja = $crudo->trashed() ? ' Está dado de baja.' : '';
+
+        return $prefijo.' El id '.$id.' es '.$crudo->abreviatura.' ('.$crudo->nombre
+            .'), operación '.$crudo->operacion.', signo '.$crudo->signo.'.'.$baja
+            .' Corresponde el tipo NCP (crédito por descuento).';
     }
 
     public static function articuloIdParaDescuento(int $empresaId): int
     {
         $id = (int) config('cobranza.nc_articulo_id', 0);
         if ($id > 0) {
-            $existe = Articulo::query()->whereKey($id)->where('empresa_id', $empresaId)->exists();
+            $existe = Articulo::query()
+                ->whereKey($id)
+                ->where(function ($q) use ($empresaId) {
+                    $q->where('empresa_id', $empresaId)->orWhereNull('empresa_id');
+                })
+                ->exists();
             if ($existe) {
                 return $id;
             }
@@ -89,7 +156,9 @@ final class CobranzaDescuentoConfigSupport
         $sku = trim((string) config('cobranza.nc_articulo_sku', ''));
         if ($sku !== '') {
             $art = Articulo::query()
-                ->where('empresa_id', $empresaId)
+                ->where(function ($q) use ($empresaId) {
+                    $q->where('empresa_id', $empresaId)->orWhereNull('empresa_id');
+                })
                 ->where('sku', $sku)
                 ->value('id');
             if ($art) {

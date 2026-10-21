@@ -18,6 +18,7 @@ use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
 use App\Support\Caja\ChequeOperacionActivaSupport;
 use App\Support\Caja\ChequeTerceroEndosoAnitaSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
+use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Contable\AsientoReversoSupport;
@@ -378,11 +379,13 @@ class PagoproveedorAnularRevertirService
             'montos' => [],
             'moneda_ids' => [],
             'cotizaciones' => [],
+            // El repositorio de caja vuelve a firmar I/E. Estas líneas ya están invertidas.
+            'montos_firmados' => true,
         ];
         foreach ($cajaOriginal->caja_movimiento_cuentacajas as $linea) {
             $monto = (float) $linea->monto;
             $lineas['cuentacaja_ids'][] = (int) $linea->cuentacaja_id;
-            $lineas['montos'][] = $monto >= 0 ? ($monto * -1.0) : abs($monto);
+            $lineas['montos'][] = IngresoEgresoCajaMontoSignoSupport::montoAnulacion($monto);
             $lineas['moneda_ids'][] = (int) ($linea->moneda_id ?: 1);
             $lineas['cotizaciones'][] = (float) ($linea->cotizacion ?: 1);
             $lineas['observaciones'][] = $leyenda;

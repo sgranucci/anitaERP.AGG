@@ -22,11 +22,37 @@ final class CambioDevolucionMarketplacePuenteSupport
     public static function resolverCuentacajaId(): ?int
     {
         $codigo = self::codigoCuentacaja();
-        $id = Cuentacaja::query()
-            ->where('codigo', $codigo)
-            ->value('id');
+        $variantes = self::variantesCodigo($codigo);
+        $cuentas = Cuentacaja::query()
+            ->whereIn('codigo', $variantes)
+            ->get(['id', 'codigo']);
 
-        return $id !== null ? (int) $id : null;
+        if ($cuentas->isEmpty()) {
+            return null;
+        }
+
+        // Anita guarda tesm_cuenta en 8 caracteres (01131009). El parámetro usa 1131009.
+        $exacta = $cuentas->first(fn (Cuentacaja $cuenta) => (string) $cuenta->codigo === $codigo);
+
+        return (int) ($exacta ?? $cuentas->first())->id;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function variantesCodigo(string $codigo): array
+    {
+        $codigo = trim($codigo);
+        $sinCeros = ltrim($codigo, '0');
+        $sinCeros = $sinCeros === '' ? '0' : $sinCeros;
+        $padded = preg_match('/^\d+$/', $sinCeros) === 1
+            ? str_pad($sinCeros, 8, '0', STR_PAD_LEFT)
+            : $codigo;
+
+        return array_values(array_unique(array_filter(
+            [$codigo, $sinCeros, $padded],
+            static fn ($valor) => $valor !== ''
+        )));
     }
 
     public static function resolverCuentacaja(): ?Cuentacaja

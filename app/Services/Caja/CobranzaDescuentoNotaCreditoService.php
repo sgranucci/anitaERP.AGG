@@ -137,6 +137,10 @@ final class CobranzaDescuentoNotaCreditoService
             'impuesto_ids' => [$impuestoId],
             'incluyeimpuestos' => [$incluyeImpuesto],
             NotaCreditoPercepcionIibbSupport::FLAG_NCP => true,
+            // NCP de descuento no devuelve mercadería. En Ferli el tipo tiene operación de stock Entrada.
+            'opciones_emision' => [
+                'omitir_movimiento_stock' => true,
+            ],
         ];
 
         if (trim((string) ($ventaOrigen->nombre ?? '')) !== '' || trim((string) ($ventaOrigen->numerodocumento ?? '')) !== '') {

@@ -16,6 +16,7 @@ use App\Support\Caja\ChequeOperacionActivaSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport;
 use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
+use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoVisibilidadSupport;
 use App\Support\Contable\AsientoReversoSupport;
@@ -171,11 +172,13 @@ class IngresoEgresoAnularRevertirService
                 'montos' => [],
                 'moneda_ids' => [],
                 'cotizaciones' => [],
+                // El repositorio de caja vuelve a firmar I/E. Estas líneas ya están invertidas.
+                'montos_firmados' => true,
             ];
             foreach ($movimiento->caja_movimiento_cuentacajas as $linea) {
                 $monto = (float) $linea->monto;
                 $lineasCaja['cuentacaja_ids'][] = (int) $linea->cuentacaja_id;
-                $lineasCaja['montos'][] = $monto >= 0 ? ($monto * -1.0) : abs($monto);
+                $lineasCaja['montos'][] = IngresoEgresoCajaMontoSignoSupport::montoAnulacion($monto);
                 $lineasCaja['moneda_ids'][] = (int) ($linea->moneda_id ?: 1);
                 $lineasCaja['cotizaciones'][] = (float) ($linea->cotizacion ?: 1);
                 $lineasCaja['observaciones'][] = $leyenda;

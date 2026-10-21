@@ -836,7 +836,7 @@ class PagosSabanaReporteService
         $query = DB::table('pagoproveedor as pp')
             ->leftJoin('empresa', 'empresa.id', '=', 'pp.empresa_id')
             ->leftJoin('proveedor', 'proveedor.id', '=', 'pp.proveedor_id')
-            ->whereIn('pp.tipocomprobante', ['OPP', 'OPA'])
+            ->whereIn('pp.tipocomprobante', ['OPP', 'OPA', 'OPV'])
             ->whereIn('pp.estado', array_merge(self::ESTADOS_PP, ['REVERTIDA']))
             ->whereBetween('pp.fecha', [$filtros['fecha_desde'], $filtros['fecha_hasta']])
             ->select([
@@ -850,7 +850,7 @@ class PagosSabanaReporteService
                 'empresa.nombre as empresa_nombre',
                 'pp.proveedor_id',
                 'proveedor.codigo as proveedor_codigo',
-                'proveedor.nombre as proveedor_nombre',
+                DB::raw("CASE WHEN pp.tipocomprobante = 'OPV' AND proveedor.codigo IN ('0', '000000') THEN COALESCE(NULLIF(TRIM(pp.detalle), ''), proveedor.nombre) ELSE proveedor.nombre END as proveedor_nombre"),
                 'pp.monto',
                 'pp.detalle',
                 'pp.proveedor_formapago_id',
@@ -863,6 +863,7 @@ class PagosSabanaReporteService
                     LIMIT 1) as solicitudpago_id'),
                 'pp.estado',
                 'pp.pagoproveedor_revertido_por_id',
+                'pp.anita_impresion_json',
             ]);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'pp.empresa_id');
@@ -919,6 +920,7 @@ class PagosSabanaReporteService
                 'cm.solicitudpago_id',
                 DB::raw('NULL as estado'),
                 DB::raw('NULL as pagoproveedor_revertido_por_id'),
+                DB::raw('NULL as anita_impresion_json'),
             ]);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'cm.empresa_id');
@@ -1314,6 +1316,36 @@ class PagosSabanaReporteService
             + $desglose['retencion_iva'] + $desglose['retencion_gan'] + $desglose['retencion_ibr']
             + $desglose['retencion_suss'];
 
+        $cuentaContable = '';
+        if ($totalMedios < 0.005) {
+            $snap = self::snapshotImpresion($cab->anita_impresion_json ?? null);
+            $desgloseSnap = is_array($snap['desglose'] ?? null) ? $snap['desglose'] : [];
+            if ($desgloseSnap !== []) {
+                foreach ([
+                    'efectivo', 'transferencia', 'ch_propios', 'ch_terceros', 'doc_propios', 'doc_terceros',
+                    'creditos', 'adelantos', 'varios', 'intercompany',
+                    'retencion_iva', 'retencion_gan', 'retencion_ibr', 'retencion_suss',
+                ] as $claveMedio) {
+                    $desglose[$claveMedio] = round((float) ($desgloseSnap[$claveMedio] ?? 0), 2);
+                }
+                $desglose['ch_prop_emi'] = (string) ($desgloseSnap['ch_prop_emi'] ?? '');
+                $desglose['fecha_cheque'] = (string) ($desgloseSnap['fecha_cheque'] ?? '');
+                $desglose['ch_terc_ent'] = (string) ($desgloseSnap['ch_terc_ent'] ?? '');
+                $desglose['banco'] = (string) ($desgloseSnap['banco'] ?? '');
+                if (trim((string) ($desgloseSnap['comprobantes'] ?? '')) !== '' && ($apps['comprobantes'] ?? []) === []) {
+                    $apps['comprobantes'] = [[
+                        'etiqueta' => (string) $desgloseSnap['comprobantes'],
+                    ]];
+                }
+                $totalMedios = $desglose['efectivo'] + $desglose['transferencia'] + $desglose['ch_propios']
+                    + $desglose['ch_terceros'] + $desglose['doc_propios'] + $desglose['doc_terceros']
+                    + $desglose['varios'] + $desglose['intercompany'] + $desglose['creditos'] + $desglose['adelantos']
+                    + $desglose['retencion_iva'] + $desglose['retencion_gan'] + $desglose['retencion_ibr']
+                    + $desglose['retencion_suss'];
+            }
+            $cuentaContable = trim((string) ($snap['cuenta_contable'] ?? ''));
+        }
+
         $totalCabecera = round((float) ($cab->monto ?? 0), 2);
         $totalPago = $totalMedios > 0.005 ? round($totalMedios, 2) : $totalCabecera;
 
@@ -1379,6 +1411,7 @@ class PagosSabanaReporteService
             'ordenes_compra' => $this->unirEtiquetas(array_column($ocs, 'numero')),
             'ordenes_compra_links' => $ocs,
             'detalle' => (string) ($cab->detalle ?? ''),
+            'cuenta_contable' => $cuentaContable,
             'anulado' => false,
             'anulado_ref' => '',
             'empresa_id' => (int) ($cab->empresa_id ?? 0),
@@ -1689,5 +1722,21 @@ class PagosSabanaReporteService
     private function totalesVacios(): array
     {
         return ['cantidad' => 0, 'anulados' => 0, 'importes' => [], 'total_pago' => 0.0];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function snapshotImpresion(mixed $raw): array
+    {
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (! is_string($raw) || trim($raw) === '') {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 }

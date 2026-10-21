@@ -48,6 +48,12 @@ class IngresoEgresoCajaMontoSignoSupportTest extends TestCase
         $this->assertSame(-50.0, IngresoEgresoCajaMontoSignoSupport::aFormulario(-50.0, $tra));
     }
 
+    public function test_anulacion_invierte_el_monto_grabado_sin_refirmar_el_tipo(): void
+    {
+        $this->assertSame(800000.0, IngresoEgresoCajaMontoSignoSupport::montoAnulacion(-800000.0));
+        $this->assertSame(-9000000.0, IngresoEgresoCajaMontoSignoSupport::montoAnulacion(9000000.0));
+    }
+
     public function test_formulario_ie_siempre_absoluto(): void
     {
         $egr = $this->tipo('EGR', 'E', 'E');

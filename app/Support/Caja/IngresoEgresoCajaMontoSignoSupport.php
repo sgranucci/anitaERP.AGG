@@ -15,6 +15,10 @@ use App\Models\Caja\Tipotransaccion_Caja;
  * el signo dos veces e invertir Debe/Haber en el asiento.
  *
  * TRA/canje: el usuario ya carga + entrada / − salida; no se altera el signo.
+ *
+ * Anulación: el monto ya es el opuesto del grabado. No pasar por aBaseDatos:
+ * ese método vuelve a firmar según el tipo (egreso siempre negativo, ingreso
+ * siempre positivo) y deja la anulación del mismo lado que el original.
  */
 final class IngresoEgresoCajaMontoSignoSupport
 {
@@ -29,6 +33,15 @@ final class IngresoEgresoCajaMontoSignoSupport
         }
 
         return 1;
+    }
+
+    /**
+     * Opuesto del monto ya grabado. Es el importe de la línea de anulación:
+     * se persiste tal cual, sin volver a aplicar el signo del tipo.
+     */
+    public static function montoAnulacion(float $montoPersistido): float
+    {
+        return round($montoPersistido * -1, 2);
     }
 
     /**
