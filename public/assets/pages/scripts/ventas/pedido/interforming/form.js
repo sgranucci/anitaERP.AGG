@@ -218,6 +218,21 @@
         });
     }
 
+    function fechaEntregaCabecera() {
+        return String($('#fechaentrega').val() || '').trim();
+    }
+
+    function aplicarFechaEntregaPorDefecto($fila) {
+        var fecha = fechaEntregaCabecera();
+        if (!fecha || !$fila || !$fila.length) {
+            return;
+        }
+        var $input = $fila.find('input[type="date"][name*="[fechaentrega]"]');
+        if ($input.length && !String($input.val() || '').trim()) {
+            $input.val(fecha);
+        }
+    }
+
     function agregarFila() {
         var tpl = $('#tpl-fila-item-pedido-if').html();
         if (!tpl) {
@@ -227,6 +242,7 @@
         tpl = tpl.replace(/__IDX__/g, String(idx)).replace(/__NUM__/g, String(idx + 1));
         $('#tbody-items-pedido-if').append(tpl);
         renumerarItems();
+        aplicarFechaEntregaPorDefecto($('#tbody-items-pedido-if tr.fila-item-pedido-if').last());
         if (typeof window.activa_eventos_consultaarticulo === 'function') {
             window.activa_eventos_consultaarticulo();
         }
@@ -766,6 +782,12 @@
 
         $('#btn-agregar-item-pedido-if').on('click', function () {
             agregarFila();
+        });
+
+        $('#fechaentrega').on('change', function () {
+            $('#tbody-items-pedido-if tr.fila-item-pedido-if').each(function () {
+                aplicarFechaEntregaPorDefecto($(this));
+            });
         });
 
         $(document).on('click', '.btn-quitar-item-pedido-if', function () {

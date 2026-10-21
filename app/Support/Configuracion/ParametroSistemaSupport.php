@@ -41,6 +41,9 @@ final class ParametroSistemaSupport
 
     public const CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID = 'ncp_pronto_pago_cuentacontable_id';
 
+    /** Pedido de ventas: imprimir IVA y percepciones de IIBB además de exento y descuentos. */
+    public const CLAVE_PEDIDO_IMPRIME_IVA_IIBB = 'pedido_imprime_iva_iibb';
+
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
     /**
@@ -121,6 +124,16 @@ final class ParametroSistemaSupport
                 'orden' => 90,
             ],
         ];
+
+        if (EntornoEmpresaSupport::esInterforming()) {
+            $defs[self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB] = [
+                'grupo' => 'Ventas',
+                'etiqueta' => 'Pedido: imprimir IVA y percepciones de IIBB',
+                'ayuda' => 'Apagado: el pedido muestra exento, gravado y descuentos. Encendido: suma el IVA y las percepciones de ingresos brutos, como la opción de Anita.',
+                'tipo' => 'boolean',
+                'orden' => 45,
+            ];
+        }
 
         if (EntornoEmpresaSupport::esElBierzo()) {
             $defs[self::CLAVE_OC_SOLICITANTE_EDITABLE] = [
@@ -284,6 +297,11 @@ final class ParametroSistemaSupport
      * Día de escalamiento de factura portal: "ultimo" | "1".."31".
      * Prioridad: Configuración general → config/.env.
      */
+    public static function pedidoImprimeIvaIibb(): bool
+    {
+        return self::boolean(self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB, false);
+    }
+
     public static function suscripcionComprobanteDiaEscalamiento(): string
     {
         return self::texto(
@@ -433,6 +451,7 @@ final class ParametroSistemaSupport
             self::CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID => '',
             self::CLAVE_NDR_CHEQUE_PUNTOVENTA_ID => (string) self::ndrChequePuntoventaIdFallback(),
             self::CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID => '',
+            self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB => '0',
             default => '0',
         };
     }

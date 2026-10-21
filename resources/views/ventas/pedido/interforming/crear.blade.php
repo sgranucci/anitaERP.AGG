@@ -11,7 +11,7 @@ Nuevo pedido Interforming
 <script src="{{ asset('assets/pages/scripts/ventas/transporte/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/form.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/interforming/form.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')

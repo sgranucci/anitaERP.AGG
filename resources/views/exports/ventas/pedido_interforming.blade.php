@@ -158,9 +158,10 @@
     <tr>
         <td>
             @if (! empty($pdf['logoUri']))
-                <img class="logo-empresa" src="{{ $pdf['logoUri'] }}" alt="">
+                <img class="logo-empresa" src="{{ $pdf['logoUri'] }}" alt="{{ $pdf['empresaNombre'] }}">
+            @else
+                <div class="marca">{{ $pdf['empresaNombre'] }}</div>
             @endif
-            <div class="marca">{{ $pdf['empresaNombre'] }}</div>
             @if ($pdf['empresaCuit'] !== '')
                 <div class="cuit">CUIT {{ $pdf['empresaCuit'] }}</div>
             @endif
@@ -296,10 +297,6 @@
 @endif
 
 <table class="pdf-totales">
-    <tr>
-        <td class="etiq">Total del pedido sin dto</td>
-        <td class="num">{{ $simbolo }} {{ $fmt($pdf['totalSinDescuento']) }}</td>
-    </tr>
     @foreach ($pdf['conceptosTotales'] as $concepto)
         @php
             $nombreConcepto = (string) ($concepto['concepto'] ?? '');
@@ -309,7 +306,7 @@
         @if (! $esSubtotal)
             @if ($esTotal)
                 <tr class="final">
-                    <td class="etiq">Total final</td>
+                    <td class="etiq">Total del pedido</td>
                     <td class="num">{{ $simbolo }} {{ $fmt($concepto['importe'] ?? 0) }}</td>
                 </tr>
             @else
@@ -322,7 +319,7 @@
     @endforeach
     @if (count($pdf['conceptosTotales']) === 0)
         <tr class="final">
-            <td class="etiq">Total final</td>
+            <td class="etiq">Total del pedido</td>
             <td class="num">{{ $simbolo }} {{ $fmt($pdf['totalSinDescuento']) }}</td>
         </tr>
     @endif

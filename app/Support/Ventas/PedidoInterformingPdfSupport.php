@@ -8,6 +8,7 @@ use App\Models\Ventas\PedidoArticuloInterforming;
 use App\Models\Ventas\PedidoInterforming;
 use App\Services\Configuracion\ImpuestoService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use Carbon\Carbon;
 
 /**
@@ -283,6 +284,10 @@ final class PedidoInterformingPdfSupport
             } catch (\Throwable) {
                 $conceptosTotales = self::conceptosDesdeImpuestosNacionales($impuestoService, $tblImpuesto);
             }
+            $conceptosTotales = self::conceptosParaImpresionPedido(
+                $conceptosTotales,
+                ParametroSistemaSupport::pedidoImprimeIvaIibb(),
+            );
         }
 
         return [
@@ -310,6 +315,56 @@ final class PedidoInterformingPdfSupport
             'conceptosTotales' => $conceptosTotales,
             'totalSinDescuento' => round($totalSinDto, 2),
         ];
+    }
+
+    /**
+     * Anita imprime el pedido con exento y descuentos. IVA y percepciones de IIBB
+     * salen solo si Configuración general lo tiene encendido. La percepción de IVA
+     * no va en el pedido.
+     *
+     * @param  list<array<string, mixed>>  $conceptos
+     * @return list<array<string, mixed>>
+     */
+    private static function conceptosParaImpresionPedido(array $conceptos, bool $conIvaIibb): array
+    {
+        $visibles = [];
+        $total = 0.0;
+        foreach ($conceptos as $concepto) {
+            $nombre = trim((string) ($concepto['concepto'] ?? ''));
+            if ($nombre === '' || strcasecmp($nombre, 'Subtotal') === 0 || strcasecmp($nombre, 'Total') === 0) {
+                continue;
+            }
+            if (! self::conceptoVisibleEnPedido($nombre, $conIvaIibb)) {
+                continue;
+            }
+            $visibles[] = $concepto;
+            if (! str_starts_with($nombre, 'Descuento')) {
+                $total += (float) ($concepto['importe'] ?? 0);
+            }
+        }
+
+        $visibles[] = [
+            'concepto' => 'Total',
+            'importe' => round($total, 2),
+            'tasa' => 0,
+        ];
+
+        return $visibles;
+    }
+
+    private static function conceptoVisibleEnPedido(string $nombre, bool $conIvaIibb): bool
+    {
+        if (str_starts_with($nombre, 'Percepcion IVA') || str_starts_with($nombre, 'Percepción IVA')) {
+            return false;
+        }
+        if (str_starts_with($nombre, 'Iva ') || str_starts_with($nombre, 'IVA ')) {
+            return $conIvaIibb;
+        }
+        if (str_starts_with($nombre, 'Perc.') || str_starts_with($nombre, 'Perc ')) {
+            return $conIvaIibb;
+        }
+
+        return true;
     }
 
     /**

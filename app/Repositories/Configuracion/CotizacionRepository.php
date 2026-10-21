@@ -48,8 +48,8 @@ class CotizacionRepository implements CotizacionRepositoryInterface
 
 		$cotizacion = $this->model->create($data);
 
-		// Graba anita
-		$anita = self::guardarAnita($data);
+		// Anita ya puede tener el día (carga previa o fila en cero). Reemplaza en vez de insertar.
+		$anita = self::actualizarAnita($data);
 
 
 		return $cotizacion;
