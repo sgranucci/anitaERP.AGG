@@ -21,6 +21,9 @@ class CotizacionRepository implements CotizacionRepositoryInterface
 	private $cotizacion_monedaRepository;
 	private $monedaRepository;
 
+	/** Informix de algunas instalaciones (Interforming) no tiene cotiz_comp. */
+	private bool $cotizCompEnAnita = true;
+
     /**
      * PostRepository constructor.
      *
@@ -313,38 +316,40 @@ class CotizacionRepository implements CotizacionRepositoryInterface
 						'".$fechaFormateada."' "
        		);
 			$cotizacion = $apiAnita->apiCallEscritura($data);
-			
 
-			// Graba cotizacion de compra
-			$apiAnita = new ApiAnita();
-			$data = array( 'tabla' => $this->tableAnita[1], 
-					'acc' => 'insert',
-					'sistema' => 'shared',
-					'campos' => '
-							cotc_fecha,
-							cotc_cambio_com2,
-							cotc_cambio_com3,
-							cotc_cambio_com4,
-							cotc_cambio_com5,
-							cotc_cambio_com6,
-							cotc_cambio_com7,
-							cotc_cambio_com8,
-							cotc_cambio_com9,
-							cotc_fecha_alfa
-						',
-						'valores' => " 
-						'".$fecha."', 
-						'".($cotizacionCompra[2] > 0 ? $cotizacionCompra[2] : 0)."',
-						'".($cotizacionCompra[3] > 0 ? $cotizacionCompra[3] : 0)."',
-						'".($cotizacionCompra[4] > 0 ? $cotizacionCompra[4] : 0)."',
-						'".($cotizacionCompra[5] > 0 ? $cotizacionCompra[5] : 0)."',
-						'".($cotizacionCompra[6] > 0 ? $cotizacionCompra[6] : 0)."',
-						'".($cotizacionCompra[7] > 0 ? $cotizacionCompra[7] : 0)."',
-						'".($cotizacionCompra[8] > 0 ? $cotizacionCompra[8] : 0)."',
-						'".($cotizacionCompra[9] > 0 ? $cotizacionCompra[9] : 0)."',
-						'".$fechaFormateada."' "
-			);
-			$cotizacion = $apiAnita->apiCallEscritura($data);
+			if ($this->cotizCompEnAnita)
+			{
+				// Graba cotizacion de compra. Si Anita no tiene cotiz_comp, la venta ya quedó.
+				$apiAnita = new ApiAnita();
+				$data = array( 'tabla' => $this->tableAnita[1], 
+						'acc' => 'insert',
+						'sistema' => 'shared',
+						'campos' => '
+								cotc_fecha,
+								cotc_cambio_com2,
+								cotc_cambio_com3,
+								cotc_cambio_com4,
+								cotc_cambio_com5,
+								cotc_cambio_com6,
+								cotc_cambio_com7,
+								cotc_cambio_com8,
+								cotc_cambio_com9,
+								cotc_fecha_alfa
+							',
+							'valores' => " 
+							'".$fecha."', 
+							'".($cotizacionCompra[2] > 0 ? $cotizacionCompra[2] : 0)."',
+							'".($cotizacionCompra[3] > 0 ? $cotizacionCompra[3] : 0)."',
+							'".($cotizacionCompra[4] > 0 ? $cotizacionCompra[4] : 0)."',
+							'".($cotizacionCompra[5] > 0 ? $cotizacionCompra[5] : 0)."',
+							'".($cotizacionCompra[6] > 0 ? $cotizacionCompra[6] : 0)."',
+							'".($cotizacionCompra[7] > 0 ? $cotizacionCompra[7] : 0)."',
+							'".($cotizacionCompra[8] > 0 ? $cotizacionCompra[8] : 0)."',
+							'".($cotizacionCompra[9] > 0 ? $cotizacionCompra[9] : 0)."',
+							'".$fechaFormateada."' "
+				);
+				$this->escribirCotizComp($apiAnita, $data);
+			}
 
 		}
 		return 'Success';
@@ -370,11 +375,36 @@ class CotizacionRepository implements CotizacionRepositoryInterface
 				'whereArmado' => " WHERE cot_fecha = '".$fecha."'");
         $apiAnita->apiCallEscritura($data);
 
+		if (! $this->cotizCompEnAnita)
+			return;
+
 		$apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
 				'sistema' => 'shared',
 				'whereArmado' => " WHERE cotc_fecha = '".$fecha."'");
-        $apiAnita->apiCallEscritura($data);
+        $this->escribirCotizComp($apiAnita, $data);
+	}
+
+	/**
+	 * cotiz_comp no está en todas las bases Anita. Si falta, la cotización de
+	 * venta igual se graba y las próximas no vuelven a pegarle a esa tabla.
+	 */
+	private function escribirCotizComp(ApiAnita $apiAnita, array $data): void
+	{
+		try {
+			$apiAnita->apiCallEscritura($data);
+		} catch (\RuntimeException $e) {
+			if (! self::anitaNoTieneCotizComp($e->getMessage())) {
+				throw $e;
+			}
+			$this->cotizCompEnAnita = false;
+		}
+	}
+
+	private static function anitaNoTieneCotizComp(string $mensaje): bool
+	{
+		return str_contains($mensaje, 'cotiz_comp')
+			&& (str_contains($mensaje, 'is not in the database') || str_contains($mensaje, '206'));
 	}
 
 }

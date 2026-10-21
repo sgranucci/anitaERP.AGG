@@ -298,28 +298,21 @@
 
 <table class="pdf-totales">
     @foreach ($pdf['conceptosTotales'] as $concepto)
-        @php
-            $nombreConcepto = (string) ($concepto['concepto'] ?? '');
-            $esTotal = strcasecmp($nombreConcepto, 'Total') === 0;
-            $esSubtotal = strcasecmp($nombreConcepto, 'Subtotal') === 0;
-        @endphp
-        @if (! $esSubtotal)
-            @if ($esTotal)
-                <tr class="final">
-                    <td class="etiq">Total del pedido</td>
-                    <td class="num">{{ $simbolo }} {{ $fmt($concepto['importe'] ?? 0) }}</td>
-                </tr>
-            @else
-                <tr>
-                    <td class="etiq">{{ $nombreConcepto }}</td>
-                    <td class="num">{{ $simbolo }} {{ $fmt($concepto['importe'] ?? 0) }}</td>
-                </tr>
-            @endif
+        @if (! empty($concepto['destacar']))
+            <tr class="final">
+                <td class="etiq">{{ $concepto['concepto'] ?? '' }}</td>
+                <td class="num">{{ $simbolo }} {{ $fmt($concepto['importe'] ?? 0) }}</td>
+            </tr>
+        @else
+            <tr>
+                <td class="etiq">{{ $concepto['concepto'] ?? '' }}</td>
+                <td class="num">{{ $simbolo }} {{ $fmt($concepto['importe'] ?? 0) }}</td>
+            </tr>
         @endif
     @endforeach
     @if (count($pdf['conceptosTotales']) === 0)
         <tr class="final">
-            <td class="etiq">Total del pedido</td>
+            <td class="etiq">Total del pedido SIN IVA</td>
             <td class="num">{{ $simbolo }} {{ $fmt($pdf['totalSinDescuento']) }}</td>
         </tr>
     @endif

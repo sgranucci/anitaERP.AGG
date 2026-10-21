@@ -318,53 +318,125 @@ final class PedidoInterformingPdfSupport
     }
 
     /**
-     * Anita imprime el pedido con exento y descuentos. IVA y percepciones de IIBB
-     * salen solo si Configuración general lo tiene encendido. La percepción de IVA
-     * no va en el pedido.
+     * Pie de a-pedido.c lista_pedido(): total sin descuento, descuento y total
+     * sin IVA. No abre exento y gravado para volver a sumarlos: el gravado es la
+     * mercadería, no el impuesto. IVA y percepciones de IIBB salen solo si
+     * Configuración general lo tiene encendido. La percepción de IVA no va.
      *
      * @param  list<array<string, mixed>>  $conceptos
      * @return list<array<string, mixed>>
      */
     private static function conceptosParaImpresionPedido(array $conceptos, bool $conIvaIibb): array
     {
-        $visibles = [];
-        $total = 0.0;
+        $subtotal = 0.0;
+        $tieneSubtotal = false;
+        $descuento = 0.0;
+        $porcentajeDescuento = 0.0;
+        $netoSinIva = 0.0;
+        $ivas = [];
+        $percepciones = [];
+
         foreach ($conceptos as $concepto) {
             $nombre = trim((string) ($concepto['concepto'] ?? ''));
-            if ($nombre === '' || strcasecmp($nombre, 'Subtotal') === 0 || strcasecmp($nombre, 'Total') === 0) {
+            if ($nombre === '' || strcasecmp($nombre, 'Total') === 0 || strcasecmp($nombre, 'Total final') === 0) {
                 continue;
             }
-            if (! self::conceptoVisibleEnPedido($nombre, $conIvaIibb)) {
+            $importe = (float) ($concepto['importe'] ?? 0);
+
+            if (strcasecmp($nombre, 'Subtotal') === 0 || strcasecmp($nombre, 'Total del pedido sin dto') === 0) {
+                $subtotal += $importe;
+                $tieneSubtotal = true;
                 continue;
             }
-            $visibles[] = $concepto;
-            if (! str_starts_with($nombre, 'Descuento')) {
-                $total += (float) ($concepto['importe'] ?? 0);
+            if (str_starts_with($nombre, 'Descuento') || str_starts_with($nombre, 'Total descuento')) {
+                $descuento += abs($importe);
+                $tasa = (float) ($concepto['tasa'] ?? 0);
+                if ($tasa > 0.00001) {
+                    $porcentajeDescuento = $tasa;
+                }
+                continue;
             }
+            if (self::esNetoMercaderiaPedido($nombre) || strcasecmp($nombre, 'Total del pedido SIN IVA') === 0) {
+                $netoSinIva += $importe;
+                continue;
+            }
+            if (str_starts_with($nombre, 'Percepcion IVA') || str_starts_with($nombre, 'Percepción IVA')) {
+                continue;
+            }
+            if (str_starts_with($nombre, 'Iva ') || str_starts_with($nombre, 'IVA ') || str_starts_with($nombre, 'Total iva')) {
+                if ($conIvaIibb) {
+                    $ivas[] = $concepto;
+                }
+                continue;
+            }
+            if (str_starts_with($nombre, 'Perc.') || str_starts_with($nombre, 'Perc ')) {
+                if ($conIvaIibb) {
+                    $percepciones[] = $concepto;
+                }
+                continue;
+            }
+
+            $netoSinIva += $importe;
         }
 
-        $visibles[] = [
-            'concepto' => 'Total',
-            'importe' => round($total, 2),
-            'tasa' => 0,
-        ];
+        if (! $tieneSubtotal) {
+            $subtotal = $netoSinIva + $descuento;
+            $tieneSubtotal = true;
+        }
 
-        return $visibles;
+        $lineas = [];
+        $lineas[] = self::lineaPiePedido('Total del pedido sin dto', $subtotal, false);
+        if ($descuento > 0.00001) {
+            $etiqueta = 'Total descuento';
+            if ($porcentajeDescuento > 0.00001) {
+                $etiqueta .= ' '.number_format($porcentajeDescuento, 2, ',', '.').'%';
+            }
+            $lineas[] = self::lineaPiePedido($etiqueta, $descuento, false);
+        }
+        $lineas[] = self::lineaPiePedido('Total del pedido SIN IVA', $netoSinIva, ! $conIvaIibb);
+
+        if ($conIvaIibb) {
+            $totalFinal = $netoSinIva;
+            foreach ($ivas as $fila) {
+                $lineas[] = self::lineaPiePedido(
+                    (string) ($fila['concepto'] ?? 'IVA'),
+                    (float) ($fila['importe'] ?? 0),
+                    false,
+                );
+                $totalFinal += (float) ($fila['importe'] ?? 0);
+            }
+            foreach ($percepciones as $fila) {
+                $lineas[] = self::lineaPiePedido(
+                    (string) ($fila['concepto'] ?? 'Percepción'),
+                    (float) ($fila['importe'] ?? 0),
+                    false,
+                );
+                $totalFinal += (float) ($fila['importe'] ?? 0);
+            }
+            $lineas[] = self::lineaPiePedido('Total final', $totalFinal, true);
+        }
+
+        return $lineas;
     }
 
-    private static function conceptoVisibleEnPedido(string $nombre, bool $conIvaIibb): bool
+    /**
+     * @return array{concepto: string, importe: float, tasa: int, destacar: bool}
+     */
+    private static function lineaPiePedido(string $concepto, float $importe, bool $destacar): array
     {
-        if (str_starts_with($nombre, 'Percepcion IVA') || str_starts_with($nombre, 'Percepción IVA')) {
-            return false;
-        }
-        if (str_starts_with($nombre, 'Iva ') || str_starts_with($nombre, 'IVA ')) {
-            return $conIvaIibb;
-        }
-        if (str_starts_with($nombre, 'Perc.') || str_starts_with($nombre, 'Perc ')) {
-            return $conIvaIibb;
-        }
+        return [
+            'concepto' => $concepto,
+            'importe' => round($importe, 2),
+            'tasa' => 0,
+            'destacar' => $destacar,
+        ];
+    }
 
-        return true;
+    private static function esNetoMercaderiaPedido(string $nombre): bool
+    {
+        return strcasecmp($nombre, 'Exento') === 0
+            || strcasecmp($nombre, 'No Gravado') === 0
+            || str_starts_with($nombre, 'Gravado');
     }
 
     /**

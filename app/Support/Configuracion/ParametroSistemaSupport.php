@@ -145,7 +145,7 @@ final class ParametroSistemaSupport
             $defs[self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB] = [
                 'grupo' => 'Ventas',
                 'etiqueta' => 'Pedido: imprimir IVA y percepciones de IIBB',
-                'ayuda' => 'Apagado: el pedido muestra exento, gravado y descuentos. Encendido: suma el IVA y las percepciones de ingresos brutos, como la opción de Anita.',
+                'ayuda' => 'Apagado: el pedido imprime el total sin descuento, el descuento y el total sin IVA. Encendido: suma el IVA y las percepciones de ingresos brutos, como la opción -t de Anita.',
                 'tipo' => 'boolean',
                 'orden' => 45,
             ];
