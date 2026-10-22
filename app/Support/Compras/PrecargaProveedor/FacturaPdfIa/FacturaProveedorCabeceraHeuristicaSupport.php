@@ -221,16 +221,36 @@ final class FacturaProveedorCabeceraHeuristicaSupport
 
     private function extraerFechaFactura(string $texto): ?string
     {
-        // Incluye dd.mm.yyyy (Telmex / varios emisores) además de / y -.
-        if (preg_match('/fecha\s+(?:de\s+)?(?:emisi[oó]n|factura|comprobante)[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu', $texto, $m)) {
-            return $this->isoFecha($m[1], $m[2], $m[3]);
+        // «Emisión: 21-10-2026» (sin la palabra Fecha) y «Fecha de emisión».
+        $patrones = [
+            '/(?:fecha\s+(?:de\s+)?)?emisi[oó]n[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
+            '/fecha\s+(?:de\s+)?(?:factura|comprobante)[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
+            // "Fecha:" / "Fecha 05.08.2026". No es inicio de actividades ni vencimiento.
+            '/\bfecha\b(?!\s+(?:de\s+)?(?:inicio|vencimiento|vto))[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/iu',
+        ];
+        foreach ($patrones as $patron) {
+            if (preg_match($patron, $texto, $m)) {
+                return $this->isoFecha($m[1], $m[2], $m[3]);
+            }
         }
-        // "Fecha:" / "Fecha 05/08/2026" / "Fecha 05.08.2026" sin la palabra emisión.
-        if (preg_match('/\bfecha\b[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/iu', $texto, $m)) {
-            return $this->isoFecha($m[1], $m[2], $m[3]);
+
+        // Último recurso: la primera fecha que no sea inicio de actividades ni vto. de CAE.
+        if (! preg_match_all(
+            '/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](20\d{2})\b/u',
+            $texto,
+            $matches,
+            PREG_OFFSET_CAPTURE
+        )) {
+            return null;
         }
-        if (preg_match('/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](20\d{2})\b/u', $texto, $m)) {
-            return $this->isoFecha($m[1], $m[2], $m[3]);
+        foreach ($matches[0] as $i => $full) {
+            $pos = (int) $full[1];
+            $contexto = substr($texto, max(0, $pos - 48), 48);
+            if (preg_match('/inicio|actividad|inscrip|nacimiento|fundac|vencimiento|\bvto\b/iu', $contexto)) {
+                continue;
+            }
+
+            return $this->isoFecha($matches[1][$i][0], $matches[2][$i][0], $matches[3][$i][0]);
         }
 
         return null;
@@ -273,6 +293,14 @@ final class FacturaProveedorCabeceraHeuristicaSupport
     {
         // Incluye dd.mm.yyyy además de / y -.
         if (preg_match('/vto\.?\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI)\.?\s*:?\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu', $texto, $m)) {
+            return $this->isoFecha($m[1], $m[2], $m[3]);
+        }
+        // «CAE 8642… VENCIMIENTO: 31-10-2026» (el rótulo no dice Vto. CAE).
+        if (preg_match(
+            '/C[\.\-\s]*A[\.\-\s]*E[\.\-\s]*A?[\.\-\s]*(?:N[°ºo]\.?)?[:\s]*\d{10,20}.{0,80}?vencimiento[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/isu',
+            $texto,
+            $m
+        )) {
             return $this->isoFecha($m[1], $m[2], $m[3]);
         }
 

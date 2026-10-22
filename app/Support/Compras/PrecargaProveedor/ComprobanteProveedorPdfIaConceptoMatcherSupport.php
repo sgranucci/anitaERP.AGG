@@ -424,6 +424,7 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n',
         ]);
         $texto = preg_replace('/\s+/', ' ', $texto) ?? $texto;
+        $texto = preg_replace('/\b(iva)\s+c(?:ont(?:ado)?|tdo)\.?(?!\w)/u', '$1 ', $texto) ?? $texto;
 
         return $texto;
     }

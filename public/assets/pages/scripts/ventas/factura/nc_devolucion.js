@@ -144,6 +144,121 @@ function aplicarEstadoTodasLineasNc() {
     });
 }
 
+function ncDevolucionNumero(valor) {
+    var s = String(valor == null ? '' : valor).trim().replace(/\s/g, '');
+    var coma = s.lastIndexOf(',');
+    var punto = s.lastIndexOf('.');
+    if (coma >= 0 && punto >= 0) {
+        if (coma > punto) {
+            s = s.replace(/\./g, '').replace(',', '.');
+        } else {
+            s = s.replace(/,/g, '');
+        }
+    } else if (coma >= 0) {
+        s = s.replace(',', '.');
+    }
+    var n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+}
+
+function ncDevolucionRedondear(n) {
+    return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
+
+function ncDevolucionLineaActiva($tr) {
+    var $chk = $tr.find('.nc-devolver');
+    return $chk.length > 0 && $chk.is(':checked') && !$chk.prop('disabled');
+}
+
+function ncDevolucionPintarConceptos(filas) {
+    var $body = $('#tbody-tabla-total-factura');
+    var tpl = $('#template-renglon-total-factura').html();
+    if (!$body.length || !tpl) {
+        return;
+    }
+    $body.empty();
+    filas.forEach(function (fila) {
+        if (fila.concepto !== 'Total' && Math.abs(fila.importe) < 0.005) {
+            return;
+        }
+        $body.append(tpl);
+        var $tr = $body.find('tr').last();
+        $tr.find('.conceptototal').val(fila.concepto);
+        $tr.find('.tasatotal').val(fila.tasa > 0 ? Number(fila.tasa).toFixed(2) : '').css('text-align', 'right');
+        $tr.find('.importetotal').val(Number(fila.importe).toFixed(2)).css('text-align', 'right');
+        if (fila.concepto === 'Total') {
+            $tr.find('.conceptototal, .importetotal').css('fontWeight', 'bold');
+            $('#montototalfactura').val(Number(fila.importe).toFixed(2));
+        }
+    });
+}
+
+function ncDevolucionPreviewTotales() {
+    if ($('#formgeneral').attr('data-factura-proceso') !== 'nc') {
+        return;
+    }
+    var neto = 0;
+    var ivas = {};
+    var hay = false;
+    ncDevolucionFilasOrigen().each(function () {
+        var $tr = $(this);
+        if (!ncDevolucionLineaActiva($tr)) {
+            return;
+        }
+        hay = true;
+        var cant = ncDevolucionNumero($tr.find('.kilo').length ? $tr.find('.kilo').val() : $tr.find('.cantidad').val());
+        var precio = ncDevolucionNumero($tr.find('.precio').val());
+        var dto = ncDevolucionNumero($tr.find('.descuento').val());
+        var bruto = cant * precio;
+        if (dto) {
+            bruto = bruto * (1 - dto / 100);
+        }
+        var incluye = String($tr.find('.incluyeimpuesto').val() || '').toUpperCase();
+        var conIvaEnPrecio = incluye !== '' && incluye !== 'N' && incluye !== '2';
+        var tasa = ncDevolucionNumero($tr.find('.factura-iva-linea option:selected').attr('data-valor'));
+        var base = bruto;
+        var ivaLinea = 0;
+        if (conIvaEnPrecio && tasa > 0) {
+            base = bruto / (1 + tasa / 100);
+            ivaLinea = bruto - base;
+        } else if (tasa > 0) {
+            ivaLinea = bruto * tasa / 100;
+        }
+        neto += ncDevolucionRedondear(base);
+        var key = String(tasa);
+        ivas[key] = (ivas[key] || 0) + ivaLinea;
+    });
+    if (!hay) {
+        ncDevolucionPintarConceptos([
+            { concepto: 'Subtotal', tasa: 0, importe: 0 },
+            { concepto: 'Total', tasa: 0, importe: 0 }
+        ]);
+        return;
+    }
+    var filas = [{ concepto: 'Subtotal', tasa: 0, importe: ncDevolucionRedondear(neto) }];
+    var totalIva = 0;
+    Object.keys(ivas).sort(function (a, b) { return Number(a) - Number(b); }).forEach(function (key) {
+        var tasa = Number(key);
+        var importe = ncDevolucionRedondear(ivas[key]);
+        if (Math.abs(importe) < 0.005) {
+            return;
+        }
+        filas.push({ concepto: 'Iva ' + tasa + '%', tasa: tasa, importe: importe });
+        totalIva += importe;
+    });
+    filas.push({ concepto: 'Total', tasa: 0, importe: ncDevolucionRedondear(neto + totalIva) });
+    ncDevolucionPintarConceptos(filas);
+}
+
+function ncDevolucionRecalcular() {
+    ncDevolucionPreviewTotales();
+    if (typeof window.calculaFactura === 'function') {
+        window.calculaFactura();
+    } else if (typeof calculaFactura === 'function') {
+        calculaFactura();
+    }
+}
+
 function ncDevolucionMarcarSegunCriterio(modo, articuloId) {
     articuloId = parseInt(articuloId, 10) || 0;
     ncDevolucionFilasOrigen().each(function () {
@@ -170,9 +285,7 @@ function ncDevolucionMarcarSegunCriterio(modo, articuloId) {
         $chk.prop('checked', marcar);
         aplicarEstadoLineaNcDevolver($tr);
     });
-    if (typeof calculaFactura === 'function') {
-        calculaFactura();
-    }
+    ncDevolucionRecalcular();
 }
 
 window.ncDevolucionMarcarArticulo = function (articuloId) {
@@ -286,9 +399,7 @@ function activa_eventos_nc_devolucion() {
 
     $(document).off('change.ncDevChk', '.nc-devolver').on('change.ncDevChk', '.nc-devolver', function () {
         aplicarEstadoLineaNcDevolver($(this).closest('tr'));
-        if (typeof calculaFactura === 'function') {
-            calculaFactura();
-        }
+        ncDevolucionRecalcular();
     });
 
     $(document).off('click.ncDevTodo', '#nc-devolver-todo').on('click.ncDevTodo', '#nc-devolver-todo', function (e) {
@@ -334,10 +445,18 @@ function activa_eventos_nc_devolucion() {
             }
             if (val > max) {
                 $inp.val(max.toFixed(2));
-                if (typeof calculaFactura === 'function') {
-                    calculaFactura();
-                }
+                ncDevolucionRecalcular();
             }
+        });
+
+    $(document).off('input.ncDevTot', '#tbody-tabla .nc-linea-origen .cantidad, #tbody-tabla .nc-linea-origen .kilo, #tbody-tabla .nc-linea-origen .precio, #tbody-tabla .nc-linea-origen .descuento')
+        .on('input.ncDevTot', '#tbody-tabla .nc-linea-origen .cantidad, #tbody-tabla .nc-linea-origen .kilo, #tbody-tabla .nc-linea-origen .precio, #tbody-tabla .nc-linea-origen .descuento', function () {
+            ncDevolucionPreviewTotales();
+        });
+
+    $(document).off('change.ncDevTot', '#tbody-tabla .nc-linea-origen .cantidad, #tbody-tabla .nc-linea-origen .kilo, #tbody-tabla .nc-linea-origen .precio, #tbody-tabla .nc-linea-origen .descuento')
+        .on('change.ncDevTot', '#tbody-tabla .nc-linea-origen .cantidad, #tbody-tabla .nc-linea-origen .kilo, #tbody-tabla .nc-linea-origen .precio, #tbody-tabla .nc-linea-origen .descuento', function () {
+            ncDevolucionRecalcular();
         });
 }
 
@@ -345,8 +464,8 @@ $(function () {
     if ($('#tm_articulo_nc_devolucion').length || $('.nc-devolver').length) {
         activa_eventos_nc_devolucion();
         aplicarEstadoTodasLineasNc();
-        if (typeof calculaFactura === 'function' && $('#formgeneral').attr('data-factura-proceso') === 'nc') {
-            calculaFactura();
+        if ($('#formgeneral').attr('data-factura-proceso') === 'nc') {
+            ncDevolucionRecalcular();
         }
     }
 });

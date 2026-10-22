@@ -390,7 +390,9 @@ final class ComprobanteProveedorPdfIaPipelineService
         }
 
         $senalExento = (bool) preg_match('/imp\.?\s*exento/iu', $textoOcr);
-        if ($sumaNeto > 0 && abs($sumaNeto - $total) <= 0.05 && ($senalExento || $sumaExento <= 0.01)) {
+        $sinIvaEnTexto = ! preg_match('/\biva\s+(?:inscripto\s+)?(?:21|10[,.]5|27)(?:[.,]\d+)?\s*%/iu', $textoOcr)
+            && ! preg_match('/\bi\.?\s*v\.?\s*a\.?\s+c(?:ont(?:ado)?|tdo)\b/iu', $textoOcr);
+        if ($sumaNeto > 0 && abs($sumaNeto - $total) <= 0.05 && ($senalExento || ($sumaExento <= 0.01 && $sinIvaEnTexto))) {
             $data['subtotal'] = $total;
             $data['lineas'] = [[
                 'descripcion' => 'Operaciones exentas (total sin desglose IVA)',

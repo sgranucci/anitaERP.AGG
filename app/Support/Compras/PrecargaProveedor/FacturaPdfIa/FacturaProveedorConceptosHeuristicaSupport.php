@@ -79,8 +79,9 @@ final class FacturaProveedorConceptosHeuristicaSupport
         }
 
         $senalExentoColumna = (bool) preg_match('/imp\.?\s*exento/iu', $texto);
-        $sinIvaEnTexto = ! preg_match('/\biva\s+(?:inscripto\s+)?(?:21|10[,.]5|27)\s*%/iu', $texto)
-            && ! preg_match('/i\.?\s*v\.?\s*a\.?\s*inscripto[^0-9\n]{0,20}[\d.,]{3,}/iu', $texto);
+        $sinIvaEnTexto = ! preg_match('/\biva\s+(?:inscripto\s+)?(?:21|10[,.]5|27)(?:[.,]\d+)?\s*%/iu', $texto)
+            && ! preg_match('/i\.?\s*v\.?\s*a\.?\s*inscripto[^0-9\n]{0,20}[\d.,]{3,}/iu', $texto)
+            && ! preg_match('/\bi\.?\s*v\.?\s*a\.?\s+c(?:ont(?:ado)?|tdo)\b/iu', $texto);
 
         if ($sumaIva > 0.01 || $sumaOtros > 0.01 || $sumaExento > 0.01) {
             return $lineas;
@@ -103,13 +104,15 @@ final class FacturaProveedorConceptosHeuristicaSupport
      */
     private function detectarEnLinea(string $fila): ?array
     {
+        // «IVA CONT.» es IVA: CONT / CONTADO / CTDO es condición de pago, no otro impuesto.
+        $fila = $this->descartarSufijoContado($fila);
         $filaLower = mb_strtolower($fila);
 
         if ($this->esRuido($filaLower)) {
             return null;
         }
 
-        $importe = $this->importeParser->importeAlFinalDeLinea($fila);
+        $importe = $this->importeDeRotulo($fila);
         if ($importe === null || abs($importe) < 0.01) {
             return null;
         }
@@ -132,10 +135,37 @@ final class FacturaProveedorConceptosHeuristicaSupport
         return null;
     }
 
+    /**
+     * El importe del rótulo. Si la línea trae «Base:», ese número es el neto, no el impuesto.
+     */
+    private function importeDeRotulo(string $fila): ?float
+    {
+        if (preg_match('/\bbase\b/iu', $fila)
+            && preg_match('/((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})\s+base\b/iu', $fila, $m)) {
+            return $this->importeParser->parsear($m[1]);
+        }
+
+        return $this->importeParser->importeAlFinalDeLinea($fila);
+    }
+
+    /**
+     * «IVA CONT.» / «IVA CONTADO» / «I.V.A. CTDO» = IVA.
+     */
+    private function descartarSufijoContado(string $fila): string
+    {
+        $limpio = preg_replace(
+            '/(\bi\.?\s*v\.?\s*a\.?)\s+c(?:ont(?:ado)?|tdo)\.?(?!\w)/iu',
+            '$1 ',
+            $fila
+        );
+
+        return is_string($limpio) ? $limpio : $fila;
+    }
+
     /** @return list<array{patron: string, tipo: string, alicuota: ?float}> */
     private function definicionesConcepto(): array
     {
-        $ali = '(?:21|10[,.]5|27|5|2[,.]5|0)';
+        $ali = '(?:21|10[,.]5|27|5|2[,.]5|0)(?:[.,]0+)?';
 
         return [
             ['patron' => '/\biva\s+(?:inscripto\s+)?'.$ali.'\s*%/u', 'tipo' => 'iva', 'alicuota' => null],
@@ -143,6 +173,8 @@ final class FacturaProveedorConceptosHeuristicaSupport
             ['patron' => '/\bi\.?\s*v\.?\s*a\.?\s*inscripto/u', 'tipo' => 'iva', 'alicuota' => null],
             ['patron' => '/\biva\s+inscripto/u', 'tipo' => 'iva', 'alicuota' => null],
             ['patron' => '/\biva\s+discriminado/u', 'tipo' => 'iva', 'alicuota' => null],
+            // Pie «IVA 60.644,85» (CONT ya descartado). El renglón «IVA 21% … Base:» lo toma el bloque de abajo.
+            ['patron' => '/^(?:i\.?\s*v\.?\s*a\.?)\b(?!.*\bbase\b)/u', 'tipo' => 'iva', 'alicuota' => null],
             ['patron' => '/\bneto\s+gravado\s+'.$ali.'/u', 'tipo' => 'neto', 'alicuota' => null],
             ['patron' => '/\bimporte\s+neto\s+gravado/u', 'tipo' => 'neto', 'alicuota' => null],
             ['patron' => '/\bgravado\s+'.$ali.'\s*%/u', 'tipo' => 'neto', 'alicuota' => null],
@@ -185,7 +217,7 @@ final class FacturaProveedorConceptosHeuristicaSupport
      */
     private function inferirAlicuotaEnTexto(string $texto): ?float
     {
-        if (preg_match('/\b(21|10[,.]5|27|5|2[,.]5|0)\s*%/u', mb_strtolower($texto), $m)) {
+        if (preg_match('/\b(21|10[,.]5|27|5|2[,.]5|0)(?:[.,]0+)?\s*%/u', mb_strtolower($texto), $m)) {
             return (float) str_replace(',', '.', $m[1]);
         }
 
@@ -217,16 +249,35 @@ final class FacturaProveedorConceptosHeuristicaSupport
             $clave = ($linea['tipo'] ?? '').'|'.($linea['alicuota_iva'] ?? 'x');
             if (! isset($mapa[$clave])) {
                 $mapa[$clave] = $linea;
-            } elseif (abs((float) $mapa[$clave]['importe'] - (float) $linea['importe']) <= 0.02) {
-                // Misma copia repetida: no sumar.
+
                 continue;
-            } else {
-                // Mismo tipo con importes distintos (ej. dos gravados): sumar.
-                $mapa[$clave]['importe'] = round((float) $mapa[$clave]['importe'] + (float) $linea['importe'], 2);
+            }
+            if (abs((float) $mapa[$clave]['importe'] - (float) $linea['importe']) <= 0.02) {
+                if (($mapa[$clave]['alicuota_iva'] ?? null) === null && ($linea['alicuota_iva'] ?? null) !== null) {
+                    $mapa[$clave]['alicuota_iva'] = $linea['alicuota_iva'];
+                }
+
+                continue;
+            }
+
+            $mapa[$clave]['importe'] = round((float) $mapa[$clave]['importe'] + (float) $linea['importe'], 2);
+        }
+
+        // «IVA CONT.» y «IVA 21.00%» traen el mismo importe con y sin alícuota: una sola línea.
+        $porImporte = [];
+        foreach ($mapa as $linea) {
+            $claveImp = ($linea['tipo'] ?? '').'|'.number_format((float) ($linea['importe'] ?? 0), 2, '.', '');
+            if (! isset($porImporte[$claveImp])) {
+                $porImporte[$claveImp] = $linea;
+
+                continue;
+            }
+            if (($porImporte[$claveImp]['alicuota_iva'] ?? null) === null && ($linea['alicuota_iva'] ?? null) !== null) {
+                $porImporte[$claveImp]['alicuota_iva'] = $linea['alicuota_iva'];
             }
         }
 
-        return array_values($mapa);
+        return array_values($porImporte);
     }
 
     /**
@@ -242,7 +293,8 @@ final class FacturaProveedorConceptosHeuristicaSupport
 
         $bloques = [
             ['regex' => '/i\.?\s*v\.?\s*a\.?\s*inscripto[^0-9\n]{0,20}([\d.,]+)/iu', 'tipo' => 'iva', 'alicuota' => null, 'desc' => 'I.V.A. INSCRIPTO'],
-            ['regex' => '/iva\s+(?:inscripto\s+)?21\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'iva', 'alicuota' => 21.0, 'desc' => 'IVA 21%'],
+            ['regex' => '/iva\s+(?:inscripto\s+)?21(?:[.,]\d+)?\s*%?\s*[:\s]*((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'iva', 'alicuota' => 21.0, 'desc' => 'IVA 21%'],
+            ['regex' => '/i\.?\s*v\.?\s*a\.?\s+c(?:ont(?:ado)?|tdo)\.?[^0-9\n]{0,20}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'iva', 'alicuota' => null, 'desc' => 'IVA'],
             ['regex' => '/iva\s+(?:inscripto\s+)?10[,.]5\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'iva', 'alicuota' => 10.5, 'desc' => 'IVA 10,5%'],
             ['regex' => '/iva\s+(?:inscripto\s+)?27\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'iva', 'alicuota' => 27.0, 'desc' => 'IVA 27%'],
             ['regex' => '/sub\s*total[^0-9\n]{0,20}([\d.,]+)/iu', 'tipo' => 'neto', 'alicuota' => null, 'desc' => 'SUBTOTAL'],

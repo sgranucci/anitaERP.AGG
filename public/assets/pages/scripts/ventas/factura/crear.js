@@ -2694,7 +2694,9 @@
 			return;
 		}
 
-		if (typeof window.facturaRenglonesTextoSinIva === 'function') {
+		// NC parcial: el IVA sale de la factura origen. No vaciar el total si falta la alícuota en pantalla.
+		var esNcPreview = $('#formgeneral').attr('data-factura-proceso') === 'nc';
+		if (!esNcPreview && typeof window.facturaRenglonesTextoSinIva === 'function') {
 			var $sinIva = window.facturaRenglonesTextoSinIva();
 			$('#itemspedido-table .factura-iva-linea').removeClass('is-invalid');
 			if ($sinIva.length) {
@@ -2715,6 +2717,8 @@
 
 		calculaFacturaAjax();
 	}
+
+	window.calculaFactura = calculaFactura;
 
 	function calculaFacturaAjax()
 	{
@@ -2761,30 +2765,38 @@
 					alert(data.error);
 					return;
 				}
+				if (!data || !$.isArray(data.conceptostotales)) {
+					return;
+				}
 
 				$('#tbody-tabla-total-factura').empty();
 
 				$.each(data.conceptostotales, function(index, item) {
 					// index es la posición del elemento en el array
 					// item es el elemento en sí
-					if (item.importe != 0)
+					var importeNum = Number(item.importe);
+					if (!isFinite(importeNum)) {
+						return;
+					}
+					if (importeNum === 0 && item.concepto !== 'Total')
 					{
-						agregaRenglonTotalFactura();
+						return;
+					}
+					agregaRenglonTotalFactura();
 
-						$('#total-factura-table').find('tr').last().find('.conceptototal').val(item.concepto);
-						if (item.tasa > 0)
-							$('#total-factura-table').find('tr').last().find('.tasatotal').val(parseFloat(item.tasa).toFixed(2));
+					$('#total-factura-table').find('tr').last().find('.conceptototal').val(item.concepto);
+					if (item.tasa > 0)
+						$('#total-factura-table').find('tr').last().find('.tasatotal').val(parseFloat(item.tasa).toFixed(2));
 
-						$('#total-factura-table').find('tr').last().find('.importetotal').val(item.importe.toFixed(2));
+					$('#total-factura-table').find('tr').last().find('.importetotal').val(importeNum.toFixed(2));
 
-						if (item.concepto == "Total")
-						{
-							$('#montototalfactura').val(item.importe.toFixed(2));
-							$('#total-factura-table').find('tr').last().find('.conceptototal').css('fontWeight', 'bold');
-							$('#total-factura-table').find('tr').last().find('.importetotal').css('fontWeight', 'bold');
-							if (typeof window.actualizarFceNcMostrador === 'function') {
-								window.actualizarFceNcMostrador();
-							}
+					if (item.concepto == "Total")
+					{
+						$('#montototalfactura').val(importeNum.toFixed(2));
+						$('#total-factura-table').find('tr').last().find('.conceptototal').css('fontWeight', 'bold');
+						$('#total-factura-table').find('tr').last().find('.importetotal').css('fontWeight', 'bold');
+						if (typeof window.actualizarFceNcMostrador === 'function') {
+							window.actualizarFceNcMostrador();
 						}
 					}
 				});

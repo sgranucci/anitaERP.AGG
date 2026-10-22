@@ -1,84 +1,81 @@
+@php
+    use App\Support\Configuracion\EmpresaLogoArchivo;
+    $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($cobranza);
+    $totalFilas = is_countable($cobranza) ? count($cobranza) : 0;
+@endphp
 <!DOCTYPE html>
-<html>
-	<title>Ingresos y Egresos de Caja</title>
-	<head>
-		<style>
-			table {
-				font-family: arial, sans-serif;
-				border-collapse: collapse;
-				width: 100%;
-			}
-			td, th {
-				boder: 1px solid #dddddd;
-				text-align: left;
-				padding: 8px;
-			}
-			tr:nth-child(even) {
-				background-color: #dddddd;
-			}
-		</style>
-	</head>
-	<body>
-		<h2>Ingresos y Egresos de Caja</h2>
-		<table class="table table-striped table-bordered table-hover">
-			<thead>
-				<tr>
-					<th class="width20">ID</th>
-					<th>Empresa</th>
-					<th>Número</th>
-					<th>Fecha</th>
-					<th>Tipo de transacción</th>
-					<th>Concepto</th>
-					<th>Detalle</th>
-					@if (config('app.empresa') == 'Iguassu Travel')
-						<th>Orden de servicio</th>
-					@endif
-					<th>Monto en $</th>
-					<th>Movimientos</th>
-				</tr>
-			</thead>
-			<tbody>
-				@foreach ($caja_movimiento as $data)
-				<tr>
-					<td>{{$data->id}}</td>
-					<td>{{$data->nombreempresa}}</td>
-					<td>{{$data->numerotransaccion}}</td>
-					<td>{{date("d/m/Y", strtotime($data->fecha ?? ''))}}</td>
-					<td>{{$data->nombretipotransaccion_caja}}</td>
-					<td>{{$data->nombreconceptogasto ?? ''}}</td>
-					<td>{{$data->detalle ?? ''}}</td>
-					@if (config('app.empresa') == 'Iguassu Travel')
-						<td>{{$data->ordenservicio_id}}</td>
-					@endif
-					<td>
-						@php $totalIngreso = 0; $totalEgreso= 0; @endphp
-						@foreach($data->caja_movimiento_cuentacajas as $movimiento)
-							@if ($movimiento->moneda_id > 1)
-								@php $coef = $movimiento->cotizacion; @endphp
-							@else
-								@php $coef = 1.; @endphp
-							@endif
-							@php 
-								$totalIngreso += ($movimiento->monto > 0 ? $movimiento->monto * $coef : 0);
-								$totalEgreso += ($movimiento->monto < 0 ? abs($movimiento->monto * $coef) : 0);
-							@endphp
-						@endforeach
-						@if ($totalIngreso != 0)
-							{{number_format($totalIngreso,2)}}
-						@else
-							{{number_format($totalEgreso,2)}}
-						@endif
-					</td>
-					<td>
-						<ul>
-						@foreach($data->caja_movimiento_cuentacajas as $movimiento)
-							<li>{{ $movimiento->cuentacajas->nombre }} {{ $movimiento->monto > 0 ? number_format($movimiento->monto,2) : '' }} {{ $movimiento->monto < 0 ? number_format($movimiento->monto,2) : ''}}</li>
-						@endforeach
-						</ul>
-					</td>
-				</tr>
-				@endforeach
-			</tbody>
-		</table>
-	</body>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>Cobranzas</title>
+    <style>
+        @page { size: legal landscape; margin: 14mm 8mm 16mm 8mm; }
+        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; margin: 0; padding: 0; }
+        table.data { border-collapse: collapse; width: 100%; table-layout: fixed; }
+        table.data td, table.data th {
+            border: 1px solid #cccccc;
+            text-align: left;
+            padding: 3px;
+            vertical-align: top;
+            word-wrap: break-word;
+        }
+        table.data thead { display: table-header-group; }
+        table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
+        table.data thead tr.columnas > th {
+            background-color: #85C1E9;
+            color: #17202A;
+            font-size: 7px;
+            font-weight: bold;
+        }
+        .text-right { text-align: right; }
+    </style>
+</head>
+<body>
+    <table class="data">
+        <thead>
+            @include('includes.reportes.pdf_thead_cabecera', [
+                'titulo' => 'Cobranzas',
+                'subtitulo' => $subtitulo ?? '',
+                'colspan' => 10,
+                'logosCabecera' => $logosCabecera,
+                'totalFilas' => $totalFilas,
+            ])
+            <tr class="columnas">
+                <th style="width: 5%;">ID</th>
+                <th style="width: 12%;">Empresa</th>
+                <th style="width: 8%;">N&uacute;mero</th>
+                <th style="width: 8%;">Fecha</th>
+                <th style="width: 18%;">Cliente</th>
+                <th style="width: 18%;">Detalle</th>
+                <th style="width: 8%;">Estado</th>
+                <th style="width: 6%;">Moneda</th>
+                <th style="width: 9%;" class="text-right">Monto</th>
+                <th style="width: 8%;" class="text-right">Prom. d&iacute;as</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($cobranza as $data)
+                <tr>
+                    <td>{{ $data->id }}</td>
+                    <td>{{ $data->nombreempresa }}</td>
+                    <td>{{ $data->numerotransaccion }}</td>
+                    <td>{{ $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '' }}</td>
+                    <td>{{ $data->nombrecliente }}</td>
+                    <td>{{ $data->detalle ?? '' }}</td>
+                    <td>{{ $data->estado ?? '' }}</td>
+                    <td>{{ $data->monedas->abreviatura ?? '' }}</td>
+                    <td class="text-right">{{ number_format((float) $data->monto, 2, ',', '.') }}</td>
+                    <td class="text-right">
+                        @if (($data->promedio_pago_dias ?? null) === null)
+                            —
+                        @else
+                            {{ $data->promedio_pago_dias }}
+                        @endif
+                    </td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+</body>
 </html>

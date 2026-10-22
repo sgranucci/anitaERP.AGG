@@ -3,6 +3,7 @@
 namespace App\Services\Caja;
 
 use App\Models\Caja\Cobranza_Descuento;
+use App\Models\Configuracion\Impuesto;
 use App\Models\Ventas\Venta;
 use App\Repositories\Ventas\Cliente_CuentacorrienteRepositoryInterface;
 use App\Services\Ventas\FacturacionService;
@@ -105,8 +106,9 @@ final class CobranzaDescuentoNotaCreditoService
             ?? $ventaOrigen->venta_emisiones->first();
 
         $impuestoId = (int) ($emisionReferencia->impuesto_id ?? config('facturacion.IMPUESTO_ID', 3));
-        $incluyeImpuesto = (string) ($emisionReferencia->incluyeimpuesto ?? '1');
-        $incluyeImpuesto = in_array($incluyeImpuesto, ['S', '1', 'Y'], true) ? '1' : 'N';
+        // El importe del descuento es el precio final (lo que el cliente paga de menos).
+        // El motor desglosa IVA y, si la factura origen percibió, IIBB desde ese total.
+        $precioConIva = $this->precioConIvaParaTotalFinal($importe, $impuestoId, (int) $ventaOrigen->id);
 
         $referenciaCompro = (string) ($ventaOrigen->codigo ?? $ventaOrigen->id);
         $leyendaManual = trim((string) $leyendaUsuario);
@@ -137,10 +139,10 @@ final class CobranzaDescuentoNotaCreditoService
             'descuentoimportepie' => 0.,
             'articulo_ids' => [$articuloId],
             'cantidades' => [1.],
-            'precios' => [$importe],
+            'precios' => [$precioConIva],
             'descripcionarticulos' => ['Descuento por cobranza — '.$referenciaCompro],
             'impuesto_ids' => [$impuestoId],
-            'incluyeimpuestos' => [$incluyeImpuesto],
+            'incluyeimpuestos' => ['1'],
             NotaCreditoPercepcionIibbSupport::FLAG_NCP => true,
             // NCP de descuento no devuelve mercadería. En Ferli el tipo tiene operación de stock Entrada.
             'opciones_emision' => [
@@ -192,6 +194,47 @@ final class CobranzaDescuentoNotaCreditoService
             'valor' => $valor,
             'leyenda' => $leyendaManual !== '' ? $leyendaManual : null,
         ];
+    }
+
+    /**
+     * El descuento es el total de la NCP. Si la factura origen tiene percepción IIBB,
+     * el precio con IVA que se manda al motor deja lugar a esa percepción para que
+     * neto + IVA + percepción cierren en el importe del descuento.
+     */
+    private function precioConIvaParaTotalFinal(float $final, int $impuestoId, int $ventaOrigenId): float
+    {
+        $final = round($final, 2);
+        $tasa = (float) (Impuesto::query()->whereKey($impuestoId)->value('valor') ?? 0);
+        if ($tasa <= 0.00001 || ! CobranzaDescuentoConfigSupport::ncPercibeIibb()) {
+            return $final;
+        }
+
+        $venta = Venta::query()->with('venta_impuestos')->find($ventaOrigenId);
+        if (! $venta) {
+            return $final;
+        }
+
+        $filas = NotaCreditoPercepcionIibbSupport::extraerFilasIibb($venta->venta_impuestos);
+        $percepcion = 0.0;
+        foreach ($filas as $fila) {
+            if (NotaCreditoPercepcionIibbSupport::esFilaBuenosAires($fila)) {
+                continue;
+            }
+            $percepcion += abs((float) ($fila['importe'] ?? 0));
+        }
+        $netoOrigen = NotaCreditoPercepcionIibbSupport::netoOrigen($filas);
+        if ($percepcion < 0.01 || $netoOrigen < 0.01) {
+            return $final;
+        }
+
+        $k = $percepcion / $netoOrigen;
+        $unoMasTasa = 1 + ($tasa / 100);
+        $divisor = 1 + ($k / $unoMasTasa);
+        if ($divisor <= 1.0000001) {
+            return $final;
+        }
+
+        return round($final / $divisor, 2);
     }
 
     /**

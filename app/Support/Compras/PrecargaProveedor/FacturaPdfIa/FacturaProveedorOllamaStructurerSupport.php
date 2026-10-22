@@ -134,7 +134,7 @@ Número de factura:
 - Si viene como 0001-00001234 → sucursal=1, numero_factura=1234, letra del tipo (A/B/C).
 - Si viene COMPACTO sin guiones (muy común): "Factura N° 0070A00369548"
   → sucursal=70, letra="A", numero_factura=369548 (NO juntes los dígitos en un solo número).
-fecha_factura: ISO YYYY-MM-DD. Si el PDF dice 05.08.2026 o 05/08/2026 → "2026-08-05".
+fecha_factura: ISO YYYY-MM-DD, la de EMISIÓN del comprobante (rótulo "Emisión:" o "Fecha de emisión"). Si dice 21-10-2026 o 05.08.2026 → "2026-10-21" / "2026-08-05". No uses "Inicio de actividades" ni otra fecha del membrete.
 fecha_vencimiento: vencimiento de PAGO comercial (Fecha de vencimiento / Vencimiento / Vto. pago). NO confundir con fecha_vto_cai_cae.
 fecha_vto_cai_cae: solo el vencimiento del CAE/CAI/CAEA.
 
@@ -168,6 +168,7 @@ Respondé ÚNICAMENTE JSON válido con esta forma:
 }
 
 tipos de linea (conceptos) permitidos: neto, iva, exento, no_gravado, percepcion_iva, percepcion_iibb, percepcion_ganancias, interno, otro_tributo, retencion_iva, retencion_iibb.
+Si el pie dice "IVA CONT.", "IVA CONTADO" o "IVA CTDO", el tipo es "iva": descartá CONT/CONTADO/CTDO (es condición de pago, no otro impuesto). "SUBTOTAL" es neto gravado.
 Si solo hay TOTAL final sin desglose neto/IVA (o Imp. Exento = Total), una sola línea tipo "exento" con importe = total (subtotal = total). No inventes IVA.
 En articulos: si no hay código interno, usá el código del proveedor en sku y codigo_proveedor. Si no hay detalle de ítems, devolvé articulos: [].
 moneda: SOLO "PESOS", "DOLARES" o "EUROS".

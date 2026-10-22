@@ -31,6 +31,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Models\Caja\Tipotransaccion_Caja;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
+use App\Support\Caja\CobranzaPromedioPagoSupport;
 use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
 use App\Support\Caja\ChequePropioInstrumentoSupport;
 use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
@@ -1458,7 +1459,7 @@ class CobranzaService
 		$cliente = $this->clienteRepository->find($cobranza->cliente_id);
 
 		$tblComprobante = [];
-		$fechaCobro = $cobranza->fecha ? Carbon::parse($cobranza->fecha)->copy()->startOfDay() : null;
+		$fechaCobro = $cobranza->fecha;
 		$pesoDias = 0.0;
 		$pesoTotal = 0.0;
 		foreach($cobranza->cobranza_comprobantes as $comprobante)
@@ -1472,20 +1473,18 @@ class CobranzaService
 			}
 
 			$montoEsta = abs((float) ($comprobante->montoaplicado ?? 0));
-			$diasPago = null;
-			if ($fechaCobro && $cc->fecha && $montoEsta >= 0.01) {
-				$diasPago = (int) round(
-					($fechaCobro->getTimestamp() - Carbon::parse($cc->fecha)->copy()->startOfDay()->getTimestamp()) / 86400
-				);
-				$cotiz = (float) ($comprobante->cotizacion ?: ($cc->cotizacion ?: 1));
-				if ($cotiz <= 0) {
-					$cotiz = 1.0;
-				}
-				// Ponderar en pesos: en moneda local la cotización es informativa y
-				// multiplicarla desbalancea el promedio contra los comprobantes que la traen en 1.
-				$peso = $montoEsta * (float) calculaCoeficienteMoneda(1, $cc->moneda_id, $cotiz);
-				$pesoDias += $diasPago * $peso;
-				$pesoTotal += $peso;
+			$aporte = CobranzaPromedioPagoSupport::diasYPeso(
+				$fechaCobro,
+				$cc->fecha,
+				$montoEsta,
+				$cc->moneda_id,
+				$comprobante->cotizacion,
+				$cc->cotizacion,
+			);
+			$diasPago = $aporte['dias'];
+			if ($diasPago !== null && $aporte['peso'] >= 0.01) {
+				$pesoDias += $diasPago * $aporte['peso'];
+				$pesoTotal += $aporte['peso'];
 			}
 
 			$tblComprobante[] = [
@@ -1500,24 +1499,26 @@ class CobranzaService
 					"dias" => $diasPago,
 					];
 		}
-		$promedioPagoDias = $pesoTotal >= 0.01 ? (int) round($pesoDias / $pesoTotal) : null;
+		$promedioPagoDias = CobranzaPromedioPagoSupport::cerrar($pesoDias, $pesoTotal);
 
-		// Arma datos del cliente
-		$datosCliente = [ "nombre" => $cobranza->clientes->nombre,
-						  "domicilio" => $cobranza->clientes->domicilio,
-						  "condicioniva" => $cobranza->clientes->condicionivas->nombre,
-						  "tipodocumento" => $cobranza->clientes->tipodocumentos->abreviatura,
-						  "numerodocumento" => $cobranza->clientes->numerodocumento,
-						  "retieneiva" => $cobranza->clientes->retieneiva,
-						  "condicioniibb" => $cobranza->clientes->condicioniibbs->nombre,
-						  "nroiibb" => $cobranza->clientes->nroiibb,
-						  "provincia" => $cobranza->clientes->provincias->nombre??'',
-						  "localidad" => $cobranza->clientes->localidades->nombre??'',
-						  "codigopostal" => $cobranza->clientes->codigopostal,
-						  "pais" => $cobranza->clientes->paises->nombre,
-						  "telefono" => $cobranza->clientes->telefono,
-						  "id" => $cobranza->clientes->id,
-						  "codigo" => $cobranza->clientes->codigo
+		// Arma datos del cliente. Consumidor final (y clientes importados) pueden
+		// no tener tipo de documento, IIBB, provincia o localidad.
+		$clienteCob = $cobranza->clientes;
+		$datosCliente = [ "nombre" => $clienteCob->nombre ?? '',
+						  "domicilio" => $clienteCob->domicilio ?? '',
+						  "condicioniva" => $clienteCob?->condicionivas?->nombre ?? '',
+						  "tipodocumento" => $clienteCob?->tipodocumentos?->abreviatura ?? '',
+						  "numerodocumento" => $clienteCob->numerodocumento ?? '',
+						  "retieneiva" => $clienteCob->retieneiva ?? '',
+						  "condicioniibb" => $clienteCob?->condicioniibbs?->nombre ?? '',
+						  "nroiibb" => $clienteCob->nroiibb ?? '',
+						  "provincia" => $clienteCob?->provincias?->nombre ?? '',
+						  "localidad" => $clienteCob?->localidades?->nombre ?? '',
+						  "codigopostal" => $clienteCob->codigopostal ?? '',
+						  "pais" => $clienteCob?->paises?->nombre ?? '',
+						  "telefono" => $clienteCob->telefono ?? '',
+						  "id" => $clienteCob->id ?? null,
+						  "codigo" => $clienteCob->codigo ?? ''
 						];
 
 		$datosEmpresa = [
@@ -2000,11 +2001,12 @@ class CobranzaService
 	}
 
 	/**
-	 * Si los medios superan lo aplicado (pago de más), deja un crédito en CC
-	 * (sin venta) para la próxima cobranza. totalcobranzas = aplicado − medios.
+	 * Si los medios superan lo aplicado (pago de más), el sobrante es una COA.
+	 * totalcobranzas = aplicado − medios. La COA entra en la ficha y en la deuda.
 	 *
 	 * El formulario repite el mismo saldo en cada solapa (comprobantes, cuentas,
 	 * cheques y retenciones). Un crédito por moneda: si llega repetido, se toma una vez.
+	 * La plata ya está en la cobranza original: la COA no vuelve a mover la caja.
 	 *
 	 * @param  array<string, mixed>  $data
 	 */
@@ -2032,16 +2034,57 @@ class CobranzaService
 			}
 		}
 
+		if ($excedentePorMoneda === []) {
+			return;
+		}
+
+		$coaTipoId = $this->tipoCajaIdPorAbreviatura('COA');
+		if ($coaTipoId <= 0) {
+			throw new \Exception('No hay tipo de transacción de caja COA. El pago de más no puede quedar como saldo a favor.');
+		}
+
+		$empresaId = (int) ($data['empresa_id'] ?? 0);
+		$padre = trim((string) ($data['numerotransaccion'] ?? ''));
+		$cotizacion = $data['cotizacion_cobranza'] ?? 1;
+
 		foreach ($excedentePorMoneda as $monedaId => $excedente) {
+			$importe = round(abs((float) $excedente), 2);
+			if ($importe < 0.01) {
+				continue;
+			}
+
+			$numero = CobranzaNumeracionTransaccion::siguienteNumeroSecuencial($empresaId, $coaTipoId);
+			$detalle = 'COA Nro. '.$numero.' — pago de más de cobranza';
+			if ($padre !== '') {
+				$detalle .= ' Nro. '.$padre;
+			}
+			$detalle .= ' (id '.$cobranzaId.')';
+
+			$coa = Cobranza::query()->create([
+				'empresa_id' => $empresaId,
+				'tipotransaccion_caja_id' => $coaTipoId,
+				'numerotransaccion' => $numero,
+				'fecha' => $data['fecha'],
+				'caja_id' => $data['caja_id'] ?? null,
+				'cliente_id' => $data['cliente_id'],
+				'detalle' => $detalle,
+				'estado' => 'CONFIRMADA',
+				'monto' => $importe,
+				'cotizacion' => $cotizacion,
+				'moneda_id' => $monedaId,
+				'usuario_id' => Auth::id(),
+			]);
+
 			$this->cliente_cuentacorrienteRepository->create([
 				'fecha' => $data['fecha'],
 				'fechavencimiento' => $data['fecha'],
 				'cliente_id' => $data['cliente_id'],
-				'total' => $excedente,
+				'total' => -1 * $importe,
 				'moneda_id' => $monedaId,
-				'cotizacion' => $data['cotizacion_cobranza'] ?? 1,
-				'cobranza_id' => $cobranzaId,
-				'empresa_id' => $data['empresa_id'],
+				'cotizacion' => $cotizacion,
+				'cobranza_id' => $coa->id,
+				'empresa_id' => $empresaId,
+				'leyenda' => $detalle,
 			]);
 		}
 	}

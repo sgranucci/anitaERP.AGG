@@ -4,6 +4,7 @@ namespace App\Queries\Caja;
 
 use App\Models\Caja\Cobranza;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Support\Caja\CobranzaPromedioPagoSupport;
 use DB;
 
 class CobranzaQuery implements CobranzaQueryInterface
@@ -40,7 +41,7 @@ class CobranzaQuery implements CobranzaQueryInterface
 
     // Lectura para index de cobranzas
 
-    public function leeCobranza($busqueda, $caja_id, $flPaginando = null)
+    public function leeCobranza($busqueda, $caja_id, $flPaginando = null, ?string $fechaDesde = null, ?string $fechaHasta = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
@@ -88,10 +89,20 @@ class CobranzaQuery implements CobranzaQueryInterface
             ['cobranza.fecha', '=', $busqueda]
         ];
 
-        $cobranzas = $cobranzas->orWhere($clausulaOrWhere)
-                                                ->orWhere($clausulaOrWhere2)
-                                                ->orWhereNull('cliente.nombre')
-                                                ->orderby('id', 'DESC');
+        $cobranzas = $cobranzas->where(function ($q) use ($clausulaOrWhere, $clausulaOrWhere2) {
+            $q->orWhere($clausulaOrWhere)
+                ->orWhere($clausulaOrWhere2)
+                ->orWhereNull('cliente.nombre');
+        });
+
+        if ($fechaDesde) {
+            $cobranzas = $cobranzas->where('cobranza.fecha', '>=', $fechaDesde);
+        }
+        if ($fechaHasta) {
+            $cobranzas = $cobranzas->where('cobranza.fecha', '<=', $fechaHasta);
+        }
+
+        $cobranzas = $cobranzas->orderby('cobranza.id', 'DESC');
 
         if (isset($flPaginando))
         {
@@ -102,7 +113,9 @@ class CobranzaQuery implements CobranzaQueryInterface
         }
         else
             $cobranzas = $cobranzas->get();
-//dd($cobranzas);
+
+        CobranzaPromedioPagoSupport::aplicar($cobranzas);
+
         return $cobranzas;
     }
 

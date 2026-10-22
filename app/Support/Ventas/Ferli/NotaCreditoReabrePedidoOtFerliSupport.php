@@ -44,6 +44,11 @@ final class NotaCreditoReabrePedidoOtFerliSupport
             return $vacio + ['motivo' => 'no_nc'];
         }
 
+        // NCP de descuento: no devuelve mercadería ni reabre la OT de la factura.
+        if (! empty($opcionesEmision['omitir_movimiento_stock'])) {
+            return $vacio + ['motivo' => 'sin_mercaderia'];
+        }
+
         $ventaOrigen = $ventaOrigenId > 0 ? Venta::query()->find($ventaOrigenId) : null;
         if (! $ventaOrigen || ! self::esNcTotal($ventaOrigen, $totalNcAbsoluto, $opcionesEmision)) {
             return self::reabrirLineasPickingDeNcParcial($ventaNcId, $vacio);

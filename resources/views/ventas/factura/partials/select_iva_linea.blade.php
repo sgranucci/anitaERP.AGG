@@ -5,7 +5,7 @@
 <select name="impuesto_ids[]" class="form-control impuesto_id factura-iva-linea" title="Alícuota IVA">
     <option value="">IVA</option>
     @foreach ($impuesto_query as $impuestoIva)
-        <option value="{{ $impuestoIva->id }}" @if ((int) $impuestoIva->id === $impuestoIdSeleccionado) selected @endif>
+        <option value="{{ $impuestoIva->id }}" data-valor="{{ $impuestoIva->valor }}" @if ((int) $impuestoIva->id === $impuestoIdSeleccionado) selected @endif>
             {{ $impuestoIva->nombre }}
         </option>
     @endforeach

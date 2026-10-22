@@ -5,6 +5,7 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/cobranza/index.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/cobranza/index.js')) }}" type="text/javascript"></script>
 
 <script>
     function eliminarCobranza(event) {
@@ -33,21 +34,38 @@
 						@endif
                     </a>
                 </div>
-                <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('cobranza') }}" method="GET">
-						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
-							<button type="submit" class="btn btn-default">
-								<span class="fa fa-search"></span>
-							</button>
-						</div>
-					</form>
-                </div>
+            </div>
+            <div class="px-3 pt-2 pb-0">
+                <form action="{{ route('cobranza') }}" method="GET" class="form-inline mb-2">
+                    <label for="fecha_desde" class="mr-1 mb-1">Desde</label>
+                    <input type="date" id="fecha_desde" name="fecha_desde" value="{{ $fechaDesde ?? '' }}" class="form-control form-control-sm mr-2 mb-1" title="Fecha del recibo">
+                    <label for="fecha_hasta" class="mr-1 mb-1">Hasta</label>
+                    <input type="date" id="fecha_hasta" name="fecha_hasta" value="{{ $fechaHasta ?? '' }}" class="form-control form-control-sm mr-2 mb-1" title="Fecha del recibo">
+                    <div class="btn-group mb-1">
+                        <input type="text" name="busqueda" value="{{ $busqueda }}" class="form-control form-control-sm" placeholder="Cliente, número, detalle…">
+                        <button type="submit" class="btn btn-default btn-sm">
+                            <span class="fa fa-search"></span>
+                        </button>
+                    </div>
+                </form>
+                <p class="text-muted small mb-2">
+                    Prom. días: días desde la fecha de cada factura hasta el recibo, ponderados por el importe cobrado.
+                    Para el listado de un día, cargá la misma fecha en Desde y Hasta y exportá.
+                </p>
             </div>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'lista_cobranza', 'busqueda' => $busqueda])
+                <div id="exportar-cobranza">
+                    @include('includes.exportar-tabla-queryparams', ['ruta' => 'lista_cobranza', 'queryparams' => $filtrosQuery ?? []])
+                </div>
+                @include('includes.proceso_overlay_aviso', [
+                    'overlayId' => 'cobranza-export-overlay',
+                    'tituloId' => 'cobranza-export-titulo',
+                    'subtituloId' => 'cobranza-export-subtitulo',
+                    'titulo' => 'Exportando…',
+                    'subtitulo' => 'Generando el listado. Puede demorar según el volumen.',
+                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width20">ID</th>
                             <th>Empresa</th>
@@ -57,7 +75,8 @@
                             <th>Detalle</th>
                             <th>Estado</th>
                             <th>Moneda</th>
-                            <th>Monto</th>
+                            <th class="text-right">Monto</th>
+                            <th class="text-right" title="Días desde la fecha de cada factura hasta el recibo, ponderados por el importe cobrado">Prom. días</th>
                             <th>Movimientos</th>
                             <th class="width120 text-nowrap" data-orderable="false">Acciones</th>
                         </tr>
@@ -73,7 +92,14 @@
                             <td>{{$data->detalle ?? ''}}</td>
                             <td>{{$data->estado ?? ''}}</td>
                             <td>{{$data->monedas->abreviatura ?? '' }}</td>
-                            <td>{{number_format($data->monto,2)}}</td>
+                            <td class="text-right">{{number_format($data->monto,2)}}</td>
+                            <td class="text-right">
+                                @if (($data->promedio_pago_dias ?? null) === null)
+                                    —
+                                @else
+                                    {{ $data->promedio_pago_dias }}
+                                @endif
+                            </td>
                             <td>
                                 <ul>
                                 @if ($data->caja_movimientos[0]->caja_movimiento_cuentacajas)
@@ -127,5 +153,5 @@
         </div>
     </div>
 </div>
-{{ $cobranza->appends(['busqueda' => $busqueda])->links() }}
+{{ $cobranza->appends($filtrosQuery ?? [])->links() }}
 @endsection

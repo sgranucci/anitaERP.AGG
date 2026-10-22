@@ -196,6 +196,18 @@ $(function () {
         $('#precarga-pdf-ia-constatacion').addClass('d-none').empty();
     }
 
+    function fechaArgentina(valor) {
+        if (valor == null || valor === '') {
+            return '';
+        }
+        var texto = String(valor).trim();
+        var iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (iso) {
+            return iso[3] + '/' + iso[2] + '/' + iso[1];
+        }
+        return texto;
+    }
+
     function renderPreview(data) {
         var res = data.resuelto || {};
         $('#precarga-pdf-ia-empresa').text(
@@ -223,15 +235,15 @@ $(function () {
             constArca.total_arca != null ? constArca.total_arca : (constArca.ejecutada ? '—' : 'No constatado')
         );
         $('#precarga-pdf-ia-cae').text(res.numerocae || (data.extraccion && data.extraccion.numerocae) || '');
-        $('#precarga-pdf-ia-fecha').text(res.fecha_factura || '');
+        $('#precarga-pdf-ia-fecha').text(fechaArgentina(res.fecha_factura) || '');
         $('#precarga-pdf-ia-vencimiento').text(
-            res.fecha_vencimiento
-            || (data.extraccion && data.extraccion.fecha_vencimiento)
+            fechaArgentina(res.fecha_vencimiento
+                || (data.extraccion && data.extraccion.fecha_vencimiento))
             || '—'
         );
         $('#precarga-pdf-ia-vto-cae').text(
-            res.fecha_vto_cai_cae
-            || (data.extraccion && data.extraccion.fecha_vto_cai_cae)
+            fechaArgentina(res.fecha_vto_cai_cae
+                || (data.extraccion && data.extraccion.fecha_vto_cai_cae))
             || '—'
         );
         var estadoArca = '—';

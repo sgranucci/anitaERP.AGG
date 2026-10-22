@@ -434,7 +434,8 @@ final class FacturaProveedorPieTotalesSupport
     {
         $patrones = match ($clave) {
             'total' => '/\btotal(?:es)?\b/iu',
-            'subtotal' => '/(?:sub\s*totals?\s*\d*|neto(?:\s+gravado)?)\b/iu',
+            // «SUBTOTAL 2» es índice de columna. No comer el importe («288,785.00» ni «1.208.932,47»).
+            'subtotal' => '/(?:sub\s*totals?(?:\s+[12])?(?!\d|[.,])|neto(?:\s+gravado)?)\b/iu',
             'iva' => '/\b[il1]\.?\s*v\.?\s*a\.?v?(?:\s*inscripto)?\b/iu',
             'impuestos_internos' => '/imp(?:uestos?)?\s*\.?\s*int(?:ernos)?\b/iu',
             'percepcion_iva' => self::PATRON_PERCEPCION_IVA,
@@ -520,6 +521,8 @@ final class FacturaProveedorPieTotalesSupport
             && ! preg_match('/per\.?\s*[il1]/iu', $l)) {
             return 'impuestos_internos';
         }
+        // «IVA CONT.» / «IVA CONTADO» / «IVA CTDO» es IVA. CONT es condición de pago.
+        $l = $this->descartarSufijoContado($l);
         if (preg_match('/\b[il1]\.?\s*v\.?\s*a\.?v?(?:\s*inscripto)?\b/iu', $l)
             && ! preg_match('/responsable|condicion|cuit/iu', $l)) {
             return 'iva';
@@ -847,7 +850,7 @@ final class FacturaProveedorPieTotalesSupport
     private function esLabelPie(string $linea): bool
     {
         return (bool) preg_match(
-            '/^(SUB\s*TOTAL|I\.?\s*V\.?\s*A\.?\s*INSCRIPTO|IMPUESTOS?\s*INTERNOS|RG\s*5329|PERCEP\s*I+\.?\s*B+\.?|TOTAL)$/iu',
+            '/^(SUB\s*TOTAL|I\.?\s*V\.?\s*A\.?(?:\s*(?:INSCRIPTO|CONT(?:ADO)?|CTDO)\.?)?|IMPUESTOS?\s*INTERNOS|RG\s*5329|PERCEP\s*I+\.?\s*B+\.?|TOTAL)$/iu',
             trim($linea)
         );
     }
@@ -860,7 +863,8 @@ final class FacturaProveedorPieTotalesSupport
 
         return match (true) {
             str_contains($l, 'subtotal') => 'subtotal',
-            str_contains($l, 'ivaincripto') || str_contains($l, 'ivainscripto') => 'iva',
+            str_contains($l, 'ivacont') || str_contains($l, 'ivactdo')
+                || str_contains($l, 'ivaincripto') || str_contains($l, 'ivainscripto') => 'iva',
             str_contains($l, 'impuestosinternos') || str_contains($l, 'impuestointerno') => 'impuestos_internos',
             str_contains($l, 'rg5329') => 'percepcion_iva',
             str_contains($l, 'percep') && str_contains($l, 'bb') => 'percepcion_iibb',
@@ -1093,6 +1097,20 @@ final class FacturaProveedorPieTotalesSupport
         }
 
         return $vals + ['lineas' => $lineas, 'origen' => $origen];
+    }
+
+    /**
+     * «IVA CONT.» / «IVA CONTADO» / «I.V.A. CTDO» = IVA. El sufijo es condición de pago.
+     */
+    private function descartarSufijoContado(string $texto): string
+    {
+        $limpio = preg_replace(
+            '/(\bi\.?\s*v\.?\s*a\.?)\s+c(?:ont(?:ado)?|tdo)\.?(?!\w)/iu',
+            '$1 ',
+            $texto
+        );
+
+        return is_string($limpio) ? $limpio : $texto;
     }
 
     private function etiquetaAlicuota(float $tasa): string

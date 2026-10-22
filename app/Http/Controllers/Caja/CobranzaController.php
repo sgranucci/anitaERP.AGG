@@ -18,6 +18,8 @@ use App\Services\Caja\CobranzaAnularRevertirService;
 use App\Services\Caja\CobranzaService;
 use App\Queries\Caja\CobranzaQueryInterface;
 use App\Exports\Caja\CobranzaExport;
+use App\Support\Caja\CobranzaPromedioPagoSupport;
+use App\Support\Reportes\DompdfListadoSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -89,13 +91,23 @@ class CobranzaController extends Controller
 		if (!$hayMovimientosCobranza)
 			$this->cobranzaRepository->sincronizarConAnita();
 
-        $busqueda = $request->busqueda;
+        $filtros = $this->filtrosListado($request);
 
-        $cobranza = $this->cobranzaQuery->leeCobranza($busqueda, 0, true);
+        $cobranza = $this->cobranzaQuery->leeCobranza(
+            $filtros['busqueda'],
+            0,
+            true,
+            $filtros['fecha_desde'],
+            $filtros['fecha_hasta'],
+        );
 
-        $datas = ['cobranza' => $cobranza, 'busqueda' => $busqueda];
-//dd($datas);
-        return view('caja.cobranza.index', $datas);
+        return view('caja.cobranza.index', [
+            'cobranza' => $cobranza,
+            'busqueda' => $filtros['busqueda'],
+            'fechaDesde' => $filtros['fecha_desde'],
+            'fechaHasta' => $filtros['fecha_hasta'],
+            'filtrosQuery' => $filtros['query'],
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -105,39 +117,87 @@ class CobranzaController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = $this->filtrosListado($request, $busqueda);
+        $subtitulo = CobranzaPromedioPagoSupport::subtituloListado(
+            $filtros['busqueda'],
+            $filtros['fecha_desde'],
+            $filtros['fecha_hasta'],
+        );
+
         switch($formato)
         {
         case 'PDF':
-            $cobranza = $this->cobranzaQuery->leeCobranza($busqueda, 0, false);
+            $cobranza = $this->cobranzaQuery->leeCobranza(
+                $filtros['busqueda'],
+                0,
+                false,
+                $filtros['fecha_desde'],
+                $filtros['fecha_hasta'],
+            );
 
-            $view =  \View::make('caja.cobranza.listado', compact('cobranza'))
+            $view = \View::make('caja.cobranza.listado', compact('cobranza', 'subtitulo'))
                         ->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_cobranza';
-
-            $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
-            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+            DompdfListadoSupport::guardarLegalLandscape($view, $path.'/'.$nombre_pdf.'.pdf', [
+                'titulo_corto' => 'Cobranzas',
+            ]);
 
             return response()->download($path.'/'.$nombre_pdf.'.pdf');
-            break;
 
         case 'EXCEL':
             return (new CobranzaExport($this->cobranzaQuery))
-                        ->parametros($busqueda)
+                        ->parametros($filtros['busqueda'], $filtros['fecha_desde'], $filtros['fecha_hasta'], $subtitulo)
                         ->download('cobranza.xlsx');
-            break;
 
         case 'CSV':
             return (new CobranzaExport($this->cobranzaQuery))
-                        ->parametros($busqueda)
+                        ->parametros($filtros['busqueda'], $filtros['fecha_desde'], $filtros['fecha_hasta'], $subtitulo)
                         ->download('cobranza.csv', \Maatwebsite\Excel\Excel::CSV);
-            break;            
         }   
 
-        $datas = ['cobranza' => $cobranza, 'busqueda' => $busqueda];
+        return redirect()->route('cobranza', $filtros['query']);
+    }
 
-		return view('caja.cobranza.indexp', $datas);       
+    /**
+     * @return array{busqueda: string, fecha_desde: ?string, fecha_hasta: ?string, query: array<string, string>}
+     */
+    private function filtrosListado(Request $request, $busquedaRuta = null): array
+    {
+        $busqueda = $request->input('busqueda', $busquedaRuta);
+        $busqueda = is_string($busqueda) ? trim($busqueda) : '';
+        $fechaDesde = $this->fechaFiltro($request->input('fecha_desde'));
+        $fechaHasta = $this->fechaFiltro($request->input('fecha_hasta'));
+        if ($fechaDesde && $fechaHasta && $fechaDesde > $fechaHasta) {
+            [$fechaDesde, $fechaHasta] = [$fechaHasta, $fechaDesde];
+        }
+
+        $query = array_filter([
+            'busqueda' => $busqueda,
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+        ], static fn ($valor) => $valor !== null && $valor !== '');
+
+        return [
+            'busqueda' => $busqueda,
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'query' => $query,
+        ];
+    }
+
+    private function fechaFiltro($valor): ?string
+    {
+        $valor = trim((string) $valor);
+        if ($valor === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($valor)->toDateString();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

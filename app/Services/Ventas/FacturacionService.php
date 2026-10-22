@@ -2708,8 +2708,17 @@ class FacturacionService
 		}
 		$codigosArticulo = $data['codigoarticulos'] ?? [];
 		$descripciones = $data['descripcionarticulos'] ?? [];
-		$cantidades = $data['cantidades'];
-		$precios = $data['precios'];
+		if (! is_array($descripciones)) {
+			$descripciones = [$descripciones];
+		}
+		$cantidades = $data['cantidades'] ?? [];
+		if (! is_array($cantidades)) {
+			$cantidades = [$cantidades];
+		}
+		$precios = $data['precios'] ?? [];
+		if (! is_array($precios)) {
+			$precios = [$precios];
+		}
 		$cajasInput = $data['cajas'] ?? [];
 		$piezasInput = $data['piezas'] ?? [];
 		$listaprecioGlobalId = isset($data['listaprecio_id']) ? (int) $data['listaprecio_id'] : null;
@@ -2748,10 +2757,9 @@ class FacturacionService
 
 		for ($offItem = 0; $offItem < count($cantidades); $offItem++)
 		{
-			if ($esNcMostrador && (
-				! is_array($precios) || ! array_key_exists($offItem, $precios)
-				|| ! is_array($descripciones) || ! array_key_exists($offItem, $descripciones)
-			)) {
+			// Una NC parcial manda solo los renglones tildados. Sin precio no hay importe;
+			// la descripción puede faltar y el artículo igual se toma del maestro.
+			if ($esNcMostrador && ! array_key_exists($offItem, $precios)) {
 				continue;
 			}
 			$articuloIdLinea = (int) ($articulos[$offItem] ?? 0);
@@ -2809,7 +2817,7 @@ class FacturacionService
 			{
 				$articulo_id = null;
 				$codigoCategoria = '';
-				$descripcion = $descripciones[$offItem];
+				$descripcion = $descripciones[$offItem] ?? '';
 				$codigoUnidadMedida = 1;
 				$sku = '';
 				$impuesto_id = (int) config('gastronomia.impuesto_exento_id', 1);
@@ -5001,7 +5009,10 @@ class FacturacionService
 				$forzarOperacionStock = $forzar;
 			}
 		}
-		$omitirStockExplicito = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_movimiento_stock']);
+		$omitirStockExplicito = is_array($opcionesEmision) && (
+			! empty($opcionesEmision['omitir_movimiento_stock'])
+			|| ! empty($opcionesEmision[NotaDebitoReversionNotaCreditoSupport::FLAG])
+		);
 		// Local (POS, Tiendanube, Facturante, Mercado Libre): el PV del local mueve stock
 		// aunque el tipo FAC esté en sin operación. Un omitir explícito sigue ganando.
 		if ($forzarOperacionStock === null && ! $omitirStockExplicito && is_object($tipotransaccion)) {
@@ -5381,7 +5392,9 @@ class FacturacionService
 								$dataFirmado, $dataTalle);
 				}
 			}
-			if (EntornoEmpresaSupport::esFerli() && ! $tipotransaccion->esNotaCredito()) {
+			$esReversionNd = is_array($opcionesEmision)
+				&& ! empty($opcionesEmision[NotaDebitoReversionNotaCreditoSupport::FLAG]);
+			if (EntornoEmpresaSupport::esFerli() && ! $tipotransaccion->esNotaCredito() && ! $esReversionNd) {
 				FacturaMostradorOtFerliSupport::marcarFacturadasYConsumirStock(
 					$dataFactura,
 					(int) $vta->id,
