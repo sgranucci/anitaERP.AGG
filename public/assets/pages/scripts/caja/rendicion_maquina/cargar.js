@@ -1128,8 +1128,8 @@
             }
             var stub = !!(data.meta && data.meta.stub);
             marcarWigosLeido(!stub);
-            if (stub && !opts.silencioso) {
-                alert(data.meta.mensaje || data.mensaje || 'No se pudo leer WIGOS.');
+            if (stub) {
+                alert((data.meta && (data.meta.mensaje || data.meta.error)) || data.mensaje || 'No se pudo leer WIGOS.');
             }
         }).catch(function (err) {
             if (seq !== wigosRequestSeq) {

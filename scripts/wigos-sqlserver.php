@@ -96,7 +96,8 @@ try {
             exit(2);
         }
 
-        $resultado = wigos_calc_datos_flash_turno($pdo, $fecha, $turno);
+        $liviano = ! empty($payload['liviano']);
+        $resultado = wigos_calc_datos_flash_turno($pdo, $fecha, $turno, $liviano);
         echo json_encode(['ok' => true, 'datos' => $resultado], JSON_THROW_ON_ERROR);
 
         exit(0);
@@ -147,7 +148,7 @@ function wigos_consumir_rowsets(PDOStatement $stmt, callable $onRow): void
 /**
  * @return array<string, float|int>
  */
-function wigos_calc_datos_flash_turno(PDO $pdo, string $fechaYmd, string $turno): array
+function wigos_calc_datos_flash_turno(PDO $pdo, string $fechaYmd, string $turno, bool $liviano = false): array
 {
     $dfecha = substr($fechaYmd, 0, 4).'-'.substr($fechaYmd, 4, 2).'-'.substr($fechaYmd, 6, 2);
     $hfecha = (new DateTimeImmutable($dfecha))->modify('+1 day')->format('Ymd');
@@ -214,28 +215,32 @@ function wigos_calc_datos_flash_turno(PDO $pdo, string $fechaYmd, string $turno)
         wigos_lee_drop($pdo, $fechaAnterior, $billSlotsAnterior, $billRulAnterior, $billPokerAnterior, $winSlots, $winRul, $winPoker, $coinInSlots, $coinInRul, $coinInPoker, $unitsSlots, $unitsRul, $unitsPoker, false);
     }
 
-    $stmt = $pdo->prepare('EXEC SP_QlickView_Win_per_EGM @working_day = ?');
-    $stmt->execute([$fechaYmd]);
-    $coinInSlotOl = 0.0;
-    $coinInRulOl = 0.0;
-    $winOlSlot = 0.0;
-    $winOlRul = 0.0;
-    wigos_consumir_rowsets($stmt, static function (array $row) use (&$coinInSlotOl, &$coinInRulOl, &$winOlSlot, &$winOlRul): void {
-        $tipo = (string) ($row['TIPO_TERMINAL'] ?? '');
-        if ($tipo === 'Slot') {
-            $coinInSlotOl += (float) ($row['COIN_IN'] ?? 0);
-            $winOlSlot += (float) ($row['WIN'] ?? 0);
-        } elseif ($tipo === 'Ruleta') {
-            $coinInRulOl += (float) ($row['COIN_IN'] ?? 0);
-            $winOlRul += (float) ($row['WIN'] ?? 0);
-        }
-    });
+    // Rendición no usa win online ni el detalle de tickets. Esos SP (sobre todo
+    // spTicketsDrop) en Biyemas superan el timeout y dejan el turno Noche sin cargar.
+    if (! $liviano) {
+        $stmt = $pdo->prepare('EXEC SP_QlickView_Win_per_EGM @working_day = ?');
+        $stmt->execute([$fechaYmd]);
+        $coinInSlotOl = 0.0;
+        $coinInRulOl = 0.0;
+        $winOlSlot = 0.0;
+        $winOlRul = 0.0;
+        wigos_consumir_rowsets($stmt, static function (array $row) use (&$coinInSlotOl, &$coinInRulOl, &$winOlSlot, &$winOlRul): void {
+            $tipo = (string) ($row['TIPO_TERMINAL'] ?? '');
+            if ($tipo === 'Slot') {
+                $coinInSlotOl += (float) ($row['COIN_IN'] ?? 0);
+                $winOlSlot += (float) ($row['WIN'] ?? 0);
+            } elseif ($tipo === 'Ruleta') {
+                $coinInRulOl += (float) ($row['COIN_IN'] ?? 0);
+                $winOlRul += (float) ($row['WIN'] ?? 0);
+            }
+        });
 
-    if ($turno === 'M') {
-        $coinInSlots = $coinInSlotOl;
-        $coinInRul = $coinInRulOl;
-        $winSlots = $winOlSlot;
-        $winRul = $winOlRul;
+        if ($turno === 'M') {
+            $coinInSlots = $coinInSlotOl;
+            $coinInRul = $coinInRulOl;
+            $winSlots = $winOlSlot;
+            $winRul = $winOlRul;
+        }
     }
 
     $ventasCaja = 0.0;
@@ -245,7 +250,7 @@ function wigos_calc_datos_flash_turno(PDO $pdo, string $fechaYmd, string $turno)
     $pagosSlots = 0.0;
     $pagosRuletas = 0.0;
 
-    if ($turno === 'M') {
+    if ($turno === 'M' && ! $liviano) {
         foreach (['1' => 'pagos', '0' => 'ventas'] as $vp => $modo) {
             $stmt = $pdo->prepare('EXEC spTicketsDrop @pStart = ?, @pEnd = ?, @pVentaPago = ?');
             $stmt->execute([$dfecha, $hfechaSql, $vp]);

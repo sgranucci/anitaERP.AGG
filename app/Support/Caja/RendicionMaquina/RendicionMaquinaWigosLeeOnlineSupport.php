@@ -48,7 +48,7 @@ final class RendicionMaquinaWigosLeeOnlineSupport
         $letraWigos = RendicionMaquinaTurno::letraWigos($turnoNorm);
         $fechaWigos = str_replace('-', '', $fechaYmd);
 
-        $datosDia = WigosSqlServerProcess::ejecutarCalcDatosFlashTurno(
+        $datosDia = WigosSqlServerProcess::ejecutarCalcDatosRendicionMaquina(
             $fechaWigos,
             $letraWigos,
             $empresaId,
@@ -121,7 +121,7 @@ final class RendicionMaquinaWigosLeeOnlineSupport
             $inputs['drop_rul_ant'] = round($billRulAnt, 2);
 
             $fechaAnt = Carbon::parse($fechaYmd)->subDay()->format('Ymd');
-            $datosAnt = WigosSqlServerProcess::ejecutarCalcDatosFlashTurno(
+            $datosAnt = WigosSqlServerProcess::ejecutarCalcDatosRendicionMaquina(
                 $fechaAnt,
                 RendicionMaquinaTurno::MANIANA,
                 $empresaId,

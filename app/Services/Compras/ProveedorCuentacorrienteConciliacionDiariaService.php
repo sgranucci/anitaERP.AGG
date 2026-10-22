@@ -95,6 +95,16 @@ class ProveedorCuentacorrienteConciliacionDiariaService
             ? collect()
             : Pagoproveedor::query()->whereIn('id', $pagoIds)->pluck('asiento_id', 'id');
 
+        $ccIds = $filas->pluck('proveedor_cuentacorriente_id')
+            ->merge($filas->pluck('proveedor_cuentacorriente_aplicado_id'))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values();
+        $pagoDeCc = $ccIds->isEmpty()
+            ? collect()
+            : Proveedor_Cuentacorriente::query()->whereIn('id', $ccIds)->pluck('pagoproveedor_id', 'id');
+
         foreach ($filas as $apl) {
             $par = Proveedor_Cuentacorriente_Aplicacion::query()
                 ->where('proveedor_cuentacorriente_id', (int) ($apl->proveedor_cuentacorriente_aplicado_id ?? 0))
@@ -129,12 +139,14 @@ class ProveedorCuentacorrienteConciliacionDiariaService
                     'moneda_id' => (int) $apl->moneda_id,
                     'cotizacion' => (float) ($apl->cotizacion ?? 1),
                     'cotizacion_liquidacion' => (float) ($apl->cotizacion_liquidacion ?? 0),
+                    'es_fila_pago' => $this->esFilaDeEstePago($apl, $pagoDeCc),
                 ],
                 [
                     'total' => (float) $par->total,
                     'moneda_id' => (int) $par->moneda_id,
                     'cotizacion' => (float) ($par->cotizacion ?? 1),
                     'cotizacion_liquidacion' => (float) ($par->cotizacion_liquidacion ?? 0),
+                    'es_fila_pago' => $this->esFilaDeEstePago($par, $pagoDeCc),
                 ]
             );
             $dcGuardada = (float) ($apl->diferencia_cambio ?? 0);
@@ -168,6 +180,22 @@ class ProveedorCuentacorrienteConciliacionDiariaService
                 }
             }
         }
+    }
+
+    /**
+     * La fila creada por esta OP/AOP guarda la cotización del pago.
+     * La otra pata es el comprobante (o un anticipo de otra OP).
+     *
+     * @param  \Illuminate\Support\Collection<int|string, mixed>  $pagoDeCc
+     */
+    private function esFilaDeEstePago(object $apl, $pagoDeCc): bool
+    {
+        $pagoApl = (int) ($apl->pagoproveedor_id ?? 0);
+        if ($pagoApl <= 0) {
+            return false;
+        }
+
+        return (int) ($pagoDeCc[(int) $apl->proveedor_cuentacorriente_id] ?? 0) === $pagoApl;
     }
 
     /**

@@ -12,8 +12,8 @@ final class ProveedorCuentacorrienteConciliacionSupport
     public const TOLERANCIA = 0.05;
 
     /**
-     * @param  array{total:float,moneda_id:int,cotizacion:float,cotizacion_liquidacion?:float|null}  $aplDeuda  total negativo
-     * @param  array{total:float,moneda_id:int,cotizacion:float,cotizacion_liquidacion?:float|null}  $aplCredito  total positivo
+     * @param  array{total:float,moneda_id:int,cotizacion:float,cotizacion_liquidacion?:float|null,es_fila_pago?:bool}  $aplDeuda  total negativo
+     * @param  array{total:float,moneda_id:int,cotizacion:float,cotizacion_liquidacion?:float|null,es_fila_pago?:bool}  $aplCredito  total positivo
      */
     public static function dcEsperada(array $aplDeuda, array $aplCredito): float
     {
@@ -23,14 +23,22 @@ final class ProveedorCuentacorrienteConciliacionSupport
         $cotCredito = (float) ($aplCredito['cotizacion'] ?? 1);
         $cruzada = ProveedorCuentacorrienteAplicacionLiquidacionSupport::esCruzada($monedaDeuda, $monedaCredito);
 
-        // La fila de la OP guarda la cotización del pago; la liquidación real es otra
-        // (a menudo la de la factura, y entonces no hay diferencia de cambio).
+        // La fila de la OP guarda la cotización del pago. En una factura esa fila es el
+        // total positivo; en una NC, OPA o AOP es el total negativo. La liquidación real
+        // es otra (a menudo la del comprobante, y entonces no hay diferencia de cambio).
         if (! $cruzada) {
             $liquidacion = (float) ($aplDeuda['cotizacion_liquidacion'] ?? 0);
             if ($liquidacion <= 0) {
                 $liquidacion = (float) ($aplCredito['cotizacion_liquidacion'] ?? 0);
             }
-            if ($liquidacion > 0) {
+            $deudaEsPago = (bool) ($aplDeuda['es_fila_pago'] ?? false);
+            $creditoEsPago = (bool) ($aplCredito['es_fila_pago'] ?? false);
+            if ($deudaEsPago !== $creditoEsPago) {
+                $cotLibro = $deudaEsPago ? $cotCredito : $cotDeuda;
+                $cotPago = $deudaEsPago ? $cotDeuda : $cotCredito;
+                $cotDeuda = $cotLibro;
+                $cotCredito = $liquidacion > 0 ? $liquidacion : $cotPago;
+            } elseif ($liquidacion > 0) {
                 $cotCredito = $liquidacion;
             }
         }

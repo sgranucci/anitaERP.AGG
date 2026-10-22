@@ -50,18 +50,23 @@ final class WigosSqlServerProcess
      *
      * @return array<string, float|int>
      */
-    public static function ejecutarCalcDatosFlashTurno(string $fechaYmd, string $turno, int $empresaId = 0): array
+    public static function ejecutarCalcDatosFlashTurno(string $fechaYmd, string $turno, int $empresaId = 0, bool $liviano = false): array
     {
         $alias = WigosConfigResolver::currWigos($empresaId);
         $timeoutFlash = (int) config('wigos.flash_process_timeout', 90);
         $fecha = self::normalizarFechaYmd($fechaYmd);
         $turnoNorm = strtoupper(trim($turno));
+        $extra = [
+            'action' => 'calcDatosFlashTurno',
+            'fecha' => $fecha,
+            'turno' => $turnoNorm,
+        ];
+        if ($liviano) {
+            // Sin SP_QlickView_Win_per_EGM ni spTicketsDrop (no los usa la rendición).
+            $extra['liviano'] = true;
+        }
         try {
-            $decoded = self::ejecutar($alias, [
-                'action' => 'calcDatosFlashTurno',
-                'fecha' => $fecha,
-                'turno' => $turnoNorm,
-            ], $empresaId, $timeoutFlash);
+            $decoded = self::ejecutar($alias, $extra, $empresaId, $timeoutFlash);
         } catch (RuntimeException $e) {
             // Timeout de SP flash no reintenta B: suele ser el mismo volumen y B (Biyemas) sin wgdb_000.
             if (! self::esErrorConexionOEspejo($e) || self::esTimeoutEjecucionSubproceso($e)) {
@@ -71,11 +76,7 @@ final class WigosSqlServerProcess
             if (! WigosConfigResolver::conexionConfigurada($secundario, $empresaId)) {
                 throw $e;
             }
-            $decoded = self::ejecutar($secundario, [
-                'action' => 'calcDatosFlashTurno',
-                'fecha' => $fecha,
-                'turno' => $turnoNorm,
-            ], $empresaId, $timeoutFlash);
+            $decoded = self::ejecutar($secundario, $extra, $empresaId, $timeoutFlash);
         }
 
         $datos = $decoded['datos'] ?? [];
@@ -93,7 +94,7 @@ final class WigosSqlServerProcess
      */
     public static function ejecutarCalcDatosRendicionMaquina(string $fechaYmd, string $turno, int $empresaId = 0): array
     {
-        return self::ejecutarCalcDatosFlashTurno($fechaYmd, $turno, $empresaId);
+        return self::ejecutarCalcDatosFlashTurno($fechaYmd, $turno, $empresaId, true);
     }
 
     /**
