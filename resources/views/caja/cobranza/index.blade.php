@@ -102,8 +102,9 @@
                             </td>
                             <td>
                                 <ul>
-                                @if ($data->caja_movimientos[0]->caja_movimiento_cuentacajas)
-                                    @foreach($data->caja_movimientos[0]->caja_movimiento_cuentacajas as $movimiento)
+                                @php $movimientoCaja = ($data->caja_movimientos ?? collect())->first(); @endphp
+                                @if ($movimientoCaja && $movimientoCaja->caja_movimiento_cuentacajas)
+                                    @foreach($movimientoCaja->caja_movimiento_cuentacajas as $movimiento)
                                         <li>{{ $movimiento->cuentacajas->nombre }} {{ $movimiento->monto > 0 ? number_format($movimiento->monto,2) : '' }} {{ $movimiento->monto < 0 ? number_format($movimiento->monto,2) : ''}}</li>
                                     @endforeach
                                 @endif

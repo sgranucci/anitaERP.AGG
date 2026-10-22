@@ -90,7 +90,7 @@
         <input type="hidden" id="id" name="id" value="{{ $data->id ?? '' }}" />
         <input type="hidden" id="cotizacion_cobranza" name="cotizacion_cobranza" value="{{ 1 }}" />
         <input type="hidden" id="caja_id" name="caja_id" value="{{ $caja_id ?? ($data->caja_id ?? '') }}" />
-        <input type="hidden" id="caja_movimiento_id" name="caja_movimiento_id" value="{{ $data->caja_movimientos[0]->id ?? '' }}" />
+        <input type="hidden" id="caja_movimiento_id" name="caja_movimiento_id" value="{{ optional(($data->caja_movimientos ?? collect())->first())->id ?? '' }}" />
         <input type="hidden" id="venta_id" name="venta_id" value="{{ $venta_id ?? '' }}" />
         <input type="hidden" id="ordenventa_id" name="ordenventa_id" value="{{ $ordenventa_id ?? '' }}" />
         <input type="hidden" id="referer" name="referer" value="{{ $referer ?? '' }}" />
