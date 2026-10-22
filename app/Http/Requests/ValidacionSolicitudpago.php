@@ -57,6 +57,12 @@ class ValidacionSolicitudpago extends FormRequest
         if ($merge !== []) {
             $this->merge($merge);
         }
+
+        $this->merge([
+            'retencion_activa' => $this->boolean('retencion_activa') ? 1 : 0,
+            'retencion_neto_gravado' => $this->parseMontoAr($this->input('retencion_neto_gravado')),
+            'retencion_tasa_iva' => $this->parseMontoAr($this->input('retencion_tasa_iva')),
+        ]);
     }
 
     /**
@@ -129,6 +135,13 @@ class ValidacionSolicitudpago extends FormRequest
             'montos_debe.*' => 'nullable|numeric|min:0',
             'montos_haber' => 'nullable|array',
             'montos_haber.*' => 'nullable|numeric|min:0',
+            'retencion_activa' => 'nullable|boolean',
+            'retencion_modo' => 'nullable|in:monto,tasa_iva',
+            'retencion_neto_gravado' => 'nullable|numeric|min:0',
+            'retencion_tasa_iva' => 'nullable|numeric|min:0|max:100',
+            'retencionganancia_id' => 'nullable|integer|exists:retencionganancia,id',
+            'retencioniva_id' => 'nullable|integer|exists:retencioniva,id',
+            'retencionsuss_id' => 'nullable|integer|exists:retencionsuss,id',
             'nro_cuotas' => 'nullable|array',
             'nro_cuotas.*' => 'nullable|integer|min:1',
             'fecha_vencimientos_cuota' => 'nullable|array',
@@ -151,7 +164,34 @@ class ValidacionSolicitudpago extends FormRequest
         $validator->after(function ($validator) {
             $this->validarAsientoObligatorio($validator);
             $this->validarCuotasSegunConcepto($validator);
+            $this->validarRetencionesOpa($validator);
         });
+    }
+
+    private function validarRetencionesOpa($validator): void
+    {
+        if (! $this->boolean('retencion_activa')) {
+            return;
+        }
+        if (! SolicitudpagoTratamientos::esAnticipada($this->input('tratamiento'))) {
+            return;
+        }
+        if ((int) $this->input('proveedor_id') <= 0) {
+            $validator->errors()->add(
+                'proveedor_id',
+                'Para calcular retenciones la solicitud anticipada tiene que tener proveedor.'
+            );
+        }
+        $modo = (string) $this->input('retencion_modo');
+        if (! in_array($modo, ['monto', 'tasa_iva'], true)) {
+            $validator->errors()->add('retencion_modo', 'Elija si el neto gravado se informa por monto o por tasa de IVA.');
+        }
+        if ($modo === 'monto' && (float) $this->input('retencion_neto_gravado') <= 0) {
+            $validator->errors()->add('retencion_neto_gravado', 'Indique el neto gravado.');
+        }
+        if ($modo === 'tasa_iva' && $this->input('retencion_tasa_iva') === null) {
+            $validator->errors()->add('retencion_tasa_iva', 'Elija la tasa de IVA.');
+        }
     }
 
     private function validarAsientoObligatorio($validator): void

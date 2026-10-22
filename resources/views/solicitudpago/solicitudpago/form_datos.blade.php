@@ -258,3 +258,5 @@
         </div>
     </div>
 </div>
+
+@include('solicitudpago.solicitudpago.partials.retenciones_opa')

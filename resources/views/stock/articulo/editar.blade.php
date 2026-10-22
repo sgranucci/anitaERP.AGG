@@ -45,7 +45,8 @@
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta-historial-precios.js') }}" type="text/javascript"></script>
 @endif
 @if (can('listar-formula-articulo', false) || can('editar-formula-articulo', false) || can('listar-articulos', false))
-<script src="{{ asset('assets/pages/scripts/stock/articulo/articulos-compra-insumo.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/articulos-compra-insumo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/articulos-compra-insumo.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/formulas-uso-articulo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/formulas-uso-articulo.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 @if (can('listar-formula-articulo', false) || can('listar-articulos', false))
 <script>
@@ -230,6 +231,8 @@ window.abrirRecalcularTraFormula = @json(session('abrir_recalcular_tra_formula')
 @if (can('listar-formula-articulo', false) || can('editar-formula-articulo', false) || can('listar-articulos', false))
 @include('stock.formula_articulo.partials.modal_articulos_compra_insumo')
 <input type="hidden" id="articulos-compra-por-insumo-url" value="{{ route('articulos_compra_por_insumo_formula', ['articulo_id' => 0]) }}">
+@include('stock.articulo.partials.modal_formulas_uso')
+<input type="hidden" id="formulas-por-articulo-url" value="{{ route('formulas_por_articulo', ['articulo_id' => 0]) }}">
 @endif
 @if (\App\Support\Stock\TransferenciaMercaderiaRepararCostosSupport::puedeRecalcularDesdeArticulo())
 @include('stock.articulo.partials.modal_recalcular_transferencias_formula')

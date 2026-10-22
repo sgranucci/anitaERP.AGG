@@ -13,6 +13,7 @@ use App\Support\Contable\CuentacajaCuentacontableResolverSupport;
 use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
+use App\Support\Solicitudpago\SolicitudpagoRetencionCalculoSupport;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
 use InvalidArgumentException;
 
@@ -22,6 +23,16 @@ use InvalidArgumentException;
  */
 class IngresoEgresoSolicitudpagoSupport
 {
+    public static function montoADesembolsar(?Solicitudpago $sp): float
+    {
+        $bruto = self::montoPendiente($sp);
+        if (! self::esPagoOpa($sp)) {
+            return $bruto;
+        }
+
+        return round(max(0.0, $bruto - SolicitudpagoRetencionCalculoSupport::totalImportes($sp)), 2);
+    }
+
     public static function montoPendiente(?Solicitudpago $sp): float
     {
         if ($sp === null) {
@@ -421,11 +432,43 @@ class IngresoEgresoSolicitudpagoSupport
             'carga_cuentacontable_manual' => 'N',
         ];
 
-        if ($lineasCaja === []) {
-            return [$anticipo];
+        $lineasRetencion = SolicitudpagoRetencionCalculoSupport::lineasHaberAsiento(
+            $sp,
+            $empresaId,
+            $monedaLinea,
+            $cotizLinea,
+        );
+
+        return self::cerrarAsientoOpaConRetenciones($anticipo, $lineasRetencion, $lineasCaja);
+    }
+
+    /**
+     * Con retenciones precalculadas el Debe del anticipo es caja + retenciones
+     * (el monto de la solicitud). Sin retenciones el asiento queda como estaba.
+     *
+     * @param  array<string, mixed>  $anticipo
+     * @param  list<array<string, mixed>>  $lineasRetencion
+     * @param  list<array<string, mixed>>  $lineasCaja
+     * @return list<array<string, mixed>>
+     */
+    public static function cerrarAsientoOpaConRetenciones(array $anticipo, array $lineasRetencion, array $lineasCaja): array
+    {
+        $totalRet = 0.0;
+        foreach ($lineasRetencion as $linea) {
+            $totalRet += (float) ($linea['haber'] ?: 0);
+        }
+        $totalRet = round($totalRet, 2);
+        if ($totalRet >= 0.01 && $lineasCaja !== []) {
+            $montoCaja = 0.0;
+            foreach ($lineasCaja as $linea) {
+                $montoCaja += (float) ($linea['haber'] ?: 0);
+                $montoCaja += (float) ($linea['debe'] ?: 0);
+            }
+            $anticipo['debe'] = round($montoCaja + $totalRet, 2);
+            $anticipo['haber'] = '';
         }
 
-        return array_merge([$anticipo], $lineasCaja);
+        return array_merge([$anticipo], $lineasRetencion, $lineasCaja);
     }
 
     /**
@@ -932,17 +975,25 @@ class IngresoEgresoSolicitudpagoSupport
             throw new InvalidArgumentException('No se encontró la solicitud de pago vinculada.');
         }
 
-        $esperado = self::montoPendiente($sp);
+        $esperado = self::montoADesembolsar($sp);
         if ($esperado < 0.01) {
             throw new InvalidArgumentException('La solicitud de pago no tiene monto pendiente a pagar.');
         }
 
         $actual = self::totalOperacionDesdeRequest($data);
         if (abs($actual - $esperado) > 0.02) {
-            throw new InvalidArgumentException(
-                'El total del pago ('.number_format($actual, 2, ',', '.').') debe ser exactamente '
-                .'el monto pendiente de la solicitud ('.number_format($esperado, 2, ',', '.').').'
-            );
+            $retenciones = SolicitudpagoRetencionCalculoSupport::totalImportes($sp);
+            $mensaje = 'El total del pago ('.number_format($actual, 2, ',', '.').') debe ser exactamente '
+                .number_format($esperado, 2, ',', '.');
+            if ($retenciones >= 0.01) {
+                $mensaje .= ' (monto de la solicitud '
+                    .number_format(self::montoPendiente($sp), 2, ',', '.')
+                    .' menos retenciones precalculadas '
+                    .number_format($retenciones, 2, ',', '.').')';
+            } else {
+                $mensaje .= ' (monto pendiente de la solicitud)';
+            }
+            throw new InvalidArgumentException($mensaje.'.');
         }
     }
 

@@ -5,7 +5,7 @@ namespace App\Services\Contable;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\MayorConcepto\MayorConceptoAuditoriaSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoConciliacionAsientoSupport;
-use App\Support\Contable\MayorConcepto\MayorConceptoErpMotor;
+use App\Support\Contable\MayorConcepto\MayorConceptoErpPlanoMotor;
 use App\Support\Contable\MayorConcepto\MayorConceptoLectorHibrido;
 use App\Support\Contable\MayorConcepto\MayorConceptoLectorInterface;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
@@ -28,7 +28,7 @@ class MayorConceptoReporteService
 
     public function __construct(
         private readonly MayorConceptoPeriodoProcesador $procesador,
-        private readonly MayorConceptoErpMotor $erpMotor,
+        private readonly MayorConceptoErpPlanoMotor $erpPlanoMotor,
         private readonly MayorConceptoMonedaConverter $monedaConverter,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly MayorConceptoAuditoriaSupport $auditoriaSupport,
@@ -693,6 +693,7 @@ class MayorConceptoReporteService
         $asientosExcepcion = 0;
         $tolerancia = 1.0;
         $regla = 'Neto analítico + Neto concepto = 0';
+        $nota = '';
 
         foreach ($porEmpresa as $empresaId => $bloque) {
             $empresaId = (int) $empresaId;
@@ -703,6 +704,9 @@ class MayorConceptoReporteService
 
             $tolerancia = (float) ($conc['tolerancia'] ?? $tolerancia);
             $regla = (string) ($conc['regla'] ?? $regla);
+            if ($nota === '' && trim((string) ($conc['nota'] ?? '')) !== '') {
+                $nota = (string) $conc['nota'];
+            }
             $asientosAnalizados += (int) ($conc['asientos_analizados'] ?? 0);
             $asientosCuadrados += (int) ($conc['asientos_cuadrados'] ?? 0);
             $asientosDescuadrados += (int) ($conc['asientos_descuadrados'] ?? 0);
@@ -736,6 +740,7 @@ class MayorConceptoReporteService
             'porcentaje_cuadrado' => $porcentaje,
             'filas_descuadradas' => $filasDescuadradas,
             'filas_cuadradas' => $filasCuadradas,
+            'nota' => $nota,
             'multiempresa' => true,
         ];
 
@@ -1056,7 +1061,7 @@ class MayorConceptoReporteService
         $hastaYmd = (int) $hasta->format('Ymd');
 
         if ($this->usaMotorErpNativo()) {
-            return $this->erpMotor->generar(
+            return $this->erpPlanoMotor->generar(
                 $empresaId,
                 $desdeYmd,
                 $hastaYmd,

@@ -47,4 +47,30 @@ class IngresoEgresoCuadreCajaAsientoSupportTest extends TestCase
         $this->assertSame(200.0, $totales['debe']);
         $this->assertSame(0.0, $totales['haber']);
     }
+
+    public function test_opa_con_retenciones_acepta_caja_neta_y_asiento_bruto(): void
+    {
+        IngresoEgresoCuadreCajaAsientoSupport::assertCuadre([
+            'cuentacaja_ids' => [52],
+            'montos' => [1716290],
+            'debeasientos' => [2096000, '', ''],
+            'haberasientos' => ['', 347710, 32000, 1716290],
+            'retenciones_precalculadas' => 379710,
+        ]);
+
+        $this->assertTrue(true);
+    }
+
+    public function test_sin_retenciones_la_caja_tiene_que_igualar_al_asiento(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        IngresoEgresoCuadreCajaAsientoSupport::assertCuadre([
+            'cuentacaja_ids' => [1],
+            'montos' => [100],
+            'debeasientos' => [200],
+            'haberasientos' => [200],
+            'retenciones_precalculadas' => 0,
+        ]);
+    }
 }

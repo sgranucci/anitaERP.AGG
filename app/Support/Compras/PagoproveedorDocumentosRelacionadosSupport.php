@@ -90,9 +90,15 @@ final class PagoproveedorDocumentosRelacionadosSupport
                     $fila['requisicion'] = CircuitoComprasDocumentosRelacionadosSupport::bloqueRequisicion($req);
                 }
             }
-            $fila['coms'] = CircuitoComprasDocumentosRelacionadosSupport::bloquesComDesdeColeccion(
-                $comp->recepcion_proveedores
-            );
+            $ocId = $oc instanceof Ordencompra ? (int) $oc->id : 0;
+            if ($ocId <= 0) {
+                $ocId = (int) $comp->recepcion_proveedores
+                    ->map(static fn ($rec) => (int) ($rec->ordencompra_id ?? 0))
+                    ->first(static fn (int $id) => $id > 0);
+            }
+            $fila['coms'] = $ocId > 0
+                ? CircuitoComprasDocumentosRelacionadosSupport::bloquesComDeOrdencompra($ocId)
+                : CircuitoComprasDocumentosRelacionadosSupport::bloquesComDesdeColeccion($comp->recepcion_proveedores);
         }
 
         return $fila;

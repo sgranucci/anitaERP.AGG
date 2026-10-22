@@ -93,23 +93,6 @@
     				<div class="col-lg-5">
     					<input type="text" name="skualternativo" id="skualternativo" class="form-control" value="{{old('skualternativo', $producto->skualternativo ?? '')}}"/>
                 	</div>
-                    @php
-                        $articuloEsCompraConInsumo = isset($producto)
-                            && \App\Support\Stock\RecepcionProveedorDepositoSupport::resolverArticuloInsumo($producto) !== null;
-                        $mostrarBtnArticulosCompraInsumo = isset($producto)
-                            && ! $articuloEsCompraConInsumo
-                            && (can('listar-formula-articulo', false) || can('editar-formula-articulo', false) || can('listar-articulos', false));
-                    @endphp
-                    @if ($mostrarBtnArticulosCompraInsumo)
-                    <div class="col-lg-3 d-flex align-items-center">
-                        <button type="button"
-                            id="btn-articulos-compra-insumo-articulo"
-                            class="btn btn-outline-info btn-sm tooltipsC"
-                            title="Art&iacute;culos de compra con SKU alt./insumo apuntando a este insumo">
-                            <i class="fa fa-shopping-cart"></i> Art. compra
-                        </button>
-                    </div>
-                    @endif
                 </div>
                 <div class="form-group row">
                     <div class="col-lg-4"></div>
@@ -117,6 +100,49 @@
                         <small class="form-text text-muted">Si este art&iacute;culo debe apuntar a un insumo, ingrese aqu&iacute; el SKU de ese insumo.</small>
                     </div>
                 </div>
+                @php
+                    $hayUsoInsumo = \App\Support\Stock\ArticuloUsoInsumoSupport::idUsoInsumo() !== null;
+                    $esInsumo = isset($producto)
+                        && \App\Support\Stock\ArticuloUsoInsumoSupport::esUsoInsumo((int) ($producto->usoarticulo_id ?? 0));
+                    $apuntaAOtroInsumo = false;
+                    if (isset($producto) && ! $hayUsoInsumo) {
+                        $insumoResuelto = \App\Support\Stock\RecepcionProveedorDepositoSupport::resolverArticuloInsumo($producto);
+                        $apuntaAOtroInsumo = $insumoResuelto !== null
+                            && (int) $insumoResuelto->id !== (int) $producto->id;
+                    }
+                    $puedeConsultarVinculosFormula = can('listar-formula-articulo', false)
+                        || can('editar-formula-articulo', false)
+                        || can('listar-articulos', false);
+                    $mostrarBtnArticulosCompraInsumo = isset($producto)
+                        && $puedeConsultarVinculosFormula
+                        && ($esInsumo || (! $hayUsoInsumo && ! $apuntaAOtroInsumo));
+                    $mostrarBtnFormulasUso = isset($producto)
+                        && (int) ($producto->id ?? 0) > 0
+                        && $puedeConsultarVinculosFormula;
+                @endphp
+                @if ($mostrarBtnArticulosCompraInsumo || $mostrarBtnFormulasUso)
+                <div class="form-group row">
+                    <div class="col-lg-4"></div>
+                    <div class="col-lg-8 d-flex flex-wrap align-items-center" style="gap: 0.35rem;">
+                        @if ($mostrarBtnArticulosCompraInsumo)
+                        <button type="button"
+                            id="btn-articulos-compra-insumo-articulo"
+                            class="btn btn-outline-info btn-sm tooltipsC"
+                            title="Art&iacute;culos de compra cuyo SKU alt./insumo apunta a este insumo">
+                            <i class="fa fa-shopping-cart"></i> Art&iacute;culos de compra
+                        </button>
+                        @endif
+                        @if ($mostrarBtnFormulasUso)
+                        <button type="button"
+                            id="btn-formulas-uso-articulo"
+                            class="btn btn-outline-info btn-sm tooltipsC"
+                            title="F&oacute;rmulas que incluyen este art&iacute;culo como componente o subf&oacute;rmula">
+                            <i class="fa fa-flask"></i> Usado en f&oacute;rmulas
+                        </button>
+                        @endif
+                    </div>
+                </div>
+                @endif
                 <div class="form-group row">
     				<label for="unidadesxenvase" class="col-lg-4 col-form-label text-right pr-2">Unidades x envase</label>
     				<div class="col-lg-2">

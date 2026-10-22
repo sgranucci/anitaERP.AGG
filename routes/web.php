@@ -1658,6 +1658,7 @@ Route::get('stock/lista-formula-articulo/{formato?}/{busqueda?}', 'Stock\Formula
 Route::get('stock/formula-articulo/{id}/archivo/{archivo}', 'Stock\FormulaArticuloController@descargarArchivo')->name('formula_articulo_archivo');
 Route::get('stock/leer_historia_formula_articulo/{formula_articulo_id}', 'Stock\FormulaArticuloController@leerHistoria')->name('leer_historia_formula_articulo');
 Route::get('stock/formula-articulo/articulos-compra-por-insumo/{articulo_id}', 'Stock\FormulaArticuloController@articulosCompraPorInsumo')->name('articulos_compra_por_insumo_formula');
+Route::get('stock/formula-articulo/formulas-por-articulo/{articulo_id}', 'Stock\FormulaArticuloController@formulasPorArticulo')->name('formulas_por_articulo');
 Route::get('stock/formula-articulo/{id}/articulos-asociados', 'Stock\FormulaArticuloController@articulosAsociados')->name('articulos_asociados_formula_articulo');
 Route::get('stock/formula-articulo/{id}/modal', 'Stock\FormulaArticuloController@modal')->name('formula_articulo_modal');
 
@@ -5086,6 +5087,8 @@ Route::get('solicitudpago/solicitudpago/crear', 'Solicitudpago\SolicitudpagoCont
 Route::post('solicitudpago/solicitudpago', 'Solicitudpago\SolicitudpagoController@guardar')->name('guardar_solicitudpago');
 Route::post('solicitudpago/solicitudpago/carga-masiva/preview', 'Solicitudpago\SolicitudpagoController@previewCargaMasiva')->name('preview_carga_masiva_solicitudpago');
 Route::post('solicitudpago/solicitudpago/carga-masiva/confirmar', 'Solicitudpago\SolicitudpagoController@confirmarCargaMasiva')->name('confirmar_carga_masiva_solicitudpago');
+Route::post('solicitudpago/solicitudpago/calcular-retenciones', 'Solicitudpago\SolicitudpagoController@calcularRetenciones')->name('calcular_retenciones_solicitudpago');
+Route::get('solicitudpago/solicitudpago/codigos-retencion-proveedor', 'Solicitudpago\SolicitudpagoController@codigosRetencionProveedor')->name('codigos_retencion_proveedor_solicitudpago');
 Route::get('solicitudpago/solicitudpago/visualizar/{id}/{hash}', 'Solicitudpago\SolicitudpagoController@visualizar')->name('visualizar_solicitudpago');
 Route::get('solicitudpago/solicitudpago/{id}/descargar-paquete/{hash}', 'Solicitudpago\SolicitudpagoController@descargarPaqueteMail')->name('descargar_paquete_mail_solicitudpago');
 Route::get('solicitudpago/solicitudpago/{id}/editar', 'Solicitudpago\SolicitudpagoController@editar')->name('editar_solicitudpago')->middleware('modo.consulta');

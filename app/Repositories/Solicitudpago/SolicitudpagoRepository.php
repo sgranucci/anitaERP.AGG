@@ -17,6 +17,7 @@ use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoListadoFiltros;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
+use App\Support\Solicitudpago\SolicitudpagoRetencionCalculoSupport;
 use App\Support\Solicitudpago\SolicitudpagoVisibilidadSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\UploadedFile;
@@ -133,6 +134,7 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
                 'empresas', 'proveedores', 'conceptos', 'formapagosol', 'monedas', 'sectores', 'centrocostos', 'madre',
                 'hijas:id,codigo,estado,monto,fecha,solicitudpago_madre_id',
                 'cuentas.empresas', 'cuentas.cuentacontables', 'cuentas.centrocostos',
+                'retenciones',
                 'cuotas.hijas',
                 'estados.usuarios',
                 'archivos.usuarios',
@@ -169,6 +171,7 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             $this->guardarCuentas($sp, $data);
             $this->guardarCuotas($sp, $data);
             $this->guardarArchivos($sp, $data);
+            SolicitudpagoRetencionCalculoSupport::sincronizar($sp, $data);
 
             if ($existente === null || ($estadoAnterior !== null && $estadoAnterior !== $sp->estado)) {
                 $this->registrarEstadoLocal(
@@ -182,6 +185,7 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             $sp = $sp->fresh([
                 'empresas', 'proveedores', 'conceptos', 'formapagosol', 'monedas', 'sectores', 'madre',
                 'cuentas.empresas', 'cuentas.cuentacontables', 'cuentas.centrocostos',
+                'retenciones',
                 'cuotas.hijas', 'archivos.usuarios',
             ]);
 
@@ -234,6 +238,7 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             $sp = $sp->fresh([
                 'empresas', 'proveedores', 'conceptos', 'formapagosol', 'monedas', 'sectores', 'madre',
                 'cuentas.empresas', 'cuentas.cuentacontables', 'cuentas.centrocostos',
+                'retenciones',
                 'cuotas.hijas', 'archivos.usuarios',
             ]);
             $this->escrituraService->actualizar($sp, $anterior);

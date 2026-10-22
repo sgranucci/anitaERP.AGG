@@ -42,6 +42,7 @@ final class IngresoEgresoCuadreCajaAsientoSupport
 
         $totalesAsiento = self::totalesAsiento($data);
         $totalAsiento = max($totalesAsiento['debe'], $totalesAsiento['haber']);
+        $totalAsiento = round($totalAsiento - self::retencionesPrecalculadas($data), 2);
         if ($totalAsiento <= self::TOLERANCIA) {
             return false;
         }
@@ -81,12 +82,17 @@ final class IngresoEgresoCuadreCajaAsientoSupport
             );
         }
 
-        // Discrepancia solo si la caja ya tenía (o quedó con) importe distinto de cero
+        // Discrepancia solo si la caja ya tenía (o quedó con) importe distinto de cero.
+        // En una OPA con retenciones el asiento es el bruto y la caja es el neto.
         if ($totalOperacion > self::TOLERANCIA
             && abs($totalOperacion - $totalAsiento) > self::TOLERANCIA) {
-            throw new InvalidArgumentException(
-                'Problemas en el asiento, no coincide el monto total de la operación con el asiento contable.'
-            );
+            $retenciones = self::retencionesPrecalculadas($data);
+            $asientoEsperado = round($totalOperacion + $retenciones, 2);
+            if ($retenciones < 0.01 || abs($asientoEsperado - $totalAsiento) > self::TOLERANCIA) {
+                throw new InvalidArgumentException(
+                    'Problemas en el asiento, no coincide el monto total de la operación con el asiento contable.'
+                );
+            }
         }
 
         self::assertLineasCajaConMonto($data);
@@ -241,6 +247,28 @@ final class IngresoEgresoCuadreCajaAsientoSupport
         );
 
         return ['debe' => round($totales['total_debe'], 2), 'haber' => round($totales['total_haber'], 2)];
+    }
+
+    /**
+     * Retenciones de la solicitud anticipada. La caja transfiere el neto y el
+     * asiento total es el bruto.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function retencionesPrecalculadas(array $data): float
+    {
+        if (array_key_exists('retenciones_precalculadas', $data)) {
+            return round(max(0, (float) $data['retenciones_precalculadas']), 2);
+        }
+
+        $spId = (int) ($data['solicitudpago_id'] ?? 0);
+        if ($spId <= 0) {
+            return 0.0;
+        }
+
+        $sp = \App\Models\Solicitudpago\Solicitudpago::query()->find($spId);
+
+        return round(max(0, \App\Support\Solicitudpago\SolicitudpagoRetencionCalculoSupport::totalImportes($sp)), 2);
     }
 
     /**

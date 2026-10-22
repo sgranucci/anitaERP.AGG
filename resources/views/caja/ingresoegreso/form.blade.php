@@ -5,11 +5,14 @@
     @php
         $montoPendienteSp = 0.0;
         if (! empty($solicitudpagoOrigen)) {
-            $montoPendienteSp = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::montoPendiente($solicitudpagoOrigen);
+            $montoPendienteSp = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::montoADesembolsar($solicitudpagoOrigen);
+            $retencionesSp = \App\Support\Solicitudpago\SolicitudpagoRetencionCalculoSupport::totalImportes($solicitudpagoOrigen);
         }
     @endphp
     <input type="hidden" id="solicitudpago_monto_pendiente" name="solicitudpago_monto_pendiente"
-           value="{{ $montoPendienteSp > 0 ? number_format($montoPendienteSp, 2, '.', '') : '' }}">
+           value="{{ $montoPendienteSp > 0 ? number_format($montoPendienteSp, 2, '.', '') : '' }}"
+           data-retenciones="{{ number_format($retencionesSp ?? 0, 2, '.', '') }}"
+           data-bruto="{{ ! empty($solicitudpagoOrigen) ? number_format(\App\Support\Caja\IngresoEgresoSolicitudpagoSupport::montoPendiente($solicitudpagoOrigen), 2, '.', '') : '' }}">
     @if ($montoPendienteSp > 0)
         <input type="hidden" id="solicitudpago_moneda_id" value="{{ (int) ($solicitudpagoOrigen->moneda_id ?? 0) }}">
     @endif

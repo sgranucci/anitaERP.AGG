@@ -18,6 +18,7 @@ use App\Services\Stock\FormulaArticuloAnitaSyncService;
 use App\Services\Stock\FormulaArticuloService;
 use App\Services\Stock\FormulaArticuloVinculoService;
 use App\Services\Stock\FormulaArticuloCostoTotalService;
+use App\Support\Stock\ArticuloFormulasUsoSupport;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
@@ -361,6 +362,38 @@ class FormulaArticuloController extends Controller
                 'id' => (int) $insumo->id,
                 'sku' => (string) $insumo->sku,
                 'descripcion' => (string) ($insumo->descripcion ?? ''),
+            ],
+        ]);
+    }
+
+    /**
+     * Fórmulas que incluyen el artículo como componente o como subfórmula.
+     */
+    public function formulasPorArticulo(int $articulo_id)
+    {
+        if (! can('listar-formula-articulo', false)
+            && ! can('editar-formula-articulo', false)
+            && ! can('listar-articulos', false)) {
+            abort(403);
+        }
+
+        $articulo = Articulo::query()->find($articulo_id, ['id', 'sku', 'descripcion']);
+        if (! $articulo) {
+            return response()->json(['datos' => [], 'articulo' => null, 'mensaje' => 'Artículo no encontrado.']);
+        }
+
+        $filas = ArticuloFormulasUsoSupport::listar((int) $articulo->id);
+        foreach ($filas as &$fila) {
+            unset($fila['linea_id']);
+        }
+        unset($fila);
+
+        return response()->json([
+            'datos' => $filas,
+            'articulo' => [
+                'id' => (int) $articulo->id,
+                'sku' => (string) $articulo->sku,
+                'descripcion' => (string) ($articulo->descripcion ?? ''),
             ],
         ]);
     }

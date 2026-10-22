@@ -5,6 +5,11 @@ namespace App\Http\Controllers\Solicitudpago;
 use App\Exports\Solicitudpago\SolicitudpagoListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionSolicitudpago;
+use App\Models\Compras\Proveedor;
+use App\Models\Compras\Retencionganancia;
+use App\Models\Compras\Retencioniva;
+use App\Models\Compras\Retencionsuss;
+use App\Models\Configuracion\Impuesto;
 use App\Models\Contable\Centrocosto;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
@@ -23,6 +28,7 @@ use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoListadoFiltros;
+use App\Support\Solicitudpago\SolicitudpagoRetencionCalculoSupport;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
 use App\Support\Solicitudpago\SolicitudpagoVisibilidadSupport;
 use Illuminate\Http\Request;
@@ -79,6 +85,92 @@ class SolicitudpagoController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+    }
+
+    public function calcularRetenciones(Request $request)
+    {
+        if (! can('crear-solicitud-pago', false)
+            && ! can('editar-solicitud-pago', false)
+            && ! can('actualizar-solicitud-pago', false)
+        ) {
+            return response()->json(['ok' => false, 'message' => 'Sin permiso'], 403);
+        }
+
+        $monto = $this->numeroRetencionPedido($request->input('monto'));
+        $neto = $request->filled('retencion_neto_gravado')
+            ? $this->numeroRetencionPedido($request->input('retencion_neto_gravado'))
+            : null;
+        $tasa = $request->filled('retencion_tasa_iva')
+            ? $this->numeroRetencionPedido($request->input('retencion_tasa_iva'))
+            : null;
+
+        try {
+            $presentacion = SolicitudpagoRetencionCalculoSupport::calcularDesdePedido(
+                (int) $request->input('proveedor_id'),
+                (int) $request->input('empresa_id'),
+                $request->input('fecha') ?: null,
+                $monto ?? 0.0,
+                (string) $request->input('retencion_modo', ''),
+                $neto,
+                $tasa,
+                SolicitudpagoRetencionCalculoSupport::codigosPedidos($request->only([
+                    'retencionganancia_id', 'retencioniva_id', 'retencionsuss_id',
+                ])),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true] + $presentacion);
+    }
+
+    public function codigosRetencionProveedor(Request $request)
+    {
+        if (! can('crear-solicitud-pago', false)
+            && ! can('editar-solicitud-pago', false)
+            && ! can('actualizar-solicitud-pago', false)
+        ) {
+            return response()->json(['ok' => false, 'message' => 'Sin permiso'], 403);
+        }
+
+        $proveedor = Proveedor::query()->find((int) $request->input('proveedor_id'));
+        if ($proveedor === null) {
+            return response()->json(['ok' => false, 'message' => 'No se encontró el proveedor.'], 404);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'retencionganancia_id' => $proveedor->retencionganancia_id ? (int) $proveedor->retencionganancia_id : null,
+            'retencioniva_id' => $proveedor->retencioniva_id ? (int) $proveedor->retencioniva_id : null,
+            'retencionsuss_id' => $proveedor->retencionsuss_id ? (int) $proveedor->retencionsuss_id : null,
+        ]);
+    }
+
+    private function numeroRetencionPedido(mixed $valor): ?float
+    {
+        if ($valor === null || $valor === '') {
+            return null;
+        }
+        if (is_int($valor) || is_float($valor)) {
+            return round((float) $valor, 2);
+        }
+        $t = trim(str_replace(' ', '', (string) $valor));
+        if ($t === '') {
+            return null;
+        }
+        if (str_contains($t, ',')) {
+            $t = str_replace('.', '', $t);
+            $t = str_replace(',', '.', $t);
+        } elseif (preg_match('/^\d{1,3}(\.\d{3})+$/', $t)) {
+            $t = str_replace('.', '', $t);
+        }
+        if (! is_numeric($t)) {
+            return null;
+        }
+
+        return round((float) $t, 2);
     }
 
     public function confirmarCargaMasiva(Request $request)
@@ -772,6 +864,10 @@ class SolicitudpagoController extends Controller
             'centrocosto_cabecera' => $centrocostoCabecera,
             'estado_enum' => SolicitudpagoEstados::opciones(),
             'tratamiento_enum' => SolicitudpagoTratamientos::opciones(),
+            'impuesto_query' => Impuesto::soloNacionales()->orderBy('valor')->orderBy('nombre')->get(),
+            'retencionganancia_query' => Retencionganancia::query()->orderBy('codigo')->orderBy('nombre')->get(['id', 'codigo', 'nombre']),
+            'retencioniva_query' => Retencioniva::query()->orderBy('codigo')->orderBy('nombre')->get(['id', 'codigo', 'nombre']),
+            'retencionsuss_query' => Retencionsuss::query()->orderBy('codigo')->orderBy('nombre')->get(['id', 'codigo', 'nombre']),
         ];
     }
 

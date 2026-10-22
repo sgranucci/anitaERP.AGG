@@ -323,7 +323,12 @@ class MayorConceptoController extends Controller
         MayorConceptoProgreso::marcar('Conciliando asientos de la empresa…');
 
         try {
-            $auditoria = $this->reporteService->conciliarPorAsiento($bloque);
+            // El motor ERP ya trae el cruce de la pata hasta el límite. No reemplazarlo
+            // por la regla vieja (neto analítico + neto concepto = 0): esa suma duplica
+            // el importe cuando el concepto sale del mismo lado que la pata.
+            $auditoria = (isset($bloque['_auditoria']) && is_array($bloque['_auditoria']))
+                ? $bloque['_auditoria']
+                : $this->reporteService->conciliarPorAsiento($bloque);
         } catch (\Throwable $e) {
             report($e);
             $auditoria = [

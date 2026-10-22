@@ -700,6 +700,18 @@ final class PagoproveedorAsientoArmadoSupport
      * Cuenta de retención: Contable → Cuentas automáticas (pago.retencion_*).
      * IIBB: primero provincia (Compras → Retención IIBB); si no, fallback automático.
      */
+    public static function cuentaIdRetencion(string $tipo, int $empresaId, ?int $provinciaId = null): int
+    {
+        return self::resolverCuentaRetencion((object) [
+            'tiporetencion' => $tipo,
+            'provincia_id' => $provinciaId,
+        ], $empresaId);
+    }
+
+    /**
+     * Cuenta de retención: Contable → Cuentas automáticas (pago.retencion_*).
+     * IIBB: primero provincia (Compras → Retención IIBB); si no, fallback automático.
+     */
     private static function resolverCuentaRetencion(object $ret, int $empresaId): int
     {
         $directo = (int) ($ret->cuentacontable_ids ?? $ret->cuentacontable_id ?? 0);

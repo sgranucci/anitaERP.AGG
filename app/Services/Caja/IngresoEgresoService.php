@@ -549,7 +549,7 @@ class IngresoEgresoService
 		// Pago desde SP: asiento = cuentas de la solicitud (on the fly).
 		if ($solicitudpagoId > 0 && count($datosContables) == 0) {
 			$sp = Solicitudpago::query()
-				->with(['cuentas.cuentacontables'])
+				->with(['cuentas.cuentacontables', 'retenciones'])
 				->find($solicitudpagoId);
 			if ($sp && $sp->cuentas->isNotEmpty()) {
 				$monedaId = (int) ($sp->moneda_id ?? 0);
@@ -578,14 +578,18 @@ class IngresoEgresoService
 					$monedaId = 1;
 				}
 
-				$asientoSp = IngresoEgresoSolicitudpagoSupport::lineasAsientoDesdeSolicitud(
-					$sp,
-					$monedaId,
-					$cotizacion,
-					is_array($datosCaja) ? $datosCaja : [],
-					$empresa_id,
-					(int) $signo
-				);
+				try {
+					$asientoSp = IngresoEgresoSolicitudpagoSupport::lineasAsientoDesdeSolicitud(
+						$sp,
+						$monedaId,
+						$cotizacion,
+						is_array($datosCaja) ? $datosCaja : [],
+						$empresa_id,
+						(int) $signo
+					);
+				} catch (InvalidArgumentException $e) {
+					return ['mensaje' => 'ng', 'errores' => $e->getMessage()];
+				}
 				if ($asientoSp !== []) {
 					$lineasCheques = [];
 					IngresoEgresoChequeAsientoSupport::agregarLineasCheques(

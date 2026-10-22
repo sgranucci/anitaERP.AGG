@@ -33,6 +33,12 @@ class Solicitudpago extends Model implements Auditable
         'fecha_entrega',
         'fecha_vencimiento',
         'monto',
+        'retencion_activa',
+        'retencion_modo',
+        'retencion_neto_gravado',
+        'retencion_tasa_iva',
+        'retencion_importe_iva',
+        'retencion_calculada_en',
         'observacion',
         'estado',
         'sector_solicitudpago_id',
@@ -50,6 +56,11 @@ class Solicitudpago extends Model implements Auditable
         'fecha_entrega' => 'date',
         'fecha_vencimiento' => 'date',
         'monto' => 'decimal:2',
+        'retencion_activa' => 'boolean',
+        'retencion_neto_gravado' => 'decimal:2',
+        'retencion_tasa_iva' => 'decimal:4',
+        'retencion_importe_iva' => 'decimal:2',
+        'retencion_calculada_en' => 'datetime',
         'proveedor_id' => 'integer',
         'concepto_solicitudpago_id' => 'integer',
         'formapagosol_id' => 'integer',
@@ -114,6 +125,11 @@ class Solicitudpago extends Model implements Auditable
     public function cuentas()
     {
         return $this->hasMany(Solicitudpago_Cuenta::class, 'solicitudpago_id')->orderBy('id');
+    }
+
+    public function retenciones(): HasMany
+    {
+        return $this->hasMany(Solicitudpago_Retencion::class, 'solicitudpago_id')->orderBy('id');
     }
 
     public function cuotas()

@@ -52,7 +52,11 @@
             <p class="small text-muted mb-2">
                 <strong>Regla:</strong> {{ $conc['regla'] ?? 'Neto analítico + Neto concepto = 0' }} por asiento.
                 Tolerancia ±{{ number_format((float) ($conc['tolerancia'] ?? 1), 2, ',', '.') }}.
-                Excluye asiento 0 (remanente mayor plano).
+                @if (! empty($conc['nota']))
+                    {{ $conc['nota'] }}
+                @else
+                    Excluye asiento 0 (remanente mayor plano).
+                @endif
             </p>
 
             @if ($asientosExcepcion > 0)

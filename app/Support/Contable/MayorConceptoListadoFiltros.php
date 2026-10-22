@@ -97,7 +97,8 @@ class MayorConceptoListadoFiltros
     }
 
     /**
-     * Fuerza Anita mientras el motor ERP del mayor por concepto no esté habilitado.
+     * Con la fuente ERP habilitada, vacío o «erp» usa el motor de patas hasta el límite.
+     * «anita» sigue en el procesador original.
      */
     public static function normalizarFuenteMayor(mixed $valor = null): string
     {
@@ -105,9 +106,7 @@ class MayorConceptoListadoFiltros
             return MayorFuenteConsultaSupport::MODO_ANITA;
         }
 
-        return MayorFuenteConsultaSupport::normalizarModo(
-            $valor ?? MayorFuenteConsultaSupport::MODO_ANITA
-        );
+        return MayorFuenteConsultaSupport::normalizarModo($valor);
     }
 
     /**

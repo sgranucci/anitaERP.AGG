@@ -437,8 +437,11 @@ class RequisicionService
         }
 
         try {
+            RequisicionCapexCuentaPuenteSupport::validar($this->payloadValidacionLineasDesdeModelo($req), true);
             $preview = $this->arbolaprobacionService->firmantesRetomeArbolRequisicion($req, $centrocostoArbolId);
         } catch (\RuntimeException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
@@ -465,7 +468,7 @@ class RequisicionService
         }
 
         try {
-            RequisicionCapexCuentaPuenteSupport::validar($this->payloadValidacionLineasDesdeModelo($req));
+            RequisicionCapexCuentaPuenteSupport::validar($this->payloadValidacionLineasDesdeModelo($req), true);
             RequisicionArticuloCatalogoSupport::validarPayload($this->payloadValidacionLineasDesdeModelo($req));
             $preview = $this->arbolaprobacionService->firmantesRetomeArbolRequisicion($req, $centrocostoArbolId);
         } catch (\RuntimeException $e) {

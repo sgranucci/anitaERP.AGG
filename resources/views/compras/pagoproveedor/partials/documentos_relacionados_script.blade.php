@@ -41,7 +41,10 @@ $(function () {
             if (idx > 0) {
                 html += '<hr class="my-1">';
             }
-            html += btnGrupo(c, 'COM ' + (c.numero || ''));
+            var label = (c.usar_etiqueta && c.etiqueta)
+                ? c.etiqueta
+                : ('COM ' + (c.numero || c.etiqueta || ''));
+            html += btnGrupo(c, label);
         });
         return html;
     }

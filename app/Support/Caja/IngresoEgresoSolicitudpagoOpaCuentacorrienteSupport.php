@@ -9,6 +9,9 @@ use App\Models\Contable\Asiento;
 use App\Services\Compras\ProveedorCuentacorrienteAplicacionAnitaSyncService;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaNumeracionSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
+use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport;
+use App\Support\Solicitudpago\SolicitudpagoRetencionCalculoSupport;
+use App\Support\Solicitudpago\SolicitudpagoRetencionOpaSupport;
 use Auth;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -51,6 +54,11 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
         if ($monto < 0.01) {
             throw new InvalidArgumentException('No hay importe para registrar la OPA de la solicitud anticipada.');
         }
+
+        $totalRetenciones = SolicitudpagoRetencionCalculoSupport::totalImportes($sp);
+        $montoAnticipo = $totalRetenciones >= 0.01
+            ? round($monto + $totalRetenciones, 2)
+            : $monto;
 
         $asientoId = (int) Asiento::query()
             ->where('caja_movimiento_id', (int) $movimiento->id)
@@ -99,7 +107,14 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
 
         PagoproveedorAplicacionCuentacorrienteSupport::crearAnticipo(
             $pago->fresh(),
-            $monto,
+            $montoAnticipo,
+            $monedaId,
+            $cotizacion > 0 ? $cotizacion : 1
+        );
+
+        SolicitudpagoRetencionOpaSupport::volcar(
+            $pago->fresh(),
+            $sp,
             $monedaId,
             $cotizacion > 0 ? $cotizacion : 1
         );
@@ -114,6 +129,7 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
         }
 
         self::espejarCuentacorrienteAnita($pago->fresh());
+        self::espejarRetencionesAnita($pago->fresh());
     }
 
     public static function eliminarDesdeMovimiento(Caja_Movimiento $movimiento): void
@@ -124,6 +140,7 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
         }
 
         self::borrarCuentacorrienteAnita($pago);
+        self::borrarRetencionesAnita($pago);
 
         PagoproveedorAplicacionCuentacorrienteSupport::revertirAplicacionesExistentes($pago);
 
@@ -149,6 +166,30 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
      * circuito de pagos. Anita es otra base: un corte del bridge no debe hacer
      * rollback del IE (la auditoría diaria lo informa como «Falta promov de la OP»).
      */
+    private static function espejarRetencionesAnita(Pagoproveedor $pago): void
+    {
+        try {
+            PagoproveedorAnitaRetencionEscrituraSupport::sincronizarDesdePago($pago->fresh(), true);
+        } catch (Throwable $e) {
+            Log::warning('anita_bridge.fallo', [
+                'contexto' => 'retenciones OPA desde IE '.$pago->etiquetaComprobante(),
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private static function borrarRetencionesAnita(Pagoproveedor $pago): void
+    {
+        try {
+            PagoproveedorAnitaRetencionEscrituraSupport::eliminarDesdePago($pago);
+        } catch (Throwable $e) {
+            Log::warning('anita_bridge.fallo', [
+                'contexto' => 'retenciones delete OPA desde IE '.$pago->etiquetaComprobante(),
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
+    }
+
     private static function espejarCuentacorrienteAnita(Pagoproveedor $pago): void
     {
         try {

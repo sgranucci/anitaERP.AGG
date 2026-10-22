@@ -28,10 +28,11 @@ final class RequisicionCapexCuentaPuenteSupport
 
     /**
      * @param  array<string, mixed>  $payload  articulo_ids[], cantidades[], capex_ids[], empresa_id
+     * @param  bool  $alEnviarArbol  true cuando el corte es el envío al árbol (el texto dice qué hacer después)
      *
      * @throws \InvalidArgumentException
      */
-    public static function validar(array $payload): void
+    public static function validar(array $payload, bool $alEnviarArbol = false): void
     {
         if (! OrdencompraUiConfigSupport::pedirPartidaCapex()) {
             return;
@@ -52,9 +53,9 @@ final class RequisicionCapexCuentaPuenteSupport
         }
 
         $cuentas = ArticuloCuentaCompraGastoSupport::etiquetasPorArticulos($ids, $empresaId);
-        $skus = $ids === []
+        $articulos = $ids === []
             ? collect()
-            : Articulo::query()->whereIn('id', $ids)->pluck('sku', 'id');
+            : Articulo::query()->whereIn('id', $ids)->get(['id', 'sku', 'descripcion'])->keyBy('id');
 
         $faltan = [];
         $n = count($articuloIds);
@@ -74,18 +75,48 @@ final class RequisicionCapexCuentaPuenteSupport
             if ($capexId !== null && $capexId !== '' && (int) $capexId > 0) {
                 continue;
             }
-            $sku = trim((string) ($skus[$articuloId] ?? ''));
+            $art = $articulos->get($articuloId);
+            $sku = trim((string) ($art?->sku ?? ''));
+            $desc = trim((string) ($art?->descripcion ?? ''));
+            if (mb_strlen($desc) > 80) {
+                $desc = mb_substr($desc, 0, 77).'…';
+            }
             $etiqueta = $sku !== '' ? $sku : ('artículo '.$articuloId);
-            $faltan[] = 'línea '.($i + 1).' ('.$etiqueta.')';
+            if ($desc !== '') {
+                $etiqueta .= ' '.$desc;
+            }
+            $faltan[] = 'la línea '.($i + 1).' ('.$etiqueta.')';
         }
 
         if ($faltan === []) {
             return;
         }
 
-        throw new \InvalidArgumentException(
-            'La cuenta puente de bienes de uso ('.self::CODIGO_CUENTA.' COMPRAS BS. DE USO -CTA.PUENTE) exige un CAPEX. Falta en: '
-            .implode('; ', $faltan).'.'
-        );
+        throw new \InvalidArgumentException(self::mensajeCapexFaltante($faltan, $alEnviarArbol));
+    }
+
+    /**
+     * @param  list<string>  $lineas  textos ya armados, p. ej. "la línea 1 (SKU descripción)"
+     */
+    public static function mensajeCapexFaltante(array $lineas, bool $alEnviarArbol = false): string
+    {
+        $lineas = array_values(array_filter($lineas, static fn ($linea) => trim((string) $linea) !== ''));
+        $cuenta = self::CODIGO_CUENTA.' COMPRAS BS. DE USO - CTA. PUENTE';
+        $una = count($lineas) === 1;
+        $donde = $una ? $lineas[0] : implode('; ', $lineas);
+        $verbo = $una ? 'imputa' : 'imputan';
+        $esas = $una ? 'esa línea' : 'esas líneas';
+
+        $tiene = $una ? 'no tiene' : 'no tienen';
+
+        if ($alEnviarArbol) {
+            return 'No se puede enviar al árbol: '.$donde.' '.$verbo
+                .' a la cuenta puente de bienes de uso ('.$cuenta.') y '.$tiene.' CAPEX. '
+                .'Edite la requisición, cargue el CAPEX de '.$esas.' y vuelva a enviarla.';
+        }
+
+        return 'No se puede guardar: '.$donde.' '.$verbo
+            .' a la cuenta puente de bienes de uso ('.$cuenta.') y '.$tiene.' CAPEX. '
+            .'Cargue el CAPEX de '.$esas.' para poder continuar.';
     }
 }

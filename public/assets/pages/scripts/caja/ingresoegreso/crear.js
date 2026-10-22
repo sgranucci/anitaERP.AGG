@@ -14,6 +14,8 @@ var ingresoEgresoAbrevTipo = '';
 var ABREV_TRANSFERENCIA_IE = 'TRA';
 var ABREV_CANJE_CHEQUE_IE = 'CANJE';
 var montoPendienteSp = 0;
+var retencionesSpIe = 0;
+var brutoSpIe = 0;
    
     $(function () {
         $('#agrega_renglon_cuenta').on('click', agregaRenglonCuenta);
@@ -28,6 +30,8 @@ var montoPendienteSp = 0;
 		flCrear = document.getElementById("crear");
 		flModificaAsiento = false;
 		montoPendienteSp = parseFloat($('#solicitudpago_monto_pendiente').val() || '0') || 0;
+		retencionesSpIe = parseFloat($('#solicitudpago_monto_pendiente').attr('data-retenciones') || '0') || 0;
+		brutoSpIe = parseFloat($('#solicitudpago_monto_pendiente').attr('data-bruto') || '0') || 0;
 		if (parseInt($('#solicitudpago_id').val() || '0', 10) > 0) {
 			// Forzar regeneración del asiento desde cuentas de la SP
 			flModificaAsiento = true;
@@ -80,6 +84,9 @@ var montoPendienteSp = 0;
         });
 		$("#botonform5").click(function(e){
 			e.preventDefault();
+			if (esPagoSolicitudPagoIe()) {
+				flModificaAsiento = true;
+			}
 			// Solo genera el asiento cuando se crea la operacion
 			if (flCrear || flModificaAsiento)
 				generaAsientoContable();
@@ -364,6 +371,10 @@ var montoPendienteSp = 0;
 			var totalHaberAsientoCmp = parseTotalAsientoCampo($("#totalhaberasiento").val());
 			var totalAsientoCmp = totalDebeAsiento >= totalHaberAsientoCmp ? totalDebeAsiento : totalHaberAsientoCmp;
 			var totalOperacionCmp = (totalDebe >= totalHaber) ? totalDebe : totalHaber;
+			var asientoEsperado = totalOperacionCmp;
+			if (retencionesSpIe > 0.009) {
+				asientoEsperado = Math.round((totalOperacionCmp + retencionesSpIe) * 100) / 100;
+			}
 
 			if (totalAsientoCmp > 0.02 && totalOperacionCmp <= 0.02) {
 				alert('Debe cargar el monto en las cuentas de caja. El asiento tiene importe pero las cuentas de caja quedaron en cero.');
@@ -373,7 +384,7 @@ var montoPendienteSp = 0;
 				alert('Debe generar el asiento contable. Las cuentas de caja tienen importe pero el asiento quedó en cero.');
 				flError = true;
 				muestraVentanaAsiento();
-			} else if (totalOperacionCmp > 0.02 && Math.abs(totalOperacionCmp - totalAsientoCmp) > 0.02) {
+			} else if (totalOperacionCmp > 0.02 && Math.abs(asientoEsperado - totalAsientoCmp) > 0.02) {
 				// Solo discrepancia si la caja ya tenía (o quedó con) monto ≠ 0
 				alert('Problemas en el asiento, no coincide el monto total de la operación con el asiento contable');
 				flError = true;
@@ -1127,6 +1138,9 @@ var montoPendienteSp = 0;
 		var debe = parseTotalAsientoCampo($("#totaldebeasiento").val());
 		var haber = parseTotalAsientoCampo($("#totalhaberasiento").val());
 		var totalAsiento = debe >= haber ? debe : haber;
+		if (retencionesSpIe > 0.009) {
+			totalAsiento = Math.round((totalAsiento - retencionesSpIe) * 100) / 100;
+		}
 		if (!(totalAsiento > 0.02)) {
 			return false;
 		}
@@ -1351,7 +1365,7 @@ var montoPendienteSp = 0;
 					});
 				}
 				else {
-					alert("Error en generación del asiento contable");
+					alert((data && data.errores) ? data.errores : "Error en generación del asiento contable");
 					if (callback) {
 						callback(false);
 					}
@@ -1744,9 +1758,14 @@ var montoPendienteSp = 0;
 		}
 		var actual = totalOperacionCajaActualIe();
 		if (Math.abs(actual - montoPendienteSp) > 0.02) {
+			var detalle = 'el monto pendiente de la solicitud (' + montoPendienteSp.toFixed(2) + ')';
+			if (retencionesSpIe > 0.009) {
+				detalle = 'el importe a transferir (' + montoPendienteSp.toFixed(2)
+					+ ', monto ' + brutoSpIe.toFixed(2) + ' menos retenciones ' + retencionesSpIe.toFixed(2) + ')';
+			}
 			alert(
-				'El total del pago (' + actual.toFixed(2) + ') debe ser exactamente el monto pendiente de la solicitud ('
-				+ montoPendienteSp.toFixed(2) + '). No puede ser ni mayor ni menor.'
+				'El total del pago (' + actual.toFixed(2) + ') debe ser exactamente ' + detalle
+				+ '. No puede ser ni mayor ni menor.'
 			);
 			return false;
 		}
@@ -1768,8 +1787,10 @@ var montoPendienteSp = 0;
 		}
 		var actual = totalOperacionCajaActualIe();
 		var diff = Math.round((actual - montoPendienteSp) * 100) / 100;
-		var txt = 'Monto fijo SP: ' + montoPendienteSp.toFixed(2)
-			+ ' — cargado: ' + actual.toFixed(2);
+		var etiqueta = retencionesSpIe > 0.009
+			? ('A transferir: ' + montoPendienteSp.toFixed(2) + ' (monto ' + brutoSpIe.toFixed(2) + ' − retenciones ' + retencionesSpIe.toFixed(2) + ')')
+			: ('Monto fijo SP: ' + montoPendienteSp.toFixed(2));
+		var txt = etiqueta + ' — cargado: ' + actual.toFixed(2);
 		if (Math.abs(diff) <= 0.02) {
 			$aviso.removeClass('d-none alert-warning alert-danger').addClass('alert-success')
 				.text(txt + ' (ok)');

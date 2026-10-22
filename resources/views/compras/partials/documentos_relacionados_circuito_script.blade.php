@@ -50,8 +50,15 @@ $(function () {
         return html;
     }
 
+    function facturasDe(r) {
+        if (r.facturas && r.facturas.length) {
+            return r.facturas;
+        }
+        return r.factura ? [r.factura] : [];
+    }
+
     function filaVacia(r) {
-        return !r.requisicion && !r.ordencompra && !(r.coms && r.coms.length) && !r.factura && !(r.ops && r.ops.length);
+        return !r.requisicion && !r.ordencompra && !(r.coms && r.coms.length) && !facturasDe(r).length && !(r.ops && r.ops.length);
     }
 
     $(document).on('click', '.js-circuito-documentos-relacionados', function () {
@@ -70,16 +77,16 @@ $(function () {
                 var origen = data.origen || '';
 
                 function tieneVinculo(r) {
+                    var facturas = facturasDe(r);
                     if (origen !== 'requisicion' && r.requisicion) return true;
                     if (origen !== 'ordencompra' && r.ordencompra) return true;
                     if (origen !== 'recepcion' && r.coms && r.coms.length) return true;
-                    if (origen !== 'factura' && r.factura) return true;
+                    if (origen !== 'factura' && facturas.length) return true;
                     if (r.ops && r.ops.length) return true;
-                    // Desde RQ/OC/COM/factura el “adelante” también cuenta
-                    if (origen === 'requisicion' && (r.ordencompra || (r.coms && r.coms.length) || r.factura || (r.ops && r.ops.length))) return true;
-                    if (origen === 'ordencompra' && (r.requisicion || (r.coms && r.coms.length) || r.factura || (r.ops && r.ops.length))) return true;
-                    if (origen === 'recepcion' && (r.requisicion || r.ordencompra || r.factura || (r.ops && r.ops.length))) return true;
-                    if (origen === 'factura' && r.factura) return true;
+                    if (origen === 'requisicion' && (r.ordencompra || (r.coms && r.coms.length) || facturas.length || (r.ops && r.ops.length))) return true;
+                    if (origen === 'ordencompra' && (r.requisicion || (r.coms && r.coms.length) || facturas.length || (r.ops && r.ops.length))) return true;
+                    if (origen === 'recepcion' && (r.requisicion || r.ordencompra || facturas.length || (r.ops && r.ops.length))) return true;
+                    if (origen === 'factura' && facturas.length) return true;
                     return false;
                 }
 
@@ -101,7 +108,7 @@ $(function () {
                     html += '<td>' + (r.requisicion ? btnGrupo(r.requisicion, 'REQ ' + (r.requisicion.numero || '')) : '<span class="text-muted small">—</span>') + '</td>';
                     html += '<td>' + (r.ordencompra ? btnGrupo(r.ordencompra, 'OC ' + (r.ordencompra.numero || '')) : '<span class="text-muted small">—</span>') + '</td>';
                     html += '<td>' + celdaLista(r.coms, 'COM') + '</td>';
-                    html += '<td>' + (r.factura ? btnGrupo(r.factura, '') : '<span class="text-muted small">—</span>') + '</td>';
+                    html += '<td>' + celdaLista(facturasDe(r), '') + '</td>';
                     html += '<td>' + celdaLista(r.ops, '') + '</td>';
                     html += '</tr>';
                 });

@@ -133,7 +133,12 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
             return;
         }
 
-        self::eliminarPorClave($pago, ['OPP', 'AOP']);
+        $tipos = ['OPP', 'AOP'];
+        $propio = strtoupper(substr(trim((string) ($pago->tipocomprobante ?: '')), 0, 3));
+        if ($propio !== '' && ! in_array($propio, $tipos, true)) {
+            $tipos[] = $propio;
+        }
+        self::eliminarPorClave($pago, $tipos);
     }
 
     /**

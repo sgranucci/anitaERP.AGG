@@ -13,8 +13,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Circuito procure-to-pay: RQ → OC → COM → Factura → OP.
  *
- * Cada origen arma filas “hacia atrás y adelante” con bloques reutilizables
- * (consulta / PDF) para el modal de documentos relacionados.
+ * Abrir cualquier documento resuelve su orden de compra y lista todas las
+ * operaciones que tienen ese id (recepciones, devoluciones, facturas y sus OP).
  */
 final class CircuitoComprasDocumentosRelacionadosSupport
 {
@@ -61,55 +61,22 @@ final class CircuitoComprasDocumentosRelacionadosSupport
      */
     public static function armarDesdeRecepcion(Recepcion_Proveedor $rec): array
     {
-        $rec->loadMissing(['ordencompras.requisiciones', 'recepcion_referencia']);
+        $rec->loadMissing('ordencompras.requisiciones');
         $oc = $rec->ordencompras instanceof Ordencompra ? $rec->ordencompras : null;
-        $req = $oc?->requisiciones instanceof Requisicion ? $oc->requisiciones : null;
+        $etiqueta = 'COM '.((string) ($rec->numerorecepcion ?? $rec->id));
+        if ($oc instanceof Ordencompra) {
+            $req = $oc->requisiciones instanceof Requisicion ? $oc->requisiciones : null;
 
-        $facturas = self::facturasVinculadasARecepcion((int) $rec->id);
-
-        $bloqueReq = $req ? self::bloqueRequisicion($req) : null;
-        $bloqueOc = $oc ? self::bloqueOrdencompra($oc) : null;
-        $bloqueCom = self::bloqueCom($rec);
-        $comsCircuito = self::comsConOrigenDevolucion($rec, $bloqueCom);
-        if ($rec->tipo !== Recepcion_Proveedor::TIPO_DEVOLUCION) {
-            $comsCircuito = array_merge($comsCircuito, self::bloquesComDesdeColeccion(
-                Recepcion_Proveedor::query()
-                    ->where('tipo', Recepcion_Proveedor::TIPO_DEVOLUCION)
-                    ->where('recepcion_referencia_id', (int) $rec->id)
-                    ->orderBy('id')
-                    ->get()
-            ));
+            return self::respuesta('recepcion', (int) $rec->id, $etiqueta, self::filasDesdeOc($oc, $req));
         }
 
-        if ($facturas->isEmpty()) {
-            $filas = [[
-                'requisicion' => $bloqueReq,
-                'ordencompra' => $bloqueOc,
-                'coms' => $comsCircuito,
-                'factura' => null,
-                'ops' => [],
-            ]];
-        } else {
-            $filas = [];
-            foreach ($facturas as $fact) {
-                $filas[] = [
-                    'requisicion' => $bloqueReq,
-                    'ordencompra' => $bloqueOc ?? ($fact->ordencompras instanceof Ordencompra
-                        ? self::bloqueOrdencompra($fact->ordencompras)
-                        : null),
-                    'coms' => $comsCircuito,
-                    'factura' => self::bloqueFactura($fact),
-                    'ops' => self::bloquesOpParaComprobante((int) $fact->id),
-                ];
-            }
-        }
-
-        return self::respuesta(
-            'recepcion',
-            (int) $rec->id,
-            'COM '.((string) ($rec->numerorecepcion ?? $rec->id)),
-            $filas
-        );
+        return self::respuesta('recepcion', (int) $rec->id, $etiqueta, [[
+            'requisicion' => null,
+            'ordencompra' => null,
+            'coms' => [self::bloqueCom($rec)],
+            'factura' => null,
+            'ops' => [],
+        ]]);
     }
 
     /**
@@ -124,15 +91,14 @@ final class CircuitoComprasDocumentosRelacionadosSupport
         ]);
 
         $oc = $comp->ordencompras instanceof Ordencompra ? $comp->ordencompras : null;
-        $req = $oc?->requisiciones instanceof Requisicion ? $oc->requisiciones : null;
-
-        $fila = [
-            'requisicion' => $req ? self::bloqueRequisicion($req) : null,
-            'ordencompra' => $oc ? self::bloqueOrdencompra($oc) : null,
-            'coms' => self::bloquesComDesdeColeccion($comp->recepcion_proveedores),
-            'factura' => self::bloqueFactura($comp),
-            'ops' => self::bloquesOpParaComprobante((int) $comp->id),
-        ];
+        if (! $oc instanceof Ordencompra) {
+            $ocIdDesdeCom = (int) $comp->recepcion_proveedores
+                ->map(static fn (Recepcion_Proveedor $rec) => (int) ($rec->ordencompra_id ?? 0))
+                ->first(static fn (int $id) => $id > 0);
+            if ($ocIdDesdeCom > 0) {
+                $oc = Ordencompra::query()->with('requisiciones')->find($ocIdDesdeCom);
+            }
+        }
 
         $etiqueta = sprintf(
             '%s %s-%04d-%s',
@@ -142,70 +108,79 @@ final class CircuitoComprasDocumentosRelacionadosSupport
             $comp->numerocomprobante
         );
 
-        return self::respuesta('factura', (int) $comp->id, $etiqueta, [$fila]);
+        if ($oc instanceof Ordencompra) {
+            $req = $oc->requisiciones instanceof Requisicion ? $oc->requisiciones : null;
+
+            return self::respuesta('factura', (int) $comp->id, $etiqueta, self::filasDesdeOc($oc, $req));
+        }
+
+        return self::respuesta('factura', (int) $comp->id, $etiqueta, [[
+            'requisicion' => null,
+            'ordencompra' => null,
+            'coms' => self::bloquesComDesdeColeccion($comp->recepcion_proveedores),
+            'factura' => self::bloqueFactura($comp),
+            'ops' => self::bloquesOpParaComprobante((int) $comp->id),
+        ]]);
     }
 
     /**
+     * Recepciones, devoluciones, facturas y órdenes de pago de esta OC.
+     *
      * @return list<array<string, mixed>>
      */
     private static function filasDesdeOc(Ordencompra $oc, ?Requisicion $req): array
     {
         $bloqueReq = $req ? self::bloqueRequisicion($req) : null;
         $bloqueOc = self::bloqueOrdencompra($oc);
-
-        $comsOc = Recepcion_Proveedor::query()
-            ->where('ordencompra_id', (int) $oc->id)
-            ->orderByDesc('id')
-            ->get();
+        $coms = self::bloquesComDeOrdencompra((int) $oc->id);
 
         $facturas = Comprobante_Proveedor::query()
             ->where('ordencompra_id', (int) $oc->id)
-            ->with(['tipotransaccion_compras:id,abreviatura', 'recepcion_proveedores'])
+            ->with(['tipotransaccion_compras:id,abreviatura'])
             ->orderByDesc('id')
             ->get();
 
-        if ($facturas->isEmpty()) {
-            return [[
-                'requisicion' => $bloqueReq,
-                'ordencompra' => $bloqueOc,
-                'coms' => self::bloquesComDesdeColeccion($comsOc),
-                'factura' => null,
-                'ops' => [],
-            ]];
-        }
-
-        $filas = [];
+        $bloquesFactura = [];
+        $ops = [];
+        $opsYa = [];
         foreach ($facturas as $fact) {
-            $comsFact = $fact->recepcion_proveedores;
-            $comsMostrar = $comsFact->isNotEmpty() ? $comsFact : $comsOc;
-            $filas[] = [
-                'requisicion' => $bloqueReq,
-                'ordencompra' => $bloqueOc,
-                'coms' => self::bloquesComDesdeColeccion($comsMostrar),
-                'factura' => self::bloqueFactura($fact),
-                'ops' => self::bloquesOpParaComprobante((int) $fact->id),
-            ];
+            $bloquesFactura[] = self::bloqueFactura($fact);
+            foreach (self::bloquesOpParaComprobante((int) $fact->id) as $op) {
+                $opId = (int) ($op['id'] ?? 0);
+                if ($opId > 0 && isset($opsYa[$opId])) {
+                    continue;
+                }
+                if ($opId > 0) {
+                    $opsYa[$opId] = true;
+                }
+                $ops[] = $op;
+            }
         }
 
-        return $filas;
+        return [[
+            'requisicion' => $bloqueReq,
+            'ordencompra' => $bloqueOc,
+            'coms' => $coms,
+            'facturas' => $bloquesFactura,
+            'factura' => $bloquesFactura[0] ?? null,
+            'ops' => $ops,
+        ]];
     }
 
     /**
-     * @return Collection<int, Comprobante_Proveedor>
+     * @return list<array<string, mixed>>
      */
-    private static function facturasVinculadasARecepcion(int $recepcionId): Collection
+    public static function bloquesComDeOrdencompra(int $ordencompraId): array
     {
-        if ($recepcionId <= 0) {
-            return collect();
+        if ($ordencompraId <= 0) {
+            return [];
         }
 
-        return Comprobante_Proveedor::query()
-            ->whereHas('recepcion_proveedores', static function ($q) use ($recepcionId) {
-                $q->where('recepcion_proveedor.id', $recepcionId);
-            })
-            ->with(['tipotransaccion_compras:id,abreviatura', 'ordencompras.requisiciones'])
-            ->orderByDesc('id')
-            ->get();
+        return self::bloquesComDesdeColeccion(
+            Recepcion_Proveedor::query()
+                ->where('ordencompra_id', $ordencompraId)
+                ->get()
+        );
     }
 
     /**
@@ -306,26 +281,6 @@ final class CircuitoComprasDocumentosRelacionadosSupport
     }
 
     /**
-     * En una devolución, el circuito muestra primero el COM del que sale.
-     *
-     * @param  array<string, mixed>  $bloquePropio
-     * @return list<array<string, mixed>>
-     */
-    private static function comsConOrigenDevolucion(Recepcion_Proveedor $rec, array $bloquePropio): array
-    {
-        $origen = $rec->recepcion_referencia;
-        if ($rec->tipo !== Recepcion_Proveedor::TIPO_DEVOLUCION || ! $origen instanceof Recepcion_Proveedor) {
-            return [$bloquePropio];
-        }
-
-        $bloqueOrigen = self::bloqueCom($origen);
-        $bloqueOrigen['etiqueta'] = 'COM origen '.((string) ($origen->numerorecepcion ?? $origen->id));
-        $bloqueOrigen['usar_etiqueta'] = true;
-
-        return [$bloqueOrigen, $bloquePropio];
-    }
-
-    /**
      * @return array<string, mixed>
      */
     public static function bloqueCom(Recepcion_Proveedor $rec): array
@@ -400,7 +355,6 @@ final class CircuitoComprasDocumentosRelacionadosSupport
             }
         }
 
-        $lista = self::agregarDevolucionesFaltantes($lista);
         $lista = self::ordenarRecepcionesYDevoluciones($lista);
 
         $out = [];
@@ -409,44 +363,6 @@ final class CircuitoComprasDocumentosRelacionadosSupport
         }
 
         return $out;
-    }
-
-    /**
-     * La factura suele vincular solo el COM recibido. La devolución de ese COM
-     * es otro documento del circuito y tiene que verse en la misma columna.
-     *
-     * @param  Collection<int, Recepcion_Proveedor>  $lista
-     * @return Collection<int, Recepcion_Proveedor>
-     */
-    private static function agregarDevolucionesFaltantes(Collection $lista): Collection
-    {
-        $ids = $lista
-            ->pluck('id')
-            ->map(static fn ($id) => (int) $id)
-            ->filter(static fn (int $id) => $id > 0)
-            ->values()
-            ->all();
-        if ($ids === []) {
-            return $lista;
-        }
-
-        $ya = array_fill_keys($ids, true);
-        $devoluciones = Recepcion_Proveedor::query()
-            ->where('tipo', Recepcion_Proveedor::TIPO_DEVOLUCION)
-            ->whereIn('recepcion_referencia_id', $ids)
-            ->orderBy('id')
-            ->get();
-
-        foreach ($devoluciones as $devolucion) {
-            $id = (int) $devolucion->id;
-            if ($id <= 0 || isset($ya[$id])) {
-                continue;
-            }
-            $lista->push($devolucion);
-            $ya[$id] = true;
-        }
-
-        return $lista;
     }
 
     /**

@@ -362,7 +362,7 @@ class IngresoEgresoController extends Controller
             $spId = (int) $request->input('solicitudpago_id');
             $data->solicitudpago_id = $spId;
             $solicitudpagoOrigen = \App\Models\Solicitudpago\Solicitudpago::query()
-                ->with(['proveedores', 'monedas', 'cuentas.cuentacontables', 'cuentas.centrocostos'])
+                ->with(['proveedores', 'monedas', 'cuentas.cuentacontables', 'cuentas.centrocostos', 'retenciones'])
                 ->find($spId);
             if ($solicitudpagoOrigen) {
                 if (! $request->filled('empresa_id') && $solicitudpagoOrigen->empresa_id) {
@@ -464,7 +464,7 @@ class IngresoEgresoController extends Controller
             $origen = 'ingresoegreso';
 
         $data = $this->caja_movimientoRepository->find($id);
-        $data->loadMissing(['solicitudpagos.monedas', 'tipotransaccioncajas']);
+        $data->loadMissing(['solicitudpagos.monedas', 'solicitudpagos.retenciones', 'tipotransaccioncajas']);
 
         $solicitudpagoOrigen = $data->solicitudpagos;
         $tipotransaccion_caja_query = $this->tipotransaccion_cajaRepository->all();

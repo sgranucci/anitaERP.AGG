@@ -35,6 +35,7 @@ class RetencionesPagoContextoBuilder
         array $overrides = [],
         ?float $importeNetoFallback = null,
         ?float $importeIvaFallback = null,
+        bool $iibbSobreNetoInformado = false,
     ): array {
         $bases = $aplicaciones !== []
             ? $this->basesSupport->desdeAplicaciones($aplicaciones, $monedaPagoId, $cotizacionPago)
@@ -45,9 +46,10 @@ class RetencionesPagoContextoBuilder
             $ivaFb = round((float) ($importeIvaFallback ?? 0), 2);
             // Anticipo / sin factura: no hay destino BA para recortar IIBB.
             // Usar el bruto como base inventaba retención CABA (primera jur. agente).
+            // La SP anticipada que pide el cálculo informa el neto a propósito.
             $bases = new RetencionesPagoBasesResultado(
                 netoGanancias: $netoFb,
-                netoIibb: 0.0,
+                netoIibb: $iibbSobreNetoInformado ? $netoFb : 0.0,
                 netoGravado: $netoFb,
                 netoExento: 0.0,
                 netoNogravado: 0.0,

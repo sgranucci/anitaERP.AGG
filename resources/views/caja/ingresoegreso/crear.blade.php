@@ -42,7 +42,7 @@
         @include('includes.mensaje')
         @if (! empty($solicitudpagoOrigen))
             @php
-                $montoSpUi = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::montoPendiente($solicitudpagoOrigen);
+                $montoSpUi = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::montoADesembolsar($solicitudpagoOrigen);
             @endphp
             <div class="alert alert-info">
                 <strong>Pago desde solicitud de pago #{{ $solicitudpagoOrigen->codigo }}</strong>
@@ -60,6 +60,24 @@
                     Tipo de transacción: {{ \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::abreviaturaTipoPago($solicitudpagoOrigen) }}
                     (solicitud anticipada). Se genera una OPA impaga en la cuenta corriente del proveedor
                     y el asiento imputa anticipos a proveedores.
+                    @php
+                        $retUi = \App\Support\Solicitudpago\SolicitudpagoRetencionCalculoSupport::totalImportes($solicitudpagoOrigen);
+                        $brutoUi = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::montoPendiente($solicitudpagoOrigen);
+                    @endphp
+                    @if ($retUi >= 0.01)
+                        <br>
+                        Retenciones precalculadas en la solicitud:
+                        <strong>{{ number_format($retUi, 2, ',', '.') }}</strong>.
+                        El importe a transferir es
+                        <strong>{{ number_format($montoSpUi, 2, ',', '.') }}</strong>
+                        (monto {{ number_format($brutoUi, 2, ',', '.') }} menos las retenciones).
+                        El asiento queda: Debe anticipos a proveedores por el monto de la solicitud,
+                        Haber la caja por lo transferido y Haber cada retención.
+                    @elseif ($solicitudpagoOrigen->retencion_activa)
+                        <br>
+                        El cálculo de retenciones está activo y no corresponde practicar ninguna.
+                        Se transfiere el monto completo de la solicitud.
+                    @endif
                 @else
                     Tipo de transacción: {{ \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::abreviaturaTipoPago($solicitudpagoOrigen) }}.
                     El asiento contable se arma con las cuentas de la solicitud.

@@ -868,3 +868,145 @@ function spActualizarEstadoAsiento() {
     $('#sp-aviso-asiento-monto').toggleClass('d-none', !valido || !balanceado || igualMonto);
     $('#sp-badge-asiento').toggleClass('d-none', valido && balanceado && igualMonto);
 }
+
+$(function () {
+    var $panel = $('#sp-retenciones');
+    if (!$panel.length) {
+        return;
+    }
+
+    function esAnticipada() {
+        return String($('#tratamiento').val() || '') === 'ANTICIPADA';
+    }
+
+    function modoRetencion() {
+        return $('input[name="retencion_modo"]:checked').val() || 'monto';
+    }
+
+    function tasaRetencionSp() {
+        var $opt = $('#retencion_tasa_iva option:selected');
+        if (!$opt.length || String($opt.val() || '') === '') {
+            return null;
+        }
+        var valor = $opt.attr('data-valor');
+        if (valor == null || valor === '') {
+            valor = $opt.val();
+        }
+        var n = parseFloat(valor);
+        return isNaN(n) ? null : n;
+    }
+
+    function fmtRetencionSp(n) {
+        return typeof spFmtMonto === 'function'
+            ? spFmtMonto(n)
+            : Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function syncRetencionesSp() {
+        var anticipada = esAnticipada();
+        var consulta = String($panel.attr('data-consulta')) === '1';
+        $panel.toggleClass('d-none', !anticipada);
+        $panel.find('input, select, button').prop('disabled', !anticipada || consulta);
+        var activa = $('#retencion_activa').is(':checked');
+        $('#sp-retenciones-cuerpo').toggleClass('d-none', !activa);
+        var porMonto = modoRetencion() === 'monto';
+        $('#sp-retencion-neto-wrap').toggleClass('d-none', !porMonto);
+        $('#sp-retencion-tasa-wrap').toggleClass('d-none', porMonto);
+        $('#sp-retencion-neto-calculado').toggleClass('d-none', porMonto);
+        if (anticipada && !consulta) {
+            $('#retencion_neto_gravado').prop('disabled', !porMonto);
+            $('#retencion_tasa_iva').prop('disabled', porMonto);
+        }
+
+        var tasa = tasaRetencionSp();
+        var monto = typeof spParseMontoValor === 'function' ? spParseMontoValor($('#monto').val()) : 0;
+        var $neto = $('#sp-retencion-neto-calculado-valor');
+        var $iva = $('#sp-retencion-neto-calculado-iva');
+        if (!porMonto && tasa != null && monto > 0) {
+            var neto = Math.round((monto / (1 + tasa / 100)) * 100) / 100;
+            var iva = Math.round((monto - neto) * 100) / 100;
+            $neto.val(fmtRetencionSp(neto));
+            $iva.text('IVA ' + fmtRetencionSp(iva));
+        } else if (!porMonto) {
+            $neto.val('');
+            $iva.text(tasa == null ? 'Elegí la tasa para ver el neto gravado.' : '');
+        }
+    }
+
+    $('#tratamiento, #retencion_activa, #monto, #retencion_neto_gravado, #retencion_tasa_iva').on('change input', syncRetencionesSp);
+    $('input[name="retencion_modo"]').on('change', syncRetencionesSp);
+    syncRetencionesSp();
+
+    function aplicarCodigosProveedor() {
+        var url = $panel.attr('data-codigos-url');
+        var proveedorId = $('#proveedor_id').val();
+        if (!url || !proveedorId || String($panel.attr('data-consulta')) === '1') {
+            return;
+        }
+        $.get(url, { proveedor_id: proveedorId }).done(function (data) {
+            if (!data || !data.ok) {
+                return;
+            }
+            $('#retencionganancia_id').val(data.retencionganancia_id || '');
+            $('#retencioniva_id').val(data.retencioniva_id || '');
+            $('#retencionsuss_id').val(data.retencionsuss_id || '');
+        });
+    }
+
+    $('#proveedor_id').on('change', aplicarCodigosProveedor);
+
+    $('#sp-retenciones-calcular').on('click', function () {
+        var $err = $('#sp-retenciones-error');
+        $err.addClass('d-none').text('');
+        var porMonto = modoRetencion() === 'monto';
+        var tasa = tasaRetencionSp();
+        if (!porMonto && tasa == null) {
+            $err.removeClass('d-none').text('Elija la tasa de IVA.');
+            return;
+        }
+        var monto = typeof spParseMontoValor === 'function' ? spParseMontoValor($('#monto').val()) : 0;
+        var neto = typeof spParseMontoValor === 'function' ? spParseMontoValor($('#retencion_neto_gravado').val()) : 0;
+        $.ajax({
+            url: $panel.data('url'),
+            method: 'POST',
+            data: {
+                _token: $('input[name=_token]').val(),
+                proveedor_id: $('#proveedor_id').val(),
+                empresa_id: $('#empresa_id').val(),
+                fecha: $('#fecha').val(),
+                monto: monto,
+                retencion_modo: modoRetencion(),
+                retencion_neto_gravado: porMonto ? neto : '',
+                retencion_tasa_iva: porMonto || tasa == null ? '' : tasa,
+                retencionganancia_id: $('#retencionganancia_id').val() || '',
+                retencioniva_id: $('#retencioniva_id').val() || '',
+                retencionsuss_id: $('#retencionsuss_id').val() || ''
+            }
+        }).done(function (data) {
+            if (!data || !data.ok) {
+                $err.removeClass('d-none').text((data && data.message) ? data.message : 'No se pudo calcular.');
+                return;
+            }
+            var html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-2"><thead class="thead-light"><tr>'
+                + '<th>Concepto</th><th class="text-right">Base</th><th class="text-right">Alícuota %</th><th class="text-right">Importe</th><th>Resultado</th>'
+                + '</tr></thead><tbody>';
+            (data.lineas || []).forEach(function (linea) {
+                html += '<tr><td>' + linea.etiqueta + '</td><td class="text-right">' + fmtRetencionSp(linea.base)
+                    + '</td><td class="text-right">' + fmtRetencionSp(linea.alicuota) + '</td><td class="text-right">' + fmtRetencionSp(linea.importe)
+                    + '</td><td>' + (linea.motivo || '') + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+            html += '<p class="mb-0 small">Neto gravado: <strong>' + fmtRetencionSp(data.bases.neto_gravado)
+                + '</strong>. IVA: <strong>' + fmtRetencionSp(data.bases.importe_iva)
+                + '</strong>. Retenciones: <strong>' + fmtRetencionSp(data.total)
+                + '</strong>. A transferir: <strong>' + fmtRetencionSp(data.a_transferir) + '</strong>.</p>';
+            $('#sp-retenciones-resultado').html(html);
+        }).fail(function (xhr) {
+            var msg = 'No se pudo calcular.';
+            if (xhr.responseJSON && xhr.responseJSON.message) {
+                msg = xhr.responseJSON.message;
+            }
+            $err.removeClass('d-none').text(msg);
+        });
+    });
+});

@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Route;
  * - Circuito hasta COM: RQ APROBADA → 1ª recepción de proveedor (COM).
  * - % OC abiertas: OC con saldo pendiente de recepción / total no suspendidas.
  * - Productividad: volumen de OC y ahorro ($ / %) por comprador
- *   (solo usuarios con roles Enc-compras / Op-Compras; configurable).
+ *   (usuarios con rol de comprador: Enc-compras, Op-Compras y las variantes AGG; configurable).
  */
 final class ComprasKpisProcesoProductividadSupport
 {
@@ -32,7 +32,7 @@ final class ComprasKpisProcesoProductividadSupport
     public const META_PCT_OC_ABIERTAS = 10.0;
 
     /** @var list<string> */
-    public const ROLES_COMPRADOR_DEFAULT = ['Enc-compras', 'Op-Compras'];
+    public const ROLES_COMPRADOR_DEFAULT = ['Enc-compras', 'Op-Compras', 'Op-Compras-arbol', 'Op-Compras-SP'];
 
     /** ID sintético para OC importadas desde Anita (no es un usuario real). */
     public const USUARIO_ID_ANITA = 0;

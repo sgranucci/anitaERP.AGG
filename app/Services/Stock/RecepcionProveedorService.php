@@ -96,6 +96,15 @@ class RecepcionProveedorService
     {
         return DB::transaction(function () use ($data) {
             $tipo = $data['tipo'] ?? Recepcion_Proveedor::TIPO_RECEPCION;
+            if ($tipo === Recepcion_Proveedor::TIPO_DEVOLUCION) {
+                $origenId = (int) ($data['recepcion_referencia_id'] ?? 0);
+                if ($origenId > 0) {
+                    $ocOrigen = (int) Recepcion_Proveedor::query()->whereKey($origenId)->value('ordencompra_id');
+                    if ($ocOrigen > 0) {
+                        $data['ordencompra_id'] = $ocOrigen;
+                    }
+                }
+            }
             $ocData = $this->ocResolver->resolverPorId(
                 (int) $data['ordencompra_id'],
                 $tipo === Recepcion_Proveedor::TIPO_RECEPCION
