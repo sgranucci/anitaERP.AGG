@@ -117,6 +117,12 @@ final class FacturacionLocalEmisionService
 			$totalPagar = (float) $fiscal['total_pagar'];
 		}
 
+        // Cambio marketplace: el único medio es el puente NCD y tiene que cubrir
+        // el total fiscal (en Factura A, la percepción IIBB va arriba del precio).
+        if (! empty($input['alinear_medio_al_total']) && ! $esRegalo && $totalPagar > 0.009 && $medios !== []) {
+            $medios = $this->escalarMediosAlTotal($medios, $totalPagar);
+        }
+
         $errores = $this->preflightService->erroresAntesDeEmitir(
             $local,
             $turno,

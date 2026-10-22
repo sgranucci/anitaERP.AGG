@@ -1459,9 +1459,6 @@ class CobranzaService
 		$cliente = $this->clienteRepository->find($cobranza->cliente_id);
 
 		$tblComprobante = [];
-		$fechaCobro = $cobranza->fecha;
-		$pesoDias = 0.0;
-		$pesoTotal = 0.0;
 		foreach($cobranza->cobranza_comprobantes as $comprobante)
 		{
 			$cc = $comprobante->cliente_cuentacorrientes;
@@ -1470,21 +1467,6 @@ class CobranzaService
 			{
 				$coeficiente = calculaCoeficienteMoneda($cc->moneda_id, $aplicacion->moneda_id, $aplicacion->cotizacion);
 				$totalAplicado += ($aplicacion->total * $coeficiente);
-			}
-
-			$montoEsta = abs((float) ($comprobante->montoaplicado ?? 0));
-			$aporte = CobranzaPromedioPagoSupport::diasYPeso(
-				$fechaCobro,
-				$cc->fecha,
-				$montoEsta,
-				$cc->moneda_id,
-				$comprobante->cotizacion,
-				$cc->cotizacion,
-			);
-			$diasPago = $aporte['dias'];
-			if ($diasPago !== null && $aporte['peso'] >= 0.01) {
-				$pesoDias += $diasPago * $aporte['peso'];
-				$pesoTotal += $aporte['peso'];
 			}
 
 			$tblComprobante[] = [
@@ -1496,10 +1478,9 @@ class CobranzaService
 					"monto" => $cc->total,
 					"aplicado" => $totalAplicado,
 					"saldo" => $cc->total + $totalAplicado,
-					"dias" => $diasPago,
 					];
 		}
-		$promedioPagoDias = CobranzaPromedioPagoSupport::cerrar($pesoDias, $pesoTotal);
+		$promedioPagoDias = CobranzaPromedioPagoSupport::desdeCobranza($cobranza);
 
 		// Arma datos del cliente. Consumidor final (y clientes importados) pueden
 		// no tener tipo de documento, IIBB, provincia o localidad.

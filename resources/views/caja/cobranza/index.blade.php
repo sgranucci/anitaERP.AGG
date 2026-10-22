@@ -76,7 +76,7 @@
                             <th>Estado</th>
                             <th>Moneda</th>
                             <th class="text-right">Monto</th>
-                            <th class="text-right" title="Días desde la fecha de cada factura hasta el recibo, ponderados por el importe cobrado">Prom. días</th>
+                            <th class="text-right" title="Días desde la fecha de cada factura hasta la fecha de pago de cada valor (e-cheq o cheque; el día del recibo si es efectivo o retención), ponderados por el importe">Prom. días</th>
                             <th>Movimientos</th>
                             <th class="width120 text-nowrap" data-orderable="false">Acciones</th>
                         </tr>

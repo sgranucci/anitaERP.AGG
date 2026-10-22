@@ -395,6 +395,10 @@ final class FacturacionLocalNotaCreditoService
                     $precio = $precioGrilla;
                 }
             }
+            // Descuento por debajo de lo facturado: se respeta. Por encima, no se acredita.
+            if ($precioFacturado > 0 && $precio - $precioFacturado > 0.02) {
+                $precio = $precioFacturado;
+            }
             // venta_emision.precio ya tiene el % de línea aplicado. Si la NC
             // vuelve a mandar ese % sobre el mismo importe, el descuento sale dos veces.
             if (abs($precio - $precioFacturado) < 0.02) {

@@ -199,7 +199,7 @@
 @if (($promedioPagoDias ?? null) !== null)
     <p style="margin: 10px 0 0;">
         <strong>Promedio de pago:</strong> {{ $promedioPagoDias }} d&iacute;as
-        <span class="muted">desde la fecha de cada factura hasta este recibo, ponderado por el importe cobrado.</span>
+        <span class="muted">desde la fecha de cada factura hasta la fecha de pago de cada valor (e-cheq o cheque; el d&iacute;a del recibo si es efectivo o retenci&oacute;n), ponderado por el importe.</span>
     </p>
 @endif
 

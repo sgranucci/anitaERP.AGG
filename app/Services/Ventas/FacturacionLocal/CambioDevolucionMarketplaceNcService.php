@@ -97,14 +97,18 @@ final class CambioDevolucionMarketplaceNcService
             'venta_id' => (int) ($resultado['venta_id'] ?? 0),
             'factura' => (string) ($resultado['factura'] ?? ''),
             'pdf_urls' => $resultado['pdf_urls'] ?? [],
-            'mensaje' => $resultado['mensaje'] ?? 'Nota de crédito emitida con medio puente NCD.',
+            'mensaje' => trim(
+                ($resultado['mensaje'] ?? 'Nota de crédito emitida con medio puente NCD.')
+                .' '.($aDevolver['aviso'] ?? '')
+            ),
         ];
     }
 
     /**
-     * Solo las líneas «A devolver». El precio es el de la grilla (producto, o el de la factura si no lo cambiaron).
+     * Solo las líneas «A devolver». Un precio menor al facturado se acredita.
+     * Si el legajo tiene la lista (más alta), la nota sale por el precio de la factura.
      *
-     * @return array{ids:list<int>,cantidades:array<int,float>,precios:array<int,float>}
+     * @return array{ids:list<int>,cantidades:array<int,float>,precios:array<int,float>,aviso:string}
      */
     private function lineasADevolver(CambioDevolucionMarketplace $cambio, Venta $venta): array
     {
@@ -120,6 +124,7 @@ final class CambioDevolucionMarketplaceNcService
         $ids = [];
         $cantidades = [];
         $precios = [];
+        $avisos = [];
 
         foreach ($lineas as $linea) {
             $emision = $this->emisionDeLinea($linea, $emisiones, $ids);
@@ -134,19 +139,34 @@ final class CambioDevolucionMarketplaceNcService
             }
             $ids[] = $emisionId;
             $cantidades[$emisionId] = round(($cantidades[$emisionId] ?? 0) + $cantidad, 4);
+            $precioFacturado = round((float) ($emision->precio ?? 0), 4);
             $precioGrilla = (float) ($linea->precio_unitario ?? 0);
-            $precios[$emisionId] = $precioGrilla > 0
-                ? $precioGrilla
-                : (float) ($emision->precio ?? 0);
+            $precio = $precioGrilla > 0 ? $precioGrilla : $precioFacturado;
+            // Un descuento (precio menor) se acredita. La lista, más alta que lo facturado, no.
+            if ($precioFacturado > 0 && $precio - $precioFacturado > 0.02) {
+                $avisos[] = trim((string) ($emision->detalle ?: 'ítem'))
+                    .': $ '.number_format($precio, 2, ',', '.')
+                    .' del legajo, se acredita $ '.number_format($precioFacturado, 2, ',', '.')
+                    .' de la factura';
+                $precio = $precioFacturado;
+            }
+            $precios[$emisionId] = $precio;
             if ($cantidades[$emisionId] - $facturada > 0.0001) {
                 throw new \InvalidArgumentException('La cantidad a devolver supera la facturada en '.$emision->detalle.'.');
             }
+        }
+
+        $aviso = '';
+        if ($avisos !== []) {
+            $aviso = 'El precio del legajo superaba lo facturado en el renglón. '
+                .implode('; ', $avisos).'.';
         }
 
         return [
             'ids' => array_values(array_unique($ids)),
             'cantidades' => $cantidades,
             'precios' => $precios,
+            'aviso' => $aviso,
         ];
     }
 

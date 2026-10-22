@@ -74,6 +74,7 @@ final class CambioDevolucionMarketplaceEmisionService
                 'provincia_id' => (int) ($ventaOriginal?->provincia_id ?? 0) ?: null,
                 'localidad_id' => (int) ($ventaOriginal?->localidad_id ?? 0) ?: null,
             ],
+            'alinear_medio_al_total' => true,
         ];
 
         $resultado = $this->emisionService->emitir($local, $input);
