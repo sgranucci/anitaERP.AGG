@@ -102,7 +102,7 @@ class CierreCajaReporteService
      */
     private function cuentasAlcance(array $empresaIds, int $cuentaFiltro): Collection
     {
-        $q = Cuentacaja::query()->orderBy('codigo');
+        $q = Cuentacaja::query()->visibleEnCierreCaja()->orderBy('codigo');
         if ($empresaIds !== []) {
             $q->where(function ($w) use ($empresaIds) {
                 $w->whereNull('empresa_id')->orWhereIn('empresa_id', $empresaIds);

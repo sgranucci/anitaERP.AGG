@@ -60,6 +60,29 @@
 	</div>
 </div>
 @php
+	$visibleCierreDefault = ! empty($data->exists)
+		? (bool) ($data->visible_cierre_caja ?? false)
+		: ! \App\Support\Configuracion\EntornoEmpresaSupport::esFerli();
+	if (session()->hasOldInput()) {
+		$visibleCierreForm = (bool) old('visible_cierre_caja');
+	} else {
+		$visibleCierreForm = $visibleCierreDefault;
+	}
+@endphp
+<div class="form-group row">
+	<label for="visible_cierre_caja" class="col-lg-3 col-form-label text-right">Cierre de caja</label>
+	<div class="col-lg-8">
+		<div class="form-check mt-2">
+			<input type="checkbox" class="form-check-input" name="visible_cierre_caja" id="visible_cierre_caja" value="1"
+				{{ $visibleCierreForm ? 'checked' : '' }}>
+			<label class="form-check-label" for="visible_cierre_caja">
+				Mostrar en el cierre de caja
+			</label>
+		</div>
+		<small class="form-text text-muted">El cierre de caja lista solo las cuentas marcadas.</small>
+	</div>
+</div>
+@php
 	$bancoIdForm = old('banco_id', $data->banco_id ?? '');
 	$bancoModelForm = null;
 	if ((int) $bancoIdForm > 0) {

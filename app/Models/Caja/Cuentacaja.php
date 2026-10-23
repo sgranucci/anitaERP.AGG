@@ -15,6 +15,7 @@ class Cuentacaja extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = ['nombre', 'descripcion_operaciones', 'orden', 'codigo', 'tipocuenta', 'es_tarjeta',
+        'visible_cierre_caja',
         'banco_id', 'empresa_id', 'cuentacontable_id', 'moneda_id', 'cbu', 'cuenta_interbanking'];
 
     protected $table = 'cuentacaja';
@@ -22,11 +23,13 @@ class Cuentacaja extends Model implements Auditable
     protected $casts = [
         'orden' => 'integer',
         'es_tarjeta' => 'boolean',
+        'visible_cierre_caja' => 'boolean',
     ];
 
     protected $attributes = [
         'orden' => 0,
         'es_tarjeta' => false,
+        'visible_cierre_caja' => false,
     ];
 
     /**
@@ -72,6 +75,17 @@ class Cuentacaja extends Model implements Auditable
     {
         return $this->belongsToMany(Usocuentacaja::class, 'cuentacaja_usocuentacaja', 'cuentacaja_id', 'usocuentacaja_id')
             ->withPivot('orden');
+    }
+
+    /**
+     * Cierre de caja: solo las cuentas con el tilde, en todas las instalaciones.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<self>
+     */
+    public function scopeVisibleEnCierreCaja($query)
+    {
+        return $query->where('visible_cierre_caja', true);
     }
 
     /**

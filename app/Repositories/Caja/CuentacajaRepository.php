@@ -117,7 +117,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             : [];
         unset($data['usocuentacaja_ids']);
 
-        $data = $this->normalizarDatosCuentacaja($data);
+        $data = $this->aplicarVisibleCierreCaja($this->normalizarDatosCuentacaja($data), true);
 
         DB::beginTransaction();
         try 
@@ -150,7 +150,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             unset($data['usocuentacaja_ids']);
         }
 
-        $data = $this->normalizarDatosCuentacaja($data);
+        $data = $this->aplicarVisibleCierreCaja($this->normalizarDatosCuentacaja($data), false);
 
         DB::beginTransaction();
         try 
@@ -439,7 +439,8 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             "empresa_id" => $empresa_id,
             "cuentacontable_id" => $cuentacontable_id,
             "moneda_id" => $data->tesm_cod_mon,
-            "cbu" => $numeroCbu
+            "cbu" => $numeroCbu,
+            "visible_cierre_caja" => ! EntornoEmpresaSupport::esFerli(),
             ];
 
         $this->model->create($arr_campos);
@@ -593,6 +594,25 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
         if (array_key_exists('es_tarjeta', $data)) {
             $data['es_tarjeta'] = filter_var($data['es_tarjeta'], FILTER_VALIDATE_BOOLEAN);
+        }
+
+        return $data;
+    }
+
+    /**
+     * El cierre de caja usa este tilde en todas las instalaciones.
+     * Sin valor explícito, en Ferli una cuenta nueva queda fuera; en el resto entra.
+     */
+    private function aplicarVisibleCierreCaja(array $data, bool $alta): array
+    {
+        if (array_key_exists('visible_cierre_caja', $data)) {
+            $data['visible_cierre_caja'] = filter_var($data['visible_cierre_caja'], FILTER_VALIDATE_BOOLEAN);
+
+            return $data;
+        }
+
+        if ($alta) {
+            $data['visible_cierre_caja'] = ! EntornoEmpresaSupport::esFerli();
         }
 
         return $data;
