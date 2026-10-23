@@ -10,10 +10,10 @@ GRUPO="www-data"
 SHARE="padrones"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 EMPRESA_RAW="$(grep -E '^EMPRESA=' "$ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d "'\"" | tr '[:lower:]' '[:upper:]')"
-# Interforming: Fabián Herber copia el padrón desde Windows. Sergio queda para soporte.
+# Interforming: fherber (Fabián Herber) copia el padrón desde Windows. Sergio queda para soporte.
 if [[ "$EMPRESA_RAW" == *INTERFORMING* && "$USUARIO" == "sergio" ]]; then
-    USUARIO="fabian"
-    USUARIOS_SHARE="fabian,sergio"
+    USUARIO="fherber"
+    USUARIOS_SHARE="fherber,sergio"
 else
     USUARIOS_SHARE="$USUARIO"
 fi
@@ -43,7 +43,18 @@ fi
 find "$DIR" -type d -exec chmod 2770 {} \;
 chgrp -R "$GRUPO" "$DIR" || true
 
-if ! grep -q "^\[${SHARE}\]" /etc/samba/smb.conf; then
+if grep -q "^\[${SHARE}\]" /etc/samba/smb.conf; then
+    awk -v share="$SHARE" -v users="$USUARIOS_SHARE" '
+        $0 ~ "^\\[" share "\\]" { inshare = 1 }
+        inshare && /^\[/ && $0 !~ "^\\[" share "\\]" { inshare = 0 }
+        inshare && $0 ~ /^[[:space:]]*valid users[[:space:]]*=/ {
+            print "   valid users = " users
+            next
+        }
+        { print }
+    ' /etc/samba/smb.conf > /etc/samba/smb.conf.padrones
+    mv /etc/samba/smb.conf.padrones /etc/samba/smb.conf
+else
     cat >> /etc/samba/smb.conf <<EOF
 
 [${SHARE}]
