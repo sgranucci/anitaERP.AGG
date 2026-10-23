@@ -5,6 +5,7 @@ namespace App\Services\Ventas;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionLiquidacionSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\ClienteCuentacorrienteAplicacionFilaSupport;
 use App\Support\Ventas\ClienteCuentacorrienteAplicacionMatcherSupport;
@@ -270,9 +271,9 @@ class ClienteCuentacorrienteAplicacionService
                 $this->asientoDcService->revertirSiCorresponde($asientoId, $fechaReverso);
             }
 
-            Cliente_Cuentacorriente_Aplicacion::query()
-                ->whereIn('id', $idsBorrar)
-                ->delete();
+            EloquentAuditDeleteSupport::each(
+                Cliente_Cuentacorriente_Aplicacion::query()->whereIn('id', $idsBorrar)
+            );
         });
 
         if ($snapshot === null) {

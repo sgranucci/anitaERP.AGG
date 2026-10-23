@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Asiento TES al acreditar depósito CHT: Debe banco / Haber valores a depositar.
+ * Asiento TES del depósito CHT: Debe banco / Haber valores a depositar.
+ * Se graba al depositar (sale de cartera). Si ese depósito no lo generó, la acreditación lo reintenta.
  */
 final class ChequeAcreditacionAsientoService
 {
@@ -37,7 +38,7 @@ final class ChequeAcreditacionAsientoService
     /**
      * @return array{asiento_id:?int, omitido:bool, motivo?:string}
      */
-    public function generarSiCorresponde(Cheque $cheque, string $fechaAcreditacion): array
+    public function generarSiCorresponde(Cheque $cheque, string $fechaAsiento, string $concepto = 'Acreditación depósito'): array
     {
         if (! $this->habilitado()) {
             return ['asiento_id' => null, 'omitido' => true, 'motivo' => 'Asiento de acreditación deshabilitado'];
@@ -78,7 +79,7 @@ final class ChequeAcreditacionAsientoService
 
         PeriodoContableCierreSupport::assertOperacionPermitida(
             $empresaId,
-            $fechaAcreditacion,
+            $fechaAsiento,
             PeriodoContableCierreSupport::ALCANCE_CAJA
         );
 
@@ -87,7 +88,8 @@ final class ChequeAcreditacionAsientoService
             throw new Exception('No existe tipo de asiento TES.');
         }
 
-        $obs = 'Acreditación depósito CHT Nº '.$cheque->numerocheque
+        $concepto = trim($concepto) !== '' ? trim($concepto) : 'Depósito';
+        $obs = $concepto.' CHT Nº '.$cheque->numerocheque
             .(trim((string) ($cheque->nro_boleta_deposito ?? '')) !== ''
                 ? ' boleta '.$cheque->nro_boleta_deposito
                 : '')
@@ -104,8 +106,10 @@ final class ChequeAcreditacionAsientoService
             $data = [
                 'empresa_id' => $empresaId,
                 'tipoasiento_id' => $tipoasiento->id,
-                'fecha' => $fechaAcreditacion,
+                'fecha' => $fechaAsiento,
                 'observacion' => $obs,
+                'alcance_cierre_contable' => PeriodoContableCierreSupport::ALCANCE_CAJA,
+                'sistema_ctav' => 'T',
                 'cuentacontable_ids' => [$bancoCcId, (int) $valoresId],
                 'moneda_ids' => [$monedaId, $monedaId],
                 'centrocosto_ids' => [0, 0],

@@ -45,6 +45,21 @@ final class ClienteCuentacorrienteGrillaSupport
     }
 
     /**
+     * Tope al aplicar un crédito sobre un comprobante de deuda.
+     * Si la factura ya está saldada, devuelve 0: el crédito queda abierto
+     * y sigue en la deuda. Aplicarlo igual deja la ficha por debajo de la deuda.
+     */
+    public static function montoAplicableSobreDeuda(float $totalDeuda, float $aplicado, float $importeCredito): float
+    {
+        $pendiente = self::saldoPendiente($totalDeuda, $aplicado);
+        if ($pendiente <= 0) {
+            return 0.0;
+        }
+
+        return round(min(abs($importeCredito), $pendiente), 2);
+    }
+
+    /**
      * @return array{tipo: string, id: int, titulo: string}|null
      */
     public static function destinoImpresion(Cliente_Cuentacorriente $fila): ?array

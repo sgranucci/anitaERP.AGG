@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Caja;
 
 use App\Models\Caja\Caja_Movimiento;
+use App\Models\Caja\Cheque;
 use App\Models\Caja\Cobranza;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Configuracion\Empresa;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Informe de movimientos de cobros/pagos/IEV (Anita l-movim.c) sobre caja_movimiento ERP.
+ * El libro de cada cuenta junta las líneas de caja con los cheques propios emitidos
+ * de esa cuenta. El cheque no se vuelve a grabar como línea de caja.
  */
 class MovimientosCajaReporteService
 {
@@ -55,6 +58,8 @@ class MovimientosCajaReporteService
             ->with([
                 'caja_movimiento_cuentacajas.cuentacajas',
                 'caja_movimiento_cuentacajas.monedas',
+                'cheques.cuentacajas',
+                'cheques.monedas',
                 'caja_movimiento_estados',
                 'tipotransaccioncajas',
                 'empresas',
@@ -111,7 +116,7 @@ class MovimientosCajaReporteService
                     'clipro_codigo' => $this->cliproCodigo($mov),
                     'clipro_nombre' => $this->cliproNombre($mov),
                     'concepto' => (string) ($mov->conceptogastos->nombre ?? ''),
-                    'detalle' => (string) ($mov->detalle ?? ''),
+                    'detalle' => (string) ($linea['detalle'] ?? $mov->detalle ?? ''),
                     'estado' => $estado,
                     'estado_nombre' => $this->estadoNombre($estado),
                     'cuenta_id' => (int) $linea['cuenta_id'],
@@ -297,8 +302,31 @@ class MovimientosCajaReporteService
         if ($cuentacajaId <= 0) {
             return;
         }
-        $query->whereHas('caja_movimiento_cuentacajas', static function ($q) use ($cuentacajaId) {
+        $query->where(function (Builder $w) use ($cuentacajaId) {
+            $w->whereHas('caja_movimiento_cuentacajas', static function ($q) use ($cuentacajaId) {
+                $q->where('cuentacaja_id', $cuentacajaId);
+            })->orWhereHas('cheques', function ($q) use ($cuentacajaId) {
+                self::aplicarChequePropioEnLibro($q, $cuentacajaId);
+            });
+        });
+    }
+
+    /**
+     * Cheque propio emitido que sale en el libro de la cuenta. El anulado
+     * (y el reemplazado, que queda anulado) no entra. El debitado sí: es la salida del banco.
+     *
+     * @param  Builder<Cheque>  $q
+     */
+    private static function aplicarChequePropioEnLibro(Builder $q, int $cuentacajaId = 0): void
+    {
+        $q->where('origen', 'E');
+        if ($cuentacajaId > 0) {
             $q->where('cuentacaja_id', $cuentacajaId);
+        } else {
+            $q->where('cuentacaja_id', '>', 0);
+        }
+        $q->where(function (Builder $w) {
+            $w->whereNull('estado')->orWhereNotIn('estado', ['A']);
         });
     }
 
@@ -458,6 +486,37 @@ class MovimientosCajaReporteService
                 'ingreso' => $partida['ingreso'],
                 'egreso' => $partida['egreso'],
                 'observacion' => (string) ($linea->observacion ?? ''),
+                'detalle' => (string) ($mov->detalle ?? ''),
+            ];
+        }
+
+        foreach ($mov->cheques as $cheque) {
+            if (! $this->chequePropioEnLibro($cheque)) {
+                continue;
+            }
+            $monto = -abs((float) ($cheque->monto ?? 0));
+            if (abs($monto) < 0.0001) {
+                continue;
+            }
+            $monedaId = (int) ($cheque->moneda_id ?? 1);
+            $cotizacion = (float) ($cheque->cotizacion ?? 1);
+            $partida = $this->ingresoEgreso($monto, $monedaId, $cotizacion);
+            $cuenta = $cheque->cuentacajas;
+            $nro = trim((string) ($cheque->numerocheque ?? ''));
+            $leyendaCheque = $nro !== '' ? 'Cheque '.$nro : 'Cheque propio';
+            $detalle = trim((string) ($mov->detalle ?? ''));
+            $lineas[] = [
+                'cuenta_id' => (int) ($cheque->cuentacaja_id ?? 0),
+                'cuenta_codigo' => (string) ($cuenta->codigo ?? ''),
+                'cuenta_nombre' => (string) ($cuenta->nombre ?? ''),
+                'moneda_id' => $monedaId,
+                'cotizacion' => $cotizacion,
+                'monto' => $monto,
+                'monto_mn' => $partida['monto_mn'],
+                'ingreso' => $partida['ingreso'],
+                'egreso' => $partida['egreso'],
+                'observacion' => $leyendaCheque,
+                'detalle' => $detalle !== '' ? $detalle.' · '.$leyendaCheque : $leyendaCheque,
             ];
         }
 
@@ -514,6 +573,19 @@ class MovimientosCajaReporteService
         }
 
         return $vacio;
+    }
+
+    private function chequePropioEnLibro(Cheque $cheque): bool
+    {
+        if (strtoupper(trim((string) ($cheque->origen ?? ''))) !== 'E') {
+            return false;
+        }
+        if ((int) ($cheque->cuentacaja_id ?? 0) <= 0 || $cheque->cuentacajas === null) {
+            return false;
+        }
+        $estado = strtoupper(trim((string) ($cheque->estado ?? '')));
+
+        return $estado !== 'A';
     }
 
     /**

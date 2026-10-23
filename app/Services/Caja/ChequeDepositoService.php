@@ -5,6 +5,7 @@ namespace App\Services\Caja;
 use App\Models\Caja\Cheque;
 use App\Models\Caja\Cuentacaja;
 use App\Support\Caja\ChequeTerceroDepositoAnitaSupport;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 final class ChequeDepositoService
@@ -56,7 +57,8 @@ final class ChequeDepositoService
 
     /**
      * Marca acreditación bancaria del depósito (sale de "en tránsito").
-     * Opcionalmente genera asiento TES: Debe banco / Haber valores a depositar.
+     * El asiento TES (Debe banco / Haber valores a depositar) se genera al depositar.
+     * Si ese depósito no lo grabó, acá se reintenta.
      *
      * @return array{cheque_id:int, fecha_acreditacion:string, asiento_id:?int, asiento_omitido?:bool, asiento_motivo?:string}
      */
@@ -81,7 +83,7 @@ final class ChequeDepositoService
         $asientoOmitido = true;
         $asientoMotivo = null;
         try {
-            $asiento = $this->acreditacionAsientoService->generarSiCorresponde($cheque->fresh(), $fechaAc);
+            $asiento = $this->acreditacionAsientoService->generarSiCorresponde($cheque->fresh(), $fechaAc, 'Acreditación depósito');
             $asientoId = $asiento['asiento_id'] ?? null;
             $asientoOmitido = (bool) ($asiento['omitido'] ?? false);
             $asientoMotivo = $asiento['motivo'] ?? null;
@@ -129,7 +131,7 @@ final class ChequeDepositoService
     }
 
     /**
-     * @return array{cheque_id:int, fecha_deposito:string, anita_ok:bool}
+     * @return array{cheque_id:int, fecha_deposito:string, anita_ok:bool, asiento_id:?int, asiento_omitido:bool, asiento_motivo:?string}
      */
     public function depositar(
         int $chequeId,
@@ -161,18 +163,39 @@ final class ChequeDepositoService
             $boleta = null;
         }
 
-        $cheque->fecha_deposito = $fechaDep;
-        $cheque->cuentacaja_deposito_id = (int) $cuenta->id;
-        $cheque->nro_boleta_deposito = $boleta;
-        $cheque->estado = '*';
-        $cheque->save();
+        try {
+            $asientoResultado = DB::transaction(function () use ($cheque, $cuenta, $fechaDep, $boleta) {
+                $cheque->fecha_deposito = $fechaDep;
+                $cheque->cuentacaja_deposito_id = (int) $cuenta->id;
+                $cheque->nro_boleta_deposito = $boleta;
+                $cheque->estado = '*';
+                $cheque->save();
 
-        $anitaOk = ChequeTerceroDepositoAnitaSupport::marcarDeposito($cheque, $fechaDep, $cuenta, $boleta);
+                return $this->acreditacionAsientoService->generarSiCorresponde(
+                    $cheque->fresh(),
+                    $fechaDep,
+                    'Depósito'
+                );
+            });
+        } catch (InvalidArgumentException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            throw new InvalidArgumentException(
+                'No se descargó Valores a depositar: '.$e->getMessage(),
+                0,
+                $e
+            );
+        }
+
+        $anitaOk = ChequeTerceroDepositoAnitaSupport::marcarDeposito($cheque->fresh(), $fechaDep, $cuenta, $boleta);
 
         return [
             'cheque_id' => (int) $cheque->id,
             'fecha_deposito' => $fechaDep,
             'anita_ok' => $anitaOk,
+            'asiento_id' => $asientoResultado['asiento_id'] ?? null,
+            'asiento_omitido' => (bool) ($asientoResultado['omitido'] ?? false),
+            'asiento_motivo' => $asientoResultado['motivo'] ?? null,
         ];
     }
 

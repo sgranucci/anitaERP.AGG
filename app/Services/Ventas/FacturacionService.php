@@ -44,8 +44,10 @@ use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Models\Ventas\Cliente;
+use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
+use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
 use App\Support\Ventas\ArcaFacturaQrSupport;
 use App\Support\Ventas\VentaFacturasPorArticuloClienteSupport;
 use App\Support\Ventas\QrCodePngSupport;
@@ -5261,38 +5263,66 @@ class FacturacionService
 				];
 				$cliente_cuentacorriente = $this->cliente_cuentacorrienteRepository->create($data);
 
-				// Graba aplicacion del comprobante que esta generando
+				// Graba aplicacion del comprobante que esta generando.
+				// Vale para el mostrador de cualquier instalación (Ferli, Bierzo,
+				// Interforming, AGG, Crown): un crédito no puede pasar el saldo
+				// que todavía tiene la factura. Si ya está cobrada, la nota queda
+				// abierta y entra en la deuda.
 				if ($venta_id > 0 && $ccOrigen)
 				{
-					$data = [
-						'fecha' => $fechaFactura,
-						'cliente_cuentacorriente_id' => $cliente_cuentacorriente->id,
-						'total' => $cuota['total'] * $signo * -1,
-						'moneda_id' => $moneda_id,
-						'cotizacion' => $cotizacion,
-						'ventaaplicado_id' => $venta_id,
-						'comprobanteaplicado' => $referenciaFactura,
-						'cobranza_id' => null,
-						'empresa_id' => $puntoventa->empresa_id,
-						'cliente_cuentacorriente_aplicado_id' => $ccOrigen->id // Apunta a factura que aplica
-					];
+					$importeCuota = round(abs((float) $cuota['total']), 2);
+					$importeAplicar = $importeCuota;
+					if ($signo < 0) {
+						$aplicadoOrigen = (float) Cliente_Cuentacorriente_Aplicacion::query()
+							->where('cliente_cuentacorriente_id', $ccOrigen->id)
+							->sum('total');
+						$importeAplicar = ClienteCuentacorrienteGrillaSupport::montoAplicableSobreDeuda(
+							(float) $ccOrigen->total,
+							$aplicadoOrigen,
+							$importeCuota
+						);
+						if ($importeAplicar + 0.01 < $importeCuota) {
+							Log::warning('facturacion.nc_aplicacion_tope_saldo_origen', [
+								'venta_id' => (int) $vta->id,
+								'venta_origen_id' => (int) $venta_id,
+								'cc_origen_id' => (int) $ccOrigen->id,
+								'importe_nota' => $importeCuota,
+								'importe_aplicado' => $importeAplicar,
+							]);
+						}
+					}
 
-					$cliente_cuentacorriente_aplicacion = $this->cliente_cuentacorriente_aplicacionRepository->create($data);
+					if ($importeAplicar >= 0.01) {
+						$data = [
+							'fecha' => $fechaFactura,
+							'cliente_cuentacorriente_id' => $cliente_cuentacorriente->id,
+							'total' => $importeAplicar * $signo * -1,
+							'moneda_id' => $moneda_id,
+							'cotizacion' => $cotizacion,
+							'ventaaplicado_id' => $venta_id,
+							'comprobanteaplicado' => $referenciaFactura,
+							'cobranza_id' => null,
+							'empresa_id' => $puntoventa->empresa_id,
+							'cliente_cuentacorriente_aplicado_id' => $ccOrigen->id // Apunta a factura que aplica
+						];
 
-					// Graba aplicacion del comprobante al que aplica (factura)
-					$data = [
-						'fecha' => $fechaFactura,
-						'cliente_cuentacorriente_id' => $ccOrigen->id,
-						'total' => $cuota['total'] * $signo,
-						'moneda_id' => $moneda_id,
-						'cotizacion' => $cotizacion,
-						'ventaaplicado_id' => $vta->id,
-						'comprobanteaplicado' => $vta->codigo,
-						'cobranza_id' => null,
-						'empresa_id' => $puntoventa->empresa_id,
-						'cliente_cuentacorriente_aplicado_id' => $cliente_cuentacorriente->id // Apunta a nota de credito que aplica
-					];
-					$cliente_cuentacorriente_aplicacion = $this->cliente_cuentacorriente_aplicacionRepository->create($data);
+						$cliente_cuentacorriente_aplicacion = $this->cliente_cuentacorriente_aplicacionRepository->create($data);
+
+						// Graba aplicacion del comprobante al que aplica (factura)
+						$data = [
+							'fecha' => $fechaFactura,
+							'cliente_cuentacorriente_id' => $ccOrigen->id,
+							'total' => $importeAplicar * $signo,
+							'moneda_id' => $moneda_id,
+							'cotizacion' => $cotizacion,
+							'ventaaplicado_id' => $vta->id,
+							'comprobanteaplicado' => $vta->codigo,
+							'cobranza_id' => null,
+							'empresa_id' => $puntoventa->empresa_id,
+							'cliente_cuentacorriente_aplicado_id' => $cliente_cuentacorriente->id // Apunta a nota de credito que aplica
+						];
+						$cliente_cuentacorriente_aplicacion = $this->cliente_cuentacorriente_aplicacionRepository->create($data);
+					}
 				}
 			}
 			}
