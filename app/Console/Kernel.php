@@ -2,7 +2,9 @@
 
 namespace App\Console;
 
+use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Configuracion\PercepcionIibbJurisdiccionEntregaSupport;
 use App\Support\Interbanking\InterbankingCalendarioSync;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubeStockCatalogoSupport;
@@ -128,6 +130,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('padron-iibb-caba:purge')->monthlyOn(10, '03:10');
 
         // Descarga DFE ARBA + encola import: último día del mes, padrón del mes siguiente.
+        // Se prende con el mismo tilde de Buenos Aires que el resto de los padrones.
         $horaArbaSync = (string) config('padrones_iibb.arba.sync_hora', '22:00');
         $periodoArbaSync = (string) config('padrones_iibb.arba.sync_periodo', 'siguiente');
         $schedule->command('padron-iibb-arba:sincronizar', [
@@ -137,7 +140,11 @@ class Kernel extends ConsoleKernel
             ->runInBackground()
             ->withoutOverlapping(7200)
             ->appendOutputTo(storage_path('logs/padron-iibb-arba-sincronizar-schedule.log'))
-            ->when(fn () => (bool) config('padrones_iibb.arba.sync_habilitado', true));
+            ->when(fn () => in_array(
+                PercepcionIibbJurisdiccionEntregaSupport::JURISDICCION_BUENOS_AIRES,
+                EmpresaJurisdiccionIibbSupport::jurisdiccionesAgente(),
+                true
+            ));
 
         // Salvo ARBA, los padrones se bajan a mano con clave fiscal. Se avisa antes
         // de que arranque el mes y en los primeros días, que es cuando todavía se

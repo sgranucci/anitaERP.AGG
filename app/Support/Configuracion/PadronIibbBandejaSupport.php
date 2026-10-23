@@ -9,8 +9,9 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Carpeta externa donde se pegan los padrones IIBB (CABA y provincias).
- * ARBA no usa esta bandeja: se baja solo por DFE.
+ * Carpeta externa donde se pegan los padrones IIBB.
+ * Solo aparecen las jurisdicciones tildadas como agente (percepción o retención).
+ * ARBA (902) no usa esta bandeja: se baja solo por DFE.
  *
  * entrada/{clave} → procesando/{clave} → ok|error/{clave}
  */
@@ -23,21 +24,69 @@ final class PadronIibbBandejaSupport
     private const SUFIJOS_TRANSITORIOS = ['.tmp', '.partial', '.crdownload', '.filepart', '.download'];
 
     /**
-     * Clave = subcarpeta relativa a la raíz de la bandeja.
+     * Catálogo de la bandeja. La carpeta visible es la que coincida con un agente.
+     *
+     * @var array<string, array{jurisdiccion: int, tipo: ?string, etiqueta: string}>
+     */
+    private const CATALOGO = [
+        'caba' => [
+            'jurisdiccion' => 901,
+            'tipo' => null,
+            'etiqueta' => 'AGIP, ARDJU….TXT o el RAR que publica AGIP',
+        ],
+        'cordoba' => [
+            'jurisdiccion' => 904,
+            'tipo' => null,
+            'etiqueta' => 'CSV con punto y coma, líneas P y R',
+        ],
+        'entrerios' => [
+            'jurisdiccion' => 908,
+            'tipo' => null,
+            'etiqueta' => 'CSV con punto y coma',
+        ],
+        'misiones' => [
+            'jurisdiccion' => 914,
+            'tipo' => null,
+            'etiqueta' => 'CSV con cabecera Periodo_fiscal;régimen;cuit;…',
+        ],
+        'santafe' => [
+            'jurisdiccion' => 921,
+            'tipo' => null,
+            'etiqueta' => 'PARP_AAAAMM.csv o el ZIP',
+        ],
+        'tucuman/tasas' => [
+            'jurisdiccion' => 924,
+            'tipo' => 'T',
+            'etiqueta' => 'padrón de tasas',
+        ],
+        'tucuman/coeficientes' => [
+            'jurisdiccion' => 924,
+            'tipo' => 'C',
+            'etiqueta' => 'padrón de coeficientes',
+        ],
+    ];
+
+    /**
+     * Subcarpetas que el vigilador lee: las del catálogo cuya jurisdicción está
+     * tildada en Agentes IIBB (o, si la grilla todavía no se guardó, en el .env).
      *
      * @return array<string, array{jurisdiccion: int, tipo: ?string}>
      */
     public static function carpetas(): array
     {
-        return [
-            'caba' => ['jurisdiccion' => 901, 'tipo' => null],
-            'cordoba' => ['jurisdiccion' => 904, 'tipo' => null],
-            'entrerios' => ['jurisdiccion' => 908, 'tipo' => null],
-            'misiones' => ['jurisdiccion' => 914, 'tipo' => null],
-            'santafe' => ['jurisdiccion' => 921, 'tipo' => null],
-            'tucuman/tasas' => ['jurisdiccion' => 924, 'tipo' => 'T'],
-            'tucuman/coeficientes' => ['jurisdiccion' => 924, 'tipo' => 'C'],
-        ];
+        $agentes = array_flip(EmpresaJurisdiccionIibbSupport::jurisdiccionesAgente());
+        $visibles = [];
+        foreach (self::CATALOGO as $clave => $def) {
+            if (! isset($agentes[$def['jurisdiccion']])) {
+                continue;
+            }
+            $visibles[$clave] = [
+                'jurisdiccion' => $def['jurisdiccion'],
+                'tipo' => $def['tipo'],
+            ];
+        }
+
+        return $visibles;
     }
 
     public static function directorio(): string
@@ -250,26 +299,38 @@ final class PadronIibbBandejaSupport
 
     public static function textoAyuda(): string
     {
-        return <<<'TXT'
+        $lineas = [];
+        foreach (self::carpetas() as $clave => $_) {
+            $etiqueta = self::CATALOGO[$clave]['etiqueta'] ?? '';
+            $lineas[] = '  '.$clave.'/  '.$etiqueta;
+        }
+
+        if ($lineas === []) {
+            return <<<'TXT'
 Padrones de Ingresos Brutos
 ===========================
 
-Pegue el archivo en la carpeta de la provincia. No lo deje en la raíz.
-ARBA no va acá: se descarga solo.
-
-  caba/                  AGIP, ARDJU….TXT o el RAR que publica AGIP
-  cordoba/               CSV con punto y coma, líneas P y R
-  entrerios/             CSV con punto y coma
-  misiones/              CSV con cabecera Periodo_fiscal;régimen;cuit;…
-  santafe/               PARP_AAAAMM.csv o el ZIP
-  tucuman/tasas/         padrón de tasas
-  tucuman/coeficientes/  padrón de coeficientes
-
-Espere a que termine de copiarse. En un par de minutos el archivo pasa a
-procesando y, al terminar, a ok o a error.
+No hay jurisdicciones tildadas como agente de percepción o de retención.
+Marquelas en Configuración general, tarjeta Agentes IIBB.
+Ahí se definen las carpetas de esta bandeja.
 
 La pantalla Importar Padrón IIBB sigue sirviendo para cargar a mano.
 TXT;
+        }
+
+        $arba = in_array(PercepcionIibbJurisdiccionEntregaSupport::JURISDICCION_BUENOS_AIRES, EmpresaJurisdiccionIibbSupport::jurisdiccionesAgente(), true)
+            ? "Buenos Aires (ARBA) no va en esta carpeta: se descarga solo.\n\n"
+            : '';
+
+        return "Padrones de Ingresos Brutos\n"
+            ."===========================\n\n"
+            ."Pegue el archivo en la carpeta de la jurisdicción. No lo deje en la raíz.\n"
+            ."Las carpetas son las jurisdicciones tildadas en Agentes IIBB.\n\n"
+            .$arba
+            .implode("\n", $lineas)."\n\n"
+            ."Espere a que termine de copiarse. En un par de minutos el archivo pasa a\n"
+            ."procesando y, al terminar, a ok o a error.\n\n"
+            ."La pantalla Importar Padrón IIBB sigue sirviendo para cargar a mano.\n";
     }
 
     private static function nombreSeguro(string $nombre): string

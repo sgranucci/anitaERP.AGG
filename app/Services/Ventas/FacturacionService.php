@@ -219,6 +219,13 @@ class FacturacionService
 	protected $mventa_id;
 	protected $cantidadBulto, $puntoventaremito_id;
 
+	/**
+	 * CAE ya otorgado por ARCA (recuperación tras rollback). No vuelve a autorizar.
+	 *
+	 * @var array{cae: string, fechavencimientocae: string}|null
+	 */
+	private ?array $caeYaAutorizado = null;
+
 	/** @var float Peso neto exportación (Interforming → constata Anita comp_peso_neto). */
 	protected $pesoNetoExportacion = 0.0;
 	protected $formapago_id, $mercaderiaExportacion, $leyendaExportacion, $incoterm_id, $abreviaturaIncoterm;
@@ -772,6 +779,7 @@ class FacturacionService
 		]);
 
 		try {
+			$this->caeYaAutorizado = $this->normalizarCaeYaAutorizado($data['cae_ya_autorizado'] ?? null);
 			UsuarioPreferenciaFacturacionSupport::guardar($data);
 			PedidoFacturacionProfiler::etapa('preferencias_ok');
 
@@ -834,8 +842,29 @@ class FacturacionService
 				return $retorno;
 			});
 		} finally {
+			$this->caeYaAutorizado = null;
 			PedidoFacturacionProfiler::finalizar($profiler);
 		}
+	}
+
+	/**
+	 * @return array{cae: string, fechavencimientocae: string}|null
+	 */
+	private function normalizarCaeYaAutorizado(mixed $cae): ?array
+	{
+		if (! is_array($cae)) {
+			return null;
+		}
+		$numero = trim((string) ($cae['cae'] ?? ''));
+		$vto = trim((string) ($cae['fechavencimientocae'] ?? ''));
+		if ($numero === '' || $vto === '') {
+			return null;
+		}
+
+		return [
+			'cae' => $numero,
+			'fechavencimientocae' => $vto,
+		];
 	}
 
 	/**
@@ -1164,11 +1193,16 @@ class FacturacionService
 			{
 			case 'C':
 			case 'E':
-				$numero = $this->ultimoNumeroComprobanteArca(
-					$empresa->nroinscripcion,
-					$codigoTipoTransaccion,
-					$puntoventa,
-				);
+				$forzado = (int) ($data['numerocomprobante_forzado'] ?? 0);
+				if ($forzado > 0 && $this->caeYaAutorizado !== null) {
+					$numero = $forzado - 1;
+				} else {
+					$numero = $this->ultimoNumeroComprobanteArca(
+						$empresa->nroinscripcion,
+						$codigoTipoTransaccion,
+						$puntoventa,
+					);
+				}
 				break;
 			case 'A':
 				$numero = $this->ultimoNumeroBaseModoCaea(
@@ -1337,8 +1371,12 @@ class FacturacionService
 					];
 				}
 				PedidoFacturacionProfiler::etapa('arma_contabilidad_inicio');
-				$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
-				$this->assertAsientoIvaPrecioFerli($dataFactura, $conceptosTotales, $asientoContable);
+				try {
+					$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+					$this->assertAsientoIvaPrecioFerli($dataFactura, $conceptosTotales, $asientoContable);
+				} catch (\Throwable $e) {
+					return ['error' => $e->getMessage()];
+				}
 				PedidoFacturacionProfiler::etapa('arma_contabilidad_fin');
 
 				// Detalle asiento (ERP + ctamov): "FAC 1296 MORA CARLOS ARIEL" — solo factura por pedido Bierzo.
@@ -8665,6 +8703,24 @@ class FacturacionService
 		return $enEmpresa ? (int) $enEmpresa->id : 0;
 	}
 
+	/**
+	 * Línea con importe y sin cuenta de venta (ni fallback de config).
+	 * Si se omite en silencio, el asiento llega a Anita con menos de dos piernas
+	 * y el CAE ya fue pedido.
+	 *
+	 * @param  array<string, mixed>  $item
+	 */
+	private function mensajeLineaSinCuentaVenta(array $item): string
+	{
+		$sku = trim((string) ($item['sku'] ?? ''));
+		$desc = trim((string) ($item['descripcion'] ?? ''));
+		$quien = trim(($sku !== '' ? $sku.' ' : '').$desc);
+
+		return 'No se puede armar el asiento: el artículo'
+			.($quien !== '' ? ' '.$quien : '')
+			.' no tiene cuenta contable de venta. Cárguela en el artículo y vuelva a facturar.';
+	}
+
 	public function armaContabilidad($dataFactura, $conceptostotales, $empresa_id, $total)
 	{
 		$asientoContable = [];
@@ -8711,6 +8767,10 @@ class FacturacionService
 			if ($cuentaId <= 0) {
 				$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuentaVenta);
 				$cuentaId = $cuentacontable ? (int) $cuentacontable->id : 0;
+			}
+
+			if ($cuentaId <= 0 && abs((float) $subTotal) >= 0.01) {
+				throw new Exception('No se puede armar el asiento: no hay cuenta contable de venta para imputar el neto.');
 			}
 
 			if ($cuentaId > 0)
@@ -8791,6 +8851,10 @@ class FacturacionService
 												];
 							else
 								$asientoContable[$i]['monto'] += $monto;
+						}
+						else
+						{
+							throw new Exception($this->mensajeLineaSinCuentaVenta($item));
 						}
 					}
 				}
@@ -10324,6 +10388,27 @@ class FacturacionService
 		{
 			case 'C':
 			case 'E':
+				if ($this->caeYaAutorizado !== null) {
+					$consulta = $this->facturaelectronicaService->consultaCompEnviado(
+						$empresa->nroinscripcion,
+						$codigoTipoTransaccion,
+						$puntoventa,
+						(int) $numeroComprobante,
+					);
+					$caeArca = is_array($consulta) ? trim((string) ($consulta['cae'] ?? '')) : '';
+					if ($caeArca === '' || $caeArca !== $this->caeYaAutorizado['cae']) {
+						throw new Exception(
+							'ARCA no confirma el CAE '.$this->caeYaAutorizado['cae']
+							.' para el comprobante '.$numeroComprobante.'.'
+						);
+					}
+					$cae = [
+						'cae' => $caeArca,
+						'fechavencimientocae' => (string) ($consulta['fechavencimientocae'] ?? ''),
+					];
+					$flGrabaCae = true;
+					break;
+				}
 				try {
 					PedidoFacturacionProfiler::etapa('arca_solicita_cae_inicio');
 					$cae = $this->facturaelectronicaService->solicitaCAE(

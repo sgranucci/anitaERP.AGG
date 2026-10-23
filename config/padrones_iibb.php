@@ -85,8 +85,8 @@ return [
         'password' => env('ARBA_DFE_PASSWORD', ''),
         'directorio' => env('PADRON_IIBB_ARBA_DIR', storage_path('app/padrones/arba')),
         'curl_timeout' => (int) env('PADRON_IIBB_ARBA_CURL_TIMEOUT', 600),
-        'sync_habilitado' => filter_var(env('PADRON_IIBB_ARBA_SYNC_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
         // siguiente = próximo mes (último día del mes); actual = mes en curso
+        // Corre si Buenos Aires (902) está tildado en Agentes IIBB.
         'sync_periodo' => env('PADRON_IIBB_ARBA_SYNC_PERIODO', 'siguiente'),
         'sync_hora' => env('PADRON_IIBB_ARBA_SYNC_HORA', '19:00'),
     ],

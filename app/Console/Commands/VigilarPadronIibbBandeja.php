@@ -5,17 +5,29 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Services\Configuracion\PadronIibbBandejaIngresoService;
+use App\Support\Configuracion\PadronIibbBandejaSupport;
 use Illuminate\Console\Command;
 
 class VigilarPadronIibbBandeja extends Command
 {
     protected $signature = 'padron-iibb:vigilar-bandeja
-                            {--dry-run : Muestra qué encolaría, sin mover archivos ni encolar}';
+                            {--dry-run : Muestra qué encolaría, sin mover archivos ni encolar}
+                            {--preparar : Solo crea las carpetas de las jurisdicciones tildadas y el LEEME}';
 
     protected $description = 'Encola los padrones IIBB pegados en la bandeja externa (CABA y provincias; ARBA no)';
 
     public function handle(PadronIibbBandejaIngresoService $ingreso): int
     {
+        if ((bool) $this->option('preparar')) {
+            PadronIibbBandejaSupport::asegurarDirectorios();
+            $claves = array_keys(PadronIibbBandejaSupport::carpetas());
+            $this->info($claves === []
+                ? 'Sin jurisdicciones tildadas: no hay carpetas de padrón.'
+                : 'Carpetas: '.implode(', ', $claves));
+
+            return self::SUCCESS;
+        }
+
         $dryRun = (bool) $this->option('dry-run');
         $resultados = $ingreso->vigilar($dryRun);
 
