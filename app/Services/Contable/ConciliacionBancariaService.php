@@ -18,6 +18,7 @@ use App\Support\Ai\AiAgenteOperativoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaAnomaliaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCodificacionSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExcelReferenciaSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaGastoDocumentoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaHashSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMatcher;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMovimientoBancoSupport;
@@ -25,9 +26,11 @@ use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendienteSuppo
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendientesCpromaeSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaReclaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaReferenciaSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaResultadoCache;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -311,6 +314,15 @@ class ConciliacionBancariaService
             'saldo_banco_ajustado' => $saldoBancoAjustado,
             'diferencia' => $diferencia,
             'gastos_resumen' => $gastosResumen,
+            'codigos_saldo_excel' => $codigosSaldoExcel,
+            'documento_gastos' => ConciliacionBancariaGastoDocumentoSupport::armar(
+                $movimientosBanco,
+                $empresaId,
+                $cuentacaja,
+                $mes,
+                $anio,
+                $codigosSaldoExcel,
+            ),
             'caratula' => $caratula,
         ];
 
@@ -353,8 +365,259 @@ class ConciliacionBancariaService
         }
 
         $resultado = $this->enriquecerConGobernanzaIa($resultado, $empresaId, $cuentacajaId, $mes, $anio);
+        ConciliacionBancariaResultadoCache::guardar($empresaId, $cuentacajaId, $mes, $anio, $resultado);
 
         return $resultado;
+    }
+
+    /**
+     * Movimientos del mes para la pantalla partida. No graba pares ni una ejecución.
+     *
+     * @return array{contables: list<array<string, mixed>>, banco: list<array<string, mixed>>, pares: list<array<string, mixed>>, anteriores: list<array<string, mixed>>}
+     */
+    public function tableroManual(
+        int $empresaId,
+        int $cuentacajaId,
+        int $mes,
+        int $anio,
+        bool $incluirAnteriores = false,
+    ): array {
+        MayorPlanoCuentaRuntimeSupport::elevarLimites();
+
+        $cuentacaja = Cuentacaja::query()->with('cuentacontables')->findOrFail($cuentacajaId);
+        if (! $cuentacaja->perteneceAEmpresa($empresaId)) {
+            throw new RuntimeException('La cuenta de caja no pertenece a la empresa indicada.');
+        }
+
+        $cuentaInterbanking = trim((string) ($cuentacaja->cuenta_interbanking ?? ''));
+        if ($cuentaInterbanking === '') {
+            throw new RuntimeException('La cuenta de caja no tiene configurada la cuenta Interbanking.');
+        }
+
+        $cuentaContable = $cuentacaja->cuentacontables;
+        if (! $cuentaContable) {
+            throw new RuntimeException('La cuenta de caja no tiene cuenta contable asociada.');
+        }
+
+        $codigoCuenta = MayorPlanoCuentaSupport::parsearCodigoCuenta((string) $cuentaContable->codigo);
+        if ($codigoCuenta <= 0) {
+            throw new RuntimeException('Código de cuenta contable inválido.');
+        }
+
+        $fechaDesde = Carbon::createFromDate($anio, $mes, 1)->startOfDay();
+        $fechaHasta = $fechaDesde->copy()->endOfMonth();
+
+        $resultadoMayor = $this->mayorPlanoService->generarDesdeFiltros([
+            'empresa_ids' => [$empresaId],
+            'moneda_id' => (int) ($cuentacaja->moneda_id ?? 1),
+            'modo_periodo' => 'mes',
+            'mes' => $mes,
+            'anio' => $anio,
+            'fecha_desde' => '',
+            'fecha_hasta' => '',
+            'solo_moneda_origen' => false,
+            'incluye_subdiario' => true,
+            'modo_inclusion_asientos' => 'sin_cierre_ni_inflacion',
+            'cuenta_desde' => $codigoCuenta,
+            'cuenta_hasta' => $codigoCuenta,
+            'filtro_texto' => '',
+        ]);
+        $contables = $this->extraerMovimientosContables(
+            $this->mayorPlanoService->aplanarFilas($resultadoMayor, [], false),
+            $cuentacajaId,
+        );
+        $banco = $this->cargarMovimientosInterbanking(
+            $empresaId,
+            $cuentaInterbanking,
+            $fechaDesde,
+            $fechaHasta,
+            $cuentacajaId,
+        );
+
+        $pares = ConciliacionBancariaPar::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where(function ($q) use ($fechaDesde, $fechaHasta): void {
+                $q->whereBetween('fecha_contable', [$fechaDesde->toDateString(), $fechaHasta->toDateString()])
+                    ->orWhereBetween('fecha_banco', [$fechaDesde->toDateString(), $fechaHasta->toDateString()]);
+            })
+            ->orderByDesc('id')
+            ->limit(3000)
+            ->get();
+
+        $hashesContables = [];
+        foreach ($contables as $mov) {
+            $hashesContables[(string) ($mov['hash'] ?? '')] = true;
+        }
+
+        $anteriores = [];
+        if ($incluirAnteriores) {
+            $cache = ConciliacionBancariaResultadoCache::leer($empresaId, $cuentacajaId, $mes, $anio, 7200);
+            foreach ($cache['pendientes_contables_otros'] ?? [] as $mov) {
+                if (! is_array($mov)) {
+                    continue;
+                }
+                $hash = (string) ($mov['hash'] ?? '');
+                if ($hash === '' || isset($hashesContables[$hash])) {
+                    continue;
+                }
+                $mov['anterior'] = true;
+                $anteriores[] = $mov;
+                if (count($anteriores) >= 800) {
+                    break;
+                }
+            }
+            foreach ($cache['pendientes_contables_cheques'] ?? [] as $mov) {
+                if (! is_array($mov) || count($anteriores) >= 800) {
+                    break;
+                }
+                $hash = (string) ($mov['hash'] ?? '');
+                if ($hash === '' || isset($hashesContables[$hash])) {
+                    continue;
+                }
+                $mov['anterior'] = true;
+                $anteriores[] = $mov;
+            }
+        }
+
+        return [
+            'contables' => array_map(fn (array $mov) => $this->filaTableroContable($mov), array_merge($contables, $anteriores)),
+            'banco' => array_map(fn (array $mov) => $this->filaTableroBanco($mov), $banco),
+            'pares' => $pares->map(fn (ConciliacionBancariaPar $par) => $this->filaTableroPar($par))->all(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $contable
+     * @param  array<string, mixed>  $banco
+     */
+    public function conciliarManual(
+        int $empresaId,
+        int $cuentacajaId,
+        array $contable,
+        array $banco,
+        ?int $usuarioId,
+        bool $forzar = false,
+    ): ConciliacionBancariaPar {
+        $hashC = (string) ($contable['hash'] ?? '');
+        $hashB = (string) ($banco['hash'] ?? '');
+        if ($hashC === '' || $hashB === '') {
+            throw new RuntimeException('Falta el identificador del movimiento contable o del banco.');
+        }
+
+        $impC = ConciliacionBancariaHashSupport::importeFirmadoContable($contable);
+        $impB = ConciliacionBancariaHashSupport::importeFirmadoBanco($banco);
+        $tolerancia = (float) config('conciliacion_bancaria.tolerancia_importe', 0.05);
+        if (! $forzar && abs($impC - $impB) > $tolerancia) {
+            throw new RuntimeException(
+                'Los importes no coinciden ('.$impC.' y '.$impB.'). Confirmá el cruce si es intencional.'
+            );
+        }
+
+        if (ConciliacionBancariaPar::query()->where('cuentacaja_id', $cuentacajaId)->where('hash_contable', $hashC)->exists()) {
+            throw new RuntimeException('Ese movimiento contable ya está conciliado.');
+        }
+        if (ConciliacionBancariaPar::query()->where('cuentacaja_id', $cuentacajaId)->where('hash_banco', $hashB)->exists()) {
+            throw new RuntimeException('Ese movimiento de Interbanking ya está conciliado.');
+        }
+
+        $contable['conciliacion_modo'] = 'manual';
+
+        try {
+            return ConciliacionBancariaPar::query()->create([
+                'empresa_id' => $empresaId,
+                'cuentacaja_id' => $cuentacajaId,
+                'hash_contable' => $hashC,
+                'hash_banco' => $hashB,
+                'contable_json' => $contable,
+                'banco_json' => $banco,
+                'fecha_contable' => self::fechaDesdeYmdOString($contable['fecha'] ?? $contable['fecha_fmt'] ?? null),
+                'fecha_banco' => self::fechaDesdeYmdOString($banco['process_date'] ?? $banco['fecha'] ?? null),
+                'importe' => $impC,
+                'conciliado_por_usuario_id' => $usuarioId,
+                'conciliado_at' => now(),
+            ]);
+        } catch (QueryException $e) {
+            throw new RuntimeException('No se pudo guardar el cruce. El movimiento puede haber quedado conciliado en otra solapa.', 0, $e);
+        }
+    }
+
+    public function desconciliar(int $empresaId, int $cuentacajaId, int $parId): void
+    {
+        $par = ConciliacionBancariaPar::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->whereKey($parId)
+            ->first();
+
+        if ($par === null) {
+            throw new RuntimeException('El cruce no existe o no pertenece a esta cuenta.');
+        }
+
+        $par->delete();
+    }
+
+    /**
+     * @param  array<string, mixed>  $mov
+     * @return array<string, mixed>
+     */
+    private function filaTableroContable(array $mov): array
+    {
+        $importe = ConciliacionBancariaHashSupport::importeFirmadoContable($mov);
+
+        return [
+            'hash' => (string) ($mov['hash'] ?? ''),
+            'fecha' => (string) ($mov['fecha'] ?? ''),
+            'fecha_fmt' => (string) ($mov['fecha_fmt'] ?? ''),
+            'tipo_comp' => (string) ($mov['tipo_comp'] ?? ''),
+            'nro_asiento_fmt' => (string) ($mov['nro_asiento_fmt'] ?? ''),
+            'nro' => (string) ($mov['nro'] ?? ''),
+            'descripcion' => (string) ($mov['descripcion'] ?? ''),
+            'debe' => (float) ($mov['debe'] ?? 0),
+            'haber' => (float) ($mov['haber'] ?? 0),
+            'importe' => $importe,
+            'anterior' => ! empty($mov['anterior']),
+            'origen' => 'mayor',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $mov
+     * @return array<string, mixed>
+     */
+    private function filaTableroBanco(array $mov): array
+    {
+        return [
+            'hash' => (string) ($mov['hash'] ?? ''),
+            'process_date' => (string) ($mov['process_date'] ?? ''),
+            'code_description_ib' => (string) ($mov['code_description_ib'] ?? ''),
+            'code_description_bank' => (string) ($mov['code_description_bank'] ?? ''),
+            'voucher_number' => $mov['voucher_number'] ?? '',
+            'amount' => (float) ($mov['amount'] ?? 0),
+            'debit_credit_type' => (string) ($mov['debit_credit_type'] ?? ''),
+            'importe' => ConciliacionBancariaHashSupport::importeFirmadoBanco($mov),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function filaTableroPar(ConciliacionBancariaPar $par): array
+    {
+        $cont = is_array($par->contable_json) ? $par->contable_json : [];
+        $banco = is_array($par->banco_json) ? $par->banco_json : [];
+
+        return [
+            'id' => (int) $par->id,
+            'hash_contable' => (string) $par->hash_contable,
+            'hash_banco' => (string) $par->hash_banco,
+            'importe' => (float) $par->importe,
+            'fecha_contable' => $par->fecha_contable?->format('d/m/Y') ?? '',
+            'fecha_banco' => $par->fecha_banco?->format('d/m/Y') ?? '',
+            'modo' => (string) ($cont['conciliacion_modo'] ?? 'auto'),
+            'detalle_contable' => (string) ($cont['descripcion'] ?? $cont['tipo_comp'] ?? ''),
+            'detalle_banco' => (string) ($banco['code_description_ib'] ?? ''),
+        ];
     }
 
     /**

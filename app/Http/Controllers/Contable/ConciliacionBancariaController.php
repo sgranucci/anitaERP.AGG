@@ -6,8 +6,10 @@ use App\Exports\Contable\ConciliacionBancariaExport;
 use App\Http\Controllers\Controller;
 use App\Models\Caja\Cuentacaja;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Contable\ConciliacionBancariaGastoDocumentoService;
 use App\Services\Contable\ConciliacionBancariaService;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaEngancheSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaResultadoCache;
 use Auth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
@@ -16,6 +18,7 @@ class ConciliacionBancariaController extends Controller
 {
     public function __construct(
         private readonly ConciliacionBancariaService $service,
+        private readonly ConciliacionBancariaGastoDocumentoService $gastoDocumentoService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {
         $this->middleware('auth');
@@ -133,7 +136,11 @@ class ConciliacionBancariaController extends Controller
         }
 
         try {
-            $resultado = $this->service->ejecutar($empresaId, $cuentacajaId, $mes, $anio, (int) Auth::id(), false);
+            $resultado = null;
+            if (! $request->boolean('recalcular')) {
+                $resultado = ConciliacionBancariaResultadoCache::leer($empresaId, $cuentacajaId, $mes, $anio);
+            }
+            $resultado ??= $this->service->ejecutar($empresaId, $cuentacajaId, $mes, $anio, (int) Auth::id(), false);
             $cc = $resultado['cuentacaja'];
             $nombre = sprintf('conciliacion_bancaria_%s_%02d_%d.xlsx', $cc->codigo ?? 'cuenta', $mes, $anio);
 
@@ -221,5 +228,159 @@ class ConciliacionBancariaController extends Controller
             'nombre' => $cuenta->nombre,
             'cuenta_interbanking' => $cuenta->cuenta_interbanking,
         ]);
+    }
+
+    public function manual(Request $request)
+    {
+        can('ejecutar-conciliacion-bancaria');
+
+        $empresaId = (int) $request->input('empresa_id');
+        $cuentacajaId = (int) $request->input('cuentacaja_id');
+        $mes = max(1, min(12, (int) $request->input('mes', (int) date('n'))));
+        $anio = max(2000, (int) $request->input('anio', (int) date('Y')));
+
+        if ($empresaId <= 0 || $cuentacajaId <= 0) {
+            return redirect()
+                ->route('conciliacion_bancaria')
+                ->with('errores', ['Elegí empresa y cuenta de caja antes de la conciliación manual.']);
+        }
+
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
+
+        $cuentacaja = Cuentacaja::query()->find($cuentacajaId);
+
+        return view('contable.conciliacion_bancaria.manual', [
+            'empresa_id' => $empresaId,
+            'cuentacaja_id' => $cuentacajaId,
+            'cuentacaja' => $cuentacaja,
+            'mes' => $mes,
+            'anio' => $anio,
+            'volver' => route('conciliacion_bancaria', [
+                'empresa_id' => $empresaId,
+                'cuentacaja_id' => $cuentacajaId,
+                'mes' => $mes,
+                'anio' => $anio,
+            ]),
+        ]);
+    }
+
+    public function apiTablero(Request $request)
+    {
+        can('ejecutar-conciliacion-bancaria');
+
+        $empresaId = (int) $request->input('empresa_id');
+        $cuentacajaId = (int) $request->input('cuentacaja_id');
+        $mes = max(1, min(12, (int) $request->input('mes')));
+        $anio = max(2000, (int) $request->input('anio'));
+
+        if ($empresaId <= 0 || $cuentacajaId <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Empresa y cuenta de caja requeridas.'], 422);
+        }
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
+
+        try {
+            $tablero = $this->service->tableroManual(
+                $empresaId,
+                $cuentacajaId,
+                $mes,
+                $anio,
+                $request->boolean('incluir_anteriores'),
+            );
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true] + $tablero);
+    }
+
+    public function apiConciliar(Request $request)
+    {
+        can('ejecutar-conciliacion-bancaria');
+
+        $empresaId = (int) $request->input('empresa_id');
+        $cuentacajaId = (int) $request->input('cuentacaja_id');
+        $contable = $request->input('contable');
+        $banco = $request->input('banco');
+
+        if ($empresaId <= 0 || $cuentacajaId <= 0 || ! is_array($contable) || ! is_array($banco)) {
+            return response()->json(['ok' => false, 'error' => 'Faltan los dos movimientos a cruzar.'], 422);
+        }
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
+
+        try {
+            $par = $this->service->conciliarManual(
+                $empresaId,
+                $cuentacajaId,
+                $contable,
+                $banco,
+                (int) Auth::id(),
+                $request->boolean('forzar'),
+            );
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'par_id' => (int) $par->id,
+        ]);
+    }
+
+    public function apiDesconciliar(Request $request)
+    {
+        can('ejecutar-conciliacion-bancaria');
+
+        $empresaId = (int) $request->input('empresa_id');
+        $cuentacajaId = (int) $request->input('cuentacaja_id');
+        $parId = (int) $request->input('par_id');
+
+        if ($empresaId <= 0 || $cuentacajaId <= 0 || $parId <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Falta el cruce a desconciliar.'], 422);
+        }
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
+
+        try {
+            $this->service->desconciliar($empresaId, $cuentacajaId, $parId);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function apiGenerarGastos(Request $request)
+    {
+        can('ejecutar-conciliacion-bancaria');
+        can('crear-ingresos-egresos-caja');
+
+        $empresaId = (int) $request->input('empresa_id');
+        $cuentacajaId = (int) $request->input('cuentacaja_id');
+        $mes = max(1, min(12, (int) $request->input('mes')));
+        $anio = max(2000, (int) $request->input('anio'));
+
+        if ($empresaId <= 0 || $cuentacajaId <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Empresa y cuenta de caja requeridas.'], 422);
+        }
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
+
+        try {
+            $resultado = $this->gastoDocumentoService->generar($empresaId, $cuentacajaId, $mes, $anio);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        return response()->json($resultado);
     }
 }

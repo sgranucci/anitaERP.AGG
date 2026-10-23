@@ -20,6 +20,12 @@
             <div class="card-header">
                 <h3 class="card-title">Conciliación bancaria</h3>
                 <div class="card-tools">
+                    @if ($cuentacaja_id && $empresa_id)
+                        <a href="{{ route('conciliacion_bancaria_manual', ['empresa_id' => $empresa_id, 'cuentacaja_id' => $cuentacaja_id, 'mes' => $mes, 'anio' => $anio]) }}"
+                           class="btn btn-app bg-primary" title="Cruzar movimientos a mano">
+                            <i class="fas fa-columns"></i> Manual
+                        </a>
+                    @endif
                     @if (!empty($filtrosQuery) && ($resultado ?? null))
                         @php
                             // No filtrar empresa_id=1 / mes=1: array_filter(... !== 1) los borraba y el export redirigía vacío.
@@ -31,8 +37,7 @@
                             $suffixExport = count($paramsExport) ? '?'.http_build_query($paramsExport) : '';
                         @endphp
                         <a href="{{ route('exportar_conciliacion_bancaria', ['formato' => 'EXCEL']).$suffixExport }}"
-                           class="btn btn-app bg-success" title="Exportar conciliación Excel"
-                           target="_blank" rel="noopener">
+                           class="btn btn-app bg-success js-export-conciliacion" title="Exportar conciliación Excel">
                             <i class="fas fa-file-excel"></i> Excel
                         </a>
                     @endif
@@ -146,8 +151,8 @@
                     @include('contable.conciliacion_bancaria.partials.panel_ia_anomalias', ['resultado' => $resultado])
 
                     <ul class="nav nav-tabs mt-3" role="tablist">
-                        <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tab-pendientes">Pendientes (cheques)</a></li>
-                        <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-mayor">Mayor sin match</a></li>
+                        <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tab-pendientes">Pendientes cheques</a></li>
+                        <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-mayor">Pendientes otros</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-saldo-banco">Saldo banco (codificado)</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-banco-pend">Pendientes banco</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-gastos">Gastos bancarios</a></li>
@@ -184,7 +189,7 @@
                             </table>
                         </div>
                         <div class="tab-pane" id="tab-mayor">
-                            <p class="text-muted small mb-2">Movimientos del mayor sin emparejar con Interbanking (no definen la carátula de cheques).</p>
+                            <p class="text-muted small mb-2">Movimientos del mayor sin emparejar que no son cheques. Los cheques están en la solapa anterior.</p>
                             <table class="table table-sm table-striped">
                                 <thead style="background:#85C1E9;color:#17202A">
                                     <tr>
@@ -192,7 +197,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @forelse (array_slice($resultado['pendientes_contables'] ?? [], 0, 200) as $mov)
+                                    @forelse (array_slice($resultado['pendientes_contables_otros'] ?? [], 0, 200) as $mov)
                                         @php $imp = ($mov['debe'] ?? 0) - ($mov['haber'] ?? 0); @endphp
                                         <tr>
                                             <td>{{ $mov['fecha_fmt'] ?? '' }}</td>
@@ -203,12 +208,12 @@
                                             <td class="text-right">{{ $imp < 0 ? number_format(abs($imp), 2, ',', '.') : '' }}</td>
                                         </tr>
                                     @empty
-                                        <tr><td colspan="6" class="text-muted">Sin pendientes de mayor.</td></tr>
+                                        <tr><td colspan="6" class="text-muted">Sin otros movimientos pendientes.</td></tr>
                                     @endforelse
                                 </tbody>
                             </table>
-                            @if (count($resultado['pendientes_contables'] ?? []) > 200)
-                                <p class="text-muted small">Mostrando 200 de {{ count($resultado['pendientes_contables']) }} — exporte Excel para el listado completo.</p>
+                            @if (count($resultado['pendientes_contables_otros'] ?? []) > 200)
+                                <p class="text-muted small">Mostrando 200 de {{ count($resultado['pendientes_contables_otros']) }}. El Excel trae el listado completo.</p>
                             @endif
                         </div>
                         <div class="tab-pane" id="tab-saldo-banco">
@@ -270,6 +275,13 @@
                             </table>
                         </div>
                         <div class="tab-pane" id="tab-gastos">
+                            @include('contable.conciliacion_bancaria.partials.documento_gastos', [
+                                'documento' => $resultado['documento_gastos'] ?? [],
+                                'empresa_id' => $empresa_id,
+                                'cuentacaja_id' => $cuentacaja_id,
+                                'mes' => $mes,
+                                'anio' => $anio,
+                            ])
                             <table class="table table-sm table-striped">
                                 <thead style="background:#85C1E9;color:#17202A">
                                     <tr><th>Código</th><th>Concepto</th><th>Importe</th></tr>
@@ -293,4 +305,11 @@
 </div>
 
 @include('includes.caja.modalconsultacuentacaja')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'conciliacion-bancaria-overlay',
+    'tituloId' => 'conciliacion-bancaria-titulo',
+    'subtituloId' => 'conciliacion-bancaria-subtitulo',
+    'titulo' => 'Conciliando…',
+    'subtitulo' => 'Puede demorar según el período. No cierre la página.',
+])
 @endsection

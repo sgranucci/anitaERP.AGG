@@ -239,4 +239,29 @@ return [
     'codigo_transferencia_default' => 10,
 
     'codigo_gasto_default' => 7,
+
+    /**
+     * Cierre de gastos bancarios → un egreso (EGR) y un ICO.
+     * Las cuentas y los conceptos se resuelven por código de maestro (no por id).
+     * Código 9 (cheques) y 10 (transferencias) no entran al documento.
+     *
+     * @var array{
+     *   tipo_caja_abreviatura: string,
+     *   tipo_compra_abreviatura: string,
+     *   lineas: array<int, array{cuenta_codigo: ?string, concepto_ivacompra_codigo: ?string}>
+     * }
+     */
+    'documento_gastos' => [
+        'tipo_caja_abreviatura' => 'EGR',
+        'tipo_compra_abreviatura' => 'ICO',
+        'lineas' => [
+            2 => ['cuenta_codigo' => '532050000', 'concepto_ivacompra_codigo' => null],
+            3 => ['cuenta_codigo' => null, 'concepto_ivacompra_codigo' => '150'],
+            4 => ['cuenta_codigo' => null, 'concepto_ivacompra_codigo' => '140'],
+            5 => ['cuenta_codigo' => null, 'concepto_ivacompra_codigo' => '221'],
+            6 => ['cuenta_codigo' => null, 'concepto_ivacompra_codigo' => '103'],
+            7 => ['cuenta_codigo' => '532040001', 'concepto_ivacompra_codigo' => null],
+            8 => ['cuenta_codigo' => null, 'concepto_ivacompra_codigo' => '151'],
+        ],
+    ],
 ];
