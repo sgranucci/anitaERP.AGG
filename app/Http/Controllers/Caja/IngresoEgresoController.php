@@ -847,6 +847,10 @@ class IngresoEgresoController extends Controller
 
         $monedaRef = (int) ($monedaIds[0] ?? 1);
         $conceptoGastoId = (int) $request->input('conceptogasto_id', 0);
+        $debesAsiento = $request->input('debeasientos', []);
+        $haberesAsiento = $request->input('haberasientos', []);
+        $monedaAsientoIds = $request->input('monedaasiento_ids', []);
+        $cotizacionesAsiento = $request->input('cotizacionasientos', []);
 
         try {
             $this->comprobanteIvaService->validarTotalesContraCaja(
@@ -854,6 +858,10 @@ class IngresoEgresoController extends Controller
                 $lineasCaja,
                 $monedaRef,
                 $conceptoGastoId,
+                is_array($debesAsiento) ? $debesAsiento : [],
+                is_array($haberesAsiento) ? $haberesAsiento : [],
+                is_array($monedaAsientoIds) ? $monedaAsientoIds : [],
+                is_array($cotizacionesAsiento) ? $cotizacionesAsiento : [],
             );
 
             return response()->json([

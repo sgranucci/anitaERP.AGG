@@ -7,8 +7,12 @@ use App\Support\Numerico\NumeroDecimalLocalSupport;
 /**
  * Cuadre entre comprobantes IVA del IE y el monto del pago en cuentas de caja.
  *
- * Una factura puede ser menor que el pago: la diferencia se imputa al concepto
- * de gasto del movimiento. Los comprobantes no pueden superar el pago.
+ * Los comprobantes de la solapa no tienen que igualar el pago. Lo que no es
+ * factura (por ejemplo L-VISA, que junta posnets ya facturados) puede quedar
+ * solo en el asiento, como en tesmov. Si el asiento ya balancea el pago entero,
+ * no se pide concepto de gasto ni un comprobante para esa diferencia.
+ * Si no hay asiento que cubra el pago, la diferencia sigue yendo al concepto
+ * de gasto. Los comprobantes no pueden superar el pago.
  */
 final class IngresoEgresoComprobanteIvaValidacionSupport
 {
@@ -44,19 +48,82 @@ final class IngresoEgresoComprobanteIvaValidacionSupport
     }
 
     /**
-     * Si las facturas no cubren el pago, el resto va al concepto de gasto.
+     * El asiento manual ya explica el pago (Debe = Haber = pago). La diferencia
+     * contra los comprobantes IVA es movimiento solo contable.
+     *
+     * @param  list<mixed>  $debes
+     * @param  list<mixed>  $haberes
+     * @param  list<mixed>  $monedaIds
+     * @param  list<mixed>  $cotizaciones
+     */
+    public static function asientoCubrePago(
+        array $debes,
+        array $haberes,
+        array $monedaIds,
+        array $cotizaciones,
+        float $totalPago,
+        int $monedaReferenciaId,
+    ): bool {
+        if ($totalPago <= self::TOLERANCIA) {
+            return false;
+        }
+
+        $n = max(count($debes), count($haberes), count($monedaIds), count($cotizaciones));
+        $totalDebe = 0.0;
+        $totalHaber = 0.0;
+
+        for ($i = 0; $i < $n; $i++) {
+            $debe = round(NumeroDecimalLocalSupport::aFloat($debes[$i] ?? 0), 2);
+            $haber = round(NumeroDecimalLocalSupport::aFloat($haberes[$i] ?? 0), 2);
+            if ($debe <= 0 && $haber <= 0) {
+                continue;
+            }
+
+            $monedaId = (int) ($monedaIds[$i] ?? $monedaReferenciaId);
+            if ($monedaId <= 0) {
+                $monedaId = $monedaReferenciaId > 0 ? $monedaReferenciaId : 1;
+            }
+            $cotizacion = NumeroDecimalLocalSupport::aFloat($cotizaciones[$i] ?? 1, 1.0);
+            $coef = function_exists('calculaCoeficienteMoneda')
+                ? calculaCoeficienteMoneda($monedaReferenciaId, $monedaId, $cotizacion)
+                : 1.0;
+
+            if ($debe > 0) {
+                $totalDebe += $debe * $coef;
+            }
+            if ($haber > 0) {
+                $totalHaber += $haber * $coef;
+            }
+        }
+
+        $totalDebe = round($totalDebe, 2);
+        $totalHaber = round($totalHaber, 2);
+        if ($totalDebe <= self::TOLERANCIA || $totalHaber <= self::TOLERANCIA) {
+            return false;
+        }
+        if (abs($totalDebe - $totalHaber) > self::TOLERANCIA) {
+            return false;
+        }
+
+        return abs(max($totalDebe, $totalHaber) - $totalPago) <= self::TOLERANCIA;
+    }
+
+    /**
+     * Si las facturas no cubren el pago y el asiento tampoco explica esa
+     * diferencia, el resto va al concepto de gasto.
      */
     public static function validarDiferenciaConConceptoGasto(
         float $totalComprobantes,
         float $totalPago,
         int $conceptoGastoId,
+        bool $asientoCubrePago = false,
     ): void {
         $diferencia = round($totalPago - $totalComprobantes, 2);
         if ($diferencia <= self::TOLERANCIA) {
             return;
         }
 
-        if ($conceptoGastoId > 0) {
+        if ($asientoCubrePago || $conceptoGastoId > 0) {
             return;
         }
 

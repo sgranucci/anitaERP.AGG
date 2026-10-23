@@ -2669,6 +2669,17 @@
                 cotizaciones.push(cotTxt === '' ? 1 : parseMontoCajaIe(cotTxt));
             });
 
+            var debeAsientos = [];
+            var haberAsientos = [];
+            var monedaAsientoIds = [];
+            var cotizacionAsientos = [];
+            $('#cuenta-asiento-table .item-cuenta-asiento').each(function () {
+                debeAsientos.push($(this).find('.debeasiento').val() || '');
+                haberAsientos.push($(this).find('.haberasiento').val() || '');
+                monedaAsientoIds.push($(this).find('.monedaasiento').val() || '');
+                cotizacionAsientos.push($(this).find('.cotizacionasiento').val() || '');
+            });
+
             $.post(url, {
                 _token: $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val(),
                 comprobantes_ivacompra_json: JSON.stringify(comprobantesIva),
@@ -2676,6 +2687,10 @@
                 moneda_ids: monedaIds,
                 cotizaciones: cotizaciones,
                 conceptogasto_id: $('#conceptogasto_id').val() || '',
+                debeasientos: debeAsientos,
+                haberasientos: haberAsientos,
+                monedaasiento_ids: monedaAsientoIds,
+                cotizacionasientos: cotizacionAsientos,
             }).done(function (data) {
                 if (data.mensaje !== 'ok' || !data.valido) {
                     alert(data.error || 'La suma de comprobantes IVA no coincide con el total del pago.');

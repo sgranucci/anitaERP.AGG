@@ -1037,6 +1037,14 @@ class IngresoEgresoService
 		return is_array($decoded) ? $decoded : [];
 	}
 
+	/** @return list<mixed> */
+	private function listaRequest($request, string $clave): array
+	{
+		$valor = $request->input($clave, []);
+
+		return is_array($valor) ? array_values($valor) : [];
+	}
+
 	private function validarComprobantesIvaContraCaja($request): void
 	{
 		$comprobantes = $this->decodificarComprobantesIvaJson($request->input('comprobantes_ivacompra_json'));
@@ -1065,6 +1073,10 @@ class IngresoEgresoService
 			$lineasCaja,
 			$monedaRef,
 			(int) $request->input('conceptogasto_id', 0),
+			$this->listaRequest($request, 'debeasientos'),
+			$this->listaRequest($request, 'haberasientos'),
+			$this->listaRequest($request, 'monedaasiento_ids'),
+			$this->listaRequest($request, 'cotizacionasientos'),
 		);
 	}
 

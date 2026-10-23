@@ -71,12 +71,20 @@ class IngresoEgresoComprobanteIvaService
     /**
      * @param  list<array<string, mixed>>  $comprobantesJson
      * @param  list<object|array<string, mixed>>  $lineasCaja
+     * @param  list<mixed>  $debesAsiento
+     * @param  list<mixed>  $haberesAsiento
+     * @param  list<mixed>  $monedaAsientoIds
+     * @param  list<mixed>  $cotizacionesAsiento
      */
     public function validarTotalesContraCaja(
         array $comprobantesJson,
         array $lineasCaja,
         int $monedaReferenciaId = 1,
         int $conceptoGastoId = 0,
+        array $debesAsiento = [],
+        array $haberesAsiento = [],
+        array $monedaAsientoIds = [],
+        array $cotizacionesAsiento = [],
     ): void {
         IngresoEgresoComprobanteIvaValidacionSupport::validarTotales(
             $comprobantesJson,
@@ -84,10 +92,20 @@ class IngresoEgresoComprobanteIvaService
             $monedaReferenciaId,
         );
 
+        $totalPago = IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaReferenciaId);
+
         IngresoEgresoComprobanteIvaValidacionSupport::validarDiferenciaConConceptoGasto(
             IngresoEgresoComprobanteIvaValidacionSupport::totalComprobantes($comprobantesJson, $monedaReferenciaId),
-            IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaReferenciaId),
+            $totalPago,
             $conceptoGastoId,
+            IngresoEgresoComprobanteIvaValidacionSupport::asientoCubrePago(
+                $debesAsiento,
+                $haberesAsiento,
+                $monedaAsientoIds,
+                $cotizacionesAsiento,
+                $totalPago,
+                $monedaReferenciaId,
+            ),
         );
     }
 
