@@ -268,11 +268,12 @@ return [
 
     /**
      * Reporte conciliación jornada: ventas ERP vs Anita vs rendgastro Z por PV (CSV por mail).
-     * Schedule después de auditorías nocturnas (@ GASTRONOMIA_CONCILIACION_DIARIA_HORA).
+     * Después del cierre Waitry escalonado (09:00, 09:05, 09:10): a las 09:00 los asientos
+     * todavía no existen y el mail marca diferencia en rendg↔asientos y medios.
      */
     'conciliacion_diaria_reporte' => [
         'habilitada' => filter_var(env('GASTRONOMIA_CONCILIACION_DIARIA_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
-        'hora' => env('GASTRONOMIA_CONCILIACION_DIARIA_HORA', '09:00'),
+        'hora' => env('GASTRONOMIA_CONCILIACION_DIARIA_HORA', '09:30'),
         'empresas_ids' => array_values(array_filter(array_map(
             'intval',
             explode(',', (string) env('GASTRONOMIA_CONCILIACION_DIARIA_EMPRESAS_IDS', '1,2,3')),

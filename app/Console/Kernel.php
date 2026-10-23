@@ -516,7 +516,7 @@ class Kernel extends ConsoleKernel
             '--enviar-mail',
             '--requiere-jornada-cerrada',
         ])
-            ->dailyAt((string) config('gastronomia.conciliacion_diaria_reporte.hora', '08:00'))
+            ->dailyAt((string) config('gastronomia.conciliacion_diaria_reporte.hora', '09:30'))
             ->withoutOverlapping(180)
             ->appendOutputTo(storage_path('logs/conciliacion-diaria-schedule.log'))
             ->when(fn () => (bool) config('gastronomia.conciliacion_diaria_reporte.habilitada', true));

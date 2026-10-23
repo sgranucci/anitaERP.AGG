@@ -130,6 +130,10 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
 
         self::espejarCuentacorrienteAnita($pago->fresh());
         self::espejarRetencionesAnita($pago->fresh());
+        // grabarDesdeMovimiento corre antes de crear la OPA: en el alta pagoproveedor_id
+        // todavía es 0 y no se escriben auxpag/tesmov RGP/RIP/RSP/RTP. Se completan acá,
+        // con las retenciones ya volcadas.
+        self::completarAuxpagRetencionesAnita($movimiento);
     }
 
     public static function eliminarDesdeMovimiento(Caja_Movimiento $movimiento): void
@@ -159,6 +163,18 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
 
         Pagoproveedor_Estado::query()->where('pagoproveedor_id', (int) $pago->id)->delete();
         $pago->delete();
+    }
+
+    private static function completarAuxpagRetencionesAnita(Caja_Movimiento $movimiento): void
+    {
+        try {
+            IngresoEgresoAnitaTesmovSupport::completarRetencionesTesoreriaDesdeMovimiento($movimiento->fresh());
+        } catch (Throwable $e) {
+            Log::warning('anita_bridge.fallo', [
+                'contexto' => 'auxpag retenciones OPA desde IE '.$movimiento->id,
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
