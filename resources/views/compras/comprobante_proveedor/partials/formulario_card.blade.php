@@ -88,7 +88,7 @@
                     <a href="{{ route('comprobante_proveedor', $retornoListadoQuery) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
-                    @if ($esEdicion && can('editar-plan-cuotas-comprobante-proveedor', false))
+                    @if ($esEdicion && empty($origen_ingreso_egreso) && can('editar-plan-cuotas-comprobante-proveedor', false))
                     <a href="{{ route('editar_plan_cuotas_comprobante_proveedor', $data->id) }}" class="btn btn-outline-light btn-sm">
                         <i class="fa fa-calendar"></i> Plan de cuotas
                     </a>
@@ -117,7 +117,7 @@
                         <i class="fa fa-money"></i> Ver pago {{ $pagoCp['etiqueta'] }}
                     </a>
                     @endforeach
-                    @if ($esEdicion && ! ($tiene_pagos ?? false) && can('borrar-comprobante-proveedor', false))
+                    @if ($esEdicion && empty($origen_ingreso_egreso) && ! ($tiene_pagos ?? false) && can('borrar-comprobante-proveedor', false))
                     @php
                         $huellaAnitaBorrar = \App\Support\Compras\ComprobanteProveedorEstados::tieneHuellaAnita($data);
                     @endphp
@@ -385,7 +385,19 @@
                     </div>
                 </div>
 
-                @if ($esEdicion && ($tiene_pagos ?? false))
+                @if ($esEdicion && ! empty($origen_ingreso_egreso))
+                    <div class="alert alert-warning mx-3 mt-3">
+                        <i class="fa fa-lock"></i>
+                        Esta factura se cargó desde Ingresos y egresos
+                        @if (! empty($numero_ingreso_egreso))
+                            (movimiento {{ $numero_ingreso_egreso }})
+                        @endif
+                        . Acá solo se consulta. Para cambiarla, abrí ese ingreso o egreso.
+                        @if (! empty($url_ingreso_egreso))
+                            <a href="{{ $url_ingreso_egreso }}" class="alert-link">Abrir el movimiento</a>
+                        @endif
+                    </div>
+                @elseif ($esEdicion && ($tiene_pagos ?? false))
                     <div class="alert alert-warning mx-3 mt-3">
                         <i class="fa fa-lock"></i>
                         Comprobante con pagos aplicados: no se puede modificar ni borrar.

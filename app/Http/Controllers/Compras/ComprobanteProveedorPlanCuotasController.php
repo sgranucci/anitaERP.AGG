@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Condicionpago;
 use App\Services\Compras\ComprobanteProveedorPlanCuotasService;
+use App\Support\Compras\ComprobanteProveedorIngresoEgresoEdicionSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use Illuminate\Http\Request;
 use RuntimeException;
@@ -49,6 +50,7 @@ class ComprobanteProveedorPlanCuotasController extends Controller
         can('editar-plan-cuotas-comprobante-proveedor');
 
         $comprobante = $this->comprobante($id);
+        $comprobante->loadMissing('caja_movimientos');
         $cotizaciones = $comprobante->comprobante_proveedor_cuotas
             ->pluck('cotizacion')
             ->map(fn ($c) => round((float) $c, 4))
@@ -63,6 +65,9 @@ class ComprobanteProveedorPlanCuotasController extends Controller
             'condiciones' => Condicionpago::query()->orderBy('nombre')->get(),
             'cotizaciones_distintas' => $cotizaciones,
             'impago' => ! ComprobanteProveedorPagoSupport::tienePagosAplicados($id),
+            'bloqueado_ingreso_egreso' => ComprobanteProveedorIngresoEgresoEdicionSupport::es($comprobante),
+            'url_ingreso_egreso' => ComprobanteProveedorIngresoEgresoEdicionSupport::urlMovimiento($comprobante),
+            'numero_ingreso_egreso' => optional($comprobante->caja_movimientos)->numerotransaccion,
         ]);
     }
 

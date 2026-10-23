@@ -1,5 +1,5 @@
 <h4 class="mb-3">Plan de cuotas</h4>
-@if (($esEdicion ?? false) && can('editar-plan-cuotas-comprobante-proveedor', false))
+@if (($esEdicion ?? false) && empty($origen_ingreso_egreso) && can('editar-plan-cuotas-comprobante-proveedor', false))
     <p>
         <a class="btn btn-primary btn-sm" href="{{ route('editar_plan_cuotas_comprobante_proveedor', $data->id) }}">
             <i class="fa fa-calendar"></i> Unificar o rearmar cuotas

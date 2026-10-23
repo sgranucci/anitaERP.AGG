@@ -37,6 +37,7 @@ use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
+use App\Support\Compras\ComprobanteProveedorIngresoEgresoEdicionSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
@@ -479,6 +480,7 @@ class ComprobanteProveedorPersistenciaService
             throw new RuntimeException('Comprobante de proveedor inexistente.');
         }
 
+        ComprobanteProveedorIngresoEgresoEdicionSupport::assertPuedeModificarDesdeComprobante($comprobante);
         ComprobanteProveedorPagoSupport::assertSinPagosAplicados($id, 'actualizar');
         $this->assertTipoProrrateadoContraOc($request);
         $this->alinearConceptosAlTipo($request);

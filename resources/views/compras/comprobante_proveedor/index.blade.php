@@ -245,12 +245,15 @@
                                 ])
                             @endforeach
                             <td class="cp-col-acciones text-nowrap">
+                                @php
+                                    $facturaDeIngresoEgreso = \App\Support\Compras\ComprobanteProveedorOrigenEntrada::esIngresoEgreso($data->origen_entrada ?? null);
+                                @endphp
                                 @if (can('editar-comprobante-proveedor', false))
-                                <a href="{{ route('editar_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar">
+                                <a href="{{ route('editar_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="{{ $facturaDeIngresoEgreso ? 'Consultar (se modifica en Ingresos y egresos)' : 'Editar' }}">
                                     <i class="fa fa-edit"></i>
                                 </a>
                                 @endif
-                                @if (can('editar-plan-cuotas-comprobante-proveedor', false))
+                                @if (! $facturaDeIngresoEgreso && can('editar-plan-cuotas-comprobante-proveedor', false))
                                 <a href="{{ route('editar_plan_cuotas_comprobante_proveedor', $data->id) }}" class="btn-accion-tabla tooltipsC" title="Unificar o rearmar cuotas">
                                     <i class="fa fa-calendar"></i>
                                 </a>
@@ -264,7 +267,8 @@
                                     <i class="fa fa-sitemap"></i>
                                 </button>
                                 @endif
-                                @if (($data->estado ?? '') !== ComprobanteProveedorEstados::CONTABILIZADO
+                                @if (! $facturaDeIngresoEgreso
+                                    && ($data->estado ?? '') !== ComprobanteProveedorEstados::CONTABILIZADO
                                     && ($data->estado ?? '') !== ComprobanteProveedorEstados::ANULADO
                                     && can('contabilizar-comprobante-proveedor', false))
                                 <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery) }}" method="POST" class="d-inline"
@@ -275,7 +279,7 @@
                                     </button>
                                 </form>
                                 @endif
-                                @if (can('borrar-comprobante-proveedor', false))
+                                @if (! $facturaDeIngresoEgreso && can('borrar-comprobante-proveedor', false))
                                 <form action="{{ route('eliminar_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery) }}" method="POST" class="d-inline form-eliminar">
                                     @csrf
                                     @method('DELETE')

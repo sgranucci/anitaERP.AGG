@@ -18,6 +18,7 @@ use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorEscrituraLock;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
+use App\Support\Compras\ComprobanteProveedorIngresoEgresoEdicionSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
@@ -243,6 +244,7 @@ class ComprobanteProveedorContabilizarService
             throw new RuntimeException('Comprobante de proveedor inexistente.');
         }
 
+        ComprobanteProveedorIngresoEgresoEdicionSupport::assertPuedeModificarDesdeComprobante($comprobante);
         $this->assertEstadoPermiteContabilizar($comprobante);
 
         app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
@@ -543,6 +545,7 @@ class ComprobanteProveedorContabilizarService
             throw new RuntimeException('Comprobante de proveedor inexistente.');
         }
 
+        ComprobanteProveedorIngresoEgresoEdicionSupport::assertPuedeModificarDesdeComprobante($comprobante);
         ComprobanteProveedorPagoSupport::assertSinPagosAplicados($comprobanteId, 'descontabilizar');
 
         // Releer con candado de fila: si otro request ya descontabilizó, salimos sin tocar Anita.

@@ -539,7 +539,7 @@
                             ? (int) ($data->getAttributes()['bloqueado_pago'] ?? 0) === 1
                             : (bool) old('excluir_circuito_pago');
                     @endphp
-                    @if (! empty($puede_excluir_circuito_pago))
+                    @if (! empty($puede_excluir_circuito_pago) && empty($origen_ingreso_egreso))
                         <label class="mb-0 small text-muted text-nowrap" style="font-weight:400;cursor:pointer;"
                                title="No entra a propuestas, órdenes de pago ni a la proyección. Sigue en la deuda del proveedor.">
                             <input type="checkbox" name="excluir_circuito_pago" id="excluir_circuito_pago" value="1"

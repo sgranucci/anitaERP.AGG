@@ -37,7 +37,19 @@
                         Si en la orden de pago ves el mismo número en todas las filas, el plan está alineado.
                     </p>
                 @endif
-                @if (! $impago)
+                @if (! empty($bloqueado_ingreso_egreso))
+                    <div class="alert alert-warning">
+                        <i class="fa fa-lock"></i>
+                        Esta factura se cargó desde Ingresos y egresos
+                        @if (! empty($numero_ingreso_egreso))
+                            (movimiento {{ $numero_ingreso_egreso }})
+                        @endif
+                        . El plan de cuotas se cambia en ese movimiento.
+                        @if (! empty($url_ingreso_egreso))
+                            <a href="{{ $url_ingreso_egreso }}" class="alert-link">Abrir el movimiento</a>
+                        @endif
+                    </div>
+                @elseif (! $impago)
                     <div class="alert alert-danger">Este comprobante tiene pagos aplicados. No se puede rearmar el plan.</div>
                 @endif
 
@@ -46,7 +58,7 @@
                     <div class="form-row align-items-end mb-3">
                         <div class="col-md-5">
                             <label for="condicionpago_id">Condición de pago</label>
-                            <select name="condicionpago_id" id="condicionpago_id" class="form-control" @disabled(! $impago)>
+                            <select name="condicionpago_id" id="condicionpago_id" class="form-control" @disabled(! $impago || ! empty($bloqueado_ingreso_egreso))>
                                 <option value="">Sin condición (no recalcula vencimientos)</option>
                                 @foreach ($condiciones as $condicion)
                                     <option value="{{ $condicion->id }}" @selected((int) old('condicionpago_id', $data->condicionpago_id) === (int) $condicion->id)>
@@ -56,11 +68,11 @@
                             </select>
                         </div>
                         <div class="col-md-7 mt-2">
-                            <button type="submit" name="accion" value="unificar" class="btn btn-primary" @disabled(! $impago)
+                            <button type="submit" name="accion" value="unificar" class="btn btn-primary" @disabled(! $impago || ! empty($bloqueado_ingreso_egreso))
                                 onclick="return confirm('Se unifica en una cuota con el vencimiento de la primera, la moneda y la cotización de la factura. La condición de pago queda vacía para que esa fecha no se recalcule.');">
                                 Unificar en 1 cuota
                             </button>
-                            <button type="submit" name="accion" value="condicion" class="btn btn-outline-primary" @disabled(! $impago)>
+                            <button type="submit" name="accion" value="condicion" class="btn btn-outline-primary" @disabled(! $impago || ! empty($bloqueado_ingreso_egreso))>
                                 Armar según condición
                             </button>
                         </div>
@@ -89,7 +101,7 @@
                                         <input type="hidden" name="cuota_formapago_id[]" value="{{ (int) ($cuota->formapago_id ?: 1) }}">
                                     </td>
                                     <td class="text-center">
-                                        @if ($impago)
+                                        @if ($impago && empty($bloqueado_ingreso_egreso))
                                             <button type="button" class="btn btn-sm btn-outline-danger js-quitar-cuota">Quitar</button>
                                         @endif
                                     </td>
@@ -97,7 +109,7 @@
                             @endforeach
                         </tbody>
                     </table>
-                    @if ($impago)
+                    @if ($impago && empty($bloqueado_ingreso_egreso))
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="js-agregar-cuota">Agregar cuota</button>
                         <button type="submit" name="accion" value="manual" class="btn btn-success">Guardar plan manual</button>
                     @endif

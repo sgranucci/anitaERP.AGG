@@ -11,6 +11,7 @@ use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorEscrituraLock;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
+use App\Support\Compras\ComprobanteProveedorIngresoEgresoEdicionSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorPlanCuotasSupport;
 use App\Support\Compras\ComprobanteProveedorVencimientoCondicionSupport;
@@ -177,6 +178,7 @@ class ComprobanteProveedorPlanCuotasService
             throw new RuntimeException('El comprobante está anulado.');
         }
 
+        ComprobanteProveedorIngresoEgresoEdicionSupport::assertPuedeModificarDesdeComprobante($comprobante);
         ComprobanteProveedorPagoSupport::assertSinPagosAplicados(
             (int) $comprobante->id,
             'cambiar el plan de cuotas'

@@ -55,6 +55,7 @@ use App\Support\Listado\ListadoLienzoSupport;
 use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
+use App\Support\Compras\ComprobanteProveedorIngresoEgresoEdicionSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
@@ -892,11 +893,20 @@ class Comprobante_ProveedorController extends Controller
         ]);
     }
 
+    private function assertNoEsFacturaDeIngresoEgreso(int $id): void
+    {
+        $comprobante = Comprobante_Proveedor::query()->find($id);
+        if ($comprobante) {
+            ComprobanteProveedorIngresoEgresoEdicionSupport::assertPuedeModificarDesdeComprobante($comprobante);
+        }
+    }
+
     public function eliminar(Request $request, int $id)
     {
         can('borrar-comprobante-proveedor');
 
         try {
+            $this->assertNoEsFacturaDeIngresoEgreso($id);
             $resultado = $this->eliminarService->eliminar($id, tambienPrecarga: false);
         } catch (\Throwable $e) {
             if ($request->ajax()) {
@@ -923,6 +933,7 @@ class Comprobante_ProveedorController extends Controller
         }
 
         try {
+            $this->assertNoEsFacturaDeIngresoEgreso($id);
             $resultado = $this->eliminarService->eliminar($id, tambienPrecarga: true);
         } catch (\Throwable $e) {
             if ($request->ajax()) {
@@ -987,6 +998,7 @@ class Comprobante_ProveedorController extends Controller
         $comprobante = Comprobante_Proveedor::query()->findOrFail($id);
 
         try {
+            ComprobanteProveedorIngresoEgresoEdicionSupport::assertPuedeModificarDesdeComprobante($comprobante);
             app(ComprobanteProveedorBloqueoPagoService::class)
                 ->liberar($comprobante, (string) $validated['motivo']);
         } catch (\Throwable $e) {
@@ -1009,6 +1021,18 @@ class Comprobante_ProveedorController extends Controller
         can('excluir-circuito-pago-comprobante-proveedor');
 
         $comprobante = Comprobante_Proveedor::query()->findOrFail($id);
+        try {
+            ComprobanteProveedorIngresoEgresoEdicionSupport::assertPuedeModificarDesdeComprobante($comprobante);
+        } catch (\RuntimeException $e) {
+            return redirect()
+                ->route(
+                    'editar_comprobante_proveedor',
+                    ['id' => $id]
+                        + $this->queryRetornoListado($request)
+                        + ComprobanteProveedorRetornoLegajoSupport::queryParams($request)
+                )
+                ->with('errores', [$e->getMessage()]);
+        }
         $excluir = $request->boolean('excluir_circuito_pago');
         $this->aplicarExclusionCircuitoPago($request, $comprobante, true);
 
@@ -1422,6 +1446,15 @@ class Comprobante_ProveedorController extends Controller
         if ($comprobanteId && ! can('actualizar-comprobante-proveedor', false)) {
             $bloqueadoEdicion = true;
         }
+        $origenIngresoEgreso = $data && ComprobanteProveedorIngresoEgresoEdicionSupport::es($data);
+        $urlIngresoEgreso = null;
+        $numeroIngresoEgreso = null;
+        if ($origenIngresoEgreso) {
+            $bloqueadoEdicion = true;
+            $data->loadMissing('caja_movimientos');
+            $numeroIngresoEgreso = optional($data->caja_movimientos)->numerotransaccion;
+            $urlIngresoEgreso = ComprobanteProveedorIngresoEgresoEdicionSupport::urlMovimiento($data);
+        }
         $puedeActualizar = (bool) $comprobanteId
             && ! $bloqueadoEdicion
             && can('actualizar-comprobante-proveedor', false);
@@ -1723,6 +1756,9 @@ class Comprobante_ProveedorController extends Controller
             'asientoPreview' => $asientoPreview,
             'mostrarSolapaAsiento' => true,
             'tiene_pagos' => $tienePagos,
+            'origen_ingreso_egreso' => $origenIngresoEgreso,
+            'url_ingreso_egreso' => $urlIngresoEgreso,
+            'numero_ingreso_egreso' => $numeroIngresoEgreso,
             'pagos_comprobante' => $comprobanteId
                 ? $this->pagosVisiblesDelComprobante((int) $comprobanteId)
                 : [],
