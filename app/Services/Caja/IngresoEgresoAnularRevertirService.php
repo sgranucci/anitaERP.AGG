@@ -4,8 +4,11 @@ namespace App\Services\Caja;
 
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Caja_Movimiento_Estado;
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Contable\Asiento;
+use App\Services\Compras\ComprobanteProveedorEliminarService;
+use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
 use App\Repositories\Caja\Caja_Movimiento_CuentacajaRepositoryInterface;
 use App\Repositories\Caja\Caja_Movimiento_EstadoRepositoryInterface;
@@ -88,6 +91,11 @@ class IngresoEgresoAnularRevertirService
             foreach ($movimiento->cheques()->get() as $cheque) {
                 $cheque->delete();
             }
+
+            // La factura IVA nacida en este movimiento tiene su propio asiento.
+            // Borrarla antes: si no, el CASCADE de caja_movimiento intenta
+            // borrar ese asiento y asiento_movimiento lo frena (ON DELETE RESTRICT).
+            $this->eliminarComprobantesIvaDelMovimiento((int) $movimiento->id);
 
             // No usar repo->delete: ya limpiamos Anita arriba.
             CajaMovimientoEloquentDeleteSupport::eliminarPorId((int) $movimiento->id);
@@ -274,6 +282,36 @@ class IngresoEgresoAnularRevertirService
             ->whereNull('caja_movimiento_origen_id')
             ->orderByDesc('id')
             ->get();
+    }
+
+    /**
+     * Facturas de proveedor con origen INGRESO_EGRESO cuelgan del movimiento
+     * (FK ON DELETE CASCADE) y su asiento no se puede caer en cascada.
+     */
+    private function eliminarComprobantesIvaDelMovimiento(int $cajaMovimientoId): void
+    {
+        $comprobantes = Comprobante_Proveedor::query()
+            ->where('caja_movimiento_id', $cajaMovimientoId)
+            ->where('origen_entrada', ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO)
+            ->get(['id', 'asiento_id']);
+
+        if ($comprobantes->isEmpty()) {
+            return;
+        }
+
+        $eliminar = app(ComprobanteProveedorEliminarService::class);
+        foreach ($comprobantes as $comprobante) {
+            $asientoPrincipal = (int) ($comprobante->asiento_id ?? 0);
+            $extras = Asiento::query()
+                ->where('comprobante_proveedor_id', (int) $comprobante->id)
+                ->when($asientoPrincipal > 0, fn ($q) => $q->where('id', '!=', $asientoPrincipal))
+                ->pluck('id');
+            foreach ($extras as $asientoId) {
+                $this->asientoRepository->delete((int) $asientoId);
+            }
+
+            $eliminar->eliminar((int) $comprobante->id, false);
+        }
     }
 
     private function cargarMovimiento(int $id): Caja_Movimiento
