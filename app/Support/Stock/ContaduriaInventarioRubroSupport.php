@@ -6,6 +6,7 @@ namespace App\Support\Stock;
  * Rubros de existencias finales que contaduría abre en solapas.
  * Alimento, bebida y cigarrillo salen del tipo de artículo.
  * Descartables, librería y limpieza salen del uso. Farmacia sale de la categoría.
+ * El orden es el de la planilla de totales (sector / costo).
  */
 final class ContaduriaInventarioRubroSupport
 {
@@ -17,15 +18,49 @@ final class ContaduriaInventarioRubroSupport
     public static function rubros(): array
     {
         return [
-            ['clave' => 'alimento', 'titulo' => 'Alimento'],
+            ['clave' => 'alimento', 'titulo' => 'Alimentos'],
             ['clave' => 'bebidas', 'titulo' => 'Bebidas'],
-            ['clave' => 'cigarrillos', 'titulo' => 'Cigarrillos'],
             ['clave' => 'descartables', 'titulo' => 'Descartables'],
+            ['clave' => 'cigarrillos', 'titulo' => 'Cigarrillos'],
+            ['clave' => 'limpieza', 'titulo' => 'Limpieza'],
             ['clave' => 'farmacia', 'titulo' => 'Farmacia'],
             ['clave' => 'libreria', 'titulo' => 'Librería'],
-            ['clave' => 'limpieza', 'titulo' => 'Limpieza'],
             ['clave' => self::OTROS, 'titulo' => 'Otros'],
         ];
+    }
+
+    /**
+     * El comentario del recuento manda la solapa cuando nombra el rubro
+     * (almacén, bebidas, cigarrillos). Limpieza y descartables juntos se parten por el artículo.
+     *
+     * @param  array<string, mixed>  $fila
+     */
+    public static function claveDesdeRecuento(string $comentario, array $fila): string
+    {
+        $texto = self::normalizar($comentario);
+        if ($texto === '') {
+            return self::clave($fila);
+        }
+        if (str_contains($texto, 'CIGARRILLO')) {
+            return 'cigarrillos';
+        }
+        if (str_contains($texto, 'BEBIDA')) {
+            return 'bebidas';
+        }
+        if (str_contains($texto, 'LIMPIEZA') && str_contains($texto, 'DESCARTABLE')) {
+            return self::clave($fila);
+        }
+        if (str_contains($texto, 'ALMACEN') || str_contains($texto, 'ALIMENTO')) {
+            return 'alimento';
+        }
+        if (str_contains($texto, 'LIMPIEZA')) {
+            return 'limpieza';
+        }
+        if (str_contains($texto, 'DESCARTABLE')) {
+            return 'descartables';
+        }
+
+        return self::clave($fila);
     }
 
     /**

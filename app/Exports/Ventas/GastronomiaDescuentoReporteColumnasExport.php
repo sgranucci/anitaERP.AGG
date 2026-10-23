@@ -47,6 +47,8 @@ class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoS
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
+    private ?string $tituloHoja = null;
+
     /**
      * @param  array<string, mixed>  $resultado
      */
@@ -64,6 +66,12 @@ class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoS
         $this->esCsv = $esCsv;
 
         return $this;
+    }
+
+    public function setTitle(string $tituloHoja): void
+    {
+        $tituloHoja = trim($tituloHoja);
+        $this->tituloHoja = $tituloHoja !== '' ? GastronomiaDescuentoReporteExport::sanitizarNombreHoja($tituloHoja) : null;
     }
 
     public function view(): View
@@ -84,6 +92,9 @@ class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoS
             true,
             count($columnas) > 0,
         );
+        if ($this->tituloHoja !== null) {
+            $filasMeta++;
+        }
         $this->layout = new GastronomiaDescuentoReporteExcelLayout(
             $this->hayFilaLogos,
             $filasMeta,
@@ -91,13 +102,14 @@ class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoS
             2,
         );
         $this->filaSubtituloExcel = trim($this->subtitulo) !== ''
-            ? $this->layout->filaInicioMeta() + 2
+            ? $this->layout->filaInicioMeta() + ($this->tituloHoja !== null ? 3 : 2)
             : 0;
 
         return view('exports.ventas.gastronomia_descuento_reporte_columnas', [
             'resultado' => $this->resultado,
             'vista' => $vista,
             'titulo' => $this->titulo,
+            'titulo_solapa' => $this->tituloHoja,
             'subtitulo' => $this->subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'formatoNumero' => $this->formatoNumeroEfectivo(),
@@ -163,6 +175,6 @@ class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoS
 
     public function title(): string
     {
-        return 'Consolidado';
+        return $this->tituloHoja ?? 'Consolidado';
     }
 }

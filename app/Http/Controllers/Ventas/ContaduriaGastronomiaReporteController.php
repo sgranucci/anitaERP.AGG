@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Ventas;
 
+use App\Exports\Stock\ContaduriaInventarioTotalesExport;
 use App\Exports\Stock\ContaduriaInventarioWorkbookExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -40,13 +41,12 @@ class ContaduriaGastronomiaReporteController extends Controller
 
         $fechaCierre = trim((string) $request->input('fecha_cierre', ''));
         if ($fechaCierre === '') {
-            $fechaCierre = Carbon::today()->format('Y-m-d');
+            $fechaCierre = Carbon::today()->startOfMonth()->subDay()->format('Y-m-d');
         }
 
-        $depositos = trim((string) $request->input('depositos', '1, 8'));
-        if ($depositos === '') {
-            $depositos = '1, 8';
-        }
+        $depositos = $request->exists('depositos')
+            ? trim((string) $request->input('depositos'))
+            : '1, 8';
 
         return view('ventas.gastronomia.reporte_contaduria.index', [
             'empresa_query' => $empresaQuery,
@@ -112,14 +112,14 @@ class ContaduriaGastronomiaReporteController extends Controller
 
         $empresaId = (int) $request->input('empresa_id', 0);
         $fecha = trim((string) $request->input('fecha_cierre', ''));
-        $depositos = $this->normalizarDepositos((string) $request->input('depositos', '1, 8'));
+        $depositos = $this->normalizarDepositos((string) $request->input('depositos', ''));
         $origen = $this->origenInventario($request);
         $this->assertAccesoEmpresa($empresaId);
 
-        if ($empresaId <= 0 || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) || $depositos === '') {
+        if ($empresaId <= 0 || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
             return redirect()
                 ->route('gastronomia_reporte_contaduria', $this->parametrosReporte($request))
-                ->with('errores', ['Seleccione la empresa, la fecha de cierre y los depósitos.']);
+                ->with('errores', ['Seleccione la empresa y la fecha de cierre.']);
         }
 
         $armado = $this->inventario->armar([
@@ -129,6 +129,7 @@ class ContaduriaGastronomiaReporteController extends Controller
             'depositos_filtro' => $depositos,
             'solo_con_saldo' => true,
             'origen' => $origen,
+            'omitir_sin_recuento' => $depositos === '',
         ]);
 
         if (($armado['error'] ?? null) !== null) {
@@ -138,17 +139,125 @@ class ContaduriaGastronomiaReporteController extends Controller
         }
 
         $empresaNombre = $this->etiquetaEmpresa($empresaId, $this->empresaRepository->allFiltrado());
-        $codigos = array_map(static fn (array $dep) => $dep['codigo'], $armado['depositos']);
-        $titulo = 'Inventario existencias finales';
-        $subtitulo = $empresaNombre.' · Cierre '.Carbon::parse($fecha)->format('d/m/Y').' · Depósitos '.implode(', ', $codigos);
+        $archivos = $this->excelsInventario($armado, $empresaNombre, $fecha);
+        if ($archivos === []) {
+            return redirect()
+                ->route('gastronomia_reporte_contaduria', $this->parametrosReporte($request))
+                ->with('errores', ['No hay existencias para armar el inventario.']);
+        }
 
-        return (new ContaduriaInventarioWorkbookExport(
-            $armado,
-            $titulo,
-            $subtitulo,
-            $empresaNombre,
-            (string) ($armado['origen_etiqueta'] ?? ''),
-        ))->download('reporte_contaduria_inventario_'.$fecha.'.xlsx');
+        $zipPath = tempnam(sys_get_temp_dir(), 'contaduria-inv');
+        if ($zipPath === false) {
+            abort(500, 'No se pudo armar el archivo.');
+        }
+
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath, ZipArchive::OVERWRITE) !== true) {
+            @unlink($zipPath);
+            abort(500, 'No se pudo armar el archivo.');
+        }
+
+        foreach ($archivos as $archivo) {
+            $zip->addFromString(
+                $archivo['nombre'],
+                Excel::raw($archivo['export'], ExcelWriter::XLSX),
+            );
+        }
+        $zip->close();
+
+        return response()
+            ->download($zipPath, 'inventario_contaduria_'.$fecha.'.zip')
+            ->deleteFileAfterSend(true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $armado
+     * @return list<array{nombre:string,export:mixed}>
+     */
+    private function excelsInventario(array $armado, string $empresaNombre, string $fecha): array
+    {
+        $fechaArchivo = $this->etiquetaFechaLarga($fecha);
+        $mes = $this->etiquetaMes($fecha);
+
+        $detallesPorDep = [];
+        foreach ($armado['detalles'] ?? [] as $detalle) {
+            $detallesPorDep[(int) ($detalle['deposito_id'] ?? 0)][] = $detalle;
+        }
+
+        $depositos = [];
+        foreach ($armado['depositos'] ?? [] as $deposito) {
+            if (($detallesPorDep[(int) ($deposito['id'] ?? 0)] ?? []) !== []) {
+                $depositos[] = $deposito;
+            }
+        }
+        if ($depositos === []) {
+            return [];
+        }
+
+        $clavesConFilas = [];
+        foreach ($armado['detalles'] ?? [] as $detalle) {
+            $clavesConFilas[(string) ($detalle['rubro'] ?? '')] = true;
+        }
+        $rubros = [];
+        foreach ($armado['subtotal'] ?? [] as $rubro) {
+            $tieneFilas = isset($clavesConFilas[(string) ($rubro['clave'] ?? '')]);
+            if (! $tieneFilas && abs((float) ($rubro['total_valor'] ?? 0)) <= 0.0001) {
+                continue;
+            }
+            $rubros[] = $rubro;
+        }
+
+        $archivos = [[
+            'nombre' => 'DEPÓSITOS - TOTALES - '.$fechaArchivo.'.xlsx',
+            'export' => new ContaduriaInventarioTotalesExport($depositos, $rubros, $mes, $empresaNombre),
+        ]];
+
+        foreach ($depositos as $deposito) {
+            $archivos[] = [
+                'nombre' => $this->nombreExcelDeposito($deposito, $fechaArchivo),
+                'export' => new ContaduriaInventarioWorkbookExport($detallesPorDep[(int) $deposito['id']]),
+            ];
+        }
+
+        return $archivos;
+    }
+
+    /**
+     * @param  array<string, mixed>  $deposito
+     */
+    private function nombreExcelDeposito(array $deposito, string $fechaArchivo): string
+    {
+        $nombre = mb_strtoupper(trim((string) ($deposito['nombre'] ?? '')));
+        $nombre = preg_replace('/[\\\\\\/:*?"<>|]/', ' ', $nombre) ?? $nombre;
+        $nombre = trim((string) preg_replace('/\s+/', ' ', $nombre));
+        $codigo = trim((string) ($deposito['codigo'] ?? ''));
+
+        return 'DEPOSITO '.$codigo.' - '.$nombre.' - '.$fechaArchivo.'.xlsx';
+    }
+
+    private function etiquetaFechaLarga(string $fecha): string
+    {
+        $carbon = Carbon::parse($fecha);
+
+        return $carbon->format('j').' '.$this->nombreMes((int) $carbon->month).' '.$carbon->year;
+    }
+
+    private function etiquetaMes(string $fecha): string
+    {
+        $carbon = Carbon::parse($fecha);
+
+        return $this->nombreMes((int) $carbon->month).' '.$carbon->year;
+    }
+
+    private function nombreMes(int $mes): string
+    {
+        $nombres = [
+            1 => 'ENERO', 2 => 'FEBRERO', 3 => 'MARZO', 4 => 'ABRIL',
+            5 => 'MAYO', 6 => 'JUNIO', 7 => 'JULIO', 8 => 'AGOSTO',
+            9 => 'SEPTIEMBRE', 10 => 'OCTUBRE', 11 => 'NOVIEMBRE', 12 => 'DICIEMBRE',
+        ];
+
+        return $nombres[$mes] ?? '';
     }
 
     /**

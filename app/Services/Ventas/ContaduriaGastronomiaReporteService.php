@@ -70,8 +70,8 @@ final class ContaduriaGastronomiaReporteService
             ContaduriaGastronomiaReporteCatalogo::CANJE_CODIGOS,
             $nombresCanje,
         );
-        $staffRecortado = $this->recortar($resultadoClientes, $codigosStaff, $nombresStaff);
-        $managersRecortado = $this->recortar($resultadoClientes, $codigosManagers, $nombresManagers);
+        $staffRecortado = $this->enColumnas($this->recortar($resultadoClientes, $codigosStaff, $nombresStaff));
+        $managersRecortado = $this->enColumnas($this->recortar($resultadoClientes, $codigosManagers, $nombresManagers));
         $comedorRecortado = $this->recortar(
             $resultadoClientes,
             [ContaduriaGastronomiaReporteCatalogo::COMEDOR_CODIGO],
@@ -124,8 +124,14 @@ final class ContaduriaGastronomiaReporteService
                             'resultado' => $invitacionesRecortadas,
                             'solo_totales' => true,
                         ],
+                        [
+                            'titulo' => 'Detalle',
+                            'resultado' => $invitacionesRecortadas,
+                            'solo_totales' => false,
+                            'lado_a_lado' => true,
+                        ],
                     ],
-                    $invitacionesRecortadas,
+                    null,
                 ),
             ],
             [
@@ -146,11 +152,13 @@ final class ContaduriaGastronomiaReporteService
                             'titulo' => 'Staff 80-105',
                             'resultado' => $staffRecortado,
                             'solo_totales' => false,
+                            'en_columnas' => true,
                         ],
                         [
                             'titulo' => 'Managers',
                             'resultado' => $managersRecortado,
                             'solo_totales' => false,
+                            'en_columnas' => true,
                         ],
                         [
                             'titulo' => 'Comedor personal',
@@ -216,15 +224,6 @@ final class ContaduriaGastronomiaReporteService
         foreach ($codigos as $codigo) {
             $items = $porCodigo[$codigo] ?? [];
             if ($items === []) {
-                if (! isset($nombres[$codigo])) {
-                    continue;
-                }
-                $totales[] = [
-                    'codigo' => $codigo,
-                    'sector' => $nombres[$codigo],
-                    'costo_total' => 0.0,
-                ];
-
                 continue;
             }
 
@@ -233,6 +232,12 @@ final class ContaduriaGastronomiaReporteService
                 $costo = round((float) ($bloque['totales']['costo_total'] ?? 0), 2);
                 $venta = round((float) ($bloque['totales']['total_venta'] ?? 0), 2);
                 $unidades = round((float) ($bloque['totales']['unidades'] ?? 0), 4);
+                $granCosto += $costo;
+                $granVenta += $venta;
+                $granUnidades += $unidades;
+                if (abs($costo) < 0.005) {
+                    continue;
+                }
                 $totales[] = [
                     'clave' => $bloque['clave'] ?? '',
                     'tipo_agrupacion' => $bloque['tipo_agrupacion'] ?? '',
@@ -240,9 +245,6 @@ final class ContaduriaGastronomiaReporteService
                     'sector' => $bloque['nombre'] ?? ($nombres[$codigo] ?? ''),
                     'costo_total' => $costo,
                 ];
-                $granCosto += $costo;
-                $granVenta += $venta;
-                $granUnidades += $unidades;
             }
         }
 
@@ -255,6 +257,20 @@ final class ContaduriaGastronomiaReporteService
         $resultado['vista_columnas'] = null;
 
         return $resultado;
+    }
+
+    /**
+     * Arma la grilla horizontal: una terna de columnas (unidades, costo, venta) por cliente con consumo.
+     *
+     * @param  array<string, mixed>  $resultado
+     * @return array<string, mixed>
+     */
+    private function enColumnas(array $resultado): array
+    {
+        return $this->reporteService->enriquecerVistaColumnas(
+            ['presentacion_columnas' => true],
+            $resultado,
+        );
     }
 
     /**

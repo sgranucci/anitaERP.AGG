@@ -76,8 +76,8 @@
                             </button>
                             <p class="text-muted small mb-0 mt-2">
                                 Un zip con canje (500, 1500 y 1501), invitaciones (20, 30, 40, 50, 60, 70, 120 y 140)
-                                y consumo personal (staff 80-105, managers y venta de comedor).
-                                Cada c&oacute;digo queda abierto por alimento, bebida y cigarrillo.
+                                y consumo personal (staff 80-105 y managers en columnas por cliente, y venta de comedor).
+                                El total por c&oacute;digo no lista los que quedaron en cero.
                             </p>
                         </div>
                     </div>
@@ -89,10 +89,10 @@
                         <div class="col-lg-3">
                             <input type="date" name="fecha_cierre" id="fecha_cierre" class="form-control" value="{{ $fecha_cierre ?? '' }}" required>
                         </div>
-                        <label for="depositos" class="col-lg-2 control-label text-right pr-2 requerido">Dep&oacute;sitos</label>
+                        <label for="depositos" class="col-lg-2 control-label text-right pr-2">Dep&oacute;sitos</label>
                         <div class="col-lg-3">
-                            <input type="text" name="depositos" id="depositos" class="form-control" value="{{ $depositos ?? '1, 8' }}" required>
-                            <small class="form-text text-muted">C&oacute;digos separados por coma. Por defecto 1 y 8.</small>
+                            <input type="text" name="depositos" id="depositos" class="form-control" value="{{ $depositos ?? '1, 8' }}">
+                            <small class="form-text text-muted">C&oacute;digos separados por coma. Vac&iacute;o = todos los dep&oacute;sitos de la empresa. Biyemas suele ser 1, 8. En Kandiko y Rebisco, dejalo vac&iacute;o para que entre todo el inventario.</small>
                         </div>
                     </div>
 
@@ -105,7 +105,9 @@
                             </select>
                             <small class="form-text text-muted">
                                 Saldo vigente es la existencia del sistema a la fecha de cierre.
-                                &Uacute;ltimo recuento toma la cantidad contada de los recuentos cerrados de la fecha m&aacute;s reciente de cada dep&oacute;sito, hasta esa fecha. Si ese d&iacute;a hay varios, entran todos. El Excel dice cu&aacute;l us&oacute;.
+                                Recuento: los cerrados de ese d&iacute;a. Si no hay, los del d&iacute;a siguiente
+                                (el 30/09/2026 toma el 1/10, RC-000160, y no un recuento posterior como el RC-000180 del 20/10).
+                                Si ese d&iacute;a hay varios, entran todos. El Excel dice cu&aacute;l us&oacute;.
                             </small>
                         </div>
                     </div>
@@ -118,9 +120,9 @@
                                 <i class="fa fa-file-excel-o"></i> Descargar inventario
                             </button>
                             <p class="text-muted small mb-0 mt-2">
-                                Otro Excel: subtotal por rubro y cada dep&oacute;sito abierto en solapa
-                                (alimento, bebidas, cigarrillos, descartables, farmacia, librer&iacute;a y limpieza),
-                                valorizado al precio de &uacute;ltima compra. El encabezado indica si sali&oacute; del saldo vigente o del &uacute;ltimo recuento.
+                                Un zip: un Excel de totales (sector y costo por dep&oacute;sito) y un Excel por dep&oacute;sito.
+                                Cada dep&oacute;sito se abre en solapas por rubro (alimentos, bebidas, descartables, cigarrillos, limpieza y, si hay stock, farmacia, librer&iacute;a y otros).
+                                Cada solapa indica el n&uacute;mero de recuento (RC-000000), igual que el listado de contadur&iacute;a.
                             </p>
                         </div>
                     </div>

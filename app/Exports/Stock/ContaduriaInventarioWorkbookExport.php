@@ -10,43 +10,22 @@ class ContaduriaInventarioWorkbookExport implements WithMultipleSheets
     use Exportable;
 
     /**
-     * @param  array<string, mixed>  $armado
+     * Solapas de un depósito, una por rubro.
+     *
+     * @param  list<array<string, mixed>>  $detalles
      */
     public function __construct(
-        private readonly array $armado,
-        private readonly string $titulo,
-        private readonly string $subtitulo,
-        private readonly string $empresaNombre,
-        private readonly string $origen = '',
+        private readonly array $detalles,
     ) {}
 
     public function sheets(): array
     {
         $usados = [];
-        $sheets = [
-            new ContaduriaInventarioHojaExport(
-                $this->unico('Subtotal', $usados),
-                'subtotal',
-                [
-                    'depositos' => $this->armado['depositos'] ?? [],
-                    'rubros' => $this->armado['subtotal'] ?? [],
-                ],
-                $this->titulo,
-                $this->subtitulo,
-                $this->empresaNombre,
-                $this->origen,
-            ),
-        ];
-
-        foreach ($this->armado['detalles'] ?? [] as $detalle) {
+        $sheets = [];
+        foreach ($this->detalles as $detalle) {
             $sheets[] = new ContaduriaInventarioHojaExport(
-                $this->unico((string) ($detalle['titulo_hoja'] ?? 'Deposito'), $usados),
-                'detalle',
+                $this->unico((string) ($detalle['titulo_hoja'] ?? 'Hoja'), $usados),
                 $detalle,
-                $this->titulo,
-                $this->subtitulo,
-                $this->empresaNombre,
-                $this->origen,
             );
         }
 

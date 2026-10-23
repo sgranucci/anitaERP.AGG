@@ -7,8 +7,9 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Último recuento cerrado de cada depósito para el inventario de contaduría.
- * Si en la fecha más reciente hay varios recuentos cerrados, entran todos.
+ * Recuentos cerrados del inventario de contaduría.
+ * Usa los del día de cierre. Si ese día no hay, los del día siguiente
+ * (el cierre del 30 se cuenta el 1). No salta a un recuento posterior.
  */
 final class ContaduriaInventarioRecuentoSupport
 {
@@ -30,33 +31,55 @@ final class ContaduriaInventarioRecuentoSupport
             return ['faltantes' => $depositoIds, 'por_deposito' => []];
         }
 
+        $cierre = Carbon::parse($fechaHasta)->startOfDay();
+        $fechaCierre = $cierre->format('Y-m-d');
+        $fechaSiguiente = $cierre->copy()->addDay()->format('Y-m-d');
+
         $recuentos = Recuento::query()
+            ->with('usuario:id,nombre')
             ->whereIn('deposito_id', $depositoIds)
-            ->where('fecha', '<=', $fechaHasta)
+            ->where('fecha', '<=', $fechaSiguiente)
             ->whereIn('estado', [Recuento::ESTADO_CERRADO_PARCIAL, Recuento::ESTADO_CERRADO_TOTAL])
             ->orderBy('deposito_id')
-            ->orderByDesc('fecha')
-            ->orderByDesc('id')
-            ->get(['id', 'codigo', 'fecha', 'deposito_id', 'estado']);
+            ->orderBy('fecha')
+            ->orderBy('id')
+            ->get(['id', 'codigo', 'fecha', 'deposito_id', 'estado', 'comentario', 'usuario_id']);
 
-        $fechaPorDeposito = [];
-        $elegidos = [];
+        $porFecha = [];
         foreach ($recuentos as $recuento) {
             $depositoId = (int) $recuento->deposito_id;
             $fecha = $recuento->fecha instanceof Carbon
                 ? $recuento->fecha->format('Y-m-d')
                 : substr((string) $recuento->fecha, 0, 10);
-            if (! isset($fechaPorDeposito[$depositoId])) {
-                $fechaPorDeposito[$depositoId] = $fecha;
-            }
-            if ($fecha !== $fechaPorDeposito[$depositoId]) {
-                continue;
-            }
-            $elegidos[$depositoId][] = [
+            $porFecha[$depositoId][$fecha][] = [
                 'id' => (int) $recuento->id,
                 'codigo' => trim((string) $recuento->codigo),
                 'estado' => (string) $recuento->estado,
+                'comentario' => trim((string) ($recuento->comentario ?? '')),
+                'usuario' => trim((string) ($recuento->usuario?->nombre ?? '')),
             ];
+        }
+
+        $fechaPorDeposito = [];
+        $elegidos = [];
+        foreach ($porFecha as $depositoId => $fechas) {
+            if (isset($fechas[$fechaCierre])) {
+                $fechaElegida = $fechaCierre;
+            } elseif (isset($fechas[$fechaSiguiente])) {
+                $fechaElegida = $fechaSiguiente;
+            } else {
+                $anteriores = array_values(array_filter(
+                    array_keys($fechas),
+                    static fn (string $fecha) => $fecha <= $fechaCierre,
+                ));
+                if ($anteriores === []) {
+                    continue;
+                }
+                rsort($anteriores);
+                $fechaElegida = $anteriores[0];
+            }
+            $fechaPorDeposito[$depositoId] = $fechaElegida;
+            $elegidos[$depositoId] = $fechas[$fechaElegida];
         }
 
         $faltantes = [];
@@ -73,7 +96,7 @@ final class ContaduriaInventarioRecuentoSupport
             }
         }
 
-        $cantidades = self::cantidadesPorDeposito($elegidos, $ids);
+        $conteo = self::cantidadesPorDeposito($elegidos, $ids);
 
         $porDeposito = [];
         foreach ($elegidos as $depositoId => $lista) {
@@ -81,7 +104,8 @@ final class ContaduriaInventarioRecuentoSupport
             $porDeposito[$depositoId] = [
                 'fecha' => $fechaPorDeposito[$depositoId],
                 'recuentos' => $lista,
-                'cantidades' => $cantidades[$depositoId] ?? [],
+                'cantidades' => $conteo['cantidades'][$depositoId] ?? [],
+                'recuento_por_articulo' => $conteo['recuento_por_articulo'][$depositoId] ?? [],
             ];
         }
 
@@ -119,12 +143,12 @@ final class ContaduriaInventarioRecuentoSupport
     /**
      * @param  array<int, list<array{id:int,codigo:string,estado:string}>>  $elegidos
      * @param  list<int>  $recuentoIds
-     * @return array<int, array<int, float>>
+     * @return array{cantidades:array<int, array<int, float>>, recuento_por_articulo:array<int, array<int, int>>}
      */
     private static function cantidadesPorDeposito(array $elegidos, array $recuentoIds): array
     {
         if ($recuentoIds === []) {
-            return [];
+            return ['cantidades' => [], 'recuento_por_articulo' => []];
         }
 
         $depositoPorRecuento = [];
@@ -150,17 +174,30 @@ final class ContaduriaInventarioRecuentoSupport
         }
 
         $cantidades = [];
+        $recuentoPorArticulo = [];
         foreach ($elegidos as $depositoId => $lista) {
             $ordenados = $lista;
             usort($ordenados, static fn (array $a, array $b) => $a['id'] <=> $b['id']);
             foreach ($ordenados as $recuento) {
                 foreach ($sumas[$recuento['id']] ?? [] as $articuloId => $cantidad) {
                     $cantidades[$depositoId][(int) $articuloId] = (float) $cantidad;
+                    $recuentoPorArticulo[$depositoId][(int) $articuloId] = (int) $recuento['id'];
                 }
             }
         }
 
-        return $cantidades;
+        return [
+            'cantidades' => $cantidades,
+            'recuento_por_articulo' => $recuentoPorArticulo,
+        ];
+    }
+
+    /**
+     * @param  list<string>  $codigos
+     */
+    public static function enumerarCodigos(array $codigos): string
+    {
+        return self::unir($codigos);
     }
 
     /**
