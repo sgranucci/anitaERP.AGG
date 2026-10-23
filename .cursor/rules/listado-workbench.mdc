@@ -72,7 +72,7 @@ Chips **por encima** del QBE, combinados con AND. El default de estado sigue sie
 
 Barra: **Configura salida**, **Configura etiqueta**, búsqueda rápida, **Nuevo artículo**.
 
-Grilla (orden por defecto; el diseñador lo cambia, ver «Orden físico de las columnas»): SKU (badge TITO), Cód. barra, Descripción, Unidad, Categoría, Tipo, Uso, Canal (Ferli), Empresa (si el flag), Nro. parte, Ubic. parte, Saldo dep. (Anita, no es columna QBE), Facturable, Estado (en Ferli badges Fábrica/Local), acciones fijas al final.
+Grilla (orden por defecto; el diseñador lo cambia, ver «Orden físico de las columnas»): SKU (badge TITO), Cód. barra, Descripción, Unidad, Categoría, Tipo, Uso, Canal (Ferli), Empresa (si el flag), Nro. parte, Ubic. parte, Saldo dep. (anitaERP, depósito de entrega; no es columna QBE), Facturable, Estado (en Ferli badges Fábrica/Local), acciones fijas al final.
 
 Acciones de fila, todas con su permiso: Editar, etiqueta QR (Ferli combinación/talle, o NPU, o cantidad), precios, saldos por depósito, kardex (o kardex por combinación), recepciones de proveedor, historial de precios de compra, Eliminar. Modales y overlays de impresión se conservan.
 
@@ -122,7 +122,7 @@ El orden que el usuario arma en **Diseñar vista** es el orden de la grilla. Apl
 @endforeach
 ```
 
-La celda y el encabezado viven en un `@switch ($key)`, no en un `@if (isset($visibles['sku']))` escrito en orden fijo. Ese `isset` solo prende o apaga columnas y deja el orden de la plantilla. Ahí van badges, links y formatos (TITO, e-cheq, Cartera, Fab/Loc, saldo Anita). Al mover la columna se mueve la celda entera.
+La celda y el encabezado viven en un `@switch ($key)`, no en un `@if (isset($visibles['sku']))` escrito en orden fijo. Ese `isset` solo prende o apaga columnas y deja el orden de la plantilla. Ahí van badges, links y formatos (TITO, e-cheq, Cartera, Fab/Loc, saldo del depósito de entrega). Al mover la columna se mueve la celda entera.
 
 Quedan **fuera** del loop, siempre en el mismo lugar:
 
@@ -139,7 +139,7 @@ Si una columna no aplica en el entorno (canal fuera de Ferli, empresa con una so
 | Cheques | `caja/cheque/partials/workbench_th` | `caja/cheque/partials/workbench_celda` |
 | Empleados | loop en `sueldos/empleado/index` | `sueldos/empleado/partials/workbench_celda` |
 
-El listado de columnas de cheques y de artículos más arriba es el **orden por defecto**. El diseñador lo puede cambiar. Saldo de depósito (Anita) entra en ese orden visual y no entra al QBE ni a los cortes.
+El listado de columnas de cheques y de artículos más arriba es el **orden por defecto**. El diseñador lo puede cambiar. Saldo de depósito (anitaERP, depósito de entrega) entra en ese orden visual, se filtra en el QBE y es valor del gráfico. El corte lo suma cuando el saldo entra en la consulta.
 
 Cheques suma, aparte, un gráfico de barras **Monto por estado** sobre el universo del filtro (Chart.js, `ChequeController::graficoMontoPorEstado`). Colapsable; arranca **colapsado**. El canvas se dibuja al abrir el panel. No es un tablero ni cruza otros módulos.
 

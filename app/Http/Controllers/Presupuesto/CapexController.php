@@ -16,6 +16,7 @@ use App\Models\Presupuesto\Capex_Estado;
 use App\Models\Presupuesto\Capex;
 use App\Queries\Presupuesto\CapexQueryInterface;
 use App\Support\Presupuesto\CapexListadoFiltros;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Presupuesto\CapexExport;
 use App\Exports\Presupuesto\CapexOrdenCompraExport;
@@ -70,13 +71,32 @@ class CapexController extends Controller
         can('listar-capex');
 
         $filtros = CapexListadoFiltros::resolverDesdeRequest($request);
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            null,
+            CapexListadoFiltros::camposOrdenables()
+        );
 
         $capex = $this->capexQuery->leeCapex($filtros, true);
-        $filtrosQuery = CapexListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery = array_merge(
+            CapexListadoFiltros::paraQueryString($filtros),
+            ListadoVisualSupport::paraQueryString($filtros)
+        );
         if ($capex instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator) {
             $capex->appends($filtrosQuery);
         }
         $estado_enum = Capex_Estado::$enumEstado;
+        $etiquetas = [];
+        foreach (CapexListadoFiltros::camposOrdenables() as $key => $meta) {
+            $etiquetas[$key] = $meta['label'];
+        }
+        $graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+            $filtros,
+            CapexListadoFiltros::camposOrdenables(),
+            $etiquetas,
+            fn (array $para): array => $this->capexQuery->cortes($para)
+        );
 
         return view('presupuesto.capex.index', [
             'capex' => $capex,
@@ -89,6 +109,8 @@ class CapexController extends Controller
             'puede_ver_empresa' => can('editar-empresas', false) || can('listar-empresas', false),
             'puede_ver_presupuesto' => can('editar-presupuesto', false) || can('listar-presupuesto', false),
             'puede_ver_centrocosto' => can('editar-centro-costo', false) || can('listar-centro-costo', false),
+            'graficoSeries' => $graficoSeries,
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
         ]);
     }
 

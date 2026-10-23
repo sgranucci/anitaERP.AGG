@@ -65,6 +65,40 @@ class NovedadSueldosCatalogo
         return isset(self::ESTADOS[$estado]) ? $estado : self::ESTADO_PENDIENTE;
     }
 
+    /**
+     * Estado leído de Excel. Vacío = pendiente. null = texto no reconocido.
+     */
+    public static function interpretarEstadoImport(mixed $valor): ?string
+    {
+        $texto = strtolower(trim((string) $valor));
+        if ($texto === '') {
+            return self::ESTADO_PENDIENTE;
+        }
+
+        $texto = strtr($texto, [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n',
+        ]);
+        $texto = preg_replace('/[^a-z0-9]+/', '_', $texto) ?? $texto;
+        $texto = trim($texto, '_');
+
+        $mapa = [
+            'pendiente' => self::ESTADO_PENDIENTE,
+            'p' => self::ESTADO_PENDIENTE,
+            '0' => self::ESTADO_PENDIENTE,
+            'incluida' => self::ESTADO_INCLUIDA,
+            'incluida_en_liquidacion' => self::ESTADO_INCLUIDA,
+            'i' => self::ESTADO_INCLUIDA,
+            'l' => self::ESTADO_INCLUIDA,
+            '1' => self::ESTADO_INCLUIDA,
+            'anulada' => self::ESTADO_ANULADA,
+            'a' => self::ESTADO_ANULADA,
+            'b' => self::ESTADO_ANULADA,
+            'x' => self::ESTADO_ANULADA,
+        ];
+
+        return $mapa[$texto] ?? null;
+    }
+
     public static function normalizarOrigen(?string $origen): string
     {
         $origen = trim((string) $origen);

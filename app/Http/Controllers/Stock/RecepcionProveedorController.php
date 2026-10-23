@@ -28,6 +28,7 @@ use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
 use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Compras\ContratoValidacionAbonoPoliticaSupport;
@@ -64,14 +65,35 @@ class RecepcionProveedorController extends Controller
             null,
             $empresaDefault ? (int) $empresaDefault : null
         );
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            null,
+            RecepcionProveedorListadoFiltros::camposOrdenables()
+        );
         $coleccion = $this->service->listar($filtros);
-        $filtrosQuery = RecepcionProveedorListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery = array_merge(
+            RecepcionProveedorListadoFiltros::paraQueryString($filtros),
+            ListadoVisualSupport::paraQueryString($filtros)
+        );
         $camposFiltro = RecepcionProveedorListadoFiltros::CAMPOS;
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $etiquetas = [];
+        foreach (RecepcionProveedorListadoFiltros::camposOrdenables() as $key => $meta) {
+            $etiquetas[$key] = $meta['label'];
+        }
+        $graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+            $filtros,
+            RecepcionProveedorListadoFiltros::camposOrdenables(),
+            $etiquetas,
+            fn (array $para): array => $this->repository->cortesRecepciones($para)
+        );
 
         return view('stock.recepcion_proveedor.index', compact(
-            'coleccion', 'filtros', 'filtrosQuery', 'camposFiltro', 'empresa_query'
-        ));
+            'coleccion', 'filtros', 'filtrosQuery', 'camposFiltro', 'empresa_query', 'graficoSeries'
+        ) + [
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
+        ]);
     }
 
     public function crear(Request $request)

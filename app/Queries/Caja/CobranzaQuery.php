@@ -4,7 +4,10 @@ namespace App\Queries\Caja;
 
 use App\Models\Caja\Cobranza;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Support\Caja\CobranzaListadoVisual;
 use App\Support\Caja\CobranzaPromedioPagoSupport;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoCortesSupport;
 use DB;
 
 class CobranzaQuery implements CobranzaQueryInterface
@@ -41,11 +44,57 @@ class CobranzaQuery implements CobranzaQueryInterface
 
     // Lectura para index de cobranzas
 
-    public function leeCobranza($busqueda, $caja_id, $flPaginando = null, ?string $fechaDesde = null, ?string $fechaHasta = null)
+    public function leeCobranza($busqueda, $caja_id, $flPaginando = null, ?string $fechaDesde = null, ?string $fechaHasta = null, ?array $qbe = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $cobranzas = $this->consulta($busqueda, $caja_id, $fechaDesde, $fechaHasta, $qbe);
+        $cobranzas = $cobranzas->orderby('cobranza.id', 'DESC');
+
+        if (isset($flPaginando))
+        {
+            if ($flPaginando)
+                $cobranzas = $cobranzas->paginate(10);
+            else
+                $cobranzas = $cobranzas->get();
+        }
+        else
+            $cobranzas = $cobranzas->get();
+
+        CobranzaPromedioPagoSupport::aplicar($cobranzas);
+
+        return $cobranzas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortes(array $filtros): array
+    {
+        $campos = CobranzaListadoVisual::campos();
+
+        return ListadoCortesSupport::calcular(
+            $this->consulta(
+                (string) ($filtros['busqueda'] ?? ''),
+                0,
+                $filtros['fecha_desde'] ?? null,
+                $filtros['fecha_hasta'] ?? null,
+                is_array($filtros['qbe'] ?? null) ? $filtros['qbe'] : null
+            ),
+            ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos),
+            $campos,
+            'cobranza.id',
+            static fn (object $row, string $key): string => trim((string) ($row->{$key} ?? '')),
+            null,
+            [],
+            CobranzaListadoVisual::medidas()
+        );
+    }
+
+    private function consulta($busqueda, $caja_id, ?string $fechaDesde, ?string $fechaHasta, ?array $qbe)
+    {
         $select = ['cobranza.id as id',
                                     'cobranza.empresa_id as empresa',
                                     'empresa.nombre as nombreempresa',
@@ -64,6 +113,7 @@ class CobranzaQuery implements CobranzaQueryInterface
                                 ->join('tipotransaccion_caja', 'tipotransaccion_caja.id', '=', 'cobranza.tipotransaccion_caja_id')
                                 ->join('empresa', 'empresa.id', '=', 'cobranza.empresa_id')
                                 ->leftjoin('cliente', 'cliente.id', '=', 'cobranza.cliente_id')
+                                ->leftJoin('moneda', 'moneda.id', '=', 'cobranza.moneda_id')
                                 ->with('monedas')
                                 ->with('cobranza_estados')
                                 ->with('cobranza_comprobantes')
@@ -102,19 +152,7 @@ class CobranzaQuery implements CobranzaQueryInterface
             $cobranzas = $cobranzas->where('cobranza.fecha', '<=', $fechaHasta);
         }
 
-        $cobranzas = $cobranzas->orderby('cobranza.id', 'DESC');
-
-        if (isset($flPaginando))
-        {
-            if ($flPaginando)
-                $cobranzas = $cobranzas->paginate(10);
-            else
-                $cobranzas = $cobranzas->get();
-        }
-        else
-            $cobranzas = $cobranzas->get();
-
-        CobranzaPromedioPagoSupport::aplicar($cobranzas);
+        CobranzaListadoVisual::aplicarQbe($cobranzas, $qbe);
 
         return $cobranzas;
     }

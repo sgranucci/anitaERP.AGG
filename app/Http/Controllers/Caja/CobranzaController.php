@@ -18,7 +18,9 @@ use App\Services\Caja\CobranzaAnularRevertirService;
 use App\Services\Caja\CobranzaService;
 use App\Queries\Caja\CobranzaQueryInterface;
 use App\Exports\Caja\CobranzaExport;
+use App\Support\Caja\CobranzaListadoVisual;
 use App\Support\Caja\CobranzaPromedioPagoSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -92,6 +94,16 @@ class CobranzaController extends Controller
 			$this->cobranzaRepository->sincronizarConAnita();
 
         $filtros = $this->filtrosListado($request);
+        $visual = ListadoVisualSupport::aplicarPedido(
+            [
+                'busqueda' => $filtros['busqueda'],
+                'fecha_desde' => $filtros['fecha_desde'],
+                'fecha_hasta' => $filtros['fecha_hasta'],
+            ],
+            $request,
+            null,
+            CobranzaListadoVisual::campos()
+        );
 
         $cobranza = $this->cobranzaQuery->leeCobranza(
             $filtros['busqueda'],
@@ -99,6 +111,22 @@ class CobranzaController extends Controller
             true,
             $filtros['fecha_desde'],
             $filtros['fecha_hasta'],
+            is_array($visual['qbe'] ?? null) ? $visual['qbe'] : null,
+        );
+        $filtrosQuery = array_merge($filtros['query'], ListadoVisualSupport::paraQueryString($visual));
+        $etiquetas = [];
+        foreach (CobranzaListadoVisual::campos() as $key => $meta) {
+            $etiquetas[$key] = $meta['label'];
+        }
+        $graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+            $visual,
+            CobranzaListadoVisual::campos(),
+            $etiquetas,
+            fn (array $para): array => $this->cobranzaQuery->cortes($para + [
+                'busqueda' => $filtros['busqueda'],
+                'fecha_desde' => $filtros['fecha_desde'],
+                'fecha_hasta' => $filtros['fecha_hasta'],
+            ])
         );
 
         return view('caja.cobranza.index', [
@@ -106,7 +134,10 @@ class CobranzaController extends Controller
             'busqueda' => $filtros['busqueda'],
             'fechaDesde' => $filtros['fecha_desde'],
             'fechaHasta' => $filtros['fecha_hasta'],
-            'filtrosQuery' => $filtros['query'],
+            'filtrosQuery' => $filtrosQuery,
+            'filtros' => $visual,
+            'graficoSeries' => $graficoSeries,
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
         ]);
     }
 

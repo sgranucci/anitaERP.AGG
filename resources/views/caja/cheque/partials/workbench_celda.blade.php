@@ -58,6 +58,12 @@
     @case('fechapago')
         <td>{{ \App\Support\Caja\ChequeDepositoComprobanteSupport::fechaDmy($data->fechapago) }}</td>
         @break
+    @case('banco')
+        <td class="small">{{ $data->bancos->nombre ?? '' }}</td>
+        @break
+    @case('cuentacaja')
+        <td class="small">{{ $data->cuentacajas->nombre ?? '' }}</td>
+        @break
     @case('banco_cta')
         <td>
             @if (($data->origen ?? '') === 'E')

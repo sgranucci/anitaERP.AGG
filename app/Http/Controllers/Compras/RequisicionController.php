@@ -40,6 +40,7 @@ use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionProvisorioSupport;
 use App\Support\Compras\RequisicionSeguimientoAprobacionSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -127,7 +128,6 @@ class RequisicionController extends Controller
             if ($page > 1) {
                 $filtrosQuery['page'] = $page;
             }
-            RequisicionListadoFiltros::persistir($filtrosQuery);
         } else {
             $guardados = RequisicionListadoFiltros::guardados();
             if ($guardados !== []) {
@@ -137,8 +137,36 @@ class RequisicionController extends Controller
             $filtrosQuery = RequisicionListadoFiltros::paraQueryString($filtros);
         }
 
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            null,
+            RequisicionListadoFiltros::CAMPOS
+        );
+        $page = (int) ($filtrosQuery['page'] ?? 0);
+        $filtrosQuery = array_merge(
+            RequisicionListadoFiltros::paraQueryString($filtros),
+            ListadoVisualSupport::paraQueryString($filtros)
+        );
+        if ($page > 1) {
+            $filtrosQuery['page'] = $page;
+        }
+        if (QueryRetornoListado::requestTraeContextoIndex($request)) {
+            RequisicionListadoFiltros::persistir($filtrosQuery);
+        }
+
         $requisicion = $this->requisicionQuery->leeRequisicion($filtros, true, true);
         $resumen = $this->requisicionQuery->resumenIndex($filtros);
+        $etiquetas = [];
+        foreach (RequisicionListadoFiltros::CAMPOS as $key => $meta) {
+            $etiquetas[$key] = $meta['label'];
+        }
+        $graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+            $filtros,
+            RequisicionListadoFiltros::CAMPOS,
+            $etiquetas,
+            fn (array $para): array => $this->requisicionQuery->cortes($para)
+        );
 
         $estadoAprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
         $datas = [
@@ -158,6 +186,8 @@ class RequisicionController extends Controller
             'estado_provisorio' => RequisicionProvisorioSupport::nombreEstadoProvisorio(),
             'tratamiento_enum' => Requisicion::$enumTratamiento,
             'contratacionDirecta_enum' => Requisicion::$enumContratacionDirecta,
+            'graficoSeries' => $graficoSeries,
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
         ];
 
         return view('compras.requisicion.index', $datas);

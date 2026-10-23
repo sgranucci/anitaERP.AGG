@@ -20,6 +20,7 @@ class ValidacionEmpresaJurisdiccionIibb extends FormRequest
             'agentes.*.*' => 'array',
             'agentes.*.*.percepcion' => 'nullable',
             'agentes.*.*.retencion' => 'nullable',
+            'agentes.*.*.consulta' => 'nullable',
         ];
     }
 }

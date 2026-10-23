@@ -51,6 +51,7 @@ use App\Support\Listado\ListadoGrillaConfigSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Listado\ListadoLienzoSupport;
 use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
@@ -125,6 +126,7 @@ class Comprobante_ProveedorController extends Controller
         $filtros = $this->resolverFiltrosListado($request, $busqueda);
         $filtrosQuery = ComprobanteProveedorListadoFiltros::paraQueryString($filtros);
         $columnasVisibles = $this->columnasDesdeRequest($request);
+        $filtros['_columnas'] = $columnasVisibles;
         $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
             ComprobanteProveedorListadoColumnas::RECURSO,
             ComprobanteProveedorListadoColumnas::catalogoActivo()
@@ -177,6 +179,7 @@ class Comprobante_ProveedorController extends Controller
         $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
         $layout = ComprobanteProveedorListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
         $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $filtros['_columnas'] = ListadoGrillaConfigSupport::keysVisibles($layout);
         $page = $this->comprobanteRepository->leeComprobanteProveedor($filtros, true);
         $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
         $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
@@ -224,7 +227,13 @@ class Comprobante_ProveedorController extends Controller
                 'sort' => $orden,
                 'orden' => $orden,
                 'agrupar' => $filtros['agrupar'] ?? [],
-                'grafico' => ListadoVisualSupport::normalizarGrafico($request->input('grafico'), ComprobanteProveedorListadoFiltros::camposOrdenables()),
+                'grafico' => ListadoLienzoSupport::primero($graficosVista = ListadoLienzoSupport::normalizar(
+                    $request->input('graficos'),
+                    $request->input('grafico'),
+                    $request->exists('graficos'),
+                    ComprobanteProveedorListadoFiltros::camposOrdenables()
+                )),
+                'graficos' => $graficosVista,
                 'formato' => ListadoVisualSupport::normalizarFormato($request->input('formato'), ComprobanteProveedorListadoFiltros::camposOrdenables()),
             ],
             $layout,
@@ -2031,6 +2040,7 @@ class Comprobante_ProveedorController extends Controller
         }
         $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
         $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+        $filtros['_columnas'] = $columnasVisibles;
 
         $datas = $this->comprobanteRepository->leeComprobanteProveedor($filtros, true);
         $cortes = ['activo' => false];
@@ -2068,12 +2078,13 @@ class Comprobante_ProveedorController extends Controller
             'vistaActiva' => $vistaActiva,
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
             'cortes' => $cortes,
-            'graficoSerie' => ListadoVisualSupport::serieDeConsulta(
+            'graficoSeries' => ($graficoSeries = ListadoVisualSupport::seriesDeConsulta(
                 $filtros,
                 ComprobanteProveedorListadoFiltros::camposOrdenables(),
                 $etiquetas,
                 fn (array $para): array => $this->comprobanteRepository->cortesComprobanteProveedor($para)
-            ),
+            )),
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
             'rolesVista' => ListadoVisualSupport::rolesParaInstalacion(),
         ];
     }

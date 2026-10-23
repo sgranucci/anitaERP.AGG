@@ -110,6 +110,54 @@ final class EmpresaJurisdiccionIibbSupport
     }
 
     /**
+     * Jurisdicciones cuyo padrón se carga para consulta (precarga / IA)
+     * sin percibir ni retener.
+     *
+     * @return list<int>
+     */
+    public static function jurisdiccionesConsulta(?int $empresaId = null): array
+    {
+        if (! Schema::hasTable('empresa_jurisdiccion_iibb')
+            || ! Schema::hasColumn('empresa_jurisdiccion_iibb', 'consulta_padron')) {
+            return [];
+        }
+
+        $query = Empresa_Jurisdiccion_Iibb::query()
+            ->where('consulta_padron', true)
+            ->join('provincia', 'provincia.id', '=', 'empresa_jurisdiccion_iibb.provincia_id')
+            ->whereNotNull('provincia.jurisdiccion');
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('empresa_jurisdiccion_iibb.empresa_id', $empresaId);
+        }
+
+        return $query
+            ->distinct()
+            ->orderBy('provincia.jurisdiccion')
+            ->pluck('provincia.jurisdiccion')
+            ->map(static fn ($j) => (int) $j)
+            ->filter(static fn (int $j) => $j >= 900)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Jurisdicciones con padrón: agente (percibe o retiene) más consulta.
+     *
+     * @return list<int>
+     */
+    public static function jurisdiccionesConPadron(?int $empresaId = null): array
+    {
+        $jurs = array_values(array_unique(array_merge(
+            self::jurisdiccionesAgente($empresaId),
+            self::jurisdiccionesConsulta($empresaId),
+        )));
+        sort($jurs);
+
+        return $jurs;
+    }
+
+    /**
      * @return list<int>
      */
     private static function jurisdicciones(string $flag, ?int $empresaId, string $envClave): array
@@ -214,6 +262,7 @@ final class EmpresaJurisdiccionIibbSupport
                     'retencion' => $fila !== null
                         ? (bool) $fila->es_agente_retencion
                         : in_array($jur, $jursRetieneEnv, true),
+                    'consulta' => $fila !== null && (bool) ($fila->consulta_padron ?? false),
                 ];
             }
             $out[] = [
@@ -248,7 +297,7 @@ final class EmpresaJurisdiccionIibbSupport
 
     /**
      * @param  array<int|string, array<int|string, array<string, mixed>>>  $payload
-     *        [empresa_id][provincia_id][percepcion|retencion]
+     *        [empresa_id][provincia_id][percepcion|retencion|consulta]
      */
     public static function guardarMatriz(array $payload): void
     {
@@ -284,6 +333,7 @@ final class EmpresaJurisdiccionIibbSupport
                         [
                             'es_agente_percepcion' => self::flagActivo($flags['percepcion'] ?? null),
                             'es_agente_retencion' => self::flagActivo($flags['retencion'] ?? null),
+                            'consulta_padron' => self::flagActivo($flags['consulta'] ?? null),
                         ]
                     );
                 }

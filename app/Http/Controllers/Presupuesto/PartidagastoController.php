@@ -16,6 +16,7 @@ use App\Models\Presupuesto\Partidagasto_Estado;
 use App\Models\Presupuesto\Partidagasto;
 use App\Queries\Presupuesto\PartidagastoQueryInterface;
 use App\Support\Presupuesto\PartidagastoListadoFiltros;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Presupuesto\PartidagastoExport;
 use App\Exports\Presupuesto\PartidagastoOrdenCompraExport;
@@ -70,15 +71,35 @@ class PartidagastoController extends Controller
         can('listar-partidagasto');
 
         $filtros = PartidagastoListadoFiltros::resolverDesdeRequest($request);
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            null,
+            PartidagastoListadoFiltros::camposOrdenables()
+        );
 
         $partidagasto = $this->partidagastoQuery->leePartidagasto($filtros, true);
         $estado_enum = Partidagasto_Estado::$enumEstado;
+        $filtrosQuery = array_merge(
+            PartidagastoListadoFiltros::paraQueryString($filtros),
+            ListadoVisualSupport::paraQueryString($filtros)
+        );
+        $etiquetas = [];
+        foreach (PartidagastoListadoFiltros::camposOrdenables() as $key => $meta) {
+            $etiquetas[$key] = $meta['label'];
+        }
+        $graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+            $filtros,
+            PartidagastoListadoFiltros::camposOrdenables(),
+            $etiquetas,
+            fn (array $para): array => $this->partidagastoQuery->cortes($para)
+        );
 
         return view('presupuesto.partidagasto.index', [
             'partidagasto' => $partidagasto,
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
-            'filtrosQuery' => PartidagastoListadoFiltros::paraQueryString($filtros),
+            'filtrosQuery' => $filtrosQuery,
             'camposFiltro' => PartidagastoListadoFiltros::CAMPOS,
             'estado_enum' => $estado_enum,
             'puede_ver_empresa' => can('editar-empresas', false) || can('listar-empresas', false),
@@ -87,6 +108,8 @@ class PartidagastoController extends Controller
             'puede_ver_articulo' => can('editar-articulos', false) || can('listar-articulos', false),
             'puede_ver_proveedor' => can('editar-proveedor', false) || can('listar-proveedor', false),
             'puede_ver_cuentacontable' => can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false),
+            'graficoSeries' => $graficoSeries,
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
         ]);
     }
 

@@ -13,7 +13,10 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Compras\OrdencompraEstados;
+use App\Support\Compras\OrdencompraCircuitoRelacion;
 use App\Support\Compras\OrdencompraListadoFiltros;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Compras\OrdencompraUiConfigSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
@@ -276,12 +279,30 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         if (EntornoEmpresaSupport::esCrown() && Schema::hasColumn('ordencompra', 'sala_id')) {
             $q->leftJoin('sala', 'sala.id', '=', 'ordencompra.sala_id');
         }
+        OrdencompraCircuitoRelacion::aplicarColumnas($q);
         $q->orderByDesc('ordencompra.fecha')
             ->orderByDesc('ordencompra.id');
 
         $this->aplicarFiltrosListado($q, $filtros, $sectorUsuarioId);
 
         return $q;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesIndex(array $filtros, ?int $sectorUsuarioId): array
+    {
+        $campos = OrdencompraListadoFiltros::CAMPOS;
+
+        return ListadoCortesSupport::calcular(
+            $this->queryListadoIndex($filtros, $sectorUsuarioId),
+            ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos),
+            $campos,
+            'ordencompra.id',
+            static fn (object $row, string $key): string => trim((string) ($row->{$key} ?? '')),
+        );
     }
 
     private function queryListadoExport($filtros, ?int $sectorUsuarioId)

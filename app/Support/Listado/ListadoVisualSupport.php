@@ -60,11 +60,9 @@ final class ListadoVisualSupport
      */
     public static function medidasDisponibles(array $campos): array
     {
-        $out = ['conteo' => 'Cantidad'];
-        foreach (['monto' => 'Suma de monto', 'total' => 'Suma de total', 'ingresos' => 'Ingresos', 'egresos' => 'Egresos'] as $key => $label) {
-            if (isset($campos[$key])) {
-                $out[$key] = $label;
-            }
+        $out = [];
+        foreach (ListadoMedidaSupport::catalogo($campos) as $key => $meta) {
+            $out[$key] = $meta['label'];
         }
 
         return $out;
@@ -454,6 +452,34 @@ final class ListadoVisualSupport
         $filas = $cortes($para);
 
         return self::serie($para['grafico'], is_array($filas) ? $filas : ['filas' => []], $etiquetas);
+    }
+
+    /**
+     * Hasta tres gráficos. El clickeado se arma sin su propio filtro para poder elegir otra barra.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, array{column?: string, label?: string}>  $campos
+     * @param  array<string, string>  $etiquetas
+     * @param  callable(array<string, mixed>): array<string, mixed>  $cortes
+     * @return list<array<string, mixed>>
+     */
+    public static function seriesDeConsulta(array $filtros, array $campos, array $etiquetas, callable $cortes): array
+    {
+        $lista = is_array($filtros['graficos'] ?? null) ? $filtros['graficos'] : [];
+        if ($lista === [] && ($filtros['grafico']['tipo'] ?? '') !== '') {
+            $lista = [$filtros['grafico']];
+        }
+        $out = [];
+        foreach ($lista as $grafico) {
+            if (! is_array($grafico) || ($grafico['tipo'] ?? '') === '') {
+                continue;
+            }
+            $para = $filtros;
+            $para['grafico'] = $grafico;
+            $out[] = self::serieDeConsulta($para, $campos, $etiquetas, $cortes);
+        }
+
+        return $out;
     }
 
     public static function tonoFila(object $fila, array $reglas, callable $valorCelda): ?string

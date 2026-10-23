@@ -306,6 +306,15 @@ class ComprobanteProveedorAsientoService
             $comprobante->comprobante_proveedor_conceptos ?? [],
         );
         $ajusteDescuentoNeto = 0.0;
+        // Mismo concepto ya abierto en varios centros (tipo prorrateado): no volver a partir.
+        $conceptosCcDistintos = [];
+        foreach ($comprobante->comprobante_proveedor_conceptos as $lineaCc) {
+            $conceptoCcId = (int) ($lineaCc->concepto_ivacompra_id ?? 0);
+            $ccLineaId = (int) ($lineaCc->centrocosto_id ?? 0);
+            if ($conceptoCcId > 0 && $ccLineaId > 0 && abs((float) ($lineaCc->monto ?? 0)) >= 0.0001) {
+                $conceptosCcDistintos[$conceptoCcId][$ccLineaId] = true;
+            }
+        }
 
         foreach ($comprobante->comprobante_proveedor_conceptos as $linea) {
             $concepto = $linea->concepto_ivacompras;
@@ -507,25 +516,43 @@ class ComprobanteProveedorAsientoService
                 );
             }
 
-            // Impuesto / percepción / IVA: no copiar el CC de compra del proveedor.
-            $ccLinea = ComprobanteProveedorCentrocostoSupport::paraCuentaSinGasto($cuentaId);
+            // Impuesto / IVA: si la cuenta maneja centro, el de la OC (partido si está prorrateada).
+            // Si no lo maneja, solo el centro único de la cuenta. El neto sin referencia sigue
+            // el centro de la línea o el de la OC, acotado a los centros de la cuenta.
+            $conceptoIdLinea = (int) ($linea->concepto_ivacompra_id ?? 0);
             if ($esNetoSinReferencia && $cuentaId > 0) {
-                $ccLinea = CuentaCentrocostoAsignadosSupport::resolver(
+                $trozosCc = [[
+                    'centrocosto_id' => CuentaCentrocostoAsignadosSupport::resolver(
+                        $cuentaId,
+                        (int) ($linea->centrocosto_id ?? 0),
+                        $centrocostoId
+                    ),
+                    'importe' => $monto,
+                ]];
+            } else {
+                $trozosCc = ComprobanteProveedorCentrocostoSupport::repartirImpuesto(
                     $cuentaId,
+                    $monto,
+                    $comprobante,
                     (int) ($linea->centrocosto_id ?? 0),
-                    $centrocostoId
+                    $conceptoIdLinea > 0 && count($conceptosCcDistintos[$conceptoIdLinea] ?? []) >= 2,
                 );
             }
-            $lineasDebe[] = [
-                'cuentacontable_id' => $cuentaId,
-                'importe' => $monto,
-                'centrocosto_id' => $ccLinea,
-                'observacion' => $descLineaErp,
-                'origen' => $esImpuestoInterno ? 'impuesto_interno' : ($esNetoSinReferencia ? 'neto_manual' : 'impuesto'),
-                'editable_cuenta' => $esNetoSinReferencia && ! $esImpuestoInterno,
-                'editable_importe' => false,
-                'concepto_ivacompra_id' => (int) ($linea->concepto_ivacompra_id ?? 0),
-            ];
+            foreach ($trozosCc as $trozoCc) {
+                if (abs((float) ($trozoCc['importe'] ?? 0)) < 0.0001) {
+                    continue;
+                }
+                $lineasDebe[] = [
+                    'cuentacontable_id' => $cuentaId,
+                    'importe' => (float) $trozoCc['importe'],
+                    'centrocosto_id' => (int) ($trozoCc['centrocosto_id'] ?? 0),
+                    'observacion' => $descLineaErp,
+                    'origen' => $esImpuestoInterno ? 'impuesto_interno' : ($esNetoSinReferencia ? 'neto_manual' : 'impuesto'),
+                    'editable_cuenta' => $esNetoSinReferencia && ! $esImpuestoInterno,
+                    'editable_importe' => false,
+                    'concepto_ivacompra_id' => $conceptoIdLinea,
+                ];
+            }
         }
 
         // Descuentos E/80/81: contra COM u OC se restan del neto agregado; si no, del Debe de neto.

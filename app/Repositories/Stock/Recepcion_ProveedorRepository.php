@@ -8,6 +8,9 @@ use App\Support\Stock\RecepcionProveedorAnitaNumeracionSupport;
 use App\Support\Stock\AnitaStkmovClaveErpSupport;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorIntercompanySupport;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoCortesSupport;
+use App\Support\Stock\RecepcionCircuitoRelacion;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -69,6 +72,33 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
 
     public function leeRecepciones(array|string|null $filtros, bool $paginar = true)
     {
+        $query = $this->consultaRecepciones($filtros);
+
+        return $paginar ? $query->paginate(10) : $query->get();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesRecepciones(array $filtros): array
+    {
+        $campos = RecepcionProveedorListadoFiltros::camposOrdenables();
+
+        return ListadoCortesSupport::calcular(
+            $this->consultaRecepciones($filtros),
+            ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos),
+            $campos,
+            'recepcion_proveedor.id',
+            static fn (object $row, string $key): string => trim((string) ($row->{$key} ?? '')),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     */
+    private function consultaRecepciones(array|string|null $filtros)
+    {
         $query = $this->model->query()
             ->select([
                 'recepcion_proveedor.*',
@@ -81,8 +111,9 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
             ->join('empresa', 'empresa.id', '=', 'recepcion_proveedor.empresa_id')
             ->join('proveedor', 'proveedor.id', '=', 'recepcion_proveedor.proveedor_id')
             ->join('ordencompra', 'ordencompra.id', '=', 'recepcion_proveedor.ordencompra_id')
-            ->leftJoin('recepcion_proveedor as rp_origen', 'rp_origen.id', '=', 'recepcion_proveedor.recepcion_referencia_id')
-            ->orderByDesc('recepcion_proveedor.id');
+            ->leftJoin('recepcion_proveedor as rp_origen', 'rp_origen.id', '=', 'recepcion_proveedor.recepcion_referencia_id');
+        RecepcionCircuitoRelacion::aplicarColumnas($query);
+        $query->orderByDesc('recepcion_proveedor.id');
 
         if (is_string($filtros)) {
             $filtros = [
@@ -99,7 +130,7 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
             RecepcionProveedorListadoFiltros::aplicar($query, $filtros);
         }
 
-        return $paginar ? $query->paginate(10) : $query->get();
+        return $query;
     }
 
     public function siguienteNumero(int $empresaId): int

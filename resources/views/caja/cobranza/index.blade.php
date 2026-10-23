@@ -36,7 +36,8 @@
                 </div>
             </div>
             <div class="px-3 pt-2 pb-0">
-                <form action="{{ route('cobranza') }}" method="GET" class="form-inline mb-2">
+                <form action="{{ route('cobranza') }}" method="GET" class="mb-2">
+                    <div class="form-inline">
                     <label for="fecha_desde" class="mr-1 mb-1">Desde</label>
                     <input type="date" id="fecha_desde" name="fecha_desde" value="{{ $fechaDesde ?? '' }}" class="form-control form-control-sm mr-2 mb-1" title="Fecha del recibo">
                     <label for="fecha_hasta" class="mr-1 mb-1">Hasta</label>
@@ -47,7 +48,21 @@
                             <span class="fa fa-search"></span>
                         </button>
                     </div>
+                    <button type="button" class="btn btn-sm btn-outline-info collapsed mb-1 ml-2" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico">
+                        <i class="fa fa-bar-chart"></i> Visual
+                    </button>
+                    </div>
+                    @php
+                        $ejesVisual = \App\Support\Caja\CobranzaListadoVisual::campos();
+                        $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                        $lienzoVisual = true;
+                    @endphp
+                    @include('includes.listado.workbench_visual')
                 </form>
+                @include('includes.listado.workbench_grafico', [
+                    'recursoVisual' => 'caja.cobranza',
+                    'rutaListadoVisual' => 'cobranza',
+                ])
                 <p class="text-muted small mb-2">
                     Prom. días: días desde la fecha de cada factura hasta el recibo, ponderados por el importe cobrado.
                     Para el listado de un día, cargá la misma fecha en Desde y Hasta y exportá.

@@ -5,6 +5,7 @@ namespace App\Support\Stock;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
+use App\Support\Listado\ListadoRelacionCatalogo;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
@@ -60,6 +61,9 @@ class ArticuloListadoFiltros
         'cuentaventa' => ['column' => 'cuentacontable.codigo', 'type' => 'cuenta_imputacion', 'label' => 'Cta. contable venta'],
         'cuentacompra' => ['column' => 'cuentacontable.codigo', 'type' => 'cuenta_imputacion', 'label' => 'Cta. contable compra'],
         'cuentagasto' => ['column' => 'cuentacontable.codigo', 'type' => 'cuenta_imputacion', 'label' => 'Cta. contable gasto'],
+        'saldo' => ['column' => 'saldo_dep.saldo', 'type' => 'decimal', 'label' => 'Saldo dep.'],
+        'proveedor_art' => ['column' => 'art_prov.proveedor_nombre', 'type' => 'texto', 'label' => 'Proveedor'],
+        'precio_proveedor' => ['column' => 'art_prov.precio_min', 'type' => 'decimal', 'label' => 'Precio proveedor'],
         'nofactura' => ['column' => 'articulo.nofactura', 'type' => 'texto', 'label' => 'Facturable (0/1)'],
         'fecha_alta' => ['column' => 'articulo.created_at', 'type' => 'fecha', 'label' => 'Fecha de alta'],
         'fecha_modificacion' => ['column' => 'articulo.updated_at', 'type' => 'fecha', 'label' => 'Fecha de modificación'],
@@ -609,8 +613,28 @@ class ArticuloListadoFiltros
      */
     private static function aplicarEnCampo(Builder $query, string $campoKey, string $operador, string $valor, string $valorHasta): void
     {
+        if (ListadoRelacionCatalogo::aplica(ArticuloListadoColumnas::RECURSO, $campoKey)) {
+            ListadoRelacionCatalogo::aplicar(
+                $query,
+                ArticuloListadoColumnas::RECURSO,
+                $campoKey,
+                $operador,
+                $valor,
+                $valorHasta,
+                ''
+            );
+
+            return;
+        }
+
         $def = self::CAMPOS[$campoKey] ?? self::CAMPOS['descripcion'];
         $type = $def['type'];
+
+        if ($type === 'decimal') {
+            ListadoQbeSupport::aplicarDecimal($query, (string) $def['column'], $operador, $valor, $valorHasta);
+
+            return;
+        }
 
         if ($type === 'entero') {
             self::aplicarEntero($query, (string) $def['column'], $operador, $valor, $valorHasta);
@@ -639,6 +663,15 @@ class ArticuloListadoFiltros
      *
      * @param  Builder<\App\Models\Stock\Articulo>  $query
      */
+    public static function aplicarCampoCuenta(Builder $query, string $campoKey, string $operador, string $valor): void
+    {
+        $tipoImputacion = self::TIPOS_IMPUTACION_FILTRO[$campoKey] ?? '';
+        if ($tipoImputacion === '') {
+            return;
+        }
+        self::aplicarCuentaImputacion($query, $tipoImputacion, $operador, $valor);
+    }
+
     private static function aplicarCuentaImputacion(Builder $query, string $tipoImputacion, string $operador, string $valor): void
     {
         if ($operador === 'vacio') {
@@ -800,6 +833,7 @@ class ArticuloListadoFiltros
         $type = self::CAMPOS[$campoKey]['type'] ?? 'texto';
         $permitidos = match ($type) {
             'entero' => array_keys(self::OPERADORES_ENTERO),
+            'decimal' => array_keys(self::OPERADORES_DECIMAL),
             'fecha' => array_keys(self::OPERADORES_FECHA),
             'cuenta_imputacion' => array_keys(self::OPERADORES_TEXTO),
             default => array_keys(self::OPERADORES_TEXTO),
@@ -821,6 +855,7 @@ class ArticuloListadoFiltros
 
         return match ($type) {
             'entero' => self::OPERADORES_ENTERO,
+            'decimal' => self::OPERADORES_DECIMAL,
             'fecha' => self::OPERADORES_FECHA,
             'cuenta_imputacion' => self::OPERADORES_TEXTO,
             default => self::OPERADORES_TEXTO,

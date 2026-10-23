@@ -12,6 +12,8 @@
         'numeroparte' => 'Nro.Parte',
         'ubicacionparte' => 'Ubic.Parte',
         'saldo' => 'Saldo dep.',
+        'proveedor_art' => 'Proveedor',
+        'precio_proveedor' => 'Precio proveedor',
         'nofactura' => 'Facturable',
         'estado' => 'Estado',
         'fecha_alta' => 'Fecha de alta',
@@ -21,9 +23,9 @@
         'cuentagasto' => 'Cta. contable gasto',
     ];
     $titulo = ($etiquetasColumnas ?? [])[$key] ?? ($titulos[$key] ?? $key);
-    $alineacion = $key === 'saldo' ? 'text-right' : '';
+    $alineacion = in_array($key, ['saldo', 'precio_proveedor'], true) ? 'text-right' : '';
     $titleTh = $key === 'saldo'
-        ? 'Saldo en Anita (stkdep) para artículos LAB con depósito de entrega'
+        ? 'Saldo en anitaERP del depósito de entrega'
         : $titulo;
     $camposOrden = $camposOrdenablesThead ?? [];
     $ordenActual = $ordenActualThead ?? [];

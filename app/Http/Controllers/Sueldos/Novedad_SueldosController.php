@@ -5,12 +5,13 @@ namespace App\Http\Controllers\Sueldos;
 use App\Exports\Sueldos\NovedadSueldosListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionNovedad_Sueldos;
-use App\Imports\Sueldos\NovedadSueldosImportLecturaCruda;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Sueldos\Novedad_SueldosRepositoryInterface;
+use App\Services\Sueldos\NovedadSueldosImportService;
 use App\Support\Sueldos\NovedadSueldosCatalogo;
+use App\Support\Sueldos\NovedadSueldosImportColumnasSupport;
 use App\Support\Sueldos\NovedadSueldosListadoFiltros;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -20,6 +21,7 @@ class Novedad_SueldosController extends Controller
     public function __construct(
         private Novedad_SueldosRepositoryInterface $repository,
         private EmpresaRepositoryInterface $empresaRepository,
+        private NovedadSueldosImportService $importService,
     ) {
     }
 
@@ -149,7 +151,47 @@ class Novedad_SueldosController extends Controller
     {
         can('crear-novedad-sueldos');
 
-        return view('sueldos.novedad.importar');
+        return view('sueldos.novedad.importar', [
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+        ]);
+    }
+
+    public function plantillaImportacion()
+    {
+        can('crear-novedad-sueldos');
+
+        $csv = "\xEF\xBB\xBF".implode(';', NovedadSueldosImportColumnasSupport::campos())."\r\n";
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="plantilla_novedades_sueldos.csv"',
+        ]);
+    }
+
+    public function previewImportacion(Request $request)
+    {
+        can('crear-novedad-sueldos');
+
+        $request->validate([
+            'archivo' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+            'empresa_id' => 'nullable|integer',
+            'fila_encabezado' => 'nullable|integer|min:1|max:50',
+            'hoja_indice' => 'nullable|integer|min:1|max:50',
+            'mapping' => 'nullable|array',
+        ]);
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '120');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+
+        return response()->json($this->importService->preview(
+            $request->file('archivo'),
+            is_array($request->input('mapping')) ? $request->input('mapping') : [],
+            $empresaId > 0 ? $empresaId : null,
+            $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null,
+            $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null
+        ));
     }
 
     public function importar(Request $request)
@@ -158,15 +200,28 @@ class Novedad_SueldosController extends Controller
 
         $request->validate([
             'archivo' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+            'empresa_id' => 'nullable|integer',
+            'fila_encabezado' => 'nullable|integer|min:1|max:50',
+            'hoja_indice' => 'nullable|integer|min:1|max:50',
+            'mapping' => 'nullable|array',
         ]);
 
-        $path = $request->file('archivo')->getRealPath();
-        $filas = $this->leerExcelSimple($path);
-        $r = $this->repository->importarFilas($filas, NovedadSueldosCatalogo::ORIGEN_IMPORT);
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '300');
 
-        $msg = 'Importadas: '.$r['importados'].' · Omitidas: '.$r['omitidos'];
-        if ($r['errores'] !== []) {
-            $msg .= ' · '.implode('; ', array_slice($r['errores'], 0, 5));
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $r = $this->importService->import(
+            $request->file('archivo'),
+            is_array($request->input('mapping')) ? $request->input('mapping') : [],
+            $empresaId > 0 ? $empresaId : null,
+            $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null,
+            $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null
+        );
+
+        $msg = 'Importadas: '.$r['importados'].' · Omitidas: '.$r['omitidos'].' · Con error: '.$r['errores'];
+        if ($r['detalle_errores'] !== []) {
+            $primero = $r['detalle_errores'][0];
+            $msg .= ' (fila '.$primero['fila'].': '.$primero['mensaje'].')';
         }
 
         return redirect()->route('consultar_novedad_sueldos')->with('mensaje', $msg);
@@ -271,114 +326,5 @@ class Novedad_SueldosController extends Controller
             'estados' => NovedadSueldosCatalogo::ESTADOS,
             'origenes' => NovedadSueldosCatalogo::ORIGENES,
         ];
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function leerExcelSimple(string $path): array
-    {
-        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        if (in_array($ext, ['csv', 'txt'], true)) {
-            return $this->leerCsv($path);
-        }
-
-        $rows = Excel::toArray(new NovedadSueldosImportLecturaCruda(), $path)[0] ?? [];
-        if ($rows === []) {
-            return [];
-        }
-
-        $headers = array_map(function ($h) {
-            return strtolower(trim((string) $h));
-        }, $rows[0] ?? []);
-
-        $mapa = [
-            'empresa_id' => 'empresa_id',
-            'empresa' => 'empresa_id',
-            'legajo' => 'legajo',
-            'concepto_codigo' => 'concepto_codigo',
-            'concepto' => 'concepto_codigo',
-            'liquidacion_numero' => 'liquidacion_numero',
-            'liquidacion' => 'liquidacion_numero',
-            'valor1' => 'valor1',
-            'valor2' => 'valor2',
-            'estado' => 'estado',
-            'fecha_vto' => 'fecha_vto',
-            'fecha_desde' => 'fecha_desde',
-            'fecha_hasta' => 'fecha_hasta',
-            'nro_interno' => 'nro_interno',
-            'periodo' => 'periodo',
-            'observacion' => 'observacion',
-        ];
-
-        $out = [];
-        for ($i = 1, $n = count($rows); $i < $n; $i++) {
-            $row = $rows[$i];
-            if (! is_array($row) || $this->filaVacia($row)) {
-                continue;
-            }
-            $item = [];
-            foreach ($headers as $col => $header) {
-                if (! isset($mapa[$header])) {
-                    continue;
-                }
-                $item[$mapa[$header]] = $row[$col] ?? null;
-            }
-            if ($item !== []) {
-                $out[] = $item;
-            }
-        }
-
-        return $out;
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function leerCsv(string $path): array
-    {
-        $fh = fopen($path, 'r');
-        if ($fh === false) {
-            return [];
-        }
-        $headers = fgetcsv($fh, 0, ';');
-        if ($headers === false || count($headers) < 2) {
-            rewind($fh);
-            $headers = fgetcsv($fh, 0, ',');
-        }
-        if ($headers === false) {
-            fclose($fh);
-
-            return [];
-        }
-        $headers = array_map(fn ($h) => strtolower(trim((string) $h)), $headers);
-        $out = [];
-        while (($row = fgetcsv($fh, 0, strpos(implode('', $headers), ';') !== false ? ';' : ',')) !== false) {
-            if ($this->filaVacia($row)) {
-                continue;
-            }
-            $item = [];
-            foreach ($headers as $i => $h) {
-                $item[$h] = $row[$i] ?? null;
-            }
-            $out[] = $item;
-        }
-        fclose($fh);
-
-        return $out;
-    }
-
-    /**
-     * @param  array<int, mixed>  $row
-     */
-    private function filaVacia(array $row): bool
-    {
-        foreach ($row as $v) {
-            if (trim((string) $v) !== '') {
-                return false;
-            }
-        }
-
-        return true;
     }
 }

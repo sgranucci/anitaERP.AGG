@@ -104,5 +104,11 @@
         <td class="text-right text-nowrap">{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</td>
         @break
     @default
-        <td>{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</td>
+        <td>
+            @include('includes.listado.celda_enlace', [
+                'filaEnlace' => $data,
+                'metaEnlace' => ComprobanteProveedorListadoColumnas::catalogoActivo()[$key] ?? [],
+                'textoEnlace' => ComprobanteProveedorListadoColumnas::valorCelda($data, $key),
+            ])
+        </td>
 @endswitch

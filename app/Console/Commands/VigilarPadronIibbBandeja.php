@@ -22,7 +22,7 @@ class VigilarPadronIibbBandeja extends Command
             PadronIibbBandejaSupport::asegurarDirectorios();
             $claves = array_keys(PadronIibbBandejaSupport::carpetas());
             $this->info($claves === []
-                ? 'Sin jurisdicciones tildadas: no hay carpetas de padrón.'
+                ? 'Sin jurisdicciones tildadas como agente ni como consulta: no hay carpetas de padrón.'
                 : 'Carpetas: '.implode(', ', $claves));
 
             return self::SUCCESS;

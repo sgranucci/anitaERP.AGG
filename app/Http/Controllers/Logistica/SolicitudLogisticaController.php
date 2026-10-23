@@ -13,6 +13,8 @@ use App\Models\Seguridad\Usuario;
 use App\Exports\Logistica\SolicitudLogisticaListadoExport;
 use App\Repositories\Configuracion\EmpresaRepository;
 use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoLienzoSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoDisenadorPreviewSupport;
 use App\Support\Listado\ListadoGrillaConfigSupport;
@@ -152,6 +154,13 @@ class SolicitudLogisticaController extends Controller
                 'sort' => $orden,
                 'orden' => $orden,
                 'agrupar' => $filtros['agrupar'] ?? [],
+                'grafico' => ListadoLienzoSupport::primero($graficosVista = ListadoLienzoSupport::normalizar(
+                    $request->input('graficos'),
+                    $request->input('grafico'),
+                    $request->exists('graficos'),
+                    SolicitudLogisticaListadoFiltros::camposOrdenables()
+                )),
+                'graficos' => $graficosVista,
             ],
             $layout,
             $request->boolean('es_default'),
@@ -475,6 +484,12 @@ class SolicitudLogisticaController extends Controller
             $filtros = SolicitudLogisticaListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
         unset($filtros['_qbe_explicito']);
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null,
+            SolicitudLogisticaListadoFiltros::camposOrdenables()
+        );
         ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
         if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
             if ($request->exists('group')) {
@@ -518,6 +533,7 @@ class SolicitudLogisticaController extends Controller
         }
 
         $filtrosQuery = SolicitudLogisticaListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
         $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
         if ($request->boolean('filtro_limpiar')) {
             $filtrosQuery['filtro_limpiar'] = 1;
@@ -542,6 +558,13 @@ class SolicitudLogisticaController extends Controller
             'vistaActiva' => $vistaActiva,
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
             'cortes' => $cortes,
+            'graficoSeries' => ($graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+                $filtros,
+                SolicitudLogisticaListadoFiltros::camposOrdenables(),
+                $etiquetas,
+                fn (array $para): array => SolicitudLogisticaListadoQuery::cortes($para, $uid, $puedeTodas)
+            )),
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
         ];
     }
 

@@ -71,6 +71,8 @@ use App\Support\Compras\ProveedorListadoColumnas;
 use App\Support\Compras\ProveedorListadoFiltros;
 use App\Support\Compras\ProveedorListadoPreferenciasUsuario;
 use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoLienzoSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoDisenadorPreviewSupport;
 use App\Support\Listado\ListadoGrillaConfigSupport;
@@ -246,6 +248,12 @@ class ProveedorController extends Controller
             $filtros = ProveedorListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
         unset($filtros['_qbe_explicito']);
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null,
+            ProveedorListadoFiltros::camposOrdenables()
+        );
         $guardoQbeVista = ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
         if ($request->boolean('quitar_qbe') && $vistaActiva && $guardoQbeVista) {
             return redirect()
@@ -307,6 +315,7 @@ class ProveedorController extends Controller
         }
 
         $filtrosQuery = ProveedorListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
         $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
         if ($vistaActiva) {
             $filtrosQuery['vista_id'] = $vistaActiva->id;
@@ -330,6 +339,13 @@ class ProveedorController extends Controller
             'vistaActiva' => $vistaActiva,
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
             'cortes' => $cortes,
+            'graficoSeries' => ($graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+                $filtros,
+                ProveedorListadoFiltros::camposOrdenables(),
+                $etiquetas,
+                fn (array $para): array => $this->proveedorRepository->cortesProveedor($para)
+            )),
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
         ]);
     }
 
@@ -461,6 +477,13 @@ class ProveedorController extends Controller
                 'qbe' => $filtros['qbe'] ?? [],
                 'orden' => $filtros['orden'] ?? [],
                 'agrupar' => $filtros['agrupar'] ?? [],
+                'grafico' => ListadoLienzoSupport::primero($graficosVista = ListadoLienzoSupport::normalizar(
+                    $request->input('graficos'),
+                    $request->input('grafico'),
+                    $request->exists('graficos'),
+                    ProveedorListadoFiltros::camposOrdenables()
+                )),
+                'graficos' => $graficosVista,
             ],
             $layout,
             $request->boolean('es_default'),

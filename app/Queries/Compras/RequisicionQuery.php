@@ -6,11 +6,14 @@ use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Estado;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Compras\RequisicionCircuitoRelacion;
 use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Compras\RequisicionVisibilidadSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoCortesSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -69,6 +72,30 @@ class RequisicionQuery implements RequisicionQueryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $q = $this->armarListado($filtros, (bool) $withArticulos);
+
+        if ($flPaginando) {
+            $paginator = $q->paginate(10);
+            if ($withArticulos) {
+                $this->enriquecerTotalesCabecera($paginator->getCollection());
+            }
+
+            return $paginator;
+        }
+
+        $collection = $q->get();
+        if ($withArticulos) {
+            $this->enriquecerTotalesCabecera($collection);
+        }
+
+        return $collection;
+    }
+
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     */
+    private function armarListado($filtros, bool $withArticulos)
+    {
         if (is_string($filtros)) {
             $texto = trim($filtros);
             $filtros = [
@@ -133,6 +160,8 @@ class RequisicionQuery implements RequisicionQueryInterface
 
         RequisicionListadoFiltros::aplicar($q, $filtros);
 
+        RequisicionCircuitoRelacion::aplicarColumnas($q);
+
         $q->orderBy('requisicion.fecha', 'desc')->orderBy('requisicion.id', 'desc');
 
         if ($withArticulos) {
@@ -147,21 +176,24 @@ class RequisicionQuery implements RequisicionQueryInterface
             ]);
         }
 
-        if ($flPaginando) {
-            $paginator = $q->paginate(10);
-            if ($withArticulos) {
-                $this->enriquecerTotalesCabecera($paginator->getCollection());
-            }
+        return $q;
+    }
 
-            return $paginator;
-        }
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortes(array $filtros): array
+    {
+        $campos = RequisicionListadoFiltros::CAMPOS;
 
-        $collection = $q->get();
-        if ($withArticulos) {
-            $this->enriquecerTotalesCabecera($collection);
-        }
-
-        return $collection;
+        return ListadoCortesSupport::calcular(
+            $this->armarListado($filtros, false),
+            ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos),
+            $campos,
+            'requisicion.id',
+            static fn (object $row, string $key): string => trim((string) ($row->{$key} ?? '')),
+        );
     }
 
     /**

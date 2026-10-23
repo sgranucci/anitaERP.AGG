@@ -3,6 +3,7 @@
 namespace App\Support\Stock;
 
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Articulo_Saldo_Deposito;
 use App\Models\Stock\Depmae;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 
@@ -11,6 +12,48 @@ final class ArticuloSaldosDepositoSupport
     public static function puedeConsultar(): bool
     {
         return MovimientosArticuloDepositoSupport::puedeConsultar();
+    }
+
+    /**
+     * Saldo vigente del depósito de entrega, leído de articulo_saldo_deposito.
+     * Suma las variantes (color y talle). Sin depósito de entrega no hay saldo.
+     *
+     * @param  iterable<object{id: int|string, depositoentrega_id?: int|string|null}>  $articulos
+     * @return array<int, float> articulo_id => saldo
+     */
+    public static function saldosDepositoEntrega(iterable $articulos): array
+    {
+        $depositoPorArticulo = [];
+        foreach ($articulos as $articulo) {
+            $articuloId = (int) ($articulo->id ?? 0);
+            $depositoId = (int) ($articulo->depositoentrega_id ?? 0);
+            if ($articuloId > 0 && $depositoId > 0) {
+                $depositoPorArticulo[$articuloId] = $depositoId;
+            }
+        }
+        if ($depositoPorArticulo === []) {
+            return [];
+        }
+
+        $filas = Articulo_Saldo_Deposito::query()
+            ->selectRaw('articulo_id, deposito_id, SUM(cantidad) as saldo')
+            ->whereIn('articulo_id', array_keys($depositoPorArticulo))
+            ->groupBy('articulo_id', 'deposito_id')
+            ->get();
+
+        $saldos = [];
+        foreach ($depositoPorArticulo as $articuloId => $depositoId) {
+            $saldos[$articuloId] = 0.0;
+        }
+        foreach ($filas as $fila) {
+            $articuloId = (int) $fila->articulo_id;
+            if (($depositoPorArticulo[$articuloId] ?? 0) !== (int) $fila->deposito_id) {
+                continue;
+            }
+            $saldos[$articuloId] = (float) $fila->saldo;
+        }
+
+        return $saldos;
     }
 
     /**

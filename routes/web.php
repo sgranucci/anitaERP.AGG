@@ -3995,7 +3995,7 @@ Route::get('compras/comprobante-proveedor/api/aviso-factura-anita', 'Compras\Com
 Route::get('compras/comprobante-proveedor/api/verificar-duplicado-cabecera', 'Compras\Comprobante_ProveedorController@apiVerificarDuplicadoCabecera')->name('comprobante_proveedor_verificar_duplicado_cabecera');
 Route::get('compras/comprobante-proveedor/api/sincronizar-oc-com', 'Compras\Comprobante_ProveedorController@apiSincronizarOcComAlta')->name('comprobante_proveedor_sincronizar_oc_com');
 Route::post('compras/comprobante-proveedor', 'Compras\Comprobante_ProveedorController@guardar')->name('guardar_comprobante_proveedor');
-Route::get('compras/comprobante-proveedor/{id}/editar', 'Compras\Comprobante_ProveedorController@editar')->name('editar_comprobante_proveedor');
+Route::get('compras/comprobante-proveedor/{id}/editar', 'Compras\Comprobante_ProveedorController@editar')->name('editar_comprobante_proveedor')->middleware('modo.consulta');
 Route::put('compras/comprobante-proveedor/{id}', 'Compras\Comprobante_ProveedorController@actualizar')->name('actualizar_comprobante_proveedor');
 Route::delete('compras/comprobante-proveedor/{id}', 'Compras\Comprobante_ProveedorController@eliminar')->name('eliminar_comprobante_proveedor');
 Route::delete('compras/comprobante-proveedor/{id}/con-precarga', 'Compras\Comprobante_ProveedorController@eliminarConPrecarga')->name('eliminar_comprobante_proveedor_con_precarga');
@@ -4032,8 +4032,8 @@ Route::post('compras/pagoproveedor/workbench/envio/{id}/baja', 'Compras\Pagoprov
 Route::post('listado/workbench/quitar-grafico', 'Listado\ListadoVisualController@quitarGrafico')->name('quitar_grafico_listado');
 Route::get('compras/pagoproveedor/crear', 'Compras\PagoproveedorController@crear')->name('crear_pagoproveedor');
 Route::post('compras/pagoproveedor', 'Compras\PagoproveedorController@guardar')->name('guardar_pagoproveedor');
-Route::get('compras/pagoproveedor/{id}/editar', 'Compras\PagoproveedorController@editar')->name('editar_pagoproveedor');
-Route::put('compras/pagoproveedor/{id}', 'Compras\PagoproveedorController@actualizar')->name('actualizar_pagoproveedor');
+Route::get('compras/pagoproveedor/{id}/editar', 'Compras\PagoproveedorController@editar')->name('editar_pagoproveedor')->middleware('modo.consulta');
+Route::put('compras/pagoproveedor/{id}', 'Compras\PagoproveedorController@actualizar')->name('actualizar_pagoproveedor')->middleware('modo.consulta');
 Route::post('compras/pagoproveedor/{id}/confirmar', 'Compras\PagoproveedorController@confirmar')->name('confirmar_pagoproveedor');
 Route::delete('compras/pagoproveedor/{id}', 'Compras\PagoproveedorController@eliminar')->name('eliminar_pagoproveedor');
 Route::post('compras/pagoproveedor/{id}/anular', 'Compras\PagoproveedorController@anularFisicamente')->name('anular_pagoproveedor');
@@ -5284,6 +5284,8 @@ Route::get('sueldos/novedad', 'Sueldos\Novedad_SueldosController@index')->name('
 Route::get('sueldos/listanovedad/{formato?}/{busqueda?}', 'Sueldos\Novedad_SueldosController@listar')->name('lista_novedad_sueldos');
 Route::post('sueldos/novedad/sincronizar-anita', 'Sueldos\Novedad_SueldosController@sincronizarAnita')->name('sincronizar_novedad_sueldos');
 Route::get('sueldos/novedad/importar', 'Sueldos\Novedad_SueldosController@importarForm')->name('importar_novedad_sueldos');
+Route::get('sueldos/novedad/importar/plantilla', 'Sueldos\Novedad_SueldosController@plantillaImportacion')->name('plantilla_importar_novedad_sueldos');
+Route::post('sueldos/novedad/importar/preview', 'Sueldos\Novedad_SueldosController@previewImportacion')->name('preview_importar_novedad_sueldos');
 Route::post('sueldos/novedad/importar', 'Sueldos\Novedad_SueldosController@importar')->name('procesar_importar_novedad_sueldos');
 Route::get('sueldos/novedad/empleados-empresa', 'Sueldos\Novedad_SueldosController@empleadosPorEmpresa')->name('empleados_empresa_novedad_sueldos');
 Route::get('sueldos/novedad/liquidaciones-empresa', 'Sueldos\Novedad_SueldosController@liquidacionesPorEmpresa')->name('liquidaciones_empresa_novedad_sueldos');

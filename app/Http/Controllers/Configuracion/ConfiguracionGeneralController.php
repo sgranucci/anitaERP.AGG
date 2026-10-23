@@ -7,6 +7,7 @@ use App\Http\Requests\ValidacionConfiguracionGeneral;
 use App\Http\Requests\ValidacionEmpresaJurisdiccionIibb;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
+use App\Support\Configuracion\PadronIibbVigenciaSupport;
 use App\Support\Configuracion\ParametroSistemaSupport;
 
 class ConfiguracionGeneralController extends Controller
@@ -67,6 +68,7 @@ class ConfiguracionGeneralController extends Controller
 
         try {
             EmpresaJurisdiccionIibbSupport::guardarMatriz($agentes);
+            PadronIibbVigenciaSupport::olvidar();
         } catch (\RuntimeException $e) {
             return redirect()
                 ->route('configuracion_general')

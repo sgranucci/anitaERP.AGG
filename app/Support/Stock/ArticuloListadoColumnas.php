@@ -29,7 +29,9 @@ final class ArticuloListadoColumnas
         'empresa' => ['label' => 'Empresa', 'default' => true, 'type' => 'texto', 'source' => 'empresa.nombre', 'attr' => 'nombreempresa', 'group' => 'clasificacion'],
         'numeroparte' => ['label' => 'Nro. parte', 'default' => true, 'type' => 'texto', 'source' => 'articulo.numeroparte', 'attr' => 'numeroparte', 'group' => 'partes'],
         'ubicacionparte' => ['label' => 'Ubic. parte', 'default' => true, 'type' => 'texto', 'source' => 'articulo.ubicacionparte', 'attr' => 'ubicacionparte', 'group' => 'partes'],
-        'saldo' => ['label' => 'Saldo dep.', 'default' => true, 'export' => false, 'type' => 'texto', 'source' => '', 'attr' => 'saldo', 'group' => 'stock'],
+        'saldo' => ['label' => 'Saldo dep.', 'default' => true, 'export' => false, 'type' => 'decimal', 'source' => 'saldo_dep.saldo', 'attr' => 'saldo', 'group' => 'stock'],
+        'proveedor_art' => ['label' => 'Proveedor', 'default' => false, 'export' => true, 'type' => 'texto', 'source' => 'art_prov.proveedor_nombre', 'attr' => 'proveedor_art', 'group' => 'compras', 'enlace' => 'proveedor', 'enlace_ids' => 'proveedor_ids'],
+        'precio_proveedor' => ['label' => 'Precio proveedor', 'default' => false, 'export' => true, 'type' => 'texto', 'source' => 'art_prov.precio_min', 'attr' => 'precio_proveedor', 'group' => 'compras'],
         'nofactura' => ['label' => 'Facturable', 'default' => true, 'type' => 'texto', 'source' => 'articulo.nofactura', 'attr' => 'nofactura', 'group' => 'clasificacion'],
         'estado' => ['label' => 'Estado', 'default' => true, 'type' => 'texto', 'source' => 'articulo.estado', 'attr' => 'estado', 'group' => 'clasificacion'],
         'fecha_alta' => ['label' => 'Fecha de alta', 'default' => false, 'type' => 'fecha', 'source' => 'articulo.created_at', 'attr' => 'created_at', 'group' => 'fechas'],
@@ -101,14 +103,15 @@ final class ArticuloListadoColumnas
             'estado' => self::textoEstado($data),
             'fecha_alta' => ListadoQbeSupport::formatearFecha(self::primero($data, 'fecha_alta', 'created_at')),
             'fecha_modificacion' => ListadoQbeSupport::formatearFecha(self::primero($data, 'fecha_modificacion', 'updated_at')),
-            'saldo' => '',
+            'saldo' => self::formatearSaldo($data),
+            'precio_proveedor' => self::formatearPrecios((string) ($data->precio_proveedor ?? '')),
             'cuentaventa', 'cuentacompra', 'cuentagasto' => trim((string) ($data->{$key} ?? '')),
             default => (string) ($data->{$key} ?? ''),
         };
     }
 
     /**
-     * Columnas que salen en PDF y Excel. El saldo de depósito se arma en pantalla desde Anita.
+     * Columnas que salen en PDF y Excel. El saldo de depósito se arma en pantalla.
      *
      * @param  list<string>  $keys
      * @return list<string>
@@ -147,7 +150,7 @@ final class ArticuloListadoColumnas
      */
     public static function sqlAgrupacion(string $key): ?array
     {
-        if (in_array($key, ['canal', 'saldo'], true)) {
+        if ($key === 'canal') {
             return null;
         }
 
@@ -166,6 +169,33 @@ final class ArticuloListadoColumnas
             'attr' => $key,
             'type' => $meta['type'],
         ]);
+    }
+
+    private static function formatearSaldo(object $data): string
+    {
+        if (! isset($data->saldo) || $data->saldo === null || $data->saldo === '') {
+            return '';
+        }
+
+        return number_format((float) $data->saldo, 2, ',', '.');
+    }
+
+    private static function formatearPrecios(string $lista): string
+    {
+        $lista = trim($lista);
+        if ($lista === '') {
+            return '';
+        }
+        $partes = array_map(static function (string $parte): string {
+            $parte = trim($parte);
+            if ($parte === '' || ! is_numeric($parte)) {
+                return $parte;
+            }
+
+            return number_format((float) $parte, 2, ',', '.');
+        }, explode(' | ', $lista));
+
+        return implode(' | ', $partes);
     }
 
     private static function primero(object $data, string ...$keys): string

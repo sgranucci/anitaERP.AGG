@@ -33,6 +33,8 @@ final class ChequeListadoColumnas
         'fechaemision' => ['label' => 'Emisión', 'default' => true, 'type' => 'fecha', 'source' => 'cheque.fechaemision', 'attr' => 'fechaemision', 'group' => 'fechas'],
         'fechapago' => ['label' => 'Pago', 'default' => true, 'type' => 'fecha', 'source' => 'cheque.fechapago', 'attr' => 'fechapago', 'group' => 'fechas'],
         'banco_cta' => ['label' => 'Banco / Cta', 'default' => true, 'type' => 'texto', 'source' => 'banco.nombre', 'attr' => 'banco_cta', 'group' => 'banco'],
+        'banco' => ['label' => 'Banco', 'default' => false, 'type' => 'texto', 'source' => 'banco.nombre', 'attr' => 'nombrebanco', 'group' => 'banco'],
+        'cuentacaja' => ['label' => 'Cuenta de caja', 'default' => false, 'type' => 'texto', 'source' => 'cuentacaja.nombre', 'attr' => 'nombrecuentacaja', 'group' => 'banco'],
         'empresa' => ['label' => 'Empresa', 'default' => true, 'type' => 'texto', 'source' => 'empresa.nombre', 'attr' => 'empresa', 'group' => 'banco'],
         'monto' => ['label' => 'Monto', 'default' => true, 'type' => 'decimal', 'source' => 'cheque.monto', 'attr' => 'monto', 'group' => 'importe'],
         'moneda' => ['label' => 'Mon', 'default' => true, 'type' => 'texto', 'source' => 'moneda.abreviatura', 'attr' => 'moneda', 'group' => 'importe'],
@@ -86,6 +88,8 @@ final class ChequeListadoColumnas
             'banco_cta' => (string) (($data->origen ?? '') === 'E'
                 ? ($data->cuentacajas->nombre ?? $data->banco_cta ?? '')
                 : ($data->bancos->nombre ?? $data->banco_cta ?? '')),
+            'banco' => (string) ($data->bancos->nombre ?? $data->nombrebanco ?? ''),
+            'cuentacaja' => (string) ($data->cuentacajas->nombre ?? $data->nombrecuentacaja ?? ''),
             'empresa' => (string) ($data->empresas->nombre ?? $data->empresa ?? ''),
             'monto' => number_format((float) ($data->monto ?? 0), 2, ',', '.'),
             'moneda' => (string) ($data->monedas->abreviatura ?? $data->moneda ?? ''),

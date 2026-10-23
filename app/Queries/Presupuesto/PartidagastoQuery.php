@@ -2,6 +2,8 @@
 
 namespace App\Queries\Presupuesto;
 
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Presupuesto\PartidagastoListadoFiltros;
 use App\Models\Presupuesto\Partidagasto;
 use App\Models\Presupuesto\Partidagasto_Estado;
@@ -43,11 +45,8 @@ class PartidagastoQuery implements PartidagastoQueryInterface
         return $this->partidagastoModel->select($campos)->get();
     }
 
-    public function leePartidagasto($filtros, $flPaginando = null)
+    public function consulta($filtros)
     {
-        ini_set('memory_limit', '-1');
-        ini_set('max_execution_time', '0');
-
         if (is_string($filtros)) {
             $texto = trim($filtros);
             $filtros = [
@@ -106,6 +105,15 @@ class PartidagastoQuery implements PartidagastoQueryInterface
             PartidagastoListadoFiltros::aplicar($partidagastos, $filtros);
         }
 
+        return $partidagastos;
+    }
+
+    public function leePartidagasto($filtros, $flPaginando = null)
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $partidagastos = $this->consulta($filtros);
         $partidagastos->orderBy('partidagasto.id', 'desc');
 
         if (isset($flPaginando)) {
@@ -119,6 +127,23 @@ class PartidagastoQuery implements PartidagastoQueryInterface
         }
 
         return $partidagastos;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortes(array $filtros): array
+    {
+        $campos = PartidagastoListadoFiltros::camposOrdenables();
+
+        return ListadoCortesSupport::calcular(
+            $this->consulta($filtros),
+            ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos),
+            $campos,
+            'partidagasto.id',
+            static fn (object $row, string $key): string => trim((string) ($row->{$key} ?? '')),
+        );
     }
 
 }

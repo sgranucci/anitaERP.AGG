@@ -39,6 +39,8 @@ use App\Support\Caja\ChequeListadoColumnas;
 use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Caja\ChequeListadoPreferenciasUsuario;
 use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoLienzoSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoDisenadorPreviewSupport;
 use App\Support\Listado\ListadoGrillaConfigSupport;
@@ -131,6 +133,12 @@ class ChequeController extends Controller
             $filtros = ChequeListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
         unset($filtros['_qbe_explicito']);
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null,
+            ChequeListadoFiltros::camposOrdenables()
+        );
         ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
 
         $catalogo = ChequeListadoColumnas::catalogoActivo();
@@ -164,6 +172,7 @@ class ChequeController extends Controller
             $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
         }
         $filtrosQuery = ChequeListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
         $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
         if ($vistaActiva) {
             $filtrosQuery['vista_id'] = $vistaActiva->id;
@@ -198,6 +207,13 @@ class ChequeController extends Controller
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
             'cortes' => $cortes,
             'graficoCheque' => $this->graficoMontoPorEstado($filtros),
+            'graficoSeries' => ($graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+                $filtros,
+                ChequeListadoFiltros::camposOrdenables(),
+                $etiquetas,
+                fn (array $para): array => $this->repository->cortesCheque($para)
+            )),
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
         ]);
     }
 
@@ -1393,6 +1409,13 @@ class ChequeController extends Controller
                 'agrupar' => $filtros['agrupar'] ?? [],
                 'orden' => $filtros['orden'] ?? 'fechapago',
                 'orden_dir' => $filtros['orden_dir'] ?? 'desc',
+                'grafico' => ListadoLienzoSupport::primero($graficosVista = ListadoLienzoSupport::normalizar(
+                    $request->input('graficos'),
+                    $request->input('grafico'),
+                    $request->exists('graficos'),
+                    ChequeListadoFiltros::camposOrdenables()
+                )),
+                'graficos' => $graficosVista,
             ],
             $layout,
             $request->boolean('es_default'),

@@ -43,10 +43,25 @@ use App\Support\Presupuesto\PartidagastoListadoFiltros; ?>
                 </div>
             </div>
             <form method="get" action="{{ route('consultar_partidagasto') }}" id="form-filtros-partidagasto" class="mb-0">
+                <div class="px-3 pt-2">
+                    <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico">
+                        <i class="fa fa-bar-chart"></i> Visual
+                    </button>
+                </div>
+                @php
+                    $ejesVisual = \App\Support\Presupuesto\PartidagastoListadoFiltros::camposOrdenables();
+                    $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                    $lienzoVisual = true;
+                @endphp
+                @include('includes.listado.workbench_visual')
                 @include('presupuesto.partidagasto.partials.filtros_listado', [
                     'limpiarUrl' => route('consultar_partidagasto'),
                 ])
             </form>
+            @include('includes.listado.workbench_grafico', [
+                'recursoVisual' => 'presupuesto.partidagasto',
+                'rutaListadoVisual' => 'consultar_partidagasto',
+            ])
             <div class="card-body table-responsive p-0">
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">

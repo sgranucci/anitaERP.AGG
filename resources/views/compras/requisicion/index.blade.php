@@ -90,8 +90,23 @@ Requisiciones
             ])
 
             <form method="get" action="{{ route('consultar_requisicion') }}" id="form-filtros-requisicion" class="mb-0">
+                <div class="px-3 pt-2">
+                    <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico">
+                        <i class="fa fa-bar-chart"></i> Visual
+                    </button>
+                </div>
+                @php
+                    $ejesVisual = \App\Support\Compras\RequisicionListadoFiltros::CAMPOS;
+                    $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                    $lienzoVisual = true;
+                @endphp
+                @include('includes.listado.workbench_visual')
                 @include('compras.requisicion.partials.filtros_listado')
             </form>
+            @include('includes.listado.workbench_grafico', [
+                'recursoVisual' => 'compras.requisicion',
+                'rutaListadoVisual' => 'consultar_requisicion',
+            ])
 
             @php
                 $esCrownIndex = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown();
@@ -107,6 +122,10 @@ Requisiciones
                             <th>Centro costo</th>
                             <th>Proveedor</th>
                             <th>Estado</th>
+                            <th>Orden de compra</th>
+                            <th>Recepción</th>
+                            <th>Factura</th>
+                            <th>Orden de pago</th>
                             <th class="text-right">Total</th>
                             <th>Ítems</th>
                             <th class="width40" data-orderable="false"></th>
@@ -143,6 +162,34 @@ Requisiciones
                                 <td>
                                     @include('compras.requisicion.partials.estado_badge', ['estado' => $data->estado ?? ''])
                                 </td>
+                                <td>
+                                    @include('includes.listado.celda_enlace', [
+                                        'filaEnlace' => $data,
+                                        'metaEnlace' => ['enlace' => 'ordencompra', 'enlace_ids' => 'ordencompra_ids'],
+                                        'textoEnlace' => $data->ordencompra_numero ?? '',
+                                    ])
+                                </td>
+                                <td>
+                                    @include('includes.listado.celda_enlace', [
+                                        'filaEnlace' => $data,
+                                        'metaEnlace' => ['enlace' => 'recepcion_proveedor', 'enlace_ids' => 'recepcion_ids'],
+                                        'textoEnlace' => $data->recepcion_numero ?? '',
+                                    ])
+                                </td>
+                                <td>
+                                    @include('includes.listado.celda_enlace', [
+                                        'filaEnlace' => $data,
+                                        'metaEnlace' => ['enlace' => 'comprobante_proveedor', 'enlace_ids' => 'factura_ids'],
+                                        'textoEnlace' => $data->factura_numero ?? '',
+                                    ])
+                                </td>
+                                <td>
+                                    @include('includes.listado.celda_enlace', [
+                                        'filaEnlace' => $data,
+                                        'metaEnlace' => ['enlace' => 'pagoproveedor', 'enlace_ids' => 'pago_ids'],
+                                        'textoEnlace' => $data->pago_numero ?? '',
+                                    ])
+                                </td>
                                 <td class="oc-num">
                                     {{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }}
                                     <span class="oc-meta">{{ $data->monedacabecera_abreviatura ?? '' }}</span>
@@ -163,7 +210,7 @@ Requisiciones
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="10" class="oc-vacio">
+                                <td colspan="14" class="oc-vacio">
                                     <i class="fa fa-inbox"></i>
                                     <div class="oc-vacio-titulo">No hay requisiciones para este filtro</div>
                                     Ajuste el estado, la empresa o el texto de búsqueda.

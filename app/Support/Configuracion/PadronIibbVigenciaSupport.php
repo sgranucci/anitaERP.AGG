@@ -10,15 +10,16 @@ use Throwable;
 
 /**
  * Estado de vigencia del padrón IIBB en las jurisdicciones donde la empresa
- * actúa como agente, unificando las tres tablas donde viven los padrones.
+ * actúa como agente o tiene el padrón solo para consulta, unificando las
+ * tablas donde viven los padrones.
  *
- * Sirve tanto al panel de la pantalla de importación como al aviso automático
- * de padrón vencido: si una jurisdicción no cubre el período en curso, se
- * factura con la tasa de descarte en lugar de la alícuota del contribuyente.
+ * Si una jurisdicción de agente no cubre el período en curso, se factura con
+ * la tasa de descarte. Una jurisdicción solo de consulta no factura: el padrón
+ * sirve para identificar percepciones (precarga / IA).
  */
 final class PadronIibbVigenciaSupport
 {
-    private const CACHE = 'padron_iibb:vigencia_agente';
+    private const CACHE = 'padron_iibb:vigencia_padron';
 
     private const CACHE_MINUTOS = 60;
 
@@ -110,9 +111,15 @@ final class PadronIibbVigenciaSupport
             ->get()
             ->keyBy(static fn ($p) => (int) $p->jurisdiccion);
 
+        $agentes = array_flip(self::jurisdiccionesAgente());
+        $consulta = array_flip(EmpresaJurisdiccionIibbSupport::jurisdiccionesConsulta());
+        $jurisdicciones = array_keys($agentes + $consulta);
+        sort($jurisdicciones);
+
         $estado = [];
 
-        foreach (self::jurisdiccionesAgente() as $jurisdiccion) {
+        foreach ($jurisdicciones as $jurisdiccion) {
+            $jurisdiccion = (int) $jurisdiccion;
             $provincia = $provincias->get($jurisdiccion);
             if ($provincia === null) {
                 continue;
@@ -163,6 +170,7 @@ final class PadronIibbVigenciaSupport
                 'ultimo_periodo' => $ultima,
                 'vigente' => $vigente,
                 'automatico' => in_array($jurisdiccion, self::AUTOMATICAS, true),
+                'consulta' => isset($consulta[$jurisdiccion]) && ! isset($agentes[$jurisdiccion]),
                 'filas' => $filas,
             ];
         }

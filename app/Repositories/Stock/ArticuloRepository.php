@@ -6,6 +6,8 @@ use App\Models\Stock\Articulo_Caja;
 use App\Models\Stock\Articulo;
 use App\Support\Stock\ArticuloListadoColumnas;
 use App\Support\Stock\ArticuloListadoCuentasSupport;
+use App\Support\Stock\ArticuloListadoSaldoSupport;
+use App\Support\Stock\ArticuloProveedorRelacion;
 use App\Support\Stock\ArticuloListadoFiltros;
 use App\Models\Stock\Color;
 use App\Models\Stock\Tipoliquido;
@@ -162,6 +164,13 @@ class ArticuloRepository implements ArticuloRepositoryInterface
             ->leftJoin('usoarticulo', 'articulo.usoarticulo_id', '=', 'usoarticulo.id')
             ->leftJoin('empresa', 'empresa.id', '=', 'articulo.empresa_id');
 
+        if (ArticuloListadoSaldoSupport::debeAplicar($filtros)) {
+            ArticuloListadoSaldoSupport::aplicar($articulo);
+        }
+        if (ArticuloProveedorRelacion::debeAplicarColumnas($filtros)) {
+            ArticuloProveedorRelacion::aplicarColumnas($articulo);
+        }
+
         if (ArticuloListadoCuentasSupport::debeAplicar($filtros)) {
             $empresaCuentas = null;
             if (ArticuloListadoFiltros::filtroEmpresaActivo() && ($filtros['empresa_scope'] ?? 'una') !== 'todas') {
@@ -205,7 +214,8 @@ class ArticuloRepository implements ArticuloRepositoryInterface
             'articulo.id',
             static fn (object $row, string $key): string => ArticuloListadoColumnas::valorCelda($row, $key),
             static fn (string $key): ?array => ArticuloListadoColumnas::sqlAgrupacion($key),
-            $etiquetas
+            $etiquetas,
+            ArticuloListadoSaldoSupport::debeAplicar($filtros) ? ArticuloListadoSaldoSupport::medidas() : []
         );
     }
 

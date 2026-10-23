@@ -6,6 +6,7 @@ use App\Models\Compras\Requisicion_Estado;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\ListadoQbeSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -44,6 +45,10 @@ class RequisicionListadoFiltros
         'comentario' => ['column' => 'requisicion.comentario', 'type' => 'texto', 'label' => 'Comentario'],
         'detalle' => ['column' => 'requisicion.detalle', 'type' => 'texto', 'label' => 'Detalle cabecera'],
         'nroinscripcion' => ['column' => 'requisicion.nroinscripcion', 'type' => 'texto', 'label' => 'Nro inscripción'],
+        'ordencompra_numero' => ['column' => 'rq_oc.ordencompra_numero', 'type' => 'texto', 'label' => 'Orden de compra'],
+        'recepcion_numero' => ['column' => 'rq_recep.recepcion_numero', 'type' => 'texto', 'label' => 'Recepción'],
+        'factura_numero' => ['column' => 'rq_fac.factura_numero', 'type' => 'texto', 'label' => 'Factura'],
+        'pago_numero' => ['column' => 'rq_pago.pago_numero', 'type' => 'texto', 'label' => 'Orden de pago'],
     ];
 
     /** @var list<string> */
@@ -364,6 +369,18 @@ class RequisicionListadoFiltros
             }
         }
 
+        if (ListadoQbeSupport::tieneCriterios(is_array($filtros['qbe'] ?? null) ? $filtros['qbe'] : [])) {
+            ListadoQbeSupport::aplicar($query, $filtros['qbe'], function ($q, array $criterio): void {
+                self::aplicarEnCampo(
+                    $q,
+                    (string) $criterio['campo'],
+                    (string) $criterio['op'],
+                    (string) $criterio['valor'],
+                    (string) ($criterio['valor_hasta'] ?? '')
+                );
+            });
+        }
+
         if (! self::tieneCriteriosTexto($filtros)) {
             return;
         }
@@ -464,6 +481,12 @@ class RequisicionListadoFiltros
     private static function aplicarEnCampo(Builder $query, string $campoKey, string $operador, string $valor, string $valorHasta): void
     {
         if ($campoKey === 'nroinscripcion' && ! Schema::hasColumn('requisicion', 'nroinscripcion')) {
+            return;
+        }
+
+        if (isset(RequisicionCircuitoRelacion::campos()[$campoKey])) {
+            RequisicionCircuitoRelacion::aplicarFiltro($query, $campoKey, $operador, $valor, $valorHasta);
+
             return;
         }
 

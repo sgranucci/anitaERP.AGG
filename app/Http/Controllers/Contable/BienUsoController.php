@@ -16,6 +16,8 @@ use App\Support\Contable\BienUsoListadoFiltros;
 use App\Support\Contable\BienUsoListadoPreferenciasUsuario;
 use App\Support\Contable\BienUsoVisibilidadSupport;
 use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoLienzoSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoDisenadorPreviewSupport;
 use App\Support\Listado\ListadoGrillaConfigSupport;
@@ -77,6 +79,12 @@ class BienUsoController extends Controller
             $filtros = BienUsoListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
         unset($filtros['_qbe_explicito']);
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null,
+            BienUsoListadoFiltros::camposOrdenables()
+        );
         ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
         if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
             if ($request->exists('group')) {
@@ -118,6 +126,7 @@ class BienUsoController extends Controller
         }
 
         $filtrosQuery = BienUsoListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
         $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
         if ($request->boolean('filtro_limpiar')) {
             $filtrosQuery['filtro_limpiar'] = 1;
@@ -149,6 +158,13 @@ class BienUsoController extends Controller
             'vistaActiva' => $vistaActiva,
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
             'cortes' => $cortes,
+            'graficoSeries' => ($graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+                $filtros,
+                BienUsoListadoFiltros::camposOrdenables(),
+                $etiquetas,
+                fn (array $para): array => $this->repository->cortesBienUso($para)
+            )),
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
         ]);
     }
 
@@ -274,6 +290,13 @@ class BienUsoController extends Controller
                 'sort' => $orden,
                 'orden' => $orden,
                 'agrupar' => $filtros['agrupar'] ?? [],
+                'grafico' => ListadoLienzoSupport::primero($graficosVista = ListadoLienzoSupport::normalizar(
+                    $request->input('graficos'),
+                    $request->input('grafico'),
+                    $request->exists('graficos'),
+                    BienUsoListadoFiltros::camposOrdenables()
+                )),
+                'graficos' => $graficosVista,
             ],
             $layout,
             $request->boolean('es_default'),

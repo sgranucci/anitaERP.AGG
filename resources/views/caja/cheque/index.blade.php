@@ -248,6 +248,9 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                         <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-qbe-panel" aria-expanded="false" aria-controls="lw-qbe-panel">
                             <i class="fa fa-filter"></i> QBE
                         </button>
+                        <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico">
+                            <i class="fa fa-bar-chart"></i> Visual
+                        </button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="modal" data-target="#modal-lw-etiquetas"
                                 @if (! ($workbenchListo ?? false)) disabled title="Requiere migración" @endif>
                             <i class="fa fa-font"></i> Defaults instalación
@@ -269,7 +272,17 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                     </div>
                 </div>
                 @include('caja.cheque.partials.workbench_qbe')
+                @php
+                    $ejesVisual = \App\Support\Caja\ChequeListadoFiltros::camposOrdenables();
+                    $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                    $lienzoVisual = true;
+                @endphp
+                @include('includes.listado.workbench_visual')
             </form>
+            @include('includes.listado.workbench_grafico', [
+                'recursoVisual' => \App\Support\Caja\ChequeListadoColumnas::RECURSO,
+                'rutaListadoVisual' => 'cheque',
+            ])
             @include('caja.cheque.partials.filtros_externos')
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])

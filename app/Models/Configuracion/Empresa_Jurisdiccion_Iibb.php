@@ -19,11 +19,13 @@ class Empresa_Jurisdiccion_Iibb extends Model implements Auditable
         'provincia_id',
         'es_agente_percepcion',
         'es_agente_retencion',
+        'consulta_padron',
     ];
 
     protected $casts = [
         'es_agente_percepcion' => 'boolean',
         'es_agente_retencion' => 'boolean',
+        'consulta_padron' => 'boolean',
     ];
 
     public function empresa(): BelongsTo

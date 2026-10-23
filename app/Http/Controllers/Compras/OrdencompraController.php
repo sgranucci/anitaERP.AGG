@@ -54,6 +54,7 @@ use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
 use Illuminate\Http\JsonResponse;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\OrdencompraPdfContextoRequisicion;
 use App\Support\Compras\OrdencompraTotalesCabecera;
@@ -110,6 +111,12 @@ class OrdencompraController extends Controller
             $empresaDefault,
             $salaDefault
         );
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            null,
+            OrdencompraListadoFiltros::CAMPOS
+        );
         $sectorId = OrdencompraSectorVisibilidadSupport::idSectorParaFiltro();
         $ordencompra = $this->ordencompraRepository->listadoIndex(
             $filtros,
@@ -119,12 +126,26 @@ class OrdencompraController extends Controller
         $estados = OrdencompraEstados::todos();
         $sectores = OrdencompraLegajoGastronomiaSupport::sectoresParaCambio();
         $resumen = $this->ordencompraRepository->resumenIndex($filtros, $sectorId);
+        $filtrosQuery = array_merge(
+            OrdencompraListadoFiltros::paraQueryString($filtros),
+            ListadoVisualSupport::paraQueryString($filtros)
+        );
+        $etiquetas = [];
+        foreach (OrdencompraListadoFiltros::CAMPOS as $key => $meta) {
+            $etiquetas[$key] = $meta['label'];
+        }
+        $graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+            $filtros,
+            OrdencompraListadoFiltros::CAMPOS,
+            $etiquetas,
+            fn (array $para): array => $this->ordencompraRepository->cortesIndex($para, $sectorId)
+        );
 
         return view('compras.ordencompra.index', [
             'ordencompra' => $ordencompra,
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
-            'filtrosQuery' => OrdencompraListadoFiltros::paraQueryString($filtros),
+            'filtrosQuery' => $filtrosQuery,
             'camposFiltro' => OrdencompraListadoFiltros::CAMPOS,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'sala_query' => $salaQuery,
@@ -133,6 +154,8 @@ class OrdencompraController extends Controller
             'sectorUsuario' => ($sectorId !== null && $sectorId > 0) ? $sectorId : null,
             'alcanceSector' => OrdencompraSectorVisibilidadSupport::etiquetaAlcance(),
             'resumen' => $resumen,
+            'graficoSeries' => $graficoSeries,
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
         ]);
     }
 

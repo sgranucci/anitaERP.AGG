@@ -4,6 +4,7 @@ namespace App\Support\Stock;
 
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\ListadoQbeSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -17,6 +18,8 @@ class RecepcionProveedorListadoFiltros
         'nombreempresa' => ['etiqueta' => 'Empresa', 'tipo' => 'texto'],
         'estado' => ['etiqueta' => 'Estado', 'tipo' => 'texto'],
         'tipo' => ['etiqueta' => 'Tipo', 'tipo' => 'texto'],
+        'factura_numero' => ['etiqueta' => 'Factura', 'tipo' => 'texto'],
+        'pago_numero' => ['etiqueta' => 'Orden de pago', 'tipo' => 'texto'],
     ];
 
     public const OPERADORES_TEXTO = [
@@ -162,10 +165,40 @@ class RecepcionProveedorListadoFiltros
         return ($meta['tipo'] ?? '') === 'entero' ? self::OPERADORES_ENTERO : self::OPERADORES_TEXTO;
     }
 
+    /**
+     * Ejes del lienzo. La grilla operativa no se reemplaza.
+     *
+     * @return array<string, array{column: string, type: string, label: string, attr: string}>
+     */
+    public static function camposOrdenables(): array
+    {
+        return array_merge([
+            'numerorecepcion' => ['column' => 'recepcion_proveedor.numerorecepcion', 'type' => 'texto', 'label' => 'Nº recepción', 'attr' => 'numerorecepcion'],
+            'fecha' => ['column' => 'recepcion_proveedor.fecha', 'type' => 'fecha', 'label' => 'Fecha', 'attr' => 'fecha'],
+            'tipo' => ['column' => 'recepcion_proveedor.tipo', 'type' => 'texto', 'label' => 'Tipo', 'attr' => 'tipo'],
+            'numeroordencompra' => ['column' => 'ordencompra.numeroordencompra', 'type' => 'entero', 'label' => 'OC', 'attr' => 'numeroordencompra'],
+            'nombreproveedor' => ['column' => 'proveedor.nombre', 'type' => 'texto', 'label' => 'Proveedor', 'attr' => 'nombreproveedor'],
+            'nombreempresa' => ['column' => 'empresa.nombre', 'type' => 'texto', 'label' => 'Empresa', 'attr' => 'nombreempresa'],
+            'estado' => ['column' => 'recepcion_proveedor.estado', 'type' => 'texto', 'label' => 'Estado', 'attr' => 'estado'],
+        ], RecepcionCircuitoRelacion::campos());
+    }
+
     public static function aplicar(Builder $query, array $filtros): void
     {
         if (! empty($filtros['empresa_id'])) {
             $query->where('recepcion_proveedor.empresa_id', (int) $filtros['empresa_id']);
+        }
+
+        if (ListadoQbeSupport::tieneCriterios(is_array($filtros['qbe'] ?? null) ? $filtros['qbe'] : [])) {
+            ListadoQbeSupport::aplicar($query, $filtros['qbe'], function ($q, array $criterio): void {
+                self::aplicarCondicion(
+                    $q,
+                    (string) $criterio['campo'],
+                    (string) $criterio['op'],
+                    (string) $criterio['valor'],
+                    false
+                );
+            });
         }
 
         if (! self::tieneCriteriosTexto($filtros)) {
@@ -199,6 +232,19 @@ class RecepcionProveedorListadoFiltros
 
     private static function aplicarCondicion(Builder $query, string $campo, string $operador, string $valor, bool $or): void
     {
+        if (isset(RecepcionCircuitoRelacion::campos()[$campo])) {
+            if ($or) {
+                $query->orWhere(function ($q) use ($campo, $operador, $valor): void {
+                    RecepcionCircuitoRelacion::aplicarFiltro($q, $campo, $operador, $valor, '');
+                });
+
+                return;
+            }
+            RecepcionCircuitoRelacion::aplicarFiltro($query, $campo, $operador, $valor, '');
+
+            return;
+        }
+
         $col = match ($campo) {
             'numeroordencompra' => 'ordencompra.numeroordencompra',
             'nombreproveedor' => 'proveedor.nombre',

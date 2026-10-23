@@ -54,8 +54,8 @@
         @break
     @case('saldo')
         <td class="text-right">
-            @if (isset($saldosStkdep[$articulo->id]))
-                {{ number_format($saldosStkdep[$articulo->id], 2, ',', '.') }}
+            @if (isset($saldosDeposito[$articulo->id]))
+                {{ number_format($saldosDeposito[$articulo->id], 2, ',', '.') }}
             @endif
         </td>
         @break
@@ -90,5 +90,17 @@
     @case('cuentacompra')
     @case('cuentagasto')
         <td title="{{ $articulo->{$key} ?? '' }}">{{ $articulo->{$key} ?? '' }}</td>
+        @break
+    @case('proveedor_art')
+        <td>
+            @include('includes.listado.celda_enlace', [
+                'filaEnlace' => $articulo,
+                'metaEnlace' => \App\Support\Stock\ArticuloListadoColumnas::catalogoActivo()[$key] ?? [],
+                'textoEnlace' => $articulo->proveedor_art ?? '',
+            ])
+        </td>
+        @break
+    @case('precio_proveedor')
+        <td class="text-right">{{ \App\Support\Stock\ArticuloListadoColumnas::valorCelda($articulo, 'precio_proveedor') }}</td>
         @break
 @endswitch

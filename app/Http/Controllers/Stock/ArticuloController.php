@@ -44,7 +44,6 @@ use App\Services\Stock\ArticuloAnitaSyncService;
 use App\Services\Stock\ArticuloParteUnicaService;
 use App\Services\Stock\PrecioService;
 use App\Support\Logistica\ArticuloCatalogoLogisticaSupport;
-use App\Services\Stock\StkdepSaldoAnitaService;
 use App\Support\Compras\ArticuloProveedorMatchSupport;
 use App\Support\Compras\ArticuloProveedorOperativoSupport;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
@@ -68,6 +67,7 @@ use App\Support\Listado\ListadoGrillaConfigSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Listado\ListadoLienzoSupport;
 use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Stock\ArticuloMarketplaceGrillaSupport;
@@ -132,8 +132,6 @@ class ArticuloController extends Controller
 
     private ArticuloAnitaSyncService $articuloAnitaSyncService;
 
-    private StkdepSaldoAnitaService $stkdepSaldoAnitaService;
-
     public function __construct(Articulo_CajaRepositoryInterface $articulo_cajaRepository,
         Articulo_CostoRepositoryInterface $articulo_costoRepository,
         Articulo_EstadoRepositoryInterface $articulo_estadoRepository,
@@ -150,8 +148,7 @@ class ArticuloController extends Controller
         SeteoModeloetiquetaRepositoryInterface $seteoModeloetiquetaRepository,
         SeteosalidaRepositoryInterface $seteosalidarepository,
         PrecioService $precioservice,
-        ArticuloAnitaSyncService $articuloAnitaSyncService,
-        StkdepSaldoAnitaService $stkdepSaldoAnitaService)
+        ArticuloAnitaSyncService $articuloAnitaSyncService)
     {
         $this->articulo_cajaRepository = $articulo_cajaRepository;
         $this->articulo_costoRepository = $articulo_costoRepository;
@@ -170,7 +167,6 @@ class ArticuloController extends Controller
         $this->seteoSalidaRepository = $seteosalidarepository;
         $this->precioService = $precioservice;
         $this->articuloAnitaSyncService = $articuloAnitaSyncService;
-        $this->stkdepSaldoAnitaService = $stkdepSaldoAnitaService;
     }
 
     /**
@@ -316,12 +312,9 @@ class ArticuloController extends Controller
             $articulos = $this->articuloRepository->leeArticulo($filtros, true);
         }
 
-        $saldosStkdep = [];
-        try {
-            $saldosStkdep = $this->stkdepSaldoAnitaService->saldosStkdepPorArticulosLab($articulos);
-        } catch (\Throwable $e) {
-            Log::warning('Articulo index: no se pudo consultar saldo stkdep', ['exception' => $e->getMessage()]);
-        }
+        $saldosDeposito = in_array('saldo', $columnasVisibles, true)
+            ? ArticuloSaldosDepositoSupport::saldosDepositoEntrega($articulos)
+            : [];
 
         $cortes = ['activo' => false];
         if (ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], ArticuloListadoFiltros::camposOrdenables()) !== []) {
@@ -352,7 +345,7 @@ class ArticuloController extends Controller
             'canalesFiltro' => ArticuloListadoFiltros::filtroCanalActivo()
                 ? Canal::query()->where('activo', true)->orderBy('nombre')->get(['id', 'codigo', 'nombre'])
                 : collect(),
-            'saldosStkdep' => $saldosStkdep,
+            'saldosDeposito' => $saldosDeposito,
             'columnasVisibles' => $columnasVisibles,
             'grillaLayout' => $grillaLayout,
             'catalogoColumnas' => $catalogo,
@@ -361,12 +354,13 @@ class ArticuloController extends Controller
             'vistaActiva' => $vistaActiva,
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
             'cortes' => $cortes,
-            'graficoSerie' => ListadoVisualSupport::serieDeConsulta(
+            'graficoSeries' => ($graficoSeries = ListadoVisualSupport::seriesDeConsulta(
                 $filtros,
                 ArticuloListadoFiltros::camposOrdenables(),
                 $etiquetas,
                 fn (array $para): array => $this->articuloRepository->cortesArticulo($para)
-            ),
+            )),
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
             'rolesVista' => ListadoVisualSupport::rolesParaInstalacion(),
         ]);
     }
@@ -579,7 +573,13 @@ class ArticuloController extends Controller
                 'qbe' => $filtros['qbe'] ?? [],
                 'sort' => $filtros['sort'] ?? [],
                 'agrupar' => $filtros['agrupar'] ?? [],
-                'grafico' => ListadoVisualSupport::normalizarGrafico($request->input('grafico'), ArticuloListadoFiltros::camposOrdenables()),
+                'grafico' => ListadoLienzoSupport::primero($graficosVista = ListadoLienzoSupport::normalizar(
+                    $request->input('graficos'),
+                    $request->input('grafico'),
+                    $request->exists('graficos'),
+                    ArticuloListadoFiltros::camposOrdenables()
+                )),
+                'graficos' => $graficosVista,
                 'formato' => ListadoVisualSupport::normalizarFormato($request->input('formato'), ArticuloListadoFiltros::camposOrdenables()),
             ],
             $layout,

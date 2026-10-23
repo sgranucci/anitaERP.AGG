@@ -116,6 +116,9 @@
                         <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-qbe-panel" aria-expanded="false" aria-controls="lw-qbe-panel">
                             <i class="fa fa-filter"></i> QBE
                         </button>
+                        <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico">
+                            <i class="fa fa-bar-chart"></i> Visual
+                        </button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="modal" data-target="#modal-lw-etiquetas"
                                 @if (! ($workbenchListo ?? false)) disabled title="Requiere migración" @endif>
                             <i class="fa fa-font"></i> Defaults instalación
@@ -138,7 +141,17 @@
                 </div>
                 @include('contable.bien_uso.partials.filtros_externos')
                 @include('contable.bien_uso.partials.workbench_qbe')
+                @php
+                    $ejesVisual = \App\Support\Contable\BienUsoListadoFiltros::camposOrdenables();
+                    $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                    $lienzoVisual = true;
+                @endphp
+                @include('includes.listado.workbench_visual')
             </form>
+            @include('includes.listado.workbench_grafico', [
+                'recursoVisual' => \App\Support\Contable\BienUsoListadoColumnas::RECURSO,
+                'rutaListadoVisual' => 'bien_uso',
+            ])
             @if (! empty($alcance_centro_costo))
                 <div class="px-3 py-2 border-bottom bg-white text-muted small">
                     <i class="fa fa-filter"></i>

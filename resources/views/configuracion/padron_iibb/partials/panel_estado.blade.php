@@ -6,7 +6,8 @@
         'error' => 'badge-danger',
         'en_proceso' => 'badge-warning',
     ];
-    $vencidosPanel = collect($vigenciaPanel)->where('vigente', false);
+    $vencidosAgente = collect($vigenciaPanel)->filter(fn ($fila) => empty($fila['vigente']) && empty($fila['consulta']));
+    $vencidosConsulta = collect($vigenciaPanel)->filter(fn ($fila) => empty($fila['vigente']) && ! empty($fila['consulta']));
 @endphp
 
 <div class="card card-outline card-info">
@@ -21,14 +22,22 @@
         </div>
     </div>
     <div class="card-body">
-        <h6 class="text-muted mb-2">Vigencia por jurisdicción donde la empresa percibe o retiene</h6>
+        <h6 class="text-muted mb-2">Vigencia por jurisdicción donde la empresa percibe, retiene o consulta el padrón</h6>
 
-        @if ($vencidosPanel->isNotEmpty())
+        @if ($vencidosAgente->isNotEmpty())
             <div class="alert alert-warning py-2">
                 <i class="fa fa-exclamation-triangle"></i>
-                <strong>Falta cargar el padrón de {{ $vencidosPanel->pluck('provincia')->implode(', ') }}.</strong>
+                <strong>Falta cargar el padrón de {{ $vencidosAgente->pluck('provincia')->implode(', ') }}.</strong>
                 Mientras falte, esas jurisdicciones se facturan con la tasa de descarte en lugar de la
                 alícuota de cada contribuyente.
+            </div>
+        @endif
+
+        @if ($vencidosConsulta->isNotEmpty())
+            <div class="alert alert-info py-2">
+                <i class="fa fa-info-circle"></i>
+                <strong>Falta el padrón de consulta de {{ $vencidosConsulta->pluck('provincia')->implode(', ') }}.</strong>
+                No cambia la facturación. Sirve para identificar percepciones en la precarga.
             </div>
         @endif
 
@@ -40,6 +49,7 @@
                         <th class="text-center">Jurisdicción</th>
                         <th class="text-center">Último período cargado</th>
                         <th class="text-center">Vigente hoy</th>
+                        <th class="text-center">Uso</th>
                         <th class="text-center">Descarga</th>
                         <th class="text-right">Registros</th>
                     </tr>
@@ -64,6 +74,13 @@
                                 @endif
                             </td>
                             <td class="text-center">
+                                @if (! empty($fila['consulta']))
+                                    <span class="badge badge-info">Consulta</span>
+                                @else
+                                    <span class="badge badge-secondary">Agente</span>
+                                @endif
+                            </td>
+                            <td class="text-center">
                                 @if ($fila['automatico'])
                                     <span class="badge badge-info">Automática</span>
                                 @else
@@ -76,7 +93,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="text-center text-muted">Todavía no hay padrones cargados.</td>
+                            <td colspan="7" class="text-center text-muted">Todavía no hay padrones cargados.</td>
                         </tr>
                     @endforelse
                 </tbody>

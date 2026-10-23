@@ -197,8 +197,23 @@ $(function () {
             ])
 
             <form method="get" action="{{ route('consultar_ordencompra') }}" id="form-filtros-ordencompra" class="mb-0">
+                <div class="px-3 pt-2">
+                    <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico">
+                        <i class="fa fa-bar-chart"></i> Visual
+                    </button>
+                </div>
+                @php
+                    $ejesVisual = \App\Support\Compras\OrdencompraListadoFiltros::CAMPOS;
+                    $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                    $lienzoVisual = true;
+                @endphp
+                @include('includes.listado.workbench_visual')
                 @include('compras.ordencompra.partials.filtros_listado')
             </form>
+            @include('includes.listado.workbench_grafico', [
+                'recursoVisual' => 'compras.ordencompra',
+                'rutaListadoVisual' => 'consultar_ordencompra',
+            ])
 
             <div class="table-responsive p-0">
                 <table class="table table-hover oc-grilla mb-0" id="tabla-paginada">
@@ -212,6 +227,9 @@ $(function () {
                             <th>Proveedor</th>
                             <th>Sector</th>
                             <th>Estado</th>
+                            <th>Recepción</th>
+                            <th>Factura</th>
+                            <th>Orden de pago</th>
                             <th class="text-right">Σ ítems</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
@@ -255,6 +273,27 @@ $(function () {
                                 <td>
                                     @include('compras.ordencompra.partials.estado_badge', ['estado' => $row->estadoordencompra ?? ''])
                                 </td>
+                                <td>
+                                    @include('includes.listado.celda_enlace', [
+                                        'filaEnlace' => $row,
+                                        'metaEnlace' => ['enlace' => 'recepcion_proveedor', 'enlace_ids' => 'recepcion_ids'],
+                                        'textoEnlace' => $row->recepcion_numero ?? '',
+                                    ])
+                                </td>
+                                <td>
+                                    @include('includes.listado.celda_enlace', [
+                                        'filaEnlace' => $row,
+                                        'metaEnlace' => ['enlace' => 'comprobante_proveedor', 'enlace_ids' => 'factura_ids'],
+                                        'textoEnlace' => $row->factura_numero ?? '',
+                                    ])
+                                </td>
+                                <td>
+                                    @include('includes.listado.celda_enlace', [
+                                        'filaEnlace' => $row,
+                                        'metaEnlace' => ['enlace' => 'pagoproveedor', 'enlace_ids' => 'pago_ids'],
+                                        'textoEnlace' => $row->pago_numero ?? '',
+                                    ])
+                                </td>
                                 <td class="oc-num">
                                     {{ number_format((float) ($row->monto_lineas ?? 0), 2, ',', '.') }}
                                 </td>
@@ -264,7 +303,7 @@ $(function () {
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="10" class="oc-vacio">
+                                <td colspan="13" class="oc-vacio">
                                     <i class="fa fa-inbox"></i>
                                     <div class="oc-vacio-titulo">No hay órdenes para este filtro</div>
                                     Ajuste el estado, la empresa o el texto de búsqueda.

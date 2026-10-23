@@ -59,6 +59,11 @@ class QueryRetornoListado
             'store_id',
             'buscar',
             'consultar',
+            'graficos',
+            'grafico',
+            'grafico_click',
+            'grafico_click_dimension',
+            'grafico_off',
         ] as $key) {
             if ($request->query->has($key)) {
                 return true;

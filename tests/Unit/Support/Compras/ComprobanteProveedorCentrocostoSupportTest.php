@@ -56,4 +56,64 @@ class ComprobanteProveedorCentrocostoSupportTest extends TestCase
 
         $this->assertSame(1, ComprobanteProveedorCentrocostoSupport::resolverDesdeComprobante($comprobante));
     }
+
+    public function test_oc_prorrateada_parte_el_iva_en_cada_centro(): void
+    {
+        $pesos = ComprobanteProveedorCentrocostoSupport::pesosDestinoOc((object) [
+            'ordencompra_articulos' => [
+                (object) ['centrocostodestino_id' => 5, 'cantidad' => 1, 'precio' => 100],
+                (object) ['centrocostodestino_id' => 9, 'cantidad' => 3, 'precio' => 100],
+            ],
+        ]);
+
+        $trozos = ComprobanteProveedorCentrocostoSupport::trozosImpuesto(true, 0, $pesos, 100.0);
+
+        $this->assertSame([
+            ['centrocosto_id' => 5, 'importe' => 25.0],
+            ['centrocosto_id' => 9, 'importe' => 75.0],
+        ], $trozos);
+        $this->assertSame(100.0, round(array_sum(array_column($trozos, 'importe')), 2));
+    }
+
+    public function test_oc_con_un_centro_imputa_todo_el_iva_ahi(): void
+    {
+        $trozos = ComprobanteProveedorCentrocostoSupport::trozosImpuesto(true, 0, [5 => 472306.99], 124535.76);
+
+        $this->assertSame([
+            ['centrocosto_id' => 5, 'importe' => 124535.76],
+        ], $trozos);
+    }
+
+    public function test_cuenta_sin_centro_no_hereda_el_de_la_oc(): void
+    {
+        $trozos = ComprobanteProveedorCentrocostoSupport::trozosImpuesto(false, 0, [5 => 10, 9 => 30], 80.0);
+
+        $this->assertSame([
+            ['centrocosto_id' => 0, 'importe' => 80.0],
+        ], $trozos);
+    }
+
+    public function test_concepto_ya_repartido_no_se_vuelve_a_partir(): void
+    {
+        $trozos = ComprobanteProveedorCentrocostoSupport::trozosImpuesto(
+            true,
+            0,
+            [5 => 10, 9 => 30],
+            25.0,
+            9,
+            true,
+        );
+
+        $this->assertSame([
+            ['centrocosto_id' => 9, 'importe' => 25.0],
+        ], $trozos);
+    }
+
+    public function test_el_ultimo_centro_absorbe_el_redondeo(): void
+    {
+        $trozos = ComprobanteProveedorCentrocostoSupport::repartirImporte(10.0, [1 => 1, 2 => 1, 3 => 1]);
+
+        $this->assertSame(10.0, round(array_sum(array_column($trozos, 'importe')), 2));
+        $this->assertSame(3.34, $trozos[2]['importe']);
+    }
 }

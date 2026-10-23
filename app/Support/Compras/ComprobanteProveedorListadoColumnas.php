@@ -306,6 +306,38 @@ final class ComprobanteProveedorListadoColumnas
             'attr' => 'anita_sync_estado',
             'group' => self::GRUPO_CONTROL,
         ],
+        'pago_numero' => [
+            'label' => 'Nro. orden de pago',
+            'default' => false,
+            'export' => true,
+            'filterable' => false,
+            'type' => 'texto',
+            'source' => 'pago_op.pago_numero',
+            'attr' => 'pago_numero',
+            'group' => self::GRUPO_TESORERIA,
+            'enlace' => 'pagoproveedor',
+            'enlace_ids' => 'pago_ids',
+        ],
+        'pago_fecha' => [
+            'label' => 'Fecha orden de pago',
+            'default' => false,
+            'export' => true,
+            'filterable' => false,
+            'type' => 'texto',
+            'source' => 'pago_op.pago_fecha',
+            'attr' => 'pago_fecha',
+            'group' => self::GRUPO_TESORERIA,
+        ],
+        'pago_estado' => [
+            'label' => 'Estado orden de pago',
+            'default' => false,
+            'export' => true,
+            'filterable' => false,
+            'type' => 'texto',
+            'source' => 'pago_op.pago_estado',
+            'attr' => 'pago_estado',
+            'group' => self::GRUPO_TESORERIA,
+        ],
     ];
 
     /**

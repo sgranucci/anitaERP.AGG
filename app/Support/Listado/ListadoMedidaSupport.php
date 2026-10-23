@@ -24,12 +24,17 @@ final class ListadoMedidaSupport
             ],
         ];
         foreach ([
-            'monto' => 'Suma de monto',
-            'total' => 'Suma de total',
-            'ingresos' => 'Ingresos',
-            'egresos' => 'Egresos',
-            'tiempo_insumido' => 'Suma de minutos',
-        ] as $key => $label) {
+            'monto' => ['Suma de monto', true],
+            'total' => ['Suma de total', true],
+            'ingresos' => ['Ingresos', true],
+            'egresos' => ['Egresos', true],
+            'tiempo_insumido' => ['Suma de minutos', false],
+            'saldo' => ['Suma de saldo dep.', false],
+            'sueldo_basico' => ['Suma de sueldo básico', false],
+            'valor_origen' => ['Suma de valor origen', true],
+            'valor_baja' => ['Suma de valor baja', true],
+            'monto_factura' => ['Suma de monto factura', true],
+        ] as $key => [$label, $parteMoneda]) {
             if (! isset($campos[$key])) {
                 continue;
             }
@@ -37,7 +42,7 @@ final class ListadoMedidaSupport
                 'label' => $label,
                 'agregado' => 'sum',
                 'campo' => $key,
-                'partir_moneda' => isset($campos['moneda']),
+                'partir_moneda' => $parteMoneda && isset($campos['moneda']),
             ];
         }
 

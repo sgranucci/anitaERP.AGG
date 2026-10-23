@@ -106,6 +106,9 @@ Proveedores
                         <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-qbe-panel" aria-expanded="false" aria-controls="lw-qbe-panel">
                             <i class="fa fa-filter"></i> QBE
                         </button>
+                        <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico">
+                            <i class="fa fa-bar-chart"></i> Visual
+                        </button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="modal" data-target="#modal-lw-etiquetas"
                                 @if (! $workbenchListo) disabled title="Requiere migración" @endif>
                             <i class="fa fa-font"></i> Defaults instalación
@@ -140,6 +143,12 @@ Proveedores
                 </div>
 
                 @include('compras.proveedor.partials.workbench_qbe')
+                @php
+                    $ejesVisual = \App\Support\Compras\ProveedorListadoFiltros::camposOrdenables();
+                    $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                    $lienzoVisual = true;
+                @endphp
+                @include('includes.listado.workbench_visual')
 
                 @if ($tieneQbe)
                     <div class="lw-chips">
@@ -219,6 +228,10 @@ Proveedores
 
                 @include('compras.proveedor.partials.filtros_externos')
             </form>
+            @include('includes.listado.workbench_grafico', [
+                'recursoVisual' => \App\Support\Compras\ProveedorListadoColumnas::RECURSO,
+                'rutaListadoVisual' => 'proveedor',
+            ])
 
             @php
                 use App\Support\Listado\ListadoGrillaConfigSupport as LwGrilla;

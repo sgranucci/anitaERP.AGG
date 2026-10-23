@@ -3,12 +3,18 @@
 namespace App\Http\Controllers\Listado;
 
 use App\Http\Controllers\Controller;
+use App\Support\Caja\ChequeListadoColumnas;
 use App\Support\Caja\IngresoEgresoListadoColumnas;
-use App\Support\Ticket\AdministracionTicketListadoColumnas;
 use App\Support\Compras\ComprobanteProveedorListadoColumnas;
+use App\Support\Compras\ProveedorListadoColumnas;
+use App\Support\Contable\BienUsoListadoColumnas;
+use App\Support\Logistica\SolicitudLogisticaListadoColumnas;
+use App\Support\Stock\ArticuloListadoColumnas;
+use App\Support\Sueldos\EmpleadoSueldosListadoColumnas;
+use App\Support\Ticket\AdministracionTicketListadoColumnas;
+use App\Support\Ventas\ClienteListadoColumnas;
 use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Listado\ListadoVisualSupport;
-use App\Support\Stock\ArticuloListadoColumnas;
 use Illuminate\Http\Request;
 
 class ListadoVisualController extends Controller
@@ -57,6 +63,54 @@ class ListadoVisualController extends Controller
             ArticuloListadoColumnas::RECURSO => [
                 'permiso' => 'listar-articulos',
                 'ruta' => 'articulo',
+            ],
+            ChequeListadoColumnas::RECURSO => [
+                'permiso' => 'listar-cheque',
+                'ruta' => 'cheque',
+            ],
+            ProveedorListadoColumnas::RECURSO => [
+                'permiso' => 'listar-proveedor',
+                'ruta' => 'proveedor',
+            ],
+            ClienteListadoColumnas::RECURSO => [
+                'permiso' => 'listar-clientes',
+                'ruta' => 'cliente',
+            ],
+            EmpleadoSueldosListadoColumnas::RECURSO => [
+                'permiso' => 'listar-empleado-sueldos',
+                'ruta' => 'consultar_empleado_sueldos',
+            ],
+            BienUsoListadoColumnas::RECURSO => [
+                'permiso' => 'listar-bien-uso',
+                'ruta' => 'bien_uso',
+            ],
+            SolicitudLogisticaListadoColumnas::RECURSO => [
+                'permiso' => 'listar-logistica-solicitud',
+                'ruta' => 'logistica_solicitud',
+            ],
+            'compras.ordencompra' => [
+                'permiso' => 'listar-ordencompra',
+                'ruta' => 'consultar_ordencompra',
+            ],
+            'stock.recepcion_proveedor' => [
+                'permiso' => 'listar-recepcion-proveedor',
+                'ruta' => 'recepcion_proveedor',
+            ],
+            'presupuesto.capex' => [
+                'permiso' => 'listar-capex',
+                'ruta' => 'consultar_capex',
+            ],
+            'presupuesto.partidagasto' => [
+                'permiso' => 'listar-partidagasto',
+                'ruta' => 'consultar_partidagasto',
+            ],
+            'caja.cobranza' => [
+                'permiso' => 'listar-cobranza',
+                'ruta' => 'cobranza',
+            ],
+            'compras.requisicion' => [
+                'permiso' => 'listar-requisicion',
+                'ruta' => 'consultar_requisicion',
             ],
             IngresoEgresoListadoColumnas::RECURSO => [
                 'permiso' => 'listar-ingresos-egresos-caja',

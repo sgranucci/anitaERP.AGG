@@ -53,10 +53,25 @@ use App\Support\Presupuesto\CapexListadoFiltros; ?>
                 </div>
             </div>
             <form method="get" action="{{ route('consultar_capex') }}" id="form-filtros-capex" class="mb-0">
+                <div class="px-3 pt-2">
+                    <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico">
+                        <i class="fa fa-bar-chart"></i> Visual
+                    </button>
+                </div>
+                @php
+                    $ejesVisual = \App\Support\Presupuesto\CapexListadoFiltros::camposOrdenables();
+                    $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                    $lienzoVisual = true;
+                @endphp
+                @include('includes.listado.workbench_visual')
                 @include('presupuesto.capex.partials.filtros_listado', [
                     'limpiarUrl' => route('consultar_capex'),
                 ])
             </form>
+            @include('includes.listado.workbench_grafico', [
+                'recursoVisual' => 'presupuesto.capex',
+                'rutaListadoVisual' => 'consultar_capex',
+            ])
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">

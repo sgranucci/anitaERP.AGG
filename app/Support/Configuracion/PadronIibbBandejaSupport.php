@@ -10,8 +10,9 @@ use Throwable;
 
 /**
  * Carpeta externa donde se pegan los padrones IIBB.
- * Solo aparecen las jurisdicciones tildadas como agente (percepción o retención).
- * ARBA (902) no usa esta bandeja: se baja solo por DFE.
+ * Aparecen las jurisdicciones tildadas como agente (percepción o retención)
+ * y las tildadas solo como consulta de padrón. ARBA (902) no usa esta bandeja:
+ * se baja solo por DFE.
  *
  * entrada/{clave} → procesando/{clave} → ok|error/{clave}
  */
@@ -68,13 +69,14 @@ final class PadronIibbBandejaSupport
 
     /**
      * Subcarpetas que el vigilador lee: las del catálogo cuya jurisdicción está
-     * tildada en Agentes IIBB (o, si la grilla todavía no se guardó, en el .env).
+     * tildada como agente o como consulta de padrón (o, si la grilla todavía
+     * no se guardó, las de agente del .env).
      *
      * @return array<string, array{jurisdiccion: int, tipo: ?string}>
      */
     public static function carpetas(): array
     {
-        $agentes = array_flip(EmpresaJurisdiccionIibbSupport::jurisdiccionesAgente());
+        $agentes = array_flip(EmpresaJurisdiccionIibbSupport::jurisdiccionesConPadron());
         $visibles = [];
         foreach (self::CATALOGO as $clave => $def) {
             if (! isset($agentes[$def['jurisdiccion']])) {
@@ -310,7 +312,8 @@ final class PadronIibbBandejaSupport
 Padrones de Ingresos Brutos
 ===========================
 
-No hay jurisdicciones tildadas como agente de percepción o de retención.
+No hay jurisdicciones tildadas como agente de percepción o de retención,
+ni como consulta de padrón.
 Marquelas en Configuración general, tarjeta Agentes IIBB.
 Ahí se definen las carpetas de esta bandeja.
 
@@ -325,7 +328,8 @@ TXT;
         return "Padrones de Ingresos Brutos\n"
             ."===========================\n\n"
             ."Pegue el archivo en la carpeta de la jurisdicción. No lo deje en la raíz.\n"
-            ."Las carpetas son las jurisdicciones tildadas en Agentes IIBB.\n\n"
+            ."Las carpetas son las jurisdicciones tildadas en Agentes IIBB\n"
+            ."(percibe, retiene o consulta de padrón).\n\n"
             .$arba
             .implode("\n", $lineas)."\n\n"
             ."Espere a que termine de copiarse. En un par de minutos el archivo pasa a\n"

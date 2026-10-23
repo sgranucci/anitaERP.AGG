@@ -61,7 +61,9 @@ use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoDisenadorPreviewSupport;
 use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoLienzoSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
@@ -189,6 +191,12 @@ class ClienteController extends Controller
             $filtros = ClienteListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
         unset($filtros['_qbe_explicito']);
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null,
+            ClienteListadoFiltros::camposOrdenables()
+        );
         ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
         if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
             if ($request->exists('group')) {
@@ -244,6 +252,7 @@ class ClienteController extends Controller
         }
 
         $filtrosQuery = ClienteListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
         $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
         if ($vistaActiva) {
             $filtrosQuery['vista_id'] = $vistaActiva->id;
@@ -266,6 +275,13 @@ class ClienteController extends Controller
             'vistaActiva' => $vistaActiva,
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
             'cortes' => $cortes,
+            'graficoSeries' => ($graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+                $filtros,
+                ClienteListadoFiltros::camposOrdenables(),
+                $etiquetas,
+                fn (array $para): array => $this->clienteRepository->cortesCliente($para)
+            )),
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
         ]);
     }
 
@@ -390,6 +406,13 @@ class ClienteController extends Controller
                 'qbe' => $filtros['qbe'] ?? [],
                 'orden' => $filtros['orden'] ?? [],
                 'agrupar' => $filtros['agrupar'] ?? [],
+                'grafico' => ListadoLienzoSupport::primero($graficosVista = ListadoLienzoSupport::normalizar(
+                    $request->input('graficos'),
+                    $request->input('grafico'),
+                    $request->exists('graficos'),
+                    ClienteListadoFiltros::camposOrdenables()
+                )),
+                'graficos' => $graficosVista,
             ],
             $layout,
             $request->boolean('es_default'),

@@ -49,6 +49,14 @@ class AlertarPadronIibbVencido extends Command
         );
 
         $vencidas = array_values(array_filter($estado, static fn (array $f): bool => ! $f['vigente']));
+        $vencidasAgente = array_values(array_filter(
+            $vencidas,
+            static fn (array $f): bool => empty($f['consulta'])
+        ));
+        $vencidasConsulta = array_values(array_filter(
+            $vencidas,
+            static fn (array $f): bool => ! empty($f['consulta'])
+        ));
 
         if ($vencidas === [] && ! $this->option('forzar-mail')) {
             $this->info('Todos los padrones cubren el período.');
@@ -58,21 +66,35 @@ class AlertarPadronIibbVencido extends Command
 
         $detalle = [];
         foreach ($vencidas as $fila) {
+            $uso = empty($fila['consulta']) ? 'agente' : 'consulta (no factura)';
             $detalle[$fila['provincia'] . ' (' . $fila['jurisdiccion'] . ')'] = sprintf(
-                'último período cargado: %s — descarga %s',
+                'último período cargado: %s — descarga %s — %s',
                 $fila['ultimo_periodo'] ?? 'sin datos',
-                $fila['automatico'] ? 'automática' : 'manual'
+                $fila['automatico'] ? 'automática' : 'manual',
+                $uso
             );
         }
 
-        $mensaje = $vencidas === []
-            ? 'Todos los padrones IIBB cubren el período en curso.'
-            : sprintf(
-                'Hay %d padrón/es IIBB sin vigencia al %s. Mientras falten, esas jurisdicciones '
-                . 'facturan con la tasa de descarte en lugar de la alícuota del contribuyente.',
-                count($vencidas),
-                $fecha
-            );
+        if ($vencidas === []) {
+            $mensaje = 'Todos los padrones IIBB cubren el período en curso.';
+        } else {
+            $partes = [];
+            if ($vencidasAgente !== []) {
+                $partes[] = sprintf(
+                    'Hay %d padrón/es de agente sin vigencia al %s. Mientras falten, esas jurisdicciones facturan con la tasa de descarte en lugar de la alícuota del contribuyente.',
+                    count($vencidasAgente),
+                    $fecha
+                );
+            }
+            if ($vencidasConsulta !== []) {
+                $partes[] = sprintf(
+                    'Hay %d padrón/es de consulta sin vigencia al %s. No cambian la facturación: sirven para identificar percepciones en la precarga. Mientras falten, ese cruce no puede usar esa jurisdicción.',
+                    count($vencidasConsulta),
+                    $fecha
+                );
+            }
+            $mensaje = implode(' ', $partes);
+        }
 
         PadronIibbCargaNotificacionSupport::notificar(
             $vencidas === [],

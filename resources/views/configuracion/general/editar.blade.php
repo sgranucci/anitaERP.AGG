@@ -246,6 +246,7 @@ Configuración general del sistema
                 <div class="card-body">
                     <p class="text-muted mb-3">
                         Tilde en qué jurisdicciones cada empresa jurídica percibe (ventas) o retiene (compras).
+                        Consulta carga el padrón para identificar percepciones en la precarga, sin percibir ni retener.
                         Las alícuotas y mínimos se cargan en el ABM de provincia: son del fisco, no de la empresa.
                         No es el catálogo PIVA/PNC (percepción IVA nacional).
                     </p>
@@ -280,13 +281,14 @@ Configuración general del sistema
                                     <th rowspan="2" class="align-middle">Jur.</th>
                                     <th rowspan="2" class="align-middle">Provincia</th>
                                     @foreach ($empresasIibb as $empresa)
-                                        <th colspan="2" class="text-center">{{ $empresa->nombre }}</th>
+                                        <th colspan="3" class="text-center">{{ $empresa->nombre }}</th>
                                     @endforeach
                                 </tr>
                                 <tr>
                                     @foreach ($empresasIibb as $empresa)
                                         <th class="text-center">Percibe</th>
                                         <th class="text-center">Retiene</th>
+                                        <th class="text-center" title="Carga el padrón para consulta. No percibe ni retiene.">Consulta</th>
                                     @endforeach
                                 </tr>
                             </thead>
@@ -297,7 +299,7 @@ Configuración general del sistema
                                         <td>{{ $fila['nombre'] }}</td>
                                         @foreach ($empresasIibb as $empresa)
                                             @php
-                                                $celda = $fila['empresas'][(int) $empresa->id] ?? ['percepcion' => false, 'retencion' => false];
+                                                $celda = $fila['empresas'][(int) $empresa->id] ?? ['percepcion' => false, 'retencion' => false, 'consulta' => false];
                                                 $base = 'agentes['.$empresa->id.']['.$fila['provincia_id'].']';
                                             @endphp
                                             <td class="text-center">
@@ -309,6 +311,12 @@ Configuración general del sistema
                                                 <input type="hidden" name="{{ $base }}[retencion]" value="0">
                                                 <input type="checkbox" name="{{ $base }}[retencion]" value="1"
                                                     {{ ! empty($celda['retencion']) ? 'checked' : '' }}>
+                                            </td>
+                                            <td class="text-center">
+                                                <input type="hidden" name="{{ $base }}[consulta]" value="0">
+                                                <input type="checkbox" name="{{ $base }}[consulta]" value="1"
+                                                    title="Cargar el padrón sin percibir ni retener"
+                                                    {{ ! empty($celda['consulta']) ? 'checked' : '' }}>
                                             </td>
                                         @endforeach
                                     </tr>

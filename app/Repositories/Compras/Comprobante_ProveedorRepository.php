@@ -6,6 +6,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorListadoColumnas;
+use App\Support\Compras\ComprobanteProveedorPagoRelacion;
 use App\Support\Compras\ComprobanteProveedorListadoFiltros;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\ListadoAgrupacionSupport;
@@ -166,6 +167,9 @@ class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepository
             ]);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'comprobante_proveedor.empresa_id');
+        if (ComprobanteProveedorPagoRelacion::debeAplicarColumnas($filtros)) {
+            ComprobanteProveedorPagoRelacion::aplicarColumnas($query);
+        }
         ComprobanteProveedorListadoFiltros::aplicar($query, $filtros);
         ComprobanteProveedorListadoFiltros::aplicarOrden($query, $filtros);
 

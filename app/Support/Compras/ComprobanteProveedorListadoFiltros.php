@@ -7,6 +7,7 @@ use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\ListadoQbeFormulaSupport;
+use App\Support\Listado\ListadoRelacionCatalogo;
 use App\Support\Listado\ListadoQbeSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -216,6 +217,9 @@ class ComprobanteProveedorListadoFiltros
                 'type' => $meta['type'],
                 'label' => $meta['label'],
             ];
+        }
+        foreach (ListadoRelacionCatalogo::campos(ComprobanteProveedorListadoColumnas::RECURSO) as $key => $meta) {
+            $out[$key] = $meta;
         }
 
         return $out;
@@ -908,6 +912,20 @@ class ComprobanteProveedorListadoFiltros
             $query->orWhere(function (Builder $q) use ($campoKey, $operador, $valor, $valorHasta) {
                 self::aplicarEnCampoQbe($q, $campoKey, $operador, $valor, $valorHasta);
             });
+
+            return;
+        }
+
+        if (ListadoRelacionCatalogo::aplica(ComprobanteProveedorListadoColumnas::RECURSO, $campoKey)) {
+            ListadoRelacionCatalogo::aplicar(
+                $query,
+                ComprobanteProveedorListadoColumnas::RECURSO,
+                $campoKey,
+                $operador,
+                $valor,
+                $valorHasta,
+                ''
+            );
 
             return;
         }

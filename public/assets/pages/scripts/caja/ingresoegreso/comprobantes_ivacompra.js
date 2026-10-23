@@ -285,6 +285,7 @@
             $('#ie-cp-banco-cuenta').addClass('d-none').empty();
             return;
         }
+        aplicarFechaCabeceraGastoBanco();
         var elegida = 0;
         var idx = parseInt($('#ie-cp-edit-index').val(), 10);
         if (!isNaN(idx) && comprobantesIva[idx] && comprobantesIva[idx].cuentacaja_id) {
@@ -547,6 +548,83 @@
             $iva.val(comp);
         }
         acotarFechaComprobanteIe();
+    }
+
+    function fechaCabeceraMovimiento() {
+        var fecha = String($('#fecha').val() || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+            return '';
+        }
+        var hoy = hoyContabilizacionIe();
+        if (hoy && fecha > hoy) {
+            fecha = hoy;
+        }
+        return fecha;
+    }
+
+    function esAltaComprobanteIva() {
+        return String($('#ie-cp-edit-index').val() || '') === '';
+    }
+
+    function escribirFechasDesdeCabecera(fecha) {
+        if (!fecha) {
+            return;
+        }
+        $('#ie-cp-fecha-iva').data('fecha-guardada', '');
+        $('#ie-cp-fecha-iva').data('seguir-comprobante', '1');
+        aplicarTopeFechaIvaIe('');
+        var tope = String($('#ie-cp-fecha-iva').attr('max') || '').slice(0, 10);
+        if (tope && fecha > tope) {
+            fecha = tope;
+        }
+        $('#ie-cp-fecha-comprobante').val(fecha);
+        copiarFechaComprobanteAIvaSiSigue();
+    }
+
+    function fechasComprobanteSiguenHoy() {
+        var hoy = hoyContabilizacionIe();
+        if (!hoy) {
+            return false;
+        }
+        var comp = String($('#ie-cp-fecha-comprobante').val() || '').slice(0, 10);
+        var iva = String($('#ie-cp-fecha-iva').val() || '').slice(0, 10);
+        return comp === hoy && iva === hoy;
+    }
+
+    /** Gasto bancario nuevo: Fecha comprobante y Fecha IVA salen de Datos principales. */
+    function aplicarFechaCabeceraGastoBanco() {
+        if (!esGastoBanco() || !esAltaComprobanteIva() || !fechasComprobanteSiguenHoy()) {
+            return;
+        }
+        escribirFechasDesdeCabecera(fechaCabeceraMovimiento());
+    }
+
+    function copiarFechaCabeceraAGastosBancoEnGrilla(fecha) {
+        if (!fecha) {
+            return;
+        }
+        var cambio = false;
+        comprobantesIva.forEach(function (c) {
+            if (!c || c.id || String(c.tipo_tesoreria || '') !== 'GASTO_BANCO') {
+                return;
+            }
+            var comp = String(c.fechacomprobante || '').slice(0, 10);
+            var iva = String(c.fechaiva || '').slice(0, 10);
+            if (comp !== iva || comp === fecha) {
+                return;
+            }
+            c.fechacomprobante = fecha;
+            c.fechaiva = fecha;
+            cambio = true;
+        });
+        if (!cambio) {
+            return;
+        }
+        renderGrilla();
+        syncHidden();
+        if (typeof flModificaAsiento !== 'undefined') {
+            flModificaAsiento = true;
+        }
     }
 
     function mensajeFechasIe() {
@@ -2193,6 +2271,18 @@
         });
 
         $('#ie-cp-tipo-tesoreria').on('change', aplicarModoProveedor);
+        $('#fecha').on('change', function () {
+            var fecha = fechaCabeceraMovimiento();
+            copiarFechaCabeceraAGastosBancoEnGrilla(fecha);
+            if (!$('#modal-ie-comprobante-iva').hasClass('show') || !esGastoBanco() || !esAltaComprobanteIva()) {
+                return;
+            }
+            if (String($('#ie-cp-fecha-iva').data('seguir-comprobante') || '1') !== '1') {
+                return;
+            }
+            escribirFechasDesdeCabecera(fecha);
+            programarPreview();
+        });
         $('#ie-cp-banco-cuenta').on('change', function () {
             var id = parseInt($(this).val() || '0', 10) || 0;
             if (id > 0) {

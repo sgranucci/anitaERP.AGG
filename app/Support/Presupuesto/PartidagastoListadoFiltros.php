@@ -4,6 +4,7 @@ namespace App\Support\Presupuesto;
 
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\ListadoQbeSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -107,6 +108,10 @@ class PartidagastoListadoFiltros
 
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
+        if (ListadoQbeSupport::tieneCriterios(is_array($filtros['qbe'] ?? null) ? $filtros['qbe'] : [])) {
+            return true;
+        }
+
         if (($filtros['operador'] ?? '') === 'vacio') {
             return true;
         }
@@ -170,11 +175,33 @@ class PartidagastoListadoFiltros
         return $params;
     }
 
+    public static function camposOrdenables(): array
+    {
+        $out = [];
+        foreach (self::CAMPOS as $key => $meta) {
+            $out[$key] = $meta + ['attr' => $key];
+        }
+
+        return $out;
+    }
+
     /**
      * @param  Builder<\App\Models\Presupuesto\Partidagasto>  $query
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
+        if (ListadoQbeSupport::tieneCriterios(is_array($filtros['qbe'] ?? null) ? $filtros['qbe'] : [])) {
+            ListadoQbeSupport::aplicar($query, $filtros['qbe'], function ($q, array $criterio): void {
+                self::aplicarEnCampo(
+                    $q,
+                    (string) $criterio['campo'],
+                    (string) $criterio['op'],
+                    (string) $criterio['valor'],
+                    (string) ($criterio['valor_hasta'] ?? '')
+                );
+            });
+        }
+
         $valor = trim((string) ($filtros['valor'] ?? ''));
         if ($valor === '' && ($filtros['operador'] ?? '') !== 'vacio') {
             return;

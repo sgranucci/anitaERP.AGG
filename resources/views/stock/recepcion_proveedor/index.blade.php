@@ -54,8 +54,23 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                 </div>
             </div>
             <form method="get" action="{{ route('recepcion_proveedor') }}" id="form-filtros-recepcion" class="mb-0">
+                <div class="px-3 pt-2">
+                    <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico">
+                        <i class="fa fa-bar-chart"></i> Visual
+                    </button>
+                </div>
+                @php
+                    $ejesVisual = \App\Support\Stock\RecepcionProveedorListadoFiltros::camposOrdenables();
+                    $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                    $lienzoVisual = true;
+                @endphp
+                @include('includes.listado.workbench_visual')
                 @include('stock.recepcion_proveedor.partials.filtros_listado')
             </form>
+            @include('includes.listado.workbench_grafico', [
+                'recursoVisual' => 'stock.recepcion_proveedor',
+                'rutaListadoVisual' => 'recepcion_proveedor',
+            ])
             @include('stock.recepcion_proveedor.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', ['ruta' => 'lista_recepcion_proveedor', 'queryparams' => $filtrosQuery ?? []])
@@ -70,6 +85,8 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                             <th>Proveedor</th>
                             <th>Empresa</th>
                             <th>Estado</th>
+                            <th>Factura</th>
+                            <th>Orden de pago</th>
                             <th>Diferencias</th>
                             <th>Acciones</th>
                         </tr>
@@ -121,6 +138,20 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                             </td>
                             <td>
                                 @include('stock.recepcion_proveedor.partials.estado_badge', ['estado' => $row->estado ?? ''])
+                            </td>
+                            <td>
+                                @include('includes.listado.celda_enlace', [
+                                    'filaEnlace' => $row,
+                                    'metaEnlace' => ['enlace' => 'comprobante_proveedor', 'enlace_ids' => 'factura_ids'],
+                                    'textoEnlace' => $row->factura_numero ?? '',
+                                ])
+                            </td>
+                            <td>
+                                @include('includes.listado.celda_enlace', [
+                                    'filaEnlace' => $row,
+                                    'metaEnlace' => ['enlace' => 'pagoproveedor', 'enlace_ids' => 'pago_ids'],
+                                    'textoEnlace' => $row->pago_numero ?? '',
+                                ])
                             </td>
                             <td class="text-nowrap">
                                 @if($precioPendiente)<span class="badge badge-info" title="Precios de remito distintos a la OC (Compras notificado)">$ OC</span>@endif

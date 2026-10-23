@@ -180,6 +180,7 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                 @php
                     $ejesVisual = \App\Support\Stock\ArticuloListadoFiltros::camposOrdenables();
                     $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                    $lienzoVisual = true;
                 @endphp
                 @include('includes.listado.workbench_visual')
             </form>

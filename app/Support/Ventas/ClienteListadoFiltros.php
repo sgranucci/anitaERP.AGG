@@ -407,9 +407,11 @@ class ClienteListadoFiltros
 
         $modo = $filtros['modo'] ?? self::MODO_TODOS;
 
-        if ($modo === self::MODO_QBE) {
+        if (ListadoQbeSupport::tieneCriterios((array) ($filtros['qbe'] ?? []))) {
             self::aplicarQbe($query, (array) ($filtros['qbe'] ?? []));
+        }
 
+        if ($modo === self::MODO_QBE) {
             return;
         }
 

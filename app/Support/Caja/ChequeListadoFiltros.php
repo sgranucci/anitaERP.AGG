@@ -29,6 +29,7 @@ class ChequeListadoFiltros
         'origen' => ['column' => 'cheque.origen', 'type' => 'texto', 'label' => 'Origen'],
         'estado' => ['column' => 'cheque.estado', 'type' => 'texto', 'label' => 'Estado'],
         'banco' => ['column' => 'banco.nombre', 'type' => 'texto', 'label' => 'Banco'],
+        'cuentacaja' => ['column' => 'cuentacaja.nombre', 'type' => 'texto', 'label' => 'Cuenta de caja'],
         'empresa' => ['column' => 'empresa.nombre', 'type' => 'texto', 'label' => 'Empresa'],
         'cliente' => ['column' => 'cliente.nombre', 'type' => 'texto', 'label' => 'Cliente'],
         'monto' => ['column' => 'cheque.monto', 'type' => 'decimal', 'label' => 'Monto'],

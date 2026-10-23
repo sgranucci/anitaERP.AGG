@@ -28,6 +28,18 @@ final class ArticuloListadoCuentasSupport
     ];
 
     /**
+     * @return array<string, array{column: string, type: string, label: string}>
+     */
+    public static function camposRelacion(): array
+    {
+        return [
+            'cuentaventa' => ['column' => 'cta_art.cuentaventa', 'type' => 'texto', 'label' => 'Cta. contable venta'],
+            'cuentacompra' => ['column' => 'cta_art.cuentacompra', 'type' => 'texto', 'label' => 'Cta. contable compra'],
+            'cuentagasto' => ['column' => 'cta_art.cuentagasto', 'type' => 'texto', 'label' => 'Cta. contable gasto'],
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $filtros
      * @param  list<string>  $columnasVisibles
      * @return array<string, mixed>

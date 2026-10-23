@@ -87,6 +87,24 @@ final class SqlDialectSupport
     }
 
     /**
+     * Lista textos ya distintos, en el orden de $orden (no el alfabético del texto).
+     * El llamador tiene que haber deduplicado: acá no hay DISTINCT, para poder
+     * ordenar por otra columna (el id) y alinear otra lista con la misma orden.
+     */
+    public static function textosEnOrden(string $expresion, string $orden, string $separador = ' | '): string
+    {
+        $sep = str_replace("'", "''", $separador);
+        if (self::esPostgres()) {
+            return 'string_agg(('.$expresion.")::text, '".$sep."' ORDER BY ".$orden.')';
+        }
+        if (self::driver() === 'sqlite') {
+            return 'group_concat('.$expresion.", '".$sep."')";
+        }
+
+        return 'GROUP_CONCAT('.$expresion.' ORDER BY '.$orden." SEPARATOR '".$sep."')";
+    }
+
+    /**
      * Columna coincide con regex (usar con binding `?`).
      * MySQL: col REGEXP ? — PostgreSQL: col ~ ?
      * El patrón debe ser POSIX simple compatible (ej. ^[0-9]+$).
