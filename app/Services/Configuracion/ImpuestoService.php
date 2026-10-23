@@ -804,6 +804,10 @@ class ImpuestoService extends FacturacionService
 			return [];
 		}
 
+		if ($fechaFactura !== null && $fechaFactura !== '') {
+			$dataCliente['fechafactura'] = $fechaFactura;
+		}
+
 		if (NotaDebitoReversionNotaCreditoSupport::activa($dataCliente)) {
 			return NotaDebitoReversionNotaCreditoSupport::filasIibb($dataCliente);
 		}
@@ -839,7 +843,7 @@ class ImpuestoService extends FacturacionService
 			$soloDatosReceptor
 		);
 
-		// NC parcial / no anulación: sin percepción Buenos Aires; otras provincias sí.
+		// NC: sin Buenos Aires si no es anulación; sin CABA si no cumple AGIP.
 		return NotaCreditoPercepcionIibbSupport::aplicarReglaBuenosAires($filas, $dataCliente);
 	}
 

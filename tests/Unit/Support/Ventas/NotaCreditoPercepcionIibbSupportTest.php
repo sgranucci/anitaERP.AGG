@@ -31,12 +31,14 @@ class NotaCreditoPercepcionIibbSupportTest extends TestCase
         self::assertFalse(S::esFilaBuenosAires(['jurisdiccion' => 0, 'concepto' => 'Perc. Buenos Aires 2.5%']));
     }
 
-    public function test_agg_mostrador_admin_prorratea_caba_en_parcial(): void
+    public function test_nc_parcial_omite_caba_aunque_este_en_plazo(): void
     {
         $out = S::paraNotaCredito([
             S::FLAG_ES_NC => true,
             S::FLAG_VENTA_ORIGEN => 10,
             'fce_anulacion' => 'N',
+            'fecha_origen' => '2026-10-23',
+            'fechafactura' => '2026-10-23',
             'percepciones_iibb_origen' => [[
                 'concepto' => 'Perc. CABA 0.1%',
                 'tasa' => 0.1,
@@ -47,11 +49,7 @@ class NotaCreditoPercepcionIibbSupportTest extends TestCase
             ]],
         ], 2000.0);
 
-        self::assertNotNull($out);
-        self::assertCount(1, $out);
-        self::assertSame(2.0, $out[0]['importe']);
-        self::assertSame(0.1, $out[0]['tasa']);
-        self::assertSame(self::JUR_CABA, (int) $out[0]['jurisdiccion']);
+        self::assertSame([], $out);
     }
 
     public function test_nc_parcial_conserva_otras_jurisdicciones_no_902(): void
@@ -89,13 +87,9 @@ class NotaCreditoPercepcionIibbSupportTest extends TestCase
         ], 2000.0);
 
         self::assertNotNull($out);
-        self::assertCount(2, $out);
-        $jurs = array_map(static fn ($f) => (int) $f['jurisdiccion'], $out);
-        sort($jurs);
-        self::assertSame([self::JUR_CABA, 904], $jurs);
-        foreach ($out as $fila) {
-            self::assertNotSame(self::JUR_BA, (int) ($fila['jurisdiccion'] ?? 0));
-        }
+        self::assertCount(1, $out);
+        self::assertSame(904, (int) $out[0]['jurisdiccion']);
+        self::assertSame(20.0, $out[0]['importe']);
     }
 
     public function test_nc_anulacion_completa_conserva_todas_las_jurisdicciones_incl_902(): void
@@ -154,16 +148,20 @@ class NotaCreditoPercepcionIibbSupportTest extends TestCase
                     'jurisdiccion' => self::JUR_CABA,
                     'importe' => 12,
                 ],
+                [
+                    'concepto' => 'Perc. Santa Fe 1%',
+                    'tasa' => 1.0,
+                    'baseimponible' => 12000,
+                    'provincia_id' => 21,
+                    'jurisdiccion' => 904,
+                    'importe' => 120,
+                ],
             ],
         ], 2000.0);
 
-        self::assertNotNull($out);
         self::assertCount(1, $out);
-        self::assertSame(self::JUR_CABA, (int) $out[0]['jurisdiccion']);
-        self::assertSame(2.0, $out[0]['importe']);
-        foreach ($out as $fila) {
-            self::assertNotSame(self::JUR_BA, (int) ($fila['jurisdiccion'] ?? 0));
-        }
+        self::assertSame(904, (int) $out[0]['jurisdiccion']);
+        self::assertSame(20.0, $out[0]['importe']);
     }
 
     public function test_nc_anulacion_completa_conserva_buenos_aires_902(): void
@@ -247,13 +245,23 @@ class NotaCreditoPercepcionIibbSupportTest extends TestCase
                 'provincia_id' => 1,
                 'importe' => 1,
             ],
+            [
+                'concepto' => 'Perc. Santa Fe 1%',
+                'tasa' => 1.0,
+                'baseimponible' => 1000,
+                'jurisdiccion' => 904,
+                'provincia_id' => 21,
+                'importe' => 10,
+            ],
         ];
         $out = S::aplicarReglaBuenosAires($filas, [
             S::FLAG_ES_NC => true,
             'fce_anulacion' => 'N',
+            'fecha_origen' => '2026-10-23',
+            'fechafactura' => '2026-10-23',
         ]);
         self::assertCount(1, $out);
-        self::assertSame(self::JUR_CABA, (int) $out[0]['jurisdiccion']);
+        self::assertSame(904, (int) $out[0]['jurisdiccion']);
     }
 
     public function test_no_aplica_a_factura_aunque_haya_origen(): void
@@ -294,15 +302,19 @@ class NotaCreditoPercepcionIibbSupportTest extends TestCase
     public function test_nc_parcial_prorratea_aunque_quede_bajo_el_minimo(): void
     {
         $filas = [[
-            'concepto' => 'Perc. CABA 3%',
+            'concepto' => 'Perc. Santa Fe 3%',
             'tasa' => 3.0,
             'baseimponible' => 12000.0,
-            'provincia_id' => 1,
-            'jurisdiccion' => self::JUR_CABA,
+            'provincia_id' => 21,
+            'jurisdiccion' => 904,
             'importe' => 360.0,
         ]];
 
-        $out = S::prorratearFilas($filas, 2000.0, 12000.0);
+        $out = S::prorratearFilas($filas, 2000.0, 12000.0, [
+            S::FLAG_ES_NC => true,
+            'fecha_origen' => '2026-10-23',
+            'fechafactura' => '2026-10-23',
+        ]);
 
         self::assertCount(1, $out);
         self::assertSame(60.0, $out[0]['importe']);
@@ -370,6 +382,30 @@ class NotaCreditoPercepcionIibbSupportTest extends TestCase
             S::FLAG_ES_NC => true,
             S::FLAG_VENTA_ORIGEN => 10,
             'percepciones_iibb_origen' => [[
+                'concepto' => 'Perc. Santa Fe 1%',
+                'tasa' => 1,
+                'baseimponible' => 12000,
+                'provincia_id' => 21,
+                'jurisdiccion' => 904,
+                'importe' => 120,
+            ]],
+        ], 2000.0);
+
+        self::assertNotNull($out);
+        self::assertCount(1, $out);
+        self::assertSame(20.0, $out[0]['importe']);
+    }
+
+    public function test_ncp_omite_caba_aunque_cubra_el_neto(): void
+    {
+        $out = S::paraNotaCredito([
+            S::FLAG_NCP => true,
+            'nc_percepcion_iibb' => true,
+            S::FLAG_ES_NC => true,
+            S::FLAG_VENTA_ORIGEN => 10,
+            'fecha_origen' => '2026-10-23',
+            'fechafactura' => '2026-10-23',
+            'percepciones_iibb_origen' => [[
                 'concepto' => 'Perc. CABA 3%',
                 'tasa' => 3,
                 'baseimponible' => 12000,
@@ -377,11 +413,74 @@ class NotaCreditoPercepcionIibbSupportTest extends TestCase
                 'jurisdiccion' => self::JUR_CABA,
                 'importe' => 360,
             ]],
-        ], 2000.0);
+        ], 12000.0);
 
-        self::assertNotNull($out);
+        self::assertSame([], $out);
+    }
+
+    public function test_nc_total_caba_en_plazo_copia_el_importe(): void
+    {
+        $out = S::paraNotaCredito([
+            S::FLAG_ES_NC => true,
+            S::FLAG_VENTA_ORIGEN => 10,
+            'fecha_origen' => '2026-10-23',
+            'fechafactura' => '2026-12-31',
+            'percepciones_iibb_origen' => [[
+                'concepto' => 'Perc. Capital Federal 3%',
+                'tasa' => 3,
+                'baseimponible' => 289600,
+                'provincia_id' => 1,
+                'jurisdiccion' => self::JUR_CABA,
+                'importe' => 8688,
+            ]],
+        ], 289600.0);
+
         self::assertCount(1, $out);
-        self::assertSame(60.0, $out[0]['importe']);
+        self::assertSame(8688.0, $out[0]['importe']);
+        self::assertSame(self::JUR_CABA, (int) $out[0]['jurisdiccion']);
+    }
+
+    public function test_nc_total_caba_fuera_de_plazo_omite_901_y_conserva_902(): void
+    {
+        $out = S::paraNotaCredito([
+            S::FLAG_ES_NC => true,
+            S::FLAG_VENTA_ORIGEN => 10,
+            'fecha_origen' => '2026-10-23',
+            'fechafactura' => '2027-01-02',
+            'percepciones_iibb_origen' => [
+                [
+                    'concepto' => 'Perc. Capital Federal 3%',
+                    'tasa' => 3,
+                    'baseimponible' => 12000,
+                    'provincia_id' => 1,
+                    'jurisdiccion' => self::JUR_CABA,
+                    'importe' => 360,
+                ],
+                [
+                    'concepto' => 'Perc. Buenos Aires 2.5%',
+                    'tasa' => 2.5,
+                    'baseimponible' => 12000,
+                    'provincia_id' => 2,
+                    'jurisdiccion' => self::JUR_BA,
+                    'importe' => 300,
+                ],
+            ],
+        ], 12000.0);
+
+        self::assertCount(1, $out);
+        self::assertSame(self::JUR_BA, (int) $out[0]['jurisdiccion']);
+        self::assertSame(300.0, $out[0]['importe']);
+    }
+
+    public function test_caba_plazo_incluye_el_periodo_y_los_dos_siguientes(): void
+    {
+        self::assertTrue(S::cabaDentroDePlazo('2026-10-23', '2026-10-23'));
+        self::assertTrue(S::cabaDentroDePlazo('2026-10-23', '2026-12-31'));
+        self::assertFalse(S::cabaDentroDePlazo('2026-10-23', '2027-01-01'));
+        self::assertTrue(S::cabaDentroDePlazo('2026-12-15', '2027-02-28'));
+        self::assertFalse(S::cabaDentroDePlazo('2026-12-15', '2027-03-01'));
+        self::assertTrue(S::cabaDentroDePlazo(null, '2026-10-23'));
+        self::assertSame('2026-10-23', S::fechaTexto('23/10/2026'));
     }
 
     public function test_mostrador_anexa_flag_ncp(): void

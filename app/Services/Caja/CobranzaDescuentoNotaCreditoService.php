@@ -197,9 +197,9 @@ final class CobranzaDescuentoNotaCreditoService
     }
 
     /**
-     * El descuento es el total de la NCP. Si la factura origen tiene percepción IIBB,
-     * el precio con IVA que se manda al motor deja lugar a esa percepción para que
-     * neto + IVA + percepción cierren en el importe del descuento.
+     * El descuento es el total de la NCP. Si la factura origen tiene percepción IIBB
+     * de una jurisdicción que la nota prorratea, el precio con IVA deja lugar a
+     * esa percepción. Buenos Aires y CABA no se restituyen en un descuento.
      */
     private function precioConIvaParaTotalFinal(float $final, int $impuestoId, int $ventaOrigenId): float
     {
@@ -217,7 +217,8 @@ final class CobranzaDescuentoNotaCreditoService
         $filas = NotaCreditoPercepcionIibbSupport::extraerFilasIibb($venta->venta_impuestos);
         $percepcion = 0.0;
         foreach ($filas as $fila) {
-            if (NotaCreditoPercepcionIibbSupport::esFilaBuenosAires($fila)) {
+            if (NotaCreditoPercepcionIibbSupport::esFilaBuenosAires($fila)
+                || NotaCreditoPercepcionIibbSupport::esFilaCaba($fila)) {
                 continue;
             }
             $percepcion += abs((float) ($fila['importe'] ?? 0));

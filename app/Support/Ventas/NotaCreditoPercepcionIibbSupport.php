@@ -17,7 +17,12 @@ use App\Support\Configuracion\RegimenPercepcionSupport;
  * se heredan de la factura origen y se prorratean por neto gravado.
  *
  * Buenos Aires (902): solo en anulación completa (NC total del origen o
- * fce_anulacion=S). NC parcial / ajuste: sin percepción BA; otras provincias sí.
+ * fce_anulacion=S). NC parcial / ajuste: sin percepción BA.
+ *
+ * CABA (901), AGIP RG 352/2022 arts. 20 y 21: solo anulación completa, y
+ * solo si la nota cae en el período de la factura o en los dos períodos
+ * mensuales siguientes. Parcial, descuento (NCP) o fuera de plazo: sin 901.
+ * El resto de las jurisdicciones se prorratea.
  *
  * NC = tipotransaccion.operacion = C (NCG/NCE pueden tener signo S en AGG).
  * Corre en AGG (y el resto) solo en facturación mostrador admin.
@@ -33,7 +38,7 @@ final class NotaCreditoPercepcionIibbSupport
     /** Payload de NC de descuento en cobranza (NCP). */
     public const FLAG_NCP = 'origen_cobranza_ncp';
 
-    /** @var array<int, array{filas: list<array<string, mixed>>, neto: float}|null> */
+    /** @var array<int, array{filas: list<array<string, mixed>>, neto: float, fecha: ?string}|null> */
     private static array $origenCache = [];
 
     /**
@@ -99,6 +104,11 @@ final class NotaCreditoPercepcionIibbSupport
         if ($origenId > 0) {
             $datosCliente[self::FLAG_VENTA_ORIGEN] = $origenId;
         }
+
+        $fechaNota = self::fechaTexto($data['fechafactura'] ?? $data['fecha'] ?? null);
+        if ($fechaNota !== null) {
+            $datosCliente['fechafactura'] = $fechaNota;
+        }
     }
 
     /**
@@ -159,8 +169,8 @@ final class NotaCreditoPercepcionIibbSupport
     }
 
     /**
-     * Quita percepción Buenos Aires cuando la NC no es anulación completa.
-     * Otras provincias se conservan.
+     * Quita Buenos Aires si la NC no es anulación completa, y CABA si no
+     * cumple AGIP (anulación completa dentro de los dos períodos siguientes).
      *
      * @param  list<array<string, mixed>>  $filas
      * @param  array<string, mixed>  $dataCliente
@@ -171,14 +181,20 @@ final class NotaCreditoPercepcionIibbSupport
         if (! self::esNotaCreditoMostrador($dataCliente)) {
             return $filas;
         }
-        if (self::esAnulacionCompleta($dataCliente, $factor)) {
+
+        $incluirBa = self::esAnulacionCompleta($dataCliente, $factor);
+        $incluirCaba = self::incluirCaba($dataCliente, $factor);
+        if ($incluirBa && $incluirCaba) {
             return $filas;
         }
 
         $out = [];
         foreach ($filas as $fila) {
             $arr = self::filaComoArray($fila);
-            if (self::esFilaBuenosAires($arr)) {
+            if (! $incluirBa && self::esFilaBuenosAires($arr)) {
+                continue;
+            }
+            if (! $incluirCaba && self::esFilaCaba($arr)) {
                 continue;
             }
             $out[] = $arr;
@@ -200,6 +216,10 @@ final class NotaCreditoPercepcionIibbSupport
         $origen = self::cargarOrigen($ventaOrigenId);
         if ($origen === null) {
             return null;
+        }
+
+        if (self::fechaTexto($dataCliente['fecha_origen'] ?? null) === null && ($origen['fecha'] ?? null) !== null) {
+            $dataCliente['fecha_origen'] = $origen['fecha'];
         }
 
         return self::prorratearFilas($origen['filas'], $netoNc, $origen['neto'], $dataCliente);
@@ -232,9 +252,13 @@ final class NotaCreditoPercepcionIibbSupport
 
         $esTotal = $factor >= 0.999;
         $incluirBa = self::esAnulacionCompleta($dataCliente, $factor);
+        $incluirCaba = self::incluirCaba($dataCliente, $factor);
         $out = [];
         foreach ($filasOrigen as $fila) {
             if (! $incluirBa && self::esFilaBuenosAires($fila)) {
+                continue;
+            }
+            if (! $incluirCaba && self::esFilaCaba($fila)) {
                 continue;
             }
             $importeOrigen = round((float) ($fila['importe'] ?? 0), 2);
@@ -339,6 +363,41 @@ final class NotaCreditoPercepcionIibbSupport
     }
 
     /**
+     * CABA IIBB = jurisdicción AFIP 901 (inamovible).
+     *
+     * @param  array<string, mixed>  $fila
+     */
+    public static function esFilaCaba(array $fila): bool
+    {
+        return (int) ($fila['jurisdiccion'] ?? 0)
+            === PercepcionIibbJurisdiccionEntregaSupport::JURISDICCION_CABA;
+    }
+
+    /**
+     * AGIP RG 352/2022 art. 20: la nota puede devolver la percepción si se
+     * emite en el período de la factura o en los dos períodos mensuales
+     * siguientes. Sin alguna de las dos fechas no se recorta (la anulación
+     * total sigue heredando 901).
+     */
+    public static function cabaDentroDePlazo(mixed $fechaOrigen, mixed $fechaNota): bool
+    {
+        $origen = self::periodoYyyymm($fechaOrigen);
+        $nota = self::periodoYyyymm($fechaNota);
+        if ($origen === null || $nota === null) {
+            return true;
+        }
+
+        $anio = intdiv($origen, 100);
+        $mes = ($origen % 100) + 2;
+        while ($mes > 12) {
+            $mes -= 12;
+            $anio++;
+        }
+
+        return $nota <= ($anio * 100 + $mes);
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $filas
      */
     public static function netoOrigen(array $filas): float
@@ -352,6 +411,37 @@ final class NotaCreditoPercepcionIibbSupport
         }
 
         return $max;
+    }
+
+    /**
+     * Percepciones IIBB de la factura origen, para el pie inmediato de la NC
+     * en pantalla. Al grabar manda paraNotaCredito().
+     *
+     * @return array{filas: list<array<string, mixed>>, neto: float, jurisdiccion_buenos_aires: int, jurisdiccion_caba: int, fecha_origen: ?string}
+     */
+    public static function payloadPreview(int $ventaOrigenId): array
+    {
+        $origen = $ventaOrigenId > 0 ? self::cargarOrigen($ventaOrigenId) : null;
+        $filasOrigen = is_array($origen) ? ($origen['filas'] ?? []) : [];
+        $filas = [];
+        foreach ($filasOrigen as $fila) {
+            $filas[] = [
+                'concepto' => (string) ($fila['concepto'] ?? ''),
+                'tasa' => (float) ($fila['tasa'] ?? 0),
+                'baseimponible' => (float) ($fila['baseimponible'] ?? 0),
+                'importe' => (float) ($fila['importe'] ?? 0),
+                'provincia_id' => $fila['provincia_id'] ?? null,
+                'jurisdiccion' => isset($fila['jurisdiccion']) ? (int) $fila['jurisdiccion'] : null,
+            ];
+        }
+
+        return [
+            'filas' => $filas,
+            'neto' => (float) (is_array($origen) ? ($origen['neto'] ?? 0) : 0),
+            'jurisdiccion_buenos_aires' => PercepcionIibbJurisdiccionEntregaSupport::JURISDICCION_BUENOS_AIRES,
+            'jurisdiccion_caba' => PercepcionIibbJurisdiccionEntregaSupport::JURISDICCION_CABA,
+            'fecha_origen' => is_array($origen) ? ($origen['fecha'] ?? null) : null,
+        ];
     }
 
     public static function olvidarCache(): void
@@ -385,7 +475,7 @@ final class NotaCreditoPercepcionIibbSupport
     }
 
     /**
-     * @return array{filas: list<array<string, mixed>>, neto: float}|null
+     * @return array{filas: list<array<string, mixed>>, neto: float, fecha: ?string}|null
      */
     private static function cargarOrigen(int $ventaOrigenId): ?array
     {
@@ -407,6 +497,7 @@ final class NotaCreditoPercepcionIibbSupport
         self::$origenCache[$ventaOrigenId] = [
             'filas' => $filas,
             'neto' => self::netoOrigen($filas),
+            'fecha' => self::fechaTexto($venta->fecha),
         ];
 
         return self::$origenCache[$ventaOrigenId];
@@ -441,6 +532,60 @@ final class NotaCreditoPercepcionIibbSupport
         }
 
         return $filas;
+    }
+
+    /**
+     * CABA solo vuelve en anulación completa, dentro del plazo AGIP.
+     * La NCP es un descuento: el art. 21 no restituye la percepción.
+     *
+     * @param  array<string, mixed>  $dataCliente
+     */
+    private static function incluirCaba(array $dataCliente, float $factor): bool
+    {
+        if (! empty($dataCliente[self::FLAG_NCP])) {
+            return false;
+        }
+        if (! self::esAnulacionCompleta($dataCliente, $factor)) {
+            return false;
+        }
+
+        return self::cabaDentroDePlazo(
+            $dataCliente['fecha_origen'] ?? null,
+            $dataCliente['fechafactura'] ?? null
+        );
+    }
+
+    public static function fechaTexto(mixed $fecha): ?string
+    {
+        if ($fecha instanceof \DateTimeInterface) {
+            return $fecha->format('Y-m-d');
+        }
+
+        $s = trim((string) $fecha);
+        if ($s === '') {
+            return null;
+        }
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $s, $m)) {
+            return $m[1].'-'.$m[2].'-'.$m[3];
+        }
+        if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $s, $m)) {
+            return $m[3].'-'.$m[2].'-'.$m[1];
+        }
+        if (preg_match('/^(\d{4})(\d{2})(\d{2})$/', $s, $m)) {
+            return $m[1].'-'.$m[2].'-'.$m[3];
+        }
+
+        return null;
+    }
+
+    public static function periodoYyyymm(mixed $fecha): ?int
+    {
+        $iso = self::fechaTexto($fecha);
+        if ($iso === null) {
+            return null;
+        }
+
+        return ((int) substr($iso, 0, 4)) * 100 + (int) substr($iso, 5, 2);
     }
 
     /**

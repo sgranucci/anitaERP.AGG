@@ -26,11 +26,16 @@ NC se detecta por `tipotransaccion.operacion = C` (NCG/NCE en AGG pueden tener `
 
 | NC | Percepción |
 |---|---|
-| Total / anulación completa (`fce_anulacion=S` o factor ≥ 99,9 %) | Hereda IIBB del origen (todas las jur., incl. Buenos Aires 902) |
-| Parcial / ajuste (no anulación completa) | **Sin Buenos Aires (902)**; **el resto de jurisdicciones sí** (CABA 901, Santa Fe, etc.) si correspondían en el origen |
+| Total / anulación completa (`fce_anulacion=S` o factor ≥ 99,9 %) | Hereda IIBB del origen, incluida Buenos Aires 902. **CABA 901 solo si la nota cae en el período de la factura o en los dos períodos mensuales siguientes** (AGIP RG 352/2022 art. 20) |
+| Parcial / ajuste | **Sin Buenos Aires (902) y sin CABA (901)**. El resto (Santa Fe, Corrientes, etc.) se prorratea |
+| NCP (descuento de cobranza) | **Sin CABA**, aunque cubra el neto. El art. 21 no restituye percepción en descuentos |
+| Fuera de plazo | Anulación total: sin CABA; Buenos Aires sigue si es anulación completa (ARBA no tiene ese corte) |
 | Factura sin perc. | La NC no inventa percepción |
+| Sin fecha de origen o de la nota | No se recorta CABA por plazo: la anulación total la hereda |
 
-**Buenos Aires = jurisdicción AFIP `902` (inamovible).** No se identifica por nombre de concepto ni `provincia_id`.
+**Buenos Aires = jurisdicción AFIP `902` (inamovible). CABA = `901`.** No se identifican por nombre de concepto ni `provincia_id`.
+
+Plazo CABA: período `YYYYMM` de la nota ≤ período de la factura + 2 meses. Factura de octubre: la nota de octubre, noviembre o diciembre lleva 901; la de enero no. El pie de pantalla (`nc_devolucion.js`) usa la misma cuenta con `fecha_origen` y `#fechafactura`. Al grabar manda `paraNotaCredito()`.
 
 NCE vs NC 003: solo NCE si el total ≥ tope MiPyME (`limite_fce`); debajo → NC ARCA 003 (`ArcaFceNcMostradorSupport::correspondeEmitirNcNdFce`).
 
@@ -55,6 +60,8 @@ $this->IIBBService->calculaPercepcionIIBB($netoNc, ...);
 // ❌ Enganchar el prorrateo en gastronomía / estacionamiento
 
 // ❌ Percibir Buenos Aires en NC parcial / fce_anulacion=N
+
+// ❌ Prorratear CABA 901 en NC parcial, en NCP o pasados los dos períodos
 ```
 
 ## Comprobación rápida

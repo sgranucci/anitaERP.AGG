@@ -193,6 +193,91 @@ function ncDevolucionPintarConceptos(filas) {
     });
 }
 
+function ncDevolucionFactorPercepcion(netoNc, netoOrigen) {
+    if (netoOrigen <= 0.00001) {
+        return netoNc > 0.00001 ? 1 : 0;
+    }
+    var factor = netoNc / netoOrigen;
+    if (factor < 0) {
+        return 0;
+    }
+    if (factor > 1) {
+        return 1;
+    }
+    return factor;
+}
+
+function ncDevolucionPeriodo(fecha) {
+    if (!fecha) {
+        return null;
+    }
+    var s = String(fecha).trim();
+    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) {
+        return Number(iso[1]) * 100 + Number(iso[2]);
+    }
+    var dmy = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (dmy) {
+        return Number(dmy[3]) * 100 + Number(dmy[2]);
+    }
+    return null;
+}
+
+function ncDevolucionCabaDentroDePlazo(fechaOrigen, fechaNota) {
+    var origen = ncDevolucionPeriodo(fechaOrigen);
+    var nota = ncDevolucionPeriodo(fechaNota);
+    if (origen === null || nota === null) {
+        return true;
+    }
+    var anio = Math.floor(origen / 100);
+    var mes = (origen % 100) + 2;
+    while (mes > 12) {
+        mes -= 12;
+        anio += 1;
+    }
+    return nota <= (anio * 100 + mes);
+}
+
+function ncDevolucionPercepcionesProrrateadas(netoNc) {
+    var origen = window.ncPercepcionesOrigen || {};
+    var filasOrigen = origen.filas || [];
+    if (!filasOrigen.length || netoNc < 0.00001) {
+        return [];
+    }
+    var factor = ncDevolucionFactorPercepcion(netoNc, Number(origen.neto) || 0);
+    if (factor < 0.00001) {
+        return [];
+    }
+    var anul = $.trim($('#fce_anulacion').val() || '').toUpperCase();
+    var completa = anul === 'S' || factor >= 0.999;
+    var jurBa = Number(origen.jurisdiccion_buenos_aires) || 902;
+    var jurCaba = Number(origen.jurisdiccion_caba) || 901;
+    var fechaNota = $.trim($('#fechafactura').val() || '');
+    var cabaOk = completa && ncDevolucionCabaDentroDePlazo(origen.fecha_origen, fechaNota);
+    var esTotal = factor >= 0.999;
+    var out = [];
+    filasOrigen.forEach(function (fila) {
+        var jur = Number(fila.jurisdiccion) || 0;
+        if (!completa && jur === jurBa) {
+            return;
+        }
+        if (!cabaOk && jur === jurCaba) {
+            return;
+        }
+        var importeOrigen = ncDevolucionRedondear(fila.importe);
+        var importe = esTotal ? importeOrigen : ncDevolucionRedondear(importeOrigen * factor);
+        if (Math.abs(importe) < 0.01) {
+            return;
+        }
+        out.push({
+            concepto: fila.concepto || 'Perc. IIBB',
+            tasa: Number(fila.tasa) || 0,
+            importe: importe
+        });
+    });
+    return out;
+}
+
 function ncDevolucionPreviewTotales() {
     if ($('#formgeneral').attr('data-factura-proceso') !== 'nc') {
         return;
@@ -235,7 +320,8 @@ function ncDevolucionPreviewTotales() {
         ]);
         return;
     }
-    var filas = [{ concepto: 'Subtotal', tasa: 0, importe: ncDevolucionRedondear(neto) }];
+    var netoRed = ncDevolucionRedondear(neto);
+    var filas = [{ concepto: 'Subtotal', tasa: 0, importe: netoRed }];
     var totalIva = 0;
     Object.keys(ivas).sort(function (a, b) { return Number(a) - Number(b); }).forEach(function (key) {
         var tasa = Number(key);
@@ -246,7 +332,16 @@ function ncDevolucionPreviewTotales() {
         filas.push({ concepto: 'Iva ' + tasa + '%', tasa: tasa, importe: importe });
         totalIva += importe;
     });
-    filas.push({ concepto: 'Total', tasa: 0, importe: ncDevolucionRedondear(neto + totalIva) });
+    var totalPerc = 0;
+    ncDevolucionPercepcionesProrrateadas(netoRed).forEach(function (fila) {
+        filas.push(fila);
+        totalPerc += fila.importe;
+    });
+    filas.push({
+        concepto: 'Total',
+        tasa: 0,
+        importe: ncDevolucionRedondear(netoRed + totalIva + totalPerc)
+    });
     ncDevolucionPintarConceptos(filas);
 }
 
@@ -457,6 +552,13 @@ function activa_eventos_nc_devolucion() {
     $(document).off('change.ncDevTot', '#tbody-tabla .nc-linea-origen .cantidad, #tbody-tabla .nc-linea-origen .kilo, #tbody-tabla .nc-linea-origen .precio, #tbody-tabla .nc-linea-origen .descuento')
         .on('change.ncDevTot', '#tbody-tabla .nc-linea-origen .cantidad, #tbody-tabla .nc-linea-origen .kilo, #tbody-tabla .nc-linea-origen .precio, #tbody-tabla .nc-linea-origen .descuento', function () {
             ncDevolucionRecalcular();
+        });
+
+    $(document).off('change.ncDevFecha', '#fechafactura, #fce_anulacion')
+        .on('change.ncDevFecha', '#fechafactura, #fce_anulacion', function () {
+            if ($('#formgeneral').attr('data-factura-proceso') === 'nc') {
+                ncDevolucionRecalcular();
+            }
         });
 }
 

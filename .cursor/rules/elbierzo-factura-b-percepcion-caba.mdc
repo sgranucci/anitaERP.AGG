@@ -6,7 +6,9 @@ alwaysApply: false
 
 # El Bierzo: Factura B cobra percepción CABA 901
 
-En **El Bierzo**, todo comprobante **letra B** (FAC / ND / NC) **cobra percepción IIBB CABA, jurisdicción 901**. No omitirla porque la letra B apague el resto de percepciones.
+En **El Bierzo**, la **factura y la nota de débito letra B** cobran percepción IIBB CABA, jurisdicción 901. No omitirla porque la letra B apague el resto de percepciones.
+
+La **nota de crédito** de mostrador no recalcula 901: la hereda de la factura con la regla AGIP (`NotaCreditoPercepcionIibbSupport`). Solo vuelve en anulación total y dentro de los dos períodos mensuales siguientes. Una NC parcial o vencida sale sin esa percepción aunque la letra sea B.
 
 Punto único: `App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport`.
 

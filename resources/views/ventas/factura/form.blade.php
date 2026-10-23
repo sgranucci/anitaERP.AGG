@@ -1043,6 +1043,15 @@
 <input type="hidden" id="modofacturacion" name="modofacturacion" class="form-control" value="{{$data->puntoventas->modofacturacion ?? ''}}" />
 <input type="hidden" id="ordenventa_id" name="ordenventa_id" class="form-control" value="{{$data->ordenventa_id ?? ''}}" />
 <input type="hidden" id="estadocliente" value="{{ $data->clientes->estado ?? '' }}">
+@php
+	$ncPercepcionesOrigen = ['filas' => [], 'neto' => 0, 'jurisdiccion_buenos_aires' => 902, 'jurisdiccion_caba' => 901, 'fecha_origen' => null];
+	if (! empty($flGeneraNotaDeCredito) && (int) ($data->id ?? 0) > 0) {
+		$ncPercepcionesOrigen = \App\Support\Ventas\NotaCreditoPercepcionIibbSupport::payloadPreview((int) $data->id);
+	}
+@endphp
+<script>
+window.ncPercepcionesOrigen = @json($ncPercepcionesOrigen);
+</script>
 
 <div class="modal fade" id="modalFacturaLeyendaLinea" tabindex="-1" role="dialog" aria-labelledby="modalFacturaLeyendaLineaLabel" aria-hidden="true">
 	<div class="modal-dialog modal-lg" role="document">
