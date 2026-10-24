@@ -82,6 +82,7 @@ class ValidacionArticulo extends FormRequest
             'clasematerial' => 'nullable|max:20',
             'gestioncompra' => 'nullable|max:20',
             'maneja_stock_color_talle' => 'nullable|boolean',
+            'impuesto_id' => ['required', 'integer', 'min:1', 'exists:impuesto,id'],
         ];
 
         if (config('articulo.filtro_empresa')) {
@@ -108,6 +109,9 @@ class ValidacionArticulo extends FormRequest
     {
         return [
             'codigobarra.required' => 'En El Bierzo el código de barra es obligatorio: ARCA (WSMTXCA) lo usa como codigoMtx del ítem.',
+            'impuesto_id.required' => 'Indicá el impuesto del artículo (IVA).',
+            'impuesto_id.min' => 'Indicá el impuesto del artículo (IVA).',
+            'impuesto_id.exists' => 'El impuesto indicado no existe en el maestro.',
         ];
     }
 }

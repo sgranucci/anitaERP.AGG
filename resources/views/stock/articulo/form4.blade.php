@@ -53,7 +53,7 @@
 				<div class="form-group row">
     				<label for="impuesto_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Impuesto aplicado</label>
 					<div class="col-lg-8">
-					<select id="impuesto_id" name="impuesto_id" class="form-control">
+					<select id="impuesto_id" name="impuesto_id" class="form-control" required>
                         <option value="">-- Seleccionar --</option>
                         @foreach($codimp as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) old('impuesto_id', $producto->impuesto_id ?? ''))

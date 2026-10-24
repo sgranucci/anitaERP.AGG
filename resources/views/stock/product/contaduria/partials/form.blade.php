@@ -42,7 +42,7 @@
 							$nomencladorActual = '';
 						}
 					@endphp
-					<select id="impuesto_id" name="impuesto_id" class="col-lg-8 form-control">
+					<select id="impuesto_id" name="impuesto_id" class="col-lg-8 form-control" required>
                         <option value="">-- Seleccionar --</option>
                         @foreach($codimp as $key => $value)
                             @if ($impuestoIdActual > 0 && (int) $value->id === $impuestoIdActual)

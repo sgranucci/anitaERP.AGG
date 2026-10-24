@@ -50,6 +50,11 @@ class ImpuestoService extends FacturacionService
 	/** Cache local de coeficientes por (articulo_id, listaprecio_id, fecha). */
 	private array $coeficienteImpuestoInternoCache = [];
 
+	/** IVA 21 % del maestro, para renglones sin impuesto cargado. */
+	private ?Impuesto $impuestoIva21PorDefecto = null;
+
+	private bool $impuestoIva21PorDefectoResuelto = false;
+
 	/** Cache local de fórmulas resueltas (id => Formula_Articulo con hijos). */
 	private array $formulaImpuestoInternoCache = [];
 
@@ -237,7 +242,7 @@ class ImpuestoService extends FacturacionService
 					$valorTasaImpuesto = $this->tasaImpuesto;
 				else
 				{
-					$impuesto = Impuesto::findOrFail($item['impuesto_id']);
+					$impuesto = $this->impuestoDeItem($item);
 
 					$valorTasaImpuesto = $impuesto->valor;
 				}
@@ -290,7 +295,7 @@ class ImpuestoService extends FacturacionService
 						// Anita procesa_division: tasa_inscripto = coef_tasa (IVA), pero
 						// Gravado/Exento sigue el tipo_iva del artículo. Si el artículo es
 						// gravado y coef_tasa=0 → "Gravado al 0%" (base de logística).
-						$impuestoArticulo = Impuesto::findOrFail($item['impuesto_id']);
+						$impuestoArticulo = $this->impuestoDeItem($item);
 						$tasaDivision = (float) ($this->tasaImpuesto ?? 0);
 						$impuesto_id = $impuestoArticulo->id;
 						$impuesto_codigoarca = $impuestoArticulo->codigoarca;
@@ -311,7 +316,7 @@ class ImpuestoService extends FacturacionService
 					}
 					else
 					{
-						$impuesto = Impuesto::findOrFail($item['impuesto_id']);
+						$impuesto = $this->impuestoDeItem($item);
 
 						$valorTasaImpuesto = $impuesto->valor;
 
@@ -676,7 +681,7 @@ class ImpuestoService extends FacturacionService
 			self::agregaItemTotales('Subtotal', 0, $totalItem, 0, 0, 0, $subtotales);
 			$descuentoFinal += $neto['totalDescuento'];
 			$porcDescuento = $neto['porcentajeDescuento'];
-			$impuesto = Impuesto::findOrFail($item['impuesto_id']);
+			$impuesto = $this->impuestoDeItem($item);
 			$valorTasaImpuesto = $impuesto->valor;
 			$totalNetoLinea = round((float) $neto['totalConDescuento'], 2);
 			$dataItem[$idx]['totalcondescuento'] = $totalNetoLinea;
@@ -901,6 +906,47 @@ class ImpuestoService extends FacturacionService
 	}
 
 	/**
+	 * Impuesto del renglón. Si el maestro no tiene uno (o el id no existe), IVA 21 %.
+	 *
+	 * @param  array<string, mixed>  $item
+	 */
+	private function impuestoDeItem(array $item): Impuesto
+	{
+		$id = (int) ($item['impuesto_id'] ?? 0);
+		if ($id > 0) {
+			$impuesto = Impuesto::query()->find($id);
+			if ($impuesto instanceof Impuesto) {
+				return $impuesto;
+			}
+		}
+
+		return $this->impuestoIva21();
+	}
+
+	public function idIva21PorDefecto(): int
+	{
+		return (int) $this->impuestoIva21()->id;
+	}
+
+	private function impuestoIva21(): Impuesto
+	{
+		if (! $this->impuestoIva21PorDefectoResuelto) {
+			$this->impuestoIva21PorDefectoResuelto = true;
+			$this->impuestoIva21PorDefecto = Impuesto::query()
+				->soloNacionales()
+				->where('valor', 21)
+				->orderBy('id')
+				->first();
+		}
+
+		if (! $this->impuestoIva21PorDefecto instanceof Impuesto) {
+			throw new \InvalidArgumentException('No hay un impuesto IVA 21 % cargado en el maestro de impuestos.');
+		}
+
+		return $this->impuestoIva21PorDefecto;
+	}
+
+	/**
 	 * Completa claves de ítem de facturación que pueden omitirse en el payload (API, OC, etc.).
 	 *
 	 * @param  array<int, array<string, mixed>>  $dataItem
@@ -967,7 +1013,7 @@ class ImpuestoService extends FacturacionService
 			}
 			else
 			{
-				$impuesto = Impuesto::findOrFail($item['impuesto_id']);
+				$impuesto = $this->impuestoDeItem($item);
 
 				$valorTasaImpuesto = $impuesto->valor;
 

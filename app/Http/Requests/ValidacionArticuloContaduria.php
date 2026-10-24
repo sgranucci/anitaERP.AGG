@@ -41,7 +41,7 @@ class ValidacionArticuloContaduria extends FormRequest
         return [
             'sku' => 'required|max:20|unique:articulo,sku,'.$this->route('id'),
             'cuentacontableventa_id' => ['required', 'integer', 'min:1'],
-            'impuesto_id' => ['required', 'integer', 'min:1'],
+            'impuesto_id' => ['required', 'integer', 'min:1', 'exists:impuesto,id'],
             'nomenclador' => ['required', 'string', 'max:6', 'not_in:NULL,null,Null'],
             'nofactura' => ['required', 'in:0,1'],
         ];
@@ -51,7 +51,9 @@ class ValidacionArticuloContaduria extends FormRequest
     {
         return [
             'cuentacontableventa_id.min' => 'Seleccione una cuenta contable de venta válida.',
-            'impuesto_id.min' => 'Seleccione un impuesto aplicado.',
+            'impuesto_id.required' => 'Indicá el impuesto del artículo (IVA).',
+            'impuesto_id.min' => 'Indicá el impuesto del artículo (IVA).',
+            'impuesto_id.exists' => 'El impuesto indicado no existe en el maestro.',
             'nomenclador.not_in' => 'Indique un nomenclador válido.',
             'nofactura.required' => 'Indique si el artículo es facturable.',
             'nofactura.in' => 'El valor de facturable no es válido.',

@@ -3054,6 +3054,12 @@ class FacturacionService
 				$impuesto_id = (int) $impuestosIdsInput[$offItem];
 			}
 
+			// Sin impuesto en el maestro (típico insumo opcional de fórmula): IVA 21 %.
+			// findOrFail(null) cortaba el POS con "No query results for model [Impuesto]".
+			if ((int) $impuesto_id <= 0) {
+				$impuesto_id = $this->impuestoService->idIva21PorDefecto();
+			}
+
 			if (is_array($incluyeimpuestosInput) && isset($incluyeimpuestosInput[$offItem]) && (string) $incluyeimpuestosInput[$offItem] !== '') {
 				$incluyeImpuesto = $incluyeimpuestosInput[$offItem];
 			} else {

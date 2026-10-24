@@ -934,7 +934,7 @@ class ArticuloFerliController extends Controller
         $datosContaduria = [
             'nofactura' => ArticuloNofacturaSupport::normalizar($request->input('nofactura')),
             'cuentacontableventa_id' => $cuentaVentaId > 0 ? $cuentaVentaId : null,
-            'impuesto_id' => $impuestoId > 0 ? $impuestoId : null,
+            'impuesto_id' => $impuestoId,
             'nomenclador' => $nomenclador !== '' ? $nomenclador : null,
         ];
 
