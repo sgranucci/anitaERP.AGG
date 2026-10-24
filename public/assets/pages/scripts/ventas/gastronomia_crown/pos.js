@@ -729,7 +729,7 @@
         $.getJSON(cfg.urls.articulo, { sku: sku })
             .done(function (resp) {
                 if (!resp.ok || !resp.articulo) {
-                    toast('Artículo no encontrado', 'warning');
+                    toast((resp && resp.mensaje) || 'Artículo no encontrado', 'warning');
                     return;
                 }
                 if (resp.articulo.url_formula) {
@@ -738,7 +738,10 @@
                 }
                 abrirRecetaPorArticulo(resp.articulo.id);
             })
-            .fail(function () { toast('Artículo no encontrado', 'error'); });
+            .fail(function (xhr) {
+                var r = xhr.responseJSON || {};
+                toast(r.mensaje || r.error || 'Artículo no encontrado', 'error');
+            });
     }
 
     function abrirRecetaPorArticulo(articuloId) {
@@ -957,8 +960,9 @@
                 $('#gc-desc-articulo').val(a.descripcion + ' · ' + money(a.precio));
                 toast(a.sku + ' — ' + a.descripcion + ' · ' + money(a.precio), 'info');
             })
-            .fail(function () {
-                toast('Artículo no encontrado', 'error');
+            .fail(function (xhr) {
+                var r = xhr.responseJSON || {};
+                toast(r.mensaje || r.error || 'Artículo no encontrado', 'error');
             });
     }
 
@@ -1313,6 +1317,10 @@
             $.getJSON(cfg.urls.articulo, { sku: sku })
                 .done(function (resp) {
                     if (!resp.ok || !resp.articulo) {
+                        $('#gc-desc-articulo').val('');
+                        if (resp && resp.mensaje) {
+                            toast(resp.mensaje, 'warning');
+                        }
                         return;
                     }
                     var a = resp.articulo;
@@ -1323,6 +1331,11 @@
                     if (a.area_comanda_gastronomia_id) {
                         $('#gc-area-kds').val(String(a.area_comanda_gastronomia_id));
                     }
+                })
+                .fail(function (xhr) {
+                    var r = xhr.responseJSON || {};
+                    $('#gc-desc-articulo').val('');
+                    toast(r.mensaje || r.error || 'Artículo no encontrado', 'error');
                 });
         });
 

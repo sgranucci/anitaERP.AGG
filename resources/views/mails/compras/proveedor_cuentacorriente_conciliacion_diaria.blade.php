@@ -12,8 +12,8 @@
     · Ficha vs deuda vs mayor es a hoy.
 </p>
 <p style="margin:0 0 16px 0; color:#555; font-size:13px;">
-    Controla el descalce histórico de Anita: aplicaciones multi-moneda, ítems de DC abiertos en la ficha
-    y diferencias entre el subledger y las cuentas de proveedores MN/ME.
+    Controla aplicaciones de la ventana, el saldo neto de la ficha contra la deuda
+    y la cuenta corriente journalizada contra las cuentas de proveedores MN/ME.
 </p>
 
 <h3 style="margin:18px 0 6px 0;">Resumen</h3>

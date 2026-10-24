@@ -29,6 +29,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaFormulaOpcionalesService;
 use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use App\Services\Stock\PrecioService;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Support\Ventas\GastronomiaCuentacajaCanjeTarjeta;
@@ -835,6 +836,11 @@ class GastronomiaProcesoFacturacionController extends Controller
 
         if (! $a) {
             return response()->json(['error' => 'Artículo no encontrado en catálogo gastronomía'], 404);
+        }
+
+        $noFacturable = ArticuloSeleccionOperativaSupport::mensajeNoFacturable($a);
+        if ($noFacturable !== null) {
+            return response()->json(['error' => $noFacturable], 422);
         }
 
         $listaId = $this->listaPrecioIdDesdeCfg($cfg);

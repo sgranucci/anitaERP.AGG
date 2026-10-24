@@ -14,6 +14,7 @@ use App\Services\Stock\FormulaArticuloService;
 use App\Services\Ventas\Gastronomia\GastronomiaFormulaOpcionalesService;
 use App\Services\Ventas\GastronomiaCrown\GastronomiaCrownPosService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPosModos;
 use App\Support\Ventas\GastronomiaCrown\GastroPlanoMesaLayoutSupport;
@@ -338,6 +339,11 @@ class GastronomiaCrownPosController extends Controller
             $articulo = $this->posService->resolverArticuloPorSku($config, (string) $request->input('sku'));
             if (! $articulo) {
                 throw new \InvalidArgumentException('Artículo no encontrado: '.$request->input('sku'));
+            }
+
+            $noFacturable = ArticuloSeleccionOperativaSupport::mensajeNoFacturable($articulo);
+            if ($noFacturable !== null) {
+                throw new \InvalidArgumentException($noFacturable);
             }
 
             // Paridad AGG: el ítem no se carga hasta tener los opcionales elegidos.
@@ -734,6 +740,10 @@ class GastronomiaCrownPosController extends Controller
         }
 
         $articulo = Articulo::query()->find((int) $art['id']);
+        $noFacturable = ArticuloSeleccionOperativaSupport::mensajeNoFacturable($articulo);
+        if ($noFacturable !== null) {
+            return response()->json(['ok' => false, 'mensaje' => $noFacturable], 422);
+        }
         $grupos = $articulo ? $this->gruposOpcionales($articulo) : [];
         $receta = $this->formulaArticuloService->resolverIdParaArticulo((int) $art['id']);
         $formulaId = (int) ($receta['formula_id'] ?? 0);

@@ -8,6 +8,7 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\CuentaGastronomiaLinea;
 use App\Models\Ventas\MesaGastronomia;
 use App\Models\Ventas\MozoGastronomia;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Ventas\GastronomiaArticuloImpuestoValidacion;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
@@ -580,6 +581,11 @@ class GastronomiaCuentaService
         $articulo = Articulo::query()->find($articuloId);
         if (! $articulo) {
             throw new InvalidArgumentException('Artículo inexistente.');
+        }
+
+        $noFacturable = ArticuloSeleccionOperativaSupport::mensajeNoFacturable($articulo);
+        if ($noFacturable !== null) {
+            throw new InvalidArgumentException($noFacturable);
         }
 
         GastronomiaArticuloImpuestoValidacion::validarCuentaConLineas($cuenta, $articulo);

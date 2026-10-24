@@ -15,6 +15,7 @@ use App\Models\Ventas\GastronomiaCrown\GastroCrownCuentaEvento;
 use App\Models\Ventas\GastronomiaCrown\GastroCrownCuentaLinea;
 use App\Models\Ventas\MesaGastronomia;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownKdsPreparaSupport;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPosModos;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPrintSupport;
@@ -161,6 +162,11 @@ final class GastronomiaCrownPosService
         $articulo = $this->resolverArticuloPorSku($cfg, $sku);
         if (! $articulo) {
             throw new InvalidArgumentException('Artículo no encontrado: '.$sku);
+        }
+
+        $noFacturable = ArticuloSeleccionOperativaSupport::mensajeNoFacturable($articulo);
+        if ($noFacturable !== null) {
+            throw new InvalidArgumentException($noFacturable);
         }
 
         $listaId = (int) ($cuenta->listaprecio_id ?: $cfg->listaprecio_id);

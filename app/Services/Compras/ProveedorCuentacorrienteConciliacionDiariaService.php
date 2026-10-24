@@ -12,6 +12,7 @@ use App\Models\Contable\Asiento;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionLiquidacionSupport;
 use App\Support\Compras\ProveedorCuentacorrienteConciliacionSupport;
+use App\Support\Compras\ProveedorCuentacorrienteDeudaFichaCuadreSupport;
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +20,13 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Robot diario: ficha CC ↔ deuda abierta ↔ integridad de pares/DC ↔ mayor AP.
+ * Robot diario: integridad de aplicaciones, ficha neta contra la deuda y mayor AP.
+ *
+ * La ficha contra la deuda usa el mismo cuadre que el ajuste de saldo: el renglón
+ * «Ajuste saldo CC» entra en la ficha y no en la deuda, y el saldo cierra cuando
+ * deuda y ficha neta coinciden. Un pago en pesos sin aplicar no es una diferencia
+ * de cambio: el descalce de Anita es una línea en pesos colgada de un pago en moneda extranjera.
+ * El ajuste no tiene asiento, así que no entra en la comparación contra el mayor.
  */
 class ProveedorCuentacorrienteConciliacionDiariaService
 {
@@ -208,10 +215,21 @@ class ProveedorCuentacorrienteConciliacionDiariaService
             ->groupBy('proveedor_cuentacorriente_id')
             ->pluck('aplicado', 'proveedor_cuentacorriente_id');
 
+        $monedaLocalId = ProveedorCuentacorrienteAplicacionLiquidacionSupport::monedaLocalId();
+
         Proveedor_Cuentacorriente::query()
             ->select(['id', 'total', 'proveedor_id', 'empresa_id', 'comprobante_proveedor_id', 'pagoproveedor_id', 'moneda_id'])
             ->orderBy('id')
-            ->chunkById(500, function ($filas) use (&$informe, $aplicados, $tolerancia) {
+            ->chunkById(500, function ($filas) use (&$informe, $aplicados, $tolerancia, $monedaLocalId) {
+                $pagoIds = $filas->pluck('pagoproveedor_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->filter(fn ($id) => $id > 0)
+                    ->unique()
+                    ->values();
+                $monedaPago = $pagoIds->isEmpty()
+                    ? collect()
+                    : Pagoproveedor::query()->whereIn('id', $pagoIds)->pluck('moneda_id', 'id');
+
                 foreach ($filas as $cc) {
                     $aplicado = (float) ($aplicados[$cc->id] ?? 0);
                     $saldo = ProveedorCuentacorrienteGrillaSupport::saldoPendiente((float) $cc->total, $aplicado);
@@ -229,9 +247,11 @@ class ProveedorCuentacorrienteConciliacionDiariaService
                         ];
                     }
 
+                    $monedaOp = (int) ($monedaPago[(int) ($cc->pagoproveedor_id ?? 0)] ?? 0);
                     $huerfanaDc = (int) ($cc->pagoproveedor_id ?? 0) > 0
                         && (int) ($cc->comprobante_proveedor_id ?? 0) === 0
-                        && (int) $cc->moneda_id === ProveedorCuentacorrienteAplicacionLiquidacionSupport::monedaLocalId()
+                        && (int) $cc->moneda_id === $monedaLocalId
+                        && $monedaOp > $monedaLocalId
                         && abs((float) $cc->total) >= 0.01
                         && abs($saldo) >= $tolerancia
                         && abs($aplicado) < $tolerancia;
@@ -240,7 +260,7 @@ class ProveedorCuentacorrienteConciliacionDiariaService
                         $informe['alertas'][] = [
                             'tipo' => 'cc_dc_huerfana',
                             'detalle' => sprintf(
-                                'CC #%d OP %d: ítem de DC en pesos sin aplicar (descalce típico Anita).',
+                                'CC #%d OP %d: línea en pesos sin aplicar en un pago en moneda extranjera.',
                                 (int) $cc->id,
                                 (int) $cc->pagoproveedor_id
                             ),
@@ -255,51 +275,33 @@ class ProveedorCuentacorrienteConciliacionDiariaService
      */
     private function auditarFichaVsDeuda(array &$informe, float $tolerancia): void
     {
-        $grupos = [];
-        Proveedor_Cuentacorriente::query()
-            ->select(['id', 'proveedor_id', 'empresa_id', 'moneda_id', 'total', 'comprobante_proveedor_id'])
-            ->where('total', '>', 0)
-            ->addSelect([
-                'aplicado' => Proveedor_Cuentacorriente_Aplicacion::query()
-                    ->selectRaw('SUM(total)')
-                    ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
-            ])
-            ->orderBy('id')
-            ->chunkById(500, function ($filas) use (&$grupos) {
-                foreach ($filas as $cc) {
-                    $pend = ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto(
-                        (float) $cc->total,
-                        (float) ($cc->aplicado ?? 0)
-                    );
-                    if ($pend < 0.01) {
-                        continue;
-                    }
-                    $key = $cc->proveedor_id.'|'.$cc->empresa_id.'|'.$cc->moneda_id;
-                    if (! isset($grupos[$key])) {
-                        $grupos[$key] = ['toda' => 0.0, 'comprobante' => 0.0, 'proveedor_id' => (int) $cc->proveedor_id, 'empresa_id' => (int) $cc->empresa_id, 'moneda_id' => (int) $cc->moneda_id];
-                    }
-                    $grupos[$key]['toda'] += $pend;
-                    if ((int) ($cc->comprobante_proveedor_id ?? 0) > 0) {
-                        $grupos[$key]['comprobante'] += $pend;
-                    }
-                }
-            });
+        $cuadre = app(ProveedorCuentacorrienteDeudaFichaCuadreSupport::class)->cuadrar(
+            Carbon::today()->toDateString(),
+            null,
+            null,
+            $tolerancia,
+            ProveedorCuentacorrienteDeudaFichaCuadreSupport::EXPRESION_ORIGEN,
+        );
 
-        foreach ($grupos as $g) {
-            if (ProveedorCuentacorrienteConciliacionSupport::desvia($g['toda'], $g['comprobante'], $tolerancia)) {
-                $informe['resumen']['ficha_vs_deuda']++;
-                $informe['alertas'][] = [
-                    'tipo' => 'ficha_vs_deuda',
-                    'detalle' => sprintf(
-                        'Proveedor %d empresa %d moneda %d: deuda abierta en ficha %s y la pantalla de deuda (con comprobante) muestra %s.',
-                        $g['proveedor_id'],
-                        $g['empresa_id'],
-                        $g['moneda_id'],
-                        number_format($g['toda'], 2, ',', '.'),
-                        number_format($g['comprobante'], 2, ',', '.')
-                    ),
-                ];
+        foreach ($cuadre['grupos'] as $grupo) {
+            $diferencia = (float) ($grupo['diferencia_origen'] ?? 0);
+            if (abs($diferencia) < $tolerancia) {
+                continue;
             }
+            $informe['resumen']['ficha_vs_deuda']++;
+            $informe['alertas'][] = [
+                'tipo' => 'ficha_vs_deuda',
+                'detalle' => sprintf(
+                    'Proveedor %d %s, empresa %d, %s: deuda %s y ficha %s (diferencia %s).',
+                    (int) $grupo['proveedor_id'],
+                    (string) ($grupo['proveedor_nombre'] ?? ''),
+                    (int) $grupo['empresa_id'],
+                    (string) ($grupo['moneda_abreviatura'] ?? ''),
+                    number_format((float) ($grupo['deuda_origen'] ?? 0), 2, ',', '.'),
+                    number_format((float) ($grupo['ficha_origen'] ?? 0), 2, ',', '.'),
+                    number_format($diferencia, 2, ',', '.')
+                ),
+            ];
         }
     }
 
@@ -380,6 +382,9 @@ class ProveedorCuentacorrienteConciliacionDiariaService
                     if (abs($saldo) < 0.01) {
                         continue;
                     }
+                    if ($this->esAjusteSaldo($cc)) {
+                        continue;
+                    }
                     $proveedor = $cc->proveedores;
                     $cuentaId = 0;
                     if ($cc->comprobante_proveedores) {
@@ -434,6 +439,16 @@ class ProveedorCuentacorrienteConciliacionDiariaService
                 ];
             }
         }
+    }
+
+    private function esAjusteSaldo(object $cc): bool
+    {
+        $leyenda = trim((string) ($cc->leyenda ?? ''));
+
+        return $leyenda !== ''
+            && str_starts_with($leyenda, ProveedorCuentacorrienteGrillaSupport::PREFIJO_LEYENDA_AJUSTE)
+            && (int) ($cc->comprobante_proveedor_id ?? 0) === 0
+            && (int) ($cc->pagoproveedor_id ?? 0) === 0;
     }
 
     /**

@@ -17,6 +17,7 @@ use App\Services\Ventas\Gastronomia\CanjeMarketing\CanjeMarketingFacturaEmisionS
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\GastronomiaFormulaOpcionalesService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Ventas\Emita\EmitaClienteVipConsulta;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
@@ -384,6 +385,11 @@ class CanjeMarketingProcesoFacturacionController extends Controller
         $a = $this->cuentaService->buscarArticuloCatalogoPorSku($cfg, $sku);
         if (! $a) {
             return response()->json(['error' => 'Artículo no encontrado en catálogo gastronomía'], 404);
+        }
+
+        $noFacturable = ArticuloSeleccionOperativaSupport::mensajeNoFacturable($a);
+        if ($noFacturable !== null) {
+            return response()->json(['error' => $noFacturable], 422);
         }
 
         $listaId = $this->listaPrecioIdDesdeCfg($cfg);

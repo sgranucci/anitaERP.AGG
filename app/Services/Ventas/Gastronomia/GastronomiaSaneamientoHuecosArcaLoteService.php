@@ -259,12 +259,11 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
         $empresaId = (int) $turno->empresa_id;
         $fechaJornada = $turno->jornada?->fecha_jornada?->format('Y-m-d')
             ?? Carbon::today()->format('Y-m-d');
-        $fechaNc = $fechaNc && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaNc)
-            ? $fechaNc
-            : now()->format('Y-m-d');
-        // El cierre de esa jornada ya está presentado: FAC y NC se imputan a la jornada de hoy.
+        // FAC y NC quedan en la jornada del hueco aunque el turno ya esté cerrado.
+        // Imputarlas a hoy parte la serie por fecha de jornada y la auditoría
+        // marca huecos de numeración que no existen. $fechaNc queda ignorada.
         $turnoCerrado = $turno->estado === TurnoOperativoGastronomia::ESTADO_CERRADO;
-        $fechaJornadaGrabacion = $turnoCerrado ? $fechaNc : $fechaJornada;
+        $fechaJornadaGrabacion = $fechaJornada;
         $pvCodigo = (string) ($recuperables[0]['puntoventa_codigo'] ?? '');
         $tipoFacId = (int) ($turno->configuracionPuntoventa?->tipotransaccion_id
             ?? config('gastronomia.tipotransaccion_factura_id', 1));
@@ -279,7 +278,6 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
             $tipoFacId,
             $fechaJornada,
             $fechaJornadaGrabacion,
-            $fechaNc,
             $turno,
             $turnoCerrado,
             &$ventaFacturaIds,
@@ -355,7 +353,7 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
                     $ventaFacturaIds,
                     $leyenda,
                     [
-                        'fecha_factura' => $fechaNc,
+                        'fecha_factura' => $fechaJornada,
                         'fecha_jornada' => $fechaJornadaGrabacion,
                         'fecha_asociacion' => $fechaJornada,
                         'identificador_pc' => (string) $turno->identificador_pc,
