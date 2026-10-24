@@ -491,7 +491,7 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
         return round($pesos / $cotizacion, 2);
     }
 
-    private function esDeudaAbierta(object $fila): bool
+    public function esDeudaAbierta(object $fila): bool
     {
         $total = (float) $fila->total;
         $aplicado = (float) ($fila->aplicado ?? 0);

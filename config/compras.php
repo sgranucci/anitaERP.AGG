@@ -131,7 +131,8 @@ return [
     | Auditor diario deuda vs ficha CC (compras:auditar-deuda-ficha-proveedor).
     | Un mail por empresa; el asunto lleva el nombre de la empresa.
     | Sin diferencias: mail verde «todo cuadrado». Con diferencias: detalle proveedor a proveedor.
-    | No graba ajustes: solo informa. La verdad operativa es la deuda.
+    | Además guarda el delta mayor − deuda y avisa si ese delta cambia de un día al otro.
+    | No graba ajustes de ficha: solo informa. La verdad operativa es la deuda.
     */
     'deuda_ficha_auditor' => [
         'habilitada' => filter_var(env('COMPRAS_DEUDA_FICHA_AUDITOR_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
@@ -141,6 +142,7 @@ return [
             env('COMPRAS_CC_CONCILIACION_EMAIL', env('MAIL_FROM_ADDRESS', ''))
         ),
         'tolerancia' => (float) env('COMPRAS_DEUDA_FICHA_AUDITOR_TOLERANCIA', 0.05),
+        'tolerancia_delta_mayor' => (float) env('COMPRAS_DEUDA_FICHA_AUDITOR_TOLERANCIA_DELTA', 1),
         'expresion' => env('COMPRAS_DEUDA_FICHA_AUDITOR_EXPRESION', 'origen'),
         'limite_filas_mail' => max(10, (int) env('COMPRAS_DEUDA_FICHA_AUDITOR_LIMITE_MAIL', 120)),
         // true = también manda el verde cuando cuadra

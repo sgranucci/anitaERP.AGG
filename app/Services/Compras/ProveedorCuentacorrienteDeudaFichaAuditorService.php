@@ -8,6 +8,7 @@ use App\Mail\Compras\ProveedorCuentacorrienteDeudaFichaAuditorMail;
 use App\Models\Configuracion\Empresa;
 use App\Support\Compras\ProveedorCuentacorrienteConciliacionSupport;
 use App\Support\Compras\ProveedorCuentacorrienteDeudaFichaCuadreSupport;
+use App\Support\Compras\ProveedorDeudaMayorDeltaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -15,13 +16,15 @@ use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 /**
- * Auditor diario: deuda vs ficha por empresa (moneda origen por defecto).
- * Solo informa por mail; no graba ajustes. La deuda es la verdad.
+ * Auditor diario: deuda vs ficha por empresa, y el delta mayor − deuda.
+ * El delta se guarda por día. El mail lo muestra y avisa solo si se movió
+ * respecto de la medición anterior. No graba ajustes de ficha. La deuda es la verdad.
  */
 final class ProveedorCuentacorrienteDeudaFichaAuditorService
 {
     public function __construct(
         private readonly ProveedorCuentacorrienteDeudaFichaCuadreSupport $cuadre,
+        private readonly ProveedorDeudaMayorDeltaSupport $deltaMayor,
     ) {
     }
 
@@ -54,8 +57,9 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
         }
         $limite = max(10, (int) ($config['limite_filas_mail'] ?? 120));
         $mailSiempre = filter_var($config['mail_siempre'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        $toleranciaDelta = (float) ($config['tolerancia_delta_mayor'] ?? 1);
 
-        $empresas = $this->empresasAAuditar($empresaId);
+        $empresas = $this->empresasAAuditar($empresaId, $fecha);
         $salida = [
             'fecha' => $fecha,
             'expresion' => $expresion,
@@ -77,6 +81,8 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
             $grupos = array_values($informe['grupos'] ?? []);
             $hayDiferencia = $grupos !== [];
             $resumen = $informe['resumen'] ?? [];
+            $delta = $this->deltaMayor->controlar((int) $empresa->id, $fecha, $toleranciaDelta);
+            $deltaMovio = (int) ($delta['variaciones'] ?? 0) > 0;
             $paquete = [
                 'fecha' => $fecha,
                 'fecha_fmt' => Carbon::parse($fecha)->format('d/m/Y'),
@@ -84,17 +90,20 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
                 'empresa_id' => (int) $empresa->id,
                 'empresa_nombre' => trim((string) $empresa->nombre),
                 'tolerancia' => $tolerancia,
-                'requiere_alerta' => $hayDiferencia,
+                'requiere_alerta' => $hayDiferencia || $deltaMovio,
+                'alerta_ficha' => $hayDiferencia,
+                'alerta_delta' => $deltaMovio,
                 'resumen' => $resumen,
                 'grupos' => array_slice($grupos, 0, $limite),
                 'grupos_total' => count($grupos),
                 'grupos_truncados' => max(0, count($grupos) - $limite),
+                'delta_mayor' => $delta,
                 'mail_enviado' => false,
                 'mail_destino' => null,
                 'mail_error' => null,
             ];
 
-            if ($hayDiferencia) {
+            if ($hayDiferencia || $deltaMovio) {
                 $salida['requiere_alerta'] = true;
             }
 
@@ -118,7 +127,7 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
     /**
      * @return list<\App\Models\Configuracion\Empresa|\stdClass>
      */
-    private function empresasAAuditar(?int $empresaId): array
+    private function empresasAAuditar(?int $empresaId, string $fecha): array
     {
         if ($empresaId !== null && $empresaId > 0) {
             $empresa = Empresa::query()->find($empresaId);
@@ -129,16 +138,18 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
             return [$empresa];
         }
 
-        $ids = DB::table('proveedor_cuentacorriente')
+        $idsCc = DB::table('proveedor_cuentacorriente')
             ->select('empresa_id')
             ->distinct()
             ->whereNotNull('empresa_id')
-            ->orderBy('empresa_id')
             ->pluck('empresa_id')
             ->map(static fn ($id) => (int) $id)
-            ->filter(static fn (int $id) => $id > 0)
-            ->values()
             ->all();
+        $ids = array_values(array_unique(array_filter(
+            array_merge($idsCc, $this->deltaMayor->empresasConSaldo($fecha)),
+            static fn (int $id) => $id > 0
+        )));
+        sort($ids);
 
         if ($ids === []) {
             return [];

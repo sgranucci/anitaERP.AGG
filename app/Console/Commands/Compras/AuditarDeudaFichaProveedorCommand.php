@@ -12,7 +12,7 @@ class AuditarDeudaFichaProveedorCommand extends Command
                             {--empresa= : Solo esta empresa_id}
                             {--sin-mail : No envía correo}';
 
-    protected $description = 'Auditor deuda vs ficha CC por empresa: mail con diferencias (o verde si cuadra)';
+    protected $description = 'Auditor deuda vs ficha y delta mayor por empresa: avisa si la ficha no cuadra o si el delta se movió';
 
     public function handle(ProveedorCuentacorrienteDeudaFichaAuditorService $service): int
     {
@@ -27,7 +27,7 @@ class AuditarDeudaFichaProveedorCommand extends Command
         $enviarMail = ! (bool) $this->option('sin-mail');
 
         $this->line(sprintf(
-            'Auditor deuda vs ficha · corte %s · expresión %s%s',
+            'Auditor deuda vs ficha y delta mayor · corte %s · expresión %s%s',
             $fecha !== '' ? $fecha : 'hoy',
             (string) config('compras.deuda_ficha_auditor.expresion', 'origen'),
             $enviarMail ? '' : ' · sin mail'
@@ -47,17 +47,23 @@ class AuditarDeudaFichaProveedorCommand extends Command
 
         $filas = [];
         foreach ($informe['empresas'] as $empresa) {
+            $delta = $empresa['delta_mayor'] ?? [];
+            $variaciones = (int) ($delta['variaciones'] ?? 0);
+            $estadoDelta = $variaciones > 0
+                ? (string) $variaciones
+                : (! empty($delta['hay_base_anterior']) ? 'estable' : 'base');
             $filas[] = [
                 $empresa['empresa_id'],
                 $empresa['empresa_nombre'],
                 ! empty($empresa['requiere_alerta']) ? 'ALERTA' : 'OK',
                 (string) ($empresa['grupos_total'] ?? 0),
+                $estadoDelta,
                 ! empty($empresa['mail_enviado'])
                     ? ('sí → '.$empresa['mail_destino'])
                     : (! empty($empresa['mail_error']) ? 'error: '.$empresa['mail_error'] : 'no'),
             ];
         }
-        $this->table(['Empresa', 'Nombre', 'Estado', 'Diferencias', 'Mail'], $filas);
+        $this->table(['Empresa', 'Nombre', 'Estado', 'Dif. ficha', 'Delta movido', 'Mail'], $filas);
 
         $this->info(sprintf(
             'Mails enviados: %d · omitidos: %d',

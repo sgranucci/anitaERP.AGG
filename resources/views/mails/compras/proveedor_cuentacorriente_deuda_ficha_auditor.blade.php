@@ -1,5 +1,9 @@
 @php
     $alerta = ! empty($informe['requiere_alerta']);
+    $alertaFicha = ! empty($informe['alerta_ficha']);
+    $alertaDelta = ! empty($informe['alerta_delta']);
+    $delta = $informe['delta_mayor'] ?? [];
+    $cuentasDelta = $delta['cuentas'] ?? [];
     $empresa = trim((string) ($informe['empresa_nombre'] ?? ''));
     $fecha = (string) ($informe['fecha_fmt'] ?? $informe['fecha'] ?? '');
     $expresion = (string) ($informe['expresion'] ?? 'origen');
@@ -22,19 +26,27 @@
 <div style="background:{{ $bannerBg }}; border:2px solid {{ $bannerBorder }}; color:{{ $bannerText }}; padding:14px 16px; border-radius:6px; margin-bottom:18px;">
     <div style="font-size:20px; font-weight:700; margin:0 0 4px 0;">{{ $empresa }}</div>
     <div style="font-size:15px; margin:0;">
-        @if ($alerta)
+        @if ($alertaFicha && $alertaDelta)
+            ALERTA — la ficha no cuadra y el delta mayor vs deuda se movió al {{ $fecha }}
+        @elseif ($alertaDelta)
+            ALERTA — el delta mayor vs deuda se movió al {{ $fecha }}
+        @elseif ($alertaFicha)
             ALERTA — hay diferencias deuda vs ficha al {{ $fecha }}
         @else
-            OK — todo cuadrado al {{ $fecha }}
+            @if (! empty($delta['hay_base_anterior']))
+                OK — ficha cuadrada y delta mayor estable al {{ $fecha }}
+            @else
+                OK — ficha cuadrada. El delta mayor queda como base al {{ $fecha }}
+            @endif
         @endif
     </div>
 </div>
 
 <p style="margin:0 0 12px 0;">
-    Control <strong>deuda vs ficha de cuenta corriente</strong>
+    Control <strong>deuda vs ficha de cuenta corriente</strong> y delta <strong>mayor − deuda</strong>
     · Corte <strong>{{ $fecha }}</strong>
     · Expresión <strong>{{ $expresion }}</strong>
-    · La deuda es la verdad; este mail solo informa (no graba ajustes).
+    · La deuda es la verdad. El delta puede existir: lo que se controla es que no cambie de un día al otro.
 </p>
 
 <h3 style="margin:16px 0 6px 0;">Resumen</h3>
@@ -68,7 +80,7 @@
     @endif
 </table>
 
-@if ($alerta)
+@if ($alertaFicha)
     <h3 style="margin:18px 0 6px 0;">Diferencias proveedor por proveedor</h3>
     <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
         Revisar motivos posibles: aplicaciones posteriores al corte, importes multi-moneda,
@@ -123,6 +135,56 @@
         No hay diferencias entre la deuda abierta y la ficha de cuenta corriente para
         <strong>{{ $empresa }}</strong> al corte <strong>{{ $fecha }}</strong>.
     </p>
+@endif
+
+<h3 style="margin:22px 0 6px 0;">Delta mayor − deuda</h3>
+<p style="margin:0 0 8px 0; color:#555; font-size:13px;">
+    En pesos, con el mismo signo del mayor (negativo = débito). Delta = mayor − deuda.
+    @if (! empty($delta['hay_base_anterior']))
+        Se compara contra el {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+        Avisa si la variación pasa de {{ $fmt($delta['tolerancia'] ?? 1) }}.
+    @else
+        Primera medición: estos números quedan como base. La próxima corrida avisa si alguno se mueve.
+    @endif
+</p>
+@if ($cuentasDelta === [])
+    <p style="margin:0;">No hay saldo de deuda ni de mayor en cuentas de proveedores.</p>
+@else
+    <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
+        <tr style="background:#85C1E9; color:#17202A;">
+            <th align="left">Cuenta</th>
+            <th align="right">Deuda</th>
+            <th align="right">Mayor</th>
+            <th align="right">Delta</th>
+            <th align="right">Delta anterior</th>
+            <th align="right">Variación</th>
+        </tr>
+        @foreach ($cuentasDelta as $c)
+            <tr @if (! empty($c['movio'])) style="background:#fadbd8;" @endif>
+                <td>{{ $c['codigo'] ?? '' }} {{ $c['nombre'] ?? '' }}</td>
+                <td align="right">{{ $fmt($c['deuda'] ?? 0) }}</td>
+                <td align="right">{{ $fmt($c['mayor'] ?? 0) }}</td>
+                <td align="right"><strong>{{ $fmt($c['delta'] ?? 0) }}</strong></td>
+                <td align="right">{{ $c['delta_anterior'] === null ? '—' : $fmt($c['delta_anterior']) }}</td>
+                <td align="right">
+                    @if ($c['variacion'] === null)
+                        —
+                    @else
+                        <strong>{{ $fmt($c['variacion']) }}</strong>
+                    @endif
+                </td>
+            </tr>
+        @endforeach
+    </table>
+    @if ($alertaDelta)
+        <p style="margin:8px 0 0 0; color:#7b241c; font-size:13px;">
+            {{ (int) ($delta['variaciones'] ?? 0) }} cuenta(s) cambiaron el delta. Conviene revisar el movimiento del día.
+        </p>
+    @elseif (! empty($delta['hay_base_anterior']))
+        <p style="margin:8px 0 0 0; color:#145a32; font-size:13px;">
+            El delta no se movió respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+        </p>
+    @endif
 @endif
 
 <p style="margin-top:22px; color:#666; font-size:12px;">
