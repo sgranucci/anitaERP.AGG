@@ -73,4 +73,43 @@ final class ArticuloSeleccionOperativaSupport
             ->where('estado', self::ESTADO_ACTIVO)
             ->exists();
     }
+
+    /**
+     * Un mensaje por artículo que no está ACTIVO. Ids inexistentes no se informan.
+     *
+     * @param  list<int>  $articuloIds
+     * @return list<string>
+     */
+    public static function mensajesNoFacturablesPorIds(array $articuloIds): array
+    {
+        $ids = [];
+        foreach ($articuloIds as $articuloId) {
+            $id = (int) $articuloId;
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+        if ($ids === []) {
+            return [];
+        }
+
+        $porId = Articulo::query()
+            ->whereIn('id', array_values($ids))
+            ->get(['id', 'sku', 'estado'])
+            ->keyBy('id');
+
+        $mensajes = [];
+        foreach ($ids as $id) {
+            $articulo = $porId->get($id);
+            if ($articulo === null) {
+                continue;
+            }
+            $mensaje = self::mensajeNoFacturable($articulo);
+            if ($mensaje !== null) {
+                $mensajes[] = $mensaje;
+            }
+        }
+
+        return $mensajes;
+    }
 }

@@ -1,0 +1,38 @@
+---
+description: Tesorería Crown — PDF, Excel y CSV chicos a la derecha de los chips de sala
+alwaysApply: true
+---
+
+# Tesorería Crown: export en la barra de sala
+
+En los listados de **caja / tesorería Crown**, Pdf, Excel y Csv van en la **misma línea** que los chips de sala, alineados a la **derecha**, en el formato chico (`variant => 'compact'`). No van encima de la tabla como botones grandes (`btn-app`).
+
+Partial: `resources/views/caja/tesoreria_crown/partials/sala_chips.blade.php`.
+
+## Correcto
+
+```blade
+@include('caja.tesoreria_crown.partials.sala_chips', [
+    'ruta' => 'tesoreria_crown_jornada',
+    'exportRuta' => 'listar_tesoreria_crown_jornada',
+    'exportQueryparams' => $filtrosQuery ?? [],
+])
+```
+
+El partial pone `ml-auto` y la clase `js-export-tesoreria-crown` (el overlay de descarga de `listado.js` sigue enganchado). Sin export, se omiten `exportRuta` y `exportQueryparams` (pantalla de un día, tipos sin listado).
+
+## Prohibido
+
+```blade
+{{-- ❌ Botones grandes sueltos arriba de la grilla --}}
+@include('includes.exportar-tabla-queryparams', [
+    'ruta' => 'listar_tesoreria_crown_jornada',
+    'queryparams' => $filtrosQuery ?? [],
+])
+```
+
+## Al agregar un listado Crown
+
+1. Chips de sala + export compacto en esa barra.
+2. La tabla arranca sin otra fila de Pdf / Excel / Csv.
+3. Conservar el overlay `proceso_overlay_aviso` y `listado.js`.

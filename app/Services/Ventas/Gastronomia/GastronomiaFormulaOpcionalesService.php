@@ -4,6 +4,7 @@ namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Formula_Articulo;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Stock\FormulaArticuloSubformulaPosSupport;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
@@ -84,6 +85,10 @@ final class GastronomiaFormulaOpcionalesService
     private function opcionDesdeHijo(\App\Models\Stock\Formula_Articulo_Hijo $h): ?array
     {
         if ($h->articulo_id && $h->articulos) {
+            if (! ArticuloSeleccionOperativaSupport::esSeleccionable($h->articulos)) {
+                return null;
+            }
+
             return [
                 'articulo_id' => (int) $h->articulo_id,
                 'sku' => (string) $h->articulos->sku,
@@ -92,6 +97,11 @@ final class GastronomiaFormulaOpcionalesService
         }
 
         if ($h->formula_hija_id) {
+            $articuloHija = $h->formula_hija?->articulos;
+            if ($articuloHija !== null && ! ArticuloSeleccionOperativaSupport::esSeleccionable($articuloHija)) {
+                return null;
+            }
+
             $etiqueta = FormulaArticuloSubformulaPosSupport::etiquetaOpcional(
                 $h->formula_hija,
                 (int) $h->formula_hija_id,

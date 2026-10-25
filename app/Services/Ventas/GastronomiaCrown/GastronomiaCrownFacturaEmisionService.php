@@ -19,6 +19,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaFormulaConsumoService;
 use App\Services\Ventas\Gastronomia\GastronomiaFormulaOpcionalesService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Services\Ventas\Gastronomia\GastronomiaReceptorFacturacionService;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
 use App\Support\Ventas\CaeaEmisionNumeracionSupport;
@@ -95,6 +96,11 @@ final class GastronomiaCrownFacturaEmisionService
 
         if ($lineasCobrables->isEmpty()) {
             return ['error' => 'La cuenta no tiene ítems para cobrar.'];
+        }
+
+        $mensajeInactivos = $this->mensajeArticulosInactivos($cuenta);
+        if ($mensajeInactivos !== null) {
+            return ['error' => $mensajeInactivos];
         }
 
         $erroresOpcionales = $this->opcionalesService->erroresOpcionalesEnLineas($lineasCobrables);
@@ -705,6 +711,31 @@ final class GastronomiaCrownFacturaEmisionService
             'descuentopie' => $pct,
             'factura_cortesia' => false,
         ];
+    }
+
+    /**
+     * Padres y opcionales elegidos: ninguno puede facturarse si el maestro está inactivo.
+     */
+    public function mensajeArticulosInactivos(GastroCrownCuenta $cuenta): ?string
+    {
+        $cuenta->loadMissing('lineas');
+        $ids = [];
+        foreach ($cuenta->lineas as $linea) {
+            if ($linea->es_separador || ! $linea->articulo_id) {
+                continue;
+            }
+            $ids[] = (int) $linea->articulo_id;
+            foreach ($linea->opcionales_json as $valor) {
+                $opcionalId = $this->articuloIdDeOpcional($valor);
+                if ($opcionalId !== null) {
+                    $ids[] = $opcionalId;
+                }
+            }
+        }
+
+        $mensajes = ArticuloSeleccionOperativaSupport::mensajesNoFacturablesPorIds($ids);
+
+        return $mensajes === [] ? null : implode(' ', $mensajes);
     }
 
     /**
