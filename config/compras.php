@@ -133,6 +133,7 @@ return [
     | Sin diferencias: mail verde «todo cuadrado». Con diferencias: detalle proveedor a proveedor.
     | Además guarda el delta mayor − deuda y avisa si ese delta cambia de un día al otro.
     | No graba ajustes de ficha: solo informa. La verdad operativa es la deuda.
+    | Solo las empresas de COMPRAS_DEUDA_FICHA_AUDITOR_EMPRESAS (default 1, 2 y 3).
     */
     'deuda_ficha_auditor' => [
         'habilitada' => filter_var(env('COMPRAS_DEUDA_FICHA_AUDITOR_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
@@ -147,6 +148,11 @@ return [
         'limite_filas_mail' => max(10, (int) env('COMPRAS_DEUDA_FICHA_AUDITOR_LIMITE_MAIL', 120)),
         // true = también manda el verde cuando cuadra
         'mail_siempre' => filter_var(env('COMPRAS_DEUDA_FICHA_AUDITOR_MAIL_SIEMPRE', true), FILTER_VALIDATE_BOOLEAN),
+        // Solo estas empresas. Vacío = el auditor no corre ninguna.
+        'empresas' => array_values(array_unique(array_filter(array_map(
+            static fn ($id) => (int) $id,
+            explode(',', (string) env('COMPRAS_DEUDA_FICHA_AUDITOR_EMPRESAS', '1,2,3'))
+        ), static fn (int $id) => $id > 0))),
     ],
 
     /*

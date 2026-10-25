@@ -191,6 +191,7 @@
     Generado {{ now()->format('d/m/Y H:i') }} —
     <code>php artisan compras:auditar-deuda-ficha-proveedor</code>
     · Destinatario: <code>COMPRAS_DEUDA_FICHA_AUDITOR_EMAIL</code>
+    · Empresas: <code>COMPRAS_DEUDA_FICHA_AUDITOR_EMPRESAS</code>
     · Desactivar: <code>COMPRAS_DEUDA_FICHA_AUDITOR_HABILITADA=false</code>
 </p>
 </body>

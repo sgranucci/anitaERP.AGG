@@ -129,7 +129,16 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
      */
     private function empresasAAuditar(?int $empresaId, string $fecha): array
     {
+        $permitidas = $this->idsEmpresasConfiguradas();
+        if ($permitidas === []) {
+            return [];
+        }
+
         if ($empresaId !== null && $empresaId > 0) {
+            if (! in_array($empresaId, $permitidas, true)) {
+                return [];
+            }
+
             $empresa = Empresa::query()->find($empresaId);
             if ($empresa === null) {
                 return [];
@@ -147,7 +156,7 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
             ->all();
         $ids = array_values(array_unique(array_filter(
             array_merge($idsCc, $this->deltaMayor->empresasConSaldo($fecha)),
-            static fn (int $id) => $id > 0
+            static fn (int $id) => in_array($id, $permitidas, true)
         )));
         sort($ids);
 
@@ -160,6 +169,25 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
             ->orderBy('id')
             ->get()
             ->all();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function idsEmpresasConfiguradas(): array
+    {
+        $raw = config('compras.deuda_ficha_auditor.empresas', [1, 2, 3]);
+        if (! is_array($raw)) {
+            $raw = explode(',', (string) $raw);
+        }
+
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn ($id) => (int) $id, $raw),
+            static fn (int $id) => $id > 0
+        )));
+        sort($ids);
+
+        return $ids;
     }
 
     /**

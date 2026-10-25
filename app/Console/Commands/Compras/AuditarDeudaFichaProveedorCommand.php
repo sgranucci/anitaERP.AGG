@@ -12,7 +12,7 @@ class AuditarDeudaFichaProveedorCommand extends Command
                             {--empresa= : Solo esta empresa_id}
                             {--sin-mail : No envía correo}';
 
-    protected $description = 'Auditor deuda vs ficha y delta mayor por empresa: avisa si la ficha no cuadra o si el delta se movió';
+    protected $description = 'Auditor deuda vs ficha y delta mayor de las empresas configuradas: avisa si la ficha no cuadra o si el delta se movió';
 
     public function handle(ProveedorCuentacorrienteDeudaFichaAuditorService $service): int
     {
@@ -25,11 +25,26 @@ class AuditarDeudaFichaProveedorCommand extends Command
         $fecha = trim((string) ($this->option('fecha') ?? ''));
         $empresaId = (int) ($this->option('empresa') ?: 0);
         $enviarMail = ! (bool) $this->option('sin-mail');
+        $permitidas = array_values(array_map(
+            static fn ($id) => (int) $id,
+            (array) config('compras.deuda_ficha_auditor.empresas', [1, 2, 3])
+        ));
+
+        if ($empresaId > 0 && ! in_array($empresaId, $permitidas, true)) {
+            $this->warn(sprintf(
+                'La empresa %d queda fuera del auditor (COMPRAS_DEUDA_FICHA_AUDITOR_EMPRESAS=%s).',
+                $empresaId,
+                $permitidas === [] ? '(ninguna)' : implode(',', $permitidas)
+            ));
+
+            return self::SUCCESS;
+        }
 
         $this->line(sprintf(
-            'Auditor deuda vs ficha y delta mayor · corte %s · expresión %s%s',
+            'Auditor deuda vs ficha y delta mayor · corte %s · expresión %s · empresas %s%s',
             $fecha !== '' ? $fecha : 'hoy',
             (string) config('compras.deuda_ficha_auditor.expresion', 'origen'),
+            $permitidas === [] ? '(ninguna)' : implode(',', $permitidas),
             $enviarMail ? '' : ' · sin mail'
         ));
 

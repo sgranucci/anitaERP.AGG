@@ -24,10 +24,12 @@ return [
     /*
     |--------------------------------------------------------------------------
     | Conciliación diaria mayor Anita AP (MN/ME) vs cuenta corriente (solo facturas)
+    | Apagada: comparaba el neto del período contra solo facturas y no podía cerrar.
+    | El auditor deuda vs ficha y delta mayor − deuda cubre ese control.
     |--------------------------------------------------------------------------
     */
     'conciliacion_mayor_cc' => [
-        'habilitada' => filter_var(env('COMPROBANTE_PROVEEDOR_MAYOR_CC_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'habilitada' => filter_var(env('COMPROBANTE_PROVEEDOR_MAYOR_CC_HABILITADA', false), FILTER_VALIDATE_BOOLEAN),
         'hora' => env('COMPROBANTE_PROVEEDOR_MAYOR_CC_HORA', '08:35'),
         'email' => env('COMPROBANTE_PROVEEDOR_MAYOR_CC_EMAIL', env('COMPROBANTE_PROVEEDOR_AUDITORIA_ANITA_EMAIL', env('ORDENCOMPRA_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com'))),
         'ventana_dias' => max(1, (int) env('COMPROBANTE_PROVEEDOR_MAYOR_CC_VENTANA_DIAS', 30)),
