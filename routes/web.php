@@ -3177,6 +3177,13 @@ Route::delete('caja/tesoreria-crown/jornada/workbench/vista/{id}', 'Caja\Tesorer
 Route::post('caja/tesoreria-crown/jornada/workbench/columnas', 'Caja\TesoreriaCrownJornadaController@guardarColumnasListado')->name('guardar_columnas_tesoreria_crown_jornada');
 Route::post('caja/tesoreria-crown/jornada/workbench/etiquetas', 'Caja\TesoreriaCrownJornadaController@guardarEtiquetasListado')->name('guardar_etiquetas_tesoreria_crown_jornada');
 Route::post('caja/tesoreria-crown/jornada/workbench/preview', 'Caja\TesoreriaCrownJornadaController@previewWorkbench')->name('preview_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/boveda', 'Caja\TesoreriaCrownBovedaController@index')->name('tesoreria_crown_boveda');
+Route::post('caja/tesoreria-crown/boveda', 'Caja\TesoreriaCrownBovedaController@crear')->name('crear_tesoreria_crown_boveda');
+Route::get('caja/tesoreria-crown/boveda/{id}', 'Caja\TesoreriaCrownBovedaController@editar')->name('editar_tesoreria_crown_boveda');
+Route::post('caja/tesoreria-crown/boveda/{id}', 'Caja\TesoreriaCrownBovedaController@guardar')->name('guardar_tesoreria_crown_boveda');
+Route::post('caja/tesoreria-crown/boveda/{id}/confirmar', 'Caja\TesoreriaCrownBovedaController@confirmar')->name('confirmar_tesoreria_crown_boveda');
+Route::post('caja/tesoreria-crown/boveda/{id}/anular', 'Caja\TesoreriaCrownBovedaController@anular')->name('anular_tesoreria_crown_boveda');
+Route::delete('caja/tesoreria-crown/boveda/{id}', 'Caja\TesoreriaCrownBovedaController@eliminar')->name('eliminar_tesoreria_crown_boveda');
 Route::get('caja/tesoreria-crown/jornada/cierre/{asignacion}', 'Caja\TesoreriaCrownCierreController@ver')->name('ver_tesoreria_crown_cierre');
 Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}', 'Caja\TesoreriaCrownCierreController@cerrar')->name('cerrar_tesoreria_crown_cierre');
 Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/revisar', 'Caja\TesoreriaCrownCierreController@revisar')->name('revisar_tesoreria_crown_cierre');

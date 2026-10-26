@@ -502,7 +502,7 @@ final class IngresoEgresoImputacionDiariaAnitaReader
     private function camposTesmov(string $extra): string
     {
         $campos = $extra.',tesv_importe,tesv_cotizacion';
-        if (! CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()) {
+        if (CobranzaAnitaCheBanEsquemaSupport::incluirColumnaEmpresaCheBan()) {
             $campos .= ',tesv_cod_mon';
         }
 

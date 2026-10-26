@@ -10,6 +10,7 @@ use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownTipoDeposito;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownAsignacionCatalogo;
+use App\Support\Caja\TesoreriaCrownBovedaSupport;
 use App\Support\Caja\TesoreriaCrownCierreSupport;
 use App\Support\Caja\TesoreriaCrownJornadaListadoColumnas;
 use App\Support\Caja\TesoreriaCrownJornadaListadoFiltros;
@@ -229,6 +230,7 @@ class TesoreriaCrownJornadaController extends Controller
                 ->where('sala_id', $sala->id)
                 ->where('estado', TesoreriaCrownJornada::ABIERTA)
                 ->first(),
+            'boveda' => TesoreriaCrownBovedaSupport::resumenJornada($jornada),
         ]);
     }
 

@@ -42,6 +42,10 @@ final class PagoproveedorAnitaNumeracionSupport
      */
     public static function sucursalParaOp(int $empresaId): int
     {
+        if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            return PagoproveedorAnitaCrownClaveSupport::sucursal();
+        }
+
         if (self::esMultiempresa()) {
             return max(1, self::codigoEmpresaAnita($empresaId));
         }

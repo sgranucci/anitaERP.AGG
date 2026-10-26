@@ -13,6 +13,7 @@ use App\Support\Caja\ChequePropioCpromaeAnitaMapper;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 use App\Support\Compras\AnitaImport\ProveedorCuentacorrienteAnitaImportFormatoSupport;
+use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaCrownClaveSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Compras\PagoproveedorAnitaAuditoriaCompareSupport as Compare;
 use App\Support\Compras\PagoproveedorDevolucionRetencionSupport;
@@ -237,9 +238,12 @@ final class PagoproveedorAnitaAuditoriaDiariaService
         }
 
         $sistema = IngresoEgresoAnitaTesmovSupport::sistema();
+        $empresaPago = PagoproveedorAnitaCrownClaveSupport::aplica()
+            ? PagoproveedorAnitaCrownClaveSupport::empresaAnita()
+            : $empresaAnita;
         $whereOp = ' WHERE pag_tipo = '.$this->escSql($tipo)
             .' AND pag_rec = '.$nro
-            .' AND pag_empresa = '.$empresaAnita;
+            .' AND pag_empresa = '.$empresaPago;
         $pagosAnita = $this->listar($sistema, 'pago', 'pag_tipo,pag_rec,pag_empresa,pag_trec', $whereOp);
         if ($pagosAnita['error'] !== null) {
             $problemas[] = 'Lectura pago Anita: '.$pagosAnita['error'];
@@ -250,9 +254,9 @@ final class PagoproveedorAnitaAuditoriaDiariaService
         $whereTes = ' WHERE tesv_tipo = '.$this->escSql($tipo)
             .' AND tesv_nro = '.$nro
             .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresaAnita);
-        $camposTes = CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()
-            ? 'tesv_tipo,tesv_nro,tesv_importe'
-            : 'tesv_tipo,tesv_nro,tesv_empresa,tesv_importe';
+        $camposTes = CobranzaAnitaCheBanEsquemaSupport::incluirColumnaEmpresaCheBan()
+            ? 'tesv_tipo,tesv_nro,tesv_empresa,tesv_importe'
+            : 'tesv_tipo,tesv_nro,tesv_importe';
         $tesmov = $this->listar($sistema, 'tesmov', $camposTes, $whereTes);
         if ($tesmov['error'] !== null) {
             $problemas[] = 'Lectura tesmov Anita: '.$tesmov['error'];
@@ -268,9 +272,9 @@ final class PagoproveedorAnitaAuditoriaDiariaService
         $whereAux = ' WHERE axp_tipo = '.$this->escSql($tipo)
             .' AND axp_rec = '.$nro
             .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaAuxpag($empresaAnita);
-        $camposAux = CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()
-            ? 'axp_tipo,axp_rec,axp_tipo_ap'
-            : 'axp_tipo,axp_rec,axp_tipo_ap,axp_empresa';
+        $camposAux = CobranzaAnitaCheBanEsquemaSupport::incluirColumnaEmpresaCheBan()
+            ? 'axp_tipo,axp_rec,axp_tipo_ap,axp_empresa'
+            : 'axp_tipo,axp_rec,axp_tipo_ap';
         $auxpag = $this->listar($sistema, 'auxpag', $camposAux, $whereAux);
         if ($auxpag['error'] !== null) {
             $problemas[] = 'Lectura auxpag Anita: '.$auxpag['error'];
@@ -540,7 +544,9 @@ final class PagoproveedorAnitaAuditoriaDiariaService
             $sistema,
             'cpromae',
             'cpro_cuenta,cpro_nro_cheque,cpro_fecha_cheque,cpro_fecha_emision,cpro_importe,'
-            .'cpro_nro_op,cpro_cotizacion,cpro_para_dep,cpro_negociable,cpro_estado,cpro_nro_e_cheq',
+            .'cpro_nro_op,cpro_cotizacion,cpro_para_dep,'
+            .(PagoproveedorAnitaCrownClaveSupport::aplica() ? '' : 'cpro_negociable,')
+            .'cpro_estado,cpro_nro_e_cheq',
             $whereCpro
         );
         if ($cpro['error'] !== null) {
@@ -568,9 +574,9 @@ final class PagoproveedorAnitaAuditoriaDiariaService
             .' AND axp_tipo_ap = '.$this->escSql('CHP')
             .' AND axp_nro = '.$nroCheque
             .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaAuxpag($empresaAnita);
-        $camposAuxChp = CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()
-            ? 'axp_tipo,axp_nro,axp_tipo_ap,axp_sucursal,axp_sucursal_cob'
-            : 'axp_tipo,axp_nro,axp_tipo_ap,axp_sucursal,axp_sucursal_cob,axp_empresa';
+        $camposAuxChp = CobranzaAnitaCheBanEsquemaSupport::incluirColumnaEmpresaCheBan()
+            ? 'axp_tipo,axp_nro,axp_tipo_ap,axp_sucursal,axp_sucursal_cob,axp_empresa'
+            : 'axp_tipo,axp_nro,axp_tipo_ap,axp_sucursal,axp_sucursal_cob';
         $auxChp = $this->listar(
             $sistema,
             'auxpag',

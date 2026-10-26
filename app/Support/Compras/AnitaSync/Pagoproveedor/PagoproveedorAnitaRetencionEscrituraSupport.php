@@ -147,7 +147,10 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
     private static function eliminarPorClave(Pagoproveedor $pago, array $tipos): void
     {
         $ctx = self::contextoClave($pago);
-        if ($ctx['nro'] <= 0 || $ctx['empresa'] <= 0) {
+        if ($ctx['nro'] <= 0) {
+            return;
+        }
+        if ($ctx['empresa'] <= 0 && ! PagoproveedorAnitaCrownClaveSupport::aplica()) {
             return;
         }
 
@@ -171,11 +174,11 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
         ];
 
         foreach ($pares as [$tabla, $pref]) {
-            // Ferli: sin *_empresa en retmov / retibrmov / retimov / retsmov.
+            // Ferli: sin *_empresa. Crown: sin retv/retibr/retiv_empresa; retsmov sí tiene retsv_empresa.
             $where = ' WHERE '.$pref.'_sucursal = '.(int) $ctx['sucursal']
                 .' AND '.$pref.'_nro = '.(int) $ctx['nro']
                 .' AND '.$pref.'_tipo IN ('.$inTipos.')';
-            if (! EntornoEmpresaSupport::esFerli()) {
+            if (! self::omitirColumnaEmpresa($pref)) {
                 $where = ' WHERE '.$pref.'_empresa = '.(int) $ctx['empresa']
                     .' AND '.$pref.'_sucursal = '.(int) $ctx['sucursal']
                     .' AND '.$pref.'_nro = '.(int) $ctx['nro']
@@ -189,6 +192,23 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
     private static function omitirEmpresaRetencionesAnita(): bool
     {
         return EntornoEmpresaSupport::esFerli();
+    }
+
+    /**
+     * Ferli omite *_empresa en las cuatro tablas.
+     * Crown omite retv / retibr / retiv y conserva retsv_empresa.
+     */
+    private static function omitirColumnaEmpresa(string $prefijo): bool
+    {
+        if (self::omitirEmpresaRetencionesAnita()) {
+            return true;
+        }
+
+        if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            return $prefijo !== 'retsv';
+        }
+
+        return false;
     }
 
     /**
@@ -212,15 +232,25 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
             $empresa = (int) $pago->empresa_id;
         }
 
+        if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            $letra = PagoproveedorAnitaCrownClaveSupport::letra();
+            $empresa = PagoproveedorAnitaCrownClaveSupport::empresaAnita();
+        }
+
         $fecha = $pago->fecha?->format('Ymd');
         if ($fecha === null || $fecha === '') {
             $fecha = date('Ymd');
         }
 
+        $sucursal = (int) ($pago->sucursal ?: $empresa);
+        if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            $sucursal = PagoproveedorAnitaCrownClaveSupport::sucursal();
+        }
+
         return [
             'tipo' => $tipo,
             'letra' => $letra,
-            'sucursal' => (int) ($pago->sucursal ?: $empresa),
+            'sucursal' => $sucursal,
             'nro' => (int) $pago->numerotransaccion,
             'empresa' => $empresa,
             'fecha' => (int) $fecha,
@@ -260,9 +290,9 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
         }
         $gravado = (float) ($det['neto_gravado_comun'] ?? $netoPago);
 
-        $camposEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ',
+        $camposEmpresa = self::omitirColumnaEmpresa('retv') ? '' : ',
                 retv_empresa';
-        $valorEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ",
+        $valorEmpresa = self::omitirColumnaEmpresa('retv') ? '' : ",
                 '".$ctx['empresa']."'";
 
         $raw = (new ApiAnita)->apiCallEscritura([
@@ -338,9 +368,9 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
             $letraComp = ' ';
         }
 
-        $camposEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ',
+        $camposEmpresa = self::omitirColumnaEmpresa('retibr') ? '' : ',
                 retibr_empresa';
-        $valorEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ",
+        $valorEmpresa = self::omitirColumnaEmpresa('retibr') ? '' : ",
                 '".$ctx['empresa']."'";
 
         $raw = (new ApiAnita)->apiCallEscritura([
@@ -417,9 +447,9 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
             $letraComp = ' ';
         }
 
-        $camposEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ',
+        $camposEmpresa = self::omitirColumnaEmpresa('retiv') ? '' : ',
                 retiv_empresa';
-        $valorEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ",
+        $valorEmpresa = self::omitirColumnaEmpresa('retiv') ? '' : ",
                 '".$ctx['empresa']."'";
 
         $raw = (new ApiAnita)->apiCallEscritura([

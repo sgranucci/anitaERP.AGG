@@ -202,6 +202,7 @@
                             </tbody>
                         </table>
                     </div>
+                    @include('caja.tesoreria_crown.jornada.partials.boveda')
                     @php
                         $pendientesFirma = $asignaciones->flatMap(function ($fila) {
                             return $fila->comprobantes

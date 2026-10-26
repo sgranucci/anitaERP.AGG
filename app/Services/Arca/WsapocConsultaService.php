@@ -280,7 +280,8 @@ class WsapocConsultaService
     {
         $timeout = max(5, (int) config('arca_wsapoc.soap_timeout', 30));
 
-        return new SoapClient($this->resolveWsdl(), [
+        // proxy_host nativo: el stream_context no alcanza para el POST SOAP (igual que el padrón).
+        return new SoapClient($this->resolveWsdl(), array_merge([
             'trace' => 1,
             'exceptions' => true,
             'cache_wsdl' => WSDL_CACHE_DISK,
@@ -297,7 +298,49 @@ class WsapocConsultaService
                     'ciphers' => 'DEFAULT@SECLEVEL=1',
                 ],
             ]),
-        ]);
+        ], $this->opcionesProxySoap()));
+    }
+
+    /**
+     * eapoc-ws.afip.gob.ar no sale directo desde este servidor. Usa el Squid del padrón.
+     *
+     * @return array<string, int|string>
+     */
+    private function opcionesProxySoap(): array
+    {
+        $proxy = $this->proxySalidaArca();
+        if ($proxy === null) {
+            return [];
+        }
+
+        $opciones = [
+            'proxy_host' => $proxy['host'],
+            'proxy_port' => $proxy['port'],
+        ];
+        if ($proxy['user'] !== '') {
+            $opciones['proxy_login'] = $proxy['user'];
+            $opciones['proxy_password'] = $proxy['password'];
+        }
+
+        return $opciones;
+    }
+
+    /**
+     * @return array{host: string, port: int, user: string, password: string}|null
+     */
+    private function proxySalidaArca(): ?array
+    {
+        $host = trim((string) config('arca.padron.proxy_host', ''));
+        if ($host === '') {
+            return null;
+        }
+
+        return [
+            'host' => $host,
+            'port' => max(1, (int) config('arca.padron.proxy_port', 3128)),
+            'user' => trim((string) config('arca.padron.proxy_user', '')),
+            'password' => (string) config('arca.padron.proxy_password', ''),
+        ];
     }
 
     /**
@@ -350,8 +393,17 @@ class WsapocConsultaService
             }
 
             $timeout = max(10, (int) config('arca_wsapoc.soap_timeout', 30));
+            $http = ['timeout' => $timeout];
+            $proxy = $this->proxySalidaArca();
+            if ($proxy !== null) {
+                $http['proxy'] = 'tcp://'.$proxy['host'].':'.$proxy['port'];
+                $http['request_fulluri'] = true;
+                if ($proxy['user'] !== '') {
+                    $http['header'] = 'Proxy-Authorization: Basic '.base64_encode($proxy['user'].':'.$proxy['password']);
+                }
+            }
             $ctx = stream_context_create([
-                'http' => ['timeout' => $timeout],
+                'http' => $http,
                 'ssl' => [
                     'verify_peer' => true,
                     'verify_peer_name' => true,

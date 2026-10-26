@@ -116,6 +116,16 @@ final class ChequePropioCpromaeAnitaMapper
             foreach (self::CAMPOS_EXTENDIDOS as $campo) {
                 unset($out[$campo]);
             }
+        } elseif (EntornoEmpresaSupport::esCrown()) {
+            foreach ([
+                'cpro_empresa',
+                'cpro_negociable',
+                'cpro_estado_banco',
+                'cpro_sucursal_pago',
+                'cpro_tipo_distrib',
+            ] as $campo) {
+                unset($out[$campo]);
+            }
         }
 
         return $out;

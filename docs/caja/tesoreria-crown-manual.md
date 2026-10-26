@@ -188,6 +188,18 @@ Hasta que esa reversa esté conforme, la caja no se cierra. Cuando está conform
 
 El comprobante avisa que quedó en consulta. Para corregir un importe sin reabrir la caja, el camino es el ajuste de auditoría. Para anular una habilitación o una rendición, primero se reabre la caja y después se revierte.
 
+## Bóveda
+
+La bóveda es el lugar de tesorería, no un puesto de cajero. El depósito se carga en Depósitos con tipo Bóveda. El pre-depósito y la caja chica usan la misma pantalla.
+
+Un movimiento tiene número propio de la sala, un tipo tomado del catálogo de Anita (INGR entra, OEGR sale, PDEP sale hacia el pre-depósito, y los marcados «no mueve saldo» quedan asentados sin cambiar la cantidad) y las cantidades de pesos, dólares, euros y fichas. Dólares y euros no se pasan a pesos en el saldo.
+
+El borrador no mueve el saldo. Tesorería lo confirma con usuario y clave. Anularlo, con la jornada abierta, lo saca del saldo y deja el número. Con la jornada cerrada queda en consulta.
+
+Se puede vincular una habilitación o una rendición conforme de esa jornada y copiar sus cantidades. El comprobante del cajero no descuenta la bóveda solo: el movimiento de bóveda es el papel que mueve el saldo. Desde el número se abre el comprobante, y desde el saldo se abre el movimiento.
+
+En la jornada del día se ve el saldo de la bóveda y la lista de movimientos. El menú Bóveda abre la misma pantalla.
+
 ## Ajuste de auditoría
 
 Este tramo está definido para Crown y todavía no está en la pantalla. Es la corrección habitual después del cierre, cuando el cajero ya no está.

@@ -2,6 +2,7 @@
 
 namespace App\Support\Caja\AnitaSync;
 
+use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaCrownClaveSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\MonedaAnitaCodigoSupport;
 use Illuminate\Support\Facades\Auth;
@@ -98,6 +99,61 @@ final class CobranzaAnitaCheBanEsquemaSupport
                     '0',
                     '".$usuario."',
                     '".$hoy."'",
+            ];
+        }
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            $empresa = (string) PagoproveedorAnitaCrownClaveSupport::empresaAnita();
+
+            return [
+                'campos' => '
+                    pag_pro,
+                    pag_fecha,
+                    pag_tipo,
+                    pag_rec,
+                    pag_trec,
+                    pag_cotizacion,
+                    pag_leyenda,
+                    pag_entregado_a,
+                    pag_letra,
+                    pag_sucursal,
+                    pag_mov_ext,
+                    pag_cod_mon_me,
+                    pag_cobrador,
+                    pag_sucursal_p,
+                    pag_recibo_p,
+                    pag_sin_comision,
+                    pag_legajo,
+                    pag_tipo_vale,
+                    pag_nro_vale,
+                    pag_vendedor,
+                    pag_usuario,
+                    pag_fecha_ult_act,
+                    pag_empresa',
+                'valores' => "
+                    '".$cliente."',
+                    '".$fecha."',
+                    '".$tipo."',
+                    '".$ctx['numeroRecibo']."',
+                    '".$ctx['totalRecibo']."',
+                    '".$ctx['cotizacion']."',
+                    '".$leyenda."',
+                    ' ',
+                    '".$ctx['letra']."',
+                    '".$ctx['puntoVenta']."',
+                    ' ',
+                    '0',
+                    '0',
+                    '0',
+                    '0',
+                    '0',
+                    '0',
+                    ' ',
+                    '0',
+                    '0',
+                    '".$usuario."',
+                    '".$hoy."',
+                    '".$empresa."'",
             ];
         }
 
@@ -209,7 +265,7 @@ final class CobranzaAnitaCheBanEsquemaSupport
             '".($ctx['vendedor'] ?? '0')."',
             '".($ctx['nroInterno'] ?? '0')."'";
 
-        if (EntornoEmpresaSupport::esFerli()) {
+        if (EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esCrown()) {
             return [
                 'campos' => $baseCampos,
                 'valores' => $baseValores,
@@ -272,6 +328,17 @@ final class CobranzaAnitaCheBanEsquemaSupport
             return [
                 'campos' => $baseCampos,
                 'valores' => $baseValores,
+            ];
+        }
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            return [
+                'campos' => $baseCampos.',
+            tesv_nro_conc,
+            tesv_fecha_conc',
+                'valores' => $baseValores.",
+            '0',
+            '0'",
             ];
         }
 
@@ -371,10 +438,19 @@ final class CobranzaAnitaCheBanEsquemaSupport
         return EntornoEmpresaSupport::esFerli();
     }
 
+    /**
+     * axp_empresa / tesv_empresa / tesv_cod_mon. Ferli y Crown no las tienen.
+     * Crown sí tiene tesv_nro_conc y tesv_fecha_conc: eso no pasa por acá.
+     */
+    public static function incluirColumnaEmpresaCheBan(): bool
+    {
+        return ! self::omitirColumnasEmpresaAggCheBan() && ! EntornoEmpresaSupport::esCrown();
+    }
+
     /** Filtro AND para list/update/delete auxpag. Vacío en Ferli. */
     public static function andFiltroEmpresaAuxpag(int $empresaAnita): string
     {
-        if (self::omitirColumnasEmpresaAggCheBan() || $empresaAnita <= 0) {
+        if (self::omitirColumnasEmpresaAggCheBan() || EntornoEmpresaSupport::esCrown() || $empresaAnita <= 0) {
             return '';
         }
 
@@ -384,7 +460,7 @@ final class CobranzaAnitaCheBanEsquemaSupport
     /** Filtro AND para list/update/delete tesmov. Vacío en Ferli. */
     public static function andFiltroEmpresaTesmov(int $empresaAnita): string
     {
-        if (self::omitirColumnasEmpresaAggCheBan() || $empresaAnita <= 0) {
+        if (self::omitirColumnasEmpresaAggCheBan() || EntornoEmpresaSupport::esCrown() || $empresaAnita <= 0) {
             return '';
         }
 
@@ -401,7 +477,7 @@ final class CobranzaAnitaCheBanEsquemaSupport
         int|string $concepto = 0,
         string $cbu = ' '
     ): array {
-        if (self::omitirColumnasEmpresaAggCheBan()) {
+        if (self::omitirColumnasEmpresaAggCheBan() || EntornoEmpresaSupport::esCrown()) {
             return ['campos' => '', 'valores' => ''];
         }
 
@@ -430,6 +506,17 @@ final class CobranzaAnitaCheBanEsquemaSupport
     ): array {
         if (self::omitirColumnasEmpresaAggCheBan()) {
             return ['campos' => '', 'valores' => ''];
+        }
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            return [
+                'campos' => ',
+                tesv_nro_conc,
+                tesv_fecha_conc',
+                'valores' => ",
+                '0',
+                '0'",
+            ];
         }
 
         return [

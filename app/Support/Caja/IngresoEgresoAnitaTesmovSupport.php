@@ -10,6 +10,7 @@ use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\AplicacionCuentacorrienteAnitaLadoSupport;
+use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaCrownClaveSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
@@ -401,7 +402,10 @@ final class IngresoEgresoAnitaTesmovSupport
         string $contexto = 'caja IE delete por clave',
         ?array $tiposExtra = null
     ): void {
-        if (! self::estaHabilitada() || $nro <= 0 || $empresa <= 0) {
+        if (! self::estaHabilitada() || $nro <= 0) {
+            return;
+        }
+        if ($empresa <= 0 && ! PagoproveedorAnitaCrownClaveSupport::aplica()) {
             return;
         }
 
@@ -503,7 +507,7 @@ final class IngresoEgresoAnitaTesmovSupport
             .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaAuxpag((int) $ctx['empresa']);
 
         $camposList = 'axp_rec,axp_tipo,axp_tipo_ap,axp_sucursal,axp_sucursal_cob';
-        if (! CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()) {
+        if (CobranzaAnitaCheBanEsquemaSupport::incluirColumnaEmpresaCheBan()) {
             $camposList .= ',axp_empresa';
         }
 
@@ -611,7 +615,7 @@ final class IngresoEgresoAnitaTesmovSupport
         }
 
         $camposTes = 'tesv_tipo,tesv_nro,tesv_cuenta,tesv_importe,tesv_desc_mov';
-        if (! CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()) {
+        if (CobranzaAnitaCheBanEsquemaSupport::incluirColumnaEmpresaCheBan()) {
             $camposTes .= ',tesv_empresa';
         }
         $tesmov = self::listarFilasAnita(
@@ -781,6 +785,12 @@ final class IngresoEgresoAnitaTesmovSupport
             $letra = ' ';
         }
 
+        if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            $empresaAnita = PagoproveedorAnitaCrownClaveSupport::empresaAnita();
+            $sucursal = PagoproveedorAnitaCrownClaveSupport::sucursal();
+            $letra = PagoproveedorAnitaCrownClaveSupport::letra();
+        }
+
         $proveedorCodigo = '000000';
         $entregadoA = '';
         if ($movimiento->proveedores) {
@@ -930,6 +940,66 @@ final class IngresoEgresoAnitaTesmovSupport
                     '0',
                     '".self::esc($ctx['usuario'])."',
                     '".date('Ymd')."'",
+            ], 'caja IE pago insert '.$movimiento->id);
+
+            self::assertOk($raw, 'pago', $movimiento->id);
+
+            return;
+        }
+
+        if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            $raw = (new ApiAnita)->apiCallEscritura([
+                'tabla' => 'pago',
+                'acc' => 'insert',
+                'sistema' => self::sistema(),
+                'campos' => '
+                    pag_pro,
+                    pag_fecha,
+                    pag_tipo,
+                    pag_rec,
+                    pag_trec,
+                    pag_cotizacion,
+                    pag_leyenda,
+                    pag_entregado_a,
+                    pag_letra,
+                    pag_sucursal,
+                    pag_mov_ext,
+                    pag_cod_mon_me,
+                    pag_cobrador,
+                    pag_sucursal_p,
+                    pag_recibo_p,
+                    pag_sin_comision,
+                    pag_legajo,
+                    pag_tipo_vale,
+                    pag_nro_vale,
+                    pag_vendedor,
+                    pag_usuario,
+                    pag_fecha_ult_act,
+                    pag_empresa',
+                'valores' => "
+                    '".$ctx['proveedorCodigo']."',
+                    '".$ctx['fecha']."',
+                    '".self::esc($ctx['tipo'])."',
+                    '".$ctx['nro']."',
+                    '".$ctx['total']."',
+                    '".$ctx['cotizacion']."',
+                    '".self::esc($ctx['detalle'])."',
+                    '".self::esc($ctx['entregadoA'])."',
+                    '".self::esc($ctx['letra'])."',
+                    '".$ctx['sucursal']."',
+                    'E',
+                    '2',
+                    '0',
+                    '0',
+                    '0',
+                    '0',
+                    '0',
+                    '".self::esc($tipoVale)."',
+                    '".$nroVale."',
+                    '0',
+                    '".self::esc($ctx['usuario'])."',
+                    '".date('Ymd')."',
+                    '".$ctx['empresa']."'",
             ], 'caja IE pago insert '.$movimiento->id);
 
             self::assertOk($raw, 'pago', $movimiento->id);
@@ -1575,6 +1645,9 @@ final class IngresoEgresoAnitaTesmovSupport
 
         $entregado = self::recortar((string) ($cheque->entregado ?: $ctx['entregadoA']), 30);
         $sucursalesAxp = ChequePropioAuxpagAnitaMapper::sucursales($nroCheque, (int) $ctx['empresa']);
+        if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            $sucursalesAxp['axp_sucursal_cob'] = '0';
+        }
         $filaCpromae = ChequePropioCpromaeAnitaMapper::mapear([
             'cuenta' => $codigoCuenta,
             'nro' => $nroCheque,
@@ -1789,6 +1862,9 @@ final class IngresoEgresoAnitaTesmovSupport
         }
 
         $sucursalesAxp = ChequePropioAuxpagAnitaMapper::sucursales($nroCheque, (int) $ctx['empresa']);
+        if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            $sucursalesAxp['axp_sucursal_cob'] = '0';
+        }
         $extraAxp = CobranzaAnitaCheBanEsquemaSupport::sufijoInsertAuxpagEmpresaConceptoCbu(
             (int) $ctx['empresa'],
             0,

@@ -30,11 +30,13 @@ final class AnitaRetencionEsquemaSupport
     }
 
     /**
-     * Ferli no tiene `retv_empresa` / `retiv_empresa` (ni el resto de `*_empresa` en retmov, retimov, retsmov, retibrmov).
+     * Ferli no tiene `*_empresa` en retmov, retimov, retsmov ni retibrmov.
+     * Crown no tiene retv_empresa, retiv_empresa ni retibr_empresa (sí retsv_empresa).
+     * El flag apaga el filtro en las cuatro lecturas para no mandar una columna inexistente.
      */
     public static function movimientosTienenColumnaEmpresa(): bool
     {
-        return ! EntornoEmpresaSupport::esFerli();
+        return ! EntornoEmpresaSupport::esFerli() && ! EntornoEmpresaSupport::esCrown();
     }
 
     /**

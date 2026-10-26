@@ -29,6 +29,7 @@ use App\Support\Caja\ChequeTerceroEndosoAnitaSupport;
 use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
+use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaCrownClaveSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaNumeracionSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
@@ -173,7 +174,7 @@ class PagoproveedorService
                         $data['tipotransaccion_caja_id'] ?? null
                     ),
                     'tipocomprobante' => $tipoComprobante,
-                    'letra' => (string) config('pagoproveedor.letra_default', ' '),
+                    'letra' => PagoproveedorAnitaCrownClaveSupport::letraDocumento(),
                     'sucursal' => $sucursal,
                     'numerotransaccion' => (string) $numero,
                     'fecha' => $data['fecha'],
@@ -1617,6 +1618,15 @@ class PagoproveedorService
             $tipo = 'OPP';
         }
 
+        if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            return [
+                'tipo' => $tipo,
+                'letra' => PagoproveedorAnitaCrownClaveSupport::letra(),
+                'sucursal' => PagoproveedorAnitaCrownClaveSupport::sucursal(),
+                'nro' => (int) $pago->numerotransaccion,
+            ];
+        }
+
         $letra = (string) config('caja.ingresoegreso_anita_tesmov_letra', ' ');
         if ($letra === '') {
             $letra = ' ';
@@ -2160,7 +2170,7 @@ class PagoproveedorService
                     'empresa_id' => $empresaId,
                     'tipotransaccion_caja_id' => $this->tipotransaccionCajaIdParaComprobante($tipoComprobante, null),
                     'tipocomprobante' => $tipoComprobante,
-                    'letra' => (string) config('pagoproveedor.letra_default', ' '),
+                    'letra' => PagoproveedorAnitaCrownClaveSupport::letraDocumento(),
                     'sucursal' => $sucursal,
                     'numerotransaccion' => (string) $numero,
                     'fecha' => $fecha,
