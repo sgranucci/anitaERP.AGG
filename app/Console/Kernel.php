@@ -28,7 +28,9 @@ class Kernel extends ConsoleKernel
     {
         // $schedule->command('inspire')->hourly();
         $horaCotizacion = (string) config('cotizacion.hora_command', '11:00');
-        $schedule->command('cotizacion:leeapi')->dailyAt($horaCotizacion);
+        $schedule->command('cotizacion:leeapi')
+            ->dailyAt($horaCotizacion)
+            ->appendOutputTo(storage_path('logs/cotizacion-leeapi.log'));
 
         $schedule->command('compras:enviar-listados-programados')
             ->dailyAt('07:05')

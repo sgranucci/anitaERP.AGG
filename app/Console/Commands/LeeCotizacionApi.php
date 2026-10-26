@@ -143,10 +143,14 @@ class LeeCotizacionApi extends Command
     {
         $url = 'https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial';
         $ctx = stream_context_create([
-            'http' => [
+            'http' => $this->opcionesHttpProxy([
                 'timeout' => 60,
                 'header' => "Accept: application/json\r\nUser-Agent: anitaERP-cotizacion:leeapi\r\n",
-            ],
+            ]),
+            'https' => $this->opcionesHttpProxy([
+                'timeout' => 60,
+                'header' => "Accept: application/json\r\nUser-Agent: anitaERP-cotizacion:leeapi\r\n",
+            ]),
         ]);
         $raw = @file_get_contents($url, false, $ctx);
         if (! is_string($raw) || $raw === '') {
@@ -257,6 +261,10 @@ class LeeCotizacionApi extends Command
             return $tolerarSinDato ? null : false;
         }
         if (($payload['sin_dato'] ?? false) === true) {
+            if (! $tolerarSinDato) {
+                $this->error('Sin cotización BNA para '.$fecha->toDateString().' (finde, feriado o sin acceso a la API).');
+            }
+
             return $tolerarSinDato ? null : false;
         }
 
@@ -367,8 +375,7 @@ class LeeCotizacionApi extends Command
             escapeshellarg($script),
             escapeshellarg($fecha->toDateString())
         );
-        $raw = shell_exec($cmd);
-        $raw = is_string($raw) ? trim($raw) : '';
+        $raw = $this->ejecutarParser($cmd);
 
         if ($raw === '') {
             $this->error('Parser BNA sin salida para '.$fecha->toDateString());
@@ -430,5 +437,67 @@ class LeeCotizacionApi extends Command
         }
 
         return null;
+    }
+
+    private function ejecutarParser(string $cmd): string
+    {
+        $descriptores = [
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+        $proceso = proc_open($cmd, $descriptores, $pipes, null, $this->entornoProxy());
+        if (! is_resource($proceso)) {
+            return '';
+        }
+        $salida = stream_get_contents($pipes[1]);
+        $error = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($proceso);
+
+        return trim((is_string($salida) ? $salida : '')."\n".(is_string($error) ? $error : ''));
+    }
+
+    /**
+     * @param  array<string, int|string>  $base
+     * @return array<string, int|string|bool>
+     */
+    private function opcionesHttpProxy(array $base): array
+    {
+        $host = trim((string) config('cotizacion.proxy_host', ''));
+        if ($host === '') {
+            return $base;
+        }
+        $port = max(1, (int) config('cotizacion.proxy_port', 3128));
+        $user = (string) config('cotizacion.proxy_user', '');
+        $password = (string) config('cotizacion.proxy_password', '');
+        $header = (string) ($base['header'] ?? '');
+        if ($user !== '') {
+            $header = 'Proxy-Authorization: Basic '.base64_encode($user.':'.$password)."\r\n".$header;
+        }
+        $base['header'] = $header;
+        $base['proxy'] = 'tcp://'.$host.':'.$port;
+        $base['request_fulluri'] = true;
+
+        return $base;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function entornoProxy(): array
+    {
+        $entorno = [];
+        foreach (array_merge($_ENV, $_SERVER) as $clave => $valor) {
+            if (is_string($clave) && (is_string($valor) || is_numeric($valor))) {
+                $entorno[$clave] = (string) $valor;
+            }
+        }
+        $entorno['COTIZACION_PROXY_HOST'] = (string) config('cotizacion.proxy_host', '');
+        $entorno['COTIZACION_PROXY_PORT'] = (string) config('cotizacion.proxy_port', 3128);
+        $entorno['COTIZACION_PROXY_USER'] = (string) config('cotizacion.proxy_user', '');
+        $entorno['COTIZACION_PROXY_PASSWORD'] = (string) config('cotizacion.proxy_password', '');
+
+        return $entorno;
     }
 }

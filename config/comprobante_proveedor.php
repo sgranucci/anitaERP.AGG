@@ -51,8 +51,10 @@ return [
     'tipoasiento_abreviatura' => env('COMPROBANTE_PROVEEDOR_TIPOASIENTO', 'COM'),
 
     /*
-    | Fecha del comprobante: tope a futuro respecto del día de carga.
-    | Evita errores de tipeo (año 2027, mes siguiente). El pasado no se limita.
+    | Fecha impresa del comprobante.
+    | A futuro: no más de N días (año o mes mal tipeado).
+    | Año mínimo: un año de dos dígitos (0026) no es una factura atrasada.
     */
     'fecha_comprobante_max_dias_futuro' => max(0, (int) env('COMPROBANTE_PROVEEDOR_FECHA_MAX_DIAS_FUTURO', 30)),
+    'fecha_comprobante_anio_minimo' => (int) env('COMPROBANTE_PROVEEDOR_FECHA_ANIO_MINIMO', 2000),
 ];

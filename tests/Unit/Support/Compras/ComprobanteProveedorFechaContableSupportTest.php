@@ -33,7 +33,8 @@ class ComprobanteProveedorFechaContableSupportTest extends TestCase
         ComprobanteProveedorFechaContableSupport::assertFechaComprobanteNoExcesivamenteFutura(
             '2026-09-10',
             '2026-08-23',
-            30
+            30,
+            2000
         );
         $this->assertTrue(true);
     }
@@ -43,9 +44,22 @@ class ComprobanteProveedorFechaContableSupportTest extends TestCase
         ComprobanteProveedorFechaContableSupport::assertFechaComprobanteNoExcesivamenteFutura(
             '2026-01-02',
             '2026-08-23',
-            30
+            30,
+            2000
         );
         $this->assertTrue(true);
+    }
+
+    public function test_fecha_comprobante_anio_0026_corta(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('año anterior a 2000');
+        ComprobanteProveedorFechaContableSupport::assertFechaComprobanteNoExcesivamenteFutura(
+            '0026-10-03',
+            '2026-10-26',
+            30,
+            2000
+        );
     }
 
     public function test_alta_ferli_ia_contabiliza_en_fecha_de_factura(): void
@@ -223,7 +237,8 @@ class ComprobanteProveedorFechaContableSupportTest extends TestCase
         ComprobanteProveedorFechaContableSupport::assertFechaComprobanteNoExcesivamenteFutura(
             '2027-08-23',
             '2026-08-23',
-            30
+            30,
+            2000
         );
     }
 }

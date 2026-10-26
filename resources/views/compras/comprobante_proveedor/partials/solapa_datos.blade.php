@@ -367,10 +367,13 @@
                         : '';
                 @endphp
                 <input type="date" name="fechacomprobante" id="fechacomprobante" class="form-control"
+                    min="{{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::anioMinimoComprobante() }}-01-01"
                     max="{{ $fechaIvaTope }}"
                     value="{{ $fechaCompValor }}" required>
                 <small class="form-text text-muted">
-                    Fecha impresa de la factura. No puede ser posterior a la fecha de contabilizaci&oacute;n.
+                    Fecha impresa de la factura. El a&ntilde;o no puede ser anterior a
+                    {{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::anioMinimoComprobante() }}
+                    ni la fecha posterior a la de contabilizaci&oacute;n.
                 </small>
             </div>
         </div>

@@ -3075,7 +3075,12 @@ $(function () {
         var $row = $(tpl.content.cloneNode(true));
         var id = parseInt(concepto && concepto.id ? concepto.id : '0', 10) || 0;
         $row.find('.concepto_ivacompra_id').val(id > 0 ? String(id) : '');
-        $row.find('.codigo_concepto_ivacompra').val((concepto && concepto.codigo) || '');
+        var codigoTxt = String((concepto && concepto.codigo) || '');
+        var $codigo = $row.find('.codigo_concepto_ivacompra');
+        $codigo.val(codigoTxt);
+        if (id > 0 && codigoTxt !== '') {
+            $codigo.data('codigo-resuelto', codigoTxt);
+        }
         $row.find('.nombre_concepto_ivacompra').val((concepto && concepto.nombre) || '');
         var montoTxt = '';
         if (monto !== undefined && monto !== null && String(monto) !== '') {

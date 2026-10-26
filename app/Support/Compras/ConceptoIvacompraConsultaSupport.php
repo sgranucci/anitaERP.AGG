@@ -74,18 +74,19 @@ final class ConceptoIvacompraConsultaSupport
             return null;
         }
 
-        if (ctype_digit($valor)) {
-            $porId = $lista->firstWhere('id', (int) $valor);
-            if ($porId) {
-                return $porId;
-            }
-            $porCodigoExacto = $lista->first(fn (Concepto_Ivacompra $c) => (string) $c->codigo === $valor);
-            if ($porCodigoExacto) {
-                return $porCodigoExacto;
-            }
+        // El operador tipea el código Anita (50 = Gravado 21). Ese código puede
+        // coincidir con el id interno de otro concepto del mismo tipo (id 50 = IVA 27).
+        // El código exacto manda; el id solo si ningún concepto tiene ese código.
+        $porCodigoExacto = $lista->first(fn (Concepto_Ivacompra $c) => (string) $c->codigo === $valor);
+        if ($porCodigoExacto) {
+            return $porCodigoExacto;
         }
 
-        return $lista->first(fn (Concepto_Ivacompra $c) => (string) $c->codigo === $valor);
+        if (ctype_digit($valor)) {
+            return $lista->firstWhere('id', (int) $valor);
+        }
+
+        return null;
     }
 
     public static function tipoTieneConceptosConfigurados(
@@ -217,13 +218,15 @@ final class ConceptoIvacompraConsultaSupport
             return null;
         }
 
-        if (ctype_digit($valor)) {
-            $porId = Concepto_Ivacompra::query()->find((int) $valor);
-            if ($porId) {
-                return $porId;
-            }
+        $porCodigo = Concepto_Ivacompra::query()->where('codigo', $valor)->orderBy('id')->first();
+        if ($porCodigo) {
+            return $porCodigo;
         }
 
-        return Concepto_Ivacompra::query()->where('codigo', $valor)->orderBy('id')->first();
+        if (ctype_digit($valor)) {
+            return Concepto_Ivacompra::query()->find((int) $valor);
+        }
+
+        return null;
     }
 }

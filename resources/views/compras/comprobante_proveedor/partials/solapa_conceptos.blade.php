@@ -83,6 +83,7 @@
                                     <div class="d-flex flex-wrap align-items-center">
                                         <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
                                             value="{{ $codigo }}" style="width:5.5rem;" autocomplete="off"
+                                            @if ($conceptoId && $codigo !== '') data-codigo-resuelto="{{ $codigo }}" @endif
                                             title="Código + Enter · F1 consulta" placeholder="Cód.">
                                         <input type="text" class="form-control form-control-sm nombre_concepto_ivacompra mr-1"
                                             value="{{ $nombre }}" readonly style="min-width:8rem;flex:1;" placeholder="Descripción">
@@ -147,6 +148,7 @@
                                     <div class="d-flex flex-wrap align-items-center">
                                         <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
                                             value="{{ $concepto->codigo ?? '' }}" style="width:5.5rem;" autocomplete="off"
+                                            @if (($renglon->concepto_ivacompra_id ?? 0) && ($concepto->codigo ?? '') !== '') data-codigo-resuelto="{{ $concepto->codigo }}" @endif
                                             title="Código + Enter · F1 consulta" placeholder="Cód.">
                                         <input type="text" class="form-control form-control-sm nombre_concepto_ivacompra mr-1"
                                             value="{{ $concepto->nombre ?? '' }}" readonly style="min-width:8rem;flex:1;" placeholder="Descripción">

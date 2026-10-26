@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import date, datetime
 
@@ -22,6 +24,28 @@ ARGENTINADATOS_FECHA = (
     "https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial/{anio}/{mes:02d}/{dia:02d}"
 )
 UA = "anitaERP-cotizacionbna/1.0"
+
+
+def instalar_proxy() -> None:
+    host = os.environ.get("COTIZACION_PROXY_HOST", "").strip()
+    if host == "":
+        return
+    port = os.environ.get("COTIZACION_PROXY_PORT", "3128").strip() or "3128"
+    user = os.environ.get("COTIZACION_PROXY_USER", "")
+    password = os.environ.get("COTIZACION_PROXY_PASSWORD", "")
+    auth = ""
+    if user != "":
+        auth = (
+            urllib.parse.quote(user, safe="")
+            + ":"
+            + urllib.parse.quote(password, safe="")
+            + "@"
+        )
+    proxy_url = f"http://{auth}{host}:{port}"
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+    )
+    urllib.request.install_opener(opener)
 
 
 def http_json(url: str, timeout: float = 20.0):
@@ -109,6 +133,7 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="Salida JSON para cotizacion:leeapi")
     parser.add_argument("--fecha", required=True, help="YYYY-MM-DD")
     args = parser.parse_args()
+    instalar_proxy()
 
     try:
         fecha = parse_fecha(args.fecha)

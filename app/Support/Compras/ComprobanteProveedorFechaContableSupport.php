@@ -214,6 +214,11 @@ final class ComprobanteProveedorFechaContableSupport
         return max(0, (int) config('comprobante_proveedor.fecha_comprobante_max_dias_futuro', 30));
     }
 
+    public static function anioMinimoComprobante(): int
+    {
+        return max(1900, (int) config('comprobante_proveedor.fecha_comprobante_anio_minimo', 2000));
+    }
+
     public static function fechaComprobanteMaximaYmd(?string $fechaReferenciaYmd = null, ?int $maxDias = null): string
     {
         $ref = self::formatear($fechaReferenciaYmd) ?? self::fechaCargaHoy();
@@ -225,17 +230,28 @@ final class ComprobanteProveedorFechaContableSupport
     }
 
     /**
-     * Evita cargar una factura con fecha muy a futuro (año/mes mal tipeado).
-     * El pasado no se limita: una factura atrasada es válida.
+     * Evita un año o un mes mal tipeado: ni 30 días después de hoy, ni un año
+     * anterior al mínimo (0026 en lugar de 2026). Una factura atrasada de este
+     * siglo sigue siendo válida.
      */
     public static function assertFechaComprobanteNoExcesivamenteFutura(
         mixed $fechaComprobante,
         ?string $fechaReferenciaYmd = null,
         ?int $maxDias = null,
+        ?int $anioMinimo = null,
     ): void {
         $fecha = self::formatear($fechaComprobante);
         if ($fecha === null) {
             return;
+        }
+
+        $anioPiso = $anioMinimo ?? self::anioMinimoComprobante();
+        $anio = (int) substr($fecha, 0, 4);
+        if ($anio < $anioPiso) {
+            throw new RuntimeException(
+                'La fecha del comprobante ('.self::aDiaMesAnio($fecha).') tiene un año anterior a '
+                .$anioPiso.'. Revisá el año: parece un error de carga.'
+            );
         }
 
         $dias = $maxDias ?? self::maxDiasFuturoComprobante();
