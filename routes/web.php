@@ -2731,7 +2731,14 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('api/l8-sync/pedidos-faltantes', 'Ventas\L8SyncExportController@pedidosFaltantes')->name('api_l8_sync_pedidos_faltantes');
 } elseif (strtoupper((string) config('app.empresa')) === 'INTERFORMING') {
     Route::get('ventas/pedido', 'Ventas\PedidoInterformingController@index')->name('pedido');
+    Route::get('ventas/pedidos-venta', 'Ventas\PedidoInterformingController@pedidosVenta')->name('pedidos_venta');
+    Route::get('ventas/pedidos-exportacion', 'Ventas\PedidoInterformingController@pedidosExportacion')->name('pedidos_exportacion');
     Route::get('ventas/pedido/crear', 'Ventas\PedidoInterformingController@crear')->name('crear_pedido');
+    Route::post('ventas/pedido/workbench/preview', 'Ventas\PedidoInterformingController@previewWorkbench')->name('preview_workbench_pedido');
+    Route::post('ventas/pedido/workbench/vista', 'Ventas\PedidoInterformingController@guardarVistaListado')->name('guardar_vista_listado_pedido');
+    Route::delete('ventas/pedido/workbench/vista/{id}', 'Ventas\PedidoInterformingController@eliminarVistaListado')->name('eliminar_vista_listado_pedido');
+    Route::post('ventas/pedido/workbench/columnas', 'Ventas\PedidoInterformingController@guardarColumnasListado')->name('guardar_columnas_listado_pedido');
+    Route::post('ventas/pedido/workbench/etiquetas', 'Ventas\PedidoInterformingController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_pedido');
     Route::post('ventas/pedido', 'Ventas\PedidoInterformingController@guardar')->name('guardar_pedido');
     Route::get('ventas/pedido/{id}/contexto-facturacion', 'Ventas\PedidoInterformingController@contextoFacturacion')->name('contexto_facturacion_pedido');
     Route::get('ventas/pedido/{id}/editar', 'Ventas\PedidoInterformingController@editar')->name('editar_pedido')->middleware('modo.consulta');

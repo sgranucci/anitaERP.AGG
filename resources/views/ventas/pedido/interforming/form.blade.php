@@ -72,6 +72,24 @@
                    value="{{ old('nombrecliente', $pedido->clientes->nombre ?? '') }}" readonly>
         </div>
 
+        @php
+            $tipoPedidoIf = strtoupper(trim((string) old('tipo_comprobante', $pedido->tipo_comprobante ?? '')));
+            if (! in_array($tipoPedidoIf, ['PED', 'PEX'], true)) {
+                $tipoPedidoIf = '';
+            }
+            $tipoPedidoIfTexto = $tipoPedidoIf === 'PEX'
+                ? 'PEX — exportación'
+                : ($tipoPedidoIf === 'PED' ? 'PED — venta' : 'Se define al elegir el cliente');
+        @endphp
+        <div class="form-group row">
+            <label class="col-lg-3 control-label text-right pr-2" for="tipo_comprobante_label">Tipo</label>
+            <div class="col-lg-8">
+                <input type="hidden" name="tipo_comprobante" id="tipo_comprobante" value="{{ $tipoPedidoIf }}">
+                <input type="text" class="form-control" id="tipo_comprobante_label" value="{{ $tipoPedidoIfTexto }}" readonly
+                       title="PED si el cliente no es exportación. PEX si la condición de IVA es letra E.">
+            </div>
+        </div>
+
         <div class="form-group row tm-vendedor-campo">
             <label class="col-lg-3 col-form-label requerido">Vendedor</label>
             <input type="hidden" class="vendedor_id" name="vendedor_id" id="vendedor_id"

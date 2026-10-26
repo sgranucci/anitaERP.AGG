@@ -5,10 +5,16 @@ namespace App\Services\Ventas;
 use App\Models\Stock\Listaprecio;
 use App\Models\Ventas\PedidoArticuloInterforming;
 use App\Models\Ventas\PedidoInterforming;
+use App\Models\Ventas\Cliente;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoCortesSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Ventas\PedidoEstadosInterforming;
 use App\Support\Ventas\PedidoInterformingFasonSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
+use App\Support\Ventas\PedidoInterformingListadoColumnas;
 use App\Support\Ventas\PedidoInterformingListadoFiltros;
+use App\Support\Ventas\PedidoInterformingNumeracionSupport;
 use App\Support\Ventas\PedidoInterformingSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
@@ -61,21 +67,70 @@ class PedidoInterformingService
             $filtros = PedidoInterformingListadoFiltros::filtrosVacios();
         }
 
+        $q = $this->queryListado($filtros);
+        if (! $paginar) {
+            return $q->get();
+        }
+        $perPage = (int) ($filtros['_per_page'] ?? 10);
+
+        return $q->paginate($perPage > 0 ? $perPage : 10);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortes(array $filtros): array
+    {
+        $campos = PedidoInterformingListadoFiltros::camposOrdenables();
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        if ($agrupar === []) {
+            return ['activo' => false];
+        }
+
+        return ListadoCortesSupport::calcular(
+            $this->queryListado($filtros, false),
+            $agrupar,
+            $campos,
+            'pedido.id',
+            static fn (object $row, string $key): string => PedidoInterformingListadoColumnas::valorCelda($row, $key)
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Database\Eloquent\Builder<PedidoInterforming>
+     */
+    private function queryListado(array $filtros, bool $conOrden = true)
+    {
         $q = PedidoInterforming::query()
+            ->select('pedido.*')
+            ->leftJoin('cliente', 'cliente.id', '=', 'pedido.cliente_id')
+            ->leftJoin('vendedor', 'vendedor.id', '=', 'pedido.vendedor_id')
+            ->leftJoin('transporte', 'transporte.id', '=', 'pedido.transporte_id')
+            ->leftJoin('moneda', 'moneda.id', '=', 'pedido.moneda_id')
             ->with([
                 'clientes',
                 'vendedores',
                 'transportes',
+                'moneda',
                 'pedido_articulos',
                 'ventas:id,pedido_id,codigo,fecha,total,cae',
-            ])
-            ->orderByDesc('id');
+            ]);
 
-        if (PedidoInterformingListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            PedidoInterformingListadoFiltros::aplicar($q, $filtros);
+        PedidoInterformingListadoFiltros::aplicar($q, $filtros);
+        if ($conOrden) {
+            $campos = PedidoInterformingListadoFiltros::camposOrdenables();
+            ListadoAgrupacionSupport::aplicarOrdenPrefijo($q, (array) ($filtros['agrupar'] ?? []), $campos);
+            ListadoOrdenamientoSupport::aplicar(
+                $q,
+                (array) ($filtros['sort'] ?? []),
+                $campos,
+                ['campo' => 'id', 'dir' => 'desc']
+            );
         }
 
-        return $paginar ? $q->paginate(10) : $q->get();
+        return $q;
     }
 
     /**
@@ -127,8 +182,10 @@ class PedidoInterformingService
             }
         }
 
+        $cliente = $cliente instanceof Cliente ? $cliente : null;
+
         try {
-            return DB::transaction(function () use ($data, $items, $modo) {
+            return DB::transaction(function () use ($data, $items, $modo, $cliente) {
                 if ($modo === 'create') {
                     $pedido = new PedidoInterforming();
                     $pedido->usuario_id = Auth::id();
@@ -140,13 +197,15 @@ class PedidoInterformingService
                 }
 
                 $this->mapearCabecera($pedido, $data);
-                $pedido->save();
-
-                if ($modo === 'create' && empty($pedido->codigo)) {
-                    $pedido->codigo = (string) $pedido->id;
-                    $pedido->numero_comprobante = (int) $pedido->id;
-                    $pedido->save();
+                if ($modo === 'create') {
+                    $numero = PedidoInterformingNumeracionSupport::reservar($cliente);
+                    $pedido->tipo_comprobante = $numero['tipo'];
+                    $pedido->letra_comprobante = $numero['letra'];
+                    $pedido->sucursal_comprobante = $numero['sucursal'];
+                    $pedido->numero_comprobante = $numero['numero'];
+                    $pedido->codigo = $numero['codigo'];
                 }
+                $pedido->save();
 
                 if ($modo !== 'create') {
                     PedidoArticuloInterforming::query()->where('pedido_id', $pedido->id)->delete();
@@ -240,9 +299,6 @@ class PedidoInterformingService
         $pedido->moneda_id = $data['moneda_id'] ?? null;
         $pedido->cotizacion = $data['cotizacion'] ?? null;
         $pedido->en_stock = $data['en_stock'] ?? null;
-        $pedido->tipo_comprobante = $data['tipo_comprobante'] ?? ($pedido->tipo_comprobante ?? 'PED');
-        $pedido->letra_comprobante = $data['letra_comprobante'] ?? ($pedido->letra_comprobante ?? 'X');
-        $pedido->sucursal_comprobante = $data['sucursal_comprobante'] ?? ($pedido->sucursal_comprobante ?? 1);
     }
 
     /**

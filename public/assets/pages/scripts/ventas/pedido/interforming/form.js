@@ -481,6 +481,8 @@
             var codigotransporte = transporteCliente && transporteCliente.codigo ? transporteCliente.codigo : '';
             var nombretransporte = transporteCliente && transporteCliente.nombre ? transporteCliente.nombre : '';
 
+            aplicarTipoPedidoDesdeCliente(data);
+
             if (!flCambioCliente) {
                 return;
             }
@@ -509,6 +511,16 @@
                 $('#zonavta_id').val(zonavtaId);
             }
         });
+    }
+
+    function aplicarTipoPedidoDesdeCliente(data) {
+        if ($('#pedido_id').val()) {
+            return;
+        }
+        var letra = String((data && data.letra) || '').toUpperCase();
+        var tipo = letra === 'E' ? 'PEX' : 'PED';
+        $('#tipo_comprobante').val(tipo);
+        $('#tipo_comprobante_label').val(tipo === 'PEX' ? 'PEX — exportación' : 'PED — venta');
     }
 
     function completaDatosCliente() {
