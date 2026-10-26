@@ -23,9 +23,9 @@
 
                 <div id="precarga-pdf-ia-paso-upload">
                     <p class="text-muted small mb-2">
-                        Identifica empresa, proveedor, conceptos IVA (sin artículos), moneda y cotización.
-                        Si hay OC, el tipo contable exacto (FGA/FIA/FCA…) lo resuelve el ERP vía listaConcepto.
-                        Sin OC, usa el centro de costo de compra del proveedor. Puede indicar OC al subir o después.
+                        Identifica empresa, proveedor, conceptos IVA, moneda y cotización.
+                        Si hay OC, el tipo lo resuelve la orden. Sin OC, indique el tipo de comprobante
+                        (por defecto FAC; cada empresa puede usar otro).
                     </p>
                     <div class="form-group">
                         <label for="precarga-pdf-ia-archivo">Archivo PDF</label>
@@ -35,6 +35,25 @@
                         <label for="precarga-pdf-ia-numero-oc">Orden de compra <span class="text-muted">(opcional; 6 dígitos)</span></label>
                         <input type="text" id="precarga-pdf-ia-numero-oc" class="form-control form-control-sm" maxlength="6"
                                pattern="\d{0,6}" placeholder="Ej. 214482" inputmode="numeric">
+                    </div>
+                    <div id="precarga-pdf-ia-bloque-tipo">
+                        @include('compras.partials.campo_consulta_tipotransaccion_compra', [
+                            'prefix' => 'precarga_pdf_ia',
+                            'label' => 'Tipo comprobante',
+                            'tipoId' => 0,
+                            'abreviatura' => 'FAC',
+                            'nombre' => '',
+                            'inputName' => 'pdf_ia_tipotransaccion_compra_id',
+                            'inputId' => 'precarga_pdf_ia_tipotransaccion_compra_id',
+                            'required' => false,
+                            'mostrar_editar' => true,
+                            'col_label' => 'col-lg-4 col-form-label control-label text-right pr-2',
+                            'col_input' => 'col-lg-8',
+                        ])
+                        <p class="text-muted small mb-0">
+                            Sin orden de compra se usa este tipo. Por defecto FAC; puede cambiarlo con F1 o la lupa.
+                            Si carga una OC, el tipo lo define la orden.
+                        </p>
                     </div>
                 </div>
 
@@ -135,3 +154,4 @@
         </div>
     </div>
 </div>
+@include('includes.compras.modalconsultatipotransaccioncompra')

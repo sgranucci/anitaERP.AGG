@@ -493,6 +493,7 @@ class CuentacontableController extends Controller
             'conceptogasto_id',
             'cuentacontable_difcambio_id',
         ]);
+        $payload['codigo'] = CuentacontableArbolSupport::normalizarCodigo((string) ($payload['codigo'] ?? ''));
         $payload['inhabilitada'] = $request->boolean('inhabilitada');
         foreach (['conceptogasto_id', 'cuentacontable_difcambio_id', 'parent_id'] as $campo) {
             if (($payload[$campo] ?? '') === '' || (int) ($payload[$campo] ?? 0) === 0) {

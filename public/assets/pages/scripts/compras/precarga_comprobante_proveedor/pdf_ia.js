@@ -55,6 +55,61 @@ $(function () {
         return String($(proveedorIdSelector).val() || '').trim();
     }
 
+    var tipoDefault = 'FAC';
+
+    function inputTipo() {
+        return document.getElementById('precarga_pdf_ia_tipotransaccion_compra_id_abreviatura');
+    }
+
+    function mostrarBloqueTipo(enPasoOc) {
+        var $bloque = $('#precarga-pdf-ia-bloque-tipo').removeClass('d-none');
+        if (enPasoOc) {
+            var $alerta = $('#precarga-pdf-ia-paso-oc-manual .alert').first();
+            if ($alerta.length) {
+                $bloque.insertAfter($alerta);
+            } else {
+                $bloque.prependTo('#precarga-pdf-ia-paso-oc-manual');
+            }
+            return;
+        }
+        $bloque.appendTo('#precarga-pdf-ia-paso-upload');
+    }
+
+    function ocultarBloqueTipo() {
+        $('#precarga-pdf-ia-bloque-tipo').addClass('d-none');
+    }
+
+    function prefijarTipo(abreviatura, avisar) {
+        var input = inputTipo();
+        if (!input || typeof leerTipotransaccionCompraPorAbreviatura !== 'function') {
+            return;
+        }
+        var abrev = String(abreviatura || input.value || tipoDefault).trim().toUpperCase() || tipoDefault;
+        input.value = abrev;
+        leerTipotransaccionCompraPorAbreviatura(abrev, input, null, { avisar: !!avisar });
+    }
+
+    function asegurarTipoSinOc(callback) {
+        var input = inputTipo();
+        if (!input) {
+            callback(tipoDefault);
+            return;
+        }
+        var abrev = String(input.value || '').trim().toUpperCase() || tipoDefault;
+        input.value = abrev;
+        if (typeof leerTipotransaccionCompraPorAbreviatura !== 'function') {
+            callback(abrev);
+            return;
+        }
+        leerTipotransaccionCompraPorAbreviatura(abrev, input, function (data) {
+            if (!data || !data.id) {
+                callback(null);
+                return;
+            }
+            callback(String(data.abreviatura || abrev).toUpperCase());
+        }, { avisar: true });
+    }
+
     function agregarProveedorPortal(datos) {
         var proveedorId = proveedorIdPortal();
         if (proveedorId) {
@@ -192,6 +247,12 @@ $(function () {
         $('#precarga-pdf-ia-btn-confirmar').addClass('d-none');
         $('#precarga-pdf-ia-btn-sin-oc').addClass('d-none').prop('disabled', false);
         $('#precarga-pdf-ia-btn-analizar').prop('disabled', false).removeClass('d-none');
+        $('#precarga_pdf_ia_tipotransaccion_compra_id').val('');
+        $('#precarga_pdf_ia_tipotransaccion_compra_id_descripcion').val('');
+        var $abrevTipo = $('#precarga_pdf_ia_tipotransaccion_compra_id_abreviatura');
+        $abrevTipo.val(tipoDefault).removeData('ultima-valida').removeData('invalida');
+        mostrarBloqueTipo(false);
+        prefijarTipo(tipoDefault, false);
         $('#precarga-pdf-ia-advertencias').addClass('d-none').empty();
         $('#precarga-pdf-ia-constatacion').addClass('d-none').empty();
     }
@@ -359,6 +420,8 @@ $(function () {
 
         $('#precarga-pdf-ia-paso-upload').addClass('d-none');
         $('#precarga-pdf-ia-paso-oc-manual').addClass('d-none');
+        ocultarBloqueTipo();
+        $('#precarga-pdf-ia-editar-oc').text(res.sin_oc ? 'Cambiar tipo o asociar OC' : 'Cambiar / asociar OC');
         $('#precarga-pdf-ia-paso-preview').removeClass('d-none');
         $('#precarga-pdf-ia-btn-analizar').addClass('d-none');
         var $btnConf = $('#precarga-pdf-ia-btn-confirmar');
@@ -403,6 +466,7 @@ $(function () {
         $('#precarga-pdf-ia-paso-upload').addClass('d-none');
         $('#precarga-pdf-ia-paso-preview').addClass('d-none');
         $('#precarga-pdf-ia-paso-oc-manual').removeClass('d-none');
+        mostrarBloqueTipo(true);
         $('#precarga-pdf-ia-btn-confirmar').addClass('d-none');
         $('#precarga-pdf-ia-btn-analizar').addClass('d-none');
         setTimeout(function () {
@@ -429,8 +493,20 @@ $(function () {
         var oc = String($('#precarga-pdf-ia-numero-oc').val() || '').replace(/\D/g, '');
         if (oc.length > 0) {
             fd.append('numero_oc', oc.padStart(6, '0'));
+            enviarAnalisis(fd);
+            return;
         }
 
+        asegurarTipoSinOc(function (tipo) {
+            if (!tipo) {
+                return;
+            }
+            fd.append('tipo_abreviatura', tipo);
+            enviarAnalisis(fd);
+        });
+    }
+
+    function enviarAnalisis(fd) {
         var $btn = $('#precarga-pdf-ia-btn-analizar').prop('disabled', true);
         mostrarOverlay('Analizando factura…');
 
@@ -528,10 +604,20 @@ $(function () {
             return;
         }
 
+        asegurarTipoSinOc(function (tipo) {
+            if (!tipo) {
+                return;
+            }
+            enviarSinOc(tipo);
+        });
+    }
+
+    function enviarSinOc(tipo) {
         var $btn = $('#precarga-pdf-ia-btn-sin-oc').prop('disabled', true);
         var datos = agregarProveedorPortal({
             _token: csrf,
-            extraccion: JSON.stringify(previewPayload.extraccion)
+            extraccion: JSON.stringify(previewPayload.extraccion),
+            tipo_abreviatura: tipo
         });
         mostrarOverlay('Validando factura sin OC…');
 
@@ -563,6 +649,33 @@ $(function () {
         });
     }
 
+    if (typeof activa_eventos_consultatipotransaccioncompra === 'function') {
+        activa_eventos_consultatipotransaccioncompra();
+    }
+
+    $modal.on('shown.bs.modal', function () {
+        if (!String($('#precarga_pdf_ia_tipotransaccion_compra_id').val() || '').trim()) {
+            prefijarTipo(tipoDefault, false);
+        }
+    });
+
+    $('#consultatipotransaccioncompraModal')
+        .on('show.bs.modal.pdfIaTipo', function () {
+            var z = 1060;
+            $(this).css('z-index', z);
+            setTimeout(function () {
+                $('.modal-backdrop').last().css('z-index', z - 10);
+            }, 0);
+        })
+        .on('hidden.bs.modal.pdfIaTipo', function () {
+            if ($modal.hasClass('show')) {
+                $('body').addClass('modal-open');
+                if (!$('.modal-backdrop').length) {
+                    $('<div class="modal-backdrop fade show"></div>').appendTo(document.body);
+                }
+            }
+        });
+
     $modal.on('hidden.bs.modal', resetModal);
 
     $('#precarga-pdf-ia-btn-analizar').on('click', analizarPdf);
@@ -576,7 +689,7 @@ $(function () {
             mostrarPasoOcManual({
                 oc_requerida: true,
                 permite_continuar_sin_oc: true,
-                message: 'Asocie una OC (6 dígitos) o continúe sin orden de compra.',
+                message: 'Sin OC indique el tipo de comprobante (por defecto FAC) o asocie una OC de 6 dígitos.',
                 extraccion: previewPayload.extraccion || previewPayload.resuelto
             });
         }

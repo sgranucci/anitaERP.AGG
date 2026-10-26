@@ -106,6 +106,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $request->validate([
             'pdf' => 'required|file|mimes:pdf|max:20480',
             'numero_oc' => 'nullable|string|max:12',
+            'tipo_abreviatura' => 'nullable|string|max:10',
         ]);
 
         try {
@@ -113,7 +114,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
                 $request->file('pdf'),
                 $request->input('numero_oc'),
                 false,
-                true
+                true,
+                $request->input('tipo_abreviatura'),
             );
 
             if (! ($preview['ok'] ?? false)) {
@@ -212,6 +214,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
         $request->validate([
             'extraccion' => 'required|json',
+            'tipo_abreviatura' => 'nullable|string|max:10',
         ]);
 
         $extraccion = json_decode((string) $request->input('extraccion'), true);
@@ -220,7 +223,11 @@ class Precarga_Comprobante_ProveedorController extends Controller
         }
 
         try {
-            $preview = $this->pdfIaService->resolverSinOc($extraccion, true);
+            $preview = $this->pdfIaService->resolverSinOc(
+                $extraccion,
+                true,
+                $request->input('tipo_abreviatura'),
+            );
 
             return response()->json($preview);
         } catch (RuntimeException $e) {
@@ -237,7 +244,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
             return response()->json([
                 'ok' => false,
                 'oc_requerida' => true,
-                'permite_continuar_sin_oc' => false,
+                'permite_continuar_sin_oc' => ComprobanteProveedorPdfIaService::errorPermiteReintentarTipo($e->getMessage()),
                 'message' => $e->getMessage(),
                 'extraccion' => $extraccion,
             ], 422);

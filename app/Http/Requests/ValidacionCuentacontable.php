@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Contable\CuentacontableArbolSupport;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -22,6 +23,14 @@ class ValidacionCuentacontable extends FormRequest
      *
      * @return array
      */
+    protected function prepareForValidation(): void
+    {
+        $codigo = CuentacontableArbolSupport::normalizarCodigo((string) $this->input('codigo', ''));
+        if ($codigo !== '000000000') {
+            $this->merge(['codigo' => $codigo]);
+        }
+    }
+
     public function rules()
     {
         $id = $this->route('id');

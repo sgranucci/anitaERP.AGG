@@ -159,6 +159,84 @@ final class PrecargaProveedorConceptosListaSupport
     }
 
     /**
+     * Sin OC, el operador eligió la abreviatura del maestro (FAC u otra de esa empresa).
+     * No se deriva FIB/FGA/… desde el centro de costo.
+     *
+     * @return array{
+     *   tipocomprobante: string,
+     *   letra: string,
+     *   centro_costo_codigo: string,
+     *   prorrateo_multi_cc: bool,
+     *   conceptos: list<array{id_concepto: int|string, nombre: string, descripcion_ai: string, concepto_ivacompra_id?: int}>,
+     *   es_proveedor_servicios: bool,
+     *   tipo_item: string,
+     *   tipo_elegido_usuario: bool
+     * }
+     */
+    public function resolverPorAbreviaturaElegida(
+        string $cuitProveedor,
+        string $abreviatura,
+        ?int $proveedorId = null,
+        string $letra = 'A',
+        string $centroCostoCodigo = '',
+    ): array {
+        $cuitProveedor = str_replace('-', '', $cuitProveedor);
+        $abreviatura = strtoupper(trim($abreviatura));
+        if ($abreviatura === '') {
+            throw new RuntimeException('Indique el tipo de comprobante.');
+        }
+
+        $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($abreviatura);
+        if (! $comprobante) {
+            throw new RuntimeException(
+                'No existe el tipo de comprobante «'.$abreviatura.'». Elija otro del maestro de compras.'
+            );
+        }
+        if ($comprobante->tipotransaccion_compra_concepto_ivacompras->isEmpty()) {
+            throw new RuntimeException(
+                'El tipo de comprobante «'.$abreviatura.'» no tiene conceptos de IVA. Elija otro tipo.'
+            );
+        }
+
+        $tipoItem = PrecargaProveedorTipoItemSupport::resolver([], $cuitProveedor, $proveedorId);
+        $conceptos = [];
+        foreach ($comprobante->tipotransaccion_compra_concepto_ivacompras as $linea) {
+            $concepto = $linea->concepto_ivacompras;
+            if (! $concepto) {
+                continue;
+            }
+            $concepto->loadMissing('impuestos');
+            $conceptos[] = [
+                'id_concepto' => (int) $concepto->codigo,
+                'concepto_ivacompra_id' => (int) $concepto->id,
+                'nombre' => (string) $concepto->nombre,
+                'descripcion_ai' => (string) ($concepto->nombre_ia ?: $concepto->nombre),
+                'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
+                'alicuota_iva' => $this->inferirAlicuotaDesdeConcepto($concepto),
+            ];
+        }
+        if ($conceptos === []) {
+            throw new RuntimeException(
+                'El tipo de comprobante «'.$abreviatura.'» no tiene conceptos de IVA. Elija otro tipo.'
+            );
+        }
+
+        return [
+            'tipocomprobante' => $abreviatura,
+            'letra' => $letra !== '' ? $letra : 'A',
+            'centro_costo_codigo' => $centroCostoCodigo,
+            'prorrateo_multi_cc' => false,
+            'es_proveedor_servicios' => PrecargaProveedorTipoItemSupport::proveedorTieneServicios(
+                $cuitProveedor,
+                $proveedorId
+            ),
+            'tipo_item' => $tipoItem,
+            'tipo_elegido_usuario' => true,
+            'conceptos' => $conceptos,
+        ];
+    }
+
+    /**
      * Lista de conceptos sin OC: abreviatura fina según centro de costo de compra del proveedor.
      *
      * @return array{

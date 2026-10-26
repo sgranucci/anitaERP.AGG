@@ -11,6 +11,7 @@
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
 @if (!empty($pdfIaHabilitado) && can('cargar-portal-proveedores', false))
+<script src="{{ asset('assets/pages/scripts/compras/tipotransaccion_compra/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/tipotransaccion_compra/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/precarga_comprobante_proveedor/pdf_ia.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/precarga_comprobante_proveedor/pdf_ia.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 @endsection

@@ -99,6 +99,7 @@ final class PortalProveedorController extends Controller
             'proveedor_id' => 'required|integer|min:1',
             'pdf' => 'required|file|mimes:pdf|max:20480',
             'numero_oc' => 'nullable|string|max:12',
+            'tipo_abreviatura' => 'nullable|string|max:10',
         ]);
 
         $proveedorId = (int) $request->input('proveedor_id');
@@ -107,7 +108,10 @@ final class PortalProveedorController extends Controller
         try {
             $preview = $this->pdfIaService->preview(
                 $request->file('pdf'),
-                $request->input('numero_oc')
+                $request->input('numero_oc'),
+                false,
+                false,
+                $request->input('tipo_abreviatura'),
             );
 
             $this->assertProveedorPreview($preview, $proveedorId);
@@ -186,6 +190,7 @@ final class PortalProveedorController extends Controller
         $request->validate([
             'proveedor_id' => 'required|integer|min:1',
             'extraccion' => 'required|json',
+            'tipo_abreviatura' => 'nullable|string|max:10',
         ]);
 
         $proveedorId = (int) $request->input('proveedor_id');
@@ -197,7 +202,11 @@ final class PortalProveedorController extends Controller
         }
 
         try {
-            $preview = $this->pdfIaService->resolverSinOc($extraccion);
+            $preview = $this->pdfIaService->resolverSinOc(
+                $extraccion,
+                false,
+                $request->input('tipo_abreviatura'),
+            );
 
             $this->assertProveedorPreview($preview, $proveedorId);
             $preview['portal_proveedor_id'] = $proveedorId;
@@ -207,7 +216,7 @@ final class PortalProveedorController extends Controller
             return response()->json([
                 'ok' => false,
                 'oc_requerida' => true,
-                'permite_continuar_sin_oc' => false,
+                'permite_continuar_sin_oc' => ComprobanteProveedorPdfIaService::errorPermiteReintentarTipo($e->getMessage()),
                 'message' => $e->getMessage(),
                 'extraccion' => $extraccion,
             ], 422);

@@ -687,6 +687,7 @@ class Tipotransaccion_CompraController extends Controller
             || can('crear-ingresos-egresos-caja', false)
             || can('editar-ingresos-egresos-caja', false)
             || can('actualizar-ingresos-egresos-caja', false)
-            || can('listar-ingresos-egresos-caja', false);
+            || can('listar-ingresos-egresos-caja', false)
+            || can('cargar-portal-proveedores', false);
     }
 }

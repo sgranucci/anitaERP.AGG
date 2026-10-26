@@ -330,8 +330,8 @@ final class TiendanubeStockSubidaService
             $asignadas[TiendanubeStockCatalogoSupport::clave($codigo)] = $codigo;
         }
 
-        $producto = $this->buscarProducto($api, $sku, $combinaciones, $stock, $articuloId, $skusConocidos);
-        if ($producto === null) {
+        $productos = $this->buscarProductos($api, $sku, $combinaciones, $stock, $articuloId, $skusConocidos);
+        if ($productos === []) {
             $this->linea($subida, [
                 'articulo_id' => $articuloId,
                 'sku' => $sku,
@@ -343,62 +343,67 @@ final class TiendanubeStockSubidaService
         }
 
         $cubiertas = [];
-        $payload = [];
-        $previstas = [];
-        foreach ($producto['variants'] as $variante) {
-            $skuVariante = trim((string) ($variante['sku'] ?? ''));
-            $variantId = (int) ($variante['id'] ?? 0);
-            $partes = TiendanubeStockCatalogoSupport::partesVariante($skuVariante, $sku);
-            if ($variantId <= 0 || $partes === null) {
-                continue;
+        $porProducto = [];
+        foreach ($productos as $producto) {
+            $productId = (int) $producto['id'];
+            foreach ($producto['variants'] as $variante) {
+                $skuVariante = trim((string) ($variante['sku'] ?? ''));
+                $variantId = (int) ($variante['id'] ?? 0);
+                $partes = TiendanubeStockCatalogoSupport::partesVariante($skuVariante, $sku);
+                if ($variantId <= 0 || $partes === null) {
+                    continue;
+                }
+                $claveComb = TiendanubeStockCatalogoSupport::clave($partes['combinacion']);
+                if (! isset($asignadas[$claveComb])) {
+                    continue;
+                }
+                $claveStock = TiendanubeStockCatalogoSupport::claveStock($articuloId, $partes['combinacion'], $partes['talle']);
+                [$unidades, $avisoStock] = self::stockNoNegativo((int) ($stock[$claveStock] ?? 0));
+                $cubiertas[$claveStock] = true;
+                $item = ['id' => $variantId];
+                if ($incluirStock) {
+                    $item['inventory_levels'] = [['stock' => $unidades]];
+                }
+                $precioTxt = null;
+                $ofertaTxt = null;
+                $aviso = null;
+                if ($incluirPrecios && $precio['precio'] !== null) {
+                    $precioTxt = number_format((float) $precio['precio'], 2, '.', '');
+                    $ofertaTxt = number_format((float) ($precio['oferta'] ?? 0), 2, '.', '');
+                    $item['price'] = $precioTxt;
+                    $item['compare_at_price'] = $precioTxt;
+                    $item['promotional_price'] = $ofertaTxt;
+                } elseif ($incluirPrecios) {
+                    $aviso = $simular
+                        ? 'Sin precio en la lista; no se enviaría el precio.'
+                        : 'Sin precio en la lista; no se actualizó el precio.';
+                }
+                if ($simular) {
+                    $hoy = self::textoHoyEnTienda($variante);
+                    $aviso = trim($hoy.($aviso !== null ? ' '.$aviso : '').' No se envió.');
+                }
+                if ($incluirStock && $avisoStock !== null) {
+                    $aviso = trim(($aviso !== null ? $aviso.' ' : '').$avisoStock);
+                }
+                if (! isset($item['inventory_levels']) && ! isset($item['price'])) {
+                    continue;
+                }
+                if (! isset($porProducto[$productId])) {
+                    $porProducto[$productId] = ['payload' => [], 'previstas' => []];
+                }
+                $porProducto[$productId]['payload'][] = $item;
+                $porProducto[$productId]['previstas'][] = [
+                    'articulo_id' => $articuloId,
+                    'sku' => $sku,
+                    'variante_sku' => $skuVariante,
+                    'combinacion_codigo' => $partes['combinacion'],
+                    'talle' => $partes['talle'],
+                    'stock' => $incluirStock ? $unidades : null,
+                    'precio' => $precioTxt,
+                    'precio_promocional' => $ofertaTxt,
+                    'mensaje' => $aviso,
+                ];
             }
-            $claveComb = TiendanubeStockCatalogoSupport::clave($partes['combinacion']);
-            if (! isset($asignadas[$claveComb])) {
-                continue;
-            }
-            $claveStock = TiendanubeStockCatalogoSupport::claveStock($articuloId, $partes['combinacion'], $partes['talle']);
-            [$unidades, $avisoStock] = self::stockNoNegativo((int) ($stock[$claveStock] ?? 0));
-            $cubiertas[$claveStock] = true;
-            $item = ['id' => $variantId];
-            if ($incluirStock) {
-                $item['inventory_levels'] = [['stock' => $unidades]];
-            }
-            $precioTxt = null;
-            $ofertaTxt = null;
-            $aviso = null;
-            if ($incluirPrecios && $precio['precio'] !== null) {
-                $precioTxt = number_format((float) $precio['precio'], 2, '.', '');
-                $ofertaTxt = number_format((float) ($precio['oferta'] ?? 0), 2, '.', '');
-                $item['price'] = $precioTxt;
-                $item['compare_at_price'] = $precioTxt;
-                $item['promotional_price'] = $ofertaTxt;
-            } elseif ($incluirPrecios) {
-                $aviso = $simular
-                    ? 'Sin precio en la lista; no se enviaría el precio.'
-                    : 'Sin precio en la lista; no se actualizó el precio.';
-            }
-            if ($simular) {
-                $hoy = self::textoHoyEnTienda($variante);
-                $aviso = trim($hoy.($aviso !== null ? ' '.$aviso : '').' No se envió.');
-            }
-            if ($incluirStock && $avisoStock !== null) {
-                $aviso = trim(($aviso !== null ? $aviso.' ' : '').$avisoStock);
-            }
-            if (! isset($item['inventory_levels']) && ! isset($item['price'])) {
-                continue;
-            }
-            $payload[] = $item;
-            $previstas[] = [
-                'articulo_id' => $articuloId,
-                'sku' => $sku,
-                'variante_sku' => $skuVariante,
-                'combinacion_codigo' => $partes['combinacion'],
-                'talle' => $partes['talle'],
-                'stock' => $incluirStock ? $unidades : null,
-                'precio' => $precioTxt,
-                'precio_promocional' => $ofertaTxt,
-                'mensaje' => $aviso,
-            ];
         }
 
         foreach ($stock as $clave => $unidades) {
@@ -427,7 +432,7 @@ final class TiendanubeStockSubidaService
             ]);
         }
 
-        if ($payload === []) {
+        if ($porProducto === []) {
             $this->linea($subida, [
                 'articulo_id' => $articuloId,
                 'sku' => $sku,
@@ -438,56 +443,67 @@ final class TiendanubeStockSubidaService
             return;
         }
 
-        if ($simular) {
-            foreach ($previstas as $prevista) {
-                $prevista['estado'] = TiendanubeStockSubidaLinea::ESTADO_PREVISTA;
+        foreach ($porProducto as $productId => $grupo) {
+            if ($simular) {
+                foreach ($grupo['previstas'] as $prevista) {
+                    $prevista['estado'] = TiendanubeStockSubidaLinea::ESTADO_PREVISTA;
+                    $this->linea($subida, $prevista);
+                }
+
+                continue;
+            }
+
+            $respuesta = $this->patchVariantes($api, (int) $productId, $grupo['payload']);
+            $estado = ($respuesta['ok'] ?? false)
+                ? TiendanubeStockSubidaLinea::ESTADO_OK
+                : TiendanubeStockSubidaLinea::ESTADO_ERROR;
+            $error = $estado === TiendanubeStockSubidaLinea::ESTADO_OK
+                ? null
+                : mb_substr((string) ($respuesta['error'] ?? 'Error al actualizar variantes'), 0, 500);
+            if ($error !== null && str_contains($error, 'Missing required scope')) {
+                throw new \RuntimeException($error);
+            }
+
+            foreach ($grupo['previstas'] as $prevista) {
+                if ($error !== null) {
+                    $prevista['mensaje'] = $error;
+                }
+                $prevista['estado'] = $estado;
                 $this->linea($subida, $prevista);
             }
-
-            return;
-        }
-
-        $respuesta = $this->patchVariantes($api, (int) $producto['id'], $payload);
-        $estado = ($respuesta['ok'] ?? false)
-            ? TiendanubeStockSubidaLinea::ESTADO_OK
-            : TiendanubeStockSubidaLinea::ESTADO_ERROR;
-        $error = $estado === TiendanubeStockSubidaLinea::ESTADO_OK
-            ? null
-            : mb_substr((string) ($respuesta['error'] ?? 'Error al actualizar variantes'), 0, 500);
-        if ($error !== null && str_contains($error, 'Missing required scope')) {
-            throw new \RuntimeException($error);
-        }
-
-        foreach ($previstas as $prevista) {
-            if ($error !== null) {
-                $prevista['mensaje'] = $error;
-            }
-            $prevista['estado'] = $estado;
-            $this->linea($subida, $prevista);
         }
     }
 
     /**
+     * Un código de artículo puede estar publicado en varios productos de la tienda
+     * (por ejemplo varón y nena). Cada SKU completo se busca en todo el catálogo;
+     * las variantes del producto encontrado no se vuelven a consultar.
+     *
      * @param  list<string>  $combinaciones
      * @param  array<string, int>  $stock
      * @param  list<string>  $skusConocidos
-     * @return array{id:int, variants:list<array<string, mixed>>}|null
+     * @return list<array{id:int, variants:list<array<string, mixed>>}>
      */
-    private function buscarProducto(
+    private function buscarProductos(
         TiendanubeApiClient $api,
         string $sku,
         array $combinaciones,
         array $stock,
         int $articuloId,
         array $skusConocidos,
-    ): ?array {
+    ): array {
         $candidatos = [];
         foreach ($skusConocidos as $conocido) {
-            $candidatos[$conocido] = $conocido;
+            $conocido = trim($conocido);
+            if ($conocido === '') {
+                continue;
+            }
+            $candidatos[TiendanubeStockCatalogoSupport::clave($conocido)] = $conocido;
         }
         foreach ($combinaciones as $codigo) {
+            $prefijo = $articuloId.'|'.TiendanubeStockCatalogoSupport::clave($codigo).'|';
             foreach ($stock as $clave => $unidades) {
-                if (! str_starts_with($clave, $articuloId.'|'.TiendanubeStockCatalogoSupport::clave($codigo).'|')) {
+                if (! str_starts_with($clave, $prefijo)) {
                     continue;
                 }
                 $talle = explode('|', $clave)[2] ?? '';
@@ -495,23 +511,22 @@ final class TiendanubeStockSubidaService
                     continue;
                 }
                 $armado = $sku.'-'.$codigo.'-'.$talle;
-                $candidatos[$armado] = $armado;
-                if (count($candidatos) >= 6) {
-                    break 2;
-                }
+                $candidatos[TiendanubeStockCatalogoSupport::clave($armado)] = $armado;
             }
         }
         if ($candidatos === [] && $combinaciones !== []) {
-            $candidatos[$sku.'-'.$combinaciones[0]] = $sku.'-'.$combinaciones[0];
+            $armado = $sku.'-'.$combinaciones[0];
+            $candidatos[TiendanubeStockCatalogoSupport::clave($armado)] = $armado;
         }
 
-        $intentos = 0;
-        foreach ($candidatos as $candidato) {
-            if ($intentos >= 4) {
-                break;
+        $productos = [];
+        $resueltos = [];
+        foreach ($candidatos as $claveSku => $candidato) {
+            if (isset($resueltos[$claveSku])) {
+                continue;
             }
-            $intentos++;
             $resp = $this->llamar(fn () => $api->get('products/sku/'.rawurlencode($candidato)));
+            $resueltos[$claveSku] = true;
             if (! ($resp['ok'] ?? false) || ! is_array($resp['data'] ?? null)) {
                 continue;
             }
@@ -520,14 +535,22 @@ final class TiendanubeStockSubidaService
             if ($id <= 0 || ! is_array($variants)) {
                 continue;
             }
-
-            return [
-                'id' => $id,
-                'variants' => array_values(array_filter($variants, 'is_array')),
-            ];
+            if (! isset($productos[$id])) {
+                $productos[$id] = [
+                    'id' => $id,
+                    'variants' => array_values(array_filter($variants, 'is_array')),
+                ];
+            }
+            foreach ($productos[$id]['variants'] as $variante) {
+                $skuVariante = trim((string) ($variante['sku'] ?? ''));
+                if ($skuVariante === '') {
+                    continue;
+                }
+                $resueltos[TiendanubeStockCatalogoSupport::clave($skuVariante)] = true;
+            }
         }
 
-        return null;
+        return array_values($productos);
     }
 
     /**

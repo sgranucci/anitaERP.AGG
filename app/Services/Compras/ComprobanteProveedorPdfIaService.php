@@ -70,22 +70,29 @@ final class ComprobanteProveedorPdfIaService
         ?string $numeroOcManual = null,
         bool $ejecucionSistema = false,
         bool $sinCentroCostoQuedaParaRevisar = false,
+        ?string $tipoAbreviaturaSinOc = null,
     ): array
     {
         $this->assertHabilitado();
 
         $extraido = $this->extraerConGobernanza($pdf, $ejecucionSistema);
         $extraido = $this->aplicarOcManualEnExtraccion($extraido, $numeroOcManual);
+        $tipoElegido = self::normalizarAbreviaturaTipoElegida($tipoAbreviaturaSinOc);
 
         $numeroOc = $this->resolverNumeroOc($extraido);
         if ($numeroOc === null) {
             try {
-                $resuelto = $this->resolverDesdeExtraccion($extraido, null, $sinCentroCostoQuedaParaRevisar);
+                $resuelto = $this->resolverDesdeExtraccion(
+                    $extraido,
+                    null,
+                    $sinCentroCostoQuedaParaRevisar,
+                    $tipoElegido,
+                );
             } catch (RuntimeException $e) {
                 return [
                     'ok' => false,
                     'oc_requerida' => true,
-                    'permite_continuar_sin_oc' => false,
+                    'permite_continuar_sin_oc' => self::errorPermiteReintentarTipo($e->getMessage()),
                     'message' => $e->getMessage()
                         .' Si la factura tiene OC, ingrese el número (6 dígitos) para reintentar.',
                     'extraccion' => $extraido,
@@ -105,6 +112,7 @@ final class ComprobanteProveedorPdfIaService
                     $extraido,
                     $numeroOc,
                     $sinCentroCostoQuedaParaRevisar,
+                    $tipoElegido,
                 );
             }
 
@@ -150,12 +158,20 @@ final class ComprobanteProveedorPdfIaService
      * @param  array<string, mixed>  $extraccion
      * @return array<string, mixed>
      */
-    public function resolverSinOc(array $extraccion, bool $sinCentroCostoQuedaParaRevisar = false): array
-    {
+    public function resolverSinOc(
+        array $extraccion,
+        bool $sinCentroCostoQuedaParaRevisar = false,
+        ?string $tipoAbreviatura = null,
+    ): array {
         $this->assertHabilitado();
 
         unset($extraccion['numero_oc'], $extraccion['numero_oc_origen']);
-        $resuelto = $this->resolverDesdeExtraccion($extraccion, null, $sinCentroCostoQuedaParaRevisar);
+        $resuelto = $this->resolverDesdeExtraccion(
+            $extraccion,
+            null,
+            $sinCentroCostoQuedaParaRevisar,
+            self::normalizarAbreviaturaTipoElegida($tipoAbreviatura),
+        );
 
         return $this->empaquetarPreviewOk($extraccion, $resuelto);
     }
@@ -445,6 +461,7 @@ final class ComprobanteProveedorPdfIaService
         array $extraido,
         ?string $numeroOc,
         bool $sinCentroCostoQuedaParaRevisar = false,
+        string $tipoAbreviaturaElegida = '',
     ): array {
         $numeroOc = $numeroOc !== null && trim($numeroOc) !== ''
             ? $this->numeroOcSupport->normalizar($numeroOc)
@@ -500,6 +517,25 @@ final class ComprobanteProveedorPdfIaService
             $proveedor = $this->resolucionSupport->resolverProveedorPorCuit($cuitProveedor);
             $extraido = $this->aplicarCuitProveedorCorregido($extraido, $proveedor, $advertencias, $cuitProveedor);
             $tipoSolicitado = PrecargaProveedorTipoComprobanteSupport::desdeExtraccion($extraido);
+            if ($tipoAbreviaturaElegida !== '') {
+                $codigoCc = $this->codigoCentroCostoCompraProveedorSiExiste((int) $proveedor['proveedor_id']);
+                if ($codigoCc === null) {
+                    $sinCentroCostoProveedor = true;
+                }
+                $listaConceptos = $this->conceptosListaSupport->resolverPorAbreviaturaElegida(
+                    $cuitProveedor,
+                    $tipoAbreviaturaElegida,
+                    (int) $proveedor['proveedor_id'],
+                    'A',
+                    (string) ($codigoCc ?? ''),
+                );
+                $advertencias[] = 'Factura sin orden de compra: se usó el tipo '
+                    .$listaConceptos['tipocomprobante'].' indicado.';
+                if ($codigoCc === null) {
+                    $advertencias[] = 'El proveedor «'.($proveedor['nombre'] ?? '')
+                        .'» no tiene centro de costo de compra. La precarga queda para revisar.';
+                }
+            } else {
             $codigoCc = $sinCentroCostoQuedaParaRevisar
                 ? $this->codigoCentroCostoCompraProveedorSiExiste((int) $proveedor['proveedor_id'])
                 : $this->codigoCentroCostoCompraProveedor((int) $proveedor['proveedor_id']);
@@ -522,6 +558,7 @@ final class ComprobanteProveedorPdfIaService
                 );
                 $advertencias[] = 'Factura sin orden de compra: tipo y conceptos según centro de costo '
                     .$codigoCc.' del proveedor.';
+            }
             }
         } else {
             if ($cuitDestinatario === '') {
@@ -1371,18 +1408,24 @@ final class ComprobanteProveedorPdfIaService
         array $extraido,
         string $numeroOc,
         bool $sinCentroCostoQuedaParaRevisar,
+        string $tipoAbreviaturaElegida = '',
     ): array {
         $extraidoSinOc = $extraido;
         unset($extraidoSinOc['numero_oc'], $extraidoSinOc['numero_oc_origen']);
         $extraidoSinOc['numero_oc_descartada'] = $numeroOc;
 
         try {
-            $resuelto = $this->resolverDesdeExtraccion($extraidoSinOc, null, $sinCentroCostoQuedaParaRevisar);
+            $resuelto = $this->resolverDesdeExtraccion(
+                $extraidoSinOc,
+                null,
+                $sinCentroCostoQuedaParaRevisar,
+                $tipoAbreviaturaElegida,
+            );
         } catch (RuntimeException $e) {
             return [
                 'ok' => false,
                 'oc_requerida' => true,
-                'permite_continuar_sin_oc' => false,
+                'permite_continuar_sin_oc' => self::errorPermiteReintentarTipo($e->getMessage()),
                 'message' => 'La OC '.$numeroOc.' no existe. '.$e->getMessage(),
                 'extraccion' => $extraidoSinOc,
                 'extraccion_meta' => $extraidoSinOc['_meta'] ?? [],
@@ -1391,7 +1434,9 @@ final class ComprobanteProveedorPdfIaService
             ];
         }
 
-        $aviso = 'La OC '.$numeroOc.' no existe en Anita. Se continúa sin orden de compra, con el centro de costo de compra del proveedor.';
+        $aviso = $tipoAbreviaturaElegida !== ''
+            ? 'La OC '.$numeroOc.' no existe. Se continúa sin orden de compra, con el tipo '.$tipoAbreviaturaElegida.' indicado.'
+            : 'La OC '.$numeroOc.' no existe en Anita. Se continúa sin orden de compra, con el centro de costo de compra del proveedor.';
         $resuelto['advertencias'] = array_values(array_merge(
             [$aviso],
             is_array($resuelto['advertencias'] ?? null) ? $resuelto['advertencias'] : [],
@@ -1403,5 +1448,18 @@ final class ComprobanteProveedorPdfIaService
     private function esOcInexistente(string $mensaje): bool
     {
         return str_contains(mb_strtolower($mensaje), 'oc inexistente');
+    }
+
+    public static function normalizarAbreviaturaTipoElegida(?string $abreviatura): string
+    {
+        $abrev = strtoupper(trim((string) $abreviatura));
+        $abrev = preg_replace('/[^A-Z0-9]/', '', $abrev) ?? '';
+
+        return substr($abrev, 0, 10);
+    }
+
+    public static function errorPermiteReintentarTipo(string $mensaje): bool
+    {
+        return str_contains(mb_strtolower($mensaje), 'tipo de comprobante');
     }
 }

@@ -89,6 +89,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 
     public function create(array $data)
     {
+        $data['usuarioultcambio_id'] = $this->usuarioUltimoCambioId();
         $cuentacontable = $this->model->create($data);
 		//
 		// Graba anita
@@ -99,6 +100,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 
     public function update(array $data, $id)
     {
+        $data['usuarioultcambio_id'] = $this->usuarioUltimoCambioId();
         $cuentacontable = $this->model->findOrFail($id)
             ->update($data);
 
@@ -110,10 +112,35 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 
     public function updateJerarquia(array $data, $id)
     {
+        $data['usuarioultcambio_id'] = $this->usuarioUltimoCambioId();
         $this->model->findOrFail($id)->update($data);
         $this->actualizarAnitaMaestro($data, $data['codigo']);
 
         return $this->model->findOrFail($id);
+    }
+
+    /**
+     * La columna es NOT NULL y tiene FK a usuario. Sin un id válido el alta
+     * revienta con 1452 (o 1364 si el INSERT la omite).
+     */
+    private function usuarioUltimoCambioId(): int
+    {
+        $usuarioId = (int) Auth::id();
+        if ($usuarioId > 0 && Usuario::query()->whereKey($usuarioId)->exists()) {
+            return $usuarioId;
+        }
+
+        $fallback = (int) Usuario::query()->orderBy('id')->value('id');
+        if ($fallback <= 0) {
+            throw new Exception('No hay un usuario válido para registrar el último cambio de la cuenta contable.');
+        }
+
+        return $fallback;
+    }
+
+    private function literalAnita(string $valor): string
+    {
+        return "'".str_replace("'", "''", $valor)."'";
     }
 
     public function delete($id)
@@ -610,45 +637,48 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
                                         ctam_salto_pag, ctam_ajustable, ctam_ley_debe1, ctam_ley_debe2, 
                                         ctam_ley_haber1, ctam_ley_haber2, ctam_rubro, ctam_fl_ccosto, 
                                         ctam_cuenta_alfa, ctam_aju_mon_ext, ctam_cta_dif_cbio',
-            			'valores' => 
-                                " '".$request['empresa_id']."', 
-                                '".$codigo."', 
-                                '".$tipocuenta."', 
-                                '".$request['nombre']."', 
-                                '".$request['nivel']."', 
-                                '".'N'.", 
-                                ".$ajustable."', 
-                                '".' '."', 
-                                '".' '."', 
-                                '".' '."', 
-                                '".' '."', 
-                                '".$request['rubrocontable_id']."', 
-                                '".$manejaccosto."', 
-                                '".$cuenta."', 
-                                '".$request['ajustamonedaextranjera'].", 
-                                '".$cuentacontable_difcambio."' "
+            			'valores' => implode(",\n", [
+                            $this->literalAnita((string) $request['empresa_id']),
+                            $this->literalAnita((string) $codigo),
+                            $this->literalAnita((string) $tipocuenta),
+                            $this->literalAnita((string) $request['nombre']),
+                            $this->literalAnita((string) $request['nivel']),
+                            $this->literalAnita('N'),
+                            $this->literalAnita((string) $ajustable),
+                            $this->literalAnita(' '),
+                            $this->literalAnita(' '),
+                            $this->literalAnita(' '),
+                            $this->literalAnita(' '),
+                            $this->literalAnita((string) $request['rubrocontable_id']),
+                            $this->literalAnita((string) $manejaccosto),
+                            $this->literalAnita((string) $cuenta),
+                            $this->literalAnita((string) ($request['ajustamonedaextranjera'] ?? 'N')),
+                            $this->literalAnita((string) $cuentacontable_difcambio),
+                        ]),
         );
         $apiAnita->apiCallEscritura($data);
 
-        // Lee el concepto de gasto        
-        $apiAnitaConc = new ApiAnita();
-        $data = array( 
-            'acc' => 'insert', 
-            'tabla' => 'ctaconc', 
-            'sistema' => 'contab',
-            'campos' => '
-                ctaco_empresa,
-                ctaco_cuenta,
-                ctaco_concepto
-            ' , 
-            'valores' => 
-                " '".$request['empresa_id']."', 
-                '".$codigo."', 
-                '".$request['conceptogasto_id']."' ",
-            'whereArmado' => " WHERE ctaco_cuenta = '".$codigo.
-                            "' AND ctaco_empresa = '".$request['empresa_id']."' " 
-        );
-        $dataAnitaConc = json_decode($apiAnitaConc->apiCall($data));
+        if (! empty($request['conceptogasto_id'])) {
+            $apiAnitaConc = new ApiAnita();
+            $data = array(
+                'acc' => 'insert',
+                'tabla' => 'ctaconc',
+                'sistema' => 'contab',
+                'campos' => '
+                    ctaco_empresa,
+                    ctaco_cuenta,
+                    ctaco_concepto
+                ',
+                'valores' => implode(",\n", [
+                    $this->literalAnita((string) $request['empresa_id']),
+                    $this->literalAnita((string) $codigo),
+                    $this->literalAnita((string) $request['conceptogasto_id']),
+                ]),
+                'whereArmado' => " WHERE ctaco_cuenta = '".$codigo.
+                                "' AND ctaco_empresa = '".$request['empresa_id']."' ",
+            );
+            $apiAnitaConc->apiCallEscritura($data);
+        }
 
         // Graba centros de costo
 		Self::grabaCentrocosto($codigo, $request);
@@ -778,9 +808,9 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 		$ajustable = $request['monetaria'];
         $manejaccosto = $request['manejaccosto'];
 
-		// Convierte a formato cuenta de anita
-		sprintf($codigo, "%09ld", $request['codigo']);
-		$cuenta = substr($codigo,0,6).'-'.substr($codigo,-3);
+		// 516000-057 y 516000057 son la misma cuenta. Anita guarda 9 dígitos.
+		$codigo = CuentacontableArbolSupport::normalizarCodigo((string) ($request['codigo'] ?? ''));
+		$cuenta = substr($codigo, 0, 6).'-'.substr($codigo, -3);
 
         // Busca cuenta contable de diferencia de cambio
         $cuentacontable_difcambio = '0';
@@ -788,7 +818,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
         {
             $cuentacontable = Self::find($request['cuentacontable_difcambio_id']);
             if ($cuentacontable)
-                $cuentacontable_difcambio = $cuentacontable->codigo;
+                $cuentacontable_difcambio = CuentacontableArbolSupport::normalizarCodigo((string) $cuentacontable->codigo);
             else
                 $cuentacontable_difcambio = '0';
         }
