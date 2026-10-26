@@ -180,9 +180,6 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-outline-info btn-sm" id="ie-lt-pasar-caja">
-                    Pasar total cobrado a la caja
-                </button>
                 <button type="button" class="btn btn-primary btn-sm" id="ie-lt-aceptar">
                     <i class="fa fa-check"></i> Armar DTC
                 </button>

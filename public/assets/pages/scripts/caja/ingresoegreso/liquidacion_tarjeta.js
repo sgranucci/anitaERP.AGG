@@ -496,9 +496,6 @@
             $(this).data('tocado', true);
         });
         $('#ie-lt-aceptar').on('click', aceptar);
-        $('#ie-lt-pasar-caja').on('click', function () {
-            pasarCobradoACaja(recalcular().cobrado);
-        });
 
         $('#modal-ie-liquidacion-tarjeta').on('shown.bs.modal.ieLt', function () {
             var codigo = document.getElementById('ie-lt-cuentacaja-id_codigo');
