@@ -154,20 +154,31 @@ fi
 # supervisorctl es "hay algún proceso que no está RUNNING"; la salida sigue siendo válida.
 SUPERVISOR_STATE=""
 SUPERVISOR_RAW=""
+# sudoers permite "supervisorctl status <programa>" (un argumento). Sin argumento no entra en la regla.
 leer_supervisor() {
-    local out="" rc=0
+    local nombre parte rc ok=0 out=""
+    local -a programas=(
+        'anitaERP-queue:*'
+        'anitaERP-queue-reports:*'
+        'anitaERP-queue-reports-mail:*'
+        'anitaERP-queue-padrones'
+    )
     set +e
-    out="$(supervisorctl status 2>/dev/null)"
-    rc=$?
-    if [[ "$rc" -ne 0 && "$rc" -ne 3 ]]; then
-        out="$(sudo -n supervisorctl status 2>/dev/null)"
+    for nombre in "${programas[@]}"; do
+        parte="$(supervisorctl status "$nombre" 2>/dev/null)"
         rc=$?
-    fi
+        if [[ "$rc" -ne 0 && "$rc" -ne 3 ]]; then
+            parte="$(sudo -n supervisorctl status "$nombre" 2>/dev/null)"
+            rc=$?
+        fi
+        if [[ "$rc" -eq 0 || "$rc" -eq 3 ]] && [[ -n "$parte" ]]; then
+            ok=1
+            out+="${parte}"$'\n'
+        fi
+    done
     set -e
-    if [[ "$rc" -ne 0 && "$rc" -ne 3 ]]; then
-        return 1
-    fi
-    printf '%s\n' "$out"
+    [[ "$ok" -eq 1 ]] || return 1
+    printf '%s' "$out"
 }
 if command -v supervisorctl >/dev/null 2>&1; then
     if SUPERVISOR_RAW="$(leer_supervisor)"; then

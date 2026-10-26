@@ -34,22 +34,45 @@
         <td colspan="2"></td>
     </tr>
     <tr><td colspan="7"></td></tr>
-    <tr>
-        <td></td>
-        <td><strong>CÓDIGO</strong></td>
-        <td colspan="2"><strong>SECTOR</strong></td>
-        <td><strong>COSTO</strong></td>
-        <td colspan="2"></td>
-    </tr>
-    @foreach ($resultado['totales'] ?? [] as $fila)
+    @if (! empty($resultado['caratula_cc']))
         <tr>
-            <td></td>
-            <td>{{ $fila['codigo'] ?? '' }}</td>
-            <td colspan="2">{{ $fila['sector'] ?? '' }}</td>
-            <td>{{ $fmtMonto($fila['costo_total'] ?? 0) }}</td>
+            <td><strong>CODIGO</strong></td>
+            <td><strong>CENTRO DE COSTO</strong></td>
+            <td colspan="2"><strong>SECTOR</strong></td>
+            <td><strong>COSTO</strong></td>
             <td colspan="2"></td>
         </tr>
-    @endforeach
+        @foreach ($resultado['totales'] ?? [] as $fila)
+            <tr>
+                <td>{{ $fila['codigo_visible'] ?? ($fila['codigo'] ?? '') }}</td>
+                <td
+                    @if (! empty($fila['centro_costo_rojo']))
+                        style="color: #FF0000; font-weight: bold;"
+                    @endif
+                >{{ $fila['centro_costo'] ?? '' }}</td>
+                <td colspan="2">{{ $fila['sector'] ?? '' }}</td>
+                <td>{{ $fmtMonto($fila['costo_total'] ?? 0) }}</td>
+                <td colspan="2"></td>
+            </tr>
+        @endforeach
+    @else
+        <tr>
+            <td></td>
+            <td><strong>CÓDIGO</strong></td>
+            <td colspan="2"><strong>SECTOR</strong></td>
+            <td><strong>COSTO</strong></td>
+            <td colspan="2"></td>
+        </tr>
+        @foreach ($resultado['totales'] ?? [] as $fila)
+            <tr>
+                <td></td>
+                <td>{{ $fila['codigo'] ?? '' }}</td>
+                <td colspan="2">{{ $fila['sector'] ?? '' }}</td>
+                <td>{{ $fmtMonto($fila['costo_total'] ?? 0) }}</td>
+                <td colspan="2"></td>
+            </tr>
+        @endforeach
+    @endif
     <tr>
         <td></td>
         <td></td>

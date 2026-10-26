@@ -17,11 +17,29 @@ final class ContaduriaGastronomiaReporteCatalogo
     /** @var list<string> */
     public const INVITACION_CODIGOS = ['20', '30', '40', '50', '60', '70', '120', '140'];
 
-    /** @var list<string> */
-    public const MANAGER_CODIGOS = [
-        '3003', '4502', '4504', '4517', '4518', '4520', '4521', '4522',
+    /**
+     * Descuento de la factura de consumo personal (staff, mandos, directorio).
+     * La vianda del centro se suma aparte y no pasa por este código.
+     */
+    public const CONSUMO_DESCUENTO_CODIGO = '10';
+
+    /**
+     * Mandos medios: solo su factura. La vianda de cada uno ya está en el centro de costo.
+     *
+     * @var list<string>
+     */
+    public const MANDOS_MEDIOS_CODIGOS = [
+        '518', '520', '2018', '2020', '3005', '4037', '4502', '4522', '5010',
+    ];
+
+    /**
+     * Directorio 7000 a 7014. Misma regla que mandos: factura, sin repetir la vianda.
+     *
+     * @var list<string>
+     */
+    public const DIRECTORIO_CODIGOS = [
         '7000', '7001', '7002', '7003', '7004', '7005', '7006', '7007',
-        '7008', '7009', '7010', '7011', '7012', '7013', '7014', '7015',
+        '7008', '7009', '7010', '7011', '7012', '7013', '7014',
     ];
 
     public const STAFF_CODIGO_DESDE = 80;

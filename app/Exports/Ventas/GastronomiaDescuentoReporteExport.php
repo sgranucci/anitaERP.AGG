@@ -307,13 +307,37 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
             'font' => ['size' => 12, 'name' => 'Arial'],
             'alignment' => ['horizontal' => 'center'],
         ]);
-        $sheet->getStyle('B7:D7')->applyFromArray([
+        $filaHeader = $this->hayFilaLogos ? 7 : 6;
+        $rangoHeader = ! empty($this->resultado['caratula_cc'])
+            ? 'A'.$filaHeader.':D'.$filaHeader
+            : 'B'.$filaHeader.':D'.$filaHeader;
+        $sheet->getStyle($rangoHeader)->applyFromArray([
             'font' => ['bold' => true, 'size' => 11, 'name' => 'Arial', 'color' => ['rgb' => '17202A']],
             'fill' => [
                 'fillType' => Fill::FILL_SOLID,
                 'color' => ['rgb' => '85C1E9'],
             ],
         ]);
-        $sheet->freezePane('A8');
+
+        if (! empty($this->resultado['caratula_cc'])) {
+            $sheet->getColumnDimension('B')->setWidth(22);
+            $sheet->getColumnDimension('D')->setWidth(25);
+            $fila = $filaHeader + 1;
+            foreach ($this->resultado['totales'] ?? [] as $total) {
+                if (! empty($total['centro_costo_rojo'])) {
+                    $sheet->getStyle('B'.$fila)->applyFromArray([
+                        'font' => [
+                            'bold' => true,
+                            'size' => 11,
+                            'name' => 'Arial',
+                            'color' => ['rgb' => 'FF0000'],
+                        ],
+                    ]);
+                }
+                $fila++;
+            }
+        }
+
+        $sheet->freezePane('A'.($filaHeader + 1));
     }
 }

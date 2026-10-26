@@ -99,13 +99,14 @@ class VerificarColaPico extends Command
         }
 
         $linea = sprintf(
-            '[%s] status=%s exit=%d workers=%d pending=%d failed_24h=%d%s',
+            '[%s] status=%s exit=%d workers=%d pending=%d failed_24h=%d supervisor=%s%s',
             $informe['timestamp'] ?? now()->toDateTimeString(),
             $informe['status'] ?? '?',
             $exitCode,
             (int) ($informe['worker_count'] ?? 0),
             (int) ($informe['jobs']['pending'] ?? 0),
             (int) ($informe['failed_jobs_24h'] ?? 0),
+            (string) ($informe['supervisor_state'] ?? '?'),
             $issuesExtra,
         );
 

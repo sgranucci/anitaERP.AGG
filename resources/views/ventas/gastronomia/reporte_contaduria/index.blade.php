@@ -75,9 +75,13 @@
                                 <i class="fa fa-file-excel-o"></i> Descargar descuentos
                             </button>
                             <p class="text-muted small mb-0 mt-2">
-                                Un zip con canje (500, 1500 y 1501), invitaciones (20, 30, 40, 50, 60, 70, 120 y 140)
-                                y consumo personal (staff 80-105 y managers en columnas por cliente, y venta de comedor).
-                                El total por c&oacute;digo no lista los que quedaron en cero.
+                                Un zip con canje (500, 1500 y 1501), invitaciones (20, 30, 40, 50, 60, 70, 120 y 140,
+                                una solapa por c&oacute;digo y un subtotal que lista todos, en blanco si no hubo consumo)
+                                y consumo personal. Canje e invitaciones no cambian.
+                                El consumo personal toma la factura con descuento 10. La car&aacute;tula lista el staff 80-105
+                                (factura m&aacute;s vianda del centro, en blanco si no hubo consumo), mandos medios y directorio
+                                (solo su factura, con el centro de costo del legajo en rojo) y el comedor.
+                                El detalle del staff junta la factura y la vianda en columnas. Mandos y directorio van en solapas aparte.
                             </p>
                         </div>
                     </div>

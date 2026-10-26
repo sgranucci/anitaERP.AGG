@@ -2,9 +2,12 @@
 
 namespace Tests\Unit\Support\Caja;
 
+use App\Models\Caja\Caja_Movimiento;
+use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Solicitudpago\Solicitudpago;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
 use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
+use App\Support\Caja\IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
 use Tests\TestCase;
@@ -46,6 +49,39 @@ class IngresoEgresoSolicitudpagoOpaTest extends TestCase
         } finally {
             config(['cobranza.tipotransaccion_caja_ids_secuencial' => $prev]);
         }
+    }
+
+    public function test_opa_tipeada_en_ingresos_egresos_genera_credito(): void
+    {
+        $opa = $this->movimientoCaja('OPA');
+
+        $this->assertTrue(IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport::esOpaDirectaEnIngresosEgresos($opa));
+    }
+
+    public function test_opp_solicitud_o_anulacion_no_son_opa_directa(): void
+    {
+        $this->assertFalse(IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport::esOpaDirectaEnIngresosEgresos(
+            $this->movimientoCaja('OPP')
+        ));
+
+        $conSolicitud = $this->movimientoCaja('OPA', ['solicitudpago_id' => 10]);
+        $this->assertFalse(IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport::esOpaDirectaEnIngresosEgresos($conSolicitud));
+
+        $anulacion = $this->movimientoCaja('OPA', ['caja_movimiento_origen_id' => 99]);
+        $this->assertFalse(IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport::esOpaDirectaEnIngresosEgresos($anulacion));
+    }
+
+    /**
+     * @param  array<string, mixed>  $attrs
+     */
+    private function movimientoCaja(string $abreviatura, array $attrs = []): Caja_Movimiento
+    {
+        $movimiento = new Caja_Movimiento($attrs);
+        $movimiento->setRelation('tipotransaccioncajas', new Tipotransaccion_Caja([
+            'abreviatura' => $abreviatura,
+        ]));
+
+        return $movimiento;
     }
 
     public function test_semilla_anita_opa_comparte_serie_con_opp(): void
