@@ -25,11 +25,12 @@ final class ContaduriaGastronomiaReporteCatalogo
 
     /**
      * Mandos medios: solo su factura. La vianda de cada uno ya está en el centro de costo.
+     * 517 y 2008 son el otro cliente de Entzinger y de Fernández Alberto: la factura de septiembre quedó partida.
      *
      * @var list<string>
      */
     public const MANDOS_MEDIOS_CODIGOS = [
-        '518', '520', '2018', '2020', '3005', '4037', '4502', '4522', '5010',
+        '517', '518', '520', '2008', '2018', '2020', '3005', '4037', '4502', '4522', '5010',
     ];
 
     /**
