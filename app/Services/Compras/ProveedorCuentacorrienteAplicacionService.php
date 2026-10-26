@@ -319,12 +319,14 @@ class ProveedorCuentacorrienteAplicacionService
 
     public static function sqlLadoCredito(): string
     {
-        return 'proveedor_cuentacorriente.total < 0 AND '.SqlDialectSupport::sqlSaldoPendienteProveedorCc();
+        return 'proveedor_cuentacorriente.total < 0 AND '.SqlDialectSupport::sqlSaldoPendienteProveedorCc()
+            .' AND '.ProveedorCuentacorrienteGrillaSupport::sqlExcluirAjuste();
     }
 
     public static function sqlLadoDeuda(): string
     {
-        return 'proveedor_cuentacorriente.total > 0 AND '.SqlDialectSupport::sqlSaldoPendienteProveedorCc();
+        return 'proveedor_cuentacorriente.total > 0 AND '.SqlDialectSupport::sqlSaldoPendienteProveedorCc()
+            .' AND '.ProveedorCuentacorrienteGrillaSupport::sqlExcluirAjuste();
     }
 
     public static function saldoAbsoluto(Proveedor_Cuentacorriente $fila): float

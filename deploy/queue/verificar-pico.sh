@@ -109,31 +109,44 @@ QUEUE_CONNECTION="${QUEUE_CONNECTION:-sync}"
 
 # --- Worker process(es) ---
 # -ww: sin esto ps recorta a 80 columnas y --queue=reports-mail se lee como reports.
-mapfile -t WORKER_LINES < <(ps -ww -eo pid,user,etime,args --no-headers 2>/dev/null \
-    | grep '[q]ueue:work database' || true)
-WORKER_COUNT="${#WORKER_LINES[@]}"
-WORKER_PIDS=()
-WORKER_ETIMES=()
-DEFAULT_COUNT=0
-REPORTS_COUNT=0
-REPORTS_MAIL_COUNT=0
-PADRONES_COUNT=0
-OTHER_COUNT=0
-for line in "${WORKER_LINES[@]}"; do
-    WORKER_PIDS+=("$(echo "$line" | awk '{print $1}')")
-    WORKER_ETIMES+=("$(echo "$line" | awk '{print $3}')")
-    if [[ "$line" == *"--queue=reports-mail"* ]]; then
-        REPORTS_MAIL_COUNT=$((REPORTS_MAIL_COUNT + 1))
-    elif [[ "$line" == *"--queue=reports"* ]]; then
-        REPORTS_COUNT=$((REPORTS_COUNT + 1))
-    elif [[ "$line" == *"--queue=padrones"* ]]; then
-        PADRONES_COUNT=$((PADRONES_COUNT + 1))
-    elif [[ "$line" == *"--queue="* ]]; then
-        OTHER_COUNT=$((OTHER_COUNT + 1))
-    else
-        DEFAULT_COUNT=$((DEFAULT_COUNT + 1))
-    fi
-done
+# reports-mail tiene numprocs=1 y --max-time=3600: Supervisor lo recicla en ~2 s
+# (exit 0 y spawn). El schedule cae en ese segundo y, sin recontar, manda crítico.
+contar_workers() {
+    WORKER_LINES=()
+    WORKER_PIDS=()
+    WORKER_ETIMES=()
+    DEFAULT_COUNT=0
+    REPORTS_COUNT=0
+    REPORTS_MAIL_COUNT=0
+    PADRONES_COUNT=0
+    OTHER_COUNT=0
+    mapfile -t WORKER_LINES < <(ps -ww -eo pid,user,etime,args --no-headers 2>/dev/null \
+        | grep '[q]ueue:work database' || true)
+    WORKER_COUNT="${#WORKER_LINES[@]}"
+    local line
+    for line in "${WORKER_LINES[@]}"; do
+        [[ -z "$line" ]] && continue
+        WORKER_PIDS+=("$(echo "$line" | awk '{print $1}')")
+        WORKER_ETIMES+=("$(echo "$line" | awk '{print $3}')")
+        if [[ "$line" == *"--queue=reports-mail"* ]]; then
+            REPORTS_MAIL_COUNT=$((REPORTS_MAIL_COUNT + 1))
+        elif [[ "$line" == *"--queue=reports"* ]]; then
+            REPORTS_COUNT=$((REPORTS_COUNT + 1))
+        elif [[ "$line" == *"--queue=padrones"* ]]; then
+            PADRONES_COUNT=$((PADRONES_COUNT + 1))
+        elif [[ "$line" == *"--queue="* ]]; then
+            OTHER_COUNT=$((OTHER_COUNT + 1))
+        else
+            DEFAULT_COUNT=$((DEFAULT_COUNT + 1))
+        fi
+    done
+}
+
+contar_workers
+if [[ "$DEFAULT_COUNT" -eq 0 || "$REPORTS_COUNT" -eq 0 || "$REPORTS_MAIL_COUNT" -eq 0 || "$PADRONES_COUNT" -eq 0 ]]; then
+    sleep 5
+    contar_workers
+fi
 
 # --- Supervisor (opcional, sin sudo puede fallar) ---
 SUPERVISOR_STATE=""

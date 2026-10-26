@@ -322,12 +322,14 @@ class ClienteCuentacorrienteAplicacionService
 
     public static function sqlLadoCredito(): string
     {
-        return 'cliente_cuentacorriente.total < 0 AND '.SqlDialectSupport::sqlSaldoPendienteClienteCc();
+        return 'cliente_cuentacorriente.total < 0 AND '.SqlDialectSupport::sqlSaldoPendienteClienteCc()
+            .' AND '.ClienteCuentacorrienteGrillaSupport::sqlExcluirAjuste();
     }
 
     public static function sqlLadoDeuda(): string
     {
-        return 'cliente_cuentacorriente.total > 0 AND '.SqlDialectSupport::sqlSaldoPendienteClienteCc();
+        return 'cliente_cuentacorriente.total > 0 AND '.SqlDialectSupport::sqlSaldoPendienteClienteCc()
+            .' AND '.ClienteCuentacorrienteGrillaSupport::sqlExcluirAjuste();
     }
 
     public static function saldoAbsoluto(Cliente_Cuentacorriente $fila): float

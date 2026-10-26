@@ -40,21 +40,29 @@ final class ClienteCuentacorrienteDeudaAlcanceSupport
      */
     public static function aplicar(Builder $query): void
     {
-        $query->where(function (Builder $alcance) {
-            $alcance->where(function (Builder $deudaVenta) {
-                $deudaVenta
-                    ->whereRaw(SqlDialectSupport::sqlSinCobranzaClienteCc())
-                    ->whereHas('ventas', function (Builder $venta) {
-                        $venta->where(function (Builder $tipos) {
-                            foreach (self::PREFIJOS_VENTA as $prefijo) {
-                                $tipos->orWhere('codigo', 'like', $prefijo.'%');
-                            }
-                        });
-                    });
-            })->orWhereHas('cobranzas.tipotransaccioncajas', function (Builder $tipo) {
-                $tipo->whereRaw('UPPER(TRIM(abreviatura)) = ?', ['COA']);
-            });
-        });
+        $query->whereRaw(self::sql('cliente_cuentacorriente'));
+    }
+
+    /**
+     * Un ajuste de cuenta corriente no tiene factura ni COA, así que no entra.
+     */
+    public static function sql(string $alias = 'cliente_cuentacorriente'): string
+    {
+        $likes = [];
+        foreach (self::PREFIJOS_VENTA as $prefijo) {
+            $likes[] = "v.codigo LIKE '".$prefijo."%'";
+        }
+
+        $sinCobranza = SqlDialectSupport::sqlSinCobranzaClienteCc($alias.'.cobranza_id');
+
+        return '('
+            .'('.$sinCobranza
+            .' AND EXISTS (SELECT 1 FROM venta v WHERE v.id = '.$alias.'.venta_id AND ('
+            .implode(' OR ', $likes).')))'
+            .' OR EXISTS (SELECT 1 FROM cobranza cob'
+            .' INNER JOIN tipotransaccion_caja ttc ON ttc.id = cob.tipotransaccion_caja_id'
+            .' WHERE cob.id = '.$alias.'.cobranza_id AND UPPER(TRIM(ttc.abreviatura)) = \'COA\')'
+            .')';
     }
 
     public static function esComprobanteDeuda(?string $codigoVenta, ?string $abreviaturaCobranza = null): bool
