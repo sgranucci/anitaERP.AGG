@@ -53,6 +53,9 @@ final class ParametroSistemaSupport
      */
     public const CLAVE_MAIL_CONSULTA_PROVEEDOR = 'mail_consulta_proveedor';
 
+    /** Diferencia de cierre de caja Crown que pasa el caso a auditoría. */
+    public const CLAVE_TESORERIA_CROWN_TOLERANCIA_AUDITORIA = 'tesoreria_crown_tolerancia_auditoria';
+
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
     /**
@@ -158,6 +161,16 @@ final class ParametroSistemaSupport
                 'ayuda' => 'Si está activo, al cargar una OC el solicitante se elige con la consulta de usuarios. Arranca con quien carga la orden, o con el último solicitante que esa persona eligió. Si está inactivo, el solicitante es quien carga y no se puede cambiar.',
                 'tipo' => 'boolean',
                 'orden' => 60,
+            ];
+        }
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            $defs[self::CLAVE_TESORERIA_CROWN_TOLERANCIA_AUDITORIA] = [
+                'grupo' => 'Tesorería Crown',
+                'etiqueta' => 'Tolerancia de auditoría',
+                'ayuda' => 'Si el valor absoluto de la diferencia del cierre de caja supera este importe, el cierre pasa a auditoría. Mientras no se cargue, se usan 50.000.',
+                'tipo' => 'decimal',
+                'orden' => 10,
             ];
         }
 

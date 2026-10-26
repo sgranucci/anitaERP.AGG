@@ -16,10 +16,11 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
                             {--hasta= : Fecha ISO hasta}
                             {--limite= : Máximo de cuotas/deuda a procesar}
                             {--usuario-id=1 : usuario_id de auditoría}
+                            {--solo-cerrar-pagadas : Solo cierra ANITA_IMPORT que Anita ya pagó por completo}
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Persiste en ERP (no escribe Anita)}';
 
-    protected $description = 'Alinea deuda Anita→ERP (no toca CC/apps de OP ERP; nativas solo apps; OPA pendientes)';
+    protected $description = 'Alinea deuda abierta Anita↔ERP (cierra ANITA_IMPORT que Anita ya pagó; nativas solo apps)';
 
     public function handle(ProveedorCuentacorrienteImportarDesdeAnitaService $service): int
     {
@@ -51,7 +52,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
             $proveedor !== '' ? $proveedor : 'todos',
             $dryRun ? 'DRY-RUN' : 'EJECUTAR',
         ));
-        $this->line('Filtro: promov pendiente + nativas ERP con apps Anita; OPA; no pisa CP nativos.');
+        $this->line('Filtro: promov pendiente + nativas con apps; ANITA_IMPORT saldadas en Anita; OPA; no pisa CP nativos.');
 
         try {
             $stats = $service->importar(
@@ -62,6 +63,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
                 $usuarioId,
                 $limite,
                 $empresaId,
+                soloCerrarPagadas: (bool) $this->option('solo-cerrar-pagadas'),
             );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
@@ -82,6 +84,11 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
             ['Ya al día', $stats['omitidas_al_dia']],
             ['Nativas saldadas Anita (candidatas)', $stats['nativas_saldadas_anita'] ?? 0],
             ['Nativas solo apps', $stats['nativas_solo_apps'] ?? 0],
+            ['Importadas abiertas en ERP', $stats['importadas_abiertas_erp'] ?? 0],
+            ['Importadas pagas en Anita (a cerrar)', $stats['importadas_saldadas_anita'] ?? 0],
+            ['Importadas sin promov Anita', $stats['importadas_sin_promov'] ?? 0],
+            ['Importadas que Anita sigue con saldo', $stats['importadas_siguen_abiertas_anita'] ?? 0],
+            ['Saldos alineados', $stats['saldos_alineados'] ?? 0],
             ['A procesar', $stats['a_procesar']],
             ['CP a crear / creados', $stats['a_crear_cp'].' / '.$stats['cp_creados']],
             ['OPA a crear / creados', $stats['a_crear_opa'].' / '.$stats['opa_creados']],

@@ -103,6 +103,11 @@ class TesoreriaCrownComprobante extends Model implements Auditable
         return $this->hasMany(TesoreriaCrownComprobanteLinea::class, 'comprobante_id');
     }
 
+    public function cierresFiscales(): HasMany
+    {
+        return $this->hasMany(TesoreriaCrownCierreFiscal::class, 'comprobante_id');
+    }
+
     public function entregaUsuario(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'entrega_usuario_id');

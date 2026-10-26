@@ -48,6 +48,11 @@ return [
         'cuit_representada' => env('ARCA_CUIT_REPRESENTADA'),
         // Tope por llamada SOAP (conexión y respuesta). Evita que un CUIT cuelgue el lote.
         'soap_timeout' => max(5, (int) env('ARCA_PADRON_SOAP_TIMEOUT', 25)),
+        // aws.arca.gob.ar:443 puede estar rehusado en salida directa. Vacío = sin proxy.
+        'proxy_host' => (string) env('ARCA_PADRON_PROXY_HOST', ''),
+        'proxy_port' => max(1, (int) env('ARCA_PADRON_PROXY_PORT', 3128)),
+        'proxy_user' => (string) env('ARCA_PADRON_PROXY_USER', ''),
+        'proxy_password' => (string) env('ARCA_PADRON_PROXY_PASSWORD', ''),
 
         'ws_sr_constancia_inscripcion' => [
             'service_id' => 'ws_sr_constancia_inscripcion',

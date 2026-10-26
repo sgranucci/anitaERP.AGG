@@ -124,12 +124,12 @@
                 <td style="width:50%;">
                     <div class="linea"></div>
                     {{ TesoreriaCrownFirmaSupport::etiqueta($comprobante->tipo, 'entrega') }}<br>
-                    <span class="muted">{{ TesoreriaCrownFirmaSupport::textoFirma($comprobante->entregaUsuario, $comprobante->entrega_at) }}</span>
+                    <span class="muted">{{ TesoreriaCrownFirmaSupport::textoFirma($comprobante->entregaUsuario, $comprobante->entrega_at, TesoreriaCrownFirmaSupport::ladoCajero($comprobante->tipo) === 'entrega' ? ($comprobante->asignacion->cajero->nombre ?? null) : null) }}</span>
                 </td>
                 <td style="width:50%;">
                     <div class="linea"></div>
                     {{ TesoreriaCrownFirmaSupport::etiqueta($comprobante->tipo, 'recibe') }}<br>
-                    <span class="muted">{{ TesoreriaCrownFirmaSupport::textoFirma($comprobante->recibeUsuario, $comprobante->recibe_at) }}</span>
+                    <span class="muted">{{ TesoreriaCrownFirmaSupport::textoFirma($comprobante->recibeUsuario, $comprobante->recibe_at, TesoreriaCrownFirmaSupport::ladoCajero($comprobante->tipo) === 'recibe' ? ($comprobante->asignacion->cajero->nombre ?? null) : null) }}</span>
                 </td>
             </tr>
         </table>

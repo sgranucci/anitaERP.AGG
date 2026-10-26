@@ -6,6 +6,7 @@ use App\Models\Configuracion\Sala;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class TesoreriaCrownAsignacion extends Model implements Auditable
@@ -46,5 +47,10 @@ class TesoreriaCrownAsignacion extends Model implements Auditable
     public function comprobantes(): HasMany
     {
         return $this->hasMany(TesoreriaCrownComprobante::class, 'asignacion_id');
+    }
+
+    public function cierre(): HasOne
+    {
+        return $this->hasOne(TesoreriaCrownCierre::class, 'asignacion_id');
     }
 }

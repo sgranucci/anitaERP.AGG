@@ -6,4 +6,6 @@
 #
 # El socket /run/supervisor.sock sigue siendo root:root 0700.
 
-www-data ALL=(root) NOPASSWD: /usr/bin/supervisorctl status *
+# "status *" no matchea "status" sin argumentos (sudoers). verificar-pico.sh
+# corre exactamente: sudo -n supervisorctl status
+www-data ALL=(root) NOPASSWD: /usr/bin/supervisorctl status, /usr/bin/supervisorctl status *
