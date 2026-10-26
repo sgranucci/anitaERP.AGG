@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Ventas\Gastronomia;
 
 use App\ApiAnita;
+use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\DescuentoGastronomia;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportBridgeSupport;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportCacheReader;
@@ -189,12 +190,13 @@ final class GastronomiaBackfillClienteInternoVipDescuentoService
                     continue;
                 }
 
-                $actualizadas = DB::table('cuenta_gastronomia')
-                    ->where('id', (int) $row->cuenta_id)
-                    ->where('cliente_interno_descuento_id', $cliPlatinoId)
-                    ->update(['cliente_interno_descuento_id' => $nuevoId]);
+                $actualizadas = $this->grabarClienteInterno(
+                    (int) $row->cuenta_id,
+                    $nuevoId,
+                    $cliPlatinoId,
+                );
 
-                if ($actualizadas <= 0) {
+                if (! $actualizadas) {
                     $ret['omitidas']++;
 
                     continue;
@@ -280,11 +282,9 @@ final class GastronomiaBackfillClienteInternoVipDescuentoService
                     continue;
                 }
 
-                $actualizadas = DB::table('cuenta_gastronomia')
-                    ->where('id', (int) $row->cuenta_id)
-                    ->update(['cliente_interno_descuento_id' => $nuevoId]);
+                $actualizadas = $this->grabarClienteInterno((int) $row->cuenta_id, $nuevoId);
 
-                if ($actualizadas > 0) {
+                if ($actualizadas) {
                     $ret['desc10_corregidas']++;
                     $ret['por_empresa'][$empresaId]['desc10_corregidas']++;
                 } else {
@@ -383,15 +383,14 @@ final class GastronomiaBackfillClienteInternoVipDescuentoService
                     continue;
                 }
 
-                $actualizadas = DB::table('cuenta_gastronomia')
-                    ->where('id', (int) $row->cuenta_id)
-                    ->whereNull('descuento_gastronomia_id')
-                    ->update([
-                        'descuento_gastronomia_id' => $nuevoDescId,
-                        'cliente_interno_descuento_id' => $nuevoCliId,
-                    ]);
+                $actualizadas = $this->grabarClienteInterno(
+                    (int) $row->cuenta_id,
+                    $nuevoCliId,
+                    null,
+                    $nuevoDescId,
+                );
 
-                if ($actualizadas <= 0) {
+                if (! $actualizadas) {
                     $ret['omitidas']++;
 
                     continue;
@@ -404,6 +403,37 @@ final class GastronomiaBackfillClienteInternoVipDescuentoService
                     .' venta_id='.(int) $row->venta_id.': '.$e->getMessage();
             }
         }
+    }
+
+    /**
+     * Graba el cliente por el modelo para que OwenIt registre el valor anterior y el nuevo.
+     */
+    private function grabarClienteInterno(
+        int $cuentaId,
+        ?int $nuevoClienteId,
+        ?int $soloSiActualEs = null,
+        ?int $descuentoIdSiFalta = null,
+    ): bool {
+        $query = CuentaGastronomia::query()->whereKey($cuentaId);
+        if ($soloSiActualEs !== null) {
+            $query->where('cliente_interno_descuento_id', $soloSiActualEs);
+        }
+        if ($descuentoIdSiFalta !== null) {
+            $query->whereNull('descuento_gastronomia_id');
+        }
+
+        $cuenta = $query->first();
+        if ($cuenta === null) {
+            return false;
+        }
+
+        $cuenta->cliente_interno_descuento_id = $nuevoClienteId;
+        if ($descuentoIdSiFalta !== null) {
+            $cuenta->descuento_gastronomia_id = $descuentoIdSiFalta;
+        }
+        $cuenta->save();
+
+        return true;
     }
 
     private function resolverClienteInternoDesc40Corregido(

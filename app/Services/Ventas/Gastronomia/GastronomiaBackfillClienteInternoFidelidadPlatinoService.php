@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Models\Ventas\CuentaGastronomia;
 use App\Support\Ventas\GastronomiaDescuentoClienteInternoSupport;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -108,17 +109,19 @@ final class GastronomiaBackfillClienteInternoFidelidadPlatinoService
                         continue;
                     }
 
-                    $actualizadas = DB::table('cuenta_gastronomia')
-                        ->where('id', $cuentaId)
+                    $cuenta = CuentaGastronomia::query()
+                        ->whereKey($cuentaId)
                         ->where('cliente_interno_descuento_id', $cliDefaultId)
-                        ->update(['cliente_interno_descuento_id' => $cliPlatinoId]);
-
-                    if ($actualizadas <= 0) {
+                        ->first();
+                    if ($cuenta === null) {
                         $ret['omitidas']++;
                         $ret['por_empresa'][$empresaId]['omitidas']++;
 
                         continue;
                     }
+
+                    $cuenta->cliente_interno_descuento_id = $cliPlatinoId;
+                    $cuenta->save();
 
                     $ret['fidelidad_platino_corregidas']++;
                     $ret['por_empresa'][$empresaId]['fidelidad_platino_corregidas']++;
