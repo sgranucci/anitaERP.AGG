@@ -11,12 +11,19 @@ use OwenIt\Auditing\Contracts\Auditable;
 class Tipoarticulo extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
-    protected $fillable = ['nombre', 'abreviatura', 'usa_control_contable_cigarrillos'];
+    protected $fillable = [
+        'nombre',
+        'abreviatura',
+        'usa_control_contable_cigarrillos',
+        'letra_comprobante_compra',
+        'comprobante_compra_iva_indirecto',
+    ];
 
     protected $table = 'tipoarticulo';
 
     protected $casts = [
         'usa_control_contable_cigarrillos' => 'boolean',
+        'comprobante_compra_iva_indirecto' => 'boolean',
     ];
 
     /**

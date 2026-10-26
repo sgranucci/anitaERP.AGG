@@ -433,18 +433,21 @@ final class PrecargaProveedorConceptosListaSupport
                 'S' => ['DIS', 'DNS', 'NDS', 'DIB', 'NDB'],
                 'L' => ['DIL', 'NDL', 'NDB'],
                 'U' => ['DIU', 'NDU', 'NDB'],
+                'A' => ['DIA', 'DIB', 'NDB'],
                 default => ['DIB', 'DNB', 'NDB', 'NDS'],
             },
             'NC' => match ($item) {
                 'S' => ['CIS', 'CNS', 'NCS', 'CIB', 'NCB'],
                 'L' => ['CIL', 'NCL', 'NCB'],
                 'U' => ['CIU', 'NCU', 'NCB'],
+                'A' => ['CIA', 'CIB', 'NCB'],
                 default => ['CIB', 'CNB', 'NCB', 'NCS'],
             },
             default => match ($item) {
                 'S' => ['FIS', 'FNS', 'FAS', 'FAB', 'FAC'],
                 'L' => ['FIL', 'FNL', 'FAL', 'FAB', 'FAC'],
                 'U' => ['FIU', 'FNU', 'FAU', 'FAB', 'FAC'],
+                'A' => ['FIA', 'FAB', 'FAC'],
                 default => ['FIB', 'FNB', 'FAB', 'FAS', 'FAC'],
             },
         };

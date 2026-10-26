@@ -5,26 +5,36 @@ namespace App\Support\Compras\PrecargaProveedor;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Contable\Centrocosto;
+use App\Models\Stock\Tipoarticulo;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Throwable;
 
 /**
- * Abreviatura fina de factura compra (FIB/FGA/FIS…) según CC destino + tipo IVA + ítem.
+ * Abreviatura fina de factura compra (FIB/FGA/FIS/FIA…) según CC destino + tipo IVA + ítem.
  *
  * Misma regla que listaConcepto / PrecargaProveedorConceptosListaSupport:
+ * - La 3ª letra sale del tipo de artículo: abreviatura B/S/L/U, o letra_comprobante_compra del maestro.
+ * - En AGG, si ese tipo tiene comprobante_compra_iva_indirecto, la 2ª letra es I
+ *   (no mira el tipo de IVA del centro ni los atajos de gastronomía / EGA).
  * - CC 85 → xGA (gastronomía)
  * - CC 104 → xEG
- * - resto → inicial AFIP + 1ª letra tipoiva (I/D/N) + tipo ítem (B/S/L/U)
+ * - resto → inicial AFIP + 1ª letra tipoiva (I/D/N) + tipo ítem
  */
 final class PrecargaProveedorAbreviaturaTipoSupport
 {
+    /** @var array<string, bool> */
+    private static array $cacheIvaIndirecto = [];
+
     /**
      * @param  'FC'|'ND'|'NC'|'REC'|'REM'|string  $tipoComprobante
+     * @param  bool|null  $ivaIndirectoForzado  null = leer el maestro (solo aplica en AGG)
      */
     public static function abreviatura(
         string $tipoComprobante,
         int|string $codigoCentroCosto,
         string $tipoIva,
         string $tipoItem,
+        ?bool $ivaIndirectoForzado = null,
     ): string {
         $tipoComprobante = strtoupper(trim($tipoComprobante));
         if (in_array($tipoComprobante, ['REC', 'REM'], true)) {
@@ -41,13 +51,29 @@ final class PrecargaProveedorAbreviaturaTipoSupport
             return '';
         }
 
+        $letraItem = self::normalizarLetraItem($tipoItem);
+        $forzarIndirecto = $ivaIndirectoForzado ?? self::tipoFuerzaIvaIndirecto($letraItem);
+        if ($forzarIndirecto) {
+            return $inicial.'I'.$letraItem;
+        }
+
         $codigo = (int) preg_replace('/\D+/', '', (string) $codigoCentroCosto);
 
         return match ($codigo) {
             85 => $inicial.'GA',
             104 => $inicial.'EG',
-            default => $inicial.strtoupper(substr(trim($tipoIva), 0, 1)).strtoupper(trim($tipoItem) ?: 'B'),
+            default => $inicial.strtoupper(substr(trim($tipoIva), 0, 1)).$letraItem,
         };
+    }
+
+    /**
+     * Letra de una posición (B/S/L/U/A…). Cualquier otra cosa cae en bienes.
+     */
+    public static function normalizarLetraItem(string $tipoItem): string
+    {
+        $letra = strtoupper(trim($tipoItem));
+
+        return preg_match('/^[A-Z]$/', $letra) === 1 ? $letra : 'B';
     }
 
     /**
@@ -66,7 +92,7 @@ final class PrecargaProveedorAbreviaturaTipoSupport
         $oc->loadMissing([
             'centrocostos:id,codigo,tipoiva',
             'ordencompra_articulos.centrocostos_destino:id,codigo,tipoiva',
-            'ordencompra_articulos.articulos.tipoarticulos:id,nombre,abreviatura',
+            'ordencompra_articulos.articulos.tipoarticulos:id,nombre,abreviatura,letra_comprobante_compra,comprobante_compra_iva_indirecto',
             'ordencompra_articulos.articulos.categorias:id,nombre,codigo',
         ]);
 
@@ -312,6 +338,16 @@ final class PrecargaProveedorAbreviaturaTipoSupport
 
     public static function tipoItemDesdeOrdencompra(Ordencompra $oc): string
     {
+        $oc->loadMissing([
+            'ordencompra_articulos.articulos.tipoarticulos:id,nombre,abreviatura,letra_comprobante_compra,comprobante_compra_iva_indirecto',
+            'ordencompra_articulos.articulos.categorias:id,nombre,codigo',
+        ]);
+
+        $letraTipo = self::letraComprobanteUniforme($oc);
+        if ($letraTipo !== null) {
+            return $letraTipo;
+        }
+
         $proveedorId = (int) ($oc->proveedor_id ?? 0);
         if (PrecargaProveedorTipoItemSupport::proveedorTieneServicios(null, $proveedorId > 0 ? $proveedorId : null)) {
             return 'S';
@@ -338,5 +374,68 @@ final class PrecargaProveedorAbreviaturaTipoSupport
         }
 
         return PrecargaProveedorTipoItemSupport::resolverDesdeItemsOc($items);
+    }
+
+    /**
+     * Si todas las líneas con artículo tienen la misma letra_comprobante_compra, esa es la 3ª letra.
+     */
+    private static function letraComprobanteUniforme(Ordencompra $oc): ?string
+    {
+        $letras = [];
+        $conArticulo = 0;
+        foreach ($oc->ordencompra_articulos ?? [] as $linea) {
+            $art = $linea->articulos;
+            if (! $art) {
+                continue;
+            }
+            $conArticulo++;
+            $letra = strtoupper(trim((string) ($art->tipoarticulos->letra_comprobante_compra ?? '')));
+            if (preg_match('/^[A-Z]$/', $letra) !== 1) {
+                return null;
+            }
+            $letras[$letra] = true;
+        }
+        if ($conArticulo === 0 || count($letras) !== 1) {
+            return null;
+        }
+
+        return (string) array_key_first($letras);
+    }
+
+    /**
+     * El maestro del tipo marca IVA indirecto y la instalación es AGG.
+     */
+    private static function tipoFuerzaIvaIndirecto(string $letra): bool
+    {
+        if (! self::entornoEsAgg()) {
+            return false;
+        }
+        if (array_key_exists($letra, self::$cacheIvaIndirecto)) {
+            return self::$cacheIvaIndirecto[$letra];
+        }
+
+        try {
+            $fuerza = Tipoarticulo::query()
+                ->where('letra_comprobante_compra', $letra)
+                ->where('comprobante_compra_iva_indirecto', true)
+                ->exists();
+        } catch (Throwable) {
+            $fuerza = false;
+        }
+
+        return self::$cacheIvaIndirecto[$letra] = $fuerza;
+    }
+
+    private static function entornoEsAgg(): bool
+    {
+        try {
+            if (! function_exists('app') || ! app()->bound('config')) {
+                return false;
+            }
+
+            return EntornoEmpresaSupport::esAgg();
+        } catch (Throwable) {
+            return false;
+        }
     }
 }

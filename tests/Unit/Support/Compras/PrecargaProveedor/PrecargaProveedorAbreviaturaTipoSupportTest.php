@@ -102,4 +102,36 @@ class PrecargaProveedorAbreviaturaTipoSupportTest extends TestCase
         $this->assertSame('REC', PrecargaProveedorAbreviaturaTipoSupport::abreviatura('REC', 103, 'Indirecto', 'B'));
         $this->assertSame('REC', PrecargaProveedorAbreviaturaTipoSupport::abreviatura('rec', 85, 'Directo', 'S'));
     }
+
+    public function test_alquiler_directo_sin_forzar_indirecto_respeta_el_centro(): void
+    {
+        $this->assertSame(
+            'FDA',
+            PrecargaProveedorAbreviaturaTipoSupport::abreviatura('FC', 106, 'Directo', 'A', false)
+        );
+        $this->assertSame(
+            'FGA',
+            PrecargaProveedorAbreviaturaTipoSupport::abreviatura('FC', 85, 'Directo', 'A', false)
+        );
+    }
+
+    public function test_alquiler_forzado_indirecto_es_fia_aunque_el_centro_sea_directo_o_gastronomia(): void
+    {
+        $this->assertSame(
+            'FIA',
+            PrecargaProveedorAbreviaturaTipoSupport::abreviatura('FC', 106, 'Directo', 'A', true)
+        );
+        $this->assertSame(
+            'FIA',
+            PrecargaProveedorAbreviaturaTipoSupport::abreviatura('FC', 85, 'Directo', 'A', true)
+        );
+        $this->assertSame(
+            'CIA',
+            PrecargaProveedorAbreviaturaTipoSupport::abreviatura('NC', 106, 'Directo', 'A', true)
+        );
+        $this->assertSame(
+            'DIA',
+            PrecargaProveedorAbreviaturaTipoSupport::abreviatura('ND', 106, 'Directo', 'A', true)
+        );
+    }
 }

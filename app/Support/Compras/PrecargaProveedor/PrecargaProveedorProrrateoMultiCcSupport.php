@@ -117,10 +117,7 @@ final class PrecargaProveedorProrrateoMultiCcSupport
         array $centrosConPeso,
     ): array {
         $tipoComprobante = strtoupper(trim($tipoComprobante));
-        $tipoItem = strtoupper(trim($tipoItem) ?: 'B');
-        if (! in_array($tipoItem, ['B', 'S', 'L', 'U'], true)) {
-            $tipoItem = 'B';
-        }
+        $tipoItem = PrecargaProveedorAbreviaturaTipoSupport::normalizarLetraItem($tipoItem);
 
         $pesosPorFino = [];
         $centros = [];
@@ -277,10 +274,7 @@ final class PrecargaProveedorProrrateoMultiCcSupport
             return $vacio;
         }
 
-        $tipoItem = strtoupper(substr($abrev, 2, 1) ?: 'B');
-        if (! in_array($tipoItem, ['B', 'S', 'L', 'U'], true)) {
-            $tipoItem = 'B';
-        }
+        $tipoItem = PrecargaProveedorAbreviaturaTipoSupport::normalizarLetraItem(substr($abrev, 2, 1) ?: 'B');
 
         $centrosConPeso = self::centrosConPesoParaOc($numeroOc, []);
         if ($centrosConPeso === []) {
