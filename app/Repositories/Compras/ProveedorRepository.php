@@ -32,6 +32,7 @@ use App\Support\Compras\ProveedorPropagoAnitaSupport;
 use App\Support\Compras\ProveedorSalaAnitaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Compras\ProveedorExclusionAnitaSupport;
+use App\Support\Compras\ProveedorRetencionIibbAnitaSupport;
 use App\Support\Configuracion\CondicionivaLetraComprasSupport;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Support\Compras\ProveedorListadoFiltros;
@@ -729,23 +730,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			else
 				$retencionsuss_id = null;
 	
-			$condicioniibb_id = 1;
-			switch($data->prom_ret_ibr)
-			{
-			case 'S':
-			case 'C':
-				$condicioniibb_id = 1;
-				break;
-			case 'L':
-			case 'B':
-				$condicioniibb_id = 2;
-				break;
-			case 'I':
-			case 'E':
-			case 'N':
-				$condicioniibb_id = 3;
-				break;
-			}
+			$condicioniibb_id = ProveedorRetencionIibbAnitaSupport::condicionIibbIdDesdePromRetIbr(
+				$data->prom_ret_ibr ?? null
+			);
 
 			$condpago = $this->condicionpagoRepository->findPorCodigo($data->prom_cond_pago);
 			if ($condpago)
@@ -2187,18 +2174,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$fechaexclusionretib = $camposExclusionPromae['fechaexclusionretib'];
 		$fechainicioexclusionretib = $camposExclusionPromae['fechainicioexclusionretib'];
 
-		switch($data['condicionIIBB_id'])
-		{
-		case 1:
-			$retieneiibb = 'S';
-			break;
-		case 2:
-			$retieneiibb = 'L';
-			break;
-		case 3:
-			$retieneiibb = 'E';
-			break;
-		}
+		$retieneiibb = ProveedorRetencionIibbAnitaSupport::promRetIbrDesdeCondicionIibbId(
+			$data['condicionIIBB_id'] ?? null
+		);
 
 		$tipoemp = $this->tipoempresaRepository->find($data['tipoempresa_id']);
 		if ($tipoemp)
