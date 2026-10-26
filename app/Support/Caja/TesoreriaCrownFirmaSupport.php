@@ -30,9 +30,9 @@ final class TesoreriaCrownFirmaSupport
         return $esHabilitacion ? 'Cajero recibe' : 'Tesorería recibe';
     }
 
-    public static function publicarToken(TesoreriaCrownComprobante $comprobante): void
+    public static function pasarAPendiente(TesoreriaCrownComprobante $comprobante): void
     {
-        $comprobante->qr_token = bin2hex(random_bytes(32));
+        $comprobante->qr_token = null;
         $comprobante->estado = TesoreriaCrownComprobanteSupport::PENDIENTE;
         $comprobante->entrega_usuario_id = null;
         $comprobante->entrega_at = null;
@@ -49,6 +49,74 @@ final class TesoreriaCrownFirmaSupport
         $comprobante->entrega_at = null;
         $comprobante->recibe_usuario_id = null;
         $comprobante->recibe_at = null;
+        $comprobante->save();
+    }
+
+    /**
+     * El número es el código de cajero. Si ese código no existe y el legajo es único, vale el legajo.
+     * Tiene que ser la persona asignada a la caja.
+     */
+    public static function cajeroPorNumero(CajeroCrown $asignado, string $numero): CajeroCrown|string
+    {
+        $numero = (int) preg_replace('/\D/', '', $numero);
+        if ($numero <= 0) {
+            return 'Ingresá el número de cajero.';
+        }
+        $base = CajeroCrown::query()
+            ->where('sala_id', $asignado->sala_id)
+            ->where('activo', true);
+        $candidato = (clone $base)->where('codigo', $numero)->first();
+        if ($candidato === null) {
+            $porLegajo = (clone $base)->where('legajo', $numero)->orderBy('codigo')->get();
+            if ($porLegajo->count() > 1) {
+                return 'Hay varios cajeros con ese legajo. Ingresá el código de cajero.';
+            }
+            $candidato = $porLegajo->first();
+        }
+        if ($candidato === null || ! self::esLaPersonaAsignada($asignado, $candidato)) {
+            return 'Esta firma le corresponde a '.$asignado->nombre.'.';
+        }
+
+        return $candidato;
+    }
+
+    public static function aceptaClaveCajero(CajeroCrown $cajero, string $ingresada): bool
+    {
+        $ingresada = trim($ingresada);
+        if ($ingresada === '') {
+            return false;
+        }
+        $guardada = (string) ($cajero->clave ?? '');
+        if ($guardada !== '') {
+            return Hash::check($ingresada, $guardada);
+        }
+
+        return hash_equals((string) $cajero->codigo, $ingresada);
+    }
+
+    private static function esLaPersonaAsignada(CajeroCrown $asignado, CajeroCrown $candidato): bool
+    {
+        if ((int) $asignado->id === (int) $candidato->id) {
+            return true;
+        }
+        $legajo = (int) $asignado->legajo;
+
+        return $legajo > 0 && $legajo === (int) $candidato->legajo;
+    }
+
+    public static function aplicarCajero(TesoreriaCrownComprobante $comprobante): void
+    {
+        $lado = self::ladoCajero($comprobante->tipo);
+        if ($lado === 'entrega' && $comprobante->entrega_at === null) {
+            $comprobante->entrega_at = now();
+        }
+        if ($lado === 'recibe' && $comprobante->recibe_at === null) {
+            $comprobante->recibe_at = now();
+        }
+        if ($comprobante->firmasCompletas()) {
+            $comprobante->estado = TesoreriaCrownComprobanteSupport::CONFORME;
+            $comprobante->qr_token = null;
+        }
         $comprobante->save();
     }
 
@@ -99,10 +167,15 @@ final class TesoreriaCrownFirmaSupport
         $comprobante->save();
     }
 
-    public static function textoFirma(?Usuario $usuario, mixed $cuando): string
+    public static function textoFirma(?Usuario $usuario, mixed $cuando, ?string $nombreSiNoHayUsuario = null): string
     {
         if ($cuando === null) {
             return 'Sin firma';
+        }
+        if ($usuario === null) {
+            $quien = trim((string) $nombreSiNoHayUsuario);
+
+            return trim(($quien !== '' ? $quien : 'Cajero').' · '.$cuando->format('d/m/Y H:i'));
         }
         $nombre = trim((string) ($usuario->nombre ?? ''));
         $login = trim((string) ($usuario->usuario ?? ''));

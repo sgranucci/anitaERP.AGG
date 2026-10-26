@@ -9,6 +9,8 @@ use App\Models\Caja\TesoreriaCrownComprobanteLinea;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Support\Caja\TesoreriaCrownAcceso;
+use App\Models\Caja\TesoreriaCrownCierreFiscal;
+use App\Support\Caja\TesoreriaCrownCierreFiscalReader;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
 use App\Support\Seguridad\UsuarioOperativoSupport;
@@ -24,6 +26,7 @@ use App\Support\Caja\TesoreriaCrownWorkbenchSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -215,7 +218,7 @@ class TesoreriaCrownComprobanteController extends Controller
         if (! isset(TesoreriaCrownComprobanteSupport::TIPOS[$tipo])) {
             abort(404);
         }
-        if ($error = $this->errorJornada($asignacion->jornada) ?? $this->errorAlta($asignacion, $tipo)) {
+        if ($error = $this->errorJornada($asignacion->jornada) ?? $this->errorCaja($asignacion) ?? $this->errorAlta($asignacion, $tipo)) {
             return redirect()->route('ver_tesoreria_crown_jornada', $asignacion->jornada_id)->with('mensaje-error', $error);
         }
 
@@ -246,7 +249,11 @@ class TesoreriaCrownComprobanteController extends Controller
             'comprobante' => $comprobante,
             'grupos' => TesoreriaCrownComprobanteSupport::gruposEdicion($comprobante->sala_id, $comprobante->tipo),
             'cantidades' => $cantidades,
-            'editable' => $comprobante->esBorrador() && $comprobante->jornada->estaAbierta(),
+            'cajaCerrada' => $comprobante->asignacion->cierre !== null,
+            'editable' => $comprobante->esBorrador()
+                && $comprobante->jornada->estaAbierta()
+                && $comprobante->asignacion->cierre === null,
+            'cierresFiscales' => $this->cierresFiscalesDe($comprobante),
         ]);
     }
 
@@ -277,7 +284,22 @@ class TesoreriaCrownComprobanteController extends Controller
                 $reglas['medio.'.$clave] = $regla;
             }
         }
+        if ($camposMedio !== [] && TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) {
+            $reglas['cierre_fiscal'] = ['array'];
+            $reglas['cierre_fiscal.*'] = ['string', 'max:40'];
+        }
         $datos = $request->validate($reglas);
+        $cierresElegidos = [];
+        if (array_key_exists('cierre_fiscal', $reglas)) {
+            try {
+                $cierresElegidos = TesoreriaCrownCierreFiscalReader::filasPorClaves(
+                    $comprobante,
+                    array_values(array_filter((array) ($datos['cierre_fiscal'] ?? [])))
+                );
+            } catch (\RuntimeException $e) {
+                return back()->with('mensaje-error', $e->getMessage())->withInput();
+            }
+        }
         $idsSala = TesoreriaCrownValor::query()
             ->where('sala_id', $comprobante->sala_id)
             ->pluck('id')
@@ -286,7 +308,8 @@ class TesoreriaCrownComprobanteController extends Controller
 
         $pedirFirmas = $request->input('accion') === 'pedir-firmas';
 
-        DB::transaction(function () use ($comprobante, $datos, $idsSala, $camposMedio) {
+        try {
+            DB::transaction(function () use ($comprobante, $datos, $idsSala, $camposMedio, $cierresElegidos) {
             EloquentAuditDeleteSupport::each(
                 TesoreriaCrownComprobanteLinea::query()->where('comprobante_id', $comprobante->id)
             );
@@ -315,7 +338,13 @@ class TesoreriaCrownComprobanteController extends Controller
                 }
                 $comprobante->save();
             }
-        });
+            if ($cierresElegidos !== [] || $comprobante->cierresFiscales()->exists()) {
+                $this->sincronizarCierresFiscales($comprobante, $cierresElegidos);
+            }
+            });
+        } catch (QueryException) {
+            return back()->with('mensaje-error', 'Ese cierre de ventas ya fue tomado por otra rendición.')->withInput();
+        }
 
         if ($pedirFirmas) {
             if (! $comprobante->lineas()->exists()) {
@@ -323,11 +352,11 @@ class TesoreriaCrownComprobanteController extends Controller
                     ->route('editar_tesoreria_crown_movimiento', $comprobante->id)
                     ->with('mensaje-error', 'No hay ninguna cantidad cargada. Completá al menos una denominación: Pedir firmas guarda lo que está en pantalla.');
             }
-            TesoreriaCrownFirmaSupport::publicarToken($comprobante);
+            TesoreriaCrownFirmaSupport::pasarAPendiente($comprobante);
 
             return redirect()
                 ->route('editar_tesoreria_crown_movimiento', $comprobante->id)
-                ->with('mensaje', 'Se guardaron las cantidades. Quedó pendiente: el cajero firma con el QR y tesorería firma en esta pantalla.');
+                ->with('mensaje', 'Se guardaron las cantidades. Quedó pendiente: el cajero firma con su número y PIN, y tesorería con usuario y clave.');
         }
 
         return redirect()->route('editar_tesoreria_crown_movimiento', $comprobante->id)
@@ -346,9 +375,9 @@ class TesoreriaCrownComprobanteController extends Controller
         if (! $comprobante->lineas()->exists()) {
             return back()->with('mensaje-error', 'Cargá al menos un valor antes de pedir la firma.');
         }
-        TesoreriaCrownFirmaSupport::publicarToken($comprobante);
+        TesoreriaCrownFirmaSupport::pasarAPendiente($comprobante);
 
-        return back()->with('mensaje', 'Quedó pendiente: el cajero firma con el QR y tesorería firma en esta pantalla.');
+        return back()->with('mensaje', 'Quedó pendiente: el cajero firma con su número y PIN, y tesorería con usuario y clave.');
     }
 
     public function firmar(Request $request, int $id)
@@ -381,51 +410,44 @@ class TesoreriaCrownComprobanteController extends Controller
             : 'Firma de tesorería registrada. Falta la firma del cajero.');
     }
 
-    public function firmarQr(Request $request, string $token)
+    public function firmarCajero(Request $request, int $id)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
-        $comprobante = $this->comprobantePorToken($token);
-        $vista = $this->datosQr($comprobante);
-        if ($vista['bloqueado'] !== null) {
-            return response()->view('caja.tesoreria_crown.movimiento.firma_qr', $vista);
-        }
-        $clave = 'tc-firma:'.$token.'|'.$request->ip();
-        if (RateLimiter::tooManyAttempts($clave, 8)) {
-            return response()->view('caja.tesoreria_crown.movimiento.firma_qr', $vista + [
-                'error' => 'Demasiados intentos. Esperá un minuto y volvé a probar.',
-            ]);
+        can('listar-tesoreria-crown-movimiento');
+
+        $comprobante = $this->comprobanteEnAlcance($id);
+        if ($error = $this->errorFirmaPendiente($comprobante)) {
+            return back()->with('mensaje-error', $error);
         }
         $lado = TesoreriaCrownFirmaSupport::ladoCajero($comprobante->tipo);
-        $usuario = TesoreriaCrownFirmaSupport::usuarioPorClave(
-            (string) $request->input('firma_usuario'),
-            (string) $request->input('firma_password')
-        );
-        if ($usuario === null) {
-            RateLimiter::hit($clave, 60);
-
-            return response()->view('caja.tesoreria_crown.movimiento.firma_qr', $vista + [
-                'error' => 'Usuario o clave incorrectos.',
-            ]);
+        if ($this->ladoYaFirmado($comprobante, $lado)) {
+            return back()->with('mensaje', 'El cajero ya firmó este comprobante.');
         }
-        if ($error = $this->errorFirmante($comprobante, $lado, $usuario, false)) {
-            return response()->view('caja.tesoreria_crown.movimiento.firma_qr', $vista + ['error' => $error]);
+        $limite = 'tc-firma-cajero:'.$comprobante->id.'|'.$request->ip();
+        if (RateLimiter::tooManyAttempts($limite, 8)) {
+            return back()->with('mensaje-error', 'Demasiados intentos. Esperá un minuto y volvé a probar.');
         }
-        TesoreriaCrownFirmaSupport::aplicar($comprobante, $lado, $usuario);
-        $comprobante->refresh();
+        $asignado = $comprobante->asignacion->cajero;
+        if ($asignado === null) {
+            return back()->with('mensaje-error', 'Esta caja no tiene cajero.');
+        }
+        $cajero = TesoreriaCrownFirmaSupport::cajeroPorNumero($asignado, (string) $request->input('cajero_numero'));
+        if (is_string($cajero)) {
+            RateLimiter::hit($limite, 60);
 
-        return response()->view('caja.tesoreria_crown.movimiento.firma_qr', $this->datosQr($comprobante) + [
-            'aviso' => 'Firma registrada.',
-        ]);
-    }
+            return back()->with('mensaje-error', $cajero)->withInput();
+        }
+        if (! TesoreriaCrownFirmaSupport::aceptaClaveCajero($cajero, (string) $request->input('cajero_pin'))) {
+            RateLimiter::hit($limite, 60);
 
-    public function verQr(string $token)
-    {
-        TesoreriaCrownAcceso::abortSiNoEsCrown();
+            return back()->with('mensaje-error', 'PIN incorrecto.')->withInput();
+        }
+        RateLimiter::clear($limite);
+        TesoreriaCrownFirmaSupport::aplicarCajero($comprobante);
 
-        return response()->view(
-            'caja.tesoreria_crown.movimiento.firma_qr',
-            $this->datosQr($this->comprobantePorToken($token))
-        );
+        return back()->with('mensaje', $comprobante->estado === TesoreriaCrownComprobanteSupport::CONFORME
+            ? 'Firmado por las dos partes. Quedó conforme.'
+            : 'Firma del cajero registrada. Falta la firma de tesorería.');
     }
 
     public function volverABorrador(int $id)
@@ -433,7 +455,7 @@ class TesoreriaCrownComprobanteController extends Controller
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('crear-tesoreria-crown-movimiento');
         $comprobante = $this->comprobanteEnAlcance($id);
-        if ($error = $this->errorJornada($comprobante->jornada)) {
+        if ($error = $this->errorJornada($comprobante->jornada) ?? $this->errorCaja($comprobante->asignacion)) {
             return back()->with('mensaje-error', $error);
         }
         if ($comprobante->estado !== TesoreriaCrownComprobanteSupport::PENDIENTE) {
@@ -441,7 +463,7 @@ class TesoreriaCrownComprobanteController extends Controller
         }
         TesoreriaCrownFirmaSupport::volverABorrador($comprobante);
 
-        return back()->with('mensaje', 'Volvió a borrador. Las firmas y el QR anteriores quedaron sin efecto.');
+        return back()->with('mensaje', 'Volvió a borrador. Las firmas anteriores quedaron sin efecto.');
     }
 
     public function vincularCajero(Request $request, int $id)
@@ -488,7 +510,7 @@ class TesoreriaCrownComprobanteController extends Controller
         can('editar-tesoreria-crown-movimiento');
 
         $comprobante = $this->comprobanteEnAlcance($id);
-        if ($error = $this->errorJornada($comprobante->jornada)) {
+        if ($error = $this->errorJornada($comprobante->jornada) ?? $this->errorCaja($comprobante->asignacion)) {
             return back()->with('mensaje-error', $error);
         }
         if (! in_array($comprobante->estado, [TesoreriaCrownComprobanteSupport::BORRADOR, TesoreriaCrownComprobanteSupport::PENDIENTE], true)) {
@@ -510,7 +532,7 @@ class TesoreriaCrownComprobanteController extends Controller
         can('editar-tesoreria-crown-movimiento');
 
         $comprobante = $this->comprobanteEnAlcance($id);
-        if ($error = $this->errorJornada($comprobante->jornada)) {
+        if ($error = $this->errorJornada($comprobante->jornada) ?? $this->errorCaja($comprobante->asignacion)) {
             return back()->with('mensaje-error', $error);
         }
         if ($comprobante->estado !== TesoreriaCrownComprobanteSupport::CONFORME || $comprobante->revierte_id !== null) {
@@ -528,12 +550,8 @@ class TesoreriaCrownComprobanteController extends Controller
                 'asignacion_id' => $comprobante->asignacion_id,
                 'tipo' => $comprobante->tipo,
                 'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $comprobante->sala_id, $comprobante->tipo),
-                'estado' => TesoreriaCrownComprobanteSupport::CONFORME,
-                'observacion' => 'Reversa del comprobante '.$comprobante->id,
-                'entrega_usuario_id' => (int) auth()->id(),
-                'entrega_at' => now(),
-                'recibe_usuario_id' => (int) auth()->id(),
-                'recibe_at' => now(),
+                'estado' => TesoreriaCrownComprobanteSupport::BORRADOR,
+                'observacion' => 'Reversa del comprobante '.TesoreriaCrownNumeradorSupport::visible((int) $comprobante->numero),
                 'revierte_id' => $comprobante->id,
             ]);
             foreach (TesoreriaCrownRendicionCampos::campos() as $clave => $meta) {
@@ -552,11 +570,54 @@ class TesoreriaCrownComprobanteController extends Controller
                 ]);
             }
 
+            $nuevo->load('lineas');
+            TesoreriaCrownFirmaSupport::pasarAPendiente($nuevo);
+
             return $nuevo;
         });
 
         return redirect()->route('editar_tesoreria_crown_movimiento', $inverso->id)
-            ->with('mensaje', 'Reversa registrada. No se puede revertir de nuevo.');
+            ->with('mensaje', 'Reversa pendiente de firma. El cajero firma con su número y PIN, y tesorería con usuario y clave.');
+    }
+
+    /**
+     * @return array{error: ?string, filas: list<array<string, mixed>>}
+     */
+    private function cierresFiscalesDe(TesoreriaCrownComprobante $comprobante): array
+    {
+        if ($comprobante->tipo !== TesoreriaCrownComprobanteSupport::RENDICION
+            || ! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) {
+            return ['error' => null, 'filas' => []];
+        }
+
+        return TesoreriaCrownCierreFiscalReader::paraRendicion($comprobante);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     */
+    private function sincronizarCierresFiscales(TesoreriaCrownComprobante $comprobante, array $filas): void
+    {
+        EloquentAuditDeleteSupport::each(
+            TesoreriaCrownCierreFiscal::query()->where('comprobante_id', $comprobante->id)
+        );
+        foreach ($filas as $fila) {
+            TesoreriaCrownCierreFiscal::query()->create([
+                'comprobante_id' => $comprobante->id,
+                'sucursal' => $fila['sucursal'],
+                'fecha_jor' => $fila['fecha'],
+                'hora' => $fila['hora'],
+                'nro_x' => $fila['nro_x'],
+                'nro_z' => $fila['nro_z'],
+                'tipo' => $fila['tipo'],
+                'nombre_sucursal' => $fila['nombre'] !== '' ? $fila['nombre'] : null,
+                'tot_venta' => $fila['venta'],
+                'tot_cred' => $fila['credito'],
+                'tot_iva' => $fila['iva'],
+                'tot_iva_cred' => $fila['iva_credito'],
+                'ult_fact_b' => $fila['ult_ticket'],
+            ]);
+        }
     }
 
     private function asignacionEnAlcance(int $id): TesoreriaCrownAsignacion
@@ -570,7 +631,7 @@ class TesoreriaCrownComprobanteController extends Controller
     private function comprobanteEnAlcance(int $id): TesoreriaCrownComprobante
     {
         $comprobante = TesoreriaCrownComprobante::query()
-            ->with(['jornada', 'sala', 'empresa', 'asignacion.deposito', 'asignacion.cajero.usuario', 'lineas.valor.tipoValor', 'entregaUsuario', 'recibeUsuario'])
+            ->with(['jornada', 'sala', 'empresa', 'asignacion.deposito', 'asignacion.cajero.usuario', 'asignacion.cierre', 'lineas.valor.tipoValor', 'entregaUsuario', 'recibeUsuario'])
             ->findOrFail($id);
         TesoreriaCrownSalaSupport::exigida((int) $comprobante->sala_id);
 
@@ -582,9 +643,15 @@ class TesoreriaCrownComprobanteController extends Controller
         return $jornada->estaAbierta() ? null : 'La jornada de esta caja ya está cerrada.';
     }
 
+    private function errorCaja(TesoreriaCrownAsignacion $asignacion): ?string
+    {
+        return $asignacion->cierre ? 'Esta caja ya está cerrada.' : null;
+    }
+
     private function errorBorradorAbierto(TesoreriaCrownComprobante $comprobante): ?string
     {
         return $this->errorJornada($comprobante->jornada)
+            ?? $this->errorCaja($comprobante->asignacion)
             ?? ($comprobante->esBorrador() ? null : 'Las cantidades solo se editan en borrador.');
     }
 
@@ -613,7 +680,7 @@ class TesoreriaCrownComprobanteController extends Controller
 
     private function errorFirmaPendiente(TesoreriaCrownComprobante $comprobante): ?string
     {
-        if ($error = $this->errorJornada($comprobante->jornada)) {
+        if ($error = $this->errorJornada($comprobante->jornada) ?? $this->errorCaja($comprobante->asignacion)) {
             return $error;
         }
         if ($comprobante->estado !== TesoreriaCrownComprobanteSupport::PENDIENTE) {
@@ -641,7 +708,7 @@ class TesoreriaCrownComprobanteController extends Controller
                 return 'Ese usuario no puede firmar por tesorería.';
             }
             if ($cajeroUsuarioId > 0 && $cajeroUsuarioId === (int) $usuario->id) {
-                return 'El cajero firma su lado con el QR. Acá firma otra persona de tesorería.';
+                return 'El cajero firma su lado con número y PIN. Acá firma otra persona de tesorería.';
             }
 
             return null;
@@ -649,51 +716,10 @@ class TesoreriaCrownComprobanteController extends Controller
         if ($cajero === null) {
             return 'Esta caja no tiene cajero.';
         }
-        if ($cajeroUsuarioId === 0) {
-            return 'El cajero '.$cajero->nombre.' no tiene un usuario asignado. Sin eso no puede firmar desde el teléfono.';
-        }
         if ($cajeroUsuarioId !== (int) $usuario->id) {
             return 'Esta firma le corresponde a '.$cajero->nombre.'.';
         }
 
         return null;
-    }
-
-    private function comprobantePorToken(string $token): TesoreriaCrownComprobante
-    {
-        $comprobante = TesoreriaCrownComprobante::query()
-            ->with(['jornada', 'sala', 'empresa', 'asignacion.deposito', 'asignacion.cajero.usuario', 'lineas.valor.tipoValor', 'entregaUsuario', 'recibeUsuario'])
-            ->where('qr_token', $token)
-            ->first();
-        if ($comprobante === null) {
-            abort(404);
-        }
-        TesoreriaCrownSalaSupport::exigida((int) $comprobante->sala_id);
-
-        return $comprobante;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function datosQr(TesoreriaCrownComprobante $comprobante): array
-    {
-        $lado = TesoreriaCrownFirmaSupport::ladoCajero($comprobante->tipo);
-        $bloqueado = $this->errorFirmaPendiente($comprobante);
-        if ($bloqueado === null && $this->ladoYaFirmado($comprobante, $lado)) {
-            $bloqueado = 'Este lado ya está firmado.';
-        }
-        $cantidades = $comprobante->lineas->pluck('cantidad', 'valor_id');
-
-        return [
-            'comprobante' => $comprobante,
-            'lado' => $lado,
-            'etiqueta' => TesoreriaCrownFirmaSupport::etiqueta($comprobante->tipo, $lado),
-            'grupos' => TesoreriaCrownComprobanteSupport::gruposEdicion($comprobante->sala_id, $comprobante->tipo),
-            'cantidades' => $cantidades,
-            'bloqueado' => $bloqueado,
-            'error' => null,
-            'aviso' => null,
-        ];
     }
 }

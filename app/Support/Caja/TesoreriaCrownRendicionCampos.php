@@ -17,7 +17,7 @@ final class TesoreriaCrownRendicionCampos
         return [
             'gastro' => [
                 'titulo' => 'Gastronomía y hotel',
-                'ayuda' => 'Informe X, cierre Z e impuestos. Anita los pide solo si la caja se abrió como gastronomía u hotel.',
+                'ayuda' => 'Salen del cierre de ventas (p-cierrefact). El Z es el cierre fiscal de la barra. El X es el que la rendición de hotel toma. Se pueden corregir antes de guardar.',
                 'campos' => [
                     'total_x' => ['label' => 'Ventas / X', 'tipo' => 'importe', 'negativo' => false],
                     'invitacion' => ['label' => 'Invitaciones', 'tipo' => 'importe', 'negativo' => false],

@@ -10,6 +10,7 @@ use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownTipoDeposito;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownAsignacionCatalogo;
+use App\Support\Caja\TesoreriaCrownCierreSupport;
 use App\Support\Caja\TesoreriaCrownJornadaListadoColumnas;
 use App\Support\Caja\TesoreriaCrownJornadaListadoFiltros;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
@@ -216,7 +217,7 @@ class TesoreriaCrownJornadaController extends Controller
             'salas' => $salas,
             'sala' => $sala,
             'jornada' => $jornada,
-            'asignaciones' => $jornada->asignaciones()->with(['deposito', 'cajero', 'comprobantes'])->orderBy('turno')->orderBy('deposito_id')->get(),
+            'asignaciones' => $jornada->asignaciones()->with(['deposito', 'cajero', 'comprobantes', 'cierre'])->orderBy('turno')->orderBy('deposito_id')->get(),
             'recientes' => TesoreriaCrownJornada::query()
                 ->where('sala_id', $sala->id)
                 ->orderByDesc('fecha')
@@ -275,6 +276,17 @@ class TesoreriaCrownJornadaController extends Controller
         $jornada = $this->jornadaEnAlcance($id);
         if (! $jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'La jornada ya está cerrada.');
+        }
+        $sinCierre = $jornada->asignaciones()->with('cierre')->withCount('comprobantes')->get()
+            ->contains(function (TesoreriaCrownAsignacion $fila) {
+                if ((int) $fila->comprobantes_count === 0) {
+                    return false;
+                }
+
+                return $fila->cierre === null || ! TesoreriaCrownCierreSupport::terminal((string) $fila->cierre->estado);
+            });
+        if ($sinCierre) {
+            return back()->with('mensaje-error', 'Quedan cajas sin un cierre terminado (conforme, revisada o cierre de auditoría).');
         }
         $jornada->estado = TesoreriaCrownJornada::CERRADA;
         $jornada->save();
@@ -366,6 +378,9 @@ class TesoreriaCrownJornadaController extends Controller
         $jornada = $this->jornadaEnAlcance((int) $asignacion->jornada_id);
         if (! $jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'No se quita una asignación de una jornada cerrada.');
+        }
+        if ($asignacion->comprobantes()->exists() || $asignacion->cierre()->exists()) {
+            return back()->with('mensaje-error', 'Esta caja ya tiene comprobantes. No se puede quitar.');
         }
         $asignacion->delete();
 

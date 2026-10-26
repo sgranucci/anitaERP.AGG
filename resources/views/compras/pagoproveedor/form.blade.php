@@ -4,14 +4,12 @@
 <div class="card form1">
     <div class="card-body">
         <div class="form-group row">
-            <label class="col-lg-2 col-form-label text-right">Empresa</label>
+            <label class="col-lg-2 col-form-label text-right pr-2" for="empresa_id">Empresa</label>
             <div class="col-lg-4">
-                <select name="empresa_id" id="empresa_id" class="form-control" required>
-                    <option value="">Seleccione</option>
-                    @foreach($empresa_query as $e)
-                        <option value="{{ $e->id }}" @selected(old('empresa_id', $data->empresa_id ?? session('empresa_id')) == $e->id)>{{ $e->nombre }}</option>
-                    @endforeach
-                </select>
+                @include('includes.form-empresa-asignada-control', [
+                    'empresa_query' => $empresa_query,
+                    'empresa_id' => $data->empresa_id ?? session('empresa_id'),
+                ])
             </div>
             <label class="col-lg-2 col-form-label text-right">Fecha</label>
             <div class="col-lg-3">

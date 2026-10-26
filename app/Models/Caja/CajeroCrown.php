@@ -19,6 +19,7 @@ class CajeroCrown extends Model implements Auditable
 
     protected $fillable = [
         'codigo',
+        'clave',
         'nombre',
         'empresa_id',
         'sala_id',
@@ -29,8 +30,13 @@ class CajeroCrown extends Model implements Auditable
         'activo',
     ];
 
+    protected $hidden = [
+        'clave',
+    ];
+
     protected $casts = [
         'codigo' => 'integer',
+        'clave' => 'hashed',
         'empresa_id' => 'integer',
         'sala_id' => 'integer',
         'usuario_id' => 'integer',

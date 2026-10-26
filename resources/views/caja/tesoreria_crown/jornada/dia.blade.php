@@ -128,6 +128,7 @@
                                     <th>Tarea</th>
                                     <th>Habilitación</th>
                                     <th>Rendición</th>
+                                    <th>Cierre</th>
                                     @if ($jornada->estaAbierta())
                                         <th class="text-center" style="width:70px;">Acciones</th>
                                     @endif
@@ -144,12 +145,13 @@
                                             $habilitaciones = $fila->comprobantes->filter(fn ($doc) => $doc->tipo === 'H' && $doc->revierte_id === null);
                                             $rendiciones = $fila->comprobantes->filter(fn ($doc) => $doc->tipo === 'F' && $doc->revierte_id === null);
                                             $hayHabilitacionConforme = $habilitaciones->contains(fn ($doc) => $doc->estado === 'C');
+                                            $cajaCerrada = $fila->cierre !== null;
                                         @endphp
                                         <td>
                                             @foreach ($habilitaciones as $doc)
                                                 <div><a class="text-primary" href="{{ route('editar_tesoreria_crown_movimiento', $doc->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($doc->numero) }} · {{ \App\Support\Caja\TesoreriaCrownComprobanteSupport::estado($doc->estado) }}</a></div>
                                             @endforeach
-                                            @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-movimiento', false))
+                                            @if ($jornada->estaAbierta() && ! $cajaCerrada && can('crear-tesoreria-crown-movimiento', false))
                                                 <form method="POST" action="{{ route('crear_tesoreria_crown_movimiento') }}" class="d-inline">
                                                     @csrf
                                                     <input type="hidden" name="asignacion_id" value="{{ $fila->id }}">
@@ -162,7 +164,7 @@
                                             @foreach ($rendiciones as $doc)
                                                 <div><a class="text-primary" href="{{ route('editar_tesoreria_crown_movimiento', $doc->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($doc->numero) }} · {{ \App\Support\Caja\TesoreriaCrownComprobanteSupport::estado($doc->estado) }}</a></div>
                                             @endforeach
-                                            @if ($jornada->estaAbierta() && $hayHabilitacionConforme && can('crear-tesoreria-crown-movimiento', false))
+                                            @if ($jornada->estaAbierta() && ! $cajaCerrada && $hayHabilitacionConforme && can('crear-tesoreria-crown-movimiento', false))
                                                 <form method="POST" action="{{ route('crear_tesoreria_crown_movimiento') }}" class="d-inline">
                                                     @csrf
                                                     <input type="hidden" name="asignacion_id" value="{{ $fila->id }}">
@@ -171,9 +173,18 @@
                                                 </form>
                                             @endif
                                         </td>
+                                        <td>
+                                            @if ($cajaCerrada)
+                                                <a class="text-primary" href="{{ route('ver_tesoreria_crown_cierre', $fila->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($fila->cierre->numero) }} · {{ $fila->cierre->estadoTexto() }}</a>
+                                            @elseif ($jornada->estaAbierta())
+                                                <a class="text-primary" href="{{ route('ver_tesoreria_crown_cierre', $fila->id) }}">Cerrar caja</a>
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
                                         @if ($jornada->estaAbierta())
                                             <td class="text-center">
-                                                @if (can('editar-tesoreria-crown-jornada', false))
+                                                @if (! $cajaCerrada && $fila->comprobantes->isEmpty() && can('editar-tesoreria-crown-jornada', false))
                                                     <form action="{{ route('quitar_tesoreria_crown_asignacion', $fila->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Quitar esta asignación?');">
                                                         @csrf
                                                         @method('DELETE')
@@ -185,7 +196,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="{{ $jornada->estaAbierta() ? 7 : 6 }}" class="text-center text-muted py-3">No hay cajeros asignados.</td>
+                                        <td colspan="{{ $jornada->estaAbierta() ? 8 : 7 }}" class="text-center text-muted py-3">No hay cajeros asignados.</td>
                                     </tr>
                                 @endforelse
                             </tbody>
@@ -194,30 +205,25 @@
                     @php
                         $pendientesFirma = $asignaciones->flatMap(function ($fila) {
                             return $fila->comprobantes
-                                ->filter(fn ($doc) => $doc->estado === 'P' && $doc->qr_token)
+                                ->filter(fn ($doc) => $doc->estado === 'P')
                                 ->each(fn ($doc) => $doc->setRelation('asignacion', $fila));
                         });
                     @endphp
                     @if ($pendientesFirma->isNotEmpty())
                         <h5 class="mt-3">Pendientes de firma</h5>
-                        <p class="text-muted small">Se pueden cargar varias y dejarlas así. Cada QR es de un comprobante. Lo escanea el cajero con su usuario.</p>
-                        <div class="d-flex flex-wrap" style="gap:1rem;">
+                        <p class="text-muted small">El cajero firma en el comprobante con su número y PIN. Tesorería firma con usuario y clave.</p>
+                        <ul class="mb-0">
                             @foreach ($pendientesFirma as $doc)
-                                @php
-                                    $urlDoc = route('firma_qr_tesoreria_crown_movimiento', $doc->qr_token);
-                                    $qrDoc = \App\Support\Ventas\QrCodePngSupport::dataUri($urlDoc, 140);
-                                @endphp
-                                <div class="border rounded p-2 text-center" style="width:11rem;">
-                                    <div class="small">
+                                <li>
+                                    <a class="text-primary" href="{{ route('editar_tesoreria_crown_movimiento', $doc->id) }}">
                                         {{ \App\Support\Caja\TesoreriaCrownComprobanteSupport::tipo($doc->tipo) }}
+                                        {{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($doc->numero) }}
                                         · {{ $doc->asignacion->deposito->codigo ?? '' }}
                                         · {{ $doc->asignacion->cajero->nombre ?? '' }}
-                                    </div>
-                                    <img src="{{ $qrDoc }}" alt="QR" width="140" height="140">
-                                    <div><a class="small" href="{{ route('editar_tesoreria_crown_movimiento', $doc->id) }}">Abrir</a></div>
-                                </div>
+                                    </a>
+                                </li>
                             @endforeach
-                        </div>
+                        </ul>
                     @endif
                 @endif
             </div>

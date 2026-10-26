@@ -1,6 +1,10 @@
 @php
     $gruposMedio = \App\Support\Caja\TesoreriaCrownRendicionCampos::gruposParaTarea($comprobante->asignacion->tipo_tarea ?? '');
 @endphp
+@if ($comprobante->tipo === \App\Support\Caja\TesoreriaCrownComprobanteSupport::RENDICION
+    && \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? ''))
+    @include('caja.tesoreria_crown.movimiento.partials.cierres_fiscales')
+@endif
 @foreach ($gruposMedio as $grupoMedio)
     <div class="card card-outline card-info mt-3 mb-0">
         <div class="card-header py-2">

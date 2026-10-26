@@ -27,8 +27,6 @@ Route::get('seguridad/cambia_password', 'Seguridad\HomeController@cambiaPassword
 Route::post('seguridad/graba_password', 'Seguridad\HomeController@grabaPassword')->middleware('auth')->name('graba_password');
 Route::post('seguridad/login', 'Seguridad\LoginController@login')->name('login_post');
 Route::get('seguridad/logout', 'Seguridad\LoginController@logout')->name('logout');
-Route::get('caja/tesoreria-crown/firma/{token}', 'Caja\TesoreriaCrownComprobanteController@verQr')->name('firma_qr_tesoreria_crown_movimiento');
-Route::post('caja/tesoreria-crown/firma/{token}', 'Caja\TesoreriaCrownComprobanteController@firmarQr')->name('firmar_qr_tesoreria_crown_movimiento');
 Route::post('ajax-sesion', 'AjaxController@setSession')->name('ajax')->middleware('auth');
 
 Route::middleware('auth')->group(function () {
@@ -3179,6 +3177,11 @@ Route::delete('caja/tesoreria-crown/jornada/workbench/vista/{id}', 'Caja\Tesorer
 Route::post('caja/tesoreria-crown/jornada/workbench/columnas', 'Caja\TesoreriaCrownJornadaController@guardarColumnasListado')->name('guardar_columnas_tesoreria_crown_jornada');
 Route::post('caja/tesoreria-crown/jornada/workbench/etiquetas', 'Caja\TesoreriaCrownJornadaController@guardarEtiquetasListado')->name('guardar_etiquetas_tesoreria_crown_jornada');
 Route::post('caja/tesoreria-crown/jornada/workbench/preview', 'Caja\TesoreriaCrownJornadaController@previewWorkbench')->name('preview_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/cierre/{asignacion}', 'Caja\TesoreriaCrownCierreController@ver')->name('ver_tesoreria_crown_cierre');
+Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}', 'Caja\TesoreriaCrownCierreController@cerrar')->name('cerrar_tesoreria_crown_cierre');
+Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/revisar', 'Caja\TesoreriaCrownCierreController@revisar')->name('revisar_tesoreria_crown_cierre');
+Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/auditar', 'Caja\TesoreriaCrownCierreController@auditar')->name('auditar_tesoreria_crown_cierre');
+Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/auditoria', 'Caja\TesoreriaCrownCierreController@firmarAuditoria')->name('firmar_auditoria_tesoreria_crown_cierre');
 Route::get('caja/tesoreria-crown/jornada/{id}', 'Caja\TesoreriaCrownJornadaController@ver')->name('ver_tesoreria_crown_jornada');
 
 Route::get('caja/tesoreria-crown/movimiento', 'Caja\TesoreriaCrownComprobanteController@index')->name('tesoreria_crown_movimiento');
@@ -3194,6 +3197,7 @@ Route::get('caja/tesoreria-crown/movimiento/{id}', 'Caja\TesoreriaCrownComproban
 Route::post('caja/tesoreria-crown/movimiento/{id}', 'Caja\TesoreriaCrownComprobanteController@guardar')->name('guardar_tesoreria_crown_movimiento');
 Route::post('caja/tesoreria-crown/movimiento/{id}/pedir-firma', 'Caja\TesoreriaCrownComprobanteController@pasarAFirma')->name('firmar_pedir_tesoreria_crown_movimiento');
 Route::post('caja/tesoreria-crown/movimiento/{id}/firmar', 'Caja\TesoreriaCrownComprobanteController@firmar')->name('firmar_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/{id}/firmar-cajero', 'Caja\TesoreriaCrownComprobanteController@firmarCajero')->name('firmar_cajero_tesoreria_crown_movimiento');
 Route::post('caja/tesoreria-crown/movimiento/{id}/volver-borrador', 'Caja\TesoreriaCrownComprobanteController@volverABorrador')->name('volver_borrador_tesoreria_crown_movimiento');
 Route::post('caja/tesoreria-crown/movimiento/{id}/vincular-cajero', 'Caja\TesoreriaCrownComprobanteController@vincularCajero')->name('vincular_cajero_tesoreria_crown_movimiento');
 Route::post('caja/tesoreria-crown/movimiento/{id}/no-conforme', 'Caja\TesoreriaCrownComprobanteController@noConforme')->name('noconforme_tesoreria_crown_movimiento');

@@ -1,0 +1,11 @@
+# Estado de Supervisor para el chequeo de colas (cron www-data, queue:verificar-pico).
+# Solo "status". No permite start, stop ni restart, y no reinicia workers.
+#
+# Instalar:
+#   sudo /var/www/html/anitaERP/deploy/queue/install-sudoers-queue-status.sh
+#
+# El socket /run/supervisor.sock sigue siendo root:root 0700.
+
+# "status *" no matchea "status" sin argumentos (sudoers). verificar-pico.sh
+# corre exactamente: sudo -n supervisorctl status
+www-data ALL=(root) NOPASSWD: /usr/bin/supervisorctl status, /usr/bin/supervisorctl status *

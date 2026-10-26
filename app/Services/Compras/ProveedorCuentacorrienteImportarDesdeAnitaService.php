@@ -38,6 +38,8 @@ use Throwable;
  *
  * - Altas solo-Anita: CP+CC con monto original + aplicaciones aplmovp.
  * - Facturas nativas (origen ≠ ANITA_IMPORT): no se pisan; solo se traen apps faltantes.
+ * - ANITA_IMPORT abiertas en ERP y saldadas en Anita (todas las cuotas con monto = pagado):
+ *   el residual de la CC pasa a cero para que la deuda abierta coincida. Sin promov, no se tocan.
  * - OPA pendientes: pagoproveedor + CC negativa.
  * - Nunca alinea ni borra apps de CC con pagoproveedor_id (crédito OP/OPA ERP).
  * - Al alinear deuda documento solo borra apps sintéticas (sin pagoproveedor_id).
@@ -99,6 +101,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         ?int $limite = null,
         ?int $empresaId = null,
         int $muestraLimite = 25,
+        bool $soloCerrarPagadas = false,
     ): array {
         $perfil = ProveedorCuentacorrienteAnitaImportFormatoSupport::perfil();
         $desdeYmd = $desdeIso ? ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso($desdeIso) : null;
@@ -116,12 +119,14 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             $this->asegurarTiposBasicos();
         }
 
-        $promovs = $this->reader->listarPromovPendiente(
-            $desdeYmd ?: null,
-            $hastaYmd ?: null,
-            $proveedorCodigo,
-            $empresaAnita,
-        );
+        $promovs = $soloCerrarPagadas
+            ? []
+            : $this->reader->listarPromovPendiente(
+                $desdeYmd ?: null,
+                $hastaYmd ?: null,
+                $proveedorCodigo,
+                $empresaAnita,
+            );
         $stats = $this->statsVacios($perfil);
         $stats['anita_promov'] = count($promovs);
         $stats['empresa_id'] = $empresaId;
@@ -180,7 +185,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             }
         }
 
-        if ($limite === null || $limite <= 0 || count($plan) < $limite) {
+        if (! $soloCerrarPagadas && ($limite === null || $limite <= 0 || count($plan) < $limite)) {
             $extra = $this->planearNativasSaldadasAnita(
                 $proveedorCodigo,
                 $empresaId,
@@ -201,6 +206,29 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         }
 
         if ($limite === null || $limite <= 0 || count($plan) < $limite) {
+            $extraImport = $this->planearImportadasPagadasEnAnita(
+                $proveedorCodigo,
+                $empresaId,
+                $empresaAnita,
+                $perfil,
+                $empresasPermitidas,
+                $clavesEnPlan,
+                $limite !== null && $limite > 0 ? ($limite - count($plan)) : null,
+            );
+            foreach ($extraImport['items'] as $prep) {
+                $plan[] = $prep;
+                $clavesEnPlan[(string) $prep['clave']] = (string) $prep['clave'];
+            }
+            $stats['importadas_abiertas_erp'] = $extraImport['candidatas'];
+            $stats['importadas_saldadas_anita'] = $extraImport['saldadas'];
+            $stats['importadas_sin_promov'] = $extraImport['sin_promov'];
+            $stats['importadas_siguen_abiertas_anita'] = $extraImport['siguen_abiertas'];
+            foreach ($extraImport['errores'] as $e) {
+                $stats['errores'][] = $e;
+            }
+        }
+
+        if (! $soloCerrarPagadas && ($limite === null || $limite <= 0 || count($plan) < $limite)) {
             foreach (ComprobanteProveedorAnitaImportOpaSupport::adelantosPendientes(
                 $promovsOpa,
                 $perfil['tipos_credito_sin_compra'] ?? null,
@@ -335,7 +363,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         ?int $cupo,
     ): array {
         $out = ['candidatas' => 0, 'solo_apps' => 0, 'items' => [], 'errores' => []];
-        $filas = $this->listarNativasPendientesErp($proveedorCodigo, $empresaId, $empresasPermitidas);
+        $filas = $this->listarPendientesErp($proveedorCodigo, $empresaId, $empresasPermitidas, false);
         if ($filas === []) {
             return $out;
         }
@@ -394,13 +422,133 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
     }
 
     /**
+     * ANITA_IMPORT abiertas en el ERP que Anita ya saldó en todas las cuotas.
+     * No inventa un promov: si Anita no tiene la fila, la deuda del ERP queda.
+     *
+     * @param  array<string, mixed>  $perfil
+     * @param  list<int>|null  $empresasPermitidas
+     * @param  array<string, string>  $clavesEnPlan
+     * @return array{candidatas:int,saldadas:int,sin_promov:int,siguen_abiertas:int,items:list<array<string,mixed>>,errores:list<string>}
+     */
+    private function planearImportadasPagadasEnAnita(
+        ?string $proveedorCodigo,
+        ?int $empresaId,
+        ?int $empresaAnita,
+        array $perfil,
+        ?array $empresasPermitidas,
+        array $clavesEnPlan,
+        ?int $cupo,
+    ): array {
+        $out = [
+            'candidatas' => 0,
+            'saldadas' => 0,
+            'sin_promov' => 0,
+            'siguen_abiertas' => 0,
+            'items' => [],
+            'errores' => [],
+        ];
+        $filas = $this->listarPendientesErp($proveedorCodigo, $empresaId, $empresasPermitidas, true);
+        if ($filas === []) {
+            return $out;
+        }
+
+        $claves = [];
+        $porClave = [];
+        foreach ($filas as $fila) {
+            $clave = (string) $fila['clave'];
+            if (isset($clavesEnPlan[$clave])) {
+                continue;
+            }
+            $claves[$clave] = $clave;
+            $porClave[$clave] = $fila;
+        }
+        $out['candidatas'] = count($claves);
+        if ($claves === []) {
+            return $out;
+        }
+
+        $promovs = $this->reader->indexarPromovPorClaves(array_values($claves), $empresaAnita);
+        $compras = $this->reader->indexarCompraPorClaves(array_values($claves), $empresaAnita);
+        $tol = (float) $perfil['tolerancia_aplicado'];
+
+        foreach ($porClave as $clave => $filaErp) {
+            if ($cupo !== null && $cupo > 0 && count($out['items']) >= $cupo) {
+                break;
+            }
+            $listaPromov = $promovs[$clave] ?? [];
+            if ($listaPromov === []) {
+                $out['sin_promov']++;
+
+                continue;
+            }
+            $algunaAbierta = false;
+            foreach ($listaPromov as $filaPromov) {
+                $monto = abs((float) ($filaPromov['prov_monto'] ?? 0));
+                $pagado = abs((float) ($filaPromov['prov_t_pagado'] ?? 0));
+                if (abs($monto - $pagado) > $tol) {
+                    $algunaAbierta = true;
+                    break;
+                }
+            }
+            if ($algunaAbierta) {
+                $out['siguen_abiertas']++;
+
+                continue;
+            }
+
+            $promov = $listaPromov[0];
+            $compra = $compras[$clave] ?? $this->compraSinteticaDesdePromov($promov);
+            $prep = $this->preparar($promov, $compra, $perfil, $empresasPermitidas);
+            if (($prep['estado'] ?? '') === 'ok_al_dia') {
+                continue;
+            }
+            if (($prep['estado'] ?? '') !== 'ok') {
+                if (! empty($prep['error'])) {
+                    $out['errores'][] = (string) $prep['error'];
+                }
+
+                continue;
+            }
+            $out['saldadas']++;
+            $out['items'][] = $prep;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $promov
+     * @return array<string, mixed>
+     */
+    private function compraSinteticaDesdePromov(array $promov): array
+    {
+        return [
+            'com_proveedor' => $promov['prov_proveedor'] ?? '',
+            'com_tipo' => $promov['prov_tipo'] ?? '',
+            'com_letra' => $promov['prov_letra'] ?? '',
+            'com_sucursal' => $promov['prov_sucursal'] ?? 0,
+            'com_nro' => $promov['prov_nro'] ?? 0,
+            'com_fecha' => $promov['prov_fecha'] ?? '',
+            'com_fecha_iva' => $promov['prov_fecha'] ?? '',
+            'com_monto' => $promov['prov_monto'] ?? 0,
+            'com_cod_mon' => $promov['prov_cod_mon'] ?? 1,
+            'com_cotizacion' => $promov['prov_cotizacion'] ?? 1,
+            'com_nro_interno' => $promov['prov_nro_interno'] ?? 0,
+            'com_empresa' => $promov['prov_empresa'] ?? 0,
+            'com_leyenda' => '',
+            'com_cuit_prov' => '',
+        ];
+    }
+
+    /**
      * @param  list<int>|null  $empresasPermitidas
      * @return list<array<string, mixed>>
      */
-    private function listarNativasPendientesErp(
+    private function listarPendientesErp(
         ?string $proveedorCodigo,
         ?int $empresaId,
         ?array $empresasPermitidas,
+        bool $soloImportadas = false,
     ): array {
         $tol = 0.02;
         $q = Proveedor_Cuentacorriente::query()
@@ -408,12 +556,16 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             ->join('comprobante_proveedor as cp', 'cp.id', '=', 'cc.comprobante_proveedor_id')
             ->join('proveedor as p', 'p.id', '=', 'cp.proveedor_id')
             ->join('tipotransaccion_compra as t', 't.id', '=', 'cp.tipotransaccion_compra_id')
-            ->leftJoin('proveedor_cuentacorriente_aplicacion as apl', 'apl.proveedor_cuentacorriente_id', '=', 'cc.id')
-            ->where(function ($w) {
+            ->leftJoin('proveedor_cuentacorriente_aplicacion as apl', 'apl.proveedor_cuentacorriente_id', '=', 'cc.id');
+        if ($soloImportadas) {
+            $q->where('cp.origen_entrada', ComprobanteProveedorOrigenEntrada::ANITA_IMPORT);
+        } else {
+            $q->where(function ($w) {
                 $w->whereNull('cp.origen_entrada')
                     ->orWhere('cp.origen_entrada', '!=', ComprobanteProveedorOrigenEntrada::ANITA_IMPORT);
-            })
-            ->where(function ($w) {
+            });
+        }
+        $q->where(function ($w) {
                 $w->whereNull('cp.estado')
                     ->orWhere('cp.estado', '!=', ComprobanteProveedorEstados::ANULADO);
             })
@@ -1851,6 +2003,10 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'omitidas_empresa' => 0,
             'nativas_saldadas_anita' => 0,
             'nativas_solo_apps' => 0,
+            'importadas_abiertas_erp' => 0,
+            'importadas_saldadas_anita' => 0,
+            'importadas_sin_promov' => 0,
+            'importadas_siguen_abiertas_anita' => 0,
             'a_procesar' => 0,
             'a_crear_cp' => 0,
             'a_crear_opa' => 0,

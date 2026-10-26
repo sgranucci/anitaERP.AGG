@@ -82,13 +82,13 @@ class ConstanciaInscripcionService
 
         $timeout = max(5, (int) config('arca.padron.soap_timeout', 25));
 
-        $this->clientePadron = new SoapClient($this->wsdl(), [
+        $this->clientePadron = new SoapClient($this->wsdl(), array_merge([
             'trace' => 1,
             'exceptions' => true,
             'cache_wsdl' => WSDL_CACHE_DISK,
             'connection_timeout' => $timeout,
-            'stream_context' => $this->soapStreamContext($timeout),
-        ]);
+            'stream_context' => $this->soapStreamContext($timeout, false),
+        ], $this->opcionesProxySoap()));
 
         return $this->clientePadron;
     }
@@ -98,19 +98,71 @@ class ConstanciaInscripcionService
      *
      * @return resource
      */
-    private function soapStreamContext(int $timeout)
+    private function soapStreamContext(int $timeout, bool $paraDescarga = true)
     {
+        $http = [
+            'timeout' => $timeout,
+            'user_agent' => 'anitaERP-ARCA-padron',
+        ];
+        $proxy = $paraDescarga ? $this->proxyPadron() : null;
+        if ($proxy !== null) {
+            $http['proxy'] = 'tcp://'.$proxy['host'].':'.$proxy['port'];
+            $http['request_fulluri'] = true;
+            if ($proxy['user'] !== '') {
+                $http['header'] = 'Proxy-Authorization: Basic '.base64_encode($proxy['user'].':'.$proxy['password']);
+            }
+        }
+
         return stream_context_create([
-            'http' => [
-                'timeout' => $timeout,
-                'user_agent' => 'anitaERP-ARCA-padron',
-            ],
+            'http' => $http,
             'ssl' => [
                 'verify_peer' => true,
                 'verify_peer_name' => true,
                 'ciphers' => 'DEFAULT@SECLEVEL=1',
             ],
         ]);
+    }
+
+    /**
+     * Opciones nativas de SoapClient. El stream_context no alcanza para el POST SOAP.
+     *
+     * @return array<string, int|string>
+     */
+    private function opcionesProxySoap(): array
+    {
+        $proxy = $this->proxyPadron();
+        if ($proxy === null) {
+            return [];
+        }
+
+        $opciones = [
+            'proxy_host' => $proxy['host'],
+            'proxy_port' => $proxy['port'],
+        ];
+        if ($proxy['user'] !== '') {
+            $opciones['proxy_login'] = $proxy['user'];
+            $opciones['proxy_password'] = $proxy['password'];
+        }
+
+        return $opciones;
+    }
+
+    /**
+     * @return array{host: string, port: int, user: string, password: string}|null
+     */
+    private function proxyPadron(): ?array
+    {
+        $host = trim((string) config('arca.padron.proxy_host', ''));
+        if ($host === '') {
+            return null;
+        }
+
+        return [
+            'host' => $host,
+            'port' => max(1, (int) config('arca.padron.proxy_port', 3128)),
+            'user' => trim((string) config('arca.padron.proxy_user', '')),
+            'password' => (string) config('arca.padron.proxy_password', ''),
+        ];
     }
 
     /**
@@ -176,7 +228,7 @@ class ConstanciaInscripcionService
             }
 
             $timeout = max(10, (int) config('arca.padron.soap_timeout', 25));
-            $body = @file_get_contents($remoteUrl, false, $this->soapStreamContext($timeout));
+            $body = @file_get_contents($remoteUrl, false, $this->soapStreamContext($timeout, true));
             if (is_string($body) && $body !== '' && stripos($body, 'definitions') !== false
                 && @file_put_contents($localPath, $body) !== false) {
                 return is_readable($localPath);
@@ -194,10 +246,20 @@ class ConstanciaInscripcionService
             return false;
         }
 
+        $proxyArgs = '';
+        $proxy = $this->proxyPadron();
+        if ($proxy !== null) {
+            $proxyArgs = sprintf(' -x %s', escapeshellarg('http://'.$proxy['host'].':'.$proxy['port']));
+            if ($proxy['user'] !== '') {
+                $proxyArgs .= sprintf(' --proxy-user %s', escapeshellarg($proxy['user'].':'.$proxy['password']));
+            }
+        }
+
         $cmd = sprintf(
-            'curl -fsSL --max-time %d --ciphers %s %s -o %s 2>/dev/null',
+            'curl -fsSL --max-time %d --ciphers %s%s %s -o %s 2>/dev/null',
             $timeout,
             escapeshellarg('DEFAULT@SECLEVEL=1'),
+            $proxyArgs,
             escapeshellarg($remoteUrl),
             escapeshellarg($localPath)
         );
