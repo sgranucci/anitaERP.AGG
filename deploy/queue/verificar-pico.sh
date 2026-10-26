@@ -135,14 +135,39 @@ for line in "${WORKER_LINES[@]}"; do
     fi
 done
 
-# --- Supervisor (opcional, sin sudo puede fallar) ---
+# --- Supervisor ---
+# El socket es root:root 0700. El schedule corre como www-data y lee el estado
+# con sudo -n (deploy/queue/sudoers.anitaerp-queue-status.example). Exit 3 de
+# supervisorctl es "hay algún proceso que no está RUNNING"; la salida sigue siendo válida.
 SUPERVISOR_STATE=""
 SUPERVISOR_RAW=""
+leer_supervisor() {
+    local out="" rc=0
+    set +e
+    out="$(supervisorctl status 2>/dev/null)"
+    rc=$?
+    if [[ "$rc" -ne 0 && "$rc" -ne 3 ]]; then
+        out="$(sudo -n supervisorctl status 2>/dev/null)"
+        rc=$?
+    fi
+    set -e
+    if [[ "$rc" -ne 0 && "$rc" -ne 3 ]]; then
+        return 1
+    fi
+    printf '%s\n' "$out"
+}
 if command -v supervisorctl >/dev/null 2>&1; then
-    if SUPERVISOR_RAW="$(supervisorctl status "$SUPERVISOR_PROGRAM" 2>/dev/null)"; then
-        SUPERVISOR_STATE="$(echo "$SUPERVISOR_RAW" | awk '{print $2}')"
-    elif SUPERVISOR_RAW="$(sudo supervisorctl status "$SUPERVISOR_PROGRAM" 2>/dev/null)"; then
-        SUPERVISOR_STATE="$(echo "$SUPERVISOR_RAW" | awk '{print $2}')"
+    if SUPERVISOR_RAW="$(leer_supervisor)"; then
+        SUPERVISOR_RAW="$(printf '%s\n' "$SUPERVISOR_RAW" | awk '$1 ~ /^anitaERP-queue/ { print }')"
+        if [[ -z "$SUPERVISOR_RAW" ]]; then
+            SUPERVISOR_STATE="UNKNOWN"
+            SUPERVISOR_RAW="sin programas anitaERP-queue en supervisorctl status"
+        elif printf '%s\n' "$SUPERVISOR_RAW" | awk '{ print $2 }' | grep -qvx 'RUNNING'; then
+            SUPERVISOR_STATE="$(printf '%s\n' "$SUPERVISOR_RAW" | awk '$2 != "RUNNING" { printf "%s %s; ", $1, $2 }')"
+            SUPERVISOR_STATE="${SUPERVISOR_STATE%; }"
+        else
+            SUPERVISOR_STATE="RUNNING"
+        fi
     else
         SUPERVISOR_STATE="UNKNOWN"
         SUPERVISOR_RAW="supervisorctl no disponible (sin permisos o sin supervisor)"
