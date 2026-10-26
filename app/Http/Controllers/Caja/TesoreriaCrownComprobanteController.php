@@ -461,9 +461,12 @@ class TesoreriaCrownComprobanteController extends Controller
         if ($comprobante->estado !== TesoreriaCrownComprobanteSupport::PENDIENTE) {
             return back()->with('mensaje-error', 'Solo un pendiente de firma vuelve a borrador.');
         }
+        $habiaFirma = $comprobante->entrega_at !== null || $comprobante->recibe_at !== null;
         TesoreriaCrownFirmaSupport::volverABorrador($comprobante);
 
-        return back()->with('mensaje', 'Volvió a borrador. Las firmas anteriores quedaron sin efecto.');
+        return back()->with('mensaje', $habiaFirma
+            ? 'Volvió a borrador. Las firmas quedaron sin efecto.'
+            : 'Volvió a borrador. Podés modificar las cantidades.');
     }
 
     public function vincularCajero(Request $request, int $id)

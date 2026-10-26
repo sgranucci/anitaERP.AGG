@@ -72,7 +72,7 @@ Los dólares y los euros quedan en su moneda en el comprobante. El cierre los pa
 | Conforme | Firmaron los dos lados. | Se puede imprimir y, mientras la caja siga abierta, revertir una sola vez. |
 | Auditoría | Alguien lo marcó no conforme, con un motivo. | No suma en el cierre. No reemplaza a una rendición conforme. |
 
-Pedir firmas graba primero lo que está en pantalla y deja el comprobante pendiente. Volver a borrador borra las dos firmas. Si cambian las cantidades, hay que pedir firmas de nuevo.
+Pedir firmas graba primero lo que está en pantalla y deja el comprobante pendiente. Si todavía no firmó nadie, **Modificar cantidades** lo devuelve a borrador. Si ya hay una firma, **Volver a borrador** borra las firmas. Si cambian las cantidades, hay que pedir firmas de nuevo.
 
 El botón **No conforme** está en el borrador y en el pendiente. Pide un motivo y deja el comprobante en auditoría. Ese comprobante deja de sumar. Para cerrar la caja tiene que existir otra rendición conforme.
 
@@ -148,7 +148,7 @@ Con la caja cerrada, en cualquiera de estos estados, los comprobantes quedan en 
 
 ### El cajero se equivoca antes de firmar
 
-El comprobante está en borrador. Se corrigen las cantidades y se guarda. Si ya se habían pedido firmas, **Volver a borrador** borra las firmas. Después se pide de nuevo.
+El comprobante está en borrador. Se corrigen las cantidades y se guarda. Si ya se habían pedido firmas y nadie firmó, **Modificar cantidades** lo abre de nuevo. Si alguien ya firmó, **Volver a borrador** borra esas firmas. Después se pide de nuevo.
 
 ### Falta una firma
 

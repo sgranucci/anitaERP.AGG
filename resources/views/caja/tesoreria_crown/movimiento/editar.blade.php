@@ -250,10 +250,13 @@
                         </div>
                     @endforeach
                 </div>
+                @php
+                    $hayFirma = $comprobante->entrega_at !== null || $comprobante->recibe_at !== null;
+                @endphp
                 @if ($comprobante->estado === 'P' && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('crear-tesoreria-crown-movimiento', false))
-                    <form method="POST" action="{{ route('volver_borrador_tesoreria_crown_movimiento', $comprobante->id) }}" class="d-inline mb-3" onsubmit="return confirm('¿Volver a borrador? Se borran las firmas.');">
+                    <form method="POST" action="{{ route('volver_borrador_tesoreria_crown_movimiento', $comprobante->id) }}" class="d-inline mb-3" onsubmit="return confirm('{{ $hayFirma ? '¿Volver a borrador? Se borran las firmas.' : '¿Volver a cargar las cantidades? Todavía no hay firmas.' }}');">
                         @csrf
-                        <button type="submit" class="btn btn-outline-secondary btn-sm">Volver a borrador</button>
+                        <button type="submit" class="btn btn-outline-secondary btn-sm">{{ $hayFirma ? 'Volver a borrador' : 'Modificar cantidades' }}</button>
                     </form>
                 @endif
 
