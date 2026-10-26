@@ -21,6 +21,7 @@
 <script src="{{ asset('assets/pages/scripts/compras/concepto_ivacompra/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/concepto_ivacompra/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/conceptos_ivacompra_coherencia.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/comprobantes_ivacompra.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/comprobantes_ivacompra.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/liquidacion_tarjeta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/liquidacion_tarjeta.js')) ?: time() }}" type="text/javascript"></script>
 <script>
     var urlConsultaProveedor = "{{ route('editar_proveedor', ':id') }}";
     var ingresoEgresoChequeDiferidosHabilitado = @json((bool) config('caja.cheque_propio_imputacion_diferidos_habilitado'));

@@ -2047,6 +2047,7 @@ class Comprobante_ProveedorController extends Controller
 
         if ($request->boolean('quitar_orden')) {
             $filtros['sort'] = [];
+            ComprobanteProveedorListadoPreferenciasUsuario::olvidarOrden();
             if ($vistaActiva) {
                 $filtros['vista_id'] = $vistaActiva->id;
                 unset($filtros['vista_estandar']);
@@ -2061,7 +2062,19 @@ class Comprobante_ProveedorController extends Controller
 
             return redirect()
                 ->route('comprobante_proveedor', ComprobanteProveedorListadoFiltros::paraQueryString($filtros))
-                ->with('mensaje', 'Se quitó el orden de la grilla.');
+                ->with('mensaje', 'Se volvió al orden estándar (fecha IVA, más reciente primero).');
+        }
+
+        if ($request->exists('sort')) {
+            ComprobanteProveedorListadoPreferenciasUsuario::persistirOrden($filtros['sort'] ?? []);
+        } elseif (ListadoOrdenamientoSupport::normalizar(
+            $filtros['sort'] ?? [],
+            ComprobanteProveedorListadoFiltros::camposOrdenables()
+        ) === []) {
+            $ordenRecordado = ComprobanteProveedorListadoPreferenciasUsuario::leerOrden();
+            if ($ordenRecordado !== []) {
+                $filtros['sort'] = $ordenRecordado;
+            }
         }
 
         $catalogo = ComprobanteProveedorListadoColumnas::catalogoActivo();

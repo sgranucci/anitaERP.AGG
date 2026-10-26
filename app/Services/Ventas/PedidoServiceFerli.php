@@ -22,6 +22,7 @@ use App\Queries\Ventas\ClienteQueryInterface;
 use App\Queries\Ventas\OrdentrabajoQueryInterface;
 use App\Models\Ventas\Pedido;
 use App\Models\Ventas\Pedido_Combinacion;
+use App\Models\Ventas\Ordentrabajo_Combinacion_Talle;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Mventa;
 use App\Models\Stock\Combinacion;
@@ -801,19 +802,10 @@ class PedidoServiceFerli
 
 						if ($ot)
 						{
-							// Lee los items
-							$pedido_combinacion_talle = $this->pedido_combinacion_talleRepository
-															->findporpedido_combinacion($id);
-							foreach($pedido_combinacion_talle as $itemPedido)
-							{
-								foreach ($ot->ordentrabajo_combinacion_talles as $item)
-								{
-									if ($item->pedido_combinacion_talle_id == $itemPedido->id)
-										// Actualiza el nuevo cliente
-										$this->ordentrabajo_combinacion_talleRepository->update(
-																['cliente_id' => $cliente_id], $item->id);
-								}
-							}
+							// Crea el vínculo si todavía no existe. Si no, al guardar el pedido
+							// los talles quedan con el cliente de la cabecera y el alta no se ve en stock.
+							$this->reasignarClienteOtDelRenglon($ot->id, (int) $id, (int) $cliente_id);
+
 							if ($cliente_id == config("consprod.CLIENTE_STOCK"))
 							{
 								$articulo = Articulo::where('id', $pedido_combinacion->articulo_id)->first();
@@ -1112,17 +1104,23 @@ class PedidoServiceFerli
 						$clienteot_id = $data['cliente_id'];
 						if ($funcion == 'update' && ($ot_ids[$i_comb] ?? 0) > 0)
 						{
-							// Cliente OT (puede diferir por reasignación a stock)
-							$pedido_combinacion_talle = $this->pedido_combinacion_talleRepository
-															->findporpedido_combinacion($ids[$i_comb]);
-															
-							if (count($pedido_combinacion_talle) > 0)
-							{
-								$ordentrabajo_combinacion_talle = $this->ordentrabajo_combinacion_talleRepository
-															->findPorPedidoCombinacionTalleId($pedido_combinacion_talle[0]->id);
-								
-								if (count($ordentrabajo_combinacion_talle) > 0)
-									$clienteot_id = $ordentrabajo_combinacion_talle[0]->cliente_id;
+							// La anulación (STOCK u otro cliente) manda sobre la cabecera.
+							// Si no, un guardado posterior vuelve a dejar la OT a nombre del cliente original.
+							$clienteReasignado = $this->clienteReasignadoDelRenglon((int) ($ids[$i_comb] ?? 0));
+							if ($clienteReasignado > 0) {
+								$clienteot_id = $clienteReasignado;
+							} else {
+								$pedido_combinacion_talle = $this->pedido_combinacion_talleRepository
+																->findporpedido_combinacion($ids[$i_comb]);
+
+								if (count($pedido_combinacion_talle) > 0)
+								{
+									$ordentrabajo_combinacion_talle = $this->ordentrabajo_combinacion_talleRepository
+																->findPorPedidoCombinacionTalleId($pedido_combinacion_talle[0]->id);
+
+									if (count($ordentrabajo_combinacion_talle) > 0)
+										$clienteot_id = $ordentrabajo_combinacion_talle[0]->cliente_id;
+								}
 							}
 						}
 
@@ -1252,11 +1250,17 @@ class PedidoServiceFerli
 				}
 			}
 
+			$clienteLineaId = (int) ($data['cliente_id'] ?? 0);
+			$clienteReasignado = $this->clienteReasignadoDelRenglon($pedidoCombinacionId);
+			if ($clienteReasignado > 0) {
+				$clienteLineaId = $clienteReasignado;
+			}
+
 			$contextoOt = null;
 			if ($funcion == 'update' && $ordentrabajoId > 0) {
 				$contextoOt = [
 					'ordentrabajo_id' => $ordentrabajoId,
-					'cliente_id' => $data['cliente_id'],
+					'cliente_id' => $clienteLineaId,
 					'usuario_id' => $data['usuario_id'],
 					'estado' => '',
 					'ordentrabajo_stock_id' => $ordentrabajo_stock_id,
@@ -1271,7 +1275,7 @@ class PedidoServiceFerli
 			$totPares = $syncTalles['total_pares'];
 
 			// Stock: rearmar AMT de talles vigentes (los quitados ya se borraron en el sync)
-			$esStock = $ordentrabajo_stock_id != 0 || $data['cliente_id'] == config("consprod.CLIENTE_STOCK");
+			$esStock = $ordentrabajo_stock_id != 0 || $clienteLineaId == (int) config('consprod.CLIENTE_STOCK');
 			if ($funcion == 'update' && $ordentrabajoId > 0 && $esStock) {
 				$pctIds = $syncTalles['talles']->pluck('id')->all();
 				if ($pctIds !== []) {
@@ -1367,6 +1371,64 @@ class PedidoServiceFerli
 		}
 
 		return 'correcto';
+	}
+
+	/**
+	 * Último cliente al que se reasignó el renglón (anulación a STOCK u otro).
+	 * La cabecera del pedido no lo pisa: si no, al guardar se pierde el alta.
+	 */
+	private function clienteReasignadoDelRenglon(int $pedidoCombinacionId): int
+	{
+		if ($pedidoCombinacionId <= 0) {
+			return 0;
+		}
+
+		$estado = $this->pedido_combinacion_estadoRepository->traeEstado($pedidoCombinacionId);
+
+		return (int) ($estado->cliente_id ?? 0);
+	}
+
+	/**
+	 * Deja los talles de esta OT del renglón con el cliente de la anulación.
+	 * Si el vínculo no existe todavía, lo crea. No toca los talles de otros clientes de la misma OT.
+	 */
+	private function reasignarClienteOtDelRenglon(int $ordentrabajoId, int $pedidoCombinacionId, int $clienteId): void
+	{
+		if ($ordentrabajoId <= 0 || $pedidoCombinacionId <= 0 || $clienteId <= 0) {
+			return;
+		}
+
+		$talles = $this->pedido_combinacion_talleRepository->findporpedido_combinacion($pedidoCombinacionId);
+		$usuarioId = Auth::id();
+
+		foreach ($talles as $talle) {
+			$octs = Ordentrabajo_Combinacion_Talle::query()
+				->where('ordentrabajo_id', $ordentrabajoId)
+				->where('pedido_combinacion_talle_id', $talle->id)
+				->get();
+
+			if ($octs->isEmpty()) {
+				$this->ordentrabajo_combinacion_talleRepository->create([
+					'ordentrabajo_id' => $ordentrabajoId,
+					'pedido_combinacion_talle_id' => $talle->id,
+					'cliente_id' => $clienteId,
+					'estado' => '0',
+					'ordentrabajo_stock_id' => 0,
+					'usuario_id' => $usuarioId,
+				]);
+				continue;
+			}
+
+			foreach ($octs as $oct) {
+				if ((int) $oct->cliente_id === $clienteId) {
+					continue;
+				}
+				$this->ordentrabajo_combinacion_talleRepository->update(
+					['cliente_id' => $clienteId],
+					$oct->id
+				);
+			}
+		}
 	}
 
 	private function generaMovimientoStock($fecha, $pedido_combinacion, $ordentrabajo, $articulo, $combinacion,

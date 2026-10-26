@@ -185,7 +185,7 @@
         return (parseFloat(n) || 0).toFixed(2);
     }
 
-    var TIPOS_NUMERO_AUTOMATICO = { ICO: true, IDO: true };
+    var TIPOS_NUMERO_AUTOMATICO = { ICO: true, IDO: true, DTC: true };
 
     function esNumeracionAutomatica() {
         return !!TIPOS_NUMERO_AUTOMATICO[abreviaturaTipoActual()];
@@ -322,9 +322,14 @@
     function etiquetaComprobante(c) {
         var meta = tiposCompraMeta[String(c.tipotransaccion_compra_id || '')] || {};
         var abrev = String(meta.abreviatura || '').trim().toUpperCase();
-        if (TIPOS_NUMERO_AUTOMATICO[abrev]) {
+        var esDtc = !!(c && (c.liquidacion_tarjeta || c.tipo_tesoreria === 'LIQUIDACION_TARJETA'));
+        if (TIPOS_NUMERO_AUTOMATICO[abrev] || esDtc) {
             var nro = parseInt(c.numerocomprobante || '0', 10) || 0;
-            return nro > 0 ? ('A 0-' + nro) : 'Automático';
+            if (nro <= 0) {
+                return 'Automático';
+            }
+            var sucursal = esDtc ? (parseInt(c.sucursal, 10) || 1) : 0;
+            return 'A ' + sucursal + '-' + nro;
         }
         return (c.letra || '') + ' ' + (c.sucursal || '') + '-' + (c.numerocomprobante || '');
     }
@@ -2648,6 +2653,25 @@
             refrescarCotizacionesIvaDesdeCaja();
             syncHidden();
             return comprobantesIva;
+        };
+
+        window.aplicarLiquidacionTarjetaEnGrilla = function (payload) {
+            var reemplazo = -1;
+            comprobantesIva.forEach(function (c, i) {
+                if (c && (c.liquidacion_tarjeta || c.tipo_tesoreria === 'LIQUIDACION_TARJETA')) {
+                    reemplazo = i;
+                }
+            });
+            if (reemplazo >= 0) {
+                payload.id = comprobantesIva[reemplazo].id || null;
+                comprobantesIva[reemplazo] = payload;
+            } else {
+                comprobantesIva.push(payload);
+            }
+            renderGrilla();
+            if (typeof flModificaAsiento !== 'undefined') {
+                flModificaAsiento = true;
+            }
         };
 
         window.validarComprobantesIvaContraCaja = function (callback) {

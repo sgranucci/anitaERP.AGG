@@ -3,6 +3,11 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h4 class="mb-0"><i class="fa fa-file-invoice"></i> Comprobantes IVA compras</h4>
             <div>
+                @if (! empty($muestraCobranzaTarjeta))
+                <button type="button" class="btn btn-info btn-sm" id="ie-btn-liquidacion-tarjeta">
+                    <i class="fa fa-credit-card"></i> Liquidación de tarjeta
+                </button>
+                @endif
                 <button type="button" class="btn btn-info btn-sm" id="ie-btn-pdf-ia-comprobante">
                     <i class="fa fa-magic"></i> Cargar PDF (OCR/IA)
                 </button>
@@ -13,7 +18,10 @@
         </div>
         <p class="text-muted small mb-3">
             Facturas de fondo fijo, gastos bancarios u otros comprobantes de IVA compras.
-            Al elegir el tipo de comprobante se cargan sus conceptos. El haber contable sale de las cuentas de caja del movimiento.
+            @if (! empty($muestraCobranzaTarjeta))
+                La liquidación de tarjeta arma el DTC con los gastos del cupón: la caja queda por el neto depositado
+                y los cupones se acreditan en la cuenta contable de la tarjeta.
+            @endif
         </p>
         <input type="hidden" name="comprobantes_ivacompra_json" id="comprobantes_ivacompra_json" value="">
         <div class="table-responsive">
@@ -53,3 +61,7 @@
 <script type="application/json" id="ie-conceptos-cuenta-meta">@json($ieConceptosCuentaMetaJson)</script>
 <script type="application/json" id="ie-cuentas-detalle-meta">@json($ieCuentasDetalleMetaJson)</script>
 <script type="application/json" id="ie-comprobantes-iva-inicial">@json($ieComprobantesInicialJson)</script>
+@if (! empty($muestraCobranzaTarjeta))
+<script type="application/json" id="ie-liquidacion-tarjeta">@json($liquidacion_tarjeta ?? [])</script>
+@include('caja.ingresoegreso.partials.modal_liquidacion_tarjeta')
+@endif

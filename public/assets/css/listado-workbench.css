@@ -710,6 +710,11 @@
   background: rgba(255, 255, 255, 0.35);
 }
 
+.lw-orden-recordado {
+  cursor: default;
+  pointer-events: none;
+}
+
 .lw-sort-icon {
   font-size: 0.75rem;
   opacity: 0.85;

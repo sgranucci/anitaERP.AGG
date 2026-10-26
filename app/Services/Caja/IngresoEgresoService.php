@@ -32,6 +32,7 @@ use App\Support\Caja\IngresoEgresoAsientoDescripcionSupport;
 use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
 use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
+use App\Support\Caja\IngresoEgresoLiquidacionTarjetaSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoCuadreCajaAsientoSupport;
 use App\Support\Caja\IngresoEgresoGrabacionTimingSupport;
@@ -845,9 +846,11 @@ class IngresoEgresoService
 
 		// Las líneas del comprobante quedan en su moneda y cotización; el balanceo
 		// (concepto de gasto y AsientoBalanceSupport) convierte con la de cada línea.
-		$lineasDebe = [];
 		try {
 			foreach ($comprobantes as $comprobante) {
+				if (! is_array($comprobante)) {
+					continue;
+				}
 				$monedaComp = (int) ($comprobante['moneda_id'] ?? 0) ?: (int) $monedaAsientoId;
 				$cotComp = NumeroDecimalLocalSupport::aFloat($comprobante['cotizacion'] ?? 0);
 				if ($monedaComp === (int) $monedaAsientoId || $monedaComp === 1) {
@@ -855,42 +858,89 @@ class IngresoEgresoService
 				} elseif ($cotComp <= 1.0001) {
 					throw new Exception('El comprobante de IVA en moneda extranjera no tiene cotización.');
 				}
+
+				// La liquidación de tarjeta es un ingreso de caja por el neto, pero
+				// los gastos del DTC van al DEBE. El bruto acredita la cuenta de la tarjeta.
+				$esLiquidacion = IngresoEgresoLiquidacionTarjetaSupport::es($comprobante);
+				$signoConcepto = $esLiquidacion ? -1 : $signo;
+
 				foreach (IngresoEgresoComprobanteIvaAsientoSupport::lineasDebeDesdeComprobantes(
 					[$comprobante],
 					1,
 					$empresaId > 0 ? $empresaId : null,
 				) as $linea) {
-					$linea['moneda_id'] = $monedaComp;
-					$linea['cotizacion'] = $cotComp;
-					$lineasDebe[] = $linea;
+					$this->agregarLineaConceptoIva($asiento, $linea, $signoConcepto, $monedaComp, $cotComp);
+				}
+
+				if ($esLiquidacion) {
+					$this->agregarHaberCuponesTarjeta($asiento, $comprobante, $monedaComp, $cotComp, $empresaId);
 				}
 			}
 		} catch (\Throwable $e) {
 			throw new Exception($e->getMessage());
 		}
+	}
 
-		foreach ($lineasDebe as $linea) {
-			$cuentacontable = $this->cuentacontableRepository->find($linea['cuentacontable_id']);
-			if (! $cuentacontable) {
-				continue;
-			}
-
-			$importe = round((float) $linea['importe'], 2);
-			// Contrapartida de la caja: egreso (signo < 0) deja el gasto/compra
-			// al DEBE y la caja al HABER. El signo del tipo no se copia a estas líneas.
-			$asiento[] = [
-				'cuentacontable_id' => $linea['cuentacontable_id'],
-				'codigo' => $cuentacontable->codigo,
-				'nombre' => $cuentacontable->nombre,
-				'moneda_id' => $linea['moneda_id'],
-				'cotizacion' => $linea['cotizacion'],
-				'centrocosto_id' => $linea['centrocosto_id'] ?? 0,
-				'debe' => $signo < 0 ? $importe : '',
-				'haber' => $signo >= 0 ? $importe : '',
-				'observacion' => $linea['observacion'] ?? '',
-				'carga_cuentacontable_manual' => 'N',
-			];
+	/** @param  array<string, mixed>  $linea */
+	private function agregarLineaConceptoIva(array &$asiento, array $linea, int $signo, int $monedaId, float $cotizacion): void
+	{
+		$cuentacontable = $this->cuentacontableRepository->find($linea['cuentacontable_id']);
+		if (! $cuentacontable) {
+			return;
 		}
+
+		$importe = round((float) $linea['importe'], 2);
+		// Contrapartida de la caja: egreso (signo < 0) deja el gasto/compra
+		// al DEBE y la caja al HABER. El signo del tipo no se copia a estas líneas.
+		$asiento[] = [
+			'cuentacontable_id' => $linea['cuentacontable_id'],
+			'codigo' => $cuentacontable->codigo,
+			'nombre' => $cuentacontable->nombre,
+			'moneda_id' => $monedaId,
+			'cotizacion' => $cotizacion,
+			'centrocosto_id' => $linea['centrocosto_id'] ?? 0,
+			'debe' => $signo < 0 ? $importe : '',
+			'haber' => $signo >= 0 ? $importe : '',
+			'observacion' => $linea['observacion'] ?? '',
+			'carga_cuentacontable_manual' => 'N',
+		];
+	}
+
+	/** @param  array<string, mixed>  $comprobante */
+	private function agregarHaberCuponesTarjeta(array &$asiento, array $comprobante, int $monedaId, float $cotizacion, int $empresaId): void
+	{
+		$bruto = IngresoEgresoLiquidacionTarjetaSupport::bruto($comprobante);
+		$cuentaCajaId = IngresoEgresoLiquidacionTarjetaSupport::cuentacajaTarjetaId($comprobante);
+		if ($bruto <= 0 || $cuentaCajaId <= 0) {
+			throw new Exception('La liquidación de tarjeta no tiene cupones o cuenta de tarjeta.');
+		}
+
+		$cuentacaja = $this->cuentacajaRepository->find($cuentaCajaId);
+		if (! $cuentacaja) {
+			throw new Exception('No está la cuenta de caja de la tarjeta.');
+		}
+		$cuentaId = CuentacontableEmpresaHomologacionSupport::idParaEmpresa(
+			(int) ($cuentacaja->cuentacontable_id ?? 0),
+			$empresaId,
+		);
+		$cuentacontable = $cuentaId > 0 ? $this->cuentacontableRepository->find($cuentaId) : null;
+		if (! $cuentacontable) {
+			$nombre = (string) ($cuentacaja->nombre ?? 'la tarjeta');
+			throw new Exception('La cuenta de caja '.$nombre.' no tiene cuenta contable para acreditar los cupones.');
+		}
+
+		$asiento[] = [
+			'cuentacontable_id' => (int) $cuentacontable->id,
+			'codigo' => $cuentacontable->codigo,
+			'nombre' => $cuentacontable->nombre,
+			'moneda_id' => $monedaId,
+			'cotizacion' => $cotizacion,
+			'centrocosto_id' => 0,
+			'debe' => '',
+			'haber' => $bruto,
+			'observacion' => 'Cupones '.$cuentacaja->nombre,
+			'carga_cuentacontable_manual' => 'N',
+		];
 	}
 
 	private function sincronizarComprobantesIva($request, int $cajaMovimientoId, int $empresaId): void

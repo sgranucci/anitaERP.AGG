@@ -3728,6 +3728,8 @@ Route::get('caja/movimientocaja', 'Caja\MovimientoCajaController@index')->name('
  */
 
 Route::get('caja/ingresoegreso', 'Caja\IngresoEgresoController@index')->name('ingresoegreso');
+Route::get('caja/ingresoegreso/configuracion', 'Caja\IngresoEgresoConfiguracionController@editar')->name('editar_configuracion_ingresoegreso');
+Route::put('caja/ingresoegreso/configuracion', 'Caja\IngresoEgresoConfiguracionController@actualizar')->name('actualizar_configuracion_ingresoegreso');
 Route::get('caja/ingresoegreso/crear/{caja?}', 'Caja\IngresoEgresoController@crear')->name('crear_ingresoegreso');
 Route::post('caja/ingresoegreso/workbench/preview', 'Caja\IngresoEgresoController@previewWorkbench')->name('preview_workbench_ingresoegreso');
 Route::post('caja/ingresoegreso/workbench/vista', 'Caja\IngresoEgresoController@guardarVistaListado')->name('guardar_vista_listado_ingresoegreso');

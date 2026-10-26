@@ -31,7 +31,7 @@ return [
                     ['2. Confirmar', 'Abierto', 'No emite comprobante. Exige factura original, un motivo y al menos una línea «A devolver». Las líneas se pueden seguir corrigiendo.'],
                     ['3. Factura de reemplazo o solo devolución', 'Aguardando recepción', 'Con reemplazo: botón «Emitir FAC reemplazo (NCD)». Sin reemplazo: botón «Continuar sin reemplazo (reembolso)». Luego se registra la recepción y la NC de lo devuelto.'],
                     ['4. Recepción', 'Recibido', 'Cuando llega el par, se elige la disposición (reventa, deterioro o no recibido) y una observación. Todavía no mueve stock.'],
-                    ['5. Nota de crédito', 'NC emitida', 'Botón «Emitir NC de lo devuelto (NCD)». Solo las líneas «A devolver», al precio cargado en la grilla. Si no se tocó, es el de la factura. Si se igualó al importe del producto (descuento por transferencia), la nota sale por ese importe. El motivo define si ese par vuelve al stock vendible.'],
+                    ['5. Nota de crédito', 'NC emitida', 'Botón «Emitir NC de lo devuelto (NCD)». Solo las líneas «A devolver». Si el precio de la grilla es más alto que lo facturado, se acredita lo facturado. En un cambio del mismo artículo la factura de reemplazo ya salió a ese importe, así que el descuento no deja diferencia. El motivo define si ese par vuelve al stock vendible.'],
                     ['6. Diferencia', 'Cerrado o Pendiente compensación', 'Compara el total de la factura de reemplazo con el total de la nota de crédito. Si son iguales, el legajo se cierra. Si no, queda pendiente y se cierra con un texto de cómo se compensó (efectivo, transferencia, etc.). Ese texto no genera otro comprobante.'],
                 ],
             ],
@@ -39,9 +39,9 @@ return [
         [
             'titulo' => '3. Precios: lista, factura y cupón',
             'parrafos' => [
-                'La línea «A devolver» muestra el precio con el que se facturó ese par, ya con el cupón repartido. La línea «Reemplazo» muestra el precio vigente de la lista del local (la misma que usa el punto de venta y Tienda Nube antes del cupón). No es un precio por talle de las listas 16/26 o 27/33: en la web el artículo tiene un precio único.',
-                'Si el pedido tenía un cupón, ese importe se reparte entre los artículos para que la factura cierre con AFIP. El par devuelto queda en la factura por menos que la lista. Si no se corrige el precio de «A devolver», la nota de crédito toma ese importe ya descontado y la factura de reemplazo toma la lista. La diferencia es la parte del cupón de ese par.',
-                'Descuento por transferencia: en la grilla se pone el importe del producto en «A devolver» y en «Reemplazo». La factura y la nota de crédito salen por ese importe. La diferencia queda en cero.',
+                'La línea «A devolver» muestra el precio con el que se facturó ese par, ya con el cupón o el descuento de transferencia. La línea «Reemplazo» arranca con el precio vigente de la lista del local. No es un precio por talle de las listas 16/26 o 27/33: en la web el artículo tiene un precio único.',
+                'Si el reemplazo es el mismo artículo (otro talle o color), al emitir la factura nueva el precio baja al que ya se cobró. La nota de crédito acredita ese mismo importe. El descuento no se vuelve a cobrar y la diferencia queda en cero.',
+                'Si el reemplazo es otro artículo, se factura el precio cargado en esa línea. La diferencia es el cambio de producto, no el descuento del pedido original.',
             ],
         ],
         [
@@ -64,15 +64,15 @@ return [
                 'caption' => 'Qué emite el legajo',
                 'headers' => ['Comprobante', 'Qué incluye', 'Importe'],
                 'rows' => [
-                    ['Factura de reemplazo', 'SINTONIA 03 talle 27 BLANCO-MULTI, precio de lista OFERTA WEB', '$ 75.000'],
-                    ['Nota de crédito', 'Solo SINTONIA 03 talle 26, al precio de la factura', '$ 46.182,27'],
+                    ['Factura de reemplazo', 'SINTONIA 03 talle 27 BLANCO-MULTI, al precio ya cobrado', '$ 46.182,27'],
+                    ['Nota de crédito', 'Solo SINTONIA 03 talle 26, al mismo importe', '$ 46.182,27'],
                     ['No entra', 'Easy Kids y el flete siguen facturados', '—'],
-                    ['Diferencia', 'Cliente debe (lista menos lo ya pagado por ese par)', '$ 28.817,73'],
+                    ['Diferencia', 'Sin diferencia: el cupón de ese par no se vuelve a cobrar', '$ 0'],
                 ],
             ],
             'items' => [
-                'El cupón de $ 46.800 se repartió así: $ 17.982,27 a Easy Kids y $ 28.817,73 a SINTONIA. Por eso 75.000 − 28.817,73 = 46.182,27.',
-                'Los dos talles de SINTONIA 03 están a $ 75.000 en la lista web. La diferencia no es porque el talle 27 sea más caro.',
+                'El cupón de $ 46.800 se repartió así: $ 17.982,27 a Easy Kids y $ 28.817,73 a SINTONIA. Por eso el par se cobró $ 46.182,27 y no los $ 75.000 de lista.',
+                'Los dos talles de SINTONIA 03 están a $ 75.000 en la lista web. El talle 27 se factura a $ 46.182,27, el mismo importe de lo que se devuelve.',
                 'Si Easy Kids o el flete quedan marcados como «A devolver», también entran en la nota de crédito. Hay que quitarlos de la grilla antes de confirmar.',
             ],
         ],

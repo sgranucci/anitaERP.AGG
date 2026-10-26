@@ -188,8 +188,22 @@
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])
-                            <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden por defecto y lo saca de la vista">
-                                <i class="fa fa-sort"></i> Quitar orden
+                            @php
+                                $partesOrdenBarra = [];
+                                foreach ($ordenActualThead as $criterioOrdenBarra) {
+                                    $campoOrdenBarra = (string) ($criterioOrdenBarra['campo'] ?? '');
+                                    $etiquetaOrdenBarra = ($etiquetasColumnas ?? [])[$campoOrdenBarra]
+                                        ?? ($camposOrdenablesThead[$campoOrdenBarra]['label'] ?? $campoOrdenBarra);
+                                    $flechaOrdenBarra = ($criterioOrdenBarra['dir'] ?? '') === 'desc' ? '↓' : '↑';
+                                    $partesOrdenBarra[] = trim($etiquetaOrdenBarra.' '.$flechaOrdenBarra);
+                                }
+                                $textoOrdenBarra = implode(' · ', $partesOrdenBarra);
+                            @endphp
+                            <span class="btn btn-sm btn-info lw-orden-recordado" title="Este orden queda recordado para su usuario">
+                                <i class="fa fa-sort-amount-down"></i> {{ $textoOrdenBarra }}
+                            </span>
+                            <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Olvida el orden elegido y vuelve a fecha IVA, más reciente primero">
+                                <i class="fa fa-undo"></i> Orden estándar
                             </a>
                         @endif
                     </div>

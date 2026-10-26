@@ -107,6 +107,32 @@ final class ClienteCuentacorrienteGrillaSupport
         return route('listar_una_cobranza', ['id' => $destino['id']]);
     }
 
+    /**
+     * Impresora y PDF de la factura sola (sin remito, pedido ni envío).
+     *
+     * @return array{impresora: ?string, pdf: ?string}
+     */
+    public static function urlsImpresionSoloFactura(int $ventaId): array
+    {
+        if ($ventaId <= 0) {
+            return ['impresora' => null, 'pdf' => null];
+        }
+
+        $params = [
+            'id' => $ventaId,
+            'solo_formulario' => ComprobanteImpresionFormulario::FACTURA,
+        ];
+        $retorno = ComprobanteImpresionSesionUrlSupport::retornoRequestActual();
+        if ($retorno !== '') {
+            $params['retorno'] = $retorno;
+        }
+
+        return [
+            'impresora' => route('lista_una_factura', $params),
+            'pdf' => route('lista_una_factura_pdf', $params),
+        ];
+    }
+
     public static function puedeImprimirComprobante(Cliente_Cuentacorriente $fila): bool
     {
         $destino = self::destinoImpresion($fila);

@@ -14,6 +14,9 @@ final class ComprobanteProveedorTipoTesoreria
     /** Comprobantes que no son fondo fijo ni gasto bancario. */
     public const OTROS_VARIOS = 'OTROS_VARIOS';
 
+    /** DTC de liquidación de tarjeta: gastos del cupón, la caja queda por el neto. */
+    public const LIQUIDACION_TARJETA = 'LIQUIDACION_TARJETA';
+
     /** @return list<string> */
     public static function todos(): array
     {
@@ -21,6 +24,7 @@ final class ComprobanteProveedorTipoTesoreria
             self::FONDO_FIJO,
             self::GASTO_BANCO,
             self::OTROS_VARIOS,
+            self::LIQUIDACION_TARJETA,
         ];
     }
 
@@ -30,6 +34,7 @@ final class ComprobanteProveedorTipoTesoreria
             self::FONDO_FIJO => 'Fondo fijo / caja chica',
             self::GASTO_BANCO => 'Gasto bancario',
             self::OTROS_VARIOS => 'Otros / Varios',
+            self::LIQUIDACION_TARJETA => 'Liquidación de tarjeta',
             default => $tipo ?? '',
         };
     }

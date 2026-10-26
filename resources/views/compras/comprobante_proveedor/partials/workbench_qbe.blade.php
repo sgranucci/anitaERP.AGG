@@ -63,6 +63,7 @@
             'camposOrdenables' => ComprobanteProveedorListadoFiltros::camposOrdenables(),
             'orden' => $filtros['sort'] ?? [],
             'etiquetasColumnas' => $etiquetasColumnas ?? [],
+            'ordenHint' => 'Por defecto: fecha IVA, más reciente primero. Si elegís otro campo, queda recordado para tu usuario y marcado en la barra.',
         ])
     </div>
     <div id="lw-group-qbe-slot">

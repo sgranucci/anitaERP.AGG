@@ -71,10 +71,10 @@
 </div>
 @else
 {{-- inline / compact (tablas): sin label si $label === '' --}}
-<div class="tm-cuentacaja-campo d-flex flex-nowrap align-items-center w-100 {{ trim((string) $label) !== '' ? 'form-group col-12 mb-2 flex-column align-items-stretch' : '' }}"
-    id="tm_cuentacaja_{{ $prefix }}" style="gap: 4px;">
+<div class="tm-cuentacaja-campo w-100 {{ trim((string) $label) !== '' ? 'form-group col-12 mb-2 text-left' : 'd-flex flex-nowrap align-items-center' }}"
+    id="tm_cuentacaja_{{ $prefix }}" style="gap: 4px; text-align: left;">
     @if (trim((string) $label) !== '')
-        <label class="d-block mb-1 {{ $required ? 'requerido' : '' }}">{{ $label }}</label>
+        <label class="d-block text-left w-100 mb-1 {{ $required ? 'requerido' : '' }}" style="text-align: left;">{{ $label }}</label>
     @endif
     <div class="d-flex flex-nowrap align-items-center tm-cuentacaja-campo-inputs w-100" style="gap: 4px;">
         <input type="hidden" class="cuentacaja_id" id="{{ $inputId }}"

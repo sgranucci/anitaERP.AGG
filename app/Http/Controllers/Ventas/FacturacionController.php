@@ -33,6 +33,7 @@ use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Exports\Ventas\FacturaExport;
 use App\Models\Ventas\Venta;
+use App\Support\Ventas\ComprobanteImpresionFormulario;
 use App\Support\Ventas\ComprobanteImpresionSesionUrlSupport;
 use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
@@ -512,6 +513,10 @@ class FacturacionController extends Controller
         }
         if (request()->boolean('con_envios')) {
             $params['con_envios'] = 1;
+        }
+        $soloFormulario = strtoupper(trim((string) request()->query('solo_formulario', '')));
+        if (in_array($soloFormulario, ComprobanteImpresionFormulario::todos(), true)) {
+            $params['solo_formulario'] = $soloFormulario;
         }
         $retorno = ComprobanteImpresionSesionUrlSupport::pathConCarpeta(
             (string) request()->query('retorno', '')

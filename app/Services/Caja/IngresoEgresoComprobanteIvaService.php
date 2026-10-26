@@ -15,10 +15,13 @@ use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Services\Ai\AiDecisionLogger;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAiHashSupport;
+use App\Support\Caja\IngresoEgresoDtcNumeracionSupport;
+use App\Support\Caja\IngresoEgresoConfiguracionSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaNumeracionSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Caja\IngresoEgresoGastoBancoSupport;
+use App\Support\Caja\IngresoEgresoLiquidacionTarjetaSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
@@ -86,6 +89,17 @@ class IngresoEgresoComprobanteIvaService
         array $monedaAsientoIds = [],
         array $cotizacionesAsiento = [],
     ): void {
+        if (IngresoEgresoLiquidacionTarjetaSupport::hay($comprobantesJson)) {
+            IngresoEgresoConfiguracionSupport::assertPuedeGrabarCobranzaTarjeta($comprobantesJson);
+            IngresoEgresoLiquidacionTarjetaSupport::validarCierre(
+                $comprobantesJson,
+                $lineasCaja,
+                $monedaReferenciaId,
+            );
+
+            return;
+        }
+
         IngresoEgresoComprobanteIvaValidacionSupport::validarTotales(
             $comprobantesJson,
             $lineasCaja,
@@ -322,7 +336,7 @@ class IngresoEgresoComprobanteIvaService
      */
     private function crearComprobante(array $payload, int $cajaMovimientoId, int $empresaId): Comprobante_Proveedor
     {
-        $payload = $this->aplicarNumeracion($payload);
+        $payload = $this->aplicarNumeracion($payload, null, $empresaId);
         $cabecera = $this->aplicarFechasCarga(
             $this->armarCabecera($payload, $cajaMovimientoId, $empresaId),
             null
@@ -345,7 +359,7 @@ class IngresoEgresoComprobanteIvaService
      */
     private function actualizarComprobante(Comprobante_Proveedor $comprobante, array $payload, int $empresaId): void
     {
-        $payload = $this->aplicarNumeracion($payload, $comprobante);
+        $payload = $this->aplicarNumeracion($payload, $comprobante, $empresaId);
         $cabecera = $this->aplicarFechasCarga(
             $this->armarCabecera($payload, (int) $comprobante->caja_movimiento_id, $empresaId),
             $comprobante
@@ -459,7 +473,13 @@ class IngresoEgresoComprobanteIvaService
             'origen_entrada' => ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO,
             'tipo_tesoreria' => $tipoTesoreria,
             'caja_movimiento_id' => $cajaMovimientoId,
-            'leyenda' => $payload['leyenda'] ?? null,
+            'leyenda' => $tipoTesoreria === ComprobanteProveedorTipoTesoreria::LIQUIDACION_TARJETA
+                ? IngresoEgresoLiquidacionTarjetaSupport::leyenda(
+                    IngresoEgresoLiquidacionTarjetaSupport::cuentacajaTarjetaId($payload),
+                    IngresoEgresoLiquidacionTarjetaSupport::bruto($payload),
+                    (string) ($payload['leyenda'] ?? ''),
+                )
+                : ($payload['leyenda'] ?? null),
         ];
     }
 
@@ -487,26 +507,38 @@ class IngresoEgresoComprobanteIvaService
 
     /**
      * ICO/IDO: letra A, sucursal 0 y el próximo número de Anita.
+     * DTC: letra A, punto de venta 1 y el próximo número del numerador ERP.
      * En una edición se conserva el número ya asignado.
      *
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    private function aplicarNumeracion(array $payload, ?Comprobante_Proveedor $existente = null): array
+    private function aplicarNumeracion(array $payload, ?Comprobante_Proveedor $existente = null, int $empresaId = 0): array
     {
         $abreviatura = $this->abreviaturaTipo((int) ($payload['tipotransaccion_compra_id'] ?? 0));
         if (! IngresoEgresoComprobanteIvaNumeracionSupport::esAutomatico($abreviatura)) {
             return $payload;
         }
 
-        $payload['letra'] = IngresoEgresoComprobanteIvaNumeracionSupport::LETRA;
-        $payload['sucursal'] = IngresoEgresoComprobanteIvaNumeracionSupport::SUCURSAL;
+        $esDtc = IngresoEgresoComprobanteIvaNumeracionSupport::esDtc($abreviatura);
+        $payload['letra'] = $esDtc
+            ? IngresoEgresoDtcNumeracionSupport::LETRA
+            : IngresoEgresoComprobanteIvaNumeracionSupport::LETRA;
+        $payload['sucursal'] = $esDtc
+            ? IngresoEgresoDtcNumeracionSupport::SUCURSAL
+            : IngresoEgresoComprobanteIvaNumeracionSupport::SUCURSAL;
 
         $tipoActual = (int) ($payload['tipotransaccion_compra_id'] ?? 0);
         $mismoTipo = $existente && (int) $existente->tipotransaccion_compra_id === $tipoActual;
         $numeroExistente = $mismoTipo ? (int) $existente->numerocomprobante : 0;
         if ($numeroExistente > 0) {
             $payload['numerocomprobante'] = $numeroExistente;
+
+            return $payload;
+        }
+
+        if ($esDtc) {
+            $payload['numerocomprobante'] = IngresoEgresoDtcNumeracionSupport::reservarSiguiente($empresaId);
 
             return $payload;
         }
@@ -691,6 +723,10 @@ class IngresoEgresoComprobanteIvaService
     /** @return array<string, mixed> */
     private function serializarComprobante(Comprobante_Proveedor $cp): array
     {
+        $marca = IngresoEgresoLiquidacionTarjetaSupport::parsearLeyenda((string) $cp->leyenda);
+        $esLiquidacion = (string) $cp->tipo_tesoreria === ComprobanteProveedorTipoTesoreria::LIQUIDACION_TARJETA
+            || $marca['cuentacaja_tarjeta_id'] > 0;
+
         return [
             'id' => (int) $cp->id,
             'proveedor_id' => (int) ($cp->proveedor_id ?? 0),
@@ -701,6 +737,9 @@ class IngresoEgresoComprobanteIvaService
             'proveedor_condicioniva_id_eventual' => $cp->proveedor_condicioniva_id_eventual,
             'tipotransaccion_compra_id' => (int) $cp->tipotransaccion_compra_id,
             'tipo_tesoreria' => $cp->tipo_tesoreria,
+            'liquidacion_tarjeta' => $esLiquidacion,
+            'bruto_cupones' => $marca['bruto_cupones'],
+            'cuentacaja_tarjeta_id' => $marca['cuentacaja_tarjeta_id'],
             'letra' => $cp->letra,
             'sucursal' => (int) $cp->sucursal,
             'numerocomprobante' => (int) $cp->numerocomprobante,

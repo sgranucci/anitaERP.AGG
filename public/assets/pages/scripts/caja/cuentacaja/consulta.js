@@ -71,6 +71,7 @@ function buscar_datos_cuentacaja(consulta) {
             usocuentacaja_id: usocuentacaja_id,
             excluir_cuentas_solo_automaticas:
                 typeof window.GASTRONOMIA !== 'undefined' || typeof window.ESTACIONAMIENTO !== 'undefined' ? 1 : 0,
+            solo_tarjeta: window.consultaCuentacajaSoloTarjeta ? 1 : 0,
         },
     })
         .done(function (respuesta) {

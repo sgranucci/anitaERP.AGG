@@ -6,6 +6,7 @@ use App\Models\Ventas\CambioDevolucionMarketplace;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Emision;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceCatalogoSupport;
+use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePrecioSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePuenteSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use Illuminate\Support\Facades\Log;
@@ -106,7 +107,8 @@ final class CambioDevolucionMarketplaceNcService
 
     /**
      * Solo las líneas «A devolver». Un precio menor al facturado se acredita.
-     * Si el legajo tiene la lista (más alta), la nota sale por el precio de la factura.
+     * Si el legajo tiene la lista (más alta), la nota sale por el precio de la factura:
+     * no se puede acreditar más de lo cobrado en ese renglón.
      *
      * @return array{ids:list<int>,cantidades:array<int,float>,precios:array<int,float>,aviso:string}
      */
@@ -141,14 +143,12 @@ final class CambioDevolucionMarketplaceNcService
             $cantidades[$emisionId] = round(($cantidades[$emisionId] ?? 0) + $cantidad, 4);
             $precioFacturado = round((float) ($emision->precio ?? 0), 4);
             $precioGrilla = (float) ($linea->precio_unitario ?? 0);
-            $precio = $precioGrilla > 0 ? $precioGrilla : $precioFacturado;
-            // Un descuento (precio menor) se acredita. La lista, más alta que lo facturado, no.
-            if ($precioFacturado > 0 && $precio - $precioFacturado > 0.02) {
+            $precio = CambioDevolucionMarketplacePrecioSupport::precioAcreditable($precioGrilla, $precioFacturado);
+            if ($precioFacturado > 0 && $precioGrilla - $precioFacturado > 0.02) {
                 $avisos[] = trim((string) ($emision->detalle ?: 'ítem'))
-                    .': $ '.number_format($precio, 2, ',', '.')
-                    .' del legajo, se acredita $ '.number_format($precioFacturado, 2, ',', '.')
+                    .': $ '.number_format($precioGrilla, 2, ',', '.')
+                    .' del legajo, se acredita $ '.number_format($precio, 2, ',', '.')
                     .' de la factura';
-                $precio = $precioFacturado;
             }
             $precios[$emisionId] = $precio;
             if ($cantidades[$emisionId] - $facturada > 0.0001) {

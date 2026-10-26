@@ -6,11 +6,14 @@ namespace App\Support\Compras;
 
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
 use Illuminate\Support\Facades\Cache;
 
 final class ComprobanteProveedorListadoPreferenciasUsuario
 {
     private const CACHE_GRILLA = 'comprobante-proveedor-listado-grilla-estandar-v1';
+
+    private const CACHE_ORDEN = 'comprobante-proveedor-listado-orden-v1';
 
     /**
      * @param  list<array{key: string, titulo: string, visible: bool, ancho: int, alinea: string, orden: int}>  $layout
@@ -63,5 +66,46 @@ final class ComprobanteProveedorListadoPreferenciasUsuario
         }
 
         return ListadoGrillaConfigSupport::keysVisibles(self::grillaEstandar());
+    }
+
+    /**
+     * Orden elegido en la barra (distinto del estándar fecha IVA + ID). Vacío = orden de instalación.
+     *
+     * @return list<array{campo: string, dir: string}>
+     */
+    public static function leerOrden(): array
+    {
+        $cached = cache()->get(generaKey(self::CACHE_ORDEN));
+        if (! is_array($cached) || $cached === []) {
+            return [];
+        }
+
+        return ListadoOrdenamientoSupport::normalizar(
+            $cached,
+            ComprobanteProveedorListadoFiltros::camposOrdenables()
+        );
+    }
+
+    /**
+     * @param  list<array{campo: string, dir: string}>  $orden
+     */
+    public static function persistirOrden(array $orden): void
+    {
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $orden,
+            ComprobanteProveedorListadoFiltros::camposOrdenables()
+        );
+        if ($orden === []) {
+            self::olvidarOrden();
+
+            return;
+        }
+
+        Cache::forever(generaKey(self::CACHE_ORDEN), $orden);
+    }
+
+    public static function olvidarOrden(): void
+    {
+        Cache::forget(generaKey(self::CACHE_ORDEN));
     }
 }

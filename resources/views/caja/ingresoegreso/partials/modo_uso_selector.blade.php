@@ -1,7 +1,12 @@
 @include('compras.configuracion_comprobante_proveedor.partials.flujo_proceso_estilos')
 
 @php
+    $muestraCobranzaTarjeta = ! empty($muestraCobranzaTarjeta);
     $modoIeInicial = old('ie_modo_uso', 'general');
+    if ($modoIeInicial === 'liquidacion_tarjeta' && ! $muestraCobranzaTarjeta) {
+        $modoIeInicial = 'general';
+    }
+    $colModoIe = $muestraCobranzaTarjeta ? 'col-lg-3' : 'col-lg-4';
 @endphp
 
 <div class="cp-flujo-proceso mb-3" id="ie-modo-uso" data-flujo-inicial="{{ $modoIeInicial }}">
@@ -19,7 +24,7 @@
     <input type="hidden" name="ie_modo_uso" id="ie_modo_uso" value="{{ $modoIeInicial }}">
 
     <div class="row">
-        <div class="col-lg-4 mb-2">
+        <div class="{{ $colModoIe }} mb-2">
             <button type="button" class="cp-flujo-card is-selected ie-modo-card" data-modo="general" tabindex="0">
                 <div class="cp-flujo-card__header">
                     <span class="cp-flujo-card__radio" aria-hidden="true"></span>
@@ -35,7 +40,7 @@
                 </ul>
             </button>
         </div>
-        <div class="col-lg-4 mb-2">
+        <div class="{{ $colModoIe }} mb-2">
             <button type="button" class="cp-flujo-card ie-modo-card" data-modo="transferencia" tabindex="0">
                 <div class="cp-flujo-card__header">
                     <span class="cp-flujo-card__radio" aria-hidden="true"></span>
@@ -52,7 +57,7 @@
                 </ul>
             </button>
         </div>
-        <div class="col-lg-4 mb-2">
+        <div class="{{ $colModoIe }} mb-2">
             <button type="button" class="cp-flujo-card ie-modo-card" data-modo="canje_cheques" tabindex="0">
                 <div class="cp-flujo-card__header">
                     <span class="cp-flujo-card__radio" aria-hidden="true"></span>
@@ -69,5 +74,24 @@
                 </ul>
             </button>
         </div>
+        @if ($muestraCobranzaTarjeta)
+        <div class="{{ $colModoIe }} mb-2">
+            <button type="button" class="cp-flujo-card ie-modo-card" data-modo="liquidacion_tarjeta" tabindex="0">
+                <div class="cp-flujo-card__header">
+                    <span class="cp-flujo-card__radio" aria-hidden="true"></span>
+                    <div>
+                        <strong>Cobranza de tarjeta</strong>
+                        <div class="cp-flujo-card__subtitle">DTC con los gastos del cupón</div>
+                    </div>
+                    <span class="badge badge-info cp-flujo-card__tag">DTC</span>
+                </div>
+                <ul class="cp-flujo-card__bullets text-left mb-0">
+                    <li>Tipo de transacción: Cobranza</li>
+                    <li>Planilla de comisiones, IVA y retenciones</li>
+                    <li>La caja queda por el neto depositado</li>
+                </ul>
+            </button>
+        </div>
+        @endif
     </div>
 </div>

@@ -29,10 +29,12 @@ use App\Services\Compras\PagoproveedorComprobantePdfService;
 use App\Services\Caja\IngresoEgresoAnularRevertirService;
 use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
 use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
+use App\Support\Caja\IngresoEgresoConfiguracionSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Caja\IngresoEgresoImputacionDiariaSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaExcelSupport;
 use App\Support\Caja\IngresoEgresoGastoBancoSupport;
+use App\Support\Caja\IngresoEgresoLiquidacionTarjetaSupport;
 use App\Support\Caja\IngresoEgresoListadoColumnas;
 use App\Support\Caja\IngresoEgresoListadoEnvioSupport;
 use App\Support\Caja\IngresoEgresoPagoProveedorSupport;
@@ -1015,6 +1017,10 @@ class IngresoEgresoController extends Controller
             ? $this->comprobanteIvaService->listarPorCajaMovimiento($cajaMovimientoId)
             : [];
 
+        $liquidacion_tarjeta = IngresoEgresoLiquidacionTarjetaSupport::catalogo();
+        $muestraCobranzaTarjeta = IngresoEgresoConfiguracionSupport::muestraCobranzaTarjeta()
+            || IngresoEgresoLiquidacionTarjetaSupport::hay($comprobantes_ivacompra_inicial);
+
         return compact(
             'tipotransaccion_compra_query',
             'condicioniva_query',
@@ -1022,6 +1028,8 @@ class IngresoEgresoController extends Controller
             'conceptos_cuenta_meta',
             'cuentas_detalle_meta',
             'comprobantes_ivacompra_inicial',
+            'liquidacion_tarjeta',
+            'muestraCobranzaTarjeta',
         );
     }
 

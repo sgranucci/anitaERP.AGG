@@ -120,7 +120,7 @@ $queryFiltrosCliente = [
                                     <th style="width: 12%; text-align: right;">Aplicado</th>
                                     <th style="width: 12%; text-align: right;">Saldo pendiente</th>
                                 @endif
-                                <th class="width80" data-orderable="false">Acciones</th>
+                                <th class="width160" data-orderable="false">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>

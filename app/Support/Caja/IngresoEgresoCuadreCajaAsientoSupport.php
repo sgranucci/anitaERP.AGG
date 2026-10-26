@@ -42,7 +42,7 @@ final class IngresoEgresoCuadreCajaAsientoSupport
 
         $totalesAsiento = self::totalesAsiento($data);
         $totalAsiento = max($totalesAsiento['debe'], $totalesAsiento['haber']);
-        $totalAsiento = round($totalAsiento - self::retencionesPrecalculadas($data), 2);
+        $totalAsiento = round($totalAsiento - self::importeAsientoPorEncimaDeLaCaja($data), 2);
         if ($totalAsiento <= self::TOLERANCIA) {
             return false;
         }
@@ -82,17 +82,14 @@ final class IngresoEgresoCuadreCajaAsientoSupport
             );
         }
 
-        // Discrepancia solo si la caja ya tenía (o quedó con) importe distinto de cero.
-        // En una OPA con retenciones el asiento es el bruto y la caja es el neto.
+        // La caja es el neto. El asiento puede ser mayor: retenciones de una OPA,
+        // o los gastos del DTC en una cobranza de tarjeta (el bruto acredita la tarjeta).
+        $asientoEsperado = round($totalOperacion + self::importeAsientoPorEncimaDeLaCaja($data), 2);
         if ($totalOperacion > self::TOLERANCIA
-            && abs($totalOperacion - $totalAsiento) > self::TOLERANCIA) {
-            $retenciones = self::retencionesPrecalculadas($data);
-            $asientoEsperado = round($totalOperacion + $retenciones, 2);
-            if ($retenciones < 0.01 || abs($asientoEsperado - $totalAsiento) > self::TOLERANCIA) {
-                throw new InvalidArgumentException(
-                    'Problemas en el asiento, no coincide el monto total de la operación con el asiento contable.'
-                );
-            }
+            && abs($asientoEsperado - $totalAsiento) > self::TOLERANCIA) {
+            throw new InvalidArgumentException(
+                'Problemas en el asiento, no coincide el monto total de la operación con el asiento contable.'
+            );
         }
 
         self::assertLineasCajaConMonto($data);
@@ -247,6 +244,45 @@ final class IngresoEgresoCuadreCajaAsientoSupport
         );
 
         return ['debe' => round($totales['total_debe'], 2), 'haber' => round($totales['total_haber'], 2)];
+    }
+
+    /**
+     * Importe que está en el asiento y no entra a la cuenta de caja:
+     * retenciones de una OPA, o gastos del DTC de una cobranza de tarjeta.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function importeAsientoPorEncimaDeLaCaja(array $data): float
+    {
+        return round(self::retencionesPrecalculadas($data) + self::gastosLiquidacionTarjeta($data), 2);
+    }
+
+    /**
+     * Gastos del DTC (comisiones, IVA, retenciones). La caja queda por el neto
+     * y el asiento por el bruto de cupones.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function gastosLiquidacionTarjeta(array $data): float
+    {
+        $raw = $data['comprobantes_ivacompra_json'] ?? null;
+        if (is_string($raw)) {
+            $lista = json_decode($raw, true) ?: [];
+        } elseif (is_array($raw)) {
+            $lista = $raw;
+        } else {
+            return 0.0;
+        }
+
+        $gastos = 0.0;
+        foreach ($lista as $comprobante) {
+            if (! is_array($comprobante) || ! IngresoEgresoLiquidacionTarjetaSupport::es($comprobante)) {
+                continue;
+            }
+            $gastos += NumeroDecimalLocalSupport::aFloat($comprobante['total'] ?? 0);
+        }
+
+        return round(max(0, $gastos), 2);
     }
 
     /**

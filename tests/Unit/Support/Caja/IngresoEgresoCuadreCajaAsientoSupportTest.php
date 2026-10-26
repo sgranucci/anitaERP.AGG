@@ -61,6 +61,23 @@ class IngresoEgresoCuadreCajaAsientoSupportTest extends TestCase
         $this->assertTrue(true);
     }
 
+    public function test_liquidacion_tarjeta_acepta_caja_neta_y_asiento_bruto(): void
+    {
+        IngresoEgresoCuadreCajaAsientoSupport::assertCuadre([
+            'cuentacaja_ids' => [10],
+            'montos' => [1342010.73],
+            'debeasientos' => [1342010.73, 93689.27],
+            'haberasientos' => ['', 1435700],
+            'comprobantes_ivacompra_json' => json_encode([[
+                'tipo_tesoreria' => 'LIQUIDACION_TARJETA',
+                'total' => 93689.27,
+                'bruto_cupones' => 1435700,
+            ]]),
+        ]);
+
+        $this->assertTrue(true);
+    }
+
     public function test_sin_retenciones_la_caja_tiene_que_igualar_al_asiento(): void
     {
         $this->expectException(\InvalidArgumentException::class);

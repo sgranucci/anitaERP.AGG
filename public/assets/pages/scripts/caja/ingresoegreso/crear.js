@@ -372,8 +372,9 @@ var brutoSpIe = 0;
 			var totalAsientoCmp = totalDebeAsiento >= totalHaberAsientoCmp ? totalDebeAsiento : totalHaberAsientoCmp;
 			var totalOperacionCmp = (totalDebe >= totalHaber) ? totalDebe : totalHaber;
 			var asientoEsperado = totalOperacionCmp;
-			if (retencionesSpIe > 0.009) {
-				asientoEsperado = Math.round((totalOperacionCmp + retencionesSpIe) * 100) / 100;
+			var porEncimaDeLaCaja = retencionesSpIe + gastosLiquidacionTarjetaIe();
+			if (porEncimaDeLaCaja > 0.009) {
+				asientoEsperado = Math.round((totalOperacionCmp + porEncimaDeLaCaja) * 100) / 100;
 			}
 
 			if (totalAsientoCmp > 0.02 && totalOperacionCmp <= 0.02) {
@@ -460,6 +461,8 @@ var brutoSpIe = 0;
 			alert('Debe ingresar empresa');
 			return;
 		}
+		window.consultaCuentacajaSoloTarjeta = false;
+		window.ieLiquidacionTarjetaDestinoCaja = null;
 		apuntarPtrsConsultaCuentaDesdeFila($tr);
 		$('#consultacuentacaja').val('');
 		$('#datoscuentacaja').html('');
@@ -829,6 +832,26 @@ var brutoSpIe = 0;
     	});
 
     	$(document).off('click.ieCuentaElige', '.eligeconsultacuentacaja').on('click.ieCuentaElige', '.eligeconsultacuentacaja', function () {
+			if (window.ieLiquidacionTarjetaDestinoCaja) {
+				var destinoLt = window.ieLiquidacionTarjetaDestinoCaja;
+				window.ieLiquidacionTarjetaDestinoCaja = null;
+				window.consultaCuentacajaSoloTarjeta = false;
+				var $filaLt = $(this).closest('tr');
+				var idLt = $.trim($filaLt.find('.cuentacaja_id').text() || $filaLt.children().eq(0).text());
+				var codigoLt = $.trim($filaLt.find('.codigo').text());
+				var nombreLt = $.trim($filaLt.find('.nombre').text());
+				if (destinoLt.id) {
+					$(destinoLt.id).val(idLt).trigger('change');
+				}
+				if (destinoLt.codigo) {
+					$(destinoLt.codigo).val(codigoLt);
+				}
+				if (destinoLt.nombre) {
+					$(destinoLt.nombre).val(nombreLt);
+				}
+				$('#consultacuentacajaModal').modal('hide');
+				return;
+			}
 			if (typeof cuentacajaxcodigoEmitido !== 'undefined' && cuentacajaxcodigoEmitido && cuentacajaxcodigoEmitido.length) {
 				var $trE = cuentacajaxcodigoEmitido;
 				var dataE = {
@@ -1114,6 +1137,27 @@ var brutoSpIe = 0;
 	}
 
 	/**
+	 * Gastos del DTC. La caja queda por el neto y el asiento por el bruto de cupones.
+	 */
+	function gastosLiquidacionTarjetaIe()
+	{
+		var lista = typeof window.obtenerComprobantesIvaIngresoEgreso === 'function'
+			? window.obtenerComprobantesIvaIngresoEgreso()
+			: [];
+		var gastos = 0;
+		(lista || []).forEach(function (c) {
+			if (!c || !(c.liquidacion_tarjeta || c.tipo_tesoreria === 'LIQUIDACION_TARJETA')) {
+				return;
+			}
+			var n = parseFloat(c.total);
+			if (!isNaN(n) && n > 0) {
+				gastos += n;
+			}
+		});
+		return Math.round(gastos * 100) / 100;
+	}
+
+	/**
 	 * Si hay exactamente 1 cuenta de caja con monto 0 y el asiento tiene total,
 	 * copia ese total al monto de la cuenta (1er pantalla).
 	 */
@@ -1138,8 +1182,9 @@ var brutoSpIe = 0;
 		var debe = parseTotalAsientoCampo($("#totaldebeasiento").val());
 		var haber = parseTotalAsientoCampo($("#totalhaberasiento").val());
 		var totalAsiento = debe >= haber ? debe : haber;
-		if (retencionesSpIe > 0.009) {
-			totalAsiento = Math.round((totalAsiento - retencionesSpIe) * 100) / 100;
+		var porEncimaDeLaCaja = retencionesSpIe + gastosLiquidacionTarjetaIe();
+		if (porEncimaDeLaCaja > 0.009) {
+			totalAsiento = Math.round((totalAsiento - porEncimaDeLaCaja) * 100) / 100;
 		}
 		if (!(totalAsiento > 0.02)) {
 			return false;
@@ -1929,6 +1974,7 @@ var brutoSpIe = 0;
 		function etiquetas(modo) {
 			if (modo === 'transferencia') return 'Escenario: Transferencia entre cuentas';
 			if (modo === 'canje_cheques') return 'Escenario: Canje / reemplazo de cheques';
+			if (modo === 'liquidacion_tarjeta') return 'Escenario: Cobranza de tarjeta';
 			return 'Escenario: Operación general';
 		}
 
@@ -1972,6 +2018,15 @@ var brutoSpIe = 0;
 					if ($firstCanje.length) {
 						$select.val($firstCanje.attr('value'));
 					}
+				}
+			} else if (modo === 'liquidacion_tarjeta') {
+				var $cob = $select.find('option').filter(function () {
+					return String($(this).attr('data-abreviatura') || '').toUpperCase() === 'COB';
+				}).first();
+				if ($cob.length) {
+					$select.val($cob.attr('value'));
+				} else if ($select.find('option[value="' + valorActual + '"]').length) {
+					$select.val(valorActual);
 				}
 			} else if ($select.find('option[value="' + valorActual + '"]').length) {
 				$select.val(valorActual);
@@ -2031,7 +2086,14 @@ var brutoSpIe = 0;
 		}
 
 		$root.find('.ie-modo-card').on('click', function () {
-			aplicar($(this).attr('data-modo'));
+			var modo = $(this).attr('data-modo');
+			aplicar(modo);
+			if (modo === 'liquidacion_tarjeta') {
+				$('#botonform3').trigger('click');
+				if (typeof window.abrirLiquidacionTarjetaIe === 'function') {
+					window.abrirLiquidacionTarjetaIe();
+				}
+			}
 		});
 
 		var inicial = $root.attr('data-flujo-inicial') || ($hidden.val() || 'general');

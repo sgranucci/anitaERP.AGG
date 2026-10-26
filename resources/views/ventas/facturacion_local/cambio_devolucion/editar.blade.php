@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         </form>
                     @elseif (can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
                         <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1"
-                              onsubmit="return confirm('¿Emitir FAC de reemplazo con medio puente NCD? Debe haber turno abierto en el local.');">
+                              onsubmit="return confirm('¿Emitir FAC de reemplazo con medio puente NCD? Si el reemplazo es el mismo artículo, se factura al precio ya cobrado (el descuento no se vuelve a cobrar). Debe haber turno abierto en el local.');">
                             @csrf
                             <button type="submit" class="btn btn-warning">Emitir FAC reemplazo (NCD)</button>
                         </form>

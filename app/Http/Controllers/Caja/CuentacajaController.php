@@ -252,6 +252,10 @@ class CuentacajaController extends Controller
             GastronomiaCuentacajaSoloAutomaticaSupport::aplicarExclusionEnQuery($query, $empresaIdInt);
         }
 
+        if (filter_var($request->get('solo_tarjeta'), FILTER_VALIDATE_BOOLEAN)) {
+            $query->where('cuentacaja.es_tarjeta', true);
+        }
+
         if (filter_var($request->get('solo_con_interbanking'), FILTER_VALIDATE_BOOLEAN)) {
             $query->whereNotNull('cuentacaja.cuenta_interbanking')
                 ->where('cuentacaja.cuenta_interbanking', '!=', '');

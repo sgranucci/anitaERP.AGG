@@ -178,11 +178,9 @@
         @if ($mostrarLinks && ! $paraPdf && ! $paraExcel)
             <td class="text-nowrap">
                 @if (($fila['venta_id'] ?? 0) > 0 && ! empty($puede_ver_factura))
-                    <a class="btn-accion-tabla tooltipsC text-primary" target="_blank" rel="noopener"
-                        href="{{ route('lista_una_factura', ['id' => $fila['venta_id']]) }}"
-                        title="Ver factura">
-                        <i class="fas fa-file-invoice"></i>
-                    </a>
+                    @include('ventas.cuentacorriente.partials.acciones_impresion_factura', [
+                        'ventaId' => (int) $fila['venta_id'],
+                    ])
                 @endif
                 @if (($fila['cobranza_id'] ?? 0) > 0 && ! empty($puede_ver_cobranza))
                     <a class="btn-accion-tabla tooltipsC text-primary" target="_blank" rel="noopener"

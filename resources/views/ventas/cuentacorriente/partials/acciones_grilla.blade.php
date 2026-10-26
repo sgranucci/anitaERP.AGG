@@ -4,11 +4,19 @@
     $destinoImpresion = ClienteCuentacorrienteGrillaSupport::destinoImpresion($data);
     $urlImpresion = ClienteCuentacorrienteGrillaSupport::urlImpresion($data);
     $puedeImprimir = ClienteCuentacorrienteGrillaSupport::puedeImprimirComprobante($data);
+    $esFactura = ($destinoImpresion['tipo'] ?? '') === 'venta';
+    $urlPdfFactura = $esFactura
+        ? (ClienteCuentacorrienteGrillaSupport::urlsImpresionSoloFactura((int) $destinoImpresion['id'])['pdf'] ?? null)
+        : $urlImpresion;
     $destinoEdicion = ClienteCuentacorrienteGrillaSupport::destinoEdicion($data);
     $urlEdicion = ClienteCuentacorrienteGrillaSupport::urlEdicion($data);
     $puedeEditar = ClienteCuentacorrienteGrillaSupport::puedeEditarComprobante($data);
 @endphp
-@if ($puedeImprimir && $urlImpresion)
+@if ($puedeImprimir && $esFactura)
+    @include('ventas.cuentacorriente.partials.acciones_impresion_factura', [
+        'ventaId' => (int) $destinoImpresion['id'],
+    ])
+@elseif ($puedeImprimir && $urlImpresion)
     <a href="{{ $urlImpresion }}"
        class="btn-accion-tabla tooltipsC js-erp-workspace"
        data-ws-modo="pdf"
@@ -31,8 +39,8 @@
        data-ws-titulo="{{ $destinoEdicion['titulo'] }}"
        data-ws-meta="{{ $data->empresas->nombre ?? '' }}"
        data-ws-edit="{{ $urlEdicion }}"
-       @if ($puedeImprimir && $urlImpresion)
-           data-ws-pdf="{{ $urlImpresion }}"
+       @if ($puedeImprimir && $urlPdfFactura)
+           data-ws-pdf="{{ $urlPdfFactura }}"
        @endif
        title="Editar en solapa (sin menú)">
         <i class="fa fa-edit"></i>
