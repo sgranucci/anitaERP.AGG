@@ -2,9 +2,12 @@
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Models\Stock\Formula_Articulo;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\Puntoventa;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
+use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaCuentacajaCanjeTarjeta;
@@ -119,7 +122,13 @@ final class GastronomiaPreflightEmisionService
         }
 
         $cuenta->loadMissing('lineas.articulo');
-        $errores = array_merge($errores, $this->opcionalesService->erroresOpcionalesEnLineas($cuenta->lineas));
+        $errores = array_merge(
+            $errores,
+            ArticuloSeleccionOperativaSupport::mensajesNoFacturablesPorIds(
+                $this->articuloIdsFacturablesDeCuenta($cuenta)
+            ),
+            $this->opcionalesService->erroresOpcionalesEnLineas($cuenta->lineas),
+        );
 
         if ($cuenta->estado !== CuentaGastronomia::ESTADO_ABIERTA) {
             $errores[] = 'La cuenta no está abierta.';
@@ -197,6 +206,46 @@ final class GastronomiaPreflightEmisionService
         }
 
         return $errores;
+    }
+
+    /**
+     * Artículos que van al comprobante: renglón y opcional elegido (artículo o subfórmula).
+     *
+     * @return list<int>
+     */
+    private function articuloIdsFacturablesDeCuenta(CuentaGastronomia $cuenta): array
+    {
+        $ids = [];
+        $formulaHijaIds = [];
+        foreach ($cuenta->lineas as $linea) {
+            if ((int) ($linea->articulo_id ?? 0) > 0) {
+                $ids[] = (int) $linea->articulo_id;
+            }
+            foreach ((array) ($linea->opcionales_json ?? []) as $valor) {
+                $decoded = GastronomiaFormulaOpcionalSeleccion::decodificar($valor);
+                if ($decoded === null) {
+                    continue;
+                }
+                if ($decoded['tipo'] === 'articulo') {
+                    $ids[] = $decoded['id'];
+                } else {
+                    $formulaHijaIds[] = $decoded['id'];
+                }
+            }
+        }
+
+        if ($formulaHijaIds !== []) {
+            $ids = array_merge(
+                $ids,
+                Formula_Articulo::query()
+                    ->whereIn('id', array_values(array_unique($formulaHijaIds)))
+                    ->pluck('articulo_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all(),
+            );
+        }
+
+        return $ids;
     }
 
     /**

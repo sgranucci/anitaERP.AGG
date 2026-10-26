@@ -405,7 +405,8 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                     ->selectRaw('SUM(total)')
                     ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
             ])
-            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc())
+            ->whereRaw(SqlDialectSupport::sqlAlcanceDeudaAbiertaProveedorCc());
 
         if ($comprobante_proveedor_id) {
             $cuentacorriente = $cuentacorriente->where('comprobante_proveedor.id', $comprobante_proveedor_id);

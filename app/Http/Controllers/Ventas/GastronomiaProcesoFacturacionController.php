@@ -794,7 +794,9 @@ class GastronomiaProcesoFacturacionController extends Controller
         $q = trim((string) $request->get('q', ''));
         $listaId = $this->listaPrecioIdDesdeCfg($cfg);
 
-        $articulos = $this->cuentaService->queryArticulosCatalogo($cfg, $q, 80)->get(['id', 'sku', 'descripcion']);
+        $articulos = ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
+            $this->cuentaService->queryArticulosCatalogo($cfg, $q, 80)
+        )->get(['id', 'sku', 'descripcion']);
         $fechaVigencia = $this->fechaVigenciaListaPrecioDesdeCfg($cfg);
 
         $out = [];

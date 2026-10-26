@@ -8,6 +8,16 @@ final class ClienteCuentacorrienteGrillaSupport
 {
     public const PREFIJO_LEYENDA_AJUSTE = 'Ajuste saldo CC ';
 
+    /**
+     * El ajuste iguala la ficha con la deuda. No es un comprobante para aplicar.
+     */
+    public static function sqlExcluirAjuste(string $alias = 'cliente_cuentacorriente'): string
+    {
+        return 'NOT ('.$alias.'.leyenda LIKE \''.self::PREFIJO_LEYENDA_AJUSTE.'%\''
+            .' AND ('.$alias.'.venta_id IS NULL OR '.$alias.'.venta_id = 0)'
+            .' AND ('.$alias.'.cobranza_id IS NULL OR '.$alias.'.cobranza_id = 0))';
+    }
+
     public static function etiquetaComprobante(Cliente_Cuentacorriente $fila): string
     {
         $leyenda = trim((string) ($fila->leyenda ?? ''));

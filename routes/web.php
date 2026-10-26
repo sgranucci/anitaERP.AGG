@@ -27,6 +27,8 @@ Route::get('seguridad/cambia_password', 'Seguridad\HomeController@cambiaPassword
 Route::post('seguridad/graba_password', 'Seguridad\HomeController@grabaPassword')->middleware('auth')->name('graba_password');
 Route::post('seguridad/login', 'Seguridad\LoginController@login')->name('login_post');
 Route::get('seguridad/logout', 'Seguridad\LoginController@logout')->name('logout');
+Route::get('caja/tesoreria-crown/firma/{token}', 'Caja\TesoreriaCrownComprobanteController@verQr')->name('firma_qr_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/firma/{token}', 'Caja\TesoreriaCrownComprobanteController@firmarQr')->name('firmar_qr_tesoreria_crown_movimiento');
 Route::post('ajax-sesion', 'AjaxController@setSession')->name('ajax')->middleware('auth');
 
 Route::middleware('auth')->group(function () {
@@ -3123,6 +3125,79 @@ Route::post('caja/tipocuentacaja', 'Caja\TipocuentacajaController@guardar')->nam
 Route::get('caja/tipocuentacaja/{id}/editar', 'Caja\TipocuentacajaController@editar')->name('editar_tipocuentacaja');
 Route::put('caja/tipocuentacaja/{id}', 'Caja\TipocuentacajaController@actualizar')->name('actualizar_tipocuentacaja');
 Route::delete('caja/tipocuentacaja/{id}', 'Caja\TipocuentacajaController@eliminar')->name('eliminar_tipocuentacaja');
+
+/*
+ * Tesorería Crown: valores, depósitos y cotización por jornada.
+ */
+Route::get('caja/tesoreria-crown/valor', 'Caja\TesoreriaCrownValorController@index')->name('tesoreria_crown_valor');
+Route::get('caja/tesoreria-crown/valor/crear', 'Caja\TesoreriaCrownValorController@crear')->name('crear_tesoreria_crown_valor');
+Route::post('caja/tesoreria-crown/valor', 'Caja\TesoreriaCrownValorController@guardar')->name('guardar_tesoreria_crown_valor');
+Route::get('caja/tesoreria-crown/valor/listar/{formato?}/{busqueda?}', 'Caja\TesoreriaCrownValorController@listar')->name('listar_tesoreria_crown_valor');
+Route::get('caja/tesoreria-crown/valor/tipos', 'Caja\TesoreriaCrownValorController@indexTipos')->name('tesoreria_crown_tipo_valor');
+Route::get('caja/tesoreria-crown/valor/tipo/crear', 'Caja\TesoreriaCrownValorController@crearTipo')->name('crear_tesoreria_crown_tipo_valor');
+Route::post('caja/tesoreria-crown/valor/tipo', 'Caja\TesoreriaCrownValorController@guardarTipo')->name('guardar_tesoreria_crown_tipo_valor');
+Route::get('caja/tesoreria-crown/valor/tipo/{id}/editar', 'Caja\TesoreriaCrownValorController@editarTipo')->name('editar_tesoreria_crown_tipo_valor');
+Route::put('caja/tesoreria-crown/valor/tipo/{id}', 'Caja\TesoreriaCrownValorController@actualizarTipo')->name('actualizar_tesoreria_crown_tipo_valor');
+Route::delete('caja/tesoreria-crown/valor/tipo/{id}', 'Caja\TesoreriaCrownValorController@eliminarTipo')->name('eliminar_tesoreria_crown_tipo_valor');
+Route::get('caja/tesoreria-crown/valor/{id}/editar', 'Caja\TesoreriaCrownValorController@editar')->name('editar_tesoreria_crown_valor');
+Route::put('caja/tesoreria-crown/valor/{id}', 'Caja\TesoreriaCrownValorController@actualizar')->name('actualizar_tesoreria_crown_valor');
+Route::delete('caja/tesoreria-crown/valor/{id}', 'Caja\TesoreriaCrownValorController@eliminar')->name('eliminar_tesoreria_crown_valor');
+
+Route::get('caja/tesoreria-crown/deposito', 'Caja\TesoreriaCrownDepositoController@index')->name('tesoreria_crown_deposito');
+Route::get('caja/tesoreria-crown/deposito/crear', 'Caja\TesoreriaCrownDepositoController@crear')->name('crear_tesoreria_crown_deposito');
+Route::post('caja/tesoreria-crown/deposito', 'Caja\TesoreriaCrownDepositoController@guardar')->name('guardar_tesoreria_crown_deposito');
+Route::get('caja/tesoreria-crown/deposito/listar/{formato?}/{busqueda?}', 'Caja\TesoreriaCrownDepositoController@listar')->name('listar_tesoreria_crown_deposito');
+Route::get('caja/tesoreria-crown/deposito/tipos', 'Caja\TesoreriaCrownDepositoController@indexTipos')->name('tesoreria_crown_tipo_deposito');
+Route::get('caja/tesoreria-crown/deposito/tipo/crear', 'Caja\TesoreriaCrownDepositoController@crearTipo')->name('crear_tesoreria_crown_tipo_deposito');
+Route::post('caja/tesoreria-crown/deposito/tipo', 'Caja\TesoreriaCrownDepositoController@guardarTipo')->name('guardar_tesoreria_crown_tipo_deposito');
+Route::get('caja/tesoreria-crown/deposito/tipo/{id}/editar', 'Caja\TesoreriaCrownDepositoController@editarTipo')->name('editar_tesoreria_crown_tipo_deposito');
+Route::put('caja/tesoreria-crown/deposito/tipo/{id}', 'Caja\TesoreriaCrownDepositoController@actualizarTipo')->name('actualizar_tesoreria_crown_tipo_deposito');
+Route::delete('caja/tesoreria-crown/deposito/tipo/{id}', 'Caja\TesoreriaCrownDepositoController@eliminarTipo')->name('eliminar_tesoreria_crown_tipo_deposito');
+Route::get('caja/tesoreria-crown/deposito/{id}/editar', 'Caja\TesoreriaCrownDepositoController@editar')->name('editar_tesoreria_crown_deposito');
+Route::put('caja/tesoreria-crown/deposito/{id}', 'Caja\TesoreriaCrownDepositoController@actualizar')->name('actualizar_tesoreria_crown_deposito');
+Route::delete('caja/tesoreria-crown/deposito/{id}', 'Caja\TesoreriaCrownDepositoController@eliminar')->name('eliminar_tesoreria_crown_deposito');
+
+Route::get('caja/tesoreria-crown/cotizacion', 'Caja\TesoreriaCrownCotizacionController@index')->name('tesoreria_crown_cotizacion');
+Route::get('caja/tesoreria-crown/cotizacion/crear', 'Caja\TesoreriaCrownCotizacionController@crear')->name('crear_tesoreria_crown_cotizacion');
+Route::get('caja/tesoreria-crown/cotizacion/editar', 'Caja\TesoreriaCrownCotizacionController@editar')->name('editar_tesoreria_crown_cotizacion');
+Route::get('caja/tesoreria-crown/cotizacion/listar/{formato?}/{busqueda?}', 'Caja\TesoreriaCrownCotizacionController@listar')->name('listar_tesoreria_crown_cotizacion');
+Route::post('caja/tesoreria-crown/cotizacion', 'Caja\TesoreriaCrownCotizacionController@guardar')->name('guardar_tesoreria_crown_cotizacion');
+
+Route::get('caja/tesoreria-crown/jornada', 'Caja\TesoreriaCrownJornadaController@index')->name('tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/listar/{formato?}/{busqueda?}', 'Caja\TesoreriaCrownJornadaController@listar')->name('listar_tesoreria_crown_jornada');
+Route::post('caja/tesoreria-crown/jornada', 'Caja\TesoreriaCrownJornadaController@abrir')->name('abrir_tesoreria_crown_jornada');
+Route::post('caja/tesoreria-crown/jornada/{id}/cerrar', 'Caja\TesoreriaCrownJornadaController@cerrar')->name('cerrar_tesoreria_crown_jornada');
+Route::delete('caja/tesoreria-crown/jornada/{id}', 'Caja\TesoreriaCrownJornadaController@eliminar')->name('eliminar_tesoreria_crown_jornada');
+Route::post('caja/tesoreria-crown/jornada/{id}/asignar', 'Caja\TesoreriaCrownJornadaController@asignar')->name('asignar_tesoreria_crown_jornada');
+Route::delete('caja/tesoreria-crown/jornada/asignacion/{id}', 'Caja\TesoreriaCrownJornadaController@quitar')->name('quitar_tesoreria_crown_asignacion');
+Route::get('caja/tesoreria-crown/jornada/resolver-deposito', 'Caja\TesoreriaCrownJornadaController@resolverDeposito')->name('resolver_deposito_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/consulta-deposito', 'Caja\TesoreriaCrownJornadaController@consultaDeposito')->name('consulta_deposito_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/resolver-cajero', 'Caja\TesoreriaCrownJornadaController@resolverCajero')->name('resolver_cajero_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/consulta-cajero', 'Caja\TesoreriaCrownJornadaController@consultaCajero')->name('consulta_cajero_tesoreria_crown_jornada');
+Route::post('caja/tesoreria-crown/jornada/workbench/vista', 'Caja\TesoreriaCrownJornadaController@guardarVistaListado')->name('guardar_vista_tesoreria_crown_jornada');
+Route::delete('caja/tesoreria-crown/jornada/workbench/vista/{id}', 'Caja\TesoreriaCrownJornadaController@eliminarVistaListado')->name('eliminar_vista_tesoreria_crown_jornada');
+Route::post('caja/tesoreria-crown/jornada/workbench/columnas', 'Caja\TesoreriaCrownJornadaController@guardarColumnasListado')->name('guardar_columnas_tesoreria_crown_jornada');
+Route::post('caja/tesoreria-crown/jornada/workbench/etiquetas', 'Caja\TesoreriaCrownJornadaController@guardarEtiquetasListado')->name('guardar_etiquetas_tesoreria_crown_jornada');
+Route::post('caja/tesoreria-crown/jornada/workbench/preview', 'Caja\TesoreriaCrownJornadaController@previewWorkbench')->name('preview_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/{id}', 'Caja\TesoreriaCrownJornadaController@ver')->name('ver_tesoreria_crown_jornada');
+
+Route::get('caja/tesoreria-crown/movimiento', 'Caja\TesoreriaCrownComprobanteController@index')->name('tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/crear', 'Caja\TesoreriaCrownComprobanteController@crear')->name('crear_tesoreria_crown_movimiento');
+Route::get('caja/tesoreria-crown/movimiento/listar/{formato?}', 'Caja\TesoreriaCrownComprobanteController@listar')->name('listar_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/workbench/vista', 'Caja\TesoreriaCrownComprobanteController@guardarVistaListado')->name('guardar_vista_tesoreria_crown_movimiento');
+Route::delete('caja/tesoreria-crown/movimiento/workbench/vista/{id}', 'Caja\TesoreriaCrownComprobanteController@eliminarVistaListado')->name('eliminar_vista_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/workbench/columnas', 'Caja\TesoreriaCrownComprobanteController@guardarColumnasListado')->name('guardar_columnas_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/workbench/etiquetas', 'Caja\TesoreriaCrownComprobanteController@guardarEtiquetasListado')->name('guardar_etiquetas_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/workbench/preview', 'Caja\TesoreriaCrownComprobanteController@previewWorkbench')->name('preview_tesoreria_crown_movimiento');
+Route::get('caja/tesoreria-crown/movimiento/{id}/pdf', 'Caja\TesoreriaCrownComprobanteController@imprimir')->name('pdf_tesoreria_crown_movimiento');
+Route::get('caja/tesoreria-crown/movimiento/{id}', 'Caja\TesoreriaCrownComprobanteController@editar')->name('editar_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/{id}', 'Caja\TesoreriaCrownComprobanteController@guardar')->name('guardar_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/{id}/pedir-firma', 'Caja\TesoreriaCrownComprobanteController@pasarAFirma')->name('firmar_pedir_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/{id}/firmar', 'Caja\TesoreriaCrownComprobanteController@firmar')->name('firmar_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/{id}/volver-borrador', 'Caja\TesoreriaCrownComprobanteController@volverABorrador')->name('volver_borrador_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/{id}/vincular-cajero', 'Caja\TesoreriaCrownComprobanteController@vincularCajero')->name('vincular_cajero_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/{id}/no-conforme', 'Caja\TesoreriaCrownComprobanteController@noConforme')->name('noconforme_tesoreria_crown_movimiento');
+Route::post('caja/tesoreria-crown/movimiento/{id}/revertir', 'Caja\TesoreriaCrownComprobanteController@revertir')->name('revertir_tesoreria_crown_movimiento');
 
 /*
  * Medio de pago (CRUD retirado): bookmarks / menú huérfano → usos de cuenta de caja

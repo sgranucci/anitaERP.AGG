@@ -672,6 +672,11 @@ final class GastronomiaCrownPosService
             throw new InvalidArgumentException('La cuenta no tiene ítems para cobrar.');
         }
 
+        $mensajeInactivos = $this->facturaEmisionService->mensajeArticulosInactivos($cuenta);
+        if ($mensajeInactivos !== null) {
+            throw new InvalidArgumentException($mensajeInactivos);
+        }
+
         if ($tipoCobro === GastroCrownCuenta::COBRO_INTERNA) {
             $this->prepararInterna($cuenta, $cfg, $extra);
         } elseif ($tipoCobro === GastroCrownCuenta::COBRO_HOTEL) {

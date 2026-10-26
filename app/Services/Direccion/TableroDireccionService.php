@@ -6,6 +6,7 @@ use App\Models\Caja\Cheque;
 use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Database\SqlDialectSupport;
+use App\Support\Ventas\ClienteCuentacorrienteDeudaAlcanceSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder;
@@ -16,7 +17,8 @@ use Illuminate\Support\Facades\DB;
  *
  * Ventas, compras e IVA salen de los comprobantes (con el signo del tipo).
  * Cheques usan el mismo criterio que el listado de cartera / para depositar.
- * La deuda es el saldo pendiente de la cuenta corriente al cierre del período.
+ * La deuda de clientes es el saldo pendiente comercial al cierre (facturas, notas y COA).
+ * Un ajuste de cuenta corriente entra en la ficha y no en la deuda.
  * Los importes se expresan en pesos: cotización del documento, o la vigente si vino en cero.
  */
 class TableroDireccionService
@@ -1022,7 +1024,14 @@ class TableroDireccionService
             return DB::table('cliente_cuentacorriente as cc')
                 ->leftJoinSub($aplicado, 'ap', 'ap.cliente_cuentacorriente_id', '=', 'cc.id')
                 ->whereIn('cc.empresa_id', $empresaIds)
-                ->whereDate('cc.fecha', '<=', $hasta);
+                ->whereDate('cc.fecha', '<=', $hasta)
+                ->whereRaw(ClienteCuentacorrienteDeudaAlcanceSupport::sql('cc'))
+                ->whereExists(function ($q) {
+                    $q->selectRaw('1')
+                        ->from('cliente as cli_deuda')
+                        ->whereColumn('cli_deuda.id', 'cc.cliente_id')
+                        ->whereNull('cli_deuda.deleted_at');
+                });
         }
 
         $aplicado = DB::table('proveedor_cuentacorriente_aplicacion')

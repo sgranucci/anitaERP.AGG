@@ -9,6 +9,16 @@ use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 final class ProveedorCuentacorrienteGrillaSupport
 {
     public const PREFIJO_LEYENDA_AJUSTE = 'Ajuste saldo CC ';
+
+    /**
+     * El ajuste iguala la ficha con la deuda. No es un comprobante para aplicar.
+     */
+    public static function sqlExcluirAjuste(string $alias = 'proveedor_cuentacorriente'): string
+    {
+        return 'NOT ('.$alias.'.leyenda LIKE \''.self::PREFIJO_LEYENDA_AJUSTE.'%\''
+            .' AND '.$alias.'.comprobante_proveedor_id IS NULL'
+            .' AND '.$alias.'.pagoproveedor_id IS NULL)';
+    }
     public static function etiquetaComprobante(Proveedor_Cuentacorriente $fila): string
     {
         $leyendaAjuste = self::leyendaAjusteVisible($fila);
