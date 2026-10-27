@@ -15,6 +15,13 @@ class AyudaManuales
     {
         $manuales = [
             [
+                'modulo' => 'Buscador del encabezado',
+                'bajada' => 'Campo Buscar de arriba: pantallas del rol, manuales, clientes, artículos, proveedores, comprobantes por número, altas y una frase hacia la consulta operativa.',
+                'url' => route('manual_buscador'),
+                'icono' => 'fa-search',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'Mis aprobaciones y circuitos',
                 'bajada' => 'Bandeja unificada, dual channel (mail + campanita), digest, artículos (tipo AR), usos y configuración admin.',
                 'url' => route('manual_aprobaciones'),

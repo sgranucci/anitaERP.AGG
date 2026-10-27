@@ -3,6 +3,8 @@
 namespace App\Support\Ventas;
 
 use App\ApiAnita;
+use App\Support\Database\SqlDialectSupport;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -142,6 +144,7 @@ final class ClienteAnitaNumeracionSupport
         $ultimoNumerador = self::leerUltimoNumeroNumerador();
         $desde = $ultimoNumerador + 1;
         $numero = ClienteAnitaColisionSupport::primerCodigoDisponible($desde);
+        self::assertFueraDeSerieEmpleado($numero);
 
         self::actualizarNumeradorConReintento($numero);
 
@@ -154,6 +157,42 @@ final class ClienteAnitaNumeracionSupport
         ]);
 
         return $numero;
+    }
+
+    /**
+     * Código que vería el alta, sin mover el numerador. Es indicativo: al guardar se reserva de nuevo.
+     */
+    public static function proximoCodigoVisible(): string
+    {
+        if (! self::estaHabilitada()) {
+            return '';
+        }
+
+        try {
+            $desde = self::leerUltimoNumeroNumerador() + 1;
+            $techo = self::techoSerieCliente();
+            if ($desde > $techo) {
+                return '';
+            }
+
+            $numero = self::primerLibreEnErp($desde, $techo);
+            $intentos = 0;
+            while ($numero <= $techo && $intentos < 40 && ClienteAnitaColisionSupport::existeCodigoEnClimae($numero)) {
+                $numero = self::primerLibreEnErp($numero + 1, $techo);
+                $intentos++;
+            }
+            if ($numero > $techo || $numero <= 0) {
+                return '';
+            }
+
+            return self::formatearCodigoErp($numero);
+        } catch (\Throwable $e) {
+            Log::warning('ClienteAnitaNumeracion: no se pudo anticipar el código de cliente', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return '';
+        }
     }
 
     /**
@@ -216,6 +255,60 @@ final class ClienteAnitaNumeracionSupport
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    private static function techoSerieCliente(): int
+    {
+        if (ClienteCodigoEmpleadoBierzoSupport::habilitada()) {
+            return ClienteCodigoEmpleadoBierzoSupport::desde() - 1;
+        }
+
+        return 999999;
+    }
+
+    /**
+     * Primer código numérico libre en el ERP entre $desde y $techo. $techo + 1 si no hay.
+     */
+    private static function primerLibreEnErp(int $desde, int $techo): int
+    {
+        if ($desde > $techo) {
+            return $techo + 1;
+        }
+
+        $cast = SqlDialectSupport::castEntero('codigo');
+        $ocupados = DB::table('cliente')
+            ->whereRaw(SqlDialectSupport::coincideRegex('codigo'), ['^[0-9]+$'])
+            ->whereRaw($cast.' BETWEEN ? AND ?', [$desde, $techo])
+            ->pluck('codigo');
+
+        $tomados = [];
+        foreach ($ocupados as $codigo) {
+            $tomados[(int) $codigo] = true;
+        }
+
+        for ($numero = $desde; $numero <= $techo; $numero++) {
+            if (! isset($tomados[$numero])) {
+                return $numero;
+            }
+        }
+
+        return $techo + 1;
+    }
+
+    /**
+     * La serie 14000–14500 es de empleados. Un cliente estándar no puede consumirla.
+     */
+    private static function assertFueraDeSerieEmpleado(int $numero): void
+    {
+        if (! ClienteCodigoEmpleadoBierzoSupport::numeroEnRango($numero)) {
+            return;
+        }
+
+        $desde = ClienteCodigoEmpleadoBierzoSupport::desde();
+        $hasta = ClienteCodigoEmpleadoBierzoSupport::hasta();
+        throw new \RuntimeException(
+            'No hay código de cliente libre antes de la serie de empleados ('.$desde.'–'.$hasta.').'
+        );
     }
 
     private static function esErrorBloqueoNumerador(string $mensaje): bool

@@ -751,6 +751,7 @@
 							data-combinacion-id="{{ (int) ($item->combinacion_id ?? 0) }}"
 							data-modulo-id="{{ (int) ($item->modulo_id ?? 0) }}"
 							data-talle-id="{{ (int) ($item->talle_id ?? 0) }}"
+							data-cantidad-original="{{ number_format((float) $cantidadOriginalNc, 4, '.', '') }}"
 							data-cantidad-pendiente="{{ number_format((float) $cantidadPendienteNc, 4, '.', '') }}">
 							@if (! empty($flGeneraNotaDeCredito))
 							<td class="nc-devolver-col">

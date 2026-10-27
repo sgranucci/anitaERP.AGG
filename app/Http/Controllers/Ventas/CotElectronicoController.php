@@ -497,6 +497,12 @@ class CotElectronicoController extends Controller
 
         switch ($formato) {
             case 'PDF':
+                if ($sesion !== null) {
+                    $ruta = $this->impresionSesionService->generarPdfListadoCot((int) $sesion->id);
+
+                    return response()->download($ruta, basename($ruta));
+                }
+
                 $view = \View::make('ventas.cot_electronico.historico.listado', compact(
                     'filas',
                     'titulo',

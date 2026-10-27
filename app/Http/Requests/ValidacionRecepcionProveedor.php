@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Support\Stock\RecepcionProveedorAccionLineaOc;
+use App\Support\Stock\RecepcionProveedorAnitaLoteSupport;
 use App\Support\Stock\RecepcionProveedorArticuloExtraSupport;
 use App\Support\Stock\RecepcionProveedorCentrocostoLineaSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
@@ -81,6 +82,7 @@ class ValidacionRecepcionProveedor extends FormRequest
             'items.*.cantidad' => 'nullable|numeric|min:0',
             'items.*.cantidad_recepcionada_origen' => 'nullable|numeric|min:0',
             'items.*.cantidad_rechazada' => 'nullable|numeric|min:0',
+            'items.*.peso_bulto' => 'nullable|numeric|min:0',
             'items.*.motivorechazo' => 'nullable|string|max:255',
             'items.*.precio' => 'required|numeric|min:0',
             'items.*.precio_solicitado' => 'nullable|numeric|min:0',
@@ -106,6 +108,8 @@ class ValidacionRecepcionProveedor extends FormRequest
             'items.*.color_id' => 'nullable|integer|exists:color,id',
             'items.*.talle_id' => 'nullable|integer|exists:talle,id',
             'items.*.maneja_stock_color_talle' => 'nullable|boolean',
+            'items.*.lote_proveedor' => 'nullable|string|max:'.RecepcionProveedorAnitaLoteSupport::LOTE_MAX,
+            'items.*.fecha_vto' => 'nullable|date',
         ];
     }
 
@@ -156,6 +160,11 @@ class ValidacionRecepcionProveedor extends FormRequest
             foreach ($items as $idx => $item) {
                 if (! is_array($item)) {
                     continue;
+                }
+
+                $faltaLote = RecepcionProveedorAnitaLoteSupport::mensajeSiFaltaEnItem($item, $idx + 1);
+                if ($faltaLote !== null) {
+                    $validator->errors()->add('items.'.$idx.'.lote_proveedor', $faltaLote);
                 }
 
                 if ($esDevolucion) {

@@ -11,6 +11,7 @@ use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
+use App\Support\Ventas\FacturacionAnitaGrabacionSupport;
 use App\Support\Ventas\PedidoFacturacionProfiler;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
@@ -371,6 +372,10 @@ class VentaRepository implements VentaRepositoryInterface
         // El Bierzo numera como a-remito/a-comprob: compemis resuelve la clave
         // y numerador contiene el ultimo numero reservado. No usar MAX(pendmae):
         // el remito puede originarse al facturar sin existir aun en pendmae.
+        if (EntornoEmpresaSupport::esElBierzo() && ! FacturacionAnitaGrabacionSupport::habilitada()) {
+            return $this->ultimoNumeroRemitoErp((string) $sucursal);
+        }
+
         if (EntornoEmpresaSupport::esElBierzo()) {
             try {
                 PedidoFacturacionProfiler::etapa('anita_compemis_numerador_inicio');
@@ -413,6 +418,31 @@ class VentaRepository implements VentaRepositoryInterface
         }
 
         return 'error';
+    }
+
+    /**
+     * Siguiente remito desde el ERP. Se usa en El Bierzo cuando la grabación Anita está apagada.
+     */
+    private function ultimoNumeroRemitoErp(string $sucursal): int
+    {
+        $codigo = trim($sucursal);
+        $digitos = preg_replace('/\D+/', '', $codigo) ?? '';
+        $variantes = array_values(array_unique(array_filter([
+            $codigo,
+            $digitos,
+            $digitos !== '' ? str_pad($digitos, 5, '0', STR_PAD_LEFT) : '',
+        ], static fn ($valor) => $valor !== '')));
+
+        if ($variantes === []) {
+            return 1;
+        }
+
+        $pvIds = DB::table('puntoventa')->whereIn('codigo', $variantes)->pluck('id');
+        if ($pvIds->isEmpty()) {
+            return 1;
+        }
+
+        return ((int) DB::table('remito')->whereIn('puntoventa_id', $pvIds)->max('numero')) + 1;
     }
 
     public function numeraAnita($tipo, $letra, $sucursal, $path_sistema = null)

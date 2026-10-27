@@ -20,6 +20,7 @@ use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
+use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
 use App\Support\Stock\RecepcionProveedorIntercompanySupport;
@@ -28,6 +29,7 @@ use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use App\Support\Stock\RecepcionProveedorAccionLineaOc;
 use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
 use App\Support\Stock\RecepcionProveedorArticuloExtraSupport;
+use App\Support\Stock\RecepcionProveedorAnitaLoteSupport;
 use App\Support\Stock\RecepcionProveedorAnitaNumeracionSupport;
 use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorArchivoSupport;
@@ -43,6 +45,7 @@ use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
 use App\Services\Ai\AiDecisionLogger;
 use App\Services\Compras\ContratoValidacionAbonoService;
 use App\Models\Ai\AiDecision;
+use Illuminate\Support\Facades\Schema;
 use App\Support\Stock\RecepcionProveedorOcr\RecepcionProveedorOcrAiHashSupport;
 use Auth;
 use Illuminate\Http\Request;
@@ -545,6 +548,9 @@ class RecepcionProveedorService
 
             $movId = (int) ($recepcion->movimientostock_id ?? 0);
             if ($movId > 0) {
+                // La recepción referencia el movimiento. Hay que soltar la FK antes de borrarlo.
+                $recepcion->update(['movimientostock_id' => null]);
+                $recepcion->movimientostock_id = null;
                 $this->movimientoStockService->borraMovimientoStock($movId);
             }
 
@@ -836,6 +842,13 @@ class RecepcionProveedorService
             $item['coeficienteconversion'] = $conversion['coeficienteconversion'];
             $item['cantidad_stock'] = $conversion['cantidad_stock'];
             $item['precio_stock'] = $conversion['precio_stock'];
+            $pesoBulto = (float) ($item['peso_bulto'] ?? 0);
+            if ($pesoBulto > 0 && empty($conversion['fl_conversion_formula'])) {
+                $item['precio_stock'] = round(
+                    (float) $item['precio'] * RecepcionProveedorConversionSupport::factorPesoBulto($pesoBulto),
+                    6
+                );
+            }
             $item['fl_conversion_formula'] = $conversion['fl_conversion_formula'];
             $item['articulo_stock_id'] = $conversion['articulo_stock_id'];
             $item['articulo_stock_sku'] = $conversion['articulo_stock_sku'];
@@ -1004,9 +1017,51 @@ class RecepcionProveedorService
                 'incluyeimpuesto' => 'N',
                 'centrocosto_id' => $ccId,
                 'lote_id' => $item['lote_id'] ?? null,
-            ]);
+            ] + $this->datosLoteProveedor($item) + $this->datosPesoBulto($item));
             $orden++;
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array{lote_proveedor: ?string, fecha_vto: ?string}
+     */
+    private function datosLoteProveedor(array $item): array
+    {
+        if (! Schema::hasColumn('recepcion_proveedor_articulo', 'lote_proveedor')) {
+            return [];
+        }
+
+        $lote = RecepcionProveedorAnitaLoteSupport::loteTexto($item['lote_proveedor'] ?? '');
+        $fecha = trim((string) ($item['fecha_vto'] ?? ''));
+        if ($fecha !== '' && RecepcionProveedorAnitaLoteSupport::fechaAnita($fecha) <= 0) {
+            $fecha = '';
+        }
+
+        return [
+            'lote_proveedor' => $lote !== '' ? $lote : null,
+            'fecha_vto' => $fecha !== '' ? substr($fecha, 0, 10) : null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array{peso_bulto?: float|null}
+     */
+    private function datosPesoBulto(array $item): array
+    {
+        if (! \App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo()) {
+            return [];
+        }
+        if (! Schema::hasColumn('recepcion_proveedor_articulo', 'peso_bulto')) {
+            return [];
+        }
+
+        $peso = (float) str_replace(',', '.', trim((string) ($item['peso_bulto'] ?? '')));
+
+        return [
+            'peso_bulto' => $peso > 0 ? round($peso, 6) : null,
+        ];
     }
 
     /** @param array<string, mixed> $item */
@@ -1091,7 +1146,7 @@ class RecepcionProveedorService
             'incluyeimpuesto' => 'N',
             'centrocosto_id' => $this->centrocostoIdItemOError($item, $orden),
             'lote_id' => null,
-        ]);
+        ] + $this->datosLoteProveedor($item) + $this->datosPesoBulto($item));
     }
 
     /** @param array<string, mixed> $item

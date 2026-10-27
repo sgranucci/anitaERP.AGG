@@ -76,14 +76,25 @@
                         </select>
                     </div>
                 </div>
+                @php
+                    $pvsRemitoReparto = \App\Support\Ventas\PuntoventaRemitoSupport::filtrarLista($puntoventa_query ?? []);
+                    $defaultRemitoReparto = (int) ($puntoventaremitodefault_id ?? 0);
+                    $idsRemitoReparto = [];
+                    foreach ($pvsRemitoReparto as $pvRemitoOpcion) {
+                        $idsRemitoReparto[] = (int) $pvRemitoOpcion->id;
+                    }
+                    if ($defaultRemitoReparto > 0 && ! in_array($defaultRemitoReparto, $idsRemitoReparto, true) && $idsRemitoReparto !== []) {
+                        $defaultRemitoReparto = $idsRemitoReparto[0];
+                    }
+                @endphp
                 <div class="form-group row">
                     <label class="col-lg-4 control-label text-right pr-2 requerido">Punto de venta del pedido</label>
                     <div class="col-lg-7">
                         <select id="reparto_puntoventaremito_id" class="form-control">
                             <option value="">-- Seleccionar punto de venta --</option>
-                            @foreach ($puntoventa_query as $pv)
+                            @foreach ($pvsRemitoReparto as $pv)
                                 <option value="{{ $pv->id }}"
-                                    {{ (int) $pv->id === (int) ($puntoventaremitodefault_id ?? 0) ? 'selected' : '' }}>
+                                    {{ (int) $pv->id === $defaultRemitoReparto ? 'selected' : '' }}>
                                     {{ $pv->codigo }}-{{ $pv->nombre }}
                                 </option>
                             @endforeach

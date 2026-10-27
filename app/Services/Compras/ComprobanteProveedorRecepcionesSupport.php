@@ -242,6 +242,7 @@ class ComprobanteProveedorRecepcionesSupport
                 (float) ($linea->descuento ?? 0),
                 0,
                 (float) ($linea->cotizacion ?: 1),
+                $linea->peso_bulto ?? 0,
             );
         }
 

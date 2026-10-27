@@ -1,0 +1,149 @@
+/**
+ * Buscador del encabezado: pantallas del rol y manuales.
+ */
+
+.anita-buscador {
+    position: relative;
+    width: 280px;
+    max-width: 34vw;
+    align-items: center;
+}
+
+.anita-buscador .input-group {
+    width: 100%;
+}
+
+.anita-buscador-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 440px;
+    max-width: min(440px, 72vw);
+    max-height: min(70vh, 480px);
+    overflow: auto;
+    background: #fff;
+    border: 1px solid #d5dde8;
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+    z-index: 2000;
+    padding: 4px 0 0;
+}
+
+.anita-buscador-grupo {
+    padding: 6px 12px 2px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #1b4f72;
+}
+
+.anita-buscador-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 12px;
+    color: #17202a;
+    text-decoration: none;
+}
+
+.anita-buscador-item:hover,
+.anita-buscador-item.is-active {
+    background: #d6eaf8;
+    color: #1b4f72;
+    text-decoration: none;
+}
+
+.anita-buscador-item i {
+    width: 16px;
+    margin-top: 3px;
+    color: #2471a3;
+    text-align: center;
+}
+
+.anita-buscador-sugerencia {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.anita-buscador-sugerencia i {
+    color: #1b4f72;
+}
+
+.anita-buscador-textos {
+    min-width: 0;
+    flex: 1;
+}
+
+.anita-buscador-titulo {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.anita-buscador-detalle {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    color: #5d6d7e;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.anita-buscador-item:hover .anita-buscador-detalle,
+.anita-buscador-item.is-active .anita-buscador-detalle {
+    color: #1b4f72;
+}
+
+.anita-buscador-vacio,
+.anita-buscador-estado {
+    padding: 10px 12px 12px;
+    font-size: 13px;
+    color: #5d6d7e;
+}
+
+.anita-buscador-pie {
+    padding: 6px 12px;
+    border-top: 1px solid #e5e8eb;
+    font-size: 11px;
+    color: #85929e;
+    background: #f8f9f9;
+}
+
+.anita-buscador-marca {
+    background: #f9e79f;
+    color: inherit;
+    padding: 0 1px;
+    border-radius: 2px;
+}
+
+.anita-buscador-anclado {
+    margin-left: 6px;
+    color: #1b4f72;
+    font-size: 11px;
+}
+
+@media (max-width: 767.98px) {
+    .anita-buscador {
+        flex: 1 1 120px;
+        width: auto;
+        max-width: none;
+        min-width: 0;
+        margin-left: 0.35rem !important;
+    }
+
+    .anita-buscador-panel {
+        position: fixed;
+        top: 52px;
+        left: 8px;
+        right: 8px;
+        width: auto;
+        max-width: none;
+    }
+}

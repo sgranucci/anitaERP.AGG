@@ -2,6 +2,7 @@
 
 namespace App\Services\Ventas;
 
+use App\Support\Ventas\FacturacionAnitaGrabacionSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaReplicaAuthSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use Illuminate\Support\Facades\Log;
@@ -24,6 +25,12 @@ final class PedidoFacturaAnitaDeferEjecucionService
      */
     public function ejecutar(int $ventaId, ?array $anitaPendiente, ?array $vencaePendiente): void
     {
+        if (! FacturacionAnitaGrabacionSupport::habilitada()) {
+            FacturacionAnitaGrabacionSupport::logSiApagada();
+
+            return;
+        }
+
         if ($ventaId <= 0 && ! is_array($anitaPendiente) && ! is_array($vencaePendiente)) {
             return;
         }

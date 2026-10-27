@@ -71,11 +71,20 @@ class BarraTareasSupport
     /**
      * @return array<int, array{id: int, nombre: string, nombre_ruta: string, url: string, icono: string, icono_clases: string, anclado: bool}>
      */
+    /**
+     * Pantallas con enlace que el rol de la sesión puede abrir.
+     *
+     * @return array<int, array{id: int, nombre: string, nombre_ruta: string, url: string, icono: string, icono_clases: string}>
+     */
+    public function hojasMenuRol(): array
+    {
+        return $this->aplanarMenusHoja($this->arbolMenuFront());
+    }
+
     public function menusDisponibles(): array
     {
         $anclados = $this->idsAnclados();
-        $menus = $this->arbolMenuFront();
-        $hojas = $this->aplanarMenusHoja($menus);
+        $hojas = $this->hojasMenuRol();
 
         return array_values(array_map(function (array $item) use ($anclados) {
             $item['anclado'] = in_array($item['id'], $anclados, true);

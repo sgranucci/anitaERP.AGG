@@ -11,17 +11,24 @@ $modoConsulta = request()->input('vista') === 'consulta';
                 <a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
             </li>
         </ul>
-        <!-- SEARCH FORM -->
-        <form class="form-inline ml-3 d-none d-md-flex">
-            <div class="input-group input-group-sm">
-                <input class="form-control form-control-navbar" type="search" placeholder="Buscar" aria-label="Buscar">
-                <div class="input-group-append">
-                    <button class="btn btn-navbar" type="submit">
-                        <i class="fas fa-search"></i>
-                    </button>
+        @auth
+            <div class="anita-buscador ml-3 d-flex" id="anita-buscador"
+                 data-url="{{ route('buscador_global') }}"
+                 data-eleccion="{{ route('buscador_global_eleccion') }}">
+                <div class="input-group input-group-sm">
+                    <input class="form-control form-control-navbar" type="search" id="anita-buscador-q"
+                           placeholder="Buscar en el sistema" autocomplete="off" spellcheck="false"
+                           aria-label="Buscar en el sistema" aria-autocomplete="list"
+                           aria-controls="anita-buscador-panel" aria-expanded="false">
+                    <div class="input-group-append">
+                        <button class="btn btn-navbar" type="button" id="anita-buscador-lupa" aria-label="Buscar">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
                 </div>
+                <div class="anita-buscador-panel d-none" id="anita-buscador-panel" role="listbox" aria-label="Resultados"></div>
             </div>
-        </form>
+        @endauth
     @else
         <span class="navbar-text font-weight-bold text-warning mr-3" title="Esta solapa fue abierta como consulta desde otra pantalla. Pod&eacute;s navegar consultas relacionadas y, si tu rol lo permite, editar. Al guardar te ofrecer&aacute; cerrar la solapa para volver a tu pantalla principal.">
             <i class="fas fa-eye"></i> Modo consulta

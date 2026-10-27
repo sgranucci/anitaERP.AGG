@@ -8,7 +8,10 @@ use App\Models\Stock\Recepcion_Proveedor_Articulo;
 use App\Services\Compras\OrdencompraAnitaBridgeService;
 use App\Services\Compras\OrdencompraAnitaSyncService;
 use App\Models\Contable\Asiento_Movimiento;
+use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
+use App\Support\Stock\RecepcionProveedorAnitaLoteNumeracionSupport;
+use App\Support\Stock\RecepcionProveedorAnitaLoteSupport;
 use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
 use App\Support\Stock\RecepcionProveedorAsientoAnitaCtamovSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
@@ -1355,6 +1358,29 @@ class RecepcionProveedorAnitaBridgeService
             }
             $ordenMax = max($ordenMax, $orden);
 
+            $loteProveedor = '';
+            $fechaVtoAnita = 0;
+            $nroInternoLote = 0;
+            if (RecepcionProveedorAnitaLoteSupport::aplica()) {
+                $faltaLote = RecepcionProveedorAnitaLoteSupport::mensajeSiFaltaEnLinea($linea);
+                if ($faltaLote !== null) {
+                    throw new \RuntimeException($faltaLote);
+                }
+
+                $loteProveedor = RecepcionProveedorAnitaLoteSupport::loteTexto($linea->lote_proveedor ?? '');
+                $fechaVtoAnita = RecepcionProveedorAnitaLoteSupport::fechaAnita($linea->fecha_vto ?? null);
+                if (RecepcionProveedorAnitaLoteSupport::lineaRequiereLote(
+                    (float) ($linea->cantidad ?? 0),
+                    (float) ($linea->cantidad_rechazada ?? 0)
+                )) {
+                    $nroInternoLote = (int) ($linea->anita_nro_lote ?? 0);
+                    if ($nroInternoLote <= 0) {
+                        $nroInternoLote = RecepcionProveedorAnitaLoteNumeracionSupport::reservarSiguiente();
+                        $linea->forceFill(['anita_nro_lote' => $nroInternoLote])->save();
+                    }
+                }
+            }
+
             $insert = RecepcionProveedorAnitaEscrituraSupport::recepmovInsert(
                 $codigoProveedor,
                 $clave,
@@ -1364,7 +1390,7 @@ class RecepcionProveedorAnitaBridgeService
                 (float) $linea->cantidad * $signo,
                 (float) ($linea->cantidad_rechazada ?? 0) * $signo,
                 substr((string) ($linea->motivorechazo ?? ''), 0, 40),
-                (float) $linea->precio,
+                round((float) $linea->precio * RecepcionProveedorConversionSupport::factorPesoBulto($linea->peso_bulto ?? 0), 6),
                 (float) ($linea->descuento ?? 0),
                 (int) ($linea->deposito_id ?? 1),
                 $fechaAnita,
@@ -1374,6 +1400,9 @@ class RecepcionProveedorAnitaBridgeService
                 (float) ($linea->cotizacion ?? 1),
                 $codigoAgrupacion,
                 $tipoIvaAnita,
+                $loteProveedor,
+                $fechaVtoAnita,
+                $nroInternoLote,
             );
 
             $this->anitaEscritura($api, [

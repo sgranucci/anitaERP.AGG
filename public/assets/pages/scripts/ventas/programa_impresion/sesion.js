@@ -56,11 +56,9 @@
                     return;
                 }
             }
-            document.querySelectorAll('.btn-ejecutar-sesion').forEach(function (boton) {
+            document.querySelectorAll('.btn-ejecutar-sesion, .btn-solo-copia').forEach(function (boton) {
                 boton.disabled = true;
-            });
-            document.querySelectorAll('.btn-solo-copia').forEach(function (b) {
-                b.disabled = true;
+                boton.setAttribute('data-bloqueado-envio', '1');
             });
             mostrarOverlay();
         });
@@ -188,6 +186,20 @@
                 return;
             }
         }
+
+        window.addEventListener('pageshow', function (ev) {
+            if (!ev.persisted) {
+                return;
+            }
+            document.querySelectorAll('[data-bloqueado-envio="1"]').forEach(function (boton) {
+                boton.disabled = false;
+                boton.removeAttribute('data-bloqueado-envio');
+            });
+            var overlay = document.getElementById('impresion-sesion-overlay');
+            if (overlay) {
+                overlay.hidden = true;
+            }
+        });
 
         if (window.impresionSesionAuto) {
             sincronizarEnviarImpresora();

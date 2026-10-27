@@ -323,6 +323,35 @@ final class NotaCreditoPercepcionIibbSupport
     }
 
     /**
+     * Pie completo de la factura (subtotal, IVA, logística, abasto, percepciones, total).
+     * La anulación total de la NC lo copia: recalcular el neto de renglón deja afuera
+     * conceptos que no son líneas (logística, abasto, percepción IVA).
+     *
+     * @param  iterable<int, mixed>  $ventaImpuestos
+     * @return list<array<string, mixed>>
+     */
+    public static function pieDesdeImpuestos(iterable $ventaImpuestos): array
+    {
+        $filas = [];
+        foreach ($ventaImpuestos as $item) {
+            $fila = self::filaComoArray($item);
+            if ($fila === [] || trim((string) ($fila['concepto'] ?? '')) === '') {
+                continue;
+            }
+            $filas[] = [
+                'concepto' => (string) ($fila['concepto'] ?? ''),
+                'tasa' => (float) ($fila['tasa'] ?? 0),
+                'baseimponible' => (float) ($fila['baseimponible'] ?? 0),
+                'importe' => (float) ($fila['importe'] ?? 0),
+                'provincia_id' => $fila['provincia_id'] ?? null,
+                'es_iibb' => self::esFilaIibb($fila),
+            ];
+        }
+
+        return self::completarJurisdiccion($filas);
+    }
+
+    /**
      * @param  array<string, mixed>  $fila
      */
     public static function esFilaIibb(array $fila): bool
@@ -417,7 +446,7 @@ final class NotaCreditoPercepcionIibbSupport
      * Percepciones IIBB de la factura origen, para el pie inmediato de la NC
      * en pantalla. Al grabar manda paraNotaCredito().
      *
-     * @return array{filas: list<array<string, mixed>>, neto: float, jurisdiccion_buenos_aires: int, jurisdiccion_caba: int, fecha_origen: ?string}
+     * @return array{filas: list<array<string, mixed>>, pie: list<array<string, mixed>>, neto: float, jurisdiccion_buenos_aires: int, jurisdiccion_caba: int, fecha_origen: ?string}
      */
     public static function payloadPreview(int $ventaOrigenId): array
     {
@@ -437,6 +466,7 @@ final class NotaCreditoPercepcionIibbSupport
 
         return [
             'filas' => $filas,
+            'pie' => is_array($origen) ? ($origen['pie'] ?? []) : [],
             'neto' => (float) (is_array($origen) ? ($origen['neto'] ?? 0) : 0),
             'jurisdiccion_buenos_aires' => PercepcionIibbJurisdiccionEntregaSupport::JURISDICCION_BUENOS_AIRES,
             'jurisdiccion_caba' => PercepcionIibbJurisdiccionEntregaSupport::JURISDICCION_CABA,
@@ -475,7 +505,7 @@ final class NotaCreditoPercepcionIibbSupport
     }
 
     /**
-     * @return array{filas: list<array<string, mixed>>, neto: float, fecha: ?string}|null
+     * @return array{filas: list<array<string, mixed>>, pie: list<array<string, mixed>>, neto: float, fecha: ?string}|null
      */
     private static function cargarOrigen(int $ventaOrigenId): ?array
     {
@@ -496,6 +526,7 @@ final class NotaCreditoPercepcionIibbSupport
         $filas = self::completarJurisdiccion($filas);
         self::$origenCache[$ventaOrigenId] = [
             'filas' => $filas,
+            'pie' => self::pieDesdeImpuestos($venta->venta_impuestos),
             'neto' => self::netoOrigen($filas),
             'fecha' => self::fechaTexto($venta->fecha),
         ];

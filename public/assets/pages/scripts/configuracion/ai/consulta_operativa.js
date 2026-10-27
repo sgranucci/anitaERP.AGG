@@ -589,4 +589,19 @@
 	}
 
 	$(boot);
+
+	window.AnitaAiConsultaAbrir = function (frase) {
+		setOpen(true);
+		var $ta = $('#anita-ai-consulta-pregunta');
+		if (frase) {
+			$ta.val(String(frase));
+			autoResizeInput();
+		}
+		$ta.trigger('focus');
+	};
+
+	window.AnitaAiConsultaEnviar = function (frase) {
+		window.AnitaAiConsultaAbrir(frase);
+		consultar();
+	};
 })(window, window.jQuery);

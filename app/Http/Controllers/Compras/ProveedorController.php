@@ -717,7 +717,13 @@ class ProveedorController extends Controller
      */
     public function editar(Request $request, $id)
     {
-        can('editar-proveedor');
+        if ($request->query('vista') === 'consulta') {
+            if (! can('editar-proveedor', false) && ! can('listar-proveedor', false) && ! can('actualizar-proveedor', false)) {
+                abort(403);
+            }
+        } else {
+            can('editar-proveedor');
+        }
         $data = $this->proveedorRepository->findOrFail($id);
 
         $referer = $request->header("referer");

@@ -218,6 +218,24 @@ class ComprobanteImpresionSesionController extends Controller
             ]);
         }
 
+        if ($request->boolean('reporte')) {
+            try {
+                $resultado = $this->sesionService->imprimirListadoCotDirecto($id);
+            } catch (\InvalidArgumentException|\RuntimeException $e) {
+                return redirect()->to($retorno)->with('errores', [$e->getMessage()]);
+            } catch (\Throwable $e) {
+                Log::error('ventas.impresion_cot_listado', [
+                    'sesion_id' => $id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return redirect()->to($retorno)
+                    ->with('errores', ['No se pudo imprimir el listado COT: '.$e->getMessage()]);
+            }
+
+            return redirect()->to($retorno)->with('mensaje', $resultado['mensaje']);
+        }
+
         try {
             $resultado = $this->sesionService->imprimirCotDirecto($id, $remitoEnvioId);
         } catch (\InvalidArgumentException $e) {
@@ -357,7 +375,9 @@ class ComprobanteImpresionSesionController extends Controller
         $impresora = $sesion['impresora_usuario'] ?? [];
         $programaSeteo = ComprobanteImpresionSalidaUsuarioSupport::programaUnificado();
 
-        if (! $autoEjecutar && ! empty($sesion['pack'])) {
+        // El reparto se arma al descargar. Prearmarlo acá corre en paralelo con ese PDF
+        // y los dos procesos se cortan a los 30 s de PHP.
+        if (! $autoEjecutar && ! $esLote && ! empty($sesion['pack'])) {
             $sesionPdf = $sesion;
             dispatch(function () use ($sesionPdf) {
                 app(ComprobanteImpresionSesionService::class)->asegurarPdfSesionPapel($sesionPdf);

@@ -19,7 +19,51 @@ if ! command -v lp >/dev/null 2>&1; then
   exit 1
 fi
 
+# Cola BIE_PS_231 → socket://192.168.59.231:9100. Si CUPS no tiene la cola
+# pero el equipo responde en JetDirect, se manda el PDF igual (VersaLink acepta PDF).
+enviar_jetdirect_bie() {
+  local cola="$1"
+  local file="$2"
+  local subred="${IMPRESION_BIE_SUBRED:-192.168.59}"
+  local octeto host tmp ec
+
+  if [[ ! "$cola" =~ ^BIE_PS_([0-9]+)$ ]]; then
+    return 1
+  fi
+  if ! command -v nc >/dev/null 2>&1; then
+    return 1
+  fi
+
+  octeto="${BASH_REMATCH[1]}"
+  host="${subred}.${octeto}"
+  if ! nc -z -w 3 "$host" 9100 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  tmp="$(mktemp)"
+  {
+    printf '\033%%-12345X@PJL JOB NAME="anitaERP"\r\n'
+    printf '@PJL ENTER LANGUAGE = PDF\r\n'
+    cat "$file"
+    printf '\r\n\033%%-12345X@PJL EOJ\r\n\033%%-12345X'
+  } > "$tmp"
+
+  ec=0
+  nc -N -w 60 "$host" 9100 < "$tmp" || ec=$?
+  rm -f "$tmp"
+  if [[ "$ec" -ne 0 ]]; then
+    echo "La cola «${cola}» no está en CUPS y falló el envío a ${host}:9100." >&2
+    return 1
+  fi
+
+  echo "Cola «${cola}» ausente en CUPS. PDF enviado a ${host}:9100."
+  return 0
+}
+
 if ! lpstat -p "$COLA" >/dev/null 2>&1; then
+  if enviar_jetdirect_bie "$COLA" "$FILE"; then
+    exit 0
+  fi
   echo "La cola de impresión «${COLA}» no existe o no es accesible." >&2
   exit 1
 fi

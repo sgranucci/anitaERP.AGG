@@ -56,15 +56,18 @@ $( "#botonform0" ).click(function() {
         @include('ventas.cliente.partials.arca_impuestos_alerta')
         @include('ventas.cliente.partials.cuit_duplicado_alerta')
         <div class="card card-primary">
-            <div class="card-header">
-                <h3 class="card-title mb-0 d-inline-flex align-items-center flex-wrap">
+            <style>
+                .cliente-alta-barra.card-header::after { content: none; display: none; }
+            </style>
+            <div class="card-header cliente-alta-barra d-flex align-items-center flex-nowrap">
+                <h3 class="card-title mb-0 d-flex align-items-center flex-nowrap">
                     Crear Cliente
                     @if ($tipoalta == 'P')
                         Provisorio
                     @endif
                     @include('ventas.cliente.partials.codigo_barra')
                 </h3>
-                <div class="card-tools">
+                <div class="card-tools ml-auto float-none">
                     @if (isset($urlOrigen))
                         <a href="javascript:history.back()" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver a consulta

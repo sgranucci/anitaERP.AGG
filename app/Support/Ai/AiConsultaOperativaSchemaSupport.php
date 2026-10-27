@@ -94,7 +94,7 @@ final class AiConsultaOperativaSchemaSupport
     {
         $out = [];
 
-        foreach (['sku', 'codigo', 'documento', 'numero', 'valor', 'cuenta_codigo', 'cuenta_nombre', 'deposito_codigo', 'empresa_codigo', 'empresa_nombre', 'numero_oc', 'evento', 'descripcion'] as $k) {
+        foreach (['sku', 'codigo', 'documento', 'numero', 'valor', 'cuenta_codigo', 'cuenta_nombre', 'deposito_codigo', 'empresa_codigo', 'empresa_nombre', 'numero_oc', 'evento', 'descripcion', 'cuentacaja_codigo', 'identificador_pc'] as $k) {
             if (isset($params[$k]) && is_scalar($params[$k])) {
                 $v = trim((string) $params[$k]);
                 if ($v !== '') {
@@ -147,6 +147,8 @@ final class AiConsultaOperativaSchemaSupport
             && in_array($intent, [
                 AiConsultaOperativaSupport::INTENT_ARTICULO_SALDO,
                 AiConsultaOperativaSupport::INTENT_ARTICULO_KARDEX,
+                AiConsultaOperativaSupport::INTENT_FORMULA_COMPRA,
+                AiConsultaOperativaSupport::INTENT_FORMULA_USO,
                 AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR,
             ], true)) {
             $out['solo_insumo'] = true;
@@ -154,6 +156,10 @@ final class AiConsultaOperativaSchemaSupport
         if (! empty($params['solo_deuda'])
             && $intent === AiConsultaOperativaSupport::INTENT_PROVEEDOR_CTACTE) {
             $out['solo_deuda'] = true;
+        }
+        if (! empty($params['sin_centrocosto'])
+            && $intent === AiConsultaOperativaSupport::INTENT_MAYOR_CUENTA) {
+            $out['sin_centrocosto'] = true;
         }
 
         foreach (['fecha_desde', 'fecha_hasta'] as $k) {
@@ -195,7 +201,9 @@ final class AiConsultaOperativaSchemaSupport
         // Aliases por intent
         return match ($intent) {
             AiConsultaOperativaSupport::INTENT_ARTICULO_SALDO,
-            AiConsultaOperativaSupport::INTENT_ARTICULO_KARDEX => self::aliasValor($out, 'sku'),
+            AiConsultaOperativaSupport::INTENT_ARTICULO_KARDEX,
+            AiConsultaOperativaSupport::INTENT_FORMULA_COMPRA,
+            AiConsultaOperativaSupport::INTENT_FORMULA_USO => self::aliasValor($out, 'sku'),
             AiConsultaOperativaSupport::INTENT_CLIENTE,
             AiConsultaOperativaSupport::INTENT_CLIENTE_CTACTE,
             AiConsultaOperativaSupport::INTENT_PROVEEDOR,

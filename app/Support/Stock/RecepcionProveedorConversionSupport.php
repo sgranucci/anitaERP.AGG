@@ -4,6 +4,8 @@ namespace App\Support\Stock;
 
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Proveedor;
+use App\Support\Configuracion\EntornoEmpresaSupport;
+use Illuminate\Support\Facades\Schema;
 
 class RecepcionProveedorConversionSupport
 {
@@ -99,9 +101,30 @@ class RecepcionProveedorConversionSupport
      * Importe neto de línea sin IVA (recepción no lleva impuestos en inscriptos).
      * El precio de recepción precargado desde OC ya incluye descuentos de línea y de pie.
      */
-    public static function importeLinea(float $cantidad, float $precio, float $descuento = 0, float $descuentoCabeceraOc = 0): float
+    /**
+     * El Bierzo: el precio del remito es por kilo (u otra unidad de peso) y la cantidad
+     * ingresada es en bultos. Con peso por bulto, el importe es bultos × peso × precio.
+     * Sin peso, o en otra empresa, el factor queda en 1.
+     */
+    public static function factorPesoBulto(mixed $peso): float
     {
-        $base = $cantidad * $precio;
+        if (! EntornoEmpresaSupport::esElBierzo()) {
+            return 1.0;
+        }
+
+        $valor = (float) $peso;
+
+        return $valor > 0 ? $valor : 1.0;
+    }
+
+    public static function importeLinea(
+        float $cantidad,
+        float $precio,
+        float $descuento = 0,
+        float $descuentoCabeceraOc = 0,
+        mixed $pesoBulto = 0,
+    ): float {
+        $base = $cantidad * self::factorPesoBulto($pesoBulto) * $precio;
         if ($descuento > 0) {
             $base -= $base * ($descuento / 100);
         }
@@ -120,9 +143,16 @@ class RecepcionProveedorConversionSupport
     {
         $alias = preg_replace('/[^A-Za-z0-9_]/', '', $aliasLinea) ?: 'rpa';
 
+        $factorPeso = '1';
+        if (EntornoEmpresaSupport::esElBierzo()
+            && Schema::hasColumn('recepcion_proveedor_articulo', 'peso_bulto')) {
+            $factorPeso = 'CASE WHEN COALESCE('.$alias.'.peso_bulto, 0) > 0 THEN '.$alias.'.peso_bulto ELSE 1 END';
+        }
+
         return sprintf(
-            '(%1$s.cantidad * %1$s.precio * (1 - COALESCE(%1$s.descuento, 0) / 100))',
-            $alias
+            '(%1$s.cantidad * (%2$s) * %1$s.precio * (1 - COALESCE(%1$s.descuento, 0) / 100))',
+            $alias,
+            $factorPeso
         );
     }
 
@@ -181,8 +211,9 @@ class RecepcionProveedorConversionSupport
         float $descuento = 0,
         float $descuentoCabeceraOc = 0,
         float $cotizacionLinea = 1.0,
+        mixed $pesoBulto = 0,
     ): float {
-        $importe = self::importeLinea($cantidad, $precio, $descuento, $descuentoCabeceraOc);
+        $importe = self::importeLinea($cantidad, $precio, $descuento, $descuentoCabeceraOc, $pesoBulto);
 
         $cot = $cotizacionLinea;
         if ($cot <= 0) {

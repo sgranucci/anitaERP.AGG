@@ -25,6 +25,7 @@ use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Jurosh\PDFMerge\PDFMerger;
+use Symfony\Component\Process\Process;
 
 class ComprobanteImpresionSesionService
 {
@@ -153,6 +154,120 @@ class ComprobanteImpresionSesionService
     public function generarPdfCot(int $sesionId, ?int $remitoEnvioId = null): string
     {
         return $this->cotConstanciaPdfService->generarPdf($sesionId, $remitoEnvioId);
+    }
+
+    /**
+     * Mismo PDF que la descarga «Pdf» del detalle de la sesión (listado de remitos).
+     */
+    public function generarPdfListadoCot(int $sesionId): string
+    {
+        $sesion = CotSesionEnvio::query()->find($sesionId);
+        if ($sesion === null) {
+            throw new \InvalidArgumentException('No se encontró la sesión de COT #'.$sesionId);
+        }
+
+        $filas = $sesion->remitos()->orderBy('numero_remito')->get();
+        $titulo = 'Detalle sesión COT #'.$sesion->id;
+        $repartoTxt = $sesion->etiquetaRepartos();
+        $subtitulo = 'Fecha facturas: '.$sesion->fecha_facturas?->format('d/m/Y')
+            .' — Envío: '.$sesion->fecha_envio?->format('d/m/Y H:i');
+        if ($repartoTxt !== '') {
+            $subtitulo .= ' — Reparto: '.$repartoTxt;
+        }
+
+        $view = view('ventas.cot_electronico.historico.listado', compact(
+            'filas',
+            'titulo',
+            'subtitulo',
+            'sesion',
+        ))->render();
+
+        $dir = storage_path('pdf/listados');
+        if (! is_dir($dir) && ! mkdir($dir, 0775, true) && ! is_dir($dir)) {
+            throw new \RuntimeException('No se pudo crear el directorio de PDF del listado COT.');
+        }
+
+        $ruta = $dir.DIRECTORY_SEPARATOR.'cot_sesion_'.$sesion->id.'_'.date('Ymd_His').'.pdf';
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('legal', 'landscape');
+        $pdf->loadHTML($view, 'UTF-8')->save($ruta);
+
+        return $ruta;
+    }
+
+    /**
+     * El listado se arma en oficio apaisado. La láser de facturación tiene A4:
+     * si el PDF pide oficio, el trabajo queda esperando esa bandeja y no sale.
+     */
+    private function encajarListadoEnA4(string $ruta): string
+    {
+        $destino = preg_replace('/\.pdf$/', '-a4.pdf', $ruta) ?: ($ruta.'-a4.pdf');
+        $process = new Process([
+            'gs', '-q', '-dSAFER', '-dNOPAUSE', '-dBATCH',
+            '-sDEVICE=pdfwrite',
+            '-dFIXEDMEDIA',
+            '-dPDFFitPage',
+            '-dDEVICEWIDTHPOINTS=842',
+            '-dDEVICEHEIGHTPOINTS=595',
+            '-dAutoRotatePages=/None',
+            '-sOutputFile='.$destino,
+            $ruta,
+        ]);
+        $process->setTimeout(60);
+        $process->run();
+
+        if (! $process->isSuccessful() || ! is_file($destino)) {
+            $detalle = trim($process->getErrorOutput());
+            throw new \RuntimeException(
+                $detalle !== ''
+                    ? 'No se pudo ajustar el listado a A4: '.$detalle
+                    : 'No se pudo ajustar el listado a A4 para la impresora.'
+            );
+        }
+
+        return $destino;
+    }
+
+    /**
+     * Manda a la impresora del usuario el listado de la sesión (el mismo PDF de descarga).
+     *
+     * @return array{ok: bool, mensaje: string, impresora: ?string}
+     */
+    public function imprimirListadoCotDirecto(int $sesionId): array
+    {
+        $resumen = ComprobanteImpresionSalidaUsuarioSupport::resumenImpresora(
+            null,
+            ComprobanteImpresionFormulario::COT
+        );
+        $salidaId = (int) ($resumen['salida_id'] ?? 0);
+        if ($salidaId < 1) {
+            throw new \InvalidArgumentException(
+                'No hay impresora asignada para el listado COT. Configure Mi impresora.'
+            );
+        }
+
+        $salida = Salida::query()->find($salidaId);
+        if ($salida === null || ! SalidaImpresionFallbackSupport::comandoPdfCompatible($salida)) {
+            throw new \InvalidArgumentException(
+                'La impresora asignada no sirve para imprimir el listado COT.'
+            );
+        }
+
+        $ruta = $this->encajarListadoEnA4($this->generarPdfListadoCot($sesionId));
+        $despacho = ComprobanteImpresionDespachoSupport::despachar($ruta, $salida, null);
+        if (! $despacho['ok']) {
+            throw new \RuntimeException($despacho['mensaje']);
+        }
+
+        $nombre = trim((string) ($resumen['nombre'] ?? $salida->nombre));
+
+        return [
+            'ok' => true,
+            'mensaje' => $nombre !== ''
+                ? 'Listado COT enviado a '.$nombre.'.'
+                : 'Listado COT enviado a la impresora.',
+            'impresora' => $nombre !== '' ? $nombre : null,
+        ];
     }
 
     /**
@@ -446,6 +561,7 @@ class ComprobanteImpresionSesionService
      */
     public function ejecutarPapelYNasDiferido(array $sesion, array $partes, string $modo, ?int $usuarioId): void
     {
+        $this->ampliarLimitePdfLote();
         ini_set('memory_limit', '512M');
         $pack = $sesion['pack'] ?? [];
         $resultados = [];
@@ -519,6 +635,8 @@ class ComprobanteImpresionSesionService
      */
     public function asegurarPdfSesionPapel(array $sesion, ?array $soloPackIdxs = null): ?string
     {
+        $this->ampliarLimitePdfLote();
+
         if (! empty($sesion['lote_venta_ids'])) {
             $expandida = $this->expandirPackLote($sesion, $soloPackIdxs);
             unset($expandida['lote_venta_ids']);
@@ -939,22 +1057,32 @@ class ComprobanteImpresionSesionService
     }
 
     /**
+     * Una factura (varias copias) sale de un solo contexto: el QR y DomPDF no se rehacen por copia.
+     * Un reparto agrupa por venta; si no, cada copia volvía a armar el comprobante y PHP cortaba a los 30 s.
+     *
      * @param  array<string, mixed>  $sesion
-     * @return array<int, string>
-     */
-    /**
      * @param  list<int>|null  $soloPackIdxs
+     * @return array<int, string>
      */
     private function generarPdfsLoteFactura(array $sesion, ?array $soloPackIdxs = null): array
     {
-        $trabajos = [];
+        $ventaSesion = (int) (($sesion['documentos'][ComprobanteImpresionFormulario::FACTURA]['id'] ?? 0)
+            ?: (($sesion['origen_tipo'] ?? '') === 'FACTURA' ? ($sesion['origen_id'] ?? 0) : 0));
+
+        $porVenta = [];
         foreach ($sesion['pack'] ?? [] as $idx => $linea) {
-            if ($soloPackIdxs !== null && ! in_array($idx, $soloPackIdxs, true)) {
+            if ($soloPackIdxs !== null && ! in_array((int) $idx, $soloPackIdxs, true)) {
                 continue;
             }
             $formulario = (string) ($linea['formulario'] ?? '');
+            $ventaId = 0;
+            $trabajo = null;
             if ($formulario === ComprobanteImpresionFormulario::FACTURA) {
-                $trabajos[$idx] = [
+                $ventaId = (int) ($linea['documento_id'] ?? 0);
+                if ($ventaId <= 0) {
+                    $ventaId = $ventaSesion;
+                }
+                $trabajo = [
                     'leyenda' => (string) ($linea['leyenda'] ?? 'ORIGINAL'),
                     'omitir_remito' => true,
                     'solo_remito' => false,
@@ -965,67 +1093,41 @@ class ComprobanteImpresionSesionService
                     $ventaId = $this->ventaIdDeRemito((int) ($linea['documento_id'] ?? 0));
                 }
                 if ($ventaId > 0) {
-                    $trabajos[$idx] = [
+                    $trabajo = [
                         'leyenda' => (string) ($linea['leyenda'] ?? 'ORIGINAL'),
                         'omitir_remito' => false,
                         'solo_remito' => true,
                     ];
                 }
             }
+            if ($ventaId <= 0 || $trabajo === null) {
+                continue;
+            }
+            $porVenta[$ventaId][(int) $idx] = $trabajo;
         }
-        if ($trabajos === []) {
+        if ($porVenta === []) {
             return [];
         }
 
-        $ventaIdsPack = [];
-        foreach ($sesion['pack'] ?? [] as $linea) {
-            if (($linea['formulario'] ?? '') === ComprobanteImpresionFormulario::FACTURA) {
-                $vid = (int) ($linea['documento_id'] ?? 0);
-                if ($vid > 0) {
-                    $ventaIdsPack[$vid] = true;
+        $rutas = [];
+        foreach ($porVenta as $ventaId => $trabajos) {
+            try {
+                $ctx = $this->facturacionService->prepararContextoPdfFactura((int) $ventaId);
+                foreach ($this->facturacionService->renderPdfFacturaLote($ctx, $trabajos) as $idx => $ruta) {
+                    $rutas[$idx] = $ruta;
                 }
+            } catch (\Throwable $e) {
+                report($e);
             }
         }
-        if (count($ventaIdsPack) > 1) {
-            return [];
-        }
 
-        $ventaId = (int) (($sesion['documentos'][ComprobanteImpresionFormulario::FACTURA]['id'] ?? 0)
-            ?: (($sesion['origen_tipo'] ?? '') === 'FACTURA' ? ($sesion['origen_id'] ?? 0) : 0));
-        if ($ventaId <= 0) {
-            foreach ($sesion['pack'] ?? [] as $linea) {
-                if (($linea['formulario'] ?? '') === ComprobanteImpresionFormulario::FACTURA) {
-                    $ventaId = (int) ($linea['documento_id'] ?? 0);
-                    break;
-                }
-            }
-        }
-        if ($ventaId <= 0) {
-            foreach ($sesion['pack'] ?? [] as $linea) {
-                if (($linea['formulario'] ?? '') === ComprobanteImpresionFormulario::REMITO) {
-                    $ventaId = (int) ($linea['venta_id_directa'] ?? 0);
-                    if ($ventaId <= 0) {
-                        $ventaId = $this->ventaIdDeRemito((int) ($linea['documento_id'] ?? 0));
-                    }
-                    if ($ventaId > 0) {
-                        break;
-                    }
-                }
-            }
-        }
-        if ($ventaId <= 0) {
-            return [];
-        }
+        return $rutas;
+    }
 
-        try {
-            $ctx = $this->facturacionService->prepararContextoPdfFactura($ventaId);
-
-            return $this->facturacionService->renderPdfFacturaLote($ctx, $trabajos);
-        } catch (\Throwable $e) {
-            report($e);
-
-            return [];
-        }
+    private function ampliarLimitePdfLote(): void
+    {
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
     }
 
     private function ventaIdDeRemito(int $remitoId): int

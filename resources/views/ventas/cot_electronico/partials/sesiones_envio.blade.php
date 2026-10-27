@@ -116,6 +116,10 @@
                                         <i class="fas fa-file-excel"></i>
                                     </a>
                                 @endif
+                                <a href="{{ route('sesion_impresion_cot', ['id' => $sesion->id, 'reporte' => 1]) }}"
+                                    class="btn btn-outline-info btn-sm" title="Imprimir el listado de la sesi&oacute;n (el mismo PDF)">
+                                    <i class="fa fa-list"></i>
+                                </a>
                                 <a href="{{ route('listar_cot_electronico_sesion', ['formato' => 'PDF', 'id' => $sesion->id]) }}"
                                     class="btn btn-outline-secondary btn-sm" title="Exportar PDF" target="_blank" rel="noopener">
                                     <i class="fa fa-file-pdf"></i>

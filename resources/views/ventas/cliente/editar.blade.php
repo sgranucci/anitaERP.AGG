@@ -59,6 +59,7 @@
 @section('contenido')
 @php
     $volverListadoUrl = route('cliente', $filtrosQuery ?? []);
+    $retornoCc = \App\Support\Listado\QueryRetornoListado::queryStringDesdeRequestActual();
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -108,7 +109,7 @@
                         </button>
                     @endif
                     @if (can('listar-cuentacorriente-cliente', false))
-                        <a href="{{route('listar_cuentacorriente_cliente', ['id' => $data->id])}}" target="_blank" class="btn btn-secondary btn-sm" title="Cuenta Corriente">
+                        <a href="{{ route('listar_cuentacorriente_cliente', array_merge(['id' => $data->id], $retornoCc !== '' ? ['retorno' => $retornoCc] : [])) }}" target="_blank" class="btn btn-secondary btn-sm" title="Cuenta Corriente">
                             <i class="fa fa-folder-open">Cuenta Corriente</i>
                         </a>
                     @endif

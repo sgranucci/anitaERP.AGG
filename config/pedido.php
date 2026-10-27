@@ -18,7 +18,9 @@ $base = [
 
 if (config('app.empresa') == 'EL BIERZO') {
     return array_merge($base, [
-        'impresora_default' => 'BIE_PS_229',
+        // Cola CUPS del entrepiso para emitir pedidos (ubicación «Entrepiso (Emilio)»).
+        // PedidoImpresoraDefaultSupport la asigna al entrar al index si el usuario no tiene impresora de pedidos.
+        'impresora_default' => 'BIE_PS_224',
         'variante' => 'bierzo',
     ]);
 }

@@ -461,6 +461,20 @@ class RecepcionProveedorFormItemsSupport
     }
 
     /** @return array<string, mixed> */
+    public static function fechaVtoIso(mixed $fecha): string
+    {
+        if ($fecha instanceof \DateTimeInterface) {
+            return $fecha->format('Y-m-d');
+        }
+
+        $texto = trim((string) $fecha);
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $texto)) {
+            return substr($texto, 0, 10);
+        }
+
+        return '';
+    }
+
     private static function mapearLineaRecepcionParaGrilla(\App\Models\Stock\Recepcion_Proveedor_Articulo $linea): array
     {
         $cantLinea = (float) ($linea->cantidad ?? 0) + (float) ($linea->cantidad_rechazada ?? 0);
@@ -498,6 +512,11 @@ class RecepcionProveedorFormItemsSupport
             'accion_linea_oc' => $accion,
             'fl_cerrar_linea_oc' => (bool) ($linea->fl_cerrar_linea_oc ?? false),
             'comentario_diferencia' => $linea->comentario_diferencia ?? '',
+            'peso_bulto' => $linea->peso_bulto !== null && $linea->peso_bulto !== ''
+                ? (float) $linea->peso_bulto
+                : '',
+            'lote_proveedor' => RecepcionProveedorAnitaLoteSupport::loteTexto($linea->lote_proveedor ?? ''),
+            'fecha_vto' => self::fechaVtoIso($linea->fecha_vto ?? null),
         ]);
     }
 }

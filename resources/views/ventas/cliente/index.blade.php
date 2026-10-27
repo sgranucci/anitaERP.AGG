@@ -32,9 +32,11 @@ Clientes
     use App\Support\Configuracion\EntornoEmpresaSupport;
 
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $retornoCc = \App\Support\Listado\QueryRetornoListado::queryStringDesdeRequestActual();
     $limpiarUrl = route('cliente');
     $esBierzo = EntornoEmpresaSupport::esElBierzo();
     $filtroCodigo = trim((string) ($filtros['codigo'] ?? ''));
+    $filtroNombre = trim((string) ($filtros['nombre'] ?? ''));
     $columnasVisibles = $columnasVisibles ?? ClienteListadoColumnas::defaultsVisibles();
     $catalogoColumnas = $catalogoColumnas ?? ClienteListadoColumnas::catalogoActivo();
     $etiquetasColumnas = $etiquetasColumnas ?? [];
@@ -81,8 +83,8 @@ Clientes
                     <input type="hidden" name="vista_id" value="{{ $vistaActiva->id }}">
                 @endif
 
-                <div class="lw-toolbar">
-                    <div class="lw-toolbar-left">
+                <div class="lw-toolbar lw-toolbar-clientes">
+                    <div class="lw-toolbar-vista">
                         <select id="lw-vista-select" class="form-control form-control-sm lw-vista-select"
                                 data-base-url="{{ route('cliente') }}"
                                 title="Vistas guardadas"
@@ -100,6 +102,9 @@ Clientes
                                 </option>
                             @endforeach
                         </select>
+                    </div>
+                    <div class="lw-toolbar-main">
+                        <div class="lw-toolbar-acciones">
                         <button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#modal-lw-grilla"
                                 @if (! $workbenchListo) disabled title="Requiere migración" @endif>
                             <i class="fa fa-th"></i> Diseñar vista
@@ -114,8 +119,8 @@ Clientes
                                 @if (! $workbenchListo) disabled title="Requiere migración" @endif>
                             <i class="fa fa-font"></i> Defaults instalación
                         </button>
-                    </div>
-                    <div class="lw-toolbar-right">
+                        </div>
+                    <div class="lw-toolbar-right lw-toolbar-busqueda">
                         @if ($esBierzo)
                             <input type="text" name="filtro_codigo" id="filtro_codigo"
                                    class="form-control form-control-sm"
@@ -124,6 +129,13 @@ Clientes
                                    placeholder="Código"
                                    autocomplete="off"
                                    title="Filtrar por código de cliente">
+                            <input type="text" name="filtro_nombre" id="filtro_nombre"
+                                   class="form-control form-control-sm"
+                                   style="width:180px;"
+                                   value="{{ $filtroNombre }}"
+                                   placeholder="Nombre"
+                                   autocomplete="off"
+                                   title="Filtrar por nombre de cliente">
                         @endif
                         <input type="search" id="lw-search-rapida" class="form-control form-control-sm lw-search-rapida"
                                value="{{ ($filtros['modo'] ?? '') !== 'qbe' ? ($filtros['valor'] ?? '') : '' }}"
@@ -132,11 +144,19 @@ Clientes
                         <button type="button" id="btn-lw-buscar-rapida" class="btn btn-sm btn-primary">
                             <i class="fa fa-search"></i>
                         </button>
-                        @if ($tieneQbe || (($filtros['valor'] ?? '') !== '') || $filtroCodigo !== '')
+                        @if ($tieneQbe || (($filtros['valor'] ?? '') !== '') || $filtroCodigo !== '' || $filtroNombre !== '')
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
                                 <i class="fa fa-eraser"></i> Limpiar
                             </a>
                         @endif
+                    </div>
+                    </div>
+                    <div class="lw-toolbar-export">
+                        @include('includes.exportar-tabla-queryparams', [
+                            'ruta' => 'lista_cliente',
+                            'queryparams' => $filtrosQuery ?? [],
+                            'variant' => 'compact',
+                        ])
                     </div>
                 </div>
 
@@ -152,6 +172,9 @@ Clientes
                     <div class="lw-chips">
                         @if ($filtroCodigo !== '')
                             <span class="lw-chip"><strong>Código</strong> {{ $filtroCodigo }}</span>
+                        @endif
+                        @if ($filtroNombre !== '')
+                            <span class="lw-chip"><strong>Nombre</strong> {{ $filtroNombre }}</span>
                         @endif
                         @if (($filtros['modo'] ?? '') === 'qbe')
                             @php
@@ -244,10 +267,6 @@ Clientes
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
             <div class="card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_cliente',
-                    'queryparams' => $filtrosQuery ?? [],
-                ])
                 <table class="table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
@@ -354,7 +373,7 @@ Clientes
                                                 </a>
                                             @endif
                                             @if (can('listar-cuentacorriente-cliente', false))
-                                                <a href="{{ route('listar_cuentacorriente_cliente', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente">
+                                                <a href="{{ route('listar_cuentacorriente_cliente', array_merge(['id' => $data->id], $retornoCc !== '' ? ['retorno' => $retornoCc] : [])) }}" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente">
                                                     <i class="fa fa-folder-open"></i>
                                                 </a>
                                             @endif

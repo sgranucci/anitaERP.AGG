@@ -33,6 +33,10 @@
                                 class="btn btn-outline-danger btn-sm">
                                 <i class="fa fa-file-pdf"></i> PDF constancia
                             </a>
+                            <a href="{{ route('sesion_impresion_cot', ['id' => $resultadoProceso['sesion_id'], 'reporte' => 1]) }}"
+                                class="btn btn-info btn-sm" title="Enviar a la impresora el mismo listado que el PDF">
+                                <i class="fa fa-print"></i> Imprimir reporte
+                            </a>
                         </div>
                     @endif
                 @endif

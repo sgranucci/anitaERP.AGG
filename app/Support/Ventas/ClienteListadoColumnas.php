@@ -68,7 +68,7 @@ final class ClienteListadoColumnas
             'default' => true,
             'export' => true,
             'filterable' => true,
-            'type' => 'texto',
+            'type' => 'entero',
             'source' => 'cliente.codigo',
             'attr' => 'codigo',
             'group' => self::GRUPO_IDENTIFICACION,

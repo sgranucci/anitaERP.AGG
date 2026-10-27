@@ -76,6 +76,11 @@ switch(config('app.empresa'))
             'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => 'SI',
             'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['luisav@elbierzo.com.ar', 'claudiam@elbierzo.com.ar', 'carolinal@elbierzo.com.ar'],
             'SINCRONIZA_CLIMA_ANITA' => true,
+            // Serie propia de empleados (14000–14500) en sistema_numerador.
+            // Quién elige Cliente o Empleado: permiso elegir-numeracion-cliente-empleado.
+            // El rol administrador pasa por can() sin fila en permiso_rol.
+            'SECUENCIA_EMPLEADO_DESDE' => 14000,
+            'SECUENCIA_EMPLEADO_HASTA' => 14500,
             // EL BIERZO: permite CUIT duplicados por defecto (override con CLIENTE_PERMITIR_CUIT_DUPLICADO=false)
             'permitir_cuit_duplicado' => filter_var(env('CLIENTE_PERMITIR_CUIT_DUPLICADO', true), FILTER_VALIDATE_BOOLEAN),
             // Coeficiente extra (clim_coef_extra). Solo lectura en ABM; se asigna en altas.

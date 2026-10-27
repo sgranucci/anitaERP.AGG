@@ -89,6 +89,15 @@
             return;
         }
 
+        $('#filtro_codigo, #filtro_nombre').on('keydown', function (e) {
+            if (e.key !== 'Enter') {
+                return;
+            }
+            e.preventDefault();
+            syncColumnasHidden();
+            $('#form-filtros-cliente').trigger('submit');
+        });
+
         $('#lw-search-rapida').on('keydown', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();

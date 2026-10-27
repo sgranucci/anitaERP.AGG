@@ -27,6 +27,7 @@ class QueryRetornoListado
             'filtro_valor_hasta',
             'filtro_busqueda_rapida',
             'filtro_codigo',
+            'filtro_nombre',
             'filtro_reparto',
             'filtro_orden',
             'fecha_desde',
@@ -124,6 +125,21 @@ class QueryRetornoListado
         }
 
         return $query;
+    }
+
+    /**
+     * Query string del listado actual, para colgarla en un link (cuenta corriente, etc.)
+     * y volver al index con los mismos filtros. No arrastra modo consulta.
+     */
+    public static function queryStringDesdeRequestActual(): string
+    {
+        $query = request()->query();
+        unset($query['origen'], $query['embed'], $query['retorno']);
+        if (($query['vista'] ?? null) === 'consulta') {
+            unset($query['vista']);
+        }
+
+        return http_build_query($query);
     }
 
     public static function esModalConsulta(Request $request): bool

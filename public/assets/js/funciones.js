@@ -428,8 +428,9 @@ function asignarCantidadBultoDesdePedido(totalCajasLineas) {
         return;
     }
     var importado = $('#caja_reales').val();
-    if (importado !== '' && importado !== undefined && !isNaN(parseInt(importado, 10))) {
-        $campo.val(normalizarCantidadBulto(importado));
+    var reales = parseInt(importado, 10);
+    if (importado !== '' && importado !== undefined && !isNaN(reales) && reales > 0) {
+        $campo.val(normalizarCantidadBulto(reales));
         return;
     }
     $campo.val(normalizarCantidadBulto(totalCajasLineas));

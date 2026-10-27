@@ -44,6 +44,11 @@
     @if (! $modoEmbed)
         <link rel="stylesheet" href="{{ asset('assets/css/barra-tareas.css') }}?v={{ @filemtime(public_path('assets/css/barra-tareas.css')) ?: time() }}">
     @endif
+    @auth
+        @if (! $modoEmbed && ! $modoConsulta)
+            <link rel="stylesheet" href="{{ asset('assets/css/buscador-global.css') }}?v={{ @filemtime(public_path('assets/css/buscador-global.css')) ?: time() }}">
+        @endif
+    @endauth
     <link rel="stylesheet" href="{{ asset('assets/css/erp-workspace-panel.css') }}?v={{ @filemtime(public_path('assets/css/erp-workspace-panel.css')) ?: time() }}">
     @auth
         @if (!$modoConsulta && !$modoEmbed && can('ejecutar-consulta-ia', false) && filter_var(config('ai.habilitado', false), FILTER_VALIDATE_BOOLEAN) && filter_var(config('ai.skills.consultar_contexto_operativo.habilitada', false), FILTER_VALIDATE_BOOLEAN))
@@ -255,6 +260,7 @@
         @if (! $modoEmbed)
             <script src="{{ asset('assets/js/barra-tareas.js') }}"></script>
             @if (!$modoConsulta)
+                <script src="{{ asset('assets/js/buscador-global.js') }}?v={{ @filemtime(public_path('assets/js/buscador-global.js')) ?: time() }}"></script>
                 <script src="{{ asset('assets/js/mis-aprobaciones-badge.js') }}?v={{ @filemtime(public_path('assets/js/mis-aprobaciones-badge.js')) ?: time() }}"></script>
                 <script src="{{ asset('assets/js/ticket-bandeja-badge.js') }}?v={{ @filemtime(public_path('assets/js/ticket-bandeja-badge.js')) ?: time() }}"></script>
                 <script src="{{ asset('assets/js/anita-notificaciones.js') }}?v={{ @filemtime(public_path('assets/js/anita-notificaciones.js')) ?: time() }}"></script>

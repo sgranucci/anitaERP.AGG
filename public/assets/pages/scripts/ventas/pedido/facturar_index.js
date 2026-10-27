@@ -44,6 +44,8 @@
         $('#factura_pedido_moneda_id').val(data.moneda_id || '');
         $('#factura_pedido_cotizacion').val(data.cotizacion || '');
         $('#factura_pedido_moneda_etiqueta').val(data.moneda_etiqueta || data.moneda_abreviatura || '');
+        var reales = data.caja_reales;
+        $('#caja_reales').val(reales === null || reales === undefined || reales === '' ? '' : reales);
         $('#totalcajaspedido').val((data.totales && data.totales.caja) || '0');
         $('#totalpiezaspedido').val((data.totales && data.totales.pieza) || '0');
         $('#totalkilospesados').val((data.totales && (data.totales.pesada || data.totales.cantidad)) || '0');

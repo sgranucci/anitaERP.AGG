@@ -81,7 +81,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                     ->where('cobranza_id', $cobranza_id)->with('ventas')->with('monedas')->get();
     }
 
-    public function listarCuentaCorriente($busqueda, $cliente_id, $paginar = true, ?int $monedaId = null)
+    public function listarCuentaCorriente($busqueda, $cliente_id, $paginar = true, ?int $monedaId = null, ?int $empresaId = null)
     {
         $busqueda = trim((string) $busqueda);
 
@@ -91,6 +91,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
 
         ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
         $this->aplicarFiltroMoneda($query, $monedaId);
+        $this->aplicarFiltroEmpresa($query, $empresaId);
 
         if ($busqueda !== '') {
             $query->where(function ($q) use ($busqueda) {
@@ -114,7 +115,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
         return $paginar ? $query->paginate(10) : $query->get();
     }
 
-    public function listarDeudaCliente($busqueda, $cliente_id, $paginar = true, ?int $monedaId = null)
+    public function listarDeudaCliente($busqueda, $cliente_id, $paginar = true, ?int $monedaId = null, ?int $empresaId = null)
     {
         $busqueda = trim((string) $busqueda);
 
@@ -132,6 +133,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
         ClienteCuentacorrienteDeudaAlcanceSupport::aplicar($query);
 
         $this->aplicarFiltroMoneda($query, $monedaId);
+        $this->aplicarFiltroEmpresa($query, $empresaId);
 
         if ($busqueda !== '') {
             $query->where(function ($q) use ($busqueda) {
@@ -164,7 +166,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
     /**
      * @return list<array{moneda_id: int, abreviatura: string, saldo_cc: float}>
      */
-    public function calcularSaldosPorMoneda(int $cliente_id): array
+    public function calcularSaldosPorMoneda(int $cliente_id, ?int $empresaId = null): array
     {
         $filasQuery = $this->model->query()
             ->selectRaw('cliente_cuentacorriente.moneda_id as moneda_id')
@@ -173,6 +175,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
             ->leftJoin('moneda', 'moneda.id', '=', 'cliente_cuentacorriente.moneda_id')
             ->where('cliente_cuentacorriente.cliente_id', $cliente_id);
         ClienteCuentacorrienteRemitoInternoSupport::excluir($filasQuery);
+        $this->aplicarFiltroEmpresa($filasQuery, $empresaId);
         $filas = $filasQuery
             ->groupBy('cliente_cuentacorriente.moneda_id')
             ->orderBy('cliente_cuentacorriente.moneda_id')
@@ -204,19 +207,19 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
     /**
      * @return list<array{moneda_id: int, abreviatura: string, deuda: float}>
      */
-    public function calcularDeudasPorMoneda(int $cliente_id): array
+    public function calcularDeudasPorMoneda(int $cliente_id, ?int $empresaId = null): array
     {
-        return CuentacorrienteSaldosPorMoneda::deudaDesdeFilas($this->filasDeudaCliente($cliente_id));
+        return CuentacorrienteSaldosPorMoneda::deudaDesdeFilas($this->filasDeudaCliente($cliente_id, null, $empresaId));
     }
 
     /**
      * @return list<array{moneda_id: int, abreviatura: string, saldo_cc: float, deuda: float}>
      */
-    public function calcularSaldosYDeudasPorMoneda(int $cliente_id): array
+    public function calcularSaldosYDeudasPorMoneda(int $cliente_id, ?int $empresaId = null): array
     {
         return CuentacorrienteSaldosPorMoneda::consolidar(
-            $this->calcularSaldosPorMoneda($cliente_id),
-            $this->calcularDeudasPorMoneda($cliente_id),
+            $this->calcularSaldosPorMoneda($cliente_id, $empresaId),
+            $this->calcularDeudasPorMoneda($cliente_id, $empresaId),
         );
     }
 
@@ -245,7 +248,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
     /**
      * @return array<int, float>
      */
-    public function saldosAnterioresPorMoneda(int $cliente_id, $primerRegistro, ?int $monedaId = null): array
+    public function saldosAnterioresPorMoneda(int $cliente_id, $primerRegistro, ?int $monedaId = null, ?int $empresaId = null): array
     {
         if ($primerRegistro === null) {
             return [];
@@ -265,6 +268,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
 
         ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
         $this->aplicarFiltroMoneda($query, $monedaId);
+        $this->aplicarFiltroEmpresa($query, $empresaId);
         $query->groupBy('cliente_cuentacorriente.moneda_id');
 
         $saldos = [];
@@ -278,7 +282,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
     /**
      * @return array{saldo_cc: float, deuda: float, abreviatura: string}
      */
-    public function calcularEquivalentePesos(int $cliente_id, ?int $monedaId = null): array
+    public function calcularEquivalentePesos(int $cliente_id, ?int $monedaId = null, ?int $empresaId = null): array
     {
         $movimientos = $this->model->query()
             ->select('cliente_cuentacorriente.total', 'cliente_cuentacorriente.moneda_id', 'cliente_cuentacorriente.cotizacion')
@@ -286,14 +290,15 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
 
         ClienteCuentacorrienteRemitoInternoSupport::excluir($movimientos);
         $this->aplicarFiltroMoneda($movimientos, $monedaId);
+        $this->aplicarFiltroEmpresa($movimientos, $empresaId);
 
         return CuentacorrienteSaldosPorMoneda::equivalenteDesdeFilas(
             $movimientos->get(),
-            $this->filasDeudaCliente($cliente_id, $monedaId),
+            $this->filasDeudaCliente($cliente_id, $monedaId, $empresaId),
         );
     }
 
-    public function saldoAnteriorPaginaEnPesos(int $cliente_id, $primerRegistro, ?int $monedaId = null): float
+    public function saldoAnteriorPaginaEnPesos(int $cliente_id, $primerRegistro, ?int $monedaId = null, ?int $empresaId = null): float
     {
         if ($primerRegistro === null) {
             return 0.0;
@@ -312,6 +317,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
 
         ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
         $this->aplicarFiltroMoneda($query, $monedaId);
+        $this->aplicarFiltroEmpresa($query, $empresaId);
 
         return CuentacorrienteSaldosPorMoneda::saldoAnteriorEnPesosDe($query->get(), $primerRegistro, $monedaId);
     }
@@ -319,7 +325,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
     /**
      * @return \Illuminate\Support\Collection<int, Cliente_Cuentacorriente>
      */
-    private function filasDeudaCliente(int $cliente_id, ?int $monedaId = null)
+    private function filasDeudaCliente(int $cliente_id, ?int $monedaId = null, ?int $empresaId = null)
     {
         $query = $this->model->query()
             ->select(
@@ -340,6 +346,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
         ClienteCuentacorrienteDeudaAlcanceSupport::aplicar($query);
 
         $this->aplicarFiltroMoneda($query, $monedaId);
+        $this->aplicarFiltroEmpresa($query, $empresaId);
 
         return $query->get();
     }
@@ -351,6 +358,13 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
     {
         if ($monedaId !== null && $monedaId > 0) {
             $query->where('cliente_cuentacorriente.moneda_id', $monedaId);
+        }
+    }
+
+    private function aplicarFiltroEmpresa($query, ?int $empresaId): void
+    {
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('cliente_cuentacorriente.empresa_id', $empresaId);
         }
     }
 

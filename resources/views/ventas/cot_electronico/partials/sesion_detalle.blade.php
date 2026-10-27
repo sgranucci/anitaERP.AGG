@@ -56,6 +56,10 @@
                         <i class="fas fa-file-excel"></i> Suburbano
                     </a>
                 @endif
+                <a href="{{ route('sesion_impresion_cot', ['id' => $sesionDetalle->id, 'reporte' => 1]) }}"
+                    class="btn btn-app bg-info" title="Enviar a la impresora el mismo listado que el PDF">
+                    <i class="fa fa-print"></i> Reporte
+                </a>
                 <a href="{{ route('listar_cot_electronico_sesion', ['id' => $sesionDetalle->id, 'formato' => 'PDF']) }}"
                     class="btn btn-app bg-danger" target="_blank" rel="noopener">
                     <i class="fas fa-file-pdf"></i> Pdf

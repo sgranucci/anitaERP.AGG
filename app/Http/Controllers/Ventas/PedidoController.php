@@ -25,8 +25,10 @@ use App\Support\Listado\QueryRetornoListado;
 use App\Support\Ventas\KiloPedidoListadoFiltros;
 use App\Support\Ventas\KiloCategoriaListadoFiltros;
 use App\Support\Ventas\ListadoRepartoFechaEntregaSupport;
+use App\Support\Ventas\PedidoImpresoraDefaultSupport;
 use App\Support\Ventas\PedidoListadoFiltros;
 use App\Support\Ventas\PedidoListadoSupport;
+use App\Support\Ventas\PuntoventaRemitoSupport;
 use App\Support\Ventas\ComprobanteImpresionSesionUrlSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
@@ -171,6 +173,8 @@ class PedidoController extends Controller
     {
 		can('listar-pedidos');
 
+		PedidoImpresoraDefaultSupport::asegurarParaUsuarioActual();
+
 		$filtros = PedidoListadoFiltros::resolverDesdeRequest($request);
 		$filtrosQuery = PedidoListadoFiltros::paraQueryString($filtros);
 		$pedidos = $this->pedidoService->leePedidosIndex($filtros, true);
@@ -244,6 +248,11 @@ class PedidoController extends Controller
 		if ($tipotransaccionId <= 0 || $puntoventaId <= 0 || $puntoventaremitoId <= 0) {
 			return response()->json([
 				'error' => 'Debe indicar tipo de transacción, punto de venta de factura y punto de venta del remito.',
+			], 422);
+		}
+		if ($errorRemito = PuntoventaRemitoSupport::errorSiNoHabilitado($puntoventaremitoId)) {
+			return response()->json([
+				'error' => $errorRemito,
 			], 422);
 		}
 		if ($actividadArcaId <= 0) {

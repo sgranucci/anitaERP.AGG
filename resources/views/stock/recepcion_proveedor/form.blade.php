@@ -93,6 +93,8 @@
                 'talle_nombre' => optional($l->talle)->nombre ?? '',
                 'maneja_stock_color_talle' => (bool) (optional($l->articulos)->maneja_stock_color_talle
                     ?? (($l->color_id || $l->talle_id) ? true : false)),
+                'lote_proveedor' => \App\Support\Stock\RecepcionProveedorAnitaLoteSupport::loteTexto($l->lote_proveedor ?? ''),
+                'fecha_vto' => RecepcionProveedorFormItemsSupport::fechaVtoIso($l->fecha_vto ?? null),
             ]);
         })->values()->all();
         $items = RecepcionProveedorFormItemsSupport::enriquecerItemsParaVista(
@@ -455,6 +457,10 @@
                 <th class="col-num">#</th>
                 <th class="col-art">Art.</th>
                 <th class="col-desc">Descripci&oacute;n</th>
+                @if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
+                <th class="col-lote" title="Lote del proveedor. Anita lo muestra al emitir la etiqueta.">Lote</th>
+                <th class="col-vto" title="Vencimiento del lote">Vto.</th>
+                @endif
                 <th class="col-color ms-col-color-talle" style="display:none;">Color</th>
                 <th class="col-talle ms-col-color-talle" style="display:none;">Talle</th>
                 <th class="col-qty text-right" title="{{ ($modoDevolucion ?? false) ? 'Cantidad recepcionada en el COM origen' : 'Cantidad pedida en la OC; si ya hubo recepciones confirmadas muestra ingresada y pendiente' }}">
@@ -463,12 +469,15 @@
                 <th class="col-qty" title="{{ ($modoDevolucion ?? false) ? 'Cantidad a devolver (no puede superar lo recepcionado)' : 'Cantidad del remito en unidad de compra (ver columna Conversi&oacute;n)' }}">
                     {{ ($modoDevolucion ?? false) ? 'Cant. a devolver' : 'Cant. recibida' }}
                 </th>
+                @if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
+                <th class="col-peso" title="Peso de cada bulto. El total de la l&iacute;nea es bultos &times; este peso &times; precio.">Peso/bulto</th>
+                @endif
                 @if(!($modoDevolucion ?? false))
                 <th class="col-qty" title="Cantidad rechazada en la misma unidad de compra">Rechaz.</th>
                 @endif
                 <th class="col-conv text-right" title="Si el artículo tiene articulo_proveedor: UM compra del catálogo × coeficiente → cantidad en UM stock. Sin catálogo, coef = 1.">Conversi&oacute;n</th>
                 <th class="col-precio text-right" title="Precio unitario seg&uacute;n remito/factura">Precio rec.</th>
-                <th class="col-importe text-right" title="Cantidad recibida &times; precio recepci&oacute;n">Total l&iacute;nea</th>
+                <th class="col-importe text-right" title="{{ \App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo() ? 'Bultos × peso por bulto × precio. Sin peso: cantidad × precio.' : 'Cantidad recibida × precio recepción' }}">Total l&iacute;nea</th>
                 <th class="col-mon" title="Moneda / cotizaci&oacute;n">Mon./Cot.</th>
                 <th class="col-dep" title="Dep&oacute;sito">Dep.</th>
                 @if(!($modoDevolucion ?? false))
@@ -501,7 +510,11 @@
     </div>
     <div class="text-right">
         <span class="text-muted mr-2">Total recepci&oacute;n</span>
+        @if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
+        <span class="text-muted small d-block">(bultos &times; peso por bulto &times; precio)</span>
+        @else
         <span class="text-muted small d-block">(cantidad recibida &times; precio remito)</span>
+        @endif
         <strong id="recepcion-total-recepcion" class="h5 mb-0 text-primary d-block mt-1">—</strong>
     </div>
 </div>
@@ -517,9 +530,12 @@
     #tabla-items-recepcion .col-num { width: 2.25rem; }
     #tabla-items-recepcion .col-art { width: 11rem; min-width: 9rem; }
     #tabla-items-recepcion .col-desc { min-width: 6rem; max-width: 14rem; }
+    #tabla-items-recepcion .col-lote { width: 8.5rem; min-width: 7.5rem; }
+    #tabla-items-recepcion .col-vto { width: 8.25rem; }
     #tabla-items-recepcion .col-color,
     #tabla-items-recepcion .col-talle { width: 5.5rem; min-width: 4.5rem; }
     #tabla-items-recepcion .col-qty { width: 6.5rem; }
+    #tabla-items-recepcion .col-peso { width: 5.5rem; min-width: 4.75rem; }
     #tabla-items-recepcion .col-conv { width: 5.75rem; min-width: 5.25rem; }
     #tabla-items-recepcion .col-precio { width: 6.25rem; min-width: 5.5rem; }
     #tabla-items-recepcion .col-importe { width: 7.75rem; min-width: 7.25rem; }
@@ -717,6 +733,8 @@
 
 <script>
     window.recepcionProveedorItemsInicial = @json($items);
+    window.recepcionProveedorGrabaLoteAnita = @json(\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo());
+    window.recepcionProveedorPesoBulto = @json(\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo());
     window.recepcionProveedorModoDevolucion = @json($modoDevolucion ?? false);
     window.recepcionProveedorSoloLectura = @json($soloLectura);
     window.recepcionProveedorId = @json($recepcion->id ?? null);

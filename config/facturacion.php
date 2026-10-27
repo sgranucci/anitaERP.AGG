@@ -104,6 +104,9 @@ switch(strtoupper(config('app.empresa')))
             "pedido_emision_profile_live" => filter_var(env('FACTURACION_PEDIDO_PROFILE_LIVE', true), FILTER_VALIDATE_BOOLEAN),
             "pedido_emision_profile_en_respuesta" => filter_var(env('FACTURACION_PEDIDO_PROFILE_EN_RESPUESTA', false), FILTER_VALIDATE_BOOLEAN),
             "pedido_emision_umbral_advertencia_ms" => max(0, (int) env('FACTURACION_PEDIDO_UMBRAL_ADVERTENCIA_MS', 5000)),
+            // false: pruebas de facturación sin bridge (pedido, remito, mostrador y división Villafranca).
+            // true: graba venta / vencae / ctamov / pendmae en Anita. Solo lo lee El Bierzo.
+            "GRABA_ANITA_BRIDGE" => filter_var(env('BIERZO_FACTURACION_GRABA_ANITA', false), FILTER_VALIDATE_BOOLEAN),
             // Anita de factura pedido / remito / mostrador: después de responder. ARCA (número + CAE) sigue síncrono.
             "ANITA_TRAS_RESPUESTA_PEDIDO" => filter_var(env('BIERZO_PEDIDO_ANITA_TRAS_RESPUESTA', true), FILTER_VALIDATE_BOOLEAN),
             // Cola Laravel (no terminating/Apache). Requiere QUEUE_CONNECTION=database|redis y worker.

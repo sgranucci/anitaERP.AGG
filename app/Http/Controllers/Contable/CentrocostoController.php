@@ -71,7 +71,17 @@ class CentrocostoController extends Controller
      */
     public function editar($id)
     {
-        can('editar-centro-costo');
+        $consulta = request()->query('origen') === 'modal_consulta'
+            || request()->query('vista') === 'consulta';
+        if ($consulta) {
+            if (! can('listar-centro-costo', false)
+                && ! can('editar-centro-costo', false)
+                && ! can('actualizar-centro-costo', false)) {
+                can('listar-centro-costo');
+            }
+        } else {
+            can('editar-centro-costo');
+        }
         $data = $this->repository->findOrFail($id);
         $tipoiva_enum = Centrocosto::$enumTipoIva;
 

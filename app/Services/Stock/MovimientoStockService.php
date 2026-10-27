@@ -13,6 +13,7 @@ use App\Models\Stock\Talle;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Ventas\FacturacionAnitaGrabacionSupport;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
 use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
@@ -196,8 +197,9 @@ class MovimientoStockService
 				// Guarda maestro de movimientostocks 
 				$movimientostock = $this->movimientostockRepository->create($data);
 
-				// Guarda remito en pendmae Anita
-				if (strtoupper(config('app.empresa') == 'EL BIERZO') && substr($data['codigo'],0,3) == 'REM')
+				// Guarda remito en pendmae Anita. Apagado en pruebas de facturación El Bierzo.
+				if (strtoupper(config('app.empresa') == 'EL BIERZO') && substr($data['codigo'],0,3) == 'REM'
+					&& FacturacionAnitaGrabacionSupport::habilitada())
 				{
 					$this->pedidoRepository->guardarPedidoEnAnita($data);
 				}

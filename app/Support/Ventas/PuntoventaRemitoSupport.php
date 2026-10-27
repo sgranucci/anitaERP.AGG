@@ -49,4 +49,42 @@ final class PuntoventaRemitoSupport
             ->where('es_remito', true)
             ->exists();
     }
+
+    /**
+     * Misma regla que el combo del navegador: si alguna sucursal de la lista
+     * está marcada, solo esas. Si ninguna, la lista completa.
+     *
+     * @param  iterable<int, object>  $puntos
+     * @return list<object>
+     */
+    public static function filtrarLista(iterable $puntos): array
+    {
+        $lista = [];
+        foreach ($puntos as $punto) {
+            $lista[] = $punto;
+        }
+
+        $marcados = [];
+        foreach ($lista as $punto) {
+            if (self::estaMarcado($punto)) {
+                $marcados[] = $punto;
+            }
+        }
+        if ($marcados === []) {
+            return $lista;
+        }
+
+        usort($marcados, static function (object $a, object $b): int {
+            return strcmp((string) ($a->codigo ?? ''), (string) ($b->codigo ?? ''));
+        });
+
+        return $marcados;
+    }
+
+    private static function estaMarcado(object $punto): bool
+    {
+        $marca = $punto->es_remito ?? false;
+
+        return $marca === true || $marca === 1 || $marca === '1';
+    }
 }

@@ -84,7 +84,9 @@
     window.recepcionProveedorActualizarAvisoDescuentoOc = actualizarAvisoDescuentoOc;
 
     function colspanTablaItems() {
-        var base = esModoDevolucion() ? 10 : COLSPAN_TABLA_ITEMS;
+        var extraLote = window.recepcionProveedorGrabaLoteAnita ? 2 : 0;
+        var extraPeso = window.recepcionProveedorPesoBulto ? 1 : 0;
+        var base = (esModoDevolucion() ? 10 : COLSPAN_TABLA_ITEMS) + extraLote + extraPeso;
         if ($('#tabla-items-recepcion th.ms-col-color-talle:visible').length > 0) {
             return base + 2;
         }
@@ -762,6 +764,14 @@
             }
             item.cantidad = leerCantidadInput($(this).find('.item-cantidad').val());
             item.cantidad_rechazada = parseFloat($(this).find('.item-cant-rechazada').val()) || 0;
+            if (window.recepcionProveedorGrabaLoteAnita) {
+                item.lote_proveedor = $.trim($(this).find('.item-lote-proveedor').val() || '');
+                item.fecha_vto = $(this).find('.item-fecha-vto').val() || '';
+            }
+            if (window.recepcionProveedorPesoBulto) {
+                var pesoRaw = $.trim($(this).find('.item-peso-bulto').val() || '');
+                item.peso_bulto = pesoRaw === '' ? '' : (parseFloat(pesoRaw) || 0);
+            }
             item.motivorechazo = $.trim($(this).closest('tbody').find('tr.item-recepcion-motivo-rechazo[data-idx="' + idx + '"] .item-motivo-rechazo').val() || '');
             item.comentario_diferencia = $.trim($comentarioDiferenciaPorIdx(idx).find('.item-comentario-diferencia').val() || '');
             item.comentario_precio = $.trim($comentarioPorIdx(idx).find('.item-comentario-precio').val() || '');
@@ -1713,8 +1723,9 @@
     function sincronizarPrecioDesdeImporte(item, importe, cantidad) {
         cantidad = parseFloat(cantidad) || 0;
         importe = redondearImporteLinea(importe);
-        if (cantidad > 0.000001) {
-            item.precio = redondearPrecioUnitario(importe / cantidad);
+        var base = cantidad * factorPesoBulto(item);
+        if (base > 0.000001) {
+            item.precio = redondearPrecioUnitario(importe / base);
         } else {
             item.precio = 0;
         }
@@ -1979,11 +1990,20 @@
         $('#modalRecepcionLineaPrecio').modal('hide');
     }
 
+    function factorPesoBulto(item) {
+        if (!window.recepcionProveedorPesoBulto || !item) {
+            return 1;
+        }
+        var peso = parseFloat(item.peso_bulto || 0) || 0;
+
+        return peso > 0 ? peso : 1;
+    }
+
     function importeLineaRecepcion(item) {
         var cant = parseFloat(item.cantidad || 0) || 0;
         var precio = precioEfectivoLinea(item);
 
-        return Math.round(cant * precio * 100) / 100;
+        return Math.round(cant * factorPesoBulto(item) * precio * 100) / 100;
     }
 
     function formatearImporteRecepcion(n) {
@@ -2163,6 +2183,27 @@
         return html;
     }
 
+    function fechaVtoInput(item) {
+        var v = item && item.fecha_vto ? String(item.fecha_vto) : '';
+        var m = v.match(/^(\d{4}-\d{2}-\d{2})/);
+        return m ? m[1] : '';
+    }
+
+    function htmlCeldasLote(item, idx, soloLectura) {
+        if (!window.recepcionProveedorGrabaLoteAnita) {
+            return '';
+        }
+        var ro = soloLectura ? ' readonly' : '';
+        var lote = escHtml(item.lote_proveedor || '');
+        var html = '<td class="align-middle">';
+        html += '<input type="text" maxlength="14" class="form-control form-control-sm item-lote-proveedor" name="items[' + idx + '][lote_proveedor]" value="' + lote + '" title="Lote del proveedor"' + ro + '>';
+        html += '</td>';
+        html += '<td class="align-middle">';
+        html += '<input type="date" class="form-control form-control-sm item-fecha-vto" name="items[' + idx + '][fecha_vto]" value="' + fechaVtoInput(item) + '" title="Vencimiento del lote"' + ro + '>';
+        html += '</td>';
+        return html;
+    }
+
     function htmlCeldaCantidadOc(item) {
         var oc = parseFloat(item.cantidad_oc);
         if (isNaN(oc)) {
@@ -2271,6 +2312,7 @@
             html += '<td class="align-middle"><input type="text" class="descripcionarticulo form-control form-control-sm" value="' + escHtml(item.descripcion || '') + '" readonly title="' + escHtml(item.descripcion || '') + '">';
             html += htmlFechaEntregaLinea(item);
             html += '</td>';
+            html += htmlCeldasLote(item, idx, soloLectura);
             html += htmlCeldasColorTalle(item, idx, tipo, soloLecturaOtros);
             html += '<td class="text-right align-middle">';
             if (esModoDevolucion()) {
@@ -2286,6 +2328,12 @@
                 html += '<small class="text-muted d-block">m&aacute;x. ' + maxDevolucion + '</small>';
             }
             html += '</td>';
+            if (window.recepcionProveedorPesoBulto) {
+                var pesoValor = item.peso_bulto != null && item.peso_bulto !== '' ? item.peso_bulto : '';
+                html += '<td class="align-middle">';
+                html += '<input type="number" step="0.000001" min="0" class="form-control form-control-sm text-right item-peso-bulto" name="items[' + idx + '][peso_bulto]" value="' + pesoValor + '" ' + (soloLectura ? 'readonly' : '') + ' title="Peso de cada bulto. El total es bultos &times; peso &times; precio.">';
+                html += '</td>';
+            }
             if (!esModoDevolucion()) {
                 html += '<td class="align-middle">' + htmlInputCantidadConUm('item-cant-rechazada input-qty-rech-recepcion', 'items[' + idx + '][cantidad_rechazada]', (item.cantidad_rechazada || 0), umCompra, soloLectura) + '</td>';
             }
@@ -2553,6 +2601,9 @@
             descripcion: '',
             cantidad: noPrecargarCantidadRecibida() ? null : 1,
             cantidad_rechazada: 0,
+            lote_proveedor: '',
+            peso_bulto: '',
+            fecha_vto: '',
             accion_linea_oc: '',
             fl_cerrar_linea_oc: false,
             comentario_diferencia: '',
@@ -2871,7 +2922,7 @@
             }
         });
 
-        $(document).on('input', '.item-cantidad, .item-precio, .item-cant-rechazada', function () {
+        $(document).on('input', '.item-cantidad, .item-precio, .item-cant-rechazada, .item-peso-bulto', function () {
             var $tr = $(this).closest('tr.item-recepcion-linea');
             var idx = parseInt($tr.data('idx'), 10);
             var item = itemsActuales[idx];
@@ -2886,6 +2937,9 @@
             } else if ($(this).hasClass('item-precio')) {
                 item.precio = parseFloat($(this).val()) || 0;
                 actualizarPrecioSolicitadoEnFila($tr, item);
+            } else if ($(this).hasClass('item-peso-bulto')) {
+                var pesoTxt = $.trim($(this).val() || '');
+                item.peso_bulto = pesoTxt === '' ? '' : (parseFloat(pesoTxt) || 0);
             }
             if (cantidadTotalRecibida(item) <= 0.000001 && lineaEsDeOc(item)) {
                 if (String(item.accion_linea_oc || '').toUpperCase() !== 'CERRAR') {
@@ -2996,7 +3050,9 @@
             sincronizandoModalLineaPrecio = true;
             var cant = parseFloat($('#modal-linea-cantidad').val()) || 0;
             var precio = parseFloat($(this).val()) || 0;
-            var importe = redondearImporteLinea(cant * precio);
+            var idxModal = parseInt($('#modal-linea-precio-idx').val(), 10);
+            var peso = factorPesoBulto(itemsActuales[idxModal] || null);
+            var importe = redondearImporteLinea(cant * peso * precio);
             $('#modal-linea-importe').val(importe.toFixed(2));
             var precioOc = parseFloat($('#modalRecepcionLineaPrecio').data('precio-oc')) || 0;
             actualizarAvisoDiffModalLineaPrecio(precioOc, precio);
@@ -3010,7 +3066,9 @@
             sincronizandoModalLineaPrecio = true;
             var cant = parseFloat($('#modal-linea-cantidad').val()) || 0;
             var importe = parseFloat($(this).val()) || 0;
-            var precio = cant > 0.000001 ? redondearPrecioUnitario(importe / cant) : 0;
+            var idxModal = parseInt($('#modal-linea-precio-idx').val(), 10);
+            var base = cant * factorPesoBulto(itemsActuales[idxModal] || null);
+            var precio = base > 0.000001 ? redondearPrecioUnitario(importe / base) : 0;
             $('#modal-linea-precio-unit').val(precio);
             var precioOc = parseFloat($('#modalRecepcionLineaPrecio').data('precio-oc')) || 0;
             actualizarAvisoDiffModalLineaPrecio(precioOc, precio);
@@ -3024,7 +3082,9 @@
             sincronizandoModalLineaPrecio = true;
             var cant = parseFloat($(this).val()) || 0;
             var precio = parseFloat($('#modal-linea-precio-unit').val()) || 0;
-            $('#modal-linea-importe').val(redondearImporteLinea(cant * precio).toFixed(2));
+            var idxModal = parseInt($('#modal-linea-precio-idx').val(), 10);
+            var peso = factorPesoBulto(itemsActuales[idxModal] || null);
+            $('#modal-linea-importe').val(redondearImporteLinea(cant * peso * precio).toFixed(2));
             sincronizandoModalLineaPrecio = false;
         });
 

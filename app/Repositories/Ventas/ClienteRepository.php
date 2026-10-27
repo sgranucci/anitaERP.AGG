@@ -37,6 +37,7 @@ use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Ventas\ClienteAnitaNumeracionSupport;
 use App\Support\Ventas\ClienteCodigoSecuenciaSupport;
+use App\Support\Ventas\ClienteCodigoEmpleadoBierzoSupport;
 use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
 use App\Support\Ventas\ClienteAnitaGeoSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
@@ -86,6 +87,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 		{
 			if (ClienteCodigoSecuenciaSupport::esPedidoGastronomia($secuencia)) {
 				$data['codigo'] = ClienteCodigoSecuenciaSupport::proximoGastronomia(true);
+			} elseif (ClienteCodigoEmpleadoBierzoSupport::esPedidoEmpleado($secuencia)) {
+				$data['codigo'] = ClienteCodigoEmpleadoBierzoSupport::reservarSiguiente();
 			} else {
 				$codigo = '';
 				self::ultimoCodigo($codigo);
@@ -131,6 +134,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 	public function registrarNumeradorAnitaTrasAlta(string $codigo): void
 	{
 		if (! ClienteAnitaNumeracionSupport::estaHabilitada()) {
+			return;
+		}
+
+		if (ClienteCodigoEmpleadoBierzoSupport::esCodigoDeSerie($codigo)) {
 			return;
 		}
 

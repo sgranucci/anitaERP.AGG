@@ -333,8 +333,11 @@ final class RecepcionProveedorAnitaEscrituraSupport
         float $cotizacion,
         string $codigoAgrupacion,
         int $tipoIvaAnita,
+        string $loteProveedor = '',
+        int $fechaVtoAnita = 0,
+        int $nroInternoLote = 0,
     ): array {
-        return self::insert([
+        $columnas = [
             'recv_proveedor' => self::proveedorSql($codigoProveedor),
             'recv_tipo' => self::textoSql($clave['tipo'], 3),
             'recv_letra' => self::textoSql($clave['letra'], 1),
@@ -359,7 +362,19 @@ final class RecepcionProveedorAnitaEscrituraSupport
             'recv_cantfact' => self::decimalSql(0),
             'recv_tipo_iva' => self::enteroSql($tipoIvaAnita),
             'recv_partida' => self::enteroSql(0),
-        ]);
+        ];
+
+        // El Bierzo: sin estos campos el C de etiquetas hace ldlong(nulo) = -2147483648.
+        if (RecepcionProveedorAnitaLoteSupport::aplica()) {
+            $columnas['recv_lote_proveed'] = self::textoSql(
+                RecepcionProveedorAnitaLoteSupport::loteTexto($loteProveedor),
+                RecepcionProveedorAnitaLoteSupport::LOTE_MAX
+            );
+            $columnas['recv_fecha_vto'] = self::enteroSql(max(0, $fechaVtoAnita));
+            $columnas['recv_nro_interno'] = self::enteroSql(max(0, $nroInternoLote));
+        }
+
+        return self::insert($columnas);
     }
 
     /**

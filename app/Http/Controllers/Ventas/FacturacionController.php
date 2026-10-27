@@ -340,7 +340,15 @@ class FacturacionController extends Controller
      */
     public function editar($id)
     {
-        can('editar-factura');
+        $soloConsulta = request()->query('vista') === 'consulta'
+            || request()->query('origen') === 'modal_consulta';
+        if ($soloConsulta) {
+            if (! can('editar-factura', false) && ! can('listar-factura', false) && ! can('actualizar-factura', false)) {
+                can('listar-factura');
+            }
+        } else {
+            can('editar-factura');
+        }
 
         return $this->facturacionService->editaUnaFactura($id);
     }

@@ -4,6 +4,7 @@ namespace App\Services\Ventas;
 
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaAnitaReplica;
+use App\Support\Ventas\FacturacionAnitaGrabacionSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use App\Support\Ventas\PedidoFacturaAnitaSemaforoSupport;
 use Illuminate\Support\Facades\Log;
@@ -130,6 +131,21 @@ final class PedidoFacturaAnitaRegrabacionService
      */
     public function procesarPendientes(bool $ejecutar, int $limite = 20): array
     {
+        if (! FacturacionAnitaGrabacionSupport::habilitada()) {
+            FacturacionAnitaGrabacionSupport::logSiApagada();
+
+            return [
+                'semaforo' => false,
+                'abiertos' => 0,
+                'agotados' => 0,
+                'procesados' => 0,
+                'ok' => 0,
+                'error' => 0,
+                'omitidos' => 0,
+                'detalle' => [],
+            ];
+        }
+
         $maxIntentos = max(1, (int) config('facturacion.ANITA_PEDIDO_REGRABAR_MAX_INTENTOS', 20));
         $limite = max(1, $limite);
 

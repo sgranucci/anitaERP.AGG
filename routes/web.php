@@ -30,6 +30,8 @@ Route::get('seguridad/logout', 'Seguridad\LoginController@logout')->name('logout
 Route::post('ajax-sesion', 'AjaxController@setSession')->name('ajax')->middleware('auth');
 
 Route::middleware('auth')->group(function () {
+    Route::get('seguridad/buscador', 'Seguridad\BuscadorGlobalController@index')->name('buscador_global');
+    Route::post('seguridad/buscador/eleccion', 'Seguridad\BuscadorGlobalController@eleccion')->name('buscador_global_eleccion');
     Route::get('seguridad/barra-tareas', 'Seguridad\BarraTareasController@index')->name('barra_tareas_index');
     Route::get('seguridad/barra-tareas/menus', 'Seguridad\BarraTareasController@menusDisponibles')->name('barra_tareas_menus');
     Route::post('seguridad/barra-tareas/anclar', 'Seguridad\BarraTareasController@anclar')->name('barra_tareas_anclar');
@@ -4442,6 +4444,9 @@ Route::get('compras/ordencompra/visualizar/{id}/{hash}/oc-pdf', 'Compras\Ordenco
  * Centro de ayuda (manuales por módulo)
  */
 Route::get('ayuda', 'AyudaController@index')->name('ayuda');
+Route::get('ayuda/manual-buscador', 'Ayuda\ManualBuscadorController@index')
+    ->middleware('auth')
+    ->name('manual_buscador');
 Route::get('ayuda/manual-aprobaciones', 'Configuracion\ManualAprobacionesController@index')
     ->middleware('auth')
     ->name('manual_aprobaciones');

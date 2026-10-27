@@ -156,6 +156,9 @@ final class PedidoListadoSupport
             'cliente_entrega_id' => (string) ($pedido->cliente_entrega_id ?? ''),
             'lugarentrega' => (string) ($pedido->lugarentrega ?? ''),
             'entrega_nombre' => (string) ($pedido->entrega_nombre ?? ''),
+            'caja_reales' => ($pedido->caja_reales ?? null) !== null && (int) $pedido->caja_reales > 0
+                ? (int) $pedido->caja_reales
+                : '',
             'items' => $items,
             'totales' => [
                 'caja' => number_format($totales['caja'], 2, '.', ''),

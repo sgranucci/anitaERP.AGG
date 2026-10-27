@@ -43,6 +43,8 @@ class ValidacionClienteProvisorio extends FormRequest
             'vaweb' => ['required', new RuleCliente('vaweb')],
         ];
 
+        $reglas['secuencia_codigo'] = 'nullable|in:administracion,gastronomia,cliente,empleado';
+
         if (EntornoEmpresaSupport::esElBierzo()) {
             $reglas['emitecertificado'] = 'nullable|in:S,N,Emite Certificado,No Emite Certificado';
         }

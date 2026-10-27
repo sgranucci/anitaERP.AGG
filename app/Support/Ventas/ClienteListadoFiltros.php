@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\ListadoAgrupacionSupport;
@@ -158,6 +159,7 @@ class ClienteListadoFiltros
             'valor' => $valor,
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'codigo' => trim((string) $request->input('filtro_codigo', '')),
+            'nombre' => trim((string) $request->input('filtro_nombre', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
             'qbe' => $qbe,
@@ -236,11 +238,15 @@ class ClienteListadoFiltros
             return true;
         }
 
+        if (trim((string) ($filtros['nombre'] ?? '')) !== '') {
+            return true;
+        }
+
         return self::tieneCriteriosTexto($filtros);
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, codigo: string, busqueda: string, qbe: array{entre_grupos: string, grupos: list}, orden: list<array{campo: string, dir: string}>}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, codigo: string, nombre: string, busqueda: string, qbe: array{entre_grupos: string, grupos: list}, orden: list<array{campo: string, dir: string}>}
      */
     public static function filtrosVacios(): array
     {
@@ -251,6 +257,7 @@ class ClienteListadoFiltros
             'valor' => '',
             'valor_hasta' => '',
             'codigo' => '',
+            'nombre' => '',
             'busqueda' => '',
             'qbe' => ListadoQbeSupport::vacio(),
             'orden' => [],
@@ -268,6 +275,9 @@ class ClienteListadoFiltros
 
         if (trim((string) ($filtros['codigo'] ?? '')) !== '') {
             $params['filtro_codigo'] = trim((string) $filtros['codigo']);
+        }
+        if (trim((string) ($filtros['nombre'] ?? '')) !== '') {
+            $params['filtro_nombre'] = trim((string) $filtros['nombre']);
         }
 
         if ($modo === self::MODO_QBE) {
@@ -367,6 +377,7 @@ class ClienteListadoFiltros
             'valor_hasta' => (string) ($desdeVista['valor_hasta'] ?? ''),
             'busqueda' => (string) ($desdeVista['valor'] ?? $desdeVista['busqueda'] ?? ''),
             'codigo' => (string) ($desdeVista['codigo'] ?? $base['codigo'] ?? ''),
+            'nombre' => (string) ($desdeVista['nombre'] ?? $base['nombre'] ?? ''),
             'qbe' => $qbe,
             'orden' => $ordenBase !== [] ? $ordenBase : $ordenVista,
             'agrupar' => $agruparBase !== [] ? $agruparBase : $agruparVista,
@@ -400,6 +411,7 @@ class ClienteListadoFiltros
     public static function aplicar(Builder $query, array $filtros): void
     {
         self::aplicarFiltroCodigo($query, $filtros);
+        self::aplicarFiltroNombre($query, $filtros);
 
         if (! self::tieneCriteriosTexto($filtros)) {
             return;
@@ -446,6 +458,32 @@ class ClienteListadoFiltros
         }
 
         $query->whereIn('cliente.codigo', $variantes);
+    }
+
+    /**
+     * Filtro dedicado de nombre (barra superior, al lado del código):
+     * contiene el texto en el nombre del cliente.
+     *
+     * @param  Builder<\App\Models\Ventas\Cliente>  $query
+     */
+    private static function aplicarFiltroNombre(Builder $query, array $filtros): void
+    {
+        $nombre = trim((string) ($filtros['nombre'] ?? ''));
+        if ($nombre === '') {
+            return;
+        }
+
+        $like = self::patronLike('contiene', $nombre);
+        $query->where(function ($q) use ($nombre, $like) {
+            $q->where('cliente.nombre', 'like', $like);
+            CoincidenciaFlexibleTexto::aplicar(
+                $q,
+                'cliente.nombre',
+                $nombre,
+                true,
+                CoincidenciaFlexibleTexto::LONGITUD_MINIMA_DEFAULT
+            );
+        });
     }
 
     /**
@@ -624,6 +662,12 @@ class ClienteListadoFiltros
 
         $type = $def['type'];
 
+        if ($campoKey === 'codigo') {
+            self::aplicarCodigoNumerico($query, (string) $def['column'], $operador, $valor, $valorHasta);
+
+            return;
+        }
+
         if ($type === 'booleano') {
             self::aplicarBooleano($query, (string) $def['column'], $operador, $valor);
 
@@ -757,6 +801,70 @@ class ClienteListadoFiltros
                 });
                 break;
         }
+    }
+
+    /**
+     * El código está guardado como texto. Mayor, menor y entre comparan el número,
+     * así 1401 no entra en el rango 14000–14500.
+     *
+     * @param  Builder<\App\Models\Ventas\Cliente>  $query
+     */
+    private static function aplicarCodigoNumerico(
+        Builder $query,
+        string $column,
+        string $operador,
+        string $valor,
+        string $valorHasta = ''
+    ): void {
+        if (! ListadoOrdenamientoSupport::esColumnaSqlSegura($column)) {
+            return;
+        }
+
+        if ($operador === 'vacio') {
+            $query->where(function ($q) use ($column) {
+                $q->whereNull($column)->orWhere($column, '');
+            });
+
+            return;
+        }
+
+        $expr = SqlDialectSupport::castEntero($column);
+        $soloDigitos = SqlDialectSupport::coincideRegex($column);
+
+        if ($operador === 'entre') {
+            $desde = filter_var(trim($valor), FILTER_VALIDATE_INT);
+            $hasta = filter_var(trim($valorHasta), FILTER_VALIDATE_INT);
+            if ($desde === false && $hasta === false) {
+                return;
+            }
+            $query->where(function ($q) use ($expr, $soloDigitos, $desde, $hasta) {
+                $q->whereRaw($soloDigitos, ['^[0-9]+$']);
+                if ($desde !== false) {
+                    $q->whereRaw($expr.' >= ?', [(int) $desde]);
+                }
+                if ($hasta !== false) {
+                    $q->whereRaw($expr.' <= ?', [(int) $hasta]);
+                }
+            });
+
+            return;
+        }
+
+        $numero = filter_var(trim($valor), FILTER_VALIDATE_INT);
+        if ($numero === false) {
+            return;
+        }
+        $numero = (int) $numero;
+        $ops = [
+            'mayor' => '>',
+            'mayor_igual' => '>=',
+            'menor' => '<',
+            'menor_igual' => '<=',
+            'igual' => '=',
+        ];
+        $op = $ops[$operador] ?? '=';
+        $query->whereRaw($soloDigitos, ['^[0-9]+$'])
+            ->whereRaw($expr.' '.$op.' ?', [$numero]);
     }
 
     /**

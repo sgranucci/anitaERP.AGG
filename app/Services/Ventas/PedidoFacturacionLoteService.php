@@ -4,6 +4,7 @@ namespace App\Services\Ventas;
 
 use App\Models\Ventas\Venta;
 use App\Queries\Ventas\PedidoQueryInterface;
+use App\Support\Ventas\PedidoBultoFacturacionSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use App\Support\Ventas\PedidoListadoSupport;
@@ -36,7 +37,8 @@ final class PedidoFacturacionLoteService
                 continue;
             }
             $cantidades = $this->cantidadesFacturables($pedido);
-            $totalCaja += $cantidades['caja'];
+            $bultos = PedidoBultoFacturacionSupport::cantidad($pedido->caja_reales ?? null, $cantidades['caja']);
+            $totalCaja += $bultos;
             $totalUnidad += $cantidades['unidad'];
             $totalKilo += $cantidades['kilo'];
             $totalPesada += $cantidades['pesada'];
@@ -44,7 +46,7 @@ final class PedidoFacturacionLoteService
                 'id' => (int) $pedido->id,
                 'codigo' => (string) ($pedido->codigo ?? ''),
                 'cliente' => (string) ($pedido->clientes->nombre ?? ''),
-                'caja' => $cantidades['caja'],
+                'caja' => $bultos,
                 'unidad' => $cantidades['unidad'],
                 'kilo' => $cantidades['kilo'],
                 'pesada' => $cantidades['pesada'],
@@ -222,7 +224,7 @@ final class PedidoFacturacionLoteService
             'descuentoimportepie' => 0,
             'descuentolinea' => 0,
             'leyendafactura' => (string) ($pedido->leyenda ?? ''),
-            'cantidadbulto' => (int) $cajas,
+            'cantidadbulto' => PedidoBultoFacturacionSupport::cantidad($pedido->caja_reales ?? null, $cajas),
             'formapago_id' => '',
             'incoterm_id' => '',
             'mercaderia' => '',

@@ -8,6 +8,7 @@ use App\Exports\Ventas\ClienteCuentacorrienteReporteExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Ventas\ClienteCuentacorrienteReporteService;
+use App\Support\Configuracion\EmpresaFiltroExternoSupport;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use App\Support\Ventas\ClienteCuentacorrienteReporteClienteSupport;
 use App\Support\Ventas\ClienteCuentacorrienteReporteFiltros;
@@ -310,9 +311,14 @@ class ClienteCuentacorrienteReporteController extends Controller
         }
 
         if (($filtros['empresa_ids'] ?? []) === [] && $empresaQuery->count() >= 1) {
-            $filtros['empresa_ids'] = $empresaQuery->count() === 1
-                ? [(int) $empresaQuery->first()->id]
-                : $permitidos;
+            $default = EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
+            if ($default !== null && in_array($default, $permitidos, true)) {
+                $filtros['empresa_ids'] = [$default];
+            } elseif ($empresaQuery->count() === 1) {
+                $filtros['empresa_ids'] = [(int) $empresaQuery->first()->id];
+            } else {
+                $filtros['empresa_ids'] = $permitidos;
+            }
         }
 
         $filtros['empresa_id'] = $filtros['empresa_ids'][0] ?? null;

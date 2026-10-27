@@ -2,6 +2,7 @@
     $esBierzo = $esBierzo ?? \App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo();
     $retornoListadoQuery = $retornoListadoQuery
         ?? \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $retornoCc = \App\Support\Listado\QueryRetornoListado::queryStringDesdeRequestActual();
     $colspan = 11;
 @endphp
 @forelse ($clientes as $data)
@@ -61,7 +62,7 @@
             </a>
         @endif
         @if (can('listar-cuentacorriente-cliente', false))
-            <a href="{{ route('listar_cuentacorriente_cliente', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente">
+            <a href="{{ route('listar_cuentacorriente_cliente', array_merge(['id' => $data->id], $retornoCc !== '' ? ['retorno' => $retornoCc] : [])) }}" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente">
                 <i class="fa fa-folder-open"></i>
             </a>
         @endif

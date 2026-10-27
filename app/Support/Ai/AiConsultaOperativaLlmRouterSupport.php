@@ -65,6 +65,11 @@ Reglas:
   Opcional: centrocosto_codigo/CC, numero_oc, fecha_desde/fecha_hasta.
 - "mayor de la OC N" / "movimientos del mayor de la OC" → mayor_cuenta con params.numero_oc (cuenta opcional).
 - "saldo del artículo/insumo" → articulo_saldo; "kardex/movimientos" → articulo_kardex (valor/sku).
+- "artículos de compra del sku / de tal insumo" → formula_compra (params.sku). Solo lectura.
+- "en qué fórmulas aparece el insumo / sku" → formula_uso (params.sku). Solo lectura. No modifica la fórmula.
+- "movimientos / mayor sin centro de costo" → mayor_cuenta con params.sin_centrocosto=true. No imputa el centro.
+- "conciliación bancaria cuenta de caja X" → conciliacion_bancaria (params.cuentacaja_codigo). Solo lee la última corrida; no concilia.
+- "diferencias del turno / gastronomía" → conciliacion_turno_gastronomia. Solo explica; no cierra ni cobra.
 - "insumo" → solo_insumo=true. Tolera typos (muzarella/mozarella).
 - "qué hago / plan para / desvíos" → plan_agente (params.evento: desvio_conciliacion|deuda_proveedor|deuda_cliente|firma_oc|stock_insumo).
 - "pedido consumo / qué pedimos / planear pedido" → pedido_consumo_sector (params.centrocosto_codigo o codigo, deposito_id o deposito_codigo; opcional fecha_desde/fecha_hasta, dias_cobertura).

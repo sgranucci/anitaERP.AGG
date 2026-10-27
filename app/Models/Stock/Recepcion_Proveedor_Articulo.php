@@ -16,17 +16,18 @@ class Recepcion_Proveedor_Articulo extends Model implements Auditable
 
     protected $fillable = [
         'recepcion_proveedor_id', 'ordencompra_articulo_id', 'ordencompra_articulo_sustituido_id', 'tipo_linea',
-        'orden', 'penvp_orden', 'penvp_nro_interno',
-        'articulo_id', 'color_id', 'talle_id', 'articulo_stock_id', 'cantidad', 'cantidad_oc', 'cantidad_stock', 'cantidad_rechazada', 'unidadmedida_id', 'coeficienteconversion',
+        'orden', 'penvp_orden', 'penvp_nro_interno', 'anita_nro_lote',
+        'articulo_id', 'color_id', 'talle_id', 'articulo_stock_id', 'cantidad', 'cantidad_oc', 'cantidad_stock', 'cantidad_rechazada', 'peso_bulto', 'unidadmedida_id', 'coeficienteconversion',
         'precio', 'precio_ordencompra', 'precio_solicitado', 'precio_stock', 'fl_precio_diferencia', 'fl_cantidad_diferencia', 'fl_articulo_distinto', 'fl_cerrar_linea_oc',
         'comentario_precio', 'comentario_diferencia', 'precio_lista_proveedor',
         'moneda_id', 'cotizacion', 'descuento', 'deposito_id', 'detalle', 'motivorechazo', 'estado',
-        'impuesto_id', 'incluyeimpuesto', 'centrocosto_id', 'lote_id', 'articulo_movimiento_id',
+        'impuesto_id', 'incluyeimpuesto', 'centrocosto_id', 'lote_id', 'lote_proveedor', 'fecha_vto', 'articulo_movimiento_id',
     ];
 
     protected $casts = [
         'fl_precio_diferencia' => 'boolean',
         'fl_cerrar_linea_oc' => 'boolean',
+        'fecha_vto' => 'date',
     ];
 
     public function recepcion_proveedores()

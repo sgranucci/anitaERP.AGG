@@ -29,6 +29,17 @@ $queryFiltrosCliente = [
     'moneda_id' => CuentacorrienteSaldosPorMoneda::valorQuery($monedaId),
     'expresion' => $expresion,
 ];
+if (($retornoQuery ?? '') !== '') {
+    $queryFiltrosCliente['retorno'] = $retornoQuery;
+}
+$empresaScope = $empresaScope ?? 'todas';
+$empresaId = isset($empresaId) ? (int) $empresaId : 0;
+if ($empresaScope === 'todas') {
+    $queryFiltrosCliente['empresa_todas'] = 1;
+} elseif ($empresaId > 0) {
+    $queryFiltrosCliente['empresa_id'] = $empresaId;
+}
+$volverListadoUrl = $volverListadoUrl ?? route('cliente');
 ?>
 
 @section('contenido')
@@ -44,23 +55,23 @@ $queryFiltrosCliente = [
                             <i class="fa fa-compress-alt"></i> Aplicar comprobantes
                         </a>
                     @endif
-                    @if (!str_contains($urlOrigen ?? '', 'editar'))
-                        @if (isset($urlOrigen))
-                            <a href="{{ $urlOrigen }}" class="btn btn-light btn-sm mr-1">
-                                <i class="fa fa-fw fa-reply-all"></i> Volver
-                            </a>
-                        @else
-                            <a href="javascript:history.back()" class="btn btn-light btn-sm mr-1">
-                                <i class="fa fa-fw fa-reply-all"></i> Volver atr&aacute;s
-                            </a>
-                        @endif
-                    @endif
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-light btn-sm mr-1" data-modo-consulta-omitir="1" title="Volver al index de clientes">
+                        <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                    </a>
                 </div>
                 <div class="d-md-flex justify-content-md-end flex-wrap align-items-center mt-2 mt-md-0">
                     <form action="{{ route('listar_cuentacorriente_cliente', ['id' => $id]) }}" method="GET" id="form-cuentacorriente-filtros" class="d-flex flex-wrap align-items-center">
                         <input type="hidden" name="modo_vista" id="modo_vista" value="{{ $modoVista ?? ClienteCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE }}">
                         <input type="hidden" name="moneda_id" value="{{ CuentacorrienteSaldosPorMoneda::valorQuery($monedaId) }}">
                         <input type="hidden" name="expresion" value="{{ $expresion }}">
+                        @if (($retornoQuery ?? '') !== '')
+                            <input type="hidden" name="retorno" value="{{ $retornoQuery }}">
+                        @endif
+                        @if ($empresaScope === 'todas')
+                            <input type="hidden" name="empresa_todas" value="1">
+                        @elseif ($empresaId > 0)
+                            <input type="hidden" name="empresa_id" value="{{ $empresaId }}">
+                        @endif
                         <div class="custom-control custom-switch mr-3 mb-2">
                             <input type="checkbox"
                                    class="custom-control-input"
@@ -83,6 +94,7 @@ $queryFiltrosCliente = [
                     </form>
                 </div>
             </div>
+            @include('ventas.cuentacorriente.partials.filtros_empresa')
             <div class="card-body">
                 @include('includes.cuentacorriente.saldos_por_moneda', [
                     'saldosPorMoneda' => $saldosPorMoneda ?? [],

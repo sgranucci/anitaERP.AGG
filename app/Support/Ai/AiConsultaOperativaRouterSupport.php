@@ -241,6 +241,11 @@ final class AiConsultaOperativaRouterSupport
             ];
         }
 
+        $conciliacion = self::interpretarConciliacion($texto, $norm);
+        if ($conciliacion !== null) {
+            return $conciliacion;
+        }
+
         // Mayor / analitico (antes que OC genérica: «mayor de la OC …»)
         // Acepta NL sin la palabra «cuenta»: «mayor de caja y bancos …»
         $pideMayor = self::contieneAlguno($norm, [
@@ -248,7 +253,7 @@ final class AiConsultaOperativaRouterSupport
             'mayor de la oc', 'mayor de oc', 'mayor oc', 'mayor de la orden', 'movimientos del mayor',
             'mayor filtrado', 'mayor con centro', 'mayor centro de costo',
             'mayor de caja', 'mayor caja', 'mayor de bancos', 'mayor bancos',
-        ]) || (
+        ]) || self::pideSinCentrocosto($norm) || (
             preg_match('/\bmayor\b/u', $norm) === 1
             && self::contieneAlguno($norm, [
                 'cuenta', 'oc', 'orden de compra', 'centro de costo', 'cc ',
@@ -265,8 +270,9 @@ final class AiConsultaOperativaRouterSupport
             $tieneCuenta = ! empty($params['cuenta_codigo']) || ! empty($params['cuenta_nombre']);
             $tieneOc = ! empty($params['numero_oc']);
             $tieneCc = ! empty($params['centrocosto_codigo']) || ! empty($params['centrocosto_id']);
+            $sinCc = ! empty($params['sin_centrocosto']);
 
-            if (! $tieneCuenta && ! $tieneOc && ! $tieneCc) {
+            if (! $tieneCuenta && ! $tieneOc && ! $tieneCc && ! $sinCc) {
                 return [
                     'ok' => false,
                     'needs_clarification' => true,
@@ -286,7 +292,9 @@ final class AiConsultaOperativaRouterSupport
             if ($tieneCuenta) {
                 $partes[] = 'cuenta '.($params['cuenta_nombre'] ?? $params['cuenta_codigo']);
             }
-            if ($tieneCc) {
+            if ($sinCc) {
+                $partes[] = 'sin centro de costo';
+            } elseif ($tieneCc) {
                 $partes[] = 'CC '.($params['centrocosto_codigo'] ?? $params['centrocosto_id']);
             }
             if ($tieneOc) {
@@ -517,6 +525,11 @@ final class AiConsultaOperativaRouterSupport
             ];
         }
 
+        $formula = self::interpretarFormula($texto, $norm);
+        if ($formula !== null) {
+            return $formula;
+        }
+
         // Kardex / movimientos de artículo (antes que saldo genérico)
         if (self::contieneAlguno($norm, [
             'kardex', 'ficha kardex', 'movimientos del articulo', 'movimientos articulo',
@@ -625,6 +638,11 @@ final class AiConsultaOperativaRouterSupport
     public static function ejemplos(): array
     {
         return [
+            'articulos de compra del sku 111',
+            'en que formulas aparece el insumo 111',
+            'movimientos sin centro de costo este mes',
+            'conciliacion bancaria cuenta de caja 300 mes pasado',
+            'diferencias del turno de gastronomia',
             'kardex del insumo muzarella este mes',
             'saldo del proveedor 475 de julio',
             'saldo del cliente 10025 este mes',
@@ -816,7 +834,9 @@ final class AiConsultaOperativaRouterSupport
             }
         }
 
-        if (preg_match('/\bcc\s*(\d{1,6})\b/u', $norm, $mCc) === 1) {
+        if (self::pideSinCentrocosto($norm)) {
+            $params['sin_centrocosto'] = true;
+        } elseif (preg_match('/\bcc\s*(\d{1,6})\b/u', $norm, $mCc) === 1) {
             $params['centrocosto_codigo'] = $mCc[1];
         } elseif (preg_match('/centro\s+de\s+costo\s+(\d{1,6})\b/u', $norm, $mCc2) === 1) {
             $params['centrocosto_codigo'] = $mCc2[1];
@@ -884,6 +904,7 @@ final class AiConsultaOperativaRouterSupport
             return null;
         }
         $nombre = preg_replace('/^(de\s+la|de\s+el|del|de|la|el)\s+/ui', '', $nombre) ?? $nombre;
+        $nombre = preg_replace('/\bsin(\s+(centro(\s+de\s+costo)?|centrocosto|cc))?\b.*$/ui', '', (string) $nombre) ?? $nombre;
         $nombre = trim((string) $nombre);
         if ($nombre === '' || mb_strlen($nombre) < 3) {
             return null;
@@ -935,6 +956,96 @@ final class AiConsultaOperativaRouterSupport
         return trim(preg_replace('/\s+/u', ' ', $texto) ?? $texto);
     }
 
+    private static function pideSinCentrocosto(string $norm): bool
+    {
+        return preg_match('/\bsin\s+(centro(\s+de\s+costo)?|centrocosto|cc)\b/u', $norm) === 1;
+    }
+
+    /**
+     * Conciliación bancaria o diferencias del turno. Solo clasifica; no corre el proceso.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function interpretarConciliacion(string $texto, string $norm): ?array
+    {
+        $pideBanco = self::contieneAlguno($norm, [
+            'conciliacion bancaria', 'conciliar banco', 'conciliar la cuenta',
+            'pares de conciliacion', 'sugerir pares', 'anomalias de conciliacion',
+            'conciliacion del banco',
+        ]) || (str_contains($norm, 'conciliacion') && str_contains($norm, 'banco'));
+        $pideTurno = self::contieneAlguno($norm, [
+            'conciliacion del turno', 'conciliacion turno', 'diferencias del turno',
+            'diferencias de gastronomia', 'conciliar turno', 'explicar diferencias del turno',
+            'diferencias de cobranza',
+        ]) || (
+            str_contains($norm, 'conciliacion')
+            && self::contieneAlguno($norm, ['turno', 'gastronomia', 'gastro'])
+        );
+
+        if (! $pideBanco && ! $pideTurno) {
+            if (! str_contains($norm, 'conciliacion') && ! str_contains($norm, 'conciliar')) {
+                return null;
+            }
+            if (self::contieneAlguno($norm, ['desvio', 'que hago', 'plan '])) {
+                return null;
+            }
+
+            return [
+                'ok' => false,
+                'error' => 'Indique si es conciliación bancaria o diferencias del turno de gastronomía.',
+                'sugerencias' => [
+                    'conciliacion bancaria cuenta de caja 300 mes pasado',
+                    'diferencias del turno de gastronomia',
+                ],
+            ];
+        }
+
+        if ($pideTurno && ! $pideBanco) {
+            $params = self::extraerParamsPeriodoYExtras($texto, $norm);
+            $params = array_merge($params, self::extraerFiltrosEmpresa($texto));
+            if (preg_match('/\bpc\s+([A-Za-z0-9][A-Za-z0-9_\-]{1,40})/ui', $texto, $mPc) === 1) {
+                $params['identificador_pc'] = $mPc[1];
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_CONCILIACION_TURNO,
+                'params' => $params,
+                'interpretacion' => 'Diferencias del turno de gastronomía',
+            ];
+        }
+
+        $params = self::extraerParamsPeriodoYExtras($texto, $norm);
+        $params = array_merge($params, self::extraerFiltrosEmpresa($texto));
+        $codigo = self::extraerCodigoCuentacaja($texto);
+        if ($codigo !== null) {
+            $params['cuentacaja_codigo'] = $codigo;
+        }
+
+        return [
+            'ok' => true,
+            'intent' => AiConsultaOperativaSupport::INTENT_CONCILIACION_BANCARIA,
+            'params' => $params,
+            'interpretacion' => 'Conciliación bancaria'
+                .($codigo !== null ? ' cuenta '.$codigo : ''),
+        ];
+    }
+
+    private static function extraerCodigoCuentacaja(string $texto): ?string
+    {
+        if (preg_match('/cuenta\s+de\s+caja\s+([A-Za-z0-9][A-Za-z0-9.\-\/]{0,30})/ui', $texto, $m) === 1) {
+            return trim($m[1]);
+        }
+        if (preg_match('/\b(?:caja|cuenta)\s+([A-Za-z0-9][A-Za-z0-9.\-\/]{1,30})/ui', $texto, $m) === 1) {
+            $tok = mb_strtolower(trim($m[1]), 'UTF-8');
+            if (! in_array($tok, ['de', 'del', 'la', 'el', 'bancaria', 'banco', 'caja', 'mes'], true)) {
+                return trim($m[1]);
+            }
+        }
+
+        return null;
+    }
+
     /** Delimitadores comunes al extraer frases de maestro en NL. */
     private static function patronStopFraseMaestro(): string
     {
@@ -942,6 +1053,65 @@ final class AiConsultaOperativaRouterSupport
             .'|este\s+mes|mes\s+pasado|mes\s+anterior|ultimos?|últimos?'
             .'|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre'
             .'|cruzar|sin\s+detalle|excluir|\d{4}-\d{2}-\d{2}';
+    }
+
+    /**
+     * Artículos de compra de un SKU, o fórmulas donde aparece un insumo. Solo lectura.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function interpretarFormula(string $texto, string $norm): ?array
+    {
+        $pideCompra = self::contieneAlguno($norm, [
+            'articulos de compra', 'articulo de compra', 'compra del sku', 'compras del sku',
+        ]);
+        $pideUso = self::contieneAlguno($norm, ['formula', 'formulas'])
+            && self::contieneAlguno($norm, [
+                'aparece', 'en que', 'insumo', 'componente', 'donde', 'usa', 'usado',
+            ]);
+        if (! $pideCompra && ! $pideUso) {
+            return null;
+        }
+
+        $sku = self::extraerTokenCodigo($texto, [
+            'articulos', 'articulo', 'artículos', 'artículo', 'compra', 'compras', 'sku',
+            'insumo', 'insumos', 'formula', 'formulas', 'fórmula', 'fórmulas',
+            'aparece', 'aparecen', 'cuales', 'cual', 'son', 'los', 'las', 'que', 'en',
+            'de', 'del', 'la', 'el', 'un', 'una', 'tal', 'este', 'esta',
+        ]);
+        if ($sku === null || $sku === '') {
+            if (preg_match('/(?:sku|insumo|articulo|artículo)\s+(.+)$/ui', $texto, $m) === 1) {
+                $sku = self::limpiarTextoEntidad(trim($m[1]));
+            }
+        }
+        if ($sku === null || $sku === '') {
+            return [
+                'ok' => false,
+                'error' => $pideCompra
+                    ? 'Indique el SKU (ej.: «artículos de compra del sku 111»).'
+                    : 'Indique el insumo (ej.: «en qué fórmulas aparece el insumo 111»).',
+                'sugerencias' => [
+                    'articulos de compra del sku 111',
+                    'en que formulas aparece el insumo 111',
+                ],
+            ];
+        }
+
+        if ($pideCompra) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_FORMULA_COMPRA,
+                'params' => ['sku' => $sku, 'valor' => $sku],
+                'interpretacion' => 'Artículos de compra del SKU '.$sku,
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'intent' => AiConsultaOperativaSupport::INTENT_FORMULA_USO,
+            'params' => ['sku' => $sku, 'valor' => $sku],
+            'interpretacion' => 'Fórmulas donde aparece '.$sku,
+        ];
     }
 
     /**

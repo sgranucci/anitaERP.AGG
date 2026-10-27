@@ -2,11 +2,13 @@
 
 namespace App\Support\Ai;
 
+use App\Models\Caja\Cuentacaja;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Contable\Asiento;
+use App\Models\Contable\ConciliacionBancariaEjecucion;
 use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
@@ -14,22 +16,31 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Models\Ventas\Cliente;
+use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Venta;
 use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\Cliente_CuentacorrienteRepository;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Compras\ComprasKpisOperativosSupport;
 use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaAnomaliaSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaResultadoCache;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
+use App\Support\Ventas\GastronomiaConciliacionTurnoExplicacionSupport;
+use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
+use App\Support\Stock\ArticuloFormulasUsoSupport;
 use App\Support\Stock\ArticuloSaldosDepositoSupport;
 use App\Support\Stock\ArticuloUsoInsumoSupport;
+use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\RecuentoMovimientosArticuloSupport;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -86,6 +97,14 @@ final class AiConsultaOperativaSupport
 
     public const INTENT_RQ_SIN_OC = 'rq_sin_oc';
 
+    public const INTENT_FORMULA_COMPRA = 'formula_compra';
+
+    public const INTENT_FORMULA_USO = 'formula_uso';
+
+    public const INTENT_CONCILIACION_BANCARIA = 'conciliacion_bancaria';
+
+    public const INTENT_CONCILIACION_TURNO = 'conciliacion_turno_gastronomia';
+
     /** @return array<string, string> */
     public static function intentsEtiquetas(): array
     {
@@ -114,6 +133,10 @@ final class AiConsultaOperativaSupport
             self::INTENT_LEAD_TIME_OC_RECEPCION => 'Lead time OC → recepción',
             self::INTENT_TOP_PROVEEDORES_MONTO => 'Top proveedores por monto',
             self::INTENT_RQ_SIN_OC => 'Requisiciones con líneas sin OC',
+            self::INTENT_FORMULA_COMPRA => 'Artículos de compra de un SKU',
+            self::INTENT_FORMULA_USO => 'Fórmulas donde aparece un insumo',
+            self::INTENT_CONCILIACION_BANCARIA => 'Sugerencias de conciliación bancaria',
+            self::INTENT_CONCILIACION_TURNO => 'Diferencias del turno de gastronomía',
         ];
     }
 
@@ -196,6 +219,14 @@ final class AiConsultaOperativaSupport
             self::INTENT_RQ_SIN_OC => can('listar-requisicion', false)
                 || can('listar-ordencompra', false)
                 || can('listar-kpi-compras', false),
+            self::INTENT_FORMULA_COMPRA,
+            self::INTENT_FORMULA_USO => can('listar-formula-articulo', false)
+                || can('editar-formula-articulo', false)
+                || can('listar-articulos', false),
+            self::INTENT_CONCILIACION_BANCARIA => can('ejecutar-conciliacion-bancaria', false)
+                && filter_var(config('ai.skills.sugerir_pares_conciliacion_bancaria.habilitada', false), FILTER_VALIDATE_BOOLEAN),
+            self::INTENT_CONCILIACION_TURNO => can('gestionar-habilitacion-turno-gastronomia', false)
+                && filter_var(config('ai.skills.explicar_diferencias_conciliacion_turno_gastronomia.habilitada', false), FILTER_VALIDATE_BOOLEAN),
             default => false,
         };
     }
@@ -277,6 +308,10 @@ final class AiConsultaOperativaSupport
                 self::INTENT_RQ_SIN_OC,
                 fn () => ComprasKpisOperativosSupport::rqSinOc($params)
             ),
+            self::INTENT_FORMULA_COMPRA => self::consultarFormulaCompra($params),
+            self::INTENT_FORMULA_USO => self::consultarFormulaUso($params),
+            self::INTENT_CONCILIACION_BANCARIA => self::consultarConciliacionBancaria($params),
+            self::INTENT_CONCILIACION_TURNO => self::consultarConciliacionTurno($params),
             default => self::fallo($intent, 'Intent no implementado.'),
         };
     }
@@ -1215,10 +1250,11 @@ final class AiConsultaOperativaSupport
             return self::fallo(self::INTENT_MAYOR_CUENTA, 'No se encontró la OC «'.$ref.'».');
         }
 
-        if (! $cuenta && ! $oc && ! $cc) {
+        $sinCc = ! empty($params['sin_centrocosto']);
+        if (! $cuenta && ! $oc && ! $cc && ! $sinCc) {
             return self::fallo(
                 self::INTENT_MAYOR_CUENTA,
-                'Indique al menos cuenta contable, centro de costo u orden de compra.'
+                'Indique al menos cuenta contable, centro de costo, orden de compra, o pida los movimientos sin centro de costo.'
             );
         }
 
@@ -1249,7 +1285,11 @@ final class AiConsultaOperativaSupport
         if ($cuentaIds !== []) {
             $base->whereIn('cuentacontable_id', $cuentaIds);
         }
-        if ($cc) {
+        if ($sinCc) {
+            $base->where(function ($q) {
+                $q->whereNull('centrocosto_id')->orWhere('centrocosto_id', 0);
+            });
+        } elseif ($cc) {
             $base->where('centrocosto_id', (int) $cc->id);
         }
         if ($ordencompraId > 0) {
@@ -1375,7 +1415,9 @@ final class AiConsultaOperativaSupport
             $empNombre = Empresa::query()->where('id', $empresaId)->value('nombre');
             $parrafos[] = 'Empresa: '.($empNombre ?: '#'.$empresaId);
         }
-        if ($cc) {
+        if ($sinCc) {
+            $parrafos[] = 'Solo movimientos sin centro de costo. La consulta no imputa ni modifica el asiento.';
+        } elseif ($cc) {
             $parrafos[] = 'Centro de costo: '.$cc->codigo.' — '.($cc->nombre ?? '');
         }
         if ($oc) {
@@ -1413,6 +1455,7 @@ final class AiConsultaOperativaSupport
                 'cuentas_incluidas' => $multiCuenta ? count($cuentaIds) : ($cuenta ? 1 : 0),
                 'centrocosto_id' => $cc ? (int) $cc->id : null,
                 'centrocosto_codigo' => $cc ? (string) $cc->codigo : null,
+                'sin_centrocosto' => $sinCc,
                 'empresa_id' => $empresaId,
                 'ordencompra_id' => $ordencompraId > 0 ? $ordencompraId : null,
                 'numero_oc' => $oc ? (string) ($oc->numeroordencompra ?? '') : null,
@@ -2010,6 +2053,525 @@ final class AiConsultaOperativaSupport
     /**
      * @return array<string,mixed>
      */
+    /**
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     */
+    private static function consultarFormulaCompra(array $params): array
+    {
+        if (! self::puedeFormula()) {
+            return self::fallo(self::INTENT_FORMULA_COMPRA, 'Sin permiso para consultar fórmulas.');
+        }
+
+        $articulo = self::articuloDeFormula($params, self::INTENT_FORMULA_COMPRA);
+        if (! ($articulo instanceof Articulo)) {
+            return $articulo;
+        }
+
+        RecepcionProveedorDepositoSupport::reiniciarCache();
+        $empresaId = (int) ($articulo->empresa_id ?? 0);
+        $compras = RecepcionProveedorDepositoSupport::resolverArticulosCompraDesdeInsumo(
+            $articulo,
+            $empresaId > 0 ? $empresaId : null
+        )->sortBy('sku')->values();
+
+        $filas = [];
+        foreach ($compras->take(40) as $compra) {
+            $filas[] = [
+                'sku' => (string) $compra->sku,
+                'descripcion' => (string) ($compra->descripcion ?? ''),
+                'skualternativo' => (string) ($compra->skualternativo ?? ''),
+            ];
+        }
+
+        $parrafos = [
+            'Artículos de compra de '.$articulo->sku.' — '.($articulo->descripcion ?? ''),
+            $compras->count().' artículo(s) de compra. La consulta no modifica datos.',
+        ];
+        if ($compras->count() > 40) {
+            $parrafos[] = 'Se muestran 40 de '.$compras->count().'.';
+        }
+        if ($compras->isEmpty()) {
+            $parrafos[] = 'Ningún artículo de compra apunta a este SKU por el alternativo.';
+        }
+
+        return [
+            'ok' => true,
+            'intent' => self::INTENT_FORMULA_COMPRA,
+            'score' => 0.9,
+            'parrafos' => $parrafos,
+            'links' => self::linksArticuloFormula($articulo),
+            'datos' => [
+                'articulo_id' => (int) $articulo->id,
+                'sku' => (string) $articulo->sku,
+                'cantidad' => $compras->count(),
+            ],
+            'tabla' => [
+                'columnas' => [
+                    ['key' => 'sku', 'label' => 'SKU compra'],
+                    ['key' => 'descripcion', 'label' => 'Descripción'],
+                    ['key' => 'skualternativo', 'label' => 'SKU alternativo'],
+                ],
+                'filas' => $filas,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     */
+    private static function consultarFormulaUso(array $params): array
+    {
+        if (! self::puedeFormula()) {
+            return self::fallo(self::INTENT_FORMULA_USO, 'Sin permiso para consultar fórmulas.');
+        }
+
+        $articulo = self::articuloDeFormula($params, self::INTENT_FORMULA_USO);
+        if (! ($articulo instanceof Articulo)) {
+            return $articulo;
+        }
+
+        $usos = ArticuloFormulasUsoSupport::listar((int) $articulo->id);
+        $filas = [];
+        $links = self::linksArticuloFormula($articulo);
+        foreach (array_slice($usos, 0, 40) as $uso) {
+            $cantidad = rtrim(rtrim(number_format((float) ($uso['cantidad'] ?? 0), 4, ',', '.'), '0'), ',');
+            if (! empty($uso['esopcional'])) {
+                $cantidad .= ' opcional';
+            }
+            $filas[] = [
+                'padre' => trim(($uso['articulo_sku'] ?? '').' — '.($uso['articulo_descripcion'] ?? '')),
+                'formula' => (string) ($uso['numero'] ?? $uso['codigo'] ?? ''),
+                'via' => (string) ($uso['via'] ?? ''),
+                'cantidad' => $cantidad,
+                'estado' => (string) ($uso['estado'] ?? ''),
+            ];
+            if (can('editar-formula-articulo', false) && count($links) < 6 && (int) ($uso['formula_id'] ?? 0) > 0) {
+                $links[] = [
+                    'etiqueta' => 'Fórmula '.($uso['numero'] ?? $uso['formula_id']),
+                    'url' => route('editar_formula_articulo', ['id' => (int) $uso['formula_id']]),
+                ];
+            }
+        }
+
+        $parrafos = [
+            'Fórmulas donde aparece '.$articulo->sku.' — '.($articulo->descripcion ?? ''),
+            count($usos).' aparición(es), como componente o como subfórmula. La consulta no modifica la fórmula.',
+        ];
+        if (count($usos) > 40) {
+            $parrafos[] = 'Se muestran 40 de '.count($usos).'.';
+        }
+        if ($usos === []) {
+            $parrafos[] = 'Este artículo no figura en ninguna fórmula.';
+        }
+
+        return [
+            'ok' => true,
+            'intent' => self::INTENT_FORMULA_USO,
+            'score' => 0.9,
+            'parrafos' => $parrafos,
+            'links' => $links,
+            'datos' => [
+                'articulo_id' => (int) $articulo->id,
+                'sku' => (string) $articulo->sku,
+                'cantidad' => count($usos),
+            ],
+            'tabla' => [
+                'columnas' => [
+                    ['key' => 'padre', 'label' => 'Artículo de la fórmula'],
+                    ['key' => 'formula', 'label' => 'Fórmula'],
+                    ['key' => 'via', 'label' => 'Cómo entra'],
+                    ['key' => 'cantidad', 'label' => 'Cantidad'],
+                    ['key' => 'estado', 'label' => 'Estado'],
+                ],
+                'filas' => $filas,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @return Articulo|array<string, mixed>
+     */
+    private static function articuloDeFormula(array $params, string $intent): Articulo|array
+    {
+        $texto = trim((string) ($params['sku'] ?? $params['valor'] ?? ''));
+        if ($texto === '') {
+            return self::fallo($intent, 'Indique el SKU o el nombre del artículo.');
+        }
+
+        $encontrado = self::resolverArticuloPorTexto($texto, ! empty($params['solo_insumo']));
+        if (! ($encontrado['ok'] ?? false)) {
+            return self::fallo($intent, (string) ($encontrado['error'] ?? 'Artículo no encontrado.'));
+        }
+
+        $articulo = Articulo::query()->find(
+            (int) $encontrado['articulo']->id,
+            ['id', 'sku', 'descripcion', 'empresa_id']
+        );
+        if (! $articulo instanceof Articulo) {
+            return self::fallo($intent, 'Artículo no encontrado.');
+        }
+
+        return $articulo;
+    }
+
+    /**
+     * @return list<array{etiqueta: string, url: string}>
+     */
+    private static function linksArticuloFormula(Articulo $articulo): array
+    {
+        if (! can('editar-articulos', false) && ! can('listar-articulos', false)) {
+            return [];
+        }
+
+        return [[
+            'etiqueta' => 'Abrir artículo',
+            'url' => route('editar_articulo', ['id' => $articulo->id]).'?origen=modal_consulta&vista=consulta',
+        ]];
+    }
+
+    /**
+     * Lee la última conciliación ya corrida. No ejecuta el mayor ni graba pares.
+     *
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     */
+    private static function consultarConciliacionBancaria(array $params): array
+    {
+        if (! self::usuarioPuedeIntent(self::INTENT_CONCILIACION_BANCARIA)) {
+            return self::fallo(self::INTENT_CONCILIACION_BANCARIA, 'Sin permiso para consultar la conciliación bancaria.');
+        }
+
+        $cuenta = self::resolverCuentacajaConciliacion($params);
+        if (! ($cuenta instanceof Cuentacaja)) {
+            return $cuenta;
+        }
+
+        $periodo = self::periodoConciliacion($params);
+        $ejecucion = ConciliacionBancariaEjecucion::query()
+            ->where('cuentacaja_id', (int) $cuenta->id)
+            ->where('mes', $periodo['mes'])
+            ->where('anio', $periodo['anio'])
+            ->orderByDesc('id')
+            ->first();
+
+        $cache = ConciliacionBancariaResultadoCache::leer(
+            (int) ($ejecucion->empresa_id ?? $cuenta->empresa_id ?? 0),
+            (int) $cuenta->id,
+            $periodo['mes'],
+            $periodo['anio'],
+            0,
+        );
+
+        $links = [[
+            'etiqueta' => 'Abrir conciliación bancaria',
+            'url' => route('conciliacion_bancaria', array_filter([
+                'empresa_id' => (int) ($ejecucion->empresa_id ?? $cuenta->empresa_id ?? 0) ?: null,
+                'cuentacaja_id' => (int) $cuenta->id,
+                'mes' => $periodo['mes'],
+                'anio' => $periodo['anio'],
+            ])),
+        ]];
+
+        $encabezado = 'Conciliación bancaria '.$cuenta->codigo.' — '.($cuenta->nombre ?? '')
+            .' · '.$periodo['mes'].'/'.$periodo['anio'].'.';
+
+        if (! $ejecucion && ! is_array($cache)) {
+            return [
+                'ok' => true,
+                'intent' => self::INTENT_CONCILIACION_BANCARIA,
+                'score' => 0.8,
+                'parrafos' => [
+                    $encabezado,
+                    'No hay una conciliación corrida de ese período. Esta consulta no la ejecuta ni graba pares.',
+                ],
+                'links' => $links,
+                'datos' => [
+                    'cuentacaja_id' => (int) $cuenta->id,
+                    'mes' => $periodo['mes'],
+                    'anio' => $periodo['anio'],
+                ],
+            ];
+        }
+
+        $resumen = is_array($ejecucion?->resumen_json) ? $ejecucion->resumen_json : [];
+        $diferencia = $ejecucion ? (float) $ejecucion->diferencia : (float) ($cache['diferencia'] ?? 0);
+        $parrafos = [
+            $encabezado,
+            'Última corrida guardada. La consulta no vuelve a conciliar ni graba pares.',
+            'Diferencia de saldo: '.number_format($diferencia, 2, ',', '.').'.',
+        ];
+        if ($resumen !== []) {
+            $parrafos[] = 'Pares nuevos: '.(int) ($resumen['pares_nuevos'] ?? 0)
+                .' · Pendientes contables: '.(int) ($resumen['pendientes_contables'] ?? 0)
+                .' · Pendientes banco: '.(int) ($resumen['pendientes_banco'] ?? 0).'.';
+        }
+
+        $filas = [];
+        $pares = is_array($cache['pares_nuevos'] ?? null) ? $cache['pares_nuevos'] : [];
+        foreach (array_slice($pares, 0, 8) as $par) {
+            if (! is_array($par)) {
+                continue;
+            }
+            $cont = is_array($par['contable'] ?? null) ? $par['contable'] : [];
+            $banco = is_array($par['banco'] ?? null) ? $par['banco'] : [];
+            $filas[] = [
+                'fecha' => (string) ($cont['fecha_fmt'] ?? $cont['fecha'] ?? ''),
+                'importe' => number_format((float) ($par['importe'] ?? $cont['importe'] ?? 0), 2, ',', '.'),
+                'contable' => mb_substr(trim((string) ($cont['descripcion'] ?? $cont['tipo_comp'] ?? '')), 0, 80),
+                'banco' => mb_substr(trim((string) ($banco['code_description_ib'] ?? $banco['code_description_bank'] ?? '')), 0, 80),
+                'score' => (string) ($par['score'] ?? ''),
+            ];
+        }
+        if ($filas !== []) {
+            $parrafos[] = 'Pares sugeridos en esa corrida (hasta 8). Hay que confirmarlos en la pantalla.';
+        }
+
+        $eval = null;
+        if (is_array($cache)) {
+            $eval = ConciliacionBancariaAnomaliaSupport::evaluar($cache);
+            foreach (array_slice($eval['anomalias'], 0, 6) as $anomalia) {
+                $mensaje = trim((string) ($anomalia['mensaje'] ?? ''));
+                if ($mensaje !== '') {
+                    $parrafos[] = $mensaje;
+                }
+            }
+        } elseif ($filas === []) {
+            $parrafos[] = 'El detalle de pares sugeridos no está en la copia de esa corrida. Abrí la conciliación para verlos.';
+        }
+
+        return [
+            'ok' => true,
+            'intent' => self::INTENT_CONCILIACION_BANCARIA,
+            'score' => (float) ($eval['score'] ?? 0.7),
+            'parrafos' => array_slice($parrafos, 0, 16),
+            'links' => $links,
+            'tabla' => $filas === [] ? null : [
+                'columnas' => [
+                    ['key' => 'fecha', 'label' => 'Fecha'],
+                    ['key' => 'importe', 'label' => 'Importe'],
+                    ['key' => 'contable', 'label' => 'Contable'],
+                    ['key' => 'banco', 'label' => 'Banco'],
+                    ['key' => 'score', 'label' => 'Score'],
+                ],
+                'filas' => $filas,
+            ],
+            'datos' => [
+                'cuentacaja_id' => (int) $cuenta->id,
+                'ejecucion_id' => $ejecucion ? (int) $ejecucion->id : null,
+                'mes' => $periodo['mes'],
+                'anio' => $periodo['anio'],
+                'diferencia' => $diferencia,
+                'pares_sugeridos' => count($pares),
+            ],
+        ];
+    }
+
+    /**
+     * Explica diferencias del turno habilitado. No cobra, no cierra y no graba la decisión.
+     *
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     */
+    private static function consultarConciliacionTurno(array $params): array
+    {
+        if (! self::usuarioPuedeIntent(self::INTENT_CONCILIACION_TURNO)) {
+            return self::fallo(self::INTENT_CONCILIACION_TURNO, 'Sin permiso para consultar la conciliación del turno.');
+        }
+
+        $empresaRes = AiResolucionMaestrosSupport::resolverEmpresa($params);
+        if (! ($empresaRes['ok'] ?? false)) {
+            return self::fallo(self::INTENT_CONCILIACION_TURNO, (string) ($empresaRes['error'] ?? 'Empresa no resuelta.'));
+        }
+        $empresaId = (int) ($empresaRes['empresa_id'] ?? 0);
+
+        $query = TurnoOperativoGastronomia::query()->with('jornada');
+        if ($empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        } else {
+            app(EmpresaRepositoryInterface::class)->aplicarFiltroEmpresasAsignadas($query, 'empresa_id', false);
+        }
+        $pc = trim((string) ($params['identificador_pc'] ?? ''));
+        if ($pc !== '') {
+            $query->where('identificador_pc', $pc);
+        }
+
+        $habilitados = (clone $query)
+            ->where('estado', TurnoOperativoGastronomia::ESTADO_HABILITADO)
+            ->orderByDesc('habilitacion_en')
+            ->limit(5)
+            ->get();
+        $turno = $habilitados->first();
+            $avisoVarios = $habilitados->count() > 1
+            ? 'Hay varios turnos habilitados. Muestro el más reciente.'
+            : null;
+        if (! $turno) {
+            $turno = (clone $query)
+                ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
+                ->where('cierre_en', '>=', now()->subDay())
+                ->orderByDesc('cierre_en')
+                ->first();
+            $avisoVarios = $turno ? 'No hay turno habilitado. Muestro el último cierre de las últimas 24 horas.' : null;
+        }
+        if (! $turno) {
+            return self::fallo(
+                self::INTENT_CONCILIACION_TURNO,
+                'No hay un turno de gastronomía habilitado para explicar diferencias.'
+            );
+        }
+
+        $fecha = $turno->jornada?->fecha_jornada;
+        $fechaJornada = $fecha instanceof \DateTimeInterface
+            ? $fecha->format('Y-m-d')
+            : substr((string) $fecha, 0, 10);
+        if ($fechaJornada === '') {
+            return self::fallo(self::INTENT_CONCILIACION_TURNO, 'El turno no tiene jornada.');
+        }
+
+        $habilitacion = $turno->habilitacion_en instanceof Carbon
+            ? $turno->habilitacion_en
+            : Carbon::parse((string) $turno->habilitacion_en);
+
+        try {
+            $grilla = GastronomiaTurnoOperativoTotalesSupport::grillaConciliacionRespuesta(
+                (string) $turno->identificador_pc,
+                (int) $turno->empresa_id,
+                $fechaJornada,
+                $habilitacion,
+                1,
+                40,
+                true,
+            );
+        } catch (\Throwable $e) {
+            return self::fallo(self::INTENT_CONCILIACION_TURNO, 'No se pudo armar la conciliación del turno.');
+        }
+
+        $eval = GastronomiaConciliacionTurnoExplicacionSupport::evaluar(
+            is_array($grilla['filas'] ?? null) ? $grilla['filas'] : [],
+            is_array($grilla['totales'] ?? null) ? $grilla['totales'] : [],
+        );
+
+        $filas = [];
+        foreach (array_slice($eval['hipotesis'], 0, 20) as $hipotesis) {
+            $filas[] = [
+                'comprobante' => (string) ($hipotesis['codigo'] ?? ''),
+                'tipo' => (string) ($hipotesis['tipo'] ?? ''),
+                'diferencia' => number_format((float) ($hipotesis['diferencia'] ?? 0), 2, ',', '.'),
+                'detalle' => (string) ($hipotesis['mensaje'] ?? ''),
+            ];
+        }
+
+        $parrafos = array_values(array_filter([
+            'Turno '.(string) $turno->identificador_pc.' · jornada '.$fechaJornada
+                .' · estado '.$turno->estado.'.',
+            $avisoVarios,
+            'La consulta no cobra, no cierra el turno y no confirma un ajuste.',
+        ]));
+        foreach ($eval['parrafos'] as $parrafo) {
+            if (count($parrafos) >= 14) {
+                break;
+            }
+            $parrafos[] = $parrafo;
+        }
+
+        return [
+            'ok' => true,
+            'intent' => self::INTENT_CONCILIACION_TURNO,
+            'score' => (float) ($eval['score'] ?? 0.7),
+            'parrafos' => $parrafos,
+            'links' => [[
+                'etiqueta' => 'Abrir habilitación de turno',
+                'url' => route('gastronomia_habilitacion_turno'),
+            ]],
+            'tabla' => $filas === [] ? null : [
+                'columnas' => [
+                    ['key' => 'comprobante', 'label' => 'Comprobante'],
+                    ['key' => 'tipo', 'label' => 'Tipo'],
+                    ['key' => 'diferencia', 'label' => 'Diferencia'],
+                    ['key' => 'detalle', 'label' => 'Detalle'],
+                ],
+                'filas' => $filas,
+            ],
+            'datos' => [
+                'turno_id' => (int) $turno->id,
+                'identificador_pc' => (string) $turno->identificador_pc,
+                'fecha_jornada' => $fechaJornada,
+                'filas_dif' => (int) ($eval['resumen']['filas_dif'] ?? 0),
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @return Cuentacaja|array<string, mixed>
+     */
+    private static function resolverCuentacajaConciliacion(array $params): Cuentacaja|array
+    {
+        $codigo = trim((string) ($params['cuentacaja_codigo'] ?? ''));
+        if ($codigo === '') {
+            return self::fallo(
+                self::INTENT_CONCILIACION_BANCARIA,
+                'Indique la cuenta de caja (ej.: «conciliación bancaria cuenta de caja 300 mes pasado»).'
+            );
+        }
+
+        $empresaRes = AiResolucionMaestrosSupport::resolverEmpresa($params);
+        if (! ($empresaRes['ok'] ?? false)) {
+            return self::fallo(self::INTENT_CONCILIACION_BANCARIA, (string) ($empresaRes['error'] ?? 'Empresa no resuelta.'));
+        }
+        $empresaId = (int) ($empresaRes['empresa_id'] ?? 0);
+        $repo = app(EmpresaRepositoryInterface::class);
+        if ($empresaId > 0 && ! $repo->empresaIdPermitida($empresaId)) {
+            return self::fallo(self::INTENT_CONCILIACION_BANCARIA, 'La empresa no está asignada a su usuario.');
+        }
+
+        $query = Cuentacaja::query()->where('codigo', $codigo);
+        if ($empresaId > 0) {
+            $query->paraEmpresa($empresaId);
+        } else {
+            $repo->aplicarFiltroEmpresasAsignadas($query, 'empresa_id', true);
+        }
+        $cuentas = $query->limit(6)->get(['id', 'codigo', 'nombre', 'empresa_id']);
+        if ($cuentas->isEmpty()) {
+            return self::fallo(self::INTENT_CONCILIACION_BANCARIA, 'No se encontró la cuenta de caja «'.$codigo.'».');
+        }
+        if ($cuentas->count() > 1) {
+            $lista = $cuentas->map(fn (Cuentacaja $c) => $c->codigo.' — '.$c->nombre)->implode('; ');
+
+            return self::fallo(
+                self::INTENT_CONCILIACION_BANCARIA,
+                'Hay varias cuentas «'.$codigo.'». Indique la empresa. '.$lista
+            );
+        }
+
+        return $cuentas->first();
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @return array{mes: int, anio: int}
+     */
+    private static function periodoConciliacion(array $params): array
+    {
+        $desde = trim((string) ($params['fecha_desde'] ?? ''));
+        if ($desde !== '' && preg_match('/^(\d{4})-(\d{2})-\d{2}$/', $desde, $m) === 1) {
+            return ['mes' => (int) $m[2], 'anio' => (int) $m[1]];
+        }
+
+        $anterior = Carbon::now()->subMonth();
+
+        return ['mes' => (int) $anterior->month, 'anio' => (int) $anterior->year];
+    }
+
+    private static function puedeFormula(): bool
+    {
+        return can('listar-formula-articulo', false)
+            || can('editar-formula-articulo', false)
+            || can('listar-articulos', false);
+    }
+
     private static function fallo(string $intent, string $mensaje): array
     {
         return [

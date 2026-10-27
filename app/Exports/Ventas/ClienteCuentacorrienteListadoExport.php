@@ -44,6 +44,8 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
 
     private ?int $monedaId = null;
 
+    private ?int $empresaId = null;
+
     private string $expresion = CuentacorrienteSaldosPorMoneda::EXPRESION_ORIGEN;
 
     /** @var array{saldo_cc?: float, deuda?: float, abreviatura?: string} */
@@ -70,9 +72,9 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
     public function view(): View
     {
         if ($this->modoVista === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
-            $filas = $this->clienteCuentacorrienteRepository->listarDeudaCliente($this->busqueda, $this->clienteId, false, $this->monedaId);
+            $filas = $this->clienteCuentacorrienteRepository->listarDeudaCliente($this->busqueda, $this->clienteId, false, $this->monedaId, $this->empresaId);
         } else {
-            $filas = $this->clienteCuentacorrienteRepository->listarCuentaCorriente($this->busqueda, $this->clienteId, false, $this->monedaId);
+            $filas = $this->clienteCuentacorrienteRepository->listarCuentaCorriente($this->busqueda, $this->clienteId, false, $this->monedaId, $this->empresaId);
         }
 
         self::enriquecerNombreEmpresa($filas);
@@ -249,6 +251,7 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
         ?int $monedaId = null,
         string $expresion = CuentacorrienteSaldosPorMoneda::EXPRESION_ORIGEN,
         array $equivalentePesos = [],
+        ?int $empresaId = null,
     ): self {
         $this->busqueda = $busqueda;
         $this->clienteId = $clienteId;
@@ -256,6 +259,7 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
         $this->nombreCliente = $nombreCliente;
         $this->saldosPorMoneda = $saldosPorMoneda;
         $this->monedaId = $monedaId;
+        $this->empresaId = $empresaId;
         $this->expresion = CuentacorrienteSaldosPorMoneda::resolverExpresion($expresion);
         $this->equivalentePesos = $equivalentePesos;
 

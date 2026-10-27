@@ -40,6 +40,7 @@ use App\Repositories\Ventas\TipoempresaClienteRepositoryInterface;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Repositories\Configuracion\TipodocumentoRepositoryInterface;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Ordenventa\OrdenventaRepositoryInterface;
 use App\Queries\Ventas\ClienteQueryInterface;
@@ -68,6 +69,7 @@ use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Listado\QueryRetornoListado;
+use App\Support\Configuracion\EmpresaFiltroExternoSupport;
 use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Ventas\ClienteCuentacorrientePreferenciasUsuario;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
@@ -177,6 +179,7 @@ class ClienteController extends Controller
             && ! $request->has('filtro_valor')
             && ! $request->has('qbe')
             && ! $request->has('filtro_codigo')
+            && ! $request->has('filtro_nombre')
             && ! $request->boolean('limpiar_filtros')
         ) {
             $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ClienteListadoColumnas::RECURSO, $usuarioId);
@@ -403,6 +406,7 @@ class ClienteController extends Controller
                 'valor' => $filtros['valor'],
                 'valor_hasta' => $filtros['valor_hasta'] ?? '',
                 'codigo' => $filtros['codigo'] ?? '',
+                'nombre' => $filtros['nombre'] ?? '',
                 'qbe' => $filtros['qbe'] ?? [],
                 'orden' => $filtros['orden'] ?? [],
                 'agrupar' => $filtros['agrupar'] ?? [],
@@ -731,7 +735,13 @@ class ClienteController extends Controller
      */
     public function editar(Request $request, $id)
     {
-        can('editar-clientes');
+        if ($request->query('vista') === 'consulta') {
+            if (! can('editar-clientes', false) && ! can('listar-clientes', false) && ! can('actualizar-clientes', false)) {
+                abort(403);
+            }
+        } else {
+            can('editar-clientes');
+        }
         $data = $this->clienteRepository->findOrFail($id);
 
         $this->armaTablasVista($pais_query, $provincia_query, $condicioniva_query, $zonavta_query,
@@ -1234,23 +1244,26 @@ class ClienteController extends Controller
 
         $cliente = Self::leeUnCliente($cliente_id);
 
-        $urlOrigen = request()->headers->get('referer');
+        $paramsRetornoListado = $this->paramsRetornoListadoCliente($request);
+        $volverListadoUrl = route('cliente', $paramsRetornoListado);
+        $retornoQuery = $paramsRetornoListado !== [] ? http_build_query($paramsRetornoListado) : '';
+        [$empresaQuery, $empresaId, $empresaScope] = $this->empresaCuentaCorrienteCliente($request);
 
         $nombrecliente = '';
         if ($cliente) {
             $nombrecliente = $cliente->nombre;
         }
 
-        $saldosPorMoneda = $this->cliente_cuentacorrienteRepository->calcularSaldosYDeudasPorMoneda((int) $cliente_id);
-        $equivalentePesos = $this->cliente_cuentacorrienteRepository->calcularEquivalentePesos((int) $cliente_id);
+        $saldosPorMoneda = $this->cliente_cuentacorrienteRepository->calcularSaldosYDeudasPorMoneda((int) $cliente_id, $empresaId);
+        $equivalentePesos = $this->cliente_cuentacorrienteRepository->calcularEquivalentePesos((int) $cliente_id, null, $empresaId);
         $mostrarSaldoCorrido = CuentacorrienteSaldosPorMoneda::mostrarSaldoCorrido($monedaId, $saldosPorMoneda);
 
         switch ($formato) {
         case 'PDF':
             if ($modoVista === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
-                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarDeudaCliente($busqueda, $cliente_id, false, $monedaId);
+                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarDeudaCliente($busqueda, $cliente_id, false, $monedaId, $empresaId);
             } else {
-                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $cliente_id, false, $monedaId);
+                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $cliente_id, false, $monedaId, $empresaId);
             }
 
             $view = \View::make('ventas.cuentacorriente.listado', compact(
@@ -1275,33 +1288,35 @@ class ClienteController extends Controller
 
         case 'EXCEL':
             return (new ClienteCuentacorrienteListadoExport($this->cliente_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $cliente_id, $modoVista, $nombrecliente, $saldosPorMoneda, $monedaId, $expresion, $equivalentePesos)
+                ->parametros($busqueda, (int) $cliente_id, $modoVista, $nombrecliente, $saldosPorMoneda, $monedaId, $expresion, $equivalentePesos, $empresaId)
                 ->download('cuentacorriente_cliente.xlsx');
             break;
 
         case 'CSV':
             return (new ClienteCuentacorrienteListadoExport($this->cliente_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $cliente_id, $modoVista, $nombrecliente, $saldosPorMoneda, $monedaId, $expresion, $equivalentePesos)
+                ->parametros($busqueda, (int) $cliente_id, $modoVista, $nombrecliente, $saldosPorMoneda, $monedaId, $expresion, $equivalentePesos, $empresaId)
                 ->download('cuentacorriente_cliente.csv', \Maatwebsite\Excel\Excel::CSV);
             break;
 
         default:
             if ($modoVista === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
-                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarDeudaCliente($busqueda, $cliente_id, true, $monedaId);
+                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarDeudaCliente($busqueda, $cliente_id, true, $monedaId, $empresaId);
                 $saldosAnterioresPorMoneda = [];
                 $saldoAnteriorPesos = 0.0;
             } else {
-                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $cliente_id, true, $monedaId);
+                $cuentacorriente = $this->cliente_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $cliente_id, true, $monedaId, $empresaId);
                 $primerRegistro = $cuentacorriente->first();
                 $saldosAnterioresPorMoneda = $this->cliente_cuentacorrienteRepository->saldosAnterioresPorMoneda(
                     (int) $cliente_id,
                     $primerRegistro,
                     $monedaId,
+                    $empresaId,
                 );
                 $saldoAnteriorPesos = $this->cliente_cuentacorrienteRepository->saldoAnteriorPaginaEnPesos(
                     (int) $cliente_id,
                     $primerRegistro,
                     $monedaId,
+                    $empresaId,
                 );
             }
 
@@ -1312,7 +1327,8 @@ class ClienteController extends Controller
                 'busqueda' => $busqueda,
                 'id' => $cliente_id,
                 'nombrecliente' => $nombrecliente,
-                'urlOrigen' => $urlOrigen,
+                'volverListadoUrl' => $volverListadoUrl,
+                'retornoQuery' => $retornoQuery,
                 'moneda_query' => $moneda_query,
                 'modoVista' => $modoVista,
                 'saldosPorMoneda' => $saldosPorMoneda,
@@ -1322,6 +1338,9 @@ class ClienteController extends Controller
                 'mostrarSaldoCorrido' => $mostrarSaldoCorrido,
                 'saldosAnterioresPorMoneda' => $saldosAnterioresPorMoneda ?? [],
                 'saldoAnteriorPesos' => $saldoAnteriorPesos ?? 0.0,
+                'empresa_query' => $empresaQuery,
+                'empresaId' => $empresaId,
+                'empresaScope' => $empresaScope,
             ];
 
             return view('ventas.cuentacorriente.index', $datas);
@@ -1409,6 +1428,105 @@ class ClienteController extends Controller
         }
 
         return ['mensaje' => $mensajeBase];
+    }
+
+    /**
+     * Filtros del index de clientes para el botón «Volver al listado» de la cuenta corriente.
+     * El referer deja de servir en cuanto se pagina o se cambia el modo, y se ocultaba
+     * el botón cuando la ficha del cliente (URL con «editar») era la página anterior.
+     *
+     * @return array<string, mixed>
+     */
+    /**
+     * @return array{0: \Illuminate\Support\Collection, 1: ?int, 2: string}
+     */
+    private function empresaCuentaCorrienteCliente(Request $request): array
+    {
+        $empresas = app(EmpresaRepositoryInterface::class)->allFiltrado();
+        $permitidas = $empresas->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [$empresas, null, 'todas'];
+        }
+
+        if ($request->filled('empresa_id')) {
+            $id = (int) $request->input('empresa_id');
+            if ($id > 0 && ($permitidas === [] || in_array($id, $permitidas, true))) {
+                return [$empresas, $id, 'una'];
+            }
+        }
+
+        $default = EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
+        if ($default !== null && $default > 0 && ($permitidas === [] || in_array($default, $permitidas, true))) {
+            return [$empresas, $default, 'una'];
+        }
+
+        return [$empresas, null, 'todas'];
+    }
+
+    private function paramsRetornoListadoCliente(Request $request): array
+    {
+        $desdeParam = $this->parseQueryRetornoCliente($request->query('retorno'));
+        if ($desdeParam !== []) {
+            return $desdeParam;
+        }
+
+        return $this->queryIndexClienteDesdeReferer((string) $request->headers->get('referer', '')) ?? [];
+    }
+
+    /**
+     * @param  mixed  $raw
+     * @return array<string, mixed>
+     */
+    private function parseQueryRetornoCliente($raw): array
+    {
+        if (! is_string($raw) || $raw === '') {
+            return [];
+        }
+
+        $query = [];
+        parse_str($raw, $query);
+
+        return $this->limpiarQueryRetornoCliente($query);
+    }
+
+    /**
+     * @return array<string, mixed>|null null si el referer no es el index ni la ficha del cliente
+     */
+    private function queryIndexClienteDesdeReferer(string $referer): ?array
+    {
+        if ($referer === '') {
+            return null;
+        }
+
+        $partes = parse_url($referer);
+        $path = (string) ($partes['path'] ?? '');
+        $esIndex = (bool) preg_match('#/ventas/cliente/?$#', $path);
+        $esFicha = (bool) preg_match('#/ventas/cliente/\d+/editar/?$#', $path);
+        if (! $esIndex && ! $esFicha) {
+            return null;
+        }
+
+        $query = [];
+        if (! empty($partes['query'])) {
+            parse_str((string) $partes['query'], $query);
+        }
+
+        return $this->limpiarQueryRetornoCliente(is_array($query) ? $query : []);
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     * @return array<string, mixed>
+     */
+    private function limpiarQueryRetornoCliente(array $query): array
+    {
+        unset($query['origen'], $query['embed'], $query['retorno']);
+        if (($query['vista'] ?? null) === 'consulta') {
+            unset($query['vista']);
+        }
+
+        return $query;
     }
 
     /**

@@ -54,6 +54,51 @@
   align-items: center;
 }
 
+/* Clientes: la vista va arriba. Abajo, los botones comparten la línea con código y nombre. */
+.lw-toolbar-clientes {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+}
+
+.lw-toolbar-vista .lw-vista-select {
+  width: 280px;
+  max-width: 100%;
+}
+
+.lw-toolbar-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.lw-toolbar-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lw-toolbar-busqueda {
+  margin-left: auto;
+  justify-content: flex-end;
+  max-width: 100%;
+}
+
+.lw-toolbar-export {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.lw-toolbar-busqueda .lw-search-rapida {
+  width: 280px;
+  max-width: 100%;
+  flex: 0 1 280px;
+}
+
 .lw-vista-select {
   min-width: 180px;
   border-radius: 999px;
@@ -793,6 +838,19 @@
   .lw-toolbar-left,
   .lw-toolbar-right {
     width: 100%;
+  }
+  .lw-toolbar-vista .lw-vista-select,
+  .lw-toolbar-acciones,
+  .lw-toolbar-busqueda {
+    width: 100%;
+  }
+  .lw-toolbar-busqueda {
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+  .lw-toolbar-busqueda .lw-search-rapida {
+    width: 100%;
+    flex-basis: 100%;
   }
 }
 

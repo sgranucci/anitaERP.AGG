@@ -113,9 +113,25 @@ final class ComprobanteImpresionResolverSupport
             ->sortByDesc(fn (ComprobanteImpresionPrograma $p) => $p->empresa_id ? 1 : 0)
             ->first();
 
+        $motivo = $fallback ? 'Programa DEFAULT (sin regla)' : 'Sin programa configurado';
+        if ($fallback === null) {
+            // La empresa del comprobante no tiene programa. El DEFAULT de la
+            // instalación cubre ese caso: si no, la sesión queda sin copias
+            // y Ejecutar / PDF salen inhabilitados.
+            $fallback = ComprobanteImpresionPrograma::query()
+                ->with('formularios.copias.salida')
+                ->where('codigo', 'DEFAULT')
+                ->get()
+                ->sortBy(fn (ComprobanteImpresionPrograma $p) => $p->empresa_id ? 1 : 0)
+                ->first();
+            if ($fallback) {
+                $motivo = 'Programa DEFAULT (la empresa del comprobante no tiene programa propio)';
+            }
+        }
+
         return [
             'programa' => $fallback,
-            'motivo' => $fallback ? 'Programa DEFAULT (sin regla)' : 'Sin programa configurado',
+            'motivo' => $motivo,
             'empresa_id' => $empresaId,
             'transporte_id' => $transporteId,
             'provincia_entrega_id' => $provinciaEntregaId,

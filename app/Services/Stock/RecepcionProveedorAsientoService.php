@@ -911,6 +911,7 @@ class RecepcionProveedorAsientoService
                 (float) ($linea->descuento ?? 0),
                 0,
                 (float) ($linea->cotizacion ?: 1),
+                $linea->peso_bulto ?? 0,
             );
         }
 
@@ -997,6 +998,7 @@ class RecepcionProveedorAsientoService
                 (float) ($linea->descuento ?? 0),
                 0,
                 (float) ($linea->cotizacion ?: 1),
+                $linea->peso_bulto ?? 0,
             );
 
             $clave = $ctaId.'|'.((int) ($linea->centrocosto_id ?? 0));

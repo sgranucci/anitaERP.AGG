@@ -28,6 +28,7 @@
         <input type="hidden" id="puntoventadefault_id" value="{{ $puntoventadefault_id ?? '' }}">
         <input type="hidden" id="puntoventaremitodefault_id" value="{{ $puntoventaremitodefault_id ?? '' }}">
         <input type="hidden" id="tipotransacciondefault_id" value="{{ $tipotransacciondefault_id ?? '' }}">
+        <input type="hidden" id="caja_reales" value="">
         <input type="hidden" id="totalcajaspedido" value="">
         <input type="hidden" id="totalpiezaspedido" value="">
         <input type="hidden" id="totalkilospesados" value="">

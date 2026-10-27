@@ -480,13 +480,25 @@ class Empleado_SueldosController extends Controller
             ->with('mensaje', 'Empleado creado en alta provisoria. Se envió aviso para autorización.');
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        can('editar-empleado-sueldos');
+        $consulta = $request->query('origen') === 'modal_consulta'
+            || $request->query('vista') === 'consulta';
+        if ($consulta) {
+            if (! can('listar-empleado-sueldos', false)
+                && ! can('editar-empleado-sueldos', false)
+                && ! can('actualizar-empleado-sueldos', false)) {
+                can('listar-empleado-sueldos');
+            }
+        } else {
+            can('editar-empleado-sueldos');
+        }
         $data = $this->repository->findOrFail($id);
 
-        // Motor de vacaciones al abrir el legajo: la solapa solo lee el ledger.
-        $this->sincronizarSaldosVacaciones($data);
+        // La consulta no recalcula vacaciones: eso escribe el ledger.
+        if (! $consulta) {
+            $this->sincronizarSaldosVacaciones($data);
+        }
 
         $usaTabla = $data->categoria
             ? CategoriaOrigenBases::usaTablaCategoria($data->categoria->origen_bases)

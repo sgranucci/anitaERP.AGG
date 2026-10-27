@@ -278,9 +278,90 @@ function ncDevolucionPercepcionesProrrateadas(netoNc) {
     return out;
 }
 
+function ncDevolucionCantidadLinea($tr) {
+    var $campo = $tr.find('.kilo').length ? $tr.find('.kilo') : $tr.find('.cantidad');
+    return ncDevolucionNumero($campo.val());
+}
+
+function ncDevolucionEsDevolucionTotal() {
+    var filas = ncDevolucionFilasOrigen();
+    if (!filas.length) {
+        return false;
+    }
+    var alguna = false;
+    var total = true;
+    filas.each(function () {
+        var $tr = $(this);
+        var original = ncDevolucionNumero($tr.attr('data-cantidad-original'));
+        if (!(original > 0.0001)) {
+            original = ncDevolucionNumero($tr.attr('data-cantidad-pendiente'));
+        }
+        if (!(original > 0.0001)) {
+            return;
+        }
+        alguna = true;
+        var pendiente = ncDevolucionNumero($tr.attr('data-cantidad-pendiente'));
+        if (Math.abs(pendiente - original) > 0.009) {
+            total = false;
+            return false;
+        }
+        if (!ncDevolucionLineaActiva($tr)) {
+            total = false;
+            return false;
+        }
+        if (Math.abs(ncDevolucionCantidadLinea($tr) - original) > 0.009) {
+            total = false;
+            return false;
+        }
+    });
+    return alguna && total;
+}
+
+function ncDevolucionPieAnulacionTotal() {
+    var origen = window.ncPercepcionesOrigen || {};
+    var pie = origen.pie || [];
+    if (!pie.length) {
+        return null;
+    }
+    var jurCaba = Number(origen.jurisdiccion_caba) || 901;
+    var fechaNota = $.trim($('#fechafactura').val() || '');
+    var cabaOk = ncDevolucionCabaDentroDePlazo(origen.fecha_origen, fechaNota);
+    var filas = [];
+    var omitido = 0;
+    var totalOrigen = null;
+    pie.forEach(function (fila) {
+        var concepto = String(fila.concepto || '');
+        var importe = ncDevolucionRedondear(fila.importe);
+        if (concepto === 'Total') {
+            totalOrigen = importe;
+            return;
+        }
+        var jur = Number(fila.jurisdiccion) || 0;
+        if (fila.es_iibb && !cabaOk && jur === jurCaba) {
+            omitido += importe;
+            return;
+        }
+        filas.push({
+            concepto: concepto,
+            tasa: Number(fila.tasa) || 0,
+            importe: importe
+        });
+    });
+    var total = totalOrigen === null ? 0 : ncDevolucionRedondear(totalOrigen - omitido);
+    filas.push({ concepto: 'Total', tasa: 0, importe: total });
+    return filas;
+}
+
 function ncDevolucionPreviewTotales() {
     if ($('#formgeneral').attr('data-factura-proceso') !== 'nc') {
         return;
+    }
+    if (ncDevolucionEsDevolucionTotal()) {
+        var pieTotal = ncDevolucionPieAnulacionTotal();
+        if (pieTotal) {
+            ncDevolucionPintarConceptos(pieTotal);
+            return;
+        }
     }
     var neto = 0;
     var ivas = {};
