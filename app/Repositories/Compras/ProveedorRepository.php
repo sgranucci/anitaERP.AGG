@@ -166,8 +166,11 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$data = LocalidadProvinciaSupport::aplicar($data);
 		$data = $this->aplicarCuentaMeDesdeOrigenSiCorresponde($data);
 
-        $proveedor = $this->model->findOrFail($id)
-            ->update($data);
+        $proveedorActual = $this->model->findOrFail($id);
+		if (! isset($data['estado']) || $data['estado'] === '' || $data['estado'] === null) {
+			$data['estado'] = $proveedorActual->estado ?: 'Activo';
+		}
+        $proveedor = $proveedorActual->update($data);
 		//
 		// Actualiza anita (si falta promae, inserta — evita UPDATE 0 filas silencioso)
 		self::actualizarAnita($data, $data['codigo']);
@@ -1268,6 +1271,27 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 	}
 
 	/**
+	 * Código Anita de prom_estado_pro. Si el combo no viaja (select disabled), conserva el del ERP.
+	 */
+	private function codigoEstadoAnita(array $request): string
+	{
+		$estado = $request['estado'] ?? '';
+		if ($estado === '' || $estado === null) {
+			$codigo = $request['codigo'] ?? null;
+			if ($codigo !== null && $codigo !== '') {
+				$estado = (string) (Proveedor::query()->where('codigo', $codigo)->value('estado') ?? '');
+			}
+		}
+
+		return match ((string) $estado) {
+			'Suspendido' => '1',
+			'Alta Pendiente' => '2',
+			'Regularizado' => '3',
+			default => '0',
+		};
+	}
+
+	/**
 	 * Arma el SQL de promae. En Ferli solo deja las 50 columnas que existen en Anita.
 	 *
 	 * @param  array<string, string>  $asignaciones  campo => literal SQL ya entrecomillado
@@ -1348,22 +1372,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			? ProveedorAnitaGeoSupport::codigoParaAnita($localidad->id, $localidad->codigo)
 			: 0;
 
-		$estado = '0';
-		switch($request['estado'])
-		{
-			case 'Activo':
-				$estado = '0';
-				break;
-			case 'Suspendido':
-				$estado = '1';
-				break;
-			case 'Alta Pendiente':
-				$estado = '2';
-				break;
-			case 'Regularizado':
-				$estado = '3';
-				break;
-		}			
+		$estado = $this->codigoEstadoAnita($request);
 
         $payload = $this->payloadPromaeAnita([
 				'prom_proveedor' => "'".$codigoAnita."'",
@@ -1622,22 +1631,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto']);
 		$domicilio = preg_replace('([^A-Za-z0-9 ])', '', $request['domicilio']);
 
-		$estado = '0';
-		switch($request['estado'])
-		{
-			case 'Activo':
-				$estado = '0';
-				break;
-			case 'Suspendido':
-				$estado = '1';
-				break;
-			case 'Alta Pendiente':
-				$estado = '2';
-				break;
-			case 'Regularizado':
-				$estado = '3';
-				break;
-		}			
+		$estado = $this->codigoEstadoAnita($request);
 
 		$payload = $this->payloadPromaeAnita([
 					'prom_proveedor' => "'".str_pad($request['codigo'], 6, '0', STR_PAD_LEFT)."'",

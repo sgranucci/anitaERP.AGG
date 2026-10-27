@@ -1,0 +1,241 @@
+.tc-desk-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin: 0 0 1rem;
+}
+
+.tc-desk-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .42rem .9rem;
+    border-radius: 999px;
+    background: #f4f6f7;
+    color: #17202a;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid #e5e8eb;
+}
+
+.tc-desk-nav a:hover {
+    color: #1a5276;
+    text-decoration: none;
+    background: #eaf2f8;
+}
+
+.tc-desk-nav a.is-on {
+    background: #1a5276;
+    border-color: #1a5276;
+    color: #fff;
+}
+
+.tc-desk-nav .tc-count {
+    min-width: 1.4rem;
+    padding: 0 .4rem;
+    border-radius: 999px;
+    background: #d6eaf8;
+    color: #1a5276;
+    font-size: .75rem;
+    text-align: center;
+}
+
+.tc-desk-nav a.is-on .tc-count {
+    background: rgba(255, 255, 255, .22);
+    color: #fff;
+}
+
+.tc-desk-nav .tc-count.is-alerta {
+    background: #f9e79f;
+    color: #7d6608;
+}
+
+.tc-aviso {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem .8rem;
+    align-items: center;
+    margin-bottom: .9rem;
+    padding: .55rem .8rem;
+    border-radius: 10px;
+    background: #fef9e7;
+    border: 1px solid #f9e79f;
+    color: #7d6608;
+}
+
+.tc-aviso a {
+    color: #1a5276;
+    font-weight: 600;
+}
+
+.tc-mesa-leyenda {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem .75rem;
+    align-items: center;
+    margin-bottom: .75rem;
+    color: #5d6d7e;
+    font-size: .8rem;
+}
+
+.tc-mesa-leyenda i {
+    display: inline-block;
+    width: .65rem;
+    height: .65rem;
+    margin-right: .25rem;
+    border-radius: 99px;
+    vertical-align: baseline;
+}
+
+.tc-dot-vacia { background: #d5d8dc; }
+.tc-dot-borrador { background: #f4d03f; }
+.tc-dot-juego { background: #3498db; }
+.tc-dot-final { background: #1e8449; }
+
+.tc-mesa-buscar {
+    max-width: 16rem;
+}
+
+.tc-mesa-piso {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    gap: .65rem;
+}
+
+.tc-mesa-ficha {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 108px;
+    padding: .7rem .75rem .6rem .9rem;
+    overflow: hidden;
+    border: 1px solid #d5dde6;
+    border-radius: 14px;
+    background: #fff;
+    color: #17202a;
+    text-decoration: none;
+    box-shadow: 0 1px 0 rgba(23, 32, 42, .04);
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.tc-mesa-ficha:hover {
+    transform: translateY(-2px);
+    border-color: #85c1e9;
+    box-shadow: 0 10px 22px rgba(23, 32, 42, .08);
+    color: inherit;
+    text-decoration: none;
+}
+
+.tc-mesa-ficha.is-activa {
+    border-color: #1a5276;
+    box-shadow: 0 0 0 2px #1a5276;
+}
+
+.tc-mesa-ficha::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 5px;
+}
+
+.tc-mesa-ficha.estado-vacia::before { background: #d5d8dc; }
+.tc-mesa-ficha.estado-borrador::before { background: #f4d03f; }
+.tc-mesa-ficha.estado-juego::before { background: #3498db; }
+.tc-mesa-ficha.estado-final::before { background: #1e8449; }
+
+.tc-mesa-num {
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: -.03em;
+    line-height: 1;
+}
+
+.tc-mesa-nombre {
+    min-height: 2.1em;
+    margin-top: .25rem;
+    color: #5d6d7e;
+    font-size: .75rem;
+    line-height: 1.25;
+}
+
+.tc-mesa-meta {
+    margin-top: auto;
+    padding-top: .35rem;
+    color: #1a5276;
+    font-size: .7rem;
+}
+
+.tc-mesa-drop {
+    position: absolute;
+    top: .45rem;
+    right: .5rem;
+    padding: .05rem .35rem;
+    border-radius: 999px;
+    background: #eaf2f8;
+    color: #1a5276;
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+}
+
+.tc-mesa-detalle {
+    margin-bottom: 1rem;
+    overflow: hidden;
+    border: 0;
+    border-radius: 16px;
+    box-shadow: 0 12px 28px rgba(23, 32, 42, .08);
+}
+
+.tc-mesa-detalle .card-header {
+    background: #1a5276;
+    color: #fff;
+}
+
+.tc-mesa-detalle .card-header a {
+    color: #fff;
+}
+
+.tc-mesa-metricas {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .6rem;
+}
+
+.tc-mesa-metrica {
+    padding: .7rem .8rem;
+    border-radius: 12px;
+    background: #f8f9f9;
+}
+
+.tc-mesa-metrica span {
+    display: block;
+    color: #5d6d7e;
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.tc-mesa-metrica strong {
+    display: block;
+    margin-top: .15rem;
+    font-size: 1.15rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.tc-mesa-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+.tc-mesa-acciones .btn {
+    border-radius: 999px;
+}
+
+@media (max-width: 767.98px) {
+    .tc-mesa-metricas {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

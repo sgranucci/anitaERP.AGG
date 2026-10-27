@@ -17,7 +17,7 @@
         ]];
     }
     $cantSaldoFicha = max(1, count($columnasSaldo));
-    $colspan = $soloTotalesDeuda ? 2 : ($modoDeuda ? 12 : (9 + $cantSaldoFicha));
+    $colspan = $soloTotalesDeuda ? 3 : ($modoDeuda ? 12 : (9 + $cantSaldoFicha));
 @endphp
 <table>
     @if ($filaLogo)
@@ -55,6 +55,7 @@
     @if ($soloTotalesDeuda)
     <thead>
         <tr>
+            <th>Código</th>
             <th>Proveedor</th>
             <th>Saldo</th>
         </tr>
@@ -69,6 +70,7 @@
                 <tr>
                     <td>Empresa: {{ $fila['nombreempresa'] ?? $fila['empresa_nombre'] ?? '' }}</td>
                     <td></td>
+                    <td></td>
                 </tr>
                 @continue
             @endif
@@ -76,11 +78,13 @@
                 @continue
             @endif
             <tr>
+                <td>{{ $fila['proveedor_codigo'] ?? '' }}</td>
                 <td>{{ $fila['proveedor_nombre'] ?? '' }}</td>
                 <td>{{ isset($fila['saldo_pendiente']) ? number_format((float) $fila['saldo_pendiente'], 2, '.', '') : '' }}</td>
             </tr>
         @endforeach
         <tr>
+            <td></td>
             <td>Total deuda pendiente</td>
             <td>{{ number_format((float) ($totalesReporte['pendiente'] ?? 0), 2, '.', '') }}</td>
         </tr>

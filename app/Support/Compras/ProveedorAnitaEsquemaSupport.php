@@ -14,6 +14,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
  * - Crown (/usr2/casino, verificado 17/oct/2026): 46 columnas base (como Interforming + prom_cod_ret_suss);
  *   sin cta_me/cc/concepto/ag_perc/excl IB extendidas; sin promadic/proexcl/servicios;
  *   sí propago (sin prop_offset), proley, proibr, procasino↔sala ERP.
+ *   proarch no está en /usr2/casino (verificado 27/oct/2026): el ABM no la escribe.
  */
 final class ProveedorAnitaEsquemaSupport
 {
@@ -222,6 +223,14 @@ final class ProveedorAnitaEsquemaSupport
     public static function escribeProcasino(): bool
     {
         return self::esCrown();
+    }
+
+    /**
+     * proarch (archivos del proveedor). Ausente en Crown; el resto de instalaciones la escribe.
+     */
+    public static function escribeProarch(): bool
+    {
+        return ! self::esCrown();
     }
 
     /**

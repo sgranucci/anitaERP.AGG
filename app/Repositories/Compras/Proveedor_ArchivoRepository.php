@@ -7,6 +7,7 @@ use App\Models\Compras\Proveedor_Archivo;
 use App\Http\Requests\ValidacionProveedor;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
+use App\Support\Compras\ProveedorAnitaEsquemaSupport;
 use Carbon\Carbon;
 use Auth;
 
@@ -141,6 +142,10 @@ class Proveedor_ArchivoRepository implements Proveedor_ArchivoRepositoryInterfac
 	}
 
     public function sincronizarConAnita(){
+		if (! ProveedorAnitaEsquemaSupport::escribeProarch()) {
+			return;
+		}
+
 		ini_set('max_execution_time', '300');
 	  	ini_set('memory_limit', '512M');
 
@@ -207,6 +212,10 @@ class Proveedor_ArchivoRepository implements Proveedor_ArchivoRepositoryInterfac
     }
 
 	private function guardarAnita($data, $linea, $nombrearchivo) {
+		if (! ProveedorAnitaEsquemaSupport::escribeProarch()) {
+			return;
+		}
+
         $apiAnita = new ApiAnita();
 
 		$usuario = Auth::user()->nombre;
@@ -236,6 +245,10 @@ class Proveedor_ArchivoRepository implements Proveedor_ArchivoRepositoryInterfac
 	}
 
 	private function eliminarAnita($proveedor) {
+		if (! ProveedorAnitaEsquemaSupport::escribeProarch()) {
+			return;
+		}
+
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita, 
 				'sistema' => 'compras',

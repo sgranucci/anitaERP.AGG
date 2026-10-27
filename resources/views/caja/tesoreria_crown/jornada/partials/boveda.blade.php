@@ -1,6 +1,5 @@
 @if (! empty($boveda) && can('listar-tesoreria-crown-boveda', false))
-    <h5 class="mt-4">Bóveda</h5>
-    <p class="text-muted small mb-2">Saldo confirmado hasta esta jornada. El detalle y los movimientos están en la bóveda.</p>
+    <p class="text-muted small mb-2">Saldo confirmado hasta esta jornada. El detalle y los movimientos nuevos se cargan en la bóveda.</p>
     @php
         $bovedas = ($boveda['lugares'] ?? collect())->filter(fn ($lugar) => (string) ($lugar->tipoDeposito->codigo ?? '') === 'BOVEDA');
     @endphp

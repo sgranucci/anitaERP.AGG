@@ -116,7 +116,7 @@
                                 <input type="checkbox" class="custom-control-input" name="solo_totales" id="solo_totales" value="1"
                                     @checked(! empty($filtros['solo_totales']))>
                                 <label class="custom-control-label" for="solo_totales">
-                                    Sin detalle de comprobantes. En deuda queda el nombre, el saldo y el total general al final
+                                    Sin detalle de comprobantes. En deuda queda el código, el nombre, el saldo y el total general al final
                                 </label>
                             </div>
                             @include('compras.partials.tilde_leyenda_cuenta_corriente', [

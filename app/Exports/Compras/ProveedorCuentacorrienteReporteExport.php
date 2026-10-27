@@ -66,7 +66,7 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
                 $this->filas,
                 static fn (array $fila): bool => ($fila['tipo'] ?? '') !== 'header_proveedor'
             ));
-            $this->colUltima = 'B';
+            $this->colUltima = 'C';
         } elseif (($this->filtros['modo'] ?? '') === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA) {
             $cantSaldo = max(1, count($this->resultado['columnas_saldo'] ?? []));
             $this->colUltima = self::letraColumna(9 + $cantSaldo);
@@ -118,7 +118,8 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
         if ($this->listadoCompacto) {
             return [
                 'A' => NumberFormat::FORMAT_TEXT,
-                'B' => '#,##0.00',
+                'B' => NumberFormat::FORMAT_TEXT,
+                'C' => '#,##0.00',
             ];
         }
 
@@ -159,8 +160,9 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
     {
         if ($this->listadoCompacto) {
             return [
-                'A' => 42,
-                'B' => 18,
+                'A' => 14,
+                'B' => 42,
+                'C' => 18,
             ];
         }
 
@@ -277,20 +279,25 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
                         }
                         $excelRow = $this->filaPrimeraDatosExcel + (int) $idx;
                         $sheet->setCellValueExplicit(
-                            'B'.$excelRow,
+                            'A'.$excelRow,
+                            (string) ($fila['proveedor_codigo'] ?? ''),
+                            DataType::TYPE_STRING
+                        );
+                        $sheet->setCellValueExplicit(
+                            'C'.$excelRow,
                             (float) ($fila['saldo_pendiente'] ?? 0),
                             DataType::TYPE_NUMERIC
                         );
-                        $sheet->getStyle('B'.$excelRow)->getNumberFormat()->setFormatCode('#,##0.00');
-                        $sheet->getStyle('B'.$excelRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                        $sheet->getStyle('C'.$excelRow)->getNumberFormat()->setFormatCode('#,##0.00');
+                        $sheet->getStyle('C'.$excelRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                     }
                     $totalRow = $this->filaTotalGeneralExcel;
                     $sheet->setCellValueExplicit(
-                        'B'.$totalRow,
+                        'C'.$totalRow,
                         (float) ($this->resultado['totales']['pendiente'] ?? 0),
                         DataType::TYPE_NUMERIC
                     );
-                    $sheet->getStyle('A'.$totalRow.':B'.$totalRow)->applyFromArray([
+                    $sheet->getStyle('A'.$totalRow.':C'.$totalRow)->applyFromArray([
                         'font' => [
                             'bold' => true,
                             'color' => ['rgb' => '1B4F72'],
@@ -302,8 +309,8 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
                             'color' => ['rgb' => 'AED6F1'],
                         ],
                     ]);
-                    $sheet->getStyle('B'.$totalRow)->getNumberFormat()->setFormatCode('#,##0.00');
-                    $sheet->getStyle('B'.$totalRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                    $sheet->getStyle('C'.$totalRow)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->getStyle('C'.$totalRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                 } else {
                     foreach ($this->filas as $idx => $fila) {
                         if (($fila['tipo'] ?? '') !== 'total_proveedor') {

@@ -14,6 +14,7 @@ use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaCrownClaveSupp
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -1144,7 +1145,13 @@ final class IngresoEgresoAnitaTesmovSupport
 
     private static function imputacionTctesDesdeCodigo(string $codigoCuenta): string
     {
-        $digits = preg_replace('/\D+/', '', trim($codigoCuenta)) ?? '';
+        $codigo = trim($codigoCuenta);
+        // Crown: tctes_imputacion y axp_banco guardan el código de cuenta tal cual (071080/1).
+        if (EntornoEmpresaSupport::esCrown()) {
+            return $codigo;
+        }
+
+        $digits = preg_replace('/\D+/', '', $codigo) ?? '';
         $digits = ltrim($digits, '0');
         if ($digits === '') {
             $digits = '0';

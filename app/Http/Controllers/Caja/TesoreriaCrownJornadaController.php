@@ -15,6 +15,7 @@ use App\Support\Caja\TesoreriaCrownCierreSupport;
 use App\Support\Caja\TesoreriaCrownJornadaListadoColumnas;
 use App\Support\Caja\TesoreriaCrownJornadaListadoFiltros;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
+use App\Support\Caja\TesoreriaCrownMesaSupport;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
 use App\Support\Caja\TesoreriaCrownWorkbenchSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
@@ -205,7 +206,7 @@ class TesoreriaCrownJornadaController extends Controller
         );
     }
 
-    public function ver(int $id)
+    public function ver(Request $request, int $id)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('listar-tesoreria-crown-jornada');
@@ -213,6 +214,33 @@ class TesoreriaCrownJornadaController extends Controller
         $jornada = $this->jornadaEnAlcance($id);
         $salas = TesoreriaCrownSalaSupport::salas();
         $sala = TesoreriaCrownSalaSupport::exigida((int) $jornada->sala_id);
+        $puedeMesas = can('listar-tesoreria-crown-mesa', false);
+        $puedeBoveda = can('listar-tesoreria-crown-boveda', false);
+        $panel = (string) $request->query('panel', 'cajeros');
+        if (! in_array($panel, ['cajeros', 'mesas', 'boveda'], true)) {
+            $panel = 'cajeros';
+        }
+        $tableroMesas = $puedeMesas
+            ? TesoreriaCrownMesaSupport::tablero($jornada)
+            : ['mesas' => [], 'movimientos' => collect()];
+        $mesaCodigo = strtoupper(trim((string) $request->query('mesa', '')));
+        if ($mesaCodigo !== '' && ctype_digit($mesaCodigo)) {
+            $mesaCodigo = 'M'.$mesaCodigo;
+        }
+        $mesaFila = null;
+        if ($puedeMesas && $mesaCodigo !== '') {
+            $panel = 'mesas';
+            $mesaFila = collect($tableroMesas['mesas'])->first(
+                fn (array $fila) => strtoupper((string) $fila['mesa']->codigo) === $mesaCodigo
+            );
+        }
+        if (($panel === 'mesas' && ! $puedeMesas) || ($panel === 'boveda' && ! $puedeBoveda)) {
+            $panel = 'cajeros';
+        }
+        $fecha = $jornada->fecha->format('Y-m-d');
+        $stock = $mesaFila
+            ? TesoreriaCrownMesaSupport::stock((int) $mesaFila['mesa']->id, (int) $sala->id, $fecha)
+            : null;
 
         return view('caja.tesoreria_crown.jornada.dia', [
             'salas' => $salas,
@@ -230,7 +258,16 @@ class TesoreriaCrownJornadaController extends Controller
                 ->where('sala_id', $sala->id)
                 ->where('estado', TesoreriaCrownJornada::ABIERTA)
                 ->first(),
-            'boveda' => TesoreriaCrownBovedaSupport::resumenJornada($jornada),
+            'boveda' => $puedeBoveda ? TesoreriaCrownBovedaSupport::resumenJornada($jornada) : null,
+            'puedeMesas' => $puedeMesas,
+            'puedeBoveda' => $puedeBoveda,
+            'panel' => $panel,
+            'tableroMesas' => $tableroMesas,
+            'mesaFila' => $mesaFila,
+            'aperturaMesa' => $stock ? TesoreriaCrownMesaSupport::filas((int) $sala->id, $stock['apertura']) : [],
+            'saldoMesa' => $stock ? TesoreriaCrownMesaSupport::filas((int) $sala->id, $stock['saldo']) : [],
+            'estadoFinalMesa' => $stock ? TesoreriaCrownMesaSupport::filas((int) $sala->id, $stock['estado_final']) : [],
+            'dropMesa' => $stock ? TesoreriaCrownMesaSupport::filas((int) $sala->id, $stock['drop']) : [],
         ]);
     }
 

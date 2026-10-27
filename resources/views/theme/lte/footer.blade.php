@@ -6,7 +6,7 @@
             @elseif (config('app.empresa') == 'EL BIERZO')
                 <img src="{{ asset('storage/imagenes/logos/logo-bierzo.png') }}" alt="El Bierzo" class="anita-footer-logo">
             @elseif (config('app.empresa') == 'CROWN')
-                <img src="{{ asset('storage/imagenes/logos/CROWN.jpg') }}" alt="CROWN" class="anita-footer-logo">
+                <img src="{{ asset('storage/imagenes/logos/CROWN.jpg') }}?v={{ @filemtime(public_path('storage/imagenes/logos/CROWN.jpg')) ?: time() }}" alt="CROWN" class="anita-footer-logo">
             @else
                 <span class="anita-footer-brand-text">{{ config('app.empresa') }}</span>
             @endif

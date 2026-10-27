@@ -3187,6 +3187,14 @@ Route::delete('caja/tesoreria-crown/jornada/workbench/vista/{id}', 'Caja\Tesorer
 Route::post('caja/tesoreria-crown/jornada/workbench/columnas', 'Caja\TesoreriaCrownJornadaController@guardarColumnasListado')->name('guardar_columnas_tesoreria_crown_jornada');
 Route::post('caja/tesoreria-crown/jornada/workbench/etiquetas', 'Caja\TesoreriaCrownJornadaController@guardarEtiquetasListado')->name('guardar_etiquetas_tesoreria_crown_jornada');
 Route::post('caja/tesoreria-crown/jornada/workbench/preview', 'Caja\TesoreriaCrownJornadaController@previewWorkbench')->name('preview_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/mesa', 'Caja\TesoreriaCrownMesaController@index')->name('tesoreria_crown_mesa');
+Route::post('caja/tesoreria-crown/mesa', 'Caja\TesoreriaCrownMesaController@crear')->name('crear_tesoreria_crown_mesa');
+Route::post('caja/tesoreria-crown/mesa/banca', 'Caja\TesoreriaCrownMesaController@guardarBanca')->name('guardar_banca_tesoreria_crown_mesa');
+Route::get('caja/tesoreria-crown/mesa/{id}', 'Caja\TesoreriaCrownMesaController@editar')->name('editar_tesoreria_crown_mesa');
+Route::post('caja/tesoreria-crown/mesa/{id}', 'Caja\TesoreriaCrownMesaController@guardar')->name('guardar_tesoreria_crown_mesa');
+Route::post('caja/tesoreria-crown/mesa/{id}/confirmar', 'Caja\TesoreriaCrownMesaController@confirmar')->name('confirmar_tesoreria_crown_mesa');
+Route::post('caja/tesoreria-crown/mesa/{id}/anular', 'Caja\TesoreriaCrownMesaController@anular')->name('anular_tesoreria_crown_mesa');
+Route::delete('caja/tesoreria-crown/mesa/{id}', 'Caja\TesoreriaCrownMesaController@eliminar')->name('eliminar_tesoreria_crown_mesa');
 Route::get('caja/tesoreria-crown/boveda', 'Caja\TesoreriaCrownBovedaController@index')->name('tesoreria_crown_boveda');
 Route::post('caja/tesoreria-crown/boveda', 'Caja\TesoreriaCrownBovedaController@crear')->name('crear_tesoreria_crown_boveda');
 Route::get('caja/tesoreria-crown/boveda/{id}', 'Caja\TesoreriaCrownBovedaController@editar')->name('editar_tesoreria_crown_boveda');

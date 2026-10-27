@@ -258,6 +258,9 @@
                 aplicarReglasRetencionesImpuestos();
                 limpiarRenglonesFormapagoVacios();
                 sincronizarRequiredFormapago();
+                if (typeof sincronizarEstadoProveedorPost === 'function') {
+                    sincronizarEstadoProveedorPost();
+                }
             }, true);
         }
 
@@ -313,12 +316,39 @@
 
         $('#condicionganancia, #retieneganancia, #retieneiva, #retienesuss').on('change', aplicarReglasRetencionesImpuestos);
 
-        // Pone en readonly estado para el alta
-        let tipoempresa_id = $("#tipoempresa_id").val();
+        // En el alta, hasta elegir tipo de empresa el estado no se edita.
+        // Un select disabled no viaja en el POST: se copia a un hidden.
+        function sincronizarEstadoProveedorPost() {
+            var $estado = $('#estado');
+            if (!$estado.length) {
+                return;
+            }
+            var $hidden = $('#estado_sincronizado');
+            if ($estado.prop('disabled')) {
+                if (!$hidden.length) {
+                    $hidden = $('<input type="hidden" id="estado_sincronizado" name="estado">');
+                    $estado.after($hidden);
+                }
+                $estado.removeAttr('name');
+                $hidden.val($estado.val() || 'Activo');
+            } else {
+                $estado.attr('name', 'estado');
+                $hidden.remove();
+            }
+        }
 
-        // Uso tipo de empresa como flag para saber si es alta
-        if (tipoempresa_id == '')
-            $("#estado").attr('disabled', true);
+        let tipoempresa_id = $("#tipoempresa_id").val();
+        if (tipoempresa_id == '') {
+            $("#estado").prop('disabled', true);
+        }
+        sincronizarEstadoProveedorPost();
+
+        $('#tipoempresa_id').on('change', function () {
+            if ($(this).val()) {
+                $('#estado').prop('disabled', false);
+            }
+            sincronizarEstadoProveedorPost();
+        });
 
         colorSemaforo();
 
@@ -376,6 +406,7 @@
 
             $("#estado").val(estado);
             $("#botonestado").html("<i class='fa fa-bell'></i>&nbsp;Estado "+descripcion);
+            sincronizarEstadoProveedorPost();
         });
 
         function mostrarSolapaProveedor(n) {

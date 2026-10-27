@@ -43,9 +43,11 @@
 <thead>
     <tr>
         @if ($paraPdf)
-            <th style="width: 72%;">Proveedor</th>
+            <th class="col-nowrap" style="width: 14%;">Código</th>
+            <th style="width: 58%;">Proveedor</th>
             <th class="text-right" style="width: 28%;">Saldo</th>
         @else
+            <th>Código</th>
             <th>Proveedor</th>
             <th class="text-right">Saldo</th>
         @endif
@@ -61,7 +63,7 @@
     @endif
     @if ($tipo === 'header_empresa')
         <tr class="cc-rep-header-empresa">
-            <td colspan="2">
+            <td colspan="3">
                 <strong>Empresa: {{ $fila['nombreempresa'] ?? $fila['empresa_nombre'] ?? '' }}</strong>
             </td>
         </tr>
@@ -71,15 +73,18 @@
         @continue
     @endif
     <tr>
-        <td>
+        <td class="{{ $paraPdf ? 'col-nowrap' : '' }}">
             @if ($mostrarLinks && ! empty($puede_ver_proveedor) && ! empty($fila['proveedor_id']))
                 <a class="text-primary" target="_blank" rel="noopener"
                     href="{{ route('editar_proveedor', ['id' => $fila['proveedor_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}">
-                    {{ $fila['proveedor_nombre'] ?? '' }}
+                    {{ $fila['proveedor_codigo'] ?? '' }}
                 </a>
             @else
-                {{ $fila['proveedor_nombre'] ?? '' }}
+                {{ $fila['proveedor_codigo'] ?? '' }}
             @endif
+        </td>
+        <td>
+            {{ $fila['proveedor_nombre'] ?? '' }}
             @if (! empty($fila['leyenda']))
                 <div class="small font-weight-normal" style="white-space: pre-wrap;">{{ $fila['leyenda'] }}</div>
             @endif
@@ -88,13 +93,14 @@
     </tr>
 @empty
     <tr>
-        <td colspan="2" class="text-muted text-center">Sin datos.</td>
+        <td colspan="3" class="text-muted text-center">Sin datos.</td>
     </tr>
 @endforelse
 </tbody>
 @if ($mostrarTotalGeneral)
 <tfoot>
     <tr class="cc-rep-total-general">
+        <td></td>
         <td><strong>Total deuda pendiente</strong></td>
         <td class="text-right">
             <strong>{{ $fmt($totalesReporte['pendiente'] ?? 0) }}</strong>

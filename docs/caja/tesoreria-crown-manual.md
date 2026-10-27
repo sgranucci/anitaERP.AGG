@@ -200,6 +200,16 @@ Se puede vincular una habilitación o una rendición conforme de esa jornada y c
 
 En la jornada del día se ve el saldo de la bóveda y la lista de movimientos. El menú Bóveda abre la misma pantalla.
 
+## Mesas
+
+La mesa es un depósito de tipo Mesa. El movimiento del día puede ser habilitación, reposición, crédito, estado final, drop o propina. Tesorería lo confirma con usuario y clave. El borrador no entra en el stock.
+
+La habilitación y la reposición suman fichas a la mesa. El crédito las saca. El estado final es el conteo, no un ajuste. El drop es el conteo de la caja de drop y no mueve el flotante de fichas.
+
+Cada mesa apunta a un código de banca. La banca que se usa es la última vigencia con fecha menor o igual a la jornada. Confirmar el movimiento guarda esa banca. Si al día siguiente se carga otra vigencia, el stock y los papeles de ayer siguen con la anterior. Una vigencia nueva no puede fecharse para atrás.
+
+En la jornada, la solapa Mesas es el piso del día: cada mesa muestra si está sin movimiento, en juego, con estado final o con un borrador. Al elegirla se ven apertura, stock, estado final y drop, y desde ahí se abre el movimiento. El número del movimiento abre el detalle para cargar cantidades y confirmar. La vigencia de la banca se cambia desde el enlace de esa mesa.
+
 ## Ajuste de auditoría
 
 Este tramo está definido para Crown y todavía no está en la pantalla. Es la corrección habitual después del cierre, cuando el cajero ya no está.

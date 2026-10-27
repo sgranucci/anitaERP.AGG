@@ -17,7 +17,7 @@ Inicio
                 };
             @endphp
             <div class="text-center py-4">
-                <img src="{{ asset('storage/imagenes/logos/'.$logoInicio) }}" alt="{{ config('app.empresa') }}" class="img-fluid" style="max-height: 320px;">
+                <img src="{{ asset('storage/imagenes/logos/'.$logoInicio) }}?v={{ @filemtime(public_path('storage/imagenes/logos/'.$logoInicio)) ?: time() }}" alt="{{ config('app.empresa') }}" class="img-fluid" style="max-height: 320px;">
             </div>
         @endif
     </div>

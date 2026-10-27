@@ -4,6 +4,10 @@
     Jornada de tesorería
 @endsection
 
+@section('styles')
+    <link rel="stylesheet" href="{{ asset('assets/css/tesoreria-crown-jornada.css') }}?v={{ filemtime(public_path('assets/css/tesoreria-crown-jornada.css')) }}">
+@endsection
+
 @section('scripts')
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/jornada.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/jornada.js')) }}"></script>
 @endsection
@@ -118,6 +122,52 @@
                 @endif
 
                 @if ($jornada)
+                    @php
+                        $pendientesFirma = $asignaciones->flatMap(function ($fila) {
+                            return $fila->comprobantes
+                                ->filter(fn ($doc) => $doc->estado === 'P')
+                                ->each(fn ($doc) => $doc->setRelation('asignacion', $fila));
+                        });
+                        $borradoresMesa = collect($tableroMesas['movimientos'] ?? [])->where('estado', 'B')->count();
+                        $movimientosBoveda = ($boveda['movimientos'] ?? collect())->count();
+                        $urlEscritorio = function (string $panelElegido) use ($jornada): string {
+                            return route('ver_tesoreria_crown_jornada', $jornada->id).'?'.http_build_query(['panel' => $panelElegido]);
+                        };
+                    @endphp
+                    @if ($pendientesFirma->isNotEmpty())
+                        <div class="tc-aviso">
+                            <strong>Firmas</strong>
+                            @foreach ($pendientesFirma as $doc)
+                                <a href="{{ route('editar_tesoreria_crown_movimiento', $doc->id) }}">
+                                    {{ \App\Support\Caja\TesoreriaCrownComprobanteSupport::tipo($doc->tipo) }}
+                                    {{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($doc->numero) }}
+                                    · {{ $doc->asignacion->deposito->codigo ?? '' }}
+                                </a>
+                            @endforeach
+                        </div>
+                    @endif
+                    <nav class="tc-desk-nav" aria-label="Escritorio de la jornada">
+                        <a href="{{ $urlEscritorio('cajeros') }}" class="{{ $panel === 'cajeros' ? 'is-on' : '' }}">
+                            Cajeros <span class="tc-count">{{ $asignaciones->count() }}</span>
+                        </a>
+                        @if ($puedeMesas)
+                            <a href="{{ $urlEscritorio('mesas') }}#piso" class="{{ $panel === 'mesas' ? 'is-on' : '' }}">
+                                Mesas
+                                <span class="tc-count {{ $borradoresMesa > 0 ? 'is-alerta' : '' }}">{{ count($tableroMesas['mesas'] ?? []) }}</span>
+                            </a>
+                        @endif
+                        @if ($puedeBoveda)
+                            <a href="{{ $urlEscritorio('boveda') }}" class="{{ $panel === 'boveda' ? 'is-on' : '' }}">
+                                Bóveda <span class="tc-count">{{ $movimientosBoveda }}</span>
+                            </a>
+                        @endif
+                    </nav>
+
+                    @if ($panel === 'mesas')
+                        @include('caja.tesoreria_crown.jornada.partials.mesa')
+                    @elseif ($panel === 'boveda')
+                        @include('caja.tesoreria_crown.jornada.partials.boveda')
+                    @else
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered mb-0">
                             <thead style="background:#85C1E9;color:#17202A;">
@@ -202,29 +252,6 @@
                             </tbody>
                         </table>
                     </div>
-                    @include('caja.tesoreria_crown.jornada.partials.boveda')
-                    @php
-                        $pendientesFirma = $asignaciones->flatMap(function ($fila) {
-                            return $fila->comprobantes
-                                ->filter(fn ($doc) => $doc->estado === 'P')
-                                ->each(fn ($doc) => $doc->setRelation('asignacion', $fila));
-                        });
-                    @endphp
-                    @if ($pendientesFirma->isNotEmpty())
-                        <h5 class="mt-3">Pendientes de firma</h5>
-                        <p class="text-muted small">El cajero firma en el comprobante con su número y PIN. Tesorería firma con usuario y clave.</p>
-                        <ul class="mb-0">
-                            @foreach ($pendientesFirma as $doc)
-                                <li>
-                                    <a class="text-primary" href="{{ route('editar_tesoreria_crown_movimiento', $doc->id) }}">
-                                        {{ \App\Support\Caja\TesoreriaCrownComprobanteSupport::tipo($doc->tipo) }}
-                                        {{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($doc->numero) }}
-                                        · {{ $doc->asignacion->deposito->codigo ?? '' }}
-                                        · {{ $doc->asignacion->cajero->nombre ?? '' }}
-                                    </a>
-                                </li>
-                            @endforeach
-                        </ul>
                     @endif
                 @endif
             </div>
@@ -232,7 +259,7 @@
                 <div class="card-footer">
                     <span class="text-muted small mr-2">Jornadas:</span>
                     @foreach ($recientes as $item)
-                        <a class="{{ $jornada && (int) $jornada->id === (int) $item->id ? 'font-weight-bold' : '' }} mr-2" href="{{ route('ver_tesoreria_crown_jornada', $item->id) }}">
+                        <a class="{{ $jornada && (int) $jornada->id === (int) $item->id ? 'font-weight-bold' : '' }} mr-2" href="{{ route('ver_tesoreria_crown_jornada', $item->id) }}?panel={{ $panel }}">
                             {{ $item->fecha->format('d/m/Y') }}
                         </a>
                     @endforeach
