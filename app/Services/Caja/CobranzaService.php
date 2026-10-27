@@ -344,7 +344,7 @@ class CobranzaService
 				$asiento_movimiento = $this->asiento_movimientoRepository->create($data, $asiento->id);
 		}
 
-		$this->persistirAnticiposPagoDeMas($data, $cobranza->id);
+		app(CobranzaPagoDeMasCoaService::class)->sincronizar($data, (int) $cobranza->id);
 	}
 
 	/**
@@ -656,15 +656,7 @@ class CobranzaService
 					$asiento_movimiento = $this->asiento_movimientoRepository->create($data, $asiento->id);
 			}
 		}
-		// Recrea anticipos si cobraron de más (crédito sin venta)
-		$cliente_cuentacorriente = $this->cliente_cuentacorrienteRepository->buscaPorVentaCobranza(null, $data['cobranza_id']);
-
-		foreach ($cliente_cuentacorriente ?? [] as $anticipoCc)
-		{
-			$this->cliente_cuentacorrienteRepository->find($anticipoCc->id)->delete();
-		}
-
-		$this->persistirAnticiposPagoDeMas($data, $id);
+		app(CobranzaPagoDeMasCoaService::class)->sincronizar($data, (int) $id);
 
 		$this->persistirDescuentosCobranza($id, $data);
 	}
@@ -1979,94 +1971,5 @@ class CobranzaService
 		$data['observaciones'] = is_array($data['observacionasientos'] ?? null) ? $data['observacionasientos'] : [];
 
 		return $data;
-	}
-
-	/**
-	 * Si los medios superan lo aplicado (pago de más), el sobrante es una COA.
-	 * totalcobranzas = aplicado − medios. La COA entra en la ficha y en la deuda.
-	 *
-	 * El formulario repite el mismo saldo en cada solapa (comprobantes, cuentas,
-	 * cheques y retenciones). Un crédito por moneda: si llega repetido, se toma una vez.
-	 * La plata ya está en la cobranza original: la COA no vuelve a mover la caja.
-	 *
-	 * @param  array<string, mixed>  $data
-	 */
-	private function persistirAnticiposPagoDeMas(array $data, $cobranzaId): void
-	{
-		$totalCobranzas = $data['totalcobranzas'] ?? [];
-		if (! is_array($totalCobranzas)) {
-			$totalCobranzas = ($totalCobranzas !== null && $totalCobranzas !== '') ? [$totalCobranzas] : [];
-		}
-		$monedaCobranzaIds = $data['moneda_cobranza_ids'] ?? [];
-		if (! is_array($monedaCobranzaIds)) {
-			$monedaCobranzaIds = ($monedaCobranzaIds !== null && $monedaCobranzaIds !== '') ? [$monedaCobranzaIds] : [];
-		}
-
-		$excedentePorMoneda = [];
-		foreach ($totalCobranzas as $i => $saldoMoneda) {
-			$excedente = (float) $saldoMoneda;
-			if ($excedente > -0.009) {
-				continue;
-			}
-
-			$monedaId = (int) ($monedaCobranzaIds[$i] ?? ($data['moneda_id'] ?? 1));
-			if (! array_key_exists($monedaId, $excedentePorMoneda)) {
-				$excedentePorMoneda[$monedaId] = $excedente;
-			}
-		}
-
-		if ($excedentePorMoneda === []) {
-			return;
-		}
-
-		$coaTipoId = $this->tipoCajaIdPorAbreviatura('COA');
-		if ($coaTipoId <= 0) {
-			throw new \Exception('No hay tipo de transacción de caja COA. El pago de más no puede quedar como saldo a favor.');
-		}
-
-		$empresaId = (int) ($data['empresa_id'] ?? 0);
-		$padre = trim((string) ($data['numerotransaccion'] ?? ''));
-		$cotizacion = $data['cotizacion_cobranza'] ?? 1;
-
-		foreach ($excedentePorMoneda as $monedaId => $excedente) {
-			$importe = round(abs((float) $excedente), 2);
-			if ($importe < 0.01) {
-				continue;
-			}
-
-			$numero = CobranzaNumeracionTransaccion::siguienteNumeroSecuencial($empresaId, $coaTipoId);
-			$detalle = 'COA Nro. '.$numero.' — pago de más de cobranza';
-			if ($padre !== '') {
-				$detalle .= ' Nro. '.$padre;
-			}
-			$detalle .= ' (id '.$cobranzaId.')';
-
-			$coa = Cobranza::query()->create([
-				'empresa_id' => $empresaId,
-				'tipotransaccion_caja_id' => $coaTipoId,
-				'numerotransaccion' => $numero,
-				'fecha' => $data['fecha'],
-				'caja_id' => $data['caja_id'] ?? null,
-				'cliente_id' => $data['cliente_id'],
-				'detalle' => $detalle,
-				'estado' => 'CONFIRMADA',
-				'monto' => $importe,
-				'cotizacion' => $cotizacion,
-				'moneda_id' => $monedaId,
-				'usuario_id' => Auth::id(),
-			]);
-
-			$this->cliente_cuentacorrienteRepository->create([
-				'fecha' => $data['fecha'],
-				'fechavencimiento' => $data['fecha'],
-				'cliente_id' => $data['cliente_id'],
-				'total' => -1 * $importe,
-				'moneda_id' => $monedaId,
-				'cotizacion' => $cotizacion,
-				'cobranza_id' => $coa->id,
-				'empresa_id' => $empresaId,
-				'leyenda' => $detalle,
-			]);
-		}
 	}
 }

@@ -16,6 +16,11 @@ use Illuminate\Support\Facades\DB;
  * Delta entre el mayor de las cuentas de proveedores y la deuda abierta, en pesos.
  * El signo es el del mayor (negativo = débito). Delta = mayor − deuda.
  * La corrida guarda el número del día y la siguiente avisa si se movió.
+ *
+ * Si la empresa tiene cuenta de anticipos (`pago.anticipo_proveedor`), esa cuenta
+ * entra al control. La deuda abierta de las OP adelantadas imputadas ahí se compara
+ * con el mayor de anticipos, no con el de proveedores. Sin esa cuenta el anticipo
+ * sigue en proveedores, que es donde se contabiliza.
  */
 final class ProveedorDeudaMayorDeltaSupport
 {
@@ -23,6 +28,12 @@ final class ProveedorDeudaMayorDeltaSupport
 
     /** @var array<string, array<int, array<int, array{deuda: float, mayor: float}>>> */
     private array $saldosPorFecha = [];
+
+    /** @var array<int, int>|null empresa_id => cuentacontable_id de anticipos */
+    private ?array $anticipoPorEmpresa = null;
+
+    /** @var array<int, true>|null pagoproveedor_id con Debe en la cuenta de anticipos */
+    private ?array $pagosConAnticipo = null;
 
     /**
      * Empresas con deuda abierta o mayor en una cuenta de proveedores al corte.
@@ -194,7 +205,73 @@ final class ProveedorDeudaMayorDeltaSupport
             }
         }
 
+        foreach ($this->cuentasAnticipoPorEmpresa() as $cuentaId) {
+            $cuentas[$cuentaId] = true;
+        }
+
         return $cuentas;
+    }
+
+    /**
+     * Solo las empresas que tienen configurada `pago.anticipo_proveedor`.
+     *
+     * @return array<int, int>
+     */
+    private function cuentasAnticipoPorEmpresa(): array
+    {
+        if ($this->anticipoPorEmpresa !== null) {
+            return $this->anticipoPorEmpresa;
+        }
+
+        $out = [];
+        foreach (Empresa::query()->orderBy('id')->pluck('id') as $empresaId) {
+            $cuentaId = (int) (ProveedorAnticipoCuentaContableSupport::cuentaAnticipoId((int) $empresaId) ?? 0);
+            if ($cuentaId > 0) {
+                $out[(int) $empresaId] = $cuentaId;
+            }
+        }
+
+        return $this->anticipoPorEmpresa = $out;
+    }
+
+    /**
+     * Pagos cuyo asiento debitó la cuenta de anticipos. Esas OP abiertas no viven
+     * en el mayor de proveedores.
+     *
+     * @return array<int, true>
+     */
+    private function pagosConDebeEnAnticipo(): array
+    {
+        if ($this->pagosConAnticipo !== null) {
+            return $this->pagosConAnticipo;
+        }
+
+        $cuentaIds = array_values(array_unique($this->cuentasAnticipoPorEmpresa()));
+        if ($cuentaIds === []) {
+            return $this->pagosConAnticipo = [];
+        }
+
+        $ids = DB::table('asiento as a')
+            ->join('asiento_movimiento as m', 'm.asiento_id', '=', 'a.id')
+            ->whereIn('m.cuentacontable_id', $cuentaIds)
+            ->where('m.monto', '>', 0)
+            ->whereNotNull('a.pagoproveedor_id')
+            ->where(function ($q) {
+                $q->whereNull('a.estado_aprobacion')
+                    ->orWhere('a.estado_aprobacion', '!=', Asiento::ESTADO_APROBACION_RECHAZADO);
+            })
+            ->distinct()
+            ->pluck('a.pagoproveedor_id');
+
+        $set = [];
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $set[$id] = true;
+            }
+        }
+
+        return $this->pagosConAnticipo = $set;
     }
 
     /**
@@ -203,6 +280,8 @@ final class ProveedorDeudaMayorDeltaSupport
     private function deudaPorCuenta(string $fecha): array
     {
         $cuadre = app(ProveedorCuentacorrienteDeudaFichaCuadreSupport::class);
+        $anticipoPorEmpresa = $this->cuentasAnticipoPorEmpresa();
+        $pagosAnticipo = $this->pagosConDebeEnAnticipo();
         $saldos = [];
         Proveedor_Cuentacorriente::query()
             ->with([
@@ -217,7 +296,7 @@ final class ProveedorDeudaMayorDeltaSupport
                     ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
             ])
             ->orderBy('id')
-            ->chunkById(300, function ($filas) use (&$saldos, $cuadre) {
+            ->chunkById(300, function ($filas) use (&$saldos, $cuadre, $anticipoPorEmpresa, $pagosAnticipo) {
                 foreach ($filas as $cc) {
                     $fila = (object) [
                         'total' => (float) $cc->total,
@@ -237,8 +316,15 @@ final class ProveedorDeudaMayorDeltaSupport
                         continue;
                     }
                     $proveedor = $cc->proveedores;
+                    $empresaId = (int) $cc->empresa_id;
+                    $cuentaAnticipoId = $anticipoPorEmpresa[$empresaId] ?? 0;
+                    $esAnticipo = $cuentaAnticipoId > 0
+                        && ProveedorAnticipoCuentaContableSupport::esCreditoAnticipo($cc)
+                        && isset($pagosAnticipo[(int) $cc->pagoproveedor_id]);
                     $cuentaId = 0;
-                    if ($cc->comprobante_proveedores) {
+                    if ($esAnticipo) {
+                        $cuentaId = $cuentaAnticipoId;
+                    } elseif ($cc->comprobante_proveedores) {
                         $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorDesdeComprobante(
                             $cc->comprobante_proveedores,
                             $proveedor
@@ -248,16 +334,18 @@ final class ProveedorDeudaMayorDeltaSupport
                         $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorId(
                             $proveedor,
                             (int) ($cc->moneda_id ?: 1),
-                            (int) $cc->empresa_id
+                            $empresaId
                         );
                     }
                     if ($cuentaId <= 0) {
                         continue;
                     }
-                    $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaEnPlanDeEmpresa(
-                        $cuentaId,
-                        (int) $cc->empresa_id
-                    );
+                    if (! $esAnticipo) {
+                        $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaEnPlanDeEmpresa(
+                            $cuentaId,
+                            $empresaId
+                        );
+                    }
                     if ($cuentaId <= 0) {
                         continue;
                     }
@@ -269,7 +357,7 @@ final class ProveedorDeudaMayorDeltaSupport
                     if ($saldo < 0) {
                         $local = -$local;
                     }
-                    $key = ((int) $cc->empresa_id).'|'.$cuentaId;
+                    $key = $empresaId.'|'.$cuentaId;
                     $saldos[$key] = ($saldos[$key] ?? 0) + $local;
                 }
             });

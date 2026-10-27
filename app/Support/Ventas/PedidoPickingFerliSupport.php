@@ -682,8 +682,8 @@ final class PedidoPickingFerliSupport
 
         if ($cantidadLinea > 0 && ($saldoElegido + 0.0001) < $cantidadLinea) {
             $depTxt = self::etiquetaDeposito($depositoId);
-            $saldoFmt = number_format($saldoElegido, 0, ',', '.');
-            $cantFmt = number_format($cantidadLinea, 0, ',', '.');
+            $saldoFmt = self::textoPares($saldoElegido);
+            $cantFmt = self::textoPares($cantidadLinea);
             $saldos = self::saldosNetosLotePorDeposito($articuloId, $combinacionId, $loteCodigo);
             $sugerencias = self::formatearSugerenciasDepositosConSaldo($saldos);
             $msg = "Saldo insuficiente del lote/OT {$loteCodigo} en {$depTxt}: hay {$saldoFmt} pares y la línea pide {$cantFmt}.";
@@ -1057,8 +1057,8 @@ final class PedidoPickingFerliSupport
             if ($pide <= $hay + 0.0001) {
                 continue;
             }
-            $faltantes[] = $nombre.': pide '.number_format($pide, 0, ',', '.')
-                .', hay '.number_format($hay, 0, ',', '.');
+            $faltantes[] = $nombre.': pide '.self::textoPares($pide)
+                .', hay '.self::textoPares($hay);
         }
 
         if ($faltantes === []) {
@@ -1067,6 +1067,15 @@ final class PedidoPickingFerliSupport
 
         return 'El lote no alcanza la numeración del pedido ('
             .implode('; ', $faltantes).').';
+    }
+
+    private static function textoPares(float $cantidad): string
+    {
+        if (abs($cantidad - round($cantidad)) <= 0.001) {
+            return number_format(round($cantidad), 0, ',', '.');
+        }
+
+        return number_format($cantidad, 2, ',', '.');
     }
 
     /**

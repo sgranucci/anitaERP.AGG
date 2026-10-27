@@ -45,6 +45,7 @@ class ReubicarDepositoBoaondaFerliCommand extends Command
                 ['Targets lote+artículo Excel', $plan['targets']],
                 ['Buckets ya en depósito OK', $plan['buckets_ok']],
                 ['Buckets saldo sin target', $plan['buckets_sin_target']],
+                ['Buckets con pares decimales (no se mueven)', $plan['buckets_con_decimales'] ?? 0],
                 ['Buckets a mover', $plan['buckets_mover']],
                 ['Pares a reubicar', number_format($plan['pares_mover'], 0, ',', '.')],
             ]
@@ -56,6 +57,10 @@ class ReubicarDepositoBoaondaFerliCommand extends Command
         }
         if ($rutas !== []) {
             $this->table(['Ruta', 'Pares'], $rutas);
+        }
+
+        if (($plan['buckets_con_decimales'] ?? 0) > 0) {
+            $this->error('Hay lotes con pares decimales. Esos no se mueven: el par queda en su talle, no se reparte.');
         }
 
         if (! $ejecutar) {

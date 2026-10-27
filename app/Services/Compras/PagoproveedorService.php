@@ -38,6 +38,7 @@ use App\Support\Compras\PagoproveedorAsientoArmadoSupport;
 use App\Support\Compras\PagoproveedorLiquidacionSupport;
 use App\Support\Compras\PagoproveedorEdicionCandadoSupport;
 use App\Support\Compras\PagoproveedorMedioCajaTesoreriaSupport;
+use App\Support\Compras\PagoproveedorOpaSobranteSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Compras\Retencion\PagoproveedorRetencionPersistenciaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
@@ -872,6 +873,23 @@ class PagoproveedorService
      */
     private function resolverAplicacionesDesdeRequest(array $data): array
     {
+        $out = $this->aplicacionesFormularioDesdeData($data);
+
+        // La propuesta ya filtra las retenidas, pero acá también llega el armado manual de la OP
+        // con ids de cuenta corriente elegidos a mano: el bloqueo tiene que valer igual.
+        app(ComprobanteProveedorBloqueoPagoService::class)->assertNingunaBloqueada(
+            array_map(static fn (array $a) => (int) $a['proveedor_cuentacorriente_id'], $out)
+        );
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<array<string, mixed>>
+     */
+    private function aplicacionesFormularioDesdeData(array $data): array
+    {
         $ids = $data['idcuentacorrientes'] ?? $data['proveedor_cuentacorriente_ids'] ?? [];
         $montos = $data['montoaplicadocomprobantes'] ?? $data['montos_aplicados'] ?? [];
         $monedas = $data['monedacomprobante_ids'] ?? $data['moneda_aplicada_ids'] ?? [];
@@ -890,12 +908,6 @@ class PagoproveedorService
                 'diferencia_cambio' => isset($dcs[$i]) ? (float) $dcs[$i] : null,
             ];
         }
-
-        // La propuesta ya filtra las retenidas, pero acá también llega el armado manual de la OP
-        // con ids de cuenta corriente elegidos a mano: el bloqueo tiene que valer igual.
-        app(ComprobanteProveedorBloqueoPagoService::class)->assertNingunaBloqueada(
-            array_map(static fn (array $a) => (int) $a['proveedor_cuentacorriente_id'], $out)
-        );
 
         return $out;
     }
@@ -1335,10 +1347,7 @@ class PagoproveedorService
     private function sincronizarOpaDeSobrante(Pagoproveedor $opp, float $anticipo): ?Pagoproveedor
     {
         $anticipo = round($anticipo, 2);
-        $hija = Pagoproveedor::query()
-            ->where('pagoproveedor_origen_id', $opp->id)
-            ->where('tipocomprobante', 'OPA')
-            ->first();
+        $hija = PagoproveedorOpaSobranteSupport::hija($opp);
 
         if ($anticipo <= 0.01) {
             if ($hija !== null) {
@@ -1376,7 +1385,7 @@ class PagoproveedorService
             ]);
             $this->registrarEstado($hija, 'CONFIRMADA', 'OPA por sobrante de OPP '.$opp->numerotransaccion);
         } else {
-            $this->assertOpaSobranteSinAplicar($hija);
+            PagoproveedorOpaSobranteSupport::assertSinAplicar($hija);
             $this->pagoproveedorRepository->update([
                 'fecha' => $opp->fecha?->format('Y-m-d'),
                 'proveedor_id' => $opp->proveedor_id,
@@ -1401,37 +1410,17 @@ class PagoproveedorService
         return $hija;
     }
 
-    private function assertOpaSobranteSinAplicar(Pagoproveedor $opa): void
-    {
-        $aplicada = Proveedor_Cuentacorriente_Aplicacion::query()
-            ->where('pagoproveedor_id', $opa->id)
-            ->exists();
-        if ($aplicada || (int) ($opa->caja_movimiento_id ?? 0) > 0 || (int) ($opa->asiento_id ?? 0) > 0) {
-            throw new Exception(
-                'La OPA '.$opa->sucursal.'-'.$opa->numerotransaccion
-                .' del sobrante ya tiene aplicaciones, caja o asiento. No se puede rehacer.'
-            );
-        }
-    }
-
     private function borrarOpaSobranteLocal(Pagoproveedor $opa): void
     {
-        $this->assertOpaSobranteSinAplicar($opa);
-        EloquentAuditDeleteSupport::each(
-            Proveedor_Cuentacorriente::query()->where('pagoproveedor_id', $opa->id)
-        );
-        EloquentAuditDeleteSupport::each(
-            Pagoproveedor_Estado::query()->where('pagoproveedor_id', $opa->id)
-        );
+        PagoproveedorOpaSobranteSupport::borrarLocal($opa);
         $this->opasSobranteBorradas[] = $opa;
-        $opa->delete();
     }
 
     private function espejarOpaSobranteEnAnita(Pagoproveedor $pago): void
     {
         foreach ($this->opasSobranteBorradas as $opa) {
             try {
-                $this->cuentacorrienteAnitaSyncService->eliminarPromovCabeceraPorPago($opa);
+                $this->cuentacorrienteAnitaSyncService->eliminarPromovCabeceraPorPago($opa, false);
             } catch (\Throwable $e) {
                 Log::warning('pagoproveedor.opa_sobrante.anita_delete', [
                     'pagoproveedor_id' => $opa->id,
@@ -1446,10 +1435,7 @@ class PagoproveedorService
             return;
         }
 
-        $hija = Pagoproveedor::query()
-            ->where('pagoproveedor_origen_id', $pago->id)
-            ->where('tipocomprobante', 'OPA')
-            ->first();
+        $hija = PagoproveedorOpaSobranteSupport::hija($pago);
         if ($hija === null || (string) $hija->estado === 'PRE CARGA') {
             return;
         }
@@ -1758,6 +1744,15 @@ class PagoproveedorService
                 $this->pagoproveedorRepository->update(['estado' => 'CONFIRMADA'], $id);
                 $pago = $this->pagoproveedorRepository->findOrFail($id);
                 $this->registrarEstado($pago, 'CONFIRMADA', 'Confirmación de orden de pago');
+
+                // En PRE CARGA no se arma la OPA del sobrante: se arma al confirmar.
+                $aplicaciones = $this->aplicacionesFormularioDesdeData($data);
+                if (strtoupper((string) $pago->tipocomprobante) === 'OPP' && $this->hayAplicacionConMonto($aplicaciones)) {
+                    $this->sincronizarOpaDeSobrante(
+                        $pago,
+                        $this->resolverImporteAnticipo($pago, $data, $aplicaciones, true)
+                    );
+                }
 
                 // No pasar el monto de la OP como neto IIBB: un anticipo sin factura
                 // no tiene destino BA y eso inventaba retención CABA.

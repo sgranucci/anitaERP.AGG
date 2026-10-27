@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
  * No entran COB, AJU, APA, RIN, remitos ni otros movimientos de aplicacion.
  * Las filas de CC con cobranza_id (imputación de cobro sobre una FAC) tampoco:
  * la deuda se reduce por aplicaciones, no listando esa fila negativa.
+ * El pago de más de una cobranza es siempre una COA ({@see \App\Services\Caja\CobranzaPagoDeMasCoaService}).
  */
 final class ClienteCuentacorrienteDeudaAlcanceSupport
 {

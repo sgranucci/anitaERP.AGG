@@ -41,8 +41,9 @@ final class FerliBoaondaReubicarDepositoSupport
      *   excel_filas: int,
      *   targets: int,
      *   buckets_ok: int,
-     *   buckets_sin_target: int,
-     *   buckets_mover: int,
+ *   buckets_sin_target: int,
+ *   buckets_con_decimales: int,
+ *   buckets_mover: int,
      *   pares_mover: float,
      *   rutas: array<string, float>,
      *   mover: list<array<string, mixed>>
@@ -70,6 +71,7 @@ final class FerliBoaondaReubicarDepositoSupport
                 'targets' => 0,
                 'buckets_ok' => 0,
                 'buckets_sin_target' => 0,
+                'buckets_con_decimales' => 0,
                 'buckets_mover' => 0,
                 'pares_mover' => 0.0,
                 'rutas' => [],
@@ -121,6 +123,7 @@ final class FerliBoaondaReubicarDepositoSupport
         $mover = [];
         $ok = 0;
         $sinTarget = 0;
+        $conDecimales = 0;
         $rutas = [];
         $pares = 0.0;
 
@@ -140,7 +143,17 @@ final class FerliBoaondaReubicarDepositoSupport
                 continue;
             }
             $gKey = implode('|', [(int) $s->lote, (int) $s->articulo_id, (int) $s->combinacion_id, (int) $s->deposito_id]);
-            $saldo = (float) $s->saldo;
+            $tallesGrupo = $tallesPorGrupo[$gKey] ?? [];
+            if (self::curvaTieneDecimales($tallesGrupo)) {
+                $conDecimales++;
+                continue;
+            }
+            // La cabecera neta puede ser menor: un talle negativo (un par ya
+            // consumido en esa numeración) no se reparte sobre el resto.
+            $saldo = self::paresEnteros($tallesGrupo);
+            if ($saldo < 1) {
+                continue;
+            }
             $item = [
                 'lote' => (int) $s->lote,
                 'sku' => (string) $s->sku,
@@ -154,7 +167,7 @@ final class FerliBoaondaReubicarDepositoSupport
                 'precio' => (float) ($s->precio ?? 0),
                 'ordentrabajo_id' => (int) ($s->ordentrabajo_id ?? 0),
                 'modulo_id' => (int) ($s->modulo_id ?? 0),
-                'talles' => $tallesPorGrupo[$gKey] ?? [],
+                'talles' => $tallesGrupo,
             ];
             $mover[] = $item;
             $pares += $saldo;
@@ -167,6 +180,7 @@ final class FerliBoaondaReubicarDepositoSupport
             'targets' => count($targets),
             'buckets_ok' => $ok,
             'buckets_sin_target' => $sinTarget,
+            'buckets_con_decimales' => $conDecimales,
             'buckets_mover' => count($mover),
             'pares_mover' => $pares,
             'rutas' => $rutas,
@@ -192,37 +206,19 @@ final class FerliBoaondaReubicarDepositoSupport
 
         DB::transaction(function () use ($plan, $movService, $tipoAlta, $tipoConot, $ahora, &$salidas, &$entradas, &$pares) {
             foreach ($plan['mover'] as $item) {
-                $talles = [];
-                $paresTalle = 0.0;
-                foreach ($item['talles'] as $t) {
-                    $cant = abs((float) $t['cantidad']);
-                    if ($cant < 0.0001) {
-                        continue;
-                    }
-                    $talles[] = [
-                        'id' => null,
-                        'talle_id' => (int) $t['talle_id'],
-                        'cantidad' => $cant,
-                        'precio' => (float) ($t['precio'] ?? $item['precio']),
-                    ];
-                    $paresTalle += $cant;
+                $talles = self::tallesEnterosParaReubicar(
+                    $item['talles'] ?? [],
+                    (int) $item['lote'],
+                    (string) ($item['sku'] ?? '')
+                );
+                $cant = 0;
+                foreach ($talles as &$t) {
+                    $t['precio'] = (float) ($t['precio'] ?? $item['precio']);
+                    $cant += (int) $t['cantidad'];
                 }
-                $cant = abs((float) $item['saldo']);
-                if ($cant < 0.0001) {
+                unset($t);
+                if ($cant < 1) {
                     continue;
-                }
-                // Usar talles del saldo; si la suma de talles no cierra con cabecera,
-                // prorratear al saldo (no inventar pares).
-                $paresTalle = 0.0;
-                foreach ($talles as $t) {
-                    $paresTalle += (float) $t['cantidad'];
-                }
-                if ($paresTalle > 0.0001 && abs($paresTalle - $cant) > 0.051) {
-                    $factor = $cant / $paresTalle;
-                    foreach ($talles as &$t) {
-                        $t['cantidad'] = round((float) $t['cantidad'] * $factor, 4);
-                    }
-                    unset($t);
                 }
 
                 $base = [
@@ -263,6 +259,74 @@ final class FerliBoaondaReubicarDepositoSupport
         });
 
         return ['salidas' => $salidas, 'entradas' => $entradas, 'pares' => $pares];
+    }
+
+    /**
+     * Cada talle sale con sus pares enteros. Si otro talle quedó negativo,
+     * ese par no se prorratea sobre el resto.
+     *
+     * @param  list<array{talle_id?: int, cantidad?: float|int, precio?: float|int}>  $talles
+     * @return list<array{id: null, talle_id: int, cantidad: int, precio: float}>
+     */
+    private static function tallesEnterosParaReubicar(array $talles, int $lote, string $sku): array
+    {
+        if (self::curvaTieneDecimales($talles)) {
+            throw new RuntimeException(
+                'Lote '.$lote.' artículo '.$sku
+                .' tiene pares decimales. No se reubica: cada par queda en su numeración.'
+            );
+        }
+
+        $out = [];
+        foreach ($talles as $t) {
+            $cant = (int) round((float) ($t['cantidad'] ?? 0));
+            if ($cant < 1) {
+                continue;
+            }
+            $out[] = [
+                'id' => null,
+                'talle_id' => (int) ($t['talle_id'] ?? 0),
+                'cantidad' => $cant,
+                'precio' => (float) ($t['precio'] ?? 0),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array{cantidad?: float|int}>  $talles
+     */
+    private static function curvaTieneDecimales(array $talles): bool
+    {
+        foreach ($talles as $t) {
+            $cant = (float) ($t['cantidad'] ?? 0);
+            if ($cant <= 0.0001) {
+                continue;
+            }
+            if (abs($cant - round($cant)) > 0.001) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<array{cantidad?: float|int}>  $talles
+     */
+    private static function paresEnteros(array $talles): int
+    {
+        $pares = 0;
+        foreach ($talles as $t) {
+            $cant = (float) ($t['cantidad'] ?? 0);
+            if ($cant <= 0.0001) {
+                continue;
+            }
+            $pares += (int) round($cant);
+        }
+
+        return $pares;
     }
 
     /**

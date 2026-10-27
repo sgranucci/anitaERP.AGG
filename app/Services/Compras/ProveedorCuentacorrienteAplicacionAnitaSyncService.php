@@ -110,8 +110,10 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
 
     /**
      * Borra promov de la OP y de un eventual AOP con el mismo número.
+     * La OPA de sobrante comparte número con la OPP: al borrarla sola, $incluirAop = false
+     * para no llevarse el AOP que revierte esa OPP.
      */
-    public function eliminarPromovCabeceraPorPago(Pagoproveedor $pago): void
+    public function eliminarPromovCabeceraPorPago(Pagoproveedor $pago, bool $incluirAop = true): void
     {
         $pago->loadMissing(['proveedores', 'empresas']);
 
@@ -140,7 +142,7 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
             $letra = 'A';
         }
 
-        $tipos = array_values(array_unique(array_filter([$tipoOrig, 'AOP'])));
+        $tipos = array_values(array_unique(array_filter([$tipoOrig, $incluirAop ? 'AOP' : null])));
         $api = new ApiAnita;
         $sistema = (string) config('comprobante_proveedor.anita_sistema_compras', 'compras');
 

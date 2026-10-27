@@ -20,7 +20,7 @@ class Cobranza extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
     protected $fillable = ['empresa_id', 'tipotransaccion_caja_id', 'numerotransaccion', 'fecha', 
                             'caja_id', 'cliente_id', 'venta_id', 'detalle', 'estado', 'monto', 'cotizacion', 'moneda_id',
-                            'usuario_id'];
+                            'usuario_id', 'cobranza_origen_id'];
 
     protected $table = 'cobranza';
 

@@ -21,6 +21,7 @@ use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
+use App\Support\Compras\PagoproveedorOpaSobranteSupport;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
@@ -77,6 +78,13 @@ class PagoproveedorAnularRevertirService
             }
             if (in_array((string) $actual->estado, ['BAJA', 'REVERTIDA'], true)) {
                 throw new RuntimeException('La OP ya está anulada o revertida.');
+            }
+
+            $opaSobrante = PagoproveedorOpaSobranteSupport::hija($actual);
+            if ($opaSobrante !== null) {
+                PagoproveedorOpaSobranteSupport::assertSinAplicar($opaSobrante);
+                $this->cuentacorrienteAnitaSyncService->eliminarPromovCabeceraPorPago($opaSobrante, false);
+                PagoproveedorOpaSobranteSupport::borrarLocal($opaSobrante);
             }
 
             // Anita CC primero: necesita las aplicaciones ERP aún presentes.
@@ -193,6 +201,12 @@ class PagoproveedorAnularRevertirService
                 throw new RuntimeException('Solo se pueden revertir OP confirmadas, pagadas o conciliadas.');
             }
 
+            // El sobrante deja de existir con la OPP: el AOP solo compensa los renglones de la OPP.
+            $opaSobrante = PagoproveedorOpaSobranteSupport::hija($actual);
+            if ($opaSobrante !== null) {
+                PagoproveedorOpaSobranteSupport::borrarLocal($opaSobrante);
+            }
+
             // AOP: mismo comprobante con importes negativos y el número del original.
             $reverso = $this->pagoproveedorRepository->create([
                 'empresa_id' => (int) $pago->empresa_id,
@@ -291,6 +305,7 @@ class PagoproveedorAnularRevertirService
             // quedar la OP en REVERTIDA esas filas salen solas de las presentaciones.
 
             return [
+                'opa_sobrante' => $opaSobrante,
                 'reverso' => $reverso,
                 'caja_reverso' => $cajaReverso,
                 'retenciones_origen' => $retencionesOrigen,
@@ -307,6 +322,9 @@ class PagoproveedorAnularRevertirService
         ];
 
         try {
+            if ($local['opa_sobrante'] !== null) {
+                $this->cuentacorrienteAnitaSyncService->eliminarPromovCabeceraPorPago($local['opa_sobrante'], false);
+            }
             PagoproveedorAnitaRetencionEscrituraSupport::grabarReversoDesdeRetenciones(
                 $pago,
                 $reverso,

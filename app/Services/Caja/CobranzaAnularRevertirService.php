@@ -120,6 +120,8 @@ class CobranzaAnularRevertirService
         string $numeroTransaccion,
         ?Cobranza $borrarCabecera,
     ): void {
+        app(CobranzaPagoDeMasCoaService::class)->eliminarCoaHijas($cobranzaId);
+
         $snapshots = [];
         $aplicacionesDeuda = Cliente_Cuentacorriente_Aplicacion::query()
             ->where('cobranza_id', $cobranzaId)

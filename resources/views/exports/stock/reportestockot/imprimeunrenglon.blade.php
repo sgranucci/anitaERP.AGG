@@ -33,15 +33,15 @@
     @foreach ($medidasCols as $medida)
         @php $cant = (float) ($cantPorMedida[(int) $medida] ?? 0); @endphp
         @if (abs($cant) > 0.0001)
-            <td align="right">{{ number_format($cant, 0, ',', '.') }}</td>
+            <td align="right">{{ abs($cant - round($cant)) > 0.001 ? number_format($cant, 2, ',', '.') : number_format($cant, 0, ',', '.') }}</td>
         @else
             <td></td>
         @endif
     @endforeach
-    <td align="right">{{ number_format($ps, 0, ',', '.') }}</td>
+    <td align="right">{{ abs($ps - round($ps)) > 0.001 ? number_format($ps, 2, ',', '.') : number_format($ps, 0, ',', '.') }}</td>
     <td>X</td>
     <td align="right">{{ $nModulos }}</td>
-    <td align="right">{{ number_format($tt, 0, ',', '.') }}</td>
+    <td align="right">{{ abs($tt - round($tt)) > 0.001 ? number_format($tt, 2, ',', '.') : number_format($tt, 0, ',', '.') }}</td>
     <td align="right">
         @if ($precio > 0)
             $ {{ number_format($precio, 0, ',', '.') }}
