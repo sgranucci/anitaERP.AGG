@@ -50,7 +50,8 @@
         <tr style="background:#85C1E9;color:#17202A;">
             @foreach ($empresas as $empresa)
                 @foreach ($metricas as $clave)
-                    <th class="{{ FlashContableReporteSupport::esTilde($clave) ? 'text-center' : 'text-right' }}">
+                    <th class="{{ FlashContableReporteSupport::esTilde($clave) ? 'text-center' : 'text-right' }}"
+                        @if ($clave === 'diferencia') title="Win electrónico − win financiero. Importe de las partidas pendientes de imputación." @endif>
                         {{ $etiquetas[$clave] ?? $clave }}
                     </th>
                 @endforeach

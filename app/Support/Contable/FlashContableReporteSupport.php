@@ -22,6 +22,7 @@ final class FlashContableReporteSupport
         'q_posiciones',
         'win_electronico',
         'win_financiero',
+        'diferencia',
         'cartones_bingo',
         'ventas_bingo',
         'net_win_bingo',
@@ -48,6 +49,7 @@ final class FlashContableReporteSupport
         'q_posiciones' => 'Q Posiciones',
         'win_electronico' => 'Win Electrónico',
         'win_financiero' => 'Win Financiero',
+        'diferencia' => 'Diferencia',
         'cartones_bingo' => 'N Cartones Bingo',
         'ventas_bingo' => 'Ventas Bingo',
         'net_win_bingo' => 'Net Win Bingo',
@@ -170,6 +172,10 @@ final class FlashContableReporteSupport
             'q_posiciones' => (int) ($m['el_positions'] ?? 0),
             'win_electronico' => (float) ($m['win_online'] ?? 0),
             'win_financiero' => (float) ($m['win_financial'] ?? 0),
+            'diferencia' => (float) ($m['win_diff'] ?? round(
+                (float) ($m['win_online'] ?? 0) - (float) ($m['win_financial'] ?? 0),
+                2
+            )),
             'cartones_bingo' => (int) ($m['bingo_carton'] ?? 0),
             'ventas_bingo' => (float) ($m['bingo_venta'] ?? 0),
             'net_win_bingo' => (float) ($m['bingo_win'] ?? 0),
@@ -194,6 +200,7 @@ final class FlashContableReporteSupport
             'q_posiciones' => 0,
             'win_electronico' => 0.0,
             'win_financiero' => 0.0,
+            'diferencia' => 0.0,
             'cartones_bingo' => 0,
             'ventas_bingo' => 0.0,
             'net_win_bingo' => 0.0,
@@ -285,6 +292,7 @@ final class FlashContableReporteSupport
                     ? (int) round($sumaEntero[$clave] / $diasEntero[$clave])
                     : 0;
             }
+            $acum['diferencia'] = round((float) $acum['win_electronico'] - (float) $acum['win_financiero'], 2);
             $acum['flash_cerrado'] = $diasCerrado;
             $acum['flash_cerrado_texto'] = $diasCerrado.'/'.$diasConDato;
             $out[$empresaId] = $acum;

@@ -40,6 +40,7 @@ class FlashContableReporteSupportTest extends TestCase
         $this->assertSame(771, $m['q_posiciones']);
         $this->assertEquals(120.75, $m['win_electronico']);
         $this->assertEquals(95.5, $m['win_financiero']);
+        $this->assertEquals(25.25, $m['diferencia']);
         $this->assertSame(2346, $m['cartones_bingo']);
         $this->assertEquals(1000.0, $m['ventas_bingo']);
         $this->assertEquals(400.4, $m['net_win_bingo']);
@@ -70,7 +71,7 @@ class FlashContableReporteSupportTest extends TestCase
         $this->assertCount(2, $reporte['empresas']);
         $this->assertCount(3, $reporte['filas']);
         $this->assertSame(2, $reporte['cantidad_dias']);
-        $this->assertSame(29, $reporte['cantidad_columnas']);
+        $this->assertSame(31, $reporte['cantidad_columnas']);
 
         $dia1 = $reporte['filas'][0];
         $this->assertSame('01/07/2026', $dia1['fecha']);
@@ -88,7 +89,9 @@ class FlashContableReporteSupportTest extends TestCase
 
         $this->assertSame(771, $reporte['totales'][1]['q_posiciones']);
         $this->assertEquals(180.0, $reporte['totales'][1]['win_electronico']);
+        $this->assertEquals(180.0, $reporte['totales'][1]['diferencia']);
         $this->assertEquals(50.0, $reporte['totales'][2]['win_electronico']);
+        $this->assertEquals(50.0, $reporte['totales'][2]['diferencia']);
         $this->assertSame(1, $reporte['totales'][1]['flash_cerrado']);
         $this->assertSame('1/2', $reporte['totales'][1]['flash_cerrado_texto']);
         $this->assertSame('0/1', $reporte['totales'][2]['flash_cerrado_texto']);
