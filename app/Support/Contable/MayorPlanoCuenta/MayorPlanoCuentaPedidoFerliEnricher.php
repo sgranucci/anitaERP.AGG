@@ -38,6 +38,7 @@ class MayorPlanoCuentaPedidoFerliEnricher
 
         $ventas = $this->leerVentas(array_values($ventaIds));
         $pedidosTn = $this->leerPedidosTiendanube(array_values($ventaIds));
+        $pedidosTn += $this->leerPedidosCambioMarketplace(array_values($ventaIds), $pedidosTn);
 
         foreach ($filas as $idx => $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
@@ -130,6 +131,56 @@ class MayorPlanoCuentaPedidoFerliEnricher
                 $ventaId = (int) $row->venta_id;
                 if (! isset($out[$ventaId])) {
                     $out[$ventaId] = trim((string) $row->order_number);
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Factura de reemplazo o NC de un cambio de Tiendanube: el pedido está
+     * en el legajo, no en la venta.
+     *
+     * @param  list<int>  $ventaIds
+     * @param  array<int, string>  $yaResueltos
+     * @return array<int, string>
+     */
+    private function leerPedidosCambioMarketplace(array $ventaIds, array $yaResueltos): array
+    {
+        if (! Schema::hasTable('cambio_devolucion_marketplace') || ! Schema::hasTable('tiendanube_pedido')) {
+            return [];
+        }
+
+        $faltantes = array_values(array_filter(
+            $ventaIds,
+            static fn (int $id): bool => ! isset($yaResueltos[$id]) || $yaResueltos[$id] === ''
+        ));
+        if ($faltantes === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach (['venta_reemplazo_id', 'venta_nc_id', 'venta_original_id'] as $columna) {
+            $pendientes = array_values(array_filter(
+                $faltantes,
+                static fn (int $id): bool => ! isset($out[$id])
+            ));
+            foreach (array_chunk($pendientes, 500) as $lote) {
+                if ($lote === []) {
+                    continue;
+                }
+                $rows = DB::table('cambio_devolucion_marketplace as c')
+                    ->join('tiendanube_pedido as tn', 'tn.id', '=', 'c.tiendanube_pedido_id')
+                    ->whereIn('c.'.$columna, $lote)
+                    ->whereNotNull('tn.order_number')
+                    ->where('tn.order_number', '<>', '')
+                    ->get(['c.'.$columna.' as venta_id', 'tn.order_number']);
+                foreach ($rows as $row) {
+                    $ventaId = (int) $row->venta_id;
+                    if ($ventaId > 0 && ! isset($out[$ventaId])) {
+                        $out[$ventaId] = trim((string) $row->order_number);
+                    }
                 }
             }
         }
