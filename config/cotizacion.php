@@ -3,6 +3,8 @@
 
 return [
     'monedaIdCommand' => 2,
+    // Euro (moneda.id 3). El cron cotizacion:leeapi lo graba junto con el dólar.
+    'monedaIdEuroCommand' => 3,
     'usuarioIdCommand' => (int) env('COTIZACION_USUARIO_ID', 1),
     'ID_MONEDA_DEFAULT' => 1,
     'ABREVIATURA_LOCAL' => env('COTIZACION_ABREVIATURA_LOCAL', 'ARS'),

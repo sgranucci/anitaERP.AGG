@@ -90,6 +90,8 @@ class Listaprecio extends Model implements Auditable
 				"formula" => $data->prem_formula,
 				"incluyeimpuesto" => $this->graba_id_incl_impuesto($data->prem_incl_impuesto),
 				"codigo" => $data->prem_lista,
+                "desdetalle" => '',
+                "hastatalle" => '',
                 "tiponumeracion_id" => Tiponumeracion::query()->orderBy('id')->value('id'),
 				"usuarioultcambio_id" => $usuario_id
             ]);

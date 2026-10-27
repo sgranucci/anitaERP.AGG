@@ -17,7 +17,7 @@
 			<option value="">-- Elija si incluye impuesto --</option>
 		@endif
 		@for ($i = 1; $i <= 2; $i++)
-			@if (!empty($data['incluyeimpuesto']) && $data['incluyeimpuesto'] == $i))
+			@if (!empty($data['incluyeimpuesto']) && $data['incluyeimpuesto'] == $i)
 				<option selected value="{{$i}}">{{$i==1?'S':'N'}}</option>
 			@else
 				<option value="{{$i}}">{{$i==1?'S':'N'}}</option>

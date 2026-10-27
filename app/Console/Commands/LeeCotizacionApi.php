@@ -19,7 +19,7 @@ class LeeCotizacionApi extends Command
                             {--desde= : Con --backfill-vacias o --importar-rango, desde YYYY-MM-DD}
                             {--hasta= : Con --backfill-vacias o --importar-rango, hasta YYYY-MM-DD}';
 
-    protected $description = 'Lee cotización dólar oficial BNA (ArgentinaDatos + fallback DolarApi) y la graba en cotizacion / cotizacion_moneda';
+    protected $description = 'Lee cotización dólar y euro oficial BNA (ArgentinaDatos + fallback DolarApi) y la graba en cotizacion / cotizacion_moneda';
 
     public function __construct(
         private CotizacionRepositoryInterface $cotizacionRepository,
@@ -68,6 +68,11 @@ class LeeCotizacionApi extends Command
 
             return self::FAILURE;
         }
+        $serieEuro = $this->leerSerieOficialArgentinaDatos($desde, $hasta, 'eur', 'argentinadatos-eur-oficial');
+        if ($serieEuro === null) {
+            $this->warn('No se pudo leer la serie del euro. El rango sigue solo con el dólar.');
+            $serieEuro = [];
+        }
 
         $diasRango = (int) $desde->diffInDays($hasta) + 1;
         $conDato = 0;
@@ -75,9 +80,12 @@ class LeeCotizacionApi extends Command
         $yaOk = 0;
         $aCrear = 0;
         $aActualizar = 0;
+        $conEuro = 0;
+        $sinEuro = 0;
         $ok = 0;
         $fail = 0;
-        $monedaId = (int) config('cotizacion.monedaIdCommand');
+        $monedaId = $this->monedaIdDolar();
+        $monedaEuroId = $this->monedaIdEuro();
         $cursor = $desde->copy();
 
         while ($cursor->lte($hasta)) {
@@ -91,7 +99,17 @@ class LeeCotizacionApi extends Command
             }
 
             $conDato++;
+            $payloadEuro = $serieEuro[$fechaSql] ?? null;
+            if (is_array($payloadEuro) && (float) ($payloadEuro['venta'] ?? 0) > 0) {
+                $conEuro++;
+            } else {
+                $sinEuro++;
+                $payloadEuro = null;
+            }
             $estadoPre = $this->estadoFilaCotizacion($fechaSql, $monedaId);
+            if ($estadoPre === 'ok' && $monedaEuroId > 0 && $this->estadoFilaCotizacion($fechaSql, $monedaEuroId) !== 'ok') {
+                $estadoPre = 'actualizar';
+            }
             if ($estadoPre === 'ok') {
                 $yaOk++;
             } elseif ($estadoPre === 'crear') {
@@ -101,7 +119,7 @@ class LeeCotizacionApi extends Command
             }
 
             if (! $soloInforme) {
-                $resultado = $this->persistirCotizacion($cursor, $payload);
+                $resultado = $this->persistirCotizacion($cursor, $payload, $payloadEuro);
                 if ($resultado) {
                     $ok++;
                 } else {
@@ -115,6 +133,8 @@ class LeeCotizacionApi extends Command
         $this->table(['Control', 'Valor'], [
             ['Días del rango', (string) $diasRango],
             ['Con cotización BNA', (string) $conDato],
+            ['Con cotización euro', (string) $conEuro],
+            ['Dólar sin euro', (string) $sinEuro],
             ['Sin dato (finde/feriado)', (string) $sinDato],
             ['Ya cargadas (>0)', (string) $yaOk],
             ['A crear', (string) $aCrear],
@@ -139,9 +159,13 @@ class LeeCotizacionApi extends Command
     /**
      * @return array<string, array{venta: float, compra: float, fuente: string, fecha: string}>|null
      */
-    private function leerSerieOficialArgentinaDatos(Carbon $desde, Carbon $hasta): ?array
-    {
-        $url = 'https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial';
+    private function leerSerieOficialArgentinaDatos(
+        Carbon $desde,
+        Carbon $hasta,
+        string $ruta = 'dolares/oficial',
+        string $fuente = 'argentinadatos-oficial',
+    ): ?array {
+        $url = 'https://api.argentinadatos.com/v1/cotizaciones/'.$ruta;
         $ctx = stream_context_create([
             'http' => $this->opcionesHttpProxy([
                 'timeout' => 60,
@@ -172,6 +196,10 @@ class LeeCotizacionApi extends Command
             if ($fecha === '' || $fecha < $desdeSql || $fecha > $hastaSql) {
                 continue;
             }
+            $casa = strtolower(trim((string) ($fila['casa'] ?? 'oficial')));
+            if ($casa !== '' && $casa !== 'oficial') {
+                continue;
+            }
             $venta = (float) ($fila['venta'] ?? 0);
             if ($venta <= 0) {
                 continue;
@@ -179,7 +207,7 @@ class LeeCotizacionApi extends Command
             $salida[$fecha] = [
                 'venta' => $venta,
                 'compra' => (float) ($fila['compra'] ?? 0),
-                'fuente' => 'argentinadatos-oficial',
+                'fuente' => $fuente,
                 'fecha' => $fecha,
             ];
         }
@@ -211,19 +239,17 @@ class LeeCotizacionApi extends Command
         $desde = $this->resolverFechaOption($this->option('desde'))
             ?? $hasta->copy()->subDays(14);
 
-        $monedaId = (int) config('cotizacion.monedaIdCommand');
-        $filas = DB::table('cotizacion as c')
-            ->join('cotizacion_moneda as cm', 'cm.cotizacion_id', '=', 'c.id')
-            ->where('cm.moneda_id', $monedaId)
-            ->whereBetween('c.fecha', [$desde->toDateString(), $hasta->toDateString()])
-            ->where(function ($q) {
-                $q->whereNull('cm.cotizacionventa')
-                    ->orWhere('cm.cotizacionventa', '<=', 0);
-            })
-            ->orderBy('c.fecha')
-            ->get(['c.id', 'c.fecha', 'cm.id as cotizacion_moneda_id']);
+        $fechas = $this->fechasConMonedaVacia($desde->toDateString(), $hasta->toDateString(), $this->monedaIdDolar());
+        $monedaEuroId = $this->monedaIdEuro();
+        if ($monedaEuroId > 0 && $monedaEuroId !== $this->monedaIdDolar()) {
+            $fechas = array_values(array_unique(array_merge(
+                $fechas,
+                $this->fechasConMonedaVacia($desde->toDateString(), $hasta->toDateString(), $monedaEuroId)
+            )));
+            sort($fechas);
+        }
 
-        if ($filas->isEmpty()) {
+        if ($fechas === []) {
             $this->info('No hay cotizaciones vacías en el rango.');
 
             return self::SUCCESS;
@@ -232,8 +258,8 @@ class LeeCotizacionApi extends Command
         $ok = 0;
         $sinDatoBna = 0;
         $fail = 0;
-        foreach ($filas as $fila) {
-            $fecha = Carbon::parse($fila->fecha)->startOfDay();
+        foreach ($fechas as $fechaSql) {
+            $fecha = Carbon::parse($fechaSql)->startOfDay();
             $this->line('Backfill '.$fecha->toDateString().'...');
             $resultado = $this->grabarFecha($fecha, true);
             if ($resultado === true) {
@@ -268,20 +294,28 @@ class LeeCotizacionApi extends Command
             return $tolerarSinDato ? null : false;
         }
 
-        return $this->persistirCotizacion($fecha, $payload) ? true : false;
+        $payloadEuro = $this->leerCotizacionBna($fecha, 'eur', false);
+        if (! is_array($payloadEuro) || ($payloadEuro['sin_dato'] ?? false) === true || (float) ($payloadEuro['venta'] ?? 0) <= 0) {
+            $this->warn('Sin cotización euro BNA para '.$fecha->toDateString().'.');
+            $payloadEuro = null;
+        }
+
+        return $this->persistirCotizacion($fecha, $payload, $payloadEuro) ? true : false;
     }
 
     /**
      * @param  array{venta: float|int|string, compra?: float|int|string, fuente?: string}  $payload
+     * @param  array{venta: float|int|string, compra?: float|int|string, fuente?: string}|null  $payloadEuro
      */
-    private function persistirCotizacion(Carbon $fecha, array $payload): bool
+    private function persistirCotizacion(Carbon $fecha, array $payload, ?array $payloadEuro = null): bool
     {
         $venta = (float) $payload['venta'];
         $compra = (float) ($payload['compra'] ?? 0);
         $fuente = (string) ($payload['fuente'] ?? '');
-        $monedaId = (int) config('cotizacion.monedaIdCommand');
+        $monedaId = $this->monedaIdDolar();
         $usuario = (int) config('cotizacion.usuarioIdCommand');
         $fechaSql = $fecha->toDateString();
+        $euro = $this->normalizarEuro($payloadEuro);
 
         if ($venta <= 0) {
             return false;
@@ -290,61 +324,35 @@ class LeeCotizacionApi extends Command
         DB::beginTransaction();
         try {
             $cotizacion = DB::table('cotizacion')->whereDate('fecha', $fechaSql)->first();
+            $alta = $cotizacion === null;
 
-            if (! $cotizacion) {
+            if ($alta) {
                 $cotizacionModel = $this->cotizacionRepository->create([
                     'fecha' => $fechaSql,
                     'usuario_id' => $usuario,
                 ]);
                 $cotizacionId = (int) $cotizacionModel->id;
-                $this->cotizacion_MonedaRepository->create([
-                    'cotizacion_ids' => [$cotizacionId],
-                    'moneda_ids' => [$monedaId],
-                    'cotizacioncompras' => [$compra],
-                    'cotizacionventas' => [$venta],
-                ], $cotizacionId);
-
-                Log::info('grabo cotizacion diaria', [
-                    'id' => $cotizacionId,
-                    'fecha' => $fechaSql,
-                    'venta' => $venta,
-                    'compra' => $compra,
-                    'fuente' => $fuente,
-                ]);
-                $this->info("Alta {$fechaSql}: venta={$venta} compra={$compra} fuente={$fuente}");
             } else {
                 $cotizacionId = (int) $cotizacion->id;
-                $existeMoneda = DB::table('cotizacion_moneda')
-                    ->where('cotizacion_id', $cotizacionId)
-                    ->where('moneda_id', $monedaId)
-                    ->first();
-
-                if ($existeMoneda) {
-                    DB::table('cotizacion_moneda')
-                        ->where('id', $existeMoneda->id)
-                        ->update([
-                            'cotizacionventa' => $venta,
-                            'cotizacioncompra' => $compra,
-                            'updated_at' => now(),
-                        ]);
-                } else {
-                    $this->cotizacion_MonedaRepository->create([
-                        'cotizacion_ids' => [$cotizacionId],
-                        'moneda_ids' => [$monedaId],
-                        'cotizacioncompras' => [$compra],
-                        'cotizacionventas' => [$venta],
-                    ], $cotizacionId);
-                }
-
-                Log::info('actualizo cotizacion diaria', [
-                    'id' => $cotizacionId,
-                    'fecha' => $fechaSql,
-                    'venta' => $venta,
-                    'compra' => $compra,
-                    'fuente' => $fuente,
-                ]);
-                $this->info("Update {$fechaSql}: venta={$venta} compra={$compra} fuente={$fuente}");
             }
+
+            $this->guardarMoneda($cotizacionId, $monedaId, $venta, $compra);
+            if ($euro !== null) {
+                $this->guardarMoneda($cotizacionId, $euro['moneda_id'], $euro['venta'], $euro['compra']);
+            }
+
+            $contexto = [
+                'id' => $cotizacionId,
+                'fecha' => $fechaSql,
+                'venta' => $venta,
+                'compra' => $compra,
+                'fuente' => $fuente,
+                'euro_venta' => $euro['venta'] ?? null,
+                'euro_compra' => $euro['compra'] ?? null,
+                'euro_fuente' => $euro['fuente'] ?? null,
+            ];
+            Log::info($alta ? 'grabo cotizacion diaria' : 'actualizo cotizacion diaria', $contexto);
+            $this->info($this->lineaResultado($alta ? 'Alta' : 'Update', $fechaSql, $venta, $compra, $fuente, $euro));
 
             DB::commit();
 
@@ -359,26 +367,129 @@ class LeeCotizacionApi extends Command
     }
 
     /**
+     * @param  array{venta: float|int|string, compra?: float|int|string, fuente?: string}|null  $payloadEuro
+     * @return array{moneda_id: int, venta: float, compra: float, fuente: string}|null
+     */
+    private function normalizarEuro(?array $payloadEuro): ?array
+    {
+        $monedaEuroId = $this->monedaIdEuro();
+        if ($monedaEuroId <= 0 || $monedaEuroId === $this->monedaIdDolar() || ! is_array($payloadEuro)) {
+            return null;
+        }
+        $venta = (float) ($payloadEuro['venta'] ?? 0);
+        if ($venta <= 0) {
+            return null;
+        }
+
+        return [
+            'moneda_id' => $monedaEuroId,
+            'venta' => $venta,
+            'compra' => (float) ($payloadEuro['compra'] ?? 0),
+            'fuente' => (string) ($payloadEuro['fuente'] ?? ''),
+        ];
+    }
+
+    private function guardarMoneda(int $cotizacionId, int $monedaId, float $venta, float $compra): void
+    {
+        $existeMoneda = DB::table('cotizacion_moneda')
+            ->where('cotizacion_id', $cotizacionId)
+            ->where('moneda_id', $monedaId)
+            ->first();
+
+        if ($existeMoneda) {
+            DB::table('cotizacion_moneda')
+                ->where('id', $existeMoneda->id)
+                ->update([
+                    'cotizacionventa' => $venta,
+                    'cotizacioncompra' => $compra,
+                    'updated_at' => now(),
+                ]);
+
+            return;
+        }
+
+        $this->cotizacion_MonedaRepository->create([
+            'cotizacion_ids' => [$cotizacionId],
+            'moneda_ids' => [$monedaId],
+            'cotizacioncompras' => [$compra],
+            'cotizacionventas' => [$venta],
+        ], $cotizacionId);
+    }
+
+    /**
+     * @param  array{moneda_id: int, venta: float, compra: float, fuente: string}|null  $euro
+     */
+    private function lineaResultado(string $accion, string $fechaSql, float $venta, float $compra, string $fuente, ?array $euro): string
+    {
+        $linea = "{$accion} {$fechaSql}: USD venta={$venta} compra={$compra} fuente={$fuente}";
+        if ($euro === null) {
+            return $linea.' EUR=sin dato';
+        }
+
+        return $linea." EUR venta={$euro['venta']} compra={$euro['compra']} fuente={$euro['fuente']}";
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function fechasConMonedaVacia(string $desde, string $hasta, int $monedaId): array
+    {
+        return DB::table('cotizacion as c')
+            ->leftJoin('cotizacion_moneda as cm', function ($join) use ($monedaId) {
+                $join->on('cm.cotizacion_id', '=', 'c.id')
+                    ->where('cm.moneda_id', '=', $monedaId);
+            })
+            ->whereBetween('c.fecha', [$desde, $hasta])
+            ->where(function ($q) {
+                $q->whereNull('cm.id')
+                    ->orWhereNull('cm.cotizacionventa')
+                    ->orWhere('cm.cotizacionventa', '<=', 0);
+            })
+            ->orderBy('c.fecha')
+            ->pluck('c.fecha')
+            ->map(fn ($fecha) => Carbon::parse($fecha)->toDateString())
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function monedaIdDolar(): int
+    {
+        return (int) config('cotizacion.monedaIdCommand', 2);
+    }
+
+    private function monedaIdEuro(): int
+    {
+        return (int) config('cotizacion.monedaIdEuroCommand', 3);
+    }
+
+    /**
      * @return array{venta?: float, compra?: float, fuente?: string, fecha?: string, sin_dato?: bool}|null
      */
-    private function leerCotizacionBna(Carbon $fecha): ?array
+    private function leerCotizacionBna(Carbon $fecha, string $moneda = 'usd', bool $avisar = true): ?array
     {
+        $moneda = $moneda === 'eur' ? 'eur' : 'usd';
         $script = $this->resolverScriptCotizacionBna();
         if ($script === null) {
-            $this->error('No existe parser: scripts/cotizacionbna.py ni storage/cotizacionbna.py');
+            if ($avisar) {
+                $this->error('No existe parser: scripts/cotizacionbna.py ni storage/cotizacionbna.py');
+            }
 
             return null;
         }
 
         $cmd = sprintf(
-            'python3 %s --json --fecha %s 2>&1',
+            'python3 %s --json --fecha %s --moneda %s 2>&1',
             escapeshellarg($script),
-            escapeshellarg($fecha->toDateString())
+            escapeshellarg($fecha->toDateString()),
+            escapeshellarg($moneda)
         );
         $raw = $this->ejecutarParser($cmd);
 
         if ($raw === '') {
-            $this->error('Parser BNA sin salida para '.$fecha->toDateString());
+            if ($avisar) {
+                $this->error('Parser BNA sin salida para '.$fecha->toDateString());
+            }
 
             return null;
         }
@@ -395,14 +506,18 @@ class LeeCotizacionApi extends Command
         }
 
         if (! is_array($data) || ! isset($data['venta'])) {
-            $this->error('Parser BNA respuesta inválida: '.$raw);
+            if ($avisar) {
+                $this->error('Parser BNA respuesta inválida: '.$raw);
+            }
 
             return null;
         }
 
         $venta = (float) $data['venta'];
         if ($venta <= 0) {
-            $this->error('Cotización venta inválida (<=0) para '.$fecha->toDateString());
+            if ($avisar) {
+                $this->error('Cotización venta inválida (<=0) para '.$fecha->toDateString());
+            }
 
             return null;
         }

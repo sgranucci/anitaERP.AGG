@@ -61,9 +61,9 @@ class ListaprecioController extends Controller
 			"formula" => $request->formula,
 			"incluyeimpuesto" => $request->incluyeimpuesto,
 			"codigo" => $request->codigo,
-            "desdetalle" => $request->desdetalle,
-            "hastatalle" => $request->hastatalle,
-            "tiponumeracion_id" => $request->tiponumeracion_id,
+            "desdetalle" => $this->talleOpcional($request->desdetalle),
+            "hastatalle" => $this->talleOpcional($request->hastatalle),
+            "tiponumeracion_id" => $request->tiponumeracion_id ?: null,
 			"usuarioultcambio_id" => Auth::user()->id,
 				]);
 
@@ -108,9 +108,9 @@ class ListaprecioController extends Controller
 		$listaprecio->formula = $request->formula;
 		$listaprecio->incluyeimpuesto = $request->incluyeimpuesto;
 		$listaprecio->codigo = $request->codigo;
-        $listaprecio->desdetalle = $request->desdetalle;
-        $listaprecio->hastatalle = $request->hastatalle;
-        $listaprecio->tiponumeracion_id = $request->tiponumeracion_id;
+        $listaprecio->desdetalle = $this->talleOpcional($request->desdetalle);
+        $listaprecio->hastatalle = $this->talleOpcional($request->hastatalle);
+        $listaprecio->tiponumeracion_id = $request->tiponumeracion_id ?: null;
 		$listaprecio->usuarioultcambio_id = Auth::user()->id;
 
 		$listaprecio->save();
@@ -204,6 +204,17 @@ class ListaprecioController extends Controller
         }
 
         return $this->findListaprecioPorCodigo($codigo);
+    }
+
+    /**
+     * Desde/hasta talle solo se cargan en Ferli. En el resto de instalaciones
+     * las columnas son NOT NULL y el alta debe persistir cadena vacía.
+     */
+    private function talleOpcional(mixed $valor): string
+    {
+        $valor = trim((string) ($valor ?? ''));
+
+        return $valor;
     }
 
     private function puedeConsultarListaprecio(): bool

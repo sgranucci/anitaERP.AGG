@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cotización dólar oficial BNA para cotizacion:leeapi.
+"""Cotización oficial BNA (dólar o euro) para cotizacion:leeapi.
 
 Salida con --json:
   {"venta": float, "compra": float, "fuente": str, "fecha": "YYYY-MM-DD"}
@@ -20,8 +20,12 @@ from datetime import date, datetime
 
 
 DOLARAPI_OFICIAL = "https://dolarapi.com/v1/dolares/oficial"
-ARGENTINADATOS_FECHA = (
+DOLARAPI_EUR = "https://dolarapi.com/v1/cotizaciones/eur"
+ARGENTINADATOS_USD = (
     "https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial/{anio}/{mes:02d}/{dia:02d}"
+)
+ARGENTINADATOS_EUR = (
+    "https://api.argentinadatos.com/v1/cotizaciones/eur/{anio}/{mes:02d}/{dia:02d}"
 )
 UA = "anitaERP-cotizacionbna/1.0"
 
@@ -65,11 +69,7 @@ def parse_fecha(texto: str) -> date:
     return datetime.strptime(texto, "%Y-%m-%d").date()
 
 
-def desde_argentinadatos(fecha: date):
-    url = ARGENTINADATOS_FECHA.format(anio=fecha.year, mes=fecha.month, dia=fecha.day)
-    data = http_json(url)
-    if not isinstance(data, dict):
-        return None
+def payload_cotizacion(data: dict, fecha: date, fuente: str):
     venta = data.get("venta")
     if venta is None:
         return None
@@ -88,50 +88,54 @@ def desde_argentinadatos(fecha: date):
     return {
         "venta": venta_f,
         "compra": compra_f,
-        "fuente": "argentinadatos-oficial",
+        "fuente": fuente,
         "fecha": fecha_out[:10],
     }
 
 
-def desde_dolarapi(fecha: date):
-    data = http_json(DOLARAPI_OFICIAL)
+def desde_argentinadatos(fecha: date, moneda: str):
+    plantilla = ARGENTINADATOS_EUR if moneda == "eur" else ARGENTINADATOS_USD
+    fuente = "argentinadatos-eur-oficial" if moneda == "eur" else "argentinadatos-oficial"
+    url = plantilla.format(anio=fecha.year, mes=fecha.month, dia=fecha.day)
+    data = http_json(url)
     if not isinstance(data, dict):
         return None
-    venta = data.get("venta")
-    try:
-        venta_f = float(venta)
-    except (TypeError, ValueError):
-        return None
-    if venta_f <= 0:
-        return None
-    compra = data.get("compra")
-    try:
-        compra_f = float(compra) if compra is not None else 0.0
-    except (TypeError, ValueError):
-        compra_f = 0.0
+    return payload_cotizacion(data, fecha, fuente)
+
+
+def desde_dolarapi(fecha: date, moneda: str):
     # DolarApi es la cotización vigente; solo sirve para hoy o ayer.
     hoy = date.today()
     if abs((fecha - hoy).days) > 1:
         return None
-    return {
-        "venta": venta_f,
-        "compra": compra_f,
-        "fuente": "dolarapi-oficial",
-        "fecha": fecha.isoformat(),
-    }
+    if moneda == "eur":
+        url = DOLARAPI_EUR
+        fuente = "dolarapi-eur-oficial"
+    else:
+        url = DOLARAPI_OFICIAL
+        fuente = "dolarapi-oficial"
+    data = http_json(url)
+    if not isinstance(data, dict):
+        return None
+    payload = payload_cotizacion(data, fecha, fuente)
+    if payload is None:
+        return None
+    payload["fecha"] = fecha.isoformat()
+    return payload
 
 
-def obtener(fecha: date):
-    payload = desde_argentinadatos(fecha)
+def obtener(fecha: date, moneda: str = "usd"):
+    payload = desde_argentinadatos(fecha, moneda)
     if payload is not None:
         return payload
-    return desde_dolarapi(fecha)
+    return desde_dolarapi(fecha, moneda)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Cotización dólar oficial BNA")
+    parser = argparse.ArgumentParser(description="Cotización oficial BNA (dólar o euro)")
     parser.add_argument("--json", action="store_true", help="Salida JSON para cotizacion:leeapi")
     parser.add_argument("--fecha", required=True, help="YYYY-MM-DD")
+    parser.add_argument("--moneda", default="usd", choices=("usd", "eur"), help="usd (default) o eur")
     args = parser.parse_args()
     instalar_proxy()
 
@@ -141,7 +145,7 @@ def main() -> int:
         print(f"Fecha inválida: {args.fecha}", file=sys.stderr)
         return 2
 
-    payload = obtener(fecha)
+    payload = obtener(fecha, args.moneda)
     if payload is None:
         print("No se pudo obtener cotización")
         return 1
