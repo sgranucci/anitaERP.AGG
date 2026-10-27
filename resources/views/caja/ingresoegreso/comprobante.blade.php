@@ -60,10 +60,14 @@
     $abrev3 = \App\Support\Caja\IngresoEgresoImputacionDiariaSupport::tipoDesdeAbreviatura($abrevTipo);
     $esOrdenPago = \App\Support\Caja\IngresoEgresoImputacionDiariaSupport::esTipoOppIe($abrev3);
     $nombreTipo = trim((string) ($tipoCaja->nombre ?? ''));
+    $cobranzaTarjeta = $cobranzaTarjeta ?? ['es' => false, 'comprobantes' => [], 'tarjetas' => [], 'bruto' => 0, 'gastos' => 0, 'neto' => 0];
+    $esCobranzaTarjeta = ! empty($cobranzaTarjeta['es']);
     if ($esTra) {
         $tituloDoc = mb_strtoupper(\App\Support\Caja\IngresoEgresoTransferenciaSupport::NOMBRE, 'UTF-8');
     } elseif ($esCanje) {
         $tituloDoc = \App\Support\Caja\IngresoEgresoCanjeChequeSupport::NOMBRE;
+    } elseif ($esCobranzaTarjeta) {
+        $tituloDoc = 'Cobranza de tarjeta de crédito';
     } elseif ($esOrdenPago) {
         $tituloDoc = trim('Orden de pago '.$abrevTipo);
     } else {
@@ -185,9 +189,27 @@
         </tr>
     @endif
     <tr>
-        <td><strong>Proveedor:</strong> {{ $proveedor->nombre ?? '' }}</td>
-        <td><strong>Tipo:</strong> {{ $movimiento->tipotransaccioncajas->nombre ?? $tipo }}</td>
+        <td>
+            @if ($proveedor)
+                <strong>Proveedor:</strong> {{ $proveedor->nombre }}
+            @elseif ($esCobranzaTarjeta)
+                <strong>Emisor:</strong> {{ $cobranzaTarjeta['comprobantes'][0]['emisor'] ?? '' }}
+            @endif
+        </td>
+        <td>
+            <strong>Tipo:</strong>
+            @if ($esCobranzaTarjeta)
+                Cobranza de tarjeta de crédito
+            @else
+                {{ $movimiento->tipotransaccioncajas->nombre ?? $tipo }}
+            @endif
+        </td>
     </tr>
+    @if ($esCobranzaTarjeta && ! empty($cobranzaTarjeta['tarjetas']))
+        <tr>
+            <td colspan="2"><strong>Tarjeta:</strong> {{ implode(' / ', $cobranzaTarjeta['tarjetas']) }}</td>
+        </tr>
+    @endif
     @if ($proveedor)
         <tr>
             <td colspan="2">
@@ -266,6 +288,50 @@
     </tbody>
 </table>
 
+@if ($esCobranzaTarjeta)
+    <h3>Gastos (DTC)</h3>
+    @foreach ($cobranzaTarjeta['comprobantes'] as $dtc)
+        <p style="margin:8px 0 2px;">
+            <strong>{{ $dtc['numero'] }}</strong>
+            @if ($dtc['emisor'] !== '')
+                — {{ $dtc['emisor'] }}
+            @endif
+            @if ($dtc['cuit'] !== '')
+                — CUIT {{ $dtc['cuit'] }}
+            @endif
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Concepto</th>
+                    <th class="right">Importe</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse ($dtc['conceptos'] as $concepto)
+                    <tr>
+                        <td>{{ $concepto['etiqueta'] }}</td>
+                        <td class="right">{{ number_format((float) $concepto['monto'], 2, ',', '.') }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="2">Sin conceptos de gasto</td></tr>
+                @endforelse
+                <tr>
+                    <td><strong>Total gastos</strong></td>
+                    <td class="right"><strong>{{ number_format((float) $dtc['gastos'], 2, ',', '.') }}</strong></td>
+                </tr>
+            </tbody>
+        </table>
+    @endforeach
+    <table class="meta" style="margin-top:8px;">
+        <tr>
+            <td><strong>Bruto de cupones:</strong> {{ number_format((float) $cobranzaTarjeta['bruto'], 2, ',', '.') }}</td>
+            <td><strong>Gastos DTC:</strong> {{ number_format((float) $cobranzaTarjeta['gastos'], 2, ',', '.') }}</td>
+            <td><strong>Neto cobrado:</strong> {{ number_format((float) $cobranzaTarjeta['neto'], 2, ',', '.') }}</td>
+        </tr>
+    </table>
+@endif
+
 @if ($movimiento->cheques && $movimiento->cheques->count() > 0)
     <h3>Cheques</h3>
     <table>
@@ -324,7 +390,11 @@
 @endif
 
 <div class="total-grande">
-    TOTAL GENERAL:
+    @if ($esCobranzaTarjeta)
+        NETO COBRADO:
+    @else
+        TOTAL GENERAL:
+    @endif
     @if ($monedaAbrTotal !== '')
         {{ $monedaAbrTotal }}
     @endif

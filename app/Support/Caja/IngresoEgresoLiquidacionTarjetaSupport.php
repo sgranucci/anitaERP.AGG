@@ -3,11 +3,13 @@
 namespace App\Support\Caja;
 
 use App\Models\Caja\Cuentacaja;
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Contable\Cuentacontable;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
+use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
@@ -44,6 +46,117 @@ final class IngresoEgresoLiquidacionTarjetaSupport
         }
 
         return false;
+    }
+
+    /**
+     * Gastos del DTC para el PDF de la cobranza de tarjeta.
+     *
+     * @param  iterable<mixed>  $comprobantes
+     * @return array{
+     *     es: bool,
+     *     bruto: float,
+     *     gastos: float,
+     *     neto: float,
+     *     tarjetas: list<string>,
+     *     comprobantes: list<array{
+     *         numero: string,
+     *         emisor: string,
+     *         cuit: string,
+     *         tarjeta: string,
+     *         bruto: float,
+     *         gastos: float,
+     *         conceptos: list<array{etiqueta: string, monto: float}>
+     *     }>
+     * }
+     */
+    public static function resumenImpresion(iterable $comprobantes): array
+    {
+        $items = [];
+        $idsTarjeta = [];
+        foreach ($comprobantes as $cp) {
+            if (! $cp instanceof Comprobante_Proveedor) {
+                continue;
+            }
+            $marca = self::parsearLeyenda((string) $cp->leyenda);
+            $es = (string) $cp->tipo_tesoreria === ComprobanteProveedorTipoTesoreria::LIQUIDACION_TARJETA
+                || $marca['cuentacaja_tarjeta_id'] > 0;
+            if (! $es) {
+                continue;
+            }
+            if ($marca['cuentacaja_tarjeta_id'] > 0) {
+                $idsTarjeta[] = $marca['cuentacaja_tarjeta_id'];
+            }
+            $items[] = ['cp' => $cp, 'marca' => $marca];
+        }
+
+        $nombresTarjeta = [];
+        if ($idsTarjeta !== []) {
+            foreach (Cuentacaja::query()->whereIn('id', array_values(array_unique($idsTarjeta)))->get(['id', 'codigo', 'nombre']) as $cuenta) {
+                $nombresTarjeta[(int) $cuenta->id] = trim((string) $cuenta->codigo.' '.(string) $cuenta->nombre);
+            }
+        }
+
+        $salida = [];
+        $bruto = 0.0;
+        $gastos = 0.0;
+        $tarjetas = [];
+        foreach ($items as $item) {
+            /** @var Comprobante_Proveedor $cp */
+            $cp = $item['cp'];
+            $marca = $item['marca'];
+            $conceptos = [];
+            $totalConceptos = 0.0;
+            foreach ($cp->comprobante_proveedor_conceptos as $linea) {
+                $monto = round((float) $linea->monto, 2);
+                if (abs($monto) < 0.0001) {
+                    continue;
+                }
+                $codigo = trim((string) ($linea->concepto_ivacompras->codigo ?? ''));
+                $nombre = trim((string) ($linea->concepto_ivacompras->nombre ?? ''));
+                $etiqueta = trim($codigo.' '.$nombre);
+                $conceptos[] = [
+                    'etiqueta' => $etiqueta !== '' ? $etiqueta : 'Concepto',
+                    'monto' => $monto,
+                ];
+                $totalConceptos += $monto;
+            }
+            $totalConceptos = round($totalConceptos, 2);
+            if ($totalConceptos == 0.0) {
+                $totalConceptos = round((float) $cp->total, 2);
+            }
+            $brutoLinea = round((float) $marca['bruto_cupones'], 2);
+            $bruto += $brutoLinea;
+            $gastos += $totalConceptos;
+            $tarjeta = $nombresTarjeta[$marca['cuentacaja_tarjeta_id']] ?? '';
+            if ($tarjeta !== '' && ! in_array($tarjeta, $tarjetas, true)) {
+                $tarjetas[] = $tarjeta;
+            }
+            $abrev = strtoupper(trim((string) ($cp->tipotransaccion_compras->abreviatura ?? 'DTC')));
+            if ($abrev === '') {
+                $abrev = 'DTC';
+            }
+            $emisor = trim((string) ($cp->proveedor_nombre_eventual ?: ($cp->proveedores->nombre ?? '')));
+            $salida[] = [
+                'numero' => $abrev.' '.strtoupper((string) $cp->letra).' '
+                    .str_pad((string) (int) $cp->sucursal, 4, '0', STR_PAD_LEFT).'-'
+                    .str_pad((string) (int) $cp->numerocomprobante, 8, '0', STR_PAD_LEFT),
+                'emisor' => $emisor,
+                'cuit' => ComprobanteProveedorUnicidadSupport::formatearCuit((string) ($cp->proveedor_documento_eventual ?? '')),
+                'tarjeta' => $tarjeta,
+                'bruto' => $brutoLinea,
+                'gastos' => $totalConceptos,
+                'conceptos' => $conceptos,
+            ];
+        }
+
+        return [
+            'es' => $salida !== [],
+            'bruto' => round($bruto, 2),
+            'gastos' => round($gastos, 2),
+            'neto' => round($bruto - $gastos, 2),
+            'tarjetas' => $tarjetas,
+            'comprobantes' => $salida,
+        ];
     }
 
     public static function cierra(float $bruto, float $gastos, float $cobrado, float $tolerancia = self::TOLERANCIA): bool

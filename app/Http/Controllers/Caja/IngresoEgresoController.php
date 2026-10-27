@@ -647,10 +647,18 @@ class IngresoEgresoController extends Controller
             'cheques.monedas',
             'asientos.asiento_movimientos.cuentacontables',
             'asientos.asiento_movimientos.centrocostos',
+            'comprobante_proveedores.tipotransaccion_compras',
+            'comprobante_proveedores.comprobante_proveedor_conceptos.concepto_ivacompras',
+            'comprobante_proveedores.proveedores',
         ]);
+
+        $cobranzaTarjeta = IngresoEgresoLiquidacionTarjetaSupport::resumenImpresion(
+            $movimiento->comprobante_proveedores
+        );
 
         $pdf = Pdf::loadView('caja.ingresoegreso.comprobante', [
             'movimiento' => $movimiento,
+            'cobranzaTarjeta' => $cobranzaTarjeta,
         ])->setPaper('a4');
 
         $dir = storage_path('pdf/ingresoegreso');
@@ -676,6 +684,8 @@ class IngresoEgresoController extends Controller
             $nombreArchivo = 'transferencia_'.$movimiento->numerotransaccion.'.pdf';
         } elseif (IngresoEgresoCanjeChequeSupport::esCanje($tipoCaja)) {
             $nombreArchivo = 'canje_'.$movimiento->numerotransaccion.'.pdf';
+        } elseif (! empty($cobranzaTarjeta['es'])) {
+            $nombreArchivo = 'cobranza_tarjeta_'.$movimiento->numerotransaccion.'.pdf';
         } elseif (IngresoEgresoImputacionDiariaSupport::esTipoOppIe($abrev3)) {
             $nombreArchivo = 'orden_pago_'.$movimiento->numerotransaccion.'.pdf';
         } else {
