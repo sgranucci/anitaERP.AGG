@@ -643,7 +643,6 @@ class MacroArchivoPagoService
                         self::fechaYmd($ch->fechaemision) ?? '',
                         self::fechaYmd($ch->fechapago) ?? ''
                     );
-                    $paraDep = strtoupper(substr(trim((string) ($ch->para_dep ?? '')), 0, 1));
                     $orden = MacroArchivoPagoFormatoSupport::ordenPagoCheque($tipo, $suc, $rec, $nroCh);
                     $ordenPagoRtn = $orden;
                     $filas[] = [
@@ -663,7 +662,9 @@ class MacroArchivoPagoService
                         'cuenta_debito' => $cuentaDebito,
                         'referencia_cbu_o_cheque' => (string) $nroCh,
                         'modalidad' => $modalidad,
-                        'flag_entrega' => $paraDep === 'E' ? 1 : 2,
+                        'flag_entrega' => MacroArchivoPagoFormatoSupport::flagEntregaCheque(
+                            (string) ($ch->caracter ?? '')
+                        ),
                         'sucursal_banco' => $sucursalBanco,
                     ];
                     $agrego = true;
@@ -954,7 +955,6 @@ class MacroArchivoPagoService
                 self::fechaYmd($ch->fechaemision) ?? '',
                 self::fechaYmd($ch->fechapago) ?? ''
             );
-            $paraDep = strtoupper(substr(trim((string) ($ch->para_dep ?? '')), 0, 1));
             $orden = MacroArchivoPagoFormatoSupport::ordenPagoCheque($tipoOpg, $suc, max($rec, 0), $nroCh);
 
             $filas[] = [
@@ -974,7 +974,9 @@ class MacroArchivoPagoService
                 'cuenta_debito' => $cuentaDebito,
                 'referencia_cbu_o_cheque' => (string) $nroCh,
                 'modalidad' => $modalidad,
-                'flag_entrega' => $paraDep === 'E' ? 1 : 2,
+                'flag_entrega' => MacroArchivoPagoFormatoSupport::flagEntregaCheque(
+                    (string) ($ch->caracter ?? '')
+                ),
                 'sucursal_banco' => $sucursalBanco,
             ];
             $yaCheques[$nroCh] = true;

@@ -34,6 +34,12 @@ final class MacroArchivoPagoFormatoSupport
     /** Modalidad OPG: cheque diferido. */
     public const MODALIDAD_CHEQUE_DIFERIDO = 8;
 
+    /** Leyenda OPG: No a la orden (default del cheque propio). */
+    public const FLAG_NO_A_LA_ORDEN = 1;
+
+    /** Leyenda OPG: A la orden. El banco imprime esa leyenda con este código. */
+    public const FLAG_A_LA_ORDEN = 2;
+
     /**
      * @param  list<array<string,mixed>>  $beneficiarios
      * @param  list<array<string,mixed>>  $ordenes
@@ -251,6 +257,17 @@ final class MacroArchivoPagoFormatoSupport
         }
 
         return self::MODALIDAD_CHEQUE_DIFERIDO;
+    }
+
+    /**
+     * Campo de leyenda del cheque en OPG.
+     * O (A la orden) → 2. N o vacío (No a la orden) → 1.
+     */
+    public static function flagEntregaCheque(?string $caracter): int
+    {
+        return strtoupper(trim((string) $caracter)) === 'O'
+            ? self::FLAG_A_LA_ORDEN
+            : self::FLAG_NO_A_LA_ORDEN;
     }
 
     public static function ordenPagoTransferencia(string $tipo, int $sucursal, int $numero): string

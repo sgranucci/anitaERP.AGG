@@ -42,6 +42,31 @@ class MacroArchivoPagoFormatoSupportTest extends TestCase
         $this->assertSame('16/09/2026', $campos[10]);
     }
 
+    public function test_leyenda_a_la_orden_es_codigo_2_en_opg(): void
+    {
+        $this->assertSame(2, MacroArchivoPagoFormatoSupport::flagEntregaCheque('O'));
+        $this->assertSame(1, MacroArchivoPagoFormatoSupport::flagEntregaCheque('N'));
+        $this->assertSame(1, MacroArchivoPagoFormatoSupport::flagEntregaCheque(''));
+
+        $opg = MacroArchivoPagoFormatoSupport::generarOpg([[
+            'cuit' => '30710115296',
+            'sucursal_banco' => 651,
+            'orden_pago' => 'OPP-0001-00001234-82094636',
+            'nombre' => 'YAFEMA S.R.L.',
+            'importe' => 5615878.33,
+            'cuenta_debito' => '365109401250715',
+            'referencia_cbu_o_cheque' => '820946362',
+            'modalidad' => MacroArchivoPagoFormatoSupport::MODALIDAD_CHEQUE_DIFERIDO,
+            'flag_entrega' => MacroArchivoPagoFormatoSupport::flagEntregaCheque('O'),
+            'fecha_pago' => '2026-10-27',
+            'fecha_cheque' => '2026-11-06',
+        ]]);
+
+        $campos = explode("\t", rtrim($opg, "\n"));
+        $this->assertSame('8', $campos[8]);
+        $this->assertSame('2', $campos[9]);
+    }
+
     public function test_bnf_beneficiario(): void
     {
         $bnf = MacroArchivoPagoFormatoSupport::generarBnf([[
