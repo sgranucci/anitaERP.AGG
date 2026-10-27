@@ -481,3 +481,34 @@ document.addEventListener('mouseover', function (event) {
 document.addEventListener('focusin', function (event) {
     anularRuedaEnSelect(event.target);
 }, true);
+
+// Sucursales con es_remito. Si ninguna está marcada, deja la lista completa.
+window.aplicarSucursalesRemito = function (lista, defaultId) {
+    var origen = lista || [];
+    var marcados = [];
+    var i;
+    for (i = 0; i < origen.length; i++) {
+        var item = origen[i];
+        if (item && (item.es_remito === true || item.es_remito === 1 || item.es_remito === '1')) {
+            marcados.push(item);
+        }
+    }
+    var usada = marcados.length ? marcados : origen.slice();
+    if (marcados.length) {
+        usada.sort(function (a, b) {
+            return String(a.codigo || '').localeCompare(String(b.codigo || ''));
+        });
+    }
+    var elegido = defaultId;
+    var esta = false;
+    for (i = 0; i < usada.length; i++) {
+        if (String(usada[i].id) === String(defaultId)) {
+            esta = true;
+            break;
+        }
+    }
+    if (!esta && usada.length) {
+        elegido = usada[0].id;
+    }
+    return { lista: usada, defaultId: elegido };
+};

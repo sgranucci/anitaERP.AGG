@@ -18,6 +18,10 @@
     $webserviceActual = old('webservice', $data->webservice ?? '');
     $modofacturacionActual = old('modofacturacion', $data->modofacturacion ?? '');
     $paisActual = (int) old('pais_id', $data->pais_id ?? config('puntoventa_anita.default_pais_id', 1));
+    $esRemitoMarcado = old('es_remito');
+    if ($esRemitoMarcado === null) {
+        $esRemitoMarcado = isset($data) && (bool) ($data->es_remito ?? false);
+    }
     $ivaVentasMarcado = old('iva_ventas');
     if ($ivaVentasMarcado === null) {
         $ivaVentasMarcado = isset($data)
@@ -169,6 +173,23 @@
                     <small class="form-text text-muted">
                         Si está tildado, los comprobantes de este punto de venta entran al listado IVA ventas.
                         En el alta se propone tildado cuando hay web service.
+                    </small>
+                </div>
+            </div>
+            @endif
+            @if (\Illuminate\Support\Facades\Schema::hasColumn('puntoventa', 'es_remito'))
+            <div class="form-group row mb-0 mt-2">
+                <div class="col-lg-3"></div>
+                <div class="col-lg-8">
+                    <div class="form-check">
+                        <input type="hidden" name="es_remito" value="0">
+                        <input type="checkbox" class="form-check-input" name="es_remito" id="es_remito" value="1"
+                            @checked($esRemitoMarcado)>
+                        <label class="form-check-label" for="es_remito">Se usa para remitos</label>
+                    </div>
+                    <small class="form-text text-muted">
+                        Solo estas sucursales aparecen al elegir el punto de venta del remito.
+                        La sucursal de la factura electrónica no lleva este tilde.
                     </small>
                 </div>
             </div>

@@ -287,6 +287,9 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
         if (! Schema::hasColumn('puntoventa', 'iva_ventas')) {
             unset($data['iva_ventas']);
         }
+        if (! Schema::hasColumn('puntoventa', 'es_remito')) {
+            unset($data['es_remito']);
+        }
 
         return $data;
     }

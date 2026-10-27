@@ -48,6 +48,7 @@ use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
+use App\Support\Ventas\PuntoventaRemitoSupport;
 use App\Support\Ventas\ArcaFacturaQrSupport;
 use App\Support\Ventas\VentaFacturasPorArticuloClienteSupport;
 use App\Support\Ventas\QrCodePngSupport;
@@ -779,6 +780,10 @@ class FacturacionService
 		]);
 
 		try {
+			if ($error = PuntoventaRemitoSupport::errorSiNoHabilitado($data['puntoventaremito_id'] ?? null)) {
+				return ['error' => $error];
+			}
+
 			$this->caeYaAutorizado = $this->normalizarCaeYaAutorizado($data['cae_ya_autorizado'] ?? null);
 			UsuarioPreferenciaFacturacionSupport::guardar($data);
 			PedidoFacturacionProfiler::etapa('preferencias_ok');
@@ -4037,6 +4042,10 @@ class FacturacionService
 
 	public function generaFacturaPorItemOt(array $data)
 	{
+		if ($error = PuntoventaRemitoSupport::errorSiNoHabilitado($data['puntoventaremito_id'] ?? null)) {
+			return ['error' => $error];
+		}
+
 		$this->prepararSesionFacturaOt($data);
 
 		// Recibe datos para facturar

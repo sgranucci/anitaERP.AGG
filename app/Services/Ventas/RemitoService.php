@@ -23,6 +23,7 @@ use App\Support\Ventas\ClienteEntregaPedidoSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\RemitoValorAseguradoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
+use App\Support\Ventas\PuntoventaRemitoSupport;
 use App\Support\Ventas\RemitoKilosVillafrancaSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use Illuminate\Support\Facades\App;
@@ -243,6 +244,9 @@ class RemitoService
                 $puntoventa = $this->puntoventaRepository->find($puntoventaId);
                 if (! $puntoventa) {
                     throw new \RuntimeException('Punto de venta de remito inexistente.');
+                }
+                if ($errorRemito = PuntoventaRemitoSupport::errorSiNoHabilitado($puntoventaId)) {
+                    throw new \RuntimeException($errorRemito);
                 }
 
                 $numero = $this->ventaRepository->traeUltimoNumeroRemito('REM', 'R', $puntoventa->codigo);

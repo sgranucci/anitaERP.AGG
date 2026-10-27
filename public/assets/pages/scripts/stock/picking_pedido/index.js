@@ -79,6 +79,12 @@
         var sel_tipotransaccion = JSON.parse(datos.dataset.tipotransaccion || '[]');
         var puntoVentaDefault = $('#puntoventadefault_id').val();
         var puntoVentaRemitoDefault = $('#puntoventaremitodefault_id').val();
+        var sel_puntoventaremito = sel_puntoventa;
+        if (window.aplicarSucursalesRemito) {
+            var sucursalesRemito = window.aplicarSucursalesRemito(sel_puntoventa, puntoVentaRemitoDefault);
+            sel_puntoventaremito = sucursalesRemito.lista;
+            puntoVentaRemitoDefault = sucursalesRemito.defaultId;
+        }
         var tipoTransaccionDefault = $('#tipotransacciondefault_id').val();
 
         var selectTipoTransaccion = modal.find('#tipotransaccion_id');
@@ -100,7 +106,7 @@
         var selectPuntoVentaRemito = modal.find('#puntoventaremito_id');
         selectPuntoVentaRemito.empty();
         selectPuntoVentaRemito.append('<option value="">-- Seleccionar punto de venta --</option>');
-        $.each(sel_puntoventa, function (obj, item) {
+        $.each(sel_puntoventaremito, function (obj, item) {
             var op = (puntoVentaRemitoDefault == item.id) ? ' selected="selected"' : '';
             selectPuntoVentaRemito.append('<option value="' + item.id + '"' + op + '>' + item.codigo + '-' + item.nombre + '</option>');
         });

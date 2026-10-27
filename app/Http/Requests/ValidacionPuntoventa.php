@@ -23,6 +23,7 @@ class ValidacionPuntoventa extends FormRequest
     {
         $this->merge([
             'iva_ventas' => $this->boolean('iva_ventas'),
+            'es_remito' => $this->boolean('es_remito'),
         ]);
 
         $codigo = $this->input('codigo');
@@ -92,6 +93,7 @@ class ValidacionPuntoventa extends FormRequest
             'empresa_id' => 'required|integer|exists:empresa,id',
             'webservice' => ['nullable', Rule::in(array_keys(Puntoventa::$enumWebservice))],
             'iva_ventas' => 'sometimes|boolean',
+            'es_remito' => 'sometimes|boolean',
         ];
     }
 

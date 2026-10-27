@@ -10,6 +10,7 @@ use App\Queries\Ventas\PedidoQueryFerli;
 use App\Services\Stock\PrecioServiceFerli;
 use App\Support\Ventas\PedidoEstadoCabeceraSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport;
+use App\Support\Ventas\PuntoventaRemitoSupport;
 use Cache;
 
 /**
@@ -77,6 +78,10 @@ class FacturacionServiceFerli extends FacturacionService
 
     public function generaFacturaPorItemOt(array $data)
     {
+        if ($error = PuntoventaRemitoSupport::errorSiNoHabilitado($data['puntoventaremito_id'] ?? null)) {
+            return ['error' => $error];
+        }
+
         if (($data['origen'] ?? '') === 'picking') {
             return $this->generaFacturaPorPickingPedido($data);
         }

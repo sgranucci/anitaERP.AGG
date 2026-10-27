@@ -21,12 +21,13 @@ class Puntoventa extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
     protected $fillable = ['nombre', 'codigo', 'empresa_id', 'domicilio', 'localidad_id', 
                             'provincia_id', 'pais_id', 'codigopostal', 'email', 'telefono', 
-                            'leyenda', 'modofacturacion', 'estado', 'webservice', 'iva_ventas', 'pathafip', 'actividad_arca_id',
+                            'leyenda', 'modofacturacion', 'estado', 'webservice', 'iva_ventas', 'es_remito', 'pathafip', 'actividad_arca_id',
                             'division', 'numeropoliza', 'puntoventa_remito'];
     protected $table = 'puntoventa';
 
     protected $casts = [
         'iva_ventas' => 'boolean',
+        'es_remito' => 'boolean',
     ];
 
     protected static function booted(): void

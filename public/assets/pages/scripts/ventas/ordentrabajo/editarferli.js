@@ -229,6 +229,11 @@ $(document).on('shown.bs.modal', '#facturarOrdenTrabajoModal', function() {
     let puntoVentaDefault = $('#puntoventadefault_id').val();
     let transporteDefault = $('#transportedefault_id').val();
     let puntoVentaRemitoDefault = $('#puntoventaremitodefault_id').val();
+    if (window.aplicarSucursalesRemito) {
+        var sucursalesRemito = window.aplicarSucursalesRemito(sel_puntoventaremito, puntoVentaRemitoDefault);
+        sel_puntoventaremito = sucursalesRemito.lista;
+        puntoVentaRemitoDefault = sucursalesRemito.defaultId;
+    }
     let sel_tipotransaccion = JSON.parse(document.querySelector('#datosfactura').dataset.tipotransaccion);
     let selectTipoTransaccion = $('#tipotransaccion_id');
     let tipoTransaccionDefault = $('#tipotransacciondefault_id').val();
