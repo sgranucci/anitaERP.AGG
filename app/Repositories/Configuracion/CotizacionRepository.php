@@ -5,6 +5,7 @@ namespace App\Repositories\Configuracion;
 use App\Models\Configuracion\Cotizacion;
 use App\Repositories\Configuracion\Cotizacion_MonedaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Exception;
 use App\ApiAnita;
@@ -51,7 +52,7 @@ class CotizacionRepository implements CotizacionRepositoryInterface
 
 		$cotizacion = $this->model->create($data);
 
-		// Anita ya puede tener el día (carga previa o fila en cero). Reemplaza en vez de insertar.
+		// Si el día ya está en shared, actualiza. Si no, lo inserta. No borra la fila.
 		$anita = self::actualizarAnita($data);
 
 
@@ -245,126 +246,233 @@ class CotizacionRepository implements CotizacionRepositoryInterface
         }
     }
 
+	/**
+	 * La API diaria no pisa shared en Interforming: ahí la cotización se carga a mano.
+	 * En el resto, alta si el día no existe y actualización de las monedas enviadas si existe.
+	 *
+	 * @param  array<int, array{venta: float, compra: float}>  $porCodigo
+	 */
+	public function grabarDiaApiEnAnita(string $fechaSql, array $porCodigo): void
+	{
+		if (EntornoEmpresaSupport::esInterforming() || $porCodigo === []) {
+			return;
+		}
+
+		$resuelto = [];
+		foreach ($porCodigo as $monedaId => $tasas) {
+			$codigo = $this->codigoAnitaDeMoneda($monedaId);
+			if ($codigo < 2 || $codigo > 9) {
+				continue;
+			}
+			$resuelto[$codigo] = [
+				'venta' => (float) ($tasas['venta'] ?? 0),
+				'compra' => (float) ($tasas['compra'] ?? 0),
+			];
+		}
+		if ($resuelto === []) {
+			return;
+		}
+
+		$this->upsertShared($fechaSql, $resuelto);
+	}
+
 	private function guardarAnita($request) 
 	{
-		// Graba cotizacion
-		if (isset($request['moneda_ids']))
-		{
-			$apiAnita = new ApiAnita();
-
-			$moneda_ids = $request['moneda_ids'];
-			$cotizacionVentas = $request['cotizacionventas'];
-			$cotizacionCompras = $request['cotizacioncompras'];
-			$fecha = Carbon::createFromFormat( 'Y-m-d', $request['fecha'])->format('Ymd');
-			$fechaFormateada = Carbon::createFromFormat( 'Y-m-d', $request['fecha'])->format('d-m-Y');
-
-			if ($moneda_ids[0] != null)
-				$qMovimiento = count($moneda_ids);
-			else
-				$qMovimiento = 0;
-			$cotizacionVenta = [];
-			$cotizacionCompra = [];
-			for ($i = 0; $i < 10; $i++)
-			{
-				$cotizacionVenta[$i] = 0;
-				$cotizacionCompra[$i] = 0;
-			}
-			for ($i_movimiento=0; $i_movimiento < $qMovimiento; $i_movimiento++) 
-			{
-				if ($moneda_ids[$i_movimiento] !== null)
-				{
-					$moneda = $this->monedaRepository->findPorCodigo($moneda_ids[$i_movimiento]);
-					if ($moneda)
-						$codigoMoneda = $moneda->codigo;
-					else
-						$codigoMoneda = 1;
-
-					if ($codigoMoneda > 1)
-					{
-						$cotizacionVenta[$codigoMoneda] = $cotizacionVentas[$i_movimiento];
-						$cotizacionCompra[$codigoMoneda] = $cotizacionCompras[$i_movimiento];
-					}
-				}
-			}
-
-			// Graba cotizacion de venta
-			$data = array( 'tabla' => $this->tableAnita[0], 
-					'acc' => 'insert',
-					'sistema' => 'shared',
-					'campos' => '
-							cot_fecha,
-							cot_cambio2,
-							cot_cambio3,
-							cot_cambio4,
-							cot_cambio5,
-							cot_cambio6,
-							cot_cambio7,
-							cot_cambio8,
-							cot_cambio9,
-							cot_fecha_alfa
-						',
-						'valores' => " 
-						'".$fecha."', 
-						'".($cotizacionVenta[2] > 0 ? $cotizacionVenta[2] : 0)."',
-						'".($cotizacionVenta[3] > 0 ? $cotizacionVenta[3] : 0)."',
-						'".($cotizacionVenta[4] > 0 ? $cotizacionVenta[4] : 0)."',
-						'".($cotizacionVenta[5] > 0 ? $cotizacionVenta[5] : 0)."',
-						'".($cotizacionVenta[6] > 0 ? $cotizacionVenta[6] : 0)."',
-						'".($cotizacionVenta[7] > 0 ? $cotizacionVenta[7] : 0)."',
-						'".($cotizacionVenta[8] > 0 ? $cotizacionVenta[8] : 0)."',
-						'".($cotizacionVenta[9] > 0 ? $cotizacionVenta[9] : 0)."',
-						'".$fechaFormateada."' "
-       		);
-			$cotizacion = $apiAnita->apiCallEscritura($data);
-
-			if ($this->cotizCompEnAnita)
-			{
-				// Graba cotizacion de compra. Si Anita no tiene cotiz_comp, la venta ya quedó.
-				$apiAnita = new ApiAnita();
-				$data = array( 'tabla' => $this->tableAnita[1], 
-						'acc' => 'insert',
-						'sistema' => 'shared',
-						'campos' => '
-								cotc_fecha,
-								cotc_cambio_com2,
-								cotc_cambio_com3,
-								cotc_cambio_com4,
-								cotc_cambio_com5,
-								cotc_cambio_com6,
-								cotc_cambio_com7,
-								cotc_cambio_com8,
-								cotc_cambio_com9,
-								cotc_fecha_alfa
-							',
-							'valores' => " 
-							'".$fecha."', 
-							'".($cotizacionCompra[2] > 0 ? $cotizacionCompra[2] : 0)."',
-							'".($cotizacionCompra[3] > 0 ? $cotizacionCompra[3] : 0)."',
-							'".($cotizacionCompra[4] > 0 ? $cotizacionCompra[4] : 0)."',
-							'".($cotizacionCompra[5] > 0 ? $cotizacionCompra[5] : 0)."',
-							'".($cotizacionCompra[6] > 0 ? $cotizacionCompra[6] : 0)."',
-							'".($cotizacionCompra[7] > 0 ? $cotizacionCompra[7] : 0)."',
-							'".($cotizacionCompra[8] > 0 ? $cotizacionCompra[8] : 0)."',
-							'".($cotizacionCompra[9] > 0 ? $cotizacionCompra[9] : 0)."',
-							'".$fechaFormateada."' "
-				);
-				$this->escribirCotizComp($apiAnita, $data);
-			}
-
+		if (! $this->tieneMonedasParaAnita($request)) {
+			return 'Success';
 		}
+
+		$porCodigo = $this->porCodigoDesdeRequest($request);
+		if ($porCodigo === []) {
+			return 'Success';
+		}
+
+		$this->upsertShared((string) $request['fecha'], $porCodigo);
+
 		return 'Success';
 	}
 
 	private function actualizarAnita($request) 
 	{
-		$fecha = Carbon::createFromFormat( 'Y-m-d', $request['fecha'])->format('Ymd');
+		return $this->guardarAnita($request);
+	}
 
-		// Borra cotizacion
-		Self::eliminarAnita($fecha);
+	/**
+	 * @param  array<int, array{venta: float, compra: float}>  $porCodigo
+	 */
+	private function upsertShared(string $fechaSql, array $porCodigo): void
+	{
+		$fecha = Carbon::parse($fechaSql)->format('Ymd');
+		$fechaAlfa = Carbon::parse($fechaSql)->format('d-m-Y');
 
-		$cotizacion = Self::guardarAnita($request);
+		$this->upsertTablaShared(
+			$this->tableAnita[0],
+			'cot_fecha',
+			'cot_cambio',
+			'cot_fecha_alfa',
+			$fecha,
+			$fechaAlfa,
+			$porCodigo,
+			'venta',
+		);
 
-		return 'Success';
+		if (! $this->cotizCompEnAnita) {
+			return;
+		}
+
+		try {
+			$this->upsertTablaShared(
+				$this->tableAnita[1],
+				'cotc_fecha',
+				'cotc_cambio_com',
+				'cotc_fecha_alfa',
+				$fecha,
+				$fechaAlfa,
+				$porCodigo,
+				'compra',
+			);
+		} catch (\RuntimeException $e) {
+			if (! self::anitaNoTieneCotizComp($e->getMessage())) {
+				throw $e;
+			}
+			$this->cotizCompEnAnita = false;
+		}
+	}
+
+	/**
+	 * @param  array<int, array{venta: float, compra: float}>  $porCodigo
+	 */
+	private function upsertTablaShared(
+		string $tabla,
+		string $campoFecha,
+		string $prefijoCambio,
+		string $campoFechaAlfa,
+		string $fecha,
+		string $fechaAlfa,
+		array $porCodigo,
+		string $lado,
+	): void {
+		$apiAnita = new ApiAnita();
+		if ($this->filaExisteEnAnita($apiAnita, $tabla, $campoFecha, $fecha)) {
+			$asignaciones = [];
+			foreach ($porCodigo as $codigo => $tasas) {
+				$codigo = (int) $codigo;
+				if ($codigo < 2 || $codigo > 9) {
+					continue;
+				}
+				$asignaciones[] = $prefijoCambio.$codigo." = '".$this->decimalSql((float) ($tasas[$lado] ?? 0))."'";
+			}
+			if ($asignaciones === []) {
+				return;
+			}
+			$asignaciones[] = $campoFechaAlfa." = '".$fechaAlfa."'";
+			$data = [
+				'acc' => 'update',
+				'tabla' => $tabla,
+				'sistema' => 'shared',
+				'valores' => implode(', ', $asignaciones),
+				'whereArmado' => " WHERE ".$campoFecha." = '".$fecha."' ",
+			];
+		} else {
+			$campos = [$campoFecha];
+			$valores = ["'".$fecha."'"];
+			for ($codigo = 2; $codigo <= 9; $codigo++) {
+				$campos[] = $prefijoCambio.$codigo;
+				$valores[] = "'".$this->decimalSql((float) ($porCodigo[$codigo][$lado] ?? 0))."'";
+			}
+			$campos[] = $campoFechaAlfa;
+			$valores[] = "'".$fechaAlfa."'";
+			$data = [
+				'acc' => 'insert',
+				'tabla' => $tabla,
+				'sistema' => 'shared',
+				'campos' => implode(', ', $campos),
+				'valores' => implode(', ', $valores),
+			];
+		}
+
+		if ($tabla === $this->tableAnita[1]) {
+			$this->escribirCotizComp($apiAnita, $data);
+
+			return;
+		}
+
+		$apiAnita->apiCallEscritura($data);
+	}
+
+	private function filaExisteEnAnita(ApiAnita $apiAnita, string $tabla, string $campoFecha, string $fecha): bool
+	{
+		$raw = $apiAnita->apiCall([
+			'acc' => 'list',
+			'sistema' => 'shared',
+			'tabla' => $tabla,
+			'campos' => $campoFecha,
+			'whereArmado' => " WHERE ".$campoFecha." = '".$fecha."' ",
+		]);
+		$parsed = ApiAnita::parsearRespuestaLista(is_string($raw) ? $raw : null);
+		if ($parsed['error_lectura'] !== null) {
+			throw new \RuntimeException('No se pudo leer '.$tabla.' en Anita: '.$parsed['error_lectura']);
+		}
+
+		return $parsed['filas'] !== [];
+	}
+
+	/**
+	 * @return array<int, array{venta: float, compra: float}>
+	 */
+	private function porCodigoDesdeRequest(array $request): array
+	{
+		$ids = $request['moneda_ids'] ?? [];
+		$ventas = $request['cotizacionventas'] ?? [];
+		$compras = $request['cotizacioncompras'] ?? [];
+		$porCodigo = [];
+		foreach ($ids as $i => $monedaId) {
+			if ($monedaId === null || $monedaId === '') {
+				continue;
+			}
+			$codigo = $this->codigoAnitaDeMoneda($monedaId);
+			if ($codigo < 2 || $codigo > 9) {
+				continue;
+			}
+			$porCodigo[$codigo] = [
+				'venta' => (float) ($ventas[$i] ?? 0),
+				'compra' => (float) ($compras[$i] ?? 0),
+			];
+		}
+
+		return $porCodigo;
+	}
+
+	private function codigoAnitaDeMoneda($monedaId): int
+	{
+		$moneda = $this->monedaRepository->findPorId($monedaId);
+		if ($moneda !== null && is_numeric(trim((string) $moneda->codigo))) {
+			return (int) $moneda->codigo;
+		}
+
+		return (int) $monedaId;
+	}
+
+	private function decimalSql(float $valor): string
+	{
+		$texto = number_format($valor, 4, '.', '');
+
+		return rtrim(rtrim($texto, '0'), '.') ?: '0';
+	}
+
+	private function tieneMonedasParaAnita($request): bool
+	{
+		if (! isset($request['moneda_ids']) || ! is_array($request['moneda_ids'])) {
+			return false;
+		}
+
+		foreach ($request['moneda_ids'] as $monedaId) {
+			if ($monedaId !== null && $monedaId !== '') {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private function eliminarAnita($fecha) 

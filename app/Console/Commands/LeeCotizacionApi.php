@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Configuracion\Cotizacion;
 use App\Repositories\Configuracion\CotizacionRepositoryInterface;
 use App\Repositories\Configuracion\Cotizacion_MonedaRepositoryInterface;
 use Carbon\Carbon;
@@ -19,7 +20,7 @@ class LeeCotizacionApi extends Command
                             {--desde= : Con --backfill-vacias o --importar-rango, desde YYYY-MM-DD}
                             {--hasta= : Con --backfill-vacias o --importar-rango, hasta YYYY-MM-DD}';
 
-    protected $description = 'Lee cotización dólar y euro oficial BNA (ArgentinaDatos + fallback DolarApi) y la graba en cotizacion / cotizacion_moneda';
+    protected $description = 'Lee cotización dólar y euro oficial BNA (ArgentinaDatos + fallback DolarApi) y la graba en cotizacion / cotizacion_moneda. En Interforming no escribe Anita; en el resto hace alta o actualización en shared, sin borrar el día.';
 
     public function __construct(
         private CotizacionRepositoryInterface $cotizacionRepository,
@@ -327,7 +328,9 @@ class LeeCotizacionApi extends Command
             $alta = $cotizacion === null;
 
             if ($alta) {
-                $cotizacionModel = $this->cotizacionRepository->create([
+                // Alta local directa: create() del repositorio también escribe Anita y
+                // esta corrida decide aparte si el bridge corresponde.
+                $cotizacionModel = Cotizacion::query()->create([
                     'fecha' => $fechaSql,
                     'usuario_id' => $usuario,
                 ]);
@@ -340,6 +343,17 @@ class LeeCotizacionApi extends Command
             if ($euro !== null) {
                 $this->guardarMoneda($cotizacionId, $euro['moneda_id'], $euro['venta'], $euro['compra']);
             }
+
+            $porCodigo = [
+                $monedaId => ['venta' => $venta, 'compra' => $compra],
+            ];
+            if ($euro !== null) {
+                $porCodigo[$euro['moneda_id']] = [
+                    'venta' => $euro['venta'],
+                    'compra' => $euro['compra'],
+                ];
+            }
+            $this->cotizacionRepository->grabarDiaApiEnAnita($fechaSql, $porCodigo);
 
             $contexto = [
                 'id' => $cotizacionId,
