@@ -13,8 +13,9 @@ class SyncAplicacionCuentacorrienteAnitaCommand extends Command
                             {--fecha= : Fecha Y-m-d de las aplicaciones (default: hoy)}
                             {--proveedor-id= : Solo un proveedor ERP}
                             {--aplicacion-id= : Solo un id de proveedor_cuentacorriente_aplicacion}
+                            {--pagoproveedor-id= : Reespeja esa OP: aplmovp y cabecera promov}
                             {--dry-run : Lista sin escribir Anita (default si no hay --ejecutar)}
-                            {--ejecutar : Graba aplmovp y promov.prov_t_pagado}';
+                            {--ejecutar : Graba aplmovp y promov}';
 
     protected $description = 'Espeja aplicaciones de CC proveedor ERP → Anita (aplmovp + promov.t_pagado)';
 
@@ -26,6 +27,27 @@ class SyncAplicacionCuentacorrienteAnitaCommand extends Command
             $this->error('No combine --ejecutar con --dry-run.');
 
             return self::FAILURE;
+        }
+
+        $pagoId = (int) ($this->option('pagoproveedor-id') ?: 0);
+        if ($pagoId > 0) {
+            $this->line('Bridge: '.ApiAnita::urlBridge());
+            $this->line($dryRun
+                ? 'DRY-RUN: no se escribe Anita. OP #'.$pagoId.' (aplmovp + cabecera promov).'
+                : 'EJECUTAR: OP #'.$pagoId.' (aplmovp + cabecera promov).');
+            if ($dryRun) {
+                return self::SUCCESS;
+            }
+            try {
+                $sync->syncPorPagoproveedor($pagoId);
+            } catch (\Throwable $e) {
+                $this->error($e->getMessage());
+
+                return self::FAILURE;
+            }
+            $this->info('OK OP #'.$pagoId);
+
+            return self::SUCCESS;
         }
 
         $fecha = trim((string) ($this->option('fecha') ?: now()->format('Y-m-d')));

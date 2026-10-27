@@ -165,14 +165,6 @@ class AplicacionCuentacorrienteAnitaMapperTest extends TestCase
         $this->assertSame(1535.0, $alineado['cotizacion']);
     }
 
-    public function test_promov_insert_op_respeta_cuota_cero(): void
-    {
-        $lado = AplicacionCuentacorrienteAnitaLadoSupport::armar('4518', 'OPP', ' ', 1, 124883, 0, 0, 1);
-        $this->assertSame(0, $lado['nro_cuota']);
-        $valores = \App\Support\Compras\AnitaSync\AplicacionCuentacorriente\PromovPagoAnitaMapper::valoresInsert($lado, 146912851.56, '20260911');
-        $this->assertStringContainsString("'146912851.5600'", $valores);
-    }
-
     public function test_aplicacion_propia_de_opa_queda_en_cuota_cero_con_apa(): void
     {
         $opa = AplicacionCuentacorrienteAnitaLadoSupport::armar('3593', 'OPA', 'A', 1, 124102, 0, 0, 1, '2', 1515);

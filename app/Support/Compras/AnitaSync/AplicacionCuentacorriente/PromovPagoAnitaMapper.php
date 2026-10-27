@@ -8,6 +8,7 @@ use App\Support\Configuracion\MonedaAnitaCodigoSupport;
 
 /**
  * Fila promov de OP / OPA (crédito). Misma estructura que la cuota de factura.
+ * Crown y Ferli: 18 columnas. AGG agrega prov_empresa y prov_*_marca.
  *
  * @phpstan-import-type Lado from AplicacionCuentacorrienteAnitaLadoSupport
  */
@@ -31,8 +32,8 @@ final class PromovPagoAnitaMapper
         }
         $codMon = MonedaAnitaCodigoSupport::normalizar($lado['cod_mon'] ?? '1');
 
-        // Ferli: sin prov_empresa ni *_marca (PromovCuotaAnitaFerliMapper).
-        if (EntornoEmpresaSupport::esFerli()) {
+        // Ferli y Crown: 18 columnas, sin prov_empresa ni *_marca.
+        if (self::promovSinEmpresa()) {
             return "
             '".$e($lado['proveedor'], 6)."',
             '".$e($lado['tipo'], 3)."',
@@ -139,7 +140,7 @@ final class PromovPagoAnitaMapper
             '".$fecha."',
             '0'";
 
-        if (EntornoEmpresaSupport::esFerli()) {
+        if (self::promovSinEmpresa()) {
             return $comun;
         }
 
@@ -149,5 +150,13 @@ final class PromovPagoAnitaMapper
             '',
             ''
         ";
+    }
+
+    /**
+     * promov de Ferli y Crown no tiene prov_empresa ni prov_*_marca.
+     */
+    private static function promovSinEmpresa(): bool
+    {
+        return EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esCrown();
     }
 }
