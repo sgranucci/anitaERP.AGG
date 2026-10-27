@@ -11,6 +11,7 @@ use App\Repositories\Ventas\IncotermRepositoryInterface;
 use App\Repositories\Ventas\PuntoventaRepositoryInterface;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\TransporteRepositoryInterface;
+use App\Services\Ventas\FacturacionServiceFerli;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport;
 use Illuminate\Http\Request;
@@ -176,6 +177,19 @@ class PickingPedidoFerliController extends Controller
         }
 
         return response()->json($payload);
+    }
+
+    public function previewTotalesFactura(Request $request)
+    {
+        $this->assertFerli();
+        can('facturar-picking-pedido');
+
+        $resultado = app(FacturacionServiceFerli::class)->previewTotalesPickingPedido($request->all());
+        if (! empty($resultado['error'])) {
+            return response()->json($resultado, 422);
+        }
+
+        return response()->json($resultado);
     }
 
     public function marcar(Request $request)

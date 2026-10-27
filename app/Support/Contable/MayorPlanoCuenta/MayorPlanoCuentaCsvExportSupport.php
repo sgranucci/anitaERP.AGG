@@ -19,9 +19,11 @@ final class MayorPlanoCuentaCsvExportSupport
     {
         $mostrarCc = MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros);
 
-        return $mostrarCc
+        $cols = $mostrarCc
             ? ['Empresa', 'Nro.Asi.', 'Fecha', 'Cuenta', 'Descripcion', 'C.Costo', 'Mon', 'Cotizacion', 'Debe', 'Haber', 'Detalle', 'Cod. emisor', 'Nombre emisor', 'Usuario', 'fecha ult. mod', 'O.Compra', 'proyecto CAPEX', 'Que se compro (OC)', 'Numeros de Facturas']
             : ['Empresa', 'Nro.Asi.', 'Fecha', 'Cuenta', 'Descripcion', 'Mon', 'Cotizacion', 'Debe', 'Haber', 'Detalle', 'Cod. emisor', 'Nombre emisor', 'Usuario', 'fecha ult. mod', 'O.Compra', 'proyecto CAPEX', 'Que se compro (OC)', 'Numeros de Facturas'];
+
+        return self::insertarPedido($cols);
     }
 
     /**
@@ -43,7 +45,7 @@ final class MayorPlanoCuentaCsvExportSupport
             $row[] = $fila['centrocosto_codigo'] ?? '';
         }
 
-        return array_merge($row, [
+        return self::insertarPedido(array_merge($row, [
             $fila['moneda_abrev'] ?? '',
             $fila['cotizacion'] ?? '',
             $fila['debe'] ?? '',
@@ -57,7 +59,7 @@ final class MayorPlanoCuentaCsvExportSupport
             $fila['proyecto_capex'] ?? '',
             $fila['observacion_oc'] ?? '',
             $fila['numeros_facturas'] ?? '',
-        ]);
+        ]), (string) ($fila['pedido_nro'] ?? ''));
     }
 
     /**
@@ -144,5 +146,32 @@ final class MayorPlanoCuentaCsvExportSupport
             'filas' => $n,
             'bytes' => (int) filesize($rutaAbsoluta),
         ];
+    }
+
+    /**
+     * En cabecera inserta «Pedido» después de O.Compra.
+     * En una fila de datos, el mismo lugar: las últimas cuatro celdas son
+     * O.Compra, CAPEX, observación y facturas.
+     *
+     * @param  list<mixed>  $valores
+     * @return list<mixed>
+     */
+    private static function insertarPedido(array $valores, mixed $pedido = null): array
+    {
+        if (! MayorPlanoCuentaPedidoFerliSupport::mostrarColumna()) {
+            return $valores;
+        }
+
+        $idx = array_search('O.Compra', $valores, true);
+        if ($idx === false) {
+            $idx = count($valores) - 4;
+            array_splice($valores, $idx + 1, 0, [$pedido ?? '']);
+
+            return $valores;
+        }
+
+        array_splice($valores, (int) $idx + 1, 0, ['Pedido']);
+
+        return $valores;
     }
 }

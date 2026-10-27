@@ -4,13 +4,14 @@
     $resumen = is_array($resumen ?? null) ? $resumen : [];
     $mostrarCcResumen = collect($resumen)->contains(fn ($row) => array_key_exists('centrocosto_codigo', $row));
     $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
+    $mostrarPedido = \App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaPedidoFerliSupport::mostrarColumna();
     $mostrarTituloCuenta = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarTituloCuenta($filtros ?? []);
     $tituloCuentaCombinado = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::tituloCuentaCombinado($filtros ?? []);
     $colSpan = $soloVentas
         ? (8 + ($mostrarCcResumen ? 1 : 0))
-        : (($multiempresa ? 18 : 17) - ($mostrarCentrocosto ? 0 : 1));
-    $colSpanAntesImportes = $mostrarCentrocosto ? 13 : 12;
-    $vaciasSaldoInicial = $mostrarCentrocosto ? 15 : 14;
+        : (($multiempresa ? 18 : 17) + ($mostrarPedido ? 1 : 0) - ($mostrarCentrocosto ? 0 : 1));
+    $colSpanAntesImportes = ($mostrarCentrocosto ? 13 : 12) + ($mostrarPedido ? 1 : 0);
+    $vaciasSaldoInicial = $colSpan - 2 - ($multiempresa ? 1 : 0);
     $totales = is_array($totales ?? null) ? $totales : [];
     $cantidadLineas = (int) ($totales['cantidad_filas'] ?? 0);
     $formatoExcel = \App\Support\Export\ExcelFormatoNumero::normalizar(
@@ -162,6 +163,9 @@
             <th>Centro de costo</th>
         @endif
         <th>O.Compra</th>
+        @if ($mostrarPedido)
+            <th>Pedido</th>
+        @endif
         <th>Mon</th>
         <th>Cotiz.</th>
         <th>Mon. Ref.</th>
@@ -251,6 +255,9 @@
                     </td>
                 @endif
                 <td>{{ (int) ($fila['nro_oc'] ?? 0) > 0 ? $fila['nro_oc'] : '' }}</td>
+                @if ($mostrarPedido)
+                    <td>{{ $fila['pedido_nro'] ?? '' }}</td>
+                @endif
                 <td>{{ $fila['moneda_abrev'] ?? '' }}</td>
                 <td>{{ $fmtCotiz($fila['cotizacion'] ?? null) }}</td>
                 <td>{{ $fmt($fila['mon_referencia'] ?? null) }}</td>

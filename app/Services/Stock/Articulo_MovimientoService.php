@@ -141,6 +141,11 @@ class Articulo_MovimientoService
 			{
 				if (isset($dataTalle))
 				{
+					// La cantidad de la línea ya está firmada y es la que mueve el saldo:
+					// los talles siguen su signo (una reversión no puede quedar con talle de egreso).
+					$cantidadLinea = (float) ($articulo_movimiento->cantidad ?? 0);
+					$signoLinea = $cantidadLinea > 1e-9 ? 1 : ($cantidadLinea < -1e-9 ? -1 : 0);
+
 					foreach($dataTalle as $talle)
 					{
 						$data = [];
@@ -149,6 +154,12 @@ class Articulo_MovimientoService
 						$data['talle_id'] = $talle['talle_id'];
 						$data['cantidad'] = $talle['cantidad'];
 						$data['precio'] = str_replace(',', '', $talle['precio']);
+						if ($signoLinea !== 0) {
+							$data['cantidad'] = abs((float) $data['cantidad']) * $signoLinea;
+							$data['cantidad_ya_firmada'] = true;
+						} elseif (! empty($talle['cantidad_ya_firmada'])) {
+							$data['cantidad_ya_firmada'] = true;
+						}
 						$this->guardaArticuloMovimientoTalle($dataMovimiento['pedido_combinacion_id'], $data);
 					}
 				}
@@ -186,6 +197,11 @@ class Articulo_MovimientoService
 	// Guarda articulo_movimiento_talle
 	public function guardaArticuloMovimientoTalle($pedido_combinacion_id, $data)
 	{
+		// Mov. stock y reversión ya firman el talle con signo_cantidad.
+		// El signo del tipo (siempre el de la salida/entrada original) no debe pisarlo.
+		$cantidadYaFirmada = ! empty($data['cantidad_ya_firmada']);
+		unset($data['cantidad_ya_firmada']);
+
 		// Busca id de articulo_movimiento
 		if (!array_key_exists('articulo_movimiento_id', $data))
 		{
@@ -197,9 +213,11 @@ class Articulo_MovimientoService
 			{
 				$data['articulo_movimiento_id'] = $articulo_movimiento->id;
 
-				$tipotransaccion = $this->resolveTipoTransaccionDesdeMovimiento($articulo_movimiento);
-				if (array_key_exists('cantidad', $data) && $data['cantidad'] > 0)
-					$data['cantidad'] = $data['cantidad']*($tipotransaccion->signo == 'S' ? 1 : -1);
+				if (! $cantidadYaFirmada) {
+					$tipotransaccion = $this->resolveTipoTransaccionDesdeMovimiento($articulo_movimiento);
+					if (array_key_exists('cantidad', $data) && $data['cantidad'] > 0)
+						$data['cantidad'] = $data['cantidad']*($tipotransaccion->signo == 'S' ? 1 : -1);
+				}
 				 
 				$articulo_movimiento_talle = $this->crearArticuloMovimientoTalle($data);
 			}
@@ -208,12 +226,11 @@ class Articulo_MovimientoService
 		}
 		else
 		{
-			$articulo_movimiento = $this->articulo_movimientoRepository->find($data['articulo_movimiento_id']);
-
-			$tipotransaccion = $this->resolveTipoTransaccionDesdeMovimiento($articulo_movimiento);
-
-			if (array_key_exists('cantidad', $data))
+			if (! $cantidadYaFirmada && array_key_exists('cantidad', $data))
 			{
+				$articulo_movimiento = $this->articulo_movimientoRepository->find($data['articulo_movimiento_id']);
+				$tipotransaccion = $this->resolveTipoTransaccionDesdeMovimiento($articulo_movimiento);
+
 				if ($data['cantidad'] > 0)
 				{
 					if ($tipotransaccion->signo == 'S')

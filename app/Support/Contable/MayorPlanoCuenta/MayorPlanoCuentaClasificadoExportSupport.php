@@ -36,8 +36,11 @@ final class MayorPlanoCuentaClasificadoExportSupport
         if ($mostrarCc) {
             $cols[] = 'Centro de costo';
         }
+        $cols[] = 'O.Compra';
+        if (MayorPlanoCuentaPedidoFerliSupport::mostrarColumna()) {
+            $cols[] = 'Pedido';
+        }
         $cols = array_merge($cols, [
-            'O.Compra',
             'Mon',
             'Cotiz.',
         ]);
@@ -141,6 +144,9 @@ final class MayorPlanoCuentaClasificadoExportSupport
             $row[] = trim(($cc !== '' ? $cc : 'Sin CC').($nombreCc !== '' ? ' '.$nombreCc : ''));
         }
         $row[] = ((int) ($fila['nro_oc'] ?? 0) > 0) ? $fila['nro_oc'] : '';
+        if (MayorPlanoCuentaPedidoFerliSupport::mostrarColumna()) {
+            $row[] = (string) ($fila['pedido_nro'] ?? '');
+        }
         $row[] = (string) ($fila['moneda_abrev'] ?? '');
         $row[] = self::numeroOVacio($fila['cotizacion'] ?? null);
         if ($mostrarMonRef) {

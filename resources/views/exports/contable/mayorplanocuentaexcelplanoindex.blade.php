@@ -1,6 +1,7 @@
 @php
     $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
-    $colSpan = $mostrarCentrocosto ? 19 : 18;
+    $mostrarPedido = \App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaPedidoFerliSupport::mostrarColumna();
+    $colSpan = ($mostrarCentrocosto ? 19 : 18) + ($mostrarPedido ? 1 : 0);
     $totales = is_array($totales ?? null) ? $totales : [];
     $cantidadLineas = (int) ($totales['cantidad_filas'] ?? 0);
     $formatoExcel = \App\Support\Export\ExcelFormatoNumero::normalizar(
@@ -69,6 +70,9 @@
         <th>Usuario</th>
         <th>fecha ult. mod</th>
         <th>O.Compra</th>
+        @if ($mostrarPedido)
+            <th>Pedido</th>
+        @endif
         <th>proyecto CAPEX</th>
         <th>Qué se compró (OC)</th>
         <th>Numeros de Facturas</th>
@@ -94,6 +98,9 @@
             <td>{{ $fila['usuario'] ?? '' }}</td>
             <td>{{ $fila['fecha_ult_mod'] ?? '' }}</td>
             <td>{{ (int) ($fila['nro_oc'] ?? 0) > 0 ? $fila['nro_oc'] : '' }}</td>
+            @if ($mostrarPedido)
+                <td>{{ $fila['pedido_nro'] ?? '' }}</td>
+            @endif
             <td>{{ $fila['proyecto_capex'] ?? '' }}</td>
             <td>{{ $fila['observacion_oc'] ?? '' }}</td>
             <td>{{ $fila['numeros_facturas'] ?? '' }}</td>
@@ -104,7 +111,7 @@
             <td colspan="{{ $mostrarCentrocosto ? 8 : 7 }}">Total general · Diferencia (D−H) {{ number_format($diferenciaFinal, 2, ',', '.') }}</td>
             <td>{{ $fmtTotal($totalDebeFinal) }}</td>
             <td>{{ $fmtTotal($totalHaberFinal) }}</td>
-            @for ($i = 0; $i < 9; $i++)
+            @for ($i = 0; $i < ($mostrarPedido ? 10 : 9); $i++)
                 <td></td>
             @endfor
         </tr>

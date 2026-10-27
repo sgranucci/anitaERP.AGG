@@ -13,6 +13,7 @@ use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaExcelPlanoEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaExcelPlanoSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaModuloFiltroSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaOrdencompraEnricher;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaPedidoFerliEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProcesador;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRecepcionAnitaEnricher;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
@@ -34,6 +35,7 @@ class MayorPlanoCuentaReporteService
         private readonly MayorPlanoCuentaComprobanteEnricher $comprobanteEnricher,
         private readonly MayorPlanoCuentaRecepcionAnitaEnricher $recepcionAnitaEnricher,
         private readonly MayorPlanoCuentaExcelPlanoEnricher $excelPlanoEnricher,
+        private readonly MayorPlanoCuentaPedidoFerliEnricher $pedidoFerliEnricher,
     ) {}
 
     /**
@@ -418,6 +420,7 @@ class MayorPlanoCuentaReporteService
         $filas = $this->ordencompraEnricher->enriquecer($filas);
         $filas = $this->completarNroOcDesdeIds($filas);
         $filas = $this->emisorEnricher->enriquecer($filas);
+        $filas = $this->pedidoFerliEnricher->enriquecer($filas);
 
         if ($filtros !== [] && MayorPlanoCuentaListadoFiltros::tieneFiltrosTextoAplicados($filtros)) {
             $filas = MayorPlanoCuentaListadoFiltros::aplicarFiltroTexto($filas, $filtros);

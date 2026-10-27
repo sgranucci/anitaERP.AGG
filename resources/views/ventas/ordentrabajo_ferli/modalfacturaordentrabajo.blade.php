@@ -88,6 +88,20 @@
                     <label for="recipient-name" class="col-form-label">Total pares</label>
                     <input type="text" size="5" style="font-weight: bold; text-align: center;" id="facturartotpares" name="facturartotpares" readonly></input>
                 </div>
+                <div class="form-group d-none" id="picking-preview-totales">
+                    <label class="col-form-label">Importes</label>
+                    <p class="small text-muted mb-1" id="picking-preview-totales-aviso"></p>
+                    <table class="table table-sm table-bordered mb-0" id="picking-preview-totales-table" style="max-width: 32rem;">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr>
+                                <th>Concepto</th>
+                                <th class="text-right" style="width: 6rem;">Tasa</th>
+                                <th class="text-right" style="width: 9rem;">Importe</th>
+                            </tr>
+                        </thead>
+                        <tbody id="picking-preview-totales-body"></tbody>
+                    </table>
+                </div>
             </form>
             <!-- textarea -->
             <div class="form-group" id="div_leyendafacturacion">

@@ -1790,7 +1790,7 @@ class TransferenciaMercaderiaService
     }
 
     /**
-     * @return list<array{id: null, talle_id: int, cantidad: float, precio: float}>
+     * @return list<array{id: null, talle_id: int, cantidad: float, precio: float, cantidad_ya_firmada: bool}>
      */
     private function tallesFirmadosDesde(Articulo_Movimiento $am, string $signo, float $precio): array
     {
@@ -1802,6 +1802,7 @@ class TransferenciaMercaderiaService
                 'talle_id' => (int) $talle->talle_id,
                 'cantidad' => abs((float) $talle->cantidad) * $factor,
                 'precio' => $precio,
+                'cantidad_ya_firmada' => true,
             ];
         }
 

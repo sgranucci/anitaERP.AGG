@@ -9,6 +9,8 @@
     var descuentoCliente = 0;
     var descuentoLineaCliente = '';
     var offFactura = 0;
+    var previewPickingXhr = null;
+    var previewPickingTimer = null;
 
     function idsSeleccionados() {
         var ids = [];
@@ -182,6 +184,93 @@
         $('#facturartotpares').val(tot ? String(Math.round(tot)) : '');
     }
 
+    function formatoImportePicking(valor) {
+        var n = parseFloat(valor);
+        if (!isFinite(n)) {
+            n = 0;
+        }
+        return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function renderPreviewTotalesPicking(conceptos) {
+        var $body = $('#picking-preview-totales-body');
+        $body.empty();
+        (conceptos || []).forEach(function (item) {
+            var esTotal = String(item.concepto || '') === 'Total';
+            var tasa = parseFloat(item.tasa);
+            var tasaTxt = (!esTotal && isFinite(tasa) && Math.abs(tasa) >= 0.005)
+                ? tasa.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : '';
+            var peso = esTotal ? 'font-weight:700;' : '';
+            $body.append(
+                '<tr>' +
+                '<td style="' + peso + '">' + escHtml(item.concepto) + '</td>' +
+                '<td class="text-right" style="' + peso + '">' + tasaTxt + '</td>' +
+                '<td class="text-right" style="' + peso + '">' + formatoImportePicking(item.importe) + '</td>' +
+                '</tr>'
+            );
+        });
+    }
+
+    function clienteIdPreviewPicking() {
+        if (typeof window.clienteIdFacturaOt === 'function') {
+            var elegido = String(window.clienteIdFacturaOt() || '').trim();
+            if (elegido !== '') {
+                return elegido;
+            }
+        }
+        return String(clienteFacturaId || '');
+    }
+
+    function pedirPreviewTotalesPicking() {
+        if (!$('#facturarOrdenTrabajoModal').hasClass('show')) {
+            return;
+        }
+        if (!pedido_combinacion_ids.length) {
+            return;
+        }
+        var $aviso = $('#picking-preview-totales-aviso');
+        $aviso.text('Calculando importes…');
+        if (previewPickingXhr && previewPickingXhr.readyState !== 4) {
+            previewPickingXhr.abort();
+        }
+        previewPickingXhr = $.post(carpetaBase + '/stock/picking-pedido/preview-totales', {
+            origen: 'picking',
+            pedido_combinacion_id: pedido_combinacion_ids,
+            ordentrabajo_id: ordentrabajo_ids,
+            cliente_id: clienteIdPreviewPicking(),
+            fechafactura: $('#fechafactura').val(),
+            descuentopie: $('#descuentopie').val(),
+            descuentoimportepie: $('#descuentoimportepie').val(),
+            descuentolinea: $('#descuentolinea').val(),
+            puntoventa_id: $('#puntoventa_id').val(),
+            tipotransaccion_id: $('#tipotransaccion_id').val(),
+            _token: $('#csrf_token').val()
+        }).done(function (data) {
+            if (data && data.error) {
+                $aviso.text(data.error);
+                $('#picking-preview-totales-body').empty();
+                return;
+            }
+            $aviso.text('');
+            renderPreviewTotalesPicking((data && data.conceptostotales) || []);
+        }).fail(function (xhr, status) {
+            if (status === 'abort') {
+                return;
+            }
+            var msg = (xhr.responseJSON && xhr.responseJSON.error)
+                ? xhr.responseJSON.error
+                : 'No se pudieron calcular los importes';
+            $aviso.text(msg);
+            $('#picking-preview-totales-body').empty();
+        });
+    }
+
+    function programarPreviewTotalesPicking() {
+        clearTimeout(previewPickingTimer);
+        previewPickingTimer = setTimeout(pedirPreviewTotalesPicking, 350);
+    }
+
     $(function () {
         $('#check-all-picking').on('change', function () {
             $('.check-picking-linea:not(:disabled)').prop('checked', $(this).is(':checked'));
@@ -248,6 +337,10 @@
             modal.find('#descuentolinea').val(descuentoLineaCliente);
             cargarSelectsModal(modal);
             renderMedidasFacturaPicking(filasFacturaPicking);
+            $('#picking-preview-totales').removeClass('d-none');
+            $('#picking-preview-totales-body').empty();
+            $('#picking-preview-totales-aviso').text('Calculando importes…');
+            pedirPreviewTotalesPicking();
             alert('Va a facturar ' + offFactura + ' ítems de picking');
         });
 
@@ -357,6 +450,24 @@
             if (nombre !== '') {
                 $('#facturarOrdenTrabajoModal .modal-title').text('Factura PICKING — ' + nombre);
             }
+            programarPreviewTotalesPicking();
+        });
+
+        $(document).on('input change', '#facturarOrdenTrabajoModal #descuentopie, #facturarOrdenTrabajoModal #descuentolinea, #facturarOrdenTrabajoModal #descuentoimportepie, #facturarOrdenTrabajoModal #fechafactura', function () {
+            programarPreviewTotalesPicking();
+        });
+
+        $(document).on('change', '#facturarOrdenTrabajoModal #puntoventa_id', function () {
+            programarPreviewTotalesPicking();
+        });
+
+        $('#facturarOrdenTrabajoModal').on('hidden.bs.modal', function () {
+            if (previewPickingXhr && previewPickingXhr.readyState !== 4) {
+                previewPickingXhr.abort();
+            }
+            $('#picking-preview-totales').addClass('d-none');
+            $('#picking-preview-totales-body').empty();
+            $('#picking-preview-totales-aviso').text('');
         });
 
         function tokenCsrf() {

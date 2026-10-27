@@ -1787,6 +1787,7 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('stock/picking-pedido', 'Stock\PickingPedidoFerliController@index')->name('picking_pedido');
     Route::get('stock/picking-pedido/exportar', 'Stock\PickingPedidoFerliController@exportarExcel')->name('exportar_picking_pedido');
     Route::post('stock/picking-pedido/payload-factura', 'Stock\PickingPedidoFerliController@payloadFactura')->name('payload_factura_picking_pedido');
+    Route::post('stock/picking-pedido/preview-totales', 'Stock\PickingPedidoFerliController@previewTotalesFactura')->name('preview_totales_picking_pedido');
     Route::post('stock/picking-pedido/consulta-lotes-stock', 'Stock\PickingPedidoFerliController@consultaLotesStock')->name('consulta_lotes_stock_picking_pedido');
     Route::post('stock/picking-pedido/consulta-pickings-dia', 'Stock\PickingPedidoFerliController@consultaPickingsDia')->name('consulta_pickings_dia_picking_pedido');
     Route::post('stock/picking-pedido/abiertos', 'Stock\PickingPedidoFerliController@abiertosParaAsignar')->name('abiertos_picking_pedido');

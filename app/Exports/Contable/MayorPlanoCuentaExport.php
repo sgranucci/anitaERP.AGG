@@ -5,6 +5,7 @@ namespace App\Exports\Contable;
 use App\Services\Contable\MayorPlanoCuentaReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaModuloFiltroSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaPedidoFerliSupport;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
@@ -187,10 +188,37 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
 
         $conCc = $this->mostrarColumnaCentrocosto();
         if ($this->multiempresa) {
-            return $conCc ? 'R' : 'Q';
+            $ultima = $conCc ? 'R' : 'Q';
+        } else {
+            $ultima = $conCc ? 'Q' : 'P';
         }
 
-        return $conCc ? 'Q' : 'P';
+        return $this->mostrarPedido()
+            ? MayorPlanoCuentaPedidoFerliSupport::letraSiguiente($ultima)
+            : $ultima;
+    }
+
+    private function mostrarPedido(): bool
+    {
+        return MayorPlanoCuentaPedidoFerliSupport::mostrarColumna();
+    }
+
+    private function letraOc(): string
+    {
+        return $this->mostrarColumnaCentrocosto() ? 'J' : 'I';
+    }
+
+    /**
+     * @param  array<string, mixed>  $porLetra
+     * @return array<string, mixed>
+     */
+    private function conColumnaPedido(array $porLetra, mixed $valorPedido): array
+    {
+        if (! $this->mostrarPedido()) {
+            return $porLetra;
+        }
+
+        return MayorPlanoCuentaPedidoFerliSupport::insertarColumna($porLetra, $this->letraOc(), $valorPedido);
     }
 
     public function columnFormats(): array
@@ -254,7 +282,7 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             ];
         }
 
-        return $fmt;
+        return $this->conColumnaPedido($fmt, NumberFormat::FORMAT_TEXT);
     }
 
     public function styles(Worksheet $sheet)
@@ -330,7 +358,7 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             }
         }
 
-        return $widths;
+        return $this->conColumnaPedido($widths, 12);
     }
 
     public function title(): string
@@ -499,6 +527,9 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             $colsImportes = $this->mostrarColumnaCentrocosto()
                 ? ['L', 'M', 'N', 'O', 'P', 'Q']
                 : ['K', 'L', 'M', 'N', 'O', 'P'];
+            if ($this->mostrarPedido()) {
+                $colsImportes = MayorPlanoCuentaPedidoFerliSupport::desplazarLetras($colsImportes, $this->letraOc());
+            }
         }
         foreach ($colsImportes as $col) {
             $sheet->getStyle($col.$desde.':'.$col.$highestRow)->applyFromArray([

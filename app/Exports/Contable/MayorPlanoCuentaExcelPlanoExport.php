@@ -4,6 +4,7 @@ namespace App\Exports\Contable;
 
 use App\Services\Contable\MayorPlanoCuentaReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaPedidoFerliSupport;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
@@ -133,14 +134,36 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
 
     private function colUltima(): string
     {
-        return $this->mostrarColumnaCentrocosto() ? 'S' : 'R';
+        $ultima = $this->mostrarColumnaCentrocosto() ? 'S' : 'R';
+
+        return MayorPlanoCuentaPedidoFerliSupport::mostrarColumna()
+            ? MayorPlanoCuentaPedidoFerliSupport::letraSiguiente($ultima)
+            : $ultima;
+    }
+
+    private function letraOc(): string
+    {
+        return $this->mostrarColumnaCentrocosto() ? 'P' : 'O';
+    }
+
+    /**
+     * @param  array<string, mixed>  $porLetra
+     * @return array<string, mixed>
+     */
+    private function conColumnaPedido(array $porLetra, mixed $valorPedido): array
+    {
+        if (! MayorPlanoCuentaPedidoFerliSupport::mostrarColumna()) {
+            return $porLetra;
+        }
+
+        return MayorPlanoCuentaPedidoFerliSupport::insertarColumna($porLetra, $this->letraOc(), $valorPedido);
     }
 
     public function columnFormats(): array
     {
         $formato = ExcelFormatoNumero::preferenciaGlobal();
         if ($this->mostrarColumnaCentrocosto()) {
-            return [
+            return $this->conColumnaPedido([
                 'A' => NumberFormat::FORMAT_TEXT,
                 'B' => NumberFormat::FORMAT_TEXT,
                 'C' => NumberFormat::FORMAT_TEXT,
@@ -160,10 +183,10 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
                 'Q' => NumberFormat::FORMAT_TEXT,
                 'R' => NumberFormat::FORMAT_TEXT,
                 'S' => NumberFormat::FORMAT_TEXT,
-            ];
+            ], NumberFormat::FORMAT_TEXT);
         }
 
-        return [
+        return $this->conColumnaPedido([
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'C' => NumberFormat::FORMAT_TEXT,
@@ -182,7 +205,7 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
             'P' => NumberFormat::FORMAT_TEXT,
             'Q' => NumberFormat::FORMAT_TEXT,
             'R' => NumberFormat::FORMAT_TEXT,
-        ];
+        ], NumberFormat::FORMAT_TEXT);
     }
 
     public function styles(Worksheet $sheet)
@@ -193,7 +216,7 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
     public function columnWidths(): array
     {
         if ($this->mostrarColumnaCentrocosto()) {
-            return [
+            return $this->conColumnaPedido([
                 'A' => 10,  // Empresa
                 'B' => 11,  // Nro.Asi.
                 'C' => 11,  // Fecha
@@ -213,10 +236,10 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
                 'Q' => 16,  // proyecto CAPEX
                 'R' => 32,  // Observación de la OC
                 'S' => 36,  // Numeros de Facturas
-            ];
+            ], 12);
         }
 
-        return [
+        return $this->conColumnaPedido([
             'A' => 10,
             'B' => 11,
             'C' => 11,
@@ -235,7 +258,7 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
             'P' => 16,
             'Q' => 32,
             'R' => 36,
-        ];
+        ], 12);
     }
 
     public function title(): string

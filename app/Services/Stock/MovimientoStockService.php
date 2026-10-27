@@ -137,6 +137,12 @@ class MovimientoStockService
 				if ($signoPata !== null) {
 					$data['signo_cantidad'] = $signoPata;
 				}
+				// Compensatorio de una reversión: lleva el signo opuesto a su tipo.
+				// Sin esto, editarlo convierte la devolución en otro egreso (o ingreso).
+				$esCompensatorio = (int) (MovimientoStock::query()->whereKey((int) $id)->value('movimientostock_origen_id') ?? 0) > 0;
+				if ($signoPata === null && $esCompensatorio) {
+					$data['signo_cantidad'] = ($tipotransaccion->signo ?? 'S') === 'S' ? 'R' : 'S';
+				}
 			}
 
 			$signoCantidadMovimiento = $data['signo_cantidad'] ?? $tipotransaccion->signo;
@@ -488,6 +494,8 @@ class MovimientoStockService
 									'talle_id' => $medida->talle_id,
 									'cantidad' => abs((float) $medida->cantidad) * $factorSignoTalle,
 									'precio' => $precioLinea,
+									// Ya firmada con signo_cantidad (el tipo puede ser el opuesto en una reversión).
+									'cantidad_ya_firmada' => true,
 								];
 							}
 						}

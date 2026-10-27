@@ -18,9 +18,11 @@
     $mostrarEmpresa = $multiempresa ?? false;
     $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
     $mostrarMonReferencia = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaMonedaReferencia($filtros ?? []);
+    $mostrarPedido = \App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaPedidoFerliSupport::mostrarColumna();
     $mostrarTituloCuenta = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarTituloCuenta($filtros ?? []);
     $tituloCuentaCombinado = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::tituloCuentaCombinado($filtros ?? []);
     $totalColumnas = ($mostrarEmpresa ? 18 : 17)
+        + ($mostrarPedido ? 1 : 0)
         - ($mostrarCentrocosto ? 0 : 1)
         - ($mostrarMonReferencia ? 0 : 1);
     $colSpanAntesImportes = $totalColumnas - 4 - ($mostrarEmpresa ? 1 : 0);
@@ -40,6 +42,9 @@
             <th>Centro de costo</th>
         @endif
         <th>O.Compra</th>
+        @if ($mostrarPedido)
+            <th>Pedido</th>
+        @endif
         <th>Mon</th>
         <th class="text-right">Cotiz.</th>
         @if ($mostrarMonReferencia)
@@ -321,6 +326,9 @@
                         @endif
                     @endif
                 </td>
+                @if ($mostrarPedido)
+                    <td>{{ $fila['pedido_nro'] ?? '' }}</td>
+                @endif
                 <td>{{ $fila['moneda_abrev'] ?? '' }}</td>
                 <td class="text-right">
                     @if (! empty($fila['cotizacion']))

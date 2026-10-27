@@ -46,7 +46,7 @@ class FacturacionServiceFerli extends FacturacionService
         return app(PedidoQueryFerli::class)->leePedidoporId($id);
     }
 
-    protected function aplicarLugarEntregaFacturaOt($cliente, $pedido)
+    protected function aplicarLugarEntregaFacturaOt($cliente, $pedido, bool $persistirEntrega = true)
     {
         $mismoCliente = (int) $cliente->id === (int) $pedido->cliente_id;
         if (! $mismoCliente) {
@@ -61,7 +61,8 @@ class FacturacionServiceFerli extends FacturacionService
         }
 
         // Si la factura va a otra razón social, el lugar queda solo en el comprobante.
-        return $this->resolverLugarEntregaPedido($cliente, $pedido, [], $mismoCliente);
+        // El preview no persiste: solo necesita la provincia en memoria para IIBB.
+        return $this->resolverLugarEntregaPedido($cliente, $pedido, [], $persistirEntrega && $mismoCliente);
     }
 
     protected function sincronizarLugarEntregaFacturaOt($pedido): void
@@ -96,6 +97,122 @@ class FacturacionServiceFerli extends FacturacionService
     {
         $this->prepararSesionFacturaOt($data);
 
+        $armado = $this->armarDataFacturaPicking($data, true);
+        if (isset($armado['error'])) {
+            return ['error' => $armado['error']];
+        }
+
+        return $this->emitirFacturaOtDesdeDataFactura(
+            $data,
+            $armado['dataFactura'],
+            $armado['cliente'],
+            $armado['pedido'],
+            $armado['moneda_id'],
+            $armado['fechaFactura'],
+            $armado['leyenda'],
+            $armado['actividad_arca_id'],
+            $armado['deposito'],
+            $armado['puntoventa_id'],
+            $armado['tipoTransaccion_id'],
+            $armado['pedidos_combinacion_id'],
+            $armado['ordenestrabajo_id'],
+            $armado['despuesGrabar']
+        );
+    }
+
+    /**
+     * Subtotal, IVA y percepción del picking, con el mismo cálculo que la emisión.
+     *
+     * @return array{conceptostotales?: list<array{concepto: string, tasa: float, importe: float}>, error?: string}
+     */
+    public function previewTotalesPickingPedido(array $data): array
+    {
+        $armado = $this->armarDataFacturaPicking($data, false);
+        if (isset($armado['error'])) {
+            return ['error' => $armado['error']];
+        }
+
+        $puntoventa = null;
+        $puntoventaId = (int) ($data['puntoventa_id'] ?? 0);
+        if ($puntoventaId > 0) {
+            $puntoventa = $this->puntoventaRepository->find($puntoventaId);
+        }
+
+        $cliente = $armado['cliente'];
+        $pedido = $armado['pedido'];
+        $entrega = null;
+        if ($pedido && (int) ($pedido->cliente_entrega_id ?? 0) > 0) {
+            $entrega = $this->cliente_entregaRepository->find($pedido->cliente_entrega_id);
+        }
+
+        $datosCliente = [
+            'condicioniva_id' => $cliente->condicioniva_id,
+            'numerodocumento' => $cliente->numerodocumento,
+            'retieneiva' => $cliente->retieneiva,
+            'condicioniibb_id' => $cliente->condicioniibb_id,
+            'provincia' => \App\Support\Ventas\ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente, $entrega),
+            'descuentoimportepie' => $this->descuentoImportePie,
+            'id' => $cliente->id,
+            'empresa_id' => $puntoventa->empresa_id ?? null,
+        ];
+
+        $dataFactura = $armado['dataFactura'];
+        try {
+            $conceptos = $this->impuestoService->calculaImpuestoVenta(
+                $dataFactura,
+                $datosCliente,
+                $armado['fechaFactura']
+            );
+        } catch (\Throwable $e) {
+            report($e);
+
+            return ['error' => 'No se pudieron calcular los importes de la factura'];
+        }
+
+        return [
+            'conceptostotales' => $this->conceptosPreviewPicking($conceptos),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $conceptos
+     * @return list<array{concepto: string, tasa: float, importe: float}>
+     */
+    private function conceptosPreviewPicking(array $conceptos): array
+    {
+        $visibles = [];
+        foreach ($conceptos as $concepto) {
+            $nombre = (string) ($concepto['concepto'] ?? '');
+            $importe = round((float) ($concepto['importe'] ?? 0), 2);
+            $nombreLower = mb_strtolower($nombre);
+            $esTotal = $nombreLower === 'total';
+            $esSubtotal = $nombreLower === 'subtotal';
+            $esIva = str_starts_with($nombreLower, 'iva');
+            $esPercepcion = str_contains($nombreLower, 'perc');
+            $esDescuento = str_starts_with($nombreLower, 'descuento');
+            if (! $esTotal && ! $esSubtotal && ! $esIva && ! $esPercepcion && ! $esDescuento) {
+                continue;
+            }
+            if (! $esTotal && abs($importe) < 0.005) {
+                continue;
+            }
+            $visibles[] = [
+                'concepto' => $nombre,
+                'tasa' => round((float) ($concepto['tasa'] ?? 0), 2),
+                'importe' => $importe,
+            ];
+        }
+
+        return $visibles;
+    }
+
+    /**
+     * Arma las líneas de la factura de picking. Con $persistirEntrega en false no graba el pedido.
+     *
+     * @return array<string, mixed>
+     */
+    private function armarDataFacturaPicking(array $data, bool $persistirEntrega): array
+    {
         $pedidos_combinacion_id = array_values(array_map('intval', (array) ($data['pedido_combinacion_id'] ?? [])));
         $ordenestrabajo_id = array_values(array_map('intval', (array) ($data['ordentrabajo_id'] ?? [])));
 
@@ -107,10 +224,10 @@ class FacturacionServiceFerli extends FacturacionService
             $ordenestrabajo_id[] = 0;
         }
 
-        $puntoventa_id = $data['puntoventa_id'];
-        $tipoTransaccion_id = $data['tipotransaccion_id'];
-        $fechaFactura = $data['fechafactura'];
-        $leyenda = $data['leyendafactura'];
+        $puntoventa_id = $data['puntoventa_id'] ?? null;
+        $tipoTransaccion_id = $data['tipotransaccion_id'] ?? null;
+        $fechaFactura = $data['fechafactura'] ?? null;
+        $leyenda = $data['leyendafactura'] ?? '';
 
         $actividad_arca_id = null;
         if (isset($data['actividad_arca_id'])) {
@@ -119,21 +236,21 @@ class FacturacionServiceFerli extends FacturacionService
 
         $deposito = $this->depositoIdDesdePayload($data);
 
-        $this->descuentoPie = $data['descuentopie'];
-        $this->descuentoLinea = $data['descuentolinea'];
-        $this->descuentoImportePie = $data['descuentoimportepie'];
+        $this->descuentoPie = $data['descuentopie'] ?? 0;
+        $this->descuentoLinea = $data['descuentolinea'] ?? 0;
+        $this->descuentoImportePie = $data['descuentoimportepie'] ?? 0;
         $this->cantidadBulto = $this->normalizarCantidadBulto($data['cantidadbulto'] ?? 0);
-        $this->puntoventaremito_id = $data['puntoventaremito_id'];
-        $this->formapago_id = $data['formapago_id'];
-        $this->incoterm_id = $data['incoterm_id'];
-        $this->mercaderiaExportacion = $data['mercaderia'];
-        $this->leyendaExportacion = $data['leyendaexportacion'];
+        $this->puntoventaremito_id = $data['puntoventaremito_id'] ?? null;
+        $this->formapago_id = $data['formapago_id'] ?? null;
+        $this->incoterm_id = $data['incoterm_id'] ?? null;
+        $this->mercaderiaExportacion = $data['mercaderia'] ?? '';
+        $this->leyendaExportacion = $data['leyendaexportacion'] ?? '';
         $this->numeroDespacho = '';
         $this->condicionVentaExportacion = '';
         $this->formaPagoExportacion = '';
         $this->monedaExportacion = '';
         $this->abreviaturaIncoterm = '';
-        if ($this->incoterm_id >= 1) {
+        if ((int) $this->incoterm_id >= 1) {
             $incoterm = $this->incotermRepository->find($this->incoterm_id);
             if ($incoterm) {
                 $this->condicionVentaExportacion = $incoterm->nombre;
@@ -224,7 +341,7 @@ class FacturacionServiceFerli extends FacturacionService
             $this->cuentacontable_id = $cliente->cuentacontable_id;
             $this->codigoCuentaContable = $cliente->cuentascontables?->codigo ?? '';
 
-            $errorEntrega = $this->aplicarLugarEntregaFacturaOt($cliente, $pedido);
+            $errorEntrega = $this->aplicarLugarEntregaFacturaOt($cliente, $pedido, $persistirEntrega);
             if ($errorEntrega) {
                 return $errorEntrega;
             }
@@ -335,25 +452,26 @@ class FacturacionServiceFerli extends FacturacionService
             return ['error' => 'No hay cantidades para facturar'];
         }
 
-        $this->sincronizarLugarEntregaFacturaOt($pedido);
+        if ($persistirEntrega) {
+            $this->sincronizarLugarEntregaFacturaOt($pedido);
+        }
 
         $lineasParaPost = $lineasValidas;
 
-        return $this->emitirFacturaOtDesdeDataFactura(
-            $data,
-            $dataFactura,
-            $cliente,
-            $pedido,
-            $moneda_id,
-            $fechaFactura,
-            $leyenda,
-            $actividad_arca_id,
-            $deposito,
-            $puntoventa_id,
-            $tipoTransaccion_id,
-            $pedidos_combinacion_id,
-            $ordenestrabajo_id,
-            function ($vta) use ($lineasParaPost, $fechaFactura, $pedido) {
+        return [
+            'dataFactura' => $dataFactura,
+            'cliente' => $cliente,
+            'pedido' => $pedido,
+            'moneda_id' => $moneda_id,
+            'fechaFactura' => $fechaFactura,
+            'leyenda' => $leyenda,
+            'actividad_arca_id' => $actividad_arca_id,
+            'deposito' => $deposito,
+            'puntoventa_id' => $puntoventa_id,
+            'tipoTransaccion_id' => $tipoTransaccion_id,
+            'pedidos_combinacion_id' => $pedidos_combinacion_id,
+            'ordenestrabajo_id' => $ordenestrabajo_id,
+            'despuesGrabar' => function ($vta) use ($lineasParaPost, $fechaFactura, $pedido) {
                 foreach ($lineasParaPost as $linea) {
                     PedidoPickingFerliSupport::marcarFacturado((int) $linea->id, (int) $vta->id);
                     PedidoPickingFerliSupport::asegurarConsumoStockPickingAlFacturar(
@@ -364,8 +482,8 @@ class FacturacionServiceFerli extends FacturacionService
                 }
                 // marcarFacturado usa Query Builder (sin observer): refrescar cabecera
                 PedidoEstadoCabeceraSupport::refrescar((int) ($pedido->id ?? 0));
-            }
-        );
+            },
+        ];
     }
 
     /**

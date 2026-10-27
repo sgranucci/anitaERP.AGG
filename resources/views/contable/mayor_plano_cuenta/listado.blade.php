@@ -171,7 +171,9 @@
         @php
             $mostrarCcDetallePdf = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
             $mostrarMonRefDetallePdf = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaMonedaReferencia($filtros ?? []);
+            $mostrarPedidoDetallePdf = \App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaPedidoFerliSupport::mostrarColumna();
             $totalColumnasDetallePdf = ($multiempresa ? 18 : 17)
+                + ($mostrarPedidoDetallePdf ? 1 : 0)
                 - ($mostrarCcDetallePdf ? 0 : 1)
                 - ($mostrarMonRefDetallePdf ? 0 : 1);
             $colSpanAntesImportesPdf = $totalColumnasDetallePdf - 4 - ($multiempresa ? 1 : 0);
