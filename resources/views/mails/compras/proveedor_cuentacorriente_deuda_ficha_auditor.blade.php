@@ -140,7 +140,7 @@
 <h3 style="margin:22px 0 6px 0;">Delta mayor − deuda</h3>
 <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
     En pesos, con el mismo signo del mayor (negativo = débito). Delta = mayor − deuda.
-    Si la empresa tiene configurada la cuenta de anticipos a proveedores, esa cuenta entra en la comparación.
+    Solo cuentas de proveedores de rubro Pasivo. La cuenta de anticipos entra si está configurada.
     @if (! empty($delta['hay_base_anterior']))
         Se compara contra el {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
         Avisa si la variación pasa de {{ $fmt($delta['tolerancia'] ?? 1) }}.

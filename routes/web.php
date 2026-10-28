@@ -799,6 +799,9 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('ventas/facturacion-local/api/contexto-pos', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiContextoPos')->name('facturacion_local_api_contexto_pos');
     Route::get('ventas/facturacion-local/api/consulta-stock-precios', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiConsultaStockPrecios')->name('facturacion_local_api_consulta_stock_precios');
 
+    Route::get('ventas/facturacion-local/nota-credito-factura-vieja', 'Ventas\FacturacionLocal\FacturacionLocalNotaCreditoFacturaViejaController@index')->name('facturacion_local_nc_factura_vieja');
+    Route::post('ventas/facturacion-local/nota-credito-factura-vieja', 'Ventas\FacturacionLocal\FacturacionLocalNotaCreditoFacturaViejaController@emitir')->name('facturacion_local_nc_factura_vieja_emitir');
+
     Route::get('ventas/facturacion-local/locales', 'Ventas\FacturacionLocal\LocalVentaController@index')->name('facturacion_local_locales');
     Route::get('ventas/facturacion-local/locales/lista/{formato?}/{busqueda?}', 'Ventas\FacturacionLocal\LocalVentaController@listar')->name('lista_local_venta');
     Route::get('ventas/facturacion-local/locales/crear', 'Ventas\FacturacionLocal\LocalVentaController@crear')->name('crear_local_venta');

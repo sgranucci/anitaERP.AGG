@@ -228,7 +228,7 @@
                                                 <span class="text-danger">${{ number_format(abs((float) ($notaNc['total'] ?? 0)), 2, ',', '.') }}</span>
                                             </a>
                                         @endforeach
-                                    @elseif ($ncVentaId)
+                                    @elseif ($ncVentaId && (int) $ncVentaId !== (int) $r->venta_id)
                                         <a href="{{ route('facturacion_local_facturas_ver', ['ventaId' => $ncVentaId]) }}" class="small text-primary d-block">
                                             {{ $r->ventaNc?->codigo ?? ('#'.$ncVentaId) }}
                                             @if ($r->ventaNc)
@@ -268,7 +268,7 @@
                                             title="Generar nota de crédito">
                                             <i class="fas fa-undo text-warning"></i>
                                         </button>
-                                    @elseif ($ncVentaId)
+                                    @elseif ($ncVentaId && (int) $ncVentaId !== (int) $r->venta_id)
                                         <a href="{{ route('facturacion_local_facturas_ver', ['ventaId' => $ncVentaId]) }}"
                                            class="btn-accion-tabla tooltipsC"
                                            title="Ver nota de crédito">

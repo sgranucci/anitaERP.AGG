@@ -17,9 +17,13 @@ use Illuminate\Support\Facades\DB;
  * El signo es el del mayor (negativo = débito). Delta = mayor − deuda.
  * La corrida guarda el número del día y la siguiente avisa si se movió.
  *
+ * Solo entran cuentas de rubro Pasivo. Un banco, un gasto u otra cuenta cargada
+ * en el proveedor no se compara: su mayor se mueve por tesorería o por el asiento
+ * de la factura y la deuda abierta no vive ahí.
+ *
  * Si la empresa tiene cuenta de anticipos (`pago.anticipo_proveedor`), esa cuenta
- * entra al control. La deuda abierta de las OP adelantadas imputadas ahí se compara
- * con el mayor de anticipos, no con el de proveedores. Sin esa cuenta el anticipo
+ * entra igual, aunque no sea pasivo. La deuda abierta de las OP adelantadas
+ * imputadas ahí se compara con el mayor de anticipos. Sin esa cuenta el anticipo
  * sigue en proveedores, que es donde se contabiliza.
  */
 final class ProveedorDeudaMayorDeltaSupport
@@ -34,6 +38,9 @@ final class ProveedorDeudaMayorDeltaSupport
 
     /** @var array<int, true>|null pagoproveedor_id con Debe en la cuenta de anticipos */
     private ?array $pagosConAnticipo = null;
+
+    /** @var array<int, true>|null cuentas de pasivo de proveedores, más anticipos */
+    private ?array $cuentasProveedorCache = null;
 
     /**
      * Empresas con deuda abierta o mayor en una cuenta de proveedores al corte.
@@ -67,7 +74,11 @@ final class ProveedorDeudaMayorDeltaSupport
         $fechaAnterior = $this->fechaAnterior($empresaId, $fecha);
         $anterior = $fechaAnterior === null ? [] : $this->filasGuardadas($empresaId, $fechaAnterior);
 
-        $ids = array_values(array_unique(array_merge(array_keys($hoy), array_keys($anterior))));
+        $permitidas = $this->cuentasProveedor();
+        $ids = array_values(array_filter(
+            array_unique(array_merge(array_keys($hoy), array_keys($anterior))),
+            static fn ($cuentaId): bool => isset($permitidas[(int) $cuentaId])
+        ));
         $cuentas = $this->nombresCuenta($ids);
         $filas = [];
         $aGuardar = [];
@@ -154,7 +165,7 @@ final class ProveedorDeudaMayorDeltaSupport
         $keys = array_unique(array_merge(array_keys($deuda), array_keys($mayor)));
         foreach ($keys as $key) {
             [$empresaId, $cuentaId] = array_map('intval', explode('|', (string) $key));
-            if ($empresaId <= 0 || $cuentaId <= 0) {
+            if ($empresaId <= 0 || $cuentaId <= 0 || ! isset($cuentaIds[$cuentaId])) {
                 continue;
             }
             $deudaLocal = round((float) ($deuda[$key] ?? 0), 2);
@@ -174,10 +185,17 @@ final class ProveedorDeudaMayorDeltaSupport
     }
 
     /**
+     * Cuentas de proveedores de rubro Pasivo, homologadas al plan de cada empresa,
+     * más la cuenta de anticipos configurada.
+     *
      * @return array<int, true>
      */
     private function cuentasProveedor(): array
     {
+        if ($this->cuentasProveedorCache !== null) {
+            return $this->cuentasProveedorCache;
+        }
+
         $cuentas = [];
         Proveedor::query()
             ->select(['id', 'cuentacontable_id', 'cuentacontableme_id'])
@@ -205,11 +223,42 @@ final class ProveedorDeudaMayorDeltaSupport
             }
         }
 
+        $cuentas = $this->soloRubroPasivo($cuentas);
+
         foreach ($this->cuentasAnticipoPorEmpresa() as $cuentaId) {
-            $cuentas[$cuentaId] = true;
+            if ($cuentaId > 0) {
+                $cuentas[$cuentaId] = true;
+            }
         }
 
-        return $cuentas;
+        return $this->cuentasProveedorCache = $cuentas;
+    }
+
+    /**
+     * @param  array<int, true>  $cuentas
+     * @return array<int, true>
+     */
+    private function soloRubroPasivo(array $cuentas): array
+    {
+        if ($cuentas === []) {
+            return [];
+        }
+
+        $ids = DB::table('cuentacontable as c')
+            ->join('rubrocontable as r', 'r.id', '=', 'c.rubrocontable_id')
+            ->whereIn('c.id', array_keys($cuentas))
+            ->where('r.nombre', 'Pasivo')
+            ->pluck('c.id');
+
+        $pasivo = [];
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $pasivo[$id] = true;
+            }
+        }
+
+        return $pasivo;
     }
 
     /**

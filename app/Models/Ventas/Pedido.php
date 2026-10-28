@@ -15,6 +15,7 @@ use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Transporte;
 use App\Models\Seguridad\Usuario;
 use App\Support\Ventas\PedidoArticuloOrdenSupport;
+use App\Support\Ventas\PedidoPickingFerliSupport;
 use App\Traits\Ventas\PedidoTrait;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -127,19 +128,21 @@ class Pedido extends Model implements Auditable
 		$articuloId = (int) $articulo_id;
 		$combinacionId = (int) $combinacion_id;
 
-		return $query->with(['pedido_combinaciones' => function ($q) use ($articuloId, $combinacionId) {
+		$filtroLinea = static function () use ($articuloId, $combinacionId) {
+			return static function ($q) use ($articuloId, $combinacionId) {
 				$q->whereIn('ot_id', [-1, 0])->where('articulo_id', $articuloId);
 				if ($combinacionId > 0) {
 					$q->where('combinacion_id', $combinacionId);
 				}
-			}, 'pedido_combinaciones.combinaciones'])
-			->whereHas('pedido_combinaciones', function ($q) use ($articuloId, $combinacionId) {
-				$q->whereIn('ot_id', [-1, 0])
-					->where('articulo_id', $articuloId);
-				if ($combinacionId > 0) {
-					$q->where('combinacion_id', $combinacionId);
-				}
-			});
+				PedidoPickingFerliSupport::restringirLineaPendienteDeFabricar($q);
+			};
+		};
+
+		return $query->with([
+				'pedido_combinaciones' => $filtroLinea(),
+				'pedido_combinaciones.combinaciones',
+			])
+			->whereHas('pedido_combinaciones', $filtroLinea());
 	}
 }
 

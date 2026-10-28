@@ -160,6 +160,27 @@ class OrdentrabajoService
 		else 
 			$ids = $id_items;
 
+		if ($funcion === 'create' && $ids !== []) {
+			$erroresOt = [];
+			foreach ($ids as $pcIdGuardia) {
+				$lineaGuardia = $this->pedido_combinacionRepository->find($pcIdGuardia);
+				if (! $lineaGuardia) {
+					continue;
+				}
+				$errorLinea = PedidoPickingFerliSupport::errorSiLineaNoGeneraOt($lineaGuardia);
+				if ($errorLinea !== null) {
+					$erroresOt[] = $errorLinea;
+				}
+			}
+			if ($erroresOt !== []) {
+				return [
+					'id' => 0,
+					'nro_orden' => 0,
+					'error' => implode(' ', $erroresOt),
+				];
+			}
+		}
+
 		if ($ids !== []) {
 			$primer = $this->pedido_combinacionRepository->find($ids[0]);
 			if ($primer) {

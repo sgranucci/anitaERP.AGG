@@ -65,6 +65,61 @@ final class PedidoPickingFerliSupport
             || MovimientoStockFerliSupport::esCalzadosFerli();
     }
 
+    /**
+     * Alta de OT: solo líneas que todavía hay que fabricar.
+     * Picking ya sacó el par de stock; facturado no se vuelve a fabricar.
+     */
+    public static function restringirLineaPendienteDeFabricar($query): void
+    {
+        if (! self::habilitado()) {
+            return;
+        }
+
+        $query->where(function ($w) {
+            $w->whereNull('picking')
+                ->orWhere('picking', '<>', self::MARCADO);
+        });
+        $query->where(function ($w) {
+            $w->whereNull('picking_facturado')
+                ->orWhere('picking_facturado', '<>', self::FACTURADO);
+        });
+    }
+
+    /**
+     * Mensaje si la línea ya se cumplió por picking y no corresponde una OT nueva.
+     */
+    public static function errorSiLineaNoGeneraOt(Pedido_Combinacion $linea): ?string
+    {
+        if (! self::habilitado()) {
+            return null;
+        }
+
+        $texto = self::textoLineaParaOt($linea);
+
+        if (($linea->picking_facturado ?? self::NO_MARCADO) === self::FACTURADO) {
+            return $texto.' ya está facturada. No se puede generar la OT.';
+        }
+
+        if (($linea->picking ?? self::NO_MARCADO) === self::MARCADO) {
+            return $texto.' ya está en un picking y el par salió de stock. No se puede generar la OT.';
+        }
+
+        return null;
+    }
+
+    private static function textoLineaParaOt(Pedido_Combinacion $linea): string
+    {
+        $pedido = $linea->pedidos;
+        $codigo = $pedido->codigo ?? $linea->pedido_id;
+        $nombre = trim((string) ($linea->articulos->descripcion ?? ''));
+
+        if ($nombre !== '') {
+            return 'La línea '.$nombre.' del pedido '.$codigo;
+        }
+
+        return 'La línea del pedido '.$codigo;
+    }
+
     public static function crearPicking(?string $fechaYmd = null, ?string $observacion = null): Pedido_Picking
     {
         return DB::transaction(function () use ($fechaYmd, $observacion) {

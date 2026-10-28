@@ -44,6 +44,73 @@ final class ConceptoIvacompraFormulaSupport
         ];
     }
 
+    /**
+     * Tipo a grabar en anitaERP cuando Anita manda N (o vacío) y la fórmula lo define.
+     * El concepto de con(COD)*coef queda I; la base, G. Un tipo ya informado por Anita se respeta.
+     *
+     * @param  list<array{codigo?: string, formula?: string, tipoconcepto?: string}>  $filas
+     * @return array<string, string> codigo => G|I
+     */
+    public static function tiposPersistidosDesdeFormulas(array $filas): array
+    {
+        $tipoPorCodigo = [];
+        foreach ($filas as $fila) {
+            $codigo = trim((string) ($fila['codigo'] ?? ''));
+            if ($codigo === '') {
+                continue;
+            }
+            $tipo = strtoupper(trim((string) ($fila['tipoconcepto'] ?? '')));
+            $tipoPorCodigo[$codigo] = $tipo === '' ? 'N' : $tipo;
+        }
+
+        $corregidos = [];
+        foreach ($filas as $fila) {
+            $parsed = self::parse((string) ($fila['formula'] ?? ''));
+            if ($parsed === null) {
+                continue;
+            }
+
+            $codigoIva = trim((string) ($fila['codigo'] ?? ''));
+            if ($codigoIva !== '' && self::esNetoInformadoPorAnita($tipoPorCodigo[$codigoIva] ?? 'N')) {
+                $corregidos[$codigoIva] = 'I';
+            }
+
+            $claveBase = self::claveCodigoEnMapa($parsed['codigo_base'], $tipoPorCodigo);
+            if ($claveBase !== null && self::esNetoInformadoPorAnita($tipoPorCodigo[$claveBase])) {
+                $corregidos[$claveBase] = 'G';
+            }
+        }
+
+        return $corregidos;
+    }
+
+    /**
+     * @param  array<string, string>  $tipoPorCodigo
+     */
+    private static function claveCodigoEnMapa(string $codigo, array $tipoPorCodigo): ?string
+    {
+        $codigo = trim($codigo);
+        if ($codigo !== '' && array_key_exists($codigo, $tipoPorCodigo)) {
+            return $codigo;
+        }
+
+        $normalizado = ltrim($codigo, '0');
+        foreach (array_keys($tipoPorCodigo) as $clave) {
+            if (ltrim($clave, '0') === $normalizado) {
+                return $clave;
+            }
+        }
+
+        return null;
+    }
+
+    private static function esNetoInformadoPorAnita(string $tipo): bool
+    {
+        $tipo = strtoupper(trim($tipo));
+
+        return $tipo === '' || $tipo === 'N';
+    }
+
     public static function tasaPorcentajeDesdeFormula(?string $formula): float
     {
         $parsed = self::parse($formula);

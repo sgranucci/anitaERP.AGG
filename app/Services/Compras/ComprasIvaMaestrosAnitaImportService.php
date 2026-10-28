@@ -13,6 +13,7 @@ use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Compras\Tipotransaccion_Compra_Concepto_Ivacompra;
 use App\Models\Contable\Cuentacontable;
 use App\Support\Compras\ConceptoIvaAnitaEsquemaSupport;
+use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -197,6 +198,15 @@ final class ComprasIvaMaestrosAnitaImportService
         $omitidos = 0;
         $detalle = [];
         $empresaIdDefault = (int) (Cuentacontable::query()->orderBy('id')->value('empresa_id') ?? 1);
+        $tiposFormula = ConceptoIvacompraFormulaSupport::tiposPersistidosDesdeFormulas(
+            array_map(static function (object $fila): array {
+                return [
+                    'codigo' => trim((string) ($fila->concc_concepto ?? '')),
+                    'formula' => (string) ($fila->concc_formula ?? ''),
+                    'tipoconcepto' => (string) ($fila->concc_tipo_conc ?? 'N'),
+                ];
+            }, $filas)
+        );
 
         foreach ($filas as $fila) {
             $codigo = trim((string) ($fila->concc_concepto ?? ''));
@@ -205,6 +215,9 @@ final class ComprasIvaMaestrosAnitaImportService
             }
 
             $payload = $this->mapearConcepto($fila, $indiceColumnas);
+            if (isset($tiposFormula[$codigo])) {
+                $payload['tipoconcepto'] = $tiposFormula[$codigo];
+            }
             $existente = $this->buscarConcepto($codigo);
 
             if ($existente === null) {

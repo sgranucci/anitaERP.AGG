@@ -19,8 +19,8 @@
         <p class="text-muted small mb-3">
             Facturas de fondo fijo, gastos bancarios u otros comprobantes de IVA compras.
             @if (! empty($muestraCobranzaTarjeta))
-                La liquidación de tarjeta arma el DTC con los gastos del cupón: la caja queda por el neto depositado
-                y los cupones se acreditan en la cuenta contable de la tarjeta.
+                La liquidación de tarjeta arma el DTC con los gastos del cupón: la cuenta de caja y el neto
+                se cargan desde el mismo cuadro, y los cupones se acreditan en la cuenta contable de la tarjeta.
             @endif
         </p>
         <input type="hidden" name="comprobantes_ivacompra_json" id="comprobantes_ivacompra_json" value="">

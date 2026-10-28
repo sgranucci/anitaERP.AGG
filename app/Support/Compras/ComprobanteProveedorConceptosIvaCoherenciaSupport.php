@@ -750,29 +750,7 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
 
         $faltantes = array_diff($tasasKeys, array_keys($resultado));
         if ($faltantes !== []) {
-            $query = Concepto_Ivacompra::query()
-                ->with('impuestos')
-                ->where('tipoconcepto', 'G');
-
-            if ($hayPermitidos) {
-                // Solo conceptos del tipo de comprobante / lista de la OC.
-                $query->whereIn('id', array_keys($permitidos));
-            }
-
-            $extra = $query
-                // Preferir gravados “de factura” (bienes/servicios/locación/uso) sobre
-                // financieros / descuentos / comisiones (evita código 54 ante 50).
-                ->orderByRaw("CASE
-                    WHEN nombre LIKE 'Gravado Bienes%' OR nombre LIKE 'Gravado Bien %' THEN 0
-                    WHEN nombre LIKE 'Gravado Servic%' THEN 1
-                    WHEN nombre LIKE 'Gravado Locacion%' THEN 2
-                    WHEN nombre LIKE 'Gravado Bs%' THEN 3
-                    WHEN nombre LIKE 'Gravado%' THEN 4
-                    ELSE 5
-                END")
-                ->orderBy('codigo')
-                ->orderBy('id')
-                ->get();
+            $extra = self::candidatosGravado($conceptoIdsPermitidos);
 
             foreach ($faltantes as $tasaKey) {
                 $candidatos = $extra->filter(
@@ -789,6 +767,60 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
         }
 
         return $resultado;
+    }
+
+    /**
+     * Gravados de la lista del tipo (o del maestro, si no hay lista).
+     *
+     * Anita deja el neto en tipoconcepto N —p. ej. «COMPRAS 21%», código 2,
+     * base de con(2)*0.21—. Dentro de la lista se carga todo el tipo y se
+     * infiere G desde esa fórmula. Sin lista se buscan los que el maestro ya marcó G.
+     *
+     * @param  list<int>  $conceptoIdsPermitidos
+     * @return Collection<int, Concepto_Ivacompra>
+     */
+    private static function candidatosGravado(array $conceptoIdsPermitidos): Collection
+    {
+        $query = Concepto_Ivacompra::query()->with('impuestos');
+        if ($conceptoIdsPermitidos !== []) {
+            $query->whereIn('id', $conceptoIdsPermitidos);
+        } else {
+            $query->where('tipoconcepto', 'G');
+        }
+
+        $extra = $query->get();
+        ConceptoIvacompraFormulaSupport::inferirTiposYTasasEnColeccion($extra);
+
+        return $extra
+            ->filter(
+                static fn (Concepto_Ivacompra $c): bool => strtoupper((string) ($c->tipoconcepto ?? '')) === 'G'
+            )
+            ->sortBy(static function (Concepto_Ivacompra $c): array {
+                return [
+                    self::prioridadNombreGravado((string) $c->nombre),
+                    (string) $c->codigo,
+                    (int) $c->id,
+                ];
+            })
+            ->values();
+    }
+
+    /**
+     * Misma preferencia que el CASE anterior: bienes, servicios, locación y uso
+     * antes que financieros, descuentos o comisiones.
+     */
+    private static function prioridadNombreGravado(string $nombre): int
+    {
+        $nombre = trim($nombre);
+
+        return match (true) {
+            str_starts_with($nombre, 'Gravado Bienes') || str_starts_with($nombre, 'Gravado Bien ') => 0,
+            str_starts_with($nombre, 'Gravado Servic') => 1,
+            str_starts_with($nombre, 'Gravado Locacion') => 2,
+            str_starts_with($nombre, 'Gravado Bs') => 3,
+            str_starts_with($nombre, 'Gravado') => 4,
+            default => 5,
+        };
     }
 
     /**

@@ -3828,6 +3828,17 @@ class FacturacionService
 						(int) $empresa->id,
 						(int) ($puntoventa->id ?? 0),
 					);
+					$opLocalNc = is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : [];
+					if (! empty($opLocalNc[FacturacionLocalCuentaVentaSupport::FLAG_IMPUTAR_NOTAS_CREDITO])) {
+						$cuentaNcLocalId = FacturacionLocalCuentaVentaSupport::cuentaNotasCreditoId((int) $empresa->id);
+						if ($cuentaNcLocalId <= 0) {
+							return ['error' => 'Falta la cuenta de notas de crédito de locales (L-notas de crédito) en Cuentas automáticas.'];
+						}
+						$dataFactura = FacturacionLocalCuentaVentaSupport::aplicarNotasCredito(
+							$dataFactura,
+							(int) $empresa->id
+						);
+					}
 				}
 				if ($esNcpCobranza) {
 					$cuentaNcpId = ParametroSistemaSupport::ncpProntoPagoCuentaIdParaEmpresa((int) $empresa->id);
@@ -9442,6 +9453,12 @@ class FacturacionService
 					);
 				}
 			} else {
+			$contrapartidaForzada = is_array($opcionesEmision)
+				? (int) ($opcionesEmision[FacturacionLocalCuentaVentaSupport::FLAG_CONTRAPARTIDA_CUENTA] ?? 0)
+				: 0;
+			if ($contrapartidaForzada > 0) {
+				$contrapartida_id = $contrapartidaForzada;
+			}
 			$cuentacontablereal = null;
 			$contrapartidaId = (int) $contrapartida_id;
 			if ($contrapartidaId > 0) {

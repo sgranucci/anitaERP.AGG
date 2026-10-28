@@ -523,6 +523,12 @@ class FacturacionLocalFacturasController extends Controller
         $base->getQuery()->columns = null;
 
         $fac = (clone $base)
+            ->whereNotExists(function ($sub) {
+                $sub->selectRaw('1')
+                    ->from('facturacion_local_emision as fle_propia')
+                    ->whereColumn('fle_propia.venta_id', 'venta.id')
+                    ->whereColumn('fle_propia.venta_nc_id', 'venta.id');
+            })
             ->selectRaw('COUNT(venta.id) as cantidad_facturas')
             ->selectRaw('COALESCE(SUM(venta.total), 0) as total_facturas')
             ->first();

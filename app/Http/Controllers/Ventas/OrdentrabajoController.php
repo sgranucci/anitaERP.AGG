@@ -368,23 +368,29 @@ class OrdentrabajoController extends Controller
 																$deposito_id,
 																(!$leyenda ? ' ' : $leyenda), 'create');
 
+		if (! empty($data['error'])) {
+			if ($origen == 'pedido') {
+				return [
+					'id' => $data['id'] ?? 0,
+					'nro_orden' => $data['nro_orden'] ?? 0,
+					'error' => $data['error'],
+				];
+			}
+
+			return redirect('ventas/ordenestrabajo')->with('errores', [$data['error']]);
+		}
+
 		if ($origen == 'pedido')
 		{
-			$respuesta = [
+			return [
 				'id' => $data['id'] ?? 0,
 				'nro_orden' => $data['nro_orden'] ?? 0,
 			];
-			if (! empty($data['error'])) {
-				$respuesta['error'] = $data['error'];
-			}
+		}
 
-			return $respuesta;
-		}
-		else
-		{
-			$mensaje = 'Orden de trabajo '.$data['id'].' creada con exito ';
-        	return redirect('ventas/ordenestrabajo')->with('mensaje', $mensaje);
-		}
+		$mensaje = 'Orden de trabajo '.$data['id'].' creada con exito ';
+
+		return redirect('ventas/ordenestrabajo')->with('mensaje', $mensaje);
     }
 
     /**

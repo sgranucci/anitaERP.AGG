@@ -107,6 +107,17 @@ final class CuentaAutomaticaClaves
      */
     public const FACTURACION_LOCAL_VENTAS = 'facturacion_local.ventas';
 
+    /**
+     * Neto de notas de crédito varias de locales (sin factura origen).
+     * No usa L-VENTAS ni el efectivo del local.
+     */
+    public const FACTURACION_LOCAL_NOTAS_CREDITO = 'facturacion_local.notas_credito';
+
+    /**
+     * Contrapartida de esas notas de crédito. No es la caja de efectivo del local.
+     */
+    public const FACTURACION_LOCAL_VALORES = 'facturacion_local.valores';
+
     /** IVA fiscal general (todas las ventas / cierres que lo consumen). */
     public const VENTAS_IVA_DEBITO_FISCAL = 'ventas.iva_debito_fiscal';
 
@@ -510,6 +521,20 @@ final class CuentaAutomaticaClaves
             self::FACTURACION_LOCAL_VENTAS => [
                 'grupo' => 'Facturación local',
                 'descripcion' => 'Neto de ventas de locales (L-VENTAS). POS, Tiendanube y Facturante imputan el comprobante completo acá',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::FACTURACION_LOCAL_NOTAS_CREDITO => [
+                'grupo' => 'Facturación local',
+                'descripcion' => 'Neto de notas de crédito varias (L-notas de crédito). No usa L-VENTAS ni el efectivo del local',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::FACTURACION_LOCAL_VALORES => [
+                'grupo' => 'Facturación local',
+                'descripcion' => 'Contrapartida de notas de crédito varias (cuenta de valores). No mueve el efectivo del local',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,
