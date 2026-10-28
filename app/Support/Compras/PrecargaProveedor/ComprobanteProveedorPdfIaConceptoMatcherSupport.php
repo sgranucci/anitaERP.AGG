@@ -377,6 +377,13 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
                 || ($tipoConcepto === 'N' && $this->nombreSugierePercepcionIibb($nombre));
         }
 
+        // IVA discriminado no puede imputarse a gravado, exento ni no gravado.
+        if (str_contains($tipoLinea, 'iva')
+            && ! str_contains($tipoLinea, 'percepcion')
+            && ! str_contains($tipoLinea, 'retencion')) {
+            return $tipoConcepto === 'I';
+        }
+
         if (str_contains($tipoLinea, 'percepcion_iva')) {
             if ($tipoConcepto === ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IVA) {
                 return true;

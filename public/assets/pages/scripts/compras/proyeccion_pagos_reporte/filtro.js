@@ -173,20 +173,38 @@ function proyMoverItem($item, direccion) {
     }
 }
 
+function proyHtmlConsultaProveedor(respuesta) {
+    if (respuesta && typeof respuesta === 'object') {
+        return respuesta.data || '';
+    }
+
+    var resp = String(respuesta || '').trim();
+    if (resp === '') {
+        return '';
+    }
+
+    try {
+        var parsed = JSON.parse(resp);
+        return (parsed && parsed.data) ? parsed.data : '';
+    } catch (e) {
+        return resp.indexOf('<tr') >= 0 ? resp : '';
+    }
+}
+
 function proyBuscarProveedoresModal(consulta) {
+    var base = (typeof carpetaBase === 'string') ? carpetaBase.replace(/\/$/, '') : '';
+    $('#datosproveedor').html('<tr><td colspan="9" class="text-muted">Buscando…</td></tr>');
     $.ajax({
-        url: carpetaBase + '/compras/proveedor/consultaproveedor',
+        url: base + '/compras/proveedor/consultaproveedor',
         type: 'POST',
-        dataType: 'HTML',
+        dataType: 'json',
         headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
         data: { consulta: consulta },
     })
         .done(function (respuesta) {
-            var html = '';
-            try {
-                html = JSON.parse(respuesta).data || '';
-            } catch (e) {
-                html = respuesta;
+            var html = proyHtmlConsultaProveedor(respuesta);
+            if (!html) {
+                html = '<tr><td colspan="9" class="text-muted">Sin resultados</td></tr>';
             }
             $('#datosproveedor').html(html);
         })
@@ -201,17 +219,42 @@ function proyAbrirModalProveedor() {
     $('#consultaproveedorModal').modal('show');
 }
 
-function proyAgregarProveedor(codigo) {
+var proyProveedoresElegidos = {};
+
+function proyTextoCelda($tr, selector) {
+    return $tr.find(selector).first().clone().children().remove().end().text().replace(/\s+/g, ' ').trim();
+}
+
+function proyMostrarProveedoresElegidos(codigos) {
+    var $el = $('#proy-proveedores-elegidos');
+    if (!$el.length) {
+        return;
+    }
+
+    var partes = (codigos || []).map(function (codigo) {
+        var nombre = proyProveedoresElegidos[codigo];
+        return nombre ? (codigo + ' — ' + nombre) : codigo;
+    }).filter(Boolean);
+
+    $el.text(partes.length ? partes.join(' · ') : '');
+}
+
+function proyAgregarProveedor(codigo, nombre) {
     var $inp = $('#proveedores_codigo');
     var actual = proyNormalizar($inp.val());
     var codigos = actual === '' ? [] : actual.split(/[,;]+/).map(function (s) { return s.trim(); }).filter(Boolean);
-    var codigoStr = String(codigo).trim();
+    var codigoStr = String(codigo || '').trim();
+    var nombreStr = String(nombre || '').trim();
 
     if (codigoStr !== '' && codigos.indexOf(codigoStr) < 0) {
         codigos.push(codigoStr);
     }
+    if (codigoStr !== '' && nombreStr !== '') {
+        proyProveedoresElegidos[codigoStr] = nombreStr;
+    }
 
     $inp.val(codigos.join(','));
+    proyMostrarProveedoresElegidos(codigos);
 }
 
 function proyToggleGrupo(grupoId, colapsar) {
@@ -356,9 +399,10 @@ function activaEventosProyeccionPagos() {
             e.stopImmediatePropagation();
 
             var $tr = $(this).closest('tr');
-            var codigo = $tr.find('.codigo').first().text().trim();
+            var codigo = proyTextoCelda($tr, 'td.codigoproveedor, td.codigo');
+            var nombre = proyTextoCelda($tr, 'td.nombreproveedor, td.nombre');
             if (codigo !== '') {
-                proyAgregarProveedor(codigo);
+                proyAgregarProveedor(codigo, nombre);
             }
 
             $('#consultaproveedorModal').modal('hide');

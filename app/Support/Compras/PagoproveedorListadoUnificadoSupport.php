@@ -183,6 +183,7 @@ final class PagoproveedorListadoUnificadoSupport
                 DB::raw("CONCAT('pp-', pp.id) as fila_clave"),
                 'pp.id as pk_id',
                 'pp.fecha',
+                'pp.created_at as hora_emision',
                 'pp.tipocomprobante',
                 'pp.letra',
                 'pp.sucursal',
@@ -266,6 +267,7 @@ final class PagoproveedorListadoUnificadoSupport
                 DB::raw("CONCAT('ie-', cm.id) as fila_clave"),
                 'cm.id as pk_id',
                 'cm.fecha',
+                'cm.created_at as hora_emision',
                 DB::raw("COALESCE(NULLIF(TRIM(ttc.abreviatura), ''), 'OPP') as tipocomprobante"),
                 DB::raw("'' as letra"),
                 DB::raw('COALESCE(empresa.codigo, cm.empresa_id, 0) as sucursal'),
@@ -373,6 +375,7 @@ final class PagoproveedorListadoUnificadoSupport
                 cuentasCaja: $fila->cuentasCaja,
                 revertible: $fila->revertible,
                 mailEnviado: true,
+                horaEmision: $fila->horaEmision,
             );
 
             return $nueva->conExtrasDe($fila);

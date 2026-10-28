@@ -234,8 +234,8 @@ class ComprobanteProveedorPersistenciaService
         $lista = $fuera->map(fn ($c) => (string) $c->codigo.' '.$c->nombre)->implode(', ');
 
         return 'El IVA '.$lista.' no corresponde al tipo '.$abrev
-            .' y no tiene un equivalente único en ese tipo. Use los conceptos de IVA del tipo '
-            .'o agregue el concepto al tipo de transacción de compra.';
+            .' y no tiene un equivalente único en ese tipo. Use los conceptos de IVA del tipo '.$abrev
+            .' o agregue el concepto al tipo de transacción de compra.';
     }
 
     /**

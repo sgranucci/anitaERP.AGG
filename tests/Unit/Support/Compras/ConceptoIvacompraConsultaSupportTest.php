@@ -17,6 +17,17 @@ class ConceptoIvacompraConsultaSupportTest extends TestCase
         $this->assertTrue($params[2]->allowsNull());
     }
 
+    public function test_hermano_indirecto_solo_para_tipo_directo(): void
+    {
+        $this->assertSame('FIB', ConceptoIvacompraConsultaSupport::abreviaturaHermanoIndirecto('FDB'));
+        $this->assertSame('FIL', ConceptoIvacompraConsultaSupport::abreviaturaHermanoIndirecto('fdl'));
+        $this->assertSame('CIB', ConceptoIvacompraConsultaSupport::abreviaturaHermanoIndirecto('CDB'));
+        $this->assertNull(ConceptoIvacompraConsultaSupport::abreviaturaHermanoIndirecto('FIB'));
+        $this->assertNull(ConceptoIvacompraConsultaSupport::abreviaturaHermanoIndirecto('FDS'));
+        $this->assertNull(ConceptoIvacompraConsultaSupport::abreviaturaHermanoIndirecto('FNB'));
+        $this->assertNull(ConceptoIvacompraConsultaSupport::abreviaturaHermanoIndirecto('FGA'));
+    }
+
     public function test_ids_concepto_tipo_invalido_vacio(): void
     {
         $this->assertSame([], ConceptoIvacompraConsultaSupport::idsConceptoParaTipo(0));

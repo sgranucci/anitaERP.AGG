@@ -14,7 +14,7 @@
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/listado-filtros.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/includes/reporte-filtros-resultado.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/reporte-filtros-resultado.js')) ?: time() }}"></script>
-<script src="{{ asset('assets/pages/scripts/compras/proyeccion_pagos_reporte/filtro.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/compras/proyeccion_pagos_reporte/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proyeccion_pagos_reporte/filtro.js')) ?: time() }}"></script>
 @endsection
 
 @section('contenido')
@@ -168,6 +168,7 @@
                                 </div>
                             </div>
                             <small class="form-text text-muted">C&oacute;digos por coma o rango con <code>/</code>.</small>
+                            <div class="small text-primary mt-1" id="proy-proveedores-elegidos"></div>
                         </div>
                         <label for="proveedor_nombre" class="{{ $colLabel }}">Nombre contiene</label>
                         <div class="{{ $colInput }}">
