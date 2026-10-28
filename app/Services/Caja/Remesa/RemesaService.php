@@ -50,6 +50,7 @@ final class RemesaService
 
         $cuentas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
+            ->paraElegir(array_map('intval', array_keys($montosGuardados)))
             ->with('monedas:id,abreviatura,nombre')
             ->whereHas('usocuentacajas', fn ($q) => $q->where('usocuentacaja.id', $usoId))
             ->get(['id', 'codigo', 'nombre', 'descripcion_operaciones', 'moneda_id']);

@@ -209,6 +209,9 @@ class InterbankingArchivoPagoService
             if ($porId !== null) {
                 return $porId;
             }
+            if (Cuentacaja::query()->whereKey($cuentacajaId)->exists()) {
+                return null;
+            }
         }
 
         $hints = [];
@@ -227,6 +230,7 @@ class InterbankingArchivoPagoService
 
         $cuentas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
+            ->operativa()
             ->whereNotNull('cbu')
             ->where('cbu', '!=', '')
             ->orderBy('codigo')
@@ -257,7 +261,7 @@ class InterbankingArchivoPagoService
             return null;
         }
 
-        $q = Cuentacaja::query()->whereKey($cuentacajaId);
+        $q = Cuentacaja::query()->whereKey($cuentacajaId)->operativa();
         if ($empresaId > 0) {
             $q->paraEmpresa($empresaId);
         }

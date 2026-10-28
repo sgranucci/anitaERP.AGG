@@ -62,8 +62,8 @@
 		<thead>
 			<tr>
 				<th style="width: 4%;">ID</th>
-				<th style="width: 12%;">Nombre</th>
-				<th style="width: 10%;">Desc. operaciones</th>
+				<th style="width: 10%;">Nombre</th>
+				<th style="width: 8%;">Desc. operaciones</th>
 				<th style="width: 5%;">C&oacute;digo</th>
 				<th style="width: 6%;">Tipo cuenta</th>
 				<th style="width: 9%;">Banco</th>
@@ -72,7 +72,8 @@
 				<th style="width: 5%;">Moneda</th>
 				<th style="width: 10%;">CBU</th>
 				<th style="width: 8%;">Cuenta Interbanking</th>
-				<th style="width: 12%;">Usos</th>
+				<th style="width: 6%;">Operativa</th>
+				<th style="width: 10%;">Usos</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -95,6 +96,7 @@
 					<td>{{ $data->monedas->nombre ?? '' }}</td>
 					<td>{{ $data->cbu }}</td>
 					<td>{{ $data->cuenta_interbanking }}</td>
+					<td>{{ !empty($data->operativa) ? 'Sí' : 'No' }}</td>
 					<td>{{ $data->usocuentacajas->pluck('nombre')->implode(', ') }}</td>
 				</tr>
 			@endforeach

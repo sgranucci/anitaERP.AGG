@@ -59,6 +59,19 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         return $query->get();
     }
 
+    /**
+     * Cuentas que se pueden elegir. Los ids ya grabados en el documento siguen en la lista.
+     *
+     * @param  list<int>  $incluirIds
+     */
+    public function paraSeleccion(array $incluirIds = [])
+    {
+        $query = $this->model->with('empresas')->with('cuentacontables')->with('bancos')->with('usocuentacajas');
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'empresa_id', true);
+
+        return $query->paraElegir($incluirIds)->orderBy('nombre')->get();
+    }
+
     public function leeCuentacaja($filtros, $flPaginando = null)
     {
         $hay_cuentacaja = Cuentacaja::first();
@@ -441,6 +454,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             "moneda_id" => $data->tesm_cod_mon,
             "cbu" => $numeroCbu,
             "visible_cierre_caja" => ! EntornoEmpresaSupport::esFerli(),
+            "operativa" => true,
             ];
 
         $this->model->create($arr_campos);
@@ -594,6 +608,10 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
         if (array_key_exists('es_tarjeta', $data)) {
             $data['es_tarjeta'] = filter_var($data['es_tarjeta'], FILTER_VALIDATE_BOOLEAN);
+        }
+
+        if (array_key_exists('operativa', $data)) {
+            $data['operativa'] = filter_var($data['operativa'], FILTER_VALIDATE_BOOLEAN);
         }
 
         return $data;

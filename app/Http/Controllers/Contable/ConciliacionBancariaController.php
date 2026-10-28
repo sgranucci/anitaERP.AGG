@@ -38,6 +38,7 @@ class ConciliacionBancariaController extends Controller
         if ($empresaId > 0) {
             $cuentasCaja = Cuentacaja::query()
                 ->paraEmpresa($empresaId)
+                ->operativa()
                 ->with('cuentacontables')
                 ->whereNotNull('cuenta_interbanking')
                 ->where('cuenta_interbanking', '!=', '')
@@ -206,6 +207,7 @@ class ConciliacionBancariaController extends Controller
 
         $cuentas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
+            ->operativa()
             ->whereIn('codigo', $variantes)
             ->whereNotNull('cuenta_interbanking')
             ->where('cuenta_interbanking', '!=', '')

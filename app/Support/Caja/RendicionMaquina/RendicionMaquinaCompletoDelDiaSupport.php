@@ -920,6 +920,7 @@ final class RendicionMaquinaCompletoDelDiaSupport
 
         $cuentas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
+            ->operativa()
             ->whereHas('usocuentacajas', fn ($q) => $q->where('usocuentacaja.id', $usoId))
             ->get(['id', 'codigo', 'nombre', 'descripcion_operaciones', 'moneda_id']);
 

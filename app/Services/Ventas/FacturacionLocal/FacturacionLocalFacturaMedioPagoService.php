@@ -105,6 +105,7 @@ final class FacturacionLocalFacturaMedioPagoService
         }
 
         $query = Cuentacaja::query()
+            ->operativa()
             ->whereIn('id', $cuentaIdsLocal)
             ->whereIn('codigo', $variantes)
             ->with('monedas:id,abreviatura,nombre');
@@ -221,6 +222,9 @@ final class FacturacionLocalFacturaMedioPagoService
                     $nuevaCuenta = Cuentacaja::query()->find($nuevaCuentaId);
                     if ($nuevaCuenta === null) {
                         throw new \InvalidArgumentException('Cuenta de caja inexistente.');
+                    }
+                    if (! $nuevaCuenta->esOperativa()) {
+                        throw new \InvalidArgumentException(Cuentacaja::MENSAJE_NO_OPERATIVA);
                     }
 
                     if ((int) $nuevaCuenta->moneda_id > 0 && (int) $nuevaCuenta->moneda_id !== (int) $linea->moneda_id) {
@@ -386,6 +390,9 @@ final class FacturacionLocalFacturaMedioPagoService
 
         return $local->cuentacajas
             ->filter(function (Cuentacaja $c) use ($empresaId) {
+                if (! $c->esOperativa()) {
+                    return false;
+                }
                 if ($empresaId <= 0) {
                     return true;
                 }

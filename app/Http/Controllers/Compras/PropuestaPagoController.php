@@ -304,12 +304,24 @@ class PropuestaPagoController extends Controller
         $lote = $data->id ? PropuestaPagoLoteBancarioSupport::ultimoLote((int) $data->id) : null;
         $lotesHist = $data->id ? PropuestaPagoLoteBancarioSupport::historial((int) $data->id) : collect();
 
+        $incluirCuentas = [];
+        if ((int) ($data->cuentacaja_id ?? 0) > 0) {
+            $incluirCuentas[] = (int) $data->cuentacaja_id;
+        }
+        if ($data->exists) {
+            foreach ($data->lineas as $lineaPp) {
+                if ((int) ($lineaPp->cuentacaja_id ?? 0) > 0) {
+                    $incluirCuentas[] = (int) $lineaPp->cuentacaja_id;
+                }
+            }
+        }
+
         return [
             'data' => $data,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'moneda_query' => $this->monedaRepository->all(),
             'caja_query' => $this->cajaRepository->all(),
-            'cuentacaja_query' => $this->cuentacajaRepository->all(),
+            'cuentacaja_query' => $this->cuentacajaRepository->paraSeleccion($incluirCuentas),
             'chequera_query' => $this->chequeraRepository->all(),
             'lote_bancario' => $lote,
             'lotes_bancarios' => $lotesHist,

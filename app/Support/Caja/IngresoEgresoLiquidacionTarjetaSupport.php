@@ -329,7 +329,7 @@ final class IngresoEgresoLiquidacionTarjetaSupport
         }
 
         $tarjetas = [];
-        foreach (Cuentacaja::query()->where('es_tarjeta', true)->orderBy('nombre')->get() as $cuenta) {
+        foreach (Cuentacaja::query()->operativa()->where('es_tarjeta', true)->orderBy('nombre')->get() as $cuenta) {
             $contable = (int) $cuenta->cuentacontable_id > 0
                 ? Cuentacontable::query()->find((int) $cuenta->cuentacontable_id)
                 : null;

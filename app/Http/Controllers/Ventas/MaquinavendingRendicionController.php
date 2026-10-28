@@ -355,6 +355,7 @@ class MaquinavendingRendicionController extends Controller
 
         $cuentas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
+            ->operativa()
             ->whereHas('usocuentacajas', fn ($r) => $r->whereKey($usoId))
             ->when($excluidas !== [], fn ($q) => $q->whereNotIn('id', $excluidas))
             ->with('monedas:id,abreviatura,nombre')

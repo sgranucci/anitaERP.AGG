@@ -83,6 +83,7 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                             <th style="width:5.5rem;">Tipo</th>
                             <th style="width:3.5rem;" title="Es tarjeta / pide cupón">Tarj.</th>
                             <th style="width:3.5rem;" title="Visible en el cierre de caja">Cierre</th>
+                            <th style="width:3.5rem;" title="Se puede elegir en un movimiento nuevo">Oper.</th>
                             <th style="min-width:6rem;">Banco</th>
                             <th style="min-width:6rem;">Empresa</th>
                             <th style="min-width:8rem;">Cta. contable</th>
@@ -128,6 +129,9 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                             </td>
                             <td class="text-center small" title="{{ !empty($data->visible_cierre_caja) ? 'Entra al cierre de caja' : 'No entra al cierre de caja' }}">
                                 {{ !empty($data->visible_cierre_caja) ? 'Sí' : '' }}
+                            </td>
+                            <td class="text-center small" title="{{ !empty($data->operativa) ? 'Se puede elegir' : 'No se puede elegir en movimientos nuevos' }}">
+                                {{ !empty($data->operativa) ? 'Sí' : 'No' }}
                             </td>
                             <td class="small" title="{{ $data->bancos->nombre ?? '' }}">
                                 {{ \Illuminate\Support\Str::limit((string) ($data->bancos->nombre ?? ''), 18) }}

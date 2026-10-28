@@ -452,6 +452,7 @@ class PagoproveedorController extends Controller
             $datos = $this->devolverRetencionesService->datos($id);
             $empresaId = (int) (Pagoproveedor::query()->whereKey($id)->value('empresa_id') ?? 0);
             $datos['cuentacajas'] = \App\Models\Caja\Cuentacaja::query()
+                ->operativa()
                 ->when($empresaId > 0, fn ($q) => $q->where('empresa_id', $empresaId))
                 ->orderBy('nombre')
                 ->get(['id', 'nombre', 'codigo', 'empresa_id'])

@@ -14,8 +14,10 @@ class Cuentacaja extends Model implements Auditable
     use CuentacajaTrait;
     use \OwenIt\Auditing\Auditable;
 
+    public const MENSAJE_NO_OPERATIVA = 'La cuenta de caja no está operativa.';
+
     protected $fillable = ['nombre', 'descripcion_operaciones', 'orden', 'codigo', 'tipocuenta', 'es_tarjeta',
-        'visible_cierre_caja',
+        'visible_cierre_caja', 'operativa',
         'banco_id', 'empresa_id', 'cuentacontable_id', 'moneda_id', 'cbu', 'cuenta_interbanking'];
 
     protected $table = 'cuentacaja';
@@ -24,12 +26,14 @@ class Cuentacaja extends Model implements Auditable
         'orden' => 'integer',
         'es_tarjeta' => 'boolean',
         'visible_cierre_caja' => 'boolean',
+        'operativa' => 'boolean',
     ];
 
     protected $attributes = [
         'orden' => 0,
         'es_tarjeta' => false,
         'visible_cierre_caja' => false,
+        'operativa' => true,
     ];
 
     /**
@@ -38,6 +42,44 @@ class Cuentacaja extends Model implements Auditable
     public function pideCupon(): bool
     {
         return (bool) $this->es_tarjeta;
+    }
+
+    public function esOperativa(): bool
+    {
+        return (bool) $this->operativa;
+    }
+
+    /**
+     * Cuentas que se pueden elegir en un movimiento nuevo.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @param  list<int>  $incluirIds  Documentos ya grabados: el id sigue visible.
+     * @return \Illuminate\Database\Eloquent\Builder<self>
+     */
+    public function scopeParaElegir($query, array $incluirIds = [])
+    {
+        $tabla = $query->getModel()->getTable();
+        $incluirIds = array_values(array_unique(array_filter(
+            array_map('intval', $incluirIds),
+            static fn (int $id) => $id > 0
+        )));
+
+        if ($incluirIds === []) {
+            return $query->where($tabla.'.operativa', true);
+        }
+
+        return $query->where(function ($q) use ($tabla, $incluirIds) {
+            $q->where($tabla.'.operativa', true)->orWhereIn($tabla.'.id', $incluirIds);
+        });
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<self>
+     */
+    public function scopeOperativa($query)
+    {
+        return $query->paraElegir();
     }
 
     /**

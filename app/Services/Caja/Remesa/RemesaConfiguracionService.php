@@ -98,6 +98,9 @@ final class RemesaConfiguracionService
         if ($cuenta === null) {
             throw new InvalidArgumentException('No se encontró la cuenta de caja #'.$cuentacajaId.'.');
         }
+        if (! $cuenta->esOperativa()) {
+            throw new InvalidArgumentException(Cuentacaja::MENSAJE_NO_OPERATIVA);
+        }
 
         $cuenta->usocuentacajas()->syncWithoutDetaching([$usoId]);
     }
@@ -109,7 +112,7 @@ final class RemesaConfiguracionService
             throw new InvalidArgumentException('Indique el código de la cuenta de caja.');
         }
 
-        $query = Cuentacaja::query()->where('codigo', $codigo);
+        $query = Cuentacaja::query()->operativa()->where('codigo', $codigo);
         if ($empresaId !== null && $empresaId > 0) {
             $query->paraEmpresa($empresaId);
         }

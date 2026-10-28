@@ -103,6 +103,7 @@ final class GastronomiaFacturaMedioPagoService
         ])));
 
         $query = Cuentacaja::query()
+            ->operativa()
             ->whereHas('usocuentacajas', fn ($r) => $r->whereKey($usoId))
             ->whereIn('codigo', $variantes)
             ->with('monedas:id,abreviatura,nombre');
@@ -211,6 +212,9 @@ final class GastronomiaFacturaMedioPagoService
                     $nuevaCuenta = Cuentacaja::query()->find($nuevaCuentaId);
                     if ($nuevaCuenta === null) {
                         throw new \InvalidArgumentException('Cuenta de caja inexistente.');
+                    }
+                    if (! $nuevaCuenta->esOperativa()) {
+                        throw new \InvalidArgumentException(Cuentacaja::MENSAJE_NO_OPERATIVA);
                     }
 
                     if (GastronomiaCuentacajaSoloAutomaticaSupport::esSoloAutomatica(
@@ -371,6 +375,7 @@ final class GastronomiaFacturaMedioPagoService
 
         return Cuentacaja::query()
             ->paraEmpresa($empresaId)
+            ->operativa()
             ->whereHas('usocuentacajas', fn ($r) => $r->whereKey($usoId))
             ->when($excluidas !== [], fn ($q) => $q->whereNotIn('id', $excluidas))
             ->with('monedas:id,abreviatura,nombre')

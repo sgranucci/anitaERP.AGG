@@ -2,13 +2,13 @@
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
 			<tr>
-				<td colspan="12" style="height: 52px;">&#160;</td>
+				<td colspan="13" style="height: 52px;">&#160;</td>
 			</tr>
 		</tbody>
 	@endif
 	<tbody>
 		<tr>
-			<td colspan="12"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de cuentas de caja</h2></td>
+			<td colspan="13"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de cuentas de caja</h2></td>
 		</tr>
 	</tbody>
 	<thead>
@@ -24,6 +24,7 @@
 			<th>Moneda</th>
 			<th>CBU</th>
 			<th>Cuenta Interbanking</th>
+			<th>Operativa</th>
 			<th>Usos</th>
 		</tr>
 	</thead>
@@ -47,6 +48,7 @@
 				<td>{{ $data->monedas->nombre ?? '' }}</td>
 				<td>{{ $data->cbu }}</td>
 				<td>{{ $data->cuenta_interbanking }}</td>
+				<td>{{ !empty($data->operativa) ? 'Sí' : 'No' }}</td>
 				<td>{{ $data->usocuentacajas->pluck('nombre')->implode(', ') }}</td>
 			</tr>
 		@endforeach

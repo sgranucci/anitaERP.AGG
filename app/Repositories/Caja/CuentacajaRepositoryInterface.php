@@ -7,6 +7,11 @@ interface CuentacajaRepositoryInterface extends RepositoryInterface
 
     public function all();
 
+    /**
+     * @param  list<int>  $incluirIds
+     */
+    public function paraSeleccion(array $incluirIds = []);
+
     public function leeCuentacaja($filtros, $flPaginando = null);
     public function sincronizarConAnita(?string $codigo = null, bool $sincronizarCbu = true): array;
     public function sincronizarCbuConAnita(?string $codigo = null): array;

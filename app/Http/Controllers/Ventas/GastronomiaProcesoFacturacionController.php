@@ -975,6 +975,7 @@ class GastronomiaProcesoFacturacionController extends Controller
 
         $cuentas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
+            ->operativa()
             ->whereHas('usocuentacajas', fn ($r) => $r->whereKey($usoId))
             ->when($excluidas !== [], fn ($q) => $q->whereNotIn('id', $excluidas))
             ->with('monedas:id,abreviatura,nombre')
@@ -1021,6 +1022,7 @@ class GastronomiaProcesoFacturacionController extends Controller
         ])));
 
         $query = Cuentacaja::query()
+            ->operativa()
             ->whereHas('usocuentacajas', fn ($r) => $r->whereKey($usoId))
             ->whereIn('codigo', $variantes)
             ->with('monedas:id,abreviatura,nombre');

@@ -232,6 +232,9 @@ class MacroArchivoPagoService
             if ($porId !== null) {
                 return $porId;
             }
+            if (Cuentacaja::query()->whereKey($cuentacajaId)->exists()) {
+                return null;
+            }
         }
 
         $hint = MacroArchivoPagoFiltros::padCuentaAnita($codigoHint);
@@ -239,7 +242,7 @@ class MacroArchivoPagoService
             return null;
         }
 
-        $q = Cuentacaja::query()->paraEmpresa($empresaId)->orderBy('codigo');
+        $q = Cuentacaja::query()->paraEmpresa($empresaId)->operativa()->orderBy('codigo');
         if ($hint !== '') {
             $porCodigo = (clone $q)->where('codigo', $hint)->first();
             if ($porCodigo === null) {
@@ -276,7 +279,7 @@ class MacroArchivoPagoService
         if ($cuentacajaId <= 0) {
             return null;
         }
-        $q = Cuentacaja::query()->whereKey($cuentacajaId);
+        $q = Cuentacaja::query()->whereKey($cuentacajaId)->operativa();
         if ($empresaId > 0) {
             $q->paraEmpresa($empresaId);
         }

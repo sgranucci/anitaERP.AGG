@@ -863,6 +863,7 @@ final class RendicionMaquinaService
 
         $cuentas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
+            ->paraElegir(array_map('intval', array_keys($montosGuardados)))
             ->whereHas('usocuentacajas', fn ($q) => $q->where('usocuentacaja.id', $usoId))
             ->get(['id', 'codigo', 'nombre', 'descripcion_operaciones', 'moneda_id']);
 

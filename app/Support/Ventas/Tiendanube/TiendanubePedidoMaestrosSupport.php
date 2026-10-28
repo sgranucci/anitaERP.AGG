@@ -268,15 +268,15 @@ final class TiendanubePedidoMaestrosSupport
             }
             if (is_numeric($val)) {
                 $asId = (int) $val;
-                if ($asId > 0 && Cuentacaja::query()->whereKey($asId)->exists()) {
+                if ($asId > 0 && Cuentacaja::query()->whereKey($asId)->operativa()->exists()) {
                     return $asId;
                 }
-                $byCodigo = (int) (Cuentacaja::query()->where('codigo', (string) $val)->value('id') ?? 0);
+                $byCodigo = (int) (Cuentacaja::query()->operativa()->where('codigo', (string) $val)->value('id') ?? 0);
                 if ($byCodigo > 0) {
                     return $byCodigo;
                 }
             } elseif (is_string($val)) {
-                $byCodigo = (int) (Cuentacaja::query()->where('codigo', $val)->value('id') ?? 0);
+                $byCodigo = (int) (Cuentacaja::query()->operativa()->where('codigo', $val)->value('id') ?? 0);
                 if ($byCodigo > 0) {
                     return $byCodigo;
                 }
@@ -367,6 +367,7 @@ final class TiendanubePedidoMaestrosSupport
 
         $q = Cuentacaja::query()
             ->paraEmpresa($empresaId)
+            ->operativa()
             ->whereHas('usocuentacajas', function ($uq) use ($usoNombre) {
                 $uq->where('nombre', $usoNombre);
             })

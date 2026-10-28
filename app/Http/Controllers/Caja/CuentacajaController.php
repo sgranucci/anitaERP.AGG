@@ -261,6 +261,8 @@ class CuentacajaController extends Controller
                 ->where('cuentacaja.cuenta_interbanking', '!=', '');
         }
 
+        $query->operativa();
+
         $query = $query->orderBy('cuentacaja.nombre')->get();
 
         $output = [];
@@ -319,6 +321,13 @@ class CuentacajaController extends Controller
             ], 404);
         }
 
+        if (! $cuenta->esOperativa()) {
+            return response()->json([
+                'id' => 0,
+                'error' => Cuentacaja::MENSAJE_NO_OPERATIVA,
+            ], 422);
+        }
+
         return $cuenta;
     }
 
@@ -348,6 +357,13 @@ class CuentacajaController extends Controller
                     ? 'No se encontró cuenta de caja para esa empresa.'
                     : 'No se encontró cuenta de caja.',
             ], 404);
+        }
+
+        if ($cuentaId <= 0 && ! $cuenta->esOperativa()) {
+            return response()->json([
+                'id' => 0,
+                'error' => Cuentacaja::MENSAJE_NO_OPERATIVA,
+            ], 422);
         }
 
         $difRaw = $request->query('diferido');

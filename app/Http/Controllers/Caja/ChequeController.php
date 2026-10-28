@@ -908,7 +908,7 @@ class ChequeController extends Controller
             'resumen' => $resumen,
             'paginator' => $resumen['paginator'],
             'empresa_query' => $this->empresaRepository->allFiltrado(),
-            'cuentacaja_query' => $this->cuentacajaRepository->all(),
+            'cuentacaja_query' => $this->cuentacajaRepository->paraSeleccion([(int) ($filtros['cuentacaja_id'] ?? 0)]),
             'filtros' => $filtros,
             'filtrosQuery' => ChequeDepositoConciliacionFiltros::paraQueryString($filtros),
             'puede_acreditar' => can('editar-cheque', false) || can('actualizar-cheque', false),

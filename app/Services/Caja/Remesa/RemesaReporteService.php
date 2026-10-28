@@ -138,6 +138,7 @@ class RemesaReporteService
         }
 
         $query = Cuentacaja::query()
+            ->operativa()
             ->whereHas('usocuentacajas', static function ($q) {
                 $q->where('usocuentacaja.nombre', RemesaSupport::USO_DESTINO);
             })

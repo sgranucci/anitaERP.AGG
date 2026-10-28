@@ -38,6 +38,7 @@ class ValidacionCuentacaja extends FormRequest
             'usocuentacaja_ids.*' => 'integer|exists:usocuentacaja,id',
             'es_tarjeta' => 'nullable|boolean',
             'visible_cierre_caja' => 'nullable|boolean',
+            'operativa' => 'nullable|boolean',
         ];
     }
 
@@ -46,6 +47,7 @@ class ValidacionCuentacaja extends FormRequest
         $this->merge([
             'es_tarjeta' => $this->boolean('es_tarjeta'),
             'visible_cierre_caja' => $this->boolean('visible_cierre_caja'),
+            'operativa' => $this->boolean('operativa'),
         ]);
     }
 
@@ -58,6 +60,7 @@ class ValidacionCuentacaja extends FormRequest
             'orden' => 'orden en posición financiera',
             'es_tarjeta' => 'es tarjeta (pide cupón)',
             'visible_cierre_caja' => 'visible en cierre de caja',
+            'operativa' => 'operativa',
         ];
     }
 }

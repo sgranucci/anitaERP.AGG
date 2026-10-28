@@ -83,6 +83,29 @@
 	</div>
 </div>
 @php
+	$operativaDefault = ! empty($data->exists)
+		? (bool) ($data->operativa ?? true)
+		: true;
+	if (session()->hasOldInput()) {
+		$operativaForm = (bool) old('operativa');
+	} else {
+		$operativaForm = $operativaDefault;
+	}
+@endphp
+<div class="form-group row">
+	<label for="operativa" class="col-lg-3 col-form-label text-right">Operativa</label>
+	<div class="col-lg-8">
+		<div class="form-check mt-2">
+			<input type="checkbox" class="form-check-input" name="operativa" id="operativa" value="1"
+				{{ $operativaForm ? 'checked' : '' }}>
+			<label class="form-check-label" for="operativa">
+				Se puede elegir en movimientos nuevos
+			</label>
+		</div>
+		<small class="form-text text-muted">Sin el tilde no aparece en la lupa ni se acepta el c&oacute;digo. El saldo y los comprobantes ya grabados siguen vi&eacute;ndola. Anita no se modifica.</small>
+	</div>
+</div>
+@php
 	$bancoIdForm = old('banco_id', $data->banco_id ?? '');
 	$bancoModelForm = null;
 	if ((int) $bancoIdForm > 0) {

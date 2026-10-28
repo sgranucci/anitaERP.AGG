@@ -67,7 +67,9 @@ class FacturacionLocalProcesoController extends Controller
             $turno->loadMissing(['turnoLocal:id,codigo,nombre', 'usuarioApertura:id,nombre']);
         }
 
-        $cuentasPos = ($local?->cuentacajas ?? collect())->map(static function ($c) {
+        $cuentasPos = ($local?->cuentacajas ?? collect())
+            ->filter(static fn ($c) => (bool) ($c->operativa ?? true))
+            ->map(static function ($c) {
             $presentacion = FacturacionLocalMedioPresentacionSupport::presentacion(
                 (string) $c->nombre,
                 (string) $c->codigo,

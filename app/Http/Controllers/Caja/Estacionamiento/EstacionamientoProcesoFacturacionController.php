@@ -290,6 +290,7 @@ class EstacionamientoProcesoFacturacionController extends Controller
         $empresaId = (int) $cfg->empresa_id;
         $cuentas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
+            ->operativa()
             ->whereHas('usocuentacajas', fn ($r) => $r->whereKey($usoId))
             ->with('monedas:id,abreviatura,nombre')
             ->orderBy('nombre')
@@ -335,6 +336,7 @@ class EstacionamientoProcesoFacturacionController extends Controller
         ])));
 
         $query = Cuentacaja::query()
+            ->operativa()
             ->whereHas('usocuentacajas', fn ($r) => $r->whereKey($usoId))
             ->whereIn('codigo', $variantes)
             ->with('monedas:id,abreviatura,nombre');

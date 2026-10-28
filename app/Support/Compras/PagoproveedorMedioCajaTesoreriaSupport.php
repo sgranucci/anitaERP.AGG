@@ -37,6 +37,7 @@ final class PagoproveedorMedioCajaTesoreriaSupport
         $porCuenta = [];
         $cajas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
+            ->operativa()
             ->where('cuentacontable_id', '>', 0)
             ->get(['id', 'codigo', 'nombre', 'cuentacontable_id']);
 
