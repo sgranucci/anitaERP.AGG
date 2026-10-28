@@ -7,6 +7,9 @@ use App\Support\Configuracion\CotizacionVigenteSupport;
 /**
  * Cotización que llega en la precarga (API / PDF+IA).
  *
+ * En pesos, si la factura trae un tipo de cambio explícito cercano al dólar del día, se respeta.
+ * Si viene vacío o 1, se graba el dólar del día (Anita lo muestra en el mayor).
+ *
  * En moneda extranjera:
  * - Si coincide con la del día (banda amplia): se respeta (puede ser el TC de la factura).
  * - Si parece la del día mal leída (1,51 vs 1510): se deduce y se marca error.
@@ -65,6 +68,12 @@ final class ComprobanteProveedorCotizacionIngresoSupport
 
         if (! ComprobanteProveedorCotizacionSupport::esMonedaExtranjera($monedaId)) {
             $guardar = $dia > ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA ? $dia : 1.0;
+            if ($recibida > ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA
+                && ($dia <= ComprobanteProveedorMonedaMotor::COTIZACION_MINIMA
+                    || self::dentroDeBanda($recibida, $dia, self::TOLERANCIA_RECIBIDA))
+            ) {
+                return self::resultado($recibida, $recibida, $guardar, 'recibida', null, null);
+            }
 
             return self::resultado($guardar, $recibida, $guardar, 'mn', null, null);
         }

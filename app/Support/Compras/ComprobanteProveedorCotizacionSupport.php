@@ -10,8 +10,9 @@ use App\Support\Configuracion\CotizacionVigenteSupport;
  *
  * Default: cotización venta del día (fecha comprobante) para moneda extranjera.
  * Pesos: se graba la cotización del dólar de esa fecha (Anita la muestra en el mayor
- * aunque el importe siga en pesos). La conversión de importes no la usa: el motor
- * sigue tratando la moneda local con coeficiente 1.
+ * aunque el importe siga en pesos). Si la factura trae un tipo de cambio explícito
+ * cercano a ese dólar, se conserva el de la factura. La conversión de importes no la
+ * usa: el motor sigue tratando la moneda local con coeficiente 1.
  * Precarga: la cotización se pasa por ComprobanteProveedorCotizacionIngresoSupport
  * (deduce escala 1,51→1510 o toma la del día si no encaja).
  */

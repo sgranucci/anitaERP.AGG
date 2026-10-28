@@ -175,7 +175,8 @@ moneda: SOLO "PESOS", "DOLARES" o "EUROS".
 IMPORTANTE Argentina: el símbolo "$" significa PESOS, NUNCA dólares.
 "Son Pesos:", "Importe $" y el pie "tipo de cambio … por cada dolar" son PESOS (solo referencia impositiva).
 Solo poné "DOLARES" si hay "Moneda: USD/U\$S", importes con U\$S/USD, o "facturado/importe en dólares".
-La palabra "dólar" suelta en el pie NO alcanza. Sin señal fuerte → "PESOS" y cotizacion=1.
+La palabra "dólar" suelta en el pie NO alcanza. Sin señal fuerte → "PESOS".
+cotizacion: si el texto trae un tipo de cambio explícito pegado al rótulo ("tc.1561.51", "T.C.: 1.561,51", "tipo de cambio: 1561,51", "cotización 1561.51"), usá ESE número aunque la moneda sea PESOS. Si no hay ese número, cotizacion=1.
 
 Heurísticas previas (pueden tener errores, corregí con el OCR):
 {$hints}

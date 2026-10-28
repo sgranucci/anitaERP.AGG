@@ -17,6 +17,26 @@ class ComprobanteProveedorCotizacionIngresoSupportTest extends TestCase
         $this->assertSame('mn', $r['origen']);
     }
 
+    public function test_pesos_respeta_el_tipo_de_cambio_de_la_factura(): void
+    {
+        $r = ComprobanteProveedorCotizacionIngresoSupport::resolver(1, 1561.51, 1560);
+
+        $this->assertSame(1561.51, $r['cotizacion']);
+        $this->assertSame(1561.51, $r['cotizacion_recibida']);
+        $this->assertSame(1560.0, $r['cotizacion_dia']);
+        $this->assertNull($r['marca_error']);
+        $this->assertSame('recibida', $r['origen']);
+    }
+
+    public function test_pesos_tipo_de_cambio_ajeno_usa_el_del_dia(): void
+    {
+        $r = ComprobanteProveedorCotizacionIngresoSupport::resolver(1, 42.7, 1560);
+
+        $this->assertSame(1560.0, $r['cotizacion']);
+        $this->assertSame('mn', $r['origen']);
+        $this->assertNull($r['marca_error']);
+    }
+
     public function test_pesos_sin_cotizacion_del_dia_queda_en_uno(): void
     {
         $r = ComprobanteProveedorCotizacionIngresoSupport::resolver(1, 1, 0);

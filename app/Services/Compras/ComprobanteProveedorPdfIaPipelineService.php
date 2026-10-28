@@ -217,13 +217,15 @@ final class ComprobanteProveedorPdfIaPipelineService
         }
 
         $data['moneda'] = $moneda;
-        if ($moneda === 'PESOS') {
+        $cotExplicita = (float) ($heuristica['cotizacion'] ?? 0);
+        if ($cotExplicita <= 1.0001) {
+            $cotExplicita = (float) ($data['cotizacion'] ?? 0);
+        }
+        if ($cotExplicita > 1.0001) {
+            // Pesos o ME: si el PDF trae tc / tipo de cambio, esa cotización manda.
+            $data['cotizacion'] = $cotExplicita;
+        } elseif ($moneda === 'PESOS') {
             $data['cotizacion'] = 1.0;
-        } elseif (empty($data['cotizacion']) || (float) $data['cotizacion'] <= 1.0001) {
-            $cotH = (float) ($heuristica['cotizacion'] ?? 0);
-            if ($cotH > 1.0001) {
-                $data['cotizacion'] = $cotH;
-            }
         }
 
         return $data;

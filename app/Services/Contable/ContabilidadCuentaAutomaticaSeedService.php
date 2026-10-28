@@ -226,8 +226,16 @@ class ContabilidadCuentaAutomaticaSeedService
 
     private function codigoSugeridoParaClave(string $clave): ?string
     {
-        if ($clave === CuentaAutomaticaClaves::FACTURACION_LOCAL_VENTAS && EntornoEmpresaSupport::esFerli()) {
-            return '411000003';
+        if (EntornoEmpresaSupport::esFerli()) {
+            if ($clave === CuentaAutomaticaClaves::FACTURACION_LOCAL_VENTAS) {
+                return '411000003';
+            }
+            if ($clave === CuentaAutomaticaClaves::FACTURACION_LOCAL_NOTAS_CREDITO) {
+                return '113100009';
+            }
+            if ($clave === CuentaAutomaticaClaves::FACTURACION_LOCAL_VALORES) {
+                return '111100002';
+            }
         }
 
         if (isset(self::CODIGO_SUGERIDO_POR_CLAVE[$clave])) {

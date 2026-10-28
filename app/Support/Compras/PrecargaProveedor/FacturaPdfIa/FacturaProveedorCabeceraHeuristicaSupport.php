@@ -440,17 +440,31 @@ final class FacturaProveedorCabeceraHeuristicaSupport
             $moneda = 'EUROS';
         }
 
-        $cotizacion = 1.0;
-        if ($moneda !== 'PESOS'
-            && preg_match('/(?:tipo\s+de\s+cambio|cotiz(?:aci[oó]n)?|t\.?\s*c\.?)[:\s]*(\d[\d.,]+)/iu', $texto, $m)
-        ) {
-            $parsed = $this->importeParser->parsear($m[1]);
-            if ($parsed !== null && $parsed > 1.0001) {
-                $cotizacion = $parsed;
-            }
-        }
+        $cotizacion = $this->parsearCotizacionExplicita($texto) ?? 1.0;
 
         return ['moneda' => $moneda, 'cotizacion' => $cotizacion];
+    }
+
+    /**
+     * Tipo de cambio escrito en la factura (también en pesos): «tc.1561.51», «T.C.: 1.561,51».
+     * El pie AFIP «tipo de cambio … por cada dólar» no trae el número pegado al rótulo y no entra.
+     */
+    private function parsearCotizacionExplicita(string $texto): ?float
+    {
+        if (! preg_match(
+            '/(?:tipo\s+de\s+cambio|cotizaci[oó]n|(?<![A-Za-z])t\s*[\.\/]?\s*c\s*\.?)\s*[:.]?\s*(\d[\d.,]*)/iu',
+            $texto,
+            $m
+        )) {
+            return null;
+        }
+
+        $parsed = $this->importeParser->parsear($m[1]);
+        if ($parsed === null || $parsed <= 1.0001 || $parsed > 100000) {
+            return null;
+        }
+
+        return $parsed;
     }
 
     private function textoIndicaDolares(string $texto): bool
