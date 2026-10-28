@@ -15,7 +15,9 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use App\Support\Stock\ReporteStockOtSituacionSupport;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Color;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
@@ -284,6 +286,15 @@ class PickingPedidoFerliExport implements FromView, ShouldAutoSize, WithColumnFo
             $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++).$excelRow, (float) ($fila['precio'] ?? 0));
             $this->celdaTexto($sheet, $c++, $excelRow, (string) ($fila['situacion'] ?? 'ENTREGA INMEDIATA'));
             $this->celdaTexto($sheet, $c++, $excelRow, (string) ($fila['numero_ot'] ?? ''));
+            if (ReporteStockOtSituacionSupport::colorearRojoEnExcel(
+                (string) ($fila['situacion'] ?? ''),
+                ! empty($fila['en_produccion'])
+            )) {
+                $sheet->getStyle('A'.$excelRow.':'.Coordinate::stringFromColumnIndex($this->totalColumnas()).$excelRow)
+                    ->getFont()
+                    ->getColor()
+                    ->setARGB(Color::COLOR_RED);
+            }
             $this->celdaTexto($sheet, $c++, $excelRow, (string) ($fila['deposito'] ?? ''));
             $this->celdaTexto($sheet, $c++, $excelRow, trim((string) ($fila['observacion'] ?? '')));
             $this->celdaTexto($sheet, $c++, $excelRow, '');
