@@ -156,7 +156,7 @@ class ReporteDefinibleSaldoReader
             if (! $this->pasaFiltroDefinicion($cargaCcosto, $rangosDefinicion, $cc)) {
                 continue;
             }
-            if ($filtroRuntime !== null && ! $this->pasaRango($cc, (int) $filtroRuntime['desde'], (int) $filtroRuntime['hasta'])) {
+            if ($filtroRuntime !== null && ! $this->pasaFiltroRuntime($cc, $filtroRuntime)) {
                 continue;
             }
             $total += (float) $mov['monto'];
@@ -238,6 +238,25 @@ class ReporteDefinibleSaldoReader
         }
 
         return false;
+    }
+
+    /**
+     * @param  array{desde?: int, hasta?: int, codigo_set?: array<int, true>}  $filtroRuntime
+     */
+    private function pasaFiltroRuntime(int $ccosto, array $filtroRuntime): bool
+    {
+        if (isset($filtroRuntime['codigo_set']) && is_array($filtroRuntime['codigo_set'])) {
+            if (! isset($filtroRuntime['codigo_set'][$ccosto])) {
+                return false;
+            }
+        }
+        $desde = (int) ($filtroRuntime['desde'] ?? 0);
+        $hasta = (int) ($filtroRuntime['hasta'] ?? 0);
+        if ($desde > 0 || $hasta > 0) {
+            return $this->pasaRango($ccosto, $desde, $hasta);
+        }
+
+        return true;
     }
 
     private function pasaRango(int $ccosto, int $desde, int $hasta): bool

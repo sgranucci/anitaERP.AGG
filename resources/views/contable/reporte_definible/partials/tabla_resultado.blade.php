@@ -75,7 +75,14 @@
                 @forelse ($filas as $fila)
                     @php
                         $esCuenta = ($fila['kind'] ?? '') === 'cuenta';
-                        $cls = $esCuenta ? 'rd-exec-row-cuenta' : 'rd-exec-row-rubro';
+                        $kindFila = (string) ($fila['kind'] ?? 'rubro');
+                        $cls = match ($kindFila) {
+                            'cuenta' => 'rd-exec-row-cuenta',
+                            'subtitulo' => 'rd-exec-row-subtitulo',
+                            'subtotal' => 'rd-exec-row-subtotal',
+                            'beneficio' => 'rd-exec-row-beneficio',
+                            default => 'rd-exec-row-rubro',
+                        };
                         if (!empty($fila['negrita'])) {
                             $cls .= ' negrita';
                         }
@@ -95,7 +102,7 @@
                             @if ($marca)
                                 <sup class="text-info font-weight-bold tooltipsC" title="Ver notas al pie del informe">{{ $marca }}</sup>
                             @endif
-                            @if (!$esCuenta && !empty($fila['tipo_label']))
+                            @if (!$esCuenta && !in_array($kindFila, ['subtitulo', 'subtotal', 'beneficio'], true) && !empty($fila['tipo_label']))
                                 <span class="badge badge-light border ml-1" style="font-size:10px">{{ $fila['tipo_label'] }}</span>
                             @endif
                         </td>
@@ -122,7 +129,7 @@
                         @endif
                         @if ($tieneAcciones)
                             <td class="text-center text-nowrap {{ $clsAcciones }}">
-                                @if ($puedeDrill && !$esCuenta && (int) ($fila['rubro_id'] ?? 0) > 0)
+                                @if ($puedeDrill && !$esCuenta && !in_array($kindFila, ['subtitulo', 'beneficio'], true) && (int) ($fila['rubro_id'] ?? 0) > 0)
                                     <button type="button" class="btn-accion-tabla tooltipsC rd-drill-rubro"
                                             title="Ver cuentas, asientos y comprobantes de este rubro"
                                             data-rubro="{{ (int) $fila['rubro_id'] }}"

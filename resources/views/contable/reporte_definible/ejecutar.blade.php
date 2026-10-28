@@ -9,6 +9,15 @@
 .rd-exec-row-rubro td { border-top: 1px solid #d5d8dc; }
 .rd-exec-row-rubro.negrita td { font-weight: 700; color: #1B4F72; }
 .rd-exec-row-cuenta td { color: #566573; font-size: 12.5px; }
+.rd-exec-row-subtitulo td,
+.rd-exec-row-subtitulo .col-fija-1,
+.rd-exec-row-subtitulo .col-fija-2 { font-weight: 700; font-size: 14px; color: #1B4F72; background: #EAF2F8; border-top: 2px solid #85C1E9; }
+.rd-exec-row-subtotal td,
+.rd-exec-row-subtotal .col-fija-1,
+.rd-exec-row-subtotal .col-fija-2 { font-weight: 700; background: #F4F6F7; border-top: 2px solid #85929E; }
+.rd-exec-row-beneficio td,
+.rd-exec-row-beneficio .col-fija-1,
+.rd-exec-row-beneficio .col-fija-2 { font-weight: 700; background: #D5F5E3; border-top: 3px double #196F3D; color: #145A32; }
 .rd-exec-indent { display: inline-block; }
 .rd-exec-importe, .rd-exec-col-importe { font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 7.5rem; }
 .rd-exec-row-rubro .col-fija-1,
@@ -25,6 +34,7 @@
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/contable/reporte_definible/grupo_ccosto.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/reporte_definible/grupo_ccosto.js')) }}"></script>
 <script>
 (function () {
     function toggleModo() {
@@ -177,6 +187,10 @@
                         var valor = s.length >= 6 ? s.slice(0, 4) + '-' + s.slice(4, 6) : '';
                         listaMeses.appendChild(filaMes(valor));
                     });
+                    return;
+                }
+                if (k === 'grupo_ccosto' && Array.isArray(filtros[k]) && typeof window.rdCargarGruposCcosto === 'function') {
+                    window.rdCargarGruposCcosto(filtros[k]);
                     return;
                 }
                 if (k === 'empresa_ids' && Array.isArray(filtros[k])) {
@@ -544,6 +558,33 @@
                             <input type="number" name="ccosto_hasta" class="form-control" min="0"
                                    value="{{ ($filtros['ccosto_hasta'] ?? 0) ?: '' }}" placeholder="Opcional">
                         </div>
+                        <div class="form-group col-md-4" id="rd-grupo-ccosto">
+                            <label>Grupo de centros de costo</label>
+                            <div class="input-group input-group-sm mb-1">
+                                <input type="text" id="rd_grupo_ccosto_codigo" class="form-control" placeholder="C&oacute;digo" autocomplete="off" style="max-width: 6rem;">
+                                <input type="text" id="rd_grupo_ccosto_nombre" class="form-control" placeholder="Descripci&oacute;n" readonly>
+                                <div class="input-group-append">
+                                    <button type="button" class="btn btn-outline-secondary" id="rd-grupo-ccosto-lupa" title="Consultar grupos (F1)">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary" id="rd-grupo-ccosto-agregar">Agregar</button>
+                                </div>
+                            </div>
+                            <table class="table table-sm table-bordered mb-0">
+                                <tbody id="rd-grupo-ccosto-lista">
+                                    @foreach ($grupos_ccosto ?? [] as $grupoCc)
+                                        <tr data-codigo="{{ $grupoCc['codigo'] }}">
+                                            <td style="width:5rem">{{ $grupoCc['codigo'] }}</td>
+                                            <td>{{ $grupoCc['nombre'] }}<input type="hidden" name="grupo_ccosto[]" value="{{ $grupoCc['codigo'] }}"></td>
+                                            <td class="text-center" style="width:3rem">
+                                                <button type="button" class="btn btn-outline-danger btn-xs rd-grupo-ccosto-quitar" title="Quitar">&times;</button>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                            <small class="text-muted">Vac&iacute;o = todos los centros. Pod&eacute;s sumar m&aacute;s de un grupo, como en Anita.</small>
+                        </div>
                         <div class="form-group col-md-1">
                             <label>Nivel</label>
                             <input type="number" name="nivel_max" class="form-control" min="0" max="20"
@@ -625,6 +666,9 @@
                                     <div class="text-muted">{{ $reporte->titulo2 }}</div>
                                 @endif
                                 <div class="small text-muted">Período {{ $periodo_texto }} · Fuente {{ $resultado['fuente'] ?? '' }}</div>
+                                @if (!empty($resultado['criterios']))
+                                    <div class="small mt-1" style="white-space: pre-line;">{{ $resultado['criterios'] }}</div>
+                                @endif
                             </div>
                             <div class="d-flex flex-wrap align-items-start">
                                 <a href="{{ route('listar_reporte_definible', ['id' => $reporte->id, 'formato' => 'PDF']).$rdExportSuffix }}" class="btn btn-app bg-danger">
@@ -734,4 +778,5 @@
         </div>
     @endif
 @endif
+@include('contable.reporte_definible.partials.modal_grupo_ccosto')
 @endsection

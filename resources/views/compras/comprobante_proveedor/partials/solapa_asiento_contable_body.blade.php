@@ -75,6 +75,9 @@
         ({{ number_format($netoImputableGasto, 2, ',', '.') }}).
         Por defecto no recalcula el prorrateo (cada importe queda como se carga, para abrir por centro de costo).
         Tilde <strong>Recalcular prorrateo</strong> si quiere que el neto se reparta solo entre las cuentas.
+        Si la cuenta de IVA pide centro de costo, toma el de las cuentas de gasto.
+        Al abrir el gasto con <strong>+ Agregar cuenta de gasto</strong>, el IVA se parte en la misma proporción.
+        Con una sola línea de IVA puede cambiar el centro en esa fila.
     </span>
     @elseif(collect($preview['lineas'] ?? [])->contains(fn ($l) => ! empty($l['editable_cuenta'])))
     <span class="d-block small mt-1">La cuenta de un neto se precarga en los otros netos vacíos. Si una línea necesita otra cuenta, cámbiela en esa fila.</span>
@@ -128,6 +131,17 @@
         <tbody>
             @php
                 $idxDebeGasto = 0;
+                $cantImpuestoPorConcepto = [];
+                foreach ($preview['lineas'] ?? [] as $lineaConteo) {
+                    if ((string) ($lineaConteo['origen'] ?? '') !== 'impuesto') {
+                        continue;
+                    }
+                    $conceptoConteo = (int) ($lineaConteo['concepto_ivacompra_id'] ?? 0);
+                    if ($conceptoConteo <= 0) {
+                        continue;
+                    }
+                    $cantImpuestoPorConcepto[$conceptoConteo] = ($cantImpuestoPorConcepto[$conceptoConteo] ?? 0) + 1;
+                }
             @endphp
             @forelse(($preview['lineas'] ?? []) as $linea)
             @php
@@ -144,9 +158,16 @@
                     $idxDebeGasto++;
                 }
                 $debeGastoIdx = $esDebeGasto ? $idxDebeGasto : 0;
+                $ivaUnaLinea = $origenLinea === 'impuesto'
+                    && $conceptoLineaId > 0
+                    && ($cantImpuestoPorConcepto[$conceptoLineaId] ?? 0) === 1;
+                $muestraSelectorCentro = ! empty($preview['es_preview'])
+                    && $cuentaLineaId > 0
+                    && ($editableCuenta || $ivaUnaLinea);
             @endphp
             <tr class="{{ $editableCuenta ? 'cp-asiento-linea-editable' : '' }}{{ $esDebeGasto ? ' cp-debe-gasto-row' : '' }}"
-                @if($editableCuenta) data-concepto-ivacompra-id="{{ $conceptoLineaId }}" @endif
+                data-origen="{{ $origenLinea }}"
+                @if($conceptoLineaId > 0) data-concepto-ivacompra-id="{{ $conceptoLineaId }}" @endif
                 @if($esDebeGasto) data-debe-gasto="1" data-debe-gasto-idx="{{ $debeGastoIdx }}" @endif>
                 <td>
                     @if($editableCuenta)
@@ -171,7 +192,7 @@
                     @endif
                 </td>
                 <td>
-                    @if($editableCuenta && $cuentaLineaId > 0)
+                    @if($muestraSelectorCentro)
                     <select class="form-control form-control-sm cp-asiento-centrocosto"
                             data-cuenta-id="{{ $cuentaLineaId }}"
                             data-cc-actual="{{ (int) ($linea['centrocosto_id'] ?? 0) }}"

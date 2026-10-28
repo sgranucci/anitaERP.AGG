@@ -2,6 +2,8 @@
 
 namespace App\Support\Stock;
 
+use Illuminate\Support\Facades\DB;
+
 /**
  * Leyendas de la columna Situación del Excel Stock por OT (Ferli).
  *
@@ -78,6 +80,37 @@ final class ReporteStockOtSituacionSupport
      * @param  iterable<int|string>  $tareaIds
      * @return array{situacion: string, en_produccion: bool}
      */
+    /**
+     * Situación de cada OT según sus tareas (misma lectura que Stock por OT).
+     *
+     * @param  list<int>  $ordentrabajoIds
+     * @return array<int, array{situacion: string, en_produccion: bool}>
+     */
+    public static function situacionesPorOrdentrabajoIds(array $ordentrabajoIds): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ordentrabajoIds))));
+        $out = [];
+        foreach ($ids as $id) {
+            $out[$id] = self::desdeTareaIds([]);
+        }
+        if ($ids === []) {
+            return $out;
+        }
+
+        $rows = DB::table('ordentrabajo_tarea')
+            ->whereIn('ordentrabajo_id', $ids)
+            ->get(['ordentrabajo_id', 'tarea_id']);
+        $porOt = [];
+        foreach ($rows as $row) {
+            $porOt[(int) $row->ordentrabajo_id][] = (int) $row->tarea_id;
+        }
+        foreach ($porOt as $otId => $tareaIds) {
+            $out[$otId] = self::desdeTareaIds($tareaIds);
+        }
+
+        return $out;
+    }
+
     public static function desdeTareaIds(iterable $tareaIds): array
     {
         $ids = [];

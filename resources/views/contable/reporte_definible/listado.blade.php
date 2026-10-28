@@ -12,6 +12,9 @@
         table.data td { border: 1px solid #cccccc; padding: 2px 4px; }
         table.data tr:nth-child(even) { background: #f5f5f5; }
         .negrita { font-weight: bold; }
+        tr.subtitulo td { font-weight: bold; background: #EAF2F8; font-size: 10px; }
+        tr.subtotal td { font-weight: bold; background: #D6EAF8; }
+        tr.beneficio td { font-weight: bold; background: #D5F5E3; }
         .right { text-align: right; }
         .notas { margin-top: 10px; font-size: 7px; color: #17202A; }
         .notas h2 { font-size: 9px; margin: 0 0 3px; }
@@ -50,6 +53,9 @@
         · Fuente {{ $resultado['fuente'] }}
     @endif
 </div>
+@if (!empty($resultado['criterios']))
+    <div class="meta" style="white-space: pre-line;">{{ $resultado['criterios'] }}</div>
+@endif
 <table class="data">
     @php
         $gruposPdf = [];
@@ -99,7 +105,7 @@
                     : ($marcasNota[strtoupper(trim((string) ($fila['codigo'] ?? '')))]
                         ?? ($marcasNota['#'.(int) ($fila['rubro_id'] ?? 0)] ?? null));
             @endphp
-            <tr class="{{ !empty($fila['negrita']) ? 'negrita' : '' }}">
+            <tr class="{{ !empty($fila['negrita']) ? 'negrita' : '' }} {{ $fila['kind'] ?? '' }}">
                 <td>{{ $fila['codigo'] ?? '' }}</td>
                 <td>
                     <span style="padding-left:{{ (int)($fila['depth'] ?? 0) * 8 }}px"></span>

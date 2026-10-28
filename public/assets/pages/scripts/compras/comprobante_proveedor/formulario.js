@@ -1890,8 +1890,12 @@ $(function () {
         cpCcAbrir = null;
         $('.cp-asiento-centrocosto').each(function () {
             var $ya = $(this);
+            var $filaYa = $ya.closest('tr');
+            if (String($filaYa.attr('data-origen') || '') === 'impuesto') {
+                return;
+            }
             var ccYa = parseInt($ya.attr('data-cc-actual') || '0', 10) || 0;
-            var conceptoYa = parseInt($ya.closest('tr').attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+            var conceptoYa = parseInt($filaYa.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
             if (conceptoYa > 0 && ccYa > 0) {
                 escribirCentrocostoConcepto(conceptoYa, ccYa);
             }
@@ -1906,11 +1910,12 @@ $(function () {
                     $sel.closest('td').text('—');
                     return;
                 }
+                var esIva = String($row.attr('data-origen') || '') === 'impuesto';
                 var conceptoId = parseInt($row.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
-                if (conceptoId > 0 && res.id > 0) {
+                if (!esIva && conceptoId > 0 && res.id > 0) {
                     escribirCentrocostoConcepto(conceptoId, res.id);
                 }
-                if (res.auto && res.id > 0 && res.id !== actual) {
+                if (!esIva && res.auto && res.id > 0 && res.id !== actual) {
                     var claveAuto = String(cuentaId) + ':' + String(res.id);
                     if (cpCcAutoHecho[claveAuto]) {
                         return;
@@ -1920,7 +1925,7 @@ $(function () {
                     if ($row.hasClass('cp-debe-gasto-row')) {
                         sincronizarDebeGastoHiddenDesdeTabla();
                     }
-                    if (conceptoId > 0) {
+                    if (!esIva && conceptoId > 0) {
                         escribirCentrocostoConcepto(conceptoId, res.id);
                     }
                     window.refrescarPreviewAsiento(true);

@@ -160,7 +160,10 @@ final class FacturacionLocalTurnoCierreSupport
         $regalo = [];
         foreach ($emisiones as $emision) {
             $ventaId = (int) $emision->venta_id;
-            if ($ventaId > 0) {
+            $ncPropia = (int) ($emision->venta_nc_id ?? 0);
+            // NC de factura anterior: la misma venta es el comprobante y la nota.
+            // Entra al turno como nota de crédito, no como factura.
+            if ($ventaId > 0 && $ventaId !== $ncPropia) {
                 $facIds[$ventaId] = $ventaId;
             }
             if ($emision->es_ticket_regalo && $ventaId > 0) {

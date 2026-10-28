@@ -56,6 +56,20 @@
         background: #D6EAF8;
         font-weight: 700;
     }
+    #modal-ie-liquidacion-tarjeta #tm_cuentacaja_ie_liquidacion_caja.d-flex {
+        display: block !important;
+    }
+    #modal-ie-liquidacion-tarjeta #tm_cuentacaja_ie_liquidacion_tarjeta > label,
+    #modal-ie-liquidacion-tarjeta #tm_cuentacaja_ie_liquidacion_caja > label {
+        display: block;
+        font-size: .72rem;
+        font-weight: 700;
+        color: #1B4F72;
+        margin-bottom: .2rem;
+        text-transform: uppercase;
+        letter-spacing: .02em;
+        text-align: left;
+    }
 </style>
 <div class="modal fade" id="modal-ie-liquidacion-tarjeta" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable ie-lt-dialog" role="document">
@@ -66,7 +80,7 @@
                         <i class="fa fa-credit-card"></i> Liquidación de tarjeta
                     </h5>
                     <div class="ie-lt-subtitulo">
-                        El bruto de cupones acredita la tarjeta. Los gastos van al DTC y la caja queda por el neto.
+                        El bruto acredita la tarjeta. Los gastos van al DTC. El neto entra en la cuenta de caja de esta pantalla.
                     </div>
                 </div>
                 <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
@@ -78,7 +92,7 @@
                     <div class="ie-lt-bloque-head">Encabezado</div>
                     <div class="ie-lt-bloque-body">
                         <div class="form-row">
-                            <div class="col-md-7">
+                            <div class="col-md-6">
                                 @include('caja.partials.campo_consulta_cuentacaja', [
                                     'prefix' => 'ie_liquidacion_tarjeta',
                                     'layout' => 'inline',
@@ -90,7 +104,21 @@
                                     'ayuda' => 'La cuenta marcada como tarjeta. Los cupones se acreditan en su cuenta contable.',
                                 ])
                             </div>
-                            <div class="form-group col-md-5">
+                            <div class="col-md-6">
+                                @include('caja.partials.campo_consulta_cuentacaja', [
+                                    'prefix' => 'ie_liquidacion_caja',
+                                    'layout' => 'inline',
+                                    'label' => 'Cuenta de caja',
+                                    'inputName' => 'ie_liquidacion_caja_deposito_id',
+                                    'inputId' => 'ie-lt-caja-id',
+                                    'required' => true,
+                                    'mostrar_editar' => true,
+                                    'ayuda' => 'Donde entra el neto. Al armar el DTC se carga en la pantalla principal.',
+                                ])
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4 mb-2">
                                 <label class="ie-lt-label" for="ie-lt-bruto">Bruto de cupones</label>
                                 <input type="text" inputmode="decimal" autocomplete="off" class="form-control form-control-sm text-right font-weight-bold" id="ie-lt-bruto">
                             </div>

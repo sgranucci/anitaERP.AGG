@@ -5,6 +5,7 @@ namespace App\Support\Compras\PrecargaProveedor;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Services\Compras\ComprobanteService;
 use App\Services\Compras\OrdencompraService;
+use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use RuntimeException;
 
@@ -130,22 +131,7 @@ final class PrecargaProveedorConceptosListaSupport
             throw new RuntimeException('No hay conceptos IVA configurados para tipo «'.$abreviatura.'»');
         }
 
-        $conceptos = [];
-        foreach ($comprobante->tipotransaccion_compra_concepto_ivacompras as $linea) {
-            $concepto = $linea->concepto_ivacompras;
-            if (! $concepto) {
-                continue;
-            }
-            $concepto->loadMissing('impuestos');
-            $conceptos[] = [
-                'id_concepto' => (int) $concepto->codigo,
-                'concepto_ivacompra_id' => (int) $concepto->id,
-                'nombre' => (string) $concepto->nombre,
-                'descripcion_ai' => (string) ($concepto->nombre_ia ?: $concepto->nombre),
-                'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
-                'alicuota_iva' => $this->inferirAlicuotaDesdeConcepto($concepto),
-            ];
-        }
+        $conceptos = $this->conceptosParaTipoTransaccion($comprobante);
 
         return [
             'tipocomprobante' => $abreviatura,
@@ -199,22 +185,7 @@ final class PrecargaProveedorConceptosListaSupport
         }
 
         $tipoItem = PrecargaProveedorTipoItemSupport::resolver([], $cuitProveedor, $proveedorId);
-        $conceptos = [];
-        foreach ($comprobante->tipotransaccion_compra_concepto_ivacompras as $linea) {
-            $concepto = $linea->concepto_ivacompras;
-            if (! $concepto) {
-                continue;
-            }
-            $concepto->loadMissing('impuestos');
-            $conceptos[] = [
-                'id_concepto' => (int) $concepto->codigo,
-                'concepto_ivacompra_id' => (int) $concepto->id,
-                'nombre' => (string) $concepto->nombre,
-                'descripcion_ai' => (string) ($concepto->nombre_ia ?: $concepto->nombre),
-                'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
-                'alicuota_iva' => $this->inferirAlicuotaDesdeConcepto($concepto),
-            ];
-        }
+        $conceptos = $this->conceptosParaTipoTransaccion($comprobante);
         if ($conceptos === []) {
             throw new RuntimeException(
                 'El tipo de comprobante «'.$abreviatura.'» no tiene conceptos de IVA. Elija otro tipo.'
@@ -293,22 +264,7 @@ final class PrecargaProveedorConceptosListaSupport
             throw new RuntimeException('No hay conceptos IVA configurados para tipo «'.$abreviatura.'»');
         }
 
-        $conceptos = [];
-        foreach ($comprobante->tipotransaccion_compra_concepto_ivacompras as $linea) {
-            $concepto = $linea->concepto_ivacompras;
-            if (! $concepto) {
-                continue;
-            }
-            $concepto->loadMissing('impuestos');
-            $conceptos[] = [
-                'id_concepto' => (int) $concepto->codigo,
-                'concepto_ivacompra_id' => (int) $concepto->id,
-                'nombre' => (string) $concepto->nombre,
-                'descripcion_ai' => (string) ($concepto->nombre_ia ?: $concepto->nombre),
-                'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
-                'alicuota_iva' => $this->inferirAlicuotaDesdeConcepto($concepto),
-            ];
-        }
+        $conceptos = $this->conceptosParaTipoTransaccion($comprobante);
 
         return [
             'tipocomprobante' => $abreviatura,
@@ -363,22 +319,7 @@ final class PrecargaProveedorConceptosListaSupport
             );
         }
 
-        $conceptos = [];
-        foreach ($comprobante->tipotransaccion_compra_concepto_ivacompras as $linea) {
-            $concepto = $linea->concepto_ivacompras;
-            if (! $concepto) {
-                continue;
-            }
-            $concepto->loadMissing('impuestos');
-            $conceptos[] = [
-                'id_concepto' => (int) $concepto->codigo,
-                'concepto_ivacompra_id' => (int) $concepto->id,
-                'nombre' => (string) $concepto->nombre,
-                'descripcion_ai' => (string) ($concepto->nombre_ia ?: $concepto->nombre),
-                'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
-                'alicuota_iva' => $this->inferirAlicuotaDesdeConcepto($concepto),
-            ];
-        }
+        $conceptos = $this->conceptosParaTipoTransaccion($comprobante);
 
         return [
             'tipocomprobante' => $abreviatura,
@@ -451,6 +392,42 @@ final class PrecargaProveedorConceptosListaSupport
                 default => ['FIB', 'FNB', 'FAB', 'FAS', 'FAC'],
             },
         };
+    }
+
+    /**
+     * Conceptos del tipo, más el IVA del hermano indirecto cuando el directo no tiene alícuota.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function conceptosParaTipoTransaccion(object $comprobante): array
+    {
+        $lista = ConceptoIvacompraConsultaSupport::listarPorTipoTransaccion((int) $comprobante->id);
+        $porId = $lista->keyBy(static fn ($concepto): int => (int) $concepto->id);
+        $ordenados = [];
+        foreach ($comprobante->tipotransaccion_compra_concepto_ivacompras ?? [] as $linea) {
+            $id = (int) ($linea->concepto_ivacompra_id ?? 0);
+            if ($id > 0 && $porId->has($id)) {
+                $ordenados[] = $porId->get($id);
+                $porId->forget($id);
+            }
+        }
+        foreach ($porId as $concepto) {
+            $ordenados[] = $concepto;
+        }
+
+        $conceptos = [];
+        foreach ($ordenados as $concepto) {
+            $conceptos[] = [
+                'id_concepto' => (int) $concepto->codigo,
+                'concepto_ivacompra_id' => (int) $concepto->id,
+                'nombre' => (string) $concepto->nombre,
+                'descripcion_ai' => (string) ($concepto->nombre_ia ?: $concepto->nombre),
+                'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
+                'alicuota_iva' => $this->inferirAlicuotaDesdeConcepto($concepto),
+            ];
+        }
+
+        return $conceptos;
     }
 
     private function inferirAlicuotaDesdeConcepto(object $concepto): ?float

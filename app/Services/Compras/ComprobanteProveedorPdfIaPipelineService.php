@@ -173,6 +173,16 @@ final class ComprobanteProveedorPdfIaPipelineService
             $data['fecha_factura'] = $heuristica['fecha_factura'];
         }
 
+        // El vencimiento de pago del encabezado («Fecha vto.») no es el del CAE.
+        if (! empty($heuristica['fecha_vto_cai_cae'])) {
+            $data['fecha_vto_cai_cae'] = $heuristica['fecha_vto_cai_cae'];
+        }
+        $comercial = $heuristica['fecha_vencimiento'] ?? null;
+        $cae = (string) ($data['fecha_vto_cai_cae'] ?? '');
+        if (is_string($comercial) && $comercial !== '' && ($cae === '' || $comercial !== $cae)) {
+            $data['fecha_vencimiento'] = $comercial;
+        }
+
         return $data;
     }
 

@@ -204,6 +204,7 @@ class ReporteDefiniblePublicacionSupport
             'fecha_desde', 'fecha_hasta', 'base_saldo', 'modo_inclusion_asientos', 'moneda_id',
             'solo_moneda_origen', 'columnas_layout', 'layout_id', 'nivel_max', 'mostrar_cuentas',
             'incluir_presupuesto', 'presupuesto_escenario_id', 'ccosto_desde', 'ccosto_hasta',
+            'grupo_ccosto',
         ];
         if (($filtros['modo_periodo'] ?? '') === ReporteDefinibleSupport::MODO_MESES) {
             $claves[] = 'periodos';
@@ -225,6 +226,13 @@ class ReporteDefiniblePublicacionSupport
         if (isset($out['periodos']) && is_array($out['periodos'])) {
             $out['periodos'] = array_values(array_map('intval', $out['periodos']));
             sort($out['periodos']);
+        }
+        if (isset($out['grupo_ccosto']) && is_array($out['grupo_ccosto'])) {
+            $out['grupo_ccosto'] = array_values(array_filter(array_map('strval', $out['grupo_ccosto'])));
+            sort($out['grupo_ccosto']);
+            if ($out['grupo_ccosto'] === []) {
+                unset($out['grupo_ccosto']);
+            }
         }
 
         return $out;

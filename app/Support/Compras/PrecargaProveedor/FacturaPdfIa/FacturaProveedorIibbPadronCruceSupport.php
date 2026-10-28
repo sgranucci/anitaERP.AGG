@@ -17,6 +17,26 @@ final class FacturaProveedorIibbPadronCruceSupport
 
     public const TOLERANCIA_TASA = 0.15;
 
+    /**
+     * Código de jurisdicción impreso en la factura (J901 CABA, J902 Buenos Aires).
+     *
+     * @return array{codigo: string, descripcion: string}|null
+     */
+    public static function jurisdiccionDesdeFragmento(string $texto): ?array
+    {
+        if (! preg_match('/\bJ\s*(\d{3})\b/iu', $texto, $m)) {
+            return null;
+        }
+
+        return match ((int) $m[1]) {
+            901 => ['codigo' => 'caba', 'descripcion' => 'Percepcion IIBB CABA'],
+            902 => ['codigo' => 'arba', 'descripcion' => 'Percepcion IIBB Buenos Aires ARBA'],
+            904 => ['codigo' => 'cordoba', 'descripcion' => 'Percepcion IIBB Cordoba'],
+            924 => ['codigo' => 'tdf', 'descripcion' => 'Percepcion IIBB Tierra del Fuego'],
+            default => null,
+        };
+    }
+
     public function __construct(
         private IIBBService $iibbService,
     ) {}
@@ -72,6 +92,11 @@ final class FacturaProveedorIibbPadronCruceSupport
 
             $tasaImplicita = round(($importe / $neto) * 100.0, 4);
             $lineas[$i]['tasa_iibb_implicita'] = $tasaImplicita;
+
+            // J901/J902 impresos en la factura mandan sobre el cruce de alícuota.
+            if (trim((string) ($linea['jurisdiccion_iibb'] ?? '')) !== '') {
+                continue;
+            }
 
             $match = $this->resolverJurisdiccion($tasaImplicita, $arba, $caba);
             if ($match === null) {

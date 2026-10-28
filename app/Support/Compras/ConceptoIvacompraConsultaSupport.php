@@ -159,7 +159,7 @@ final class ConceptoIvacompraConsultaSupport
             ->all();
 
         if ($desdePivot !== []) {
-            return $desdePivot;
+            return self::conIvaDelHermanoIndirecto($tipotransaccionCompraId, $desdePivot);
         }
 
         $numeroOc = trim((string) $numeroOc);
@@ -185,6 +185,113 @@ final class ConceptoIvacompraConsultaSupport
         }
 
         return array_values(array_unique(array_map('intval', array_filter($ids))));
+    }
+
+    /**
+     * Factura directa de bienes (FDB) y las de locación (FDL): Anita no les vinculó
+     * conceptos de IVA. El débito de bienes (DDB) y la factura indirecta (FIB/FIL)
+     * sí tienen el IVA de esa base. Sin eso el combo no ofrece alícuota y el importe
+     * de IVA termina en «No gravado».
+     *
+     * Solo cuando el tipo es directo (2ª letra D), tiene gravados y ningún IVA.
+     *
+     * @param  list<int>  $idsPivot
+     * @return list<int>
+     */
+    public static function conIvaDelHermanoIndirecto(int $tipotransaccionCompraId, array $idsPivot): array
+    {
+        $idsPivot = array_values(array_unique(array_filter(array_map('intval', $idsPivot))));
+        if ($tipotransaccionCompraId <= 0 || $idsPivot === []) {
+            return $idsPivot;
+        }
+
+        $abrev = strtoupper(trim((string) (Tipotransaccion_Compra::query()
+            ->whereKey($tipotransaccionCompraId)
+            ->value('abreviatura') ?? '')));
+        $hermano = self::abreviaturaHermanoIndirecto($abrev);
+        if ($hermano === null) {
+            return $idsPivot;
+        }
+
+        $propios = Concepto_Ivacompra::query()
+            ->whereIn('id', $idsPivot)
+            ->get(['id', 'codigo', 'tipoconcepto']);
+        $codigosGravado = [];
+        foreach ($propios as $concepto) {
+            if (strtoupper(trim((string) ($concepto->tipoconcepto ?? ''))) === 'I') {
+                return $idsPivot;
+            }
+            if (strtoupper(trim((string) ($concepto->tipoconcepto ?? ''))) === 'G') {
+                $codigosGravado[(string) $concepto->codigo] = true;
+            }
+        }
+        if ($codigosGravado === []) {
+            return $idsPivot;
+        }
+
+        $hermanoId = (int) (Tipotransaccion_Compra::query()
+            ->where('abreviatura', $hermano)
+            ->value('id') ?? 0);
+        if ($hermanoId <= 0) {
+            return $idsPivot;
+        }
+
+        $idsHermano = Tipotransaccion_Compra_Concepto_Ivacompra::query()
+            ->where('tipotransaccion_compra_id', $hermanoId)
+            ->pluck('concepto_ivacompra_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->filter(static fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($idsHermano === []) {
+            return $idsPivot;
+        }
+
+        $ivas = Concepto_Ivacompra::query()
+            ->whereIn('id', $idsHermano)
+            ->where('tipoconcepto', 'I')
+            ->get(['id', 'formula']);
+
+        $extra = [];
+        foreach ($ivas as $iva) {
+            foreach (self::codigosEnFormula((string) ($iva->formula ?? '')) as $codigo) {
+                if (isset($codigosGravado[$codigo]) || isset($codigosGravado[ltrim($codigo, '0')])) {
+                    $extra[] = (int) $iva->id;
+                    break;
+                }
+            }
+        }
+        if ($extra === []) {
+            return $idsPivot;
+        }
+
+        return array_values(array_unique(array_merge($idsPivot, $extra)));
+    }
+
+    /**
+     * FDB → FIB, FDL → FIL, CDB → CIB. Null si no es un tipo directo de 3 letras.
+     */
+    public static function abreviaturaHermanoIndirecto(string $abreviatura): ?string
+    {
+        $abreviatura = strtoupper(trim($abreviatura));
+        if (strlen($abreviatura) !== 3 || $abreviatura[1] !== 'D') {
+            return null;
+        }
+
+        return $abreviatura[0].'I'.$abreviatura[2];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function codigosEnFormula(string $formula): array
+    {
+        if (preg_match_all('/con\s*\(\s*([0-9]+)\s*\)/i', $formula, $m) < 1) {
+            return [];
+        }
+
+        return array_values(array_unique(array_map('strval', $m[1] ?? [])));
     }
 
     /**

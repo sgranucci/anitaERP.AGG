@@ -3,6 +3,7 @@
 namespace App\Support\Contable;
 
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleDimensionSupport;
+use App\Support\Contable\ReporteDefinible\ReporteDefinibleGrupoCcostoSupport;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleSupport;
 use Illuminate\Http\Request;
 
@@ -197,6 +198,7 @@ class ReporteDefinibleListadoFiltros
             'modo_inclusion_asientos' => $modoAsientos,
             'ccosto_desde' => max(0, (int) $request->input('ccosto_desde', 0)),
             'ccosto_hasta' => max(0, (int) $request->input('ccosto_hasta', 0)),
+            'grupo_ccosto' => ReporteDefinibleGrupoCcostoSupport::normalizarCodigos($request->input('grupo_ccosto', [])),
             'incluir_sin_ccosto' => $request->boolean('incluir_sin_ccosto', true),
             'incluir_total_ccosto' => $request->boolean('incluir_total_ccosto', true),
             'ocultar_ceros' => $request->boolean('ocultar_ceros'),
@@ -236,6 +238,9 @@ class ReporteDefinibleListadoFiltros
             'nivel_max' => $filtros['nivel_max'] ?? 0,
             'ccosto_desde' => ($filtros['ccosto_desde'] ?? 0) ?: null,
             'ccosto_hasta' => ($filtros['ccosto_hasta'] ?? 0) ?: null,
+            'grupo_ccosto' => ($filtros['grupo_ccosto'] ?? []) !== []
+                ? array_values($filtros['grupo_ccosto'])
+                : null,
         ];
         if (! empty($filtros['mostrar_cuentas'])) {
             $out['mostrar_cuentas'] = 1;

@@ -9,6 +9,7 @@ use App\Repositories\Contable\ReporteContableRepository;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleAnitaSaldoReader;
+use App\Support\Contable\ReporteDefinible\ReporteDefinibleGrupoCcostoSupport;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleProcesador;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleSaldoReader;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleSupport;
@@ -159,7 +160,7 @@ class ReporteDefinibleParidadService
         $monedaId = (int) ($filtros['moneda_id'] ?? 0) ?: null;
         $soloOrigen = (bool) ($filtros['solo_moneda_origen'] ?? false);
         $nivelMax = (int) ($filtros['nivel_max'] ?? 0);
-        $filtroCcosto = $this->filtroCcosto($filtros);
+        $filtroCcosto = ReporteDefinibleGrupoCcostoSupport::filtroRuntime($filtros, $advertencias);
 
         $codigos = $this->procesador->codigosRealesDelReporte($reporteErp);
         if ($codigos === []) {
@@ -420,21 +421,6 @@ class ReporteDefinibleParidadService
         }
 
         return false;
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     * @return array{desde: int, hasta: int}|null
-     */
-    private function filtroCcosto(array $filtros): ?array
-    {
-        $desde = (int) ($filtros['ccosto_desde'] ?? 0);
-        $hasta = (int) ($filtros['ccosto_hasta'] ?? 0);
-        if ($desde <= 0 && $hasta <= 0) {
-            return null;
-        }
-
-        return ['desde' => $desde, 'hasta' => $hasta > 0 ? $hasta : $desde];
     }
 
     /**

@@ -492,6 +492,32 @@ var brutoSpIe = 0;
 		sumaMonto();
 	}
 
+	window.aplicarCuentaNetoLiquidacionTarjeta = function (cuenta, cobrado) {
+		var $filas = $('#tbody-cuenta-table tr.item-cuenta');
+		var $fila = $filas.filter(function () {
+			return (parseInt($(this).find('.cuentacaja_id').val() || '0', 10) || 0) > 0
+				|| $.trim($(this).find('.codigo').val() || '') !== '';
+		}).first();
+		if (!$fila.length) {
+			$fila = $filas.first();
+		}
+		if (!$fila.length) {
+			agregaUnRenglon();
+			$fila = $('#tbody-cuenta-table tr.item-cuenta').last();
+		}
+		aplicarCuentaCajaEnFilaIe($fila, cuenta || {});
+		var $monto = $fila.find('.monto');
+		var n = Number(cobrado);
+		if (isNaN(n)) {
+			n = 0;
+		}
+		$monto.val(n.toFixed(2));
+		if (window.AsientoMontosFormato && typeof AsientoMontosFormato.formatearInput === 'function') {
+			AsientoMontosFormato.formatearInput($monto[0]);
+		}
+		$monto.trigger('change');
+	};
+
 	function enfocarCampoCuentaIe(el) {
 		if (!el) {
 			return;
@@ -841,7 +867,7 @@ var brutoSpIe = 0;
 				var codigoLt = $.trim($filaLt.find('.codigo').text());
 				var nombreLt = $.trim($filaLt.find('.nombre').text());
 				if (destinoLt.id) {
-					$(destinoLt.id).val(idLt).trigger('change');
+					$(destinoLt.id).val(idLt).attr('data-moneda-id', $.trim($filaLt.find('.moneda_id').text())).trigger('change');
 				}
 				if (destinoLt.codigo) {
 					$(destinoLt.codigo).val(codigoLt);

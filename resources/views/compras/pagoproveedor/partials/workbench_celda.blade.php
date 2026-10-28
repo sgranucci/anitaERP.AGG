@@ -3,13 +3,24 @@
     $alineacion = match ($key) {
         'monto' => 'text-right text-nowrap',
         'mail' => 'text-center align-middle js-op-mail-celda',
+        'fecha' => 'text-nowrap pp-fecha-celda',
         default => '',
     };
 @endphp
 <td class="{{ $alineacion }}" @if ($key === 'mail') data-pagoproveedor-id="{{ $esIeOpp ? '' : $fila->id }}" @endif>
     @switch ($key)
         @case ('fecha')
-            {{ optional($fila->fecha)->format('d/m/Y') }}
+            @php
+                $horaEmision = $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
+                    ? $fila->horaEmision
+                    : null;
+            @endphp
+            <span class="pp-fecha-bloque">
+                <span class="pp-fecha-dia">{{ optional($fila->fecha)->format('d/m/Y') }}</span>
+                @if ($horaEmision)
+                    <span class="pp-fecha-hora" title="Hora de emisión">{{ $horaEmision->format('H:i') }}</span>
+                @endif
+            </span>
             @break
         @case ('op')
             {{ $fila->etiquetaComprobante() }}

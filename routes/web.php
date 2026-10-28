@@ -799,6 +799,9 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('ventas/facturacion-local/api/contexto-pos', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiContextoPos')->name('facturacion_local_api_contexto_pos');
     Route::get('ventas/facturacion-local/api/consulta-stock-precios', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiConsultaStockPrecios')->name('facturacion_local_api_consulta_stock_precios');
 
+    Route::get('ventas/facturacion-local/nota-credito-factura-vieja', 'Ventas\FacturacionLocal\FacturacionLocalNotaCreditoFacturaViejaController@index')->name('facturacion_local_nc_factura_vieja');
+    Route::post('ventas/facturacion-local/nota-credito-factura-vieja', 'Ventas\FacturacionLocal\FacturacionLocalNotaCreditoFacturaViejaController@emitir')->name('facturacion_local_nc_factura_vieja_emitir');
+
     Route::get('ventas/facturacion-local/locales', 'Ventas\FacturacionLocal\LocalVentaController@index')->name('facturacion_local_locales');
     Route::get('ventas/facturacion-local/locales/lista/{formato?}/{busqueda?}', 'Ventas\FacturacionLocal\LocalVentaController@listar')->name('lista_local_venta');
     Route::get('ventas/facturacion-local/locales/crear', 'Ventas\FacturacionLocal\LocalVentaController@crear')->name('crear_local_venta');
@@ -1381,6 +1384,8 @@ Route::get('contable/reporte-definible/crear', 'Contable\ReporteDefinibleControl
 Route::post('contable/reporte-definible', 'Contable\ReporteDefinibleController@guardar')->name('guardar_reporte_definible');
 Route::post('contable/reporte-definible/importar-anita', 'Contable\ReporteDefinibleController@importarAnita')->name('importar_reporte_definible_anita');
 Route::get('contable/reporte-definible/ejecutar/{id?}', 'Contable\ReporteDefinibleController@ejecutar')->name('ejecutar_reporte_definible');
+Route::post('contable/reporte-definible/consulta-grupo-ccosto', 'Contable\ReporteDefinibleController@consultaGrupoCcosto')->name('consulta_grupo_ccosto_reporte_definible');
+Route::get('contable/reporte-definible/resolver-grupo-ccosto', 'Contable\ReporteDefinibleController@resolverGrupoCcosto')->name('resolver_grupo_ccosto_reporte_definible');
 Route::get('contable/listar-reporte-definible/{id}/{formato}', 'Contable\ReporteDefinibleController@exportar')->name('listar_reporte_definible');
 Route::get('contable/reporte-definible-conjunto', 'Contable\ReporteDefinibleConjuntoController@index')->name('reporte_definible_conjunto');
 Route::get('contable/reporte-definible-conjunto/crear', 'Contable\ReporteDefinibleConjuntoController@crear')->name('crear_reporte_definible_conjunto');

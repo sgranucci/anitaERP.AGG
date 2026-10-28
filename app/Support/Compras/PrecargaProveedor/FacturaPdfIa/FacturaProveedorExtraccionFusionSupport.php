@@ -248,12 +248,17 @@ final class FacturaProveedorExtraccionFusionSupport
             if ($importe <= 0) {
                 continue;
             }
-            $salida[] = [
+            $fila = [
                 'descripcion' => (string) ($linea['descripcion'] ?? $linea['tipo'] ?? 'Concepto'),
                 'importe' => $importe,
                 'alicuota_iva' => isset($linea['alicuota_iva']) ? (float) $linea['alicuota_iva'] : null,
                 'tipo' => (string) ($linea['tipo'] ?? 'neto'),
             ];
+            $jurisdiccion = strtolower(trim((string) ($linea['jurisdiccion_iibb'] ?? '')));
+            if ($jurisdiccion !== '') {
+                $fila['jurisdiccion_iibb'] = $jurisdiccion;
+            }
+            $salida[] = $fila;
         }
 
         return $salida;

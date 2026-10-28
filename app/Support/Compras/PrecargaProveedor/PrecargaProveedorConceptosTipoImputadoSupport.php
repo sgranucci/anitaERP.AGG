@@ -5,6 +5,7 @@ namespace App\Support\Compras\PrecargaProveedor;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Compras\Tipotransaccion_Compra_Concepto_Ivacompra;
+use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use Illuminate\Support\Collection;
 
@@ -14,6 +15,8 @@ use Illuminate\Support\Collection;
  *
  * Las facturas prorrateadas (FPB/CPS/…) usan la unión de conceptos de los centros
  * de costo de la OC y no tienen conceptos propios: quedan fuera de esta regla.
+ * Las directas (FDB/FDL/CDB) no tienen IVA en Anita: vale el IVA del hermano
+ * indirecto (FIB/FIL/CIB) que ya ofrece el combo, el que referencia un gravado propio.
  */
 final class PrecargaProveedorConceptosTipoImputadoSupport
 {
@@ -159,6 +162,9 @@ final class PrecargaProveedorConceptosTipoImputadoSupport
     }
 
     /**
+     * Pivot del tipo. En una directa sin IVA propio (FDB) suma el IVA del hermano
+     * indirecto que el combo ya deja elegir. Vacío si es prorrateado.
+     *
      * @return list<int>
      */
     public static function idsDelTipo(int $tipotransaccionCompraId, ?string $abreviaturaTipo = null): array
@@ -171,7 +177,7 @@ final class PrecargaProveedorConceptosTipoImputadoSupport
             return [];
         }
 
-        return Tipotransaccion_Compra_Concepto_Ivacompra::query()
+        $ids = Tipotransaccion_Compra_Concepto_Ivacompra::query()
             ->where('tipotransaccion_compra_id', $tipotransaccionCompraId)
             ->pluck('concepto_ivacompra_id')
             ->map(static fn ($id): int => (int) $id)
@@ -179,6 +185,11 @@ final class PrecargaProveedorConceptosTipoImputadoSupport
             ->unique()
             ->values()
             ->all();
+
+        return ConceptoIvacompraConsultaSupport::conIvaDelHermanoIndirecto(
+            $tipotransaccionCompraId,
+            $ids
+        );
     }
 
     public static function abreviaturaTipo(int $tipotransaccionCompraId): string

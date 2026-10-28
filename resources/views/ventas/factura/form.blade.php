@@ -245,15 +245,22 @@
 		display: block;
 		margin: 2px auto 0;
 	}
+	#itemspedido-table .nc-linea-meta {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.25rem;
+		margin-top: 2px;
+	}
 	#itemspedido-table .nc-linea-extra {
 		display: block;
 		font-size: 0.75rem;
 		color: #5d6d7e;
-		margin-top: 2px;
-		line-height: 1.2;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		line-height: 1.25;
+		white-space: normal;
+	}
+	#itemspedido-table .nc-consultar-color {
+		flex: 0 0 auto;
+		margin-top: 1px;
 	}
 </style>
 <div class="form1">
@@ -706,8 +713,30 @@
 							}
 							$extraNcPartes = [];
 							$combCodigoNc = trim((string) ($item->combinaciones?->codigo ?? ''));
+							$combNombreNc = trim((string) ($item->combinaciones?->nombre ?? ''));
+							$colorFondoNc = trim((string) ($item->combinaciones?->coloresfondos?->nombre ?? ''));
+							$colorForroNc = trim((string) ($item->combinaciones?->coloresforros?->nombre ?? ''));
+							$colorVisibleNc = $combNombreNc !== '' ? $combNombreNc : $colorFondoNc;
+							$combinacionIdNc = (int) ($item->combinacion_id ?? 0);
+							$consultaColorPartes = [];
+							if ($combNombreNc !== '') {
+								$consultaColorPartes[] = 'Color: '.$combNombreNc;
+							}
+							if ($colorFondoNc !== '') {
+								$consultaColorPartes[] = 'Fondo: '.$colorFondoNc;
+							}
+							if ($colorForroNc !== '') {
+								$consultaColorPartes[] = 'Forro: '.$colorForroNc;
+							}
+							$consultaColorNcTitle = $consultaColorPartes !== []
+								? implode('. ', $consultaColorPartes)
+								: 'Consultar combinación';
 							if ($combCodigoNc !== '') {
-								$extraNcPartes[] = 'Comb. '.$combCodigoNc;
+								$textoCombNc = 'Comb. '.$combCodigoNc;
+								if ($colorVisibleNc !== '' && strcasecmp($colorVisibleNc, $combCodigoNc) !== 0) {
+									$textoCombNc .= ' · '.$colorVisibleNc;
+								}
+								$extraNcPartes[] = $textoCombNc;
 							}
 							$modCodigoNc = trim((string) ($item->modulos?->codigo ?? ''));
 							$modNombreNc = trim((string) ($item->modulos?->nombre ?? ''));
@@ -816,8 +845,21 @@
 								<textarea name="leyendas_linea[]" class="d-none factura-ta-leyenda-linea" aria-hidden="true">{{ $leyendaLineaItem }}</textarea>
 								<div class="factura-leyenda-badge" title="{{ $leyendaLineaItem }}">{{ $leyendaLineaItem !== '' ? $leyendaLineaItem : '' }}</div>
 								<div class="factura-ot-badge"></div>
-								@if ($extraNcTexto !== '')
-									<span class="nc-linea-extra">{{ $extraNcTexto }}</span>
+								@if ($extraNcTexto !== '' || $combinacionIdNc > 0)
+									<div class="nc-linea-meta">
+										@if ($extraNcTexto !== '')
+											<span class="nc-linea-extra">{{ $extraNcTexto }}</span>
+										@endif
+										@if ($combinacionIdNc > 0)
+											<a href="{{ route('combinacion.edit', ['id' => $combinacionIdNc]) }}"
+												class="btn-accion-tabla nc-consultar-color tooltipsC"
+												target="_blank"
+												rel="noopener"
+												title="{{ $consultaColorNcTitle }}">
+												<i class="fa fa-paint-brush"></i>
+											</a>
+										@endif
+									</div>
 								@endif
                             </td>
 							<td class="factura-col-iva">
@@ -968,8 +1010,17 @@
 			<div class="col-sm-6">
 				@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
 					<div class="form-group mb-2 d-flex align-items-center justify-content-end">
-						<label for="TotalCantidadFactura" class="mb-0 mr-2 font-weight-bold">Total pares</label>
+						<label for="TotalCantidadFactura" class="mb-0 mr-2 font-weight-bold">
+							@if (! empty($flGeneraNotaDeCredito))
+								Pares a devolver
+							@else
+								Total pares
+							@endif
+						</label>
 						<input type="text" id="TotalCantidadFactura" name="TotalCantidadFactura" class="form-control form-control-sm text-right font-weight-bold" style="max-width:6rem;" readonly value="" />
+						@if (! empty($flGeneraNotaDeCredito))
+							<span id="nc-pares-factura" class="text-muted small ml-2"></span>
+						@endif
 					</div>
 				@endif
 				<table class="table table-sm table-bordered" id="total-factura-table">

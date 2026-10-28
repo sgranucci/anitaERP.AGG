@@ -31,6 +31,7 @@ final class PagoproveedorListadoFila
         public readonly string $cuentasCaja = '',
         public readonly bool $revertible = false,
         public readonly bool $mailEnviado = false,
+        public readonly ?CarbonInterface $horaEmision = null,
     ) {
         $this->nombreempresa = $this->nombreEmpresa;
     }
@@ -67,6 +68,7 @@ final class PagoproveedorListadoFila
             cuentasCaja: trim($cuentasCaja),
             revertible: $this->revertible,
             mailEnviado: $this->mailEnviado,
+            horaEmision: $this->horaEmision,
         );
 
         return $fila->conExtrasDe($this);
@@ -164,6 +166,13 @@ final class PagoproveedorListadoFila
                 : Carbon::parse((string) $row->fecha)->startOfDay();
         }
 
+        $horaEmision = null;
+        if (! empty($row->hora_emision)) {
+            $horaEmision = $row->hora_emision instanceof CarbonInterface
+                ? $row->hora_emision
+                : Carbon::parse((string) $row->hora_emision);
+        }
+
         $origen = (string) $row->origen;
         $tipo = (string) ($row->tipocomprobante ?: ($origen === self::ORIGEN_IE_OPP ? 'OPP' : 'OP'));
         $sucursal = (int) ($row->sucursal ?? 0);
@@ -193,6 +202,7 @@ final class PagoproveedorListadoFila
                 : null,
             cuentasCaja: trim((string) ($row->cuentas_caja ?? '')),
             revertible: (int) ($row->revertible ?? 0) === 1,
+            horaEmision: $horaEmision,
         );
         for ($i = 0; $i < 2; $i++) {
             $alias = 'calc_'.$i;

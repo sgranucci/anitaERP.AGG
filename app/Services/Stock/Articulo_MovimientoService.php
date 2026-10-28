@@ -858,27 +858,7 @@ class Articulo_MovimientoService
 	 */
 	private function situacionesReporteStockOtPorIds(array $ordentrabajoIds): array
 	{
-		$ids = array_values(array_unique(array_filter(array_map('intval', $ordentrabajoIds))));
-		$out = [];
-		foreach ($ids as $id) {
-			$out[$id] = ReporteStockOtSituacionSupport::desdeTareaIds([]);
-		}
-		if ($ids === []) {
-			return $out;
-		}
-
-		$rows = DB::table('ordentrabajo_tarea')
-			->whereIn('ordentrabajo_id', $ids)
-			->get(['ordentrabajo_id', 'tarea_id']);
-		$porOt = [];
-		foreach ($rows as $row) {
-			$porOt[(int) $row->ordentrabajo_id][] = (int) $row->tarea_id;
-		}
-		foreach ($porOt as $otId => $tareaIds) {
-			$out[$otId] = ReporteStockOtSituacionSupport::desdeTareaIds($tareaIds);
-		}
-
-		return $out;
+		return ReporteStockOtSituacionSupport::situacionesPorOrdentrabajoIds($ordentrabajoIds);
 	}
 
 	/**

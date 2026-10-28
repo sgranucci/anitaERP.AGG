@@ -2080,14 +2080,32 @@
 	function TotalCantidadFactura()
 	{
 		totPares = 0;
+		var esNc = $('#formgeneral').attr('data-factura-proceso') === 'nc';
+		var paresFactura = 0;
 
 		$(".cantidad").each(function() {
-			if ((parseFloat($(this).val()) >= 1 && parseFloat($(this).val()) <= 999999) ||
-				(parseFloat($(this).val()) <= -1 && parseFloat($(this).val()) >= -999999))
-				totPares += parseFloat($(this).val());
+			var $inp = $(this);
+			var $tr = $inp.closest('tr');
+			var val = parseFloat($inp.val());
+			if (esNc && $tr.find('.nc-devolver').length) {
+				var original = parseFloat($tr.attr('data-cantidad-original') || '');
+				if (!isNaN(original)) {
+					paresFactura += original;
+				}
+				var $chk = $tr.find('.nc-devolver');
+				if (!$chk.is(':checked') || $tr.hasClass('nc-linea-excluida')) {
+					return;
+				}
+			}
+			if ((val >= 1 && val <= 999999) || (val <= -1 && val >= -999999))
+				totPares += val;
 		});
 		
 		$("#TotalCantidadFactura").val(totPares.toFixed(0));
+		var $factura = $('#nc-pares-factura');
+		if ($factura.length) {
+			$factura.text(paresFactura > 0 ? ('de ' + Math.round(paresFactura) + ' de la factura') : '');
+		}
 	}
 
 	function sumaanulacionPares()

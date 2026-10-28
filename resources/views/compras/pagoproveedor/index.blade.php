@@ -9,6 +9,10 @@
     #tabla-paginada tr.pp-tono-danger > td { background:#FDEDEC !important; }
     #tabla-paginada tr.pp-tono-warning > td { background:#FEF9E7 !important; }
     #tabla-paginada tr.pp-tono-success > td { background:#E8F8F5 !important; }
+    #tabla-paginada td.pp-fecha-celda { line-height: 1; padding-top: 0.15rem; padding-bottom: 0.1rem; }
+    #tabla-paginada .pp-fecha-bloque { display: inline-flex; flex-direction: column; line-height: 1; }
+    #tabla-paginada .pp-fecha-dia { line-height: 1.05; }
+    #tabla-paginada .pp-fecha-hora { display: block; margin-top: 1px; font-size: 0.62rem; line-height: 1; color: #7f8c8d; letter-spacing: .02em; }
 </style>
 @endsection
 

@@ -93,6 +93,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
             ['CP a crear / creados', $stats['a_crear_cp'].' / '.$stats['cp_creados']],
             ['OPA a crear / creados', $stats['a_crear_opa'].' / '.$stats['opa_creados']],
             ['CC a crear / creadas', $stats['a_crear_cc'].' / '.$stats['cc_creadas']],
+            ['Importe CC nuevas', number_format((float) ($stats['importe_cc_nuevas'] ?? 0), 2, ',', '.')],
             ['Alinear ANITA_IMPORT', $stats['a_alinear_anita_import'] ?? 0],
             ['aplmovp Anita', $stats['anita_aplmovp']],
             ['Aplicaciones Anita (pares)', $stats['aplicaciones_anita']],

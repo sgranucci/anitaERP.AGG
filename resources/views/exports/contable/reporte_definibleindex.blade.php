@@ -35,6 +35,11 @@
             <td colspan="20">{{ $reporte->titulo2 }}</td>
         </tr>
     @endif
+    @if (trim((string) ($resultado['criterios'] ?? '')) !== '')
+        <tr>
+            <td colspan="20">{!! nl2br(e($resultado['criterios'])) !!}</td>
+        </tr>
+    @endif
     <thead>
         @if ($mostrarGrupos)
             <tr>

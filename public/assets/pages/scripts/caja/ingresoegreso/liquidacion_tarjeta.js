@@ -185,10 +185,14 @@
         return 0;
     }
 
-    function pasarCobradoACaja(cobrado) {
+    function pasarCobradoACaja(cobrado, cuenta) {
+        if (typeof window.aplicarCuentaNetoLiquidacionTarjeta === 'function' && cuenta) {
+            window.aplicarCuentaNetoLiquidacionTarjeta(cuenta, cobrado);
+            return;
+        }
         var $fila = $('#tbody-cuenta-table tr.item-cuenta').filter(function () {
             return (parseInt($(this).find('.cuentacaja_id').val() || '0', 10) || 0) > 0
-                || $.trim($(this).find('.codigocuentacaja').val() || '') !== '';
+                || $.trim($(this).find('.codigo').val() || '') !== '';
         }).first();
         if (!$fila.length) {
             $fila = $('#tbody-cuenta-table tr.item-cuenta').first();
@@ -198,6 +202,25 @@
         }
         var $monto = $fila.find('.monto');
         $monto.val(formato(cobrado)).trigger('change');
+    }
+
+    function prellenarCuentaCajaDesdePrincipal() {
+        if ((parseInt($('#ie-lt-caja-id').val() || '0', 10) || 0) > 0) {
+            return;
+        }
+        var $fila = $('#tbody-cuenta-table tr.item-cuenta').filter(function () {
+            return (parseInt($(this).find('.cuentacaja_id').val() || '0', 10) || 0) > 0;
+        }).first();
+        if (!$fila.length) {
+            return;
+        }
+        var id = parseInt($fila.find('.cuentacaja_id').val() || '0', 10) || 0;
+        if (id <= 0 || tarjetaPorId(id)) {
+            return;
+        }
+        $('#ie-lt-caja-id').val(String(id)).attr('data-moneda-id', $fila.find('.moneda').val() || '');
+        $('#ie-lt-caja-id_codigo').val($.trim($fila.find('.codigo').val() || ''));
+        $('#ie-lt-caja-id_nombre').val($.trim($fila.find('.nombre').val() || ''));
     }
 
     function elegirCobranza() {
@@ -221,6 +244,7 @@
             $('#ie-lt-fecha').val(fecha);
         }
         $('#ie-lt-aviso').addClass('d-none').text('');
+        prellenarCuentaCajaDesdePrincipal();
         sugerirEmisor();
         recalcular();
         $('#modal-ie-liquidacion-tarjeta').modal('show');
@@ -241,6 +265,15 @@
         var tarjetaId = parseInt($('#ie-lt-cuentacaja-id').val() || '0', 10) || 0;
         if (tarjetaId <= 0) {
             fallo('Elegí la cuenta de la tarjeta.');
+            return;
+        }
+        var cajaId = parseInt($('#ie-lt-caja-id').val() || '0', 10) || 0;
+        if (cajaId <= 0) {
+            fallo('Elegí la cuenta de caja donde entra el neto.');
+            return;
+        }
+        if (cajaId === tarjetaId || tarjetaPorId(cajaId)) {
+            fallo('La cuenta de caja del neto tiene que ser el banco o la caja, no la tarjeta.');
             return;
         }
         if (totales.bruto <= 0) {
@@ -338,7 +371,12 @@
             return;
         }
         window.aplicarLiquidacionTarjetaEnGrilla(payload);
-        pasarCobradoACaja(totales.cobrado);
+        pasarCobradoACaja(totales.cobrado, {
+            id: cajaId,
+            codigo: $.trim($('#ie-lt-caja-id_codigo').val() || ''),
+            nombre: $.trim($('#ie-lt-caja-id_nombre').val() || ''),
+            moneda_id: parseInt($('#ie-lt-caja-id').attr('data-moneda-id') || '0', 10) || 0
+        });
         elegirCobranza();
         if (typeof flModificaAsiento !== 'undefined') {
             flModificaAsiento = true;
@@ -356,17 +394,35 @@
         $('#ie-btn-liquidacion-tarjeta').on('click', abrir);
         window.abrirLiquidacionTarjetaIe = abrir;
 
-        function abrirConsultaTarjeta() {
+        var enfoqueAlCerrarConsulta = 'bruto';
+
+        function campoCuentaDelModal(target) {
+            var $campo = $(target).closest('.tm-cuentacaja-campo');
+            if ($campo.attr('id') === 'tm_cuentacaja_ie_liquidacion_caja') {
+                return 'caja';
+            }
+            return 'tarjeta';
+        }
+
+        function abrirConsultaCuentaModal(cual) {
             if (!$('#empresa_id').val()) {
                 alert('Debe ingresar empresa');
                 return;
             }
-            window.consultaCuentacajaSoloTarjeta = true;
-            window.ieLiquidacionTarjetaDestinoCaja = {
-                id: '#ie-lt-cuentacaja-id',
-                codigo: '#ie-lt-cuentacaja-id_codigo',
-                nombre: '#ie-lt-cuentacaja-id_nombre'
-            };
+            var esCaja = cual === 'caja';
+            enfoqueAlCerrarConsulta = esCaja ? 'bruto' : 'caja';
+            window.consultaCuentacajaSoloTarjeta = !esCaja;
+            window.ieLiquidacionTarjetaDestinoCaja = esCaja
+                ? {
+                    id: '#ie-lt-caja-id',
+                    codigo: '#ie-lt-caja-id_codigo',
+                    nombre: '#ie-lt-caja-id_nombre'
+                }
+                : {
+                    id: '#ie-lt-cuentacaja-id',
+                    codigo: '#ie-lt-cuentacaja-id_codigo',
+                    nombre: '#ie-lt-cuentacaja-id_nombre'
+                };
             $('#consultacuentacaja').val('');
             $('#datoscuentacaja').html('');
             $('#consultacuentacajaModal').modal('show');
@@ -375,7 +431,7 @@
         $(document).on('click.ieLtTarjeta', '#modal-ie-liquidacion-tarjeta .consultacuentacaja', function (e) {
             e.preventDefault();
             e.stopPropagation();
-            abrirConsultaTarjeta();
+            abrirConsultaCuentaModal(campoCuentaDelModal(this));
         });
 
         document.addEventListener('keydown', function (e) {
@@ -392,7 +448,7 @@
             }
             e.preventDefault();
             e.stopPropagation();
-            abrirConsultaTarjeta();
+            abrirConsultaCuentaModal(campoCuentaDelModal(target));
         }, true);
 
         $(document).on('keydown.ieLtTarjeta', '#ie-lt-cuentacaja-id_codigo', function (e) {
@@ -422,14 +478,52 @@
                     $('#ie-lt-cuentacaja-id').val(data.id).trigger('change');
                     $('#ie-lt-cuentacaja-id_codigo').val(data.codigo || codigo);
                     $('#ie-lt-cuentacaja-id_nombre').val(data.nombre || '');
-                    var $bruto = $('#ie-lt-bruto');
-                    if ($bruto.length) {
-                        $bruto.trigger('focus');
+                    var codigoCaja = document.getElementById('ie-lt-caja-id_codigo');
+                    if (codigoCaja) {
+                        codigoCaja.focus();
                     }
                 })
                 .fail(function () {
                     alert('No existe la cuenta de caja.');
                     $('#ie-lt-cuentacaja-id_codigo').trigger('focus');
+                });
+        });
+
+        $(document).on('keydown.ieLtCaja', '#ie-lt-caja-id_codigo', function (e) {
+            if (e.key !== 'Enter' && e.keyCode !== 13 && e.which !== 13) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            var codigo = $.trim($(this).val() || '');
+            var empresaId = $('#empresa_id').val();
+            if (codigo === '') {
+                $('#ie-lt-caja-id').val('').removeAttr('data-moneda-id');
+                $('#ie-lt-caja-id_nombre').val('');
+                return;
+            }
+            if (!empresaId) {
+                alert('Debe ingresar empresa');
+                return;
+            }
+            $.get(carpetaBase + '/caja/cuentacaja/leercuentacajaporcodigo/' + encodeURIComponent(codigo), { empresa_id: empresaId })
+                .done(function (data) {
+                    var esTarjeta = data && (data.es_tarjeta === true || data.es_tarjeta === 1 || String(data.es_tarjeta) === '1');
+                    if (!data || !(parseInt(data.id, 10) > 0) || esTarjeta) {
+                        alert(esTarjeta
+                            ? 'Esa cuenta es una tarjeta. Elegí el banco o la caja donde se deposita el neto.'
+                            : 'No existe la cuenta de caja.');
+                        $('#ie-lt-caja-id_codigo').trigger('focus');
+                        return;
+                    }
+                    $('#ie-lt-caja-id').val(data.id).attr('data-moneda-id', data.moneda_id || '');
+                    $('#ie-lt-caja-id_codigo').val(data.codigo || codigo);
+                    $('#ie-lt-caja-id_nombre').val(data.nombre || '');
+                    enfocarBrutoCupones();
+                })
+                .fail(function () {
+                    alert('No existe la cuenta de caja.');
+                    $('#ie-lt-caja-id_codigo').trigger('focus');
                 });
         });
 
@@ -532,7 +626,19 @@
                 window.ieLiquidacionTarjetaDestinoCaja = null;
                 if ($('#modal-ie-liquidacion-tarjeta').hasClass('show')) {
                     $('body').addClass('modal-open');
-                    setTimeout(enfocarBrutoCupones, 0);
+                    setTimeout(function () {
+                        if (enfoqueAlCerrarConsulta === 'caja') {
+                            var codigoCaja = document.getElementById('ie-lt-caja-id_codigo');
+                            if (codigoCaja) {
+                                codigoCaja.focus();
+                                if (typeof codigoCaja.select === 'function') {
+                                    codigoCaja.select();
+                                }
+                            }
+                        } else {
+                            enfocarBrutoCupones();
+                        }
+                    }, 0);
                 }
                 sugerirEmisor();
             });

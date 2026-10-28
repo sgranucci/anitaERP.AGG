@@ -45,6 +45,12 @@ final class ComprobanteProveedorCuentaDebeNetoSupport
         if ($cuentaId <= 0 && $concepto !== null) {
             $cuentaId = (int) $concepto->cuentacontableDebeIdParaEmpresa($empresaArg);
         }
+        if ($cuentaId <= 0 && $concepto !== null && ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto(
+            (string) ($concepto->tipoconcepto ?? ''),
+            (string) ($concepto->codigo ?? '')
+        )) {
+            $cuentaId = (int) ($comprobante->proveedores?->cuentacontablecompra_id ?? 0);
+        }
         if ($cuentaId > 0) {
             return $cuentaId;
         }

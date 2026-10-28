@@ -67,7 +67,7 @@ final class FacturaProveedorPieTotalesSupport
                 continue;
             }
 
-            return $this->conLineas($vals, $origen);
+            return $this->etiquetarJurisdiccionIibb($this->conLineas($vals, $origen), $texto);
         }
 
         return $vacio;
@@ -294,6 +294,10 @@ final class FacturaProveedorPieTotalesSupport
                 if ($importe >= 100) {
                     $score += 3;
                 }
+                if (in_array($clave, ['percepcion_iva', 'percepcion_iibb'], true)
+                    && $this->esAlicuotaEscrita($importe, $lineaOriginal)) {
+                    continue;
+                }
                 if ($clave === 'total' && $importe >= 1000) {
                     $score += 5;
                 }
@@ -392,10 +396,10 @@ final class FacturaProveedorPieTotalesSupport
             }
         }
 
-        // Perc. IIBB típica 1–8% del neto.
+        // Perc. IIBB: desde 0,05% (alícuota mínima, p. ej. 0,10%) hasta 15% del neto.
         if ($out['percepcion_iibb'] > 0) {
             $ratio = $out['percepcion_iibb'] / $base;
-            if ($ratio < 0.002 || $ratio > 0.15 || abs($out['percepcion_iibb'] - $base) < 1) {
+            if ($ratio < 0.0005 || $ratio > 0.15 || abs($out['percepcion_iibb'] - $base) < 1) {
                 $alt = $this->buscarImporteCercanoA($filas, $base * 0.06, 'percepcion_iibb');
                 if ($alt !== null) {
                     $out['percepcion_iibb'] = $alt;
@@ -435,11 +439,11 @@ final class FacturaProveedorPieTotalesSupport
         $patrones = match ($clave) {
             'total' => '/\btotal(?:es)?\b/iu',
             // «SUBTOTAL 2» es índice de columna. No comer el importe («288,785.00» ni «1.208.932,47»).
-            'subtotal' => '/(?:sub\s*totals?(?:\s+[12])?(?!\d|[.,])|neto(?:\s+gravado)?)\b/iu',
+            'subtotal' => '/(?:sub[\s\-]*totals?(?:\s+[12])?(?!\d|[.,])|neto(?:\s+gravado)?)\b/iu',
             'iva' => '/\b[il1]\.?\s*v\.?\s*a\.?v?(?:\s*inscripto)?\b/iu',
             'impuestos_internos' => '/imp(?:uestos?)?\s*\.?\s*int(?:ernos)?\b/iu',
             'percepcion_iva' => self::PATRON_PERCEPCION_IVA,
-            'percepcion_iibb' => '/per\.?\s*[il1]+\.?\s*b+\.?|percepcion\s+iibb|percep\s*ii\.?\s*bb/iu',
+            'percepcion_iibb' => '/perc(?:ep(?:ci[oó]n)?)?\.?\s*(?:ii\.?\s*bb\.?|iibb)|per\.?\s*[il1]+\.?\s*b+\.?|percepcion\s+iibb/iu',
             default => null,
         };
         if ($patrones === null) {
@@ -475,6 +479,42 @@ final class FacturaProveedorPieTotalesSupport
         return $out;
     }
 
+    /** 0,10% escrito en la línea no es el importe de la percepción. */
+    private function esAlicuotaEscrita(float $importe, string $linea): bool
+    {
+        if ($importe <= 0 || $importe >= 100) {
+            return false;
+        }
+        $punto = rtrim(rtrim(number_format($importe, 2, '.', ''), '0'), '.');
+        $coma = str_replace('.', ',', $punto);
+
+        return (bool) preg_match(
+            '/(?:^|[^\d])(?:'.preg_quote($punto, '/').'|'.preg_quote($coma, '/').')\d*\s*%/u',
+            $linea
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $armado
+     * @return array<string, mixed>
+     */
+    private function etiquetarJurisdiccionIibb(array $armado, string $texto): array
+    {
+        $jurisdiccion = FacturaProveedorIibbPadronCruceSupport::jurisdiccionDesdeFragmento($texto);
+        if ($jurisdiccion === null || ! is_array($armado['lineas'] ?? null)) {
+            return $armado;
+        }
+        foreach ($armado['lineas'] as $i => $linea) {
+            if (! is_array($linea) || ($linea['tipo'] ?? '') !== 'percepcion_iibb') {
+                continue;
+            }
+            $armado['lineas'][$i]['descripcion'] = $jurisdiccion['descripcion'];
+            $armado['lineas'][$i]['jurisdiccion_iibb'] = $jurisdiccion['codigo'];
+        }
+
+        return $armado;
+    }
+
     private function esImportePlausible(float $importe, string $clave): bool
     {
         if ($importe < 0) {
@@ -506,11 +546,14 @@ final class FacturaProveedorPieTotalesSupport
     {
         $l = mb_strtolower($linea);
         // Orden importa: Per.IVA / RG antes que IVA genérico; TOTAL antes que Subtotal.
-        if (preg_match('/\btotal(?:es)?\b/iu', $l) && ! preg_match('/sub\s*total|precio|unitario|bultos/iu', $l)) {
+        if (preg_match('/sub[\s\-]*totals?/iu', $l)) {
+            return 'subtotal';
+        }
+        if (preg_match('/\btotal(?:es)?\b/iu', $l) && ! preg_match('/precio|unitario|bultos/iu', $l)) {
             return 'total';
         }
         // OCR confunde I/l/1: Per.IIBB / Per.llBB / Per.ilBB
-        if (preg_match('/per\.?\s*[il1]+\.?\s*b{1,2}|percepcion\s+iibb|percep\s*ii\.?\s*bb/iu', $l)) {
+        if (preg_match('/perc(?:ep(?:ci[oó]n)?)?\.?\s*(?:ii\.?\s*bb\.?|iibb)|per\.?\s*[il1]+\.?\s*b{1,2}|percepcion\s+iibb/iu', $l)) {
             return 'percepcion_iibb';
         }
         if (preg_match(self::PATRON_PERCEPCION_IVA, $l)) {
@@ -527,7 +570,7 @@ final class FacturaProveedorPieTotalesSupport
             && ! preg_match('/responsable|condicion|cuit/iu', $l)) {
             return 'iva';
         }
-        if (preg_match('/\bneto(?:\s+gravado)?\b|sub\s*totals?\b/iu', $l)) {
+        if (preg_match('/\bneto(?:\s+gravado)?\b|sub[\s\-]*totals?\b/iu', $l)) {
             return 'subtotal';
         }
 

@@ -7,7 +7,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 /**
  * Diferencias de esquema Anita (módulo compras / retenciones) por instalación.
  *
- * Calzados Ferli:
+ * Calzados Ferli y Crown:
  * - `retencion` y `retiva` no tienen base / cant_per / valor_unit.
  * - `retmov`, `retimov`, `retsmov` y `retibrmov` no tienen columna `*_empresa`.
  * - `provibr` usa `proib_porc_noins` (sin la "c" final de otras instalaciones).
@@ -16,12 +16,12 @@ final class AnitaRetencionEsquemaSupport
 {
     public static function retencionIncluyeBasePeriodoValor(): bool
     {
-        return ! EntornoEmpresaSupport::esFerli();
+        return ! EntornoEmpresaSupport::esFerli() && ! EntornoEmpresaSupport::esCrown();
     }
 
     public static function retivaIncluyeBasePeriodoValor(): bool
     {
-        return ! EntornoEmpresaSupport::esFerli();
+        return ! EntornoEmpresaSupport::esFerli() && ! EntornoEmpresaSupport::esCrown();
     }
 
     public static function iibbCampoPorcNoInscripto(): string

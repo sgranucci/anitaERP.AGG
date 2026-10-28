@@ -65,6 +65,61 @@ final class PedidoPickingFerliSupport
             || MovimientoStockFerliSupport::esCalzadosFerli();
     }
 
+    /**
+     * Alta de OT: solo líneas que todavía hay que fabricar.
+     * Picking ya sacó el par de stock; facturado no se vuelve a fabricar.
+     */
+    public static function restringirLineaPendienteDeFabricar($query): void
+    {
+        if (! self::habilitado()) {
+            return;
+        }
+
+        $query->where(function ($w) {
+            $w->whereNull('picking')
+                ->orWhere('picking', '<>', self::MARCADO);
+        });
+        $query->where(function ($w) {
+            $w->whereNull('picking_facturado')
+                ->orWhere('picking_facturado', '<>', self::FACTURADO);
+        });
+    }
+
+    /**
+     * Mensaje si la línea ya se cumplió por picking y no corresponde una OT nueva.
+     */
+    public static function errorSiLineaNoGeneraOt(Pedido_Combinacion $linea): ?string
+    {
+        if (! self::habilitado()) {
+            return null;
+        }
+
+        $texto = self::textoLineaParaOt($linea);
+
+        if (($linea->picking_facturado ?? self::NO_MARCADO) === self::FACTURADO) {
+            return $texto.' ya está facturada. No se puede generar la OT.';
+        }
+
+        if (($linea->picking ?? self::NO_MARCADO) === self::MARCADO) {
+            return $texto.' ya está en un picking y el par salió de stock. No se puede generar la OT.';
+        }
+
+        return null;
+    }
+
+    private static function textoLineaParaOt(Pedido_Combinacion $linea): string
+    {
+        $pedido = $linea->pedidos;
+        $codigo = $pedido->codigo ?? $linea->pedido_id;
+        $nombre = trim((string) ($linea->articulos->descripcion ?? ''));
+
+        if ($nombre !== '') {
+            return 'La línea '.$nombre.' del pedido '.$codigo;
+        }
+
+        return 'La línea del pedido '.$codigo;
+    }
+
     public static function crearPicking(?string $fechaYmd = null, ?string $observacion = null): Pedido_Picking
     {
         return DB::transaction(function () use ($fechaYmd, $observacion) {
@@ -2224,6 +2279,7 @@ final class PedidoPickingFerliSupport
         $depositos = Depmae::query()->get()->keyBy('id');
         $filas = [];
         $nombreEmpresa = trim((string) config('app.empresa'));
+        $situaciones = self::situacionesRealesPorLinea($lineas);
 
         foreach ($lineas as $linea) {
             $medidas = [];
@@ -2269,7 +2325,8 @@ final class PedidoPickingFerliSupport
                 'cantidad_modulos' => $presentacion['modulos'],
                 'cantidadmodulo' => $presentacion['pares_modulo'],
                 'precio' => self::precioUnitarioLinea($linea),
-                'situacion' => 'ENTREGA INMEDIATA',
+                'situacion' => $situaciones[(int) $linea->id]['situacion'],
+                'en_produccion' => $situaciones[(int) $linea->id]['en_produccion'],
                 'numero_ot' => $loteTxt,
                 'deposito' => $depositoTxt,
                 'observacion' => trim((string) ($linea->observacion ?? '')),
@@ -2283,6 +2340,158 @@ final class PedidoPickingFerliSupport
         }
 
         return $filas;
+    }
+
+    /**
+     * Situación de la OT asignada a cada línea, con la misma regla que Stock por OT.
+     * Si el número no es una OT (lote de importación), queda entrega inmediata.
+     *
+     * @param  Collection<int, Pedido_Combinacion>  $lineas
+     * @return array<int, array{situacion: string, en_produccion: bool}>
+     */
+    private static function situacionesRealesPorLinea(Collection $lineas): array
+    {
+        $entrega = [
+            'situacion' => ReporteStockOtSituacionSupport::ENTREGA_INMEDIATA,
+            'en_produccion' => false,
+        ];
+        $otIdPorLinea = [];
+        $codigos = [];
+        foreach ($lineas as $linea) {
+            $otId = (int) ($linea->picking_ordentrabajo_id ?? 0);
+            if ($otId > 0) {
+                $otIdPorLinea[(int) $linea->id] = $otId;
+
+                continue;
+            }
+            $codigo = trim((string) ($linea->picking_lote_codigo ?? ''));
+            if ($codigo !== '' && $codigo !== '0') {
+                $codigos[$codigo] = $codigo;
+            }
+        }
+
+        if ($codigos !== []) {
+            $porCodigo = [];
+            $ots = Ordentrabajo::query()
+                ->whereIn('codigo', array_values($codigos))
+                ->get(['id', 'codigo']);
+            foreach ($ots as $ot) {
+                $porCodigo[trim((string) $ot->codigo)][] = (int) $ot->id;
+            }
+            $idsLookup = [];
+            foreach ($porCodigo as $ids) {
+                foreach ($ids as $id) {
+                    $idsLookup[] = $id;
+                }
+            }
+            $articuloPorOt = self::articuloCombinacionPorOt($idsLookup);
+
+            foreach ($lineas as $linea) {
+                $lineaId = (int) $linea->id;
+                if (isset($otIdPorLinea[$lineaId])) {
+                    continue;
+                }
+                $codigo = trim((string) ($linea->picking_lote_codigo ?? ''));
+                $candidatos = $porCodigo[$codigo] ?? [];
+                $otIdPorLinea[$lineaId] = self::elegirOtDelCodigo(
+                    $candidatos,
+                    (int) ($linea->articulo_id ?? 0),
+                    (int) ($linea->combinacion_id ?? 0),
+                    $articuloPorOt,
+                    $codigo
+                );
+            }
+        }
+
+        $metas = ReporteStockOtSituacionSupport::situacionesPorOrdentrabajoIds(array_values($otIdPorLinea));
+        $out = [];
+        foreach ($lineas as $linea) {
+            $lineaId = (int) $linea->id;
+            $otId = (int) ($otIdPorLinea[$lineaId] ?? 0);
+            if ($otId <= 0) {
+                $out[$lineaId] = $entrega;
+
+                continue;
+            }
+            $out[$lineaId] = ReporteStockOtSituacionSupport::situacionFila(
+                false,
+                (int) ($linea->picking_deposito_id ?? 0),
+                $metas[$otId] ?? null,
+                false
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<int>  $ordentrabajoIds
+     * @return array<int, array{articulo_id: int, combinacion_id: int}>
+     */
+    private static function articuloCombinacionPorOt(array $ordentrabajoIds): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ordentrabajoIds))));
+        if ($ids === []) {
+            return [];
+        }
+
+        $rows = DB::table('ordentrabajo_combinacion_talle as oct')
+            ->join('pedido_combinacion_talle as pct', 'pct.id', '=', 'oct.pedido_combinacion_talle_id')
+            ->join('pedido_combinacion as pc', 'pc.id', '=', 'pct.pedido_combinacion_id')
+            ->whereIn('oct.ordentrabajo_id', $ids)
+            ->get(['oct.ordentrabajo_id', 'pc.articulo_id', 'pc.combinacion_id']);
+
+        $out = [];
+        foreach ($rows as $row) {
+            $otId = (int) $row->ordentrabajo_id;
+            if (! isset($out[$otId])) {
+                $out[$otId] = [
+                    'articulo_id' => (int) $row->articulo_id,
+                    'combinacion_id' => (int) $row->combinacion_id,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<int>  $candidatos
+     * @param  array<int, array{articulo_id: int, combinacion_id: int}>  $articuloPorOt
+     */
+    private static function elegirOtDelCodigo(
+        array $candidatos,
+        int $articuloId,
+        int $combinacionId,
+        array $articuloPorOt,
+        string $codigo
+    ): int {
+        $candidatos = array_values(array_unique(array_filter(array_map('intval', $candidatos))));
+        if ($candidatos === []) {
+            return 0;
+        }
+        if (count($candidatos) === 1) {
+            return $candidatos[0];
+        }
+
+        if ($articuloId > 0 && $combinacionId > 0) {
+            foreach ($candidatos as $otId) {
+                $art = $articuloPorOt[$otId] ?? null;
+                if ($art
+                    && (int) $art['articulo_id'] === $articuloId
+                    && (int) $art['combinacion_id'] === $combinacionId
+                ) {
+                    return $otId;
+                }
+            }
+        }
+
+        $codigoNum = (int) $codigo;
+        if ($codigoNum > 0 && in_array($codigoNum, $candidatos, true)) {
+            return $codigoNum;
+        }
+
+        return $candidatos[0];
     }
 
     /**

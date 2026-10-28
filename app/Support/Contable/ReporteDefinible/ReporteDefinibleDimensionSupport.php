@@ -50,13 +50,28 @@ class ReporteDefinibleDimensionSupport
         )));
         sort($codigos);
 
+        $filtraGrupo = isset($filtroRuntime['codigo_set']) && is_array($filtroRuntime['codigo_set']);
         if ($filtroRuntime !== null) {
-            $d = (int) $filtroRuntime['desde'];
-            $h = (int) $filtroRuntime['hasta'];
-            $codigos = array_values(array_filter(
-                $codigos,
-                fn (int $c) => $c >= $d && $c <= $h
-            ));
+            $d = (int) ($filtroRuntime['desde'] ?? 0);
+            $h = (int) ($filtroRuntime['hasta'] ?? 0);
+            if ($d > 0 || $h > 0) {
+                if ($h <= 0) {
+                    $h = $d;
+                }
+                if ($d <= 0) {
+                    $d = $h;
+                }
+                $codigos = array_values(array_filter(
+                    $codigos,
+                    fn (int $c) => $c >= $d && $c <= $h
+                ));
+            }
+            if ($filtraGrupo) {
+                $codigos = array_values(array_filter(
+                    $codigos,
+                    fn (int $c) => isset($filtroRuntime['codigo_set'][$c])
+                ));
+            }
         }
 
         $nombres = Centrocosto::query()
@@ -65,7 +80,10 @@ class ReporteDefinibleDimensionSupport
             ->all();
 
         $columnas = [];
-        if ($incluirSinCcosto && ($filtroRuntime === null || (int) $filtroRuntime['desde'] <= 0)) {
+        $incluyeSin = $incluirSinCcosto
+            && ! $filtraGrupo
+            && ($filtroRuntime === null || (int) ($filtroRuntime['desde'] ?? 0) <= 0);
+        if ($incluyeSin) {
             $columnas[] = [
                 'codigo' => 0,
                 'key' => 'cc:0',

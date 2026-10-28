@@ -85,6 +85,15 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
     /** @var array<string, int|null> */
     private array $cacheTipoCaja = [];
 
+    /**
+     * CC ya asignada a un promov en esta corrida.
+     * Dos movimientos Anita pueden compartir tipo, letra, sucursal y número
+     * (otro nro_interno): cada uno se queda con su propia cuenta corriente.
+     *
+     * @var array<int, true>
+     */
+    private array $ccReclamadasEnImport = [];
+
     public function __construct(
         private readonly ProveedorCuentacorrienteAnitaImportBridgeReader $reader = new ProveedorCuentacorrienteAnitaImportBridgeReader,
     ) {}
@@ -115,6 +124,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         }
 
         $empresasPermitidas = $this->empresasPermitidas($empresaId);
+        $this->ccReclamadasEnImport = [];
         if (! $dryRun) {
             $this->asegurarTiposBasicos();
         }
@@ -166,14 +176,27 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
 
         $plan = [];
         $clavesEnPlan = [];
+        $promovPorClave = [];
+        foreach ($deuda as $promov) {
+            $promovPorClave[ComprobanteProveedorAnitaImportClaveSupport::claveDesdePromov($promov)][] = $promov;
+        }
         foreach ($deuda as $promov) {
             $clave = ComprobanteProveedorAnitaImportClaveSupport::claveDesdePromov($promov);
             if (! isset($compras[$clave])) {
                 $stats['omitidas_sin_compra']++;
+                $stats['errores'][] = 'Sin compra Anita '.$clave
+                    .' monto '.(string) ($promov['prov_monto'] ?? '')
+                    .' interno '.(string) ($promov['prov_nro_interno'] ?? '');
 
                 continue;
             }
-            $prep = $this->preparar($promov, $compras[$clave], $perfil, $empresasPermitidas);
+            $prep = $this->preparar(
+                $promov,
+                $compras[$clave],
+                $perfil,
+                $empresasPermitidas,
+                $this->pendientesHermanos($promov, $promovPorClave[$clave] ?? []),
+            );
             $prep = $this->contabilizarPrep($prep, $stats);
             if (($prep['estado'] ?? '') !== 'ok') {
                 continue;
@@ -274,6 +297,10 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             static fn (array $p) => ($p['kind'] ?? '') === 'opa' && ($p['accion_pago'] ?? '') === 'crear'
         ));
         $stats['a_crear_cc'] = count(array_filter($plan, static fn (array $p) => ($p['accion_cc'] ?? '') === 'crear'));
+        $stats['importe_cc_nuevas'] = round(array_sum(array_map(
+            static fn (array $p) => ($p['accion_cc'] ?? '') === 'crear' ? (float) ($p['pendiente_anita'] ?? 0) : 0.0,
+            $plan
+        )), 2);
         $stats['a_alinear_anita_import'] = count(array_filter(
             $plan,
             static fn (array $p) => ($p['accion_saldo'] ?? '') === 'alinear'
@@ -478,6 +505,8 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             $listaPromov = $promovs[$clave] ?? [];
             if ($listaPromov === []) {
                 $out['sin_promov']++;
+                $out['errores'][] = 'ERP abierto sin promov Anita '.$clave
+                    .' pendiente '.(string) ($filaErp['pendiente'] ?? '');
 
                 continue;
             }
@@ -738,6 +767,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
      * @param  array<string, mixed>  $compra
      * @param  array<string, mixed>  $perfil
      * @param  list<int>|null  $empresasPermitidas
+     * @param  list<float>  $hermanosPendientes  Residuales absolutos de otros promov con la misma clave fiscal
      * @return array<string, mixed>
      */
     private function preparar(
@@ -745,6 +775,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         array $compra,
         array $perfil,
         ?array $empresasPermitidas,
+        array $hermanosPendientes = [],
     ): array {
         $clave = ComprobanteProveedorAnitaImportClaveSupport::claveDesdePromov($promov);
         $tipoAbrev = ComprobanteProveedorAnitaImportClaveSupport::tipo((string) ($promov['prov_tipo'] ?? ''));
@@ -753,6 +784,12 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         $nro = (int) ($promov['prov_nro'] ?? 0);
         $cuotaNro = max(1, (int) ($promov['prov_nro_cuota'] ?? 1));
         $etiqueta = ComprobanteProveedorAnitaImportClaveSupport::etiqueta($tipoAbrev, $letra, $suc, $nro);
+        if ($hermanosPendientes !== []) {
+            $internoEtiqueta = (int) ($promov['prov_nro_interno'] ?? 0);
+            if ($internoEtiqueta > 0) {
+                $etiqueta .= ' int '.$internoEtiqueta;
+            }
+        }
 
         $proveedor = $this->resolverProveedor((string) ($promov['prov_proveedor'] ?? ''));
         if ($proveedor === null) {
@@ -785,7 +822,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             (float) $perfil['tolerancia_aplicado'],
         );
         $pendienteAbs = round(max(0, $monto - $pagado), 4);
-        $signo = ((string) $tipo->signo === 'R') ? -1 : 1;
+        $signo = $this->signoImporte($tipo);
         // CC nueva = monto original; el residual lo dan las aplicaciones aplmovp.
         $totalFirmado = round($monto * $signo, 4);
         $pendienteFirmado = round($pendienteAbs * $signo, 4);
@@ -872,6 +909,26 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             : 0.0;
         $tol = (float) $perfil['tolerancia_aplicado'];
         $saldoErp = $cc ? round((float) $cc->total + $aplicadoErpFirmado, 4) : null;
+        $forzarCcNueva = false;
+        if ($hermanosPendientes !== []) {
+            $cc = $this->resolverCcEntreHermanos(
+                $cp,
+                $cc,
+                $pendienteAbs,
+                $monto,
+                $tol,
+            );
+            $forzarCcNueva = $cc === null;
+            $aplicadoErpFirmado = $cc
+                ? round((float) Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->where('proveedor_cuentacorriente_id', $cc->id)
+                    ->sum('total'), 4)
+                : 0.0;
+            $saldoErp = $cc ? round((float) $cc->total + $aplicadoErpFirmado, 4) : null;
+        }
+        if ($cc !== null) {
+            $this->ccReclamadasEnImport[(int) $cc->id] = true;
+        }
 
         $accionCp = $cp ? 'existente' : 'crear';
         $accionCc = $cc ? 'existente' : 'crear';
@@ -966,8 +1023,11 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'aplicado_erp' => abs($aplicadoErpFirmado),
             'moneda_id' => $monedaId,
             'cotizacion' => $cotizacion,
-            'nro_interno' => (int) ($compra['com_nro_interno'] ?? $promov['prov_nro_interno'] ?? 0),
+            'nro_interno' => $hermanosPendientes !== [] && (int) ($promov['prov_nro_interno'] ?? 0) > 0
+                ? (int) $promov['prov_nro_interno']
+                : (int) ($compra['com_nro_interno'] ?? $promov['prov_nro_interno'] ?? 0),
             'cuit' => $cuit,
+            'forzar_cc_nueva' => $forzarCcNueva,
             'resumen' => [
                 'etiqueta' => $etiqueta,
                 'proveedor' => (string) $proveedor->codigo,
@@ -985,6 +1045,157 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                 'es_nativo' => $esNativo,
             ],
         ];
+    }
+
+    /**
+     * Residuales de los otros promov que comparten tipo, letra, sucursal y número.
+     *
+     * @param  array<string, mixed>  $promov
+     * @param  list<array<string, mixed>>  $grupo
+     * @return list<float>
+     */
+    private function pendientesHermanos(array $promov, array $grupo): array
+    {
+        if (count($grupo) < 2) {
+            return [];
+        }
+
+        $interno = (int) ($promov['prov_nro_interno'] ?? 0);
+        $fecha = (string) ($promov['prov_fecha'] ?? '');
+        $monto = round((float) ($promov['prov_monto'] ?? 0), 4);
+        $excluido = false;
+        $out = [];
+        foreach ($grupo as $otro) {
+            $mismo = ! $excluido
+                && (int) ($otro['prov_nro_interno'] ?? 0) === $interno
+                && (string) ($otro['prov_fecha'] ?? '') === $fecha
+                && abs(round((float) ($otro['prov_monto'] ?? 0), 4) - $monto) < 0.02;
+            if ($mismo) {
+                $excluido = true;
+
+                continue;
+            }
+            $bruto = abs((float) ($otro['prov_monto'] ?? 0));
+            $pagado = abs((float) ($otro['prov_t_pagado'] ?? 0));
+            $out[] = round(max(0, $bruto - $pagado), 4);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Entre varios promov con la misma clave fiscal, cada residual se queda
+     * con la CC que ya tiene ese importe. El que no tiene CC no pisa a la otra.
+     */
+    private function resolverCcEntreHermanos(
+        ?Comprobante_Proveedor $cp,
+        ?Proveedor_Cuentacorriente $cc,
+        float $pendienteAbs,
+        float $monto,
+        float $tol,
+    ): ?Proveedor_Cuentacorriente {
+        $candidatas = [];
+        if ($cp !== null) {
+            $candidatas = ProveedorCuentacorrienteAnitaImportCcGuardSupport::soloDeudaDocumento(
+                Proveedor_Cuentacorriente::query()->where('comprobante_proveedor_id', $cp->id)
+            )->orderBy('id')->get()->all();
+        } elseif ($cc !== null) {
+            $candidatas = [$cc];
+        }
+
+        foreach ($candidatas as $candidata) {
+            if (isset($this->ccReclamadasEnImport[(int) $candidata->id])) {
+                continue;
+            }
+            $abs = abs((float) $candidata->total);
+            if (abs($abs - $pendienteAbs) <= $tol || abs($abs - $monto) <= $tol) {
+                return $candidata;
+            }
+        }
+
+        return null;
+    }
+
+    private function signoImporte(Tipotransaccion_Compra $tipo): int
+    {
+        $signo = strtoupper(trim((string) $tipo->signo));
+
+        return in_array($signo, ['R', '-1', '-'], true) ? -1 : 1;
+    }
+
+    /**
+     * La cuota 1 ya apunta a la CC del otro interno: hay que abrir otra cuota.
+     *
+     * @param  array<string, mixed>  $item
+     */
+    private function cuotaPerteneceAOtroInterno(Proveedor_Cuentacorriente $cc, array $item): bool
+    {
+        if (empty($item['forzar_cc_nueva'])) {
+            return false;
+        }
+        $tol = 0.02;
+        $abs = abs((float) $cc->total);
+        $pendiente = abs((float) ($item['pendiente_anita'] ?? $item['total'] ?? 0));
+        $monto = abs((float) ($item['monto_abs'] ?? $item['total'] ?? 0));
+
+        return abs($abs - $pendiente) > $tol && abs($abs - $monto) > $tol;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array{cc_id: int, creada: bool}
+     */
+    private function crearCcEnCuotaSiguiente(array $item, Proveedor $proveedor, int $cpId): array
+    {
+        $numero = (int) Comprobante_Proveedor_Cuota::query()
+            ->where('comprobante_proveedor_id', $cpId)
+            ->max('numero_cuota') + 1;
+        $leyenda = $this->leyendaCcAnita($item);
+        $cuota = Comprobante_Proveedor_Cuota::query()->create([
+            'comprobante_proveedor_id' => $cpId,
+            'numero_cuota' => $numero,
+            'fechavencimiento' => $item['fechavencimiento'],
+            'monto' => $item['monto_abs'],
+            'moneda_id' => $item['moneda_id'],
+            'cotizacion' => $item['cotizacion'],
+            'formapago_id' => (int) config('comprobante_proveedor.import_anita.formapago_id', 1),
+            'total_pagado' => 0,
+            'detalle' => $leyenda,
+        ]);
+        $cc = Proveedor_Cuentacorriente::query()->create([
+            'fecha' => $item['fecha'],
+            'fechavencimiento' => $item['fechavencimiento'],
+            'proveedor_id' => $proveedor->id,
+            'total' => $item['total'],
+            'moneda_id' => $item['moneda_id'],
+            'cotizacion' => $item['cotizacion'],
+            'comprobante_proveedor_id' => $cpId,
+            'comprobante_proveedor_cuota_id' => $cuota->id,
+            'empresa_id' => $item['empresa_id'],
+            'leyenda' => $leyenda,
+        ]);
+        $cuota->proveedor_cuentacorriente_id = $cc->id;
+        $cuota->save();
+
+        return ['cc_id' => (int) $cc->id, 'creada' => true];
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function leyendaCcAnita(array $item): string
+    {
+        $interno = (int) ($item['nro_interno'] ?? 0);
+        if (! empty($item['forzar_cc_nueva'])) {
+            return mb_substr(
+                'Anita interno '.($interno > 0 ? (string) $interno : '?').' '.(string) ($item['fecha'] ?? ''),
+                0,
+                255
+            );
+        }
+        $leyenda = trim((string) ($item['compra']['com_leyenda'] ?? ''));
+
+        return mb_substr($leyenda !== '' ? $leyenda : 'Importado Anita (deuda CC)', 0, 255);
     }
 
     /**
@@ -1205,8 +1416,16 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                     ->where('numero_cuota', $item['cuota'])
                     ->first()
                 : null;
-            if ($cuotaRow && (int) $cuotaRow->proveedor_cuentacorriente_id > 0) {
-                $ccId = (int) $cuotaRow->proveedor_cuentacorriente_id;
+            $ccDeCuota = ($cuotaRow && (int) $cuotaRow->proveedor_cuentacorriente_id > 0)
+                ? Proveedor_Cuentacorriente::query()->find((int) $cuotaRow->proveedor_cuentacorriente_id)
+                : null;
+            $reusarCuota = $ccDeCuota !== null && ! $this->cuotaPerteneceAOtroInterno($ccDeCuota, $item);
+            if ($reusarCuota) {
+                $ccId = (int) $ccDeCuota->id;
+            } elseif ($cpId && $ccDeCuota !== null) {
+                $nueva = $this->crearCcEnCuotaSiguiente($item, $proveedor, $cpId);
+                $ccId = $nueva['cc_id'];
+                $out['cc_creada'] = $nueva['creada'];
             } else {
                 $cc = Proveedor_Cuentacorriente::query()->create([
                     'fecha' => $item['fecha'],
@@ -1218,6 +1437,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                     'comprobante_proveedor_id' => $cpId,
                     'comprobante_proveedor_cuota_id' => $cuotaRow?->id,
                     'empresa_id' => $item['empresa_id'],
+                    'leyenda' => $this->leyendaCcAnita($item),
                 ]);
                 $ccId = (int) $cc->id;
                 $out['cc_creada'] = true;
@@ -1306,6 +1526,11 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         $tol = 0.02;
         foreach ($plan as $item) {
             if (($item['kind'] ?? 'deuda') !== 'deuda' || ! empty($item['es_nativo'])) {
+                continue;
+            }
+            // La CC nueva ya nace con el importe de este promov. Alinear acá
+            // tomaría la primera CC del comprobante y le pisaría el saldo del otro interno.
+            if (($item['accion_cc'] ?? '') === 'crear' || ($item['forzar_cc_nueva'] ?? false)) {
                 continue;
             }
             if (! array_key_exists('pendiente_anita', $item)) {
