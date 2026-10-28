@@ -467,9 +467,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         
         Self::convierteDatosParaAnita($request, $banco, $tipoCuenta, $fecha, $cuentaContable, $empresa, $moneda);
 
-        $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
-			'sistema' => 'che_ban',
-            'campos' => ' 
+        $camposTesmae = ' 
                 tesm_cuenta,
                 tesm_codigo_banco,
                 tesm_desc,
@@ -481,10 +479,8 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                 tesm_cta_contable,
                 tesm_cod_mon,
                 tesm_cta_destino,
-                tesm_fl_boleta_cl,
-                tesm_empresa 
-				',
-            'valores' => " 
+                tesm_fl_boleta_cl';
+        $valoresTesmae = " 
 				'".str_pad($request['codigo'], 8, "0", STR_PAD_LEFT)."', 
 				'".$banco."',
 				'".$request['nombre']."',
@@ -496,8 +492,17 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 				'".$cuentaContable."',
                 '".$moneda."',
                 '0',
-                '0',
-				'".$empresa."' "
+                '0'";
+        if (self::tesmaeTieneColumnaEmpresa()) {
+            $camposTesmae .= ',
+                tesm_empresa';
+            $valoresTesmae .= ",
+				'".$empresa."'";
+        }
+        $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
+			'sistema' => 'che_ban',
+            'campos' => $camposTesmae,
+            'valores' => $valoresTesmae
         );
         $anita = $apiAnita->apiCallEscritura($data);
 
@@ -518,8 +523,11 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                         tesm_codigo_banco               = '".$banco."' ,
                         tesm_desc    	                = '".$request['nombre']."' ,
                         tesm_cta_contable               = '".$cuentaContable."' ,
-                        tesm_cod_mon                    = '".$moneda."' ,
+                        tesm_cod_mon                    = '".$moneda."' ";
+        if (self::tesmaeTieneColumnaEmpresa()) {
+            $valoresTesmae .= ",
                         tesm_empresa 	                = '".$empresa."' ";
+        }
         if (! self::usaTablaTesmcbu() && self::tesmaeTieneColumnaCbu()) {
             $valoresTesmae .= ",
                         tesm_nro_cbu                    = '".($request['cbu'] ?? '')."' ";
@@ -699,6 +707,12 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
     private static function usaTablaTesmcbu(): bool
     {
         return config('app.empresa') === 'AGG';
+    }
+
+    /** Crown /usr2/casino che_ban.tesmae no tiene tesm_empresa (12 columnas). */
+    private static function tesmaeTieneColumnaEmpresa(): bool
+    {
+        return ! EntornoEmpresaSupport::esCrown();
     }
 
     /** Ferli/AGG con CBU en tesmae; Crown no tiene la columna. */
