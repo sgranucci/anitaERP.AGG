@@ -9,6 +9,7 @@
     $agrupacion = $agrupacion_resumen ?? 'concepto_cuenta';
     $mostrarEnlaces = $mostrar_enlaces ?? false;
     $colspanMedio = (int) ($colspan_medio ?? 0);
+    $celdaFinalVacia = (bool) ($celda_final_vacia ?? false);
 @endphp
 @if ($agrupacion === 'cuenta_concepto')
     @foreach ($resumen as $secCuenta)
@@ -42,6 +43,9 @@
                 @endif
                 <td class="text-right">{{ $formatearMonto($concepto['total_debe'] ?? null) }}</td>
                 <td class="text-right">{{ $formatearMonto($concepto['total_haber'] ?? null) }}</td>
+                @if ($celdaFinalVacia)
+                    <td></td>
+                @endif
             </tr>
         @endforeach
         <tr class="font-weight-bold" style="background-color: #ebf5fb;">
@@ -54,6 +58,9 @@
             @endif
             <td class="text-right">{{ $formatearMonto($secCuenta['total_debe'] ?? null) }}</td>
             <td class="text-right">{{ $formatearMonto($secCuenta['total_haber'] ?? null) }}</td>
+            @if ($celdaFinalVacia)
+                <td></td>
+            @endif
         </tr>
     @endforeach
 @else
@@ -88,6 +95,9 @@
                 @endif
                 <td class="text-right">{{ $formatearMonto($cuenta['total_debe'] ?? null) }}</td>
                 <td class="text-right">{{ $formatearMonto($cuenta['total_haber'] ?? null) }}</td>
+                @if ($celdaFinalVacia)
+                    <td></td>
+                @endif
             </tr>
         @endforeach
         <tr class="font-weight-bold" style="background-color: #ebf5fb;">
@@ -100,6 +110,9 @@
             @endif
             <td class="text-right">{{ $formatearMonto($seccion['total_debe'] ?? null) }}</td>
             <td class="text-right">{{ $formatearMonto($seccion['total_haber'] ?? null) }}</td>
+            @if ($celdaFinalVacia)
+                <td></td>
+            @endif
         </tr>
     @endforeach
 @endif

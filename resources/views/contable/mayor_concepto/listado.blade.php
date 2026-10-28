@@ -191,6 +191,7 @@
                     <th colspan="{{ $colSpanTotalesPdf }}">Totales</th>
                     <th class="text-right">{{ number_format((float) ($tot['total_debe'] ?? 0), 2, ',', '.') }}</th>
                     <th class="text-right">{{ number_format((float) ($tot['total_haber'] ?? 0), 2, ',', '.') }}</th>
+                    <th class="text-right">{{ number_format((float) ($tot['total_retenciones'] ?? 0), 2, ',', '.') }}</th>
                 </tr>
             </tfoot>
         @endif

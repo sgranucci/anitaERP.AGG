@@ -611,6 +611,7 @@ class MayorConceptoController extends Controller
             'cantidad_filas' => (int) ($resultado['totales']['lineas'] ?? 0),
             'total_debe' => (float) ($resultado['totales']['debe'] ?? 0),
             'total_haber' => (float) ($resultado['totales']['haber'] ?? 0),
+            'total_retenciones' => (float) ($resultado['totales']['retenciones'] ?? 0),
             'stats' => $resultado['stats'] ?? [],
         ];
     }

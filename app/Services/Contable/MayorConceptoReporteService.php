@@ -857,6 +857,7 @@ class MayorConceptoReporteService
             $conceptoNombre = (string) ($seccion['concepto_nombre'] ?? '');
             $totalConceptoDebe = 0.0;
             $totalConceptoHaber = 0.0;
+            $totalConceptoRetenciones = 0.0;
 
             foreach ($seccion['cuentas'] ?? [] as $cuentaBlock) {
                 $lineasBloque = $cuentaBlock['lineas'] ?? [];
@@ -887,6 +888,7 @@ class MayorConceptoReporteService
                         'cuenta_nombre' => $cuentaBlock['cuenta_nombre'] ?? '',
                         'debe' => (float) ($cuentaBlock['total_debe'] ?? 0),
                         'haber' => (float) ($cuentaBlock['total_haber'] ?? 0),
+                        'retenciones' => (float) ($cuentaBlock['total_retenciones'] ?? 0),
                         'empresa_id' => $empresaId,
                         'nombreempresa' => $empresaId > 0 ? $nombreEmpresa : '',
                     ];
@@ -894,6 +896,7 @@ class MayorConceptoReporteService
 
                 $totalConceptoDebe += (float) ($cuentaBlock['total_debe'] ?? 0);
                 $totalConceptoHaber += (float) ($cuentaBlock['total_haber'] ?? 0);
+                $totalConceptoRetenciones += (float) ($cuentaBlock['total_retenciones'] ?? 0);
             }
 
             if ($conTotales && ($totalConceptoDebe > 0 || $totalConceptoHaber > 0 || count($seccion['cuentas'] ?? []) > 0)) {
@@ -903,6 +906,7 @@ class MayorConceptoReporteService
                     'concepto_nombre' => $conceptoNombre,
                     'debe' => round($totalConceptoDebe, 2),
                     'haber' => round($totalConceptoHaber, 2),
+                    'retenciones' => round($totalConceptoRetenciones, 2),
                     'empresa_id' => $empresaId,
                     'nombreempresa' => $nombreEmpresa,
                 ];
@@ -957,7 +961,7 @@ class MayorConceptoReporteService
                 continue;
             }
 
-            foreach (['debe', 'haber', 'disp_debe', 'disp_haber'] as $campo) {
+            foreach (['debe', 'haber', 'disp_debe', 'disp_haber', 'retenciones'] as $campo) {
                 $agrupadas[$clave][$campo] = round(
                     (float) ($agrupadas[$clave][$campo] ?? 0) + (float) ($linea[$campo] ?? 0),
                     2,

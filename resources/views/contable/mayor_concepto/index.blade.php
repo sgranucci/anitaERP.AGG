@@ -810,12 +810,14 @@
                                 <strong>{{ (int) ($totVis['cantidad_filas'] ?? 0) }}</strong> líneas
                                 · Debe <strong>{{ number_format((float) ($totVis['total_debe'] ?? 0), 2, ',', '.') }}</strong>
                                 · Haber <strong>{{ number_format((float) ($totVis['total_haber'] ?? 0), 2, ',', '.') }}</strong>
+                                · Retenciones <strong>{{ number_format((float) ($totVis['total_retenciones'] ?? 0), 2, ',', '.') }}</strong>
                                 <span class="text-muted">(de {{ (int) ($tot['cantidad_filas'] ?? 0) }} del período)</span>
                             @else
                                 <span class="text-muted">Totales filtro:</span>
                                 <strong>{{ (int) ($tot['cantidad_filas'] ?? 0) }}</strong> líneas
                                 · Debe <strong>{{ number_format((float) ($tot['total_debe'] ?? 0), 2, ',', '.') }}</strong>
                                 · Haber <strong>{{ number_format((float) ($tot['total_haber'] ?? 0), 2, ',', '.') }}</strong>
+                                · Retenciones <strong>{{ number_format((float) ($tot['total_retenciones'] ?? 0), 2, ',', '.') }}</strong>
                             @endif
                         </div>
                     </div>

@@ -1,8 +1,9 @@
 @php
-    $colSpanExcel = (int) ($colSpanExcel ?? (($multiempresa ?? false) ? 18 : 17));
-    $colSpanTotalesExcel = $colSpanExcel - 2;
-    // Resumen: Concepto/Cuenta + Nombre + Cuenta/Concepto + Desc + Líneas + Debe + Haber = 7 cols
-    $colSpanResumenMedio = max(0, $colSpanExcel - 7);
+    $colSpanExcel = (int) ($colSpanExcel ?? (($multiempresa ?? false) ? 19 : 18));
+    $colSpanTotalesExcel = $colSpanExcel - 3;
+    // El resumen no tiene la columna Retenciones: el medio deja Debe y Haber
+    // alineados con el detalle y cierra con una celda vacía.
+    $colSpanResumenMedio = max(0, $colSpanExcel - 8);
     $formatoExcel = \App\Support\Contable\MayorConceptoExcelFormatoNumero::normalizar(
         $excel_formato_numero
             ?? ($filtros['excel_formato_numero'] ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal())
@@ -40,6 +41,7 @@
                 {{ number_format($cantidadLineas, 0, ',', '.') }} movimiento(s)
                 &middot; Debe {{ number_format((float) ($totales['total_debe'] ?? 0), 2, ',', '.') }}
                 &middot; Haber {{ number_format((float) ($totales['total_haber'] ?? 0), 2, ',', '.') }}
+                &middot; Retenciones {{ number_format((float) ($totales['total_retenciones'] ?? 0), 2, ',', '.') }}
                 @if (! empty($totales['filtrado']))
                     &middot; (filtrado)
                 @endif
@@ -65,6 +67,7 @@
                 <td colspan="{{ $colSpanTotalesExcel }}" style="background-color: #adb5bd;"><strong>Totales</strong></td>
                 <td style="text-align: right; background-color: #adb5bd;">{{ $formatearMontoExcel($totales['total_debe'] ?? 0) }}</td>
                 <td style="text-align: right; background-color: #adb5bd;">{{ $formatearMontoExcel($totales['total_haber'] ?? 0) }}</td>
+                <td style="text-align: right; background-color: #adb5bd;">{{ $formatearMontoExcel($totales['total_retenciones'] ?? 0) }}</td>
             </tr>
         </tbody>
     @endif
@@ -97,6 +100,7 @@
                     @endif
                     <td style="text-align: right;"><strong>Debe</strong></td>
                     <td style="text-align: right;"><strong>Haber</strong></td>
+                    <td></td>
                 </tr>
             @else
                 <tr style="background-color: #85C1E9; color: #17202A;">
@@ -110,6 +114,7 @@
                     @endif
                     <td style="text-align: right;"><strong>Debe</strong></td>
                     <td style="text-align: right;"><strong>Haber</strong></td>
+                    <td></td>
                 </tr>
             @endif
             @include('contable.mayor_concepto.partials.resumen_filas', [
@@ -117,6 +122,7 @@
                 'agrupacion_resumen' => $agrupacionResumen,
                 'mostrar_enlaces' => false,
                 'colspan_medio' => $colSpanResumenMedio,
+                'celda_final_vacia' => true,
                 'formatearMonto' => $formatearMontoExcel,
             ])
             @php

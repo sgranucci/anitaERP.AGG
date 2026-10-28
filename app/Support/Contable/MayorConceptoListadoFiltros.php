@@ -494,6 +494,7 @@ class MayorConceptoListadoFiltros
         $cantidad = 0;
         $debe = 0.0;
         $haber = 0.0;
+        $retenciones = 0.0;
 
         foreach ($filas as $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
@@ -503,12 +504,14 @@ class MayorConceptoListadoFiltros
             $cantidad++;
             $debe += (float) ($fila['debe'] ?? 0);
             $haber += (float) ($fila['haber'] ?? 0);
+            $retenciones += (float) ($fila['retenciones'] ?? 0);
         }
 
         return [
             'cantidad_filas' => $cantidad,
             'total_debe' => round($debe, 2),
             'total_haber' => round($haber, 2),
+            'total_retenciones' => round($retenciones, 2),
         ];
     }
 

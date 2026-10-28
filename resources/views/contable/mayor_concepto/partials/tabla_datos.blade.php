@@ -15,7 +15,7 @@
     };
     $mostrarEmpresa = $multiempresa ?? false;
     $colSpanTotales = $mostrarEmpresa ? 17 : 16;
-    $colSpanVacio = $mostrarEmpresa ? 19 : 18;
+    $colSpanVacio = $mostrarEmpresa ? 20 : 19;
     $puedeVerAsiento = (bool) ($puede_ver_asiento ?? false);
     $puedeVerCuenta = (bool) ($puede_ver_cuenta ?? false);
     $puedeVerConcepto = (bool) ($puede_ver_concepto ?? false);
@@ -45,6 +45,7 @@
         <th style="text-align: right;">Cotiz.</th>
         <th style="text-align: right;">Debe</th>
         <th style="text-align: right;">Haber</th>
+        <th style="text-align: right;">Retenciones</th>
     </tr>
 </thead>
 <tbody>
@@ -78,6 +79,7 @@
                 </td>
                 <td class="text-right">{{ $formatearMonto($fila['debe'] ?? null) }}</td>
                 <td class="text-right">{{ $formatearMonto($fila['haber'] ?? null) }}</td>
+                <td class="text-right">{{ $formatearMonto($fila['retenciones'] ?? null) }}</td>
             </tr>
         @elseif ($tipoFila === 'total_concepto')
             <tr class="fila-total-concepto font-weight-bold" style="background-color: #ced4da; border-top: 2px solid #6c757d;">
@@ -97,6 +99,7 @@
                 </td>
                 <td class="text-right">{{ $formatearMonto($fila['debe'] ?? null) }}</td>
                 <td class="text-right">{{ $formatearMonto($fila['haber'] ?? null) }}</td>
+                <td class="text-right">{{ $formatearMonto($fila['retenciones'] ?? null) }}</td>
             </tr>
         @else
             <tr>
@@ -178,6 +181,7 @@
                 </td>
                 <td class="text-right">{{ $formatearMonto($fila['debe'] ?? null) }}</td>
                 <td class="text-right">{{ $formatearMonto($fila['haber'] ?? null) }}</td>
+                <td class="text-right">{{ $formatearMonto($fila['retenciones'] ?? null) }}</td>
             </tr>
         @endif
     @empty

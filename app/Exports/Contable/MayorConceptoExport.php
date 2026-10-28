@@ -95,19 +95,19 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
 
     private function colUltima(): string
     {
-        return $this->esMultiempresa() ? 'S' : 'R';
+        return $this->esMultiempresa() ? 'T' : 'S';
     }
 
     /** @return list<string> Columnas de importes (cotiz / debe / haber). */
     private function columnasImportes(): array
     {
-        return $this->esMultiempresa() ? ['Q', 'R', 'S'] : ['P', 'Q', 'R'];
+        return $this->esMultiempresa() ? ['Q', 'R', 'S', 'T'] : ['P', 'Q', 'R', 'S'];
     }
 
     /** @return list<string> Solo Debe y Haber. */
     private function columnasDebeHaber(): array
     {
-        return $this->esMultiempresa() ? ['R', 'S'] : ['Q', 'R'];
+        return $this->esMultiempresa() ? ['R', 'S', 'T'] : ['Q', 'R', 'S'];
     }
 
     public function view(): View
@@ -144,10 +144,18 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
             }
         }
 
+        $totalRetenciones = 0.0;
+        foreach ($filas as $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') === 'detalle') {
+                $totalRetenciones += (float) ($fila['retenciones'] ?? 0);
+            }
+        }
+
         $totalesReporte = [
             'cantidad_filas' => $cantidadDetalle,
             'total_debe' => (float) ($resultado['totales']['debe'] ?? 0),
             'total_haber' => (float) ($resultado['totales']['haber'] ?? 0),
+            'total_retenciones' => round($totalRetenciones, 2),
         ];
         if (MayorConceptoListadoFiltros::tieneFiltroDetalle($this->filtros)) {
             $totalesVisibles = MayorConceptoListadoFiltros::totalesDesdeFilasVisibles($filas);
@@ -177,7 +185,7 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
             'subtitulo' => $subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'multiempresa' => $multiempresa,
-            'colSpanExcel' => $multiempresa ? 19 : 18,
+            'colSpanExcel' => $multiempresa ? 20 : 19,
         ]);
     }
 
@@ -305,6 +313,7 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
                 'Q' => 11,  // Cotiz.
                 'R' => 16,  // Debe
                 'S' => 16,  // Haber
+                'T' => 16,  // Retenciones
             ];
         }
 
@@ -327,6 +336,7 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
             'P' => 11,  // Cotiz.
             'Q' => 16,  // Debe
             'R' => 16,  // Haber
+            'S' => 16,  // Retenciones
         ];
     }
 

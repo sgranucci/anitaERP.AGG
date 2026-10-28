@@ -162,6 +162,75 @@ class MayorConceptoErpPlanoMotorTest extends TestCase
         $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
     }
 
+    public function test_opp_abre_el_importe_en_las_cuentas_de_gasto_y_prorratea_retenciones(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $clasificado = $motor->clasificar([
+            $this->asiento(61, 906, [
+                $this->mov(112010001, 'Banco', 0, 'SIN CLASIFICAR', 1000, false),
+                $this->mov(211010004, 'Proveedores', 9, 'PROVEEDORES', 1000, true),
+            ]),
+        ], [
+            61 => [
+                $this->mov(521180011, 'Mantenimiento', 24, 'MANTENIMIENTO', 0, true, 70),
+                $this->mov(521180012, 'Limpieza', 25, 'LIMPIEZA', 0, true, 30),
+            ],
+        ], self::LIMITE, [61 => 142.72]);
+
+        $haber = 0.0;
+        $retenciones = 0.0;
+        $porCuenta = [];
+        foreach ($clasificado['lineas'] as $ln) {
+            $this->assertNotSame(211010004, $ln['cuenta']);
+            $haber += $ln['haber'];
+            $retenciones += $ln['retenciones'];
+            $porCuenta[$ln['cuenta']] = [
+                'haber' => $ln['haber'],
+                'concepto' => $ln['concepto_id'],
+                'retenciones' => $ln['retenciones'],
+            ];
+        }
+
+        $this->assertEqualsWithDelta(1000.0, $haber, 0.001);
+        $this->assertEqualsWithDelta(142.72, $retenciones, 0.001);
+        $this->assertSame(24, $porCuenta[521180011]['concepto']);
+        $this->assertSame(25, $porCuenta[521180012]['concepto']);
+        $this->assertEqualsWithDelta(700.0, $porCuenta[521180011]['haber'], 0.001);
+        $this->assertEqualsWithDelta(300.0, $porCuenta[521180012]['haber'], 0.001);
+        $this->assertEqualsWithDelta(99.90, $porCuenta[521180011]['retenciones'], 0.001);
+        $this->assertEqualsWithDelta(42.82, $porCuenta[521180012]['retenciones'], 0.001);
+        $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
+    }
+
+    public function test_sin_gasto_la_retencion_queda_en_la_linea_del_proveedor(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $clasificado = $motor->clasificar([
+            $this->asiento(62, 907, [
+                $this->mov(112010001, 'Banco', 0, 'SIN CLASIFICAR', 400, false),
+                $this->mov(211010004, 'Proveedores', 9, 'PROVEEDORES', 400, true),
+            ]),
+        ], [], self::LIMITE, [62 => 25]);
+
+        $this->assertSame(211010004, $clasificado['lineas'][0]['cuenta']);
+        $this->assertSame(25.0, $clasificado['lineas'][0]['retenciones']);
+        $this->assertSame(400.0, $clasificado['lineas'][0]['haber']);
+    }
+
+    public function test_una_venta_no_arrastra_retenciones(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $clasificado = $motor->clasificar([
+            $this->asiento(63, 908, [
+                $this->mov(111010001, 'Caja', 4, 'VENTAS', 1000, false),
+                $this->mov(411010001, 'Ventas salon', 4, 'VENTAS', 1000, true),
+            ]),
+        ], [], self::LIMITE, [63 => 80]);
+
+        $this->assertSame(0.0, $clasificado['lineas'][0]['retenciones']);
+        $this->assertArrayNotHasKey('lleva_retencion', $clasificado['lineas'][0]);
+    }
+
     public function test_una_cuenta_por_encima_del_limite_no_entra(): void
     {
         $motor = new MayorConceptoErpPlanoMotor;

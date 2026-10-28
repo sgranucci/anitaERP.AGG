@@ -12,8 +12,10 @@ use Illuminate\Support\Facades\DB;
  * Lee asientos, cuentas, conceptos y el gasto de la orden de pago desde MySQL.
  * Cada pata con cuenta menor o igual al límite de caja/banco sale con el mismo
  * importe y el mismo lado. Si la contrapartida es proveedores, ese importe se
- * reparte entre las cuentas de gasto del comprobante. Si no, queda en la
- * contrapartida con el concepto de esa cuenta.
+ * abre en las cuentas de gasto de la COM (y, si no hay COM, en las del
+ * comprobante), cada una con el concepto de esa cuenta. Si no es proveedores,
+ * queda en la contrapartida con el concepto de esa cuenta. Las OPP llevan
+ * además el total de retenciones del pago, prorrateado con el mismo criterio.
  */
 class MayorConceptoErpPlanoMotor
 {
@@ -49,17 +51,21 @@ class MayorConceptoErpPlanoMotor
             }
         }
 
-        $gastos = $this->cargarGastosPorAsiento($empresaId, array_keys($conProveedor));
-        $clasificado = $this->clasificar($asientos, $gastos, $limite);
+        $asientosProveedor = array_keys($conProveedor);
+        $gastos = $this->cargarGastosPorAsiento($empresaId, $asientosProveedor);
+        $retenciones = $this->cargarRetencionesPorAsiento($empresaId, $asientosProveedor);
+        $clasificado = $this->clasificar($asientos, $gastos, $limite, $retenciones);
         $lineas = $clasificado['lineas'];
         $analitico = $clasificado['analitico'];
         $auditoria = $this->auditar($analitico, $lineas);
 
         $debe = 0.0;
         $haber = 0.0;
+        $retencionesTotal = 0.0;
         foreach ($lineas as $ln) {
             $debe += (float) $ln['debe'];
             $haber += (float) $ln['haber'];
+            $retencionesTotal += (float) ($ln['retenciones'] ?? 0);
         }
 
         return [
@@ -79,6 +85,7 @@ class MayorConceptoErpPlanoMotor
                 'lineas' => count($lineas),
                 'debe' => round($debe, 2),
                 'haber' => round($haber, 2),
+                'retenciones' => round($retencionesTotal, 2),
             ],
             'errores_bridge' => [],
             'lectura_incompleta' => false,
@@ -98,9 +105,10 @@ class MayorConceptoErpPlanoMotor
     /**
      * @param  list<array<string, mixed>>  $asientos
      * @param  array<int, list<array<string, mixed>>>  $gastosPorAsiento
+     * @param  array<int, float>  $retencionesPorAsiento  total de retenciones de la OPP, por asiento
      * @return array{lineas: list<array<string, mixed>>, analitico: array<int, array<string, mixed>>}
      */
-    public function clasificar(array $asientos, array $gastosPorAsiento, int $limite): array
+    public function clasificar(array $asientos, array $gastosPorAsiento, int $limite, array $retencionesPorAsiento = []): array
     {
         $lineas = [];
         $analitico = [];
@@ -123,6 +131,7 @@ class MayorConceptoErpPlanoMotor
 
             $nro = (int) $asiento['nro'];
             $asientoId = (int) $asiento['id'];
+            $inicioLineas = count($lineas);
             $debePlano = 0.0;
             $haberPlano = 0.0;
             $cuentasPlano = [];
@@ -161,7 +170,9 @@ class MayorConceptoErpPlanoMotor
                             ? $this->repartir($monto, $gastos, 'peso')
                             : [['peso_linea' => $monto, 'item' => $contra]];
                         foreach ($partesGasto as $parte) {
-                            $lineas[] = $this->linea($asiento, $pata, $parte['item'], (float) $parte['peso_linea'], $esDebe, $gastos !== []);
+                            $linea = $this->linea($asiento, $pata, $parte['item'], (float) $parte['peso_linea'], $esDebe, $gastos !== []);
+                            $linea['lleva_retencion'] = true;
+                            $lineas[] = $linea;
                         }
                         continue;
                     }
@@ -169,6 +180,8 @@ class MayorConceptoErpPlanoMotor
                     $lineas[] = $this->linea($asiento, $pata, $contra, $monto, $esDebe, false);
                 }
             }
+
+            $this->asignarRetenciones($lineas, $inicioLineas, (float) ($retencionesPorAsiento[$asientoId] ?? 0));
 
             $cuentas = array_keys($cuentasPlano);
             sort($cuentas);
@@ -285,8 +298,61 @@ class MayorConceptoErpPlanoMotor
             'filas' => $filas,
             'filas_descuadradas' => $filasDescuadradas,
             'filas_cuadradas' => $filasCuadradas,
-            'nota' => 'Solo entran las cuentas menores o iguales al límite de caja/banco. El importe de esa pata no se cambia: se reclasifica al concepto de la contrapartida, o al gasto del comprobante si la contrapartida es proveedores.',
+            'nota' => 'Solo entran las cuentas menores o iguales al límite de caja/banco. El importe de esa pata no se cambia: se abre en las cuentas de gasto de la COM si la contrapartida es proveedores, y si no queda en la contrapartida con el concepto de esa cuenta.',
         ];
+    }
+
+    /**
+     * Reparte el total de retenciones de la OPP entre las líneas que salieron
+     * de la cuenta de proveedores, con el mismo peso que el importe. La suma
+     * de la columna cierra en el total del pago. Si el movimiento es un
+     * reverso (neto al Debe), el importe de la columna sale en negativo.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    private function asignarRetenciones(array &$lineas, int $desde, float $total): void
+    {
+        $marcadas = [];
+        for ($i = $desde, $n = count($lineas); $i < $n; $i++) {
+            if (empty($lineas[$i]['lleva_retencion'])) {
+                continue;
+            }
+            unset($lineas[$i]['lleva_retencion']);
+            $marcadas[] = $i;
+        }
+        if ($marcadas === [] || abs($total) < 0.005) {
+            return;
+        }
+
+        $pesos = [];
+        $suma = 0.0;
+        $neto = 0.0;
+        foreach ($marcadas as $i) {
+            $peso = abs((float) $lineas[$i]['debe']) + abs((float) $lineas[$i]['haber']);
+            $pesos[$i] = $peso;
+            $suma += $peso;
+            $neto += (float) $lineas[$i]['haber'] - (float) $lineas[$i]['debe'];
+        }
+        if ($suma <= 0) {
+            return;
+        }
+
+        $firmado = abs($total) * ($neto < 0 ? -1.0 : 1.0);
+        if ($total < 0) {
+            $firmado = -abs($firmado);
+        }
+
+        $acumulado = 0.0;
+        $ultimo = $marcadas[count($marcadas) - 1];
+        foreach ($marcadas as $i) {
+            if ($i === $ultimo) {
+                $monto = round($firmado - $acumulado, 2);
+            } else {
+                $monto = round($firmado * ($pesos[$i] / $suma), 2);
+                $acumulado = round($acumulado + $monto, 2);
+            }
+            $lineas[$i]['retenciones'] = $monto;
+        }
     }
 
     /**
@@ -369,9 +435,11 @@ class MayorConceptoErpPlanoMotor
             'cotizacion' => (float) ($pata['cotizacion'] ?? 0),
             'debe' => $debe,
             'haber' => $haber,
+            'retenciones' => 0.0,
             'disp_debe' => $debe,
             'disp_haber' => $haber,
-            'origen' => $desdeGasto ? 'Gasto del comprobante de compra' : 'Contrapartida de la pata hasta el límite',
+            'origen' => (string) ($destino['origen_linea']
+                ?? ($desdeGasto ? 'Gasto del comprobante de compra' : 'Contrapartida de la pata hasta el límite')),
             'desde_operacion_disponibilidad' => true,
             'empresa_id' => (int) ($asiento['empresa_id'] ?? 0),
         ];
@@ -482,8 +550,9 @@ class MayorConceptoErpPlanoMotor
     }
 
     /**
-     * Pesos de gasto por asiento: lo aplicado a cada comprobante, abierto por la
-     * cuenta de debe_gasto (o, si no hay, por el concepto del comprobante).
+     * Pesos de gasto por asiento. Cada comprobante aplicado se abre en las
+     * cuentas de gasto de su COM. Si la factura no tiene COM, se usa el
+     * debe_gasto y, si tampoco está, la cuenta del concepto del comprobante.
      *
      * @param  list<int>  $asientoIds
      * @return array<int, list<array<string, mixed>>>
@@ -525,6 +594,7 @@ class MayorConceptoErpPlanoMotor
         }
         $idsComprobante = array_keys($comprobantes);
 
+        $gastosCom = $this->cargarGastosComPorComprobante($idsComprobante);
         $gastosPorComprobante = [];
         $conDebeGasto = [];
         foreach (array_chunk($idsComprobante, 800) as $lote) {
@@ -574,10 +644,12 @@ class MayorConceptoErpPlanoMotor
         $porAsiento = [];
         foreach ($aplicaciones as $ap) {
             $cp = (int) $ap->comprobante_proveedor_id;
-            $lineasGasto = $gastosPorComprobante[$cp] ?? [];
+            $desdeCom = isset($gastosCom[$cp]);
+            $lineasGasto = $desdeCom ? $gastosCom[$cp] : ($gastosPorComprobante[$cp] ?? []);
             if ($lineasGasto === []) {
                 continue;
             }
+            $origenLinea = $desdeCom ? 'Gasto de la COM' : 'Gasto del comprobante de compra';
             $suma = 0.0;
             foreach ($lineasGasto as $g) {
                 $suma += (float) $g->importe;
@@ -604,7 +676,11 @@ class MayorConceptoErpPlanoMotor
                         'peso' => 0.0,
                         'emisor' => trim((string) ($ap->proveedor_nombre ?? '')),
                         'cuit' => '',
+                        'origen_linea' => $origenLinea,
                     ];
+                }
+                if ($desdeCom) {
+                    $porAsiento[$asientoId][$clave]['origen_linea'] = 'Gasto de la COM';
                 }
                 $porAsiento[$asientoId][$clave]['peso'] += $peso;
             }
@@ -616,6 +692,121 @@ class MayorConceptoErpPlanoMotor
         }
 
         return $salida;
+    }
+
+    /**
+     * Cuentas de gasto de la COM vinculada a cada factura: el Debe del asiento
+     * de la recepción, sin la cuenta de proveedores.
+     *
+     * @param  list<int>  $idsComprobante
+     * @return array<int, list<object>>
+     */
+    private function cargarGastosComPorComprobante(array $idsComprobante): array
+    {
+        if ($idsComprobante === []) {
+            return [];
+        }
+
+        $asientosPorComprobante = [];
+        foreach (array_chunk($idsComprobante, 800) as $lote) {
+            $filas = DB::table('comprobante_proveedor_recepcion as cpr')
+                ->join('recepcion_proveedor as rp', 'rp.id', '=', 'cpr.recepcion_proveedor_id')
+                ->whereIn('cpr.comprobante_proveedor_id', $lote)
+                ->where('rp.anita_tipo', 'COM')
+                ->whereNotNull('rp.asiento_id')
+                ->get(['cpr.comprobante_proveedor_id', 'rp.asiento_id']);
+            foreach ($filas as $f) {
+                $asientosPorComprobante[(int) $f->comprobante_proveedor_id][(int) $f->asiento_id] = true;
+            }
+        }
+        if ($asientosPorComprobante === []) {
+            return [];
+        }
+
+        $asientoIds = [];
+        foreach ($asientosPorComprobante as $asientos) {
+            foreach (array_keys($asientos) as $asientoId) {
+                $asientoIds[$asientoId] = true;
+            }
+        }
+
+        $movsPorAsiento = [];
+        foreach (array_chunk(array_keys($asientoIds), 800) as $lote) {
+            $filas = DB::table('asiento_movimiento as am')
+                ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
+                ->leftJoin('conceptogasto as cg', 'cg.id', '=', 'cc.conceptogasto_id')
+                ->whereIn('am.asiento_id', $lote)
+                ->where('am.monto', '>', 0)
+                ->get([
+                    'am.asiento_id',
+                    'am.monto',
+                    'cc.codigo',
+                    'cc.nombre',
+                    'cc.conceptogasto_id',
+                    'cg.nombre as concepto_nombre',
+                ]);
+            foreach ($filas as $f) {
+                $codigo = $this->soloDigitos($f->codigo);
+                if ($codigo <= 0 || $this->esProveedor($codigo)) {
+                    continue;
+                }
+                $movsPorAsiento[(int) $f->asiento_id][] = $f;
+            }
+        }
+
+        $porComprobante = [];
+        foreach ($asientosPorComprobante as $cp => $asientos) {
+            $acum = [];
+            foreach (array_keys($asientos) as $asientoId) {
+                foreach ($movsPorAsiento[$asientoId] ?? [] as $g) {
+                    $codigo = $this->soloDigitos($g->codigo);
+                    $conceptoId = (int) ($g->conceptogasto_id ?? 0);
+                    $clave = $codigo.'|'.$conceptoId;
+                    if (! isset($acum[$clave])) {
+                        $acum[$clave] = (object) [
+                            'codigo' => $g->codigo,
+                            'nombre' => $g->nombre,
+                            'conceptogasto_id' => $conceptoId,
+                            'concepto_nombre' => $g->concepto_nombre,
+                            'importe' => 0.0,
+                        ];
+                    }
+                    $acum[$clave]->importe += (float) $g->monto;
+                }
+            }
+            if ($acum !== []) {
+                $porComprobante[(int) $cp] = array_values($acum);
+            }
+        }
+
+        return $porComprobante;
+    }
+
+    /**
+     * @param  list<int>  $asientoIds
+     * @return array<int, float>
+     */
+    private function cargarRetencionesPorAsiento(int $empresaId, array $asientoIds): array
+    {
+        if ($empresaId <= 0 || $asientoIds === []) {
+            return [];
+        }
+
+        $porAsiento = [];
+        foreach (array_chunk($asientoIds, 800) as $lote) {
+            $filas = DB::table('pagoproveedor as p')
+                ->join('pagoproveedor_retencion as r', 'r.pagoproveedor_id', '=', 'p.id')
+                ->where('p.empresa_id', $empresaId)
+                ->whereIn('p.asiento_id', $lote)
+                ->groupBy('p.asiento_id')
+                ->selectRaw('p.asiento_id, SUM(r.importe) as total')
+                ->get();
+            foreach ($filas as $f) {
+                $porAsiento[(int) $f->asiento_id] = round((float) $f->total, 2);
+            }
+        }
+
+        return $porAsiento;
     }
 
     /**
@@ -643,6 +834,7 @@ class MayorConceptoErpPlanoMotor
                     'lineas' => [],
                     'total_debe' => 0.0,
                     'total_haber' => 0.0,
+                    'total_retenciones' => 0.0,
                 ];
             }
             $porConcepto[$cpto]['cuentas'][$cuenta]['lineas'][] = $linea;
@@ -652,6 +844,10 @@ class MayorConceptoErpPlanoMotor
             );
             $porConcepto[$cpto]['cuentas'][$cuenta]['total_haber'] = round(
                 $porConcepto[$cpto]['cuentas'][$cuenta]['total_haber'] + (float) $linea['haber'],
+                2,
+            );
+            $porConcepto[$cpto]['cuentas'][$cuenta]['total_retenciones'] = round(
+                $porConcepto[$cpto]['cuentas'][$cuenta]['total_retenciones'] + (float) ($linea['retenciones'] ?? 0),
                 2,
             );
         }
