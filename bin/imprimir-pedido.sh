@@ -8,6 +8,14 @@ FILE="${1:?falta ruta del PDF}"
 COLA="${2:?falta nombre de cola CUPS}"
 
 TIMEOUT="${IMPRESION_PEDIDO_TIMEOUT:-60}"
+PDF_ADAPTADO=""
+
+limpiar_pdf_adaptado() {
+  if [[ -n "${PDF_ADAPTADO}" && -f "${PDF_ADAPTADO}" ]]; then
+    rm -f "${PDF_ADAPTADO}"
+  fi
+}
+trap limpiar_pdf_adaptado EXIT
 
 if [[ ! -f "$FILE" ]]; then
   echo "Archivo no encontrado: $FILE" >&2
@@ -60,6 +68,38 @@ enviar_jetdirect_bie() {
   return 0
 }
 
+# Xerox B230 acepta el PDF y CUPS da el trabajo por terminado, pero no dibuja
+# fuentes CID embebidas (DejaVu del pedido). La factura usa Times y sí sale.
+# Se convierten esas fuentes a trazos antes de enviar.
+adaptar_pdf_xerox_b230() {
+  local info
+  info="$(lpoptions -p "$COLA" 2>/dev/null || true)"
+  if ! grep -q 'B230' <<<"$info"; then
+    return 0
+  fi
+  if command -v pdffonts >/dev/null 2>&1; then
+    if ! pdffonts "$FILE" 2>/dev/null | awk 'NR>2 { print }' | grep -qE 'CID|TrueType'; then
+      return 0
+    fi
+  fi
+  if ! command -v gs >/dev/null 2>&1; then
+    echo "La impresora «${COLA}» (Xerox B230) no imprime el pedido: faltan las fuentes que esa impresora puede dibujar y no está Ghostscript." >&2
+    return 1
+  fi
+
+  PDF_ADAPTADO="$(mktemp --suffix=.pdf)"
+  if ! gs -dSAFER -dBATCH -dNOPAUSE -dNoOutputFonts -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -sOutputFile="$PDF_ADAPTADO" "$FILE" >/dev/null 2>&1; then
+    echo "No se pudo adaptar el PDF del pedido para la Xerox B230 («${COLA}»)." >&2
+    return 1
+  fi
+  if [[ ! -s "$PDF_ADAPTADO" ]]; then
+    echo "El PDF adaptado para la Xerox B230 («${COLA}») quedó vacío." >&2
+    return 1
+  fi
+  FILE="$PDF_ADAPTADO"
+  return 0
+}
+
 if ! lpstat -p "$COLA" >/dev/null 2>&1; then
   if enviar_jetdirect_bie "$COLA" "$FILE"; then
     exit 0
@@ -73,6 +113,8 @@ if echo "$STATE" | grep -qiE 'disabled|rejecting|paused'; then
   echo "La impresora «${COLA}» no acepta trabajos: ${STATE}" >&2
   exit 1
 fi
+
+adaptar_pdf_xerox_b230
 
 LP_OUT="$(lp -d "$COLA" -o fit-to-page "$FILE" 2>&1)" || {
   echo "Error al enviar a la cola «${COLA}»: ${LP_OUT}" >&2
