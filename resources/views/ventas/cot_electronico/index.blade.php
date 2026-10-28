@@ -28,7 +28,7 @@
                         @if (! empty($imprimirAlProcesar) && empty($tieneImpresoraAsignada))
                             <div class="small mt-2">
                                 Marc&oacute; imprimir al procesar, pero no tiene impresora asignada.
-                                Configure <strong>Mi impresora</strong> o use el bot&oacute;n Imprimir COT.
+                                Configure <strong>Mi impresora</strong> o use el bot&oacute;n Imprimir reporte.
                             </div>
                         @endif
                         <div class="mt-2">
@@ -441,7 +441,7 @@
                             class="form-check-input" value="1"
                             {{ ! empty($imprimirAlProcesar) ? 'checked' : '' }}>
                         <label class="form-check-label" for="imprimir_al_procesar">
-                            Imprimir COT al procesar
+                            Imprimir reporte al procesar
                         </label>
                     </div>
                     <span class="small text-muted align-middle">

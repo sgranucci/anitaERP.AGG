@@ -448,7 +448,7 @@ class CotElectronicoController extends Controller
     private function imprimirCotTrasProcesar(int $sesionId): void
     {
         try {
-            $resultado = $this->impresionSesionService->imprimirCotDirecto($sesionId);
+            $resultado = $this->impresionSesionService->imprimirListadoCotDirecto($sesionId);
             session()->flash('mensaje', $resultado['mensaje']);
         } catch (\InvalidArgumentException $e) {
             session()->flash('errores', [$e->getMessage()]);
@@ -458,7 +458,7 @@ class CotElectronicoController extends Controller
                 'error' => $e->getMessage(),
             ]);
             session()->flash('errores', [
-                'El envío se procesó, pero no se pudo imprimir el COT: '.$e->getMessage(),
+                'El envío se procesó, pero no se pudo imprimir el reporte COT: '.$e->getMessage(),
             ]);
         }
     }

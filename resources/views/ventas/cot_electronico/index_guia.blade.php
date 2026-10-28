@@ -240,7 +240,7 @@
                     <div class="form-check form-check-inline ml-2 align-middle">
                         <input type="checkbox" id="imprimir_al_procesar" class="form-check-input" value="1"
                             {{ ! empty($imprimirAlProcesar) ? 'checked' : '' }}>
-                        <label class="form-check-label" for="imprimir_al_procesar">Imprimir COT al procesar</label>
+                        <label class="form-check-label" for="imprimir_al_procesar">Imprimir reporte al procesar</label>
                     </div>
                 @endif
                 @if (! empty($guiaSuburbanoHabilitado))

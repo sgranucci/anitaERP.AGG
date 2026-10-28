@@ -730,10 +730,10 @@
             + '\nImporte (sin IVA): $ ' + formatearNumeroCot(totEnvio.importe);
         if (imprimirAlProcesar && tieneImpresora) {
             mensajeConfirm += nombreImpresora !== ''
-                ? '\n\nDespués se enviará la constancia COT a la impresora ' + nombreImpresora + '.'
-                : '\n\nDespués se enviará la constancia COT a su impresora.';
+                ? '\n\nDespués se enviará el reporte COT a la impresora ' + nombreImpresora + '.'
+                : '\n\nDespués se enviará el reporte COT a su impresora.';
         } else if (imprimirAlProcesar && !tieneImpresora) {
-            mensajeConfirm += '\n\nMarcó imprimir al procesar, pero no tiene impresora asignada. Configure Mi impresora o imprima después con el botón.';
+            mensajeConfirm += '\n\nMarcó imprimir al procesar, pero no tiene impresora asignada. Configure Mi impresora o use el botón Imprimir reporte.';
         }
 
         if (!confirm(mensajeConfirm)) {
