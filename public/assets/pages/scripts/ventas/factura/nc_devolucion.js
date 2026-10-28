@@ -353,6 +353,9 @@ function ncDevolucionPieAnulacionTotal() {
 }
 
 function ncDevolucionPreviewTotales() {
+    if (typeof TotalCantidadFactura === 'function') {
+        TotalCantidadFactura();
+    }
     if ($('#formgeneral').attr('data-factura-proceso') !== 'nc') {
         return;
     }

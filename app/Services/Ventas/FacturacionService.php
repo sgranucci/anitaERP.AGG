@@ -10182,6 +10182,12 @@ class FacturacionService
 	public function editaUnaFactura($id, $flGeneraNotaDeCredito = null, int $articuloNcFiltro = 0, bool $flGeneraNotaDeDebito = false)
 	{
 	   	$data = Self::leeFactura($id);
+		if ($data) {
+			$data->loadMissing([
+				'venta_emisiones.combinaciones.coloresfondos:id,nombre,codigo',
+				'venta_emisiones.combinaciones.coloresforros:id,nombre,codigo',
+			]);
+		}
 		VentaPercepcionIibbAsientoSupport::completarPie($data);
 
 		if (isset($flGeneraNotaDeCredito)) {

@@ -295,9 +295,9 @@ final class FacturaProveedorCabeceraHeuristicaSupport
         if (preg_match('/vto\.?\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI)\.?\s*:?\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu', $texto, $m)) {
             return $this->isoFecha($m[1], $m[2], $m[3]);
         }
-        // «CAE 8642… VENCIMIENTO: 31-10-2026» (el rótulo no dice Vto. CAE).
+        // «CAE Nro.: 8642… Fecha de Vencimiento: 06/11/2026» (el rótulo no dice Vto. CAE).
         if (preg_match(
-            '/C[\.\-\s]*A[\.\-\s]*E[\.\-\s]*A?[\.\-\s]*(?:N[°ºo]\.?)?[:\s]*\d{10,20}.{0,80}?vencimiento[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/isu',
+            '/C[\.\-\s]*A[\.\-\s]*E[\.\-\s]*A?[\.\-\s]*(?:N(?:ro|[°ºo])\.?)?[:\s.]*\d{10,20}.{0,80}?vencimiento[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/isu',
             $texto,
             $m
         )) {
@@ -312,16 +312,31 @@ final class FacturaProveedorCabeceraHeuristicaSupport
      */
     private function extraerFechaVencimientoPago(string $texto): ?string
     {
+        $vtoCae = $this->extraerFechaVtoCae($texto);
+        // «Fecha vto.:» del encabezado es el pago. «Fecha de Vencimiento» junto al CAE no.
         $patrones = [
+            '/\bfecha\s+vto\.?\s*:?\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
             '/fecha\s+(?:de\s+)?vencimiento(?:\s+(?:de\s+)?pago)?[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
             '/vencimiento\s+(?:del\s+)?pago[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
-            '/\bfecha\s+vto\.?(?!\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI))[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
             '/\bvencimiento\b(?!\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI))[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
             '/\bvto\.?(?!\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI))[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
         ];
         foreach ($patrones as $patron) {
-            if (preg_match($patron, $texto, $m)) {
-                return $this->isoFecha($m[1], $m[2], $m[3]);
+            if (! preg_match_all($patron, $texto, $matches, PREG_OFFSET_CAPTURE)) {
+                continue;
+            }
+            foreach ($matches[0] as $i => $full) {
+                $pos = (int) $full[1];
+                $contexto = substr($texto, max(0, $pos - 40), 40);
+                if (preg_match('/\b(?:cae|cai|caea)\b/iu', $contexto)) {
+                    continue;
+                }
+                $iso = $this->isoFecha($matches[1][$i][0], $matches[2][$i][0], $matches[3][$i][0]);
+                if ($vtoCae !== null && $iso === $vtoCae) {
+                    continue;
+                }
+
+                return $iso;
             }
         }
 

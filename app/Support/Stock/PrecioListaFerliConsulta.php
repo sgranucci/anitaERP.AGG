@@ -4,6 +4,7 @@ namespace App\Support\Stock;
 
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Listaprecio;
+use App\Models\Ventas\Canal;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -131,12 +132,9 @@ class PrecioListaFerliConsulta
             ->whereIn('articulo.mventa_id', $filtros['mventa_ids'])
             ->where('articulo.nofactura', (string) $filtros['facturable']);
 
-        self::aplicarCanal($query, (string) ($filtros['canal'] ?? ''));
-        ArticuloEstadoCanalSupport::aplicarFiltroEstadoListado(
-            $query,
-            (string) ($filtros['estado'] ?? ''),
-            (string) ($filtros['canal'] ?? '')
-        );
+        $canal = (string) ($filtros['canal'] ?? '');
+        self::aplicarCanal($query, $canal);
+        self::aplicarEstadoVendible($query, (string) ($filtros['estado'] ?? ''), $canal);
 
         $query->whereExists(function ($sub) use ($listaIds, $fecha) {
             $sub->selectRaw('1')
@@ -150,6 +148,91 @@ class PrecioListaFerliConsulta
             ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('articulo.sku'))
             ->orderBy('articulo.sku')
             ->orderBy('articulo.id');
+    }
+
+    /**
+     * Activo en la lista: la cabecera del artículo y, si tiene combinaciones, al menos una
+     * activa en el mismo canal. Si todas las combinaciones están inactivas, el artículo
+     * no entra en Activos aunque estado_fabrica o estado_local de la cabecera sigan activos.
+     *
+     * @param  Builder<Articulo>  $query
+     */
+    private static function aplicarEstadoVendible(Builder $query, string $estado, string $canal): void
+    {
+        if ($estado === '') {
+            return;
+        }
+
+        $estado = ArticuloEstadoCanalSupport::normalizarEstado($estado);
+
+        if (! CombinacionEstadoCanalSupport::uiFerliActiva()) {
+            ArticuloEstadoCanalSupport::aplicarFiltroEstadoListado($query, $estado, $canal);
+
+            return;
+        }
+
+        if ($estado === ArticuloEstadoCanalSupport::ESTADO_ACTIVO) {
+            ArticuloEstadoCanalSupport::aplicarFiltroEstadoListado($query, $estado, $canal);
+            $query->where(function ($q) use ($canal) {
+                $q->whereNotExists(function ($sub) {
+                    $sub->selectRaw('1')
+                        ->from('combinacion')
+                        ->whereColumn('combinacion.articulo_id', 'articulo.id');
+                })->orWhereExists(function ($sub) use ($canal) {
+                    self::whereCombinacionActiva($sub, $canal);
+                });
+            });
+
+            return;
+        }
+
+        $query->where(function ($q) use ($canal) {
+            $q->where(function ($header) use ($canal) {
+                ArticuloEstadoCanalSupport::aplicarFiltroEstadoListado(
+                    $header,
+                    ArticuloEstadoCanalSupport::ESTADO_INACTIVO,
+                    $canal
+                );
+            })->orWhere(function ($sinColorActivo) use ($canal) {
+                $sinColorActivo->whereExists(function ($sub) {
+                    $sub->selectRaw('1')
+                        ->from('combinacion')
+                        ->whereColumn('combinacion.articulo_id', 'articulo.id');
+                })->whereNotExists(function ($sub) use ($canal) {
+                    self::whereCombinacionActiva($sub, $canal);
+                });
+            });
+        });
+    }
+
+    /**
+     * @param  \Illuminate\Database\Query\Builder  $sub
+     */
+    private static function whereCombinacionActiva($sub, string $canal): void
+    {
+        $sub->selectRaw('1')
+            ->from('combinacion')
+            ->whereColumn('combinacion.articulo_id', 'articulo.id');
+
+        $canal = strtoupper(trim($canal));
+        $activa = CombinacionEstadoCanalSupport::ESTADO_ACTIVO;
+
+        if ($canal === Canal::CODIGO_LOCAL) {
+            $sub->where('combinacion.estado_local', $activa);
+
+            return;
+        }
+
+        if ($canal === Canal::CODIGO_FABRICA) {
+            $sub->where('combinacion.estado_fabrica', $activa);
+
+            return;
+        }
+
+        $sub->where(function ($w) use ($activa) {
+            $w->where('combinacion.estado_fabrica', $activa)
+                ->orWhere('combinacion.estado_local', $activa);
+        });
     }
 
     /**

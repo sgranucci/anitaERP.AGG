@@ -126,7 +126,7 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
                 }
             }
 
-            if ($jurisdiccionHint !== '' && $tipoConcepto === 'B') {
+            if ($jurisdiccionHint !== '' && $this->nombreSugierePercepcionIibb($nombre)) {
                 $score += $this->scoreJurisdiccionIibb($jurisdiccionHint, $aliases, $nombre);
             }
 
@@ -286,6 +286,10 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             return 50;
         }
 
+        if (str_contains($tipoLinea, 'percepcion_iibb') && $tipoConcepto === 'N' && $this->nombreSugierePercepcionIibb($nombre)) {
+            return 60;
+        }
+
         if (str_contains($tipoLinea, 'percepc') && in_array($tipoConcepto, ['P', 'B'], true)) {
             return 30;
         }
@@ -331,6 +335,20 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
         return 0;
     }
 
+    /** «CABA PERCEP I.B.» queda en tipoconcepto N; igual es percepción de ingresos brutos. */
+    private function nombreSugierePercepcionIibb(string $nombre): bool
+    {
+        if ($nombre === '') {
+            return false;
+        }
+        if (preg_match('/iibb|ibr|sircreb|arba|agip|ingresos\s+brutos/u', $nombre)) {
+            return true;
+        }
+
+        return (bool) preg_match('/percep/u', $nombre)
+            && (bool) preg_match('/\bi\.?\s*b\b/u', $nombre);
+    }
+
     private function nombreSugierePercepcionIva(string $nombre): bool
     {
         if ($nombre === '') {
@@ -356,7 +374,7 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
     ): bool {
         if (str_contains($tipoLinea, 'percepcion_iibb')) {
             return $tipoConcepto === ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IIBB
-                || ($tipoConcepto === 'N' && (bool) preg_match('/iibb|ibr|sircreb|arba|agip/u', $nombre));
+                || ($tipoConcepto === 'N' && $this->nombreSugierePercepcionIibb($nombre));
         }
 
         if (str_contains($tipoLinea, 'percepcion_iva')) {
@@ -407,6 +425,12 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             if (preg_match('/\b(?:arba|bs\.?\s*as|buenos\s+aires)\b/u', $blob)) {
                 return -25;
             }
+        }
+        if ($hint === 'cordoba' && preg_match('/cordoba/u', $blob)) {
+            return 40;
+        }
+        if ($hint === 'tdf' && preg_match('/tdf|tierra\s+del\s+fuego/u', $blob)) {
+            return 40;
         }
 
         return 0;

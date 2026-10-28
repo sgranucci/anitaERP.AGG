@@ -73,6 +73,7 @@
                                     <option value="{{ $cod }}" @selected($estadoSeleccionado === $cod)>{{ $label }}</option>
                                 @endforeach
                             </select>
+                            <small class="form-text text-muted">Si tiene combinaciones, hace falta al menos una activa en el canal. Con Todos alcanza fábrica o local.</small>
                         </div>
                     </div>
 
