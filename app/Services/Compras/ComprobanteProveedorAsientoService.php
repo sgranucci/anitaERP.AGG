@@ -276,6 +276,7 @@ class ComprobanteProveedorAsientoService
             );
         }
         $hayRepartoDebeGasto = ComprobanteProveedorDebeGastoSupport::tieneReparto($lineasRepartoGasto);
+        $pesosGastoIva = $this->pesosGastoParaIva($comprobante, $hayRepartoDebeGasto, $lineasRepartoGasto);
 
         $lineasDebe = [];
         $lineasHaberExtra = [];
@@ -517,8 +518,10 @@ class ComprobanteProveedorAsientoService
             }
 
             // Impuesto / IVA: si la cuenta maneja centro, el de la OC (partido si está prorrateada).
-            // Si no lo maneja, solo el centro único de la cuenta. El neto sin referencia sigue
-            // el centro de la línea o el de la OC, acotado a los centros de la cuenta.
+            // Sin OC, el IVA sigue las cuentas de gasto: una sola hereda ese centro; varias
+            // (Agregar cuenta) lo abren en la misma proporción. Si el renglón de IVA ya tiene
+            // centro, ese manda mientras el gasto no esté abierto en más de uno.
+            // Si la cuenta no maneja centro, solo el único de la matriz.
             $conceptoIdLinea = (int) ($linea->concepto_ivacompra_id ?? 0);
             if ($esNetoSinReferencia && $cuentaId > 0) {
                 $trozosCc = [[
@@ -530,12 +533,25 @@ class ComprobanteProveedorAsientoService
                     'importe' => $monto,
                 ]];
             } else {
+                $ccLinea = (int) ($linea->centrocosto_id ?? 0);
+                $yaRepartido = $conceptoIdLinea > 0 && count($conceptosCcDistintos[$conceptoIdLinea] ?? []) >= 2;
+                $pesosIva = [];
+                if (strtoupper($tipoConcepto) === 'I' && ! $yaRepartido) {
+                    $pesosIva = ComprobanteProveedorCentrocostoSupport::pesosIvaSinOc(
+                        $pesosGastoIva,
+                        $ccLinea,
+                    );
+                    if (count($pesosIva) >= 2) {
+                        $ccLinea = 0;
+                    }
+                }
                 $trozosCc = ComprobanteProveedorCentrocostoSupport::repartirImpuesto(
                     $cuentaId,
                     $monto,
                     $comprobante,
-                    (int) ($linea->centrocosto_id ?? 0),
-                    $conceptoIdLinea > 0 && count($conceptosCcDistintos[$conceptoIdLinea] ?? []) >= 2,
+                    $ccLinea,
+                    $yaRepartido,
+                    $pesosIva,
                 );
             }
             foreach ($trozosCc as $trozoCc) {
@@ -1289,6 +1305,52 @@ class ComprobanteProveedorAsientoService
                 $linea->setRelation('concepto_ivacompras', $concepto);
             }
         }
+    }
+
+    /**
+     * Centros del gasto que el IVA puede seguir.
+     * Con varias cuentas (Agregar cuenta) manda ese reparto.
+     * Con una sola, el centro cargado en el neto.
+     *
+     * @param  list<array{cuentacontable_id?:int, importe?:float, centrocosto_id?:int}>  $lineasRepartoGasto
+     * @return array<int, float>
+     */
+    private function pesosGastoParaIva(
+        Comprobante_Proveedor $comprobante,
+        bool $hayRepartoDebeGasto,
+        array $lineasRepartoGasto,
+    ): array {
+        $pesos = [];
+        if ($hayRepartoDebeGasto) {
+            foreach ($lineasRepartoGasto as $linea) {
+                $this->sumarPesoGasto($pesos, (int) ($linea['centrocosto_id'] ?? 0), (float) ($linea['importe'] ?? 0));
+            }
+
+            return $pesos;
+        }
+
+        foreach ($comprobante->comprobante_proveedor_conceptos ?? [] as $linea) {
+            $concepto = $linea->concepto_ivacompras ?? null;
+            $tipo = (string) ($concepto?->tipoconcepto ?? '');
+            $codigo = (string) ($concepto?->codigo ?? '');
+            if (! ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto($tipo, $codigo)) {
+                continue;
+            }
+            $this->sumarPesoGasto($pesos, (int) ($linea->centrocosto_id ?? 0), (float) ($linea->monto ?? 0));
+        }
+
+        return $pesos;
+    }
+
+    /**
+     * @param  array<int, float>  $pesos
+     */
+    private function sumarPesoGasto(array &$pesos, int $centrocostoId, float $importe): void
+    {
+        if ($centrocostoId <= 0 || abs($importe) < 0.0001) {
+            return;
+        }
+        $pesos[$centrocostoId] = ($pesos[$centrocostoId] ?? 0) + abs($importe);
     }
 
     private function resolverTipoAsiento(): Tipoasiento

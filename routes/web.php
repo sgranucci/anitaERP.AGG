@@ -1384,6 +1384,8 @@ Route::get('contable/reporte-definible/crear', 'Contable\ReporteDefinibleControl
 Route::post('contable/reporte-definible', 'Contable\ReporteDefinibleController@guardar')->name('guardar_reporte_definible');
 Route::post('contable/reporte-definible/importar-anita', 'Contable\ReporteDefinibleController@importarAnita')->name('importar_reporte_definible_anita');
 Route::get('contable/reporte-definible/ejecutar/{id?}', 'Contable\ReporteDefinibleController@ejecutar')->name('ejecutar_reporte_definible');
+Route::post('contable/reporte-definible/consulta-grupo-ccosto', 'Contable\ReporteDefinibleController@consultaGrupoCcosto')->name('consulta_grupo_ccosto_reporte_definible');
+Route::get('contable/reporte-definible/resolver-grupo-ccosto', 'Contable\ReporteDefinibleController@resolverGrupoCcosto')->name('resolver_grupo_ccosto_reporte_definible');
 Route::get('contable/listar-reporte-definible/{id}/{formato}', 'Contable\ReporteDefinibleController@exportar')->name('listar_reporte_definible');
 Route::get('contable/reporte-definible-conjunto', 'Contable\ReporteDefinibleConjuntoController@index')->name('reporte_definible_conjunto');
 Route::get('contable/reporte-definible-conjunto/crear', 'Contable\ReporteDefinibleConjuntoController@crear')->name('crear_reporte_definible_conjunto');

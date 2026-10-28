@@ -299,6 +299,10 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
             'errores' => [],
         ];
 
+        if (! $this->anitaTieneCtaconc()) {
+            return $ret;
+        }
+
         $apiAnita = new ApiAnita();
         $payload = [
             'acc' => 'list',
@@ -522,7 +526,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 
             // Crown no tiene ctaconc: el concepto de gasto queda vacío.
             $dataAnitaConc = [];
-            if (! EntornoEmpresaSupport::esCrown()) {
+            if ($this->anitaTieneCtaconc()) {
                 $dataConc = array(
                     'acc' => 'list', 'tabla' => $this->tableAnita[1],
                     'sistema' => 'contab',
@@ -658,7 +662,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
         );
         $apiAnita->apiCallEscritura($data);
 
-        if (! empty($request['conceptogasto_id'])) {
+        if ($this->anitaTieneCtaconc() && ! empty($request['conceptogasto_id'])) {
             $apiAnitaConc = new ApiAnita();
             $data = array(
                 'acc' => 'insert',
@@ -729,6 +733,10 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
                                             "' AND ctam_empresa='".$request['empresa_id']."' ");
         $apiAnita->apiCallEscritura($data);
 
+        if (! $this->anitaTieneCtaconc()) {
+            return;
+        }
+
         $apiAnitaConc = new ApiAnita();
 
         $data = array( 'acc' => 'update',
@@ -785,12 +793,14 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
                     "' AND ctam_empresa = '".$empresa."'" );
         $apiAnita->apiCallEscritura($data);
 
-        $apiAnitaConc = new ApiAnita();
-        $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1],
-                    'sistema' => 'contab',
-					'whereArmado' => " WHERE ctaco_cuenta = '".$id.
-                    "' AND ctaco_empresa = '".$empresa."'");
-        $apiAnitaConc->apiCallEscritura($data);
+        if ($this->anitaTieneCtaconc()) {
+            $apiAnitaConc = new ApiAnita();
+            $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1],
+                        'sistema' => 'contab',
+                        'whereArmado' => " WHERE ctaco_cuenta = '".$id.
+                        "' AND ctaco_empresa = '".$empresa."'");
+            $apiAnitaConc->apiCallEscritura($data);
+        }
 
         $apiAnitaConc = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2],
@@ -869,6 +879,15 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 			default => '2',
 		};
 	}
+
+    /**
+     * Crown no tiene ctaconc en la base contab de Anita. El concepto de gasto
+     * queda solo en el ERP; leer o grabar esa tabla devuelve Informix 206.
+     */
+    private function anitaTieneCtaconc(): bool
+    {
+        return ! EntornoEmpresaSupport::esCrown();
+    }
 
 	/**
 	 * AGG, Ferli y Crown: ctam_tipo 0 = imputable, 1 y 3 = título, 2 = totalizadora.

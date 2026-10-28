@@ -30,7 +30,8 @@ class RetenciongananciaRepository implements RetenciongananciaRepositoryInterfac
     {
         $retencionesganancia = $this->model->with("retencionganancia_escalas")->get();
 
-		if ($retencionesganancia->isEmpty())
+		// El stub codigo 0 ("sin código") no es la tabla Anita: si es lo único cargado, hay que importar.
+		if ($retencionesganancia->isEmpty() || $this->soloStubSinCodigo($retencionesganancia))
 		{
         	self::sincronizarConAnita();
 
@@ -119,13 +120,32 @@ class RetenciongananciaRepository implements RetenciongananciaRepositoryInterfac
         $datosLocalArray = [];
 
         foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
+            $datosLocalArray[] = (string) $value->{$this->keyField};
         }
 		
+        $faltantes = [];
         foreach ($dataAnita as $value) {
-            if (!in_array($value->{$this->keyField}, $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+            if (!in_array((string) $value->{$this->keyField}, $datosLocalArray, true)) {
+                $faltantes[] = (string) $value->{$this->keyFieldAnita};
             }
+        }
+
+        $idsOcupados = array_fill_keys(
+            $this->model->newQuery()->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            true
+        );
+        usort($faltantes, function (string $a, string $b) use ($idsOcupados): int {
+            $aLibre = ! isset($idsOcupados[(int) $a]);
+            $bLibre = ! isset($idsOcupados[(int) $b]);
+            if ($aLibre !== $bLibre) {
+                return $aLibre ? -1 : 1;
+            }
+
+            return (int) $a <=> (int) $b;
+        });
+
+        foreach ($faltantes as $codigoAnita) {
+            $this->traerRegistroDeAnita($codigoAnita);
         }
     }
 
@@ -163,28 +183,36 @@ class RetenciongananciaRepository implements RetenciongananciaRepositoryInterfac
             if (! is_array($dataAnitamov)) {
                 $dataAnitamov = [];
             }
+            usort($dataAnitamov, fn ($a, $b) => (int) ($a->esc_nro_linea ?? 0) <=> (int) ($b->esc_nro_linea ?? 0));
 
-			// Crea registro 
-            $retencionganancia = $this->model->create([
-                'id' => $key,
-                'nombre' => $data->ret_desc,
-				'codigo' => $data->ret_codigo,
-				'regimen' => $data->ret_cod_regimen,
-				'formacalculo' => $data->ret_toma_acum,
-				'porcentajeinscripto' => $data->ret_porc_insc,
-				'porcentajenoinscripto' => $data->ret_porc_no_insc,
-				'montoexcedente' => $data->ret_excedente,
-				'minimoretencion' => $data->ret_minimo_ret,
+			// Crea registro. El id de Anita se conserva si está libre.
+			// En Crown el stub "sin código" ocupa el id 1 y el régimen 1 no puede pisarlo.
+            $atributos = [
+                'nombre' => ($nombre = trim((string) ($data->ret_desc ?? ''))) !== ''
+                    ? $nombre
+                    : 'Retención ganancias '.$key,
+				'codigo' => trim((string) $data->ret_codigo),
+				'regimen' => trim((string) ($data->ret_cod_regimen ?? '0')),
+				'formacalculo' => trim((string) ($data->ret_toma_acum ?? 'N')),
+				'porcentajeinscripto' => $this->numeroAnita($data->ret_porc_insc ?? 0),
+				'porcentajenoinscripto' => $this->numeroAnita($data->ret_porc_no_insc ?? 0),
+				'montoexcedente' => $this->numeroAnita($data->ret_excedente ?? 0),
+				'minimoretencion' => $this->numeroAnita($data->ret_minimo_ret ?? 0),
 				'baseimponible' => AnitaRetencionEsquemaSupport::retencionIncluyeBasePeriodoValor()
-                    ? ($data->ret_base ?? 0)
+                    ? $this->numeroAnita($data->ret_base ?? 0)
                     : 0,
 				'cantidadperiodoacumula' => AnitaRetencionEsquemaSupport::retencionIncluyeBasePeriodoValor()
-                    ? ($data->ret_cant_per ?? 0)
+                    ? (int) $this->numeroAnita($data->ret_cant_per ?? 0)
                     : 0,
 				'valorunitario' => AnitaRetencionEsquemaSupport::retencionIncluyeBasePeriodoValor()
-                    ? ($data->ret_valor_unit ?? 0)
+                    ? $this->numeroAnita($data->ret_valor_unit ?? 0)
                     : 0,
-            ]);
+            ];
+            $idAnita = (int) $key;
+            if ($idAnita > 0 && ! $this->model->newQuery()->whereKey($idAnita)->exists()) {
+                $atributos['id'] = $idAnita;
+            }
+            $retencionganancia = $this->model->create($atributos);
 
 			if ($retencionganancia)
 			{
@@ -193,14 +221,14 @@ class RetenciongananciaRepository implements RetenciongananciaRepositoryInterfac
 					if ($i == 0)
 						$excedente = 0;
 					else
-						$excedente = $dataAnitamov[$i-1]->esc_desde;
+						$excedente = $this->numeroAnita($dataAnitamov[$i - 1]->esc_desde ?? 0);
 
         			$retencionganancia_escala = $this->model_Escala->create([
             											'retencionganancia_id' => $retencionganancia->id,
-            											'desdemonto' => $dataAnitamov[$i]->esc_desde,
-														'hastamonto' => $dataAnitamov[$i]->esc_hasta,
-														'montoretencion' => $dataAnitamov[$i]->esc_retencion,
-														'porcentajeretencion' => $dataAnitamov[$i]->esc_porc_ret,
+            											'desdemonto' => $this->numeroAnita($dataAnitamov[$i]->esc_desde ?? 0),
+														'hastamonto' => $this->numeroAnita($dataAnitamov[$i]->esc_hasta ?? 0),
+														'montoretencion' => $this->numeroAnita($dataAnitamov[$i]->esc_retencion ?? 0),
+														'porcentajeretencion' => $this->numeroAnita($dataAnitamov[$i]->esc_porc_ret ?? 0),
 														'excedente' => $excedente
 														]);
 				}
@@ -392,7 +420,7 @@ class RetenciongananciaRepository implements RetenciongananciaRepositoryInterfac
 
     /**
      * Campos de cabecera Anita `retencion`.
-     * Ferli no tiene ret_base / ret_cant_per / ret_valor_unit.
+     * Ferli y Crown no tienen ret_base / ret_cant_per / ret_valor_unit.
      */
     private function camposCabeceraAnita(): string
     {
@@ -414,5 +442,28 @@ class RetenciongananciaRepository implements RetenciongananciaRepositoryInterfac
 
         return implode(",\n", $campos);
     }
-		
+
+    /**
+     * Informix manda ceros como notación científica (0.000…e+00).
+     */
+    private function numeroAnita(mixed $valor): float
+    {
+        if ($valor === null || $valor === '') {
+            return 0.0;
+        }
+
+        return (float) $valor;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Retencionganancia>  $filas
+     */
+    private function soloStubSinCodigo($filas): bool
+    {
+        if ($filas->isEmpty()) {
+            return false;
+        }
+
+        return $filas->every(fn ($fila) => (string) $fila->codigo === '0');
+    }
 }

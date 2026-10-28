@@ -66,7 +66,9 @@ class ReporteDefinibleExport implements FromView, WithColumnFormatting, WithColu
         $this->rutasLogosExcel = $logos;
         $hayLogos = count($logos) > 0;
         // Filas meta de la vista: [logo] + titulo1 + generado + [titulo2]
-        $filasMeta = 2 + ($hayLogos ? 1 : 0) + (trim((string) ($this->reporte->titulo2 ?? '')) !== '' ? 1 : 0);
+        $filasMeta = 2 + ($hayLogos ? 1 : 0)
+            + (trim((string) ($this->reporte->titulo2 ?? '')) !== '' ? 1 : 0)
+            + (trim((string) ($this->resultado['criterios'] ?? '')) !== '' ? 1 : 0);
         $grupos = [];
         foreach ($this->resultado['columnas'] ?? [] as $col) {
             $nombreGrupo = trim((string) ($col['grupo'] ?? ''));
@@ -240,11 +242,28 @@ class ReporteDefinibleExport implements FromView, WithColumnFormatting, WithColu
                 }
 
                 $row = $filaDatos;
+                $lastCol = $sheet->getHighestColumn();
                 foreach ($filas['filas'] ?? [] as $fila) {
                     $url = $fila['drill_url'] ?? null;
                     if (is_string($url) && $url !== '') {
                         $abs = $this->absolutizarUrl($url);
                         $sheet->setHyperlink('A'.$row, new Hyperlink($abs, 'Abrir mayor plano'));
+                    }
+                    $kind = (string) ($fila['kind'] ?? '');
+                    $fill = match ($kind) {
+                        'subtitulo' => 'EAF2F8',
+                        'subtotal' => 'D6EAF8',
+                        'beneficio' => 'D5F5E3',
+                        default => null,
+                    };
+                    if ($fill !== null) {
+                        $sheet->getStyle('A'.$row.':'.$lastCol.$row)->applyFromArray([
+                            'font' => ['bold' => true, 'name' => 'Arial'],
+                            'fill' => [
+                                'fillType' => Fill::FILL_SOLID,
+                                'startColor' => ['rgb' => $fill],
+                            ],
+                        ]);
                     }
                     $row++;
                 }

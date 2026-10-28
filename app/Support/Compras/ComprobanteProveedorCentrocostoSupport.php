@@ -76,24 +76,54 @@ final class ComprobanteProveedorCentrocostoSupport
      *
      * @return list<array{centrocosto_id:int, importe:float}>
      */
+    /**
+     * @param  array<int, float>  $pesosGasto  centro => importe del gasto (Agregar cuenta, o el neto si hay uno solo)
+     */
     public static function repartirImpuesto(
         int $cuentaId,
         float $importe,
         ?object $comprobante,
         int $centrocostoLinea = 0,
         bool $conceptoYaRepartido = false,
+        array $pesosGasto = [],
     ): array {
         $oc = is_object($comprobante) ? ($comprobante->ordencompras ?? null) : null;
+        $pesosOc = self::pesosDestinoOc(is_object($oc) ? $oc : null);
+        $pesos = self::pesosPositivos($pesosOc);
+        if ($pesos === []) {
+            $pesos = self::pesosIvaSinOc($pesosGasto, $centrocostoLinea);
+        }
 
         return self::trozosImpuesto(
             self::cuentaManejaCentrocosto($cuentaId),
             self::paraCuentaSinGasto($cuentaId),
-            self::pesosDestinoOc(is_object($oc) ? $oc : null),
+            $pesos,
             $importe,
             $centrocostoLinea,
             $conceptoYaRepartido,
             self::resolverDesdeComprobante($comprobante),
         );
+    }
+
+    /**
+     * Sin OC prorrateada, el IVA sigue las cuentas de gasto.
+     * Varias (Agregar cuenta): se abre en la misma proporción.
+     * Una sola: se usa si el renglón de IVA todavía no tiene centro propio.
+     *
+     * @param  array<int, float>  $pesosGasto
+     * @return array<int, float>
+     */
+    public static function pesosIvaSinOc(array $pesosGasto, int $centrocostoLinea): array
+    {
+        $gasto = self::pesosPositivos($pesosGasto);
+        if (count($gasto) >= 2) {
+            return $gasto;
+        }
+        if (count($gasto) === 1 && $centrocostoLinea <= 0) {
+            return $gasto;
+        }
+
+        return [];
     }
 
     /**

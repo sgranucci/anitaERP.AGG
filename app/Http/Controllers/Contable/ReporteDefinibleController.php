@@ -19,6 +19,7 @@ use App\Support\Contable\ReporteDefinible\ReporteDefinibleAlertaSupport;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleCoberturaSupport;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleConjuntoSupport;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleEliminacionSupport;
+use App\Support\Contable\ReporteDefinible\ReporteDefinibleGrupoCcostoSupport;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleLayoutResolver;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleLayoutSupport;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleNotaSupport;
@@ -483,6 +484,7 @@ class ReporteDefinibleController extends Controller
             'variantes' => $reporte
                 ? $this->varianteSupport->payloadUi((int) $reporte->id, (int) auth()->id())
                 : [],
+            'grupos_ccosto' => ReporteDefinibleGrupoCcostoSupport::describirSeleccion($filtros['grupo_ccosto'] ?? []),
         ]);
     }
 
@@ -1484,6 +1486,59 @@ class ReporteDefinibleController extends Controller
             'ok' => true,
             'historial' => $this->notaSupport->historial((int) $id, (int) $notaId),
         ]);
+    }
+
+    public function consultaGrupoCcosto(Request $request)
+    {
+        $this->assertPuedeEjecutar();
+        $consulta = mb_strtolower(trim((string) $request->input('consulta', '')));
+        $filas = ReporteDefinibleGrupoCcostoSupport::listar();
+        if ($consulta !== '') {
+            $filas = array_values(array_filter($filas, static function (array $fila) use ($consulta): bool {
+                $texto = mb_strtolower($fila['codigo'].' '.$fila['nombre']);
+
+                return str_contains($texto, $consulta);
+            }));
+        }
+
+        if ($filas === []) {
+            $html = '<tr><td colspan="4">Sin grupos de centros de costo.</td></tr>';
+        } else {
+            $html = '';
+            foreach ($filas as $fila) {
+                $html .= '<tr>';
+                $html .= '<td class="codigo">'.e($fila['codigo']).'</td>';
+                $html .= '<td class="nombre">'.e($fila['nombre']).'</td>';
+                $html .= '<td class="text-right">'.(int) $fila['centros'].'</td>';
+                $html .= '<td class="text-nowrap"><a class="btn btn-warning btn-sm eligeconsultagrupocc">Elegir</a></td>';
+                $html .= '</tr>';
+            }
+        }
+
+        return response()->json(['data' => $html]);
+    }
+
+    public function resolverGrupoCcosto(Request $request)
+    {
+        $this->assertPuedeEjecutar();
+        $grupo = ReporteDefinibleGrupoCcostoSupport::buscar(trim((string) $request->query('valor', '')));
+        if ($grupo === null) {
+            return response()->json(['ok' => false, 'mensaje' => 'Grupo de centros de costo no encontrado']);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'codigo' => $grupo['codigo'],
+            'nombre' => $grupo['nombre'],
+            'centros' => $grupo['centros'],
+        ]);
+    }
+
+    private function assertPuedeEjecutar(): void
+    {
+        if (! can('ejecutar-reporte-definible', false) && ! can('listar-reporte-definible', false)) {
+            can('listar-reporte-definible');
+        }
     }
 
     /**

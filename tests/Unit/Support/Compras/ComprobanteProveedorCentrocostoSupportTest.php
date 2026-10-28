@@ -109,6 +109,31 @@ class ComprobanteProveedorCentrocostoSupportTest extends TestCase
         ], $trozos);
     }
 
+    public function test_iva_sin_oc_hereda_el_unico_centro_del_gasto(): void
+    {
+        $pesos = ComprobanteProveedorCentrocostoSupport::pesosIvaSinOc([210 => 7960000.0], 0);
+
+        $this->assertSame([210 => 7960000.0], $pesos);
+    }
+
+    public function test_iva_sin_oc_se_abre_como_las_cuentas_de_gasto(): void
+    {
+        $pesos = ComprobanteProveedorCentrocostoSupport::pesosIvaSinOc([
+            210 => 6000.0,
+            88 => 4000.0,
+        ], 15);
+
+        $this->assertSame([
+            210 => 6000.0,
+            88 => 4000.0,
+        ], $pesos);
+    }
+
+    public function test_iva_con_centro_propio_no_pisa_el_unico_del_gasto(): void
+    {
+        $this->assertSame([], ComprobanteProveedorCentrocostoSupport::pesosIvaSinOc([210 => 100.0], 88));
+    }
+
     public function test_el_ultimo_centro_absorbe_el_redondeo(): void
     {
         $trozos = ComprobanteProveedorCentrocostoSupport::repartirImporte(10.0, [1 => 1, 2 => 1, 3 => 1]);

@@ -79,7 +79,9 @@ class ReporteDefinibleProcesador
         $modoAsientos = (string) ($filtros['modo_inclusion_asientos'] ?? 'sin_cierre_ni_inflacion');
         $monedaId = (int) ($filtros['moneda_id'] ?? CuentacontableSaldoMesSupport::monedaLocalId());
         $soloOrigen = (bool) ($filtros['solo_moneda_origen'] ?? false);
-        $filtroCcosto = $this->filtroCcostoRuntime($filtros);
+        $avisosCc = [];
+        $filtroCcosto = ReporteDefinibleGrupoCcostoSupport::filtroRuntime($filtros, $avisosCc);
+        $advFechas = array_merge($advFechas, $avisosCc);
 
         $reporte->load(['rubros.cuentas.ccostos', 'rubros.cuentas.cuentacontable']);
         $this->conjuntoSupport->expandirEnReporte($reporte);
@@ -120,8 +122,12 @@ class ReporteDefinibleProcesador
         if ($usaCcostoDef) {
             $advertencias[] = 'Filtros de centro de costo de la definición aplicados (lectura por asientos).';
         }
-        if ($filtroCcosto !== null) {
-            $advertencias[] = sprintf('Filtro runtime c.costo %d–%d.', $filtroCcosto['desde'], $filtroCcosto['hasta']);
+        if ($filtroCcosto !== null && ((int) ($filtroCcosto['desde'] ?? 0) > 0 || (int) ($filtroCcosto['hasta'] ?? 0) > 0)) {
+            $advertencias[] = sprintf(
+                'Filtro de centro de costo %d–%d.',
+                (int) $filtroCcosto['desde'],
+                (int) $filtroCcosto['hasta']
+            );
         }
         if ($layout === ReporteDefinibleSupport::LAYOUT_CCOSTO) {
             $advertencias[] = 'Apertura por centros de costo en columnas (lectura por asientos).';
@@ -336,6 +342,17 @@ class ReporteDefinibleProcesador
                     );
                 }
             }
+            // Anita arma_encab: con más de un período agrega la columna que suma los meses.
+            if (count($periodos) > 1) {
+                $columnas[] = [
+                    'key' => 'total',
+                    'label' => 'Total',
+                    'tipo' => 'total',
+                    'meta' => [
+                        'sumar' => array_map(static fn (int $p): string => (string) $p, $periodos),
+                    ],
+                ];
+            }
         }
 
         $byParent = [];
@@ -367,6 +384,7 @@ class ReporteDefinibleProcesador
         if ($layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
             $this->aplicarColumnasDerivadas($columnas, $totalesActual);
         }
+        $this->completarColumnaTotal($columnas, $totalesActual);
 
         $filas = [];
         $this->emitir(
@@ -385,14 +403,12 @@ class ReporteDefinibleProcesador
             $filas
         );
 
-        if (! empty($filtros['ocultar_ceros'])) {
-            [$columnas, $filas] = $this->aplicarOcultarCeros($columnas, $filas);
-        }
-        $filas = $this->aplicarOcultarSiCeroRubro($filas);
+        [$columnas, $filas] = $this->cerrarPresentacion($reporte, $columnas, $filas, $filtros);
 
         return [
             'columnas' => $columnas,
             'filas' => $filas,
+            'criterios' => ReporteDefinibleGrupoCcostoSupport::criterios($filtros, $filtroCcosto),
             'advertencias' => array_values(array_unique($advertencias)),
             'fuente' => $fuente,
             'layout' => $layout,
@@ -582,8 +598,12 @@ class ReporteDefinibleProcesador
         if ($usaCcostoDef) {
             $advertencias[] = 'Filtros de centro de costo de la definición aplicados (lectura por asientos).';
         }
-        if ($filtroCcosto !== null) {
-            $advertencias[] = sprintf('Filtro runtime c.costo %d–%d.', $filtroCcosto['desde'], $filtroCcosto['hasta']);
+        if ($filtroCcosto !== null && ((int) ($filtroCcosto['desde'] ?? 0) > 0 || (int) ($filtroCcosto['hasta'] ?? 0) > 0)) {
+            $advertencias[] = sprintf(
+                'Filtro de centro de costo %d–%d.',
+                (int) $filtroCcosto['desde'],
+                (int) $filtroCcosto['hasta']
+            );
         }
 
         $columnas = $this->layoutResolver->armarColumnas($layoutModel, $fechaDesde, $fechaHasta);
@@ -709,14 +729,12 @@ class ReporteDefinibleProcesador
             'diseñado', $mostrarCuentas, $nivelMax, $filtros, $empresaIds, $filas
         );
 
-        if (! empty($filtros['ocultar_ceros'])) {
-            [$columnas, $filas] = $this->aplicarOcultarCeros($columnas, $filas);
-        }
-        $filas = $this->aplicarOcultarSiCeroRubro($filas);
+        [$columnas, $filas] = $this->cerrarPresentacion($reporte, $columnas, $filas, $filtros);
 
         return [
             'columnas' => $columnas,
             'filas' => $filas,
+            'criterios' => ReporteDefinibleGrupoCcostoSupport::criterios($filtros, $filtroCcosto),
             'advertencias' => array_values(array_unique($advertencias)),
             'fuente' => $fuente,
             'layout' => 'diseñado',
@@ -732,6 +750,251 @@ class ReporteDefinibleProcesador
      * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
      */
+    /**
+     * @param  list<ReporteContableRubro>  $hijos
+     * @return list<ReporteContableRubro>
+     */
+    private function hijosVisibles(array $hijos, int $nivelMax): array
+    {
+        if ($nivelMax <= 0) {
+            return $hijos;
+        }
+
+        return array_values(array_filter(
+            $hijos,
+            static fn (ReporteContableRubro $hijo): bool => (int) $hijo->nivel <= $nivelMax
+        ));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $columnas
+     * @param  array<int, array<string, array<int, float>>>  $detalleCuentas
+     * @param  array<string, mixed>  $filtros
+     * @param  list<int>  $empresaIds
+     * @param  list<array<string, mixed>>  $filas
+     */
+    private function emitirCuentas(
+        ReporteContableRubro $rubro,
+        int $rid,
+        int $depth,
+        array $columnas,
+        array $detalleCuentas,
+        ?string $lado,
+        array $filtros,
+        array $empresaIds,
+        array &$filas,
+    ): void {
+        $nombres = [];
+        foreach ($rubro->cuentas as $cta) {
+            if ($cta->origen !== ReporteDefinibleSupport::ORIGEN_REAL) {
+                continue;
+            }
+            foreach ($this->cuentaRangoSupport->expandirAsignacion($cta) as $codigo) {
+                $nombres[$codigo] = $cta->cuentacontable->nombre
+                    ?? MayorPlanoCuentaSupport::formatearCodigoCuenta($codigo);
+            }
+        }
+        foreach ($nombres as $codigo => $nombreCta) {
+            $valoresCta = [];
+            foreach ($columnas as $col) {
+                $tipo = (string) ($col['tipo'] ?? '');
+                if (in_array($tipo, ReporteDefinibleLayoutResolver::tiposDatos(), true)) {
+                    $valoresCta[(string) $col['key']] = (float) ($detalleCuentas[$rid][$col['key']][$codigo] ?? 0);
+                }
+            }
+            foreach ($columnas as $col) {
+                if (($col['tipo'] ?? '') !== 'total') {
+                    continue;
+                }
+                $suma = 0.0;
+                foreach ((array) ($col['meta']['sumar'] ?? []) as $kSum) {
+                    $suma += (float) ($valoresCta[(string) $kSum] ?? 0);
+                }
+                $valoresCta[(string) $col['key']] = round($suma, 2);
+            }
+            $saldosCta = $this->resolverSaldosDerivados($columnas, $valoresCta);
+            $saldosCta = $this->aplicarLadoPresentacion($saldosCta, $lado);
+            $filas[] = [
+                'kind' => 'cuenta',
+                'rubro_id' => $rid,
+                'depth' => $depth,
+                'codigo' => MayorPlanoCuentaSupport::formatearCodigoCuenta($codigo),
+                'codigo_num' => $codigo,
+                'nombre' => $nombreCta,
+                'tipo' => 'cuenta',
+                'negrita' => false,
+                'subrayado' => false,
+                'saldos' => $saldosCta,
+                'drill_url' => $this->urlDrillMayor([$codigo], $filtros, $empresaIds, $columnas),
+            ];
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $columnas
+     * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, mixed>  $filtros
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
+     */
+    private function cerrarPresentacion(
+        ReporteContable $reporte,
+        array $columnas,
+        array $filas,
+        array $filtros,
+    ): array {
+        if (! empty($filtros['ocultar_ceros'])) {
+            [$columnas, $filas] = $this->aplicarOcultarCeros($columnas, $filas);
+        }
+        $filas = $this->aplicarOcultarSiCeroRubro($filas);
+        $filas = $this->descartarSubtitulosHuerfanos($filas);
+
+        return [$columnas, $this->agregarBeneficio($reporte, $columnas, $filas)];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function descartarSubtitulosHuerfanos(array $filas): array
+    {
+        $conImporte = [];
+        foreach ($filas as $fila) {
+            if (($fila['kind'] ?? '') === 'subtitulo') {
+                continue;
+            }
+            $conImporte[(int) ($fila['rubro_id'] ?? 0)] = true;
+        }
+
+        return array_values(array_filter(
+            $filas,
+            static function (array $fila) use ($conImporte): bool {
+                if (($fila['kind'] ?? '') !== 'subtitulo') {
+                    return true;
+                }
+
+                return isset($conImporte[(int) ($fila['rubro_id'] ?? 0)]);
+            }
+        ));
+    }
+
+    /**
+     * Anita cierra con «Total general» (suma con signo del mayor). En un estado de resultados
+     * el ingreso es haber (negativo) y el gasto es debe (positivo): el beneficio es el signo
+     * contrario de esa suma.
+     *
+     * @param  list<array<string, mixed>>  $columnas
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function agregarBeneficio(ReporteContable $reporte, array $columnas, array $filas): array
+    {
+        $suma = [];
+        $hay = false;
+        foreach ($filas as $fila) {
+            if ((int) ($fila['depth'] ?? 0) !== 0) {
+                continue;
+            }
+            if (! in_array($fila['kind'] ?? '', ['rubro', 'subtotal'], true)) {
+                continue;
+            }
+            if (($fila['saldos'] ?? null) === null) {
+                continue;
+            }
+            $hay = true;
+            foreach ($columnas as $col) {
+                $k = (string) ($col['key'] ?? '');
+                if ($k === '') {
+                    continue;
+                }
+                $tipo = (string) ($col['tipo'] ?? '');
+                if (str_contains($tipo, 'pct')) {
+                    $suma[$k] = null;
+                    continue;
+                }
+                if (array_key_exists($k, $suma) && $suma[$k] === null) {
+                    continue;
+                }
+                $v = $fila['saldos'][$k] ?? null;
+                if ($v === null) {
+                    $suma[$k] = null;
+                    continue;
+                }
+                $suma[$k] = ($suma[$k] ?? 0.0) + (float) $v;
+            }
+        }
+        if (! $hay) {
+            return $filas;
+        }
+
+        $firmados = [];
+        foreach ($suma as $k => $v) {
+            $firmados[$k] = $v === null ? null : round((float) $v, 2);
+        }
+        $filas[] = [
+            'kind' => 'subtotal',
+            'rubro_id' => 0,
+            'depth' => 0,
+            'codigo' => '',
+            'nombre' => 'Total general',
+            'tipo' => 'total',
+            'negrita' => true,
+            'subrayado' => true,
+            'saldos' => $firmados,
+            'nivel' => 0,
+        ];
+
+        if ($this->esEstadoResultados($reporte) && ! $this->yaTieneBeneficio($reporte)) {
+            $beneficio = [];
+            foreach ($firmados as $k => $v) {
+                $beneficio[$k] = $v === null ? null : round(-1 * (float) $v, 2);
+            }
+            $filas[] = [
+                'kind' => 'beneficio',
+                'rubro_id' => 0,
+                'depth' => 0,
+                'codigo' => '',
+                'nombre' => 'Beneficio',
+                'tipo' => 'beneficio',
+                'negrita' => true,
+                'subrayado' => true,
+                'saldos' => $beneficio,
+                'nivel' => 0,
+            ];
+        }
+
+        return $filas;
+    }
+
+    private function esEstadoResultados(ReporteContable $reporte): bool
+    {
+        $texto = '';
+        foreach ($reporte->rubros as $rubro) {
+            if ($rubro->parent_id !== null) {
+                continue;
+            }
+            $texto .= ' '.mb_strtoupper((string) $rubro->nombre);
+        }
+        $tieneIngreso = preg_match('/GANANC|REVENUE|INGRESO/', $texto) === 1;
+        $tieneGasto = preg_match('/GASTO|EXPENSE|COSTO|COST/', $texto) === 1;
+
+        return $tieneIngreso && $tieneGasto;
+    }
+
+    private function yaTieneBeneficio(ReporteContable $reporte): bool
+    {
+        foreach ($reporte->rubros as $rubro) {
+            if ($rubro->parent_id !== null) {
+                continue;
+            }
+            $nombre = mb_strtoupper((string) $rubro->nombre);
+            if (preg_match('/BENEFICIO|RESULTADO DEL EJERCICIO|NET INCOME|UTILIDAD/', $nombre) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function aplicarOcultarSiCeroRubro(array $filas): array
     {
         $ocultarIds = [];
@@ -891,7 +1154,7 @@ class ReporteDefinibleProcesador
             }
         }
 
-        return [$columnas, $filasOut];
+        return [$columnas, $this->descartarSubtitulosHuerfanos($filasOut)];
     }
 
     /**
@@ -1121,6 +1384,63 @@ class ReporteDefinibleProcesador
                 }
             }
             $codigosRubro = array_values(array_unique($codigosRubro));
+            $drillUrl = $this->urlDrillMayor($codigosRubro, $filtros, $empresaIds, $columnas);
+            $hijosVisibles = $this->hijosVisibles($byParent[$rid] ?? [], $nivelMax);
+            $lado = isset($rubro->lado_presentacion) ? (string) $rubro->lado_presentacion : null;
+
+            // Anita l-infomae: el rubro que abre detalle (hijos o cuentas) es un subtítulo
+            // sin importes y el «Total:» va debajo. Las columnas no cambian.
+            $abreDetalle = $hijosVisibles !== [] || ($mostrarCuentas && $codigosRubro !== []);
+            if ($abreDetalle && ! $esTexto) {
+                $filas[] = [
+                    'kind' => 'subtitulo',
+                    'rubro_id' => $rid,
+                    'depth' => $depth,
+                    'codigo' => (string) ($rubro->codigo_linea ?? ''),
+                    'nombre' => (string) $rubro->nombre,
+                    'tipo' => (string) $rubro->tipo,
+                    'negrita' => true,
+                    'subrayado' => false,
+                    'saldos' => null,
+                    'nivel' => (int) $rubro->nivel,
+                    'ocultar_si_cero' => (bool) ($rubro->ocultar_si_cero ?? false),
+                ];
+                if ($mostrarCuentas) {
+                    $this->emitirCuentas(
+                        $rubro, $rid, $depth + 1, $columnas, $detalleCuentas, $lado, $filtros, $empresaIds, $filas
+                    );
+                }
+                $this->emitir(
+                    $rid,
+                    $depth + 1,
+                    $byParent,
+                    $columnas,
+                    $totalesActual,
+                    $totalesPlan,
+                    $detalleCuentas,
+                    $layout,
+                    $mostrarCuentas,
+                    $nivelMax,
+                    $filtros,
+                    $empresaIds,
+                    $filas
+                );
+                $filas[] = [
+                    'kind' => 'subtotal',
+                    'rubro_id' => $rid,
+                    'depth' => $depth,
+                    'codigo' => (string) ($rubro->codigo_linea ?? ''),
+                    'nombre' => 'Total: '.$rubro->nombre,
+                    'tipo' => (string) $rubro->tipo,
+                    'negrita' => true,
+                    'subrayado' => true,
+                    'saldos' => $saldos,
+                    'nivel' => (int) $rubro->nivel,
+                    'ocultar_si_cero' => (bool) ($rubro->ocultar_si_cero ?? false),
+                    'drill_url' => $drillUrl,
+                ];
+                continue;
+            }
 
             $filas[] = [
                 'kind' => 'rubro',
@@ -1135,47 +1455,13 @@ class ReporteDefinibleProcesador
                 'saldos' => $esTexto ? null : $saldos,
                 'nivel' => (int) $rubro->nivel,
                 'ocultar_si_cero' => (bool) ($rubro->ocultar_si_cero ?? false),
-                'drill_url' => $this->urlDrillMayor($codigosRubro, $filtros, $empresaIds, $columnas),
+                'drill_url' => $drillUrl,
             ];
 
             if ($mostrarCuentas && ! $esTexto) {
-                $nombres = [];
-                foreach ($rubro->cuentas as $cta) {
-                    if ($cta->origen !== ReporteDefinibleSupport::ORIGEN_REAL) {
-                        continue;
-                    }
-                    foreach ($this->cuentaRangoSupport->expandirAsignacion($cta) as $codigo) {
-                        $nombres[$codigo] = $cta->cuentacontable->nombre
-                            ?? MayorPlanoCuentaSupport::formatearCodigoCuenta($codigo);
-                    }
-                }
-                foreach ($nombres as $codigo => $nombreCta) {
-                    $valoresCta = [];
-                    foreach ($columnas as $col) {
-                        $tipo = (string) ($col['tipo'] ?? '');
-                        if (in_array($tipo, ReporteDefinibleLayoutResolver::tiposDatos(), true)) {
-                            $valoresCta[(string) $col['key']] = (float) ($detalleCuentas[$rid][$col['key']][$codigo] ?? 0);
-                        }
-                    }
-                    $saldosCta = $this->resolverSaldosDerivados($columnas, $valoresCta);
-                    $saldosCta = $this->aplicarLadoPresentacion(
-                        $saldosCta,
-                        isset($rubro->lado_presentacion) ? (string) $rubro->lado_presentacion : null
-                    );
-                    $filas[] = [
-                        'kind' => 'cuenta',
-                        'rubro_id' => $rid,
-                        'depth' => $depth + 1,
-                        'codigo' => MayorPlanoCuentaSupport::formatearCodigoCuenta($codigo),
-                        'codigo_num' => $codigo,
-                        'nombre' => $nombreCta,
-                        'tipo' => 'cuenta',
-                        'negrita' => false,
-                        'subrayado' => false,
-                        'saldos' => $saldosCta,
-                        'drill_url' => $this->urlDrillMayor([$codigo], $filtros, $empresaIds, $columnas),
-                    ];
-                }
+                $this->emitirCuentas(
+                    $rubro, $rid, $depth + 1, $columnas, $detalleCuentas, $lado, $filtros, $empresaIds, $filas
+                );
             }
 
             $this->emitir(
@@ -1193,6 +1479,33 @@ class ReporteDefinibleProcesador
                 $empresaIds,
                 $filas
             );
+        }
+    }
+
+    /**
+     * Columna Total de los meses: suma las claves de período ya acumuladas (y las fórmulas).
+     *
+     * @param  list<array<string, mixed>>  $columnas
+     * @param  array<int, array<string, float>>  $totales
+     */
+    private function completarColumnaTotal(array $columnas, array &$totales): void
+    {
+        foreach ($columnas as $col) {
+            if (($col['tipo'] ?? '') !== 'total') {
+                continue;
+            }
+            $kTotal = (string) ($col['key'] ?? '');
+            $sumar = array_values(array_map('strval', (array) ($col['meta']['sumar'] ?? [])));
+            if ($kTotal === '' || $sumar === []) {
+                continue;
+            }
+            foreach ($totales as $rid => $vals) {
+                $suma = 0.0;
+                foreach ($sumar as $k) {
+                    $suma += (float) ($vals[$k] ?? 0);
+                }
+                $totales[$rid][$kTotal] = round($suma, 2);
+            }
         }
     }
 
@@ -1243,7 +1556,7 @@ class ReporteDefinibleProcesador
             $tipo = (string) ($col['tipo'] ?? '');
             $meta = is_array($col['meta'] ?? null) ? $col['meta'] : [];
 
-            if (in_array($tipo, ReporteDefinibleLayoutResolver::tiposDatos(), true)) {
+            if (in_array($tipo, ReporteDefinibleLayoutResolver::tiposDatos(), true) || $tipo === 'total') {
                 $out[$k] = (float) ($valoresPorKey[$k] ?? 0);
                 continue;
             }
@@ -1951,27 +2264,6 @@ class ReporteDefinibleProcesador
         [$fd, $fh] = ReporteDefinibleSaldoReader::fechasDesdePeriodos($periodoDesde, $periodoHasta);
 
         return [$fd, $fh, $periodos, []];
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     * @return array{desde: int, hasta: int}|null
-     */
-    private function filtroCcostoRuntime(array $filtros): ?array
-    {
-        $desde = (int) ($filtros['ccosto_desde'] ?? 0);
-        $hasta = (int) ($filtros['ccosto_hasta'] ?? 0);
-        if ($desde <= 0 && $hasta <= 0) {
-            return null;
-        }
-        if ($hasta <= 0) {
-            $hasta = $desde;
-        }
-        if ($desde <= 0) {
-            $desde = $hasta;
-        }
-
-        return ['desde' => $desde, 'hasta' => $hasta];
     }
 
     private function definicionUsaCcosto(ReporteContable $reporte): bool
