@@ -10,8 +10,8 @@
 <tbody>
     @forelse ($filas as $fila)
         <tr>
-            <td>{{ $fila['categoria'] }}</td>
-            <td>{{ $fila['subcategoria'] }}</td>
+            <td class="celda-amplia">{{ $fila['categoria'] }}</td>
+            <td class="celda-amplia">{{ $fila['subcategoria'] }}</td>
             <td class="text-right">{{ (int) $fila['recetas'] }}</td>
             <td class="text-right">{{ (int) $fila['alta'] }}</td>
             <td class="text-right">{{ (int) $fila['media'] }}</td>

@@ -24,7 +24,7 @@
                     {{ $fila['codigo'] }}
                 @endif
             </td>
-            <td>{{ $fila['nombre'] }}</td>
+            <td class="celda-amplia">{{ $fila['nombre'] }}</td>
             <td>
                 @if (($fila['sku'] ?? '') !== '')
                     <small class="text-muted">{{ $fila['sku'] }}</small>

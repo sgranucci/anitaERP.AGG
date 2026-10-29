@@ -8,11 +8,11 @@
     <meta charset="UTF-8">
     <title>{{ $tituloReporte }}</title>
     <style>
-        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
+        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 10px; color: #1a1a1a; }
         h1 { font-size: 14px; margin: 0 0 4px; }
         .meta { font-size: 9px; color: #444; margin-bottom: 8px; }
         table.data { border-collapse: collapse; width: 100%; }
-        table.data td, table.data th { border: 1px solid #cccccc; padding: 3px 4px; vertical-align: top; }
+        table.data td, table.data th { border: 1px solid #cccccc; padding: 5px 6px; vertical-align: middle; font-size: 10px; }
         table.data thead tr { background-color: #85C1E9; }
         table.data th { font-weight: bold; color: #17202A; }
         .text-right { text-align: right; white-space: nowrap; }

@@ -136,13 +136,30 @@
                     </div>
 
                     <style>
+                        .tabla-recetas-reporte { font-size: 1rem; }
                         .tabla-recetas-reporte thead tr { background-color: #85C1E9; color: #17202A; }
-                        .tabla-recetas-reporte thead th { font-weight: 600; border-color: #7fb3d5; white-space: nowrap; font-size: 0.85rem; }
-                        .tabla-recetas-reporte td { font-size: 0.85rem; }
+                        .tabla-recetas-reporte thead th {
+                            font-weight: 600;
+                            border-color: #7fb3d5;
+                            white-space: nowrap;
+                            font-size: 0.95rem;
+                            padding: 0.55rem 0.75rem;
+                        }
+                        .tabla-recetas-reporte td {
+                            font-size: 0.95rem;
+                            padding: 0.45rem 0.75rem;
+                            white-space: nowrap;
+                            vertical-align: middle;
+                        }
+                        .tabla-recetas-reporte td.celda-amplia {
+                            white-space: normal;
+                            min-width: 22rem;
+                            max-width: 36rem;
+                        }
                     </style>
 
                     <div class="table-responsive">
-                        <table class="table table-sm table-striped table-bordered table-hover mb-0 tabla-recetas-reporte">
+                        <table class="table table-striped table-bordered table-hover mb-0 tabla-recetas-reporte">
                             @if ($vista === 'lineas')
                                 @include('ventas.gastronomia.recetas_reporte.partials.tabla_lineas', ['filas' => $paginador ? $paginador->items() : []])
                             @elseif ($vista === 'resumen')

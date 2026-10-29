@@ -20,7 +20,7 @@
             <td>{{ $fila['receta'] }} <small class="text-muted">{{ $fila['codigo_receta'] }}</small></td>
             <td>{{ $fila['tipo'] }}</td>
             <td>{{ $fila['codigo_linea'] }}</td>
-            <td>{{ $fila['descripcion'] }}</td>
+            <td class="celda-amplia">{{ $fila['descripcion'] }}</td>
             <td>{{ $fila['um'] }}</td>
             <td class="text-right">{{ number_format((float) $fila['cantidad'], 4, ',', '.') }}</td>
             <td class="text-right">{{ number_format((float) $fila['factor'], 2, ',', '.') }}</td>

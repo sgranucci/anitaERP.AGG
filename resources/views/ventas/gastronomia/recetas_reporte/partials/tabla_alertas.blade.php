@@ -16,7 +16,7 @@
             <td>{{ $fila['categoria'] }}</td>
             <td>{{ $fila['gravedad'] }}</td>
             <td>{{ $fila['tipo'] }}</td>
-            <td>{{ $fila['detalle'] }}</td>
+            <td class="celda-amplia">{{ $fila['detalle'] }}</td>
         </tr>
     @empty
         <tr>
