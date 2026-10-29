@@ -57,10 +57,12 @@ final class PosicionBancariaDiariaGeneradorSupport
         }
 
         $saldos = $this->saldosIb->saldosPorCodigo($fecha);
-        $fechaSaldos = Carbon::parse($saldos['fecha']);
-        if ($fechaSaldos->toDateString() !== $fecha->toDateString()) {
-            $advertencias[] = 'No hay saldos Interbanking para '.$fecha->toDateString()
-                .'; se usó '.$fechaSaldos->toDateString().'.';
+        $fechaIb = ! empty($saldos['fecha_ib']) ? Carbon::parse($saldos['fecha_ib']) : null;
+        if ($fechaIb === null) {
+            $advertencias[] = 'No hay cierre Interbanking anterior a '.$fecha->toDateString().'.';
+        } elseif ($fechaIb->toDateString() !== $fecha->copy()->subDay()->toDateString()) {
+            $advertencias[] = 'Posición al '.$fecha->toDateString()
+                .': cierre Interbanking del '.$fechaIb->toDateString().'.';
         }
         if ($saldos['sin_mapear'] !== []) {
             $advertencias[] = count($saldos['sin_mapear']).' cuentas IB sin mapear a código Saldos.';
@@ -79,8 +81,11 @@ final class PosicionBancariaDiariaGeneradorSupport
             }
         }
 
-        $this->aplicarSaldos($wb, $fechaSaldos, $saldos['por_codigo']);
+        $this->aplicarSaldos($wb, $fecha, $saldos['por_codigo']);
         $this->presentarSaldos($wb);
+        // Columna G queda con el importe: la fórmula INDEX/MATCH solo cubría 1/8–31/8
+        // y, al pedir otra fecha, Excel mostraba el 0 cacheado.
+        $this->fijarSaldoDia($wb, $saldos['por_codigo']);
         $this->aplicarResumenMeta($wb, $fecha, $usd, $eur);
 
         $statsCheques = $this->chequesExport->volcarEnSpreadsheet($wb, $fecha);
@@ -113,7 +118,7 @@ final class PosicionBancariaDiariaGeneradorSupport
         return [
             'path' => $rutaSalida,
             'fecha' => $fecha->toDateString(),
-            'fecha_saldos' => $fechaSaldos->toDateString(),
+            'fecha_saldos' => $fechaIb?->toDateString() ?? $fecha->toDateString(),
             'cotizacion_usd' => $usd,
             'cotizacion_eur' => $eur,
             'saldos_codigos' => count($saldos['por_codigo']),
@@ -188,6 +193,25 @@ final class PosicionBancariaDiariaGeneradorSupport
             // No pisar TRANSITO salvo que venga mapeado
             $ws->setCellValue("{$colLetter}{$r}", $porCodigo[$codigo]);
             $ws->getStyle("{$colLetter}{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
+        }
+    }
+
+    /**
+     * @param  array<string, float>  $porCodigo
+     */
+    private function fijarSaldoDia(Spreadsheet $wb, array $porCodigo): void
+    {
+        if (! $wb->sheetNameExists('Saldos')) {
+            return;
+        }
+        $ws = $wb->getSheetByName('Saldos');
+        $maxRow = (int) $ws->getHighestDataRow();
+        for ($r = 2; $r <= $maxRow; $r++) {
+            $codigo = trim((string) $ws->getCell("A{$r}")->getValue());
+            if ($codigo === '' || ! str_contains($codigo, '|')) {
+                continue;
+            }
+            $ws->setCellValue("G{$r}", $porCodigo[$codigo] ?? 0);
         }
     }
 

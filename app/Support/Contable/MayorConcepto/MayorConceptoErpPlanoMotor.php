@@ -12,8 +12,9 @@ use Illuminate\Support\Facades\DB;
  * Lee asientos, cuentas, conceptos y el gasto de la orden de pago desde MySQL.
  * Cada pata con cuenta menor o igual al límite de caja/banco sale con el mismo
  * importe y el mismo lado. Si la contrapartida es proveedores, ese importe se
- * abre en las cuentas de gasto de la COM (y, si no hay COM, en las del
- * comprobante), cada una con el concepto de esa cuenta. Si no es proveedores,
+ * abre en la cuenta de la COM de la orden de compra de la factura. Si la
+ * factura no tiene la orden cargada, usa la COM que trae ese número de
+ * factura. Si no hay COM, queda en la cuenta de la factura. Si no es proveedores,
  * queda en la contrapartida con el concepto de esa cuenta. Las OPP llevan
  * además el total de retenciones del pago, prorrateado con el mismo criterio.
  */
@@ -166,11 +167,29 @@ class MayorConceptoErpPlanoMotor
                     $contra = $trozo['item'];
                     if ($this->esProveedor((int) $contra['cuenta'])) {
                         $gastos = $gastosPorAsiento[$asientoId] ?? [];
-                        $partesGasto = $gastos !== []
-                            ? $this->repartir($monto, $gastos, 'peso')
-                            : [['peso_linea' => $monto, 'item' => $contra]];
+                        $sumaPesos = 0.0;
+                        foreach ($gastos as $gasto) {
+                            $sumaPesos += (float) ($gasto['peso'] ?? 0);
+                        }
+                        $fraccion = $gastos === [] ? null : ($gastos[0]['fraccion'] ?? null);
+                        if ($gastos === []) {
+                            $aRepartir = 0.0;
+                        } elseif ($fraccion !== null) {
+                            $aRepartir = round($monto * (float) $fraccion, 2);
+                        } else {
+                            $aRepartir = round(min($monto, $sumaPesos), 2);
+                        }
+                        $partesGasto = $aRepartir >= 0.005
+                            ? $this->repartir($aRepartir, $gastos, 'peso')
+                            : [];
                         foreach ($partesGasto as $parte) {
-                            $linea = $this->linea($asiento, $pata, $parte['item'], (float) $parte['peso_linea'], $esDebe, $gastos !== []);
+                            $linea = $this->linea($asiento, $pata, $parte['item'], (float) $parte['peso_linea'], $esDebe, true);
+                            $linea['lleva_retencion'] = true;
+                            $lineas[] = $linea;
+                        }
+                        $resto = round($monto - $aRepartir, 2);
+                        if ($resto >= 0.005) {
+                            $linea = $this->linea($asiento, $pata, $contra, $resto, $esDebe, false);
                             $linea['lleva_retencion'] = true;
                             $lineas[] = $linea;
                         }
@@ -479,6 +498,10 @@ class MayorConceptoErpPlanoMotor
                 'am.cotizacion',
                 'am.moneda_id',
                 'am.observacion as mov_observacion',
+                'am.anita_tipo as mov_anita_tipo',
+                'am.anita_letra as mov_anita_letra',
+                'am.anita_sucursal as mov_anita_sucursal',
+                'am.anita_nro as mov_anita_nro',
                 'am.nro_ordencompra',
                 'cc.codigo as cuenta_codigo',
                 'cc.nombre as cuenta_nombre',
@@ -527,6 +550,13 @@ class MayorConceptoErpPlanoMotor
                 ];
             }
 
+            if ($porId[$id]['tipo'] === '' && trim((string) ($f->mov_anita_tipo ?? '')) !== '') {
+                $porId[$id]['tipo'] = strtoupper(trim((string) $f->mov_anita_tipo));
+                $porId[$id]['letra'] = trim((string) ($f->mov_anita_letra ?? ''));
+                $porId[$id]['sucursal'] = (int) ($f->mov_anita_sucursal ?? 0);
+                $porId[$id]['nro_comp'] = (int) ($f->mov_anita_nro ?? 0);
+            }
+
             $codigo = $this->soloDigitos($f->cuenta_codigo);
             $conceptoId = (int) ($f->conceptogasto_id ?? 0);
             $porId[$id]['movimientos'][] = [
@@ -550,9 +580,9 @@ class MayorConceptoErpPlanoMotor
     }
 
     /**
-     * Pesos de gasto por asiento. Cada comprobante aplicado se abre en las
-     * cuentas de gasto de su COM. Si la factura no tiene COM, se usa el
-     * debe_gasto y, si tampoco está, la cuenta del concepto del comprobante.
+     * Pesos de gasto por asiento. De cada factura del pago se toma la orden de
+     * compra y, de esa orden, la COM. Si la factura no tiene COM, se usa la
+     * cuenta de la factura.
      *
      * @param  list<int>  $asientoIds
      * @return array<int, list<array<string, mixed>>>
@@ -563,26 +593,8 @@ class MayorConceptoErpPlanoMotor
             return [];
         }
 
-        $aplicaciones = [];
-        foreach (array_chunk($asientoIds, 800) as $lote) {
-            $filas = DB::table('pagoproveedor as p')
-                ->join('pagoproveedor_comprobante as pc', 'pc.pagoproveedor_id', '=', 'p.id')
-                ->join('proveedor_cuentacorriente as pcc', 'pcc.id', '=', 'pc.proveedor_cuentacorriente_id')
-                ->leftJoin('proveedor as pr', 'pr.id', '=', 'p.proveedor_id')
-                ->where('p.empresa_id', $empresaId)
-                ->whereIn('p.asiento_id', $lote)
-                ->where('pc.montoaplicado', '>', 0)
-                ->whereNotNull('pcc.comprobante_proveedor_id')
-                ->get([
-                    'p.asiento_id',
-                    'pcc.comprobante_proveedor_id',
-                    'pc.montoaplicado',
-                    'pr.nombre as proveedor_nombre',
-                ]);
-            foreach ($filas as $f) {
-                $aplicaciones[] = $f;
-            }
-        }
+        $pagoPorAsiento = $this->pagoIdPorAsiento($empresaId, $asientoIds);
+        $aplicaciones = $this->aplicacionesDePagos($pagoPorAsiento);
 
         if ($aplicaciones === []) {
             return [];
@@ -592,64 +604,56 @@ class MayorConceptoErpPlanoMotor
         foreach ($aplicaciones as $ap) {
             $comprobantes[(int) $ap->comprobante_proveedor_id] = true;
         }
-        $idsComprobante = array_keys($comprobantes);
+        $signos = $this->signoPorComprobante(array_keys($comprobantes));
+        $notasCredito = array_keys(array_filter($signos, fn (int $s) => $s < 0));
+        $cuentasNotaCredito = $this->cargarCuentasNotaCredito($notasCredito);
+        $idsComprobante = array_values(array_filter(
+            array_keys($comprobantes),
+            fn (int $id) => ($signos[$id] ?? 1) > 0,
+        ));
 
         $gastosCom = $this->cargarGastosComPorComprobante($idsComprobante);
-        $gastosPorComprobante = [];
-        $conDebeGasto = [];
-        foreach (array_chunk($idsComprobante, 800) as $lote) {
-            $filas = DB::table('comprobante_proveedor_debe_gasto as dg')
-                ->join('cuentacontable as cc', 'cc.id', '=', 'dg.cuentacontable_id')
-                ->leftJoin('conceptogasto as cg', 'cg.id', '=', 'cc.conceptogasto_id')
-                ->whereIn('dg.comprobante_proveedor_id', $lote)
-                ->where('dg.importe', '>', 0)
-                ->get([
-                    'dg.comprobante_proveedor_id',
-                    'dg.importe',
-                    'cc.codigo',
-                    'cc.nombre',
-                    'cc.conceptogasto_id',
-                    'cg.nombre as concepto_nombre',
-                ]);
-            foreach ($filas as $f) {
-                $cp = (int) $f->comprobante_proveedor_id;
-                $conDebeGasto[$cp] = true;
-                $gastosPorComprobante[$cp][] = $f;
-            }
+        $sinCom = array_values(array_filter(
+            $idsComprobante,
+            fn (int $id) => ! isset($gastosCom[$id]),
+        ));
+        foreach ($this->cargarGastosComPorOrdencompra($sinCom) as $cp => $lineas) {
+            $gastosCom[$cp] = $lineas;
         }
-
-        $sinDebe = array_values(array_filter($idsComprobante, fn (int $id) => ! isset($conDebeGasto[$id])));
-        foreach (array_chunk($sinDebe, 800) as $lote) {
-            if ($lote === []) {
-                continue;
-            }
-            $filas = DB::table('comprobante_proveedor_concepto as cpc')
-                ->join('cuentacontable as cc', 'cc.id', '=', 'cpc.cuentacontabledebe_id')
-                ->leftJoin('conceptogasto as cg', 'cg.id', '=', 'cc.conceptogasto_id')
-                ->whereIn('cpc.comprobante_proveedor_id', $lote)
-                ->where('cpc.monto', '>', 0)
-                ->get([
-                    'cpc.comprobante_proveedor_id',
-                    'cpc.monto as importe',
-                    'cc.codigo',
-                    'cc.nombre',
-                    'cc.conceptogasto_id',
-                    'cg.nombre as concepto_nombre',
-                ]);
-            foreach ($filas as $f) {
-                $gastosPorComprobante[(int) $f->comprobante_proveedor_id][] = $f;
-            }
+        $sinCom = array_values(array_filter(
+            $idsComprobante,
+            fn (int $id) => ! isset($gastosCom[$id]),
+        ));
+        foreach ($this->cargarGastosComPorNumeroFactura($sinCom) as $cp => $lineas) {
+            $gastosCom[$cp] = $lineas;
         }
+        $sinCom = array_values(array_filter(
+            $idsComprobante,
+            fn (int $id) => ! isset($gastosCom[$id]),
+        ));
+        $cuentasFactura = $this->cargarCuentasFactura($sinCom);
 
         $porAsiento = [];
+        $aplicadoPorAsiento = [];
+        $cubiertoPorAsiento = [];
         foreach ($aplicaciones as $ap) {
             $cp = (int) $ap->comprobante_proveedor_id;
-            $desdeCom = isset($gastosCom[$cp]);
-            $lineasGasto = $desdeCom ? $gastosCom[$cp] : ($gastosPorComprobante[$cp] ?? []);
+            $signo = $signos[$cp] ?? 1;
+            $aplicadoPorAsiento[(int) $ap->asiento_id] = ($aplicadoPorAsiento[(int) $ap->asiento_id] ?? 0.0)
+                + $signo * (float) $ap->montoaplicado;
+            if ($signo < 0) {
+                $lineasGasto = $cuentasNotaCredito[$cp] ?? [];
+                $origenLinea = 'Gasto del comprobante de compra';
+            } elseif (isset($gastosCom[$cp])) {
+                $lineasGasto = $gastosCom[$cp];
+                $origenLinea = 'Gasto de la COM';
+            } else {
+                $lineasGasto = $cuentasFactura[$cp] ?? [];
+                $origenLinea = 'Gasto del comprobante de compra';
+            }
             if ($lineasGasto === []) {
                 continue;
             }
-            $origenLinea = $desdeCom ? 'Gasto de la COM' : 'Gasto del comprobante de compra';
             $suma = 0.0;
             foreach ($lineasGasto as $g) {
                 $suma += (float) $g->importe;
@@ -657,10 +661,13 @@ class MayorConceptoErpPlanoMotor
             if ($suma <= 0) {
                 continue;
             }
-            $aplicado = (float) $ap->montoaplicado;
+            $aplicado = $signo * (float) $ap->montoaplicado;
             $asientoId = (int) $ap->asiento_id;
             foreach ($lineasGasto as $g) {
                 $codigo = $this->soloDigitos($g->codigo);
+                if ($codigo <= 0) {
+                    continue;
+                }
                 $conceptoId = (int) ($g->conceptogasto_id ?? 0);
                 $peso = $aplicado * ((float) $g->importe / $suma);
                 $clave = $asientoId.'|'.$codigo.'|'.$conceptoId;
@@ -679,10 +686,569 @@ class MayorConceptoErpPlanoMotor
                         'origen_linea' => $origenLinea,
                     ];
                 }
-                if ($desdeCom) {
+                if ($origenLinea === 'Gasto de la COM') {
                     $porAsiento[$asientoId][$clave]['origen_linea'] = 'Gasto de la COM';
                 }
                 $porAsiento[$asientoId][$clave]['peso'] += $peso;
+                $cubiertoPorAsiento[$asientoId] = ($cubiertoPorAsiento[$asientoId] ?? 0.0) + $peso;
+            }
+        }
+
+        $salida = [];
+        foreach ($porAsiento as $asientoId => $filas) {
+            $aplicado = $aplicadoPorAsiento[$asientoId] ?? 0.0;
+            $filas = array_filter($filas, fn (array $fila) => (float) $fila['peso'] >= 0.005);
+            if ($filas === []) {
+                continue;
+            }
+            $fraccion = $aplicado > 0
+                ? max(0.0, min(1.0, ($cubiertoPorAsiento[$asientoId] ?? 0.0) / $aplicado))
+                : 1.0;
+            foreach ($filas as $clave => $fila) {
+                $filas[$clave]['fraccion'] = $fraccion;
+            }
+            $salida[$asientoId] = array_values($filas);
+        }
+
+        return $salida;
+    }
+
+    /**
+     * COM de la orden de compra de la factura. El Debe de esas COM, sin proveedores.
+     *
+     * @param  list<int>  $idsComprobante
+     * @return array<int, list<object>>
+     */
+    private function cargarGastosComPorOrdencompra(array $idsComprobante): array
+    {
+        $idsComprobante = array_values(array_filter(array_map('intval', $idsComprobante), fn (int $id) => $id > 0));
+        if ($idsComprobante === []) {
+            return [];
+        }
+
+        $ocPorComprobante = [];
+        foreach (array_chunk($idsComprobante, 800) as $lote) {
+            $filas = DB::table('comprobante_proveedor')
+                ->whereIn('id', $lote)
+                ->where('ordencompra_id', '>', 0)
+                ->get(['id', 'ordencompra_id']);
+            foreach ($filas as $f) {
+                $ocPorComprobante[(int) $f->id] = (int) $f->ordencompra_id;
+            }
+        }
+        if ($ocPorComprobante === []) {
+            return [];
+        }
+
+        $asientosPorOc = [];
+        foreach (array_chunk(array_values(array_unique($ocPorComprobante)), 800) as $lote) {
+            $filas = DB::table('recepcion_proveedor')
+                ->where('anita_tipo', 'COM')
+                ->whereNotNull('asiento_id')
+                ->whereIn('ordencompra_id', $lote)
+                ->get(['ordencompra_id', 'asiento_id']);
+            foreach ($filas as $f) {
+                $asientosPorOc[(int) $f->ordencompra_id][(int) $f->asiento_id] = true;
+            }
+        }
+        if ($asientosPorOc === []) {
+            return [];
+        }
+
+        $asientoIds = [];
+        foreach ($asientosPorOc as $asientos) {
+            foreach (array_keys($asientos) as $asientoId) {
+                $asientoIds[$asientoId] = true;
+            }
+        }
+        $movs = $this->cargarDebeNoProveedorPorAsiento(array_keys($asientoIds));
+
+        $porComprobante = [];
+        foreach ($ocPorComprobante as $cp => $ocId) {
+            $acum = [];
+            foreach (array_keys($asientosPorOc[$ocId] ?? []) as $asientoId) {
+                foreach ($movs[$asientoId] ?? [] as $g) {
+                    $codigo = $this->soloDigitos($g->codigo);
+                    $conceptoId = (int) ($g->conceptogasto_id ?? 0);
+                    $clave = $codigo.'|'.$conceptoId;
+                    if (! isset($acum[$clave])) {
+                        $acum[$clave] = (object) [
+                            'codigo' => $g->codigo,
+                            'nombre' => $g->nombre,
+                            'conceptogasto_id' => $conceptoId,
+                            'concepto_nombre' => $g->concepto_nombre,
+                            'importe' => 0.0,
+                        ];
+                    }
+                    $acum[$clave]->importe += (float) $g->importe;
+                }
+            }
+            if ($acum !== []) {
+                $porComprobante[$cp] = array_values($acum);
+            }
+        }
+
+        return $porComprobante;
+    }
+
+    /**
+     * COM que anota el número de esta factura (sucursal y número), misma
+     * empresa y mismo proveedor. La factura no tiene la orden de compra cargada.
+     *
+     * @param  list<int>  $idsComprobante
+     * @return array<int, list<object>>
+     */
+    private function cargarGastosComPorNumeroFactura(array $idsComprobante): array
+    {
+        $idsComprobante = array_values(array_filter(array_map('intval', $idsComprobante), fn (int $id) => $id > 0));
+        if ($idsComprobante === []) {
+            return [];
+        }
+
+        $facturas = [];
+        $empresas = [];
+        $proveedores = [];
+        foreach (array_chunk($idsComprobante, 800) as $lote) {
+            $filas = DB::table('comprobante_proveedor')
+                ->whereIn('id', $lote)
+                ->where('proveedor_id', '>', 0)
+                ->where('numerocomprobante', '>', 0)
+                ->get(['id', 'empresa_id', 'proveedor_id', 'sucursal', 'numerocomprobante']);
+            foreach ($filas as $f) {
+                $facturas[(int) $f->id] = $f;
+                $empresas[(int) $f->empresa_id] = true;
+                $proveedores[(int) $f->proveedor_id] = true;
+            }
+        }
+        if ($facturas === []) {
+            return [];
+        }
+
+        $asientosPorClave = [];
+        foreach (array_chunk(array_keys($proveedores), 400) as $lote) {
+            $filas = DB::table('recepcion_proveedor')
+                ->where('anita_tipo', 'COM')
+                ->whereNotNull('asiento_id')
+                ->where('numerofactura', '!=', '')
+                ->whereIn('empresa_id', array_keys($empresas))
+                ->whereIn('proveedor_id', $lote)
+                ->get(['empresa_id', 'proveedor_id', 'numerofactura', 'asiento_id']);
+            foreach ($filas as $f) {
+                $parsed = $this->parsearNumeroFacturaCom((string) $f->numerofactura);
+                if ($parsed === null) {
+                    continue;
+                }
+                $clave = (int) $f->empresa_id.'|'.(int) $f->proveedor_id.'|'.$parsed['sucursal'].'|'.$parsed['numero'];
+                $asientosPorClave[$clave][(int) $f->asiento_id] = true;
+            }
+        }
+        if ($asientosPorClave === []) {
+            return [];
+        }
+
+        $asientoIds = [];
+        $asientosPorComprobante = [];
+        foreach ($facturas as $cp => $f) {
+            $clave = (int) $f->empresa_id.'|'.(int) $f->proveedor_id.'|'.(int) $f->sucursal.'|'.(int) $f->numerocomprobante;
+            $asientos = array_keys($asientosPorClave[$clave] ?? []);
+            if ($asientos === []) {
+                continue;
+            }
+            $asientosPorComprobante[$cp] = $asientos;
+            foreach ($asientos as $asientoId) {
+                $asientoIds[$asientoId] = true;
+            }
+        }
+        if ($asientosPorComprobante === []) {
+            return [];
+        }
+
+        $movs = $this->cargarDebeNoProveedorPorAsiento(array_keys($asientoIds));
+        $porComprobante = [];
+        foreach ($asientosPorComprobante as $cp => $asientos) {
+            $acum = [];
+            foreach ($asientos as $asientoId) {
+                foreach ($movs[$asientoId] ?? [] as $g) {
+                    $codigo = $this->soloDigitos($g->codigo);
+                    $conceptoId = (int) ($g->conceptogasto_id ?? 0);
+                    $clave = $codigo.'|'.$conceptoId;
+                    if (! isset($acum[$clave])) {
+                        $acum[$clave] = (object) [
+                            'codigo' => $g->codigo,
+                            'nombre' => $g->nombre,
+                            'conceptogasto_id' => $conceptoId,
+                            'concepto_nombre' => $g->concepto_nombre,
+                            'importe' => 0.0,
+                        ];
+                    }
+                    $acum[$clave]->importe += (float) $g->importe;
+                }
+            }
+            if ($acum !== []) {
+                $porComprobante[$cp] = array_values($acum);
+            }
+        }
+
+        return $porComprobante;
+    }
+
+    /**
+     * Número de factura anotado en la COM: sucursal y número.
+     *
+     * @return array{sucursal: int, numero: int}|null
+     */
+    private function parsearNumeroFacturaCom(string $numerofactura): ?array
+    {
+        $raw = trim($numerofactura);
+        if ($raw === '' || ! preg_match('/(\d+)\D+(\d+)\s*$/', $raw, $m)) {
+            return null;
+        }
+        $sucursal = (int) $m[1];
+        $numero = (int) $m[2];
+        if ($numero <= 0) {
+            return null;
+        }
+
+        return ['sucursal' => $sucursal, 'numero' => $numero];
+    }
+
+    /**
+     * Asiento de la factura. Si la ficha no lo tiene cargado, el subdiario
+     * con el mismo tipo, letra, sucursal y número. Si hay más de uno, el de
+     * la fecha de contabilización (fecha de IVA).
+     *
+     * @param  list<int>  $idsComprobante
+     * @return array<int, int>
+     */
+    private function asientoIdPorFactura(array $idsComprobante): array
+    {
+        $asientoPorCp = [];
+        $sinEnlace = [];
+        foreach (array_chunk($idsComprobante, 800) as $lote) {
+            $filas = DB::table('comprobante_proveedor as cp')
+                ->leftJoin('tipotransaccion_compra as tc', 'tc.id', '=', 'cp.tipotransaccion_compra_id')
+                ->whereIn('cp.id', $lote)
+                ->get([
+                    'cp.id',
+                    'cp.empresa_id',
+                    'cp.asiento_id',
+                    'cp.letra',
+                    'cp.sucursal',
+                    'cp.numerocomprobante',
+                    'cp.fechaiva',
+                    'tc.abreviatura',
+                ]);
+            foreach ($filas as $f) {
+                $cp = (int) $f->id;
+                $asientoId = (int) ($f->asiento_id ?? 0);
+                if ($asientoId > 0) {
+                    $asientoPorCp[$cp] = $asientoId;
+                    continue;
+                }
+                $tipo = strtoupper(trim((string) ($f->abreviatura ?? '')));
+                $numero = (int) ($f->numerocomprobante ?? 0);
+                if ($tipo === '' || $numero <= 0) {
+                    continue;
+                }
+                $sinEnlace[$cp] = [
+                    'empresa_id' => (int) $f->empresa_id,
+                    'tipo' => $tipo,
+                    'letra' => strtoupper(trim((string) ($f->letra ?? ''))),
+                    'sucursal' => (int) ($f->sucursal ?? 0),
+                    'numero' => $numero,
+                    'fechaiva' => substr((string) ($f->fechaiva ?? ''), 0, 10),
+                ];
+            }
+        }
+        if ($sinEnlace === []) {
+            return $asientoPorCp;
+        }
+
+        $numeros = [];
+        $empresas = [];
+        $tipos = [];
+        foreach ($sinEnlace as $dato) {
+            $numeros[$dato['numero']] = true;
+            $empresas[$dato['empresa_id']] = true;
+            $tipos[$dato['tipo']] = true;
+        }
+
+        $porClave = [];
+        foreach (array_chunk(array_keys($numeros), 800) as $lote) {
+            $filas = DB::table('asiento')
+                ->whereIn('empresa_id', array_keys($empresas))
+                ->whereIn('anita_nro', $lote)
+                ->whereIn('anita_tipo', array_keys($tipos))
+                ->get(['id', 'empresa_id', 'fecha', 'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro']);
+            foreach ($filas as $f) {
+                $clave = (int) $f->empresa_id.'|'
+                    .strtoupper(trim((string) $f->anita_tipo)).'|'
+                    .strtoupper(trim((string) ($f->anita_letra ?? ''))).'|'
+                    .(int) $f->anita_sucursal.'|'
+                    .(int) $f->anita_nro;
+                $porClave[$clave][] = $f;
+            }
+        }
+
+        foreach ($sinEnlace as $cp => $dato) {
+            $clave = $dato['empresa_id'].'|'.$dato['tipo'].'|'.$dato['letra'].'|'.$dato['sucursal'].'|'.$dato['numero'];
+            $candidatos = $porClave[$clave] ?? [];
+            if ($candidatos === []) {
+                continue;
+            }
+            if (count($candidatos) > 1 && $dato['fechaiva'] !== '') {
+                $enFecha = array_values(array_filter(
+                    $candidatos,
+                    fn ($a) => substr((string) ($a->fecha ?? ''), 0, 10) === $dato['fechaiva'],
+                ));
+                if ($enFecha !== []) {
+                    $candidatos = $enFecha;
+                }
+            }
+            if (count($candidatos) === 1) {
+                $asientoPorCp[$cp] = (int) $candidatos[0]->id;
+            }
+        }
+
+        return $asientoPorCp;
+    }
+
+    /**
+     * Cuenta de la factura cuando no tiene COM: el Debe de su asiento que no es
+     * proveedores (el de la ficha o, si no está enganchado, el del mismo
+     * tipo, letra, sucursal y número), si no el debe del gasto cargado, y si
+     * no la cuenta del concepto.
+     *
+     * @param  list<int>  $idsComprobante
+     * @return array<int, list<object>>
+     */
+    private function cargarCuentasFactura(array $idsComprobante): array
+    {
+        $idsComprobante = array_values(array_filter(array_map('intval', $idsComprobante), fn (int $id) => $id > 0));
+        if ($idsComprobante === []) {
+            return [];
+        }
+
+        $asientoPorCp = $this->asientoIdPorFactura($idsComprobante);
+        $movs = $this->cargarDebeNoProveedorPorAsiento(array_values(array_filter($asientoPorCp)));
+
+        $salida = [];
+        $sinAsiento = [];
+        foreach ($idsComprobante as $cp) {
+            $gastos = $movs[$asientoPorCp[$cp] ?? 0] ?? [];
+            if ($gastos !== []) {
+                $salida[$cp] = $gastos;
+                continue;
+            }
+            $sinAsiento[] = $cp;
+        }
+        if ($sinAsiento === []) {
+            return $salida;
+        }
+
+        $conDebe = [];
+        foreach (array_chunk($sinAsiento, 800) as $lote) {
+            $filas = DB::table('comprobante_proveedor_debe_gasto as dg')
+                ->join('cuentacontable as cc', 'cc.id', '=', 'dg.cuentacontable_id')
+                ->leftJoin('conceptogasto as cg', 'cg.id', '=', 'cc.conceptogasto_id')
+                ->whereIn('dg.comprobante_proveedor_id', $lote)
+                ->where('dg.importe', '>', 0)
+                ->get([
+                    'dg.comprobante_proveedor_id',
+                    'dg.importe',
+                    'cc.codigo',
+                    'cc.nombre',
+                    'cc.conceptogasto_id',
+                    'cg.nombre as concepto_nombre',
+                ]);
+            foreach ($filas as $f) {
+                $cp = (int) $f->comprobante_proveedor_id;
+                $conDebe[$cp] = true;
+                $salida[$cp][] = (object) [
+                    'codigo' => $f->codigo,
+                    'nombre' => $f->nombre,
+                    'conceptogasto_id' => (int) ($f->conceptogasto_id ?? 0),
+                    'concepto_nombre' => $f->concepto_nombre,
+                    'importe' => (float) $f->importe,
+                ];
+            }
+        }
+
+        $sinDebe = array_values(array_filter($sinAsiento, fn (int $id) => ! isset($conDebe[$id])));
+        $pendientes = [];
+        $cuentaIds = [];
+        foreach (array_chunk($sinDebe, 800) as $lote) {
+            if ($lote === []) {
+                continue;
+            }
+            $filas = DB::table('comprobante_proveedor_concepto as cpc')
+                ->join('comprobante_proveedor as cp', 'cp.id', '=', 'cpc.comprobante_proveedor_id')
+                ->leftJoin('concepto_ivacompra as ci', 'ci.id', '=', 'cpc.concepto_ivacompra_id')
+                ->leftJoin('concepto_ivacompra_empresa as cie', function ($join) {
+                    $join->on('cie.concepto_ivacompra_id', '=', 'ci.id')
+                        ->on('cie.empresa_id', '=', 'cp.empresa_id');
+                })
+                ->leftJoin('proveedor as pr', 'pr.id', '=', 'cp.proveedor_id')
+                ->whereIn('cpc.comprobante_proveedor_id', $lote)
+                ->where('cpc.monto', '>', 0)
+                ->get([
+                    'cpc.comprobante_proveedor_id',
+                    'cpc.monto',
+                    'cpc.cuentacontabledebe_id',
+                    'cie.cuentacontabledebe_id as cuenta_empresa',
+                    'ci.cuentacontabledebe_id as cuenta_maestro',
+                    'ci.tipoconcepto',
+                    'pr.cuentacontablecompra_id',
+                ]);
+            foreach ($filas as $f) {
+                $cuentaId = (int) ($f->cuentacontabledebe_id ?: 0);
+                if ($cuentaId <= 0) {
+                    $cuentaId = (int) ($f->cuenta_empresa ?: 0);
+                }
+                if ($cuentaId <= 0) {
+                    $cuentaId = (int) ($f->cuenta_maestro ?: 0);
+                }
+                if ($cuentaId <= 0 && in_array(strtoupper((string) ($f->tipoconcepto ?? '')), ['N', 'G', 'E'], true)) {
+                    $cuentaId = (int) ($f->cuentacontablecompra_id ?: 0);
+                }
+                if ($cuentaId <= 0) {
+                    $salida[(int) $f->comprobante_proveedor_id][] = (object) [
+                        'codigo' => '',
+                        'nombre' => '',
+                        'conceptogasto_id' => 0,
+                        'concepto_nombre' => '',
+                        'importe' => (float) $f->monto,
+                    ];
+                    continue;
+                }
+                $pendientes[] = [(int) $f->comprobante_proveedor_id, $cuentaId, (float) $f->monto];
+                $cuentaIds[$cuentaId] = true;
+            }
+        }
+
+        $cuentas = [];
+        foreach (array_chunk(array_keys($cuentaIds), 800) as $lote) {
+            if ($lote === []) {
+                continue;
+            }
+            $filas = DB::table('cuentacontable as cc')
+                ->leftJoin('conceptogasto as cg', 'cg.id', '=', 'cc.conceptogasto_id')
+                ->whereIn('cc.id', $lote)
+                ->get(['cc.id', 'cc.codigo', 'cc.nombre', 'cc.conceptogasto_id', 'cg.nombre as concepto_nombre']);
+            foreach ($filas as $f) {
+                $cuentas[(int) $f->id] = $f;
+            }
+        }
+        foreach ($pendientes as [$cp, $cuentaId, $monto]) {
+            $cuenta = $cuentas[$cuentaId] ?? null;
+            if ($cuenta === null) {
+                continue;
+            }
+            $codigo = $this->soloDigitos($cuenta->codigo);
+            if ($codigo <= 0 || $this->esProveedor($codigo)) {
+                continue;
+            }
+            $salida[$cp][] = (object) [
+                'codigo' => $cuenta->codigo,
+                'nombre' => $cuenta->nombre,
+                'conceptogasto_id' => (int) ($cuenta->conceptogasto_id ?? 0),
+                'concepto_nombre' => $cuenta->concepto_nombre,
+                'importe' => $monto,
+            ];
+        }
+
+        return $salida;
+    }
+
+    /**
+     * Signo del tipo de comprobante: las notas de crédito restan del pago.
+     *
+     * @param  list<int>  $idsComprobante
+     * @return array<int, int>
+     */
+    private function signoPorComprobante(array $idsComprobante): array
+    {
+        $signos = [];
+        foreach (array_chunk($idsComprobante, 800) as $lote) {
+            $filas = DB::table('comprobante_proveedor as cp')
+                ->leftJoin('tipotransaccion_compra as tc', 'tc.id', '=', 'cp.tipotransaccion_compra_id')
+                ->whereIn('cp.id', $lote)
+                ->get(['cp.id', 'tc.signo']);
+            foreach ($filas as $f) {
+                $signos[(int) $f->id] = (int) ($f->signo ?? 1) < 0 ? -1 : 1;
+            }
+        }
+
+        return $signos;
+    }
+
+    /**
+     * Cuentas de la nota de crédito: el Haber de su asiento que no es proveedores.
+     *
+     * @param  list<int>  $idsComprobante
+     * @return array<int, list<object>>
+     */
+    private function cargarCuentasNotaCredito(array $idsComprobante): array
+    {
+        $idsComprobante = array_values(array_filter(array_map('intval', $idsComprobante), fn (int $id) => $id > 0));
+        if ($idsComprobante === []) {
+            return [];
+        }
+
+        $asientoPorCp = $this->asientoIdPorFactura($idsComprobante);
+        $movs = $this->cargarDebeNoProveedorPorAsiento(array_values(array_filter($asientoPorCp)), true);
+
+        $salida = [];
+        foreach ($idsComprobante as $cp) {
+            $lineas = $movs[$asientoPorCp[$cp] ?? 0] ?? [];
+            if ($lineas !== []) {
+                $salida[$cp] = $lineas;
+            }
+        }
+
+        return $salida;
+    }
+
+    private function cargarDebeNoProveedorPorAsiento(array $asientoIds, bool $haber = false): array
+    {
+        $asientoIds = array_values(array_filter(array_map('intval', $asientoIds), fn (int $id) => $id > 0));
+        if ($asientoIds === []) {
+            return [];
+        }
+
+        $porAsiento = [];
+        foreach (array_chunk($asientoIds, 800) as $lote) {
+            $filas = DB::table('asiento_movimiento as am')
+                ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
+                ->leftJoin('conceptogasto as cg', 'cg.id', '=', 'cc.conceptogasto_id')
+                ->whereIn('am.asiento_id', $lote)
+                ->where('am.monto', $haber ? '<' : '>', 0)
+                ->get([
+                    'am.asiento_id',
+                    'am.monto',
+                    'cc.codigo',
+                    'cc.nombre',
+                    'cc.conceptogasto_id',
+                    'cg.nombre as concepto_nombre',
+                ]);
+            foreach ($filas as $f) {
+                $codigo = $this->soloDigitos($f->codigo);
+                if ($codigo <= 0 || $this->esProveedor($codigo)) {
+                    continue;
+                }
+                $asientoId = (int) $f->asiento_id;
+                $conceptoId = (int) ($f->conceptogasto_id ?? 0);
+                $clave = $codigo.'|'.$conceptoId;
+                if (! isset($porAsiento[$asientoId][$clave])) {
+                    $porAsiento[$asientoId][$clave] = (object) [
+                        'codigo' => $f->codigo,
+                        'nombre' => $f->nombre,
+                        'conceptogasto_id' => $conceptoId,
+                        'concepto_nombre' => $f->concepto_nombre,
+                        'importe' => 0.0,
+                    ];
+                }
+                $porAsiento[$asientoId][$clave]->importe += abs((float) $f->monto);
             }
         }
 
@@ -792,21 +1358,386 @@ class MayorConceptoErpPlanoMotor
             return [];
         }
 
-        $porAsiento = [];
-        foreach (array_chunk($asientoIds, 800) as $lote) {
-            $filas = DB::table('pagoproveedor as p')
-                ->join('pagoproveedor_retencion as r', 'r.pagoproveedor_id', '=', 'p.id')
-                ->where('p.empresa_id', $empresaId)
-                ->whereIn('p.asiento_id', $lote)
-                ->groupBy('p.asiento_id')
-                ->selectRaw('p.asiento_id, SUM(r.importe) as total')
+        $pagoPorAsiento = $this->pagoIdPorAsiento($empresaId, $asientoIds);
+        if ($pagoPorAsiento === []) {
+            return [];
+        }
+
+        $totalPorPago = [];
+        foreach (array_chunk(array_values(array_unique($pagoPorAsiento)), 800) as $lote) {
+            $filas = DB::table('pagoproveedor_retencion')
+                ->whereIn('pagoproveedor_id', $lote)
+                ->groupBy('pagoproveedor_id')
+                ->selectRaw('pagoproveedor_id, SUM(importe) as total')
                 ->get();
             foreach ($filas as $f) {
-                $porAsiento[(int) $f->asiento_id] = round((float) $f->total, 2);
+                $totalPorPago[(int) $f->pagoproveedor_id] = round((float) $f->total, 2);
+            }
+        }
+
+        $asientosPorPago = [];
+        foreach ($pagoPorAsiento as $asientoId => $pagoId) {
+            $asientosPorPago[$pagoId][] = $asientoId;
+        }
+        $pesoCaja = $this->pesoCajaPorAsiento($asientoIds);
+
+        $porAsiento = [];
+        foreach ($asientosPorPago as $pagoId => $ids) {
+            $total = $totalPorPago[$pagoId] ?? 0.0;
+            if (abs($total) < 0.005) {
+                continue;
+            }
+            $vivos = [];
+            $suma = 0.0;
+            foreach ($ids as $id) {
+                $peso = $pesoCaja[$id] ?? 0.0;
+                if ($peso <= 0) {
+                    continue;
+                }
+                $vivos[] = $id;
+                $suma += $peso;
+            }
+            if ($vivos === [] || $suma <= 0) {
+                continue;
+            }
+            $acumulado = 0.0;
+            $ultimo = $vivos[count($vivos) - 1];
+            foreach ($vivos as $id) {
+                if ($id === $ultimo) {
+                    $monto = round($total - $acumulado, 2);
+                } else {
+                    $monto = round($total * (($pesoCaja[$id] ?? 0.0) / $suma), 2);
+                    $acumulado = round($acumulado + $monto, 2);
+                }
+                $porAsiento[$id] = $monto;
             }
         }
 
         return $porAsiento;
+    }
+
+    /**
+     * La orden de pago puede estar partida en dos asientos (banco y
+     * retenciones) y el pago queda colgado de uno solo. Cada asiento se
+     * engancha por su id o, si no, por tipo, letra, sucursal y número.
+     *
+     * @param  list<int>  $asientoIds
+     * @return array<int, int> asiento_id => pagoproveedor_id
+     */
+    private function pagoIdPorAsiento(int $empresaId, array $asientoIds): array
+    {
+        $asientoIds = array_values(array_filter(array_map('intval', $asientoIds), fn (int $id) => $id > 0));
+        if ($empresaId <= 0 || $asientoIds === []) {
+            return [];
+        }
+
+        $identidades = [];
+        $numeros = [];
+        foreach (array_chunk($asientoIds, 800) as $lote) {
+            $filas = DB::table('asiento')
+                ->whereIn('id', $lote)
+                ->get(['id', 'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro']);
+            foreach ($filas as $f) {
+                $identidades[(int) $f->id] = $f;
+                $nro = (int) ($f->anita_nro ?? 0);
+                if ($nro > 0) {
+                    $numeros[(string) $nro] = true;
+                }
+            }
+        }
+
+        $pagos = [];
+        $camposPago = [
+            'p.id',
+            'p.asiento_id',
+            'p.tipocomprobante',
+            'p.letra',
+            'p.sucursal',
+            'p.numerotransaccion',
+        ];
+        foreach (array_chunk($asientoIds, 800) as $lote) {
+            $filas = DB::table('pagoproveedor as p')
+                ->where('p.empresa_id', $empresaId)
+                ->whereIn('p.asiento_id', $lote)
+                ->get($camposPago);
+            foreach ($filas as $f) {
+                $pagos[(int) $f->id] = $f;
+            }
+        }
+        foreach (array_chunk(array_keys($numeros), 800) as $lote) {
+            $filas = DB::table('pagoproveedor as p')
+                ->where('p.empresa_id', $empresaId)
+                ->whereIn('p.numerotransaccion', $lote)
+                ->get($camposPago);
+            foreach ($filas as $f) {
+                $pagos[(int) $f->id] = $f;
+            }
+        }
+
+        $porAsientoPago = [];
+        $porClave = [];
+        $porClaveSinLetra = [];
+        foreach ($pagos as $pago) {
+            if ((int) ($pago->asiento_id ?? 0) > 0) {
+                $porAsientoPago[(int) $pago->asiento_id] = $pago;
+            }
+            $clave = $this->claveOrden($pago->tipocomprobante, $pago->letra, $pago->sucursal, $pago->numerotransaccion);
+            if ($clave === '') {
+                continue;
+            }
+            $porClave[$clave] = $pago;
+            $sinLetra = $this->claveOrden($pago->tipocomprobante, '', $pago->sucursal, $pago->numerotransaccion);
+            $porClaveSinLetra[$sinLetra][] = $pago;
+        }
+
+        $salida = [];
+        foreach ($identidades as $asientoId => $f) {
+            if (isset($porAsientoPago[$asientoId])) {
+                $salida[$asientoId] = (int) $porAsientoPago[$asientoId]->id;
+                continue;
+            }
+            $clave = $this->claveOrden($f->anita_tipo, $f->anita_letra, $f->anita_sucursal, $f->anita_nro);
+            if ($clave !== '' && isset($porClave[$clave])) {
+                $salida[$asientoId] = (int) $porClave[$clave]->id;
+                continue;
+            }
+            if (strtoupper(trim((string) ($f->anita_tipo ?? ''))) === 'AOP') {
+                $claveOpp = $this->claveOrden('OPP', $f->anita_letra, $f->anita_sucursal, $f->anita_nro);
+                if ($claveOpp !== '' && isset($porClave[$claveOpp])) {
+                    $salida[$asientoId] = (int) $porClave[$claveOpp]->id;
+                    continue;
+                }
+            }
+            if (trim((string) ($f->anita_letra ?? '')) === '' && $clave !== '') {
+                $candidatos = $porClaveSinLetra[$clave] ?? [];
+                if (count($candidatos) === 1) {
+                    $salida[$asientoId] = (int) $candidatos[0]->id;
+                }
+            }
+        }
+
+        return $salida;
+    }
+
+    /**
+     * @param  array<int, int>  $pagoPorAsiento
+     * @return list<object>
+     */
+    private function aplicacionesDePagos(array $pagoPorAsiento): array
+    {
+        if ($pagoPorAsiento === []) {
+            return [];
+        }
+
+        $porPago = [];
+        foreach (array_chunk(array_values(array_unique($pagoPorAsiento)), 800) as $lote) {
+            $filas = DB::table('pagoproveedor as p')
+                ->join('pagoproveedor_comprobante as pc', 'pc.pagoproveedor_id', '=', 'p.id')
+                ->join('proveedor_cuentacorriente as pcc', 'pcc.id', '=', 'pc.proveedor_cuentacorriente_id')
+                ->leftJoin('proveedor as pr', 'pr.id', '=', 'p.proveedor_id')
+                ->whereIn('p.id', $lote)
+                ->where('pc.montoaplicado', '<>', 0)
+                ->whereNotNull('pcc.comprobante_proveedor_id')
+                ->get([
+                    'p.id as pago_id',
+                    'pcc.comprobante_proveedor_id',
+                    'pc.montoaplicado',
+                    'pr.nombre as proveedor_nombre',
+                ]);
+            foreach ($filas as $f) {
+                $f->montoaplicado = abs((float) $f->montoaplicado);
+                $porPago[(int) $f->pago_id][] = $f;
+            }
+        }
+
+        $pagoIds = array_values(array_unique(array_map('intval', $pagoPorAsiento)));
+        foreach ($this->aplicacionesDesdeImpresion($pagoIds) as $pagoId => $filas) {
+            $ya = [];
+            foreach ($porPago[$pagoId] ?? [] as $ap) {
+                $ya[(int) $ap->comprobante_proveedor_id] = true;
+            }
+            foreach ($filas as $ap) {
+                if (isset($ya[(int) $ap->comprobante_proveedor_id])) {
+                    continue;
+                }
+                $porPago[$pagoId][] = $ap;
+                $ya[(int) $ap->comprobante_proveedor_id] = true;
+            }
+        }
+
+        $aplicaciones = [];
+        foreach ($pagoPorAsiento as $asientoId => $pagoId) {
+            foreach ($porPago[$pagoId] ?? [] as $ap) {
+                $copia = clone $ap;
+                $copia->asiento_id = $asientoId;
+                $aplicaciones[] = $copia;
+            }
+        }
+
+        return $aplicaciones;
+    }
+
+    /**
+     * Pagos importados sin cuenta corriente: la factura está en la impresión.
+     *
+     * @param  list<int>  $pagoIds
+     * @return array<int, list<object>>
+     */
+    private function aplicacionesDesdeImpresion(array $pagoIds): array
+    {
+        $pagoIds = array_values(array_filter(array_map('intval', $pagoIds), fn (int $id) => $id > 0));
+        if ($pagoIds === []) {
+            return [];
+        }
+
+        $busqueda = [];
+        foreach (array_chunk($pagoIds, 400) as $lote) {
+            $filas = DB::table('pagoproveedor as p')
+                ->leftJoin('proveedor as pr', 'pr.id', '=', 'p.proveedor_id')
+                ->whereIn('p.id', $lote)
+                ->whereNotNull('p.anita_impresion_json')
+                ->get([
+                    'p.id',
+                    'p.empresa_id',
+                    'p.proveedor_id',
+                    'p.anita_impresion_json',
+                    'pr.nombre as proveedor_nombre',
+                ]);
+            foreach ($filas as $pago) {
+                $json = json_decode((string) $pago->anita_impresion_json, true);
+                if (! is_array($json)) {
+                    continue;
+                }
+                foreach ($json['aplicaciones'] ?? [] as $ap) {
+                    if (! is_array($ap)) {
+                        continue;
+                    }
+                    $monto = (float) ($ap['monto_aplicado'] ?? $ap['monto'] ?? 0);
+                    if ($monto <= 0) {
+                        continue;
+                    }
+                    $parsed = $this->parsearNumeroAplicacion((string) ($ap['numero'] ?? ''));
+                    $busqueda[] = [
+                        'pago_id' => (int) $pago->id,
+                        'empresa_id' => (int) $pago->empresa_id,
+                        'proveedor_id' => (int) $pago->proveedor_id,
+                        'proveedor_nombre' => trim((string) ($pago->proveedor_nombre ?? '')),
+                        'nro_int' => (int) ($ap['nro_int'] ?? 0),
+                        'letra' => $parsed['letra'] ?? '',
+                        'sucursal' => $parsed['sucursal'] ?? 0,
+                        'numero' => $parsed['numero'] ?? 0,
+                        'monto' => $monto,
+                    ];
+                }
+            }
+        }
+        if ($busqueda === []) {
+            return [];
+        }
+
+        $porInterno = [];
+        $internos = array_values(array_unique(array_filter(array_map(
+            fn (array $b) => $b['nro_int'],
+            $busqueda,
+        ))));
+        foreach (array_chunk($internos, 800) as $lote) {
+            $filas = DB::table('comprobante_proveedor')
+                ->whereIn('anita_nro_interno', $lote)
+                ->get(['id', 'empresa_id', 'proveedor_id', 'anita_nro_interno']);
+            foreach ($filas as $f) {
+                $clave = (int) $f->empresa_id.'|'.(int) $f->proveedor_id.'|'.(int) $f->anita_nro_interno;
+                $porInterno[$clave] = (int) $f->id;
+            }
+        }
+
+        $porNumero = [];
+        $numeros = array_values(array_unique(array_filter(array_map(
+            fn (array $b) => $b['numero'],
+            $busqueda,
+        ))));
+        foreach (array_chunk($numeros, 800) as $lote) {
+            $filas = DB::table('comprobante_proveedor')
+                ->whereIn('numerocomprobante', $lote)
+                ->get(['id', 'empresa_id', 'proveedor_id', 'letra', 'sucursal', 'numerocomprobante']);
+            foreach ($filas as $f) {
+                $clave = (int) $f->empresa_id.'|'.(int) $f->proveedor_id.'|'
+                    .strtoupper(trim((string) $f->letra)).'|'.(int) $f->sucursal.'|'.(int) $f->numerocomprobante;
+                $porNumero[$clave] = (int) $f->id;
+            }
+        }
+
+        $salida = [];
+        foreach ($busqueda as $b) {
+            $cp = $porInterno[$b['empresa_id'].'|'.$b['proveedor_id'].'|'.$b['nro_int']] ?? 0;
+            if ($cp <= 0 && $b['numero'] > 0) {
+                $cp = $porNumero[$b['empresa_id'].'|'.$b['proveedor_id'].'|'.$b['letra'].'|'.$b['sucursal'].'|'.$b['numero']] ?? 0;
+            }
+            if ($cp <= 0) {
+                continue;
+            }
+            $salida[$b['pago_id']][] = (object) [
+                'comprobante_proveedor_id' => $cp,
+                'montoaplicado' => $b['monto'],
+                'proveedor_nombre' => $b['proveedor_nombre'],
+            ];
+        }
+
+        return $salida;
+    }
+
+    /**
+     * @return array{letra: string, sucursal: int, numero: int}|null
+     */
+    private function parsearNumeroAplicacion(string $numero): ?array
+    {
+        $numero = trim($numero);
+        if (! preg_match('/^[A-Z0-9]+\s+([A-Z])(\d+)-(\d+)$/i', $numero, $m)) {
+            return null;
+        }
+
+        return [
+            'letra' => strtoupper($m[1]),
+            'sucursal' => (int) $m[2],
+            'numero' => (int) $m[3],
+        ];
+    }
+
+    /**
+     * @param  list<int>  $asientoIds
+     * @return array<int, float>
+     */
+    private function pesoCajaPorAsiento(array $asientoIds): array
+    {
+        $limite = (int) config('contable.mayor_concepto.limite_caja_banco', 112010008);
+        $pesos = [];
+        foreach (array_chunk($asientoIds, 800) as $lote) {
+            $filas = DB::table('asiento_movimiento as am')
+                ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
+                ->whereIn('am.asiento_id', $lote)
+                ->get(['am.asiento_id', 'am.monto', 'cc.codigo']);
+            foreach ($filas as $f) {
+                $codigo = $this->soloDigitos($f->codigo);
+                if ($codigo <= 0 || $codigo > $limite) {
+                    continue;
+                }
+                $asientoId = (int) $f->asiento_id;
+                $pesos[$asientoId] = ($pesos[$asientoId] ?? 0.0) + abs((float) $f->monto);
+            }
+        }
+
+        return $pesos;
+    }
+
+    private function claveOrden(mixed $tipo, mixed $letra, mixed $sucursal, mixed $nro): string
+    {
+        $numero = (int) preg_replace('/\D/', '', (string) ($nro ?? ''));
+        $tipo = strtoupper(trim((string) ($tipo ?? '')));
+        if ($numero <= 0 || $tipo === '') {
+            return '';
+        }
+        $letra = strtoupper(trim((string) ($letra ?? '')));
+
+        return $tipo.'|'.$letra.'|'.(int) $sucursal.'|'.$numero;
     }
 
     /**

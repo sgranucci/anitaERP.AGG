@@ -507,7 +507,7 @@
         window.cambiarFormatoExcelNumero(btn.getAttribute('data-formato') || 'auto');
     });
 
-    // Preferir query/localStorage al cargar (sin invalidar cache del reporte).
+    // Preferir query/localStorage al cargar.
     (function initFormatoExcel() {
         var actual = 'auto';
         var input = document.getElementById('excel_formato_numero');

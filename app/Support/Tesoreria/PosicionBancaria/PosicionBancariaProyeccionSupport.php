@@ -30,6 +30,7 @@ final class PosicionBancariaProyeccionSupport
         $movimientos = $this->movimientosPorHoja(
             (new PosicionBancariaPrecargaVolcadoSupport())->lineasPorFechaYHoja($fechaPosicion, $hasta),
             (new PosicionBancariaSolicitudpagoSupport())->lineasPorFechaYHoja($fechaPosicion, $hasta),
+            (new PosicionBancariaProyeccionPagosSupport())->lineasPorFechaYHoja($fechaPosicion, $hasta),
         );
         $hojas = 0;
         foreach ($this->definiciones() as $def) {
@@ -50,14 +51,13 @@ final class PosicionBancariaProyeccionSupport
     }
 
     /**
-     * @param  array<string, array<string, list<array<string, mixed>>>>  $precargas
-     * @param  array<string, array<string, list<array<string, mixed>>>>  $solicitudes
+     * @param  array<string, array<string, list<array<string, mixed>>>>  ...$fuentes
      * @return array<string, array<string, list<array<string, mixed>>>>
      */
-    private function movimientosPorHoja(array $precargas, array $solicitudes): array
+    private function movimientosPorHoja(array ...$fuentes): array
     {
         $out = [];
-        foreach ([$precargas, $solicitudes] as $fuente) {
+        foreach ($fuentes as $fuente) {
             foreach ($fuente as $fecha => $porHoja) {
                 foreach ($porHoja as $hoja => $lineas) {
                     foreach ($lineas as $linea) {
@@ -186,7 +186,6 @@ final class PosicionBancariaProyeccionSupport
         $this->pintarEncabezado($ws, 'A3:G3');
 
         $saldoCol = $def['saldo_resumen']; // e.g. B6
-        $letra = substr($saldoCol, 0, 1);
         $filaSaldo = (int) substr($saldoCol, 1);
 
         $fila = 4;
@@ -199,75 +198,49 @@ final class PosicionBancariaProyeccionSupport
             $ws->setCellValue("G{$fila}", '=Resumen!'.$def['ut_saldo']);
         }
         $filaSaldoLocal = $fila;
-        $fila++;
-
         $filaInicioSum = $filaSaldoLocal;
-        if ($def['con_vencidos'] && $def['cheques_resumen'] !== null) {
-            $ch = $def['cheques_resumen']; // B79
-            $fCh = (int) substr($ch, 1);
-            $ws->setCellValue("A{$fila}", 'Cheques retenidos+tránsito');
-            $ws->setCellValue("B{$fila}", "=Resumen!B{$fCh}");
-            $ws->setCellValue("C{$fila}", "=Resumen!C{$fCh}");
-            $ws->setCellValue("D{$fila}", "=Resumen!D{$fCh}");
-            $ws->setCellValue("E{$fila}", "=SUM(B{$fila}:D{$fila})");
-            $fila++;
-
-            $ws->setCellValue("A{$fila}", 'Disponible del día ajustado');
-            $ws->setCellValue("B{$fila}", '=B'.$filaSaldoLocal.'+B'.($fila - 1));
-            $ws->setCellValue("C{$fila}", '=C'.$filaSaldoLocal.'+C'.($fila - 1));
-            $ws->setCellValue("D{$fila}", '=D'.$filaSaldoLocal.'+D'.($fila - 1));
-            $ws->setCellValue("E{$fila}", "=SUM(B{$fila}:D{$fila})");
-            if ($def['disponible_resumen'] !== null) {
-                // Control vs Resumen Disponible HOY
-                $ws->setCellValue('F'.$fila, 'ctrl Resumen');
-                $disp = $def['disponible_resumen'];
-                $fd = (int) substr($disp, 1);
-                $ws->setCellValue('G'.$fila, "=Resumen!B{$fd}");
-            }
-            $ws->getStyle("A{$fila}:E{$fila}")->getFont()->setBold(true);
-            $filaInicioSum = $fila;
-            $fila++;
-        }
+        $fila++;
 
         $ws->setCellValue("A{$fila}", 'MOVIMIENTOS DEL DÍA');
         $this->pintarSeccion($ws, $fila);
         $fila++;
-
-        if ($def['cheques_pagos_fila'] !== null) {
-            $fRef = (int) substr((string) $def['cheques_pagos_fila'], 1);
-            $ws->setCellValue("A{$fila}", 'Pagos proyectados del día Cheque');
-            $ws->setCellValue("B{$fila}", "=IFERROR(ResumenCheques!B{$fRef}*-1,0)");
-            $ws->setCellValue("C{$fila}", "=IFERROR(ResumenCheques!E{$fRef}*-1,0)");
-            $ws->setCellValue("D{$fila}", "=IFERROR(ResumenCheques!H{$fRef}*-1,0)");
-            $ws->setCellValue("E{$fila}", "=SUM(B{$fila}:D{$fila})");
-            $ws->setCellValue('F'.$fila, 'Cheques');
-            $fila++;
-        }
 
         $filasDescubierto = [];
         $fechaClave = $fechaPosicion->toDateString();
         $this->escribirMovimientos($ws, $fila, $movimientosPorFecha[$fechaClave] ?? [], true, $filasDescubierto);
 
         $this->escribirTotalProyectado($ws, $fila, $filaInicioSum, 'Proyectado del día');
-        $filaProyectado = $fila;
         $fila++;
         $this->marcarDescubierto($ws, $fila, $filasDescubierto);
 
+        $fechasFuturas = [];
         for ($paso = 1; $paso <= $diasProyectados; $paso++) {
-            $dia = $fechaPosicion->copy()->addDays($paso * $saltoDias);
+            $fechasFuturas[$fechaPosicion->copy()->addDays($paso * $saltoDias)->toDateString()] = $paso;
+        }
+        foreach (array_keys($movimientosPorFecha) as $fechaMov) {
+            if ($fechaMov > $fechaPosicion->toDateString() && ! isset($fechasFuturas[$fechaMov])) {
+                $fechasFuturas[$fechaMov] = null;
+            }
+        }
+        ksort($fechasFuturas);
+        foreach ($fechasFuturas as $fechaMov => $paso) {
+            $dia = Carbon::parse($fechaMov);
             $fila++;
             $ws->setCellValue("A{$fila}", $dia->locale('es')->isoFormat('dddd DD/MM/YY'));
             $this->pintarDia($ws, $fila);
             $fila++;
             $antes = $fila;
             $sinDescubierto = [];
-            $this->escribirMovimientos($ws, $fila, $movimientosPorFecha[$dia->toDateString()] ?? [], false, $sinDescubierto);
+            $this->escribirMovimientos($ws, $fila, $movimientosPorFecha[$fechaMov] ?? [], false, $sinDescubierto);
             if ($fila === $antes) {
-                $ws->setCellValue("A{$fila}", 'Sin precargas ni solicitudes de pago');
+                $ws->setCellValue("A{$fila}", 'Sin movimientos');
                 $ws->getStyle("A{$fila}")->getFont()->setItalic(true)->getColor()->setRGB('7F8C8D');
                 $fila++;
             }
-            $this->escribirTotalProyectado($ws, $fila, $filaInicioSum, 'Proyectado del día T+'.$paso);
+            $titulo = $paso !== null
+                ? 'Proyectado del día T+'.$paso
+                : 'Proyectado al '.$dia->format('d/m/Y');
+            $this->escribirTotalProyectado($ws, $fila, $filaInicioSum, $titulo);
             $fila++;
         }
         $filaUltima = $fila - 1;
@@ -511,6 +484,7 @@ final class PosicionBancariaProyeccionSupport
             'trf_intercompany' => 'E8DAEF',
             'otras_operaciones' => 'D6EAF8',
             'sp' => 'FCF3CF',
+            'proyeccion' => 'F9E79F',
             default => 'EAF2F8',
         };
     }

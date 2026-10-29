@@ -67,7 +67,9 @@
                     cheques del portfolio, <strong>Disponible HOY</strong> y hojas de proyección
                     (Macro / BMA / BAPRO / Bi Bank / BIND + Resumen descubierto).
                     Los movimientos del día salen con el detalle de cada precarga y de las solicitudes de pago
-                    por vencimiento (sin las suspendidas). El estado queda en la columna F.
+                    por vencimiento (sin las suspendidas). La proyección de pagos entra totalizada en Macro:
+                    transferencias del día como TRF PROYECCION y cheques, en cada diferimiento, como CHEQUES PROYECCION.
+                    El estado queda en la columna F.
                     @if (can('listar-finanza-movimiento-precarga', false))
                         <a href="{{ route('finanza_movimiento_precarga') }}">Abrir precargas</a>.
                     @endif
@@ -123,7 +125,9 @@
 
                 @if ($consultado && $preview)
                     <div class="mb-2">
-                        <strong>Saldos Interbanking usados:</strong> {{ $preview['fecha'] }}
+                        <strong>Posición al</strong> {{ \Carbon\Carbon::parse($preview['fecha'])->format('d/m/Y') }}
+                        · <strong>cierre Interbanking</strong>
+                        {{ ! empty($preview['fecha_ib']) ? \Carbon\Carbon::parse($preview['fecha_ib'])->format('d/m/Y') : 'sin foto' }}
                         · {{ count($preview['por_codigo']) }} códigos mapeados
                         · {{ count($preview['sin_mapear']) }} sin mapear
                     </div>

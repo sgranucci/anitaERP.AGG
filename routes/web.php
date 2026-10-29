@@ -2595,6 +2595,8 @@ Route::get('ventas/gastronomia/descuento-reporte/leer-mozo/{codigo}', 'Ventas\Ga
 Route::post('ventas/gastronomia/descuento-reporte/consulta-clientevip', 'Ventas\GastronomiaDescuentoReporteController@consultaClienteVip')->name('gastronomia_descuento_reporte_consulta_clientevip');
 Route::get('ventas/gastronomia/descuento-reporte/leer-clientevip/{codigo}', 'Ventas\GastronomiaDescuentoReporteController@leerClienteVipPorCodigo')->name('gastronomia_descuento_reporte_leer_clientevip');
 Route::get('ventas/listar-gastronomia-descuento-reporte/{formato}', 'Ventas\GastronomiaDescuentoReporteController@exportar')->name('listar_gastronomia_descuento_reporte');
+Route::get('ventas/gastronomia/recetas-reporte', 'Ventas\GastronomiaRecetasReporteController@index')->name('gastronomia_recetas_reporte')->middleware('modo.consulta');
+Route::get('ventas/listar-gastronomia-recetas-reporte/{formato}', 'Ventas\GastronomiaRecetasReporteController@exportar')->name('listar_gastronomia_recetas_reporte');
 Route::get('ventas/gastronomia/ventas-articulos-reporte', 'Ventas\GastronomiaVentasArticulosReporteController@index')->name('gastronomia_ventas_articulos_reporte')->middleware('modo.consulta');
 Route::get('ventas/listar-gastronomia-ventas-articulos-reporte/{formato}', 'Ventas\GastronomiaVentasArticulosReporteController@exportar')->name('listar_gastronomia_ventas_articulos_reporte');
 Route::get('ventas/gastronomia/venta-hora-reporte', 'Ventas\GastronomiaVentaHoraReporteController@index')->name('gastronomia_venta_hora_reporte')->middleware('modo.consulta');

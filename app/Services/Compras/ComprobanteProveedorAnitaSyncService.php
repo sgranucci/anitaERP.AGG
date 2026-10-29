@@ -167,6 +167,102 @@ class ComprobanteProveedorAnitaSyncService
     }
 
     /**
+     * Publica un plan que conserva cuotas con pago.
+     * Borra e inserta solo las cuotas impagas. Las que ya tienen aplicación no se regraban,
+     * así promov.prov_t_pagado y aplmovp siguen en el mismo número de cuota.
+     *
+     * @param  list<int>  $numerosBorrar
+     * @param  list<int>  $numerosActualizar  cuotas parciales: se actualiza monto y vencimiento
+     * @param  list<int>  $numerosInsertar
+     */
+    public function publicarPlanConservandoCuotasPagadas(
+        Comprobante_Proveedor $comprobante,
+        array $numerosBorrar,
+        array $numerosActualizar,
+        array $numerosInsertar,
+    ): void {
+        if (! ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada()) {
+            return;
+        }
+
+        $comprobante->loadMissing([
+            'comprobante_proveedor_cuotas',
+            'empresas', 'proveedores', 'condicionpagos',
+            'tipotransaccion_compras', 'monedas', 'provinciaDestino',
+            'ordencompras',
+        ]);
+
+        if (! $comprobante->anita_nro_interno) {
+            return;
+        }
+
+        $ctx = new ComprobanteProveedorAnitaContext($comprobante, (int) $comprobante->anita_nro_interno);
+        $this->updateCompra($ctx);
+
+        $porNumero = [];
+        foreach ($comprobante->comprobante_proveedor_cuotas as $cuota) {
+            $porNumero[(int) $cuota->numero_cuota] = $cuota;
+        }
+
+        foreach ($this->numerosCuota($numerosActualizar) as $numero) {
+            $cuota = $porNumero[$numero] ?? null;
+            if ($cuota === null) {
+                throw new RuntimeException('No está la cuota '.$numero.' para actualizar el plan en Anita.');
+            }
+            $api = new ApiAnita;
+            $api->apiCallEscritura([
+                'acc' => 'update',
+                'tabla' => 'promov',
+                'sistema' => self::SISTEMA_COMPRAS,
+                'valores' => PromovCuotaAnitaMapper::valoresUpdateMontoVencimiento($ctx, $cuota),
+                'whereArmado' => PromovCuotaAnitaMapper::whereCuota($ctx, $numero),
+            ], 'promov update monto cuota '.$numero, 'anita_bridge.fallo', true);
+        }
+
+        foreach ($this->numerosCuota($numerosBorrar) as $numero) {
+            $this->apiDelete('promov', PromovCuotaAnitaMapper::whereCuota($ctx, $numero));
+        }
+
+        $api = new ApiAnita;
+        foreach ($this->numerosCuota($numerosInsertar) as $numero) {
+            $cuota = $porNumero[$numero] ?? null;
+            if ($cuota === null) {
+                throw new RuntimeException('No está la cuota '.$numero.' para publicar el plan en Anita.');
+            }
+            $api->apiCallEscritura([
+                'acc' => 'insert',
+                'tabla' => 'promov',
+                'sistema' => self::SISTEMA_COMPRAS,
+                'campos' => PromovCuotaAnitaMapper::camposInsert(),
+                'valores' => PromovCuotaAnitaMapper::valoresInsert($ctx, $cuota),
+            ], 'promov insert cuota '.$numero);
+        }
+
+        $comprobante->forceFill([
+            'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::SYNC_OK,
+            'anita_sync_error' => null,
+            'anita_sync_at' => now(),
+        ])->save();
+    }
+
+    /**
+     * @param  list<int>  $numeros
+     * @return list<int>
+     */
+    private function numerosCuota(array $numeros): array
+    {
+        $out = [];
+        foreach ($numeros as $numero) {
+            $n = (int) $numero;
+            if ($n > 0) {
+                $out[$n] = $n;
+            }
+        }
+
+        return array_values($out);
+    }
+
+    /**
      * Regraba solo aplicped (factura → PEP). No toca compra / concmov / promov.
      */
     public function resyncAplicped(Comprobante_Proveedor $comprobante): void

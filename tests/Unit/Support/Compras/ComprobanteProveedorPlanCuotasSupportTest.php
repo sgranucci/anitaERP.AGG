@@ -25,6 +25,62 @@ class ComprobanteProveedorPlanCuotasSupportTest extends TestCase
         $this->assertSame(1, $plan[0]['formapago_id']);
     }
 
+    public function test_unificar_pendientes_conserva_la_cuota_aplicada(): void
+    {
+        $cuotas = [];
+        for ($i = 1; $i <= 3; $i++) {
+            $cuotas[] = [
+                'id' => $i,
+                'numero_cuota' => $i,
+                'fechavencimiento' => sprintf('2026-%02d-10', 9 + $i),
+                'monto' => $i === 3 ? 100.02 : 100.00,
+                'aplicado' => $i === 1 ? 100.00 : 0,
+                'formapago_id' => 1,
+                'proveedor_cuentacorriente_id' => 10 + $i,
+            ];
+        }
+
+        $plan = ComprobanteProveedorPlanCuotasSupport::planUnificadoConservandoAplicaciones($cuotas, 300.02, 2, 1540);
+
+        $this->assertCount(1, $plan['conservadas']);
+        $this->assertSame(1, $plan['conservadas'][0]['numero_cuota']);
+        $this->assertSame(1, $plan['conservadas'][0]['id']);
+        $this->assertSame(100.0, $plan['conservadas'][0]['monto']);
+        $this->assertSame(11, $plan['conservadas'][0]['proveedor_cuentacorriente_id']);
+        $this->assertSame([], $plan['numeros_actualizar']);
+        $this->assertSame([2, 3], $plan['numeros_borrar']);
+        $this->assertSame(2, $plan['nueva']['numero_cuota']);
+        $this->assertSame('2026-11-10', $plan['nueva']['fechavencimiento']);
+        $this->assertSame(200.02, $plan['nueva']['monto']);
+        $this->assertSame(1540.0, $plan['nueva']['cotizacion']);
+    }
+
+    public function test_unificar_pendientes_achica_la_cuota_parcial_y_suma_el_resto(): void
+    {
+        $plan = ComprobanteProveedorPlanCuotasSupport::planUnificadoConservandoAplicaciones([
+            ['id' => 1, 'numero_cuota' => 1, 'fechavencimiento' => '2026-10-10', 'monto' => 100, 'aplicado' => 40, 'formapago_id' => 1],
+            ['id' => 2, 'numero_cuota' => 2, 'fechavencimiento' => '2026-11-10', 'monto' => 100, 'aplicado' => 0, 'formapago_id' => 3],
+        ], 200, 1, 1);
+
+        $this->assertSame(40.0, $plan['conservadas'][0]['monto']);
+        $this->assertSame([1], $plan['numeros_actualizar']);
+        $this->assertSame([2], $plan['numeros_borrar']);
+        $this->assertSame(2, $plan['nueva']['numero_cuota']);
+        $this->assertSame('2026-10-10', $plan['nueva']['fechavencimiento']);
+        $this->assertSame(160.0, $plan['nueva']['monto']);
+        $this->assertSame(1, $plan['nueva']['formapago_id']);
+    }
+
+    public function test_unificar_pendientes_rechaza_una_sola_cuota_abierta(): void
+    {
+        $this->expectException(RuntimeException::class);
+
+        ComprobanteProveedorPlanCuotasSupport::planUnificadoConservandoAplicaciones([
+            ['numero_cuota' => 1, 'fechavencimiento' => '2026-10-10', 'monto' => 100, 'aplicado' => 100],
+            ['numero_cuota' => 2, 'fechavencimiento' => '2026-11-10', 'monto' => 50, 'aplicado' => 0],
+        ], 150, 1, 1);
+    }
+
     public function test_manual_rechaza_una_suma_distinta_del_total(): void
     {
         $this->expectException(RuntimeException::class);

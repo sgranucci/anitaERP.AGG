@@ -10,9 +10,16 @@ use Illuminate\Support\Collection;
 /**
  * Mapea interbanking_saldo_diario → códigos canónicos de la hoja Saldos
  * (ej. BIY|MACRO|ARS|CC).
+ *
+ * La columna del día D de la posición es el cierre del último día con foto
+ * completa anterior a D (el 20/8 usa el 19/8; un lunes, el viernes).
+ * Las cuentas 393 del banco 285 son Macro ex Itaú y van a ITAU, no a MACRO.
  */
 final class PosicionBancariaSaldosInterbankingSupport
 {
+    /** Una foto real trae ~28 cuentas; el día en curso a veces queda en 1 fila. */
+    private const MIN_CUENTAS_DIA = 10;
+
     /** @var array<string, string> bank_number BCRA → banco canónico */
     private const BANCO_POR_BCRA = [
         '285' => 'MACRO',
@@ -37,6 +44,7 @@ final class PosicionBancariaSaldosInterbankingSupport
     /**
      * @return array{
      *   fecha: string,
+     *   fecha_ib: ?string,
      *   por_codigo: array<string, float>,
      *   detalle: list<array<string, mixed>>,
      *   sin_mapear: list<array<string, mixed>>
@@ -44,29 +52,16 @@ final class PosicionBancariaSaldosInterbankingSupport
      */
     public function saldosPorCodigo(Carbon $fecha, array $empresaIds = [1, 2, 3]): array
     {
-        $fechaStr = $fecha->toDateString();
-        $rows = InterbankingSaldoDiario::query()
-            ->whereDate('fecha', $fechaStr)
-            ->whereIn('empresa_id', $empresaIds)
-            ->orderBy('empresa_id')
-            ->orderBy('bank_number')
-            ->get();
-
-        // Si no hay exacto, usar último día disponible <= fecha
-        if ($rows->isEmpty()) {
-            $fechaAlt = InterbankingSaldoDiario::query()
-                ->whereDate('fecha', '<=', $fechaStr)
+        $fechaPosicion = $fecha->toDateString();
+        $fechaIb = $this->fechaCierreAnterior($fechaPosicion, $empresaIds);
+        $rows = collect();
+        if ($fechaIb !== null) {
+            $rows = InterbankingSaldoDiario::query()
+                ->whereDate('fecha', $fechaIb)
                 ->whereIn('empresa_id', $empresaIds)
-                ->max('fecha');
-            if ($fechaAlt) {
-                $fechaStr = Carbon::parse($fechaAlt)->toDateString();
-                $rows = InterbankingSaldoDiario::query()
-                    ->whereDate('fecha', $fechaStr)
-                    ->whereIn('empresa_id', $empresaIds)
-                    ->orderBy('empresa_id')
-                    ->orderBy('bank_number')
-                    ->get();
-            }
+                ->orderBy('empresa_id')
+                ->orderBy('bank_number')
+                ->get();
         }
 
         $cuentas = Cuentacaja::query()
@@ -102,11 +97,33 @@ final class PosicionBancariaSaldosInterbankingSupport
         }
 
         return [
-            'fecha' => $fechaStr,
+            'fecha' => $fechaPosicion,
+            'fecha_ib' => $fechaIb,
             'por_codigo' => $porCodigo,
             'detalle' => $detalle,
             'sin_mapear' => $sinMapear,
         ];
+    }
+
+    /**
+     * Último día con foto completa estrictamente anterior a la posición.
+     */
+    private function fechaCierreAnterior(string $fechaPosicion, array $empresaIds): ?string
+    {
+        $row = InterbankingSaldoDiario::query()
+            ->selectRaw('fecha, COUNT(*) as cuentas')
+            ->whereDate('fecha', '<', $fechaPosicion)
+            ->whereIn('empresa_id', $empresaIds)
+            ->groupBy('fecha')
+            ->havingRaw('COUNT(*) >= ?', [self::MIN_CUENTAS_DIA])
+            ->orderByDesc('fecha')
+            ->first();
+
+        if ($row === null || $row->fecha === null) {
+            return null;
+        }
+
+        return Carbon::parse($row->fecha)->toDateString();
     }
 
     /**
@@ -152,6 +169,11 @@ final class PosicionBancariaSaldosInterbankingSupport
     {
         $bank = ltrim((string) $ib->bank_number, '0');
         $bankPad = str_pad($bank, 3, '0', STR_PAD_LEFT);
+        $acctDigits = $this->soloDigitos((string) $ib->account_number);
+        // 393… en el banco 285 es la cuenta Macro ex Itaú (BMA), no la CC operativa.
+        if ($bankPad === '285' && str_starts_with($acctDigits, '393')) {
+            return 'ITAU';
+        }
         if (isset(self::BANCO_POR_BCRA[$bankPad])) {
             return self::BANCO_POR_BCRA[$bankPad];
         }
@@ -159,7 +181,6 @@ final class PosicionBancariaSaldosInterbankingSupport
             return self::BANCO_POR_BCRA[$bank];
         }
 
-        $acctDigits = $this->soloDigitos((string) $ib->account_number);
         foreach ($cuentas as $cc) {
             if ((int) $cc->empresa_id !== (int) $ib->empresa_id) {
                 continue;

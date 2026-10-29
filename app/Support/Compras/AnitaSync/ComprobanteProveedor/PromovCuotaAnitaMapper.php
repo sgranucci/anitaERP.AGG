@@ -71,6 +71,58 @@ final class PromovCuotaAnitaMapper
             return PromovCuotaAnitaCrownMapper::valoresInsert($ctx, $cuota);
         }
 
+        [$vto, $monto] = self::vencimientoYMonto($ctx, $cuota);
+
+        // Alta de factura: sin pago ni referencia (OPP/NC las completa el pago).
+        return "
+            '".$ctx->proveedorCodigo()."',
+            '".$ctx->tipoComprobante()."',
+            '".$ctx->letra()."',
+            '".$ctx->sucursal()."',
+            '".$ctx->numero()."',
+            '   ',
+            ' ',
+            '0',
+            '0',
+            '".$ctx->fechaYmd()."',
+            '".$vto."',
+            '".$ctx->decimal($monto)."',
+            '".$ctx->monedaCodigoAnita()."',
+            '".$ctx->cotizacion()."',
+            '".(int) $cuota->numero_cuota."',
+            '0',
+            '0',
+            '".$ctx->nroInterno."',
+            '".$ctx->empresaCodigo()."',
+            '0',
+            '',
+            ''
+        ";
+    }
+
+    /**
+     * Ajusta monto y vencimiento de una cuota que ya tiene pago.
+     * No toca prov_t_pagado: aplmovp sigue apuntando a este número de cuota.
+     */
+    public static function valoresUpdateMontoVencimiento(
+        ComprobanteProveedorAnitaContext $ctx,
+        Comprobante_Proveedor_Cuota $cuota,
+    ): string {
+        [$vto, $monto] = self::vencimientoYMonto($ctx, $cuota);
+
+        return "
+            prov_fecha_vto = '".$vto."',
+            prov_monto = '".$ctx->decimal($monto)."'
+        ";
+    }
+
+    /**
+     * @return array{0: string, 1: float}
+     */
+    private static function vencimientoYMonto(
+        ComprobanteProveedorAnitaContext $ctx,
+        Comprobante_Proveedor_Cuota $cuota,
+    ): array {
         $vto = $cuota->fechavencimiento
             ? Carbon::parse($cuota->fechavencimiento)->format('Ymd')
             : $ctx->fechaYmd();
@@ -99,31 +151,7 @@ final class PromovCuotaAnitaMapper
             );
         }
 
-        // Alta de factura: sin pago ni referencia (OPP/NC las completa el pago).
-        return "
-            '".$ctx->proveedorCodigo()."',
-            '".$ctx->tipoComprobante()."',
-            '".$ctx->letra()."',
-            '".$ctx->sucursal()."',
-            '".$ctx->numero()."',
-            '   ',
-            ' ',
-            '0',
-            '0',
-            '".$ctx->fechaYmd()."',
-            '".$vto."',
-            '".$ctx->decimal($monto)."',
-            '".$ctx->monedaCodigoAnita()."',
-            '".$ctx->cotizacion()."',
-            '".(int) $cuota->numero_cuota."',
-            '0',
-            '0',
-            '".$ctx->nroInterno."',
-            '".$ctx->empresaCodigo()."',
-            '0',
-            '',
-            ''
-        ";
+        return [$vto, $monto];
     }
 
     public static function whereCuota(ComprobanteProveedorAnitaContext $ctx, int $numeroCuota): string

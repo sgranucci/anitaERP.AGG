@@ -14,14 +14,11 @@ use App\Support\Contable\MayorConceptoListadoFiltros;
 use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Jurosh\PDFMerge\PDFMerger;
 use Maatwebsite\Excel\Excel;
 
 class MayorConceptoController extends Controller
 {
-    private const SESSION_CACHE_KEY = 'mayor_concepto_resultado_cache';
-
     private const PREFERENCIAS_CLAVE = 'mayor_concepto';
 
     public function __construct(
@@ -55,14 +52,9 @@ class MayorConceptoController extends Controller
         $lecturaIncompleta = false;
         $filasBase = null;
 
-        if (MayorConceptoListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            $pack = $this->leerCachePack($filtros);
-
-            // GET solo lee cache. El cálculo pesado va por POST @consultar (evita timeout/404 del proxy).
-            if ($pack === null && $request->boolean('consultar') && $request->boolean('recalcular')) {
-                MayorConceptoRuntimeSupport::elevarLimites();
-                $pack = $this->generarYCachearPack($filtros);
-            }
+        if (MayorConceptoListadoFiltros::tieneCriteriosAplicados($filtros) && $request->boolean('consultar')) {
+            MayorConceptoRuntimeSupport::elevarLimites();
+            $pack = $this->armarPack($filtros);
 
             if ($pack !== null) {
                 $consultado = true;
@@ -172,192 +164,21 @@ class MayorConceptoController extends Controller
         ]);
 
         if ($request->ajax() || $request->boolean('ajax') || $request->wantsJson()) {
-            return $this->consultarPasoAjax($request, $filtros);
+            return response()->json([
+                'ok' => true,
+                'done' => true,
+                'mensaje' => 'Abriendo reporte…',
+                'redirect' => route('mayor_concepto', array_merge(
+                    MayorConceptoListadoFiltros::paraQueryString($filtros),
+                    ['consultar' => 1],
+                )),
+            ]);
         }
-
-        $this->generarYCachearPack($filtros);
 
         return redirect()->route('mayor_concepto', array_merge(
             MayorConceptoListadoFiltros::paraQueryString($filtros),
             ['consultar' => 1],
         ));
-    }
-
-    /**
-     * Un paso = una empresa. El front encadena hasta terminar y redirige al index.
-     *
-     * @param  array<string, mixed>  $filtros
-     */
-    private function consultarPasoAjax(Request $request, array $filtros)
-    {
-        $empresaIds = MayorConceptoListadoFiltros::empresaIds($filtros);
-        $total = count($empresaIds);
-        $idx = max(0, (int) $request->input('empresa_idx', 0));
-
-        if ($total === 0 || $idx >= $total) {
-            return response()->json(['ok' => false, 'mensaje' => 'Índice de empresa inválido.'], 422);
-        }
-
-        $empresaId = (int) $empresaIds[$idx];
-        $nombreEmpresa = $this->empresaRepository->find($empresaId)?->nombre ?? ('#'.$empresaId);
-        $progressKey = $this->cacheProgressKey($filtros);
-
-        if (! MayorConceptoProgreso::reservar()) {
-            return response()->json([
-                'ok' => false,
-                'mensaje' => 'Ya hay un mayor por concepto generándose con su usuario. Espere a que termine: no vuelva a pulsar Consultar ni recargue la página.',
-            ], 409);
-        }
-
-        MayorConceptoProgreso::activar();
-        if ($idx === 0) {
-            MayorConceptoProgreso::olvidar();
-            Cache::store('file')->forget($progressKey);
-            Cache::store('file')->put($progressKey, ['bloques' => []], now()->addHours(2));
-        }
-        MayorConceptoProgreso::marcar('Procesando '.$nombreEmpresa.' ('.($idx + 1).'/'.$total.')…');
-
-        try {
-            return $this->consultarPasoAjaxConLock($filtros, $empresaIds, $idx, $empresaId, $nombreEmpresa, $progressKey, $total);
-        } catch (\Throwable $e) {
-            report($e);
-
-            return response()->json([
-                'ok' => false,
-                'mensaje' => 'La generación se interrumpió: '.$e->getMessage(),
-            ], 500);
-        } finally {
-            MayorConceptoProgreso::liberar();
-        }
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     * @param  list<int>  $empresaIds
-     */
-    private function consultarPasoAjaxConLock(
-        array $filtros,
-        array $empresaIds,
-        int $idx,
-        int $empresaId,
-        string $nombreEmpresa,
-        string $progressKey,
-        int $total,
-    ) {
-        $progress = Cache::store('file')->get($progressKey);
-        if (! is_array($progress)) {
-            $progress = ['bloques' => []];
-        }
-
-        $bloque = $this->aligerarBloqueEmpresa(
-            $this->reporteService->generarUnaEmpresaDesdeFiltros($filtros, $empresaId)
-        );
-        $progress['bloques'][$empresaId] = $bloque;
-
-        $siguiente = $idx + 1;
-        if ($siguiente < $total) {
-            MayorConceptoProgreso::marcar('Guardando '.$nombreEmpresa.' ('.($idx + 1).'/'.$total.')…');
-            Cache::store('file')->put($progressKey, $progress, now()->addHours(2));
-
-            return response()->json([
-                'ok' => true,
-                'done' => false,
-                'empresa_idx' => $siguiente,
-                'procesada' => $idx + 1,
-                'total' => $total,
-                'empresa_id' => $empresaId,
-                'empresa_nombre' => $nombreEmpresa,
-                'mensaje' => 'Procesada '.$nombreEmpresa.' ('.($idx + 1).'/'.$total.')',
-            ]);
-        }
-
-        MayorConceptoProgreso::marcar('Armando el reporte…');
-
-        $consolidar = (bool) ($filtros['consolidar_empresas'] ?? true);
-        $bloques = [];
-        foreach ($empresaIds as $eid) {
-            if (isset($progress['bloques'][$eid])) {
-                $bloques[(int) $eid] = $progress['bloques'][$eid];
-            }
-        }
-
-        if (count($bloques) === 1) {
-            $eid = (int) array_key_first($bloques);
-            $resultado = $bloques[$eid];
-            $resultado['parametros']['empresa_ids'] = $empresaIds;
-            $resultado['parametros']['empresa_id'] = $eid;
-            $resultado['parametros']['consolidar_empresas'] = true;
-        } else {
-            // Multiempresa: consolidar=true fusiona concepto/cuenta; false = bloques por empresa.
-            $resultado = $this->reporteService->fusionarBloquesEmpresas($bloques, $empresaIds, $consolidar);
-            $resultado['parametros']['consolidar_empresas'] = $consolidar;
-        }
-
-        $this->persistirPackDesdeResultado($resultado, $filtros);
-        Cache::store('file')->forget($progressKey);
-        MayorConceptoProgreso::olvidar();
-
-        return response()->json([
-            'ok' => true,
-            'done' => true,
-            'procesada' => $total,
-            'total' => $total,
-            'empresa_nombre' => $nombreEmpresa,
-            'mensaje' => 'Listo. Abriendo reporte…',
-            'redirect' => route('mayor_concepto', array_merge(
-                MayorConceptoListadoFiltros::paraQueryString($filtros),
-                ['consultar' => 1],
-            )),
-        ]);
-    }
-
-    /**
-     * Conciliación por empresa y se descartan los planos crudos: si no, el cache
-     * entre pasos AJAX retiene el mes completo y el request no llega a responder.
-     *
-     * @param  array<string, mixed>  $bloque
-     * @return array<string, mixed>
-     */
-    private function aligerarBloqueEmpresa(array $bloque): array
-    {
-        MayorConceptoProgreso::marcar('Conciliando asientos de la empresa…');
-
-        try {
-            // El motor ERP ya trae el cruce de la pata hasta el límite. No reemplazarlo
-            // por la regla vieja (neto analítico + neto concepto = 0): esa suma duplica
-            // el importe cuando el concepto sale del mismo lado que la pata.
-            $auditoria = (isset($bloque['_auditoria']) && is_array($bloque['_auditoria']))
-                ? $bloque['_auditoria']
-                : $this->reporteService->conciliarPorAsiento($bloque);
-        } catch (\Throwable $e) {
-            report($e);
-            $auditoria = [
-                'cuadra' => false,
-                'asientos_analizados' => 0,
-                'asientos_cuadrados' => 0,
-                'asientos_descuadrados' => 0,
-                'filas_descuadradas' => [],
-                'filas_cuadradas' => [],
-                'nota' => 'No se pudo armar la conciliación: '.$e->getMessage(),
-            ];
-        }
-
-        if (isset($auditoria['filas_cuadradas']) && is_array($auditoria['filas_cuadradas']) && count($auditoria['filas_cuadradas']) > 50) {
-            $auditoria['filas_cuadradas'] = array_slice($auditoria['filas_cuadradas'], 0, 50);
-            $auditoria['filas_cuadradas_recortadas'] = true;
-        }
-        unset($auditoria['filas']);
-        $bloque['_auditoria'] = $auditoria;
-
-        unset(
-            $bloque['mayor_plano_disponibilidad'],
-            $bloque['mayor_plano_analitico'],
-            $bloque['analitico_por_asiento'],
-            $bloque['motivos_por_asiento'],
-            $bloque['mayor_plano_contrapartidas_disponibilidad'],
-        );
-
-        return $bloque;
     }
 
     public function progreso()
@@ -374,21 +195,11 @@ class MayorConceptoController extends Controller
     }
 
     /**
-     * @param  array<string, mixed>  $filtros
-     */
-    private function cacheProgressKey(array $filtros): string
-    {
-        $userId = (int) (auth()->id() ?? 0);
-
-        return 'mayor_concepto_progress_'.$userId.'_'.MayorConceptoListadoFiltros::firma($filtros);
-    }
-
-    /**
      * @param  array<string, mixed>  $resultado
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>
      */
-    private function persistirPackDesdeResultado(array $resultado, array $filtros): array
+    private function armarPackDesdeResultado(array $resultado, array $filtros): array
     {
         $empresaIds = MayorConceptoListadoFiltros::empresaIds(array_merge(
             $filtros,
@@ -434,14 +245,6 @@ class MayorConceptoController extends Controller
             'auditoria_panel' => $auditoriaPanel,
         ];
 
-        Cache::store('file')->put($this->cachePackKey($filtros), $pack, now()->addHours(4));
-        session()->forget(self::SESSION_CACHE_KEY);
-        session([
-            self::SESSION_CACHE_KEY => [
-                'firma' => MayorConceptoListadoFiltros::firma($filtros),
-            ],
-        ]);
-
         return $pack;
     }
 
@@ -466,11 +269,7 @@ class MayorConceptoController extends Controller
             return $this->descargarPdfPorEmpresa($filtros);
         }
 
-        // Reutilizar pack de pantalla (evita regenerar Anita al exportar junio / mes completo).
-        $pack = $this->leerCachePack($filtros);
-        if ($pack === null) {
-            $pack = $this->generarYCachearPack($filtros);
-        }
+        $pack = $this->armarPack($filtros);
 
         $resultado = $pack['resultado'];
         $filas = $this->reporteService->aplanarFilasConTotalesFiltradas($resultado, $filtros);
@@ -528,16 +327,6 @@ class MayorConceptoController extends Controller
 
     /**
      * @param  array<string, mixed>  $filtros
-     */
-    private function cachePackKey(array $filtros): string
-    {
-        $userId = (int) (auth()->id() ?? 0);
-
-        return 'mayor_concepto_pack_'.$userId.'_'.MayorConceptoListadoFiltros::firma($filtros);
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
      * @return array{
      *   resultado: array<string, mixed>,
      *   totales: array<string, mixed>,
@@ -546,41 +335,12 @@ class MayorConceptoController extends Controller
      *   auditoria_panel: array<string, mixed>
      * }
      */
-    private function generarYCachearPack(array $filtros): array
+    private function armarPack(array $filtros): array
     {
-        $resultado = $this->reporteService->generarDesdeFiltros($filtros);
-
-        return $this->persistirPackDesdeResultado($resultado, $filtros);
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     * @return array{
-     *   resultado: array<string, mixed>,
-     *   totales: array<string, mixed>,
-     *   resumen: list<array<string, mixed>>,
-     *   resumen_por_cuenta: list<array<string, mixed>>,
-     *   auditoria_panel: array<string, mixed>
-     * }|null
-     */
-    private function leerCachePack(array $filtros): ?array
-    {
-        $pack = Cache::store('file')->get($this->cachePackKey($filtros));
-
-        if (! is_array($pack) || ! isset($pack['resultado'])) {
-            // Limpiar sesión legacy hinchada (formato viejo con resultado completo).
-            $legacy = session(self::SESSION_CACHE_KEY);
-            if (is_array($legacy) && (isset($legacy['resultado']) || isset($legacy['pack']))) {
-                session()->forget(self::SESSION_CACHE_KEY);
-            }
-
-            return null;
-        }
-
-        // La clave de cache ya incluye la firma de los filtros. El marcador de sesión
-        // no puede invalidarla: los contadores de la pantalla regraban la sesión
-        // mientras el POST de generación sigue abierto.
-        return $pack;
+        return $this->armarPackDesdeResultado(
+            $this->reporteService->generarDesdeFiltros($filtros),
+            $filtros
+        );
     }
 
     /**

@@ -54,6 +54,130 @@ final class ComprobanteProveedorPlanCuotasSupport
     }
 
     /**
+     * Deja intactas las cuotas con pago aplicado y junta el saldo pendiente en una sola.
+     * El número de las cuotas pagadas no cambia: la aplicación de Anita apunta a ese número.
+     *
+     * @param  list<array<string, mixed>>  $cuotas  cada una con monto y aplicado
+     * @return array{
+     *     conservadas: list<array<string, mixed>>,
+     *     nueva: array<string, mixed>,
+     *     numeros_borrar: list<int>,
+     *     numeros_actualizar: list<int>
+     * }
+     */
+    public static function planUnificadoConservandoAplicaciones(
+        array $cuotas,
+        float $totalComprobante,
+        int $monedaId,
+        float $cotizacion,
+    ): array {
+        $ordenadas = self::ordenar($cuotas);
+        if ($ordenadas === []) {
+            throw new RuntimeException('El comprobante no tiene cuotas para unificar.');
+        }
+
+        $tol = 0.01;
+        $conservadas = [];
+        $pendientes = [];
+        $numerosBorrar = [];
+        $numerosActualizar = [];
+
+        foreach ($ordenadas as $cuota) {
+            $monto = round(abs(self::monto($cuota['monto'] ?? 0)), 2);
+            $aplicado = round(min($monto, max(0, (float) ($cuota['aplicado'] ?? 0))), 2);
+            $pendiente = round($monto - $aplicado, 2);
+            $numero = (int) ($cuota['numero_cuota'] ?? 0);
+
+            if ($aplicado > $tol) {
+                $conservada = $cuota;
+                $conservada['monto'] = $aplicado;
+                $conservada['numero_cuota'] = $numero;
+                $conservadas[] = $conservada;
+                if (abs($aplicado - $monto) > $tol) {
+                    $numerosActualizar[] = $numero;
+                }
+            }
+            if ($pendiente > $tol) {
+                $fecha = ComprobanteProveedorVencimientoCondicionSupport::fechaYmd($cuota['fechavencimiento'] ?? null);
+                if ($fecha === null) {
+                    throw new RuntimeException('Hay una cuota pendiente sin fecha de vencimiento.');
+                }
+                $pendientes[] = [
+                    'numero_cuota' => $numero,
+                    'fechavencimiento' => $fecha,
+                    'monto' => $pendiente,
+                    'formapago_id' => (int) ($cuota['formapago_id'] ?? 1) ?: 1,
+                ];
+            }
+            if ($aplicado <= $tol) {
+                $numerosBorrar[] = $numero;
+            }
+        }
+
+        if ($pendientes === []) {
+            throw new RuntimeException('No hay saldo pendiente para unificar.');
+        }
+        if (count($pendientes) < 2) {
+            throw new RuntimeException('Ya queda una sola cuota pendiente. No hay nada que unificar.');
+        }
+
+        $sumaConservada = round(array_sum(array_map(
+            static fn (array $cuota): float => (float) $cuota['monto'],
+            $conservadas
+        )), 2);
+        $sumaPendiente = round(array_sum(array_map(
+            static fn (array $cuota): float => (float) $cuota['monto'],
+            $pendientes
+        )), 2);
+        $total = round(abs($totalComprobante), 2);
+        $montoNueva = round($total - $sumaConservada, 2);
+        if ($total > 0 && abs($montoNueva - $sumaPendiente) > ComprobanteProveedorCuotasTotalSupport::TOLERANCIA) {
+            throw new RuntimeException(
+                'No se unifica: el saldo pendiente ('.number_format($sumaPendiente, 2, ',', '.')
+                .') no coincide con lo que falta del total de la factura ('.number_format($montoNueva, 2, ',', '.').').'
+            );
+        }
+        if ($montoNueva <= $tol) {
+            throw new RuntimeException('No hay saldo pendiente para unificar.');
+        }
+
+        $primera = $pendientes[0];
+        $usados = [];
+        foreach ($conservadas as $conservada) {
+            $usados[(int) $conservada['numero_cuota']] = true;
+        }
+        $numeroNueva = $numerosBorrar !== [] ? min($numerosBorrar) : (max(array_merge(
+            array_map(static fn (array $cuota): int => (int) $cuota['numero_cuota'], $conservadas),
+            [0]
+        )) + 1);
+        while (isset($usados[$numeroNueva])) {
+            $numeroNueva++;
+        }
+
+        $nueva = [
+            'numero_cuota' => $numeroNueva,
+            'fechavencimiento' => $primera['fechavencimiento'],
+            'monto' => $total > 0 ? $montoNueva : $sumaPendiente,
+            'moneda_id' => $monedaId,
+            'cotizacion' => $cotizacion,
+            'formapago_id' => (int) $primera['formapago_id'] ?: 1,
+            'detalle' => null,
+            'ordencompra_comprobante_cuota_id' => null,
+        ];
+
+        $plan = $conservadas;
+        $plan[] = $nueva;
+        ComprobanteProveedorCuotasTotalSupport::assertCuadraConTotal($totalComprobante, $plan);
+
+        return [
+            'conservadas' => $conservadas,
+            'nueva' => $nueva,
+            'numeros_borrar' => array_values(array_unique($numerosBorrar)),
+            'numeros_actualizar' => array_values(array_unique($numerosActualizar)),
+        ];
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
      */

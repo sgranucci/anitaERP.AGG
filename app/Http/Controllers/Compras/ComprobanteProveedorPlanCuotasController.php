@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Condicionpago;
 use App\Services\Compras\ComprobanteProveedorPlanCuotasService;
+use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorIngresoEgresoEdicionSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use Illuminate\Http\Request;
@@ -50,7 +51,10 @@ class ComprobanteProveedorPlanCuotasController extends Controller
         can('editar-plan-cuotas-comprobante-proveedor');
 
         $comprobante = $this->comprobante($id);
-        $comprobante->loadMissing('caja_movimientos');
+        $comprobante->loadMissing([
+            'caja_movimientos',
+            'comprobante_proveedor_conceptos.concepto_ivacompras',
+        ]);
         $cotizaciones = $comprobante->comprobante_proveedor_cuotas
             ->pluck('cotizacion')
             ->map(fn ($c) => round((float) $c, 4))
@@ -58,16 +62,25 @@ class ComprobanteProveedorPlanCuotasController extends Controller
             ->sort()
             ->values();
 
+        $resumen = $this->planService->resumenParaEdicion($comprobante);
+
         return view('compras.comprobante_proveedor.plan_cuotas.editar', [
             'data' => $comprobante,
             'etiqueta' => $this->planService->etiqueta($comprobante),
             'cuotas' => $comprobante->comprobante_proveedor_cuotas->sortBy('numero_cuota')->values(),
             'condiciones' => Condicionpago::query()->orderBy('nombre')->get(),
             'cotizaciones_distintas' => $cotizaciones,
-            'impago' => ! ComprobanteProveedorPagoSupport::tienePagosAplicados($id),
+            'impago' => $resumen['impago'],
+            'puede_unificar' => $resumen['puede_unificar'],
+            'advertencia_pagos' => $resumen['advertencia_pagos'],
+            'mensaje_bloqueo' => $resumen['mensaje_bloqueo'],
+            'mensaje_estado' => $resumen['mensaje_estado'],
+            'aplicado_por_cuota' => $resumen['aplicado'],
+            'texto_confirmar_unificar' => $resumen['texto_confirmar_unificar'],
             'bloqueado_ingreso_egreso' => ComprobanteProveedorIngresoEgresoEdicionSupport::es($comprobante),
             'url_ingreso_egreso' => ComprobanteProveedorIngresoEgresoEdicionSupport::urlMovimiento($comprobante),
             'numero_ingreso_egreso' => optional($comprobante->caja_movimientos)->numerotransaccion,
+            'percepciones' => $this->percepciones($comprobante),
         ]);
     }
 
@@ -101,6 +114,19 @@ class ComprobanteProveedorPlanCuotasController extends Controller
         return redirect()
             ->route('editar_plan_cuotas_comprobante_proveedor', $id)
             ->with('mensaje', $mensaje);
+    }
+
+    private function percepciones(Comprobante_Proveedor $comprobante): float
+    {
+        $suma = 0.0;
+        foreach ($comprobante->comprobante_proveedor_conceptos as $linea) {
+            if (! ComprobanteProveedorConceptoIvaTipos::esPercepcion($linea->concepto_ivacompras->tipoconcepto ?? null)) {
+                continue;
+            }
+            $suma += (float) $linea->monto;
+        }
+
+        return round(abs($suma), 2);
     }
 
     private function comprobante(int $id): Comprobante_Proveedor

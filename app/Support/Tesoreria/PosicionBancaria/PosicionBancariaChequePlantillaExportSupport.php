@@ -33,13 +33,34 @@ final class PosicionBancariaChequePlantillaExportSupport
     public function volcarEnSpreadsheet(Spreadsheet $wb, Carbon $fechaPosicion): array
     {
         $aging = new PosicionBancariaChequeAgingSupport();
+        $emitidos = new PosicionBancariaChequeEmitidoSupport();
         $stats = ['hojas' => 0, 'filas' => 0];
 
-        // Precalcular aging por empresa (activos diferidos/blank).
+        // Portfolio de tesorería más cheques propios ya emitidos y todavía diferidos.
         /** @var array<int, array{retenidos:array{count:int,importe:float},transito:array{count:int,importe:float},diferidos:array{count:int,importe:float},por_banco:array<string,array{retenidos:float,transito:float,diferidos:float,total:float}>}> $agingPorEmp */
         $agingPorEmp = [];
+        /** @var array<int, \Illuminate\Support\Collection<int, \App\Models\Tesoreria\PosicionBancariaCheque>> $carteraPorEmp */
+        $carteraPorEmp = [];
         foreach ([1, 2, 3] as $empresaId) {
-            $agingPorEmp[$empresaId] = $aging->resumir($fechaPosicion, null, $empresaId, true);
+            $portfolio = PosicionBancariaCheque::query()
+                ->where('empresa_id', $empresaId)
+                ->where('activo', true)
+                ->where('en_portfolio_posicion', true)
+                ->where(function ($w) {
+                    $w->whereNull('estado')->orWhere('estado', '')->orWhere('estado', ' ');
+                })
+                ->whereIn('banco_canonico', self::BANCOS)
+                ->orderBy('banco_canonico')
+                ->orderBy('fecha_cheque')
+                ->get();
+            $carteraPorEmp[$empresaId] = $portfolio
+                ->concat($emitidos->diferidosNoDuplicados($fechaPosicion, $empresaId, $portfolio))
+                ->sortBy([
+                    ['banco_canonico', 'asc'],
+                    ['fecha_cheque', 'asc'],
+                ])
+                ->values();
+            $agingPorEmp[$empresaId] = $aging->resumir($fechaPosicion, $carteraPorEmp[$empresaId], $empresaId, false);
         }
 
         foreach (self::EMPRESA_HOJA as $empresaId => $nombreHoja) {
@@ -98,17 +119,7 @@ final class PosicionBancariaChequePlantillaExportSupport
                 $ws->getStyle($col.'8')->getFont()->setBold(true);
             }
 
-            $cheques = PosicionBancariaCheque::query()
-                ->where('empresa_id', $empresaId)
-                ->where('activo', true)
-                ->where('en_portfolio_posicion', true)
-                ->where(function ($w) {
-                    $w->whereNull('estado')->orWhere('estado', '')->orWhere('estado', ' ');
-                })
-                ->whereIn('banco_canonico', self::BANCOS)
-                ->orderBy('banco_canonico')
-                ->orderBy('fecha_cheque')
-                ->get();
+            $cheques = $carteraPorEmp[$empresaId];
 
             $corteRet = $fechaPosicion->copy()->subDays(30)->startOfDay();
             $corteHoy = $fechaPosicion->copy()->startOfDay();

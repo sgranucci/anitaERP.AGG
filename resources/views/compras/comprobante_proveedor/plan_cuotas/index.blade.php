@@ -13,6 +13,7 @@
             <div class="card-body">
                 <p class="text-muted">
                     Unifica cuotas, cambia la condición de pago o rearma los vencimientos de un comprobante sin pagos.
+                    Si ya hay un pago aplicado, se pueden unificar las cuotas que siguen impagas: las pagadas quedan como están.
                     El total y la moneda de la factura no se modifican. Todas las cuotas quedan con la cotización de la cabecera.
                     Para cambiar importes, conceptos o la cotización de la factura usá la edición del comprobante.
                 </p>

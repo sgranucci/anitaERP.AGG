@@ -1109,7 +1109,64 @@
             <button type="button" class="btn btn-outline-primary btn-sm" id="oc_btn_agregar_comprobante"><i class="fa fa-plus"></i> Agregar comprobante</button>
         @endif
     </div>
-    <p class="text-muted small">Agregue cada comprobante esperado y defina sus cuotas con el asistente por condición de pago o de forma manual.</p>
+    <p class="text-muted small">Agregue cada comprobante esperado, o genere varios iguales de una vez. Después puede ajustar las cuotas de cada fila.</p>
+
+    @if (!$soloLectura)
+        <div class="border rounded px-3 pt-3 pb-2 mb-3" id="oc-generar-comprobantes" style="background:#F8FBFD;">
+            <div class="d-flex flex-wrap justify-content-between align-items-baseline mb-2">
+                <strong>Generar N comprobantes iguales</strong>
+                <span class="text-muted small">Un comprobante por cuota, en partes iguales</span>
+            </div>
+            <div class="form-row align-items-end">
+                <div class="form-group col-6 col-md-1">
+                    <label for="oc_gen_comp_cantidad">Cantidad</label>
+                    <input type="number" min="1" max="60" id="oc_gen_comp_cantidad" class="form-control form-control-sm" placeholder="24" title="Cantidad de comprobantes a generar">
+                </div>
+                <div class="form-group col-6 col-md-2">
+                    <label for="oc_gen_comp_fecha">Fecha 1.er vencimiento</label>
+                    <input type="date" id="oc_gen_comp_fecha" class="form-control form-control-sm" title="Vencimiento del primer comprobante; en mensual los siguientes suman 1 mes">
+                </div>
+                <div class="form-group col-6 col-md-2">
+                    <label for="oc_gen_comp_monto">Monto total</label>
+                    <input type="number" step="0.01" min="0" id="oc_gen_comp_monto" class="form-control form-control-sm" title="Importe a repartir entre los N comprobantes">
+                </div>
+                <div class="form-group col-6 col-md-1">
+                    <label for="oc_gen_comp_moneda">Moneda</label>
+                    <select id="oc_gen_comp_moneda" class="form-control form-control-sm">
+                        @foreach ($moneda_query as $moneda)
+                            <option value="{{ $moneda->id }}">{{ $moneda->abreviatura }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="form-group col-6 col-md-2">
+                    <label for="oc_gen_comp_tipo">Tipo</label>
+                    <select id="oc_gen_comp_tipo" class="form-control form-control-sm">
+                        @foreach ($tipos_comprobante as $tc)
+                            <option value="{{ $tc['valor'] }}">{{ $tc['nombre'] }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="form-group col-6 col-md-2">
+                    <label for="oc_gen_comp_formapago">Forma de pago</label>
+                    <select id="oc_gen_comp_formapago" class="form-control form-control-sm" title="Forma de pago de la cuota única de cada comprobante">
+                        @foreach ($formapago_query as $fp)
+                            <option value="{{ $fp->id }}">{{ $fp->nombre }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="form-group col-12 col-md-2">
+                    <label for="oc_gen_comp_detalle">Detalle</label>
+                    <input type="text" id="oc_gen_comp_detalle" class="form-control form-control-sm" maxlength="2000" placeholder="Opcional">
+                </div>
+            </div>
+            <div class="d-flex flex-wrap align-items-center mb-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="oc_gen_comp_misma">Generar (misma fecha)</button>
+                <button type="button" class="btn btn-outline-danger btn-sm ml-1" id="oc_gen_comp_mensual">Generar mensuales</button>
+                <span class="text-muted small ml-2" id="oc_gen_comp_preview"></span>
+            </div>
+            <p class="text-muted small mb-2">Igual que al armar cuotas de un comprobante: el monto se parte en N importes iguales y cada parte es una factura con una sola cuota. <em>Mensual</em> suma un mes entre vencimientos. Los comprobantes pendientes se reemplazan; los ya cargados se conservan.</p>
+        </div>
+    @endif
 
     <div class="table-responsive mb-3">
         <table class="table table-bordered table-sm" id="oc_tabla_comprobantes_resumen">

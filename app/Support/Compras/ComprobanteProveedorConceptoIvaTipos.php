@@ -148,4 +148,16 @@ final class ComprobanteProveedorConceptoIvaTipos
     {
         return strtoupper((string) $tipoconcepto) === self::PERCEPCION_IIBB;
     }
+
+    /** IVA, IIBB, municipales, SIRCREB y aduana. No incluye el IVA de la factura ni retenciones. */
+    public static function esPercepcion(?string $tipoconcepto): bool
+    {
+        return in_array(strtoupper((string) $tipoconcepto), [
+            self::PERCEPCION_IVA,
+            self::PERCEPCION_IIBB,
+            'M',
+            self::PERCEPCION_SIRCREB,
+            'A',
+        ], true);
+    }
 }

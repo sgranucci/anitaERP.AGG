@@ -1881,9 +1881,10 @@ class OrdencompraGestionService
     }
 
     /**
-     * Upsert de comprobantes a venir y cuotas. No hace delete-all/recreate:
-     * las facturas de proveedor referencian ordencompra_comprobante_id y
-     * ordencompra_comprobante_cuota_id (FK RESTRICT).
+     * Upsert de comprobantes a venir y cuotas. No hace delete-all/recreate.
+     * Si una factura ya apunta a un comprobante o a cuotas que este guardado
+     * deja afuera, se suelta ese vínculo (la factura sigue en la OC) y después
+     * se borra lo que ya no está en el plan.
      *
      * @param  array<string, mixed>  $payload
      */
@@ -1955,13 +1956,12 @@ class OrdencompraGestionService
             ->all();
 
         if ($idsCompBorrar !== []) {
-            $this->assertComprobantesOcEliminables($idsCompBorrar);
             $cuotasBorrar = Ordencompra_Comprobante_Cuota::query()
                 ->whereIn('ordencompra_comprobante_id', $idsCompBorrar)
                 ->pluck('id')
                 ->map(static fn ($id) => (int) $id)
                 ->all();
-            $this->assertCuotasOcEliminables($cuotasBorrar);
+            $this->desvincularComprobantesOcDeFacturas($idsCompBorrar, $cuotasBorrar);
             if ($cuotasBorrar !== []) {
                 Ordencompra_Comprobante_Cuota::query()->whereIn('id', $cuotasBorrar)->delete();
             }
@@ -2031,68 +2031,47 @@ class OrdencompraGestionService
             ->all();
 
         if ($idsBorrar !== []) {
-            $this->assertCuotasOcEliminables($idsBorrar);
+            $this->desvincularCuotasOcDeFacturas($idsBorrar);
             Ordencompra_Comprobante_Cuota::query()->whereIn('id', $idsBorrar)->delete();
         }
     }
 
     /**
-     * @param  list<int>  $cuotaIds
+     * La factura conserva sus propias cuotas. Solo se suelta el puntero a la cuota de la OC que se va a borrar.
      *
-     * @throws \InvalidArgumentException
+     * @param  list<int>  $cuotaIds
      */
-    private function assertCuotasOcEliminables(array $cuotaIds): void
+    private function desvincularCuotasOcDeFacturas(array $cuotaIds): void
     {
         $cuotaIds = array_values(array_filter(array_map('intval', $cuotaIds), static fn (int $id) => $id > 0));
         if ($cuotaIds === []) {
             return;
         }
 
-        $referidas = DB::table('comprobante_proveedor_cuota')
+        DB::table('comprobante_proveedor_cuota')
             ->whereIn('ordencompra_comprobante_cuota_id', $cuotaIds)
-            ->distinct()
-            ->pluck('comprobante_proveedor_id')
-            ->map(static fn ($id) => (int) $id)
-            ->filter(static fn (int $id) => $id > 0)
-            ->values()
-            ->all();
-
-        if ($referidas !== []) {
-            throw new \InvalidArgumentException(
-                'No se pueden eliminar o regenerar cuotas de la OC que ya están vinculadas a facturas de proveedor (ids '
-                .implode(', ', $referidas)
-                .'). Modifique fechas/montos/forma de pago sobre las cuotas existentes, o anule/elimine la factura vinculada.'
-            );
-        }
+            ->update(['ordencompra_comprobante_cuota_id' => null]);
     }
 
     /**
-     * @param  list<int>  $comprobanteIds
+     * Si el comprobante a venir se elimina, la factura sigue asociada a la orden
+     * y deja de apuntar a ese comprobante y a sus cuotas.
      *
-     * @throws \InvalidArgumentException
+     * @param  list<int>  $comprobanteIds
+     * @param  list<int>  $cuotaIds
      */
-    private function assertComprobantesOcEliminables(array $comprobanteIds): void
+    private function desvincularComprobantesOcDeFacturas(array $comprobanteIds, array $cuotaIds): void
     {
         $comprobanteIds = array_values(array_filter(array_map('intval', $comprobanteIds), static fn (int $id) => $id > 0));
         if ($comprobanteIds === []) {
             return;
         }
 
-        $referidos = DB::table('comprobante_proveedor')
-            ->whereIn('ordencompra_comprobante_id', $comprobanteIds)
-            ->pluck('id')
-            ->map(static fn ($id) => (int) $id)
-            ->filter(static fn (int $id) => $id > 0)
-            ->values()
-            ->all();
+        $this->desvincularCuotasOcDeFacturas($cuotaIds);
 
-        if ($referidos !== []) {
-            throw new \InvalidArgumentException(
-                'No se pueden eliminar comprobantes a venir de la OC que ya están vinculados a facturas de proveedor (ids '
-                .implode(', ', $referidos)
-                .').'
-            );
-        }
+        DB::table('comprobante_proveedor')
+            ->whereIn('ordencompra_comprobante_id', $comprobanteIds)
+            ->update(['ordencompra_comprobante_id' => null]);
     }
 
     private function regenerarCondicionesContratacion(int $ordencompraId): void

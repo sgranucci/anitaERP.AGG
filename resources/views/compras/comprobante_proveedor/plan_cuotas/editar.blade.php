@@ -49,8 +49,15 @@
                             <a href="{{ $url_ingreso_egreso }}" class="alert-link">Abrir el movimiento</a>
                         @endif
                     </div>
-                @elseif (! $impago)
-                    <div class="alert alert-danger">Este comprobante tiene pagos aplicados. No se puede rearmar el plan.</div>
+                @elseif (! empty($mensaje_bloqueo))
+                    <div class="alert alert-danger">{{ $mensaje_bloqueo }}</div>
+                @elseif (! empty($mensaje_estado))
+                    <div class="alert alert-info">{{ $mensaje_estado }}</div>
+                @elseif (! empty($advertencia_pagos))
+                    <div class="alert alert-warning">
+                        Hay cuotas con pagos aplicados: esas quedan como están, con su vencimiento y su aplicación.
+                        Unificar junta en una sola cuota el saldo que todavía no se pagó.
+                    </div>
                 @endif
 
                 <form method="post" action="{{ route('actualizar_plan_cuotas_comprobante_proveedor', $data->id) }}" id="form-plan-cuotas">
@@ -68,8 +75,8 @@
                             </select>
                         </div>
                         <div class="col-md-7 mt-2">
-                            <button type="submit" name="accion" value="unificar" class="btn btn-primary" @disabled(! $impago || ! empty($bloqueado_ingreso_egreso))
-                                onclick="return confirm('Se unifica en una cuota con el vencimiento de la primera, la moneda y la cotización de la factura. La condición de pago queda vacía para que esa fecha no se recalcule.');">
+                            <button type="submit" name="accion" value="unificar" class="btn btn-primary" @disabled(empty($puede_unificar) || ! empty($bloqueado_ingreso_egreso))
+                                onclick='return confirm(@json($texto_confirmar_unificar));'>
                                 Unificar en 1 cuota
                             </button>
                             <button type="submit" name="accion" value="condicion" class="btn btn-outline-primary" @disabled(! $impago || ! empty($bloqueado_ingreso_egreso))>
@@ -97,21 +104,37 @@
                                     <button type="button" class="btn btn-outline-primary btn-sm" id="js-cuotas-mensual">Generar cuotas mensuales</button>
                                 </div>
                             </div>
+                            <div class="mt-2">
+                                @if ($percepciones > 0.009)
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="js-percepciones-primera">Percepciones en la 1ª cuota y prorratear</button>
+                                @endif
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="js-prorratear-saldo">Prorratear saldo en las cuotas siguientes</button>
+                            </div>
                             <p class="text-muted small mb-0 mt-2">
                                 Reparte el total de la factura en partes iguales, igual que en el comprobante a venir de la orden de compra.
                                 Misma fecha repite el vencimiento en todas las filas; mensual suma un mes entre cuotas.
-                                La última cuota absorbe los centavos. Después se pueden ajustar importes y fechas, y guardar el plan manual.
+                                La última cuota absorbe los centavos.
+                                @if ($percepciones > 0.009)
+                                    Las percepciones de esta factura suman <strong>{{ number_format($percepciones, 2, ',', '.') }} {{ $data->monedas->abreviatura ?? '' }}</strong>.
+                                    «Percepciones en la 1ª cuota» deja ese importe en la primera, junto con su parte, y reparte el saldo sin percepciones en todas las cuotas.
+                                @endif
+                                «Prorratear saldo» respeta el importe que hayas cargado en la primera y reparte lo que falta del total en las demás. Las fechas no cambian.
+                                Después se guarda el plan manual.
                             </p>
                         </div>
                     @endif
 
                     <table class="table table-sm table-bordered" id="tabla-plan-cuotas"
-                        data-total="{{ number_format(abs((float) $data->total), 2, '.', '') }}">
+                        data-total="{{ number_format(abs((float) $data->total), 2, '.', '') }}"
+                        data-percepciones="{{ number_format((float) $percepciones, 2, '.', '') }}">
                         <thead style="background:#85C1E9;color:#17202A;">
                             <tr>
                                 <th style="width:5rem;">Cuota</th>
                                 <th>Vencimiento</th>
                                 <th class="text-right">Importe</th>
+                                @if (! $impago)
+                                    <th class="text-right">Aplicado</th>
+                                @endif
                                 <th></th>
                             </tr>
                         </thead>
@@ -128,6 +151,9 @@
                                             value="{{ number_format((float) $cuota->monto, 2, '.', '') }}" @disabled(! $impago)>
                                         <input type="hidden" name="cuota_formapago_id[]" value="{{ (int) ($cuota->formapago_id ?: 1) }}">
                                     </td>
+                                    @if (! $impago)
+                                        <td class="text-right align-middle">{{ number_format((float) ($aplicado_por_cuota[$cuota->id] ?? 0), 2, ',', '.') }}</td>
+                                    @endif
                                     <td class="text-center">
                                         @if ($impago && empty($bloqueado_ingreso_egreso))
                                             <button type="button" class="btn btn-sm btn-outline-danger js-quitar-cuota">Quitar</button>
@@ -154,6 +180,7 @@
     var tabla = document.getElementById('tabla-plan-cuotas');
     if (!tabla) return;
     var totalFactura = Math.round((parseFloat(tabla.getAttribute('data-total')) || 0) * 100) / 100;
+    var percepciones = Math.round((parseFloat(tabla.getAttribute('data-percepciones')) || 0) * 100) / 100;
     var resumen = document.getElementById('js-resumen-plan-cuotas');
 
     function renumerar() {
@@ -218,17 +245,73 @@
         return first.getFullYear() + '-' + (mm < 10 ? '0' : '') + mm + '-' + (dd < 10 ? '0' : '') + dd;
     }
 
-    function montosIguales(n, total) {
-        var cents = Math.round(total * 100);
+    function montosIgualesCents(n, cents) {
         var base = Math.floor(cents / n);
         var out = [];
         var used = 0;
         for (var i = 0; i < n - 1; i++) {
-            out.push((base / 100).toFixed(2));
+            out.push(base);
             used += base;
         }
-        out.push(((cents - used) / 100).toFixed(2));
+        out.push(cents - used);
         return out;
+    }
+
+    function montosIguales(n, total) {
+        return montosIgualesCents(n, Math.round(total * 100)).map(function (cents) {
+            return (cents / 100).toFixed(2);
+        });
+    }
+
+    function filasPlan() {
+        return Array.prototype.slice.call(tabla.querySelectorAll('tbody tr'));
+    }
+
+    function escribirMontos(filas, centsPorFila) {
+        filas.forEach(function (tr, i) {
+            var input = tr.querySelector('input[name="cuota_monto[]"]');
+            if (input) input.value = (centsPorFila[i] / 100).toFixed(2);
+        });
+        actualizarResumen();
+    }
+
+    function prorratearSaldo() {
+        var filas = filasPlan();
+        if (filas.length < 2) {
+            alert('Hacen falta al menos dos cuotas para prorratear el saldo.');
+            return;
+        }
+        var primera = filas[0].querySelector('input[name="cuota_monto[]"]');
+        var montoPrimera = Math.round(((primera && parseFloat(primera.value)) || 0) * 100);
+        var totalCents = Math.round(totalFactura * 100);
+        if (montoPrimera <= 0) {
+            alert('Indique el importe de la primera cuota.');
+            return;
+        }
+        if (montoPrimera >= totalCents) {
+            alert('La primera cuota tiene que ser menor que el total de la factura.');
+            return;
+        }
+        var resto = montosIgualesCents(filas.length - 1, totalCents - montoPrimera);
+        var cents = [montoPrimera].concat(resto);
+        escribirMontos(filas, cents);
+    }
+
+    function percepcionesEnPrimera() {
+        var filas = filasPlan();
+        if (filas.length < 2) {
+            alert('Generá las cuotas y después pasá las percepciones a la primera.');
+            return;
+        }
+        var percCents = Math.round(percepciones * 100);
+        var totalCents = Math.round(totalFactura * 100);
+        if (percCents <= 0 || percCents >= totalCents) {
+            alert('Esta factura no tiene percepciones para pasar a la primera cuota.');
+            return;
+        }
+        var partes = montosIgualesCents(filas.length, totalCents - percCents);
+        partes[0] += percCents;
+        escribirMontos(filas, partes);
     }
 
     function generar(mensual) {
@@ -275,6 +358,8 @@
     });
     document.getElementById('js-cuotas-misma-fecha')?.addEventListener('click', function () { generar(false); });
     document.getElementById('js-cuotas-mensual')?.addEventListener('click', function () { generar(true); });
+    document.getElementById('js-prorratear-saldo')?.addEventListener('click', prorratearSaldo);
+    document.getElementById('js-percepciones-primera')?.addEventListener('click', percepcionesEnPrimera);
     tabla.addEventListener('click', function (ev) {
         var btn = ev.target.closest('.js-quitar-cuota');
         if (!btn) return;

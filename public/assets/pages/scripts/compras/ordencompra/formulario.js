@@ -1051,6 +1051,8 @@ $(function () {
 	var ocProveedorFormapagoId = null;
 	/** Se intenta precargar el comprobante default hasta tener total (>0) tras elegir proveedor. */
 	var ocAutocompPendiente = false;
+	/** Último monto que el generador escribió solo, para no pisar un importe tipeado a mano. */
+	var ocGenCompMontoAuto = null;
 
 	function ocMonedaAbrev(monedaId) {
 		var m = ocMonedas.find(function (x) { return String(x.id) === String(monedaId); });
@@ -1710,6 +1712,7 @@ $(function () {
 		ocParseComprobantesFromHidden();
 		ocRenderTablaComprobantes();
 		ocSyncComprobantesToHidden();
+		ocPrefillGeneradorComprobantes();
 	}
 
 	// Al abrir el formulario con un proveedor ya elegido (crear con requisición/plantilla o editar
@@ -1890,6 +1893,212 @@ $(function () {
 		});
 	});
 
+	function ocMontoSugeridoGeneradorComprobantes() {
+		var total = ocRound2Money(ocTotalesReferencia.total);
+		var midRef = parseInt(ocTotalesReferencia.moneda_id, 10) || 1;
+		if (!(total > 0)) {
+			return null;
+		}
+		var sumCargado = 0;
+		ocComprobantesState.forEach(function (c) {
+			if (String((c && c.estado) || '').toUpperCase() !== 'CARGADO') {
+				return;
+			}
+			if (parseInt(c.moneda_id, 10) === midRef && c.monto != null) {
+				sumCargado += parseFloat(c.monto) || 0;
+			}
+		});
+		return ocRound2Money(Math.max(0, total - sumCargado));
+	}
+
+	function ocActualizarPreviewGeneradorComprobantes() {
+		var $prev = $('#oc_gen_comp_preview');
+		if (!$prev.length) {
+			return;
+		}
+		var n = parseInt($('#oc_gen_comp_cantidad').val(), 10) || 0;
+		var total = ocRound2Money(parseFloat(String($('#oc_gen_comp_monto').val() || '').replace(/\s/g, '').replace(',', '.')) || 0);
+		var mon = parseInt($('#oc_gen_comp_moneda').val(), 10) || 1;
+		if (n < 1 || total <= 0) {
+			$prev.text('');
+			return;
+		}
+		var montos = ocMontosCuotasIguales(n, total);
+		if (!montos.length) {
+			$prev.text('');
+			return;
+		}
+		var cada = montos[0];
+		var ultimo = montos[montos.length - 1];
+		var txt = 'Cada uno: ' + ocFmtEsAr(cada) + ' ' + ocMonedaAbrev(mon);
+		if (Math.abs(ultimo - cada) >= 0.01) {
+			txt += ' (el último ' + ocFmtEsAr(ultimo) + ')';
+		}
+		txt += ' · 1 cuota';
+		$prev.text(txt);
+	}
+
+	function ocPrefillGeneradorComprobantes() {
+		if (!$('#oc_gen_comp_monto').length) {
+			return;
+		}
+		var $m = $('#oc_gen_comp_monto');
+		var actual = String($m.val() || '').trim();
+		var actualNum = parseFloat(actual.replace(/\s/g, '').replace(',', '.'));
+		var sug = ocMontoSugeridoGeneradorComprobantes();
+		if (sug != null && sug > 0 && (actual === '' || (ocGenCompMontoAuto != null && Math.abs(actualNum - ocGenCompMontoAuto) < 0.001))) {
+			ocGenCompMontoAuto = sug;
+			$m.val(String(sug));
+		}
+		var $f = $('#oc_gen_comp_fecha');
+		if ($f.length && !String($f.val() || '').trim()) {
+			$f.val(($('#fecha').val() || '').substring(0, 10));
+		}
+		var $mon = $('#oc_gen_comp_moneda');
+		if ($mon.length && !$mon.data('usuario') && ocTotalesReferencia.moneda_id) {
+			$mon.val(String(ocTotalesReferencia.moneda_id));
+		}
+		var $fp = $('#oc_gen_comp_formapago');
+		if ($fp.length && !$fp.data('usuario') && ocProveedorFormapagoId) {
+			$fp.val(String(ocProveedorFormapagoId));
+		}
+		ocActualizarPreviewGeneradorComprobantes();
+	}
+
+	function ocLeerParametrosGeneradorComprobantes(mensual) {
+		var n = parseInt($('#oc_gen_comp_cantidad').val(), 10) || 0;
+		if (n < 1 || n > 60) {
+			alert('Indique una cantidad entre 1 y 60.');
+			return null;
+		}
+		var total = ocRound2Money(parseFloat(String($('#oc_gen_comp_monto').val() || '').replace(/\s/g, '').replace(',', '.')) || 0);
+		if (total <= 0) {
+			alert('Indique el monto total a repartir.');
+			return null;
+		}
+		var fecha0 = ($('#oc_gen_comp_fecha').val() || '').substring(0, 10);
+		if (!fecha0) {
+			fecha0 = ($('#fecha').val() || '').substring(0, 10);
+		}
+		if (!fecha0) {
+			alert('Indique la fecha del primer vencimiento.');
+			return null;
+		}
+		var fp = parseInt($('#oc_gen_comp_formapago').val(), 10) || 0;
+		if (fp <= 0) {
+			fp = ocPrimerFormapagoId();
+		}
+		if (fp <= 0) {
+			alert('Seleccione la forma de pago de la cuota.');
+			return null;
+		}
+		return {
+			n: n,
+			total: total,
+			fecha0: fecha0,
+			mensual: !!mensual,
+			tipo: $('#oc_gen_comp_tipo').val() || 'FACTURA',
+			monedaId: parseInt($('#oc_gen_comp_moneda').val(), 10) || 1,
+			formapagoId: fp,
+			detalle: String($('#oc_gen_comp_detalle').val() || '').trim()
+		};
+	}
+
+	function ocGenerarComprobantesIguales(mensual) {
+		if (!$('#oc_gen_comp_cantidad').length || ocGenerarComprobantesIguales.enCurso) {
+			return;
+		}
+		var params = ocLeerParametrosGeneradorComprobantes(mensual);
+		if (!params) {
+			return;
+		}
+		var conservados = [];
+		var pendientes = 0;
+		ocComprobantesState.forEach(function (c) {
+			if (String((c && c.estado) || 'PENDIENTE').toUpperCase() === 'CARGADO') {
+				conservados.push(c);
+			} else {
+				pendientes += 1;
+			}
+		});
+		if (pendientes > 0) {
+			var msg = pendientes === 1
+				? 'Se va a reemplazar 1 comprobante pendiente por los ' + params.n + ' nuevos. Los ya cargados se conservan.'
+				: 'Se van a reemplazar ' + pendientes + ' comprobantes pendientes por los ' + params.n + ' nuevos. Los ya cargados se conservan.';
+			if (!window.confirm(msg + ' ¿Continuar?')) {
+				return;
+			}
+		}
+		var montos = ocMontosCuotasIguales(params.n, params.total);
+		var $btns = $('#oc_gen_comp_misma, #oc_gen_comp_mensual').prop('disabled', true);
+		ocGenerarComprobantesIguales.enCurso = true;
+
+		function aplicar(cot) {
+			var nuevos = [];
+			for (var i = 0; i < params.n; i++) {
+				var fv = params.mensual ? ocYmdAddMonths(params.fecha0, i) : params.fecha0;
+				var etiqueta = 'Cuota ' + (i + 1);
+				var det = params.detalle ? params.detalle + ' — ' + etiqueta : etiqueta;
+				nuevos.push({
+					tipocomprobante: params.tipo,
+					fechavencimiento: fv,
+					monto: montos[i],
+					moneda_id: params.monedaId,
+					cotizacion: cot,
+					detalle: det,
+					condicionpago_id: null,
+					cantidadcuota: 1,
+					estado: 'PENDIENTE',
+					cuotas: [{
+						fechavencimiento: fv,
+						monto: montos[i],
+						moneda_id: params.monedaId,
+						cotizacion: cot,
+						formapago_id: params.formapagoId,
+						detalle: det
+					}]
+				});
+			}
+			ocComprobantesState = conservados.concat(nuevos);
+			ocSyncComprobantesToHidden();
+			ocRenderTablaComprobantes();
+		}
+
+		function terminar() {
+			ocGenerarComprobantesIguales.enCurso = false;
+			$btns.prop('disabled', false);
+		}
+
+		var fechaCot = ($('#fecha').val() || '').substring(0, 10);
+		if (!fechaCot || params.monedaId === ocMonedaPesoId) {
+			aplicar(1);
+			terminar();
+			return;
+		}
+		$.get(carpetaBase + '/compras/ordencompra/cotizacion-moneda-fecha', {
+			fecha: fechaCot,
+			moneda_id: params.monedaId
+		}).done(function (res) {
+			var cot = res && res.cotizacion != null ? parseFloat(res.cotizacion) : 1;
+			aplicar(!Number.isNaN(cot) && cot > 0 ? cot : 1);
+		}).fail(function () {
+			aplicar(1);
+		}).always(terminar);
+	}
+
+	$('#oc_gen_comp_misma').on('click', function () {
+		ocGenerarComprobantesIguales(false);
+	});
+	$('#oc_gen_comp_mensual').on('click', function () {
+		ocGenerarComprobantesIguales(true);
+	});
+	$(document).on('input change', '#oc_gen_comp_cantidad, #oc_gen_comp_monto, #oc_gen_comp_moneda', function () {
+		ocActualizarPreviewGeneradorComprobantes();
+	});
+	$('#oc_gen_comp_moneda, #oc_gen_comp_formapago').on('change', function () {
+		$(this).data('usuario', 1);
+	});
+
 	$('#oc_cuotas_agregar_fila').on('click', function () {
 		var idx = parseInt($('#oc_cuotas_comp_idx').val(), 10);
 		var c = ocComprobantesState[idx];
@@ -1995,6 +2204,7 @@ $(function () {
 				ocTotalesReferencia.total = ocRound2Money(parseFloat(res.total) || 0);
 				ocTotalesReferencia.moneda_id = parseInt(res.moneda_id, 10) || 1;
 				ocIntentarPrecargaComprobanteDefault();
+				ocPrefillGeneradorComprobantes();
 			}
 			$('#oc-tot-mon-abrev').text(res.moneda_abrev || '—');
 			$('#oc-tot-final-moneda').text(res.moneda_abrev || '—');
@@ -2732,6 +2942,7 @@ $(function () {
 			ocAutocompPendiente = true;
 			ocIntentarPrecargaComprobanteDefault();
 		}
+		ocPrefillGeneradorComprobantes();
 	}
 
 	function ocAplicarPlantillaRequisicion(id) {
