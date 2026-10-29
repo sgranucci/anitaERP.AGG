@@ -186,6 +186,13 @@ class PuntoventaAnitaSyncService
                 if ($existente->trashed()) {
                     $existente->restore();
                 }
+                // Anita Crown marca fiscal F/N puntos que ARCA tiene como CAE o CAEA.
+                // No pisar un modo electrónico ya alineado con ARCA.
+                $modoActual = strtoupper(trim((string) $existente->modofacturacion));
+                $modoAnita = strtoupper(trim((string) ($datos['modofacturacion'] ?? '')));
+                if (in_array($modoActual, ['C', 'A'], true) && $modoAnita === 'M') {
+                    $datos['modofacturacion'] = $modoActual;
+                }
                 $this->puntoventaRepository->update($datos, $existente->id, false);
                 DB::commit();
 
