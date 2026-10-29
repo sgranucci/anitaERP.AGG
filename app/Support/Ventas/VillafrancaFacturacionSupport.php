@@ -24,12 +24,21 @@ final class VillafrancaFacturacionSupport
     /**
      * Decimales al aplicar coeficiente de división (Villafranca / Bierzo).
      * Anita a-comprob.c: Round(cantidad|cant_kilo|pieza, 1) — no DECIMAL_CANTIDAD (2).
+     * Round de Anita es floor(x * 10^n + 0.5) / 10^n. PHP round() sube
+     * 136.20 * 0.75 (102.14999…) a 102.20; Anita lo deja en 102.10.
+     * Pedido, remito y mostrador usan este método.
      */
     public const DECIMALES_CANTIDAD_DIVISION = 1;
 
     public static function redondearCantidadDivision(float $valor): float
     {
-        return round($valor, self::DECIMALES_CANTIDAD_DIVISION);
+        if ($valor < 0) {
+            return -self::redondearCantidadDivision(-$valor);
+        }
+
+        $factor = 10 ** self::DECIMALES_CANTIDAD_DIVISION;
+
+        return floor($valor * $factor + 0.5) / $factor;
     }
 
     public static function esReparto101($pedido): bool

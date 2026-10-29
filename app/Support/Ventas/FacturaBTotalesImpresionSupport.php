@@ -7,12 +7,15 @@ namespace App\Support\Ventas;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 
 /**
- * Pie de factura letra B: muestra percepción IVA (RG 2126 no categorizado)
- * y percepción IIBB CABA cuando el comprobante las tiene.
+ * Pie de factura letra B: subtotal y descuento (con IVA, como el renglón),
+ * percepción a no categorizado (RG 2126, rótulo «Perc.Iva no categ.») y percepción IIBB CABA cuando
+ * el comprobante las tiene. Gravado e IVA del pie no se imprimen: el IVA
+ * va en el precio y en la leyenda de transparencia.
  */
 final class FacturaBTotalesImpresionSupport
 {
-    public const ETIQUETA_PERCEPCION_IVA = 'Percepcion IVA';
+    /** RG 2126. No es la percepción IVA del 3 % (RG 5329). */
+    public const ETIQUETA_PERCEPCION_IVA = 'Perc.Iva no categ.';
 
     public const ETIQUETA_PERCEPCION_IIBB_CABA = 'Percepcion IIBB CABA';
 
@@ -22,12 +25,16 @@ final class FacturaBTotalesImpresionSupport
     public static function mostrar(array $fila): bool
     {
         $concepto = (string) ($fila['concepto'] ?? '');
-        if ($concepto === 'Total') {
+        if ($concepto === 'Total' || $concepto === 'Subtotal') {
             return true;
         }
 
         if (abs((float) ($fila['importe'] ?? 0)) < 0.00001) {
             return false;
+        }
+
+        if (str_starts_with($concepto, 'Descuento')) {
+            return true;
         }
 
         return self::esPercepcionNoCategorizado($fila) || self::esPercepcionIibbCaba($fila);
@@ -68,7 +75,70 @@ final class FacturaBTotalesImpresionSupport
             ];
         }
 
+        return self::preciosConIvaIncluido($conceptos, $lineas);
+    }
+
+    /**
+     * El renglón de la B se imprime con IVA. Subtotal y descuento porcentual
+     * están guardados en neto: se llevan a la misma base para que cierren con el total.
+     *
+     * @param  iterable<int, mixed>  $conceptos
+     * @param  list<array{concepto: string, tasa: float, importe: float, es_total: bool}>  $lineas
+     * @return list<array{concepto: string, tasa: float, importe: float, es_total: bool}>
+     */
+    private static function preciosConIvaIncluido(iterable $conceptos, array $lineas): array
+    {
+        $tasa = self::tasaIvaUnica($conceptos);
+        if ($tasa === null || $tasa <= 0.00001) {
+            return $lineas;
+        }
+
+        $factor = 1 + ($tasa / 100);
+        $exento = 0.0;
+        foreach ($conceptos as $item) {
+            $fila = self::filaComoArray($item);
+            $concepto = (string) ($fila['concepto'] ?? '');
+            if ($concepto === 'Exento' || $concepto === 'No Gravado') {
+                $exento += (float) ($fila['importe'] ?? 0);
+            }
+        }
+
+        foreach ($lineas as $i => $linea) {
+            $concepto = (string) $linea['concepto'];
+            if ($concepto === 'Subtotal') {
+                $gravado = (float) $linea['importe'] - $exento;
+                $lineas[$i]['importe'] = round($exento + ($gravado * $factor), 2);
+            } elseif (str_starts_with($concepto, 'Descuento') && abs((float) $linea['tasa']) > 0.00001) {
+                $lineas[$i]['importe'] = round((float) $linea['importe'] * $factor, 2);
+            }
+        }
+
         return $lineas;
+    }
+
+    /**
+     * @param  iterable<int, mixed>  $conceptos
+     */
+    private static function tasaIvaUnica(iterable $conceptos): ?float
+    {
+        $tasa = null;
+        foreach ($conceptos as $item) {
+            $fila = self::filaComoArray($item);
+            $concepto = (string) ($fila['concepto'] ?? '');
+            if (! preg_match('/^Iva\s+([0-9]+(?:\.[0-9]+)?)%/i', $concepto, $coincidencias)) {
+                continue;
+            }
+            if (abs((float) ($fila['importe'] ?? 0)) < 0.00001) {
+                continue;
+            }
+            $actual = (float) $coincidencias[1];
+            if ($tasa !== null && abs($tasa - $actual) > 0.00001) {
+                return null;
+            }
+            $tasa = $actual;
+        }
+
+        return $tasa;
     }
 
     /**

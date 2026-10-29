@@ -949,6 +949,13 @@ final class IngresoEgresoAnitaTesmovSupport
         }
 
         if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            // Anita viejo imprime prom_nombre solo si pag_mov_ext=I y pag_entregado_a va en blanco.
+            // E + nombre en entregado_a es el pago sin padrón (pag_pro 000000). Pesos = pag_cod_mon_me 0.
+            $movExt = self::movExtPagoCrown((string) $ctx['proveedorCodigo']);
+            $entregado = $movExt === 'I'
+                ? ' '
+                : (trim((string) $ctx['entregadoA']) !== '' ? (string) $ctx['entregadoA'] : ' ');
+            $codMonMe = self::codMonMeCrown($movimiento);
             $raw = (new ApiAnita)->apiCallEscritura([
                 'tabla' => 'pago',
                 'acc' => 'insert',
@@ -976,7 +983,8 @@ final class IngresoEgresoAnitaTesmovSupport
                     pag_vendedor,
                     pag_usuario,
                     pag_fecha_ult_act,
-                    pag_empresa',
+                    pag_empresa,
+                    pag_empr_cont',
                 'valores' => "
                     '".$ctx['proveedorCodigo']."',
                     '".$ctx['fecha']."',
@@ -985,11 +993,11 @@ final class IngresoEgresoAnitaTesmovSupport
                     '".$ctx['total']."',
                     '".$ctx['cotizacion']."',
                     '".self::esc($ctx['detalle'])."',
-                    '".self::esc($ctx['entregadoA'])."',
+                    '".self::esc($entregado)."',
                     '".self::esc($ctx['letra'])."',
                     '".$ctx['sucursal']."',
-                    'E',
-                    '2',
+                    '".self::esc($movExt)."',
+                    '".$codMonMe."',
                     '0',
                     '0',
                     '0',
@@ -1000,7 +1008,8 @@ final class IngresoEgresoAnitaTesmovSupport
                     '0',
                     '".self::esc($ctx['usuario'])."',
                     '".date('Ymd')."',
-                    '".$ctx['empresa']."'",
+                    '".$ctx['empresa']."',
+                    '0'",
             ], 'caja IE pago insert '.$movimiento->id);
 
             self::assertOk($raw, 'pago', $movimiento->id);
@@ -2147,6 +2156,38 @@ final class IngresoEgresoAnitaTesmovSupport
         }
 
         return $monedaId <= 1 ? 1.0 : ($cotizacion > 0 ? $cotizacion : 1.0);
+    }
+
+    /**
+     * Crown: I = proveedor de promae (el impreso toma prom_nombre). E = sin padrón.
+     */
+    private static function movExtPagoCrown(string $proveedorCodigo): string
+    {
+        $codigo = trim($proveedorCodigo);
+
+        return ($codigo !== '' && $codigo !== '000000') ? 'I' : 'E';
+    }
+
+    /**
+     * che_ban.pago en Crown guarda pesos en 0. El id ERP 1 no se copia tal cual.
+     */
+    private static function codMonMeCrown(Caja_Movimiento $movimiento): string
+    {
+        $monedaId = 1;
+        if ((int) ($movimiento->pagoproveedor_id ?? 0) > 0) {
+            $movimiento->loadMissing('pagoproveedores');
+            $monedaId = (int) ($movimiento->pagoproveedores->moneda_id ?? 1);
+        } else {
+            foreach ($movimiento->caja_movimiento_cuentacajas as $linea) {
+                $id = (int) ($linea->moneda_id ?: 0);
+                if ($id > 1) {
+                    $monedaId = $id;
+                    break;
+                }
+            }
+        }
+
+        return $monedaId <= 1 ? '0' : (string) $monedaId;
     }
 
     private static function recortar(string $valor, int $max): string

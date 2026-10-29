@@ -113,7 +113,6 @@
 				<input type="hidden" name="nombrezonavta" id="nombrezonavta" class="form-control" value="{{old('nombrezonavta', $pedido->zonavtas->nombre ?? '')}}">
 		</div>
        	<input type="hidden" name="condicionventa_id" id="condicionventa_id" value="{{$pedido->condicionventa_id??''}}">
-        <input type="hidden" id="descuento" name="descuento" class="form-control col-lg-2" value="{{$pedido->descuento ?? '0'}}" />
 	</div>
 </div>
 
@@ -272,7 +271,9 @@
 				<label style="margin-top: 6px;">Total kilos:&nbsp</label>
                 <input type="text" id="totalkilospedido" name="totalkilospedido" class="form-control col-sm-3" readonly value="" />
 				<label style="margin-top: 6px;">Total pesados:&nbsp</label>
-                <input type="text" id="totalkilospesados" name="totalkilospesados" class="form-control col-sm-3" readonly value="" />				
+                <input type="text" id="totalkilospesados" name="totalkilospesados" class="form-control col-sm-3" readonly value="" />
+				<label for="descuento" style="margin-top: 6px;" class="text-right pr-2">Descuento:&nbsp</label>
+                <input type="number" id="descuento" name="descuento" class="form-control col-sm-3 pedido-carga-bloqueable" step="0.01" min="0" value="{{ old('descuento', $pedido->descuento ?? '0') }}" title="Descuento del cliente. Se carga al terminar los productos." />
             </div>
         </div>
     </div>

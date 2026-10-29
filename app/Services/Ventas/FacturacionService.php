@@ -9837,6 +9837,21 @@ class FacturacionService
 				);
 				$precioArticulo = $netoImpreso['precio'];
 				$precioSinDescuento = $netoImpreso['preciosindescuento'];
+			} elseif (strtoupper((string) $letra) === 'B') {
+				$impuestoImpresionId = (int) $ventaItem->impuesto_id;
+				if (! array_key_exists($impuestoImpresionId, $tasasIvaImpresion)) {
+					$tasasIvaImpresion[$impuestoImpresionId] = (float) (Impuesto::find($impuestoImpresionId)->valor ?? 0);
+				}
+				$precioArticulo = FacturaLineaPrecioImpresionSupport::conIva(
+					(float) $precioArticulo,
+					$ventaItem->incluyeimpuesto,
+					$tasasIvaImpresion[$impuestoImpresionId]
+				);
+				$precioSinDescuento = FacturaLineaPrecioImpresionSupport::conIva(
+					(float) $precioSinDescuento,
+					$ventaItem->incluyeimpuesto,
+					$tasasIvaImpresion[$impuestoImpresionId]
+				);
 			}
 			$articuloItem = $ventaItem->articulos;
 			$conceptoItem = $ventaItem->conceptoVenta;

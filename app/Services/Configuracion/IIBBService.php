@@ -351,8 +351,6 @@ class IIBBService
 							continue;
 
 						$importePercepcion = round($totalNeto * $tasa / 100. * $coeficienteCm05, 2);
-						//if ($i == 1)
-						//	dd($totalNeto.' '.$minimoNeto[$i].' '.$importePercepcion.' '.$minimaPercepcion[$i].' '.$i.' '.$tasa);
 
 						if ($importePercepcion >= $minimaPercepcion[$i] && $importePercepcion != 0)
 						{
