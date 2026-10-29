@@ -17,6 +17,7 @@ use App\Models\Ventas\TurnoLocal;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Ventas\FacturacionLocal\DepmaeLocalAnitaSyncService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Stock\DepmaeCanalSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalUsoCuentacajaSupport;
 use App\Support\Ventas\LocalVentaListadoFiltros;
 use Illuminate\Http\Request;
@@ -111,6 +112,7 @@ class LocalVentaController extends Controller
         $this->syncCuentas($data, $payload['cuentacaja_ids']);
         $this->syncUsuarios($data, $payload['usuario_ids']);
         $this->syncTurnosMaestro($data, $payload['turno_local_ids']);
+        $this->marcarCanalLocalDelDeposito($data);
 
         return redirect()->route('facturacion_local_locales')->with('mensaje', 'Local creado con éxito');
     }
@@ -181,6 +183,7 @@ class LocalVentaController extends Controller
         $this->syncCuentas($data, $payload['cuentacaja_ids']);
         $this->syncUsuarios($data, $payload['usuario_ids']);
         $this->syncTurnosMaestro($data, $payload['turno_local_ids']);
+        $this->marcarCanalLocalDelDeposito($data);
 
         return redirect()->route('facturacion_local_locales')->with('mensaje', 'Local actualizado con éxito');
     }
@@ -582,6 +585,15 @@ class LocalVentaController extends Controller
         }
 
         return $paginar ? $query->paginate(15) : $query->get();
+    }
+
+    private function marcarCanalLocalDelDeposito(LocalVenta $data): void
+    {
+        if (! $data->activo) {
+            return;
+        }
+
+        DepmaeCanalSupport::marcarComoLocal((int) $data->deposito_id);
     }
 
     private function assertFerli(): void

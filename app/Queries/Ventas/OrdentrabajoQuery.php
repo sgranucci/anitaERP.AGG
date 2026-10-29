@@ -4,6 +4,7 @@ namespace App\Queries\Ventas;
 
 use App\Models\Ventas\Ordentrabajo;
 use App\ApiAnita;
+use App\Support\Ventas\OrdentrabajoListadoFiltros;
 
 class OrdentrabajoQuery implements OrdentrabajoQueryInterface
 {
@@ -36,34 +37,18 @@ class OrdentrabajoQuery implements OrdentrabajoQueryInterface
 
 		if (is_string($filtros)) {
 			$busqueda = trim($filtros);
-			if ($busqueda !== '') {
-				$boletasJuntas = 'BOLETAS JUNTAS';
-				if (strncasecmp($busqueda, $boletasJuntas, strlen($busqueda)) === 0) {
-					$ordenes = $ordenes->whereRaw(
-						'(select count(distinct(ordentrabajo_combinacion_talle.cliente_id)) from ordentrabajo_combinacion_talle
-						where ordentrabajo.id=ordentrabajo_combinacion_talle.ordentrabajo_id) >= 2'
-					);
-				} else {
-					$ordenes = $ordenes->where(function ($q) use ($busqueda) {
-						$q->whereHas('ordentrabajo_combinacion_talles.clientes', function ($query) use ($busqueda) {
-							$query->where('nombre', 'like', '%'.$busqueda.'%');
-						})
-							->orWhereHas('ordentrabajo_combinacion_talles.pedido_combinacion_talles.pedidos_combinacion.articulos', function ($query) use ($busqueda) {
-								$query->where('descripcion', 'like', '%'.$busqueda.'%');
-							})
-							->orWhereHas('ordentrabajo_combinacion_talles.pedido_combinacion_talles.pedidos_combinacion.combinaciones', function ($query) use ($busqueda) {
-								$query->where('nombre', 'like', '%'.$busqueda.'%');
-							})
-							->orWhereHas('ordentrabajo_tareas.tareas', function ($query) use ($busqueda) {
-								$query->where('nombre', 'like', '%'.$busqueda.'%');
-							})
-							->orWhere('ordentrabajo.id', '=', $busqueda)
-							->orWhere('ordentrabajo.codigo', '=', $busqueda);
-					});
-				}
-			}
-		} elseif (is_array($filtros)) {
-			\App\Support\Ventas\OrdentrabajoListadoFiltros::aplicar($ordenes, $filtros);
+			$filtros = [
+				'modo' => OrdentrabajoListadoFiltros::MODO_TODOS,
+				'campo' => 'cliente',
+				'operador' => 'contiene',
+				'valor' => $busqueda,
+				'valor_hasta' => '',
+				'busqueda' => $busqueda,
+				'busqueda_rapida' => true,
+			];
+		}
+		if (is_array($filtros)) {
+			OrdentrabajoListadoFiltros::aplicar($ordenes, $filtros);
 		}
 
 		$ordenes = $ordenes->orderByDesc('id');
@@ -202,7 +187,11 @@ class OrdentrabajoQuery implements OrdentrabajoQueryInterface
 			->join('articulo_caja', 'articulo_caja.articulo_id', 'pedido_combinacion.articulo_id')
 			->join('cajaproducto', 'cajaproducto.id', 'articulo_caja.caja_id')
 			->join('articulo', 'articulo.id', 'cajaproducto.articulo_id')
-			->whereIn('ordentrabajo_combinacion_talle.ordentrabajo_stock_id', [0, null]);
+			// 0 y null = producción (no sale de una OT de stock). whereIn no matchea NULL.
+			->where(function ($q) {
+				$q->where('ordentrabajo_combinacion_talle.ordentrabajo_stock_id', 0)
+					->orWhereNull('ordentrabajo_combinacion_talle.ordentrabajo_stock_id');
+			});
 
 		if ($ordenestrabajo != '')
 		{

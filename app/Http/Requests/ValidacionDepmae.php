@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Stock\DepmaeCanalSupport;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -25,6 +26,13 @@ class ValidacionDepmae extends FormRequest
 
         if ($this->has('sala_id') && $this->input('sala_id') === '') {
             $this->merge(['sala_id' => null]);
+        }
+
+        if ($this->has('canal')) {
+            $canal = strtoupper(trim((string) $this->input('canal')));
+            if (array_key_exists($canal, DepmaeCanalSupport::opciones())) {
+                $this->merge(['canal' => $canal]);
+            }
         }
     }
 
@@ -71,6 +79,9 @@ class ValidacionDepmae extends FormRequest
             'sala_id' => $esCrown
                 ? 'required|integer|exists:sala,id'
                 : 'nullable|integer|exists:sala,id',
+            'canal' => EntornoEmpresaSupport::esFerli()
+                ? ['required', Rule::in(array_keys(DepmaeCanalSupport::opciones()))]
+                : ['nullable', Rule::in(array_keys(DepmaeCanalSupport::opciones()))],
         ];
     }
 
@@ -80,6 +91,7 @@ class ValidacionDepmae extends FormRequest
             'codigo' => 'código',
             'nombre' => 'descripción',
             'sala_id' => 'sala',
+            'canal' => 'canal',
         ];
     }
 

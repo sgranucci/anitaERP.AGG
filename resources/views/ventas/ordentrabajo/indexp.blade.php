@@ -1,6 +1,10 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-	Órdenes de trabajo
+	@if (!empty($esConsulta))
+		Consulta de OT
+	@else
+		Órdenes de trabajo
+	@endif
 @endsection
 
 @section('scripts')
@@ -47,8 +51,10 @@ function borraOt() {
 @section('contenido')
 @php
     use App\Support\Ventas\OrdentrabajoListadoFiltros;
+    $esConsulta = !empty($esConsulta);
+    $rutaListado = $rutaListado ?? ($esConsulta ? 'consulta_ordentrabajo' : 'ordentrabajo');
     $filtrosQuery = $filtrosQuery ?? [];
-    $limpiarUrl = route('ordentrabajo');
+    $limpiarUrl = route($rutaListado);
 @endphp
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
@@ -57,7 +63,7 @@ function borraOt() {
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Órdenes de trabajo</h3>
+                <h3 class="card-title">{{ $esConsulta ? 'Consulta de OT' : 'Órdenes de trabajo' }}</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-ordentrabajo',
@@ -68,13 +74,13 @@ function borraOt() {
                         'toggleTarget' => '#panel-filtros-ordentrabajo',
                         'toggleId' => 'btn-toggle-filtros-ordentrabajo',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_ordentrabajo'),
+                        'nuevoRegistroUrl' => $esConsulta ? null : route('crear_ordentrabajo'),
                         'nuevoRegistroCan' => 'crear-ordenes-de-trabajo',
                         'nuevoRegistroLabel' => 'Nueva OT',
                     ])
                 </div>
             </div>
-            <form method="get" action="{{ route('ordentrabajo') }}" id="form-filtros-ordentrabajo" class="mb-0">
+            <form method="get" action="{{ route($rutaListado) }}" id="form-filtros-ordentrabajo" class="mb-0">
                 @include('ventas.ordentrabajo.partials.filtros_listado', [
                     'limpiarUrl' => $limpiarUrl,
                 ])
@@ -92,15 +98,31 @@ function borraOt() {
                             <th>Cliente</th>
                             <th>Artículo</th>
                             <th>Combinación</th>
-                            <th>Pares</th>
+                            <th class="text-right">Pares</th>
                             <th class="width30">Estado</th>
-                            <th class="width40" data-orderable="false"></th>
+                            <th class="width40 text-nowrap" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($ordentrabajo as $data)
+                        @php
+                            $codigoOt = str_pad($data->codigo, 4, '0', STR_PAD_LEFT);
+                            $urlOt = route('editar_ordentrabajo', $esConsulta
+                                ? ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']
+                                : ['id' => $data->id]);
+                        @endphp
                         <tr>
-                            <td class="codigo">{{ str_pad($data->codigo, 4, '0', STR_PAD_LEFT) }}</td>
+                            <td class="codigo">
+                                @if (can('editar-ordenes-de-trabajo', false))
+                                    @if ($esConsulta)
+                                        <a href="{{ $urlOt }}" class="text-primary font-weight-bold" target="_blank" rel="noopener">{{ $codigoOt }}</a>
+                                    @else
+                                        <a href="{{ $urlOt }}" class="text-primary font-weight-bold">{{ $codigoOt }}</a>
+                                    @endif
+                                @else
+                                    {{ $codigoOt }}
+                                @endif
+                            </td>
                             <td class="fecha">{{ $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '' }}</td>
                             <td>
                                 @php
@@ -119,7 +141,7 @@ function borraOt() {
                             @php $pedidoCombinacionOt = $data->pedidoCombinacionVigente(); @endphp
                             <td>{{ $pedidoCombinacionOt?->articulos->descripcion ?? '' }}</td>
                             <td>{{ $pedidoCombinacionOt?->combinaciones->nombre ?? '' }}</td>
-                            <td>
+                            <td class="text-right">
                                 @php
                                     $pares = 0.;
                                     if (isset($data->ordentrabajo_combinacion_talles)) {
@@ -128,20 +150,28 @@ function borraOt() {
                                         }
                                     }
                                 @endphp
-                                {{ $pares }}
+                                {{ number_format($pares, 0, ',', '.') }}
                             </td>
                             <td>
                                 @php $ultimaTarea = ''; @endphp
                                 @foreach ($data->ordentrabajo_tareas as $tarea)
                                     @php $ultimaTarea = $tarea->tareas->nombre ?? $ultimaTarea; @endphp
                                 @endforeach
-                                {{ $ultimaTarea }}
+                                @if ($ultimaTarea !== '')
+                                    <span class="badge" style="background:#D6EAF8;color:#1B4F72;">{{ $ultimaTarea }}</span>
+                                @endif
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                                 @if (can('editar-ordenes-de-trabajo', false))
-                                    <a href="{{ route('editar_ordentrabajo', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                        <i class="fa fa-edit"></i>
-                                    </a>
+                                    @if ($esConsulta)
+                                        <a href="{{ $urlOt }}" class="btn-accion-tabla tooltipsC" title="Consultar esta OT" target="_blank" rel="noopener">
+                                            <i class="fa fa-edit"></i>
+                                        </a>
+                                    @else
+                                        <a href="{{ $urlOt }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                            <i class="fa fa-edit"></i>
+                                        </a>
+                                    @endif
                                 @endif
                                 @if (can('listar-ordenes-de-trabajo', false))
                                     <a href="#" onclick="return imprimeOt('{{ $data->codigo }}')" class="btn-accion-tabla tooltipsC" title="Imprimir la OT">
@@ -151,7 +181,7 @@ function borraOt() {
                                         <i class="fas fa-file-pdf text-danger"></i>
                                     </a>
                                 @endif
-                                @if (can('borrar-ordenes-de-trabajo', false))
+                                @if (! $esConsulta && can('borrar-ordenes-de-trabajo', false))
                                     <button type="button" class="btn-accion-tabla borraot tooltipsC" title="Eliminar este registro" data-id="{{ $data->id }}">
                                         <i class="fa fa-times-circle text-danger"></i>
                                     </button>
@@ -167,7 +197,14 @@ function borraOt() {
                 </table>
             </div>
             @if (method_exists($ordentrabajo, 'links'))
-            <div class="card-footer clearfix">
+            <div class="card-footer clearfix d-flex flex-wrap align-items-center justify-content-between">
+                <span class="text-muted small">
+                    @if ($ordentrabajo->total() > 0)
+                        {{ $ordentrabajo->firstItem() }}–{{ $ordentrabajo->lastItem() }} de {{ $ordentrabajo->total() }}
+                    @else
+                        Sin registros
+                    @endif
+                </span>
                 {{ $ordentrabajo->appends($filtrosQuery)->links() }}
             </div>
             @endif

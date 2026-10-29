@@ -22,6 +22,7 @@ use App\Support\Stock\ArticuloCombinacionFotoSupport;
 use App\Support\Stock\CurvaModuloPresentacionSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\OtClienteCompartidoStockSupport;
+use App\Support\Stock\OtListaEntregaSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
 use Carbon\Carbon;
@@ -772,6 +773,158 @@ final class PedidoPickingFerliSupport
     }
 
     /**
+     * Rechaza bajar pares de un lote/OT cuando el bucket que se va a grabar no los tiene.
+     * El total y cada talle se miran por separado: alcanza el total y falta un talle, también corta.
+     *
+     * @param  array<string, float|int>  $tallesStock
+     * @param  array<string, float|int>  $curvaPedido
+     */
+    public static function errorSiBucketNoAlcanza(
+        float $saldo,
+        array $tallesStock,
+        float $paresPedidos,
+        array $curvaPedido,
+        string $loteCodigo,
+        string $depositoTxt
+    ): ?string {
+        $loteCodigo = trim($loteCodigo);
+        $ref = $loteCodigo !== '' && $loteCodigo !== '0' ? $loteCodigo : 'indicado';
+        if ($paresPedidos <= 0.0001 && $curvaPedido === []) {
+            return null;
+        }
+        if ($saldo + 0.0001 < $paresPedidos) {
+            if ($saldo <= 0.0001) {
+                return 'El lote/OT '.$ref.' no tiene saldo en el depósito '.$depositoTxt.'.';
+            }
+
+            return 'Saldo insuficiente del lote/OT '.$ref.' en '.$depositoTxt
+                .': hay '.self::textoPares($saldo)
+                .' pares y se piden '.self::textoPares($paresPedidos).'.';
+        }
+
+        return self::mensajeSiNumeracionSuperaElLote($curvaPedido, $tallesStock);
+    }
+
+    /**
+     * Saldo del bucket que se va a descontar: lote importado (fila L:código) u OT con lote 0.
+     *
+     * @param  array<string, float|int>  $curvaPorTalle
+     */
+    public static function errorSiEgresoBucketSuperaSaldo(
+        int $articuloId,
+        int $combinacionId,
+        string $loteCodigo,
+        int $depositoId,
+        float $pares,
+        array $curvaPorTalle,
+        bool $bucketLoteImportado,
+        int $otId = 0,
+        int $excluirPedidoCombinacionId = 0
+    ): ?string {
+        if ($articuloId <= 0 || $combinacionId <= 0 || $depositoId <= 0) {
+            return 'Faltan artículo, combinación o depósito para validar el stock.';
+        }
+
+        $loteCodigo = trim($loteCodigo);
+        $otLookup = $otId;
+        if ($otLookup <= 0 && $loteCodigo !== '' && $loteCodigo !== '0') {
+            $otLookup = (int) (Ordentrabajo::query()->where('codigo', $loteCodigo)->value('id') ?? 0);
+            if ($otLookup <= 0 && ctype_digit($loteCodigo)) {
+                $otLookup = (int) (Ordentrabajo::query()->whereKey((int) $loteCodigo)->value('id') ?? 0);
+            }
+        }
+
+        $porDeposito = self::bucketsSaldoLotePorDeposito(
+            $articuloId,
+            $combinacionId,
+            $loteCodigo !== '' ? $loteCodigo : '0',
+            $otLookup,
+            $excluirPedidoCombinacionId
+        );
+        $buckets = $porDeposito[$depositoId]['buckets'] ?? [];
+        $saldo = 0.0;
+        $talles = [];
+        foreach ($buckets as $b) {
+            $loteBucket = $b['lote'] ?? 0;
+            $esImportado = ReporteStockOtSituacionSupport::esLoteImportado($loteBucket);
+            if ($bucketLoteImportado) {
+                if ($esImportado && trim((string) $loteBucket) === $loteCodigo) {
+                    $saldo = (float) ($b['saldo'] ?? 0);
+                    $talles = is_array($b['talles'] ?? null) ? $b['talles'] : [];
+                    break;
+                }
+                continue;
+            }
+            if (! $esImportado && ($otLookup <= 0 || (int) ($b['ordentrabajo_id'] ?? 0) === $otLookup)) {
+                $saldo = (float) ($b['saldo'] ?? 0);
+                $talles = is_array($b['talles'] ?? null) ? $b['talles'] : [];
+                break;
+            }
+        }
+
+        return self::errorSiBucketNoAlcanza(
+            $saldo,
+            $talles,
+            $pares,
+            $curvaPorTalle,
+            $loteCodigo !== '' ? $loteCodigo : (string) $otLookup,
+            self::etiquetaDeposito($depositoId)
+        );
+    }
+
+    /**
+     * Consumo al armar una OT con stock de otra: el lote que se graba es el id/código de la OT origen.
+     * Al regrabar la misma línea, sus pares ya descontados vuelven al disponible.
+     */
+    public static function errorSiConsumoOtStockSuperaSaldo(
+        int $pedidoCombinacionId,
+        string $loteCodigo,
+        ?float $paresCabecera = null,
+        ?int $depositoId = null
+    ): ?string {
+        $linea = Pedido_Combinacion::query()
+            ->with(['pedido_combinacion_talles.talles'])
+            ->find($pedidoCombinacionId);
+        if (! $linea) {
+            return 'La línea de pedido no existe para validar el stock.';
+        }
+
+        $curva = self::curvaDesdeTallesPedido($linea);
+        $sumaTalles = 0.0;
+        foreach ($curva as $cant) {
+            $sumaTalles += (float) $cant;
+        }
+        $pide = $paresCabecera !== null ? (float) $paresCabecera : (float) ($linea->cantidad ?? 0);
+        if ($pide <= 0.0001) {
+            $pide = $sumaTalles;
+        }
+
+        $deposito = (int) ($depositoId ?? 0);
+        if ($deposito <= 0) {
+            $deposito = (int) Articulo_Movimiento::query()
+                ->where('pedido_combinacion_id', $pedidoCombinacionId)
+                ->where('deposito_id', '>', 0)
+                ->orderByDesc('id')
+                ->value('deposito_id');
+        }
+        if ($deposito <= 0) {
+            $deposito = 1;
+        }
+
+        return self::errorSiEgresoBucketSuperaSaldo(
+            (int) $linea->articulo_id,
+            (int) $linea->combinacion_id,
+            trim($loteCodigo),
+            $deposito,
+            $pide,
+            $curva,
+            true,
+            0,
+            $pedidoCombinacionId
+        );
+    }
+
+    /**
      * Saldo neto por depósito del bucket preferido (lote importado vs OT lote=0).
      * No suma buckets distintos: el modal / Excel los muestran separados.
      *
@@ -788,7 +941,7 @@ final class PedidoPickingFerliSupport
         }
 
         $otId = (int) (Ordentrabajo::query()->where('codigo', $loteCodigo)->value('id') ?? 0);
-        $porDeposito = self::bucketsSaldoLotePorDeposito($articuloId, $combinacionId, $loteCodigo, $otId);
+        $porDeposito = self::bucketsSaldoLotePorDeposito($articuloId, $combinacionId, $loteCodigo, $otId, 0);
 
         $out = [];
         foreach ($porDeposito as $depId => $info) {
@@ -883,7 +1036,7 @@ final class PedidoPickingFerliSupport
         $loteCodigo = trim($loteCodigo);
         $otAsignado = (int) ($ordentrabajoIdAsignado ?? 0);
         $otIdCodigo = (int) (Ordentrabajo::query()->where('codigo', $loteCodigo)->value('id') ?? 0);
-        $porDeposito = self::bucketsSaldoLotePorDeposito($articuloId, $combinacionId, $loteCodigo, $otIdCodigo);
+        $porDeposito = self::bucketsSaldoLotePorDeposito($articuloId, $combinacionId, $loteCodigo, $otIdCodigo, 0);
         $buckets = $porDeposito[$depositoId]['buckets'] ?? [];
 
         // Modal eligió OT (lote=0): usar ese bucket directo.
@@ -951,7 +1104,8 @@ final class PedidoPickingFerliSupport
         int $articuloId,
         int $combinacionId,
         string $loteCodigo,
-        int $otId
+        int $otId,
+        int $excluirPedidoCombinacionId = 0
     ): array {
         $rows = DB::table('articulo_movimiento as am')
             ->join('articulo_movimiento_talle as amt', 'amt.articulo_movimiento_id', '=', 'am.id')
@@ -965,6 +1119,13 @@ final class PedidoPickingFerliSupport
                     $q->orWhere('am.ordentrabajo_id', $otId);
                 }
             });
+
+        if ($excluirPedidoCombinacionId > 0) {
+            $rows->where(function ($w) use ($excluirPedidoCombinacionId) {
+                $w->whereNull('am.pedido_combinacion_id')
+                    ->orWhere('am.pedido_combinacion_id', '<>', $excluirPedidoCombinacionId);
+            });
+        }
 
         OtClienteCompartidoStockSupport::excluirConsumoFacturaCompanero($rows, 'am');
 
@@ -2136,7 +2297,7 @@ final class PedidoPickingFerliSupport
         ?int $depositoId = null,
         ?int $ordentrabajoId = null
     ): void {
-        $linea->loadMissing(['articulos', 'combinaciones', 'pedido_combinacion_talles']);
+        $linea->loadMissing(['articulos', 'combinaciones', 'pedido_combinacion_talles.talles']);
 
         $articulo = $linea->articulos;
         $combinacion = $linea->combinaciones;
@@ -2167,6 +2328,27 @@ final class PedidoPickingFerliSupport
         );
         $loteMovimiento = $bucket['lote'];
         $otId = (int) $bucket['ordentrabajo_id'];
+
+        $curva = self::curvaDesdeTallesPedido($linea);
+        $sumaTalles = 0.0;
+        foreach ($curva as $cantTalle) {
+            $sumaTalles += (float) $cantTalle;
+        }
+        $pide = (float) ($linea->cantidad ?? 0);
+        if ($pide <= 0.0001) {
+            $pide = $sumaTalles;
+        }
+        $errorSaldo = self::errorSiBucketNoAlcanza(
+            (float) ($bucket['saldo'] ?? 0),
+            is_array($bucket['talles'] ?? null) ? $bucket['talles'] : [],
+            $pide,
+            $curva,
+            $loteCodigo,
+            self::etiquetaDeposito($depositoId)
+        );
+        if ($errorSaldo !== null) {
+            throw new RuntimeException($errorSaldo);
+        }
 
         $dataArticuloMovimiento = [
             'fecha' => $fecha,
@@ -2413,12 +2595,15 @@ final class PedidoPickingFerliSupport
 
                 continue;
             }
-            $out[$lineaId] = ReporteStockOtSituacionSupport::situacionFila(
-                false,
+            $ev = OtListaEntregaSupport::evaluar(
+                $otId,
                 (int) ($linea->picking_deposito_id ?? 0),
-                $metas[$otId] ?? null,
-                false
+                $metas[$otId] ?? null
             );
+            $out[$lineaId] = [
+                'situacion' => $ev['situacion'],
+                'en_produccion' => $ev['en_produccion'],
+            ];
         }
 
         return $out;

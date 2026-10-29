@@ -240,12 +240,23 @@ final class MovimientoStockListadoUnificadoSupport
             $perPage = 15;
             $total = (int) (clone $mov)->count()
                 + (int) (clone $tm)->count();
-            $claves = $ordenado($mov->unionAll($tm))
-                ->forPage($page, $perPage)
+            $offset = max(0, ($page - 1) * $perPage);
+            // Cada pata ordenada corta en offset+página. El top de la unión está
+            // dentro de esos prefijos: no hace falta materializar las miles de claves.
+            $necesarios = $offset + $perPage;
+            $movClaves = (clone $mov)->orderByDesc('ms.id')->limit($necesarios)->get();
+            $tmClaves = (clone $tm)
+                ->orderByRaw('operacion_stock_id DESC')
+                ->orderByDesc('tm.fecha')
+                ->orderByDesc('tm.id')
+                ->limit($necesarios)
                 ->get();
 
             return new PaginatorImpl(
-                $this->hidratarDesdeClaves($claves, $valorizacionCompleta),
+                $this->hidratarDesdeClaves(
+                    $this->fusionarClavesPagina($movClaves, $tmClaves, $offset, $perPage),
+                    $valorizacionCompleta
+                ),
                 $total,
                 $perPage,
                 $page,
@@ -257,6 +268,34 @@ final class MovimientoStockListadoUnificadoSupport
             $ordenado($mov->unionAll($tm))->get(),
             $valorizacionCompleta
         );
+    }
+
+    /**
+     * Une dos listas ya ordenadas (movimiento por id, transferencia por operación)
+     * y devuelve la página. Mismo criterio que el ORDER BY del UNION.
+     *
+     * @param  Collection<int, object>  $movClaves
+     * @param  Collection<int, object>  $tmClaves
+     * @return Collection<int, object>
+     */
+    private function fusionarClavesPagina(Collection $movClaves, Collection $tmClaves, int $offset, int $perPage): Collection
+    {
+        $claves = $movClaves->concat($tmClaves)->all();
+        usort($claves, static function (object $a, object $b): int {
+            $operacion = ((int) ($b->operacion_stock_id ?? 0)) <=> ((int) ($a->operacion_stock_id ?? 0));
+            if ($operacion !== 0) {
+                return $operacion;
+            }
+
+            $fecha = strcmp((string) ($b->fecha ?? ''), (string) ($a->fecha ?? ''));
+            if ($fecha !== 0) {
+                return $fecha;
+            }
+
+            return ((int) ($b->pk_id ?? 0)) <=> ((int) ($a->pk_id ?? 0));
+        });
+
+        return collect($claves)->slice($offset, $perPage)->values();
     }
 
     /**
@@ -287,11 +326,14 @@ final class MovimientoStockListadoUnificadoSupport
         if ($depositoIds === []) {
             $query->whereRaw('0 = 1');
         } else {
-            $query->whereIn('ms.id', function ($sub) use ($depositoIds) {
+            // EXISTS contra el id del movimiento: MySQL recorre la PK hacia atrás
+            // y corta en el LIMIT. El IN (SELECT movimientostock_id ...) obliga a
+            // recorrer articulo_movimiento entero antes de ordenar.
+            $query->whereExists(function ($sub) use ($depositoIds) {
                 $sub->from('articulo_movimiento as am_f')
-                    ->select('am_f.movimientostock_id')
-                    ->whereIn('am_f.deposito_id', $depositoIds)
-                    ->whereNotNull('am_f.movimientostock_id');
+                    ->selectRaw('1')
+                    ->whereColumn('am_f.movimientostock_id', 'ms.id')
+                    ->whereIn('am_f.deposito_id', $depositoIds);
             });
         }
 

@@ -20,6 +20,7 @@ use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceEstadosSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceListadoFiltros;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceLiquidacionSupport;
+use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePrecioSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePuenteSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceVentaConsultaSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
@@ -187,13 +188,15 @@ class CambioDevolucionMarketplaceController extends Controller
             ->with('mensaje', 'Legajo confirmado (abierto).');
     }
 
-    public function emitirFac($id)
+    public function emitirFac(Request $request, $id)
     {
         $this->assertFerli();
         can('emitir-fac-cambio-devolucion-marketplace-facturacion-local');
 
+        $modo = CambioDevolucionMarketplacePrecioSupport::normalizar((string) $request->input('modo_precio'));
+
         try {
-            $resultado = $this->service->emitirFacReemplazo(CambioDevolucionMarketplace::query()->findOrFail($id));
+            $resultado = $this->service->emitirFacReemplazo(CambioDevolucionMarketplace::query()->findOrFail($id), $modo);
         } catch (InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -248,13 +251,15 @@ class CambioDevolucionMarketplaceController extends Controller
             ->with('mensaje', 'Recepción registrada.');
     }
 
-    public function emitirNc($id)
+    public function emitirNc(Request $request, $id)
     {
         $this->assertFerli();
         can('emitir-nc-cambio-devolucion-marketplace-facturacion-local');
 
+        $modo = CambioDevolucionMarketplacePrecioSupport::normalizar((string) $request->input('modo_precio'));
+
         try {
-            $resultado = $this->service->emitirNcOriginal(CambioDevolucionMarketplace::query()->findOrFail($id));
+            $resultado = $this->service->emitirNcOriginal(CambioDevolucionMarketplace::query()->findOrFail($id), $modo);
         } catch (InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }

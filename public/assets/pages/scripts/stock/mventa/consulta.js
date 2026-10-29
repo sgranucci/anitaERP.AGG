@@ -102,6 +102,12 @@ function resolverPorCodigoMventa(codigo, $ctx, opciones) {
     }
     if (cod === '') {
         limpiarMventaEnContexto($ctx);
+        if (opts.avanzar) {
+            var sigVacio = $ctx.find('.codigomventa').attr('data-siguiente');
+            if (sigVacio && $(sigVacio).length) {
+                $(sigVacio).trigger('focus');
+            }
+        }
         if (typeof opts.onDone === 'function') {
             opts.onDone(null);
         }
@@ -129,6 +135,9 @@ function resolverPorCodigoMventa(codigo, $ctx, opciones) {
     }).fail(function () {
         if (!opts.silencioso) {
             alert('No se pudo validar la marca');
+        }
+        if (typeof opts.onDone === 'function') {
+            opts.onDone(null);
         }
     });
 }

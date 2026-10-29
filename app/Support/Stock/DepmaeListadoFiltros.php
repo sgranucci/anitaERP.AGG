@@ -2,6 +2,7 @@
 
 namespace App\Support\Stock;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,9 +23,25 @@ class DepmaeListadoFiltros
         'codigo' => ['column' => 'depmae.codigo', 'type' => 'texto', 'label' => 'Código ANITA'],
         'nombre' => ['column' => 'depmae.nombre', 'type' => 'texto', 'label' => 'Descripción'],
         'tipodeposito' => ['column' => 'depmae.tipodeposito', 'type' => 'texto', 'label' => 'Tipo de depósito'],
+        'canal' => ['column' => 'depmae.canal', 'type' => 'texto', 'label' => 'Canal'],
         'empresa' => ['column' => 'empresa.nombre', 'type' => 'texto', 'label' => 'Empresa'],
         'sala' => ['column' => 'sala.nombre', 'type' => 'texto', 'label' => 'Sala'],
     ];
+
+    /**
+     * Canal Local / Fábrica solo se ofrece en Ferli.
+     *
+     * @return array<string, array{column: string, type: string, label: string}>
+     */
+    public static function campos(): array
+    {
+        $campos = self::CAMPOS;
+        if (! EntornoEmpresaSupport::esFerli()) {
+            unset($campos['canal']);
+        }
+
+        return $campos;
+    }
 
     /** @var list<string> */
     private const COLUMNAS_COINCIDENCIA_FLEXIBLE = [
@@ -67,7 +84,7 @@ class DepmaeListadoFiltros
         }
 
         $campo = (string) $request->input('filtro_campo', 'nombre');
-        if (! isset(self::CAMPOS[$campo])) {
+        if (! isset(self::campos()[$campo])) {
             $campo = 'nombre';
         }
 
@@ -214,6 +231,9 @@ class DepmaeListadoFiltros
                 'sala.nombre',
                 'sala.codigo',
             ];
+            if (EntornoEmpresaSupport::esFerli() && DepmaeCanalSupport::columnaDisponible()) {
+                $textCols[] = 'depmae.canal';
+            }
             foreach ($textCols as $col) {
                 $q->orWhere($col, 'like', $like);
                 if ($operador === 'contiene' && self::usaCoincidenciaFlexibleEnColumna($col)) {

@@ -82,6 +82,16 @@ class MovimientoOrdentrabajoService
 		return $movimientoOrdentrabajo;
 	}
 
+	public function leeListado(array $filtros, bool $paginar)
+	{
+		return $this->movimientoordentrabajoRepository->leeListado($filtros, $paginar);
+	}
+
+	public function cortesListado(array $filtros): array
+	{
+		return $this->movimientoordentrabajoRepository->cortesListado($filtros);
+	}
+
 	public function guardaMovimientoOrdenTrabajo($data, $funcion, $id = null)
 	{
 		$usuario_id = Auth::user()->id;

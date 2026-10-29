@@ -19,7 +19,7 @@ class Depmae extends Model implements Auditable
     use DepmaeTrait;
 
     use \OwenIt\Auditing\Auditable;
-    protected $fillable = ['nombre', 'tipodeposito', 'codigo', 'empresa_id', 'sala_id'];
+    protected $fillable = ['nombre', 'tipodeposito', 'codigo', 'empresa_id', 'sala_id', 'canal'];
     protected $table = 'depmae';
     protected $keyField = 'depm_deposito';
 

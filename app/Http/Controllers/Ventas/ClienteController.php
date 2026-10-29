@@ -32,6 +32,7 @@ use App\Repositories\Ventas\Cliente_EntregaRepositoryInterface;
 use App\Repositories\Ventas\Cliente_SeguimientoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_Cm05RepositoryInterface;
 use App\Repositories\Ventas\Cliente_Exclusion_PercepcionRepositoryInterface;
+use App\Repositories\Ventas\Cliente_AvisoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_Articulo_SuspendidoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_ArchivoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_CuentacorrienteRepositoryInterface;
@@ -91,6 +92,7 @@ class ClienteController extends Controller
     private $cliente_seguimientoRepository;
     private $cliente_cm05Repository;
     private $cliente_exclusion_percepcionRepository;
+    private $cliente_avisoRepository;
     private $cliente_articulo_suspendidoRepository;
     private $cliente_cuentacorrienteRepository;
 	private $cliente_archivoRepository;
@@ -115,6 +117,7 @@ class ClienteController extends Controller
         Cliente_CuentacorrienteRepositoryInterface $cliente_cuentacorrienterepository,
         Cliente_Cm05RepositoryInterface $cliente_cm05repository,
         Cliente_Exclusion_PercepcionRepositoryInterface $cliente_exclusion_percepcionrepository,
+        Cliente_AvisoRepositoryInterface $cliente_avisorepository,
         Cliente_Articulo_SuspendidoRepositoryInterface $cliente_articulo_suspendidorepository,
         DescuentoventaRepositoryInterface $descuentoventarepository,
         TipodocumentoRepositoryInterface $tipodocumentoRepository,
@@ -135,6 +138,7 @@ class ClienteController extends Controller
         $this->cliente_cuentacorrienteRepository = $cliente_cuentacorrienterepository;
         $this->cliente_cm05Repository = $cliente_cm05repository;
         $this->cliente_exclusion_percepcionRepository = $cliente_exclusion_percepcionrepository;
+        $this->cliente_avisoRepository = $cliente_avisorepository;
         $this->cliente_articulo_suspendidoRepository = $cliente_articulo_suspendidorepository;
         $this->cliente_archivoRepository = $cliente_archivoRepository;
         $this->descuentoventaRepository = $descuentoventarepository;
@@ -649,6 +653,8 @@ class ClienteController extends Controller
 
                 $this->cliente_exclusion_percepcionRepository->create($request->all(), $cliente->id);
 
+                $this->cliente_avisoRepository->create($request->all(), $cliente->id);
+
                 $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->create($request->all(), $cliente->id);
 
                 $cliente_archivo = $this->cliente_archivoRepository->create($request, $cliente->id);
@@ -701,6 +707,8 @@ class ClienteController extends Controller
                 $cliente_cm05 = $this->cliente_cm05Repository->create($request->all(), $cliente->id);
 
                 $this->cliente_exclusion_percepcionRepository->create($request->all(), $cliente->id);
+
+                $this->cliente_avisoRepository->create($request->all(), $cliente->id);
 
                 $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->create($request->all(), $cliente->id);
 
@@ -990,6 +998,8 @@ class ClienteController extends Controller
 
             $this->cliente_exclusion_percepcionRepository->update($request->all(), $id);
 
+            $this->cliente_avisoRepository->update($request->all(), $id);
+
             $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->update($request->all(), $id);
 
             // Graba archivos asociados
@@ -1248,6 +1258,7 @@ class ClienteController extends Controller
         $volverListadoUrl = route('cliente', $paramsRetornoListado);
         $retornoQuery = $paramsRetornoListado !== [] ? http_build_query($paramsRetornoListado) : '';
         [$empresaQuery, $empresaId, $empresaScope] = $this->empresaCuentaCorrienteCliente($request);
+        $mostrarColumnaEmpresa = $empresaScope === 'todas' && $empresaQuery->count() > 1;
 
         $nombrecliente = '';
         if ($cliente) {
@@ -1275,6 +1286,7 @@ class ClienteController extends Controller
                 'monedaId',
                 'expresion',
                 'mostrarSaldoCorrido',
+                'mostrarColumnaEmpresa',
             ))->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_cuentacorriente';
@@ -1288,13 +1300,13 @@ class ClienteController extends Controller
 
         case 'EXCEL':
             return (new ClienteCuentacorrienteListadoExport($this->cliente_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $cliente_id, $modoVista, $nombrecliente, $saldosPorMoneda, $monedaId, $expresion, $equivalentePesos, $empresaId)
+                ->parametros($busqueda, (int) $cliente_id, $modoVista, $nombrecliente, $saldosPorMoneda, $monedaId, $expresion, $equivalentePesos, $empresaId, $mostrarColumnaEmpresa)
                 ->download('cuentacorriente_cliente.xlsx');
             break;
 
         case 'CSV':
             return (new ClienteCuentacorrienteListadoExport($this->cliente_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $cliente_id, $modoVista, $nombrecliente, $saldosPorMoneda, $monedaId, $expresion, $equivalentePesos, $empresaId)
+                ->parametros($busqueda, (int) $cliente_id, $modoVista, $nombrecliente, $saldosPorMoneda, $monedaId, $expresion, $equivalentePesos, $empresaId, $mostrarColumnaEmpresa)
                 ->download('cuentacorriente_cliente.csv', \Maatwebsite\Excel\Excel::CSV);
             break;
 
@@ -1341,6 +1353,7 @@ class ClienteController extends Controller
                 'empresa_query' => $empresaQuery,
                 'empresaId' => $empresaId,
                 'empresaScope' => $empresaScope,
+                'mostrarColumnaEmpresa' => $mostrarColumnaEmpresa,
             ];
 
             return view('ventas.cuentacorriente.index', $datas);

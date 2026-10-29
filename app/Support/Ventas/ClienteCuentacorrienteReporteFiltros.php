@@ -105,6 +105,9 @@ final class ClienteCuentacorrienteReporteFiltros
             'fecha_desde' => trim((string) $request->input('fecha_desde', '')),
             'fecha_hasta' => $fechaHasta,
             'incluir_aplicaciones' => $request->boolean('incluir_aplicaciones'),
+            'incluir_suspendidos' => $request->has('incluir_suspendidos')
+                ? $request->boolean('incluir_suspendidos')
+                : true,
             'solo_totales' => $request->boolean('solo_totales'),
             'expresion' => $expresion,
             'cotizacion_modo' => $cotizacionModo,
@@ -186,6 +189,7 @@ final class ClienteCuentacorrienteReporteFiltros
         if (! empty($filtros['incluir_aplicaciones'])) {
             $out['incluir_aplicaciones'] = 1;
         }
+        $out['incluir_suspendidos'] = ! empty($filtros['incluir_suspendidos']) ? 1 : 0;
         if (! empty($filtros['solo_totales'])) {
             $out['solo_totales'] = 1;
         }
@@ -329,6 +333,9 @@ final class ClienteCuentacorrienteReporteFiltros
         if (! empty($filtros['incluir_aplicaciones'])) {
             $partes[] = 'Con aplicaciones';
         }
+        $partes[] = ! empty($filtros['incluir_suspendidos'])
+            ? 'Incluye clientes suspendidos'
+            : 'Sin clientes suspendidos';
         $partes[] = (($filtros['expresion'] ?? '') === self::EXPRESION_PESOS)
             ? 'Importes en moneda local'
             : 'Importes en moneda origen';

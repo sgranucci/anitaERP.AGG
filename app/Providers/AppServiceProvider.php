@@ -214,6 +214,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\Cliente_AvisoRepositoryInterface',
+            'App\Repositories\Ventas\Cliente_AvisoRepository',
+        );
+
+        $this->app->bind(
             'App\Queries\Ventas\ClienteQueryInterface',
             'App\Queries\Ventas\ClienteQuery',
         );

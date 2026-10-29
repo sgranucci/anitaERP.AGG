@@ -25,10 +25,6 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
 {
     use Exportable;
 
-    private const COL_ULTIMA_DEUDA = 'I';
-
-    private const COL_ULTIMA_CC = 'J';
-
     private Cliente_CuentacorrienteRepositoryInterface $clienteCuentacorrienteRepository;
 
     private string $busqueda = '';
@@ -45,6 +41,8 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
     private ?int $monedaId = null;
 
     private ?int $empresaId = null;
+
+    private bool $mostrarColumnaEmpresa = false;
 
     private string $expresion = CuentacorrienteSaldosPorMoneda::EXPRESION_ORIGEN;
 
@@ -104,18 +102,23 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
             'mostrarSaldoCorrido' => CuentacorrienteSaldosPorMoneda::mostrarSaldoCorrido($this->monedaId, $this->saldosPorMoneda),
             'totalFilas' => $filas->count(),
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'mostrarColumnaEmpresa' => $this->mostrarColumnaEmpresa,
         ]);
     }
 
     public function columnFormats(): array
     {
-        return [
-            'A' => NumberFormat::FORMAT_TEXT,
-            'G' => NumberFormat::FORMAT_NUMBER_00,
-            'H' => NumberFormat::FORMAT_NUMBER_00,
-            'I' => NumberFormat::FORMAT_NUMBER_00,
-            'J' => NumberFormat::FORMAT_NUMBER_00,
+        $letras = $this->letrasColumnas();
+        $formats = [
+            $letras['id'] => NumberFormat::FORMAT_TEXT,
         ];
+        foreach (['imp1', 'imp2', 'imp3', 'imp4'] as $clave) {
+            if (isset($letras[$clave])) {
+                $formats[$letras[$clave]] = NumberFormat::FORMAT_NUMBER_00;
+            }
+        }
+
+        return $formats;
     }
 
     public function styles(Worksheet $sheet)
@@ -138,18 +141,25 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
 
     public function columnWidths(): array
     {
-        return [
-            'A' => 8,
-            'B' => 18,
-            'C' => 12,
-            'D' => 12,
-            'E' => 32,
-            'F' => CuentacorrienteSaldosPorMoneda::esExpresionPesos($this->expresion) ? 22 : 8,
-            'G' => 14,
-            'H' => 14,
-            'I' => 14,
-            'J' => 16,
+        $letras = $this->letrasColumnas();
+        $anchos = [
+            'id' => 8,
+            'empresa' => 18,
+            'fecha' => 12,
+            'vencimiento' => 12,
+            'comprobante' => 36,
+            'moneda' => CuentacorrienteSaldosPorMoneda::esExpresionPesos($this->expresion) ? 22 : 8,
+            'imp1' => 14,
+            'imp2' => 14,
+            'imp3' => 14,
+            'imp4' => 16,
         ];
+        $resultado = [];
+        foreach ($letras as $clave => $letra) {
+            $resultado[$letra] = $anchos[$clave] ?? 14;
+        }
+
+        return $resultado;
     }
 
     public function registerEvents(): array
@@ -216,12 +226,13 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
 
                 $primera = $this->filaPrimeraDatosExcel;
-                $sheet->getStyle('E'.$primera.':E'.$sheet->getHighestRow())
+                $letras = $this->letrasColumnas();
+                $sheet->getStyle($letras['comprobante'].$primera.':'.$letras['comprobante'].$sheet->getHighestRow())
                     ->getAlignment()
                     ->setWrapText(true)
                     ->setVertical(Alignment::VERTICAL_TOP);
 
-                $sheet->getStyle('G'.$primera.':'.$this->colUltima().$sheet->getHighestRow())
+                $sheet->getStyle($letras['imp1'].$primera.':'.$this->colUltima().$sheet->getHighestRow())
                     ->getAlignment()
                     ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             },
@@ -230,9 +241,30 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
 
     private function colUltima(): string
     {
-        return $this->modoVista === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA
-            ? self::COL_ULTIMA_DEUDA
-            : self::COL_ULTIMA_CC;
+        $letras = $this->letrasColumnas();
+
+        return (string) end($letras);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function letrasColumnas(): array
+    {
+        $claves = ['id', 'fecha', 'vencimiento', 'comprobante', 'moneda', 'imp1', 'imp2', 'imp3'];
+        if ($this->mostrarColumnaEmpresa) {
+            array_splice($claves, 1, 0, ['empresa']);
+        }
+        if ($this->modoVista !== ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
+            $claves[] = 'imp4';
+        }
+
+        $mapa = [];
+        foreach ($claves as $indice => $clave) {
+            $mapa[$clave] = chr(ord('A') + $indice);
+        }
+
+        return $mapa;
     }
 
     public function title(): string
@@ -252,6 +284,7 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
         string $expresion = CuentacorrienteSaldosPorMoneda::EXPRESION_ORIGEN,
         array $equivalentePesos = [],
         ?int $empresaId = null,
+        bool $mostrarColumnaEmpresa = false,
     ): self {
         $this->busqueda = $busqueda;
         $this->clienteId = $clienteId;
@@ -260,6 +293,7 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
         $this->saldosPorMoneda = $saldosPorMoneda;
         $this->monedaId = $monedaId;
         $this->empresaId = $empresaId;
+        $this->mostrarColumnaEmpresa = $mostrarColumnaEmpresa;
         $this->expresion = CuentacorrienteSaldosPorMoneda::resolverExpresion($expresion);
         $this->equivalentePesos = $equivalentePesos;
 

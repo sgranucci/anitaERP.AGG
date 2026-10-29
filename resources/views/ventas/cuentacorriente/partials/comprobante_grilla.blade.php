@@ -24,6 +24,6 @@
 @else
     {{ $etiquetaComprobante }}
 @endif
-@if ($data->venta_id > 0 && ! empty($data->ventas->lugarentrega))
+@if ((int) ($data->cobranza_id ?? 0) === 0 && (int) ($data->venta_id ?? 0) > 0 && ! empty($data->ventas->lugarentrega))
     <br><small class="text-muted">Entrega: {{ $data->ventas->lugarentrega }}</small>
 @endif

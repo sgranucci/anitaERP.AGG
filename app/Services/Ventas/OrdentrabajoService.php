@@ -30,6 +30,7 @@ use App\Support\Ventas\OrdentrabajoEmisionCopiaSupport;
 use App\Support\Ventas\OrdentrabajoEmisionPreimpresoLayout;
 use App\Support\Ventas\OrdentrabajoEmisionTextoSupport;
 use App\Support\Produccion\OrdentrabajoTareaFechaSupport;
+use App\Support\Stock\OtListaEntregaSupport;
 use App\Models\Configuracion\Salida;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
@@ -3480,10 +3481,13 @@ class OrdentrabajoService
 		$estado = '-1';
 		$saldo = 0;
 		$deposito_id = 0;
+		$otIds = [];
 		$tipoAlta = (int) config('consprod.TIPOTRANSACCION_ALTA_PRODUCCION', 3);
 		foreach ($stock as $movimiento) {
-			if ($movimiento->ordentrabajo_id > 0) {
+			$otIdMov = (int) ($movimiento->ordentrabajo_id ?? 0);
+			if ($otIdMov > 0) {
 				$estado = 0;
+				$otIds[$otIdMov] = $otIdMov;
 			} else {
 				$estado = 1;
 			}
@@ -3501,7 +3505,18 @@ class OrdentrabajoService
 			}
 		}
 
-		return ['estado' => $estado, 'saldo' => $saldo, 'deposito_id' => $deposito_id];
+		$aviso = OtListaEntregaSupport::avisoDeIds(
+			array_values($otIds),
+			(int) $deposito_id,
+			(string) $codigoOt
+		);
+
+		return [
+			'estado' => $estado,
+			'saldo' => $saldo,
+			'deposito_id' => $deposito_id,
+			'ot_aviso' => $aviso,
+		];
 	}
 }
 

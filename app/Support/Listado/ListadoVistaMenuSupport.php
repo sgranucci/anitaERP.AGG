@@ -48,6 +48,11 @@ final class ListadoVistaMenuSupport
             'icono' => 'fa-bookmark',
             'etiqueta_padre' => 'Bienes de uso',
         ],
+        'produccion.movimiento_ot' => [
+            'url_base' => 'produccion/movimientoordentrabajo',
+            'icono' => 'fa-bookmark',
+            'etiqueta_padre' => 'Movimientos de OT',
+        ],
     ];
 
     public static function columnaMenuDisponible(): bool

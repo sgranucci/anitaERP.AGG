@@ -4,6 +4,7 @@ namespace App\Queries\Stock;
 
 use App\Models\Stock\Articulo_Movimiento;
 use App\Support\Stock\OtClienteCompartidoStockSupport;
+use App\Support\Stock\ReporteStockOtDepositoAmbitoSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +28,8 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
                                             $desdelinea_id, $hastalinea_id,
                                             $desdecategoria_id, $hastacategoria_id,
                                             $desdelote, $hastalote, $deposito_id,
-                                            $apertura = 'TOTALIZADO')
+                                            $apertura = 'TOTALIZADO',
+                                            $ambitoDeposito = 'TODOS')
     {
         $agrupaModulo = $apertura === 'MOVIMIENTOS';
 
@@ -47,6 +49,7 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             'talle.nombre as nombretalle',
             'depmae.codigo as depositocodigo',
             'depmae.nombre as depositonombre',
+            DB::raw('MAX(articulo.id) as articulo_id'),
             DB::raw('SUM(articulo_movimiento_talle.cantidad) as cantidad'),
             DB::raw('MAX(articulo_movimiento_talle.precio) as precio'),
             DB::raw('MAX(pedido_combinacion.pedido_id) as pedido'),
@@ -104,9 +107,11 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             $articulo_query = $articulo_query->where('articulo.mventa_id', $mventa_id);
         }
 
-        if ($deposito_id != 0) {
-            $articulo_query = $articulo_query->where('articulo_movimiento.deposito_id', $deposito_id);
-        }
+        $articulo_query = ReporteStockOtDepositoAmbitoSupport::aplicar(
+            $articulo_query,
+            (string) $ambitoDeposito,
+            (int) $deposito_id
+        );
 
         switch ($estado) {
             case 'ACTIVAS':
@@ -187,6 +192,7 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
                 DB::raw('0 as deposito_id'),
                 'combinacion.foto as foto',
                 'linea.nombre as nombrelinea',
+                'articulo.id as articulo_id',
                 'articulo.sku as sku',
                 'combinacion.codigo as codigocombinacion',
                 'combinacion.nombre as nombrecombinacion',
@@ -222,7 +228,10 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
                     ->from('ordentrabajo_tarea as ottc')
                     ->whereColumn('ottc.ordentrabajo_id', 'ot.id')
                     ->whereIn('ottc.tarea_id', $idsCierre);
-            })
+            });
+        // EMPAQUE cerrado (OT 29885): ya no está en planta.
+        ReporteStockOtSituacionSupport::aplicarExcluirEmpaqueFinalizado($query, 'ot.id');
+        $query
             // Ya tiene movimiento de stock (evita duplicar; sin IN gigante).
             ->whereNotExists(function ($sub) {
                 $sub->select(DB::raw('1'))
@@ -263,6 +272,7 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
         return $query->get()->map(static function ($row) {
             return [
                 'ordentrabajo_id' => (int) $row->ordentrabajo_id,
+                'articulo_id' => (int) ($row->articulo_id ?? 0),
                 'deposito_id' => 0,
                 'foto' => $row->foto,
                 'nombrelinea' => $row->nombrelinea,

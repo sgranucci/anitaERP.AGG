@@ -1452,6 +1452,10 @@
 							alert('No puede hacer la orden de trabajo porque no tiene deposito asignado el lote');
 							return;							
 						}
+						if (data.ot_aviso && !window.confirm(data.ot_aviso + '\n\n¿Continuar igual?'))
+						{
+							return;
+						}
 						$('#crearOrdenTrabajoModal').modal('hide');
 
 						if (checkotstock == 'on')

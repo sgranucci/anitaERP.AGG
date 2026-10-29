@@ -37,6 +37,7 @@
             </div>
             <div class="px-3 pt-2 pb-0">
                 <form action="{{ route('cobranza') }}" method="GET" class="mb-2">
+                    @include('caja.cobranza.partials.filtro_origen_ferli')
                     <div class="form-inline">
                     <label for="fecha_desde" class="mr-1 mb-1">Desde</label>
                     <input type="date" id="fecha_desde" name="fecha_desde" value="{{ $fechaDesde ?? '' }}" class="form-control form-control-sm mr-2 mb-1" title="Fecha del recibo">

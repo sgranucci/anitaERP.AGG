@@ -86,7 +86,13 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
         $busqueda = trim((string) $busqueda);
 
         $query = $this->model->query()
-            ->with(['ventas', 'cobranzas', 'monedas', 'empresas'])
+            ->with([
+                'ventas',
+                'cobranzas',
+                'monedas',
+                'empresas',
+                'cliente_cuentacorriente_aplicaciones:id,cliente_cuentacorriente_id,comprobanteaplicado',
+            ])
             ->where('cliente_cuentacorriente.cliente_id', $cliente_id);
 
         ClienteCuentacorrienteRemitoInternoSupport::excluir($query);
@@ -120,7 +126,13 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
         $busqueda = trim((string) $busqueda);
 
         $query = $this->model->query()
-            ->with(['ventas', 'monedas', 'empresas'])
+            ->with([
+                'ventas',
+                'cobranzas',
+                'monedas',
+                'empresas',
+                'cliente_cuentacorriente_aplicaciones:id,cliente_cuentacorriente_id,comprobanteaplicado',
+            ])
             ->select('cliente_cuentacorriente.*')
             ->addSelect([
                 'aplicado' => Cliente_Cuentacorriente_Aplicacion::query()

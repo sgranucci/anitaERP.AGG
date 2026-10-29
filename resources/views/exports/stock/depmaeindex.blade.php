@@ -1,8 +1,10 @@
 @php
 	use App\Models\Stock\Depmae;
 	use App\Support\Configuracion\EntornoEmpresaSupport;
+	use App\Support\Stock\DepmaeCanalSupport;
 	$esCrown = EntornoEmpresaSupport::esCrown();
-	$colspan = $esCrown ? 6 : 5;
+	$muestraCanal = EntornoEmpresaSupport::esFerli();
+	$colspan = 5 + ($esCrown ? 1 : 0) + ($muestraCanal ? 1 : 0);
 @endphp
 <table>
 	@if (!empty($reservarFilaLogoExcel))
@@ -26,6 +28,9 @@
 			<th>Sala</th>
 			@endif
 			<th>Tipo de dep&oacute;sito</th>
+			@if ($muestraCanal)
+			<th>Canal</th>
+			@endif
 			<th>C&oacute;digo ANITA</th>
 		</tr>
 	</thead>
@@ -39,6 +44,9 @@
 				<td>{{ $data->salas ? trim(($data->salas->codigo ?? '').' — '.($data->salas->nombre ?? ''), ' —') : '' }}</td>
 				@endif
 				<td>{{ Depmae::etiquetaTipoDeposito($data->tipodeposito) }}</td>
+				@if ($muestraCanal)
+				<td>{{ DepmaeCanalSupport::etiqueta($data->canal ?? null) }}</td>
+				@endif
 				<td>{{ $data->codigo }}</td>
 			</tr>
 		@endforeach

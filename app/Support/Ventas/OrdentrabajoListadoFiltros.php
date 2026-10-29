@@ -6,6 +6,7 @@ use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Filtros del listado de órdenes de trabajo (indexp / exportaciones).
@@ -190,75 +191,117 @@ class OrdentrabajoListadoFiltros
             return;
         }
 
-        $id = filter_var($valor, FILTER_VALIDATE_INT);
+        $ids = self::idsOrdentrabajoCoincidentes($operador, $valor);
+        if ($ids === []) {
+            $query->whereRaw('0 = 1');
+
+            return;
+        }
+
+        $query->whereIntegerInRaw('ordentrabajo.id', $ids);
+    }
+
+    /**
+     * Arma los ids de OT que coinciden, buscando primero en las tablas chicas
+     * (cliente, artículo, combinación, tarea) y después en las hijas por FK.
+     * Un EXISTS anidado desde ordentrabajo obliga a evaluar el LIKE en cada OT.
+     *
+     * @return list<int>
+     */
+    private static function idsOrdentrabajoCoincidentes(string $operador, string $valor): array
+    {
         $like = self::patronLike($operador, $valor);
+        $ids = [];
 
-        $query->where(function ($q) use ($valor, $like, $id, $operador) {
-            if ($id !== false) {
-                $q->orWhere('ordentrabajo.codigo', (int) $id);
-                $q->orWhere('ordentrabajo.id', (int) $id);
-            }
-            $q->orWhere('ordentrabajo.estado', 'like', $like);
-            $q->orWhere('ordentrabajo.fecha', 'like', $like);
-
-            $q->orWhereHas('ordentrabajo_combinacion_talles.clientes', function ($cq) use ($valor, $like, $operador) {
-                $cq->where('nombre', 'like', $like);
-                if ($operador === 'contiene') {
-                    CoincidenciaFlexibleTexto::aplicar(
-                        $cq,
-                        'nombre',
-                        $valor,
-                        false,
-                        CoincidenciaFlexibleTexto::LONGITUD_MINIMA_DEFAULT
-                    );
+        $id = filter_var($valor, FILTER_VALIDATE_INT);
+        if ($id !== false || self::puedeCoincidirEstadoOFecha($valor)) {
+            $ids = array_merge($ids, DB::table('ordentrabajo')->where(function ($w) use ($like, $id, $valor) {
+                if ($id !== false) {
+                    $w->where('codigo', (int) $id)->orWhere('id', (int) $id);
                 }
-            });
-
-            $q->orWhereHas(
-                'ordentrabajo_combinacion_talles.pedido_combinacion_talles.pedidos_combinacion.articulos',
-                function ($aq) use ($valor, $like, $operador) {
-                    $aq->where('descripcion', 'like', $like);
-                    if ($operador === 'contiene') {
-                        CoincidenciaFlexibleTexto::aplicar(
-                            $aq,
-                            'descripcion',
-                            $valor,
-                            false,
-                            CoincidenciaFlexibleTexto::LONGITUD_MINIMA_ARTICULO
-                        );
-                    }
+                if (self::puedeCoincidirEstadoOFecha($valor)) {
+                    $w->orWhere('estado', 'like', $like)->orWhere('fecha', 'like', $like);
                 }
+            })->pluck('id')->all());
+        }
+
+        $clienteIds = DB::table('cliente')->where('nombre', 'like', $like)->pluck('id')->all();
+        $ids = array_merge($ids, self::pluckDondeIn(
+            'ordentrabajo_combinacion_talle',
+            'cliente_id',
+            'ordentrabajo_id',
+            $clienteIds
+        ));
+
+        $articuloIds = DB::table('articulo')->where('descripcion', 'like', $like)->pluck('id')->all();
+        $ids = array_merge($ids, self::idsOtPorPedidoCombinacion('articulo_id', $articuloIds));
+
+        $combinacionIds = DB::table('combinacion')->where('nombre', 'like', $like)->pluck('id')->all();
+        $ids = array_merge($ids, self::idsOtPorPedidoCombinacion('combinacion_id', $combinacionIds));
+
+        $tareaIds = DB::table('tarea')->where('nombre', 'like', $like)->pluck('id')->all();
+        $ids = array_merge($ids, self::pluckDondeIn(
+            'ordentrabajo_tarea',
+            'tarea_id',
+            'ordentrabajo_id',
+            $tareaIds
+        ));
+
+        return array_values(array_unique(array_map('intval', $ids)));
+    }
+
+    /**
+     * Estado de la OT es siempre "0" y la fecha es Y-m-d: un texto con letras,
+     * o un número de 5 dígitos o más, no puede aparecer ahí.
+     */
+    private static function puedeCoincidirEstadoOFecha(string $valor): bool
+    {
+        if (preg_match('/\p{L}/u', $valor)) {
+            return false;
+        }
+        if (ctype_digit($valor) && strlen($valor) >= 5) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  list<int|string>  $idsMaestro
+     * @return list<int>
+     */
+    private static function idsOtPorPedidoCombinacion(string $columnaPedido, array $idsMaestro): array
+    {
+        $pedidoCombinacionIds = self::pluckDondeIn('pedido_combinacion', $columnaPedido, 'id', $idsMaestro);
+        $talleIds = self::pluckDondeIn('pedido_combinacion_talle', 'pedido_combinacion_id', 'id', $pedidoCombinacionIds);
+
+        return self::pluckDondeIn(
+            'ordentrabajo_combinacion_talle',
+            'pedido_combinacion_talle_id',
+            'ordentrabajo_id',
+            $talleIds
+        );
+    }
+
+    /**
+     * @param  list<int|string>  $ids
+     * @return list<int|string>
+     */
+    private static function pluckDondeIn(string $tabla, string $columna, string $pluck, array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach (array_chunk($ids, 2000) as $chunk) {
+            $out = array_merge(
+                $out,
+                DB::table($tabla)->whereIn($columna, $chunk)->pluck($pluck)->all()
             );
+        }
 
-            $q->orWhereHas(
-                'ordentrabajo_combinacion_talles.pedido_combinacion_talles.pedidos_combinacion.combinaciones',
-                function ($cq) use ($valor, $like, $operador) {
-                    $cq->where('nombre', 'like', $like);
-                    if ($operador === 'contiene') {
-                        CoincidenciaFlexibleTexto::aplicar(
-                            $cq,
-                            'nombre',
-                            $valor,
-                            false,
-                            CoincidenciaFlexibleTexto::LONGITUD_MINIMA_DEFAULT
-                        );
-                    }
-                }
-            );
-
-            $q->orWhereHas('ordentrabajo_tareas.tareas', function ($tq) use ($valor, $like, $operador) {
-                $tq->where('nombre', 'like', $like);
-                if ($operador === 'contiene') {
-                    CoincidenciaFlexibleTexto::aplicar(
-                        $tq,
-                        'nombre',
-                        $valor,
-                        false,
-                        CoincidenciaFlexibleTexto::LONGITUD_MINIMA_DEFAULT
-                    );
-                }
-            });
-        });
+        return $out;
     }
 
     /**

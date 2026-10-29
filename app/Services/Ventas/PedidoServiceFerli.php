@@ -194,6 +194,7 @@ class PedidoServiceFerli
 												$desdefondo_id, $hastafondo_id)
 	{
 		ini_set('memory_limit', '512M');
+		ini_set('max_execution_time', '2400');
 
 		$data = $this->pedidoQuery->findPorRangoFecha($tipolistado, $mventa_id, $desdefecha, $hastafecha,
 									$desdevendedor_id, $hastavendedor_id,
@@ -1274,6 +1275,17 @@ class PedidoServiceFerli
 			);
 			$totPares = $syncTalles['total_pares'];
 
+			if ($funcion == 'update' && $ordentrabajoId > 0 && (int) $ordentrabajo_stock_id > 0) {
+				$errorStock = PedidoPickingFerliSupport::errorSiConsumoOtStockSuperaSaldo(
+					$pedidoCombinacionId,
+					(string) $ordentrabajo_stock_id,
+					(float) $totPares
+				);
+				if ($errorStock !== null) {
+					throw new Exception($errorStock);
+				}
+			}
+
 			// Stock: rearmar AMT de talles vigentes (los quitados ya se borraron en el sync)
 			$esStock = $ordentrabajo_stock_id != 0 || $clienteLineaId == (int) config('consprod.CLIENTE_STOCK');
 			if ($funcion == 'update' && $ordentrabajoId > 0 && $esStock) {
@@ -1440,6 +1452,18 @@ class PedidoServiceFerli
 		$depositoId = (int) $deposito_id;
 		if ($depositoId <= 0) {
 			$depositoId = 1;
+		}
+
+		if ($esConsumo) {
+			$errorStock = PedidoPickingFerliSupport::errorSiConsumoOtStockSuperaSaldo(
+				(int) $pedido_combinacion->id,
+				(string) $ordentrabajo_stock_id,
+				(float) $pedido_combinacion->cantidad,
+				$depositoId
+			);
+			if ($errorStock !== null) {
+				throw new Exception($errorStock);
+			}
 		}
 
 		$dataArticuloMovimiento = [

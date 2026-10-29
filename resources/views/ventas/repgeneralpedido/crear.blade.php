@@ -4,7 +4,7 @@
 @endsection
 
 @section("scripts")
-
+<script src="{{ asset('assets/pages/scripts/ventas/repgeneralpedido/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/repgeneralpedido/form.js')) ?: time() }}"></script>
 @endsection
 
 @section('contenido')
@@ -16,7 +16,7 @@
             <div class="card-header">
                 <h3 class="card-title">Datos Reporte General de Pedidos de Venta</h3>
             </div>
-            <form action="{{route('crear_repgeneralpedido')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('crear_repgeneralpedido')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-sin-bloqueo-grabacion="1">
                 @csrf @method("post")
                 <div class="card-body">
                     @include('ventas.repgeneralpedido.form')
@@ -33,4 +33,9 @@
         </div>
     </div>
 </div>
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'repgeneralpedido-overlay',
+    'titulo' => 'Generando el listado…',
+    'subtitulo' => 'Puede demorar según el período. No cierre la página.',
+])
 @endsection

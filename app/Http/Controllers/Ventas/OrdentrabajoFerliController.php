@@ -16,6 +16,7 @@ use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\TransporteRepositoryInterface;
 use App\Services\Ventas\OrdentrabajoService;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
+use App\Support\Ventas\Ferli\OtConsultaDivisionPickingSupport;
 use App\Support\Ventas\QuitarTerminadaStockOtSupport;
 use RuntimeException;
 
@@ -127,6 +128,12 @@ class OrdentrabajoFerliController extends OrdentrabajoController
                 $data[$ii]['medidas'][] = $medidas;
             }
         }
+
+        $data = OtConsultaDivisionPickingSupport::dividir(
+            $data,
+            (int) $ordentrabajo->id,
+            (string) $ordentrabajo->codigo
+        );
 
         $puntoventadefault_id = cache()->get(generaKey('puntoventa'));
         $puntoventaremitodefault_id = cache()->get(generaKey('puntoventaremito'));

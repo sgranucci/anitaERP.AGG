@@ -8,6 +8,7 @@ use App\Models\Ventas\LocalVenta;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceCatalogoSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePrecioSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePuenteSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioArticuloSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -23,8 +24,9 @@ final class CambioDevolucionMarketplaceEmisionService
     /**
      * @return array{ok:bool,error?:string,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string}
      */
-    public function emitirFacReemplazo(CambioDevolucionMarketplace $cambio): array
+    public function emitirFacReemplazo(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null): array
     {
+        $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
         $cambio->loadMissing(['lineas.articulo', 'localVenta', 'ventaOriginal.venta_emisiones']);
         /** @var LocalVenta|null $local */
         $local = $cambio->localVenta;
@@ -48,25 +50,25 @@ final class CambioDevolucionMarketplaceEmisionService
 
         $lineas = [];
         $total = 0.0;
+        $avisos = [];
         foreach ($lineasReemplazo as $linea) {
             $cant = (float) $linea->cantidad;
-            $precio = (float) $linea->precio_unitario;
-            $par = $this->devolverMismoArticulo($devolverPendientes, (int) $linea->articulo_id, $devolverUsados);
-            if ($par instanceof CambioDevolucionMarketplaceLinea) {
-                $devolverUsados[] = (int) $par->id;
-                $acreditable = CambioDevolucionMarketplacePrecioSupport::precioAcreditable(
-                    (float) $par->precio_unitario,
-                    $this->precioFacturadoDeLinea($par, $emisiones)
-                );
-                if ($acreditable > 0 && $precio - $acreditable > 0.02) {
-                    $ajustes[] = [
-                        'reemplazo' => $linea,
-                        'devolver' => $par,
-                        'precio' => $acreditable,
-                        'anterior' => $precio,
-                    ];
-                    $precio = $acreditable;
-                }
+            $anterior = (float) $linea->precio_unitario;
+            $par = $this->parDeDevolucion($devolverPendientes, $linea, $devolverUsados);
+            $resuelto = $this->precioDeReemplazo($modo, $cambio, $linea, $par, $emisiones);
+            if ($resuelto['error'] !== null) {
+                return ['ok' => false, 'error' => $resuelto['error']];
+            }
+            $precio = (float) $resuelto['precio'];
+            if (abs($precio - $anterior) > 0.02) {
+                $ajustes[] = [
+                    'reemplazo' => $linea,
+                    'precio' => $precio,
+                    'anterior' => $anterior,
+                ];
+            }
+            if ($resuelto['aviso'] !== '') {
+                $avisos[] = $resuelto['aviso'];
             }
             $total += $cant * $precio;
             $lineas[] = [
@@ -123,15 +125,127 @@ final class CambioDevolucionMarketplaceEmisionService
             $factura = trim((string) ($venta->codigo ?? ''));
         }
 
-        $aviso = $this->persistirPreciosAcreditables($ajustes);
+        $aviso = $this->persistirPreciosFacturados($ajustes);
+        $detalle = trim(implode(' ', array_filter([
+            CambioDevolucionMarketplacePrecioSupport::etiqueta($modo).'.',
+            $aviso,
+            $avisos !== [] ? implode(' ', $avisos) : '',
+        ])));
 
         return [
             'ok' => true,
             'venta_id' => $ventaId,
             'factura' => $factura,
             'pdf_urls' => $ventaId > 0 ? [url('ventas/listaunafactura/'.$ventaId)] : [],
-            'mensaje' => trim('Factura de reemplazo emitida con medio puente NCD. '.$aviso),
+            'mensaje' => trim('Factura de reemplazo emitida con medio puente NCD. '.$detalle),
+            'modo_precio' => $modo,
         ];
+    }
+
+    /**
+     * El par que se lleva toma el precio de una línea «A devolver» todavía libre.
+     * Primero el mismo artículo; si el reemplazo es otro modelo, la siguiente línea a devolver.
+     *
+     * @param  \Illuminate\Support\Collection<int, CambioDevolucionMarketplaceLinea>  $devolver
+     * @param  list<int>  $usados
+     */
+    private function parDeDevolucion($devolver, CambioDevolucionMarketplaceLinea $reemplazo, array &$usados): ?CambioDevolucionMarketplaceLinea
+    {
+        $par = $this->devolverMismoArticulo($devolver, (int) $reemplazo->articulo_id, $usados);
+        if (! $par instanceof CambioDevolucionMarketplaceLinea) {
+            $par = $devolver->first(function (CambioDevolucionMarketplaceLinea $linea) use ($usados) {
+                return ! in_array((int) $linea->id, $usados, true);
+            });
+        }
+        if ($par instanceof CambioDevolucionMarketplaceLinea) {
+            $usados[] = (int) $par->id;
+
+            return $par;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Ventas\Venta_Emision>  $emisiones
+     * @return array{precio:float,error:?string,aviso:string}
+     */
+    private function precioDeReemplazo(
+        string $modo,
+        CambioDevolucionMarketplace $cambio,
+        CambioDevolucionMarketplaceLinea $linea,
+        ?CambioDevolucionMarketplaceLinea $par,
+        $emisiones,
+    ): array {
+        $nombre = trim((string) ($linea->descripcion ?: $linea->articulo?->descripcion ?: 'el artículo'));
+        $precioActual = null;
+        if ($modo === CambioDevolucionMarketplacePrecioSupport::MODO_LLENO_ACTUAL) {
+            $precioActual = $this->precioActualDeLinea($cambio, $linea);
+            if ($precioActual === null) {
+                return [
+                    'precio' => 0,
+                    'error' => 'No hay precio de lista vigente para '.$nombre.'.',
+                    'aviso' => '',
+                ];
+            }
+        }
+
+        $facturado = 0.0;
+        $descuento = 0.0;
+        if ($par instanceof CambioDevolucionMarketplaceLinea) {
+            $emision = $this->emisionDeLineaDevolver($par, $emisiones);
+            $facturado = round((float) ($emision?->precio ?? 0), 4);
+            $descuento = (float) ($emision?->descuento ?? 0);
+        }
+
+        if ($modo !== CambioDevolucionMarketplacePrecioSupport::MODO_LLENO_ACTUAL && ! $par instanceof CambioDevolucionMarketplaceLinea) {
+            $propio = round((float) $linea->precio_unitario, 4);
+
+            return [
+                'precio' => $propio > 0 ? $propio : 0,
+                'error' => $propio > 0 ? null : 'La línea de reemplazo '.$nombre.' no tiene precio.',
+                'aviso' => $nombre.': sin par en la factura original, se usó el precio de la línea.',
+            ];
+        }
+
+        $unitario = CambioDevolucionMarketplacePrecioSupport::unitario($modo, $facturado, $descuento, $precioActual);
+        if ($unitario === null || $unitario <= 0) {
+            return [
+                'precio' => 0,
+                'error' => 'No se pudo resolver el precio de '.$nombre.' con la opción elegida.',
+                'aviso' => '',
+            ];
+        }
+
+        return ['precio' => $unitario, 'error' => null, 'aviso' => ''];
+    }
+
+    private function precioActualDeLinea(CambioDevolucionMarketplace $cambio, CambioDevolucionMarketplaceLinea $linea): ?float
+    {
+        $cot = FacturacionLocalPrecioArticuloSupport::paraLocal(
+            (int) $cambio->local_venta_id,
+            (int) $linea->articulo_id,
+            (int) ($linea->combinacion_id ?? 0),
+            (int) ($linea->talle_id ?? 0),
+        );
+        $precio = round((float) ($cot['precio'] ?? 0), 4);
+
+        return $precio > 0 ? $precio : null;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Ventas\Venta_Emision>  $emisiones
+     */
+    private function emisionDeLineaDevolver(CambioDevolucionMarketplaceLinea $linea, $emisiones)
+    {
+        $emisionId = (int) ($linea->venta_emision_id ?? 0);
+        $emision = $emisionId > 0 ? $emisiones->get($emisionId) : null;
+        if ($emision !== null) {
+            return $emision;
+        }
+        $articuloId = (int) $linea->articulo_id;
+
+        return $emisiones->first(fn ($em) => (int) $em->articulo_id === $articuloId);
     }
 
     /**
@@ -155,26 +269,12 @@ final class CambioDevolucionMarketplaceEmisionService
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, \App\Models\Ventas\Venta_Emision>  $emisiones
-     */
-    private function precioFacturadoDeLinea(CambioDevolucionMarketplaceLinea $linea, $emisiones): float
-    {
-        $emisionId = (int) ($linea->venta_emision_id ?? 0);
-        $emision = $emisionId > 0 ? $emisiones->get($emisionId) : null;
-        if ($emision === null) {
-            $articuloId = (int) $linea->articulo_id;
-            $emision = $emisiones->first(fn ($em) => (int) $em->articulo_id === $articuloId);
-        }
-
-        return round((float) ($emision?->precio ?? 0), 4);
-    }
-
-    /**
-     * Deja en el legajo el precio que salió en la factura, el mismo que va a acreditar la nota.
+     * Deja en la línea de reemplazo el precio que salió en la factura.
+     * La línea a devolver no se toca: la nota de crédito elige su precio aparte.
      *
-     * @param  list<array{reemplazo:CambioDevolucionMarketplaceLinea,devolver:CambioDevolucionMarketplaceLinea,precio:float,anterior:float}>  $ajustes
+     * @param  list<array{reemplazo:CambioDevolucionMarketplaceLinea,precio:float,anterior:float}>  $ajustes
      */
-    private function persistirPreciosAcreditables(array $ajustes): string
+    private function persistirPreciosFacturados(array $ajustes): string
     {
         if ($ajustes === []) {
             return '';
@@ -184,20 +284,14 @@ final class CambioDevolucionMarketplaceEmisionService
         foreach ($ajustes as $ajuste) {
             $precio = round((float) $ajuste['precio'], 4);
             $reemplazo = $ajuste['reemplazo'];
-            $devolver = $ajuste['devolver'];
             $reemplazo->precio_unitario = $precio;
             $reemplazo->save();
-            if ((float) $devolver->precio_unitario - $precio > 0.02) {
-                $devolver->precio_unitario = $precio;
-                $devolver->save();
-            }
             $nombre = trim((string) ($reemplazo->descripcion ?: $reemplazo->articulo?->descripcion ?: 'el artículo'));
             $partes[] = $nombre
                 .' $ '.number_format((float) $ajuste['anterior'], 2, ',', '.')
                 .' → $ '.number_format($precio, 2, ',', '.');
         }
 
-        return 'Mismo artículo: se facturó al precio ya cobrado para no volver a cobrar el descuento. '
-            .implode('; ', $partes).'.';
+        return implode('; ', $partes).'.';
     }
 }

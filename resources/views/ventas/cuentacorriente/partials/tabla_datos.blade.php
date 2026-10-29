@@ -11,6 +11,7 @@
     $saldoPesos = (float) ($saldoAnteriorPesos ?? 0);
     $separadorEntrega = ! empty($para_pdf) ? '<br>' : "\n";
     $paraExcel = ! empty($para_excel);
+    $mostrarColumnaEmpresa = (bool) ($mostrarColumnaEmpresa ?? false);
     $formatearMonto = static function ($valor, $abreviatura = '') use ($paraExcel) {
         if ($paraExcel) {
             return $valor;
@@ -22,7 +23,9 @@
 <thead>
     <tr>
         <th style="width: 5%;">ID</th>
-        <th style="width: 12%;">Empresa</th>
+        @if ($mostrarColumnaEmpresa)
+            <th style="width: 12%;">Empresa</th>
+        @endif
         <th style="width: 9%;">Fecha</th>
         <th style="width: 9%;">Vencimiento</th>
         <th style="width: {{ $enPesos ? '20%' : '24%' }};">Comprobante</th>
@@ -74,14 +77,21 @@
         @endphp
         <tr>
             <td>{{ $data->id }}</td>
-            <td>{{ $data->empresas->nombre ?? ($data->nombreempresa ?? '') }}</td>
+            @if ($mostrarColumnaEmpresa)
+                <td>{{ $data->empresas->nombre ?? ($data->nombreempresa ?? '') }}</td>
+            @endif
             <td>{{ date('d/m/Y', strtotime($data->fecha ?? '')) }}</td>
             <td>{{ date('d/m/Y', strtotime($data->fechavencimiento ?? '')) }}</td>
             <td>
                 {{ $etiquetaComprobante }}
-                @if ($data->venta_id > 0 && ! empty($data->ventas?->lugarentrega))
+                @if ((int) ($data->cobranza_id ?? 0) === 0 && (int) ($data->venta_id ?? 0) > 0 && ! empty($data->ventas?->lugarentrega))
                     {!! $separadorEntrega !!}<small>Entrega: {{ $data->ventas->lugarentrega }}</small>
                 @endif
+                @include('ventas.cuentacorriente.partials.referencia_aplicacion', [
+                    'data' => $data,
+                    'para_pdf' => $para_pdf ?? false,
+                    'para_excel' => $paraExcel,
+                ])
             </td>
             <td>{{ $importes['etiqueta_moneda'] }}</td>
             @if ($modoDeuda)

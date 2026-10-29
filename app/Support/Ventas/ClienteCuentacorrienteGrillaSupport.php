@@ -38,6 +38,49 @@ final class ClienteCuentacorrienteGrillaSupport
         return 'Movimiento #' . (int) $fila->id;
     }
 
+    /**
+     * Facturas (u otros débitos) a los que se aplicó este crédito:
+     * cada renglón de cobranza o de nota de crédito.
+     *
+     * @return list<string>
+     */
+    public static function referenciasAplicacion(Cliente_Cuentacorriente $fila): array
+    {
+        if ((float) ($fila->total ?? 0) >= 0) {
+            return [];
+        }
+
+        $codigoPropio = '';
+        if ((int) ($fila->cobranza_id ?? 0) === 0 && $fila->relationLoaded('ventas') && $fila->ventas) {
+            $codigoPropio = mb_strtoupper(trim((string) ($fila->ventas->codigo ?? '')));
+        }
+
+        $refs = [];
+        $aplicaciones = $fila->relationLoaded('cliente_cuentacorriente_aplicaciones')
+            ? $fila->cliente_cuentacorriente_aplicaciones
+            : collect();
+
+        foreach ($aplicaciones as $aplicacion) {
+            $comp = trim((string) ($aplicacion->comprobanteaplicado ?? ''));
+            if ($comp === '') {
+                continue;
+            }
+            if ($codigoPropio !== '' && mb_strtoupper($comp) === $codigoPropio) {
+                continue;
+            }
+            $refs[$comp] = $comp;
+        }
+
+        if ($refs === [] && (int) ($fila->cobranza_id ?? 0) > 0 && (int) ($fila->venta_id ?? 0) > 0 && $fila->ventas) {
+            $codigo = trim((string) ($fila->ventas->codigo ?? ''));
+            if ($codigo !== '') {
+                $refs[$codigo] = $codigo;
+            }
+        }
+
+        return array_values($refs);
+    }
+
     public static function saldoPendiente(float $total, ?float $aplicado): float
     {
         $aplicadoSum = (float) ($aplicado ?? 0);

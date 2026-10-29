@@ -166,6 +166,7 @@ class OrdentrabajoController extends Controller
         $filtros = OrdentrabajoListadoFiltros::resolverDesdeRequest($request);
         $filtrosQuery = OrdentrabajoListadoFiltros::paraQueryString($filtros);
 		$ordentrabajo = $this->ordentrabajoService->leeOrdenestrabajoPaginando($filtros, true);
+		$esConsulta = $request->routeIs('consulta_ordentrabajo');
 
 		return view('ventas.ordentrabajo.indexp', [
             'ordentrabajo' => $ordentrabajo,
@@ -173,6 +174,8 @@ class OrdentrabajoController extends Controller
             'filtrosQuery' => $filtrosQuery,
             'camposFiltro' => OrdentrabajoListadoFiltros::CAMPOS,
             'busqueda' => $filtros['valor'] ?? '',
+            'esConsulta' => $esConsulta,
+            'rutaListado' => $esConsulta ? 'consulta_ordentrabajo' : 'ordentrabajo',
         ]);
     }
 

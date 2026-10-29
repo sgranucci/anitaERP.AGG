@@ -5,6 +5,9 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/produccion/tarea/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/produccion/tarea/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/produccion/empleado/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/produccion/empleado/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/produccion/movimientoordentrabajo/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/produccion/movimientoordentrabajo/form.js')) ?: time() }}"></script>
 @endsection
 
 @section('contenido')
@@ -12,7 +15,7 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">Editar Movimiento de OT</h3>
                 <div class="card-tools">
@@ -21,7 +24,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('actualizar_movimientoordentrabajo', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('actualizar_movimientoordentrabajo', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-foco-inicial="#fecha">
                 @csrf @method("put")
                 <div class="card-body">
         			<input type="hidden" id="movimiento_id" name="movimiento_id" value="{{$data->id}}" >
@@ -39,4 +42,6 @@
         </div>
     </div>
 </div>
+@include('includes.produccion.modalconsultatarea')
+@include('includes.produccion.modalconsultaempleado')
 @endsection

@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
     <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}">
     @stack('styles')
-    @routes
+    {!! \App\Support\Http\ZiggyRutasScript::html() !!}
 </head>
 <body class="layout-top-nav text-sm" style="background:#e9ecef;">
     <div class="wrapper">

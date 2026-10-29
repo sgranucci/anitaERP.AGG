@@ -6,6 +6,7 @@ use App\Models\Stock\Mventa;
 use App\Queries\Stock\ArticuloQueryInterface;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Support\Stock\ArticuloCombinacionFotoSupport;
+use App\Support\Stock\ReporteStockOtDepositoAmbitoSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -59,9 +60,14 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
 
     private $deposito_id;
 
+    private $ambitoDeposito = 'TODOS';
+
     private ArticuloQueryInterface $articuloQuery;
 
     private Articulo_MovimientoService $articulo_movimientoService;
+
+    /** @var list<array<string, mixed>>|null */
+    private ?array $filasInyectadas = null;
 
     /** @var list<array<string, mixed>> */
     private array $filasDatos = [];
@@ -89,31 +95,33 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
 
     public function view(): View
     {
-        $ret = generaRangoArticulo($this->desdearticulo_id, $this->hastaarticulo_id, $this->articuloQuery);
-        $desdeArticuloRango = $ret['desdearticulorango'];
-        $hastaArticuloRango = $ret['hastaarticulorango'];
-
         $nombremarca = 'Todas las marcas';
         if ($this->mventa_id != 0) {
             $marca = Mventa::find($this->mventa_id);
             $nombremarca = $marca ? $marca->nombre : '--';
         }
 
-        $data = $this->articulo_movimientoService->generaDatosRepStockOt(
-            $this->estado,
-            $this->mventa_id,
-            $desdeArticuloRango,
-            $hastaArticuloRango,
-            $this->desdelinea_id,
-            $this->hastalinea_id,
-            $this->desdecategoria_id,
-            $this->hastacategoria_id,
-            $this->desdelote,
-            $this->hastalote,
-            $this->estadoOt,
-            $this->apertura,
-            $this->deposito_id
-        );
+        if ($this->filasInyectadas !== null) {
+            $data = $this->filasInyectadas;
+        } else {
+            $ret = generaRangoArticulo($this->desdearticulo_id, $this->hastaarticulo_id, $this->articuloQuery);
+            $data = $this->articulo_movimientoService->generaDatosRepStockOt(
+                $this->estado,
+                $this->mventa_id,
+                $ret['desdearticulorango'],
+                $ret['hastaarticulorango'],
+                $this->desdelinea_id,
+                $this->hastalinea_id,
+                $this->desdecategoria_id,
+                $this->hastacategoria_id,
+                $this->desdelote,
+                $this->hastalote,
+                $this->estadoOt,
+                $this->apertura,
+                $this->deposito_id,
+                $this->ambitoDeposito
+            );
+        }
 
         if ($this->imprimeFoto === 'CON_FOTO') {
             foreach ($data as &$fila) {
@@ -138,6 +146,11 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
         $this->filaCabecerasExcel = 2;
         $this->filaPrimeraDatosExcel = 3;
         $this->tituloHoja = 'Stock por OT — '.$nombremarca;
+        if ((int) $this->deposito_id <= 0
+            && ReporteStockOtDepositoAmbitoSupport::normalizar((string) $this->ambitoDeposito)
+                !== ReporteStockOtDepositoAmbitoSupport::TODOS) {
+            $this->tituloHoja .= ' — '.ReporteStockOtDepositoAmbitoSupport::etiqueta((string) $this->ambitoDeposito);
+        }
 
         return view('exports.stock.reportestockot.reportestockot', [
             'data' => $this->filasDatos,
@@ -306,7 +319,8 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
         $imprimefoto,
         $estadoot,
         $apertura,
-        $deposito_id
+        $deposito_id,
+        $ambitoDeposito = 'TODOS'
     ) {
         $this->estado = $estado;
         $this->mventa_id = $mventa_id;
@@ -322,6 +336,19 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
         $this->estadoOt = $estadoot;
         $this->apertura = $apertura;
         $this->deposito_id = $deposito_id;
+        $this->ambitoDeposito = ReporteStockOtDepositoAmbitoSupport::normalizar((string) $ambitoDeposito);
+
+        return $this;
+    }
+
+    /**
+     * Filas ya armadas (vista previa / filtro de resultado). No vuelve a consultar.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     */
+    public function conFilas(array $filas): self
+    {
+        $this->filasInyectadas = array_values($filas);
 
         return $this;
     }

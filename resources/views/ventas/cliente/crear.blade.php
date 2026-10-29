@@ -38,6 +38,10 @@ input:invalid {
 <script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}?v={{ file_exists($arcaPadronAsyncJs) ? filemtime($arcaPadronAsyncJs) : time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-validacion-abm.js') }}?v={{ file_exists($arcaValidacionAbmJs) ? filemtime($arcaValidacionAbmJs) : time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/crear.js') }}?v={{ file_exists($clienteCrearJs) ? filemtime($clienteCrearJs) : time() }}" type="text/javascript"></script>
+@php
+    $clienteAvisosJs = public_path('assets/pages/scripts/ventas/cliente/avisos.js');
+@endphp
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/avisos.js') }}?v={{ file_exists($clienteAvisosJs) ? filemtime($clienteAvisosJs) : time() }}" type="text/javascript"></script>
 <script>
 $( "#botonform0" ).click(function() {
   $( "#form-general" ).submit();
@@ -99,6 +103,7 @@ $( "#botonform0" ).click(function() {
                         @include('ventas.cliente.form7')
                         @include('ventas.cliente.form8')
                         @include('ventas.cliente.form10')
+                        @include('ventas.cliente.form11')
                     </div>
                     @include('ventas.cliente.partials.arca_padron_support')
                 </div>

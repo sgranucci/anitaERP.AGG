@@ -735,8 +735,10 @@ Route::delete('stock/tiponumeracion/{id}', 'Stock\TiponumeracionController@elimi
 Route::get('stock/linea', 'Stock\LineaController@index')->name('linea');
 Route::get('stock/linea/crear', 'Stock\LineaController@crear')->name('crear_linea');
 Route::post('stock/linea', 'Stock\LineaController@guardar')->name('guardar_linea');
-Route::get('stock/linea/{id}/editar', 'Stock\LineaController@editar')->name('editar_linea');
-Route::put('stock/linea/{id}', 'Stock\LineaController@actualizar')->name('actualizar_linea');
+Route::post('stock/linea/consultalinea', 'Stock\LineaController@consultaLinea')->name('consulta_linea');
+Route::get('stock/leerlinea/{codigo}', 'Stock\LineaController@leeUnaLineaPorCodigo')->name('leer_linea');
+Route::get('stock/linea/{id}/editar', 'Stock\LineaController@editar')->name('editar_linea')->middleware('modo.consulta');
+Route::put('stock/linea/{id}', 'Stock\LineaController@actualizar')->name('actualizar_linea')->middleware('modo.consulta');
 Route::delete('stock/linea/{id}', 'Stock\LineaController@eliminar')->name('eliminar_linea');
 
 /*
@@ -1043,6 +1045,7 @@ Route::post('stock/crearrepcombinacion', 'Stock\RepCombinacionController@crearRe
 
 // Stock OT
 Route::get('stock/repstockot', 'Stock\RepStockOtController@index')->name('rep_stockot');
+Route::get('stock/repstockot/listar/{formato}', 'Stock\RepStockOtController@exportar')->name('listar_repstockot');
 Route::post('stock/crearrepstockot', 'Stock\RepStockOtController@crearReporteStockOt')->name('crear_repstockot');
 
 // Stock Listas de Precio
@@ -2830,8 +2833,8 @@ Route::get('ventas/ordenestrabajo', $ordentrabajoCtrl.'@indexp')->name('ordentra
 // Route::get('ventas/ordenestrabajop', 'Ventas\OrdentrabajoController@indexp')->name('ordentrabajop');
 Route::get('ventas/consultaordenestrabajo', $ordentrabajoCtrl.'@indexp')->name('consulta_ordentrabajo');
 Route::get('ventas/ordenestrabajo/crear', $ordentrabajoCtrl.'@crear')->name('crear_ordentrabajo');
-Route::get('ventas/ordenestrabajo/{id}/editar', $ordentrabajoCtrl.'@editar')->name('editar_ordentrabajo');
-Route::put('ventas/ordenestrabajo/{id}', $ordentrabajoCtrl.'@actualizar')->name('actualizar_ordentrabajo');
+Route::get('ventas/ordenestrabajo/{id}/editar', $ordentrabajoCtrl.'@editar')->name('editar_ordentrabajo')->middleware('modo.consulta');
+Route::put('ventas/ordenestrabajo/{id}', $ordentrabajoCtrl.'@actualizar')->name('actualizar_ordentrabajo')->middleware('modo.consulta');
 Route::delete('ventas/ordenestrabajo/{id}', $ordentrabajoCtrl.'@eliminar')->name('eliminar_ordentrabajo');
 if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::post('ventas/pedido/consultapendientesot', 'Ventas\PedidoFerliController@consultarPendienteOT')->name('consultar_pendiente_ot');
@@ -2849,7 +2852,8 @@ Route::get('ventas/listaordentrabajo/{formato?}/{busqueda?}', $ordentrabajoCtrl.
 Route::post('ventas/ordenestrabajo/borrarOt', $ordentrabajoCtrl.'@borrarOt')->name('borrar_ot');
 if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::post('ventas/ordenestrabajo/{id}/quitar-terminada-stock', $ordentrabajoCtrl.'@quitarTerminadaStock')
-        ->name('quitar_terminada_stock_ordentrabajo');
+        ->name('quitar_terminada_stock_ordentrabajo')
+        ->middleware('modo.consulta');
 }
 
 /*
@@ -2930,6 +2934,12 @@ Route::delete('produccion/operacion/{id}', 'Produccion\OperacionController@elimi
  */
 
 Route::get('produccion/movimientoordentrabajo', 'Produccion\MovimientoOrdentrabajoController@index')->name('movimientoordentrabajo');
+Route::get('produccion/movimientoordentrabajo/listar/{formato?}', 'Produccion\MovimientoOrdentrabajoController@listar')->name('listar_movimientoordentrabajo');
+Route::post('produccion/movimientoordentrabajo/workbench/vista', 'Produccion\MovimientoOrdentrabajoController@guardarVistaListado')->name('guardar_vista_listado_movimientoordentrabajo');
+Route::post('produccion/movimientoordentrabajo/workbench/preview', 'Produccion\MovimientoOrdentrabajoController@previewWorkbench')->name('preview_workbench_movimientoordentrabajo');
+Route::delete('produccion/movimientoordentrabajo/workbench/vista/{id}', 'Produccion\MovimientoOrdentrabajoController@eliminarVistaListado')->name('eliminar_vista_listado_movimientoordentrabajo')->whereNumber('id');
+Route::post('produccion/movimientoordentrabajo/workbench/columnas', 'Produccion\MovimientoOrdentrabajoController@guardarColumnasListado')->name('guardar_columnas_listado_movimientoordentrabajo');
+Route::post('produccion/movimientoordentrabajo/workbench/etiquetas', 'Produccion\MovimientoOrdentrabajoController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_movimientoordentrabajo');
 Route::get('produccion/movimientoordentrabajo/crear', 'Produccion\MovimientoOrdentrabajoController@crear')->name('crear_movimientoordentrabajo');
 Route::post('produccion/movimientoordentrabajo', 'Produccion\MovimientoOrdentrabajoController@guardar')->name('guardar_movimientoordentrabajo');
 Route::get('produccion/movimientoordentrabajo/{id}/editar', 'Produccion\MovimientoOrdentrabajoController@editar')->name('editar_movimientoordentrabajo');

@@ -42,12 +42,17 @@ final class FacturacionLocalNotaCreditoService
      *   local_venta_id?:int,
      *   venta_emision_ids?:list<int>,
      *   cantidades_por_emision?:array<int,float>,
-     *   precios_por_emision?:array<int,float>
+     *   precios_por_emision?:array<int,float>,
+     *   precios_finales?:bool,
+     *   omitir_tope_factura?:bool
      * }|null  $opciones  Solo Facturación Local / marketplace Ferli (no gastronomía).
      *   venta_emision_ids limita la NC a esos ítems (cambio: solo lo devuelto).
      *   precios_por_emision reemplaza el precio de la factura (precio editado en el legajo).
      *   Con ese array se marca respetar_precios_enviados: si no, calculaFacturaGeneral
      *   vuelve a copiar el precio pagado de la factura (2x1 / promo de Tiendanube).
+     *   precios_finales: el unitario enviado ya es el importe a acreditar (precio lleno),
+     *   sin reaplicar el descuento de línea ni el de pie, y sin tope al precio cobrado.
+     *   omitir_tope_factura: la nota puede superar el total de la factura origen.
      * @return array{ok:bool,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string,warn?:string,error?:string}
      */
     public function generarDesdeFactura(
@@ -149,6 +154,7 @@ final class FacturacionLocalNotaCreditoService
         $idsNc = self::idsEmisionOpcion($opciones['venta_emision_ids'] ?? null);
         $cantidadesNc = self::cantidadesPorEmisionOpcion($opciones['cantidades_por_emision'] ?? null);
         $preciosNc = self::preciosPorEmisionOpcion($opciones['precios_por_emision'] ?? null);
+        $preciosFinales = ! empty($opciones['precios_finales']);
 
         try {
             $payload = $this->armarPayloadNotaCredito(
@@ -159,19 +165,22 @@ final class FacturacionLocalNotaCreditoService
                 $idsNc,
                 $cantidadesNc,
                 $preciosNc,
+                $preciosFinales,
             );
         } catch (InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
 
         $importeNuevo = self::importeDesdePayload($payload);
-        $mensajeTope = FacturacionLocalNotasCreditoFacturaSupport::mensajeSiSupera(
-            (float) $ventaOrigen->total,
-            FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado($ventaFacturaId),
-            $importeNuevo,
-        );
-        if ($mensajeTope !== null) {
-            return ['ok' => false, 'error' => $mensajeTope];
+        if (empty($opciones['omitir_tope_factura'])) {
+            $mensajeTope = FacturacionLocalNotasCreditoFacturaSupport::mensajeSiSupera(
+                (float) $ventaOrigen->total,
+                FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado($ventaFacturaId),
+                $importeNuevo,
+            );
+            if ($mensajeTope !== null) {
+                return ['ok' => false, 'error' => $mensajeTope];
+            }
         }
 
         if ($omitirReingresoStock) {
@@ -363,6 +372,7 @@ final class FacturacionLocalNotaCreditoService
         ?array $idsFiltro = null,
         ?array $cantidadesPorEmision = null,
         ?array $preciosPorEmision = null,
+        bool $preciosSonFinales = false,
     ): array {
         $ventaOrigen->loadMissing(['venta_emisiones.articulos']);
         $esParcial = $idsFiltro !== null;
@@ -389,20 +399,30 @@ final class FacturacionLocalNotaCreditoService
             $emisionId = (int) $em->id;
             $descuentoLinea = (float) ($em->descuento ?? 0);
             $precio = $precioFacturado;
-            if ($preciosPorEmision !== null && array_key_exists($emisionId, $preciosPorEmision)) {
-                $precioGrilla = (float) $preciosPorEmision[$emisionId];
-                if ($precioGrilla > 0) {
-                    $precio = $precioGrilla;
+            if ($preciosSonFinales) {
+                if ($preciosPorEmision !== null && array_key_exists($emisionId, $preciosPorEmision)) {
+                    $enviado = round((float) $preciosPorEmision[$emisionId], 4);
+                    if ($enviado > 0) {
+                        $precio = $enviado;
+                    }
                 }
-            }
-            // Descuento por debajo de lo facturado: se respeta. Por encima, no se acredita.
-            if ($precioFacturado > 0 && $precio - $precioFacturado > 0.02) {
-                $precio = $precioFacturado;
-            }
-            // venta_emision.precio ya tiene el % de línea aplicado. Si la NC
-            // vuelve a mandar ese % sobre el mismo importe, el descuento sale dos veces.
-            if (abs($precio - $precioFacturado) < 0.02) {
-                $precio = self::precioListaDesdeGuardado($precioFacturado, $descuentoLinea);
+                $descuentoLinea = 0.0;
+            } else {
+                if ($preciosPorEmision !== null && array_key_exists($emisionId, $preciosPorEmision)) {
+                    $precioGrilla = (float) $preciosPorEmision[$emisionId];
+                    if ($precioGrilla > 0) {
+                        $precio = $precioGrilla;
+                    }
+                }
+                // Descuento por debajo de lo facturado: se respeta. Por encima, no se acredita.
+                if ($precioFacturado > 0 && $precio - $precioFacturado > 0.02) {
+                    $precio = $precioFacturado;
+                }
+                // venta_emision.precio ya tiene el % de línea aplicado. Si la NC
+                // vuelve a mandar ese % sobre el mismo importe, el descuento sale dos veces.
+                if (abs($precio - $precioFacturado) < 0.02) {
+                    $precio = self::precioListaDesdeGuardado($precioFacturado, $descuentoLinea);
+                }
             }
             if ($articuloId <= 0 || ($cantidadFacturada <= 0 && abs($precioFacturado) < 0.00001 && abs($precio) < 0.00001)) {
                 continue;
@@ -459,7 +479,9 @@ final class FacturacionLocalNotaCreditoService
         }
 
         $descuentoPie = (float) ($ventaOrigen->descuento ?? 0);
-        if ($esParcial && $descuentoPie > 0.004 && $brutoTodos > 0.004) {
+        if ($preciosSonFinales) {
+            $descuentoPie = 0.;
+        } elseif ($esParcial && $descuentoPie > 0.004 && $brutoTodos > 0.004) {
             $descuentoPie = round($descuentoPie * ($brutoSeleccionado / $brutoTodos), 2);
         }
 

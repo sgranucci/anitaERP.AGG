@@ -15,6 +15,7 @@
     $colLabel = $col_label ?? 'col-lg-4 control-label text-right pr-2';
     $colInput = $col_input ?? 'col-lg-8';
     $siguiente = $siguiente ?? '';
+    $ayuda = $ayuda ?? '';
     $puedeAbrirAbm = can('editar-marcas-de-venta', false) || can('listar-marcas-de-venta', false);
     $editUrl = ((int) $mventaId > 0 && $puedeAbrirAbm)
         ? route('editar_mventa', ['id' => (int) $mventaId, 'origen' => 'modal_consulta', 'vista' => 'consulta'])
@@ -55,5 +56,8 @@
                     style="min-width: 0; flex: 1 1 auto;">
             @endif
         </div>
+        @if ($ayuda !== '')
+            <small class="form-text text-muted">{{ $ayuda }}</small>
+        @endif
     </div>
 </div>

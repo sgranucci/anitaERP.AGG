@@ -102,6 +102,12 @@ function resolverPorCodigoCategoria(codigo, $ctx, opciones) {
     }
     if (cod === '') {
         limpiarCategoriaEnContexto($ctx);
+        if (opts.avanzar) {
+            var sigVacio = $ctx.find('.codigocategoria').attr('data-siguiente');
+            if (sigVacio && $(sigVacio).length) {
+                $(sigVacio).trigger('focus');
+            }
+        }
         if (typeof opts.onDone === 'function') {
             opts.onDone(null);
         }
@@ -129,6 +135,9 @@ function resolverPorCodigoCategoria(codigo, $ctx, opciones) {
     }).fail(function () {
         if (!opts.silencioso) {
             alert('No se pudo validar la categoría');
+        }
+        if (typeof opts.onDone === 'function') {
+            opts.onDone(null);
         }
     });
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Ventas;
 
 use App\Models\Configuracion\Empresa;
+use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Support\Configuracion\CotizacionVigenteSupport;
@@ -166,6 +167,7 @@ class ClienteCuentacorrienteReporteService
         $cotizacionesDiaUsadas = 0;
         $clientesUnicos = [];
         $vendedoresUnicos = [];
+        $suspendidosConSaldo = [];
 
         $vendedorActualId = null;
         $metaVendedor = [
@@ -226,6 +228,13 @@ class ClienteCuentacorrienteReporteService
                 : ($vendedorId > 0 ? 'Vendedor #'.$vendedorId : 'Sin vendedor');
             $clienteCodigo = trim((string) ($primero->clientes->codigo ?? $primero->codigocliente ?? ''));
             $clienteNombre = (string) ($primero->clientes->nombre ?? $primero->nombrecliente ?? '');
+            $clienteSuspendido = trim((string) ($primero->clientes->estado ?? '')) === Cliente::ESTADO_SUSPENDIDO;
+            $clienteNombreAviso = $clienteSuspendido
+                ? $clienteNombre.' (Suspendido)'
+                : $clienteNombre;
+            if ($clienteSuspendido) {
+                $suspendidosConSaldo[] = trim($clienteCodigo.' '.$clienteNombre);
+            }
             $nombreEmpresa = $this->nombreEmpresaUnicaGrupo($movsCliente);
 
             if ($vendedorActualId !== $vendedorId) {
@@ -248,7 +257,8 @@ class ClienteCuentacorrienteReporteService
                 'tipo' => 'header_cliente',
                 'cliente_id' => (int) $clienteId,
                 'cliente_codigo' => $clienteCodigo,
-                'cliente_nombre' => $clienteNombre,
+                'cliente_nombre' => $clienteNombreAviso,
+                'cliente_suspendido' => $clienteSuspendido,
                 'nombreempresa' => $nombreEmpresa,
                 'empresa_id' => (int) ($primero->empresa_id ?? 0),
                 'vendedor_id' => $vendedorId,
@@ -402,7 +412,8 @@ class ClienteCuentacorrienteReporteService
                 'tipo' => 'total_cliente',
                 'cliente_id' => (int) $clienteId,
                 'cliente_codigo' => $clienteCodigo,
-                'cliente_nombre' => $clienteNombre,
+                'cliente_nombre' => $clienteNombreAviso,
+                'cliente_suspendido' => $clienteSuspendido,
                 'nombreempresa' => $nombreEmpresa,
                 'vendedor_id' => $vendedorId,
                 'vendedor_codigo' => $vendedorCodigo,
@@ -450,6 +461,10 @@ class ClienteCuentacorrienteReporteService
         if ($cotizacionesDiaUsadas > 0 && $enPesos) {
             $advertencias[] = 'Se usó cotización vigente del día en '.$cotizacionesDiaUsadas
                 .' movimiento(s) sin cotización cargada en el comprobante.';
+        }
+        if ($suspendidosConSaldo !== []) {
+            $advertencias[] = 'Hay '.count($suspendidosConSaldo)
+                .' cliente(s) suspendido(s) con saldo. La deuda se lista igual, marcada como Suspendido, para no perderla.';
         }
 
         return [
@@ -503,7 +518,7 @@ class ClienteCuentacorrienteReporteService
     {
         $query = Cliente_Cuentacorriente::query()
             ->with([
-                'clientes:id,codigo,nombre,vendedor_id',
+                'clientes:id,codigo,nombre,vendedor_id,estado',
                 'clientes.vendedores:id,codigo,nombre',
                 'ventas:id,codigo,lugarentrega',
                 'cobranzas:id,detalle',
@@ -539,7 +554,7 @@ class ClienteCuentacorrienteReporteService
     {
         $query = Cliente_Cuentacorriente::query()
             ->with([
-                'clientes:id,codigo,nombre,vendedor_id',
+                'clientes:id,codigo,nombre,vendedor_id,estado',
                 'clientes.vendedores:id,codigo,nombre',
                 'ventas:id,codigo,lugarentrega',
                 'cobranzas:id,detalle',
@@ -589,6 +604,13 @@ class ClienteCuentacorrienteReporteService
 
         if ($vendedorIds !== []) {
             $query->whereIn('cliente.vendedor_id', $vendedorIds);
+        }
+
+        if (array_key_exists('incluir_suspendidos', $filtros) && empty($filtros['incluir_suspendidos'])) {
+            $query->where(function (Builder $q) {
+                $q->whereNull('cliente.estado')
+                    ->orWhere('cliente.estado', '!=', Cliente::ESTADO_SUSPENDIDO);
+            });
         }
     }
 

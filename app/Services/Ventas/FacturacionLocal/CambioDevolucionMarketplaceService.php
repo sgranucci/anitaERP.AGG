@@ -13,6 +13,7 @@ use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceCatalogoSuppo
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceEstadosSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceLiquidacionSupport;
+use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePrecioSupport;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -159,8 +160,9 @@ final class CambioDevolucionMarketplaceService
     /**
      * @return array{ok:bool,error?:string,cambio?:CambioDevolucionMarketplace,mensaje?:string}
      */
-    public function emitirFacReemplazo(CambioDevolucionMarketplace $cambio): array
+    public function emitirFacReemplazo(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null): array
     {
+        $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
         $this->assertTransicion($cambio, CambioDevolucionMarketplaceEstadosSupport::FACTURA_REEMPLAZO);
         $cambio->loadMissing('lineas');
         if ($cambio->lineas->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)->isEmpty()) {
@@ -168,7 +170,7 @@ final class CambioDevolucionMarketplaceService
                 'No hay líneas de reemplazo. Si es solo devolución, usá «Continuar sin reemplazo».'
             );
         }
-        $resultado = $this->emisionService->emitirFacReemplazo($cambio);
+        $resultado = $this->emisionService->emitirFacReemplazo($cambio, $modo);
         if (empty($resultado['ok'])) {
             return $resultado;
         }
@@ -179,7 +181,7 @@ final class CambioDevolucionMarketplaceService
         $this->registrarEstado(
             $cambio,
             CambioDevolucionMarketplaceEstadosSupport::FACTURA_REEMPLAZO,
-            'FAC reemplazo '.$resultado['factura'].' (medio puente NCD)'
+            'FAC reemplazo '.$resultado['factura'].' ('.CambioDevolucionMarketplacePrecioSupport::etiqueta($modo).')'
         );
 
         $cambio->estado = CambioDevolucionMarketplaceEstadosSupport::AGUARDANDO_RECEPCION;
@@ -224,10 +226,11 @@ final class CambioDevolucionMarketplaceService
     /**
      * @return array{ok:bool,error?:string,cambio?:CambioDevolucionMarketplace,mensaje?:string}
      */
-    public function emitirNcOriginal(CambioDevolucionMarketplace $cambio): array
+    public function emitirNcOriginal(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null): array
     {
+        $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
         $this->assertTransicion($cambio, CambioDevolucionMarketplaceEstadosSupport::NC_ORIGINAL);
-        $resultado = $this->ncService->emitirNcOriginal($cambio);
+        $resultado = $this->ncService->emitirNcOriginal($cambio, $modo);
         if (empty($resultado['ok'])) {
             return $resultado;
         }
@@ -242,7 +245,7 @@ final class CambioDevolucionMarketplaceService
         $this->registrarEstado(
             $cambio,
             CambioDevolucionMarketplaceEstadosSupport::NC_ORIGINAL,
-            'NC de lo devuelto '.$resultado['factura'].' (medio puente NCD)'
+            'NC de lo devuelto '.$resultado['factura'].' ('.CambioDevolucionMarketplacePrecioSupport::etiqueta($modo).')'
         );
 
         CambioDevolucionMarketplaceLiquidacionSupport::aplicarALegajo($cambio);

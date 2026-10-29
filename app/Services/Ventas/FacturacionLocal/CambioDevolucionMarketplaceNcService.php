@@ -3,17 +3,19 @@
 namespace App\Services\Ventas\FacturacionLocal;
 
 use App\Models\Ventas\CambioDevolucionMarketplace;
+use App\Models\Ventas\CambioDevolucionMarketplaceLinea;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Emision;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceCatalogoSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePrecioSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePuenteSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Emite la NC del cambio solo por las líneas «A devolver», al precio de la grilla.
- * Si no lo editaron, ese precio es el de la factura original. Medio puente NCD.
+ * Emite la NC del cambio solo por las líneas «A devolver». Medio puente NCD.
+ * El precio sale de la opción elegida al emitir (neto de la factura, lleno de esa factura o lleno actual).
  * No toca gastronomía AGG.
  */
 final class CambioDevolucionMarketplaceNcService
@@ -26,8 +28,9 @@ final class CambioDevolucionMarketplaceNcService
     /**
      * @return array{ok:bool,error?:string,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string}
      */
-    public function emitirNcOriginal(CambioDevolucionMarketplace $cambio): array
+    public function emitirNcOriginal(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null): array
     {
+        $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
         $cambio->loadMissing(['localVenta', 'ventaOriginal']);
         $ventaOriginalId = (int) $cambio->venta_original_id;
         if ($ventaOriginalId <= 0) {
@@ -48,7 +51,7 @@ final class CambioDevolucionMarketplaceNcService
         $cambio->loadMissing('lineas');
         $venta->loadMissing('venta_emisiones');
         try {
-            $aDevolver = $this->lineasADevolver($cambio, $venta);
+            $aDevolver = $this->lineasADevolver($cambio, $venta, $modo);
         } catch (\InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -77,6 +80,8 @@ final class CambioDevolucionMarketplaceNcService
                 'venta_emision_ids' => $aDevolver['ids'],
                 'cantidades_por_emision' => $aDevolver['cantidades'],
                 'precios_por_emision' => $aDevolver['precios'],
+                'precios_finales' => CambioDevolucionMarketplacePrecioSupport::esPrecioFinal($modo),
+                'omitir_tope_factura' => CambioDevolucionMarketplacePrecioSupport::esPrecioFinal($modo),
             ]
         );
 
@@ -93,26 +98,30 @@ final class CambioDevolucionMarketplaceNcService
             ];
         }
 
+        $this->persistirPreciosAcreditados($aDevolver['precios_linea'] ?? []);
+
         return [
             'ok' => true,
             'venta_id' => (int) ($resultado['venta_id'] ?? 0),
             'factura' => (string) ($resultado['factura'] ?? ''),
             'pdf_urls' => $resultado['pdf_urls'] ?? [],
+            'modo_precio' => $modo,
             'mensaje' => trim(
                 ($resultado['mensaje'] ?? 'Nota de crédito emitida con medio puente NCD.')
+                .' '.CambioDevolucionMarketplacePrecioSupport::etiqueta($modo).'.'
                 .' '.($aDevolver['aviso'] ?? '')
             ),
         ];
     }
 
     /**
-     * Solo las líneas «A devolver». Un precio menor al facturado se acredita.
-     * Si el legajo tiene la lista (más alta), la nota sale por el precio de la factura:
-     * no se puede acreditar más de lo cobrado en ese renglón.
+     * Solo las líneas «A devolver».
+     * Modo neto: un precio de grilla menor al facturado se acredita; por encima, lo cobrado.
+     * Precio lleno: el unitario elegido, sin reaplicar el descuento de la factura.
      *
-     * @return array{ids:list<int>,cantidades:array<int,float>,precios:array<int,float>,aviso:string}
+     * @return array{ids:list<int>,cantidades:array<int,float>,precios:array<int,float>,precios_linea:array<int,float>,aviso:string}
      */
-    private function lineasADevolver(CambioDevolucionMarketplace $cambio, Venta $venta): array
+    private function lineasADevolver(CambioDevolucionMarketplace $cambio, Venta $venta, string $modo): array
     {
         $lineas = $cambio->lineas
             ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER)
@@ -126,7 +135,9 @@ final class CambioDevolucionMarketplaceNcService
         $ids = [];
         $cantidades = [];
         $precios = [];
+        $preciosLinea = [];
         $avisos = [];
+        $precioFinal = CambioDevolucionMarketplacePrecioSupport::esPrecioFinal($modo);
 
         foreach ($lineas as $linea) {
             $emision = $this->emisionDeLinea($linea, $emisiones, $ids);
@@ -142,15 +153,37 @@ final class CambioDevolucionMarketplaceNcService
             $ids[] = $emisionId;
             $cantidades[$emisionId] = round(($cantidades[$emisionId] ?? 0) + $cantidad, 4);
             $precioFacturado = round((float) ($emision->precio ?? 0), 4);
-            $precioGrilla = (float) ($linea->precio_unitario ?? 0);
-            $precio = CambioDevolucionMarketplacePrecioSupport::precioAcreditable($precioGrilla, $precioFacturado);
-            if ($precioFacturado > 0 && $precioGrilla - $precioFacturado > 0.02) {
-                $avisos[] = trim((string) ($emision->detalle ?: 'ítem'))
-                    .': $ '.number_format($precioGrilla, 2, ',', '.')
-                    .' del legajo, se acredita $ '.number_format($precio, 2, ',', '.')
-                    .' de la factura';
+            $nombre = trim((string) ($emision->detalle ?: $linea->descripcion ?: 'ítem'));
+            if ($precioFinal) {
+                $precioActual = null;
+                if ($modo === CambioDevolucionMarketplacePrecioSupport::MODO_LLENO_ACTUAL) {
+                    $precioActual = $this->precioActualDeLinea($cambio, $linea);
+                }
+                $precio = CambioDevolucionMarketplacePrecioSupport::unitario(
+                    $modo,
+                    $precioFacturado,
+                    (float) ($emision->descuento ?? 0),
+                    $precioActual,
+                );
+                if ($precio === null || $precio <= 0) {
+                    throw new \InvalidArgumentException(
+                        $modo === CambioDevolucionMarketplacePrecioSupport::MODO_LLENO_ACTUAL
+                            ? 'No hay precio de lista vigente para '.$nombre.'.'
+                            : 'No se pudo resolver el precio lleno de la factura para '.$nombre.'.'
+                    );
+                }
+            } else {
+                $precioGrilla = (float) ($linea->precio_unitario ?? 0);
+                $precio = CambioDevolucionMarketplacePrecioSupport::precioAcreditable($precioGrilla, $precioFacturado);
+                if ($precioFacturado > 0 && $precioGrilla - $precioFacturado > 0.02) {
+                    $avisos[] = $nombre
+                        .': $ '.number_format($precioGrilla, 2, ',', '.')
+                        .' del legajo, se acredita $ '.number_format($precio, 2, ',', '.')
+                        .' de la factura';
+                }
             }
             $precios[$emisionId] = $precio;
+            $preciosLinea[(int) $linea->id] = $precio;
             if ($cantidades[$emisionId] - $facturada > 0.0001) {
                 throw new \InvalidArgumentException('La cantidad a devolver supera la facturada en '.$emision->detalle.'.');
             }
@@ -166,8 +199,41 @@ final class CambioDevolucionMarketplaceNcService
             'ids' => array_values(array_unique($ids)),
             'cantidades' => $cantidades,
             'precios' => $precios,
+            'precios_linea' => $preciosLinea,
             'aviso' => $aviso,
         ];
+    }
+
+    private function precioActualDeLinea(CambioDevolucionMarketplace $cambio, $linea): ?float
+    {
+        $cot = FacturacionLocalPrecioArticuloSupport::paraLocal(
+            (int) $cambio->local_venta_id,
+            (int) ($linea->articulo_id ?? 0),
+            (int) ($linea->combinacion_id ?? 0),
+            (int) ($linea->talle_id ?? 0),
+        );
+        $precio = round((float) ($cot['precio'] ?? 0), 4);
+
+        return $precio > 0 ? $precio : null;
+    }
+
+    /**
+     * @param  array<int, float>  $preciosLinea
+     */
+    private function persistirPreciosAcreditados(array $preciosLinea): void
+    {
+        foreach ($preciosLinea as $lineaId => $precio) {
+            $lineaId = (int) $lineaId;
+            if ($lineaId <= 0) {
+                continue;
+            }
+            $linea = CambioDevolucionMarketplaceLinea::query()->find($lineaId);
+            if ($linea === null) {
+                continue;
+            }
+            $linea->precio_unitario = round((float) $precio, 4);
+            $linea->save();
+        }
     }
 
     /**

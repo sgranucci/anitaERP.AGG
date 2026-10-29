@@ -10,7 +10,8 @@
     $abrevLocal = CuentacorrienteSaldosPorMoneda::abreviaturaLocal();
     $modoDeuda = ($modoVista ?? ClienteCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE)
         === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA;
-    $colspan = $modoDeuda ? 9 : 10;
+    $mostrarColumnaEmpresa = (bool) ($mostrarColumnaEmpresa ?? false);
+    $colspan = ($modoDeuda ? 9 : 10) - ($mostrarColumnaEmpresa ? 0 : 1);
 @endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
@@ -64,5 +65,6 @@
         'expresion' => $expresion,
         'para_pdf' => true,
         'para_excel' => true,
+        'mostrarColumnaEmpresa' => $mostrarColumnaEmpresa,
     ])
 </table>

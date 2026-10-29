@@ -8,7 +8,7 @@
 		<input type="hidden" id="tipotransacciondefault_id" class="form-control" value="{{$tipotransacciondefault_id}}" />
 		<input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
 		<div class="form-group row" id="marca">
-   			<label for="mventa" class="col-lg-3 col-form-label">Marca</label>
+   			<label for="mventa" class="col-lg-3 col-form-label text-right pr-2">Marca</label>
         	<select name="mventa_id" id="mventa_id" data-placeholder="Marca de Venta" class="col-lg-8 form-control required" data-fouc>
         		<option value="">-- Seleccionar marca --</option>
         		@foreach($mventa_query as $key => $value)
@@ -21,7 +21,7 @@
         	</select>
 		</div>
         <div class="form-group row">
-    		<label for="articulo_id" class="col-lg-3 col-form-label">Art&iacute;culo</label>
+    		<label for="articulo_id" class="col-lg-3 col-form-label text-right pr-2">Art&iacute;culo</label>
 			<select name="articulo_id" class="col-lg-8 form-control articulo required">
            		<option value="">-- Elija art&iacute;culo --</option>
            		@foreach ($articulo_query as $articulo)
@@ -34,7 +34,7 @@
         	</select>
 		</div>
         <div class="form-group row">
-    		<label for="combinacion" class="col-lg-3 col-form-label">Combinaci&oacute;n</label>
+    		<label for="combinacion" class="col-lg-3 col-form-label text-right pr-2">Combinaci&oacute;n</label>
         	<select id="combinacion_id" name="combinacion_id" data-placeholder="Combinaciones" class="col-lg-8 form-control combinacion" data-fouc>
            		<option value="">-- Elija combinaci&iacute;n --</option>
            		@foreach ($combinacion_query as $combinacion)
@@ -49,19 +49,19 @@
 	</div>
 	<div class="col-sm-6">
 		<div class="form-group row">
-    		<label for="fecha" class="col-lg-3 col-form-label">Fecha</label>
+    		<label for="fecha" class="col-lg-3 col-form-label text-right pr-2">Fecha</label>
     		<div class="col-lg-5">
     			<input type="date" name="fecha" id="fecha" class="form-control" value="{{substr(old('fecha', $ordentrabajo->fecha ?? date('Y-m-d')),0,10)}}" required>
     		</div>
 		</div>
 		<div class="form-group row">
-    		<label for="estado" class="col-lg-3 col-form-label">Estado</label>
+    		<label for="estado" class="col-lg-3 col-form-label text-right pr-2">Estado</label>
     		<div class="col-lg-5">
     			<input type="text" name="estado" id="estado" class="form-control" value="{{$ordentrabajo->estado}}" readonly>
     		</div>
 		</div>
 		<div class="form-group row">
-    		<label for="tipoot" class="col-lg-3 col-form-label">Tipo de OT</label>
+    		<label for="tipoot" class="col-lg-3 col-form-label text-right pr-2">Tipo de OT</label>
     		<div class="col-lg-5">
     			<input type="text" name="tipoot" id="tipoot" class="form-control" value="{{$ordentrabajo->tipoot}}" readonly>
     		</div>
@@ -69,55 +69,70 @@
 	</div>
 </div>
 
-<div class="card">
+<div class="card card-outline card-info">
 <div class="row">
     <div class="card-body col-sm-7">
-    	<table class="table" id="itemsordentrabajo-table">
-    		<thead>
+    	<table class="table table-sm table-bordered" id="itemsordentrabajo-table">
+    		<thead style="background:#85C1E9;color:#17202A;">
     			<tr>
     				<th>Cliente</th>
     				<th>Pedido</th>
 					<th>Item ID</th>
     				<th>Art&iacute;culo</th>
 					<th>Combinaci&oacute;n</th>
-    				<th style="width: 10%;">Pares</th>
+    				<th class="text-right" style="width: 10%;">Pares</th>
+    				<th class="text-nowrap">Acciones</th>
     			</tr>
     		</thead>
     		<tbody id="tbody-tabla">
 		 		@if ($data ?? '') 
 					@foreach ($data as $ordentrabajoitem)
-						<tr class="item-ordentrabajo">
+						@php
+							$esPicking = ! empty($ordentrabajoitem['es_picking']);
+						@endphp
+						<tr class="item-ordentrabajo{{ $esPicking ? ' fila-picking' : '' }}">
 							<td>
-								<input type="hidden" name="ids[]" class="form-control id" value="{{ $ordentrabajoitem['id'] }}">
-								<input type="text" name="clientes[]" class="form-control cliente" value="{{ $ordentrabajoitem['cliente'] }}" readonly>
-								<input type="hidden" name="cliente_ids[]" class="form-control cliente_id" value="{{ $ordentrabajoitem['cliente_id'] }}">
-								<input type="hidden" name="estadoclientes[]" class="form-control estadocliente" value="{{ $ordentrabajoitem['estadocliente'] }}">
-								<input type="hidden" name="nombretiposuspensionclientes[]" class="form-control nombretiposuspensioncliente" value="{{ $ordentrabajoitem['nombretiposuspensioncliente'] }}">
-								<input type="hidden" name="tiposuspensioncliente_ids[]" class="form-control tiposuspensioncliente_id" value="{{ $ordentrabajoitem['tiposuspensioncliente_id'] }}">
+								@unless ($esPicking)
+									<input type="hidden" name="ids[]" class="form-control id" value="{{ $ordentrabajoitem['id'] }}">
+								@endunless
+								<input type="text" @unless($esPicking) name="clientes[]" @endunless class="form-control cliente" value="{{ $ordentrabajoitem['cliente'] }}" readonly>
+								<input type="hidden" @unless($esPicking) name="cliente_ids[]" @endunless class="form-control cliente_id" value="{{ $ordentrabajoitem['cliente_id'] }}">
+								<input type="hidden" @unless($esPicking) name="estadoclientes[]" @endunless class="form-control estadocliente" value="{{ $ordentrabajoitem['estadocliente'] }}">
+								<input type="hidden" @unless($esPicking) name="nombretiposuspensionclientes[]" @endunless class="form-control nombretiposuspensioncliente" value="{{ $ordentrabajoitem['nombretiposuspensioncliente'] }}">
+								<input type="hidden" @unless($esPicking) name="tiposuspensioncliente_ids[]" @endunless class="form-control tiposuspensioncliente_id" value="{{ $ordentrabajoitem['tiposuspensioncliente_id'] }}">
 								<input type="hidden" class="form-control politica_comercial" value='@json($ordentrabajoitem["politica_comercial"] ?? [])'>
 							</td>
 							<td>
-								<input type="text" name="codigos[]" class="form-control codigo" value="{{ $ordentrabajoitem['codigo'] }}" readonly>
-								<input type="hidden" name="descuentopies[]" class="form-control descuentopie" value="{{ $ordentrabajoitem['descuentopie'] }}">
+								<input type="text" @unless($esPicking) name="codigos[]" @endunless class="form-control codigo" value="{{ $ordentrabajoitem['codigo'] }}" readonly>
+								<input type="hidden" @unless($esPicking) name="descuentopies[]" @endunless class="form-control descuentopie" value="{{ $ordentrabajoitem['descuentopie'] }}">
 							</td>
 							<td>
-								<input type="text" name="idpedido[]" class="form-control idpedido" value="{{ $ordentrabajoitem['pedidocombinacion_id'] }}" readonly>
+								<input type="text" @unless($esPicking) name="idpedido[]" @endunless class="form-control idpedido" value="{{ $ordentrabajoitem['pedidocombinacion_id'] }}" readonly>
 							</td>							
 							<td>
-								<input type="hidden" name="articulo_ids[]" class="form-control articulo_id" value="{{ $ordentrabajoitem['articulo_id'] }}">
-								<input type="text" name="articulos[]" class="form-control articulo" value="{{ $ordentrabajoitem['articulo'] }}" readonly>
-								<input type="hidden" name="skus[]" class="form-control sku" value="{{ $ordentrabajoitem['sku'] }}">
+								<input type="hidden" @unless($esPicking) name="articulo_ids[]" @endunless class="form-control articulo_id" value="{{ $ordentrabajoitem['articulo_id'] }}">
+								<input type="text" @unless($esPicking) name="articulos[]" @endunless class="form-control articulo" value="{{ $ordentrabajoitem['articulo'] }}" readonly>
+								<input type="hidden" @unless($esPicking) name="skus[]" @endunless class="form-control sku" value="{{ $ordentrabajoitem['sku'] }}">
 							</td>
 							<td>
-								<input type="hidden" name="combinacion_ids[]" class="form-control combinacion_id" value="{{ $ordentrabajoitem['combinacion_id'] }}">
-								<input type="text" name="combinaciones[]" class="form-control nombre_combinacion" value="{{ $ordentrabajoitem['nombre_combinacion'] }}" readonly>
+								<input type="hidden" @unless($esPicking) name="combinacion_ids[]" @endunless class="form-control combinacion_id" value="{{ $ordentrabajoitem['combinacion_id'] }}">
+								<input type="text" @unless($esPicking) name="combinaciones[]" @endunless class="form-control nombre_combinacion" value="{{ $ordentrabajoitem['nombre_combinacion'] }}" readonly>
 							</td>
 							<td>
-								<input type="hidden" name="modulos[]" class="form-control modulo_id" value="{{ $ordentrabajoitem['modulo_id'] }}" />
-								<input type="hidden" name="medidas[]" class="form-control medidas" value="{{ json_encode($ordentrabajoitem['medidas']) }}" />
-								<input type="text" name="pares[]" class="form-control pares" readonly value="{{number_format($ordentrabajoitem['pares'],0)}}" />
+								<input type="hidden" @unless($esPicking) name="modulos[]" @endunless class="form-control modulo_id" value="{{ $ordentrabajoitem['modulo_id'] }}" />
+								<input type="hidden" @unless($esPicking) name="medidas[]" @endunless class="form-control medidas" value="{{ json_encode($ordentrabajoitem['medidas']) }}" />
+								@if (isset($ordentrabajoitem['pares_fabricacion']))
+									<input type="hidden" name="pares[]" class="pares-fabricacion" value="{{ number_format($ordentrabajoitem['pares_fabricacion'], 0, '.', '') }}" />
+									<input type="text" class="form-control pares" readonly value="{{ number_format($ordentrabajoitem['pares'], 0, '.', '') }}" title="{{ $ordentrabajoitem['pares_titulo'] ?? '' }}" />
+								@else
+									<input type="text" @unless($esPicking) name="pares[]" @endunless class="form-control pares" readonly value="{{ number_format($ordentrabajoitem['pares'], 0, '.', '') }}" title="{{ $ordentrabajoitem['pares_titulo'] ?? '' }}" />
+								@endif
+								@if (! empty($ordentrabajoitem['pares_titulo']))
+									<small class="text-muted d-block">{{ $ordentrabajoitem['pares_titulo'] }}</small>
+								@endif
 							</td>
 							<td>
+							@unless ($esPicking)
 							@if (can('editar-ordenes-de-trabajo', false))
                                	<a href="#" class="btn-accion-tabla tooltipsC editar" title="Editar el Pedido">
                                 	<i class="fa fa-edit"></i>
@@ -132,6 +147,30 @@
 								<a href="#" class="btn-accion-tabla tooltipsC botonempacar" style="color:green;" title="Empacar la OT">
                                    	<i class="fa fa-archive"></i>
                                	</a>
+							@endif
+							@endunless
+							@if ($esPicking)
+								@php
+									$pickingCodigoAccion = (int) ($ordentrabajoitem['picking_codigo'] ?? 0);
+									$pickingIdAccion = (int) ($ordentrabajoitem['picking_id'] ?? 0);
+									$puedeAbrirPicking = $pickingCodigoAccion > 0
+										&& \App\Support\Ventas\PedidoPickingFerliSupport::habilitado()
+										&& can('listar-reporte-picking-pedido', false);
+								@endphp
+								@if ($puedeAbrirPicking)
+									<a href="{{ route('picking_pedido', [
+										'consultar' => 1,
+										'estado' => 'todos',
+										'picking_codigo' => $pickingCodigoAccion,
+										'picking_id' => $pickingIdAccion > 0 ? $pickingIdAccion : null,
+									]) }}"
+									   class="btn-accion-tabla tooltipsC"
+									   title="Abrir picking #{{ $pickingCodigoAccion }}"
+									   target="_blank"
+									   rel="noopener">
+										<i class="fa fa-dolly"></i>
+									</a>
+								@endif
 							@endif
 							</td>
 						</tr>
@@ -153,19 +192,19 @@
                 </button>
             </div>
         @endif
-    	<table class="table table-hover" id="tareasordentrabajo-table">
-    		<thead>
+        <div class="d-flex justify-content-end mb-2">
+            <a href="{{ route('consultamovimientoordentrabajo', ['id' => $ordentrabajo->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}" class="btn btn-outline-info btn-sm" target="_blank" rel="noopener">
+                <i class="fa fa-fw fa-file"></i> Ver movimientos
+            </a>
+        </div>
+    	<table class="table table-sm table-bordered table-hover" id="tareasordentrabajo-table">
+    		<thead style="background:#85C1E9;color:#17202A;">
     			<tr>
 					<th style="width: 10%;">Id</th>
     				<th style="width: 30%;">Tarea</th>
 					<th style="width: 20%;">Empleado</th>
     				<th style="width: 12%;">Inicio</th>
     				<th style="width: 12%;">Fin</th>
-					<div class="card-tools">
-						<a href="{{route('consultamovimientoordentrabajo', ['id' => $ordentrabajo->id])}}" class="btn btn-outline-info btn-sm">
-							<i class="fa fa-fw fa-file"></i> Ver movimientos
-						</a>
-                	</div>
     			</tr>
     		</thead>
     		<tbody id="tbody-tareas">

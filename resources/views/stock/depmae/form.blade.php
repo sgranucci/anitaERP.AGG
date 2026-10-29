@@ -51,3 +51,20 @@
         </select>
     </div>
 </div>
+@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
+<div class="form-group row">
+    <label for="canal" class="col-lg-3 col-form-label text-right pr-2">Canal</label>
+    <div class="col-lg-4">
+        <select id="canal" name="canal" class="form-control" required>
+            @foreach (\App\Support\Stock\DepmaeCanalSupport::opciones() as $codigoCanal => $etiquetaCanal)
+                @if ($codigoCanal === old('canal', $data->canal ?? \App\Support\Stock\DepmaeCanalSupport::FABRICA))
+                    <option value="{{ $codigoCanal }}" selected>{{ $etiquetaCanal }}</option>
+                @else
+                    <option value="{{ $codigoCanal }}">{{ $etiquetaCanal }}</option>
+                @endif
+            @endforeach
+        </select>
+        <small class="form-text text-muted">Mismo corte que los artículos. El stock por OT separa Locales y Fábrica con este dato.</small>
+    </div>
+</div>
+@endif

@@ -35,10 +35,22 @@ class ValidacionMovimientoOrdentrabajo extends FormRequest
         return [
             'tarea_id' => 'required',
             'operacion_id' => 'required',
+            'empleado_id' => 'required',
             'fecha' => 'required',
             'ordenestrabajo' => ['required', new RuleMovimientoOrdentrabajo('ordenestrabajo', request()->tarea_id, 
                                     request()->operacion_id, request()->movimiento_id,
                                     $this->movimientoOrdentrabajoService)],
+        ];
+    }
+
+    public function attributes()
+    {
+        return [
+            'tarea_id' => 'tarea',
+            'operacion_id' => 'operación',
+            'empleado_id' => 'empleado',
+            'fecha' => 'fecha',
+            'ordenestrabajo' => 'órdenes de trabajo',
         ];
     }
 }

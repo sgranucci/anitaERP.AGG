@@ -30,6 +30,8 @@
     $tipodeposito = $tipodeposito ?? '';
     $codigoExtraClass = trim((string) ($codigoExtraClass ?? ''));
     $codigoName = $codigoName ?? null;
+    $siguiente = $siguiente ?? '';
+    $ayuda = $ayuda ?? '';
     $puedeAbrirAbmDeposito = can('editar-depositos', false) || can('listar-depositos', false);
     $editUrl = ((int) $depositoId > 0 && $puedeAbrirAbmDeposito)
         ? route('editar_depmae', ['id' => (int) $depositoId, 'origen' => 'modal_consulta', 'vista' => 'consulta'])
@@ -70,13 +72,17 @@
                         id="{{ $inputId }}_codigo" value="{{ $codigo }}"
                         @if ($codigoName) name="{{ $codigoName }}" @endif
                         placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off"
-                        style="width: 5.5rem; flex-shrink: 0;">
+                        style="width: 5.5rem; flex-shrink: 0;"
+                        @if ($siguiente !== '') data-siguiente="{{ $siguiente }}" @endif>
                     <input type="text" class="form-control descripciondeposito text-truncate"
                         id="{{ $inputId }}_descripcion" value="{{ $descripcion }}"
                         placeholder="Descripci&oacute;n" readonly
                         style="min-width: 0; flex: 1 1 auto;">
                 @endif
             </div>
+            @if ($ayuda !== '')
+                <small class="form-text text-muted">{{ $ayuda }}</small>
+            @endif
         </div>
     @if ($wrapRow)
     </div>

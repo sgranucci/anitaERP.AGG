@@ -139,8 +139,16 @@ class PedidoQueryFerli
                                 $desdelinea_id, $hastalinea_id,
                                 $desdefondo_id, $hastafondo_id)
     {
+        // Solo las columnas del listado. pedido.* + pedido_combinacion.* hidrata
+        // decenas de miles de modelos y agota la memoria antes de armar el Excel.
         $pedido = $this->model
-                        ->select('pedido.*','pedido_combinacion.*',
+                        ->select(
+                                'pedido.fecha',
+                                'pedido_combinacion.pedido_id',
+                                'pedido_combinacion.estado',
+                                'pedido_combinacion.observacion',
+                                'pedido_combinacion.picking',
+                                'pedido_combinacion.picking_facturado',
                                 'pedido_combinacion.id as pedido_combinacion_id',
                                 'pedido_combinacion_talle.talle_id as talle_id',
                                 'talle.nombre as nombretalle',
@@ -165,8 +173,6 @@ class PedidoQueryFerli
                                 'vendedor.id as vendedor_id',
                                 'vendedor.nombre as nombrevendedor',
                                 'color.nombre as nombrecolorfondo')
-                        ->with('clientes:id,nombre')
-                        ->with('mventas:id,nombre')
                         ->join('pedido_combinacion', 'pedido_combinacion.pedido_id', '=', 'pedido.id')
                         ->leftjoin('pedido_combinacion_talle', 'pedido_combinacion_talle.pedido_combinacion_id', '=', 'pedido_combinacion.id')
                         ->leftjoin('ordentrabajo_combinacion_talle', 'ordentrabajo_combinacion_talle.pedido_combinacion_talle_id', '=', 'pedido_combinacion_talle.id')

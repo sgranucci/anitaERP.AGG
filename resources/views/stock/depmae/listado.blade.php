@@ -2,7 +2,9 @@
     use App\Models\Stock\Depmae;
     use App\Support\Configuracion\EmpresaLogoArchivo;
     use App\Support\Configuracion\EntornoEmpresaSupport;
+    use App\Support\Stock\DepmaeCanalSupport;
     $esCrown = EntornoEmpresaSupport::esCrown();
+    $muestraCanal = EntornoEmpresaSupport::esFerli();
     foreach ($datas as $row) {
         $row->nombreempresa = $row->empresas->nombre ?? '';
     }
@@ -70,8 +72,11 @@
 				@if ($esCrown)
 				<th style="width: 14%;">Sala</th>
 				@endif
-				<th style="width: {{ $esCrown ? '18%' : '22%' }};">Tipo de dep&oacute;sito</th>
-				<th style="width: 16%;">C&oacute;digo ANITA</th>
+				<th style="width: {{ $esCrown ? '16%' : '18%' }};">Tipo de dep&oacute;sito</th>
+				@if ($muestraCanal)
+				<th style="width: 12%;">Canal</th>
+				@endif
+				<th style="width: 14%;">C&oacute;digo ANITA</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -84,6 +89,9 @@
 					<td>{{ $data->salas ? trim(($data->salas->codigo ?? '').' — '.($data->salas->nombre ?? ''), ' —') : '' }}</td>
 					@endif
 					<td>{{ Depmae::etiquetaTipoDeposito($data->tipodeposito) }}</td>
+					@if ($muestraCanal)
+					<td>{{ DepmaeCanalSupport::etiqueta($data->canal ?? null) }}</td>
+					@endif
 					<td>{{ $data->codigo }}</td>
 				</tr>
 			@endforeach

@@ -11,7 +11,10 @@ Dep&oacute;sitos
 
 <?php
 use App\Models\Stock\Depmae;
+use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Stock\DepmaeCanalSupport;
 use App\Support\Stock\DepmaeListadoFiltros;
+$muestraCanal = EntornoEmpresaSupport::esFerli();
 ?>
 
 @section('contenido')
@@ -59,6 +62,9 @@ use App\Support\Stock\DepmaeListadoFiltros;
                             <th>Sala</th>
                             @endif
                             <th>Tipo de dep&oacute;sito</th>
+                            @if ($muestraCanal)
+                            <th>Canal</th>
+                            @endif
                             <th>C&oacute;digo ANITA</th>
                             <th class="width120" data-orderable="false"></th>
                         </tr>
@@ -79,6 +85,9 @@ use App\Support\Stock\DepmaeListadoFiltros;
                             </td>
                             @endif
                             <td>{{ Depmae::etiquetaTipoDeposito($data->tipodeposito) ?: '—' }}</td>
+                            @if ($muestraCanal)
+                            <td>{{ DepmaeCanalSupport::etiqueta($data->canal ?? null) }}</td>
+                            @endif
                             <td>{{ $data->codigo }}</td>
                             <td class="text-nowrap">
                        			@if (can('editar-depositos', false))

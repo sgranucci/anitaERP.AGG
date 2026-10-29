@@ -44,6 +44,11 @@
             <i class="fa fa-percent"></i> Exclusiones percepci&oacute;n
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link" id="tab-avisos-link" data-toggle="tab" href="#tab-avisos" role="tab">
+            <i class="fa fa-bell"></i> Avisos
+        </a>
+    </li>
     @if (!empty($mostrarSuitecrm))
     <li class="nav-item">
         <a class="nav-link" id="tab-suitecrm-link" data-toggle="tab" href="#tab-suitecrm" role="tab">

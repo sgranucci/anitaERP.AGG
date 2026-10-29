@@ -47,6 +47,34 @@ class ReporteStockOtSituacionSupportTest extends TestCase
         self::assertTrue($r['en_produccion']);
     }
 
+    public function test_empaque_finalizado_es_entrega_aunque_haya_avance_de_planta(): void
+    {
+        $tareas = [
+            ['tarea_id' => 6, 'hastafecha' => '2026-08-18'],
+            ['tarea_id' => 34, 'hastafecha' => '2026-10-29'],
+            ['tarea_id' => 34, 'hastafecha' => '2026-10-29'],
+        ];
+        $r = S::desdeTareas($tareas, 34);
+        self::assertSame(S::ENTREGA_INMEDIATA, $r['situacion']);
+        self::assertFalse($r['en_produccion']);
+        self::assertTrue(S::empaqueFinalizado($tareas, 34));
+    }
+
+    public function test_empaque_abierto_o_sin_empaque_no_cuenta_como_finalizado(): void
+    {
+        self::assertFalse(S::empaqueFinalizado([
+            ['tarea_id' => 6, 'hastafecha' => '2026-08-18'],
+            ['tarea_id' => 34, 'hastafecha' => null],
+        ], 34));
+        self::assertFalse(S::empaqueFinalizado([
+            ['tarea_id' => 6, 'hastafecha' => '2026-08-18'],
+        ], 34));
+        self::assertFalse(S::empaqueFinalizado([
+            ['tarea_id' => 34, 'hastafecha' => '2026-10-29'],
+            ['tarea_id' => 34, 'hastafecha' => null],
+        ], 34));
+    }
+
     public function test_desde_tarea_ids_solo_pendiente(): void
     {
         // Sin config Laravel: id pendiente = 0 → tratar [0] como sin avance si coincide.
@@ -64,10 +92,18 @@ class ReporteStockOtSituacionSupportTest extends TestCase
         self::assertFalse(S::esClienteStock(''));
     }
 
-    public function test_filtro_entrega_excluye_pendiente(): void
+    public function test_filtro_stock_separa_entrega_de_lo_rojo(): void
     {
-        self::assertFalse(S::pasaFiltroEstadoOt('ENTREGA', S::PENDIENTE_DE_FABRICACION, false));
+        self::assertTrue(S::pasaFiltroEstadoOt('TODAS', S::ENTREGA_INMEDIATA, false));
+        self::assertTrue(S::pasaFiltroEstadoOt('TODAS', S::EN_PRODUCCION, true));
+        self::assertTrue(S::pasaFiltroEstadoOt('TODAS', S::PENDIENTE_DE_FABRICACION, false));
+
         self::assertTrue(S::pasaFiltroEstadoOt('ENTREGA', S::ENTREGA_INMEDIATA, false));
+        self::assertFalse(S::pasaFiltroEstadoOt('ENTREGA', S::EN_PRODUCCION, true));
+        self::assertFalse(S::pasaFiltroEstadoOt('ENTREGA', S::PENDIENTE_DE_FABRICACION, false));
+
+        self::assertFalse(S::pasaFiltroEstadoOt('PRODUCCION', S::ENTREGA_INMEDIATA, false));
+        self::assertTrue(S::pasaFiltroEstadoOt('PRODUCCION', S::EN_PRODUCCION, true));
         self::assertTrue(S::pasaFiltroEstadoOt('PRODUCCION', S::PENDIENTE_DE_FABRICACION, false));
     }
 
@@ -76,5 +112,8 @@ class ReporteStockOtSituacionSupportTest extends TestCase
         self::assertTrue(S::colorearRojoEnExcel(S::EN_PRODUCCION, true));
         self::assertTrue(S::colorearRojoEnExcel(S::PENDIENTE_DE_FABRICACION, false));
         self::assertFalse(S::colorearRojoEnExcel(S::ENTREGA_INMEDIATA, false));
+        self::assertFalse(S::listaParaEntrega(S::EN_PRODUCCION, true));
+        self::assertFalse(S::listaParaEntrega(S::PENDIENTE_DE_FABRICACION, false));
+        self::assertTrue(S::listaParaEntrega(S::ENTREGA_INMEDIATA, false));
     }
 }

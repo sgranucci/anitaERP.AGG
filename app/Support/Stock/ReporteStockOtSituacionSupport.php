@@ -2,6 +2,8 @@
 
 namespace App\Support\Stock;
 
+use App\Support\Database\SqlDialectSupport;
+use App\Support\Produccion\OrdentrabajoTareaFechaSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -13,8 +15,8 @@ use Illuminate\Support\Facades\DB;
  * | Situación | Criterio |
  * |---|---|
  * | PENDIENTE DE FABRICACION | Solo tarea pendiente (sin avance de planta ni cierre) |
- * | EN PRODUCCION | Avance de planta sin Terminada / Facturada |
- * | ENTREGA INMEDIATA | Cierre (Terminada / Terminada stock / Facturada) o lote listo en depósito |
+ * | EN PRODUCCION | Avance de planta sin cierre y sin EMPAQUE finalizado |
+ * | ENTREGA INMEDIATA | Cierre (Terminada / Terminada stock / Facturada), EMPAQUE con fecha de fin, o lote listo en depósito |
  */
 final class ReporteStockOtSituacionSupport
 {
@@ -39,6 +41,11 @@ final class ReporteStockOtSituacionSupport
     public static function idTareaPendienteFabricacion(): int
     {
         return (int) config('consprod.TAREA_PENDIENTE_FABRICACION');
+    }
+
+    public static function idTareaEmpaque(): int
+    {
+        return (int) config('consprod.TAREA_EMPAQUE');
     }
 
     /**
@@ -77,10 +84,6 @@ final class ReporteStockOtSituacionSupport
     }
 
     /**
-     * @param  iterable<int|string>  $tareaIds
-     * @return array{situacion: string, en_produccion: bool}
-     */
-    /**
      * Situación de cada OT según sus tareas (misma lectura que Stock por OT).
      *
      * @param  list<int>  $ordentrabajoIds
@@ -99,16 +102,114 @@ final class ReporteStockOtSituacionSupport
 
         $rows = DB::table('ordentrabajo_tarea')
             ->whereIn('ordentrabajo_id', $ids)
-            ->get(['ordentrabajo_id', 'tarea_id']);
+            ->get(['ordentrabajo_id', 'tarea_id', 'hastafecha']);
         $porOt = [];
         foreach ($rows as $row) {
-            $porOt[(int) $row->ordentrabajo_id][] = (int) $row->tarea_id;
+            $porOt[(int) $row->ordentrabajo_id][] = $row;
         }
-        foreach ($porOt as $otId => $tareaIds) {
-            $out[$otId] = self::desdeTareaIds($tareaIds);
+        foreach ($porOt as $otId => $tareas) {
+            $out[$otId] = self::desdeTareas($tareas);
         }
 
         return $out;
+    }
+
+    /**
+     * EMPAQUE cerrado (fecha de fin real en todas sus filas).
+     * Referencia: OT 29885, en stock con empaque terminado.
+     *
+     * @param  iterable<int, array{tarea_id?: int, hastafecha?: mixed}|object|int|string>  $tareas
+     */
+    public static function empaqueFinalizado(iterable $tareas, ?int $empaqueId = null): bool
+    {
+        $empaqueId ??= self::idTareaEmpaque();
+        if ($empaqueId <= 0) {
+            return false;
+        }
+
+        $empaques = 0;
+        $abiertos = 0;
+        foreach ($tareas as $tarea) {
+            [$id, $hasta] = self::tareaIdYHastafecha($tarea);
+            if ($id !== $empaqueId) {
+                continue;
+            }
+            $empaques++;
+            if (! OrdentrabajoTareaFechaSupport::tieneValor($hasta)) {
+                $abiertos++;
+            }
+        }
+
+        return $empaques > 0 && $abiertos === 0;
+    }
+
+    /**
+     * @param  iterable<int, array{tarea_id?: int, hastafecha?: mixed}|object|int|string>  $tareas
+     * @return array{situacion: string, en_produccion: bool}
+     */
+    public static function desdeTareas(iterable $tareas, ?int $empaqueId = null): array
+    {
+        $lista = [];
+        $ids = [];
+        foreach ($tareas as $tarea) {
+            $lista[] = $tarea;
+            $ids[] = self::tareaIdYHastafecha($tarea)[0];
+        }
+
+        if (self::empaqueFinalizado($lista, $empaqueId)) {
+            return [
+                'situacion' => self::ENTREGA_INMEDIATA,
+                'en_produccion' => false,
+            ];
+        }
+
+        return self::desdeTareaIds($ids);
+    }
+
+    /**
+     * El overlay de planta no incluye una OT cuyo EMPAQUE ya está cerrado.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     */
+    public static function aplicarExcluirEmpaqueFinalizado($query, string $otIdColumn): void
+    {
+        $empaqueId = self::idTareaEmpaque();
+        if ($empaqueId <= 0 || ! preg_match('/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/', $otIdColumn)) {
+            return;
+        }
+
+        $fin = SqlDialectSupport::castTexto('otte.hastafecha');
+        $query->where(function ($q) use ($empaqueId, $otIdColumn, $fin) {
+            $q->whereNotExists(function ($sub) use ($empaqueId, $otIdColumn, $fin) {
+                $sub->select(DB::raw('1'))
+                    ->from('ordentrabajo_tarea as otte')
+                    ->whereColumn('otte.ordentrabajo_id', $otIdColumn)
+                    ->where('otte.tarea_id', $empaqueId)
+                    ->whereNotNull('otte.hastafecha')
+                    ->whereRaw($fin." NOT LIKE '0000%'");
+            })->orWhereExists(function ($sub) use ($empaqueId, $otIdColumn) {
+                $sub->select(DB::raw('1'))
+                    ->from('ordentrabajo_tarea as otte')
+                    ->whereColumn('otte.ordentrabajo_id', $otIdColumn)
+                    ->where('otte.tarea_id', $empaqueId);
+                OrdentrabajoTareaFechaSupport::aplicarSinFechaFin($sub, 'otte.hastafecha');
+            });
+        });
+    }
+
+    /**
+     * @return array{0: int, 1: mixed}
+     */
+    private static function tareaIdYHastafecha(mixed $tarea): array
+    {
+        if (is_int($tarea) || is_string($tarea)) {
+            return [(int) $tarea, null];
+        }
+        if (is_array($tarea)) {
+            return [(int) ($tarea['tarea_id'] ?? 0), $tarea['hastafecha'] ?? null];
+        }
+
+        return [(int) ($tarea->tarea_id ?? 0), $tarea->hastafecha ?? null];
     }
 
     public static function desdeTareaIds(iterable $tareaIds): array
@@ -149,13 +250,16 @@ final class ReporteStockOtSituacionSupport
         ];
     }
 
+    /**
+     * TODAS: el reporte completo.
+     * ENTREGA: solo lo que se puede entregar (filas que el Excel no pinta de rojo).
+     * PRODUCCION: solo lo rojo (en producción y pendiente de fabricación).
+     */
     public static function pasaFiltroEstadoOt(string $estadoOt, string $situacion, bool $enProduccion): bool
     {
         return match ($estadoOt) {
-            'ENTREGA' => ! $enProduccion && $situacion === self::ENTREGA_INMEDIATA,
-            'PRODUCCION' => $enProduccion
-                || $situacion === self::EN_PRODUCCION
-                || $situacion === self::PENDIENTE_DE_FABRICACION,
+            'ENTREGA' => self::listaParaEntrega($situacion, $enProduccion),
+            'PRODUCCION' => self::colorearRojoEnExcel($situacion, $enProduccion),
             default => true,
         };
     }
@@ -169,6 +273,15 @@ final class ReporteStockOtSituacionSupport
         return $enProduccion
             || $situacion === self::EN_PRODUCCION
             || $situacion === self::PENDIENTE_DE_FABRICACION;
+    }
+
+    /**
+     * Lista para entregar o consumir: la consulta Stock por OT la muestra como entrega inmediata.
+     * El aviso reutilizable está en OtListaEntregaSupport.
+     */
+    public static function listaParaEntrega(string $situacion, bool $enProduccion): bool
+    {
+        return ! self::colorearRojoEnExcel($situacion, $enProduccion);
     }
 
     public static function esLoteImportado(mixed $lote): bool
@@ -223,7 +336,8 @@ final class ReporteStockOtSituacionSupport
      *
      * - Overlay sin movimiento: EN PRODUCCION forzada.
      * - OT solo pendiente: PENDIENTE DE FABRICACION (aunque haya depósito / Alta / Restaura).
-     * - OT con avance de planta sin Terminada: EN PRODUCCION (aunque haya Alta/Restaura).
+     * - OT con avance de planta sin Terminada y sin EMPAQUE finalizado: EN PRODUCCION (aunque haya Alta/Restaura).
+     * - EMPAQUE con fecha de fin (OT 29885): no es producción; con depósito queda ENTREGA INMEDIATA.
      * - ALTAP del import Excel con depósito: ENTREGA INMEDIATA (aunque la OT no tenga cierre).
      * - Resto con depósito: ENTREGA INMEDIATA.
      *

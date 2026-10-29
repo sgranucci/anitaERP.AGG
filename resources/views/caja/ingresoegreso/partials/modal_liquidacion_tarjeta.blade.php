@@ -202,15 +202,17 @@
                     </div>
                     <div class="px-3 py-2">
                         <p class="small text-muted mb-0" id="ie-lt-cuenta-haber"></p>
-                        <p class="small text-danger mb-0 d-none" id="ie-lt-aviso"></p>
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary btn-sm" id="ie-lt-aceptar">
-                    <i class="fa fa-check"></i> Armar DTC
-                </button>
+            <div class="modal-footer flex-column align-items-stretch">
+                <p class="small text-danger font-weight-bold mb-2 d-none w-100" id="ie-lt-aviso"></p>
+                <div class="d-flex justify-content-end w-100">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary btn-sm ml-2" id="ie-lt-aceptar">
+                        <i class="fa fa-check"></i> Armar DTC
+                    </button>
+                </div>
             </div>
         </div>
     </div>

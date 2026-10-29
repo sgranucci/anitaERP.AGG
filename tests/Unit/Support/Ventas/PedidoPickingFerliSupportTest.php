@@ -316,4 +316,41 @@ class PedidoPickingFerliSupportTest extends TestCase
         self::assertSame(72.0, (float) $ot['saldo']);
         self::assertFalse(\App\Support\Stock\ReporteStockOtSituacionSupport::esLoteImportado($ot['lote']));
     }
+
+    public function test_no_deja_bajar_si_el_lote_no_tiene_saldo(): void
+    {
+        $error = S::errorSiBucketNoAlcanza(0, [], 8, ['36' => 1, '37' => 2], '21108', '1');
+
+        self::assertNotNull($error);
+        self::assertStringContainsString('21108', $error);
+    }
+
+    public function test_no_deja_bajar_un_talle_que_no_alcanza_aunque_el_total_si(): void
+    {
+        $error = S::errorSiBucketNoAlcanza(
+            8,
+            ['36' => 1, '37' => 2, '38' => 2, '39' => 2, '40' => 1],
+            8,
+            ['36' => 2, '37' => 2, '38' => 2, '39' => 1, '40' => 1],
+            '21108',
+            '1'
+        );
+
+        self::assertNotNull($error);
+        self::assertStringContainsString('36', $error);
+    }
+
+    public function test_deja_bajar_cuando_el_lote_alcanza_total_y_talles(): void
+    {
+        $error = S::errorSiBucketNoAlcanza(
+            8,
+            ['36' => 1, '37' => 2, '38' => 2, '39' => 2, '40' => 1],
+            8,
+            ['36' => 1, '37' => 2, '38' => 2, '39' => 2, '40' => 1],
+            '21108',
+            '1'
+        );
+
+        self::assertNull($error);
+    }
 }

@@ -36,6 +36,8 @@ class CobranzaExport implements FromView, WithColumnFormatting, WithColumnWidths
 
     private string $subtitulo = '';
 
+    private string $origen = '';
+
     private bool $flDesdeIndex = false;
 
     private bool $hayFilaLogos = false;
@@ -56,12 +58,13 @@ class CobranzaExport implements FromView, WithColumnFormatting, WithColumnWidths
         $this->cobranzaQuery = $cobranzaQuery;
     }
 
-    public function parametros(?string $busqueda, ?string $fechaDesde, ?string $fechaHasta, string $subtitulo): self
+    public function parametros(?string $busqueda, ?string $fechaDesde, ?string $fechaHasta, string $subtitulo, string $origen = ''): self
     {
         $this->busqueda = $busqueda;
         $this->fechaDesde = $fechaDesde;
         $this->fechaHasta = $fechaHasta;
         $this->subtitulo = $subtitulo;
+        $this->origen = $origen;
         $this->flDesdeIndex = true;
 
         return $this;
@@ -70,7 +73,7 @@ class CobranzaExport implements FromView, WithColumnFormatting, WithColumnWidths
     public function view(): View
     {
         $cobranza = $this->flDesdeIndex
-            ? $this->cobranzaQuery->leeCobranza($this->busqueda, 0, false, $this->fechaDesde, $this->fechaHasta)
+            ? $this->cobranzaQuery->leeCobranza($this->busqueda, 0, false, $this->fechaDesde, $this->fechaHasta, null, $this->origen)
             : collect();
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($cobranza);

@@ -238,7 +238,8 @@
     <div class="tab-pane fade" id="tab-lineas" role="tabpanel">
         <p class="text-muted small">
             Al elegir la factura se cargan las líneas a devolver con el artículo, el talle y el color o la combinación.
-            El precio inicial de «A devolver» es el de la factura. Si el reemplazo es el mismo artículo (otro talle o color), la factura nueva sale a ese precio ya cobrado: el descuento de transferencia o el cupón no se vuelve a cobrar. Si el reemplazo es otro artículo, se usa el precio de esa línea.
+            El precio inicial de «A devolver» es el de la factura, ya con el descuento.
+            Al emitir la factura del par y al emitir la nota de crédito se elige el precio: el de la factura original menos el descuento, el precio lleno de esa factura, o el precio lleno actual.
             Cambio: cargar el reemplazo con lupa o F1. Solo reembolso: dejar solo líneas «A devolver» (sin reemplazo) y usar «Continuar sin reemplazo».
             El calzado pide talle y, según el artículo, color o combinación. Si no maneja variante, esos campos quedan en «No aplica».
             Buscar factura: también atajos tipo A26-146 o 23-45335.

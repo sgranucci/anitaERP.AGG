@@ -71,7 +71,7 @@ class EmpleadoRepository implements EmpleadoRepositoryInterface
 
     public function consultaModal(?string $texto): array
     {
-        $q = $this->model->newQuery()->orderBy('id');
+        $q = $this->model->newQuery()->orderBy('nombre')->orderBy('id');
         $texto = trim((string) $texto);
         if ($texto !== '') {
             $q->where(function ($w) use ($texto) {

@@ -73,6 +73,11 @@ class Cliente extends Model implements Auditable
     	return $this->hasMany(Cliente_Exclusion_Percepcion::class, 'cliente_id');
 	}
 
+	public function cliente_avisos()
+	{
+    	return $this->hasMany(Cliente_Aviso::class, 'cliente_id')->orderBy('orden')->orderBy('id');
+	}
+
     public function cliente_articulo_suspendidos()
 	{
     	return $this->hasMany(Cliente_Articulo_Suspendido::class, 'cliente_id');

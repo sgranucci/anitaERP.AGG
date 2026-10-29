@@ -19,6 +19,7 @@ use App\Services\Caja\CobranzaService;
 use App\Queries\Caja\CobranzaQueryInterface;
 use App\Exports\Caja\CobranzaExport;
 use App\Support\Caja\CobranzaListadoVisual;
+use App\Support\Caja\CobranzaOrigenFerliSupport;
 use App\Support\Caja\CobranzaPromedioPagoSupport;
 use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Reportes\DompdfListadoSupport;
@@ -31,6 +32,8 @@ use DB;
 
 class CobranzaController extends Controller
 {
+    private const SESSION_FILTROS_LISTADO = 'cobranza_listado_filtros';
+
     private $cobranzaRepository;
     private $caja_movimiento_cuentacajaRepository;
     private $caja_movimiento_estadoRepository;
@@ -87,6 +90,18 @@ class CobranzaController extends Controller
     public function index(Request $request)
     {
         can('listar-cobranza');
+
+        if (! $this->requestTraeFiltrosListado($request)) {
+            $guardados = $this->filtrosListadoGuardados();
+            if ($guardados !== []) {
+                $redirect = redirect()->route('cobranza', $guardados);
+                if (session()->has('mensaje')) {
+                    $redirect->with('mensaje', session('mensaje'));
+                }
+
+                return $redirect;
+            }
+        }
 		
         $hayMovimientosCobranza = $this->cobranzaQuery->first();
 
@@ -112,8 +127,10 @@ class CobranzaController extends Controller
             $filtros['fecha_desde'],
             $filtros['fecha_hasta'],
             is_array($visual['qbe'] ?? null) ? $visual['qbe'] : null,
+            $filtros['origen'],
         );
         $filtrosQuery = array_merge($filtros['query'], ListadoVisualSupport::paraQueryString($visual));
+        $this->recordarFiltrosListado($request, $filtrosQuery);
         $etiquetas = [];
         foreach (CobranzaListadoVisual::campos() as $key => $meta) {
             $etiquetas[$key] = $meta['label'];
@@ -126,6 +143,7 @@ class CobranzaController extends Controller
                 'busqueda' => $filtros['busqueda'],
                 'fecha_desde' => $filtros['fecha_desde'],
                 'fecha_hasta' => $filtros['fecha_hasta'],
+                'origen' => $filtros['origen'],
             ])
         );
 
@@ -134,6 +152,8 @@ class CobranzaController extends Controller
             'busqueda' => $filtros['busqueda'],
             'fechaDesde' => $filtros['fecha_desde'],
             'fechaHasta' => $filtros['fecha_hasta'],
+            'origen' => $filtros['origen'],
+            'muestraFiltroOrigen' => CobranzaOrigenFerliSupport::aplica(),
             'filtrosQuery' => $filtrosQuery,
             'filtros' => $visual,
             'graficoSeries' => $graficoSeries,
@@ -154,6 +174,9 @@ class CobranzaController extends Controller
             $filtros['fecha_desde'],
             $filtros['fecha_hasta'],
         );
+        if ($filtros['origen'] !== '') {
+            $subtitulo .= ' · Origen: '.CobranzaOrigenFerliSupport::etiqueta($filtros['origen']);
+        }
 
         switch($formato)
         {
@@ -164,6 +187,8 @@ class CobranzaController extends Controller
                 false,
                 $filtros['fecha_desde'],
                 $filtros['fecha_hasta'],
+                null,
+                $filtros['origen'],
             );
 
             $view = \View::make('caja.cobranza.listado', compact('cobranza', 'subtitulo'))
@@ -178,12 +203,12 @@ class CobranzaController extends Controller
 
         case 'EXCEL':
             return (new CobranzaExport($this->cobranzaQuery))
-                        ->parametros($filtros['busqueda'], $filtros['fecha_desde'], $filtros['fecha_hasta'], $subtitulo)
+                        ->parametros($filtros['busqueda'], $filtros['fecha_desde'], $filtros['fecha_hasta'], $subtitulo, $filtros['origen'])
                         ->download('cobranza.xlsx');
 
         case 'CSV':
             return (new CobranzaExport($this->cobranzaQuery))
-                        ->parametros($filtros['busqueda'], $filtros['fecha_desde'], $filtros['fecha_hasta'], $subtitulo)
+                        ->parametros($filtros['busqueda'], $filtros['fecha_desde'], $filtros['fecha_hasta'], $subtitulo, $filtros['origen'])
                         ->download('cobranza.csv', \Maatwebsite\Excel\Excel::CSV);
         }   
 
@@ -191,7 +216,7 @@ class CobranzaController extends Controller
     }
 
     /**
-     * @return array{busqueda: string, fecha_desde: ?string, fecha_hasta: ?string, query: array<string, string>}
+     * @return array{busqueda: string, fecha_desde: ?string, fecha_hasta: ?string, origen: string, query: array<string, string>}
      */
     private function filtrosListado(Request $request, $busquedaRuta = null): array
     {
@@ -202,19 +227,129 @@ class CobranzaController extends Controller
         if ($fechaDesde && $fechaHasta && $fechaDesde > $fechaHasta) {
             [$fechaDesde, $fechaHasta] = [$fechaHasta, $fechaDesde];
         }
+        $origen = CobranzaOrigenFerliSupport::normalizar($request->input('origen'));
 
         $query = array_filter([
             'busqueda' => $busqueda,
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
+            'origen' => $origen,
         ], static fn ($valor) => $valor !== null && $valor !== '');
 
         return [
             'busqueda' => $busqueda,
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
+            'origen' => $origen,
             'query' => $query,
         ];
+    }
+
+    /**
+     * El menú abre el index sin query. Si hay una elección previa (fechas, texto,
+     * gráfico y, en Ferli, Locales / Administración), se vuelve a esa URL.
+     */
+    private function requestTraeFiltrosListado(Request $request): bool
+    {
+        foreach ([
+            'busqueda',
+            'fecha_desde',
+            'fecha_hasta',
+            'origen',
+            'grafico',
+            'graficos',
+            'grafico_off',
+            'formato',
+            'grafico_click',
+            'grafico_click_dimension',
+        ] as $key) {
+            if ($request->query->has($key)) {
+                return true;
+            }
+        }
+
+        return (int) $request->query('page', 0) > 1;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtrosQuery
+     */
+    private function recordarFiltrosListado(Request $request, array $filtrosQuery): void
+    {
+        if (! $this->requestTraeFiltrosListado($request)) {
+            return;
+        }
+
+        $page = (int) $request->query('page', 0);
+        if ($page > 1) {
+            $filtrosQuery['page'] = $page;
+        }
+
+        if ($this->filtrosListadoSinCriterio($filtrosQuery)) {
+            session()->forget(self::SESSION_FILTROS_LISTADO);
+
+            return;
+        }
+
+        session([self::SESSION_FILTROS_LISTADO => $filtrosQuery]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function filtrosListadoGuardados(): array
+    {
+        $guardados = session(self::SESSION_FILTROS_LISTADO, []);
+        if (! is_array($guardados)) {
+            return [];
+        }
+
+        $limpio = [];
+        foreach (['busqueda', 'fecha_desde', 'fecha_hasta', 'grafico_click', 'grafico_click_dimension'] as $key) {
+            if (! isset($guardados[$key]) || ! is_scalar($guardados[$key])) {
+                continue;
+            }
+            $valor = trim((string) $guardados[$key]);
+            if ($valor !== '') {
+                $limpio[$key] = $valor;
+            }
+        }
+
+        $origen = CobranzaOrigenFerliSupport::normalizar($guardados['origen'] ?? '');
+        if ($origen !== '') {
+            $limpio['origen'] = $origen;
+        }
+
+        foreach (['grafico', 'graficos', 'formato'] as $key) {
+            if (isset($guardados[$key]) && is_array($guardados[$key]) && $guardados[$key] !== []) {
+                $limpio[$key] = $guardados[$key];
+            }
+        }
+
+        if (! empty($guardados['grafico_off']) && ! isset($limpio['graficos']) && ! isset($limpio['grafico'])) {
+            $limpio['grafico_off'] = 1;
+        }
+
+        $page = (int) ($guardados['page'] ?? 0);
+        if ($page > 1) {
+            $limpio['page'] = $page;
+        }
+
+        return $this->filtrosListadoSinCriterio($limpio) ? [] : $limpio;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtrosQuery
+     */
+    private function filtrosListadoSinCriterio(array $filtrosQuery): bool
+    {
+        if ($filtrosQuery === []) {
+            return true;
+        }
+
+        $claves = array_keys($filtrosQuery);
+
+        return $claves === ['grafico_off'];
     }
 
     private function fechaFiltro($valor): ?string

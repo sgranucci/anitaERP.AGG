@@ -259,8 +259,10 @@ $('input').keydown(function (e) {
         return;
     }
     if ($(this).is(
-        '.codigodeposito, #consultadeposito, #consultapuntoventa, #consultatipotransaccionventa,'
-        + ' #consultacuentacaja, #consultalistaprecio, #consultacuentacontable, #consultaarticulo'
+        '.codigodeposito, .codigomventa, .codigocategoria, .codigolinea, .codigoarticulo,'
+        + ' #consultadeposito, #consultapuntoventa, #consultatipotransaccionventa,'
+        + ' #consultacuentacaja, #consultalistaprecio, #consultacuentacontable, #consultaarticulo,'
+        + ' #consultamventa, #consultacategoria, #consultalinea'
     )) {
         return;
     }
@@ -311,7 +313,17 @@ $(document)
         }
         e.preventDefault();
         e.stopPropagation();
-        leerDepositoPorCodigo($(this).val(), this);
+        var $inputDep = $(this);
+        var sigDep = $inputDep.attr('data-siguiente') || '';
+        leerDepositoPorCodigo($inputDep.val(), this, function (data) {
+            var codDep = ($inputDep.val() || '').trim();
+            if (!sigDep || !$(sigDep).length) {
+                return;
+            }
+            if (codDep === '' || (data && data.id)) {
+                $(sigDep).trigger('focus');
+            }
+        });
     });
 
 function esTeclaF1Deposito(e) {
@@ -518,13 +530,26 @@ function activa_eventos_consultadeposito() {
             return;
         }
         e.preventDefault();
-        leerDepositoPorCodigo($(this).val(), this);
+        leerDepositoPorCodigo($(this).val(), this, null, { silencioso: true });
         });
 }
 
-function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
+$(document)
+    .off('input.leerDepositoCod', '.codigodeposito')
+    .on('input.leerDepositoCod', '.codigodeposito', function () {
+        $(this).removeAttr('data-deposito-invalido');
+    });
+
+function leerDepositoPorCodigo(codigo, ptrrenglon, onDone, opciones) {
+    var opts = opciones || {};
     var cod = (codigo || '').trim();
+    var $ctxVacio = $(ptrrenglon).closest('.tm-deposito-campo, .depmae-campo-consulta, tr');
     if (!cod) {
+        if ($ctxVacio.length) {
+            $ctxVacio.find('.deposito_id').val('');
+            $ctxVacio.find('.descripciondeposito').val('');
+            actualizarLinkEditarDeposito($ctxVacio, 0);
+        }
         if (typeof onDone === 'function') {
             onDone(null);
         }
@@ -558,6 +583,9 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
     } else if (salaId) {
         leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'sala_id=' + encodeURIComponent(salaId);
     }
+    if (extraPayload.ambito_deposito) {
+        leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'ambito_deposito=' + encodeURIComponent(extraPayload.ambito_deposito);
+    }
 
     $.get(leerUrl)
         .done(function (data) {
@@ -571,7 +599,13 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
                     }
                     actualizarLinkEditarDeposito($ctx, 0);
                 }
-                alert('Dep\u00f3sito no encontrado');
+                var $codigoInvalido = $ctx.length ? $ctx.find('.codigodeposito') : $();
+                var yaAvisado = $codigoInvalido.attr('data-deposito-invalido') === codOriginal;
+                $codigoInvalido.attr('data-deposito-invalido', codOriginal);
+                if (!opts.silencioso && !yaAvisado) {
+                    alert('Dep\u00f3sito no encontrado');
+                    $codigoInvalido.trigger('focus');
+                }
                 if (typeof onDone === 'function') {
                     onDone(null);
                 }
@@ -591,7 +625,7 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
 
             if ($ctx.length) {
                 $ctx.find('.deposito_id').val(data.id);
-                $ctx.find('.codigodeposito').val(data.codigo);
+                $ctx.find('.codigodeposito').val(data.codigo).removeAttr('data-deposito-invalido');
                 $ctx.find('.descripciondeposito').val(
                     descripcionDepositoConEmpresa(
                         data.descripcion,

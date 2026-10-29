@@ -89,6 +89,7 @@
             'mostrarSaldoCorrido' => $mostrarSaldoCorrido,
             'expresion' => $expresion,
             'para_pdf' => true,
+            'mostrarColumnaEmpresa' => $mostrarColumnaEmpresa ?? false,
         ])
     </table>
 </body>

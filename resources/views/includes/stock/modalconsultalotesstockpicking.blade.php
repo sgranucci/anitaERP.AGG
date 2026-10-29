@@ -135,6 +135,7 @@
             <thead style="background:#85C1E9;color:#17202A;">
               <tr>
                 <th>Lote / OT</th>
+                <th>Situaci&oacute;n</th>
                 <th>M&oacute;dulo</th>
                 <th>Medidas</th>
                 <th>Dep&oacute;sito</th>

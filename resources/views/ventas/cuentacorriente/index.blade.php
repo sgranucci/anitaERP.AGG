@@ -34,6 +34,8 @@ if (($retornoQuery ?? '') !== '') {
 }
 $empresaScope = $empresaScope ?? 'todas';
 $empresaId = isset($empresaId) ? (int) $empresaId : 0;
+$mostrarColumnaEmpresa = (bool) ($mostrarColumnaEmpresa ?? false);
+$colspanPie = $mostrarColumnaEmpresa ? 8 : 7;
 if ($empresaScope === 'todas') {
     $queryFiltrosCliente['empresa_todas'] = 1;
 } elseif ($empresaId > 0) {
@@ -117,7 +119,9 @@ $volverListadoUrl = $volverListadoUrl ?? route('cliente');
                         <thead>
                             <tr>
                                 <th class="width20">ID</th>
-                                <th>Empresa</th>
+                                @if ($mostrarColumnaEmpresa)
+                                    <th>Empresa</th>
+                                @endif
                                 <th>Fecha</th>
                                 <th>Vencimiento</th>
                                 <th>Comprobante</th>
@@ -173,7 +177,9 @@ $volverListadoUrl = $volverListadoUrl ?? route('cliente');
                                 @endphp
                                 <tr>
                                     <td class="cuentacorriente_id">{{ $data->id }}</td>
-                                    <td>{{ $data->empresas->nombre ?? '' }}</td>
+                                    @if ($mostrarColumnaEmpresa)
+                                        <td>{{ $data->empresas->nombre ?? '' }}</td>
+                                    @endif
                                     <td>{{ date('d/m/Y', strtotime($data->fecha ?? '')) }}</td>
                                     <td>{{ date('d/m/Y', strtotime($data->fechavencimiento ?? '')) }}</td>
                                     <td class="comprobante">
@@ -181,6 +187,7 @@ $volverListadoUrl = $volverListadoUrl ?? route('cliente');
                                             'data' => $data,
                                             'etiquetaComprobante' => $etiquetaComprobante,
                                         ])
+                                        @include('ventas.cuentacorriente.partials.referencia_aplicacion', ['data' => $data])
                                     </td>
                                     <td>
                                         {{ $etiquetaMoneda }}
@@ -226,7 +233,7 @@ $volverListadoUrl = $volverListadoUrl ?? route('cliente');
                         @if ($modoCuentaCorriente)
                             <tfoot>
                                 <tr class="font-weight-bold bg-light">
-                                    <td colspan="8" class="text-right">Saldos acumulados</td>
+                                    <td colspan="{{ $colspanPie }}" class="text-right">Saldos acumulados</td>
                                     <td style="text-align: right;">
                                         {{ CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda ?? [], 'saldo_cc') }}
                                     </td>
@@ -248,7 +255,7 @@ $volverListadoUrl = $volverListadoUrl ?? route('cliente');
                             @endphp
                             <tfoot>
                                 <tr class="font-weight-bold bg-light">
-                                    <td colspan="8" class="text-right">{{ $enPesos ? 'Total deuda en pantalla ('.$abrevLocal.')' : 'Total deuda en pantalla' }}</td>
+                                    <td colspan="{{ $colspanPie }}" class="text-right">{{ $enPesos ? 'Total deuda en pantalla ('.$abrevLocal.')' : 'Total deuda en pantalla' }}</td>
                                     <td style="text-align: right;">
                                         @if ($enPesos)
                                             {{ CuentacorrienteSaldosPorMoneda::formatearMonto((float) $deudaPantalla, $abrevLocal) }}

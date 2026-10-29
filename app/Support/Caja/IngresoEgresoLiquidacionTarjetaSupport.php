@@ -297,7 +297,7 @@ final class IngresoEgresoLiquidacionTarjetaSupport
             }
             $codigo = trim((string) $concepto->codigo);
             $nombre = trim((string) $concepto->nombre);
-            $tipo = strtoupper(trim((string) ($concepto->tipoconcepto ?? '')));
+            $tipoConcepto = strtoupper(trim((string) ($concepto->tipoconcepto ?? '')));
             $filas[] = [
                 'clave' => (string) $concepto->id,
                 'etiqueta' => trim($codigo.' '.$nombre),
@@ -306,8 +306,8 @@ final class IngresoEgresoLiquidacionTarjetaSupport
                 'concepto_id' => (int) $concepto->id,
                 'codigo' => $codigo,
                 'nombre' => $nombre,
-                'tipoconcepto' => $tipo,
-                'columna' => ComprobanteProveedorConceptoIvaTipos::esImpuesto($tipo) ? 'puestos' : 'netos',
+                'tipoconcepto' => $tipoConcepto,
+                'columna' => ComprobanteProveedorConceptoIvaTipos::esImpuesto($tipoConcepto) ? 'puestos' : 'netos',
                 'cuenta_debe_id' => (int) ($concepto->cuentacontabledebe_id ?? 0),
             ];
         }

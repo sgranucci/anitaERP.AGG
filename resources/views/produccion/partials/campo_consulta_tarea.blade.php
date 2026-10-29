@@ -33,7 +33,7 @@
     <div class="{{ $colInput }}">
         <div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
             <input type="hidden" name="{{ $inputName }}" id="{{ $inputId }}" class="tarea_id"
-                value="{{ $tareaId }}" @if ($required) required @endif>
+                value="{{ $tareaId }}">
             <button type="button" title="Consulta tareas (F1)" class="btn-accion-tabla consultatarea flex-shrink-0">
                 <i class="fa fa-search text-primary"></i>
             </button>
@@ -44,10 +44,11 @@
                     <i class="fa fa-edit"></i>
                 </a>
             @endif
-            <input type="text" class="form-control codigotarea" id="{{ $inputId }}_codigo"
+            <input type="text" class="form-control codigotarea{{ $required ? ' required' : '' }}" id="{{ $inputId }}_codigo"
                 value="{{ $codigo }}" placeholder="Id" autocomplete="off"
                 title="Id de tarea. F1 = consulta, Enter = resolver"
-                style="width: 5.5rem; flex-shrink: 0;">
+                style="width: 5.5rem; flex-shrink: 0;"
+                @if ($required) required @endif>
             <input type="text" class="form-control nombretarea text-truncate" id="{{ $inputId }}_nombre"
                 value="{{ $descripcion }}" placeholder="Nombre" readonly
                 style="min-width: 0; flex: 1 1 auto;">

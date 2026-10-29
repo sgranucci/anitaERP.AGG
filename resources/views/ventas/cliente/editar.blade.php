@@ -32,6 +32,10 @@
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-apoc-validacion-abm.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/crear.js') }}?v={{ file_exists($clienteCrearJs) ? filemtime($clienteCrearJs) : time() }}" type="text/javascript"></script>
+@php
+    $clienteAvisosJs = public_path('assets/pages/scripts/ventas/cliente/avisos.js');
+@endphp
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/avisos.js') }}?v={{ file_exists($clienteAvisosJs) ? filemtime($clienteAvisosJs) : time() }}" type="text/javascript"></script>
 @if (config('suitecrm.habilitado'))
 @php
     $suitecrmNotasJs = public_path('assets/pages/scripts/ventas/cliente/suitecrm-notas.js');
@@ -143,6 +147,7 @@
                         @include('ventas.cliente.form7')
                         @include('ventas.cliente.form8')
                         @include('ventas.cliente.form10')
+                        @include('ventas.cliente.form11')
                         @if (config('suitecrm.habilitado'))
                             @include('ventas.cliente.form9')
                         @endif

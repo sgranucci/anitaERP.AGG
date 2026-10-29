@@ -240,7 +240,7 @@
                 ? 'Sin lotes/OT con saldo para el módulo de la línea. Desmarcá «Solo módulo de la línea» para ver stock de otros módulos.'
                 : 'Sin lotes/OT con saldo pendiente';
             $tbody.append(
-                '<tr><td colspan="6" class="text-center text-muted">' + hint + '</td></tr>'
+                '<tr><td colspan="7" class="text-center text-muted">' + hint + '</td></tr>'
             );
             return;
         }
@@ -255,6 +255,12 @@
                 $tr.addClass('clsp-fila-cubre');
             }
             $tr.append($('<td/>').text(fila.lote || ''));
+            var situacion = fila.situacion || '';
+            var $sit = $('<td/>').text(situacion);
+            if (fila.lista_entrega === false) {
+                $sit.addClass('text-danger font-weight-bold');
+            }
+            $tr.append($sit);
             $tr.append($('<td/>').text(moduloTxt));
             $tr.append($('<td class="clsp-medidas"/>').text(fila.medidas || ''));
             $tr.append($('<td/>').text(fila.deposito || ''));
@@ -271,6 +277,8 @@
                 $btn.attr('data-deposito-etiqueta', fila.deposito || '');
                 $btn.attr('data-origen', fila.origen === 'OT' ? 'OT' : 'L');
                 $btn.attr('data-ordentrabajo-id', parseInt(fila.ordentrabajo_id, 10) || 0);
+                $btn.attr('data-lista-entrega', fila.lista_entrega === false ? '0' : '1');
+                $btn.attr('data-aviso-ot', fila.aviso_ot || '');
                 $tr.append($('<td class="text-nowrap"/>').append($btn));
             }
             $tbody.append($tr);
@@ -292,7 +300,7 @@
         var token = $('#csrf_token').val();
         pintarContexto(armarHtmlContexto(ctx, null));
         $('#datoslotesstockpicking').html(
-            '<tr><td colspan="6" class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Buscando…</td></tr>'
+            '<tr><td colspan="7" class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Buscando…</td></tr>'
         );
 
         $.post(carpetaBase + '/stock/picking-pedido/consulta-lotes-stock', {
@@ -365,6 +373,14 @@
         $lbl.addClass('d-none').text('');
     }
 
+    function confirmarSiOtNoTerminada(fila) {
+        if (!fila || fila.lista_entrega !== false) {
+            return true;
+        }
+        var msg = fila.aviso_ot || ('La OT ' + (fila.lote || '') + ' no está terminada.');
+        return window.confirm(msg + '\n\n¿Continuar igual?');
+    }
+
     function aplicarLoteElegido(lote, depositoId, ordentrabajoId, etiqueta) {
         if (!$filaPickingLoteActiva || !$filaPickingLoteActiva.length) {
             return;
@@ -430,6 +446,14 @@
             var etiqueta = $(this).attr('data-deposito-etiqueta') || '';
             var origen = $(this).attr('data-origen') || 'L';
             var otId = origen === 'OT' ? (parseInt($(this).attr('data-ordentrabajo-id'), 10) || 0) : 0;
+            var lista = $(this).attr('data-lista-entrega');
+            if (!confirmarSiOtNoTerminada({
+                lista_entrega: lista === '0' ? false : true,
+                aviso_ot: $(this).attr('data-aviso-ot') || '',
+                lote: lote
+            })) {
+                return;
+            }
             aplicarLoteElegido(lote, depositoId, otId, etiqueta);
             $('#consultalotesstockpickingModal').modal('hide');
         });
@@ -547,6 +571,10 @@
         }
         consultarStockDeLote($tr, lote, function (filas) {
             if (filas.length === 1) {
+                if (!confirmarSiOtNoTerminada(filas[0])) {
+                    done({ depositoId: 0 });
+                    return;
+                }
                 aplicarFilaStock($tr, filas[0]);
                 done({
                     depositoId: parseInt(filas[0].deposito_id, 10) || 0,

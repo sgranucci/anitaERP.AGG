@@ -27,7 +27,9 @@ use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\MovimientoStockLoteNumeracionSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use App\Support\Stock\RecuentoBloqueoSalidaDepositoSupport;
+use App\Support\Stock\ReporteStockOtSituacionSupport;
 use App\Support\Stock\TransferenciaMercaderiaDetalleFerliSupport;
+use App\Support\Ventas\PedidoPickingFerliSupport;
 use App\Support\Stock\TransferenciaMercaderiaSignoSupport;
 use Auth;
 use DB;
@@ -345,6 +347,28 @@ class MovimientoStockService
 							$tallsSal,
 						);
 					}
+				}
+
+				if (
+					empty($data['omitir_validacion_saldo'])
+					&& MovimientoStockFerliSupport::esCalzadosFerli()
+					&& MovimientoStockConsumoOtAvisoSupport::esDocumentoEgreso(
+						$tipotransaccion,
+						is_string($signoCantidadMovimiento) ? $signoCantidadMovimiento : null
+					)
+				) {
+					$this->validarSaldoLoteOtFerli(
+						$data,
+						$articulos,
+						$combinaciones,
+						$cantidades,
+						$medidas,
+						$sentidos,
+						$tipotransaccion,
+						is_string($signoCantidadMovimiento) ? $signoCantidadMovimiento : null,
+						$aplicarOtEnEgresos,
+						(int) ($ordentrabajoIdConsumo ?? 0)
+					);
 				}
 
 				// Graba items. El precio vacío se resuelve una sola vez para todos los renglones.
@@ -823,6 +847,125 @@ class MovimientoStockService
 		}
 
 		return PeriodoContableCierreSupport::ALCANCE_STOCK;
+	}
+
+	/**
+	 * Ferli: un egreso con lote/OT no puede dejar esa fila de Stock por OT en negativo.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @param  list<mixed>  $articulos
+	 * @param  list<mixed>  $combinaciones
+	 * @param  list<mixed>  $cantidades
+	 * @param  list<mixed>  $medidas
+	 * @param  list<mixed>  $sentidos
+	 */
+	private function validarSaldoLoteOtFerli(
+		array $data,
+		array $articulos,
+		array $combinaciones,
+		array $cantidades,
+		array $medidas,
+		array $sentidos,
+		?Tipotransaccion_Stock $tipotransaccion,
+		?string $signoCantidad,
+		bool $aplicarOtEnEgresos,
+		int $ordentrabajoIdConsumo
+	): void {
+		$loteDoc = trim((string) ($data['lote'] ?? ''));
+		$depositoId = (int) ($data['deposito_id'] ?? 0);
+		$comoOt = $aplicarOtEnEgresos && $ordentrabajoIdConsumo > 0;
+		$comoLote = ! $comoOt && ReporteStockOtSituacionSupport::esLoteImportado($loteDoc);
+		if ($depositoId <= 0 || (! $comoOt && ! $comoLote)) {
+			return;
+		}
+
+		/** @var array<string, array{articulo_id:int, combinacion_id:int, pares:float, curva:array<string, float>}> $grupos */
+		$grupos = [];
+		foreach ($articulos as $i => $articuloId) {
+			$articuloId = (int) $articuloId;
+			$combinacionId = (int) ($combinaciones[$i] ?? 0);
+			$firmada = (float) str_replace(',', '.', (string) ($cantidades[$i] ?? 0));
+			if ($articuloId <= 0 || $combinacionId <= 0) {
+				continue;
+			}
+			if (! MovimientoStockConsumoOtAvisoSupport::lineaEsEgreso($tipotransaccion, $signoCantidad, $firmada, (string) ($sentidos[$i] ?? ''))) {
+				continue;
+			}
+			$curva = self::curvaTallesDesdeMedidas($medidas[$i] ?? null);
+			$pares = 0.0;
+			foreach ($curva as $cant) {
+				$pares += (float) $cant;
+			}
+			if ($pares < 0.000001) {
+				$pares = abs($firmada);
+			}
+			if ($pares < 0.000001 && $curva === []) {
+				continue;
+			}
+			$clave = $articuloId.'|'.$combinacionId;
+			if (! isset($grupos[$clave])) {
+				$grupos[$clave] = [
+					'articulo_id' => $articuloId,
+					'combinacion_id' => $combinacionId,
+					'pares' => 0.0,
+					'curva' => [],
+				];
+			}
+			$grupos[$clave]['pares'] += $pares;
+			foreach ($curva as $nombre => $cant) {
+				$grupos[$clave]['curva'][$nombre] = (float) ($grupos[$clave]['curva'][$nombre] ?? 0) + (float) $cant;
+			}
+		}
+
+		$loteMensaje = $comoOt ? (string) $ordentrabajoIdConsumo : $loteDoc;
+		foreach ($grupos as $grupo) {
+			$error = PedidoPickingFerliSupport::errorSiEgresoBucketSuperaSaldo(
+				$grupo['articulo_id'],
+				$grupo['combinacion_id'],
+				$loteMensaje,
+				$depositoId,
+				$grupo['pares'],
+				$grupo['curva'],
+				! $comoOt,
+				$comoOt ? $ordentrabajoIdConsumo : 0
+			);
+			if ($error !== null) {
+				throw new \Exception($error);
+			}
+		}
+	}
+
+	/**
+	 * @return array<string, float>
+	 */
+	private static function curvaTallesDesdeMedidas(mixed $medidas): array
+	{
+		if (is_string($medidas)) {
+			$decoded = json_decode($medidas, true);
+			$medidas = is_array($decoded) ? $decoded : [];
+		}
+		if (! is_array($medidas)) {
+			return [];
+		}
+
+		$curva = [];
+		foreach ($medidas as $m) {
+			$nombre = '';
+			$cant = 0.0;
+			if (is_array($m)) {
+				$nombre = trim((string) ($m['medida'] ?? ''));
+				$cant = abs((float) ($m['cantidad'] ?? 0));
+			} elseif (is_object($m)) {
+				$nombre = trim((string) ($m->medida ?? ''));
+				$cant = abs((float) ($m->cantidad ?? 0));
+			}
+			if ($nombre === '' || $cant < 0.000001) {
+				continue;
+			}
+			$curva[$nombre] = (float) ($curva[$nombre] ?? 0) + $cant;
+		}
+
+		return $curva;
 	}
 
 	/**

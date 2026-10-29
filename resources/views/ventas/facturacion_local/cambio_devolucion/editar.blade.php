@@ -82,9 +82,10 @@ document.addEventListener('DOMContentLoaded', function () {
                             <button type="submit" class="btn btn-info">Continuar sin reemplazo (reembolso)</button>
                         </form>
                     @elseif (can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
-                        <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1"
-                              onsubmit="return confirm('¿Emitir FAC de reemplazo con medio puente NCD? Si el reemplazo es el mismo artículo, se factura al precio ya cobrado (el descuento no se vuelve a cobrar). Debe haber turno abierto en el local.');">
+                        <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1"
+                              onsubmit="var s=this.querySelector('[name=modo_precio]'); return confirm('¿Emitir la factura del par que se lleva con este precio: '+(s?s.options[s.selectedIndex].text:'')+'? Debe haber turno abierto en el local.');">
                             @csrf
+                            @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio')
                             <button type="submit" class="btn btn-warning">Emitir FAC reemplazo (NCD)</button>
                         </form>
                     @endif
@@ -105,9 +106,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 @endif
 
                 @if ($estado === CambioDevolucionMarketplaceEstadosSupport::RECIBIDO && can('emitir-nc-cambio-devolucion-marketplace-facturacion-local', false))
-                    <form method="POST" action="{{ route('emitir_nc_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1"
-                          onsubmit="return confirm('¿Emitir la nota de crédito solo por las líneas A devolver? Si el precio del legajo supera lo facturado, se acredita el precio de la factura. El motivo define si ese par ingresa al stock.');">
+                    <form method="POST" action="{{ route('emitir_nc_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1"
+                          onsubmit="var s=this.querySelector('[name=modo_precio]'); return confirm('¿Emitir la nota de crédito de lo devuelto con este precio: '+(s?s.options[s.selectedIndex].text:'')+'? El motivo define si ese par ingresa al stock.');">
                         @csrf
+                        @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio')
                         <button type="submit" class="btn btn-danger">Emitir NC de lo devuelto (NCD)</button>
                     </form>
                 @endif

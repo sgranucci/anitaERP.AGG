@@ -17,6 +17,7 @@ use App\Support\Stock\DepmaeListadoFiltros;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\RecepcionProveedorIntercompanySupport;
 use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
+use App\Support\Stock\ReporteStockOtDepositoAmbitoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use App\Support\Ventas\GastronomiaSalaSupport;
 
@@ -116,7 +117,7 @@ class DepmaeController extends Controller
             'tipodeposito_enum' => $tipodeposito_enum,
             'filtros' => $filtros,
             'filtrosQuery' => DepmaeListadoFiltros::paraQueryString($filtros),
-            'camposFiltro' => DepmaeListadoFiltros::CAMPOS,
+            'camposFiltro' => DepmaeListadoFiltros::campos(),
             'esCrown' => $esCrown,
             'sala_query' => $esCrown ? $this->salaRepository->allFiltrado() : collect(),
         ]);
@@ -199,6 +200,9 @@ class DepmaeController extends Controller
         if (EntornoEmpresaSupport::esCrown()) {
             $campos[] = 'sala_id';
         }
+        if (EntornoEmpresaSupport::esFerli()) {
+            $campos[] = 'canal';
+        }
         Depmae::create($request->only($campos));
 
         return redirect()->route('depmae', QueryRetornoListado::desdeRequest($request, DepmaeListadoFiltros::class))
@@ -269,6 +273,16 @@ class DepmaeController extends Controller
         return true;
     }
 
+    private function aplicarAmbitoDepositoReporte(Request $request, $query): void
+    {
+        $ambito = trim((string) $request->input('ambito_deposito', ''));
+        if ($ambito === '') {
+            return;
+        }
+
+        ReporteStockOtDepositoAmbitoSupport::aplicarSobreMaestro($query, $ambito);
+    }
+
     public function consultaDeposito(Request $request)
     {
         if (! $this->puedeConsultarDeposito()) {
@@ -310,6 +324,8 @@ class DepmaeController extends Controller
         if (! $omitirFiltroUsuario) {
             UsuarioDepositoAutorizado::aplicarFiltroQuery($query, $intercompany ? null : ($empresaId > 0 ? $empresaId : null));
         }
+
+        $this->aplicarAmbitoDepositoReporte($request, $query);
 
         if ($consulta !== '') {
             $query->where(function ($q) use ($consulta) {
@@ -420,9 +436,17 @@ class DepmaeController extends Controller
             UsuarioDepositoAutorizado::aplicarFiltroQuery($query, $intercompany ? null : ($empresaId > 0 ? $empresaId : null));
         }
 
+        $this->aplicarAmbitoDepositoReporte($request, $query);
+
         $matches = $query->limit(5)->get();
         if ($matches->isEmpty()) {
-            return response()->json(['error' => 'Depósito no encontrado'], 404);
+            $ambitoPedido = trim((string) $request->input('ambito_deposito', ''));
+            $ambito = ReporteStockOtDepositoAmbitoSupport::normalizar($ambitoPedido);
+            $mensaje = ($ambitoPedido !== '' && $ambito !== ReporteStockOtDepositoAmbitoSupport::TODOS)
+                ? 'Ese depósito no está en '.ReporteStockOtDepositoAmbitoSupport::etiqueta($ambito).'.'
+                : 'Depósito no encontrado';
+
+            return response()->json(['error' => $mensaje], 404);
         }
 
         if ($esCrown && $salaId <= 0 && $matches->count() > 1) {
@@ -460,6 +484,9 @@ class DepmaeController extends Controller
         $campos = ['codigo', 'nombre', 'tipodeposito', 'empresa_id'];
         if (EntornoEmpresaSupport::esCrown()) {
             $campos[] = 'sala_id';
+        }
+        if (EntornoEmpresaSupport::esFerli()) {
+            $campos[] = 'canal';
         }
         Depmae::findOrFail($id)->update($request->only($campos));
 

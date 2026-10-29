@@ -5,6 +5,7 @@ namespace App\Queries\Caja;
 use App\Models\Caja\Cobranza;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Support\Caja\CobranzaListadoVisual;
+use App\Support\Caja\CobranzaOrigenFerliSupport;
 use App\Support\Caja\CobranzaPromedioPagoSupport;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoCortesSupport;
@@ -44,12 +45,12 @@ class CobranzaQuery implements CobranzaQueryInterface
 
     // Lectura para index de cobranzas
 
-    public function leeCobranza($busqueda, $caja_id, $flPaginando = null, ?string $fechaDesde = null, ?string $fechaHasta = null, ?array $qbe = null)
+    public function leeCobranza($busqueda, $caja_id, $flPaginando = null, ?string $fechaDesde = null, ?string $fechaHasta = null, ?array $qbe = null, string $origen = '')
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $cobranzas = $this->consulta($busqueda, $caja_id, $fechaDesde, $fechaHasta, $qbe);
+        $cobranzas = $this->consulta($busqueda, $caja_id, $fechaDesde, $fechaHasta, $qbe, $origen);
         $cobranzas = $cobranzas->orderby('cobranza.id', 'DESC');
 
         if (isset($flPaginando))
@@ -81,7 +82,8 @@ class CobranzaQuery implements CobranzaQueryInterface
                 0,
                 $filtros['fecha_desde'] ?? null,
                 $filtros['fecha_hasta'] ?? null,
-                is_array($filtros['qbe'] ?? null) ? $filtros['qbe'] : null
+                is_array($filtros['qbe'] ?? null) ? $filtros['qbe'] : null,
+                (string) ($filtros['origen'] ?? '')
             ),
             ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos),
             $campos,
@@ -93,7 +95,7 @@ class CobranzaQuery implements CobranzaQueryInterface
         );
     }
 
-    private function consulta($busqueda, $caja_id, ?string $fechaDesde, ?string $fechaHasta, ?array $qbe)
+    private function consulta($busqueda, $caja_id, ?string $fechaDesde, ?string $fechaHasta, ?array $qbe, string $origen = '')
     {
         $select = ['cobranza.id as id',
                                     'cobranza.empresa_id as empresa',
@@ -153,6 +155,7 @@ class CobranzaQuery implements CobranzaQueryInterface
         }
 
         CobranzaListadoVisual::aplicarQbe($cobranzas, $qbe);
+        CobranzaOrigenFerliSupport::aplicar($cobranzas, $origen);
 
         return $cobranzas;
     }

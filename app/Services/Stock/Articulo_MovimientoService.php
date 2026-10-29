@@ -16,6 +16,8 @@ use App\Models\Stock\Talle;
 use App\Support\Database\DbContencionSupport;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\ArticuloMovimientoReferenciasSupport;
+use App\Support\Stock\OtListaEntregaSupport;
+use App\Support\Stock\ReporteStockOtDepositoAmbitoSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -309,17 +311,21 @@ class Articulo_MovimientoService
 	public function generaDatosRepStockOt($estado, $mventa_id, $desdearticulo, $hastaarticulo,
 										$desdelinea_id, $hastalinea_id,
 										$desdecategoria_id, $hastacategoria_id,
-										$desdelote, $hastalote, $estadoot, $apertura, $deposito_id)
+										$desdelote, $hastalote, $estadoot, $apertura, $deposito_id,
+										$ambitoDeposito = 'TODOS')
 	{
 		$data = collect($this->articulo_movimientoQuery->generaDatosRepStockOt($estado, $mventa_id,
 				$desdearticulo, $hastaarticulo,
 				$desdelinea_id, $hastalinea_id,
 				$desdecategoria_id, $hastacategoria_id,
-				$desdelote, $hastalote, $deposito_id, $apertura));
+				$desdelote, $hastalote, $deposito_id, $apertura, $ambitoDeposito));
 
-		// Overlay EN PRODUCCION: solo si no filtramos depósito ni «Entrega inmediata».
-		$incluirExtrasProduccion = (int) $deposito_id === 0
-			&& (string) $estadoot !== 'ENTREGA';
+		// Overlay EN PRODUCCION: planta, no tienda. No entra si hay un depósito puntual ni «Entrega inmediata».
+		$incluirExtrasProduccion = ReporteStockOtDepositoAmbitoSupport::incluyeOtEnProduccion(
+			(string) $ambitoDeposito,
+			(int) $deposito_id,
+			(string) $estadoot
+		);
 		if ($incluirExtrasProduccion) {
 			$extras = $this->articulo_movimientoQuery->generaDatosOtEnProduccion(
 				$estado,
@@ -397,6 +403,8 @@ class Articulo_MovimientoService
 					'modulo' => $modulo,
 					'pedido' => $movimiento['pedido'] ?? null,
 					'ordencompra' => $movimiento['ordentrabajo_codigo'] ?? '',
+					'ordentrabajo_id' => (int) ($movimiento['ordentrabajo_id'] ?? 0),
+					'articulo_id' => (int) ($movimiento['articulo_id'] ?? 0),
 					'deposito_id' => (int) ($movimiento['deposito_id'] ?? 0),
 					'deposito_codigo' => (string) ($movimiento['depositocodigo'] ?? ''),
 					'deposito_nombre' => (string) ($movimiento['depositonombre'] ?? ''),
@@ -467,7 +475,9 @@ class Articulo_MovimientoService
 				(int) $grupo['deposito_id'],
 				(string) $grupo['deposito_codigo'],
 				(string) $grupo['deposito_nombre'],
-				(string) ($grupo['modulo_nombre'] ?? '')
+				(string) ($grupo['modulo_nombre'] ?? ''),
+				(int) ($grupo['ordentrabajo_id'] ?? 0),
+				(int) ($grupo['articulo_id'] ?? 0)
 			);
 		}
 
@@ -592,7 +602,7 @@ class Articulo_MovimientoService
 			return [$a['lote'], $a['deposito'] ?? '', $a['modulo_id']] <=> [$b['lote'], $b['deposito'] ?? '', $b['modulo_id']];
 		});
 
-		return $filas;
+		return OtListaEntregaSupport::aplicarAFilas($filas);
 	}
 
 	/**
@@ -873,12 +883,19 @@ class Articulo_MovimientoService
 			? $situacionesPorOt[$otId]
 			: null;
 
-		return ReporteStockOtSituacionSupport::situacionFila(
-			! empty($movimiento['en_produccion_forzada']),
+		$ev = OtListaEntregaSupport::evaluar(
+			$otId,
 			(int) ($movimiento['deposito_id'] ?? 0),
 			$metaOt,
+			(string) ($movimiento['ordentrabajo_codigo'] ?? ''),
+			! empty($movimiento['en_produccion_forzada']),
 			(int) ($movimiento['es_altap_excel'] ?? 0) === 1
 		);
+
+		return [
+			'situacion' => $ev['situacion'],
+			'en_produccion' => $ev['en_produccion'],
+		];
 	}
 
 	/**
@@ -942,7 +959,9 @@ class Articulo_MovimientoService
 		int $depositoId = 0,
 		string $depositoCodigo = '',
 		string $depositoNombre = '',
-		string $moduloNombre = ''
+		string $moduloNombre = '',
+		int $ordentrabajoId = 0,
+		int $articuloId = 0
 	): array {
 		$totalPares = 0.0;
 		foreach ($medidas as $m) {
@@ -972,6 +991,8 @@ class Articulo_MovimientoService
 			'deposito_id' => $depositoId,
 			'deposito_codigo' => $depositoCodigo,
 			'deposito_nombre' => $depositoNombre,
+			'ordentrabajo_id' => $ordentrabajoId,
+			'articulo_id' => $articuloId,
 		];
 	}
 

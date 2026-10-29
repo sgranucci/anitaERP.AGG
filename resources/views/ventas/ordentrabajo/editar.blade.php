@@ -1,6 +1,10 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Ordenes de trabajo
+    @if (request()->input('vista') === 'consulta')
+        Consulta de OT
+    @else
+        Ordenes de trabajo
+    @endif
 @endsection
 
 @section("scripts")
@@ -26,15 +30,27 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Editar Orden de trabajo</h3>
-				&nbsp;- ID: {{ $ordentrabajo->id }} - Orden de trabajo: {{$ordentrabajo->codigo}}
+                <h3 class="card-title">
+                    @if (request()->input('vista') === 'consulta')
+                        Consulta de OT
+                    @else
+                        Editar orden de trabajo
+                    @endif
+                    — {{ str_pad($ordentrabajo->codigo, 4, '0', STR_PAD_LEFT) }}
+                </h3>
 
                 <div class="card-tools">
-                    <a href="{{route('ordentrabajo')}}" class="btn btn-outline-info btn-sm">
-                        <i class="fa fa-fw fa-reply-all"></i> Volver al listado
-                    </a>
+                    @if (request()->input('vista') === 'consulta')
+                        <button type="button" class="btn btn-outline-light btn-sm" onclick="window.close()">
+                            <i class="fa fa-fw fa-times"></i> Cerrar solapa
+                        </button>
+                    @else
+                        <a href="{{ route('ordentrabajo') }}" class="btn btn-outline-info btn-sm">
+                            <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                        </a>
+                    @endif
                 </div>
             </div>
             <form action="{{route('actualizar_ordentrabajo', ['id' => $ordentrabajo->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">

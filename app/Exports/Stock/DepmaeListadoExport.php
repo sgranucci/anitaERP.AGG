@@ -28,7 +28,15 @@ class DepmaeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
 
     private function colUltima(): string
     {
-        return EntornoEmpresaSupport::esCrown() ? 'F' : 'E';
+        $columnas = 5;
+        if (EntornoEmpresaSupport::esCrown()) {
+            $columnas++;
+        }
+        if (EntornoEmpresaSupport::esFerli()) {
+            $columnas++;
+        }
+
+        return chr(ord('A') + $columnas - 1);
     }
 
     /** @var array<string, mixed>|string|null */
@@ -123,8 +131,15 @@ class DepmaeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
     public function columnWidths(): array
     {
         if ($this->flDesdeIndex) {
+            $anchos = [
+                'A' => 8,
+                'B' => 36,
+                'C' => 22,
+                'D' => 18,
+                'E' => 14,
+            ];
             if (EntornoEmpresaSupport::esCrown()) {
-                return [
+                $anchos = [
                     'A' => 8,
                     'B' => 32,
                     'C' => 18,
@@ -133,14 +148,11 @@ class DepmaeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
                     'F' => 14,
                 ];
             }
+            if (EntornoEmpresaSupport::esFerli()) {
+                $anchos[$this->colUltima()] = 14;
+            }
 
-            return [
-                'A' => 8,
-                'B' => 36,
-                'C' => 22,
-                'D' => 18,
-                'E' => 14,
-            ];
+            return $anchos;
         }
 
         return [];

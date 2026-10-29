@@ -13,8 +13,8 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Movimientos de stock Ferli: grilla calzado vs insumos; canal según depósito.
  *
- * - Depósito ligado a local_venta → catálogo LOCAL (tiendas).
- * - Resto (Fábrica, Junín, Tal-*, etc.) → catálogo FÁBRICA (importaciones, insumos).
+ * - Depósito con canal Local → catálogo LOCAL (tiendas).
+ * - Resto (canal Fábrica: planta, Junín, Tal-*, etc.) → catálogo FÁBRICA (importaciones, insumos).
  * - TRA fábrica→local / local→fábrica: manda el depósito de origen (de dónde se saca).
      * - Calzado: combinaciones activas del canal, o activas en el otro canal (estado legacy).
      * - Insumos: sin combinaciones, igual seleccionables.
@@ -48,7 +48,15 @@ final class MovimientoStockFerliSupport
 
     public static function depositoEsDeLocalVenta(int $depositoId): bool
     {
-        if ($depositoId <= 0 || ! Schema::hasTable('local_venta')) {
+        if ($depositoId <= 0) {
+            return false;
+        }
+
+        if (self::esCalzadosFerli() && DepmaeCanalSupport::columnaDisponible()) {
+            return DepmaeCanalSupport::esLocal($depositoId);
+        }
+
+        if (! Schema::hasTable('local_venta')) {
             return false;
         }
 
@@ -56,6 +64,33 @@ final class MovimientoStockFerliSupport
             ->where('deposito_id', $depositoId)
             ->where('activo', true)
             ->exists();
+    }
+
+    /**
+     * Depósitos de tienda: canal Local del maestro (precargado con los locales activos).
+     *
+     * @return list<int>
+     */
+    public static function idsDepositosDeLocalVenta(): array
+    {
+        if (self::esCalzadosFerli() && DepmaeCanalSupport::columnaDisponible()) {
+            return DepmaeCanalSupport::idsLocales();
+        }
+
+        if (! Schema::hasTable('local_venta')) {
+            return [];
+        }
+
+        return LocalVenta::query()
+            ->where('activo', true)
+            ->where('deposito_id', '>', 0)
+            ->distinct()
+            ->pluck('deposito_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

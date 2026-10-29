@@ -138,6 +138,17 @@
                                 </label>
                             </div>
                             <div class="custom-control custom-checkbox mb-2">
+                                <input type="hidden" name="incluir_suspendidos" value="0">
+                                <input type="checkbox" class="custom-control-input" name="incluir_suspendidos" id="incluir_suspendidos" value="1"
+                                    @checked($filtros['incluir_suspendidos'] ?? true)>
+                                <label class="custom-control-label" for="incluir_suspendidos">
+                                    Incluir clientes suspendidos
+                                </label>
+                                <small class="form-text text-muted mt-0">
+                                    Viene tildado: si tienen deuda, se listan igual para no perder ese saldo.
+                                </small>
+                            </div>
+                            <div class="custom-control custom-checkbox mb-2">
                                 <input type="checkbox" class="custom-control-input" name="solo_totales" id="solo_totales" value="1"
                                     @checked(! empty($filtros['solo_totales']))>
                                 <label class="custom-control-label" for="solo_totales">

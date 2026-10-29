@@ -79,11 +79,21 @@ $(function () {
     tipoOt();
 });
 
+function paresFabricacionDeFila($tr)
+{
+    var fabricacion = $tr.find(".pares-fabricacion").val();
+    if (fabricacion !== undefined && String(fabricacion) !== '') {
+        return fabricacion;
+    }
+
+    return $tr.find(".pares").val();
+}
+
 function editarPedido(item)
 {
     pedido_combinacion_id = $(item).parents("tr").find(".id").val();
 
-    cantidad = $(item).parents("tr").find(".pares").val();
+    cantidad = paresFabricacionDeFila($(item).parents("tr"));
 
     articulo_id = $(item).parents("tr").find(".articulo_id").val();
     descripcion_articulo = $(item).parents("tr").find(".articulo").val();
@@ -124,7 +134,7 @@ function facturarPedido(item)
     ordentrabajo_id = $('#ordentrabajo_id').val();
     descripcion_articulo = $(item).parents("tr").find(".articulo").val();
     nombre_combinacion = $(item).parents("tr").find(".nombre_combinacion").val();
-    cantidad = $(item).parents("tr").find(".pares").val();
+    cantidad = paresFabricacionDeFila($(item).parents("tr"));
 
     articulo_id = $(item).parents("tr").find(".articulo_id").val();
     modulo_id = $(item).parents("tr").find(".modulo_id").val();
@@ -489,7 +499,7 @@ function empacarPedido(item)
     var sku = $(item).parents("tr").find(".sku").val();
     var combinacion = $(item).parents("tr").find(".nombre_combinacion").val();
     var medidas = $(item).parents("tr").find(".medidas").val();
-    var pares = $(item).parents("tr").find(".pares").val();
+    var pares = paresFabricacionDeFila($(item).parents("tr"));
     var operacion_id = 1; // Inicio de operacion
 
 	// Graba la tarea de armado
@@ -624,8 +634,13 @@ $('#aceptaModal').on('click', function () {
 
     asignaPrecio(articulo_id, jsonTallesId);
     
-    // Asigna cantidad de pares
-    $(ptr_cantidad).parents("tr").find(".pares").val(totalPares);
+    // La fila partida muestra el saldo. El lápiz sigue editando la curva fabricada.
+    var $filaPares = $(ptr_cantidad).parents("tr");
+    if (String($filaPares.find(".pares-fabricacion").val() || '') !== '') {
+        $filaPares.find(".pares-fabricacion").val(totalPares);
+    } else {
+        $filaPares.find(".pares").val(totalPares);
+    }
 
     off = 0;
     var flError = false;

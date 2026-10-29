@@ -754,6 +754,10 @@
 					{
 						alert("Saldo lote "+ordentrabajo_stock_codigo+" "+data.saldo);
 
+						if (data.ot_aviso && !window.confirm(data.ot_aviso + '\n\n¿Continuar igual?'))
+						{
+							return;
+						}
 						$('#crearOrdenTrabajoModal').modal('hide');
 
 						if (checkotstock == 'on')
