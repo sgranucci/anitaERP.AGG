@@ -55,6 +55,23 @@
 </footer>
 
 @auth
+    <div class="anita-accesos-panel d-none" id="anita-accesos-panel" role="dialog" aria-labelledby="anita-accesos-titulo" aria-hidden="true">
+        <div class="anita-accesos-panel-header">
+            <h6 class="anita-accesos-panel-titulo" id="anita-accesos-titulo">
+                <i class="fas fa-thumbtack" aria-hidden="true"></i> Accesos anclados
+            </h6>
+            <button type="button" class="anita-accesos-cerrar" id="anita-accesos-cerrar" aria-label="Cerrar">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="anita-accesos-lista" id="anita-accesos-lista"></div>
+        <div class="anita-accesos-panel-footer">
+            <button type="button" class="btn btn-sm btn-outline-primary" id="anita-accesos-agregar">
+                <i class="fas fa-plus"></i> Agregar
+            </button>
+            <span class="anita-accesos-ayuda">Clic derecho sobre un acceso para quitarlo.</span>
+        </div>
+    </div>
     <div class="modal fade" id="modal-barra-tareas" tabindex="-1" role="dialog" aria-labelledby="modal-barra-tareas-label" aria-hidden="true">
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">

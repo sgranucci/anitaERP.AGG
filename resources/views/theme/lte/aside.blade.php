@@ -8,7 +8,7 @@
     <!-- sidebar: style can be found in sidebar.less -->
     <div class="sidebar">
         <!-- Sidebar user panel -->
-        <div class="user-panel mt-3 pb-3 mb-3 d-flex">
+        <div class="user-panel mt-3 pb-3 mb-3 d-flex align-items-center anita-user-panel">
             <div class="image">
 			@php
 				$foto = session()->get('foto_usuario');
@@ -28,6 +28,18 @@
                     <a href="#" class="d-block">{{ session()->get('nombre_usuario', 'Invitado') }}</a>
                 @endguest
             </div>
+            @auth
+                <button type="button"
+                    class="anita-accesos-btn"
+                    id="anita-accesos-anclados-btn"
+                    title="Accesos anclados"
+                    aria-label="Abrir accesos anclados"
+                    aria-expanded="false"
+                    aria-controls="anita-accesos-panel">
+                    <i class="fas fa-thumbtack" aria-hidden="true"></i>
+                    <span class="anita-accesos-count{{ count($barraTareasAnclados ?? []) > 0 ? '' : ' d-none' }}">{{ count($barraTareasAnclados ?? []) }}</span>
+                </button>
+            @endauth
         </div>
         <!-- sidebar menu: : style can be found in sidebar.less -->
         <nav class="mt-1">

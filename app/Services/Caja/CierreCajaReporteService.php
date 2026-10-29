@@ -134,15 +134,18 @@ class CierreCajaReporteService
         $ids = $cuentas->pluck('id')->map(static fn ($id) => (int) $id)->all();
         $saldoAnteriorMap = $this->sumasPorCuenta($ids, $empresaIds, null, $this->diaAnterior($desde));
         $movPeriodo = $this->sumasIngresoEgresoPorCuenta($ids, $empresaIds, $desde, $hasta);
+        // Mismo libro que Movimientos de caja: el cheque propio no tiene línea y sale como egreso.
+        $chequesAnterior = $this->egresosChequesPropiosPorCuenta($ids, $empresaIds, null, $this->diaAnterior($desde));
+        $chequesPeriodo = $this->egresosChequesPropiosPorCuenta($ids, $empresaIds, $desde, $hasta);
 
         $filas = [];
         $totSaldoAnt = $totIng = $totEgr = $totSaldoAct = 0.0;
 
         foreach ($cuentas as $cuenta) {
             $id = (int) $cuenta->id;
-            $saldoAnt = (float) ($saldoAnteriorMap[$id] ?? 0);
+            $saldoAnt = round((float) ($saldoAnteriorMap[$id] ?? 0) - (float) ($chequesAnterior[$id] ?? 0), 2);
             $ing = (float) ($movPeriodo[$id]['ingreso'] ?? 0);
-            $egr = (float) ($movPeriodo[$id]['egreso'] ?? 0);
+            $egr = round((float) ($movPeriodo[$id]['egreso'] ?? 0) + (float) ($chequesPeriodo[$id] ?? 0), 2);
             $mov = round($ing - $egr, 2);
             $saldoAct = round($saldoAnt + $mov, 2);
 
@@ -494,6 +497,65 @@ class CierreCajaReporteService
                 'ingreso' => round((float) $row->ingreso, 2),
                 'egreso' => round((float) $row->egreso, 2),
             ];
+        }
+
+        return $map;
+    }
+
+    /**
+     * Cheques propios del libro de la cuenta (origen E, no anulados). El debitado
+     * entra: ya salió del banco. Sin movimiento de caja no está en el libro.
+     * La fecha es la del movimiento, igual que en Movimientos de caja.
+     *
+     * @param  list<int>  $cuentaIds
+     * @param  list<int>  $empresaIds
+     * @return array<int, float> egreso en moneda local, por cuenta
+     */
+    private function egresosChequesPropiosPorCuenta(array $cuentaIds, array $empresaIds, ?string $desde, ?string $hasta): array
+    {
+        if ($cuentaIds === []) {
+            return [];
+        }
+
+        $mn = 'ABS(cheque.monto) * CASE WHEN COALESCE(cheque.moneda_id, 1) > 1 THEN CASE WHEN COALESCE(cheque.cotizacion, 0) > 0 THEN cheque.cotizacion ELSE 1 END ELSE 1 END';
+
+        $q = Cheque::query()
+            ->select('cheque.cuentacaja_id')
+            ->selectRaw('SUM('.$mn.') as egreso')
+            ->join('caja_movimiento', 'caja_movimiento.id', '=', 'cheque.caja_movimiento_id')
+            ->where('cheque.origen', 'E')
+            ->whereIn('cheque.cuentacaja_id', $cuentaIds)
+            ->where(function ($w) {
+                $w->whereNull('cheque.estado')
+                    ->orWhereRaw("UPPER(TRIM(cheque.estado)) <> 'A'");
+            })
+            ->where(function ($w) {
+                $w->whereNotExists(function ($sub) {
+                    $sub->select(DB::raw(1))
+                        ->from('caja_movimiento_estado as e0')
+                        ->whereColumn('e0.caja_movimiento_id', 'caja_movimiento.id');
+                })->orWhereExists(function ($sub) {
+                    $sub->select(DB::raw(1))
+                        ->from('caja_movimiento_estado as e')
+                        ->whereColumn('e.caja_movimiento_id', 'caja_movimiento.id')
+                        ->where('e.estado', 'A')
+                        ->whereRaw('e.id = (select max(e2.id) from caja_movimiento_estado e2 where e2.caja_movimiento_id = caja_movimiento.id)');
+                });
+            });
+
+        if ($empresaIds !== []) {
+            $q->whereIn('caja_movimiento.empresa_id', $empresaIds);
+        }
+        if ($desde !== null && $desde !== '') {
+            $q->where('caja_movimiento.fecha', '>=', $desde);
+        }
+        if ($hasta !== null && $hasta !== '') {
+            $q->where('caja_movimiento.fecha', '<=', $hasta);
+        }
+
+        $map = [];
+        foreach ($q->groupBy('cheque.cuentacaja_id')->get() as $row) {
+            $map[(int) $row->cuentacaja_id] = round((float) $row->egreso, 2);
         }
 
         return $map;

@@ -258,7 +258,7 @@
     @endif
     @auth
         @if (! $modoEmbed)
-            <script src="{{ asset('assets/js/barra-tareas.js') }}"></script>
+            <script src="{{ asset('assets/js/barra-tareas.js') }}?v={{ @filemtime(public_path('assets/js/barra-tareas.js')) ?: time() }}"></script>
             @if (!$modoConsulta)
                 <script src="{{ asset('assets/js/buscador-global.js') }}?v={{ @filemtime(public_path('assets/js/buscador-global.js')) ?: time() }}"></script>
                 <script src="{{ asset('assets/js/mis-aprobaciones-badge.js') }}?v={{ @filemtime(public_path('assets/js/mis-aprobaciones-badge.js')) ?: time() }}"></script>

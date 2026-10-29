@@ -62,6 +62,104 @@
         (anclados || []).forEach(function (pin) {
             $container.append(buildPinElement(pin));
         });
+
+        actualizarContadorAccesos((anclados || []).length);
+        if ($('#anita-accesos-panel').length && !$('#anita-accesos-panel').hasClass('d-none')) {
+            poblarAccesos();
+        }
+    }
+
+    function actualizarContadorAccesos(cantidad) {
+        var $count = $('.anita-accesos-count');
+        if (!$count.length) {
+            return;
+        }
+        $count.text(String(cantidad));
+        $count.toggleClass('d-none', cantidad <= 0);
+    }
+
+    function poblarAccesos() {
+        var $lista = $('#anita-accesos-lista');
+        if (!$lista.length) {
+            return;
+        }
+
+        $lista.empty();
+        var $pins = $('#anita-taskbar-pins .anita-taskbar-pin');
+        if (!$pins.length) {
+            $lista.append('<div class="anita-accesos-vacio">Todavía no hay accesos anclados. Use Agregar para elegir programas.</div>');
+            return;
+        }
+
+        $pins.each(function () {
+            var $pin = $(this);
+            var $item = $('<a>', {
+                href: $pin.attr('href'),
+                class: 'anita-accesos-item' + ($pin.hasClass('is-active') ? ' is-active' : ''),
+                'data-menu-id': $pin.data('menu-id'),
+                title: $pin.attr('title') || $pin.find('.anita-taskbar-pin-label').text(),
+            });
+            $item.append($pin.find('.anita-taskbar-pin-icon').clone());
+            $item.append($('<span>', {
+                class: 'anita-accesos-item-label',
+                text: $pin.find('.anita-taskbar-pin-label').text(),
+            }));
+            $lista.append($item);
+        });
+    }
+
+    function posicionarAccesos() {
+        var btn = document.getElementById('anita-accesos-anclados-btn');
+        var panel = document.getElementById('anita-accesos-panel');
+        var sidebar = document.querySelector('.main-sidebar');
+        if (!btn || !panel || !sidebar) {
+            return;
+        }
+
+        var btnRect = btn.getBoundingClientRect();
+        var sideRect = sidebar.getBoundingClientRect();
+        var margen = 8;
+        var top = Math.max(margen, btnRect.top);
+        var left = sideRect.right + margen;
+        var maxAlto = Math.max(180, window.innerHeight - top - margen);
+        var ancho = panel.offsetWidth || 280;
+
+        if (left + ancho > window.innerWidth - margen) {
+            left = Math.max(margen, window.innerWidth - ancho - margen);
+        }
+
+        panel.style.top = top + 'px';
+        panel.style.left = left + 'px';
+        panel.style.maxHeight = maxAlto + 'px';
+        var lista = panel.querySelector('.anita-accesos-lista');
+        if (lista) {
+            var ocupado = panel.querySelector('.anita-accesos-panel-header').offsetHeight
+                + panel.querySelector('.anita-accesos-panel-footer').offsetHeight;
+            lista.style.maxHeight = Math.max(80, maxAlto - ocupado) + 'px';
+        }
+    }
+
+    function cerrarAccesos() {
+        var $panel = $('#anita-accesos-panel');
+        var $btn = $('#anita-accesos-anclados-btn');
+        if (!$panel.length || $panel.hasClass('d-none')) {
+            return;
+        }
+        $panel.addClass('d-none').attr('aria-hidden', 'true');
+        $btn.removeClass('is-open').attr('aria-expanded', 'false');
+    }
+
+    function abrirAccesos() {
+        var $panel = $('#anita-accesos-panel');
+        var $btn = $('#anita-accesos-anclados-btn');
+        if (!$panel.length) {
+            return;
+        }
+        poblarAccesos();
+        $panel.css('visibility', 'hidden').removeClass('d-none').attr('aria-hidden', 'false');
+        posicionarAccesos();
+        $panel.css('visibility', '');
+        $btn.addClass('is-open').attr('aria-expanded', 'true');
     }
 
     function tituloPinMenu(anclado) {
@@ -264,7 +362,7 @@
             );
         });
 
-        $(document).on('contextmenu', '.anita-taskbar-pin', function (e) {
+        $(document).on('contextmenu', '.anita-taskbar-pin, .anita-accesos-item', function (e) {
             e.preventDefault();
 
             var $pin = $(this);
@@ -273,8 +371,56 @@
                 return;
             }
 
-            var nombre = String($pin.find('.anita-taskbar-pin-label').text() || '').trim();
+            var nombre = String(
+                $pin.find('.anita-taskbar-pin-label, .anita-accesos-item-label').first().text() || ''
+            ).trim();
             solicitarTogglePin(menuId, false, nombre);
+        });
+
+        $(document).on('click', '#anita-accesos-anclados-btn', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if ($('#anita-accesos-panel').hasClass('d-none')) {
+                abrirAccesos();
+            } else {
+                cerrarAccesos();
+            }
+        });
+
+        $(document).on('click', '#anita-accesos-cerrar', function (e) {
+            e.preventDefault();
+            cerrarAccesos();
+        });
+
+        $(document).on('click', '#anita-accesos-agregar', function (e) {
+            e.preventDefault();
+            cerrarAccesos();
+            $('#anita-taskbar-add').trigger('click');
+        });
+
+        $(document).on('click', function (e) {
+            if ($(e.target).closest('#anita-accesos-panel, #anita-accesos-anclados-btn').length) {
+                return;
+            }
+            cerrarAccesos();
+        });
+
+        $(document).on('keydown', function (e) {
+            if (e.key === 'Escape') {
+                cerrarAccesos();
+            }
+        });
+
+        function reposicionarSiAbierto() {
+            if (!$('#anita-accesos-panel').hasClass('d-none')) {
+                posicionarAccesos();
+            }
+        }
+
+        $(window).on('resize', reposicionarSiAbierto);
+        $('.main-sidebar .sidebar').on('scroll', reposicionarSiAbierto);
+        $('.main-sidebar').on('mouseenter mouseleave', function () {
+            window.setTimeout(reposicionarSiAbierto, 320);
         });
 
         $('#barra-tareas-buscar').on('input', function () {
