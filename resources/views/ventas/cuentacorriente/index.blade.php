@@ -187,7 +187,6 @@ $volverListadoUrl = $volverListadoUrl ?? route('cliente');
                                             'data' => $data,
                                             'etiquetaComprobante' => $etiquetaComprobante,
                                         ])
-                                        @include('ventas.cuentacorriente.partials.referencia_aplicacion', ['data' => $data])
                                     </td>
                                     <td>
                                         {{ $etiquetaMoneda }}

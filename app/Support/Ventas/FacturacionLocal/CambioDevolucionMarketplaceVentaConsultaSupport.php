@@ -23,6 +23,28 @@ use Illuminate\Support\Collection;
 final class CambioDevolucionMarketplaceVentaConsultaSupport
 {
     /**
+     * @return array<string, mixed>|null
+     */
+    public static function detalle(int $ventaId): ?array
+    {
+        if ($ventaId <= 0) {
+            return null;
+        }
+
+        $venta = Venta::query()
+            ->with(['clientes:id,nombre,numerodocumento'])
+            ->find($ventaId, [
+                'id', 'codigo', 'fecha', 'total', 'cliente_id', 'nombre',
+                'nroinscripcion', 'puntoventa_id',
+            ]);
+        if (! $venta instanceof Venta) {
+            return null;
+        }
+
+        return self::mapear(collect([$venta]))[0] ?? null;
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public static function buscar(string $q): array

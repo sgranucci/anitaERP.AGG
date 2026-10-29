@@ -6,7 +6,10 @@
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cuentacaja/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/facturacion_local/cambio_devolucion_opp.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/facturacion_local/cambio_devolucion_opp.js')) ?: time() }}" type="text/javascript"></script>
-@include('ventas.facturacion_local.cambio_devolucion.partials.scripts_form', ['editable' => $editable ?? false])
+@include('ventas.facturacion_local.cambio_devolucion.partials.scripts_form', [
+    'editable' => $editable ?? false,
+    'lineaInteractiva' => ($editable ?? false) || ($puedeCorregirReemplazo ?? false),
+])
 @if (session('abrir_pdf_opp'))
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -21,6 +24,13 @@ document.addEventListener('DOMContentLoaded', function () {
     use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceLiquidacionSupport;
     $estado = (string) $data->estado;
     $puedeActualizar = $editable && can('actualizar-cambio-devolucion-marketplace-facturacion-local', false);
+    $ncDevolucionEmitida = (int) ($data->venta_nc_id ?? 0) > 0;
+    $puedeElegirPrecioDevolucion = $data->exists
+        && ! $ncDevolucionEmitida
+        && ! in_array($estado, [
+            CambioDevolucionMarketplaceEstadosSupport::CERRADO,
+            CambioDevolucionMarketplaceEstadosSupport::ANULADO,
+        ], true);
     $puedeCerrarOpp = $estado === CambioDevolucionMarketplaceEstadosSupport::PENDIENTE_COMPENSACION
         && (string) $data->diferencia_sentido === CambioDevolucionMarketplaceLiquidacionSupport::SENTIDO_FERLI_ACREDITA
         && (float) $data->diferencia_importe >= 0.01
@@ -85,10 +95,31 @@ document.addEventListener('DOMContentLoaded', function () {
                         <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1"
                               onsubmit="var s=this.querySelector('[name=modo_precio]'); return confirm('¿Emitir la factura del par que se lleva con este precio: '+(s?s.options[s.selectedIndex].text:'')+'? Debe haber turno abierto en el local.');">
                             @csrf
-                            @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio')
+                            @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio', [
+                                'etiquetaPrecio' => 'Precio de la factura',
+                            ])
                             <button type="submit" class="btn btn-warning">Emitir FAC reemplazo (NCD)</button>
                         </form>
                     @endif
+                @endif
+
+                @if (($puedeRefacturar ?? false) && can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
+                    <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1"
+                          onsubmit="var s=this.querySelector('[name=modo_precio]'); return confirm('¿Facturar de nuevo el reemplazo con este precio: '+(s?s.options[s.selectedIndex].text:'')+'? El legajo sigue hasta el cierre.');">
+                        @csrf
+                        @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio', [
+                            'etiquetaPrecio' => 'Precio de la factura',
+                        ])
+                        <button type="submit" class="btn btn-warning">Facturar reemplazo de nuevo</button>
+                    </form>
+                @endif
+
+                @if (($puedeNcReemplazo ?? false) && can('emitir-nc-cambio-devolucion-marketplace-facturacion-local', false))
+                    <form method="POST" action="{{ route('emitir_nc_reemplazo_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1"
+                          onsubmit="return confirm('¿Emitir nota de crédito de la factura de reemplazo por un error de carga? El par vuelve al stock y después se puede facturar de nuevo. El legajo no se cierra.');">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-danger">NC del reemplazo (error)</button>
+                    </form>
                 @endif
 
                 @if ($estado === CambioDevolucionMarketplaceEstadosSupport::AGUARDANDO_RECEPCION && can('registrar-recepcion-cambio-devolucion-marketplace-facturacion-local', false))
@@ -105,13 +136,25 @@ document.addEventListener('DOMContentLoaded', function () {
                     </form>
                 @endif
 
-                @if ($estado === CambioDevolucionMarketplaceEstadosSupport::RECIBIDO && can('emitir-nc-cambio-devolucion-marketplace-facturacion-local', false))
+                @if ($puedeElegirPrecioDevolucion && $estado === CambioDevolucionMarketplaceEstadosSupport::RECIBIDO && can('emitir-nc-cambio-devolucion-marketplace-facturacion-local', false))
                     <form method="POST" action="{{ route('emitir_nc_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1"
                           onsubmit="var s=this.querySelector('[name=modo_precio]'); return confirm('¿Emitir la nota de crédito de lo devuelto con este precio: '+(s?s.options[s.selectedIndex].text:'')+'? El motivo define si ese par ingresa al stock.');">
                         @csrf
-                        @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio')
+                        @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio', [
+                            'etiquetaPrecio' => 'Precio de la devolución',
+                            'selectClass' => 'cdm-modo-precio-devolucion',
+                        ])
                         <button type="submit" class="btn btn-danger">Emitir NC de lo devuelto (NCD)</button>
                     </form>
+                @elseif ($puedeElegirPrecioDevolucion)
+                    <div class="d-inline-flex flex-wrap align-items-center border rounded px-2 py-1 mr-2 mb-1">
+                        @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio', [
+                            'etiquetaPrecio' => 'Precio de la devolución',
+                            'selectName' => '',
+                            'selectClass' => 'cdm-modo-precio-devolucion',
+                        ])
+                        <span class="small text-muted">Se usa al emitir la nota de crédito de lo devuelto.</span>
+                    </div>
                 @endif
 
                 @if ($puedeCerrarOpp)

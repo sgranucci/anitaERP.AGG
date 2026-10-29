@@ -5,7 +5,8 @@
         || (($filtros['modo'] ?? ClienteCuentacorrienteReporteFiltros::MODO_DEUDA)
             !== ClienteCuentacorrienteReporteFiltros::MODO_FICHA);
     $stats = $resultado['stats'] ?? [];
-    $colspan = 12;
+    $mostrarColumnaEmpresa = ClienteCuentacorrienteReporteFiltros::esMultiempresa($filtros ?? []);
+    $colspan = $mostrarColumnaEmpresa ? 12 : 11;
 @endphp
 <table>
     @if ($filaLogo)
@@ -40,7 +41,9 @@
         <tr>
             <th>Código</th>
             <th>Cliente / Vendedor</th>
-            <th>Empresa</th>
+            @if ($mostrarColumnaEmpresa)
+                <th>Empresa</th>
+            @endif
             <th>Fecha</th>
             <th>Vencimiento</th>
             <th>Comprobante</th>
@@ -65,18 +68,7 @@
             @php $tipo = $fila['tipo'] ?? ''; @endphp
             @if ($tipo === 'header_empresa')
                 <tr>
-                    <td></td>
-                    <td>Empresa: {{ $fila['nombreempresa'] ?? $fila['empresa_nombre'] ?? '' }}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
+                    <td colspan="{{ $colspan }}">Empresa: {{ $fila['nombreempresa'] ?? $fila['empresa_nombre'] ?? '' }}</td>
                 </tr>
                 @continue
             @endif
@@ -101,7 +93,9 @@
                         {{ $fila['comprobante'] ?? 'Saldo anterior' }}
                     @endif
                 </td>
-                <td>{{ in_array($tipo, ['header_cliente', 'aplicacion', 'saldo_anterior', 'movimiento'], true) ? ($fila['nombreempresa'] ?? '') : '' }}</td>
+                @if ($mostrarColumnaEmpresa)
+                    <td>{{ in_array($tipo, ['header_cliente', 'aplicacion', 'saldo_anterior', 'movimiento'], true) ? ($fila['nombreempresa'] ?? '') : '' }}</td>
+                @endif
                 <td>{{ $fila['fecha'] ?? '' }}</td>
                 <td>{{ $fila['fechavencimiento'] ?? '' }}</td>
                 <td>{{ in_array($tipo, ['header_cliente', 'header_vendedor'], true) ? '' : ($fila['comprobante'] ?? '') }}</td>

@@ -117,4 +117,9 @@ class CambioDevolucionMarketplace extends Model implements Auditable
     {
         return $this->hasMany(CambioDevolucionMarketplaceArchivo::class, 'cambio_id');
     }
+
+    public function comprobantes()
+    {
+        return $this->hasMany(CambioDevolucionMarketplaceComprobante::class, 'cambio_id')->orderBy('id');
+    }
 }

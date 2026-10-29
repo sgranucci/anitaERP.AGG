@@ -524,6 +524,7 @@ class ClienteCuentacorrienteReporteService
                 'cobranzas:id,detalle',
                 'monedas:id,abreviatura',
                 'empresas:id,nombre',
+                'cliente_cuentacorriente_aplicaciones:id,cliente_cuentacorriente_id,comprobanteaplicado',
             ])
             ->select('cliente_cuentacorriente.*')
             ->addSelect([
@@ -560,6 +561,7 @@ class ClienteCuentacorrienteReporteService
                 'cobranzas:id,detalle',
                 'monedas:id,abreviatura',
                 'empresas:id,nombre',
+                'cliente_cuentacorriente_aplicaciones:id,cliente_cuentacorriente_id,comprobanteaplicado',
             ])
             ->select('cliente_cuentacorriente.*');
 

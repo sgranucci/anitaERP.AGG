@@ -141,6 +141,7 @@ class CambioDevolucionMarketplaceController extends Controller
                 'ventaOriginal',
                 'ventaReemplazo',
                 'ventaNc',
+                'comprobantes.venta:id,codigo,total',
                 'cajaMovimiento.tipotransaccioncajas',
                 'tiendanubePedido',
                 'motivoDevolucion',
@@ -208,6 +209,70 @@ class CambioDevolucionMarketplaceController extends Controller
         return redirect()
             ->route('editar_cambio_devolucion_marketplace', $id)
             ->with('mensaje', $resultado['mensaje'] ?? 'FAC emitida.');
+    }
+
+    public function emitirNcReemplazo($id)
+    {
+        $this->assertFerli();
+        can('emitir-nc-cambio-devolucion-marketplace-facturacion-local');
+
+        try {
+            $resultado = $this->service->emitirNcReemplazo(CambioDevolucionMarketplace::query()->findOrFail($id));
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if (empty($resultado['ok'])) {
+            return back()->with('error', $resultado['error'] ?? 'Error al emitir la nota de crédito del reemplazo.');
+        }
+
+        return redirect()
+            ->route('editar_cambio_devolucion_marketplace', $id)
+            ->with('mensaje', $resultado['mensaje'] ?? 'Nota de crédito del reemplazo emitida.');
+    }
+
+    public function agregarDevoluciones(Request $request, $id)
+    {
+        $this->assertFerli();
+        can('actualizar-cambio-devolucion-marketplace-facturacion-local');
+
+        $ids = $request->input('emision_ids', []);
+        $ids = is_array($ids) ? $ids : [];
+
+        try {
+            $this->service->agregarDevolucionesDesdeFactura(
+                CambioDevolucionMarketplace::query()->findOrFail($id),
+                $ids
+            );
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('editar_cambio_devolucion_marketplace', $id)
+            ->with('mensaje', 'Artículos de la factura original agregados al legajo.');
+    }
+
+    public function actualizarReemplazos(Request $request, $id)
+    {
+        $this->assertFerli();
+        can('actualizar-cambio-devolucion-marketplace-facturacion-local');
+
+        $lineas = $request->input('lineas', []);
+        $lineas = is_array($lineas) ? $lineas : [];
+
+        try {
+            $this->service->actualizarReemplazos(
+                CambioDevolucionMarketplace::query()->findOrFail($id),
+                $lineas
+            );
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('editar_cambio_devolucion_marketplace', $id)
+            ->with('mensaje', 'Artículos de reemplazo actualizados.');
     }
 
     public function continuarSoloDevolucion($id)
@@ -465,6 +530,23 @@ class CambioDevolucionMarketplaceController extends Controller
         return response()->json(CambioDevolucionMarketplaceVentaConsultaSupport::variantes($articuloId));
     }
 
+    public function apiArticulosFactura(int $ventaId)
+    {
+        $this->assertFerli();
+        if (! can('crear-cambio-devolucion-marketplace-facturacion-local', false)
+            && ! can('actualizar-cambio-devolucion-marketplace-facturacion-local', false)
+            && ! can('ver-cambio-devolucion-marketplace-facturacion-local', false)) {
+            abort(403);
+        }
+
+        $detalle = CambioDevolucionMarketplaceVentaConsultaSupport::detalle($ventaId);
+        if ($detalle === null) {
+            return response()->json(['error' => 'Factura no encontrada'], 404);
+        }
+
+        return response()->json($detalle);
+    }
+
     public function apiPrecio(Request $request)
     {
         $this->assertFerli();
@@ -488,11 +570,16 @@ class CambioDevolucionMarketplaceController extends Controller
     private function formData(CambioDevolucionMarketplace $data): array
     {
         $locales = LocalVenta::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre', 'empresa_id']);
+        $estado = (string) ($data->estado ?? '');
         $editable = ! $data->exists
-            || CambioDevolucionMarketplaceEstadosSupport::esEditable((string) $data->estado);
+            || CambioDevolucionMarketplaceEstadosSupport::esEditable($estado);
+        $terminal = $data->exists && CambioDevolucionMarketplaceEstadosSupport::esTerminal($estado);
+        $oppEmitida = (int) ($data->caja_movimiento_id ?? 0) > 0;
+        $facVigente = (int) ($data->venta_reemplazo_id ?? 0) > 0;
         $puente = CambioDevolucionMarketplacePuenteSupport::resolverCuentacaja();
         $data->loadMissing('lineas');
         $esSoloDevolucion = CambioDevolucionMarketplaceCatalogoSupport::esSoloDevolucion($data->lineas);
+        $puedeOperarFacturacion = $data->exists && ! $terminal && ! $oppEmitida;
 
         return [
             'data' => $data,
@@ -506,6 +593,17 @@ class CambioDevolucionMarketplaceController extends Controller
             'editable' => $editable,
             'puenteCuentacaja' => $puente,
             'esSoloDevolucion' => $esSoloDevolucion,
+            'puedeCorregirReemplazo' => $puedeOperarFacturacion && ! $editable && ! $facVigente,
+            'puedeTraerFactura' => $data->exists
+                && ! $terminal
+                && (int) ($data->venta_original_id ?? 0) > 0
+                && (int) ($data->venta_nc_id ?? 0) <= 0,
+            'puedeRefacturar' => $puedeOperarFacturacion
+                && ! $facVigente
+                && ! $esSoloDevolucion
+                && $estado !== CambioDevolucionMarketplaceEstadosSupport::BORRADOR
+                && $estado !== CambioDevolucionMarketplaceEstadosSupport::ABIERTO,
+            'puedeNcReemplazo' => $puedeOperarFacturacion && $facVigente,
         ];
     }
 

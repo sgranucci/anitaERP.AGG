@@ -1574,8 +1574,11 @@ var saldoFinalCobranza = 0;
 					}
 					if (item.cliente_id && window.clientePoliticaComercial) {
 						$.get(carpetaBase+'/ventas/leeruncliente/'+item.cliente_id).done(function (cli) {
-							if (cli && cli.politica_comercial) {
+							if (cli && cli.politica_comercial && window.clientePoliticaComercial) {
 								window.clientePoliticaComercial.setActual(cli.politica_comercial);
+							}
+							if (cli && window.clienteAvisos) {
+								window.clienteAvisos.mostrar(cli.avisos || [], cli.id);
 							}
 						});
 					}

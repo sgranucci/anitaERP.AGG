@@ -677,22 +677,30 @@ function leeUnCliente(cliente_id, codigocliente, avisar)
                 if (window.clientePoliticaComercial) {
                     window.clientePoliticaComercial.setActual(politica);
                 }
+                var avisosEval = (window.clienteAvisos && typeof window.clienteAvisos.evaluar === 'function')
+                    ? window.clienteAvisos.evaluar(data.avisos || [])
+                    : { seguir: true, mensaje: '', avisos: [] };
                 var contextoOp = (window.clientePoliticaComercial && window.clientePoliticaComercial.contexto)
                     ? window.clientePoliticaComercial.contexto()
                     : 'consultar';
                 var permiteContexto = !window.clientePoliticaComercial
                     || window.clientePoliticaComercial.permiteOperacion(contextoOp, politica);
-                if (!permiteContexto)
+                if (!permiteContexto || !avisosEval.seguir)
                 {
                     if (typeof window.limpiarSeleccionClienteOperacion === 'function') {
                         window.limpiarSeleccionClienteOperacion();
                     } else if (typeof window.invalidarEstadoPadronOperacion === 'function') {
                         window.invalidarEstadoPadronOperacion();
                     }
-                    if (avisar) {
-                        var msg = window.clientePoliticaComercial
-                            ? window.clientePoliticaComercial.mensaje(contextoOp, politica)
-                            : ('Cliente ' + (data.nombre || '') + ' no habilitado para esta operación');
+                    if (window.clienteAvisos) {
+                        window.clienteAvisos.limpiar();
+                    }
+                    if (avisar || !avisosEval.seguir) {
+                        var msg = !avisosEval.seguir
+                            ? (avisosEval.mensaje || 'No se puede continuar con este cliente.')
+                            : (window.clientePoliticaComercial
+                                ? window.clientePoliticaComercial.mensaje(contextoOp, politica)
+                                : ('Cliente ' + (data.nombre || '') + ' no habilitado para esta operación'));
                         avisarClientePolitica(msg, clave);
                     }
                     $('#codigocliente').attr('data-cliente-invalido', '1').trigger('focus');
@@ -754,6 +762,9 @@ function leeUnCliente(cliente_id, codigocliente, avisar)
                     clienteInvalidoAvisadoClave = '';
                     $('#codigocliente').removeAttr('data-cliente-invalido');
                     aplicarDatosClienteEnFormulario();
+                    if (window.clienteAvisos && typeof window.clienteAvisos.mostrar === 'function') {
+                        window.clienteAvisos.mostrar(avisosEval.avisos, data.id);
+                    }
 
                     if (typeof window.validarPadronClientePostCarga === 'function') {
                         window.validarPadronClientePostCarga(data.id, {

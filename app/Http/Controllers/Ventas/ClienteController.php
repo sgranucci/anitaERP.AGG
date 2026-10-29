@@ -79,6 +79,7 @@ use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\ClienteFacturasApocrifasSupport;
 use App\Support\Ventas\ClienteDocumentoUnicoSupport;
 use App\Support\Ventas\ClienteHabilitacionAbmSupport;
+use App\Support\Ventas\ClienteAvisoSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Services\Arca\ConstanciaInscripcionService;
 use Carbon\Carbon;
@@ -1206,13 +1207,26 @@ class ClienteController extends Controller
 
     public function leeUnCliente($cliente_id)
     {
-        return ClientePoliticaComercialSupport::anexarPayloadAlCliente($this->clienteRepository->find($cliente_id));
+        return $this->clienteConAvisos(
+            ClientePoliticaComercialSupport::anexarPayloadAlCliente($this->clienteRepository->find($cliente_id))
+        );
 	}
 
     public function leeUnClientePorCodigo($cliente_id)
     {
-        return ClientePoliticaComercialSupport::anexarPayloadAlCliente($this->clienteRepository->findPorCodigo($cliente_id));
+        return $this->clienteConAvisos(
+            ClientePoliticaComercialSupport::anexarPayloadAlCliente($this->clienteRepository->findPorCodigo($cliente_id))
+        );
 	}
+
+    private function clienteConAvisos($cliente)
+    {
+        if ($cliente) {
+            $cliente->setAttribute('avisos', ClienteAvisoSupport::payloadVigentes($cliente));
+        }
+
+        return $cliente;
+    }
 
     public function emiteNc($cliente_id)
     {

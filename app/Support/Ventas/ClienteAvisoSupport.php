@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Aviso;
 use Illuminate\Support\Collection;
 
@@ -106,5 +107,78 @@ final class ClienteAvisoSupport
             ->orderBy('orden')
             ->orderBy('id')
             ->get();
+    }
+
+    /**
+     * Contexto de la pantalla (cobranza, pedido, factura…) → disparador del aviso.
+     */
+    public static function disparadorDeContexto(string $contexto): ?string
+    {
+        return match (strtolower(trim($contexto))) {
+            self::DISPARADOR_PEDIDO => self::DISPARADOR_PEDIDO,
+            self::DISPARADOR_FACTURA, 'facturacion' => self::DISPARADOR_FACTURA,
+            self::DISPARADOR_RECIBO, 'cobranza', 'cobro' => self::DISPARADOR_RECIBO,
+            self::DISPARADOR_BOLETA, 'ot', 'ordentrabajo' => self::DISPARADOR_BOLETA,
+            self::DISPARADOR_REMITO => self::DISPARADOR_REMITO,
+            default => null,
+        };
+    }
+
+    /**
+     * Avisos vigentes de hoy, para que la pantalla los muestre al cargar el cliente.
+     *
+     * @return list<array{id: int, disparador: string, modo: string, accion: string, texto: string, mensaje: string}>
+     */
+    public static function payloadVigentes(?Cliente $cliente, ?string $fecha = null): array
+    {
+        if ($cliente === null) {
+            return [];
+        }
+
+        $dia = substr(trim((string) ($fecha ?? '')), 0, 10);
+        if ($dia === '') {
+            $dia = now()->toDateString();
+        }
+
+        $avisos = $cliente->relationLoaded('cliente_avisos')
+            ? $cliente->cliente_avisos
+            : $cliente->cliente_avisos()->orderBy('orden')->orderBy('id')->get();
+
+        $salida = [];
+        foreach ($avisos as $aviso) {
+            if (! $aviso instanceof Cliente_Aviso || ! self::estaVigente($aviso, $dia)) {
+                continue;
+            }
+            $texto = trim((string) ($aviso->texto ?? ''));
+            $accion = strtolower(trim((string) ($aviso->accion ?? '')));
+            $mensaje = $texto !== '' ? $texto : self::etiquetaAccion($accion);
+            if ($mensaje === '') {
+                continue;
+            }
+            $salida[] = [
+                'id' => (int) $aviso->id,
+                'disparador' => (string) $aviso->disparador,
+                'modo' => (string) $aviso->modo,
+                'accion' => $accion,
+                'texto' => $texto,
+                'mensaje' => $mensaje,
+            ];
+        }
+
+        return $salida;
+    }
+
+    public static function estaVigente(Cliente_Aviso $aviso, string $dia): bool
+    {
+        $desde = $aviso->desdefecha?->format('Y-m-d');
+        $hasta = $aviso->hastafecha?->format('Y-m-d');
+        if ($desde !== null && $desde !== '' && $desde > $dia) {
+            return false;
+        }
+        if ($hasta !== null && $hasta !== '' && $hasta < $dia) {
+            return false;
+        }
+
+        return true;
     }
 }

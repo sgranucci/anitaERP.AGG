@@ -87,11 +87,6 @@
                 @if ((int) ($data->cobranza_id ?? 0) === 0 && (int) ($data->venta_id ?? 0) > 0 && ! empty($data->ventas?->lugarentrega))
                     {!! $separadorEntrega !!}<small>Entrega: {{ $data->ventas->lugarentrega }}</small>
                 @endif
-                @include('ventas.cuentacorriente.partials.referencia_aplicacion', [
-                    'data' => $data,
-                    'para_pdf' => $para_pdf ?? false,
-                    'para_excel' => $paraExcel,
-                ])
             </td>
             <td>{{ $importes['etiqueta_moneda'] }}</td>
             @if ($modoDeuda)

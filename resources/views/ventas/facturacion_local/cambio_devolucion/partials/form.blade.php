@@ -239,11 +239,21 @@
         <p class="text-muted small">
             Al elegir la factura se cargan las líneas a devolver con el artículo, el talle y el color o la combinación.
             El precio inicial de «A devolver» es el de la factura, ya con el descuento.
-            Al emitir la factura del par y al emitir la nota de crédito se elige el precio: el de la factura original menos el descuento, el precio lleno de esa factura, o el precio lleno actual.
+            El precio de la factura del par se elige junto a ese botón. El precio de la devolución (nota de crédito de lo devuelto) se elige en el pie: el de la factura original menos el descuento, el precio lleno de esa factura, o el precio lleno actual.
+            «Traer de la factura» vuelve a leer todos los artículos de la factura original para devolver todos o sumar alguno más.
+            Si la factura del reemplazo se cargó mal, la nota de crédito de ese comprobante lo anula y se puede facturar de nuevo sin cerrar el legajo.
             Cambio: cargar el reemplazo con lupa o F1. Solo reembolso: dejar solo líneas «A devolver» (sin reemplazo) y usar «Continuar sin reemplazo».
             El calzado pide talle y, según el artículo, color o combinación. Si no maneja variante, esos campos quedan en «No aplica».
             Buscar factura: también atajos tipo A26-146 o 23-45335.
         </p>
+        @php
+            $mostrarAccionesLinea = ! $ro || ($puedeCorregirReemplazo ?? false);
+        @endphp
+        @if ($puedeTraerFactura ?? false)
+            <button type="button" class="btn btn-outline-info btn-sm mb-2" id="cdm-traer-factura">
+                <i class="fa fa-refresh"></i> Traer artículos de la factura
+            </button>
+        @endif
         <div class="table-responsive">
             <table class="table table-sm table-bordered" id="cdm-lineas-table">
                 <thead style="background:#85C1E9;color:#17202A;">
@@ -255,7 +265,7 @@
                         <th>Talle</th>
                         <th style="width:90px">Cant.</th>
                         <th style="width:110px">Precio</th>
-                        @if (! $ro)
+                        @if ($mostrarAccionesLinea)
                             <th style="width:60px"></th>
                         @endif
                     </tr>
@@ -275,6 +285,18 @@
             <button type="button" class="btn btn-outline-primary btn-sm" id="cdm-agregar-linea">
                 <i class="fa fa-plus"></i> Agregar línea
             </button>
+        @elseif ($puedeCorregirReemplazo ?? false)
+            <button type="button" class="btn btn-outline-primary btn-sm" id="cdm-agregar-linea">
+                <i class="fa fa-plus"></i> Agregar reemplazo
+            </button>
+            @if (can('actualizar-cambio-devolucion-marketplace-facturacion-local', false))
+                <button type="submit" class="btn btn-success btn-sm ml-1"
+                        formaction="{{ route('actualizar_reemplazos_cambio_devolucion_marketplace', $data->id) }}"
+                        formmethod="post"
+                        onclick="return confirm('¿Guardar los artículos de reemplazo?');">
+                    Guardar reemplazo
+                </button>
+            @endif
         @endif
     </div>
 
@@ -291,7 +313,7 @@
     </div>
 </div>
 
-@if (! $ro)
+@if (! $ro || ($puedeCorregirReemplazo ?? false))
 <div class="modal fade" id="cdm-modal-ventas" tabindex="-1" role="dialog" aria-labelledby="cdm-modal-ventas-titulo" aria-hidden="true">
     <div class="modal-dialog modal-xl" role="document">
         <div class="modal-content">
@@ -344,4 +366,46 @@
         'ro' => false,
     ])
 </template>
+@endif
+
+@if ($puedeTraerFactura ?? false)
+<div class="modal fade" id="cdm-modal-traer-factura" tabindex="-1" role="dialog" aria-labelledby="cdm-modal-traer-factura-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cdm-modal-traer-factura-titulo">Artículos de la factura original</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">Marcá los que querés devolver. Los que ya están en el legajo quedan tildados y no se duplican.</p>
+                <div class="custom-control custom-checkbox mb-2">
+                    <input type="checkbox" class="custom-control-input" id="cdm-traer-todos">
+                    <label class="custom-control-label" for="cdm-traer-todos">Seleccionar todos los que faltan</label>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr>
+                                <th style="width:40px"></th>
+                                <th>Artículo</th>
+                                <th>Variante</th>
+                                <th class="text-right">Cant.</th>
+                                <th class="text-right">Precio</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cdm-traer-factura-body">
+                            <tr><td colspan="5" class="text-muted text-center">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cierra</button>
+                <button type="button" class="btn btn-primary" id="cdm-traer-factura-agregar">Agregar al legajo</button>
+            </div>
+        </div>
+    </div>
+</div>
 @endif

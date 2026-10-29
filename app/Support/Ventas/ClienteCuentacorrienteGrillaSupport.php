@@ -28,14 +28,44 @@ final class ClienteCuentacorrienteGrillaSupport
         }
 
         if ((int) ($fila->cobranza_id ?? 0) > 0 && $fila->cobranzas) {
-            return (string) ($fila->cobranzas->detalle ?? 'Cobranza');
+            return self::comprobanteConReferencia(
+                $fila,
+                self::detalleCobranzaSinCliente((string) ($fila->cobranzas->detalle ?? 'Cobranza'))
+            );
         }
 
         if ((int) ($fila->venta_id ?? 0) > 0 && $fila->ventas) {
-            return (string) ($fila->ventas->codigo ?? 'Comprobante');
+            return self::comprobanteConReferencia(
+                $fila,
+                (string) ($fila->ventas->codigo ?? 'Comprobante')
+            );
         }
 
-        return 'Movimiento #' . (int) $fila->id;
+        return self::comprobanteConReferencia($fila, 'Movimiento #' . (int) $fila->id);
+    }
+
+    /**
+     * En la ficha el cliente ya está en el encabezado. El detalle de caja
+     * guarda «NOMBRE - Cobranza Nro. N»; acá queda solo el comprobante.
+     */
+    public static function detalleCobranzaSinCliente(string $detalle): string
+    {
+        $detalle = trim($detalle);
+        if (preg_match('/^(.+?) - ((?:Cobranza|COA) Nro\. .+)$/u', $detalle, $coincidencias) === 1) {
+            return trim($coincidencias[2]);
+        }
+
+        return $detalle !== '' ? $detalle : 'Cobranza';
+    }
+
+    public static function comprobanteConReferencia(Cliente_Cuentacorriente $fila, string $etiqueta): string
+    {
+        $refs = self::referenciasAplicacion($fila);
+        if ($refs === []) {
+            return $etiqueta;
+        }
+
+        return $etiqueta.' · Aplica a: '.implode(' · ', $refs);
     }
 
     /**

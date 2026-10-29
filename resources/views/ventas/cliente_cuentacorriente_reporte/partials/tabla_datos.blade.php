@@ -16,13 +16,19 @@
 
         return number_format($n, 2, ',', '.');
     };
+    $mostrarColumnaEmpresa = ClienteCuentacorrienteReporteFiltros::esMultiempresa($filtros ?? []);
     $colSpan = ($modoDeuda ? 11 : 10) + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
+    if (! $mostrarColumnaEmpresa) {
+        $colSpan--;
+    }
 @endphp
 <thead>
     <tr>
         <th>Código</th>
         <th>Cliente / Vendedor</th>
-        <th>Empresa</th>
+        @if ($mostrarColumnaEmpresa)
+            <th>Empresa</th>
+        @endif
         <th>Fecha</th>
         <th>Vencimiento</th>
         <th>Comprobante</th>
@@ -110,11 +116,13 @@
                 <em>{{ $fila['comprobante'] ?? 'Saldo anterior' }}</em>
             @endif
         </td>
-        <td>
-            @if ($esHeader || $esApl || $esSaldoAnt || $tipo === 'movimiento')
-                {{ $fila['nombreempresa'] ?? '' }}
-            @endif
-        </td>
+        @if ($mostrarColumnaEmpresa)
+            <td>
+                @if ($esHeader || $esApl || $esSaldoAnt || $tipo === 'movimiento')
+                    {{ $fila['nombreempresa'] ?? '' }}
+                @endif
+            </td>
+        @endif
         <td>{{ $fila['fecha'] ?? '' }}</td>
         <td>{{ $fila['fechavencimiento'] ?? '' }}</td>
         <td>

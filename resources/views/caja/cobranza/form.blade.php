@@ -77,6 +77,7 @@
                 </div>
                 <small class="form-text text-muted">F1 o lupa consulta; Enter resuelve por c&oacute;digo.</small>
                 <label id="nombretiposuspension" class="col-form-label text-danger mb-0 d-block"></label>
+                <div id="cliente-avisos-banner" class="alert alert-warning py-1 px-2 mt-1 mb-0" role="status" style="display:none;"></div>
             </div>
         </div>
         <div class="form-group row">

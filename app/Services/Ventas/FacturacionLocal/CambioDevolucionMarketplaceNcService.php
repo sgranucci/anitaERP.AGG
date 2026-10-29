@@ -26,6 +26,77 @@ final class CambioDevolucionMarketplaceNcService
     }
 
     /**
+     * Nota de crédito de la factura de reemplazo, por un error de carga.
+     * Acredita lo facturado y reingresa el stock para poder facturar de nuevo.
+     *
+     * @return array{ok:bool,error?:string,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string}
+     */
+    public function emitirNcReemplazo(CambioDevolucionMarketplace $cambio): array
+    {
+        $cambio->loadMissing(['localVenta', 'ventaReemplazo']);
+        $ventaId = (int) ($cambio->venta_reemplazo_id ?? 0);
+        if ($ventaId <= 0) {
+            return ['ok' => false, 'error' => 'No hay factura de reemplazo vigente.'];
+        }
+
+        $motivo = MotivoDevolucionSupport::resolverDeCambio($cambio);
+        if (! $motivo) {
+            return ['ok' => false, 'error' => 'Elegí un motivo de devolución activo antes de emitir la nota de crédito.'];
+        }
+
+        /** @var Venta|null $venta */
+        $venta = $cambio->ventaReemplazo ?: Venta::query()->find($ventaId);
+        if (! $venta) {
+            return ['ok' => false, 'error' => 'Factura de reemplazo inexistente.'];
+        }
+
+        $total = round(abs((float) $venta->total), 2);
+        if ($total <= 0) {
+            return ['ok' => false, 'error' => 'La factura de reemplazo no tiene importe.'];
+        }
+
+        try {
+            $medios = CambioDevolucionMarketplacePuenteSupport::medioPagoUnico($total);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+
+        $resultado = $this->notaCreditoService->generarDesdeFactura(
+            $ventaId,
+            null,
+            'Error de reemplazo. Legajo Nº '.$cambio->numero,
+            [
+                'medios_forzados' => $medios,
+                'local_venta_id' => (int) $cambio->local_venta_id,
+                'motivo_devolucion_id' => (int) $motivo->id,
+                'omitir_reingreso_stock' => false,
+                'registrar_historial' => false,
+            ]
+        );
+
+        if (empty($resultado['ok'])) {
+            Log::warning('cambio_devolucion_marketplace.nc_reemplazo.fallo', [
+                'cambio_id' => $cambio->id,
+                'venta_reemplazo_id' => $ventaId,
+                'error' => $resultado['error'] ?? null,
+            ]);
+
+            return [
+                'ok' => false,
+                'error' => (string) ($resultado['error'] ?? 'No se pudo emitir la nota de crédito del reemplazo.'),
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'venta_id' => (int) ($resultado['venta_id'] ?? 0),
+            'factura' => (string) ($resultado['factura'] ?? ''),
+            'pdf_urls' => $resultado['pdf_urls'] ?? [],
+            'mensaje' => (string) ($resultado['mensaje'] ?? 'Nota de crédito del reemplazo emitida.'),
+        ];
+    }
+
+    /**
      * @return array{ok:bool,error?:string,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string}
      */
     public function emitirNcOriginal(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null): array

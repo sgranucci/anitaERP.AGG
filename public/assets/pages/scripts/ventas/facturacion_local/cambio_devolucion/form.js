@@ -220,7 +220,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        if (!window.cdmEditable) {
+        if (!window.cdmEditable && !window.cdmPuedeCorregirReemplazo) {
             return;
         }
 
@@ -265,6 +265,8 @@
             }
             return row;
         }
+        window.cdmInsertarFila = insertarFila;
+        window.cdmReindexLineas = reindexLineas;
 
         if (btnAdd && tbody && tpl) {
             btnAdd.addEventListener('click', function () {
@@ -676,5 +678,171 @@
                 }
             });
         }
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var btn = document.getElementById('cdm-traer-factura');
+        var modal = document.getElementById('cdm-modal-traer-factura');
+        var body = document.getElementById('cdm-traer-factura-body');
+        var btnAgregar = document.getElementById('cdm-traer-factura-agregar');
+        var chkTodos = document.getElementById('cdm-traer-todos');
+        if (!btn || !modal || !body || !btnAgregar) {
+            return;
+        }
+
+        function idsEnGrilla() {
+            var set = {};
+            document.querySelectorAll('#cdm-lineas-tbody input[name$="[venta_emision_id]"]').forEach(function (el) {
+                if (el.value) {
+                    set[String(el.value)] = true;
+                }
+            });
+            return set;
+        }
+
+        function variante(linea) {
+            return [linea.combinacion_codigo, linea.color_nombre || linea.color_codigo, linea.talle_nombre || linea.talle_codigo]
+                .filter(function (parte) { return parte; })
+                .join(' · ');
+        }
+
+        function pintar(lineas) {
+            var ya = idsEnGrilla();
+            if (!lineas.length) {
+                body.innerHTML = '<tr><td colspan="5" class="text-muted text-center">La factura no tiene artículos.</td></tr>';
+                return;
+            }
+            body.innerHTML = lineas.map(function (linea) {
+                var id = String(linea.venta_emision_id || '');
+                var cargado = !!ya[id];
+                var nombre = (linea.articulo_codigo ? linea.articulo_codigo + ' — ' : '') + (linea.descripcion || '');
+                return '<tr>'
+                    + '<td><input type="checkbox" class="cdm-traer-check" value="' + esc(id) + '"'
+                    + (cargado ? ' checked disabled' : '') + '></td>'
+                    + '<td>' + esc(nombre) + (cargado ? ' <span class="text-muted">(ya en el legajo)</span>' : '') + '</td>'
+                    + '<td>' + esc(variante(linea)) + '</td>'
+                    + '<td class="text-right">' + esc(linea.cantidad) + '</td>'
+                    + '<td class="text-right">$ ' + esc(money(linea.precio_unitario)) + '</td>'
+                    + '</tr>';
+            }).join('');
+            body._lineas = lineas;
+        }
+
+        btn.addEventListener('click', function () {
+            var ventaId = (document.getElementById('venta_original_id') || {}).value || '';
+            if (!ventaId || !window.cdmArticulosFacturaUrl) {
+                alert('El legajo no tiene factura original.');
+                return;
+            }
+            body.innerHTML = '<tr><td colspan="5" class="text-muted text-center">Cargando…</td></tr>';
+            if (window.jQuery) {
+                window.jQuery(modal).modal('show');
+            }
+            var url = String(window.cdmArticulosFacturaUrl).replace('__ID__', encodeURIComponent(ventaId));
+            fetch(url, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            }).then(function (r) {
+                return r.json();
+            }).then(function (json) {
+                pintar((json && json.lineas) || []);
+            }).catch(function () {
+                body.innerHTML = '<tr><td colspan="5" class="text-danger text-center">No se pudo leer la factura.</td></tr>';
+            });
+        });
+
+        if (chkTodos) {
+            chkTodos.addEventListener('change', function () {
+                body.querySelectorAll('.cdm-traer-check:not(:disabled)').forEach(function (chk) {
+                    chk.checked = chkTodos.checked;
+                });
+            });
+        }
+
+        btnAgregar.addEventListener('click', function () {
+            var elegidas = [];
+            body.querySelectorAll('.cdm-traer-check:checked:not(:disabled)').forEach(function (chk) {
+                elegidas.push(chk.value);
+            });
+            if (!elegidas.length) {
+                alert('Elegí al menos un artículo que no esté en el legajo.');
+                return;
+            }
+            var mapa = {};
+            (body._lineas || []).forEach(function (linea) {
+                mapa[String(linea.venta_emision_id)] = linea;
+            });
+            if (window.cdmEditable && typeof window.cdmInsertarFila === 'function') {
+                elegidas.forEach(function (id) {
+                    var linea = mapa[id];
+                    if (linea) {
+                        window.cdmInsertarFila(linea);
+                    }
+                });
+                if (typeof window.cdmReindexLineas === 'function') {
+                    window.cdmReindexLineas();
+                }
+                if (window.jQuery) {
+                    window.jQuery(modal).modal('hide');
+                }
+                alert('Quedaron en la grilla. Actualizá el legajo para guardarlos.');
+                return;
+            }
+            if (window.cdmPuedeCorregirReemplazo && !window.confirm('Se agregan a lo devuelto. Si cambiaste el reemplazo y no lo guardaste, se pierde. ¿Seguir?')) {
+                return;
+            }
+            var tokenEl = document.querySelector('#form-cambio-devolucion input[name="_token"]');
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = window.cdmAgregarDevolucionesUrl;
+            if (tokenEl) {
+                var token = document.createElement('input');
+                token.type = 'hidden';
+                token.name = '_token';
+                token.value = tokenEl.value;
+                form.appendChild(token);
+            }
+            elegidas.forEach(function (id) {
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'emision_ids[]';
+                input.value = id;
+                form.appendChild(input);
+            });
+            document.body.appendChild(form);
+            form.submit();
+        });
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var selects = document.querySelectorAll('.cdm-modo-precio-devolucion');
+        if (!selects.length || !window.cdmLegajoId) {
+            return;
+        }
+        var clave = 'cdm-precio-devolucion-' + window.cdmLegajoId;
+        var guardado = '';
+        try {
+            guardado = sessionStorage.getItem(clave) || '';
+        } catch (e) {
+            guardado = '';
+        }
+        function aplicar(valor) {
+            selects.forEach(function (s) {
+                if (s.querySelector('option[value="' + valor + '"]')) {
+                    s.value = valor;
+                }
+            });
+        }
+        if (guardado) {
+            aplicar(guardado);
+        }
+        selects.forEach(function (s) {
+            s.addEventListener('change', function () {
+                aplicar(s.value);
+                try {
+                    sessionStorage.setItem(clave, s.value);
+                } catch (e) {}
+            });
+        });
     });
 })();

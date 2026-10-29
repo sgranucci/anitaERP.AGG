@@ -25,8 +25,6 @@ class ClienteCuentacorrienteReporteExport implements FromView, ShouldAutoSize, W
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'L';
-
     private bool $hayFilaLogos = false;
 
     private int $filaTituloExcel = 1;
@@ -89,15 +87,20 @@ class ClienteCuentacorrienteReporteExport implements FromView, ShouldAutoSize, W
 
     public function columnFormats(): array
     {
-        return [
+        $moneda = $this->mostrarColumnaEmpresa() ? 'G' : 'F';
+        $importes = $this->mostrarColumnaEmpresa()
+            ? ['H', 'I', 'J', 'K']
+            : ['G', 'H', 'I', 'J'];
+        $formats = [
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
-            'G' => NumberFormat::FORMAT_TEXT,
-            'H' => '#,##0.00',
-            'I' => '#,##0.00',
-            'J' => '#,##0.00',
-            'K' => '#,##0.00',
+            $moneda => NumberFormat::FORMAT_TEXT,
         ];
+        foreach ($importes as $columna) {
+            $formats[$columna] = '#,##0.00';
+        }
+
+        return $formats;
     }
 
     public function styles(Worksheet $sheet)
@@ -120,19 +123,35 @@ class ClienteCuentacorrienteReporteExport implements FromView, ShouldAutoSize, W
 
     public function columnWidths(): array
     {
+        if ($this->mostrarColumnaEmpresa()) {
+            return [
+                'A' => 10,
+                'B' => 28,
+                'C' => 14,
+                'D' => 11,
+                'E' => 11,
+                'F' => 36,
+                'G' => 14,
+                'H' => 16,
+                'I' => 16,
+                'J' => 16,
+                'K' => 16,
+                'L' => 4,
+            ];
+        }
+
         return [
             'A' => 10,
             'B' => 28,
-            'C' => 14,
+            'C' => 11,
             'D' => 11,
-            'E' => 11,
-            'F' => 28,
-            'G' => 14,
+            'E' => 36,
+            'F' => 14,
+            'G' => 16,
             'H' => 16,
             'I' => 16,
             'J' => 16,
-            'K' => 16,
-            'L' => 4,
+            'K' => 4,
         ];
     }
 
@@ -146,7 +165,7 @@ class ClienteCuentacorrienteReporteExport implements FromView, ShouldAutoSize, W
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
-                $colUltima = self::COL_ULTIMA;
+                $colUltima = $this->mostrarColumnaEmpresa() ? 'L' : 'K';
 
                 if ($this->hayFilaLogos) {
                     $sheet->getRowDimension(1)->setRowHeight(54);
@@ -231,5 +250,10 @@ class ClienteCuentacorrienteReporteExport implements FromView, ShouldAutoSize, W
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },
         ];
+    }
+
+    private function mostrarColumnaEmpresa(): bool
+    {
+        return ClienteCuentacorrienteReporteFiltros::esMultiempresa($this->filtros);
     }
 }

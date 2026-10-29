@@ -1,10 +1,14 @@
 <script>
+window.cdmLegajoId = @json($data->exists ? (int) $data->id : 0);
 window.cdmEditable = @json((bool) ($editable ?? false));
+window.cdmPuedeCorregirReemplazo = @json((bool) ($puedeCorregirReemplazo ?? false));
 window.cdmBuscarVentaUrl = @json(route('api_buscar_venta_cambio_devolucion_marketplace'));
+window.cdmArticulosFacturaUrl = @json(route('api_articulos_factura_cambio_devolucion_marketplace', ['ventaId' => '__ID__']));
+window.cdmAgregarDevolucionesUrl = @json($data->exists ? route('agregar_devoluciones_cambio_devolucion_marketplace', $data->id) : '');
 window.cdmVariantesUrl = @json(route('api_variantes_cambio_devolucion_marketplace', ['articuloId' => '__ID__']));
 window.cdmPrecioUrl = @json(route('api_precio_cambio_devolucion_marketplace'));
 </script>
-@if ($editable ?? false)
+@if ($lineaInteractiva ?? $editable ?? false)
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/stock/talle/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/talle/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/stock/color/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/color/consulta.js')) ?: time() }}"></script>
