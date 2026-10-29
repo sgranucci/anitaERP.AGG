@@ -15,6 +15,7 @@ use App\Support\Contable\Anita\AnitaAsientoImportBridgeReader;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Anita\AnitaSubdiarioMayorSupport;
 use App\Support\Contable\AsientoAnitaMetadatosSupport;
+use App\Support\Contable\AsientoNroInternoSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -991,19 +992,35 @@ final class AnitaAsientoImportService
             $completarNroAsiento = (int) ($asientoPlan['anita_nro_asiento'] ?? 0) > 0
                 && (int) ($existente['anita_nro_asiento'] ?? 0) <= 0
                 && ($completarMetadatos || AsientoAnitaMetadatosSupport::esDetalle($origenExistente));
-            if (! $dryRun && ! $soloDocumentos && ($completarMetadatos || $completarNroAsiento)) {
-                $cambios = $completarMetadatos
-                    ? $this->metadatosAnitaDesdePlan($asientoPlan)
-                    : ['anita_nro_asiento' => (int) $asientoPlan['anita_nro_asiento']];
-                DB::table('asiento')
-                    ->where('id', (int) $existente['id'])
-                    ->update($cambios);
-                $out['metadatos_anita_actualizados']++;
+            $completarInterno = (int) ($asientoPlan['anita_nro_interno'] ?? 0) > 0
+                && (int) ($existente['anita_nro_interno'] ?? 0) <= 0
+                && Schema::hasColumn('asiento', 'anita_nro_interno');
+            if (! $dryRun && ! $soloDocumentos && ($completarMetadatos || $completarNroAsiento || $completarInterno)) {
+                if ($completarMetadatos) {
+                    $cambios = $this->metadatosAnitaDesdePlan($asientoPlan);
+                } else {
+                    $cambios = [];
+                    if ($completarNroAsiento) {
+                        $cambios['anita_nro_asiento'] = (int) $asientoPlan['anita_nro_asiento'];
+                    }
+                    if ($completarInterno) {
+                        $cambios['anita_nro_interno'] = (int) $asientoPlan['anita_nro_interno'];
+                    }
+                }
+                if ($cambios !== []) {
+                    DB::table('asiento')
+                        ->where('id', (int) $existente['id'])
+                        ->update($cambios);
+                    $out['metadatos_anita_actualizados']++;
+                }
                 if ($completarMetadatos) {
                     $existentes[$nro]['anita_origen'] = $asientoPlan['anita_origen'] ?? null;
                 }
                 if ($completarNroAsiento) {
                     $existentes[$nro]['anita_nro_asiento'] = $asientoPlan['anita_nro_asiento'];
+                }
+                if ($completarInterno) {
+                    $existentes[$nro]['anita_nro_interno'] = (int) $asientoPlan['anita_nro_interno'];
                 }
             }
 
@@ -1389,7 +1406,7 @@ final class AnitaAsientoImportService
      */
     private function metadatosAnitaDesdePlan(array $plan): array
     {
-        return [
+        $meta = [
             'anita_origen' => $plan['anita_origen'] ?? null,
             'anita_nro_asiento' => $plan['anita_nro_asiento'] ?? null,
             'anita_sistema' => $plan['anita_sistema'] ?? null,
@@ -1399,6 +1416,12 @@ final class AnitaAsientoImportService
             'anita_nro' => $plan['anita_nro'] ?? null,
             'anita_emisor' => $plan['anita_emisor'] ?? null,
         ];
+        if (Schema::hasColumn('asiento', 'anita_nro_interno')) {
+            $interno = (int) ($plan['anita_nro_interno'] ?? 0);
+            $meta['anita_nro_interno'] = $interno > 0 ? $interno : null;
+        }
+
+        return $meta;
     }
 
     /**
@@ -1595,6 +1618,7 @@ final class AnitaAsientoImportService
             'anita_sucursal' => (int) ($primera->subd_sucursal ?? 0),
             'anita_nro' => (int) ($primera->subd_nro ?? 0) ?: null,
             'anita_emisor' => $emisor !== '' ? $emisor : null,
+            'anita_nro_interno' => AsientoNroInternoSupport::unicoDesdeLineasSubdiario($lineas),
             'usuario_id' => $usuarioId,
             'movimientos' => $movimientos,
         ];
@@ -1743,14 +1767,15 @@ final class AnitaAsientoImportService
                     }
                     $q->select($cols)->orderBy('id');
                 }])
-                ->get([
+                ->get(array_values(array_filter([
                     'id', 'numeroasiento', 'fecha',
                     'venta_id', 'movimientostock_id', 'cobranza_id', 'compra_id',
                     'caja_movimiento_id', 'remesa_id', 'jornada_gastronomia_id',
                     'rendicion_estacionamiento_caja_id', 'transferencia_mercaderia_id',
                     'ordencompra_id', 'recepcionproveedor_id', 'comprobante_proveedor_id',
                     'pagoproveedor_id', 'anita_origen', 'anita_nro_asiento',
-                ]);
+                    Schema::hasColumn('asiento', 'anita_nro_interno') ? 'anita_nro_interno' : null,
+                ])));
 
             foreach ($asientos as $asiento) {
                 $nro = (int) $asiento->numeroasiento;
@@ -1800,6 +1825,7 @@ final class AnitaAsientoImportService
                     'con_fk_proceso' => $conFk,
                     'anita_origen' => $asiento->anita_origen,
                     'anita_nro_asiento' => $asiento->anita_nro_asiento,
+                    'anita_nro_interno' => $asiento->anita_nro_interno ?? null,
                     'lineas' => count($movs),
                     'suma_monto' => round($suma, 4),
                     'firma_movimientos' => $this->firmaMovimientos($movs),

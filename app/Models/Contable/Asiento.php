@@ -37,7 +37,7 @@ class Asiento extends Model implements Auditable
                             'ordencompra_id', 'recepcionproveedor_id',
                             'comprobante_proveedor_id', 'liquidacion_sueldos_id', 'observacion',
                             'copia_de_numeroasiento',
-                            'anita_origen', 'anita_nro_asiento',
+                            'anita_origen', 'anita_nro_asiento', 'anita_nro_interno',
                             'anita_sistema', 'anita_tipo', 'anita_letra',
                             'anita_sucursal', 'anita_nro', 'anita_emisor',
                             'usuario_id', 'estado_aprobacion', 'cuentas_no_autorizadas',
