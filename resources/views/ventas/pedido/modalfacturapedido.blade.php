@@ -46,27 +46,6 @@
                         </div>
                     </div>
                     <div class="col-sm-6">
-                        @if (config('app.empresa') == "EL BIERZO")
-                            <div class="form-group row" style="display: none">
-                                <label for="recipient-name" class="col-lg-4 col-form-label">Descuento pie factura</label>
-                                <input type="number" id="descuentopie" name="descuentopie" value=""></input>
-                                <input type="hidden" id="descuentolinea" name="descuentolinea" value=""></input>
-                                <input type="hidden" id="descuentoimportepie" name="descuentoimportepie" value=""></input>
-                            </div>
-                        @else
-                            <div class="form-group row">
-                                <label for="recipient-name" class="col-lg-4 col-form-label">Descuento de l&iacute;nea</label>
-                                <input type="number" id="descuentolinea" name="descuentolinea" value=""></input>
-                            </div>
-                            <div class="form-group row">
-                                <label for="recipient-name" class="col-lg-4 col-form-label">Descuento pie factura</label>
-                                <input type="number" id="descuentopie" name="descuentopie" value=""></input>
-                            </div>
-                            <div class="form-group row">
-                                <label for="recipient-name" class="col-lg-4 col-form-label">Descuento pie importe</label>
-                                <input type="number" id="descuentoimportepie" name="descuentoimportepie" value=""></input>
-                            </div>
-                        @endif
                         <div class="form-group row" id="puntoventaremito">
                             <label for="recipient-name" class="col-lg-4 col-form-label requerido">Pto.venta del remito</label>
                             <select name="puntoventaremito_id" id="puntoventaremito_id" data-placeholder="Punto de venta del remito" class="col-lg-5 form-control required" data-fouc>
@@ -123,6 +102,37 @@
                         <tbody id="tbody-tabla-factura"> 
                         </tbody>
                     </table>
+                </div>
+                <div id="factura-pedido-descuentos" class="border-top pt-2 mt-1 mb-2">
+                    @if (config('app.empresa') == "EL BIERZO")
+                        <div class="form-group row mb-1">
+                            <label for="descuentopie" class="col-lg-3 col-form-label text-right pr-2">Descuento</label>
+                            <div class="col-lg-3">
+                                <input type="number" id="descuentopie" name="descuentopie" class="form-control" value="" step="0.01" min="0" title="Descuento al pie. Se carga al terminar los productos.">
+                            </div>
+                            <input type="hidden" id="descuentolinea" name="descuentolinea" value="">
+                            <input type="hidden" id="descuentoimportepie" name="descuentoimportepie" value="">
+                        </div>
+                    @else
+                        <div class="form-group row mb-1">
+                            <label for="descuentolinea" class="col-lg-3 col-form-label text-right pr-2">Descuento de l&iacute;nea</label>
+                            <div class="col-lg-3">
+                                <input type="number" id="descuentolinea" name="descuentolinea" class="form-control" value="" step="0.01">
+                            </div>
+                        </div>
+                        <div class="form-group row mb-1">
+                            <label for="descuentopie" class="col-lg-3 col-form-label text-right pr-2">Descuento pie factura</label>
+                            <div class="col-lg-3">
+                                <input type="number" id="descuentopie" name="descuentopie" class="form-control" value="" step="0.01">
+                            </div>
+                        </div>
+                        <div class="form-group row mb-1">
+                            <label for="descuentoimportepie" class="col-lg-3 col-form-label text-right pr-2">Descuento pie importe</label>
+                            <div class="col-lg-3">
+                                <input type="number" id="descuentoimportepie" name="descuentoimportepie" class="form-control" value="" step="0.01">
+                            </div>
+                        </div>
+                    @endif
                 </div>
                 <div class="row">
                     <div class="col-sm-6">

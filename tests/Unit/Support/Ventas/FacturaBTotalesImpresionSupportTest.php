@@ -108,4 +108,29 @@ final class FacturaBTotalesImpresionSupportTest extends TestCase
             ],
         ], $lineas);
     }
+
+    public function test_muestra_descuento_de_cabecera_con_iva_incluido(): void
+    {
+        $lineas = S::lineas([
+            ['concepto' => 'Subtotal', 'tasa' => 0, 'importe' => 25313.10],
+            ['concepto' => 'Descuento Gral. 20%', 'tasa' => 20, 'importe' => -5062.62],
+            ['concepto' => 'Gravado al 21%', 'tasa' => 21, 'importe' => 20250.48],
+            ['concepto' => 'Iva 21%', 'tasa' => 21, 'importe' => 4252.60],
+            ['concepto' => 'Percepcion no categorizado 10.5%', 'tasa' => 10.5, 'importe' => 2572.82],
+            ['concepto' => 'Total', 'tasa' => 0, 'importe' => 27075.90],
+        ]);
+
+        self::assertSame([
+            ['concepto' => 'Subtotal', 'tasa' => 0.0, 'importe' => 30628.85, 'es_total' => false],
+            ['concepto' => 'Descuento Gral. 20%', 'tasa' => 20.0, 'importe' => -6125.77, 'es_total' => false],
+            ['concepto' => S::ETIQUETA_PERCEPCION_IVA, 'tasa' => 10.5, 'importe' => 2572.82, 'es_total' => false],
+            ['concepto' => 'Total', 'tasa' => 0.0, 'importe' => 27075.90, 'es_total' => true],
+        ], $lineas);
+    }
+
+    public function test_precio_b_incluye_iva_cuando_el_precio_es_neto(): void
+    {
+        self::assertSame(18016.97, \App\Support\Ventas\FacturaLineaPrecioImpresionSupport::conIva(14890.06, 'N', 21));
+        self::assertSame(14890.06, \App\Support\Ventas\FacturaLineaPrecioImpresionSupport::conIva(14890.06, 'S', 21));
+    }
 }

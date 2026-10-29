@@ -124,6 +124,11 @@ class VillafrancaFacturacionSupportTest extends TestCase
         $this->assertSame(1.2, VillafrancaFacturacionSupport::redondearCantidadDivision(1.15));
         $this->assertSame(0.5, VillafrancaFacturacionSupport::redondearCantidadDivision(0.45));
         $this->assertSame(12.5, VillafrancaFacturacionSupport::redondearCantidadDivision(12.50));
+        // 136.20 * 0.75 queda en 102.14999…: PHP round() da 102.20 y Anita Round da 102.10.
+        $this->assertSame(102.1, VillafrancaFacturacionSupport::redondearCantidadDivision(136.20 * 0.75));
+        $this->assertSame(94.9, VillafrancaFacturacionSupport::redondearCantidadDivision(126.60 * 0.75));
+        $this->assertSame(4.9, VillafrancaFacturacionSupport::redondearCantidadDivision(6.60 * 0.75));
+        $this->assertSame(58.8, VillafrancaFacturacionSupport::redondearCantidadDivision(78.40 * 0.75));
     }
 
     public function test_montos_pedido_solo_con_factura_villafranca_101(): void

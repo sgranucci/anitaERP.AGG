@@ -48,6 +48,7 @@ use App\Models\Stock\Unidadmedida;
 use App\Models\Stock\Materialcapellada;
 use App\Models\Stock\Materialavio;
 use App\Models\Stock\Listaprecio;
+use App\Models\Ventas\Pedido_Articulo;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Exports\Ventas\PedidoExport;
@@ -1120,8 +1121,16 @@ class PedidoController extends Controller
 	{
         can('actualizar-pedidos');
 		$pedido = $this->pedidoService->guardaPedido($request->all(), 'update', $id);
+		$grabadoPrevioFacturar = $request->boolean('grabado_previo_facturar');
 
 		if (isset($pedido['error'])) {
+			if ($grabadoPrevioFacturar) {
+				return response()->json([
+					'ok' => false,
+					'error' => $pedido['error'],
+				], 422);
+			}
+
 			if ($request->input('origen') === 'modal_consulta') {
 				return redirect()
 					->route('editar_pedido', [
@@ -1137,6 +1146,27 @@ class PedidoController extends Controller
 		}
 
 		$mensaje = 'Pedido '.($pedido['codigo'] ?? $request->codigo).' actualizado con exito';
+
+		if ($grabadoPrevioFacturar) {
+			$lineas = Pedido_Articulo::query()
+				->where('pedido_id', (int) $id)
+				->get(['id', 'numeroitem', 'articulo_id'])
+				->map(static function ($linea) {
+					return [
+						'id' => (int) $linea->id,
+						'numeroitem' => (int) $linea->numeroitem,
+						'articulo_id' => (int) $linea->articulo_id,
+					];
+				})
+				->values();
+
+			return response()->json([
+				'ok' => true,
+				'mensaje' => $mensaje,
+				'codigo' => $pedido['codigo'] ?? $request->codigo,
+				'lineas' => $lineas,
+			]);
+		}
 
 		if ($request->input('origen') === 'modal_consulta') {
 			return redirect()

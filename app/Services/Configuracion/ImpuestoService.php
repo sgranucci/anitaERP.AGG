@@ -803,7 +803,7 @@ class ImpuestoService extends FacturacionService
 		$fechaFactura,
 		$cliente_id,
 		bool $omitirPercepciones,
-		bool $flGrabaComprobanteDividido
+		bool $flGrabaComprobanteDividido,
 	): array {
 		if ($flGrabaComprobanteDividido) {
 			return [];

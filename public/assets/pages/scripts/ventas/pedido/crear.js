@@ -765,6 +765,7 @@
 			});
 
 			window._entregasClienteActual = entr;
+			setTimeout(pedidoMarcarSnapshotSiNoEdito, 800);
 			var nombradas = entregasNombradasCliente(entr);
 			fl_tiene_entrega = nombradas.length > 0;
 			$('#fl_cliente_tiene_entrega').val(fl_tiene_entrega ? '1' : '0');
@@ -1620,6 +1621,8 @@
 			$("#divlote").hide();
 
 		enfocarCodigoClientePedidoAlCargar();
+
+		pedidoPrepararDeteccionCambios();
     });
 
     function agregaRenglon(event, opciones){
@@ -1938,6 +1941,211 @@
 		generaFacturaAbrirModal();
 	}
 
+	var pedidoSnapshotFacturar = null;
+	var pedidoUsuarioEdito = false;
+	var pedidoGrabandoAntesFacturar = false;
+
+	function pedidoMarcarSnapshotSiNoEdito()
+	{
+		if (pedidoUsuarioEdito || !pedidoPuedeGuardarseAntesDeFacturar()) {
+			return;
+		}
+		pedidoSnapshotFacturar = $('#formgeneral').serialize();
+	}
+
+	function pedidoPrepararDeteccionCambios()
+	{
+		var $form = $('#formgeneral');
+		if (!$form.length || !$form.attr('action')) {
+			return;
+		}
+		$form.on('input change', 'input, select, textarea', function () {
+			pedidoUsuarioEdito = true;
+		});
+		setTimeout(pedidoMarcarSnapshotSiNoEdito, 4000);
+	}
+
+	function pedidoPuedeGuardarseAntesDeFacturar()
+	{
+		var $form = $('#formgeneral');
+		if (window.pedidoModoIndexFacturacion || !$form.length) {
+			return false;
+		}
+		var method = String($form.find('input[name="_method"]').val() || '').toUpperCase();
+		return method === 'PUT' && !!$form.attr('action');
+	}
+
+	function pedidoTieneLineaNueva()
+	{
+		var falta = false;
+		$('#tbody-tabla tr.item-pedido').each(function () {
+			var articuloId = parseInt($(this).find('.articulo_id').val(), 10) || 0;
+			var lineaId = parseInt($(this).find('.ids').val(), 10) || 0;
+			if (articuloId > 0 && lineaId <= 0) {
+				falta = true;
+			}
+		});
+		return falta;
+	}
+
+	function pedidoHuboCambiosParaFacturar()
+	{
+		if (!pedidoPuedeGuardarseAntesDeFacturar()) {
+			return false;
+		}
+		if (pedidoTieneLineaNueva() || pedidoUsuarioEdito) {
+			return true;
+		}
+		if (pedidoSnapshotFacturar === null) {
+			return false;
+		}
+		return $('#formgeneral').serialize() !== pedidoSnapshotFacturar;
+	}
+
+	function aplicarLineasGuardadasPedido(lineas)
+	{
+		var usadas = {};
+		(lineas || []).forEach(function (linea) {
+			if (!linea || !linea.id) {
+				return;
+			}
+			usadas[String(linea.id)] = false;
+		});
+		$('#tbody-tabla tr.item-pedido').each(function () {
+			var $tr = $(this);
+			var actual = parseInt($tr.find('.ids').val(), 10) || 0;
+			if (actual > 0) {
+				usadas[String(actual)] = true;
+			}
+		});
+		$('#tbody-tabla tr.item-pedido').each(function () {
+			var $tr = $(this);
+			var actual = parseInt($tr.find('.ids').val(), 10) || 0;
+			if (actual > 0) {
+				return;
+			}
+			var nro = parseInt($tr.find('.item').val(), 10) || 0;
+			var articuloId = String($tr.find('.articulo_id').val() || '');
+			var i;
+			for (i = 0; i < (lineas || []).length; i++) {
+				var linea = lineas[i];
+				var lineaId = String(linea.id || '');
+				if (!lineaId || usadas[lineaId]) {
+					continue;
+				}
+				if (parseInt(linea.numeroitem, 10) === nro && String(linea.articulo_id || '') === articuloId) {
+					$tr.find('.ids').val(linea.id);
+					if (!$tr.find('.estados').val()) {
+						$tr.find('.estados').val('P');
+					}
+					usadas[lineaId] = true;
+					break;
+				}
+			}
+		});
+	}
+
+	function sincronizarDescuentoAnteriorPedido()
+	{
+		$('#tbody-tabla tr.item-pedido').each(function () {
+			var descuentoId = $(this).find('.descuentoventa_id').val() || '';
+			if (descuentoId !== '') {
+				$(this).find('.descuentoventaanterior_id').val(descuentoId);
+			}
+		});
+	}
+
+	function mensajeErrorGuardadoPedido(xhr)
+	{
+		var data = xhr && xhr.responseJSON ? xhr.responseJSON : null;
+		if (data && data.error) {
+			return String(data.error);
+		}
+		if (data && data.message) {
+			return String(data.message);
+		}
+		if (data && data.errores && data.errores.length) {
+			return String(data.errores[0]);
+		}
+		return 'No se pudo actualizar el pedido' + (xhr && xhr.status ? ' (HTTP ' + xhr.status + ').' : '.');
+	}
+
+	function continuarEmisionPedidoTrasGuardar(seguir)
+	{
+		if (pedidoGrabandoAntesFacturar) {
+			return;
+		}
+		if (!pedidoHuboCambiosParaFacturar()) {
+			seguir();
+			return;
+		}
+		if ($('#formgeneral').hasClass('pedido-bloqueado-padron')) {
+			if (typeof window.notificarBloqueoPadronCliente === 'function') {
+				window.notificarBloqueoPadronCliente('Problemas en ARCA: no puede guardar el pedido con este cliente.');
+			} else {
+				alert('Problemas en ARCA: no puede guardar el pedido con este cliente.');
+			}
+			return;
+		}
+		if (typeof validarListaprecioLineasFormularioVentas === 'function'
+			&& !validarListaprecioLineasFormularioVentas('#tbody-tabla tr')) {
+			return;
+		}
+
+		sincronizarDescuentoAnteriorPedido();
+		pedidoGrabandoAntesFacturar = true;
+		if (window.PedidoProcesoOverlay && typeof window.PedidoProcesoOverlay.iniciar === 'function') {
+			window.PedidoProcesoOverlay.iniciar(['Actualizando el pedido…'], 'Actualizando el pedido…');
+		}
+
+		$.ajax({
+			url: $('#formgeneral').attr('action'),
+			method: 'POST',
+			data: $('#formgeneral').serialize() + '&grabado_previo_facturar=1',
+			dataType: 'json',
+			headers: { 'Accept': 'application/json' }
+		}).done(function (data) {
+			if (!data || data.ok !== true) {
+				var msg = (data && data.error) ? data.error : 'No se pudo actualizar el pedido.';
+				if (window.toastr) {
+					toastr.error(msg, 'Pedido', { timeOut: 9000, closeButton: true });
+				} else {
+					alert(msg);
+				}
+				return;
+			}
+			aplicarLineasGuardadasPedido(data.lineas || []);
+			if (data.codigo) {
+				$('#codigo').val(data.codigo);
+				$('#codigopedido').val(data.codigo);
+			}
+			pedidoUsuarioEdito = false;
+			pedidoSnapshotFacturar = $('#formgeneral').serialize();
+			if (pedidoTieneLineaNueva()) {
+				var msgLinea = 'El pedido se actualizó, pero una línea nueva no quedó identificada. Corrija el renglón y vuelva a facturar.';
+				if (window.toastr) {
+					toastr.error(msgLinea, 'Pedido', { timeOut: 9000, closeButton: true });
+				} else {
+					alert(msgLinea);
+				}
+				return;
+			}
+			seguir();
+		}).fail(function (xhr) {
+			var msg = mensajeErrorGuardadoPedido(xhr);
+			if (window.toastr) {
+				toastr.error(msg, 'Pedido', { timeOut: 9000, closeButton: true });
+			} else {
+				alert(msg);
+			}
+		}).always(function () {
+			pedidoGrabandoAntesFacturar = false;
+			if (window.PedidoProcesoOverlay && typeof window.PedidoProcesoOverlay.detener === 'function') {
+				window.PedidoProcesoOverlay.detener();
+			}
+		});
+	}
+
 	function generaFactura()
 	{
 		window.modoEmisionPedido = 'factura';
@@ -1949,7 +2157,7 @@
 			return;
 		}
 
-		abrirModalEmisionPedidoSiPadronOk();
+		continuarEmisionPedidoTrasGuardar(abrirModalEmisionPedidoSiPadronOk);
 	}
 
 	function generaRemito()
@@ -1959,7 +2167,7 @@
 			return;
 		}
 
-		abrirModalEmisionPedidoSiPadronOk();
+		continuarEmisionPedidoTrasGuardar(abrirModalEmisionPedidoSiPadronOk);
 	}
 
 	function transferirPedidoDespacho()
@@ -2185,7 +2393,7 @@
 		} else {
 			$modal.find('#puntoventaremito').show();
 		}
-		$modal.find('#descuentopie, #descuentolinea, #descuentoimportepie').closest('.form-group').toggle(!esRemito);
+		$modal.find('#factura-pedido-descuentos').toggle(!esRemito);
 		$modal.find('#div_leyendafacturacion, #datos-exportacion').toggle(!esRemito);
 		$modal.find('#cantidadbulto').closest('.form-group').toggle(!esRemito);
 		$modal.find('#div_peso_neto_exportacion').toggle(!esRemito && esInterforming);
@@ -3440,7 +3648,8 @@
 				$('#letra_cliente_factura').val(window.facturacionLetraCliente);
 			}
 			// Lee zona de venta
-			leeZonaVta();			
+			leeZonaVta();
+			pedidoMarcarSnapshotSiNoEdito();
 		});
 		
         setTimeout(() => {

@@ -76,6 +76,18 @@ final class FacturaLineaPrecioImpresionSupport
     }
 
     /**
+     * Factura B: el precio impreso incluye el IVA. El pie no vuelve a sumarlo.
+     */
+    public static function conIva(float $precio, mixed $incluye, float $tasaIva): float
+    {
+        if (self::precioIncluyeImpuesto($incluye) || $tasaIva <= 0.00001) {
+            return $precio;
+        }
+
+        return round($precio * (1 + ($tasaIva / 100)), 2);
+    }
+
+    /**
      * @return array{concepto: string, tasa: float}|null
      */
     private static function fila(mixed $fila): ?array
