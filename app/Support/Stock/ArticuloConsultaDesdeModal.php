@@ -92,7 +92,9 @@ class ArticuloConsultaDesdeModal
             || can('actualizar-cambio-devolucion-marketplace-facturacion-local', false)
             || can('ver-cambio-devolucion-marketplace-facturacion-local', false)
             || can('listar-cambio-devolucion-marketplace-facturacion-local', false)
-            || can('listar-kilos-articulo-surmar', false);
+            || can('listar-kilos-articulo-surmar', false)
+            || can('listar-analisis-entregas', false)
+            || can('listar-pedidos', false);
     }
 
     public static function urlEditar(int $id): string

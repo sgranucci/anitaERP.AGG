@@ -2763,6 +2763,8 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::post('ventas/pedido/limpiafiltro', 'Ventas\PedidoInterformingController@limpiafiltro')->name('pedido.limpiafiltro');
     Route::get('ventas/listarpedidopdf/{id}/{cliente_id?}', 'Ventas\PedidoInterformingController@listarPedidoPdf')->name('listar_pedido_pdf');
     Route::get('ventas/listapedido/{formato?}/{busqueda?}', 'Ventas\PedidoInterformingController@listar')->name('lista_pedido');
+    Route::get('ventas/analisis-entregas', 'Ventas\AnalisisEntregasController@index')->name('analisis_entregas');
+    Route::get('ventas/listar-analisis-entregas/{formato}', 'Ventas\AnalisisEntregasController@exportar')->name('listar_analisis_entregas');
 } else {
     Route::get('ventas/pedido', 'Ventas\PedidoController@indexp')->name('pedido');
     Route::get('ventas/pedido/crear', 'Ventas\PedidoController@crear')->name('crear_pedido');

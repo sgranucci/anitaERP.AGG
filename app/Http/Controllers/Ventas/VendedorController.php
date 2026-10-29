@@ -241,7 +241,9 @@ class VendedorController extends Controller
             && ! can('crear-factura', false)
             && ! can('editar-factura', false)
             && ! can('listar-factura', false)
-            && ! can('generar-nota-de-credito', false)) {
+            && ! can('generar-nota-de-credito', false)
+            && ! can('listar-analisis-entregas', false)
+            && ! can('listar-pedidos', false)) {
             abort(403);
         }
 
