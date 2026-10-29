@@ -415,9 +415,10 @@ class GastronomiaProcesoFacturacionController extends Controller
             'waitry_monto_cobro' => $montoWaitry,
             'total_cuenta' => $totalCuenta,
             'desfasaje_totem' => $desfasajeTotem,
-            'mensaje' => $soloOpcionalesEnPos
+            'mensaje' => ($soloOpcionalesEnPos
                 ? 'Cuenta Waitry «'.$identificadorPapelito.'» abierta. Complete los consumos con opcionales en el POS.'
-                : 'Cuenta Waitry «'.$identificadorPapelito.'» importada correctamente.',
+                : 'Cuenta Waitry «'.$identificadorPapelito.'» importada correctamente.')
+                .$this->sufijoSlotWaitry($resultado['cuenta'] ?? null),
             'warn' => $warn,
         ]);
     }
@@ -575,6 +576,8 @@ class GastronomiaProcesoFacturacionController extends Controller
                 'cliente_id' => $c->cliente_id,
                 'mozo_gastronomia_id' => $c->mozo_gastronomia_id,
                 'cubiertos' => $c->cubiertos,
+                'waitry_display_id' => $c->waitry_display_id,
+                'waitry_slot' => $c->waitry_slot,
             ])->values(),
         ]);
     }
@@ -1579,6 +1582,17 @@ class GastronomiaProcesoFacturacionController extends Controller
         }
 
         return response()->json($res);
+    }
+
+    private function sufijoSlotWaitry(mixed $cuenta): string
+    {
+        if (! $cuenta instanceof CuentaGastronomia) {
+            return '';
+        }
+
+        $slot = trim((string) ($cuenta->waitry_slot ?? ''));
+
+        return $slot !== '' ? ' Slot: '.$slot.'.' : '';
     }
 
     private function cfgPv(Request $request): ?ConfiguracionPuntoventaGastronomia

@@ -928,6 +928,10 @@
         if (papelito && txt.indexOf(papelito) < 0) {
             txt += ' Papelito monitor: ' + papelito + '.';
         }
+        const slot = data && data.waitry_slot ? String(data.waitry_slot).trim() : '';
+        if (slot && txt.indexOf('Slot: ' + slot) < 0) {
+            txt += ' Slot: ' + slot + '.';
+        }
         const warn = data && String(data.warn || '').trim();
         if (warn) {
             const soloToast = esAvisoInformativoPostEmision(warn);
@@ -2683,14 +2687,16 @@
             return { titulo: '', detalle: '', esMesa: false, mesaId: null };
         }
         const id = cuenta.id;
+        const slot = cuenta.waitry_slot ? String(cuenta.waitry_slot).trim() : '';
+        const papelito = cuenta.waitry_display_id ? String(cuenta.waitry_display_id).trim() : '';
         const esMesa = cuenta.tipo === 'mesa' || !!cuenta.mesa_gastronomia_id;
         if (!cuenta.tipo && !cuenta.mesa_gastronomia_id && !cuenta.mesa) {
-            return {
+            return aplicarReferenciasWaitryEnCuenta({
                 titulo: 'Cuenta #' + id,
                 detalle: 'Cargando datos…',
                 esMesa: false,
                 mesaId: null,
-            };
+            });
         }
         if (esMesa) {
             const titulo = etiquetaMesa(cuenta.mesa) || 'Mesa (cuenta #' + id + ')';
@@ -2701,19 +2707,31 @@
             if (cuenta.mozo && cuenta.mozo.nombre) {
                 detalle += ' · Mozo: ' + cuenta.mozo.nombre;
             }
-            return {
+            return aplicarReferenciasWaitryEnCuenta({
                 titulo,
                 detalle,
                 esMesa: true,
                 mesaId: cuenta.mesa_gastronomia_id || (cuenta.mesa ? cuenta.mesa.id : null),
-            };
+            });
         }
-        return {
+        return aplicarReferenciasWaitryEnCuenta({
             titulo: 'Cuenta libre #' + id,
             detalle: 'Sin mesa asignada',
             esMesa: false,
             mesaId: null,
-        };
+        });
+
+        function aplicarReferenciasWaitryEnCuenta(info) {
+            if (papelito && String(info.detalle || '').indexOf(papelito) < 0) {
+                info.detalle += (info.detalle ? ' · ' : '') + 'Papelito ' + papelito;
+            }
+            if (slot) {
+                const base = info.titulo ? info.titulo + (info.detalle ? ' · ' + info.detalle : '') : info.detalle;
+                info.detalle = base;
+                info.titulo = 'Slot ' + slot;
+            }
+            return info;
+        }
     }
 
     function lineaIndicadorCuentaActiva(cuenta, subtotal) {
@@ -5299,6 +5317,7 @@
             ordenes.forEach((o) => {
                 const idNum = o.waitry_order_id;
                 const displayId = o.display_id ? String(o.display_id).trim() : '';
+                const slot = o.slot ? String(o.slot).trim() : '';
                 const sinSku = !!o.requiere_mapeo_sku;
                 const unidades = o.cantidad_unidades != null ? o.cantidad_unidades : o.cantidad_items;
                 const unidadesLabel =
@@ -5310,6 +5329,7 @@
                           (Number(unidades) === 1 ? ' ud.' : ' uds.')
                         : '';
                 const label =
+                    (slot ? 'Slot ' + slot + ' · ' : '') +
                     (displayId ? displayId + ' ' : '') +
                     '#' +
                     idNum +
@@ -5484,12 +5504,13 @@
         panel.innerHTML = '';
         (data.cuentas || []).forEach((c) => {
             const esActiva = cuentaId === c.id;
+            const slot = c.waitry_slot ? String(c.waitry_slot).trim() : '';
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className =
                 'btn btn-sm m-1' +
                 (esActiva ? ' btn-primary btn-gastro-cuenta-activa' : ' btn-outline-primary');
-            btn.textContent = 'Cuenta #' + c.id + (esActiva ? ' ★' : '');
+            btn.textContent = (slot ? 'Slot ' + slot + ' · ' : '') + 'Cuenta #' + c.id + (esActiva ? ' ★' : '');
             btn.addEventListener('click', () => seleccionarCuenta(c.id));
             panel.appendChild(btn);
         });
@@ -6004,7 +6025,22 @@
         }
         const wrap = document.getElementById('panel-detalle-lineas');
         const sub = subtotalEstimadoDesdeCuenta(cuenta);
-        let html = '<table class="table table-sm table-striped mb-0"><thead><tr><th>#</th><th>Artículo</th><th>Cant.</th><th>P.U.</th><th></th></tr></thead><tbody>';
+        const slotPantalla = cuenta && cuenta.waitry_slot ? String(cuenta.waitry_slot).trim() : '';
+        const papelitoPantalla = cuenta && cuenta.waitry_display_id ? String(cuenta.waitry_display_id).trim() : '';
+        let html = '';
+        if (slotPantalla || papelitoPantalla) {
+            html +=
+                '<div class="alert alert-info py-2 mb-2">' +
+                (papelitoPantalla ? '<strong>Papelito ' + escHtml(papelitoPantalla) + '</strong>' : '') +
+                (slotPantalla
+                    ? (papelitoPantalla ? '<br>' : '') +
+                      '<strong style="font-size:1.15rem;">Slot ' +
+                      escHtml(slotPantalla) +
+                      '</strong>'
+                    : '') +
+                '</div>';
+        }
+        html += '<table class="table table-sm table-striped mb-0"><thead><tr><th>#</th><th>Artículo</th><th>Cant.</th><th>P.U.</th><th></th></tr></thead><tbody>';
         (cuenta.lineas || []).forEach((ln) => {
             const pu = Number(ln.precio_unitario);
             const cant = Number(ln.cantidad);

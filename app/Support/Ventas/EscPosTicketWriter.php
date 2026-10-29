@@ -132,26 +132,40 @@ final class EscPosTicketWriter
     }
 
     /**
-     * Código alfanumérico del papelito Waitry — visible para el cliente en el monitor.
+     * Código del papelito Waitry — visible para el cliente en el monitor.
+     * El slot (table.name) va debajo del número, en el mismo bloque.
      */
-    public function bloquePapelitoMonitor(string $codigo): self
+    public function bloquePapelitoMonitor(string $codigo, string $slot = ''): self
     {
         $codigo = trim($codigo);
-        if ($codigo === '') {
+        $slot = trim($slot);
+        if ($codigo === '' && $slot === '') {
             return $this;
         }
 
         $this->separador();
         $this->alinearCentro();
         $this->negrita(true);
-        $this->linea('SU PEDIDO EN EL MONITOR');
-        $this->negrita(false);
-        $this->feed(1);
-        $this->negrita(true);
-        $this->dobleTamano(true);
-        $this->linea($this->truncar($codigo, (int) floor($this->ancho / 2)));
-        $this->dobleTamano(false);
-        $this->negrita(false);
+        if ($codigo !== '') {
+            $this->linea('SU PEDIDO EN EL MONITOR');
+            $this->negrita(false);
+            $this->feed(1);
+            $this->negrita(true);
+            $this->dobleTamano(true);
+            $this->linea($this->truncar($codigo, (int) floor($this->ancho / 2)));
+            $this->dobleTamano(false);
+            $this->negrita(false);
+        }
+        if ($slot !== '') {
+            if ($codigo !== '') {
+                $this->feed(1);
+            }
+            $this->negrita(true);
+            $this->dobleTamano(true);
+            $this->linea($this->truncar('Slot '.$slot, (int) floor($this->ancho / 2)));
+            $this->dobleTamano(false);
+            $this->negrita(false);
+        }
         $this->feed(1);
         $this->linea('Presente este codigo');
         $this->alinearIzquierda();

@@ -188,10 +188,17 @@
                     <div class="col-md-6">
                         <strong>PV:</strong> {{ $venta->puntoventas->codigo ?? '—' }} — modo {{ $venta->puntoventas->modofacturacion ?? '—' }}<br>
                         <strong>Cuenta gastronomía:</strong> {{ $meta->cuenta_gastronomia_id ?? '—' }}<br>
-                        @php $codigoPapelitoWaitry = \App\Support\Ventas\GastronomiaVentaDisplaySupport::waitryDisplayId($venta); @endphp
+                        @php
+                            $codigoPapelitoWaitry = \App\Support\Ventas\GastronomiaVentaDisplaySupport::waitryDisplayId($venta);
+                            $slotWaitry = \App\Support\Ventas\GastronomiaVentaDisplaySupport::waitrySlot($venta);
+                        @endphp
                         @if ($codigoPapelitoWaitry !== null)
                             <strong>Papelito monitor:</strong>
                             <span class="font-weight-bold text-primary" style="font-size: 1.15em; letter-spacing: 0.04em;">{{ $codigoPapelitoWaitry }}</span><br>
+                        @endif
+                        @if ($slotWaitry !== null)
+                            <strong>Slot:</strong>
+                            <span class="font-weight-bold text-primary" style="font-size: 1.15em; letter-spacing: 0.04em;">{{ $slotWaitry }}</span><br>
                         @endif
                         <strong>PC emisión:</strong> {{ $meta->identificador_pc }}<br>
                         @if ($depositoVentaConfig)

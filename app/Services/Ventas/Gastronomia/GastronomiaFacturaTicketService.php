@@ -325,8 +325,9 @@ final class GastronomiaFacturaTicketService
         $w->alinearIzquierda();
 
         $codigoPapelito = GastronomiaVentaDisplaySupport::waitryDisplayId($venta);
-        if ($codigoPapelito !== null) {
-            $w->bloquePapelitoMonitor($codigoPapelito);
+        $slotWaitry = GastronomiaVentaDisplaySupport::waitrySlot($venta);
+        if ($codigoPapelito !== null || $slotWaitry !== null) {
+            $w->bloquePapelitoMonitor($codigoPapelito ?? '', $slotWaitry ?? '');
         }
 
         $w->separadorDoble();

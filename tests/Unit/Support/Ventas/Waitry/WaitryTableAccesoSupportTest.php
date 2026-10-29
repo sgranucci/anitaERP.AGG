@@ -26,6 +26,18 @@ final class WaitryTableAccesoSupportTest extends TestCase
         $this->assertSame('Kiosco 1', $acceso['layout_name']);
     }
 
+    public function test_table_name_es_el_numero_de_slot(): void
+    {
+        $acceso = WaitryTableAccesoSupport::extraerDesdeOrden([
+            'table' => [
+                'tableId' => 88,
+                'name' => '14',
+            ],
+        ]);
+
+        $this->assertSame('14', $acceso['table_name']);
+    }
+
     public function test_extraer_table_id_legacy_table_id_en_raiz(): void
     {
         $this->assertSame(101066, WaitryTableAccesoSupport::extraerTableId(['tableId' => 101066]));

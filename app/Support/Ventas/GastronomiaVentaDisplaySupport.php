@@ -164,6 +164,17 @@ final class GastronomiaVentaDisplaySupport
     }
 
     /**
+     * Número de slot Waitry (table.name de la orden importada).
+     */
+    public static function waitrySlot(?Venta $venta): ?string
+    {
+        $emision = self::emisionWaitryDesdeVenta($venta);
+        $slot = trim((string) ($emision?->cuenta?->waitry_slot ?? ''));
+
+        return $slot !== '' ? $slot : null;
+    }
+
+    /**
      * Línea para ticket/PDF cuando la factura proviene de una cuenta Waitry.
      */
     public static function lineaOrdenWaitry(?Venta $venta): ?string

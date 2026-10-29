@@ -105,6 +105,169 @@
         });
     }
 
+    function esCeldaImporte(texto) {
+        var t = String(texto || '').trim();
+        if (t === '') {
+            return true;
+        }
+        if (!/^[\s$()\-]*[\d.,]+[\s)]*$/.test(t)) {
+            return false;
+        }
+        var digitos = t.replace(/\D/g, '');
+        if (!/[.,]/.test(t) && digitos.length >= 5) {
+            return false;
+        }
+        return true;
+    }
+
+    function parsearPegadoImportes(texto) {
+        var crudo = String(texto || '').replace(/\u00a0/g, ' ').replace(/^\uFEFF/, '');
+        if (!crudo.trim()) {
+            return null;
+        }
+        var filas = crudo.split(/\r?\n/).map(function (linea) {
+            var celdas = linea.split('\t').map(function (celda) {
+                var limpia = celda.trim().replace(/^"(.*)"$/, '$1').trim();
+                return limpia;
+            });
+            while (celdas.length && celdas[celdas.length - 1] === '') {
+                celdas.pop();
+            }
+            return celdas;
+        }).filter(function (celdas) {
+            return celdas.length > 0;
+        });
+        if (!filas.length) {
+            return null;
+        }
+        for (var i = 0; i < filas.length; i++) {
+            if (filas[i].length > 2) {
+                return null;
+            }
+            for (var j = 0; j < filas[i].length; j++) {
+                if (!esCeldaImporte(filas[i][j])) {
+                    return null;
+                }
+            }
+        }
+        return filas;
+    }
+
+    function claseMontoDe(el) {
+        var clases = ['.debeasiento', '.haberasiento', '.cotizacionasiento', '.debe', '.haber', '.cotizacion', '.monto', '.js-monto-ar'];
+        var $el = window.jQuery(el);
+        for (var i = 0; i < clases.length; i++) {
+            if ($el.is(clases[i])) {
+                return clases[i];
+            }
+        }
+        return null;
+    }
+
+    function escribirMonto(el, texto) {
+        if (!el) {
+            return;
+        }
+        var n = parseDecimal(texto);
+        el.value = n === 0 ? '' : fmt(n);
+    }
+
+    function filasDeColumna($input) {
+        var clase = claseMontoDe($input.get(0));
+        var $tbody = $input.closest('tbody');
+        if (!$tbody.length) {
+            return { clase: clase, $filas: window.jQuery() };
+        }
+        return {
+            clase: clase,
+            $filas: $tbody.children('tr').filter(function () {
+                return window.jQuery(this).find(clase).length > 0;
+            })
+        };
+    }
+
+    function agregarFilaDeMontos($input) {
+        var $ = window.jQuery;
+        var $tbody = $input.closest('tbody');
+        var $scope = $input.closest('form');
+        if (!$scope.length) {
+            $scope = $(document);
+        }
+        var $btn = $scope.find('#agrega_renglon_cuenta, #agrega_renglon_asiento').filter(':visible').first();
+        if (!$btn.length) {
+            $btn = $('#agrega_renglon_cuenta, #agrega_renglon_asiento').filter(':visible').first();
+        }
+        if (!$btn.length || !$tbody.length) {
+            return false;
+        }
+        var antes = $tbody.children('tr').length;
+        $btn.trigger('click');
+        return $tbody.children('tr').length > antes;
+    }
+
+    function pegarColumnaImportes(el, texto) {
+        if (!jqueryDisponible() || !el) {
+            return false;
+        }
+        var filas = parsearPegadoImportes(texto);
+        if (!filas) {
+            return false;
+        }
+        var $ = window.jQuery;
+        var $inicio = $(el);
+        if (!$inicio.is(SELECTORES_MONTO)) {
+            var $trOrigen = $inicio.closest('tr');
+            var $debeFila = $trOrigen.find('.debe, .debeasiento').first();
+            if ($debeFila.length) {
+                $inicio = $debeFila;
+            } else {
+                $inicio = $('#tbody-cuenta-table .debe, .debeasiento').first();
+            }
+        }
+        if (!$inicio.length || !$inicio.is(SELECTORES_MONTO)) {
+            return false;
+        }
+
+        var claseInicio = claseMontoDe($inicio.get(0));
+        if (!claseInicio) {
+            return false;
+        }
+        var dosColumnas = filas.some(function (fila) { return fila.length > 1; });
+        var esAsientoExterno = claseInicio.indexOf('asiento') >= 0;
+        var indiceInicio = filasDeColumna($inicio).$filas.index($inicio.closest('tr'));
+        if (indiceInicio < 0) {
+            indiceInicio = 0;
+        }
+
+        for (var i = 0; i < filas.length; i++) {
+            var datos = filasDeColumna($inicio);
+            var guard = 0;
+            while (datos.$filas.length <= indiceInicio + i && guard < 40) {
+                if (!agregarFilaDeMontos($inicio)) {
+                    break;
+                }
+                datos = filasDeColumna($inicio);
+                guard++;
+            }
+            if (datos.$filas.length <= indiceInicio + i) {
+                break;
+            }
+            var $tr = datos.$filas.eq(indiceInicio + i);
+            if (dosColumnas && (claseInicio === '.debe' || claseInicio === '.haber' || claseInicio === '.debeasiento' || claseInicio === '.haberasiento')) {
+                escribirMonto($tr.find(esAsientoExterno ? '.debeasiento' : '.debe').get(0), filas[i][0]);
+                escribirMonto($tr.find(esAsientoExterno ? '.haberasiento' : '.haber').get(0), filas[i][1] || '');
+            } else {
+                escribirMonto($tr.find(claseInicio).get(0), filas[i][0]);
+            }
+        }
+
+        if (typeof window.sumaMonto === 'function') {
+            window.sumaMonto();
+        }
+        $(document).trigger('asiento:monto-actualizado');
+        return true;
+    }
+
     function bindEventos() {
         if (bindEventos._listo) {
             return true;
@@ -131,23 +294,17 @@
             if (!clipboard) {
                 return;
             }
-            var texto = String(clipboard.getData('text') || '').replace(/\u00a0/g, ' ').trim();
-            if (!texto) {
-                return;
+            var texto = '';
+            try {
+                texto = clipboard.getData('text/plain') || clipboard.getData('text') || '';
+            } catch (err) {
+                texto = '';
             }
-            var lineas = texto.split(/\r?\n/).map(function (linea) {
-                return linea.trim();
-            }).filter(function (linea) {
-                return linea !== '';
-            });
-            if (lineas.length !== 1 || lineas[0].indexOf('\t') >= 0) {
+            if (!pegarColumnaImportes(this, texto)) {
                 return;
             }
             e.preventDefault();
-            e.stopPropagation();
-            var n = parseDecimal(lineas[0]);
-            this.value = n === 0 ? '' : fmt(n);
-            $(document).trigger('asiento:monto-actualizado');
+            e.stopImmediatePropagation();
         });
 
         $(document).on('submit', 'form', function () {
@@ -167,6 +324,7 @@
         normalizarAntesDeEnviar: normalizarAntesDeEnviar,
         initEnContenedor: initEnContenedor,
         bindEventos: bindEventos,
+        pegarColumnaImportes: pegarColumnaImportes,
         selectoresMonto: SELECTORES_MONTO
     };
 

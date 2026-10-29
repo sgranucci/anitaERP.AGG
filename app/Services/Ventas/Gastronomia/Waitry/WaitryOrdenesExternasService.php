@@ -12,6 +12,7 @@ use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Ventas\GastronomiaSkuCatalogoSupport;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
 use App\Support\Ventas\Waitry\WaitryDisplayIdSupport;
+use App\Support\Ventas\Waitry\WaitryTableAccesoSupport;
 use App\Support\Ventas\Waitry\WaitryFacturacionDuplicadosSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\Waitry\WaitryOpcionalesPendientesSupport;
@@ -221,6 +222,7 @@ final class WaitryOrdenesExternasService
             $lista[] = [
                 'waitry_order_id' => $orderId,
                 'display_id' => $displayId,
+                'slot' => $this->slotDesdeOrden($orden),
                 'external_reference_id' => trim((string) ($orden['external_reference_id'] ?? $orden['externalId'] ?? '')),
                 'current_state' => trim((string) ($orden['current_state'] ?? '')),
                 'type' => trim((string) ($orden['type'] ?? '')),
@@ -970,6 +972,7 @@ final class WaitryOrdenesExternasService
             $identificadorPapelito,
         );
         $cuenta->waitry_display_id = $displayId !== '' ? $displayId : null;
+        $slot = $this->slotDesdeOrden($orden);
         $cuenta->waitry_cobro_totem = $cobroTotem;
         $montoCobroWaitry = WaitryTotemImporteFacturaSupport::montoCobradoEnOrden($orden);
         $cuenta->waitry_monto_cobro = $montoCobroWaitry > 0.0001 ? $montoCobroWaitry : null;
@@ -980,8 +983,12 @@ final class WaitryOrdenesExternasService
             $ordenPos = $this->obtenerOrdenPorIdConciliacion($empresaId, $waitryOrderId);
             if ($ordenPos !== null) {
                 $waitryTipoPago = WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($ordenPos);
+                if ($slot === null) {
+                    $slot = $this->slotDesdeOrden($ordenPos);
+                }
             }
         }
+        $cuenta->waitry_slot = $slot;
         $cuenta->waitry_tipo_pago = $waitryTipoPago;
         $cuenta->save();
 
@@ -1206,6 +1213,18 @@ final class WaitryOrdenesExternasService
     private function extraerDisplayIdOrden(array $orden): string
     {
         return WaitryDisplayIdSupport::extraerDesdeOrden($orden);
+    }
+
+    /**
+     * Número de slot Waitry (table.name al recuperar la orden).
+     *
+     * @param  array<string, mixed>  $orden
+     */
+    private function slotDesdeOrden(array $orden): ?string
+    {
+        $nombre = trim((string) (WaitryTableAccesoSupport::extraerDesdeOrden($orden)['table_name'] ?? ''));
+
+        return $nombre !== '' ? mb_substr($nombre, 0, 64) : null;
     }
 
     /**

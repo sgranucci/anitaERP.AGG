@@ -41,7 +41,7 @@ class CuentaGastronomia extends Model implements Auditable
         'cliente_vip_gastronomia_id',
         'factura_receptor_nombre', 'factura_receptor_documento', 'factura_receptor_domicilio',
         'factura_receptor_tipodocumento_id',
-        'configuracion_puntoventa_gastronomia_id', 'venta_id', 'waitry_order_id', 'waitry_display_id', 'waitry_cobro_totem', 'waitry_tipo_pago',
+        'configuracion_puntoventa_gastronomia_id', 'venta_id', 'waitry_order_id', 'waitry_display_id', 'waitry_slot', 'waitry_cobro_totem', 'waitry_tipo_pago',
         'waitry_monto_cobro',
         'canje_premio_pendiente',
         'canje_fidelidad_pendiente',

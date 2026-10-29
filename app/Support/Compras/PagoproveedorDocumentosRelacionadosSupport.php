@@ -7,6 +7,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Comprobante;
 use App\Models\Compras\Requisicion;
+use App\Support\Compras\AnitaImport\PagoproveedorAnitaImpresionAuxpagMapper;
 
 /**
  * Cadena inversa OP → facturas aplicadas → OC / requisición / COM + URLs de consulta y PDF.
@@ -38,11 +39,20 @@ final class PagoproveedorDocumentosRelacionadosSupport
             ->get();
 
         $filas = [];
+        $ya = [];
         foreach ($aplicaciones as $apl) {
             $fila = self::filaDesdeAplicacion($apl);
             if ($fila !== null) {
                 $filas[] = $fila;
+                $facturaId = (int) ($fila['factura']['id'] ?? 0);
+                if ($facturaId > 0) {
+                    $ya[$facturaId] = true;
+                }
             }
+        }
+
+        foreach (self::filasDesdeSnapshotAnita($pago, $ya) as $fila) {
+            $filas[] = $fila;
         }
 
         return [
@@ -100,6 +110,100 @@ final class PagoproveedorDocumentosRelacionadosSupport
                 ? CircuitoComprasDocumentosRelacionadosSupport::bloquesComDeOrdencompra($ocId)
                 : CircuitoComprasDocumentosRelacionadosSupport::bloquesComDesdeColeccion($comp->recepcion_proveedores);
         }
+
+        return $fila;
+    }
+
+    /**
+     * Comprobantes del snapshot Anita cuando la OP no escribió cuenta corriente.
+     *
+     * @param  array<int, true>  $ya
+     * @return list<array<string, mixed>>
+     */
+    private static function filasDesdeSnapshotAnita(Pagoproveedor $pago, array $ya): array
+    {
+        $snap = $pago->anita_impresion_json;
+        $aplicaciones = is_array($snap) ? ($snap['aplicaciones'] ?? null) : null;
+        if (! is_array($aplicaciones) || $aplicaciones === []) {
+            return [];
+        }
+
+        [$comprobantesSnap] = PagoproveedorAnitaImpresionAuxpagMapper::separarSnapshotAplicaciones($aplicaciones);
+        $porNro = [];
+        foreach ($comprobantesSnap as $apl) {
+            $nro = (int) ($apl['nro_int'] ?? 0);
+            if ($nro > 0) {
+                $porNro[$nro] = $apl;
+            }
+        }
+        if ($porNro === []) {
+            return [];
+        }
+
+        $comps = Comprobante_Proveedor::query()
+            ->where('empresa_id', (int) $pago->empresa_id)
+            ->where('proveedor_id', (int) $pago->proveedor_id)
+            ->whereIn('anita_nro_interno', array_keys($porNro))
+            ->with([
+                'tipotransaccion_compras',
+                'monedas:id,abreviatura',
+                'ordencompras.requisiciones',
+                'recepcion_proveedores',
+            ])
+            ->get()
+            ->keyBy(static fn (Comprobante_Proveedor $comp) => (int) $comp->anita_nro_interno);
+
+        $out = [];
+        foreach ($porNro as $nro => $apl) {
+            $comp = $comps->get($nro);
+            if (! $comp instanceof Comprobante_Proveedor || isset($ya[(int) $comp->id])) {
+                continue;
+            }
+            $out[] = self::filaDesdeComprobanteSnapshot($comp, $apl);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $apl
+     * @return array<string, mixed>
+     */
+    private static function filaDesdeComprobanteSnapshot(Comprobante_Proveedor $comp, array $apl): array
+    {
+        $monto = abs((float) ($apl['monto_aplicado'] ?? $apl['monto'] ?? 0));
+        $moneda = (string) ($comp->monedas?->abreviatura ?? ($apl['moneda'] ?? ''));
+        $fila = [
+            'pagoproveedor_comprobante_id' => 0,
+            'proveedor_cuentacorriente_id' => 0,
+            'etiqueta' => (string) ($apl['numero'] ?? ''),
+            'fecha' => (string) ($apl['fecha'] ?? ''),
+            'monto_aplicado' => $monto,
+            'monto_aplicado_fmt' => number_format($monto, 2, ',', '.').($moneda !== '' ? ' '.$moneda : ''),
+            'es_opa' => false,
+            'factura' => CircuitoComprasDocumentosRelacionadosSupport::bloqueFactura($comp),
+            'ordencompra' => null,
+            'requisicion' => null,
+            'coms' => [],
+        ];
+
+        $oc = $comp->ordencompras;
+        if ($oc instanceof Ordencompra) {
+            $fila['ordencompra'] = CircuitoComprasDocumentosRelacionadosSupport::bloqueOrdencompra($oc);
+            $req = $oc->requisiciones;
+            if ($req instanceof Requisicion) {
+                $fila['requisicion'] = CircuitoComprasDocumentosRelacionadosSupport::bloqueRequisicion($req);
+            }
+        }
+        $ocId = $oc instanceof Ordencompra ? (int) $oc->id : 0;
+        if ($ocId <= 0) {
+            $ocId = (int) $comp->recepcion_proveedores
+                ->map(static fn ($rec) => (int) ($rec->ordencompra_id ?? 0))
+                ->first(static fn (int $id) => $id > 0);
+        }
+        $fila['coms'] = $ocId > 0
+            ? CircuitoComprasDocumentosRelacionadosSupport::bloquesComDeOrdencompra($ocId)
+            : CircuitoComprasDocumentosRelacionadosSupport::bloquesComDesdeColeccion($comp->recepcion_proveedores);
 
         return $fila;
     }

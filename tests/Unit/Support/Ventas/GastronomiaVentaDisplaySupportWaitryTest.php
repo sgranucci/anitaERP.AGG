@@ -63,4 +63,31 @@ final class GastronomiaVentaDisplaySupportWaitryTest extends TestCase
 
         $this->assertNull(GastronomiaVentaDisplaySupport::lineaOrdenWaitry($venta));
     }
+
+    public function test_slot_desde_cuenta_waitry(): void
+    {
+        $venta = new Venta(['id' => 1]);
+        $emision = new VentaGastronomiaEmision(['waitry_order_id' => 17613458]);
+        $cuenta = new CuentaGastronomia([
+            'waitry_order_id' => 17613458,
+            'waitry_display_id' => '301',
+            'waitry_slot' => '12',
+        ]);
+        $emision->setRelation('cuenta', $cuenta);
+        $venta->setRelation('gastronomiaEmision', $emision);
+
+        $this->assertSame('12', GastronomiaVentaDisplaySupport::waitrySlot($venta));
+        $this->assertSame('301', GastronomiaVentaDisplaySupport::waitryDisplayId($venta));
+    }
+
+    public function test_slot_vacio_retorna_null(): void
+    {
+        $venta = new Venta(['id' => 1]);
+        $emision = new VentaGastronomiaEmision(['waitry_order_id' => 10]);
+        $cuenta = new CuentaGastronomia(['waitry_order_id' => 10, 'waitry_display_id' => '4']);
+        $emision->setRelation('cuenta', $cuenta);
+        $venta->setRelation('gastronomiaEmision', $emision);
+
+        $this->assertNull(GastronomiaVentaDisplaySupport::waitrySlot($venta));
+    }
 }

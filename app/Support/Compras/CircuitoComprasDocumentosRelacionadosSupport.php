@@ -460,7 +460,10 @@ final class CircuitoComprasDocumentosRelacionadosSupport
                 ->where('app.comprobante_proveedor_aplicado_id', $comprobanteId)
                 ->where('credito.pagoproveedor_id', '>', 0)
                 ->pluck('credito.pagoproveedor_id')
-                ->all()
+                ->all(),
+            // Documento importado sin cuenta corriente: el comprobante queda
+            // en anita_impresion_json (nro interno Anita), no en la ficha.
+            self::pagoproveedorIdsPorSnapshotAnita($comprobanteId)
         );
 
         return collect($ids)
@@ -468,6 +471,39 @@ final class CircuitoComprasDocumentosRelacionadosSupport
             ->filter(static fn (int $id) => $id > 0)
             ->unique()
             ->values()
+            ->all();
+    }
+
+    /**
+     * OP importada desde Anita sin aplicaciones de cuenta corriente.
+     *
+     * @return list<int>
+     */
+    private static function pagoproveedorIdsPorSnapshotAnita(int $comprobanteId): array
+    {
+        $comp = Comprobante_Proveedor::query()
+            ->select(['id', 'empresa_id', 'proveedor_id', 'anita_nro_interno'])
+            ->find($comprobanteId);
+        if (! $comp) {
+            return [];
+        }
+        $nroInt = (int) ($comp->anita_nro_interno ?? 0);
+        $proveedorId = (int) ($comp->proveedor_id ?? 0);
+        $empresaId = (int) ($comp->empresa_id ?? 0);
+        if ($nroInt <= 0 || $proveedorId <= 0 || $empresaId <= 0) {
+            return [];
+        }
+
+        return Pagoproveedor::query()
+            ->where('empresa_id', $empresaId)
+            ->where('proveedor_id', $proveedorId)
+            ->whereNotNull('anita_impresion_json')
+            ->whereRaw(
+                "JSON_SEARCH(anita_impresion_json, 'one', ?, NULL, '$.aplicaciones[*].nro_int') IS NOT NULL",
+                [(string) $nroInt]
+            )
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
             ->all();
     }
 }

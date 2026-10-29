@@ -18,7 +18,7 @@ $(function () {
     });
 
     $(document).on('paste', '#cuenta-table, #asiento_pegar_excel_texto', function (e) {
-        if (archivoImagenPortapapeles(e)) {
+        if (archivoImagenPortapapeles(e) && !textoPlanoPortapapeles(e)) {
             return;
         }
         var clipboard = e.originalEvent && e.originalEvent.clipboardData
@@ -27,7 +27,14 @@ $(function () {
         if (!clipboard) {
             return;
         }
-        var texto = clipboard.getData('text') || '';
+        var texto = textoPlanoPortapapeles(e);
+        if (e.target && e.target.id !== 'asiento_pegar_excel_texto'
+            && window.AsientoMontosFormato
+            && AsientoMontosFormato.pegarColumnaImportes(e.target, texto)) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
         if (texto.indexOf('\n') < 0 && texto.indexOf('\t') < 0) {
             return;
         }
@@ -39,6 +46,10 @@ $(function () {
         if (!$('#cuenta-table').length && !$('#modalAsientoPegarExcel').length) {
             return;
         }
+        // Excel copia el número y también una imagen de la celda. Si hay texto, ese texto manda.
+        if (textoPlanoPortapapeles(e)) {
+            return;
+        }
         var archivo = archivoImagenPortapapeles(e);
         if (!archivo) {
             return;
@@ -48,6 +59,20 @@ $(function () {
         decodificarPegadoAsiento('', true, archivo);
     }, true);
 });
+
+function textoPlanoPortapapeles(e) {
+    var clipboard = (e && e.clipboardData)
+        || (e && e.originalEvent && e.originalEvent.clipboardData)
+        || null;
+    if (!clipboard || !clipboard.getData) {
+        return '';
+    }
+    try {
+        return String(clipboard.getData('text/plain') || clipboard.getData('text') || '');
+    } catch (err) {
+        return '';
+    }
+}
 
 function archivoImagenPortapapeles(e) {
     var clipboard = (e && e.clipboardData)

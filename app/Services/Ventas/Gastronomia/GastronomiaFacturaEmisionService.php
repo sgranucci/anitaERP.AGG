@@ -1022,6 +1022,11 @@ final class GastronomiaFacturaEmisionService
             $resultado['waitry_display_id'] = $displayId;
             $mensaje .= ' Papelito monitor: '.$displayId.'.';
         }
+        $slot = trim((string) ($cuenta->waitry_slot ?? ''));
+        if ($slot !== '') {
+            $resultado['waitry_slot'] = $slot;
+            $mensaje .= ' Slot: '.$slot.'.';
+        }
 
         $waitryOrderId = (int) ($cuenta->waitry_order_id ?? 0);
 
