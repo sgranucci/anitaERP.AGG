@@ -1862,6 +1862,12 @@ Route::put('configuracion/recepcion-proveedor', 'Configuracion\ConfiguracionRece
 Route::post('configuracion/recepcion-proveedor/tolerancias', 'Configuracion\ConfiguracionRecepcionProveedorController@guardarTolerancias')->name('guardar_tolerancias_recepcion_proveedor');
 
 /*
+ * Kilos por artículo Surmar (remito, alta de producción y recepción, para SENASA)
+ */
+Route::get('stock/kilos-articulo-surmar', 'Stock\KilosArticuloSurmarController@index')->name('kilos_articulo_surmar');
+Route::get('stock/listar-kilos-articulo-surmar/{formato?}', 'Stock\KilosArticuloSurmarController@exportar')->name('listar_kilos_articulo_surmar');
+
+/*
  * Movimientos Surmar (entrada de menú; reutiliza ABM movimientos + piqueo etiquetas)
  */
 Route::get('stock/movimiento-surmar', 'Stock\MovimientoSurmarController@index')->name('movimiento_surmar');
