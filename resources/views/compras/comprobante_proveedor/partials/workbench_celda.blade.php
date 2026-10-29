@@ -70,8 +70,9 @@
     @case ('estado')
         @php
             $errorAnita = ($data->anita_sync_estado ?? '') === ComprobanteProveedorAnitaSyncEstado::ERROR;
+            $pendienteAnita = ($data->anita_sync_estado ?? '') === ComprobanteProveedorAnitaSyncEstado::PENDIENTE;
             $badgeEstado = ComprobanteProveedorEstados::badge($data->estado ?? '');
-            $badgeError = $errorAnita ? ComprobanteProveedorEstados::badge(null, true) : null;
+            $badgeError = $errorAnita ? ComprobanteProveedorEstados::badge($data->estado ?? '', true) : null;
         @endphp
         <td>
             <span class="{{ $badgeEstado['class'] }}">{{ $badgeEstado['label'] }}</span>
@@ -80,6 +81,8 @@
             @endif
             @if ($badgeError)
                 <span class="{{ $badgeError['class'] }}" title="{{ $data->anita_sync_error }}">{{ $badgeError['label'] }}</span>
+            @elseif ($pendienteAnita)
+                <span class="badge badge-warning ml-1" title="Se graba en Anita en el barrido de las 13 y las 16">Anita pendiente</span>
             @endif
         </td>
         @break

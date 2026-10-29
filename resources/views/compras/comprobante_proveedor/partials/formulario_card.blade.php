@@ -19,6 +19,22 @@
     $desdeIaErp = ! ($esEdicion ?? false)
         && \App\Support\Compras\PrecargaComprobanteOrigenEntrada::esLecturaIa($origenPrecarga);
     $pideCuentaGastoIa = $desdeIaErp && (int) ($data->ordencompra_id ?? 0) <= 0;
+    $anitaEnLinea = \App\Support\Compras\ComprobanteProveedorAnitaBridgeGate::grabacionEnLineaHabilitada();
+    $horasBridge = config('comprobante_proveedor_anita.sync_bridge.horas', ['13:00', '16:00']);
+    if (! is_array($horasBridge) || $horasBridge === []) {
+        $horasBridge = ['13:00', '16:00'];
+    }
+    $textoHorasBridge = implode(' y ', $horasBridge);
+    $textoConfirmContabilizar = $anitaEnLinea
+        ? '¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.'
+        : '¿Confirmar / contabilizar el comprobante? Genera asiento y cuenta corriente. Anita se graba a las '.$textoHorasBridge.'.';
+    $textoConfirmGuardarYContabilizar = $anitaEnLinea
+        ? '¿Guardar y contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.'
+        : '¿Guardar y contabilizar el comprobante? Genera asiento y cuenta corriente. Anita se graba a las '.$textoHorasBridge.'.';
+    $textoConfirmActualizarContabilizado = $anitaEnLinea
+        ? 'El comprobante está contabilizado. Al guardar se regenerará el asiento, la cuenta corriente y Anita. ¿Continuar?'
+        : 'El comprobante está contabilizado. Al guardar se regenera el asiento y la cuenta corriente. Si ya estaba en Anita se borra ahora y se vuelve a grabar a las '.$textoHorasBridge.'. ¿Continuar?';
+    $syncAnita = (string) (isset($data) ? ($data->anita_sync_estado ?? '') : '');
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -52,8 +68,16 @@
                             $badgeEstadoForm = \App\Support\Compras\ComprobanteProveedorEstados::badge($data->estado ?? '');
                         @endphp
                         <span class="{{ $badgeEstadoForm['class'] }} ml-2">{{ $badgeEstadoForm['label'] }}</span>
-                        @if (($data->anita_sync_estado ?? '') === \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::ERROR)
-                        <span class="badge badge-danger ml-1" title="{{ $data->anita_sync_error }}">No se contabilizó</span>
+                        @if ($syncAnita === \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::ERROR)
+                        <span class="badge badge-danger ml-1" title="{{ $data->anita_sync_error }}">
+                            @if (($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
+                                Error Anita
+                            @else
+                                No se contabilizó
+                            @endif
+                        </span>
+                        @elseif ($syncAnita === \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::PENDIENTE)
+                        <span class="badge badge-warning ml-1" title="Se graba en Anita a las {{ $textoHorasBridge }}">Anita pendiente</span>
                         @endif
                     @else
                         Nuevo comprobante de proveedor
@@ -64,13 +88,13 @@
                         @if ($esEdicion)
                         <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
                             class="btn btn-warning btn-sm js-cp-contabilizar"
-                            onclick="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            onclick="return confirm(@json($textoConfirmContabilizar));">
                             <i class="fa fa-check"></i> Contabilizar
                         </button>
                         @else
                         <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
                             class="btn btn-warning btn-sm js-cp-contabilizar"
-                            onclick="return confirm('¿Guardar y contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            onclick="return confirm(@json($textoConfirmGuardarYContabilizar));">
                             <i class="fa fa-check"></i> Contabilizar
                         </button>
                         @endif
@@ -414,7 +438,14 @@
                         @if ($data->anita_nro_interno)
                             · Anita nro interno {{ $data->anita_nro_interno }}
                         @endif
-                        · Al actualizar se regenerará asiento, cuenta corriente y sync Anita.
+                        @if ($syncAnita === \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::PENDIENTE)
+                            · Anita pendiente: se graba a las {{ $textoHorasBridge }}.
+                        @endif
+                        @if ($anitaEnLinea)
+                            · Al actualizar se regenerará asiento, cuenta corriente y sync Anita.
+                        @else
+                            · Al actualizar se regenera el asiento y la cuenta corriente. Anita queda para el barrido de las {{ $textoHorasBridge }}.
+                        @endif
                     </div>
                 @endif
 
@@ -434,13 +465,13 @@
                     <div class="col-lg-6 d-flex flex-wrap align-items-center">
                         <button type="submit" form="form-comprobante-proveedor" class="btn botonsubmit btn-success mr-2 mb-1"
                             @if (($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
-                            onclick="return confirm('El comprobante está contabilizado. Al guardar se regenerará el asiento, la cuenta corriente y Anita. ¿Continuar?');"
+                            onclick="return confirm(@json($textoConfirmActualizarContabilizado));"
                             @endif
                         >Actualizar</button>
                         @if ($mostrarContabilizar)
                         <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
                             class="btn btn-primary mb-1"
-                            onclick="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            onclick="return confirm(@json($textoConfirmContabilizar));">
                             <i class="fa fa-check"></i> Contabilizar
                         </button>
                         @endif
@@ -454,7 +485,7 @@
                         @if ($mostrarContabilizar)
                         <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
                             class="btn btn-primary mb-1"
-                            onclick="return confirm('¿Guardar y contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            onclick="return confirm(@json($textoConfirmGuardarYContabilizar));">
                             <i class="fa fa-check"></i> Contabilizar
                         </button>
                         @endif
@@ -465,7 +496,7 @@
                     <div class="col-lg-3"></div>
                     <div class="col-lg-6">
                         <form action="{{ $rutaContabilizar }}" method="POST" class="d-inline"
-                            onsubmit="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            onsubmit="return confirm(@json($textoConfirmContabilizar));">
                             @csrf
                             <button type="submit" class="btn btn-primary">
                                 <i class="fa fa-check"></i> Contabilizar

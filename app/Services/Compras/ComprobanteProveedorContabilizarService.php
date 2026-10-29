@@ -302,7 +302,8 @@ class ComprobanteProveedorContabilizarService
         // Antes de asentar ERP: si Anita ya tiene la misma clave fiscal, no confirmar.
         ComprobanteProveedorAnitaCompraExistenciaSupport::assertDesdeComprobante($comprobante);
 
-        $escribeAnita = $this->anitaEscrituraHabilitada();
+        $escribeAnita = ComprobanteProveedorAnitaBridgeGate::grabacionEnLineaHabilitada();
+        $diferirAnita = $this->anitaEscrituraHabilitada() && ! $escribeAnita;
 
         // Limpia ctamov huérfanos de intentos previos (mismo patrón que recepción COM).
         if ($escribeAnita) {
@@ -314,7 +315,7 @@ class ComprobanteProveedorContabilizarService
         $ctamovEscrito = false;
 
         try {
-            $resultadoErp = DB::transaction(function () use ($comprobanteId) {
+            $resultadoErp = DB::transaction(function () use ($comprobanteId, $diferirAnita) {
                 // Releer con candado de fila: el segundo request que llegó acá espera y,
                 // al despertar, ve CONTABILIZADO y aborta antes de generar otro asiento.
                 $comprobante = Comprobante_Proveedor::query()
@@ -347,7 +348,8 @@ class ComprobanteProveedorContabilizarService
                     'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
                     'usuario_id' => Auth::id(),
                     'observacion' => 'Contabilizado en ERP (asiento #'.$asientoErp['asiento_id']
-                        .' / Anita '.$asientoErp['numeroasiento'].')',
+                        .' / Anita '.$asientoErp['numeroasiento'].')'
+                        .($diferirAnita ? '. Bridge Anita pendiente del barrido programado.' : ''),
                 ]);
 
                 return $asientoErp;
@@ -358,7 +360,9 @@ class ComprobanteProveedorContabilizarService
 
             if (! $escribeAnita) {
                 $comprobante->forceFill([
-                    'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::OMITIDO,
+                    'anita_sync_estado' => $diferirAnita
+                        ? ComprobanteProveedorAnitaSyncEstado::PENDIENTE
+                        : ComprobanteProveedorAnitaSyncEstado::OMITIDO,
                     'anita_sync_error' => null,
                     'anita_sync_at' => now(),
                 ])->save();
@@ -567,23 +571,19 @@ class ComprobanteProveedorContabilizarService
         $comprobante->refresh();
         $comprobante->loadMissing(['asientos', 'proveedores', 'tipotransaccion_compras']);
 
-        $asientoId = (int) ($comprobante->asiento_id ?? 0);
         $numeroAsiento = $comprobante->asientos
             ? (string) ($comprobante->asientos->numeroasiento ?? '')
             : '';
         $anitaNro = (int) ($comprobante->anita_nro_interno ?? 0);
 
-        if ($this->anitaEscrituraHabilitada()) {
+        // Sin nro interno la factura todavía no salió al bridge (pendiente del barrido).
+        if ($this->anitaEscrituraHabilitada() && $anitaNro > 0) {
             try {
-                if ($asientoId > 0 || $anitaNro > 0) {
-                    $this->asientoService->eliminarCtamovAnitaDeComprobante(
-                        $comprobante,
-                        $numeroAsiento !== '' ? $numeroAsiento : null
-                    );
-                }
-                if ($anitaNro > 0) {
-                    $this->anitaSyncService->syncDelete($comprobante);
-                }
+                $this->asientoService->eliminarCtamovAnitaDeComprobante(
+                    $comprobante,
+                    $numeroAsiento !== '' ? $numeroAsiento : null
+                );
+                $this->anitaSyncService->syncDelete($comprobante);
             } catch (Throwable $e) {
                 Log::error('comprobante_proveedor.descontabilizar_anita_fallo', [
                     'comprobante_id' => $comprobanteId,

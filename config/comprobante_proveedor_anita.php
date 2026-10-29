@@ -7,6 +7,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Grabación en el momento de contabilizar. Solo Crown consulta este flag.
+    | En AGG y el resto la factura se graba en Anita al contabilizar.
+    | false en Crown: el ERP asienta y el cron de las 13 y 16 manda al bridge.
+    |--------------------------------------------------------------------------
+    */
+    'grabacion_en_linea' => filter_var(
+        env('COMPROBANTE_PROVEEDOR_ANITA_GRABACION_EN_LINEA', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Barrido ERP → bridge. Solo se agenda en Crown.
+    | Horas separadas por coma, formato HH:MM. Default 13:00 y 16:00.
+    |--------------------------------------------------------------------------
+    */
+    'sync_bridge' => [
+        'habilitada' => filter_var(env('COMPROBANTE_PROVEEDOR_ANITA_SYNC_BRIDGE_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'horas' => array_values(array_filter(array_map(
+            static fn (string $hora): string => trim($hora),
+            explode(',', (string) env('COMPROBANTE_PROVEEDOR_ANITA_SYNC_BRIDGE_HORAS', '13:00,16:00'))
+        ), static fn (string $hora): bool => preg_match('/^\d{1,2}:\d{2}$/', $hora) === 1)),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Auditoría diaria tablas Anita (compra, concmov, promov, aplicped, ctamov)
     |--------------------------------------------------------------------------
     */

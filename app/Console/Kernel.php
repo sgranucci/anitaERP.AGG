@@ -2,6 +2,7 @@
 
 namespace App\Console;
 
+use App\Support\Compras\ComprobanteProveedorAnitaBridgeGate;
 use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\PercepcionIibbJurisdiccionEntregaSupport;
@@ -434,6 +435,19 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(180)
             ->appendOutputTo(storage_path('logs/comprobante-proveedor-anita-auditoria-schedule.log'))
             ->when(fn () => (bool) config('comprobante_proveedor_anita.auditoria_diaria.habilitada', true));
+
+        $horasSyncBridge = config('comprobante_proveedor_anita.sync_bridge.horas', ['13:00', '16:00']);
+        if (! is_array($horasSyncBridge) || $horasSyncBridge === []) {
+            $horasSyncBridge = ['13:00', '16:00'];
+        }
+        foreach ($horasSyncBridge as $horaSyncBridge) {
+            $schedule->command('comprobante-proveedor:sincronizar-bridge')
+                ->dailyAt((string) $horaSyncBridge)
+                ->runInBackground()
+                ->withoutOverlapping(180)
+                ->appendOutputTo(storage_path('logs/comprobante-proveedor-sincronizar-bridge-schedule.log'))
+                ->when(fn () => ComprobanteProveedorAnitaBridgeGate::syncBridgeProgramadoHabilitado());
+        }
 
         $ventanaAuditoriaOp = max(1, (int) config('pagoproveedor.auditoria_diaria.ventana_dias', 7));
         $schedule->command('pagoproveedor:auditoria-anita-diaria', [

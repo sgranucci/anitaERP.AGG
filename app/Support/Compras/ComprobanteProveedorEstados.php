@@ -82,9 +82,11 @@ final class ComprobanteProveedorEstados
     public static function badge(?string $estado, bool $errorAnita = false): array
     {
         if ($errorAnita) {
+            $contabilizado = strtoupper(trim((string) $estado)) === self::CONTABILIZADO;
+
             return [
                 'class' => 'badge badge-danger',
-                'label' => 'No se contabilizó',
+                'label' => $contabilizado ? 'Error Anita' : 'No se contabilizó',
             ];
         }
 
