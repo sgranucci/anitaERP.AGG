@@ -27,6 +27,7 @@
                     <p class="text-muted small mb-3">
                         Ventas facturadas en gastronom&iacute;a por art&iacute;culo de venta (excluye insumos
                         <em>INSUMO GASTRONOMIA</em>): externas, invitaciones y staff seg&uacute;n tipo consumo del descuento.
+                        La nota de cr&eacute;dito resta la cantidad y el importe.
                         P.Vta. lista {{ (int) config('precio.listaprecio_default_id', 1) }};
                         costo lista {{ (int) config('gastronomia.informe_gerente_costo_lista_base', 5000) }} + mes.
                     </p>
@@ -58,6 +59,10 @@
                             <input type="hidden" name="consultar" value="1">
                             <button type="submit" class="btn btn-primary btn-sm">
                                 <i class="fa fa-search"></i> Consultar
+                            </button>
+                            <button type="submit" class="btn btn-outline-primary btn-sm"
+                                formaction="{{ route('gastronomia_ventas_articulos_conciliacion') }}">
+                                <i class="fa fa-balance-scale"></i> Conciliar con contabilidad
                             </button>
                         </div>
                     </div>

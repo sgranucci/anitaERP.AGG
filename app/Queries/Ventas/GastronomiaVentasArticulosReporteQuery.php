@@ -9,6 +9,9 @@ use App\Support\Ventas\GastronomiaVentaComprobanteSignoSupport;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Cantidad e importe salen con el signo del comprobante: la factura suma y la nota de crédito resta.
+ */
 final class GastronomiaVentasArticulosReporteQuery
 {
     private static function cantidadExpr(): string
@@ -57,13 +60,13 @@ final class GastronomiaVentasArticulosReporteQuery
                 'a.sku',
                 'a.descripcion',
             ])
-            ->selectRaw("SUM(ABS({$cantidad})) as cant_total")
-            ->selectRaw("SUM(CASE WHEN ({$tipoVenta}) = 'externa' THEN ABS({$cantidad}) ELSE 0 END) as cant_externa")
-            ->selectRaw("SUM(CASE WHEN ({$tipoVenta}) = 'externa' THEN ABS({$importe}) ELSE 0 END) as importe_externa")
-            ->selectRaw("SUM(CASE WHEN ({$tipoVenta}) = 'invitacion' THEN ABS({$cantidad}) ELSE 0 END) as cant_invitacion")
-            ->selectRaw("SUM(CASE WHEN ({$tipoVenta}) = 'staff' THEN ABS({$cantidad}) ELSE 0 END) as cant_staff")
+            ->selectRaw("SUM({$cantidad}) as cant_total")
+            ->selectRaw("SUM(CASE WHEN ({$tipoVenta}) = 'externa' THEN ({$cantidad}) ELSE 0 END) as cant_externa")
+            ->selectRaw("SUM(CASE WHEN ({$tipoVenta}) = 'externa' THEN ({$importe}) ELSE 0 END) as importe_externa")
+            ->selectRaw("SUM(CASE WHEN ({$tipoVenta}) = 'invitacion' THEN ({$cantidad}) ELSE 0 END) as cant_invitacion")
+            ->selectRaw("SUM(CASE WHEN ({$tipoVenta}) = 'staff' THEN ({$cantidad}) ELSE 0 END) as cant_staff")
             ->groupBy('ve.articulo_id', 'a.sku', 'a.descripcion')
-            ->havingRaw("SUM(ABS({$cantidad})) > 0.0001")
+            ->havingRaw("ABS(SUM({$cantidad})) > 0.0001")
             ->orderBy('a.sku')
             ->get();
 
@@ -96,8 +99,7 @@ final class GastronomiaVentasArticulosReporteQuery
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
             ->leftJoin('cuenta_gastronomia as cg', 'cg.id', '=', 'vge.cuenta_gastronomia_id')
-            ->leftJoin('descuento_gastronomia as dg', 'dg.id', '=', 'cg.descuento_gastronomia_id')
-            ->whereNull('vge.venta_factura_origen_id');
+            ->leftJoin('descuento_gastronomia as dg', 'dg.id', '=', 'cg.descuento_gastronomia_id');
 
         $this->aplicarExclusionInsumosYDescartables($query);
 

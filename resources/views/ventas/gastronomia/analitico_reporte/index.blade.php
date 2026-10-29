@@ -52,7 +52,7 @@
                             @endif
                         </p>
                         <p class="mb-0 small text-muted">
-                            Datos desde anitaERP (venta / emisi&oacute;n gastronom&iacute;a). Costo lista 5000+mes.
+                            Datos desde anitaERP (venta / emisión gastronomía). El costo es el último precio de la lista 5000+mes vigente al cierre del período.
                             Legajo mozo = c&oacute;digo del mozo.
                             Art&iacute;culos a precio 0 por opcionales de promo o invitaci&oacute;n se aclaran en
                             <strong>Obs. precio 0</strong>.

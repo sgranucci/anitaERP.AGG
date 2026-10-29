@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Ventas;
 use App\Exports\Ventas\GastronomiaVentasArticulosReporteExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Ventas\GastronomiaVentasArticulosConciliacionService;
 use App\Services\Ventas\GastronomiaVentasArticulosReporteService;
 use App\Support\Ventas\GastronomiaVentasArticulosReporteFiltros;
 use Carbon\Carbon;
@@ -20,6 +21,7 @@ class GastronomiaVentasArticulosReporteController extends Controller
 
     public function __construct(
         private readonly GastronomiaVentasArticulosReporteService $reporteService,
+        private readonly GastronomiaVentasArticulosConciliacionService $conciliacionService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {
         $this->middleware('auth');
@@ -77,6 +79,41 @@ class GastronomiaVentasArticulosReporteController extends Controller
             'periodo_texto' => GastronomiaVentasArticulosReporteFiltros::formatearPeriodoTexto($filtros),
             'empresa_texto' => $this->etiquetaEmpresa((int) ($filtros['empresa_id'] ?? 0), $empresaQuery),
             'puede_ver_articulo' => can('editar-articulos', false) || can('listar-articulos', false),
+        ]);
+    }
+
+    public function conciliacion(Request $request)
+    {
+        $this->assertAccesoMenu();
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $filtros = GastronomiaVentasArticulosReporteFiltros::resolverDesdeRequest($request);
+        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaQuery);
+        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
+
+        $consultado = $request->boolean('consultar')
+            && GastronomiaVentasArticulosReporteFiltros::tieneCriteriosAplicados($filtros);
+
+        $resultado = null;
+        if ($consultado) {
+            ini_set('memory_limit', '-1');
+            ini_set('max_execution_time', '0');
+            $resultado = $this->conciliacionService->generar($filtros);
+        }
+
+        $filtrosQuery = GastronomiaVentasArticulosReporteFiltros::paraQueryString($filtros);
+        if ($consultado) {
+            $filtrosQuery['consultar'] = 1;
+        }
+
+        return view('ventas.gastronomia.ventas_articulos_reporte.conciliacion', [
+            'empresa_query' => $empresaQuery,
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'consultado' => $consultado,
+            'resultado' => $resultado,
+            'periodo_texto' => GastronomiaVentasArticulosReporteFiltros::formatearPeriodoTexto($filtros),
+            'empresa_texto' => $this->etiquetaEmpresa((int) ($filtros['empresa_id'] ?? 0), $empresaQuery),
         ]);
     }
 

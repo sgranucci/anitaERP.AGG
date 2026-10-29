@@ -55,8 +55,8 @@ final class GastronomiaAnaliticoReporteService
             $fechaCostoDefault,
         );
 
-        $mapear = function (object $row) use (&$cacheCosto, &$cacheListaMes, $listaCostoId, $fechaCostoDefault): object {
-            return $this->enriquecerFila($row, $cacheCosto, $cacheListaMes, $listaCostoId, $fechaCostoDefault);
+        $mapear = function (object $row) use (&$cacheCosto, $listaCostoId, $fechaCostoDefault): object {
+            return $this->enriquecerFila($row, $cacheCosto, $listaCostoId, $fechaCostoDefault);
         };
 
         if ($filasRaw instanceof LengthAwarePaginator) {
@@ -120,8 +120,8 @@ final class GastronomiaAnaliticoReporteService
     }
 
     /**
-     * Carga en una sola query los precios de lista necesarios y arma el cache
-     * articulo|lista|fecha (misma semántica que PrecioService::asignaPrecioPorLista).
+     * Un solo costo para todo el período: el último precio de la lista 5000+mes
+     * vigente al cierre (fecha hasta). No el de cada día de venta.
      *
      * @param  Collection<int, object>  $filas
      * @param  array<string, float>  $cacheCosto
@@ -133,7 +133,21 @@ final class GastronomiaAnaliticoReporteService
         array &$cacheListaMes,
         string $fechaCostoDefault,
     ): void {
-        if ($filas->isEmpty()) {
+        if ($filas->isEmpty() || $fechaCostoDefault === '') {
+            return;
+        }
+
+        try {
+            $mesKey = Carbon::parse($fechaCostoDefault)->format('Y-m');
+        } catch (\Throwable) {
+            return;
+        }
+        if (! array_key_exists($mesKey, $cacheListaMes)) {
+            $listas = GastronomiaInformeGerenteCostoListaSupport::listasDesdeFechaJornada($fechaCostoDefault);
+            $cacheListaMes[$mesKey] = $this->resolverListaprecioId((string) $listas['lista_actual']);
+        }
+        $listaId = $cacheListaMes[$mesKey];
+        if ($listaId === null) {
             return;
         }
 
@@ -148,32 +162,12 @@ final class GastronomiaAnaliticoReporteService
                 continue;
             }
 
-            $fechaJornada = $this->ymd($row->fechajornada ?? null);
-            $fechaCosto = $fechaJornada !== '' ? $fechaJornada : $fechaCostoDefault;
-            if ($fechaCosto === '') {
-                continue;
-            }
-
-            try {
-                $mesKey = Carbon::parse($fechaCosto)->format('Y-m');
-            } catch (\Throwable) {
-                continue;
-            }
-            if (! array_key_exists($mesKey, $cacheListaMes)) {
-                $listas = GastronomiaInformeGerenteCostoListaSupport::listasDesdeFechaJornada($fechaCosto);
-                $cacheListaMes[$mesKey] = $this->resolverListaprecioId((string) $listas['lista_actual']);
-            }
-            $listaId = $cacheListaMes[$mesKey];
-            if ($listaId === null) {
-                continue;
-            }
-
             $articuloIds[$articuloId] = true;
-            $key = $articuloId.'|'.$listaId.'|'.$fechaCosto;
+            $key = $articuloId.'|'.$listaId.'|'.$fechaCostoDefault;
             $claves[$key] = [
                 'articulo_id' => $articuloId,
                 'lista_id' => $listaId,
-                'fecha' => $fechaCosto,
+                'fecha' => $fechaCostoDefault,
             ];
         }
 
@@ -193,6 +187,7 @@ final class GastronomiaAnaliticoReporteService
             ->whereIn('articulo_id', array_keys($articuloIds))
             ->whereIn('listaprecio_id', $listaIds)
             ->orderBy('fechavigencia')
+            ->orderBy('id')
             ->get()
             ->each(function ($precio) use (&$porArticuloLista): void {
                 $grupo = ((int) $precio->articulo_id).'|'.((int) $precio->listaprecio_id);
@@ -217,12 +212,10 @@ final class GastronomiaAnaliticoReporteService
 
     /**
      * @param  array<string, float>  $cacheCosto
-     * @param  array<string, int|null>  $cacheListaMes
      */
     private function enriquecerFila(
         object $row,
         array &$cacheCosto,
-        array &$cacheListaMes,
         ?int $listaCostoIdDefault,
         string $fechaCostoDefault,
     ): object {
@@ -256,21 +249,10 @@ final class GastronomiaAnaliticoReporteService
         $precio = round((float) ($row->precio_unitario ?? 0), 2);
         $total = round((float) ($row->total ?? 0), 2);
 
-        $listaId = $listaCostoIdDefault;
-        $fechaCosto = $fechaJornada !== '' ? $fechaJornada : $fechaCostoDefault;
-        if ($fechaCosto !== '') {
-            $mesKey = Carbon::parse($fechaCosto)->format('Y-m');
-            if (! array_key_exists($mesKey, $cacheListaMes)) {
-                $listas = GastronomiaInformeGerenteCostoListaSupport::listasDesdeFechaJornada($fechaCosto);
-                $cacheListaMes[$mesKey] = $this->resolverListaprecioId((string) $listas['lista_actual']);
-            }
-            $listaId = $cacheListaMes[$mesKey];
-        }
-
         $costoUnit = $this->resolverPrecioUnitario(
             (int) ($row->articulo_id ?? 0),
-            $listaId,
-            $fechaCosto,
+            $listaCostoIdDefault,
+            $fechaCostoDefault,
             $cacheCosto,
         );
         $costo = round(abs($cantidad) * $costoUnit * ($cantidad < 0 ? -1 : 1), 2);

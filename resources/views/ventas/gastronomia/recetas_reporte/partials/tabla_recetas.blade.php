@@ -7,7 +7,8 @@
         <th>Categoría</th>
         <th>Subcategoría</th>
         <th class="text-right">Porciones</th>
-        <th class="text-right">Costo</th>
+        <th class="text-right">Costo porción</th>
+        <th class="text-right">Costo lote</th>
         <th class="text-right">Precio</th>
         <th class="text-right">Precio / costo</th>
         <th class="text-right">Líneas</th>
@@ -37,6 +38,7 @@
             <td>{{ $fila['subcategoria'] }}</td>
             <td class="text-right">{{ number_format((float) $fila['porciones'], 2, ',', '.') }}</td>
             <td class="text-right">{{ number_format((float) $fila['costo'], 2, ',', '.') }}</td>
+            <td class="text-right">{{ number_format((float) ($fila['costo_lote'] ?? 0), 2, ',', '.') }}</td>
             <td class="text-right">{{ number_format((float) $fila['precio'], 2, ',', '.') }}</td>
             <td class="text-right">{{ $fila['ratio'] === null ? '—' : number_format((float) $fila['ratio'], 2, ',', '.') }}</td>
             <td class="text-right">{{ (int) $fila['lineas'] }}</td>
@@ -49,7 +51,7 @@
         </tr>
     @empty
         <tr>
-            <td colspan="12" class="text-center text-muted">No hay recetas para los filtros elegidos.</td>
+            <td colspan="13" class="text-center text-muted">No hay recetas para los filtros elegidos.</td>
         </tr>
     @endforelse
 </tbody>

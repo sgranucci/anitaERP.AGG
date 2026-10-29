@@ -108,9 +108,10 @@
                                 <option value="saldo" @selected(($origen_inventario ?? '') === 'saldo')>Saldo vigente</option>
                             </select>
                             <small class="form-text text-muted">
+                                El mes de arriba es solo para los descuentos. El inventario usa esta fecha.
                                 Saldo vigente es la existencia del sistema a la fecha de cierre.
-                                Recuento: los cerrados de ese d&iacute;a. Si no hay, los del d&iacute;a siguiente
-                                (el 30/09/2026 toma el 1/10, RC-000160, y no un recuento posterior como el RC-000180 del 20/10).
+                                &Uacute;ltimo recuento: de cada dep&oacute;sito, el cerrado m&aacute;s reciente hasta el d&iacute;a siguiente
+                                (el 30/09 toma el 1/10, RC-000160, y no uno posterior como el RC-000180 del 20/10).
                                 Si ese d&iacute;a hay varios, entran todos. El Excel dice cu&aacute;l us&oacute;.
                             </small>
                         </div>

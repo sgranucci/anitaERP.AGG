@@ -7,9 +7,10 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Recuentos cerrados del inventario de contaduría.
- * Usa los del día de cierre. Si ese día no hay, los del día siguiente
- * (el cierre del 30 se cuenta el 1). No salta a un recuento posterior.
+ * Último recuento cerrado de cada depósito para el inventario de contaduría.
+ * La fecha pedida es el corte: entra el más reciente con fecha hasta el día
+ * siguiente (el cierre del 30 se cuenta el 1). No salta a uno posterior.
+ * Si ese día hay varios, entran todos. El mes del listado no interviene.
  */
 final class ContaduriaInventarioRecuentoSupport
 {
@@ -32,7 +33,6 @@ final class ContaduriaInventarioRecuentoSupport
         }
 
         $cierre = Carbon::parse($fechaHasta)->startOfDay();
-        $fechaCierre = $cierre->format('Y-m-d');
         $fechaSiguiente = $cierre->copy()->addDay()->format('Y-m-d');
 
         $recuentos = Recuento::query()
@@ -63,21 +63,12 @@ final class ContaduriaInventarioRecuentoSupport
         $fechaPorDeposito = [];
         $elegidos = [];
         foreach ($porFecha as $depositoId => $fechas) {
-            if (isset($fechas[$fechaCierre])) {
-                $fechaElegida = $fechaCierre;
-            } elseif (isset($fechas[$fechaSiguiente])) {
-                $fechaElegida = $fechaSiguiente;
-            } else {
-                $anteriores = array_values(array_filter(
-                    array_keys($fechas),
-                    static fn (string $fecha) => $fecha <= $fechaCierre,
-                ));
-                if ($anteriores === []) {
-                    continue;
-                }
-                rsort($anteriores);
-                $fechaElegida = $anteriores[0];
+            $candidatas = array_keys($fechas);
+            if ($candidatas === []) {
+                continue;
             }
+            rsort($candidatas);
+            $fechaElegida = $candidatas[0];
             $fechaPorDeposito[$depositoId] = $fechaElegida;
             $elegidos[$depositoId] = $fechas[$fechaElegida];
         }

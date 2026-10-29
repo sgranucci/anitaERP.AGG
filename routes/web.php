@@ -2611,6 +2611,7 @@ Route::get('ventas/listar-gastronomia-descuento-reporte/{formato}', 'Ventas\Gast
 Route::get('ventas/gastronomia/recetas-reporte', 'Ventas\GastronomiaRecetasReporteController@index')->name('gastronomia_recetas_reporte')->middleware('modo.consulta');
 Route::get('ventas/listar-gastronomia-recetas-reporte/{formato}', 'Ventas\GastronomiaRecetasReporteController@exportar')->name('listar_gastronomia_recetas_reporte');
 Route::get('ventas/gastronomia/ventas-articulos-reporte', 'Ventas\GastronomiaVentasArticulosReporteController@index')->name('gastronomia_ventas_articulos_reporte')->middleware('modo.consulta');
+Route::get('ventas/gastronomia/ventas-articulos-reporte/conciliacion', 'Ventas\GastronomiaVentasArticulosReporteController@conciliacion')->name('gastronomia_ventas_articulos_conciliacion')->middleware('modo.consulta');
 Route::get('ventas/listar-gastronomia-ventas-articulos-reporte/{formato}', 'Ventas\GastronomiaVentasArticulosReporteController@exportar')->name('listar_gastronomia_ventas_articulos_reporte');
 Route::get('ventas/gastronomia/venta-hora-reporte', 'Ventas\GastronomiaVentaHoraReporteController@index')->name('gastronomia_venta_hora_reporte')->middleware('modo.consulta');
 Route::get('ventas/listar-gastronomia-venta-hora-reporte/{formato}', 'Ventas\GastronomiaVentaHoraReporteController@exportar')->name('listar_gastronomia_venta_hora_reporte');

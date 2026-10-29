@@ -152,6 +152,7 @@ class GastronomiaRecetasReporteController extends Controller
                 $fila['subcategoria'],
                 (float) $fila['porciones'],
                 (float) $fila['costo'],
+                (float) ($fila['costo_lote'] ?? 0),
                 (float) $fila['precio'],
                 $fila['ratio'] === null ? null : (float) $fila['ratio'],
                 (int) $fila['lineas'],
@@ -162,9 +163,9 @@ class GastronomiaRecetasReporteController extends Controller
 
         return (new GastronomiaRecetasReporteHojaExport(
             'Recetas',
-            ['Código', 'Receta', 'SKU venta', 'Estado artículo', 'Categoría', 'Subcategoría', 'Porciones', 'Costo', 'Precio vta', 'Precio / costo', 'Líneas', 'Alerta', 'Cant. alertas'],
+            ['Código', 'Receta', 'SKU venta', 'Estado artículo', 'Categoría', 'Subcategoría', 'Porciones', 'Costo porción', 'Costo lote', 'Precio vta', 'Precio / costo', 'Líneas', 'Alerta', 'Cant. alertas'],
             $filas,
-            ['G' => 2, 'H' => 2, 'I' => 2, 'J' => 2, 'K' => 0, 'M' => 0],
+            ['G' => 2, 'H' => 2, 'I' => 2, 'J' => 2, 'K' => 2, 'L' => 0, 'N' => 0],
         ))->download('recetas_gastronomia.csv', Excel::CSV);
     }
 

@@ -30,7 +30,8 @@
                 <th>Categoría</th>
                 <th>Subcategoría</th>
                 <th class="text-right">Porc.</th>
-                <th class="text-right">Costo</th>
+                <th class="text-right">Costo porción</th>
+                <th class="text-right">Costo lote</th>
                 <th class="text-right">Precio</th>
                 <th class="text-right">P/C</th>
                 <th>Alerta</th>
@@ -46,6 +47,7 @@
                     <td>{{ $fila['subcategoria'] }}</td>
                     <td class="text-right">{{ number_format((float) $fila['porciones'], 2, ',', '.') }}</td>
                     <td class="text-right">{{ number_format((float) $fila['costo'], 2, ',', '.') }}</td>
+                    <td class="text-right">{{ number_format((float) ($fila['costo_lote'] ?? 0), 2, ',', '.') }}</td>
                     <td class="text-right">{{ number_format((float) $fila['precio'], 2, ',', '.') }}</td>
                     <td class="text-right">{{ $fila['ratio'] === null ? '' : number_format((float) $fila['ratio'], 2, ',', '.') }}</td>
                     <td>{{ $fila['alerta'] ?? '' }}</td>

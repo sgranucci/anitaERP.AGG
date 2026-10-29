@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Reporte de recetas: costo por última compra, precio de venta del artículo asignado
- * y alertas que se pueden calcular (sin precio, costo en cero, insumo sin costo, nombre duplicado).
+ * Reporte de recetas: costo por última compra, expresado por porción para compararlo
+ * con el precio de venta del artículo, y alertas (sin precio, costo en cero, insumo sin costo, nombre duplicado).
  */
 final class GastronomiaRecetasReporteService
 {
@@ -140,8 +140,9 @@ final class GastronomiaRecetasReporteService
                     'costo_unitario' => $linea['costo_unitario'],
                     'costo_linea' => $linea['costo_linea'],
                     'entra_costo' => $linea['entra_costo'],
-                    'precio' => $receta['precio'],
-                    'porciones' => $receta['porciones'],
+                    'precio' => $primera ? $receta['precio'] : null,
+                    'porciones' => $primera ? $receta['porciones'] : null,
+                    'costo_porcion' => $primera ? $receta['costo'] : null,
                     'es_total' => false,
                 ];
                 if ($linea['entra_costo'] === 'Sí') {
@@ -165,6 +166,7 @@ final class GastronomiaRecetasReporteService
                 'entra_costo' => '',
                 'precio' => $receta['precio'],
                 'porciones' => $receta['porciones'],
+                'costo_porcion' => $receta['costo'],
                 'es_total' => true,
             ];
         }
@@ -555,7 +557,8 @@ final class GastronomiaRecetasReporteService
         if ($porciones <= 0) {
             $porciones = 1.0;
         }
-        $costo = (float) ($this->costoFormula[$formulaId] ?? 0);
+        $costoLote = (float) ($this->costoFormula[$formulaId] ?? 0);
+        $costo = $costoLote / $porciones;
         $precio = $articulo === null ? 0.0 : (float) ($articulo['precio'] ?? 0);
         $codigoNum = (int) $formula['anita'];
         if ($codigoNum <= 0 && $formula['codigo'] !== '' && ctype_digit((string) $formula['codigo'])) {
@@ -628,6 +631,7 @@ final class GastronomiaRecetasReporteService
                 'precio' => $precio,
                 'porciones' => $porciones,
                 'costo_receta' => $costo,
+                'costo_lote' => $costoLote,
             ];
         }
 
@@ -658,13 +662,6 @@ final class GastronomiaRecetasReporteService
         if ($articulo !== null && $precio <= 0) {
             $alertas[] = $this->alerta('Baja', 'Sin precio de venta', 'El artículo de venta asignado no tiene precio vigente en la lista.');
         }
-        if ($porciones > 1 && $precio > 0) {
-            $alertas[] = $this->alerta(
-                'Baja',
-                'Precio con porciones > 1',
-                'La receta rinde '.$this->numero($porciones).' porciones y el precio es el del artículo, sin prorratear.',
-            );
-        }
 
         $receta = [
             'formula_id' => $formulaId,
@@ -678,6 +675,7 @@ final class GastronomiaRecetasReporteService
             'subcategoria' => $subcategoria,
             'porciones' => $porciones,
             'costo' => $costo,
+            'costo_lote' => $costoLote,
             'precio' => $precio,
             'ratio' => ($costo > 0 && $precio > 0) ? $precio / $costo : null,
             'lineas' => count($lineas),

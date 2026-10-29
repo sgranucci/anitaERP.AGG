@@ -36,7 +36,7 @@
             <form method="get" action="{{ route('gastronomia_recetas_reporte') }}" class="mb-0">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        Costo por última compra de cada insumo y de las subrecetas.
+                        El costo porción es el del lote (última compra de cada insumo y de las subrecetas) dividido por las porciones que rinde la receta, para compararlo con el precio de una unidad.
                         El precio es el vigente del artículo de venta en la lista {{ (int) config('precio.listaprecio_default_id', 1) }}.
                         La receta entra si el artículo de venta asignado está activo o inactivo, según lo que marques.
                         Las que no tienen artículo de venta salen solo con el tercer criterio, también si filtrás por empresa.

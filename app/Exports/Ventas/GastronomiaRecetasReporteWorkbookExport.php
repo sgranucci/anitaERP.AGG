@@ -65,6 +65,7 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
                 $fila['subcategoria'],
                 (float) $fila['porciones'],
                 (float) $fila['costo'],
+                (float) ($fila['costo_lote'] ?? 0),
                 (float) $fila['precio'],
                 $fila['ratio'] === null ? null : (float) $fila['ratio'],
                 (int) $fila['lineas'],
@@ -75,9 +76,9 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
 
         return new GastronomiaRecetasReporteHojaExport(
             'Recetas',
-            ['Código', 'Receta', 'SKU venta', 'Estado artículo', 'Categoría', 'Subcategoría', 'Porciones', 'Costo', 'Precio vta', 'Precio / costo', 'Líneas', 'Alerta', 'Cant. alertas'],
+            ['Código', 'Receta', 'SKU venta', 'Estado artículo', 'Categoría', 'Subcategoría', 'Porciones', 'Costo porción', 'Costo lote', 'Precio vta', 'Precio / costo', 'Líneas', 'Alerta', 'Cant. alertas'],
             $filas,
-            ['G' => 2, 'H' => 2, 'I' => 2, 'J' => 2, 'K' => 0, 'M' => 0],
+            ['G' => 2, 'H' => 2, 'I' => 2, 'J' => 2, 'K' => 2, 'L' => 0, 'N' => 0],
         );
     }
 
@@ -95,6 +96,7 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
                 $fila['cant_desp'],
                 $fila['costo_unitario'],
                 $fila['costo_linea'],
+                $fila['costo_porcion'] ?? null,
                 $fila['precio'],
                 $fila['porciones'],
                 $fila['entra_costo'],
@@ -103,9 +105,9 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
 
         return new GastronomiaRecetasReporteHojaExport(
             'Detalle',
-            ['Receta', 'Código', 'Tipo línea', 'SKU / subreceta', 'Descripción', 'UM', 'Cant. c/ desp.', 'Costo unitario', 'Costo línea', 'Precio vta', 'Porciones', 'Entra al costo'],
+            ['Receta', 'Código', 'Tipo línea', 'SKU / subreceta', 'Descripción', 'UM', 'Cant. c/ desp.', 'Costo unitario', 'Costo línea', 'Costo porción', 'Precio vta', 'Porciones', 'Entra al costo'],
             $filas,
-            ['G' => 4, 'H' => 2, 'I' => 2, 'J' => 2, 'K' => 2],
+            ['G' => 4, 'H' => 2, 'I' => 2, 'J' => 2, 'K' => 2, 'L' => 2],
             true,
         );
     }
@@ -113,7 +115,11 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
     private function hojaLineas(): GastronomiaRecetasReporteHojaExport
     {
         $filas = [];
+        $yaMostroCabecera = [];
         foreach ($this->resultado['lineas'] ?? [] as $fila) {
+            $formulaId = (int) ($fila['formula_id'] ?? 0);
+            $cabecera = ! isset($yaMostroCabecera[$formulaId]);
+            $yaMostroCabecera[$formulaId] = true;
             $filas[] = [
                 $fila['receta'],
                 $fila['codigo_receta'],
@@ -126,11 +132,12 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
                 (float) $fila['cant_desp'],
                 (float) $fila['costo_unitario'],
                 (float) $fila['costo_linea'],
-                (float) $fila['costo_receta'],
-                (float) $fila['precio'],
+                $cabecera ? (float) $fila['costo_receta'] : null,
+                $cabecera ? (float) ($fila['costo_lote'] ?? 0) : null,
+                $cabecera ? (float) $fila['precio'] : null,
                 $fila['opcional'],
                 $fila['entra_costo'],
-                (float) $fila['porciones'],
+                $cabecera ? (float) $fila['porciones'] : null,
                 $fila['categoria'],
                 $fila['subcategoria'],
                 $fila['estado_articulo'],
@@ -140,9 +147,9 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
 
         return new GastronomiaRecetasReporteHojaExport(
             'Líneas',
-            ['Receta', 'Código', 'SKU / subreceta', 'Descripción', 'UM', 'Tipo línea', 'Cantidad', 'Factor desp.', 'Cant. c/ desp.', 'Costo unitario', 'Costo línea', 'Costo receta', 'Precio vta', 'Opcional', 'Entra al costo', 'Porciones', 'Categoría', 'Subcategoría', 'Estado artículo', 'Alerta'],
+            ['Receta', 'Código', 'SKU / subreceta', 'Descripción', 'UM', 'Tipo línea', 'Cantidad', 'Factor desp.', 'Cant. c/ desp.', 'Costo unitario', 'Costo línea', 'Costo porción', 'Costo lote', 'Precio vta', 'Opcional', 'Entra al costo', 'Porciones', 'Categoría', 'Subcategoría', 'Estado artículo', 'Alerta'],
             $filas,
-            ['G' => 4, 'H' => 4, 'I' => 4, 'J' => 2, 'K' => 2, 'L' => 2, 'M' => 2, 'P' => 2],
+            ['G' => 4, 'H' => 4, 'I' => 4, 'J' => 2, 'K' => 2, 'L' => 2, 'M' => 2, 'N' => 2, 'Q' => 2],
         );
     }
 
