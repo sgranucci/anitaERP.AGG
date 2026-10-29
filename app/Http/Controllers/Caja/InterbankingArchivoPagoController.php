@@ -183,7 +183,7 @@ class InterbankingArchivoPagoController extends Controller
             'Del '.date('d/m/Y', strtotime((string) $filtros['fecha_desde']))
                 .' al '.date('d/m/Y', strtotime((string) $filtros['fecha_hasta'])),
             'OP '.(int) $filtros['op_desde'].' a '.(int) $filtros['op_hasta'],
-            'Tipo '.((string) ($filtros['tipo_op'] ?? 'OPP')),
+            'Tipo '.InterbankingArchivoPagoFiltros::etiquetaTipoOp((string) ($filtros['tipo_op'] ?? 'OPP')),
         ]));
         $titulo = 'Transferencias Interbanking';
         $total = (float) ($resultado['total_importe'] ?? 0);
@@ -251,7 +251,7 @@ class InterbankingArchivoPagoController extends Controller
         if (! $request->filled('tipo_op')) {
             $tipoPref = ReportePreferenciasUsuario::leerString(self::PREFERENCIAS_CLAVE, 'tipo_op');
             if ($tipoPref !== '') {
-                $filtros['tipo_op'] = $tipoPref;
+                $filtros['tipo_op'] = InterbankingArchivoPagoFiltros::normalizarTipoOp($tipoPref);
             }
         }
 

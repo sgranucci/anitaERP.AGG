@@ -47,20 +47,16 @@
                     <div class="form-group row">
                         <label for="empresa_id" class="{{ $colLabel }} requerido">Empresa</label>
                         <div class="{{ $colInput }}">
-                            @if ($empresasDisponibles->count() > 1)
-                                <select name="empresa_id" id="empresa_id" class="form-control" required>
-                                    <option value="">Seleccione…</option>
-                                    @foreach ($empresasDisponibles as $emp)
-                                        <option value="{{ $emp->id }}" @selected((int) ($filtros['empresa_id'] ?? 0) === (int) $emp->id)>
-                                            {{ $emp->nombre }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                            @elseif ($empresasDisponibles->count() === 1)
-                                <input type="hidden" name="empresa_id" id="empresa_id" value="{{ (int) $empresasDisponibles->first()->id }}">
-                                <span class="form-control-plaintext">{{ $empresasDisponibles->first()->nombre }}</span>
-                            @else
+                            @if ($empresasDisponibles->isEmpty())
                                 <p class="text-danger small mb-0">Sin empresas asignadas.</p>
+                            @else
+                                @include('includes.form-empresa-asignada-control', [
+                                    'empresa_query' => $empresa_query,
+                                    'empresa_id' => $filtros['empresa_id'] ?? null,
+                                    'required' => true,
+                                    'permite_vacio' => $empresasDisponibles->count() > 1,
+                                    'opcion_vacia' => 'Seleccione…',
+                                ])
                             @endif
                         </div>
                         <label class="{{ $colLabel }} requerido">Cuenta de caja</label>
@@ -111,12 +107,21 @@
                         </div>
                     </div>
 
+                    @php
+                        $tipoOpSel = \App\Support\Caja\InterbankingArchivoPagoFiltros::normalizarTipoOp((string) ($filtros['tipo_op'] ?? 'OPP'));
+                    @endphp
                     <div class="form-group row">
-                        <label for="tipo_op" class="{{ $colLabel }}">Tipo de OP</label>
+                        <label class="{{ $colLabel }}">Tipo de OP</label>
                         <div class="{{ $colInput }}">
-                            <input type="text" name="tipo_op" id="tipo_op" class="form-control" maxlength="3"
-                                   value="{{ $filtros['tipo_op'] ?? 'OPP' }}"
-                                   title="OPP / OPA / 0 = todas OP*">
+                            <div class="btn-group btn-group-toggle" data-toggle="buttons" role="group" aria-label="Tipo de OP">
+                                @foreach (['0' => 'TODAS', 'OPP' => 'OPP', 'OPA' => 'OPA'] as $valorTipo => $etiquetaTipo)
+                                    <label class="btn btn-outline-primary mb-0 {{ $tipoOpSel === $valorTipo ? 'active' : '' }}">
+                                        <input type="radio" name="tipo_op" value="{{ $valorTipo }}" autocomplete="off"
+                                            @checked($tipoOpSel === $valorTipo)>
+                                        {{ $etiquetaTipo }}
+                                    </label>
+                                @endforeach
+                            </div>
                         </div>
                         <label for="tipo_aplicacion" class="{{ $colLabel }}">Tipo aplicación Anita</label>
                         <div class="{{ $colInput }}">

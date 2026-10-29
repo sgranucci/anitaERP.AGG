@@ -30,10 +30,7 @@ final class InterbankingArchivoPagoFiltros
      */
     public static function resolverDesdeRequest(Request $request): array
     {
-        $tipoOp = strtoupper(substr(trim((string) $request->input('tipo_op', 'OPP')), 0, 3));
-        if ($tipoOp === '' || $tipoOp === '0') {
-            $tipoOp = '0';
-        }
+        $tipoOp = self::normalizarTipoOp((string) $request->input('tipo_op', 'OPP'));
 
         $opDesde = max(0, (int) $request->input('op_desde', 0));
         $opHasta = max(0, (int) $request->input('op_hasta', 99999999));
@@ -102,6 +99,25 @@ final class InterbankingArchivoPagoFiltros
             'incluir_anita' => ! empty($filtros['incluir_anita']) ? 1 : 0,
             'incluir_erp' => ! empty($filtros['incluir_erp']) ? 1 : 0,
         ];
+    }
+
+    /**
+     * TODAS (0) incluye todo comprobante OP*. Cualquier otro texto vuelve a OPP.
+     */
+    public static function normalizarTipoOp(string $valor): string
+    {
+        $raw = strtoupper(trim($valor));
+        if ($raw === '' || $raw === '0' || $raw === 'TODAS') {
+            return '0';
+        }
+        $tipo = substr($raw, 0, 3);
+
+        return in_array($tipo, ['OPP', 'OPA'], true) ? $tipo : 'OPP';
+    }
+
+    public static function etiquetaTipoOp(string $valor): string
+    {
+        return self::normalizarTipoOp($valor) === '0' ? 'TODAS' : self::normalizarTipoOp($valor);
     }
 
     private static function normalizarFecha(mixed $valor, string $default): string

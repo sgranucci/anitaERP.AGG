@@ -3847,6 +3847,9 @@ Route::get('caja/interbanking/archivo-pago/{formato}', 'Caja\InterbankingArchivo
     ->where('formato', 'PDF|EXCEL|CSV');
 
 // Banco Macro — exportación pagos por archivo (diskette); WS premium vía config macro.canal
+Route::get('caja/frances/archivo-pago', 'Caja\FrancesArchivoPagoController@index')->name('frances_archivo_pago');
+Route::get('caja/frances/archivo-pago/descargar', 'Caja\FrancesArchivoPagoController@descargar')->name('descargar_frances_archivo_pago');
+
 Route::get('caja/macro/archivo-pago', 'Caja\MacroArchivoPagoController@index')->name('macro_archivo_pago');
 Route::get('caja/macro/archivo-pago/descargar', 'Caja\MacroArchivoPagoController@descargar')->name('descargar_macro_archivo_pago');
 Route::get('caja/macro/archivo-pago/{formato}', 'Caja\MacroArchivoPagoController@exportar')
@@ -4116,6 +4119,13 @@ Route::get('compras/tracking-facturas', 'Compras\TrackingFacturasController@inde
 Route::get('compras/tracking-facturas/{id}/pdf', 'Compras\TrackingFacturasController@verPdf')->name('tracking_facturas_pdf');
 Route::post('compras/tracking-facturas/sincronizar-pagina', 'Compras\TrackingFacturasController@sincronizarPagina')->name('tracking_facturas_sincronizar_pagina');
 Route::get('compras/lista_tracking_facturas/{formato?}/{busqueda?}', 'Compras\TrackingFacturasController@listar')->name('lista_tracking_facturas');
+
+// Crown: solicitudes de retiro (p-cargasolret) → Interbanking + Francés.
+Route::get('compras/solicitud-retiro', 'Compras\SolicitudRetiroCrownController@index')->name('solicitud_retiro_crown');
+Route::post('compras/solicitud-retiro', 'Compras\SolicitudRetiroCrownController@generar')->name('generar_solicitud_retiro_crown');
+Route::get('compras/solicitud-retiro/descargar/{tipo}', 'Compras\SolicitudRetiroCrownController@descargar')
+    ->name('descargar_solicitud_retiro_crown')
+    ->where('tipo', 'interbanking|frances|zip');
 
 Route::get('compras/comprobante-proveedor', 'Compras\Comprobante_ProveedorController@index')->name('comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/workbench/vista', 'Compras\Comprobante_ProveedorController@guardarVistaListado')->name('guardar_vista_listado_comprobante_proveedor');
