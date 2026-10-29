@@ -2,8 +2,10 @@
     $alerta = ! empty($informe['requiere_alerta']);
     $alertaFicha = ! empty($informe['alerta_ficha']);
     $alertaDelta = ! empty($informe['alerta_delta']);
+    $alertaAnticipos = ! empty($informe['alerta_anticipos']);
     $delta = $informe['delta_mayor'] ?? [];
     $cuentasDelta = $delta['cuentas'] ?? [];
+    $cuentasAnticipo = $delta['anticipos'] ?? [];
     $empresa = trim((string) ($informe['empresa_nombre'] ?? ''));
     $fecha = (string) ($informe['fecha_fmt'] ?? $informe['fecha'] ?? '');
     $expresion = (string) ($informe['expresion'] ?? 'origen');
@@ -27,26 +29,32 @@
     <div style="font-size:20px; font-weight:700; margin:0 0 4px 0;">{{ $empresa }}</div>
     <div style="font-size:15px; margin:0;">
         @if ($alertaFicha && $alertaDelta)
-            ALERTA — la ficha no cuadra y el delta mayor vs deuda se movió al {{ $fecha }}
+            ALERTA — la ficha no cuadra y el delta de proveedores se movió al {{ $fecha }}
+        @elseif ($alertaFicha && $alertaAnticipos)
+            ALERTA — la ficha no cuadra y el sin explicar de anticipos se movió al {{ $fecha }}
+        @elseif ($alertaDelta && $alertaAnticipos)
+            ALERTA — se movió el delta de proveedores y el sin explicar de anticipos al {{ $fecha }}
         @elseif ($alertaDelta)
-            ALERTA — el delta mayor vs deuda se movió al {{ $fecha }}
+            ALERTA — el delta de proveedores se movió al {{ $fecha }}
+        @elseif ($alertaAnticipos)
+            ALERTA — el sin explicar de anticipos se movió al {{ $fecha }}
         @elseif ($alertaFicha)
             ALERTA — hay diferencias deuda vs ficha al {{ $fecha }}
         @else
             @if (! empty($delta['hay_base_anterior']))
-                OK — ficha cuadrada y delta mayor estable al {{ $fecha }}
+                OK — ficha cuadrada y delta de proveedores estable al {{ $fecha }}
             @else
-                OK — ficha cuadrada. El delta mayor queda como base al {{ $fecha }}
+                OK — ficha cuadrada. El delta de proveedores queda como base al {{ $fecha }}
             @endif
         @endif
     </div>
 </div>
 
 <p style="margin:0 0 12px 0;">
-    Control <strong>deuda vs ficha de cuenta corriente</strong> y delta <strong>mayor − deuda</strong>
+    Control <strong>deuda vs ficha</strong>, delta de <strong>proveedores</strong> y, aparte, <strong>anticipos</strong>
     · Corte <strong>{{ $fecha }}</strong>
     · Expresión <strong>{{ $expresion }}</strong>
-    · La deuda es la verdad. El delta puede existir: lo que se controla es que no cambie de un día al otro.
+    · La deuda es la verdad. Una factura anticipada debita anticipos y acredita proveedores: no mueve ninguno de los dos controles.
 </p>
 
 <h3 style="margin:16px 0 6px 0;">Resumen</h3>
@@ -137,12 +145,11 @@
     </p>
 @endif
 
-<h3 style="margin:22px 0 6px 0;">Delta mayor − deuda</h3>
+<h3 style="margin:22px 0 6px 0;">Delta de proveedores</h3>
 <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
     En pesos, con el mismo signo del mayor (negativo = débito). Delta = mayor − deuda.
     Solo cuentas de proveedores de rubro Pasivo y del plan de proveedores (MN, ME y no corrientes).
-    La cuenta de anticipos entra si está configurada.
-    En esa cuenta la deuda también incluye el neto de las facturas anticipadas que la recepción todavía no cerró.
+    Anticipos no entra en esta tabla.
     @if (! empty($delta['hay_base_anterior']))
         Se compara contra el {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
         Avisa si la variación pasa de {{ $fmt($delta['tolerancia'] ?? 1) }}.
@@ -163,7 +170,11 @@
             <th align="right">Variación</th>
         </tr>
         @foreach ($cuentasDelta as $c)
-            <tr @if (! empty($c['movio'])) style="background:#fadbd8;" @endif>
+            <tr
+                @if (! empty($c['movio']))
+                    style="background:#fadbd8;"
+                @endif
+            >
                 <td>{{ $c['codigo'] ?? '' }} {{ $c['nombre'] ?? '' }}</td>
                 <td align="right">{{ $fmt($c['deuda'] ?? 0) }}</td>
                 <td align="right">{{ $fmt($c['mayor'] ?? 0) }}</td>
@@ -185,7 +196,67 @@
         </p>
     @elseif (! empty($delta['hay_base_anterior']))
         <p style="margin:8px 0 0 0; color:#145a32; font-size:13px;">
-            El delta no se movió respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+            El delta de proveedores no se movió respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+        </p>
+    @endif
+@endif
+
+<h3 style="margin:22px 0 6px 0;">Anticipos a proveedores</h3>
+<p style="margin:0 0 8px 0; color:#555; font-size:13px;">
+    Control aparte. Explicado = OP adelantadas imputadas a la cuenta + neto de facturas anticipadas que la recepción todavía no cerró.
+    Sin explicar = mayor − explicado.
+    La factura anticipada suma el neto en el mayor y en Facturas anticipadas; el cierre por recepción lo resta de los dos.
+    El sin explicar no cambia por eso.
+    @if (! empty($delta['hay_base_anterior']))
+        Avisa solo si el sin explicar se mueve más de {{ $fmt($delta['tolerancia'] ?? 1) }} respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+    @else
+        Primera medición: el sin explicar queda como base.
+    @endif
+</p>
+@if ($cuentasAnticipo === [])
+    <p style="margin:0;">No hay saldo en la cuenta de anticipos.</p>
+@else
+    <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
+        <tr style="background:#85C1E9; color:#17202A;">
+            <th align="left">Cuenta</th>
+            <th align="right">OP adelantadas</th>
+            <th align="right">Facturas anticipadas</th>
+            <th align="right">Explicado</th>
+            <th align="right">Mayor</th>
+            <th align="right">Sin explicar</th>
+            <th align="right">Anterior</th>
+            <th align="right">Variación</th>
+        </tr>
+        @foreach ($cuentasAnticipo as $c)
+            <tr
+                @if (! empty($c['movio']))
+                    style="background:#fadbd8;"
+                @endif
+            >
+                <td>{{ $c['codigo'] ?? '' }} {{ $c['nombre'] ?? '' }}</td>
+                <td align="right">{{ $fmt($c['opa'] ?? 0) }}</td>
+                <td align="right">{{ $fmt($c['facturas'] ?? 0) }}</td>
+                <td align="right">{{ $fmt($c['deuda'] ?? 0) }}</td>
+                <td align="right">{{ $fmt($c['mayor'] ?? 0) }}</td>
+                <td align="right"><strong>{{ $fmt($c['delta'] ?? 0) }}</strong></td>
+                <td align="right">{{ $c['delta_anterior'] === null ? '—' : $fmt($c['delta_anterior']) }}</td>
+                <td align="right">
+                    @if ($c['variacion'] === null)
+                        —
+                    @else
+                        <strong>{{ $fmt($c['variacion']) }}</strong>
+                    @endif
+                </td>
+            </tr>
+        @endforeach
+    </table>
+    @if ($alertaAnticipos)
+        <p style="margin:8px 0 0 0; color:#7b241c; font-size:13px;">
+            El sin explicar de anticipos cambió. Una factura anticipada o su recepción no producen este aviso.
+        </p>
+    @elseif (! empty($delta['hay_base_anterior']))
+        <p style="margin:8px 0 0 0; color:#145a32; font-size:13px;">
+            El sin explicar de anticipos no se movió respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
         </p>
     @endif
 @endif

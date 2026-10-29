@@ -14,30 +14,26 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Delta entre el mayor de las cuentas de proveedores y la deuda abierta, en pesos.
- * El signo es el del mayor (negativo = débito). Delta = mayor − deuda.
- * La corrida guarda el número del día y la siguiente avisa si se movió.
+ * Dos controles separados, en pesos, con el signo del mayor (negativo = débito).
  *
- * Solo entran cuentas de rubro Pasivo que además estén en el plan de proveedores
- * (MN, ME y no corrientes de la config). Un banco, un gasto u otra cuenta cargada
- * en el proveedor no se compara: su mayor se mueve por tesorería o por el asiento
- * de la factura y la deuda abierta no vive ahí.
+ * Proveedores: delta = mayor − deuda abierta, solo cuentas de rubro Pasivo que
+ * además estén en el plan (MN, ME y no corrientes). Avisa si ese delta cambia.
+ * Una factura anticipada acredita proveedores y suma la misma deuda abierta:
+ * el delta de proveedores no se mueve. Un banco, un gasto u otra cuenta cargada
+ * en el proveedor no entra.
  *
- * Si la empresa tiene cuenta de anticipos (`pago.anticipo_proveedor`), esa cuenta
- * entra igual, aunque no sea pasivo. La deuda abierta de las OP adelantadas
- * imputadas ahí se compara con el mayor de anticipos. Sin esa cuenta el anticipo
- * sigue en proveedores, que es donde se contabiliza.
- *
- * La factura anticipada (OC anticipada, sin COM) debita esa misma cuenta y la deuda
- * del comprobante vive en proveedores. Ese neto, menos lo que la recepción ya cerró
- * de la misma orden, entra en la deuda de anticipos: así el alta y el cierre no
- * mueven el delta.
+ * Anticipos: control aparte, solo si la empresa tiene `pago.anticipo_proveedor`.
+ * Lo explicado es la OP adelantada imputada ahí más el neto de la factura
+ * anticipada que la recepción todavía no cerró. Sin explicar = mayor − explicado.
+ * Alta de factura y cierre por recepción mueven el mayor y lo explicado por el
+ * mismo importe, así que este control no avisa. Avisa si el sin explicar cambia.
+ * Sin cuenta de anticipos configurada, el anticipo sigue en proveedores.
  */
 final class ProveedorDeudaMayorDeltaSupport
 {
     private const TABLA = 'proveedor_deuda_mayor_delta';
 
-    /** @var array<string, array<int, array<int, array{deuda: float, mayor: float}>>> */
+    /** @var array<string, array<int, array<int, array{deuda: float, mayor: float, opa: float, facturas: float}>>> */
     private array $saldosPorFecha = [];
 
     /** @var array<int, int>|null empresa_id => cuentacontable_id de anticipos */
@@ -72,8 +68,10 @@ final class ProveedorDeudaMayorDeltaSupport
      *   hay_base_anterior: bool,
      *   tolerancia: float,
      *   variaciones: int,
+     *   variaciones_anticipos: int,
      *   cuentas: list<array<string, mixed>>,
-     *   cuentas_total: int
+     *   cuentas_total: int,
+     *   anticipos: list<array<string, mixed>>
      * }
      */
     public function controlar(int $empresaId, string $fecha, float $tolerancia): array
@@ -83,6 +81,7 @@ final class ProveedorDeudaMayorDeltaSupport
         $hoy = $this->saldos($fecha)[$empresaId] ?? [];
         $fechaAnterior = $this->fechaAnterior($empresaId, $fecha);
         $anterior = $fechaAnterior === null ? [] : $this->filasGuardadas($empresaId, $fechaAnterior);
+        $cuentaAnticipoId = (int) ($this->cuentasAnticipoPorEmpresa()[$empresaId] ?? 0);
 
         $permitidas = $this->cuentasProveedor();
         $ids = array_values(array_filter(
@@ -90,9 +89,11 @@ final class ProveedorDeudaMayorDeltaSupport
             static fn ($cuentaId): bool => isset($permitidas[(int) $cuentaId])
         ));
         $cuentas = $this->nombresCuenta($ids);
-        $filas = [];
+        $filasProveedor = [];
+        $filasAnticipo = [];
         $aGuardar = [];
         $variaciones = 0;
+        $variacionesAnticipo = 0;
 
         foreach ($ids as $cuentaId) {
             $deuda = round((float) ($hoy[$cuentaId]['deuda'] ?? 0), 2);
@@ -102,22 +103,35 @@ final class ProveedorDeudaMayorDeltaSupport
             $deltaAnterior = $tenia ? round((float) $anterior[$cuentaId], 2) : null;
             $variacion = $deltaAnterior === null ? null : round($delta - $deltaAnterior, 2);
             $movio = $variacion !== null && abs($variacion) >= $tolerancia;
+            $esAnticipo = $cuentaAnticipoId > 0 && $cuentaId === $cuentaAnticipoId;
             if ($movio) {
-                $variaciones++;
+                if ($esAnticipo) {
+                    $variacionesAnticipo++;
+                } else {
+                    $variaciones++;
+                }
             }
 
             $nombre = $cuentas[$cuentaId] ?? ['codigo' => '', 'nombre' => ''];
-            $filas[] = [
+            $fila = [
                 'cuentacontable_id' => $cuentaId,
                 'codigo' => $nombre['codigo'],
                 'nombre' => $nombre['nombre'],
                 'deuda' => $deuda,
+                'opa' => round((float) ($hoy[$cuentaId]['opa'] ?? 0), 2),
+                'facturas' => round((float) ($hoy[$cuentaId]['facturas'] ?? 0), 2),
                 'mayor' => $mayor,
                 'delta' => $delta,
                 'delta_anterior' => $deltaAnterior,
                 'variacion' => $variacion,
                 'movio' => $movio,
+                'es_anticipo' => $esAnticipo,
             ];
+            if ($esAnticipo) {
+                $filasAnticipo[] = $fila;
+            } else {
+                $filasProveedor[] = $fila;
+            }
 
             $releva = abs($deuda) >= 0.01 || abs($mayor) >= 0.01 || abs($delta) >= 0.01 || $movio;
             if ($releva) {
@@ -134,15 +148,8 @@ final class ProveedorDeudaMayorDeltaSupport
             }
         }
 
-        usort($filas, static function (array $a, array $b): int {
-            $ma = ! empty($a['movio']);
-            $mb = ! empty($b['movio']);
-            if ($ma !== $mb) {
-                return $mb <=> $ma;
-            }
-
-            return abs((float) $b['delta']) <=> abs((float) $a['delta']);
-        });
+        $filasProveedor = $this->ordenarPorVariacion($filasProveedor);
+        $filasAnticipo = $this->ordenarPorVariacion($filasAnticipo);
 
         $this->guardar($empresaId, $fecha, $aGuardar);
 
@@ -153,13 +160,34 @@ final class ProveedorDeudaMayorDeltaSupport
             'hay_base_anterior' => $fechaAnterior !== null,
             'tolerancia' => $tolerancia,
             'variaciones' => $variaciones,
-            'cuentas' => $filas,
-            'cuentas_total' => count($filas),
+            'variaciones_anticipos' => $variacionesAnticipo,
+            'cuentas' => $filasProveedor,
+            'cuentas_total' => count($filasProveedor),
+            'anticipos' => $filasAnticipo,
         ];
     }
 
     /**
-     * @return array<int, array<int, array{deuda: float, mayor: float}>>
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function ordenarPorVariacion(array $filas): array
+    {
+        usort($filas, static function (array $a, array $b): int {
+            $ma = ! empty($a['movio']);
+            $mb = ! empty($b['movio']);
+            if ($ma !== $mb) {
+                return $mb <=> $ma;
+            }
+
+            return abs((float) $b['delta']) <=> abs((float) $a['delta']);
+        });
+
+        return $filas;
+    }
+
+    /**
+     * @return array<int, array<int, array{deuda: float, mayor: float, opa: float, facturas: float}>>
      */
     private function saldos(string $fecha): array
     {
@@ -168,23 +196,20 @@ final class ProveedorDeudaMayorDeltaSupport
         }
 
         $cuentaIds = $this->cuentasProveedor();
-        $deuda = $this->deudaPorCuenta($fecha);
-        foreach ($this->saldoFacturaAnticipadaEnAnticipo() as $key => $importe) {
-            if (abs($importe) < 0.005) {
-                continue;
-            }
-            $deuda[$key] = round(($deuda[$key] ?? 0) + $importe, 2);
-        }
+        $deudaCc = $this->deudaPorCuenta($fecha);
+        $deudaFa = $this->saldoFacturaAnticipadaEnAnticipo();
         $mayor = $this->mayorPorCuenta($cuentaIds);
 
         $porEmpresa = [];
-        $keys = array_unique(array_merge(array_keys($deuda), array_keys($mayor)));
+        $keys = array_unique(array_merge(array_keys($deudaCc), array_keys($deudaFa), array_keys($mayor)));
         foreach ($keys as $key) {
             [$empresaId, $cuentaId] = array_map('intval', explode('|', (string) $key));
             if ($empresaId <= 0 || $cuentaId <= 0 || ! isset($cuentaIds[$cuentaId])) {
                 continue;
             }
-            $deudaLocal = round((float) ($deuda[$key] ?? 0), 2);
+            $opa = round((float) ($deudaCc[$key] ?? 0), 2);
+            $facturas = round((float) ($deudaFa[$key] ?? 0), 2);
+            $deudaLocal = round($opa + $facturas, 2);
             $mayorLocal = round((float) ($mayor[$key] ?? 0), 2);
             if (abs($deudaLocal) < 0.01 && abs($mayorLocal) < 0.01) {
                 continue;
@@ -192,6 +217,8 @@ final class ProveedorDeudaMayorDeltaSupport
             $porEmpresa[$empresaId][$cuentaId] = [
                 'deuda' => $deudaLocal,
                 'mayor' => $mayorLocal,
+                'opa' => $opa,
+                'facturas' => $facturas,
             ];
         }
 

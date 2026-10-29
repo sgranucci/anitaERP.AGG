@@ -16,9 +16,10 @@ use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 /**
- * Auditor diario: deuda vs ficha por empresa, y el delta mayor − deuda.
- * El delta se guarda por día. El mail lo muestra y avisa solo si se movió
- * respecto de la medición anterior. No graba ajustes de ficha. La deuda es la verdad.
+ * Auditor diario: deuda vs ficha, delta de proveedores y control aparte de anticipos.
+ * Cada delta se guarda por día. El mail avisa si el de proveedores se movió, o si
+ * el sin explicar de anticipos se movió. Una factura anticipada no dispara ninguno.
+ * No graba ajustes de ficha. La deuda es la verdad.
  */
 final class ProveedorCuentacorrienteDeudaFichaAuditorService
 {
@@ -83,6 +84,7 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
             $resumen = $informe['resumen'] ?? [];
             $delta = $this->deltaMayor->controlar((int) $empresa->id, $fecha, $toleranciaDelta);
             $deltaMovio = (int) ($delta['variaciones'] ?? 0) > 0;
+            $anticipoMovio = (int) ($delta['variaciones_anticipos'] ?? 0) > 0;
             $paquete = [
                 'fecha' => $fecha,
                 'fecha_fmt' => Carbon::parse($fecha)->format('d/m/Y'),
@@ -90,9 +92,10 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
                 'empresa_id' => (int) $empresa->id,
                 'empresa_nombre' => trim((string) $empresa->nombre),
                 'tolerancia' => $tolerancia,
-                'requiere_alerta' => $hayDiferencia || $deltaMovio,
+                'requiere_alerta' => $hayDiferencia || $deltaMovio || $anticipoMovio,
                 'alerta_ficha' => $hayDiferencia,
                 'alerta_delta' => $deltaMovio,
+                'alerta_anticipos' => $anticipoMovio,
                 'resumen' => $resumen,
                 'grupos' => array_slice($grupos, 0, $limite),
                 'grupos_total' => count($grupos),
@@ -103,7 +106,7 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
                 'mail_error' => null,
             ];
 
-            if ($hayDiferencia || $deltaMovio) {
+            if ($hayDiferencia || $deltaMovio || $anticipoMovio) {
                 $salida['requiere_alerta'] = true;
             }
 
