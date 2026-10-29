@@ -174,6 +174,7 @@
                         'codigo' => old('deposito_codigo', $depositoModelMov->codigo ?? ''),
                         'descripcion' => old('deposito_descripcion', $depositoModelMov->nombre ?? ''),
                         'tipodeposito' => $depositoModelMov->tipodeposito ?? '',
+                        'canal' => $depositoModelMov->canal ?? '',
                         'col_label' => 'col-lg-4 col-form-label',
                         'col_input' => 'col-lg-8',
                     ])
@@ -190,6 +191,7 @@
                         'codigo' => old('deposito_salida_codigo', $depositoSalidaModel->codigo ?? ''),
                         'descripcion' => old('deposito_salida_descripcion', $depositoSalidaModel->nombre ?? ''),
                         'tipodeposito' => $depositoSalidaModel->tipodeposito ?? '',
+                        'canal' => $depositoSalidaModel->canal ?? '',
                         'col_label' => 'col-lg-4 col-form-label',
                         'col_input' => 'col-lg-8',
                     ])
@@ -216,6 +218,7 @@
                         'codigo' => old('deposito_entrada_codigo', $depositoEntradaModel->codigo ?? ''),
                         'descripcion' => old('deposito_entrada_descripcion', $depositoEntradaModel->nombre ?? ''),
                         'tipodeposito' => $depositoEntradaModel->tipodeposito ?? '',
+                        'canal' => $depositoEntradaModel->canal ?? '',
                         'col_label' => 'col-lg-4 col-form-label',
                         'col_input' => 'col-lg-8',
                     ])

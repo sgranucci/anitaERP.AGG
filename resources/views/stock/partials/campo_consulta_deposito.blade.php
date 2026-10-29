@@ -28,6 +28,7 @@
     $colInput = $col_input ?? 'col-lg-7';
     $wrapRow = $wrap_row ?? true;
     $tipodeposito = $tipodeposito ?? '';
+    $canal = $canal ?? '';
     $codigoExtraClass = trim((string) ($codigoExtraClass ?? ''));
     $codigoName = $codigoName ?? null;
     $siguiente = $siguiente ?? '';
@@ -40,13 +41,13 @@
 
 @if ($layout === 'form_row')
     @if ($wrapRow)
-    <div class="form-group row tm-deposito-campo mb-2" id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}">
+    <div class="form-group row tm-deposito-campo mb-2" id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}" data-canal="{{ $canal }}">
     @endif
         <label for="{{ $inputId }}_codigo" class="{{ $colLabel }} control-label text-right pr-2 {{ $required ? 'requerido' : '' }}">{{ $label }}@if(!empty($ayuda_tooltip)) <i class="fa fa-question-circle text-muted tooltipsC ml-1" title="{{ $ayuda_tooltip }}"></i>@endif</label>
         @if ($wrapRow)
         <div class="{{ $colInput }}">
         @else
-        <div class="{{ $colInput }} tm-deposito-campo" id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}">
+        <div class="{{ $colInput }} tm-deposito-campo" id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}" data-canal="{{ $canal }}">
         @endif
             <div class="d-flex flex-nowrap align-items-center tm-deposito-campo-inputs w-100" style="gap: 4px;">
                 <input type="hidden" name="{{ $inputName }}" id="{{ $inputId }}" class="deposito_id"
@@ -90,7 +91,7 @@
 @else
     {{-- inline / compact (tablas): sin label si $label === '' --}}
     <div class="tm-deposito-campo d-flex flex-nowrap align-items-center w-100 {{ trim((string) $label) !== '' ? 'form-group col-12 mb-2 flex-column align-items-stretch' : '' }}"
-        id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}" style="gap: 4px;">
+        id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}" data-canal="{{ $canal }}" style="gap: 4px;">
         @if (trim((string) $label) !== '')
             <label class="d-block mb-1">{{ $label }}</label>
         @endif

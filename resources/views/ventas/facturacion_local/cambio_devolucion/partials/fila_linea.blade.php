@@ -3,7 +3,10 @@
     $linea = $linea ?? [];
     $ro = $ro ?? false;
     $tipoLinea = (string) ($linea['tipo'] ?? 'devolver');
-    $lineaEditable = ! $ro || (($puedeCorregirReemplazo ?? false) && $tipoLinea === 'reemplazo');
+    $reemplazoYaFacturado = $tipoLinea === 'reemplazo' && (int) ($linea['venta_fac_id'] ?? 0) > 0;
+    $lineaEditable = ! $ro
+        || (($puedeCorregirReemplazo ?? false) && $tipoLinea === 'reemplazo')
+        || (($puedeSumarReemplazo ?? false) && $tipoLinea === 'reemplazo' && ! $reemplazoYaFacturado);
     $mostrarAccionesLinea = $mostrarAccionesLinea ?? (! $ro);
 @endphp
 <tr class="cdm-linea-row" data-modo="">
@@ -16,6 +19,7 @@
         @if (! $lineaEditable)
             <input type="hidden" name="lineas[{{ $idx }}][tipo]" value="{{ $tipoLinea }}">
         @endif
+        <input type="hidden" name="lineas[{{ $idx }}][id]" value="{{ $linea['id'] ?? '' }}">
         <input type="hidden" name="lineas[{{ $idx }}][venta_emision_id]" value="{{ $linea['venta_emision_id'] ?? '' }}">
     </td>
     <td>

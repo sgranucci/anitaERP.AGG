@@ -16,6 +16,7 @@ use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\FacturacionAnitaGrabacionSupport;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
+use App\Support\Stock\DepmaeControlStockSupport;
 use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
 use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
@@ -177,23 +178,22 @@ class MovimientoStockService
 			if ($funcion == 'create')
 			{
 				// Si no existe el codigo numera secuencial
+				$ultimoMovimiento = null;
 				if (!isset($data['codigo']))
 				{
-					$movimientostock = $this->movimientostockRepository->latest('id');
+					$ultimoMovimiento = $this->movimientostockRepository->latest('id');
 
-					if ($data['lote'] == 'LOTE DE ALTA')
-					{
-						$lote = 500000;
-						if ($movimientostock)
-							$lote = $movimientostock->id+500000;
-						$data['lote'] = $lote + 1;
-					}
-					
 					$id = 0;
-					if ($movimientostock)
-						$id = $movimientostock->id;
+					if ($ultimoMovimiento)
+						$id = $ultimoMovimiento->id;
 
 					$data['codigo'] = $id + 1;
+				}
+
+				// Vacío, null o «LOTE DE ALTA»: articulo_movimiento.lote es NOT NULL.
+				// El compare suelto `== 'LOTE DE ALTA'` no toma el null (el form lo manda vacío).
+				if ($this->loteDocumentoEsAlta($data['lote'] ?? null)) {
+					$this->asignarNumeroLoteAlta($data, $ultimoMovimiento);
 				}
 
 				// Guarda maestro de movimientostocks 
@@ -216,6 +216,18 @@ class MovimientoStockService
 			if ($movimientostock)
 			{
 				$movimientostock_id = ($funcion == 'update' ? $id : $movimientostock->id);
+
+				if ($funcion === 'update' && $this->loteDocumentoEsAlta($data['lote'] ?? null)) {
+					$lotePrevio = \App\Models\Stock\Articulo_Movimiento::query()
+						->where('movimientostock_id', (int) $movimientostock_id)
+						->orderBy('id')
+						->value('lote');
+					if ($lotePrevio !== null && ! $this->loteDocumentoEsAlta($lotePrevio)) {
+						$data['lote'] = $lotePrevio;
+					} else {
+						$this->asignarNumeroLoteAlta($data);
+					}
+				}
 
 				// Borra los registros de movimientos antes de grabar nuevamente
 				$curvasNumeracionAntes = [];
@@ -445,7 +457,10 @@ class MovimientoStockService
 						(float) ($cantidades[$i] ?? 0),
 						(string) ($sentidos[$i] ?? '')
 					);
-					$loteLinea = $data['lote'];
+					$loteLinea = $data['lote'] ?? null;
+					if ($this->loteDocumentoEsAlta($loteLinea)) {
+						throw new \Exception('No se puede grabar el movimiento: falta el lote de stock.');
+					}
 					$otLinea = null;
 					if ($aplicarOtEnEgresos && $esLineaEgreso) {
 						$loteLinea = 0;
@@ -873,6 +888,11 @@ class MovimientoStockService
 	): void {
 		$loteDoc = trim((string) ($data['lote'] ?? ''));
 		$depositoId = (int) ($data['deposito_id'] ?? 0);
+		$depositoLote = $depositoId > 0 ? Depmae::query()->find($depositoId) : null;
+		if (DepmaeControlStockSupport::localFerliPermiteNegativo($depositoLote)
+			|| ! DepmaeControlStockSupport::manejaControlStock($depositoLote)) {
+			return;
+		}
 		$comoOt = $aplicarOtEnEgresos && $ordentrabajoIdConsumo > 0;
 		$comoLote = ! $comoOt && ReporteStockOtSituacionSupport::esLoteImportado($loteDoc);
 		if ($depositoId <= 0 || (! $comoOt && ! $comoLote)) {
@@ -966,6 +986,33 @@ class MovimientoStockService
 		}
 
 		return $curva;
+	}
+
+	/**
+	 * El formulario muestra «LOTE DE ALTA» cuando no hay lote. Un POST vacío llega null
+	 * (ConvertEmptyStringsToNull) y la columna articulo_movimiento.lote no acepta null.
+	 */
+	private function loteDocumentoEsAlta(mixed $lote): bool
+	{
+		$texto = trim((string) ($lote ?? ''));
+
+		return $texto === '' || strcasecmp($texto, 'LOTE DE ALTA') === 0;
+	}
+
+	/**
+	 * Numeración histórica del alta: último id de movimientostock + 500001.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function asignarNumeroLoteAlta(array &$data, mixed $movimientoReferencia = null): void
+	{
+		$baseId = (int) (is_object($movimientoReferencia) ? ($movimientoReferencia->id ?? 0) : 0);
+		if ($baseId <= 0) {
+			$ultimo = $this->movimientostockRepository->latest('id');
+			$baseId = $ultimo ? (int) $ultimo->id : 0;
+		}
+
+		$data['lote'] = $baseId + 500001;
 	}
 
 	/**

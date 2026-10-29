@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Compras\IvaCompras;
 
+use App\Support\Contable\NotaCreditoIvaCuentaSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -44,6 +45,9 @@ final class IvaComprasConciliacionCuentaSupport
         }
         foreach (self::codigosConfig('cuentas_perc_iibb_por_empresa', $empresaId) as $codigo) {
             self::agregarPorCodigo($percIibb, $detalle, 'perc_iibb', $empresaId, $codigo, 'Percepción IIBB');
+        }
+        foreach (NotaCreditoIvaCuentaSupport::cuentasConceptoCompraCruzadasIds($empresaId) as $cuentaId) {
+            self::agregarPorId($iva, $detalle, 'iva_credito', $cuentaId, 'IVA concepto compra');
         }
 
         return [
@@ -110,6 +114,36 @@ final class IvaComprasConciliacionCuentaSupport
             'codigo' => $codigo,
             'nombre' => (string) ($fila->nombre ?? $nombreDefault),
             'fuente' => self::FUENTE_CONFIG,
+        ];
+    }
+
+    /**
+     * @param  list<int>  $bucket
+     * @param  list<array{rol: string, id: int, codigo: string, nombre: string, fuente: string}>  $detalle
+     */
+    private static function agregarPorId(
+        array &$bucket,
+        array &$detalle,
+        string $rol,
+        int $id,
+        string $nombreDefault,
+    ): void {
+        if ($id <= 0 || in_array($id, $bucket, true)) {
+            return;
+        }
+
+        $fila = DB::table('cuentacontable')->where('id', $id)->first(['codigo', 'nombre']);
+        if ($fila === null) {
+            return;
+        }
+
+        $bucket[] = $id;
+        $detalle[] = [
+            'rol' => $rol,
+            'id' => $id,
+            'codigo' => (string) ($fila->codigo ?? ''),
+            'nombre' => (string) ($fila->nombre ?? $nombreDefault),
+            'fuente' => 'concepto_ivacompra',
         ];
     }
 }

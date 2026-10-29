@@ -2,6 +2,7 @@
 
 namespace App\Support\Caja\AnitaSync;
 
+use App\Support\Anita\AnitaTextoSanitizer;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaCrownClaveSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\MonedaAnitaCodigoSupport;
@@ -32,12 +33,12 @@ final class CobranzaAnitaCheBanEsquemaSupport
      */
     public static function payloadPago(array $ctx): array
     {
-        $usuario = addslashes((string) (Auth::user()->nombre ?? ''));
+        $usuario = self::escSql((string) (Auth::user()->nombre ?? ''));
         $hoy = date('Ymd');
         $fecha = date('Ymd', strtotime((string) $ctx['fecha']));
         $tipo = substr((string) $ctx['tipo'], 0, 3);
         $cliente = self::padCliente($ctx['codigoCliente']);
-        $leyenda = addslashes((string) $ctx['leyenda']);
+        $leyenda = self::escSql((string) $ctx['leyenda']);
 
         if (EntornoEmpresaSupport::esFerli()) {
             return [
@@ -293,7 +294,7 @@ final class CobranzaAnitaCheBanEsquemaSupport
         $fecha = date('Ymd', strtotime((string) $ctx['fecha']));
         $tipo = substr((string) $ctx['tipo'], 0, 3);
         $cuenta = str_pad((string) $ctx['codigoCuenta'], 8, '0', STR_PAD_LEFT);
-        $detalle = addslashes((string) ($ctx['detalle'] ?? ''));
+        $detalle = self::escSql((string) ($ctx['detalle'] ?? ''));
         $monedaAnita = MonedaAnitaCodigoSupport::normalizar($ctx['monedaId'] ?? 1);
 
         $baseCampos = '
@@ -481,7 +482,7 @@ final class CobranzaAnitaCheBanEsquemaSupport
             return ['campos' => '', 'valores' => ''];
         }
 
-        $cbuEsc = addslashes($cbu !== '' ? $cbu : ' ');
+        $cbuEsc = self::escSql($cbu !== '' ? $cbu : ' ');
 
         return [
             'campos' => ',
@@ -540,8 +541,8 @@ final class CobranzaAnitaCheBanEsquemaSupport
     public static function payloadCtermae(array $ctx): array
     {
         $cliente = self::padCliente((string) $ctx['codigoCliente']);
-        $entregadoPor = addslashes((string) ($ctx['entregadoPor'] ?? ''));
-        $nombreBanco = addslashes((string) ($ctx['nombreBanco'] ?? ''));
+        $entregadoPor = self::escSql((string) ($ctx['entregadoPor'] ?? ''));
+        $nombreBanco = self::escSql((string) ($ctx['nombreBanco'] ?? ''));
         $monedaAnita = MonedaAnitaCodigoSupport::normalizar($ctx['monedaId'] ?? 1);
 
         $baseCampos = '
@@ -613,7 +614,7 @@ final class CobranzaAnitaCheBanEsquemaSupport
             '".($ctx['cuentaLibradora'] ?? '0')."',
             '".($ctx['codigoBanco'] ?? '0')."',
             '".($ctx['cuit'] ?? '0')."',
-            '".addslashes($nroEcheq)."'";
+            '".self::escSql($nroEcheq)."'";
 
         if (self::omitirEmpresaEnCtermae()) {
             return [
@@ -633,5 +634,17 @@ final class CobranzaAnitaCheBanEsquemaSupport
     private static function padCliente(string $codigo): string
     {
         return str_pad($codigo, 6, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Informix cierra el literal con comilla simple. Un apóstrofe (D'AQUINO) se duplica.
+     * addslashes deja D\'AQUINO y Anita responde error 201 de sintaxis.
+     */
+    private static function escSql(string $valor): string
+    {
+        $soloEspacios = trim($valor) === '';
+        $texto = $soloEspacios ? $valor : AnitaTextoSanitizer::sanitizar($valor);
+
+        return str_replace("'", "''", $texto);
     }
 }

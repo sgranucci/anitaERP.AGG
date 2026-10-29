@@ -165,8 +165,8 @@ final class CambioDevolucionMarketplaceService
     public function emitirFacReemplazo(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null): array
     {
         $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
-        $this->assertPuedeFacturarReemplazo($cambio);
         $cambio->loadMissing('lineas');
+        $this->assertPuedeFacturarReemplazo($cambio);
         if ($cambio->lineas->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)->isEmpty()) {
             throw new InvalidArgumentException(
                 'No hay líneas de reemplazo. Si es solo devolución, usá «Continuar sin reemplazo».'
@@ -237,8 +237,27 @@ final class CambioDevolucionMarketplaceService
         }
 
         $ventaNcId = (int) ($resultado['venta_id'] ?? 0);
-        $this->registrarComprobante($cambio, CambioDevolucionMarketplaceComprobante::TIPO_NC_REEMPLAZO, $ventaNcId);
-        $cambio->venta_reemplazo_id = null;
+        $this->registrarComprobante(
+            $cambio,
+            CambioDevolucionMarketplaceComprobante::TIPO_NC_REEMPLAZO,
+            $ventaNcId,
+            $ventaFacId
+        );
+        CambioDevolucionMarketplaceLinea::query()
+            ->where('cambio_id', $cambio->id)
+            ->where('venta_fac_id', $ventaFacId)
+            ->get()
+            ->each(function (CambioDevolucionMarketplaceLinea $linea): void {
+                $linea->venta_fac_id = null;
+                $linea->save();
+            });
+        $otraFacId = CambioDevolucionMarketplaceLinea::query()
+            ->where('cambio_id', $cambio->id)
+            ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)
+            ->whereNotNull('venta_fac_id')
+            ->orderByDesc('venta_fac_id')
+            ->value('venta_fac_id');
+        $cambio->venta_reemplazo_id = $otraFacId ? (int) $otraFacId : null;
         $cambio->save();
         $this->registrarEstado(
             $cambio,
@@ -328,6 +347,9 @@ final class CambioDevolucionMarketplaceService
     public function actualizarReemplazos(CambioDevolucionMarketplace $cambio, array $lineas): CambioDevolucionMarketplace
     {
         $this->assertPuedeCorregirReemplazo($cambio);
+        if ((int) ($cambio->venta_reemplazo_id ?? 0) > 0) {
+            return $this->sumarReemplazos($cambio, $lineas);
+        }
 
         return DB::transaction(function () use ($cambio, $lineas) {
             EloquentAuditDeleteSupport::each(
@@ -601,8 +623,15 @@ final class CambioDevolucionMarketplaceService
     private function assertPuedeFacturarReemplazo(CambioDevolucionMarketplace $cambio): void
     {
         $this->assertLegajoAbierto($cambio);
-        if ((int) ($cambio->venta_reemplazo_id ?? 0) > 0) {
-            throw new InvalidArgumentException('Ya hay una factura de reemplazo vigente. Si se cargó con error, emití primero su nota de crédito.');
+        $hayPendiente = CambioDevolucionMarketplaceLinea::query()
+            ->where('cambio_id', $cambio->id)
+            ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)
+            ->where(function ($query): void {
+                $query->whereNull('venta_fac_id')->orWhere('venta_fac_id', 0);
+            })
+            ->exists();
+        if ((int) ($cambio->venta_reemplazo_id ?? 0) > 0 && ! $hayPendiente) {
+            throw new InvalidArgumentException('Ya hay una factura de reemplazo vigente. Agregá el par nuevo en la grilla, o emití la nota de crédito si esa factura tiene un error.');
         }
         $estado = (string) $cambio->estado;
         $permitidos = [
@@ -645,12 +674,58 @@ final class CambioDevolucionMarketplaceService
         if (CambioDevolucionMarketplaceEstadosSupport::esEditable((string) $cambio->estado)) {
             throw new InvalidArgumentException('Guardá el legajo con Actualizar.');
         }
-        if ((int) ($cambio->venta_reemplazo_id ?? 0) > 0) {
-            throw new InvalidArgumentException('Hay una factura de reemplazo vigente. Emití su nota de crédito antes de cambiar los artículos.');
-        }
     }
 
-    private function registrarComprobante(CambioDevolucionMarketplace $cambio, string $tipo, int $ventaId): void
+    /**
+     * Suma líneas de reemplazo nuevas sin tocar las que ya tienen factura.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    private function sumarReemplazos(CambioDevolucionMarketplace $cambio, array $lineas): CambioDevolucionMarketplace
+    {
+        return DB::transaction(function () use ($cambio, $lineas) {
+            $guardadas = 0;
+            foreach ($lineas as $linea) {
+                if ((string) ($linea['tipo'] ?? '') !== CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO) {
+                    continue;
+                }
+                if ((int) ($linea['id'] ?? 0) > 0) {
+                    continue;
+                }
+                $articuloId = (int) ($linea['articulo_id'] ?? 0);
+                if ($articuloId <= 0) {
+                    continue;
+                }
+                CambioDevolucionMarketplaceLinea::query()->create([
+                    'cambio_id' => (int) $cambio->id,
+                    'tipo' => CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO,
+                    'articulo_id' => $articuloId,
+                    'talle_id' => ((int) ($linea['talle_id'] ?? 0)) ?: null,
+                    'color_id' => ((int) ($linea['color_id'] ?? 0)) ?: null,
+                    'combinacion_id' => ((int) ($linea['combinacion_id'] ?? 0)) ?: null,
+                    'cantidad' => max(0.0001, (float) ($linea['cantidad'] ?? 1)),
+                    'precio_unitario' => (float) ($linea['precio_unitario'] ?? 0),
+                    'venta_emision_id' => ((int) ($linea['venta_emision_id'] ?? 0)) ?: null,
+                    'descripcion' => $linea['descripcion'] ?? null,
+                ]);
+                $guardadas++;
+            }
+
+            if ($guardadas === 0) {
+                throw new InvalidArgumentException('Agregá el artículo de reemplazo en una línea nueva.');
+            }
+
+            $this->registrarEstado(
+                $cambio,
+                (string) $cambio->estado,
+                'Reemplazo agregado ('.$guardadas.'). La factura anterior queda.'
+            );
+
+            return $cambio->fresh(['lineas']);
+        });
+    }
+
+    private function registrarComprobante(CambioDevolucionMarketplace $cambio, string $tipo, int $ventaId, ?int $anulaVentaId = null): void
     {
         if ($ventaId <= 0) {
             return;
@@ -667,6 +742,7 @@ final class CambioDevolucionMarketplaceService
             'cambio_id' => (int) $cambio->id,
             'tipo' => $tipo,
             'venta_id' => $ventaId,
+            'anula_venta_id' => ($anulaVentaId ?? 0) > 0 ? $anulaVentaId : null,
         ]);
     }
 

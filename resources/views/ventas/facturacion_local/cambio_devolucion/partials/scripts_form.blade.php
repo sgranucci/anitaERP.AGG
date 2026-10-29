@@ -2,6 +2,7 @@
 window.cdmLegajoId = @json($data->exists ? (int) $data->id : 0);
 window.cdmEditable = @json((bool) ($editable ?? false));
 window.cdmPuedeCorregirReemplazo = @json((bool) ($puedeCorregirReemplazo ?? false));
+window.cdmPuedeSumarReemplazo = @json((bool) ($puedeSumarReemplazo ?? false));
 window.cdmBuscarVentaUrl = @json(route('api_buscar_venta_cambio_devolucion_marketplace'));
 window.cdmArticulosFacturaUrl = @json(route('api_articulos_factura_cambio_devolucion_marketplace', ['ventaId' => '__ID__']));
 window.cdmAgregarDevolucionesUrl = @json($data->exists ? route('agregar_devoluciones_cambio_devolucion_marketplace', $data->id) : '');

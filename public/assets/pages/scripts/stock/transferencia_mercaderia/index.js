@@ -1133,7 +1133,9 @@
         }
 
         var tipoDepSalida = String($('#tm_deposito_salida').attr('data-tipodeposito') || '').trim();
+        var canalSalida = String($('#tm_deposito_salida').attr('data-canal') || '').trim().toUpperCase();
         var omitirControlSaldo = !!window.TM_PERMITE_SALDOS_NEGATIVOS
+            || canalSalida === 'LOCAL'
             || tipoDepSalida.toLowerCase() === 'centro de consumo'
             || tipoDepSalida.toUpperCase() === 'M';
 

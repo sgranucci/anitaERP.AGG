@@ -93,6 +93,10 @@
 				&& !window.msDepositoOrigenRequiereControlStock()) {
 				return false;
 			}
+			if (typeof window.msDepositoOrigenPermiteNegativo === 'function'
+				&& window.msDepositoOrigenPermiteNegativo()) {
+				return false;
+			}
 			if (typeof window.msOperacionTipoTransaccion !== 'function') {
 				return false;
 			}

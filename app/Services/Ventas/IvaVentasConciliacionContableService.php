@@ -472,6 +472,7 @@ final class IvaVentasConciliacionContableService
             ->where('a.empresa_id', $empresaId)
             ->whereIn('cc.id', $idsTodos);
 
+        IvaVentasConciliacionCuentaSupport::aplicarFiltroOrigenNotaCreditoCruzada($query, $empresaId);
         IvaVentasConciliacionUnidadCuentaSupport::aplicarFiltroPeriodoConciliacion($query, $filtros);
 
         $cuentasGlobal = IvaVentasConciliacionCuentaSupport::cuentasConciliacionEmpresa($empresaId);
@@ -560,6 +561,7 @@ final class IvaVentasConciliacionContableService
             ->where('a.empresa_id', $empresaId)
             ->whereIn('cc.id', $idsTodos);
 
+        IvaVentasConciliacionCuentaSupport::aplicarFiltroOrigenNotaCreditoCruzada($query, $empresaId);
         IvaVentasConciliacionUnidadCuentaSupport::aplicarFiltroPeriodoConciliacion($query, $filtros);
 
         $rows = $query
@@ -634,6 +636,7 @@ final class IvaVentasConciliacionContableService
             ->where('a.empresa_id', $empresaId)
             ->whereIn('cc.id', $idsTodos);
 
+        IvaVentasConciliacionCuentaSupport::aplicarFiltroOrigenNotaCreditoCruzada($query, $empresaId);
         IvaVentasConciliacionUnidadCuentaSupport::aplicarFiltroPeriodoConciliacion($query, $filtros);
 
         $rows = $query

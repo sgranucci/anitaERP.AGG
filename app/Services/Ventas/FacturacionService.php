@@ -60,6 +60,7 @@ use App\Models\Stock\Lote;
 use App\Models\Stock\Linea;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Contable\NotaCreditoIvaCuentaSupport;
 use App\Support\Ventas\Ferli\FacturaDespachoFerliSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorOtFerliSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorPickingFerliSupport;
@@ -9276,6 +9277,28 @@ class FacturacionService
 	 * El tipo de comprobante puede no imputar (remito interno RIN).
 	 * Si la marca no existe todavía, se sigue generando el asiento.
 	 */
+	private function tipoTransaccionParaAsiento(int $ventaId, string $tipoAbreviatura): ?Tipotransaccion
+	{
+		if ($ventaId > 0) {
+			$tipoId = (int) Venta::query()->whereKey($ventaId)->value('tipotransaccion_id');
+			if ($tipoId > 0) {
+				$tipo = Tipotransaccion::query()->find($tipoId);
+				if ($tipo instanceof Tipotransaccion) {
+					return $tipo;
+				}
+			}
+		}
+
+		$abreviatura = strtoupper(substr(trim($tipoAbreviatura), 0, 5));
+		if ($abreviatura === '') {
+			return null;
+		}
+
+		$tipo = Tipotransaccion::query()->where('abreviatura', $abreviatura)->first();
+
+		return $tipo instanceof Tipotransaccion ? $tipo : null;
+	}
+
 	private function tipoGeneraAsientoContable($ventaId, $tipoAbreviatura): bool
 	{
 		if (! \Illuminate\Support\Facades\Schema::hasColumn('tipotransaccion', 'genera_asiento')) {
@@ -9312,6 +9335,11 @@ class FacturacionService
 	{
 		if (! $this->tipoGeneraAsientoContable($venta_id, $tipo)) {
 			return null;
+		}
+
+		$tipoNc = $this->tipoTransaccionParaAsiento((int) $venta_id, (string) $tipo);
+		if (is_array($asientocontable) && NotaCreditoIvaCuentaSupport::esNotaCreditoVenta($tipoNc)) {
+			$asientocontable = NotaCreditoIvaCuentaSupport::remapearAsientoVenta($asientocontable, (int) $empresa_id);
 		}
 
 		$opcionesCierre = ['modofacturacion_pv' => $modoFacturacionPv];

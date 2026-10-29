@@ -3,6 +3,7 @@
 namespace App\Support\Stock;
 
 use App\Models\Stock\Depmae;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
  * Reglas de control de stock según tipo de depósito (depmae.tipodeposito)
@@ -14,6 +15,9 @@ use App\Models\Stock\Depmae;
  * Resto (Normal, Excedente, Consignacion, Transito, Temporal, Interno, Formulas):
  * aplica validación de saldo en salidas y en transferencias desde depósito origen,
  * salvo que STOCK_PERMITE_SALDOS_NEGATIVOS=true (entonces se muestra saldo pero no bloquea).
+ *
+ * Ferli, canal Local (locales): se puede mover aunque el saldo quede bajo cero.
+ * Fábrica sigue exigiendo saldo.
  */
 final class DepmaeControlStockSupport
 {
@@ -46,7 +50,23 @@ final class DepmaeControlStockSupport
             return false;
         }
 
+        if (self::localFerliPermiteNegativo($deposito)) {
+            return false;
+        }
+
         return self::manejaControlStock($deposito);
+    }
+
+    /**
+     * Locales Ferli (depmae.canal = LOCAL) pueden egresar o canjear bajo cero.
+     */
+    public static function localFerliPermiteNegativo(?Depmae $deposito): bool
+    {
+        if ($deposito === null || ! EntornoEmpresaSupport::esFerli() || ! DepmaeCanalSupport::columnaDisponible()) {
+            return false;
+        }
+
+        return DepmaeCanalSupport::normalizar((string) ($deposito->canal ?? '')) === DepmaeCanalSupport::LOCAL;
     }
 
     public static function esCentroDeConsumo(?string $tipodeposito): bool

@@ -350,6 +350,8 @@
                             'depositoId' => optional($depSalida)->id ?? '',
                             'codigo' => optional($depSalida)->codigo ?? '',
                             'descripcion' => optional($depSalida)->nombre ?? '',
+                            'tipodeposito' => optional($depSalida)->tipodeposito ?? '',
+                            'canal' => optional($depSalida)->canal ?? '',
                             'required' => false,
                         ])
                         @if (\App\Support\Stock\TransferenciaMercaderiaIntercompanySupport::puedeUsar())
@@ -382,6 +384,8 @@
                             'depositoId' => optional($depEntrada)->id ?? '',
                             'codigo' => optional($depEntrada)->codigo ?? '',
                             'descripcion' => optional($depEntrada)->nombre ?? '',
+                            'tipodeposito' => optional($depEntrada)->tipodeposito ?? '',
+                            'canal' => optional($depEntrada)->canal ?? '',
                         ])
                         <div class="form-group col-12 mb-2" id="tm_panel_bien_destino" style="display:none;">
                             <label for="bien_uso_destino_id">Bien de uso destino</label>

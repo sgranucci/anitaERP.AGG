@@ -31,11 +31,13 @@ class CambioDevolucionMarketplaceComprobante extends Model implements Auditable
         'cambio_id',
         'tipo',
         'venta_id',
+        'anula_venta_id',
     ];
 
     protected $casts = [
         'cambio_id' => 'integer',
         'venta_id' => 'integer',
+        'anula_venta_id' => 'integer',
     ];
 
     public function cambio()

@@ -3,6 +3,7 @@
 namespace App\Support\Ventas\FacturacionLocal;
 
 use App\Models\Ventas\CambioDevolucionMarketplace;
+use App\Models\Ventas\CambioDevolucionMarketplaceComprobante;
 use App\Models\Ventas\Venta;
 
 /**
@@ -54,11 +55,58 @@ final class CambioDevolucionMarketplaceLiquidacionSupport
 
     public static function aplicarALegajo(CambioDevolucionMarketplace $cambio): void
     {
-        $cambio->loadMissing(['ventaReemplazo', 'ventaOriginal', 'ventaNc']);
+        $cambio->loadMissing(['ventaOriginal', 'ventaNc', 'comprobantes']);
         $base = $cambio->ventaNc ?? $cambio->ventaOriginal;
-        $calc = self::calcular($cambio->ventaReemplazo, $base);
+        $reemplazo = new Venta();
+        $reemplazo->total = self::totalReemplazosVigentes($cambio);
+        $calc = self::calcular($reemplazo, $base);
         $cambio->diferencia_importe = $calc['diferencia_importe'];
         $cambio->diferencia_sentido = $calc['diferencia_sentido'];
+    }
+
+    /**
+     * Suma las facturas de reemplazo que siguen vigentes (las anuladas por NC no entran).
+     */
+    public static function totalReemplazosVigentes(CambioDevolucionMarketplace $cambio): float
+    {
+        $cambio->loadMissing('comprobantes');
+        $anuladas = [];
+        foreach ($cambio->comprobantes as $comprobante) {
+            if ((string) $comprobante->tipo !== CambioDevolucionMarketplaceComprobante::TIPO_NC_REEMPLAZO) {
+                continue;
+            }
+            $anulaId = (int) ($comprobante->anula_venta_id ?? 0);
+            if ($anulaId > 0) {
+                $anuladas[] = $anulaId;
+            }
+        }
+
+        $ids = [];
+        foreach ($cambio->comprobantes as $comprobante) {
+            if ((string) $comprobante->tipo !== CambioDevolucionMarketplaceComprobante::TIPO_FAC_REEMPLAZO) {
+                continue;
+            }
+            $ventaId = (int) $comprobante->venta_id;
+            if ($ventaId > 0 && ! in_array($ventaId, $anuladas, true)) {
+                $ids[] = $ventaId;
+            }
+        }
+
+        $pointer = (int) ($cambio->venta_reemplazo_id ?? 0);
+        if ($pointer > 0 && ! in_array($pointer, $anuladas, true)) {
+            $ids[] = $pointer;
+        }
+        $ids = array_values(array_unique($ids));
+        if ($ids === []) {
+            return 0.0;
+        }
+
+        $total = 0.0;
+        foreach (Venta::query()->whereIn('id', $ids)->get(['id', 'total']) as $venta) {
+            $total += abs((float) $venta->total);
+        }
+
+        return round($total, 2);
     }
 
     public static function etiquetaSentido(?string $sentido): string

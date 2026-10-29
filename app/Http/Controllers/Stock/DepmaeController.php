@@ -13,6 +13,7 @@ use App\Http\Requests\ValidacionDepmae;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\QueryRetornoListado;
+use App\Support\Stock\DepmaeCanalSupport;
 use App\Support\Stock\DepmaeListadoFiltros;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\RecepcionProveedorIntercompanySupport;
@@ -304,7 +305,11 @@ class DepmaeController extends Controller
         $esCrown = EntornoEmpresaSupport::esCrown();
         $mostrarSala = $esCrown;
 
-        $query = Depmae::query()->select('id', 'codigo', 'nombre', 'tipodeposito', 'empresa_id', 'sala_id')
+        $columnasConsulta = ['id', 'codigo', 'nombre', 'tipodeposito', 'empresa_id', 'sala_id'];
+        if (DepmaeCanalSupport::columnaDisponible()) {
+            $columnasConsulta[] = 'canal';
+        }
+        $query = Depmae::query()->select($columnasConsulta)
             ->with(['empresas:id,nombre', 'salas:id,codigo,nombre']);
 
         if (! $intercompany) {
@@ -371,6 +376,7 @@ class DepmaeController extends Controller
                 $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
                 $output['data'] .= '<td class="descripcion">'.e($row->nombre).'</td>';
                 $output['data'] .= '<td class="tipodeposito">'.e($row->tipodeposito).'</td>';
+                $output['data'] .= '<td class="canal d-none">'.e($row->canal ?? '').'</td>';
                 if ($mostrarSala) {
                     $output['data'] .= '<td class="sala-nombre">'.e($salaEtiqueta).'</td>';
                 }
@@ -463,6 +469,7 @@ class DepmaeController extends Controller
             'codigo' => $deposito->codigo,
             'descripcion' => $deposito->nombre,
             'tipodeposito' => $deposito->tipodeposito,
+            'canal' => $deposito->canal ?? '',
             'empresa_id' => $deposito->empresa_id,
             'empresa_nombre' => optional($deposito->empresas)->nombre,
             'sala_id' => $deposito->sala_id,

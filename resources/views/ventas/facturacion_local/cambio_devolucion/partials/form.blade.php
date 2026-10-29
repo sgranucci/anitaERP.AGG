@@ -20,6 +20,8 @@
                 'descripcion' => $l->descripcion ?: ($l->articulo->descripcion ?? ''),
                 'cantidad' => $l->cantidad,
                 'precio_unitario' => $l->precio_unitario,
+                'id' => $l->id,
+                'venta_fac_id' => $l->venta_fac_id,
                 'venta_emision_id' => $l->venta_emision_id,
                 'talle_id' => $l->talle_id,
                 'talle_codigo' => $codigoMaestro($l->talle),
@@ -241,13 +243,14 @@
             El precio inicial de «A devolver» es el de la factura, ya con el descuento.
             El precio de la factura del par se elige junto a ese botón. El precio de la devolución (nota de crédito de lo devuelto) se elige en el pie: el de la factura original menos el descuento, el precio lleno de esa factura, o el precio lleno actual.
             «Traer de la factura» vuelve a leer todos los artículos de la factura original para devolver todos o sumar alguno más.
+            Si ya facturaste un reemplazo y sumaste otro par a devolver, usá Agregar reemplazo, Guardar reemplazo y Facturar el reemplazo agregado. La factura anterior queda.
             Si la factura del reemplazo se cargó mal, la nota de crédito de ese comprobante lo anula y se puede facturar de nuevo sin cerrar el legajo.
             Cambio: cargar el reemplazo con lupa o F1. Solo reembolso: dejar solo líneas «A devolver» (sin reemplazo) y usar «Continuar sin reemplazo».
             El calzado pide talle y, según el artículo, color o combinación. Si no maneja variante, esos campos quedan en «No aplica».
             Buscar factura: también atajos tipo A26-146 o 23-45335.
         </p>
         @php
-            $mostrarAccionesLinea = ! $ro || ($puedeCorregirReemplazo ?? false);
+            $mostrarAccionesLinea = ! $ro || ($puedeCorregirReemplazo ?? false) || ($puedeSumarReemplazo ?? false);
         @endphp
         @if ($puedeTraerFactura ?? false)
             <button type="button" class="btn btn-outline-info btn-sm mb-2" id="cdm-traer-factura">
@@ -285,7 +288,7 @@
             <button type="button" class="btn btn-outline-primary btn-sm" id="cdm-agregar-linea">
                 <i class="fa fa-plus"></i> Agregar línea
             </button>
-        @elseif ($puedeCorregirReemplazo ?? false)
+        @elseif (($puedeCorregirReemplazo ?? false) || ($puedeSumarReemplazo ?? false))
             <button type="button" class="btn btn-outline-primary btn-sm" id="cdm-agregar-linea">
                 <i class="fa fa-plus"></i> Agregar reemplazo
             </button>
@@ -296,6 +299,9 @@
                         onclick="return confirm('¿Guardar los artículos de reemplazo?');">
                     Guardar reemplazo
                 </button>
+            @endif
+            @if ($puedeSumarReemplazo ?? false)
+                <span class="small text-muted ml-2">La factura ya emitida no se modifica. Después facturá solo el par nuevo.</span>
             @endif
         @endif
     </div>
@@ -313,7 +319,7 @@
     </div>
 </div>
 
-@if (! $ro || ($puedeCorregirReemplazo ?? false))
+@if (! $ro || ($puedeCorregirReemplazo ?? false) || ($puedeSumarReemplazo ?? false))
 <div class="modal fade" id="cdm-modal-ventas" tabindex="-1" role="dialog" aria-labelledby="cdm-modal-ventas-titulo" aria-hidden="true">
     <div class="modal-dialog modal-xl" role="document">
         <div class="modal-content">

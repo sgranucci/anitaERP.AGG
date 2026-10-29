@@ -46,6 +46,11 @@
         return tipo.toLowerCase() !== 'centro de consumo' && tipo.toUpperCase() !== 'M';
     }
 
+    function depositoOrigenPermiteNegativo() {
+        var $ctx = ctxDepositoOrigen();
+        return String($ctx.attr('data-canal') || '').trim().toUpperCase() === 'LOCAL';
+    }
+
     function depositoOrigenId() {
         if (!depositoOrigenRequiereControlStock()) {
             return 0;
@@ -80,6 +85,9 @@
         }
         if (typeof window.msDepositoOrigenRequiereControlStock === 'function'
             && !window.msDepositoOrigenRequiereControlStock()) {
+            return false;
+        }
+        if (depositoOrigenPermiteNegativo()) {
             return false;
         }
         var op = operacionTipo();
@@ -243,6 +251,7 @@
 
     window.msRefrescarSaldosOrigen = refrescarSaldosOrigen;
     window.msDepositoOrigenRequiereControlStock = depositoOrigenRequiereControlStock;
+    window.msDepositoOrigenPermiteNegativo = depositoOrigenPermiteNegativo;
 
     $(document).on('change input', '#tabla-items-movimientostock .articulo_id, #tabla-items-movimientostock .codigoarticulo', function () {
         programarSaldoFila($(this).closest('tr'));

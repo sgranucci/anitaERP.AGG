@@ -248,6 +248,9 @@ function notificarDepositoAplicado($ctx, data) {
         $ctx.attr('data-tipodeposito', String(data.tipodeposito || ''));
         $ctx.find('.deposito_id').attr('data-tipodeposito', String(data.tipodeposito || ''));
     }
+    if (data && data.canal !== undefined) {
+        $ctx.attr('data-canal', String(data.canal || ''));
+    }
     $ctx.find('.deposito_id').trigger('change');
     if (typeof window.onDepositoAplicadoEnFormulario === 'function') {
         window.onDepositoAplicadoEnFormulario(data, $ctx);
@@ -440,6 +443,7 @@ function activa_eventos_consultadeposito() {
             var codigo = $tr.find('.codigo').html();
             var descripcion = $tr.find('.descripcion').html();
             var tipodeposito = $tr.find('.tipodeposito').html() || '';
+            var canal = $tr.find('.canal').text() || '';
             var empresaIdDep = $tr.find('.empresa-id').html() || '';
             var empresaNombreDep = $tr.find('.empresa-nombre').html() || '';
             var salaIdDep = $tr.find('.sala-id').html() || '';
@@ -504,6 +508,7 @@ function activa_eventos_consultadeposito() {
                 codigo: codigo,
                 descripcion: descripcion,
                 tipodeposito: tipodeposito,
+                canal: canal,
                 empresa_id: parseInt(empresaIdDep, 10) || 0,
                 empresa_nombre: empresaNombreDep,
                 sala_id: parseInt(salaIdDep, 10) || 0,

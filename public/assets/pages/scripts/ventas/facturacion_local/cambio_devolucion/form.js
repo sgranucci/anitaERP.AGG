@@ -220,7 +220,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        if (!window.cdmEditable && !window.cdmPuedeCorregirReemplazo) {
+        if (!window.cdmEditable && !window.cdmPuedeCorregirReemplazo && !window.cdmPuedeSumarReemplazo) {
             return;
         }
 

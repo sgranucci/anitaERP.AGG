@@ -38,6 +38,7 @@ use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
+use App\Support\Contable\NotaCreditoIvaCuentaSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -500,6 +501,13 @@ class ComprobanteProveedorAsientoService
             // Sin OC/COM: renglón, maestro, o la cuenta de gasto ya cargada en otro neto.
             // El impuesto interno usa esa cuenta de gasto; no exige la del concepto.
             $cuentaId = ComprobanteProveedorCuentaDebeNetoSupport::resolverParaLinea($comprobante, $linea, $concepto);
+            if ($esNotaCredito && $concepto !== null) {
+                $cuentaId = NotaCreditoIvaCuentaSupport::cuentaHaberNotaCreditoCompra(
+                    $cuentaId,
+                    (int) $concepto->cuentacontableDebeIdParaEmpresa($empresaId > 0 ? $empresaId : null),
+                    (int) $concepto->cuentacontableHaberIdParaEmpresa($empresaId > 0 ? $empresaId : null),
+                );
+            }
             if ($cuentaId <= 0 && ! ($permitirCuentasPendientes && $esNetoSinReferencia)) {
                 if ($esImpuestoInterno) {
                     throw new RuntimeException(

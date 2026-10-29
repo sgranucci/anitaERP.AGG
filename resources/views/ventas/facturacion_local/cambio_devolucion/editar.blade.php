@@ -8,7 +8,7 @@
 <script src="{{ asset('assets/pages/scripts/ventas/facturacion_local/cambio_devolucion_opp.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/facturacion_local/cambio_devolucion_opp.js')) ?: time() }}" type="text/javascript"></script>
 @include('ventas.facturacion_local.cambio_devolucion.partials.scripts_form', [
     'editable' => $editable ?? false,
-    'lineaInteractiva' => ($editable ?? false) || ($puedeCorregirReemplazo ?? false),
+    'lineaInteractiva' => ($editable ?? false) || ($puedeCorregirReemplazo ?? false) || ($puedeSumarReemplazo ?? false),
 ])
 @if (session('abrir_pdf_opp'))
 <script>
@@ -101,6 +101,17 @@ document.addEventListener('DOMContentLoaded', function () {
                             <button type="submit" class="btn btn-warning">Emitir FAC reemplazo (NCD)</button>
                         </form>
                     @endif
+                @endif
+
+                @if (($puedeFacturarAgregado ?? false) && can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
+                    <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1"
+                          onsubmit="var s=this.querySelector('[name=modo_precio]'); return confirm('¿Facturar solo el reemplazo agregado, con este precio: '+(s?s.options[s.selectedIndex].text:'')+'? La factura anterior queda.');">
+                        @csrf
+                        @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio', [
+                            'etiquetaPrecio' => 'Precio de la factura',
+                        ])
+                        <button type="submit" class="btn btn-warning">Facturar el reemplazo agregado</button>
+                    </form>
                 @endif
 
                 @if (($puedeRefacturar ?? false) && can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))

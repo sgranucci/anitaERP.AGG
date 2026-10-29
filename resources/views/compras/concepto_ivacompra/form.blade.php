@@ -174,7 +174,7 @@
 <div class="card card-outline card-info mb-3">
     <div class="card-header d-flex align-items-center justify-content-between py-2">
         <strong>Cuentas contables por empresa</strong>
-        <small class="text-muted mb-0">Una fila por empresa (Debe / Haber). Use el modal de consulta.</small>
+        <small class="text-muted mb-0">Factura: cuenta Debe. Nota de crédito: cuenta Haber si es otra.</small>
     </div>
     <div class="card-body p-2">
         <div class="table-responsive">

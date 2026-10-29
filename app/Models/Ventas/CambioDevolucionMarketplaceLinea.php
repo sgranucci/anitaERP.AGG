@@ -25,6 +25,7 @@ class CambioDevolucionMarketplaceLinea extends Model implements Auditable
         'cantidad',
         'precio_unitario',
         'venta_emision_id',
+        'venta_fac_id',
         'descripcion',
     ];
 
@@ -37,6 +38,7 @@ class CambioDevolucionMarketplaceLinea extends Model implements Auditable
         'cantidad' => 'float',
         'precio_unitario' => 'float',
         'venta_emision_id' => 'integer',
+        'venta_fac_id' => 'integer',
     ];
 
     public function cambio()

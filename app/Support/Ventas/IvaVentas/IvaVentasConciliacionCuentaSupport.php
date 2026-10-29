@@ -7,6 +7,7 @@ namespace App\Support\Ventas\IvaVentas;
 use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
+use App\Support\Contable\NotaCreditoIvaCuentaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use Illuminate\Support\Facades\DB;
 
@@ -75,6 +76,19 @@ final class IvaVentasConciliacionCuentaSupport
         // IVA crédito fiscal: entra al mismo bucket que el débito (debe = −) para netear el IVA.
         foreach (self::codigosConfigIvaVentas('cuentas_iva_credito_por_empresa', $empresaId) as $codigo) {
             self::agregarCuentaPorCodigoConfig($ivaDebito, $detalle, 'iva_credito', self::FUENTE_IVA_VENTAS, $empresaId, $codigo, 'IVA crédito fiscal (config IVA ventas)');
+        }
+        $creditoVentaId = NotaCreditoIvaCuentaSupport::cuentaCreditoFiscalVentaId($empresaId);
+        if ($creditoVentaId > 0) {
+            $ctaCredito = DB::table('cuentacontable')->where('id', $creditoVentaId)->first(['codigo', 'nombre']);
+            self::agregarCuenta(
+                $ivaDebito,
+                $detalle,
+                'iva_credito',
+                'cuenta_automatica',
+                $creditoVentaId,
+                (string) ($ctaCredito->codigo ?? ''),
+                (string) ($ctaCredito->nombre ?? 'IVA crédito fiscal')
+            );
         }
 
         $cuentaNcpId = ParametroSistemaSupport::ncpProntoPagoCuentaIdParaEmpresa($empresaId);
@@ -215,6 +229,43 @@ final class IvaVentasConciliacionCuentaSupport
 
         $nombre = (string) (DB::table('cuentacontable')->where('id', $id)->value('nombre') ?? $nombreDefault);
         self::agregarCuenta($bucket, $detalle, $rol, $fuente, $id, $codigo, $nombre);
+    }
+
+    /**
+     * Si la NC de compra usa otra cuenta que la factura, el cuadre de ventas
+     * no suma esos asientos de compra. Si el IVA crédito de ventas es también
+     * la cuenta Debe de un concepto de compra, solo entran asientos de venta.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     */
+    public static function aplicarFiltroOrigenNotaCreditoCruzada($query, int $empresaId, string $aliasAsiento = 'a', string $aliasCuenta = 'cc'): void
+    {
+        $haberNc = NotaCreditoIvaCuentaSupport::cuentasHaberDistintasDebeIds($empresaId);
+        $creditoCompartido = NotaCreditoIvaCuentaSupport::cuentaCreditoVentaCompartidaConCompraId($empresaId);
+        $restringidas = $haberNc;
+        if ($creditoCompartido > 0) {
+            $restringidas[] = $creditoCompartido;
+        }
+        $restringidas = array_values(array_unique($restringidas));
+        if ($restringidas === []) {
+            return;
+        }
+
+        $query->where(function ($q) use ($aliasAsiento, $aliasCuenta, $haberNc, $creditoCompartido, $restringidas) {
+            $q->whereNotIn($aliasCuenta.'.id', $restringidas);
+            if ($haberNc !== []) {
+                $q->orWhere(function ($deb) use ($aliasAsiento, $aliasCuenta, $haberNc) {
+                    $deb->whereIn($aliasCuenta.'.id', $haberNc)
+                        ->whereNull($aliasAsiento.'.comprobante_proveedor_id');
+                });
+            }
+            if ($creditoCompartido > 0) {
+                $q->orWhere(function ($cre) use ($aliasAsiento, $aliasCuenta, $creditoCompartido) {
+                    $cre->where($aliasCuenta.'.id', $creditoCompartido)
+                        ->whereNotNull($aliasAsiento.'.venta_id');
+                });
+            }
+        });
     }
 
     private static function resolverIdPorCodigo(int $empresaId, string $codigo): int

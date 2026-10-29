@@ -34,18 +34,32 @@ final class CambioDevolucionMarketplaceEmisionService
             return ['ok' => false, 'error' => 'Local de venta inexistente.'];
         }
 
-        $lineasReemplazo = $cambio->lineas
+        $todasReemplazo = $cambio->lineas
             ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)
             ->values();
-        if ($lineasReemplazo->isEmpty()) {
+        if ($todasReemplazo->isEmpty()) {
             return ['ok' => false, 'error' => 'No hay líneas de reemplazo para facturar.'];
         }
+
+        $yaFacturadas = $todasReemplazo
+            ->filter(static fn ($linea): bool => (int) ($linea->venta_fac_id ?? 0) > 0)
+            ->values();
+        $pendientes = $todasReemplazo
+            ->filter(static fn ($linea): bool => (int) ($linea->venta_fac_id ?? 0) <= 0)
+            ->values();
+        if ($pendientes->isEmpty()) {
+            return ['ok' => false, 'error' => 'No hay un reemplazo nuevo para facturar. Agregalo en la grilla y guardalo.'];
+        }
+        $lineasReemplazo = $yaFacturadas->isEmpty() ? $todasReemplazo : $pendientes;
 
         $emisiones = $cambio->ventaOriginal?->venta_emisiones?->keyBy('id') ?? collect();
         $devolverPendientes = $cambio->lineas
             ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER)
             ->values();
         $devolverUsados = [];
+        foreach ($yaFacturadas as $ya) {
+            $this->parDeDevolucion($devolverPendientes, $ya, $devolverUsados);
+        }
         $ajustes = [];
 
         $lineas = [];
@@ -126,6 +140,12 @@ final class CambioDevolucionMarketplaceEmisionService
         }
 
         $aviso = $this->persistirPreciosFacturados($ajustes);
+        if ($ventaId > 0) {
+            foreach ($lineasReemplazo as $lineaFacturada) {
+                $lineaFacturada->venta_fac_id = $ventaId;
+                $lineaFacturada->save();
+            }
+        }
         $detalle = trim(implode(' ', array_filter([
             CambioDevolucionMarketplacePrecioSupport::etiqueta($modo).'.',
             $aviso,

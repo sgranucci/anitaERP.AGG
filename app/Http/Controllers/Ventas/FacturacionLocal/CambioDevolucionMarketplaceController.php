@@ -580,6 +580,10 @@ class CambioDevolucionMarketplaceController extends Controller
         $data->loadMissing('lineas');
         $esSoloDevolucion = CambioDevolucionMarketplaceCatalogoSupport::esSoloDevolucion($data->lineas);
         $puedeOperarFacturacion = $data->exists && ! $terminal && ! $oppEmitida;
+        $reemplazosPendientes = $data->lineas
+            ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)
+            ->filter(static fn ($linea): bool => (int) ($linea->venta_fac_id ?? 0) <= 0)
+            ->count();
 
         return [
             'data' => $data,
@@ -594,6 +598,12 @@ class CambioDevolucionMarketplaceController extends Controller
             'puenteCuentacaja' => $puente,
             'esSoloDevolucion' => $esSoloDevolucion,
             'puedeCorregirReemplazo' => $puedeOperarFacturacion && ! $editable && ! $facVigente,
+            'puedeSumarReemplazo' => $puedeOperarFacturacion && ! $editable && $facVigente,
+            'puedeFacturarAgregado' => $puedeOperarFacturacion
+                && $facVigente
+                && $reemplazosPendientes > 0
+                && ! $esSoloDevolucion
+                && $estado !== CambioDevolucionMarketplaceEstadosSupport::BORRADOR,
             'puedeTraerFactura' => $data->exists
                 && ! $terminal
                 && (int) ($data->venta_original_id ?? 0) > 0
