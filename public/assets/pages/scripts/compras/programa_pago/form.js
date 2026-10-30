@@ -160,15 +160,129 @@
             else if (est === 'completo') completos++;
         });
         $('#pp-progreso-texto').text(completos + ' OK / ' + total + ' · ' + pendientes + ' sin marcar');
-        var pct = total ? Math.round((completos / total) * 100) : 0;
-        $('#pp-progreso-barra').css('width', pct + '%').attr('aria-valuenow', pct).text(pct + '%');
+    }
+
+    function fijarPieGrilla() {
+        var filasPie = document.querySelectorAll('#tabla-programa-pago tfoot tr');
+        var acumulado = 0;
+        var i;
+        for (i = filasPie.length - 1; i >= 0; i--) {
+            filasPie[i].style.setProperty('--pp-foot-bottom', acumulado + 'px');
+            acumulado += filasPie[i].getBoundingClientRect().height;
+        }
+    }
+
+    function filaVisible() {
+        var filasDom = document.querySelectorAll('#tbody-programa-pago tr');
+        var i;
+        for (i = 0; i < filasDom.length; i++) {
+            if (filasDom[i].offsetHeight > 0) {
+                return filasDom[i];
+            }
+        }
+        return null;
+    }
+
+    function ajustarAltoGrilla() {
+        var wrap = document.querySelector('.pp-matriz-wrap');
+        var thead = document.querySelector('#tabla-programa-pago thead');
+        var tfoot = document.querySelector('#tabla-programa-pago tfoot');
+        var filaEl = filaVisible();
+        if (!wrap || !thead || !filaEl) {
+            return;
+        }
+        var head = thead.getBoundingClientRect().height;
+        var foot = tfoot ? tfoot.getBoundingClientRect().height : 0;
+        var fila = filaEl.getBoundingClientRect().height;
+        if (fila < 1) {
+            return;
+        }
+        var topDocumento = wrap.getBoundingClientRect().top + (window.scrollY || document.documentElement.scrollTop || 0);
+        var reserva = 8;
+        var card = wrap.closest('.card');
+        var cardFooter = card ? card.querySelector('.card-footer') : null;
+        var body = wrap.closest('.card-body');
+        if (cardFooter) {
+            reserva += cardFooter.offsetHeight;
+        }
+        if (body) {
+            reserva += parseFloat(window.getComputedStyle(body).paddingBottom) || 0;
+        }
+        var disponible = window.innerHeight - topDocumento - reserva;
+        var n = Math.floor((disponible - head - foot - 18) / fila);
+        if (n < 2) {
+            n = 2;
+        }
+        function aplicarAlto(cant) {
+            wrap.style.height = Math.ceil(head + foot + (cant * fila) + 2) + 'px';
+            wrap.style.maxHeight = wrap.style.height;
+            return wrap.clientHeight - head - foot;
+        }
+        var cuerpo = aplicarAlto(n);
+        var nReal = Math.floor((cuerpo + 0.5) / fila);
+        if (nReal >= 2 && nReal !== n) {
+            cuerpo = aplicarAlto(nReal);
+            nReal = Math.floor((cuerpo + 0.5) / fila);
+        }
+        var sobra = cuerpo - (nReal * fila);
+        if (sobra > 1) {
+            wrap.style.height = (parseFloat(wrap.style.height) - sobra) + 'px';
+            wrap.style.maxHeight = wrap.style.height;
+        }
+        wrap.style.setProperty('--pp-head', head + 'px');
+        wrap.style.setProperty('--pp-foot', foot + 'px');
+        fijarPieGrilla();
+        alinearScrollAFilas();
+    }
+
+    function alinearScrollAFilas() {
+        var wrap = document.querySelector('.pp-matriz-wrap');
+        var filaEl = filaVisible();
+        if (!wrap || !filaEl) {
+            return;
+        }
+        var fila = filaEl.getBoundingClientRect().height;
+        if (fila < 1) {
+            return;
+        }
+        var destino = Math.round(wrap.scrollTop / fila) * fila;
+        var maximo = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+        if (destino > maximo) {
+            destino = Math.floor(maximo / fila) * fila;
+        }
+        if (Math.abs(wrap.scrollTop - destino) > 0.5) {
+            wrap.scrollTop = destino;
+        }
     }
 
     function scrollAFila($tr) {
-        if (!$tr || !$tr.length || !$tr[0].scrollIntoView) {
+        var wrap = document.querySelector('.pp-matriz-wrap');
+        var row = $tr && $tr[0];
+        var thead = document.querySelector('#tabla-programa-pago thead');
+        var tfoot = document.querySelector('#tabla-programa-pago tfoot');
+        if (!wrap || !row || !$tr.is(':visible') || !thead) {
             return;
         }
-        $tr[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        var fila = row.getBoundingClientRect().height;
+        if (fila < 1) {
+            return;
+        }
+        var visibles = $('#tbody-programa-pago tr:visible').toArray();
+        var idx = visibles.indexOf(row);
+        if (idx < 0) {
+            return;
+        }
+        var head = thead.getBoundingClientRect().height;
+        var foot = tfoot ? tfoot.getBoundingClientRect().height : 0;
+        var cupo = Math.max(1, Math.floor((wrap.clientHeight - head - foot + 0.5) / fila));
+        var primero = Math.round(wrap.scrollTop / fila);
+        var destino = primero * fila;
+        if (idx < primero) {
+            destino = idx * fila;
+        } else if (idx >= primero + cupo) {
+            destino = (idx - cupo + 1) * fila;
+        }
+        wrap.scrollTop = destino;
     }
 
     function setActivo(i, scroll) {
@@ -394,7 +508,14 @@
             toggleMes(String($(this).data('clave')));
         });
 
-        $('#pp-solo-pendientes').on('change', aplicarFiltroVista);
+        $('#pp-solo-pendientes').on('change', function () {
+            aplicarFiltroVista();
+            alinearScrollAFilas();
+        });
+        var wrapGrilla = document.querySelector('.pp-matriz-wrap');
+        if (wrapGrilla) {
+            wrapGrilla.addEventListener('scrollend', alinearScrollAFilas);
+        }
 
         $('#pp-btn-limpiar-chips').on('click', limpiarChips);
 
@@ -509,6 +630,9 @@
         });
 
         recalcular();
+        ajustarAltoGrilla();
+        window.addEventListener('resize', ajustarAltoGrilla);
+        window.addEventListener('load', ajustarAltoGrilla);
         irSiguientePendiente();
         if (idxActivo < 0 && filas().length) {
             setActivo(0);

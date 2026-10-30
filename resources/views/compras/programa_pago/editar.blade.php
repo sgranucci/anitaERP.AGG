@@ -5,44 +5,80 @@
 
 @section('styles')
 <style>
-    /* Solo scroll horizontal de la grilla; el vertical es el de la página */
+    /* El panel de programación queda en la página. Solo se desplaza el cuerpo de proveedores. */
     .pp-matriz-wrap {
-        overflow-x: auto;
-        overflow-y: visible;
+        overflow: auto;
+        overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
         border: 1px solid #dee2e6;
         border-radius: 4px;
+        max-height: 55vh;
+        scroll-snap-type: y mandatory;
+        scroll-padding-top: var(--pp-head, 0px);
+        scroll-padding-bottom: var(--pp-foot, 0px);
+    }
+    .pp-matriz tbody tr {
+        scroll-snap-align: start;
     }
     .pp-matriz {
         margin-bottom: 0;
         min-width: 900px;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .pp-matriz thead th,
+    .pp-matriz tbody td,
+    .pp-matriz tfoot td {
+        border-width: 0 1px 1px 0;
+        border-style: solid;
+        border-color: #dee2e6;
+    }
+    .pp-matriz thead th:first-child,
+    .pp-matriz tbody td:first-child,
+    .pp-matriz tfoot td:first-child {
+        border-left-width: 1px;
     }
     .pp-matriz thead th {
+        border-top-width: 1px;
         white-space: nowrap;
         background: #85C1E9;
         color: #17202A;
+        position: sticky;
+        top: 0;
+        z-index: 4;
     }
     .pp-matriz .pp-col-proveedor { min-width: 220px; background: #fff; }
     .pp-matriz .pp-monto { width: 100px; text-align: right; }
     .pp-matriz .pp-obs { min-width: 120px; }
-    .pp-matriz tfoot td { font-weight: 600; background: #f8f9fa; }
+    .pp-matriz tfoot td {
+        font-weight: 600;
+        background: #f8f9fa;
+        position: sticky;
+        bottom: var(--pp-foot-bottom, 0px);
+        z-index: 3;
+    }
     .pp-matriz tr.pp-fila-activa > td { background: #D6EAF8 !important; }
     .pp-matriz tr.pp-fila-pendiente .pp-col-proveedor { border-left: 4px solid #95a5a6; }
     .pp-matriz tr.pp-fila-parcial .pp-col-proveedor { border-left: 4px solid #f39c12; }
     .pp-matriz tr.pp-fila-completo .pp-col-proveedor { border-left: 4px solid #27ae60; }
     .pp-matriz tr.pp-fila-activa .pp-col-proveedor { background: #D6EAF8; }
     .pp-barra {
+        position: sticky;
+        top: 0;
+        z-index: 20;
         background: #f4f9fc;
         border: 1px solid #aed6f1;
         border-radius: 4px;
-        padding: 0.6rem 0.75rem;
-        margin-bottom: 0.75rem;
+        padding: 0.35rem 0.5rem;
+        margin-bottom: 0.35rem;
     }
-    .pp-barra .pp-nombre-activo { font-weight: 600; font-size: 1rem; }
-    .pp-barra .pp-btns .btn { margin: 0 0.2rem 0.25rem 0; }
+    .pp-barra .pp-nombre-activo { font-weight: 600; font-size: 1rem; line-height: 1.15; }
+    .pp-barra .pp-btns .btn { margin: 0 0.2rem 0 0; }
+    .pp-barra .custom-checkbox { margin-bottom: 0; padding-top: 0.15rem; }
+    .pp-meses-chips { display: flex; flex-wrap: wrap; align-items: center; }
     .pp-meses-chips .btn {
-        margin: 0 0.25rem 0.25rem 0;
-        min-width: 5.5rem;
+        margin: 0 0.2rem 0.2rem 0;
+        min-width: 4.6rem;
     }
     .pp-meses-chips .btn.pp-chip-on {
         background: #2471A3;
@@ -116,66 +152,66 @@ window.programaPagoCfg = {
             <form id="form-programa-pago" method="POST" action="{{ route('actualizar_programa_pago', $data->id) }}">
                 @csrf
                 @method('PUT')
-                <div class="card-body">
-                    <div class="mb-2">
-                        <a href="{{ route('exportar_matriz_programa_pago', ['id' => $data->id, 'formato' => 'PDF']) }}"
-                           class="btn btn-app bg-danger" target="_blank" rel="noopener">
-                            <i class="fas fa-file-pdf"></i> Pdf
-                        </a>
-                        <a href="{{ route('exportar_matriz_programa_pago', ['id' => $data->id, 'formato' => 'EXCEL']) }}"
-                           class="btn btn-app bg-success">
-                            <i class="fas fa-file-excel"></i> Excel
-                        </a>
-                        <a href="{{ route('exportar_matriz_programa_pago', ['id' => $data->id, 'formato' => 'CSV']) }}"
-                           class="btn btn-app bg-warning">
-                            <i class="fas fa-file-csv"></i> Csv
-                        </a>
-                    </div>
-                    <div class="form-row mb-2">
-                        <div class="form-group col-md-4 mb-2">
-                            <label class="small">Título</label>
+                <div class="card-body py-2">
+                    <div class="form-row align-items-end mb-1">
+                        <div class="form-group col-md-3 mb-1">
+                            <label class="small mb-0">Título</label>
                             <input type="text" name="titulo" class="form-control form-control-sm" maxlength="120"
                                    value="{{ old('titulo', $data->titulo) }}" @disabled(! $puedeEditar)>
                         </div>
-                        <div class="form-group col-md-8 mb-2">
-                            <label class="small">Detalle</label>
+                        <div class="form-group col-md-6 mb-1">
+                            <label class="small mb-0">Detalle</label>
                             <input type="text" name="detalle" class="form-control form-control-sm" maxlength="2000"
                                    value="{{ old('detalle', $data->detalle) }}" @disabled(! $puedeEditar)>
+                        </div>
+                        <div class="form-group col-md-3 mb-1 d-flex justify-content-md-end">
+                            <span class="d-inline-flex align-items-center flex-nowrap" role="group" aria-label="Exportar programa">
+                                <a href="{{ route('exportar_matriz_programa_pago', ['id' => $data->id, 'formato' => 'PDF']) }}"
+                                   class="btn btn-sm bg-danger mr-1" target="_blank" rel="noopener" title="Exportar PDF">
+                                    <i class="fas fa-file-pdf"></i> Pdf
+                                </a>
+                                <a href="{{ route('exportar_matriz_programa_pago', ['id' => $data->id, 'formato' => 'EXCEL']) }}"
+                                   class="btn btn-sm bg-success mr-1" title="Exportar Excel">
+                                    <i class="fas fa-file-excel"></i> Excel
+                                </a>
+                                <a href="{{ route('exportar_matriz_programa_pago', ['id' => $data->id, 'formato' => 'CSV']) }}"
+                                   class="btn btn-sm bg-warning" title="Exportar CSV">
+                                    <i class="fas fa-file-csv"></i> Csv
+                                </a>
+                            </span>
                         </div>
                     </div>
 
                     @if ($puedeEditar)
                         <div class="pp-barra" id="pp-barra-herramientas">
-                            <div class="d-flex flex-wrap align-items-center mb-2">
-                                <button type="button" class="btn btn-sm btn-outline-secondary mr-1" id="pp-btn-prev" title="Anterior">
-                                    <i class="fa fa-chevron-left"></i>
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary mr-2" id="pp-btn-next" title="Siguiente">
-                                    <i class="fa fa-chevron-right"></i>
-                                </button>
-                                <div class="mr-3">
-                                    <span class="text-muted small" id="pp-asistente-pos">—</span>
-                                    <div class="pp-nombre-activo" id="pp-asistente-proveedor">—</div>
-                                    <div class="small text-muted">
-                                        Saldo <strong id="pp-asistente-saldo">—</strong>
-                                        · Cargado <strong id="pp-asistente-asignado">—</strong>
-                                        · Resta <strong id="pp-asistente-resto">—</strong>
+                            <div class="d-flex flex-wrap align-items-start">
+                                <div class="d-flex align-items-center mr-3 mb-1">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary mr-1" id="pp-btn-prev" title="Anterior">
+                                        <i class="fa fa-chevron-left"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary mr-2" id="pp-btn-next" title="Siguiente">
+                                        <i class="fa fa-chevron-right"></i>
+                                    </button>
+                                    <div>
+                                        <span class="text-muted small" id="pp-asistente-pos">—</span>
+                                        <div class="pp-nombre-activo" id="pp-asistente-proveedor">—</div>
+                                        <div class="small text-muted">
+                                            Saldo <strong id="pp-asistente-saldo">—</strong>
+                                            · Cargado <strong id="pp-asistente-asignado">—</strong>
+                                            · Resta <strong id="pp-asistente-resto">—</strong>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="ml-auto small text-muted" id="pp-progreso-texto">—</div>
-                            </div>
-
-                            <div class="mb-2">
-                                <div class="small text-muted mb-1">
-                                    Marcá los meses (o TRANSF) donde va el pago de este proveedor:
-                                </div>
-                                <div class="pp-meses-chips" id="pp-meses-chips"></div>
-                                <div class="mt-1">
-                                    <span class="pp-prorrateo-preview" id="pp-prorrateo-preview">Seleccioná uno o más períodos</span>
+                                <div class="pp-lado-meses flex-grow-1 mb-1" style="min-width: 280px;">
+                                    <div class="d-flex flex-wrap align-items-center">
+                                        <div class="pp-meses-chips" id="pp-meses-chips"></div>
+                                        <span class="pp-prorrateo-preview" id="pp-prorrateo-preview">Seleccioná uno o más períodos</span>
+                                    </div>
+                                    <div class="small text-muted text-right" id="pp-progreso-texto">—</div>
                                 </div>
                             </div>
 
-                            <div class="d-flex flex-wrap align-items-center pp-btns mb-1">
+                            <div class="d-flex flex-wrap align-items-center pp-btns">
                                 <button type="button" class="btn btn-sm btn-primary" id="pp-btn-partir-igual"
                                         title="Reparte el saldo en partes iguales entre los períodos marcados">
                                     Partir igual
@@ -207,19 +243,9 @@ window.programaPagoCfg = {
                                         title="Asigna CHT diferidos a todos los proveedores ya programados (montos guardados, ±30%)">
                                     <i class="fa fa-money-check-alt"></i> Cheques (todos programados)
                                 </button>
-                            </div>
-
-                            <div class="small text-muted mt-1">
-                                Asignar cheques usa los montos <strong>guardados</strong> (no los del formulario sin Guardar). Tolerancia ±30%.
-                            </div>
-
-                            <div class="d-flex flex-wrap align-items-center mt-2">
-                                <div class="custom-control custom-checkbox mr-3">
+                                <div class="custom-control custom-checkbox ml-md-auto">
                                     <input type="checkbox" class="custom-control-input" id="pp-solo-pendientes">
-                                    <label class="custom-control-label" for="pp-solo-pendientes">Ocultar ya marcados (completos)</label>
-                                </div>
-                                <div class="progress flex-grow-1" style="height: 14px; min-width: 120px; max-width: 280px;">
-                                    <div id="pp-progreso-barra" class="progress-bar bg-success" role="progressbar" style="width:0%">0%</div>
+                                    <label class="custom-control-label" for="pp-solo-pendientes">Ocultar ya marcados</label>
                                 </div>
                             </div>
                         </div>

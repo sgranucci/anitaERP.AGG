@@ -2,7 +2,11 @@
     $columnas = $matriz['columnas'] ?? [];
     $filas = $matriz['filas'] ?? [];
     $totales = $matriz['totales_asignacion'] ?? [];
+    $cheques = $matriz['cheques']['por_clave'] ?? [];
+    $diferencia = $matriz['diferencia'] ?? [];
+    $chequesAsignados = $matriz['cheques_asignados'] ?? [];
     $cols = 3 + count($columnas) + 2;
+    $fmt = static fn ($n): string => number_format((float) $n, 2, '.', '');
 @endphp
 <table>
     <tr>
@@ -42,13 +46,75 @@
         @endforeach
         <tr>
             <td></td>
-            <td>Totales</td>
-            <td>{{ $matriz['total_saldo'] ?? 0 }}</td>
+            <td><strong>Totales programa</strong></td>
+            <td><strong>{{ $fmt($matriz['total_saldo'] ?? 0) }}</strong></td>
             @foreach($columnas as $col)
-                <td>{{ $totales[$col['clave']] ?? 0 }}</td>
+                <td><strong>{{ $fmt($totales[$col['clave']] ?? 0) }}</strong></td>
             @endforeach
-            <td>{{ $matriz['total_programa'] ?? 0 }}</td>
+            <td><strong>{{ $fmt($matriz['total_programa'] ?? 0) }}</strong></td>
+            <td></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td><strong>Cheques en cartera</strong></td>
+            <td></td>
+            @foreach($columnas as $col)
+                <td>
+                    @if ($col['anio_mes'] ?? null)
+                        <strong>{{ $fmt($cheques[$col['clave']] ?? 0) }}</strong>
+                    @else
+                        —
+                    @endif
+                </td>
+            @endforeach
+            <td><strong>{{ $fmt($matriz['cheques']['total'] ?? 0) }}</strong></td>
+            <td></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td><strong>Diferencia (CHT − pagos)</strong></td>
+            <td></td>
+            @foreach($columnas as $col)
+                <td><strong>{{ $fmt($diferencia[$col['clave']] ?? 0) }}</strong></td>
+            @endforeach
+            <td></td>
             <td></td>
         </tr>
     </tbody>
 </table>
+@if (count($chequesAsignados) > 0)
+<table>
+    <tr>
+        <td colspan="8"></td>
+    </tr>
+    <tr>
+        <td colspan="8"><strong>Cheques asignados ({{ count($chequesAsignados) }})</strong></td>
+    </tr>
+    <thead>
+        <tr>
+            <th>Mes</th>
+            <th>Proveedor</th>
+            <th>Nº interno</th>
+            <th>Nº cheque</th>
+            <th>Fecha pago</th>
+            <th>Banco</th>
+            <th>Monto cheque</th>
+            <th>Programado</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach ($chequesAsignados as $asigCh)
+            <tr>
+                <td>{{ $asigCh['clave'] }}</td>
+                <td>{{ $asigCh['proveedor'] }}</td>
+                <td>{{ $asigCh['nro_interno_anita'] ?? '' }}</td>
+                <td>{{ $asigCh['numerocheque'] }}</td>
+                <td>{{ ! empty($asigCh['fechapago']) ? \Carbon\Carbon::parse($asigCh['fechapago'])->format('d/m/Y') : '' }}</td>
+                <td>{{ $asigCh['banco'] }}</td>
+                <td>{{ $fmt($asigCh['monto'] ?? 0) }}</td>
+                <td>{{ $fmt($asigCh['monto_programado'] ?? 0) }}</td>
+            </tr>
+        @endforeach
+    </tbody>
+</table>
+@endif
