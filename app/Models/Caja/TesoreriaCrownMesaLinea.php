@@ -19,7 +19,7 @@ class TesoreriaCrownMesaLinea extends Model implements Auditable
     ];
 
     protected $casts = [
-        'cantidad' => 'decimal:2',
+        'cantidad' => 'integer',
     ];
 
     public function movimiento(): BelongsTo

@@ -26,6 +26,16 @@ final class TesoreriaCrownMesaSupport
         'P' => 'Propina',
     ];
 
+    /** @var array<string, string> */
+    public const AYUDA = [
+        'A' => 'Fichas con las que arranca la mesa. Suman al stock.',
+        'R' => 'Fichas que se agregan durante el juego. Suman al stock.',
+        'C' => 'Fichas que salen de la mesa. Restan del stock.',
+        'F' => 'Conteo al cerrar. Pasa a ser la apertura del día siguiente.',
+        'D' => 'Drop de la mesa. No mueve el stock de fichas.',
+        'P' => 'Propina de la mesa. No mueve el stock de fichas.',
+    ];
+
     /** Habilitación y reposición suman fichas a la mesa. El crédito las saca. El estado final y el drop son conteos. */
     public const EFECTO = [
         'A' => 1,
@@ -39,6 +49,11 @@ final class TesoreriaCrownMesaSupport
     public static function tipo(string $codigo): string
     {
         return self::TIPOS[$codigo] ?? $codigo;
+    }
+
+    public static function ayuda(string $codigo): string
+    {
+        return self::AYUDA[$codigo] ?? '';
     }
 
     public static function estado(string $codigo): string

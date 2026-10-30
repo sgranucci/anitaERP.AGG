@@ -223,7 +223,15 @@
         });
         html += '</tr></thead><tbody>';
         permisos.forEach(function (p) {
-            html += '<tr><td class="font-weight-bold menu-rol-col-menu">' + escapeHtml(p.nombre) + '</td>';
+            var texto = String(p.ayuda || '').trim();
+            if (texto === '') {
+                texto = 'Todavía no hay una explicación de esta tarea. El código es ' + (p.slug || '') + '.';
+            } else {
+                texto = (p.slug || '') + '. ' + texto;
+            }
+            html += '<tr><td class="font-weight-bold menu-rol-col-menu">' + escapeHtml(p.nombre);
+            html += ' <button type="button" class="btn btn-link btn-sm p-0 ml-1 align-baseline" data-toggle="popover" data-placement="right" data-container="body" title="Qué habilita" data-content="' + escapeHtml(texto) + '" aria-label="Qué habilita este permiso">';
+            html += '<i class="fa fa-question-circle text-info"></i></button></td>';
             roleKeys.forEach(function (rolId) {
                 var rid = parseInt(rolId, 10);
                 var rolesIds = (p.roles_ids || []).map(function (id) { return parseInt(id, 10); });
@@ -319,6 +327,7 @@
                     return;
                 }
                 $contenedor.html(tabla).show();
+                $contenedor.find('[data-toggle="popover"]').popover({ container: 'body', trigger: 'focus' });
             },
             error: function (xhr) {
                 $cargando.hide();

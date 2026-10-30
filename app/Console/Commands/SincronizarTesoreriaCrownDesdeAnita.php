@@ -10,7 +10,7 @@ class SincronizarTesoreriaCrownDesdeAnita extends Command
     protected $signature = 'tesoreria-crown:sincronizar-anita
                             {--dry-run : Cuenta altas y cambios sin grabar}';
 
-    protected $description = 'Lee fichas, denominaciones, cajas, mesas y cotizaciones de Cipolletti hacia la tesorería de esa sala.';
+    protected $description = 'Lee fichas, denominaciones, cajas, mesas, bóveda, tipos de transacción, bancas y cotizaciones de Cipolletti hacia la tesorería de esa sala.';
 
     public function handle(TesoreriaCrownAnitaSyncService $sync): int
     {
@@ -30,10 +30,14 @@ class SincronizarTesoreriaCrownDesdeAnita extends Command
                 $this->fila('Denominaciones', $plan['denominaciones']),
                 $this->fila('Cajas', $plan['cajas']),
                 $this->fila('Mesas', $plan['mesas']),
+                $this->fila('Tipos de transacción', $plan['transacciones']),
+                $this->fila('Bancas y fichas', $plan['bancas']),
+                $this->fila('Banca de cada mesa', $plan['mesas_banca']),
+                $this->fila('Bóveda', $plan['boveda']),
                 $this->fila('Cotización shared', $plan['cotizaciones']),
             ]
         );
-        foreach (['fichas', 'denominaciones', 'cajas', 'mesas', 'cotizaciones'] as $grupo) {
+        foreach (['fichas', 'denominaciones', 'cajas', 'mesas', 'transacciones', 'bancas', 'mesas_banca', 'boveda', 'cotizaciones'] as $grupo) {
             foreach ($plan[$grupo]['avisos'] as $aviso) {
                 $this->warn($aviso);
             }

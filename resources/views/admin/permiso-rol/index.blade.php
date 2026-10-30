@@ -8,6 +8,7 @@ Permiso - Rol
 <script src="https://unpkg.com/sticky-table-headers"></script>
 <script>
     $('table').stickyTableHeaders();
+    $('[data-toggle="popover"]').popover({ container: 'body', trigger: 'focus' });
 </script>
 @endsection
 
@@ -46,7 +47,20 @@ Permiso - Rol
                     <tbody>
                         @foreach ($permisos as $key => $permiso)
                             <tr>
-                                <td class="font-weight-bold">{{$permiso["nombre"]}}</td>
+                                <td class="font-weight-bold">
+                                    {{ $permiso['nombre'] }}
+                                    @php
+                                        $textoAyuda = trim((string) ($permiso['ayuda'] ?? ''));
+                                        if ($textoAyuda === '') {
+                                            $textoAyuda = 'Todavía no hay una explicación de esta tarea. El código es '.$permiso['slug'].'.';
+                                        } else {
+                                            $textoAyuda = $permiso['slug'].'. '.$textoAyuda;
+                                        }
+                                    @endphp
+                                    <button type="button" class="btn btn-link btn-sm p-0 ml-1 align-baseline" data-toggle="popover" data-placement="right" title="Qué habilita" data-content="{{ $textoAyuda }}" aria-label="Qué habilita este permiso">
+                                        <i class="fa fa-question-circle text-info"></i>
+                                    </button>
+                                </td>
                                 @foreach($rols as $id => $nombre)
                                     <td class="text-center">
                                         <input

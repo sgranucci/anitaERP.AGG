@@ -13,7 +13,7 @@
                 @foreach ($filas as $fila)
                     <tr>
                         <td>{{ $fila['valor']->descripcion }}</td>
-                        <td class="text-right">{{ number_format($fila['cantidad'], 2, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format($fila['cantidad'], 0, ',', '.') }}</td>
                         <td class="text-right">{{ number_format($fila['monto'], 2, ',', '.') }}</td>
                     </tr>
                 @endforeach

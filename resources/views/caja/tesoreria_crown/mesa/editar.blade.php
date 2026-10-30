@@ -5,6 +5,7 @@
 @endsection
 
 @section('scripts')
+<script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/cajero.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/cajero.js')) }}"></script>
 <script>
 (function () {
     function texto(numero) {
@@ -27,6 +28,10 @@
         recalcular();
         panel.addEventListener('input', recalcular);
     });
+    var cajero = document.querySelector('.tc-cajero-codigo');
+    if (cajero && cajero.value.trim() === '') {
+        cajero.focus();
+    }
 })();
 </script>
 @endsection
@@ -50,6 +55,7 @@
                 </div>
             </div>
             <div class="card-body">
+                <p class="text-muted mb-2">{{ \App\Support\Caja\TesoreriaCrownMesaSupport::ayuda($movimiento->tipo) }}</p>
                 <p>
                     Estado: <strong>{{ \App\Support\Caja\TesoreriaCrownMesaSupport::estado($movimiento->estado) }}</strong>
                     @if ($movimiento->cajero)
@@ -62,15 +68,17 @@
                         · {{ \App\Support\Caja\TesoreriaCrownFirmaSupport::textoFirma($movimiento->usuario, $movimiento->confirmado_at) }}
                     @endif
                 </p>
-                <form method="POST" action="{{ route('guardar_tesoreria_crown_mesa', $movimiento->id) }}">
+                <form method="POST" action="{{ route('guardar_tesoreria_crown_mesa', $movimiento->id) }}" id="form-mesa-crown" data-enter-campos="1">
                     @csrf
                     @if ($editable)
                         <div class="form-row">
-                            <div class="form-group col-md-3">
-                                <label for="cajero_numero">Cajero</label>
-                                <input type="text" name="cajero_numero" id="cajero_numero" class="form-control" inputmode="numeric" value="{{ old('cajero_numero', $movimiento->cajero->codigo ?? '') }}">
-                            </div>
-                            <div class="form-group col-md-6">
+                            @include('caja.tesoreria_crown.partials.campo_cajero', [
+                                'salaId' => $movimiento->sala_id,
+                                'codigo' => old('cajero_numero', $movimiento->cajero->codigo ?? ''),
+                                'nombre' => old('cajero_numero') !== null && old('cajero_numero') !== ($movimiento->cajero->codigo ?? '') ? '' : ($movimiento->cajero->nombre ?? ''),
+                                'inputId' => 'cajero_numero',
+                            ])
+                            <div class="form-group col-md-5 mb-2">
                                 <label for="comentario">Comentario</label>
                                 <input type="text" name="comentario" id="comentario" class="form-control" maxlength="80" value="{{ old('comentario', $movimiento->comentario) }}">
                             </div>
@@ -97,7 +105,7 @@
                                                         <td>{{ $valor->descripcion }}</td>
                                                         <td>
                                                             @if ($editable)
-                                                                <input type="number" name="cantidad[{{ $valor->id }}]" class="form-control form-control-sm text-right" min="0" step="1" data-denom="{{ (float) $valor->denominacion }}" value="{{ old('cantidad.'.$valor->id, $cantidad) }}">
+                                                                <input type="number" name="cantidad[{{ $valor->id }}]" class="form-control form-control-sm text-right" min="0" step="1" inputmode="numeric" data-denom="{{ (float) $valor->denominacion }}" value="{{ old('cantidad.'.$valor->id, $cantidad === null || $cantidad === '' ? '' : (int) $cantidad) }}">
                                                             @elseif ($cantidad !== null && (float) $cantidad > 0)
                                                                 {{ number_format((float) $cantidad, 0, ',', '.') }}
                                                             @endif
@@ -112,19 +120,22 @@
                         @endforeach
                     </div>
                     @if ($editable && can('crear-tesoreria-crown-mesa', false))
-                        <button type="submit" class="btn btn-primary">Guardar borrador</button>
+                        <button type="submit" class="btn btn-primary" id="btn-guardar-mesa">Guardar borrador</button>
+                    @endif
+                    @if ($editable && can('editar-tesoreria-crown-mesa', false))
+                        <div class="border rounded p-3 mt-3">
+                            <p class="mb-2">Confirmar guarda estas cantidades y fija la banca de esta fecha. Un cambio posterior de banca no reescribe este movimiento.</p>
+                            <div class="form-row">
+                                <div class="col-md-3 mb-2"><input type="text" name="firma_usuario" class="form-control" placeholder="Usuario" autocomplete="off" value="{{ old('firma_usuario') }}"></div>
+                                <div class="col-md-3 mb-2"><input type="password" name="firma_password" class="form-control" placeholder="Clave" autocomplete="new-password"></div>
+                                <div class="col-md-3 mb-2">
+                                    <button type="submit" class="btn btn-success" formaction="{{ route('confirmar_tesoreria_crown_mesa', $movimiento->id) }}">Confirmar</button>
+                                </div>
+                            </div>
+                        </div>
                     @endif
                 </form>
                 @if ($editable && can('editar-tesoreria-crown-mesa', false))
-                    <form method="POST" action="{{ route('confirmar_tesoreria_crown_mesa', $movimiento->id) }}" class="border rounded p-3 mt-3" autocomplete="off">
-                        @csrf
-                        <p class="mb-2">Confirmar fija la banca de esta fecha. Un cambio posterior de banca no reescribe este movimiento.</p>
-                        <div class="form-row">
-                            <div class="col-md-3 mb-2"><input type="text" name="firma_usuario" class="form-control" placeholder="Usuario" autocomplete="off" required></div>
-                            <div class="col-md-3 mb-2"><input type="password" name="firma_password" class="form-control" placeholder="Clave" autocomplete="new-password" required></div>
-                            <div class="col-md-3 mb-2"><button type="submit" class="btn btn-success">Confirmar</button></div>
-                        </div>
-                    </form>
                     <form method="POST" action="{{ route('eliminar_tesoreria_crown_mesa', $movimiento->id) }}" class="d-inline" onsubmit="return confirm('¿Eliminar este borrador?');">
                         @csrf
                         @method('DELETE')
@@ -132,7 +143,7 @@
                     </form>
                 @endif
                 @if ($movimiento->estado === 'C' && $movimiento->jornada->estaAbierta() && can('editar-tesoreria-crown-mesa', false))
-                    <form method="POST" action="{{ route('anular_tesoreria_crown_mesa', $movimiento->id) }}" class="border rounded p-3 mt-3" autocomplete="off">
+                    <form method="POST" action="{{ route('anular_tesoreria_crown_mesa', $movimiento->id) }}" class="border rounded p-3 mt-3" autocomplete="off" data-enter-campos="1">
                         @csrf
                         <p class="mb-2">Anular lo saca del stock. El número queda.</p>
                         <div class="form-row">
@@ -146,4 +157,5 @@
         </div>
     </div>
 </div>
+@include('caja.tesoreria_crown.partials.modal_consulta_cajero')
 @endsection

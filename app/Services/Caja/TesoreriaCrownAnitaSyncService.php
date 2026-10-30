@@ -3,13 +3,18 @@
 namespace App\Services\Caja;
 
 use App\ApiAnita;
+use App\Models\Caja\TesoreriaCrownBanca;
+use App\Models\Caja\TesoreriaCrownBancaLinea;
+use App\Models\Caja\TesoreriaCrownBovedaTipo;
 use App\Models\Caja\TesoreriaCrownCotizacion;
 use App\Models\Caja\TesoreriaCrownDeposito;
+use App\Models\Caja\TesoreriaCrownMesaJuego;
 use App\Models\Caja\TesoreriaCrownTipoDeposito;
 use App\Models\Caja\TesoreriaCrownTipoValor;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Models\Configuracion\Sala;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\GastronomiaSalaSupport;
 use RuntimeException;
 
@@ -49,6 +54,25 @@ class TesoreriaCrownAnitaSyncService
             'SELECT mesaj_mesajuego, mesaj_desc_tipoj FROM mesajuego'
         ), $salaId, $contexto['empresa_id'], $tiposDeposito['MESA'] ?? null);
 
+        $transacciones = $this->planTransacciones($this->consultar(
+            'transm_codigo,transm_desc,transm_abrev,transm_signo,transm_operacion,transm_estado',
+            'SELECT transm_codigo, transm_desc, transm_abrev, transm_signo, transm_operacion, transm_estado FROM transmae'
+        ), $salaId);
+
+        $bancas = $this->planBancas(
+            $this->consultar('tipoj_tipojuego,tipoj_desc', 'SELECT tipoj_tipojuego, tipoj_desc FROM tipojuego'),
+            $this->consultar('bant_tipojuego,bant_codigo,bant_cantidad', 'SELECT bant_tipojuego, bant_codigo, bant_cantidad FROM bancatipo'),
+            $this->consultar('fichm_codigo,fichm_serie', 'SELECT fichm_codigo, fichm_serie FROM fichamae'),
+            $salaId
+        );
+
+        $mesasBanca = $this->planMesasBanca($this->consultar(
+            'mesaj_mesajuego,mesaj_tipoj_banca',
+            'SELECT mesaj_mesajuego, mesaj_tipoj_banca FROM mesajuego'
+        ), $salaId);
+
+        $boveda = $this->planBoveda($salaId, $contexto['empresa_id'], $tiposDeposito['BOVEDA'] ?? null);
+
         $cotizaciones = $this->planCotizaciones($this->consultar(
             'cot_fecha,cot_cambio2,cot_cambio3',
             'SELECT cot_fecha, cot_cambio2, cot_cambio3 FROM cotizacion WHERE cot_fecha >= 20260101',
@@ -63,6 +87,10 @@ class TesoreriaCrownAnitaSyncService
             'denominaciones' => $denominaciones,
             'cajas' => $cajas,
             'mesas' => $mesas,
+            'transacciones' => $transacciones,
+            'bancas' => $bancas,
+            'mesas_banca' => $mesasBanca,
+            'boveda' => $boveda,
             'cotizaciones' => $cotizaciones,
         ];
     }
@@ -104,6 +132,57 @@ class TesoreriaCrownAnitaSyncService
                         $cambios++;
                     }
                 }
+            }
+        }
+
+        foreach ($plan['transacciones']['filas'] as $fila) {
+            if ($fila['accion'] === 'crear') {
+                TesoreriaCrownBovedaTipo::query()->create($fila['datos']);
+                $altas++;
+            } elseif ($fila['accion'] === 'actualizar') {
+                $tipo = TesoreriaCrownBovedaTipo::query()->find($fila['id']);
+                if ($tipo) {
+                    $tipo->fill($fila['datos'])->save();
+                    $cambios++;
+                }
+            }
+        }
+
+        foreach ($plan['bancas']['filas'] as $fila) {
+            if ($fila['accion'] === 'crear') {
+                $banca = TesoreriaCrownBanca::query()->create($fila['datos']);
+                $this->aplicarLineasBanca($banca, $fila['lineas'] ?? [], $altas, $cambios);
+            } elseif ($fila['accion'] === 'actualizar') {
+                $banca = TesoreriaCrownBanca::query()->find($fila['id']);
+                if ($banca) {
+                    if ($fila['datos'] !== []) {
+                        $banca->fill($fila['datos'])->save();
+                        $cambios++;
+                    }
+                    if (is_array($fila['lineas'])) {
+                        $this->aplicarLineasBanca($banca, $fila['lineas'], $altas, $cambios);
+                    }
+                }
+            }
+        }
+
+        foreach ($plan['mesas_banca']['filas'] as $fila) {
+            if ($fila['accion'] === 'crear') {
+                TesoreriaCrownMesaJuego::query()->create($fila['datos']);
+                $altas++;
+            } elseif ($fila['accion'] === 'actualizar') {
+                $juego = TesoreriaCrownMesaJuego::query()->find($fila['id']);
+                if ($juego) {
+                    $juego->fill($fila['datos'])->save();
+                    $cambios++;
+                }
+            }
+        }
+
+        foreach ($plan['boveda']['filas'] as $fila) {
+            if ($fila['accion'] === 'crear') {
+                TesoreriaCrownDeposito::query()->create($fila['datos']);
+                $altas++;
             }
         }
 
@@ -335,6 +414,286 @@ class TesoreriaCrownAnitaSyncService
                 'caja_id' => null,
             ]);
         }
+
+        return $plan;
+    }
+
+    /**
+     * @param  list<object>  $filas
+     * @return array{leer: int, crear: int, actualizar: int, omitir: int, filas: list<array<string, mixed>>, avisos: list<string>}
+     */
+    private function planTransacciones(array $filas, int $salaId): array
+    {
+        $plan = $this->planVacio(count($filas));
+        foreach ($filas as $fila) {
+            $codigo = (int) ($fila->transm_codigo ?? 0);
+            $abrev = strtoupper(trim((string) ($fila->transm_abrev ?? '')));
+            $nombre = trim((string) ($fila->transm_desc ?? ''));
+            if ($codigo <= 0 || $abrev === '' || $nombre === '') {
+                $plan['omitir']++;
+
+                continue;
+            }
+            $datos = [
+                'sala_id' => $salaId,
+                'codigo' => $codigo,
+                'abreviatura' => mb_substr($abrev, 0, 4),
+                'nombre' => mb_substr($nombre, 0, 40),
+                'signo' => substr(trim((string) ($fila->transm_signo ?? '2')), 0, 1),
+                'operacion' => substr(trim((string) ($fila->transm_operacion ?? '0')), 0, 1),
+                'activo' => strtoupper(trim((string) ($fila->transm_estado ?? 'A'))) !== 'S'
+                    && ! str_starts_with($nombre, 'NO USAR'),
+            ];
+            $existente = TesoreriaCrownBovedaTipo::query()
+                ->where('sala_id', $salaId)
+                ->where('codigo', $codigo)
+                ->first();
+            if (! $existente) {
+                $plan['crear']++;
+                $plan['filas'][] = ['accion' => 'crear', 'datos' => $datos];
+
+                continue;
+            }
+            $cambia = $existente->abreviatura !== $datos['abreviatura']
+                || $existente->nombre !== $datos['nombre']
+                || (string) $existente->signo !== $datos['signo']
+                || (string) $existente->operacion !== $datos['operacion']
+                || (bool) $existente->activo !== $datos['activo'];
+            if ($cambia) {
+                unset($datos['sala_id'], $datos['codigo']);
+                $plan['actualizar']++;
+                $plan['filas'][] = ['accion' => 'actualizar', 'id' => $existente->id, 'datos' => $datos];
+
+                continue;
+            }
+            $plan['omitir']++;
+        }
+
+        return $plan;
+    }
+
+    /**
+     * @param  list<object>  $tipos
+     * @param  list<object>  $composicion
+     * @param  list<object>  $fichas
+     * @return array{leer: int, crear: int, actualizar: int, omitir: int, filas: list<array<string, mixed>>, avisos: list<string>}
+     */
+    private function planBancas(array $tipos, array $composicion, array $fichas, int $salaId): array
+    {
+        $plan = $this->planVacio(count($tipos));
+        $seriePorFicha = [];
+        foreach ($fichas as $ficha) {
+            $serie = strtoupper(trim((string) ($ficha->fichm_serie ?? '')));
+            if ($serie !== '') {
+                $seriePorFicha[(int) $ficha->fichm_codigo] = $serie;
+            }
+        }
+        $valorPorSerie = TesoreriaCrownValor::query()
+            ->where('sala_id', $salaId)
+            ->pluck('id', 'serie');
+        $lineasPorTipo = [];
+        foreach ($composicion as $fila) {
+            $tipo = (int) ($fila->bant_tipojuego ?? 0);
+            $cantidad = round((float) ($fila->bant_cantidad ?? 0), 2);
+            $serie = $seriePorFicha[(int) ($fila->bant_codigo ?? 0)] ?? '';
+            $valorId = (int) ($valorPorSerie[$serie] ?? 0);
+            if ($tipo <= 0 || $cantidad <= 0 || $valorId <= 0) {
+                if ($tipo > 0 && $serie !== '' && $valorId <= 0) {
+                    $plan['avisos'][] = 'La ficha '.$serie.' de la banca '.$tipo.' no está en la sala.';
+                }
+
+                continue;
+            }
+            $lineasPorTipo[$tipo][$valorId] = ($lineasPorTipo[$tipo][$valorId] ?? 0) + $cantidad;
+        }
+
+        foreach ($tipos as $fila) {
+            $codigo = (int) ($fila->tipoj_tipojuego ?? 0);
+            if ($codigo <= 0) {
+                $plan['omitir']++;
+
+                continue;
+            }
+            $nombre = mb_substr(trim((string) ($fila->tipoj_desc ?? '')) ?: ('Tipo '.$codigo), 0, 40);
+            $lineas = [];
+            foreach ($lineasPorTipo[$codigo] ?? [] as $valorId => $cantidad) {
+                $lineas[] = ['valor_id' => (int) $valorId, 'cantidad' => round((float) $cantidad, 2)];
+            }
+            $existente = TesoreriaCrownBanca::query()
+                ->where('sala_id', $salaId)
+                ->where('codigo', $codigo)
+                ->orderByDesc('vigencia_desde')
+                ->first();
+            if (! $existente) {
+                $plan['crear']++;
+                $plan['filas'][] = [
+                    'accion' => 'crear',
+                    'datos' => [
+                        'sala_id' => $salaId,
+                        'codigo' => $codigo,
+                        'nombre' => $nombre,
+                        'vigencia_desde' => '2003-10-26',
+                    ],
+                    'lineas' => $lineas,
+                ];
+
+                continue;
+            }
+            $cambiaNombre = $existente->nombre !== $nombre;
+            $cambiaLineas = $this->lineasBancaDistintas((int) $existente->id, $lineas);
+            if ($cambiaNombre || $cambiaLineas) {
+                $plan['actualizar']++;
+                $plan['filas'][] = [
+                    'accion' => 'actualizar',
+                    'id' => $existente->id,
+                    'datos' => $cambiaNombre ? ['nombre' => $nombre] : [],
+                    'lineas' => $cambiaLineas ? $lineas : null,
+                ];
+
+                continue;
+            }
+            $plan['omitir']++;
+        }
+
+        return $plan;
+    }
+
+    /**
+     * @param  list<array{valor_id: int, cantidad: float}>  $lineas
+     */
+    private function lineasBancaDistintas(int $bancaId, array $lineas): bool
+    {
+        $actuales = TesoreriaCrownBancaLinea::query()
+            ->where('banca_id', $bancaId)
+            ->pluck('cantidad', 'valor_id');
+        if ($actuales->count() !== count($lineas)) {
+            return true;
+        }
+        foreach ($lineas as $linea) {
+            $cantidad = $actuales->get($linea['valor_id']);
+            if ($cantidad === null || abs((float) $cantidad - $linea['cantidad']) > 0.001) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<array{valor_id: int, cantidad: float}>  $lineas
+     */
+    private function aplicarLineasBanca(TesoreriaCrownBanca $banca, array $lineas, int &$altas, int &$cambios): void
+    {
+        $conservar = array_map(fn (array $linea) => (int) $linea['valor_id'], $lineas);
+        $sobrantes = TesoreriaCrownBancaLinea::query()->where('banca_id', $banca->id);
+        if ($conservar !== []) {
+            $sobrantes->whereNotIn('valor_id', $conservar);
+        }
+        EloquentAuditDeleteSupport::each($sobrantes);
+
+        foreach ($lineas as $linea) {
+            $existente = TesoreriaCrownBancaLinea::query()
+                ->where('banca_id', $banca->id)
+                ->where('valor_id', $linea['valor_id'])
+                ->first();
+            if (! $existente) {
+                TesoreriaCrownBancaLinea::query()->create([
+                    'banca_id' => $banca->id,
+                    'valor_id' => $linea['valor_id'],
+                    'cantidad' => $linea['cantidad'],
+                ]);
+                $altas++;
+
+                continue;
+            }
+            if (abs((float) $existente->cantidad - $linea['cantidad']) > 0.001) {
+                $existente->cantidad = $linea['cantidad'];
+                $existente->save();
+                $cambios++;
+            }
+        }
+    }
+
+    /**
+     * @param  list<object>  $filas
+     * @return array{leer: int, crear: int, actualizar: int, omitir: int, filas: list<array<string, mixed>>, avisos: list<string>}
+     */
+    private function planMesasBanca(array $filas, int $salaId): array
+    {
+        $plan = $this->planVacio(count($filas));
+        foreach ($filas as $fila) {
+            $numero = (int) ($fila->mesaj_mesajuego ?? 0);
+            $banca = (int) ($fila->mesaj_tipoj_banca ?? 0);
+            if ($numero <= 0 || $banca <= 0) {
+                $plan['omitir']++;
+
+                continue;
+            }
+            $depositoId = (int) TesoreriaCrownDeposito::query()
+                ->where('sala_id', $salaId)
+                ->where('codigo', 'M'.$numero)
+                ->value('id');
+            if ($depositoId <= 0) {
+                $plan['omitir']++;
+                $plan['avisos'][] = 'La mesa '.$numero.' no está cargada, no se le asignó la banca '.$banca.'.';
+
+                continue;
+            }
+            $datos = ['deposito_id' => $depositoId, 'banca_codigo' => $banca];
+            $existente = TesoreriaCrownMesaJuego::query()->where('deposito_id', $depositoId)->first();
+            if (! $existente) {
+                $plan['crear']++;
+                $plan['filas'][] = ['accion' => 'crear', 'datos' => $datos];
+
+                continue;
+            }
+            if ((int) $existente->banca_codigo !== $banca) {
+                $plan['actualizar']++;
+                $plan['filas'][] = ['accion' => 'actualizar', 'id' => $existente->id, 'datos' => ['banca_codigo' => $banca]];
+
+                continue;
+            }
+            $plan['omitir']++;
+        }
+
+        return $plan;
+    }
+
+    /**
+     * @return array{leer: int, crear: int, actualizar: int, omitir: int, filas: list<array<string, mixed>>, avisos: list<string>}
+     */
+    private function planBoveda(int $salaId, int $empresaId, ?int $tipoId): array
+    {
+        $plan = $this->planVacio(1);
+        if (! $tipoId) {
+            $plan['omitir']++;
+            $plan['avisos'][] = 'Falta el tipo de depósito BOVEDA.';
+
+            return $plan;
+        }
+        $existe = TesoreriaCrownDeposito::query()
+            ->where('sala_id', $salaId)
+            ->where('tipo_deposito_id', $tipoId)
+            ->exists();
+        if ($existe) {
+            $plan['omitir']++;
+
+            return $plan;
+        }
+        $plan['crear']++;
+        $plan['filas'][] = [
+            'accion' => 'crear',
+            'datos' => [
+                'sala_id' => $salaId,
+                'empresa_id' => $empresaId,
+                'tipo_deposito_id' => $tipoId,
+                'codigo' => 'BOV',
+                'nombre' => 'Bóveda',
+                'orden' => 1,
+                'activo' => true,
+                'caja_id' => null,
+            ],
+        ];
 
         return $plan;
     }

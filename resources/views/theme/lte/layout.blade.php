@@ -289,6 +289,7 @@
             @endif
         @endif
     @endauth
+    <script src="{{ asset('assets/js/enter-campos.js') }}?v={{ @filemtime(public_path('assets/js/enter-campos.js')) ?: time() }}"></script>
     @yield("scripts")
 </body>
 

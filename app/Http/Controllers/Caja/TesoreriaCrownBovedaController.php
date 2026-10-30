@@ -80,6 +80,9 @@ class TesoreriaCrownBovedaController extends Controller
         if ($request->filled('comprobante_numero') && $comprobante === null) {
             return back()->withInput()->with('mensaje-error', 'Ese comprobante no es una habilitación o rendición conforme de esta jornada.');
         }
+        if ($comprobante !== null && TesoreriaCrownBovedaSupport::comprobanteYaAsentado((int) $comprobante->id)) {
+            return back()->withInput()->with('mensaje-error', 'Esa habilitación o rendición ya movió la bóveda al quedar conforme.');
+        }
 
         $movimiento = DB::transaction(function () use ($jornada, $lugar, $tipo, $comprobante, $request) {
             $movimiento = TesoreriaCrownBoveda::query()->create([
@@ -128,45 +131,9 @@ class TesoreriaCrownBovedaController extends Controller
         if (! $movimiento->esBorrador() || ! $movimiento->jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'Este movimiento ya no se puede modificar.');
         }
-        $datos = $request->validate([
-            'comentario' => ['nullable', 'string', 'max:80'],
-            'comprobante_tipo' => ['nullable', 'string', 'max:1'],
-            'comprobante_numero' => ['nullable', 'string', 'max:12'],
-            'cantidad' => ['nullable', 'array'],
-            'cantidad.*' => ['nullable', 'numeric', 'min:0'],
-        ]);
-        $comprobante = $this->comprobantePorNumero(
-            $movimiento->jornada,
-            (string) ($datos['comprobante_tipo'] ?? ''),
-            (string) ($datos['comprobante_numero'] ?? '')
-        );
-        if (trim((string) ($datos['comprobante_numero'] ?? '')) !== '' && $comprobante === null) {
-            return back()->with('mensaje-error', 'Ese comprobante no es una habilitación o rendición conforme de esta jornada.');
+        if ($error = $this->persistirBorrador($request, $movimiento)) {
+            return back()->withInput()->with('mensaje-error', $error);
         }
-        $comprobanteId = (int) ($comprobante->id ?? 0);
-        $valoresSala = TesoreriaCrownValor::query()
-            ->where('sala_id', $movimiento->sala_id)
-            ->where('activo', true)
-            ->pluck('id')
-            ->all();
-
-        DB::transaction(function () use ($movimiento, $datos, $comprobanteId, $valoresSala) {
-            $movimiento->comentario = $this->comentario($datos['comentario'] ?? null);
-            $movimiento->comprobante_id = $comprobanteId > 0 ? $comprobanteId : null;
-            $movimiento->save();
-            EloquentAuditDeleteSupport::each($movimiento->lineas()->getQuery());
-            foreach ((array) ($datos['cantidad'] ?? []) as $valorId => $cantidad) {
-                $cantidad = (float) $cantidad;
-                if ($cantidad <= 0 || ! in_array((int) $valorId, $valoresSala, true)) {
-                    continue;
-                }
-                TesoreriaCrownBovedaLinea::query()->create([
-                    'boveda_id' => $movimiento->id,
-                    'valor_id' => (int) $valorId,
-                    'cantidad' => $cantidad,
-                ]);
-            }
-        });
 
         return back()->with('mensaje', 'Borrador guardado.');
     }
@@ -183,8 +150,17 @@ class TesoreriaCrownBovedaController extends Controller
         if (! $movimiento->esBorrador()) {
             return back()->with('mensaje-error', 'Este movimiento ya no está en borrador.');
         }
+        if ($request->exists('cantidad')) {
+            if ($error = $this->persistirBorrador($request, $movimiento)) {
+                return back()->withInput()->with('mensaje-error', $error);
+            }
+            $movimiento->unsetRelation('lineas');
+        }
         if ($movimiento->lineas()->doesntExist()) {
-            return back()->with('mensaje-error', 'Cargá al menos una cantidad antes de confirmar.');
+            return back()->withInput()->with('mensaje-error', 'Cargá al menos una cantidad antes de confirmar.');
+        }
+        if (trim((string) $request->input('firma_usuario')) === '' || trim((string) $request->input('firma_password')) === '') {
+            return back()->withInput()->with('mensaje-error', 'Completá el usuario y la clave de tesorería.');
         }
         $limite = 'tc-boveda:'.$movimiento->id.'|'.$request->ip();
         if (RateLimiter::tooManyAttempts($limite, 8)) {
@@ -365,6 +341,51 @@ class TesoreriaCrownBovedaController extends Controller
                 'cantidad' => $cantidad,
             ]);
         }
+    }
+
+    private function persistirBorrador(Request $request, TesoreriaCrownBoveda $movimiento): ?string
+    {
+        $datos = $request->validate([
+            'comentario' => ['nullable', 'string', 'max:80'],
+            'comprobante_tipo' => ['nullable', 'string', 'max:1'],
+            'comprobante_numero' => ['nullable', 'string', 'max:12'],
+            'cantidad' => ['nullable', 'array'],
+            'cantidad.*' => ['nullable', 'integer', 'min:0'],
+        ]);
+        $comprobante = $this->comprobantePorNumero(
+            $movimiento->jornada,
+            (string) ($datos['comprobante_tipo'] ?? ''),
+            (string) ($datos['comprobante_numero'] ?? '')
+        );
+        if (trim((string) ($datos['comprobante_numero'] ?? '')) !== '' && $comprobante === null) {
+            return 'Ese comprobante no es una habilitación o rendición conforme de esta jornada.';
+        }
+        $comprobanteId = (int) ($comprobante->id ?? 0);
+        $valoresSala = TesoreriaCrownValor::query()
+            ->where('sala_id', $movimiento->sala_id)
+            ->where('activo', true)
+            ->pluck('id')
+            ->all();
+
+        DB::transaction(function () use ($movimiento, $datos, $comprobanteId, $valoresSala) {
+            $movimiento->comentario = $this->comentario($datos['comentario'] ?? null);
+            $movimiento->comprobante_id = $comprobanteId > 0 ? $comprobanteId : null;
+            $movimiento->save();
+            EloquentAuditDeleteSupport::each($movimiento->lineas()->getQuery());
+            foreach ((array) ($datos['cantidad'] ?? []) as $valorId => $cantidad) {
+                $cantidad = (int) $cantidad;
+                if ($cantidad <= 0 || ! in_array((int) $valorId, $valoresSala, true)) {
+                    continue;
+                }
+                TesoreriaCrownBovedaLinea::query()->create([
+                    'boveda_id' => $movimiento->id,
+                    'valor_id' => (int) $valorId,
+                    'cantidad' => $cantidad,
+                ]);
+            }
+        });
+
+        return null;
     }
 
     private function comentario(mixed $texto): ?string

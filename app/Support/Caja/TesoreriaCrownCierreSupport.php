@@ -18,6 +18,12 @@ final class TesoreriaCrownCierreSupport
 
     public const CIERRE_AUDITORIA = 'F';
 
+    /** El cierre queda en la historia y la caja vuelve a operativa. No es un estado de aprobación. */
+    public const REABIERTA = 'O';
+
+    /** No se asigna a ningún rol al instalar. Lo tilda Sistemas en Permiso - Rol. */
+    public const PERMISO_REABRIR = 'reabrir-tesoreria-crown-caja';
+
     /** @var array<string, string> */
     public const ESTADOS = [
         self::CONFORME => 'Conforme',
@@ -26,6 +32,7 @@ final class TesoreriaCrownCierreSupport
         self::REVISADA => 'Revisada',
         self::AUDITORIA => 'Auditoría',
         self::CIERRE_AUDITORIA => 'Cierre de auditoría',
+        self::REABIERTA => 'Reabierta',
     ];
 
     public static function estado(string $codigo): string

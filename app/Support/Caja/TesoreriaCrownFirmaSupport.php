@@ -6,6 +6,7 @@ use App\Models\Admin\Permiso;
 use App\Models\Caja\CajeroCrown;
 use App\Models\Caja\TesoreriaCrownComprobante;
 use App\Models\Seguridad\Usuario;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 final class TesoreriaCrownFirmaSupport
@@ -113,11 +114,7 @@ final class TesoreriaCrownFirmaSupport
         if ($lado === 'recibe' && $comprobante->recibe_at === null) {
             $comprobante->recibe_at = now();
         }
-        if ($comprobante->firmasCompletas()) {
-            $comprobante->estado = TesoreriaCrownComprobanteSupport::CONFORME;
-            $comprobante->qr_token = null;
-        }
-        $comprobante->save();
+        self::cerrarSiCorresponde($comprobante);
     }
 
     public static function usuarioPorClave(string $login, string $clave): ?Usuario
@@ -150,6 +147,19 @@ final class TesoreriaCrownFirmaSupport
             ->exists();
     }
 
+    public static function puedeReabrirCaja(Usuario $usuario): bool
+    {
+        $roles = $usuario->roles()->get(['rol.id', 'rol.nombre']);
+        if ($roles->contains(fn ($rol) => (string) $rol->nombre === 'administrador')) {
+            return true;
+        }
+
+        return Permiso::query()
+            ->where('slug', TesoreriaCrownCierreSupport::PERMISO_REABRIR)
+            ->whereHas('roles', fn ($q) => $q->whereIn('rol.id', $roles->pluck('id')))
+            ->exists();
+    }
+
     public static function aplicar(TesoreriaCrownComprobante $comprobante, string $lado, Usuario $usuario): void
     {
         if ($lado === 'entrega' && $comprobante->entrega_at === null) {
@@ -160,11 +170,21 @@ final class TesoreriaCrownFirmaSupport
             $comprobante->recibe_usuario_id = $usuario->id;
             $comprobante->recibe_at = now();
         }
-        if ($comprobante->firmasCompletas()) {
-            $comprobante->estado = TesoreriaCrownComprobanteSupport::CONFORME;
-            $comprobante->qr_token = null;
-        }
-        $comprobante->save();
+        self::cerrarSiCorresponde($comprobante);
+    }
+
+    private static function cerrarSiCorresponde(TesoreriaCrownComprobante $comprobante): void
+    {
+        DB::transaction(function () use ($comprobante) {
+            if ($comprobante->firmasCompletas()) {
+                $comprobante->estado = TesoreriaCrownComprobanteSupport::CONFORME;
+                $comprobante->qr_token = null;
+            }
+            $comprobante->save();
+            if ($comprobante->estado === TesoreriaCrownComprobanteSupport::CONFORME) {
+                TesoreriaCrownBovedaSupport::asentarCajero($comprobante);
+            }
+        });
     }
 
     public static function textoFirma(?Usuario $usuario, mixed $cuando, ?string $nombreSiNoHayUsuario = null): string

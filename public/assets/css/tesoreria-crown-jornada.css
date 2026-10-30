@@ -98,19 +98,19 @@
 
 .tc-mesa-piso {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-    gap: .65rem;
+    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+    gap: .4rem;
 }
 
 .tc-mesa-ficha {
     position: relative;
     display: flex;
     flex-direction: column;
-    min-height: 108px;
-    padding: .7rem .75rem .6rem .9rem;
+    min-height: 72px;
+    padding: .4rem .45rem .35rem .6rem;
     overflow: hidden;
     border: 1px solid #d5dde6;
-    border-radius: 14px;
+    border-radius: 10px;
     background: #fff;
     color: #17202a;
     text-decoration: none;
@@ -146,25 +146,25 @@
 .tc-mesa-ficha.estado-final::before { background: #1e8449; }
 
 .tc-mesa-num {
-    font-size: 1.35rem;
+    font-size: 1.05rem;
     font-weight: 700;
     letter-spacing: -.03em;
     line-height: 1;
 }
 
 .tc-mesa-nombre {
-    min-height: 2.1em;
-    margin-top: .25rem;
+    min-height: 0;
+    margin-top: .1rem;
     color: #5d6d7e;
-    font-size: .75rem;
-    line-height: 1.25;
+    font-size: .68rem;
+    line-height: 1.2;
 }
 
 .tc-mesa-meta {
     margin-top: auto;
-    padding-top: .35rem;
+    padding-top: .15rem;
     color: #1a5276;
-    font-size: .7rem;
+    font-size: .65rem;
 }
 
 .tc-mesa-drop {
@@ -200,12 +200,12 @@
 .tc-mesa-metricas {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: .6rem;
+    gap: .4rem;
 }
 
 .tc-mesa-metrica {
-    padding: .7rem .8rem;
-    border-radius: 12px;
+    padding: .35rem .55rem;
+    border-radius: 8px;
     background: #f8f9f9;
 }
 
@@ -219,19 +219,135 @@
 
 .tc-mesa-metrica strong {
     display: block;
-    margin-top: .15rem;
-    font-size: 1.15rem;
+    margin-top: .05rem;
+    font-size: 1rem;
     font-variant-numeric: tabular-nums;
 }
 
-.tc-mesa-acciones {
+.tc-mesa-ops {
     display: flex;
     flex-wrap: wrap;
-    gap: .4rem;
+    gap: .35rem;
 }
 
-.tc-mesa-acciones .btn {
+.tc-mesa-ops .btn {
     border-radius: 999px;
+    padding: .15rem .7rem;
+}
+
+.tc-mesa-ops-ayuda {
+    min-height: 1.15rem;
+    margin-top: .3rem;
+}
+
+.tc-papel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .28rem .35rem;
+    margin: .2rem 0;
+}
+
+.tc-papel-nro {
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.tc-papel.is-revertido .tc-papel-nro {
+    color: #7b241c;
+    text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
+}
+
+.tc-papel.is-reversa {
+    margin-left: .55rem;
+    padding-left: .4rem;
+    border-left: 2px solid #e59866;
+}
+
+.tc-papel-marca {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .05rem .42rem;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+    line-height: 1.4;
+    text-transform: uppercase;
+}
+
+.tc-papel-marca.is-revertido {
+    background: #f5b7b1;
+    color: #7b241c;
+}
+
+.tc-papel-marca.is-reversa {
+    background: #fdebd0;
+    color: #9a4d0a;
+}
+
+.tc-papel-estado {
+    color: #5d6d7e;
+    font-size: .75rem;
+}
+
+.tc-papel.is-reabierto .tc-papel-nro {
+    color: #1a5276;
+    text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
+}
+
+.tc-papel.is-reabierto {
+    margin-left: .55rem;
+    padding-left: .4rem;
+    border-left: 2px solid #85c1e9;
+}
+
+.tc-papel-marca.is-reabierto {
+    background: #d6eaf8;
+    color: #1a5276;
+}
+
+.tc-papel-marca.is-vigente {
+    background: #d5f5e3;
+    color: #196f3d;
+}
+
+.tc-cierre-historia {
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+    margin-bottom: 1rem;
+}
+
+.tc-cierre-anterior {
+    padding: .75rem .9rem;
+    border-radius: 12px;
+    background: #f4f6f7;
+    border: 1px solid #d4e6f1;
+}
+
+.tc-cierre-meta {
+    margin: .35rem 0 0;
+    color: #5d6d7e;
+    font-size: .8rem;
+}
+
+.tc-cierre-motivo {
+    margin: .15rem 0 0;
+    color: #1a5276;
+    font-size: .88rem;
+}
+
+.tc-cierre-abierta {
+    margin-bottom: 1rem;
+    padding: .55rem .85rem;
+    border-radius: 10px;
+    background: #eaf2f8;
+    border: 1px solid #85c1e9;
+    color: #1a5276;
 }
 
 @media (max-width: 767.98px) {

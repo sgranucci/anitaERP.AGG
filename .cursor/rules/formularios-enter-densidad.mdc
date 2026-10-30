@@ -1,0 +1,50 @@
+---
+description: En formularios de carga, Enter pasa de campo y las acciones no ocupan toda la pantalla
+alwaysApply: true
+---
+
+# Formularios: Enter y densidad
+
+En un formulario de carga, **Enter pasa al campo siguiente**. No envía ni valida el formulario.
+
+## Enter
+
+- El `<form>` lleva `data-enter-campos="1"`.
+- El script único es `public/assets/js/enter-campos.js`, incluido en el layout. No copiar el listener en cada pantalla.
+- Recorre inputs, selects y áreas de texto editables, en el orden del DOM. Salta hidden, readonly, disabled y `tabindex="-1"`.
+- En el último campo, Enter deja el foco en el botón de enviar. Guardar es un clic.
+- En un `<textarea>`, Enter sigue siendo el salto de línea.
+- Un buscador de una sola caja y el filtro de un listado no llevan el atributo: ahí Enter consulta.
+
+## Maestro dentro del formulario
+
+Sigue `campos-tablas-consulta-modal-teclado`: código, descripción, F1 y lupa.
+Enter en ese código **también avanza**. El blur resuelve en silencio. Un código inválido no frena el avance ni abre un alert.
+
+## Cantidades
+
+Fichas y billetes se cargan en enteros, sin decimales: `step="1"` e `inputmode="numeric"`. La cantidad no se formatea con dos decimales. El importe (cantidad por denominación) sí lleva decimales.
+
+## Densidad
+
+- Varias acciones del mismo paso van en una fila de `btn-sm`, no en botones de ancho completo.
+- La ayuda de cada acción es una sola línea, o el `title` del botón.
+- La pantalla tiene que mostrar la operación y la mayor cantidad de datos posible, sin una tira de botones que empuje el resto fuera de la vista.
+
+## Prohibido
+
+```blade
+{{-- ❌ Enter en la cantidad guarda el formulario --}}
+<form method="POST">
+    <input type="number" name="cantidad">
+    <button type="submit" class="btn btn-block">Guardar</button>
+</form>
+```
+
+```blade
+{{-- ✅ --}}
+<form method="POST" data-enter-campos="1">
+    <input type="number" name="cantidad">
+    <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+</form>
+```

@@ -3249,6 +3249,7 @@ Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}', 'Caja\TesoreriaC
 Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/revisar', 'Caja\TesoreriaCrownCierreController@revisar')->name('revisar_tesoreria_crown_cierre');
 Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/auditar', 'Caja\TesoreriaCrownCierreController@auditar')->name('auditar_tesoreria_crown_cierre');
 Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/auditoria', 'Caja\TesoreriaCrownCierreController@firmarAuditoria')->name('firmar_auditoria_tesoreria_crown_cierre');
+Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/reabrir', 'Caja\TesoreriaCrownCierreController@reabrir')->name('reabrir_tesoreria_crown_cierre');
 Route::get('caja/tesoreria-crown/jornada/{id}', 'Caja\TesoreriaCrownJornadaController@ver')->name('ver_tesoreria_crown_jornada');
 
 Route::get('caja/tesoreria-crown/movimiento', 'Caja\TesoreriaCrownComprobanteController@index')->name('tesoreria_crown_movimiento');

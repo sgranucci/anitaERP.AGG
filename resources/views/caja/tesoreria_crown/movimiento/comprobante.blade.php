@@ -85,7 +85,7 @@
                             <tr>
                                 <td class="right">{{ number_format((float) $valor->denominacion, 2, ',', '.') }}</td>
                                 <td>{{ $valor->descripcion }}</td>
-                                <td class="right">{{ number_format($cantidad, 2, ',', '.') }}</td>
+                                <td class="right">{{ number_format($cantidad, 0, ',', '.') }}</td>
                                 <td class="right">{{ number_format($importe, 2, ',', '.') }}</td>
                             </tr>
                         @endforeach

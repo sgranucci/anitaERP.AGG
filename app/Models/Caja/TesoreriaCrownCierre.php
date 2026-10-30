@@ -25,6 +25,7 @@ class TesoreriaCrownCierre extends Model implements Auditable
         'valores_rendidos',
         'resultado',
         'diferencia',
+        'componentes',
         'estado',
         'observacion',
         'tesoreria_usuario_id',
@@ -32,6 +33,9 @@ class TesoreriaCrownCierre extends Model implements Auditable
         'cajero_at',
         'auditor_usuario_id',
         'auditor_at',
+        'reabierta_at',
+        'reabierta_usuario_id',
+        'reabierta_motivo',
     ];
 
     protected $casts = [
@@ -40,9 +44,11 @@ class TesoreriaCrownCierre extends Model implements Auditable
         'valores_rendidos' => 'decimal:2',
         'resultado' => 'decimal:2',
         'diferencia' => 'decimal:2',
+        'componentes' => 'array',
         'tesoreria_at' => 'datetime',
         'cajero_at' => 'datetime',
         'auditor_at' => 'datetime',
+        'reabierta_at' => 'datetime',
     ];
 
     public function asignacion(): BelongsTo
@@ -63,6 +69,11 @@ class TesoreriaCrownCierre extends Model implements Auditable
     public function auditorUsuario(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'auditor_usuario_id');
+    }
+
+    public function reabiertaUsuario(): BelongsTo
+    {
+        return $this->belongsTo(Usuario::class, 'reabierta_usuario_id');
     }
 
     public function eventos(): HasMany

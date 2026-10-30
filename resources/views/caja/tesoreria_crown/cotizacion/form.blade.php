@@ -22,7 +22,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{ route('guardar_tesoreria_crown_cotizacion') }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{ route('guardar_tesoreria_crown_cotizacion') }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-enter-campos="1">
                 @csrf
                 <div class="card-body">
                     <input type="hidden" name="sala_id" value="{{ $sala->id }}">

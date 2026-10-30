@@ -136,6 +136,8 @@ class MenuRolController extends Controller
                     'nombre' => $menuOrigen !== ''
                         ? $p->nombre.' ('.$menuOrigen.')'
                         : $p->nombre,
+                    'slug' => (string) $p->slug,
+                    'ayuda' => (string) ($p->ayuda ?? ''),
                     'roles_ids' => array_values(array_intersect($ids, $rolIds)),
                 ];
             });

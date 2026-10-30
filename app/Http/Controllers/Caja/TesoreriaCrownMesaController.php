@@ -118,35 +118,10 @@ class TesoreriaCrownMesaController extends Controller
         if (! $movimiento->esBorrador() || ! $movimiento->jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'Este movimiento ya no se puede modificar.');
         }
-        $datos = $request->validate([
-            'comentario' => ['nullable', 'string', 'max:80'],
-            'cajero_numero' => ['nullable', 'string', 'max:12'],
-            'cantidad' => ['nullable', 'array'],
-            'cantidad.*' => ['nullable', 'numeric', 'min:0'],
-        ]);
-        $cajero = TesoreriaCrownMesaSupport::cajeroPorNumero((int) $movimiento->sala_id, (string) ($datos['cajero_numero'] ?? ''));
-        if (is_string($cajero)) {
-            return back()->with('mensaje-error', $cajero);
+        $datos = $this->datosBorrador($request);
+        if ($error = $this->persistirBorrador($movimiento, $datos)) {
+            return back()->withInput()->with('mensaje-error', $error);
         }
-        $valoresSala = TesoreriaCrownValor::query()->where('sala_id', $movimiento->sala_id)->where('activo', true)->pluck('id')->all();
-
-        DB::transaction(function () use ($movimiento, $datos, $cajero, $valoresSala) {
-            $movimiento->comentario = $this->comentario($datos['comentario'] ?? null);
-            $movimiento->cajero_crown_id = $cajero?->id;
-            $movimiento->save();
-            EloquentAuditDeleteSupport::each($movimiento->lineas()->getQuery());
-            foreach ((array) ($datos['cantidad'] ?? []) as $valorId => $cantidad) {
-                $cantidad = (float) $cantidad;
-                if ($cantidad <= 0 || ! in_array((int) $valorId, $valoresSala, true)) {
-                    continue;
-                }
-                TesoreriaCrownMesaLinea::query()->create([
-                    'mesa_id' => $movimiento->id,
-                    'valor_id' => (int) $valorId,
-                    'cantidad' => $cantidad,
-                ]);
-            }
-        });
 
         return back()->with('mensaje', 'Borrador guardado.');
     }
@@ -163,8 +138,18 @@ class TesoreriaCrownMesaController extends Controller
         if (! $movimiento->esBorrador()) {
             return back()->with('mensaje-error', 'Este movimiento ya no está en borrador.');
         }
+        if ($request->exists('cantidad')) {
+            $datos = $this->datosBorrador($request);
+            if ($error = $this->persistirBorrador($movimiento, $datos)) {
+                return back()->withInput()->with('mensaje-error', $error);
+            }
+            $movimiento->unsetRelation('lineas');
+        }
         if ($movimiento->lineas()->doesntExist()) {
-            return back()->with('mensaje-error', 'Cargá al menos una cantidad antes de confirmar.');
+            return back()->withInput()->with('mensaje-error', 'Cargá al menos una cantidad antes de confirmar.');
+        }
+        if (trim((string) $request->input('firma_usuario')) === '' || trim((string) $request->input('firma_password')) === '') {
+            return back()->withInput()->with('mensaje-error', 'Completá el usuario y la clave de tesorería.');
         }
         $limite = 'tc-mesa:'.$movimiento->id.'|'.$request->ip();
         if (RateLimiter::tooManyAttempts($limite, 8)) {
@@ -254,7 +239,7 @@ class TesoreriaCrownMesaController extends Controller
             'nombre' => ['required', 'string', 'max:40'],
             'vigencia_desde' => ['required', 'date'],
             'cantidad' => ['nullable', 'array'],
-            'cantidad.*' => ['nullable', 'numeric', 'min:0'],
+            'cantidad.*' => ['nullable', 'integer', 'min:0'],
         ]);
         $vigencia = $datos['vigencia_desde'];
         if ($vigencia < now()->toDateString()) {
@@ -353,6 +338,51 @@ class TesoreriaCrownMesaController extends Controller
         TesoreriaCrownSalaSupport::exigida((int) $movimiento->sala_id);
 
         return $movimiento;
+    }
+
+    /**
+     * @return array{comentario: ?string, cajero_numero: ?string, cantidad: array<int|string, mixed>}
+     */
+    private function datosBorrador(Request $request): array
+    {
+        return $request->validate([
+            'comentario' => ['nullable', 'string', 'max:80'],
+            'cajero_numero' => ['nullable', 'string', 'max:12'],
+            'cantidad' => ['nullable', 'array'],
+            'cantidad.*' => ['nullable', 'integer', 'min:0'],
+        ]);
+    }
+
+    /**
+     * @param  array{comentario?: ?string, cajero_numero?: ?string, cantidad?: array<int|string, mixed>}  $datos
+     */
+    private function persistirBorrador(TesoreriaCrownMesa $movimiento, array $datos): ?string
+    {
+        $cajero = TesoreriaCrownMesaSupport::cajeroPorNumero((int) $movimiento->sala_id, (string) ($datos['cajero_numero'] ?? ''));
+        if (is_string($cajero)) {
+            return $cajero;
+        }
+        $valoresSala = TesoreriaCrownValor::query()->where('sala_id', $movimiento->sala_id)->where('activo', true)->pluck('id')->all();
+
+        DB::transaction(function () use ($movimiento, $datos, $cajero, $valoresSala) {
+            $movimiento->comentario = $this->comentario($datos['comentario'] ?? null);
+            $movimiento->cajero_crown_id = $cajero?->id;
+            $movimiento->save();
+            EloquentAuditDeleteSupport::each($movimiento->lineas()->getQuery());
+            foreach ((array) ($datos['cantidad'] ?? []) as $valorId => $cantidad) {
+                $cantidad = (int) $cantidad;
+                if ($cantidad <= 0 || ! in_array((int) $valorId, $valoresSala, true)) {
+                    continue;
+                }
+                TesoreriaCrownMesaLinea::query()->create([
+                    'mesa_id' => $movimiento->id,
+                    'valor_id' => (int) $valorId,
+                    'cantidad' => $cantidad,
+                ]);
+            }
+        });
+
+        return null;
     }
 
     private function comentario(mixed $texto): ?string

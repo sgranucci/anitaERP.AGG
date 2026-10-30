@@ -4,6 +4,10 @@
     {{ \App\Support\Caja\TesoreriaCrownComprobanteSupport::tipo($comprobante->tipo) }}
 @endsection
 
+@section('styles')
+    <link rel="stylesheet" href="{{ asset('assets/css/tesoreria-crown-jornada.css') }}?v={{ filemtime(public_path('assets/css/tesoreria-crown-jornada.css')) }}">
+@endsection
+
 @section('scripts')
 <script>
 (function () {
@@ -35,30 +39,11 @@
         panel.addEventListener('input', function () { recalcular(panel); });
     });
 
-    var campos = Array.prototype.slice.call(document.querySelectorAll('#form-cantidades-crown input[data-denom], #form-cantidades-crown input.js-importe'));
-    if (!campos.length) {
-        return;
+    var primero = document.querySelector('#form-cantidades-crown input[data-denom], #form-cantidades-crown input.js-importe');
+    if (primero) {
+        primero.focus();
+        primero.select();
     }
-    campos[0].focus();
-    campos[0].select();
-    campos.forEach(function (campo, indice) {
-        campo.addEventListener('keydown', function (evento) {
-            if (evento.key !== 'Enter') {
-                return;
-            }
-            evento.preventDefault();
-            var siguiente = campos[indice + 1];
-            if (siguiente) {
-                siguiente.focus();
-                siguiente.select();
-                return;
-            }
-            var boton = document.getElementById('btn-guardar-cantidades');
-            if (boton) {
-                boton.focus();
-            }
-        });
-    });
 })();
 </script>
 @endsection
@@ -75,7 +60,8 @@
     $ladoCajero = \App\Support\Caja\TesoreriaCrownFirmaSupport::ladoCajero($comprobante->tipo);
     $ladoTesoreria = \App\Support\Caja\TesoreriaCrownFirmaSupport::ladoTesoreria($comprobante->tipo);
     $cajeroFirma = $comprobante->asignacion->cajero;
-    $yaRevertido = \App\Models\Caja\TesoreriaCrownComprobante::query()->where('revierte_id', $comprobante->id)->exists();
+    $reversa = $comprobante->reversa;
+    $yaRevertido = $reversa !== null;
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -104,15 +90,28 @@
                 </div>
             </div>
             <div class="card-body">
-                <p class="mb-3">
+                <p class="mb-2">
                     Estado: <strong>{{ \App\Support\Caja\TesoreriaCrownComprobanteSupport::estado($comprobante->estado) }}</strong>
-                    @if ($comprobante->revierte_id)
-                        <span class="text-muted">Reversa del comprobante {{ $comprobante->revierte_id }}.</span>
-                    @endif
-                    @if ($yaRevertido)
-                        <span class="text-muted">Ya tiene reversa.</span>
-                    @endif
                 </p>
+                @if ($reversa)
+                    <div class="tc-cierre-anterior mb-3">
+                        <div class="tc-papel is-revertido">
+                            <span class="tc-papel-marca is-revertido"><i class="fa fa-undo"></i> Reversada</span>
+                            <a class="tc-papel-nro" href="{{ route('editar_tesoreria_crown_movimiento', $reversa->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($reversa->numero) }}</a>
+                            <span class="tc-papel-estado">{{ \App\Support\Caja\TesoreriaCrownComprobanteSupport::estado($reversa->estado) }}</span>
+                        </div>
+                        <p class="tc-cierre-meta">{{ collect([$reversa->creadoUsuario ? 'Por '.$reversa->creadoUsuario->nombre : null, $reversa->created_at?->format('d/m/Y H:i')])->filter()->implode(' · ') }}</p>
+                    </div>
+                @endif
+                @if ($comprobante->revierte)
+                    <div class="tc-cierre-anterior mb-3">
+                        <div class="tc-papel is-reversa">
+                            <span class="tc-papel-marca is-reversa"><i class="fa fa-undo"></i> Reversa de</span>
+                            <a class="tc-papel-nro text-primary" href="{{ route('editar_tesoreria_crown_movimiento', $comprobante->revierte->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($comprobante->revierte->numero) }}</a>
+                        </div>
+                        <p class="tc-cierre-meta">{{ collect([$comprobante->creadoUsuario ? 'Por '.$comprobante->creadoUsuario->nombre : null, $comprobante->created_at?->format('d/m/Y H:i')])->filter()->implode(' · ') }}</p>
+                    </div>
+                @endif
                 @if ($comprobante->observacion)
                     <p class="text-muted">{{ $comprobante->observacion }}</p>
                 @endif
@@ -123,7 +122,7 @@
                     <p class="text-muted">Efectivo, fichas y, al final, cashless y tarjetas.@if (\App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) Esta caja se abrió como {{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::tarea($comprobante->asignacion->tipo_tarea) }}, así que también pide el informe de gastronomía u hotel.@endif</p>
                 @endif
 
-                <form method="POST" action="{{ route('guardar_tesoreria_crown_movimiento', $comprobante->id) }}" id="form-cantidades-crown">
+                <form method="POST" action="{{ route('guardar_tesoreria_crown_movimiento', $comprobante->id) }}" id="form-cantidades-crown" data-enter-campos="1">
                     @csrf
                     @if ($editable)
                         <div class="border rounded px-3 py-2 mb-3 bg-light d-flex flex-wrap align-items-center" id="barra-totales-crown" style="position:sticky;top:3.5rem;z-index:5;">
@@ -177,9 +176,9 @@
                                                         <td>{{ $valor->descripcion }}</td>
                                                         <td>
                                                             @if ($editable)
-                                                                <input type="number" name="cantidad[{{ $valor->id }}]" class="form-control form-control-sm text-right" min="0" step="1" data-denom="{{ $denominacion }}" value="{{ old('cantidad.'.$valor->id, $cantidades[$valor->id] ?? '') }}">
-                                                            @else
-                                                                {{ $cantidades[$valor->id] ?? '' }}
+                                                                <input type="number" name="cantidad[{{ $valor->id }}]" class="form-control form-control-sm text-right" min="0" step="1" inputmode="numeric" data-denom="{{ $denominacion }}" value="{{ old('cantidad.'.$valor->id, isset($cantidades[$valor->id]) && $cantidades[$valor->id] !== '' ? (int) $cantidades[$valor->id] : '') }}">
+                                                            @elseif (isset($cantidades[$valor->id]) && (int) $cantidades[$valor->id] !== 0)
+                                                                {{ number_format((int) $cantidades[$valor->id], 0, ',', '.') }}
                                                             @endif
                                                         </td>
                                                     </tr>
@@ -217,7 +216,7 @@
                                 <strong>{{ $etiqueta }}</strong>
                                 <p class="mb-2">{{ \App\Support\Caja\TesoreriaCrownFirmaSupport::textoFirma($usuarioFirma, $cuando, $lado === $ladoCajero ? ($cajeroFirma->nombre ?? null) : null) }}</p>
                                 @if ($lado === $ladoCajero && $comprobante->estado === 'P' && $cuando === null && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('listar-tesoreria-crown-movimiento', false))
-                                    <form method="POST" action="{{ route('firmar_cajero_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off">
+                                    <form method="POST" action="{{ route('firmar_cajero_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-campos="1">
                                         @csrf
                                         <p class="small text-muted mb-2">{{ $cajeroFirma->nombre ?? 'El cajero' }} firma en este teclado con su número y su PIN.</p>
                                         <div class="form-row">
@@ -232,7 +231,7 @@
                                     </form>
                                 @endif
                                 @if ($lado === $ladoTesoreria && $comprobante->estado === 'P' && $cuando === null && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('editar-tesoreria-crown-movimiento', false))
-                                    <form method="POST" action="{{ route('firmar_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off">
+                                    <form method="POST" action="{{ route('firmar_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-campos="1">
                                         @csrf
                                         <p class="small text-muted">Tesorería firma con usuario y clave del sistema.</p>
                                         <div class="form-row">
@@ -261,7 +260,7 @@
                 @endif
 
                 @if (in_array($comprobante->estado, ['B', 'P'], true) && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('editar-tesoreria-crown-movimiento', false))
-                    <form method="POST" action="{{ route('noconforme_tesoreria_crown_movimiento', $comprobante->id) }}" class="form-inline d-inline ml-2">
+                    <form method="POST" action="{{ route('noconforme_tesoreria_crown_movimiento', $comprobante->id) }}" class="form-inline d-inline ml-2" data-enter-campos="1">
                         @csrf
                         <input type="text" name="observacion" class="form-control form-control-sm mr-2" maxlength="500" placeholder="Motivo" required>
                         <button type="submit" class="btn btn-outline-danger btn-sm">No conforme</button>

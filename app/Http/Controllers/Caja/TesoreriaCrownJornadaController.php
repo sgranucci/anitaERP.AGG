@@ -246,7 +246,7 @@ class TesoreriaCrownJornadaController extends Controller
             'salas' => $salas,
             'sala' => $sala,
             'jornada' => $jornada,
-            'asignaciones' => $jornada->asignaciones()->with(['deposito', 'cajero', 'comprobantes', 'cierre'])->orderBy('turno')->orderBy('deposito_id')->get(),
+            'asignaciones' => $jornada->asignaciones()->with(['deposito', 'cajero', 'comprobantes', 'cierre', 'cierres'])->orderBy('turno')->orderBy('deposito_id')->get(),
             'recientes' => TesoreriaCrownJornada::query()
                 ->where('sala_id', $sala->id)
                 ->orderByDesc('fecha')
@@ -418,7 +418,7 @@ class TesoreriaCrownJornadaController extends Controller
         if (! $jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'No se quita una asignación de una jornada cerrada.');
         }
-        if ($asignacion->comprobantes()->exists() || $asignacion->cierre()->exists()) {
+        if ($asignacion->comprobantes()->exists() || $asignacion->cierres()->exists()) {
             return back()->with('mensaje-error', 'Esta caja ya tiene comprobantes. No se puede quitar.');
         }
         $asignacion->delete();
@@ -463,7 +463,7 @@ class TesoreriaCrownJornadaController extends Controller
     public function resolverCajero(Request $request)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
-        can('listar-tesoreria-crown-jornada');
+        $this->exigirConsultaCajero();
 
         $sala = TesoreriaCrownSalaSupport::exigida((int) $request->input('sala_id'));
         $codigo = (int) $request->input('codigo', 0);
@@ -490,7 +490,7 @@ class TesoreriaCrownJornadaController extends Controller
     public function consultaCajero(Request $request)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
-        can('listar-tesoreria-crown-jornada');
+        $this->exigirConsultaCajero();
 
         $sala = TesoreriaCrownSalaSupport::exigida((int) $request->input('sala_id'));
         $texto = trim((string) $request->input('q', ''));
@@ -628,8 +628,19 @@ class TesoreriaCrownJornadaController extends Controller
         ];
     }
 
+    private function exigirConsultaCajero(): void
+    {
+        if (can('listar-tesoreria-crown-jornada', false)
+            || can('listar-tesoreria-crown-mesa', false)
+            || can('crear-tesoreria-crown-mesa', false)) {
+            return;
+        }
+
+        can('listar-tesoreria-crown-jornada');
+    }
+
     /**
-     * @return array{id: int, codigo: string, nombre: string}
+     * @return array{id: int, codigo: string, legajo: string, nombre: string}
      */
     private function filaCajero(CajeroCrown $cajero): array
     {

@@ -35,12 +35,12 @@
             </div>
             <div class="card-body">
                 @if ($bancaActiva)
-                    <p class="mb-3">Banca {{ $bancaActiva->codigo }} {{ $bancaActiva->nombre }}, vigente desde {{ $bancaActiva->vigencia_desde->format('d/m/Y') }}.</p>
+                    <p class="mb-2">Banca {{ $bancaActiva->codigo }} {{ $bancaActiva->nombre }}, vigente desde {{ $bancaActiva->vigencia_desde->format('d/m/Y') }}.</p>
                 @else
-                    <p class="text-muted mb-3">Esta mesa no tiene una banca vigente para esta fecha.</p>
+                    <p class="text-muted mb-2">Esta mesa no tiene una banca vigente para esta fecha.</p>
                 @endif
 
-                <div class="tc-mesa-metricas mb-3">
+                <div class="tc-mesa-metricas mb-2">
                     <div class="tc-mesa-metrica">
                         <span>Apertura</span>
                         <strong>{{ $textoMesa($sumaMesa($aperturaMesa), $aperturaMesa) }}</strong>
@@ -60,26 +60,23 @@
                 </div>
 
                 @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-mesa', false))
-                    <form method="POST" action="{{ route('crear_tesoreria_crown_mesa') }}" class="mb-3">
+                    <form method="POST" action="{{ route('crear_tesoreria_crown_mesa') }}" class="mb-3" data-enter-campos="1">
                         @csrf
                         <input type="hidden" name="jornada_id" value="{{ $jornada->id }}">
                         <input type="hidden" name="deposito_id" value="{{ $mesaActiva->id }}">
                         <div class="form-row align-items-end">
-                            <div class="form-group col-md-3 mb-2">
-                                <label for="cajero_numero_mesa">Cajero</label>
-                                <input type="text" name="cajero_numero" id="cajero_numero_mesa" class="form-control" inputmode="numeric" placeholder="Número, si corresponde" value="{{ old('cajero_numero') }}">
-                            </div>
+                            @include('caja.tesoreria_crown.partials.campo_cajero', [
+                                'salaId' => $jornada->sala_id,
+                                'codigo' => old('cajero_numero'),
+                                'nombre' => '',
+                                'inputId' => 'cajero_numero_mesa',
+                            ])
                             <div class="form-group col-md-5 mb-2">
                                 <label for="comentario_mesa">Comentario</label>
                                 <input type="text" name="comentario" id="comentario_mesa" class="form-control" maxlength="80" value="{{ old('comentario') }}">
                             </div>
                         </div>
-                        <div class="tc-mesa-acciones">
-                            @foreach (\App\Support\Caja\TesoreriaCrownMesaSupport::TIPOS as $codigoTipo => $nombreTipo)
-                                <button type="submit" name="tipo" value="{{ $codigoTipo }}" class="btn btn-sm {{ $codigoTipo === 'F' ? 'btn-success' : ($codigoTipo === 'C' ? 'btn-outline-warning' : 'btn-outline-primary') }}">{{ $nombreTipo }}</button>
-                            @endforeach
-                        </div>
-                        <p class="text-muted small mt-2 mb-0">El movimiento se abre para cargar las cantidades. Confirmarlo guarda la banca de esta fecha.</p>
+                        @include('caja.tesoreria_crown.partials.operaciones_mesa')
                     </form>
                 @endif
 

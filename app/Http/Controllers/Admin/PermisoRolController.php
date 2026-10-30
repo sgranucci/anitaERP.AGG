@@ -51,7 +51,8 @@ class PermisoRolController extends Controller
             $permiso = $request->permiso;
             $permisos = Permiso::where(function ($q) use ($permiso) {
                 $q->where('nombre', 'LIKE', '%'.$permiso.'%')
-                    ->orWhere('slug', 'LIKE', '%'.$permiso.'%');
+                    ->orWhere('slug', 'LIKE', '%'.$permiso.'%')
+                    ->orWhere('ayuda', 'LIKE', '%'.$permiso.'%');
             })
                 ->orderBy('nombre')
                 ->get();

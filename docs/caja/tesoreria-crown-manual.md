@@ -103,16 +103,19 @@ Al cerrar firman los dos en el momento: tesorería con usuario y clave, y el caj
 
 ### Cómo se calcula la diferencia
 
-Todo el cierre se expresa en pesos. Entran solo los comprobantes conformes. Una reversa conforme resta, porque sus cantidades van al revés.
+Todo el cierre se expresa en pesos. Entran solo los comprobantes conformes. Una reversa conforme resta, porque sus cantidades y sus medios van al revés.
 
-- **Efectivo habilitado**: suma de las habilitaciones conformes.
-- **Valores rendidos**: suma de las rendiciones conformes, fichas incluidas.
-- **Resultado**: en gastronomía, X menos notas de crédito. En hotel, eso más la cuenta corriente del hotel. En el resto de las tareas, cero.
-- **Diferencia** = valores rendidos − efectivo habilitado − resultado.
+El efectivo de cada comprobante es pesos, más dólares y euros por la cotización de la jornada, más la tarjeta de crédito menos el recargo, más el débito y el QR. Las fichas no van dentro de ese efectivo.
+
+| Tarea | Diferencia |
+|---|---|
+| Venta y pago, kiosco y cashless | Efectivo rendido + fichas + cashless + vouchers + online + apuestas − efectivo habilitado. |
+| Gastronomía y hotel | Efectivo rendido + fichas + transferencia + cuenta corriente − efectivo habilitado − (X − notas de crédito − fallo de mozo). |
+| Empleados | Cero. |
 
 Un negativo es **faltante**: el cajero devolvió de menos. Un positivo es **excedente**. Cero es **sin diferencia**.
 
-Esos cuatro números quedan grabados en el cierre. No se recalculan solos si después cambia una cotización.
+Esos importes y el desglose quedan grabados en el cierre. No se recalculan solos si después cambia una cotización. Un cierre anterior a este desglose sigue mostrando los cuatro números que se grabaron en su momento.
 
 ### Tolerancia
 
@@ -186,7 +189,7 @@ Hasta que esa reversa esté conforme, la caja no se cierra. Cuando está conform
 
 ### Caja ya cerrada
 
-El comprobante avisa que quedó en consulta. Para corregir un importe sin reabrir la caja, el camino es el ajuste de auditoría. Para anular una habilitación o una rendición, primero se reabre la caja y después se revierte.
+El comprobante avisa que quedó en consulta. Para anular una habilitación o una rendición, primero se reabre la caja y después se revierte.
 
 ## Bóveda
 
@@ -196,7 +199,7 @@ Un movimiento tiene número propio de la sala, un tipo tomado del catálogo de A
 
 El borrador no mueve el saldo. Tesorería lo confirma con usuario y clave. Anularlo, con la jornada abierta, lo saca del saldo y deja el número. Con la jornada cerrada queda en consulta.
 
-Se puede vincular una habilitación o una rendición conforme de esa jornada y copiar sus cantidades. El comprobante del cajero no descuenta la bóveda solo: el movimiento de bóveda es el papel que mueve el saldo. Desde el número se abre el comprobante, y desde el saldo se abre el movimiento.
+Al quedar conforme, la habilitación saca de la bóveda los pesos, dólares y euros. La rendición los vuelve a entrar. Las fichas no pasan por la bóveda. La reversa, cuando queda conforme, hace el movimiento al revés porque las cantidades van con signo contrario. Ese papel se confirma solo, queda vinculado al comprobante y no se puede cargar de nuevo a mano. Anularlo lo saca del saldo. Desde el número se abre el comprobante, y desde el saldo se abre el movimiento.
 
 En la jornada del día se ve el saldo de la bóveda y la lista de movimientos. El menú Bóveda abre la misma pantalla.
 
@@ -226,9 +229,11 @@ El ajuste es un comprobante nuevo. No reescribe la habilitación, la rendición 
 
 ## Reapertura
 
-Este tramo también está definido y todavía no está en la pantalla. Sirve cuando hay que habilitar o rendir de nuevo, o cuando hay que revertir un comprobante que quedó del otro lado del cierre.
+Sirve cuando hay que habilitar o rendir de nuevo, o cuando hay que revertir un comprobante que quedó del otro lado del cierre.
 
-La pide alguien con permiso de edición. Queda anotado quién autorizó. La caja vuelve a operativa. Si la jornada estaba cerrada, también vuelve a abierta: si no, la reversa no se puede firmar.
+Está en el cierre de la caja, **Reabrir caja**. El permiso es `reabrir-tesoreria-crown-caja`. No se asigna a ningún rol al instalarlo: Sistemas lo tilda en Permiso - Rol, y ahí el signo de pregunta dice qué habilita. El rol administrador entra igual, porque ese rol no consulta los permisos.
+
+Pide el motivo y la clave de un usuario que tenga ese permiso. Queda anotado quién autorizó. La caja vuelve a operativa. Si la jornada estaba cerrada, también vuelve a abierta, salvo que la sala ya tenga otra jornada abierta: si no, la reversa no se puede firmar.
 
 Con la caja reabierta se puede revertir una habilitación o una rendición conforme. El comprobante original no se toca. La reversa es un comprobante nuevo, con el número siguiente, los importes al revés y las dos firmas de siempre: el cajero con número y PIN, y tesorería con usuario y clave. Una sola vez, y no se revierte una reversa.
 

@@ -18,8 +18,13 @@ use App\Support\Contable\CuentacontableSaldoMesSupport;
  */
 class AsientoObserver
 {
-    /** @var array<int, array{fecha: mixed, empresa_id: int}> */
-    private array $cabeceraAnterior = [];
+    /**
+     * Laravel resuelve un observer nuevo por evento. Si esto no es estático,
+     * updated() no ve lo que guardó updating() y el saldo mensual no sigue a la fecha.
+     *
+     * @var array<int, array{fecha: mixed, empresa_id: int}>
+     */
+    private static array $cabeceraAnterior = [];
 
     public function updating(Asiento $asiento): void
     {
@@ -32,7 +37,7 @@ class AsientoObserver
             return;
         }
 
-        $this->cabeceraAnterior[$id] = [
+        self::$cabeceraAnterior[$id] = [
             'fecha' => $asiento->getOriginal('fecha'),
             'empresa_id' => (int) $asiento->getOriginal('empresa_id'),
         ];
@@ -41,12 +46,12 @@ class AsientoObserver
     public function updated(Asiento $asiento): void
     {
         $id = (int) $asiento->getKey();
-        if (! isset($this->cabeceraAnterior[$id])) {
+        if (! isset(self::$cabeceraAnterior[$id])) {
             return;
         }
 
-        $anterior = $this->cabeceraAnterior[$id];
-        unset($this->cabeceraAnterior[$id]);
+        $anterior = self::$cabeceraAnterior[$id];
+        unset(self::$cabeceraAnterior[$id]);
 
         if (! CuentacontableSaldoMesSupport::observerHabilitado()) {
             return;

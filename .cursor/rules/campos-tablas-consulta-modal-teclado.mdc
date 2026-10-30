@@ -14,7 +14,7 @@ En formularios y filtros, toda referencia a una tabla maestra (empleado, artícu
 - Guardar el ID real en hidden cuando el proceso lo necesite.
 - Mostrar un input editable de código/legajo y una descripción readonly.
 - **F1** sobre el código y la **lupa** abren el mismo modal.
-- **Enter** resuelve el código; si es válido, avanza al siguiente campo.
+- **Enter** avanza al campo siguiente, también si el código todavía no se resolvió. El blur resuelve en silencio y no frena ese avance.
 - **Tab** conserva la navegación nativa.
 - El modal permite **Elegir** y **Consultar** el ABM en otra pestaña.
 - Enter en el buscador del modal elige la primera fila.
@@ -24,7 +24,7 @@ En formularios y filtros, toda referencia a una tabla maestra (empleado, artícu
 
 - Abrir el modal dispara `blur` del código: **no** resolver ni avisar mientras el modal está abriéndose o abierto.
 - Antes de un `alert()`, **cerrar** el modal y avisar en `setTimeout(..., 0)`; un alert sobre la transición de Bootstrap deja el backdrop huérfano y el body con `modal-open`.
-- Resolver en `blur` sin alerta; alertar solo en Enter o al elegir del modal.
+- Resolver en `blur` sin alerta. Un código inválido se marca y limpia el nombre; no abre un `alert` que corte el paso al campo siguiente.
 - Marcar el valor inválido (`data-*`) y limpiarlo en `input` para no repetir el aviso.
 - Ante bloqueo, usar `window.liberarPantallaModalesBloqueados()` (`public/assets/js/funciones.js`).
 

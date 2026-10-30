@@ -19,7 +19,7 @@ class TesoreriaCrownBancaLinea extends Model implements Auditable
     ];
 
     protected $casts = [
-        'cantidad' => 'decimal:2',
+        'cantidad' => 'integer',
     ];
 
     public function banca(): BelongsTo

@@ -37,7 +37,7 @@
         enfocar('turno');
     }
 
-    function resolver(prefijo) {
+    function resolver(prefijo, avisar) {
         var codigo = document.getElementById(prefijo + '_codigo').value.trim();
         if (codigo === '') {
             limpiar(prefijo);
@@ -55,10 +55,10 @@
             .then(function (resultado) {
                 if (!resultado || !resultado.ok) {
                     limpiar(prefijo);
-                    if (resultado && resultado.fila && resultado.fila.mensaje) {
+                    if (avisar && resultado && resultado.fila && resultado.fila.mensaje) {
                         window.alert(resultado.fila.mensaje);
+                        enfocar(prefijo + '_codigo');
                     }
-                    enfocar(prefijo + '_codigo');
                     return false;
                 }
                 aplicar(prefijo, resultado.fila);
@@ -130,24 +130,25 @@
         buscar();
     }
 
-    document.getElementById('deposito_codigo').addEventListener('change', function () { resolver('deposito'); });
-    document.getElementById('cajero_codigo').addEventListener('change', function () { resolver('cajero'); });
+    var enterLoLlevaElFormulario = form.hasAttribute('data-enter-campos');
+    document.getElementById('deposito_codigo').addEventListener('change', function () { resolver('deposito', false); });
+    document.getElementById('cajero_codigo').addEventListener('change', function () { resolver('cajero', false); });
     document.getElementById('deposito_codigo').addEventListener('keydown', function (evento) {
         if (evento.key === 'F1') { evento.preventDefault(); abrir('deposito', 'Cajas'); }
-        if (evento.key === 'Enter') {
+        if (evento.key === 'Enter' && !enterLoLlevaElFormulario) {
             evento.preventDefault();
-            resolver('deposito').then(function (ok) { if (ok) { siguienteDe('deposito'); } });
+            resolver('deposito', true).then(function (ok) { if (ok) { siguienteDe('deposito'); } });
         }
     });
     document.getElementById('cajero_codigo').addEventListener('keydown', function (evento) {
         if (evento.key === 'F1') { evento.preventDefault(); abrir('cajero', 'Cajeros'); }
-        if (evento.key === 'Enter') {
+        if (evento.key === 'Enter' && !enterLoLlevaElFormulario) {
             evento.preventDefault();
-            resolver('cajero').then(function (ok) { if (ok) { siguienteDe('cajero'); } });
+            resolver('cajero', true).then(function (ok) { if (ok) { siguienteDe('cajero'); } });
         }
     });
     document.getElementById('turno').addEventListener('keydown', function (evento) {
-        if (evento.key === 'Enter') {
+        if (evento.key === 'Enter' && !enterLoLlevaElFormulario) {
             evento.preventDefault();
             enfocar('tipo_tarea');
         }

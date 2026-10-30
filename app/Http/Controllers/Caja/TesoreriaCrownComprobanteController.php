@@ -268,7 +268,7 @@ class TesoreriaCrownComprobanteController extends Controller
         }
         $reglas = [
             'cantidad' => ['array'],
-            'cantidad.*' => ['nullable', 'numeric', 'min:0'],
+            'cantidad.*' => ['nullable', 'integer', 'min:0'],
         ];
         $camposMedio = $comprobante->tipo === TesoreriaCrownComprobanteSupport::RENDICION
             ? TesoreriaCrownRendicionCampos::camposDe($comprobante->asignacion->tipo_tarea ?? '')
@@ -545,7 +545,8 @@ class TesoreriaCrownComprobanteController extends Controller
             return back()->with('mensaje-error', 'Este comprobante ya fue revertido.');
         }
 
-        $inverso = DB::transaction(function () use ($comprobante) {
+        $usuarioId = auth()->id();
+        $inverso = DB::transaction(function () use ($comprobante, $usuarioId) {
             $nuevo = TesoreriaCrownComprobante::query()->create([
                 'sala_id' => $comprobante->sala_id,
                 'empresa_id' => $comprobante->empresa_id,
@@ -556,6 +557,7 @@ class TesoreriaCrownComprobanteController extends Controller
                 'estado' => TesoreriaCrownComprobanteSupport::BORRADOR,
                 'observacion' => 'Reversa del comprobante '.TesoreriaCrownNumeradorSupport::visible((int) $comprobante->numero),
                 'revierte_id' => $comprobante->id,
+                'creado_usuario_id' => $usuarioId,
             ]);
             foreach (TesoreriaCrownRendicionCampos::campos() as $clave => $meta) {
                 if ($meta['tipo'] === 'importe') {
@@ -569,7 +571,7 @@ class TesoreriaCrownComprobanteController extends Controller
                 TesoreriaCrownComprobanteLinea::query()->create([
                     'comprobante_id' => $nuevo->id,
                     'valor_id' => $linea->valor_id,
-                    'cantidad' => round((float) $linea->cantidad * -1, 2),
+                    'cantidad' => (int) round((float) $linea->cantidad * -1),
                 ]);
             }
 
@@ -634,7 +636,7 @@ class TesoreriaCrownComprobanteController extends Controller
     private function comprobanteEnAlcance(int $id): TesoreriaCrownComprobante
     {
         $comprobante = TesoreriaCrownComprobante::query()
-            ->with(['jornada', 'sala', 'empresa', 'asignacion.deposito', 'asignacion.cajero.usuario', 'asignacion.cierre', 'lineas.valor.tipoValor', 'entregaUsuario', 'recibeUsuario'])
+            ->with(['jornada', 'sala', 'empresa', 'asignacion.deposito', 'asignacion.cajero.usuario', 'asignacion.cierre', 'lineas.valor.tipoValor', 'entregaUsuario', 'recibeUsuario', 'creadoUsuario', 'reversa.creadoUsuario', 'revierte'])
             ->findOrFail($id);
         TesoreriaCrownSalaSupport::exigida((int) $comprobante->sala_id);
 

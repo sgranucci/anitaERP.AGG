@@ -49,8 +49,19 @@ class TesoreriaCrownAsignacion extends Model implements Auditable
         return $this->hasMany(TesoreriaCrownComprobante::class, 'asignacion_id');
     }
 
+    public function cierres(): HasMany
+    {
+        return $this->hasMany(TesoreriaCrownCierre::class, 'asignacion_id')->orderBy('id');
+    }
+
+    /**
+     * El cierre que tiene la caja cerrada. Los reabiertos quedan en la historia.
+     */
     public function cierre(): HasOne
     {
-        return $this->hasOne(TesoreriaCrownCierre::class, 'asignacion_id');
+        return $this->hasOne(TesoreriaCrownCierre::class, 'asignacion_id')
+            ->ofMany(['id' => 'max'], function ($query) {
+                $query->whereNull('reabierta_at');
+            });
     }
 }

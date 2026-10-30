@@ -75,7 +75,7 @@
                                                 <tr>
                                                     <td class="text-right">{{ number_format((float) $fila['valor']->denominacion, 2, ',', '.') }}</td>
                                                     <td>{{ $fila['valor']->descripcion }}</td>
-                                                    <td class="text-right">{{ number_format($fila['cantidad'], 2, ',', '.') }}</td>
+                                                    <td class="text-right">{{ number_format($fila['cantidad'], 0, ',', '.') }}</td>
                                                     <td class="text-right">{{ number_format($fila['monto'], 2, ',', '.') }}</td>
                                                 </tr>
                                             @endforeach
@@ -86,7 +86,7 @@
                         @endif
 
                         @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-boveda', false) && $lugar)
-                            <form method="POST" action="{{ route('crear_tesoreria_crown_boveda') }}" class="border rounded p-3 mt-3" id="form-nueva-boveda">
+                            <form method="POST" action="{{ route('crear_tesoreria_crown_boveda') }}" class="border rounded p-3 mt-3" id="form-nueva-boveda" data-enter-campos="1">
                                 @csrf
                                 <input type="hidden" name="jornada_id" value="{{ $jornada->id }}">
                                 <input type="hidden" name="deposito_id" value="{{ $lugar->id }}">

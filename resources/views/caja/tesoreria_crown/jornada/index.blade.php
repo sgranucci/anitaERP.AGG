@@ -43,7 +43,7 @@
             </div>
             @if (! $abierta && $sala && can('crear-tesoreria-crown-jornada', false))
                 <div class="collapse border-bottom" id="panel-abrir-jornada">
-                    <form method="POST" action="{{ route('abrir_tesoreria_crown_jornada') }}" class="form-inline px-3 py-2 mb-0 bg-light">
+                    <form method="POST" action="{{ route('abrir_tesoreria_crown_jornada') }}" class="form-inline px-3 py-2 mb-0 bg-light" data-enter-campos="1">
                         @csrf
                         <input type="hidden" name="sala_id" value="{{ $sala->id }}">
                         <label for="fecha" class="mr-2 mb-0">Fecha</label>

@@ -4,6 +4,10 @@
     Mesas
 @endsection
 
+@section('scripts')
+    <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/cajero.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/cajero.js')) }}"></script>
+@endsection
+
 @section('contenido')
 @include('includes.mensaje')
 <div class="row">
@@ -57,31 +61,23 @@
                         @include('caja.tesoreria_crown.mesa.partials.cantidades', ['titulo' => 'Drop', 'filas' => $drop])
 
                         @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-mesa', false))
-                            <form method="POST" action="{{ route('crear_tesoreria_crown_mesa') }}" class="border rounded p-3 mt-3">
+                            <form method="POST" action="{{ route('crear_tesoreria_crown_mesa') }}" class="border rounded p-3 mt-3" data-enter-campos="1">
                                 @csrf
                                 <input type="hidden" name="jornada_id" value="{{ $jornada->id }}">
                                 <input type="hidden" name="deposito_id" value="{{ $mesa->id }}">
                                 <div class="form-row">
-                                    <div class="form-group col-md-3">
-                                        <label for="tipo">Movimiento</label>
-                                        <select name="tipo" id="tipo" class="form-control" required>
-                                            @foreach (\App\Support\Caja\TesoreriaCrownMesaSupport::TIPOS as $codigo => $nombre)
-                                                <option value="{{ $codigo }}" @selected(old('tipo') === $codigo)>{{ $nombre }}</option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                    <div class="form-group col-md-3">
-                                        <label for="cajero_numero">Cajero</label>
-                                        <input type="text" name="cajero_numero" id="cajero_numero" class="form-control" inputmode="numeric" placeholder="Número" value="{{ old('cajero_numero') }}">
-                                    </div>
-                                    <div class="form-group col-md-4">
+                                    @include('caja.tesoreria_crown.partials.campo_cajero', [
+                                        'salaId' => $sala->id,
+                                        'codigo' => old('cajero_numero'),
+                                        'nombre' => '',
+                                        'inputId' => 'cajero_numero',
+                                    ])
+                                    <div class="form-group col-md-5 mb-2">
                                         <label for="comentario">Comentario</label>
                                         <input type="text" name="comentario" id="comentario" class="form-control" maxlength="80" value="{{ old('comentario') }}">
                                     </div>
-                                    <div class="form-group col-md-2 d-flex align-items-end">
-                                        <button type="submit" class="btn btn-primary mb-1">Nuevo</button>
-                                    </div>
                                 </div>
+                                @include('caja.tesoreria_crown.partials.operaciones_mesa')
                             </form>
                         @endif
 
@@ -117,7 +113,7 @@
                     @if (can('editar-tesoreria-crown-mesa', false) && $juego)
                         <h5 class="mt-4">Nueva vigencia de la banca {{ $juego->banca_codigo }}</h5>
                         <p class="text-muted small">Rige desde la fecha que indiques, de hoy en adelante. No reescribe la banca de los días ya jugados.</p>
-                        <form method="POST" action="{{ route('guardar_banca_tesoreria_crown_mesa') }}">
+                        <form method="POST" action="{{ route('guardar_banca_tesoreria_crown_mesa') }}" data-enter-campos="1">
                             @csrf
                             <input type="hidden" name="sala_id" value="{{ $sala->id }}">
                             <input type="hidden" name="codigo" value="{{ $juego->banca_codigo }}">
@@ -140,7 +136,7 @@
                                             @foreach ($grupo['filas'] as $valor)
                                                 <tr>
                                                     <td>{{ $valor->descripcion }}</td>
-                                                    <td><input type="number" name="cantidad[{{ $valor->id }}]" class="form-control form-control-sm text-right" min="0" step="1"></td>
+                                                    <td><input type="number" name="cantidad[{{ $valor->id }}]" class="form-control form-control-sm text-right" min="0" step="1" inputmode="numeric"></td>
                                                 </tr>
                                             @endforeach
                                         </tbody>
@@ -155,4 +151,5 @@
         </div>
     </div>
 </div>
+@include('caja.tesoreria_crown.partials.modal_consulta_cajero')
 @endsection

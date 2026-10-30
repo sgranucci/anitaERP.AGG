@@ -11,7 +11,7 @@ class Permiso extends Model implements Auditable
 
     protected $table = 'permiso';
 
-    protected $fillable = ['nombre', 'slug', 'menu_id'];
+    protected $fillable = ['nombre', 'slug', 'ayuda', 'menu_id'];
 
     public function roles()
     {

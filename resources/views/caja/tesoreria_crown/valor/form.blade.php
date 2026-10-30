@@ -20,7 +20,7 @@
                     </a>
                 </div>
             </div>
-            <form class="form-horizontal form--label-right" id="form-general" method="POST" action="{{ $accion }}" autocomplete="off">
+            <form class="form-horizontal form--label-right" id="form-general" method="POST" action="{{ $accion }}" autocomplete="off" data-enter-campos="1">
                 @csrf
                 @if ($metodo !== 'POST')
                     @method($metodo)

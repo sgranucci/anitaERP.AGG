@@ -25,6 +25,7 @@ final class TesoreriaCrownRendicionCampos
                     'nro_z' => ['label' => 'Nro. informe Z', 'tipo' => 'texto', 'negativo' => false],
                     'ult_ticket' => ['label' => 'Último ticket del Z', 'tipo' => 'entero', 'negativo' => false],
                     'total_nc' => ['label' => 'Notas de crédito', 'tipo' => 'importe', 'negativo' => false],
+                    'fallo_mozo' => ['label' => 'Fallo de mozo', 'tipo' => 'importe', 'negativo' => false],
                     'iva_facturas' => ['label' => 'IVA facturas', 'tipo' => 'importe', 'negativo' => false],
                     'iva_nc' => ['label' => 'IVA notas de crédito', 'tipo' => 'importe', 'negativo' => false],
                 ],

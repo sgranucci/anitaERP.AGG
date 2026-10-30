@@ -9,6 +9,7 @@ use App\Support\Caja\TesoreriaCrownComprobanteSupport;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class TesoreriaCrownComprobante extends Model implements Auditable
@@ -31,6 +32,7 @@ class TesoreriaCrownComprobante extends Model implements Auditable
         'nro_z',
         'ult_ticket',
         'total_nc',
+        'fallo_mozo',
         'iva_facturas',
         'iva_nc',
         'nro_z_cash',
@@ -51,6 +53,7 @@ class TesoreriaCrownComprobante extends Model implements Auditable
         'recibe_usuario_id',
         'recibe_at',
         'revierte_id',
+        'creado_usuario_id',
         'qr_token',
     ];
 
@@ -63,6 +66,7 @@ class TesoreriaCrownComprobante extends Model implements Auditable
         'invitacion' => 'decimal:2',
         'total_z' => 'decimal:2',
         'total_nc' => 'decimal:2',
+        'fallo_mozo' => 'decimal:2',
         'iva_facturas' => 'decimal:2',
         'iva_nc' => 'decimal:2',
         'venta_cash' => 'decimal:2',
@@ -121,6 +125,16 @@ class TesoreriaCrownComprobante extends Model implements Auditable
     public function revierte(): BelongsTo
     {
         return $this->belongsTo(self::class, 'revierte_id');
+    }
+
+    public function reversa(): HasOne
+    {
+        return $this->hasOne(self::class, 'revierte_id');
+    }
+
+    public function creadoUsuario(): BelongsTo
+    {
+        return $this->belongsTo(Usuario::class, 'creado_usuario_id');
     }
 
     public function esBorrador(): bool

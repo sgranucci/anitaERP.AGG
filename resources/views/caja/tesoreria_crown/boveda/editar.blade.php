@@ -77,7 +77,7 @@
                     </p>
                 @endif
 
-                <form method="POST" action="{{ route('guardar_tesoreria_crown_boveda', $movimiento->id) }}" id="form-cantidades-crown">
+                <form method="POST" action="{{ route('guardar_tesoreria_crown_boveda', $movimiento->id) }}" id="form-cantidades-crown" data-enter-campos="1">
                     @csrf
                     @if ($editable)
                         <div class="form-row">
@@ -141,7 +141,7 @@
                                                         <td>{{ $valor->descripcion }}</td>
                                                         <td>
                                                             @if ($editable)
-                                                                <input type="number" name="cantidad[{{ $valor->id }}]" class="form-control form-control-sm text-right" min="0" step="1" data-denom="{{ $denominacion }}" value="{{ old('cantidad.'.$valor->id, $cantidad) }}">
+                                                                <input type="number" name="cantidad[{{ $valor->id }}]" class="form-control form-control-sm text-right" min="0" step="1" inputmode="numeric" data-denom="{{ $denominacion }}" value="{{ old('cantidad.'.$valor->id, $cantidad === null || $cantidad === '' ? '' : (int) $cantidad) }}">
                                                             @elseif ($cantidad !== null && (float) $cantidad > 0)
                                                                 {{ number_format((float) $cantidad, 0, ',', '.') }}
                                                             @endif
@@ -158,24 +158,25 @@
                     @if ($editable && can('crear-tesoreria-crown-boveda', false))
                         <button type="submit" class="btn btn-primary" id="btn-guardar-cantidades">Guardar borrador</button>
                     @endif
+                    @if ($editable && can('editar-tesoreria-crown-boveda', false))
+                        <div class="border rounded p-3 mt-3">
+                            <p class="mb-2">Confirmar guarda estas cantidades. A partir de ahí el movimiento entra en el saldo.</p>
+                            <div class="form-row">
+                                <div class="col-md-3 mb-2">
+                                    <input type="text" name="firma_usuario" class="form-control" placeholder="Usuario" autocomplete="off" value="{{ old('firma_usuario') }}">
+                                </div>
+                                <div class="col-md-3 mb-2">
+                                    <input type="password" name="firma_password" class="form-control" placeholder="Clave" autocomplete="new-password">
+                                </div>
+                                <div class="col-md-3 mb-2">
+                                    <button type="submit" class="btn btn-success" formaction="{{ route('confirmar_tesoreria_crown_boveda', $movimiento->id) }}">Confirmar</button>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
                 </form>
 
                 @if ($editable && can('editar-tesoreria-crown-boveda', false))
-                    <form method="POST" action="{{ route('confirmar_tesoreria_crown_boveda', $movimiento->id) }}" class="border rounded p-3 mt-3" autocomplete="off">
-                        @csrf
-                        <p class="mb-2">Confirmar con usuario y clave de tesorería. A partir de ahí el movimiento entra en el saldo.</p>
-                        <div class="form-row">
-                            <div class="col-md-3 mb-2">
-                                <input type="text" name="firma_usuario" class="form-control" placeholder="Usuario" autocomplete="off" required>
-                            </div>
-                            <div class="col-md-3 mb-2">
-                                <input type="password" name="firma_password" class="form-control" placeholder="Clave" autocomplete="new-password" required>
-                            </div>
-                            <div class="col-md-3 mb-2">
-                                <button type="submit" class="btn btn-success">Confirmar</button>
-                            </div>
-                        </div>
-                    </form>
                     <form method="POST" action="{{ route('eliminar_tesoreria_crown_boveda', $movimiento->id) }}" class="d-inline" onsubmit="return confirm('¿Eliminar este borrador?');">
                         @csrf
                         @method('DELETE')
@@ -184,7 +185,7 @@
                 @endif
 
                 @if ($movimiento->estado === 'C' && $movimiento->jornada->estaAbierta() && can('editar-tesoreria-crown-boveda', false))
-                    <form method="POST" action="{{ route('anular_tesoreria_crown_boveda', $movimiento->id) }}" class="border rounded p-3 mt-3" autocomplete="off">
+                    <form method="POST" action="{{ route('anular_tesoreria_crown_boveda', $movimiento->id) }}" class="border rounded p-3 mt-3" autocomplete="off" data-enter-campos="1">
                         @csrf
                         <p class="mb-2">Anular lo saca del saldo. El número queda en la jornada.</p>
                         <div class="form-row">
