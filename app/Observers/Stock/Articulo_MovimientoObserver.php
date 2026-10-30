@@ -129,35 +129,46 @@ class Articulo_MovimientoObserver
             return;
         }
 
+        $aplicar = function () use ($articuloId, $depositoId, $colorId, $talleId, $delta, $fecha): void {
+            $row = Articulo_Saldo_Deposito::query()
+                ->where('articulo_id', $articuloId)
+                ->where('deposito_id', $depositoId)
+                ->where('color_id', $colorId)
+                ->where('talle_id', $talleId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($row === null) {
+                Articulo_Saldo_Deposito::create([
+                    'articulo_id' => $articuloId,
+                    'deposito_id' => $depositoId,
+                    'color_id' => $colorId,
+                    'talle_id' => $talleId,
+                    'cantidad' => $delta,
+                    'fecha_ult_movimiento' => $fecha ? (string) $fecha : now(),
+                ]);
+
+                return;
+            }
+
+            $row->cantidad = (float) $row->cantidad + $delta;
+            if ($fecha) {
+                $row->fecha_ult_movimiento = (string) $fecha;
+            }
+            $row->save();
+        };
+
+        // Misma regla que el saldo contable: dentro de una transacción de un
+        // comprobante no se abre otra ni se traga el error. MariaDB 1020
+        // aborta todo el servidor y lo que sigue se graba igual.
+        if (DB::connection()->transactionLevel() > 0) {
+            $aplicar();
+
+            return;
+        }
+
         try {
-            DB::transaction(function () use ($articuloId, $depositoId, $colorId, $talleId, $delta, $fecha) {
-                $row = Articulo_Saldo_Deposito::query()
-                    ->where('articulo_id', $articuloId)
-                    ->where('deposito_id', $depositoId)
-                    ->where('color_id', $colorId)
-                    ->where('talle_id', $talleId)
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($row === null) {
-                    Articulo_Saldo_Deposito::create([
-                        'articulo_id' => $articuloId,
-                        'deposito_id' => $depositoId,
-                        'color_id' => $colorId,
-                        'talle_id' => $talleId,
-                        'cantidad' => $delta,
-                        'fecha_ult_movimiento' => $fecha ? (string) $fecha : now(),
-                    ]);
-
-                    return;
-                }
-
-                $row->cantidad = (float) $row->cantidad + $delta;
-                if ($fecha) {
-                    $row->fecha_ult_movimiento = (string) $fecha;
-                }
-                $row->save();
-            });
+            DB::transaction($aplicar);
         } catch (\Throwable $e) {
             Log::error('Articulo_MovimientoObserver delta error', [
                 'articulo_id' => $articuloId,

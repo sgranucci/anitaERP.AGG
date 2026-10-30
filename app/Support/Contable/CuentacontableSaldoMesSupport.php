@@ -3,9 +3,13 @@
 namespace App\Support\Contable;
 
 use App\Models\Contable\Cuentacontable_Saldo_Mes;
+use App\Support\Database\DbContencionSupport;
+use App\Support\Database\TransaccionServidorSupport;
 use Carbon\Carbon;
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Aplica deltas sobre cuentacontable_saldo_mes (agregado mensual por moneda origen).
@@ -138,8 +142,21 @@ class CuentacontableSaldoMesSupport
 
         $centrocostoId = self::normalizarCentrocostoId($contexto['centrocosto_id'] ?? null);
 
-        try {
-            DB::transaction(function () use (
+        $aplicar = function () use (
+            $empresaId,
+            $cuentaId,
+            $centrocostoId,
+            $anioMes,
+            $monedaId,
+            $deltaNeto,
+            $deltaLocal,
+            $deltaDebe,
+            $deltaHaber,
+            $deltaDebeLocal,
+            $deltaHaberLocal,
+        ): void {
+            self::aplicarEnConexion(
+                DB::connection(),
                 $empresaId,
                 $cuentaId,
                 $centrocostoId,
@@ -151,48 +168,22 @@ class CuentacontableSaldoMesSupport
                 $deltaHaber,
                 $deltaDebeLocal,
                 $deltaHaberLocal,
-            ) {
-                $query = Cuentacontable_Saldo_Mes::query()
-                    ->where('empresa_id', $empresaId)
-                    ->where('cuentacontable_id', $cuentaId)
-                    ->where('anio_mes', $anioMes)
-                    ->where('moneda_id', $monedaId);
+            );
+        };
 
-                if ($centrocostoId === null) {
-                    $query->whereNull('centrocosto_id');
-                } else {
-                    $query->where('centrocosto_id', $centrocostoId);
-                }
+        // Dentro de la contabilización el saldo va en la misma transacción que el
+        // asiento. No se abre otra: en MariaDB un choque 1020 aborta toda la
+        // transacción del servidor. Si se traga, el asiento desaparece y el
+        // comprobante sigue (FK de asiento_id, comprobante 32502).
+        if (DB::connection()->transactionLevel() > 0) {
+            $aplicar();
 
-                $row = $query->lockForUpdate()->first();
+            return;
+        }
 
-                if ($row === null) {
-                    Cuentacontable_Saldo_Mes::create([
-                        'empresa_id' => $empresaId,
-                        'cuentacontable_id' => $cuentaId,
-                        'centrocosto_id' => $centrocostoId,
-                        'anio_mes' => $anioMes,
-                        'moneda_id' => $monedaId,
-                        'debe' => $deltaDebe,
-                        'haber' => $deltaHaber,
-                        'debe_local' => $deltaDebeLocal,
-                        'haber_local' => $deltaHaberLocal,
-                        'monto' => $deltaNeto,
-                        'monto_local' => $deltaLocal,
-                    ]);
-
-                    return;
-                }
-
-                $row->debe = (float) $row->debe + $deltaDebe;
-                $row->haber = (float) $row->haber + $deltaHaber;
-                $row->debe_local = (float) $row->debe_local + $deltaDebeLocal;
-                $row->haber_local = (float) $row->haber_local + $deltaHaberLocal;
-                $row->monto = (float) $row->monto + $deltaNeto;
-                $row->monto_local = (float) $row->monto_local + $deltaLocal;
-                $row->save();
-            });
-        } catch (\Throwable $e) {
+        try {
+            self::reintentarEnTransaccionPropia($aplicar);
+        } catch (Throwable $e) {
             Log::error('CuentacontableSaldoMesSupport delta error', [
                 'empresa_id' => $empresaId,
                 'cuentacontable_id' => $cuentaId,
@@ -202,6 +193,89 @@ class CuentacontableSaldoMesSupport
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Solo cuando no hay transacción de un comprobante arriba.
+     * Acá un rollback no se lleva un asiento sin commitear.
+     *
+     * @param  callable(): void  $aplicar
+     */
+    private static function reintentarEnTransaccionPropia(callable $aplicar): void
+    {
+        $esperaMs = 40;
+        for ($intento = 1; $intento <= 4; $intento++) {
+            try {
+                DB::transaction($aplicar);
+
+                return;
+            } catch (Throwable $e) {
+                $reintentar = $intento < 4 && (
+                    DbContencionSupport::esErrorReintentable($e)
+                    || TransaccionServidorSupport::esConflictoSnapshot($e)
+                );
+                if (! $reintentar) {
+                    throw $e;
+                }
+                usleep($esperaMs * 1000);
+                $esperaMs = min(500, $esperaMs * 2);
+            }
+        }
+    }
+
+    private static function aplicarEnConexion(
+        Connection $conn,
+        int $empresaId,
+        int $cuentaId,
+        ?int $centrocostoId,
+        int $anioMes,
+        int $monedaId,
+        float $deltaNeto,
+        float $deltaLocal,
+        float $deltaDebe,
+        float $deltaHaber,
+        float $deltaDebeLocal,
+        float $deltaHaberLocal,
+    ): void {
+        $query = Cuentacontable_Saldo_Mes::on($conn->getName())
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacontable_id', $cuentaId)
+            ->where('anio_mes', $anioMes)
+            ->where('moneda_id', $monedaId);
+
+        if ($centrocostoId === null) {
+            $query->whereNull('centrocosto_id');
+        } else {
+            $query->where('centrocosto_id', $centrocostoId);
+        }
+
+        $row = $query->lockForUpdate()->first();
+
+        if ($row === null) {
+            Cuentacontable_Saldo_Mes::on($conn->getName())->create([
+                'empresa_id' => $empresaId,
+                'cuentacontable_id' => $cuentaId,
+                'centrocosto_id' => $centrocostoId,
+                'anio_mes' => $anioMes,
+                'moneda_id' => $monedaId,
+                'debe' => $deltaDebe,
+                'haber' => $deltaHaber,
+                'debe_local' => $deltaDebeLocal,
+                'haber_local' => $deltaHaberLocal,
+                'monto' => $deltaNeto,
+                'monto_local' => $deltaLocal,
+            ]);
+
+            return;
+        }
+
+        $row->debe = (float) $row->debe + $deltaDebe;
+        $row->haber = (float) $row->haber + $deltaHaber;
+        $row->debe_local = (float) $row->debe_local + $deltaDebeLocal;
+        $row->haber_local = (float) $row->haber_local + $deltaHaberLocal;
+        $row->monto = (float) $row->monto + $deltaNeto;
+        $row->monto_local = (float) $row->monto_local + $deltaLocal;
+        $row->save();
     }
 
     /**

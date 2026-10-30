@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Concepto_Ivacompra;
+use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Contable\Tipoasiento;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
@@ -40,6 +41,7 @@ use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
 use App\Support\Contable\NotaCreditoIvaCuentaSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Database\TransaccionServidorSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -96,7 +98,16 @@ class ComprobanteProveedorAsientoService
         $asientoId = (int) $asiento->id;
         $this->asientoMovimientoRepository->create($payload, $asientoId);
 
-        $asientoModel = $asiento->fresh() ?? $asiento;
+        // Si MariaDB abortó la transacción al actualizar el saldo, el id en memoria
+        // ya no existe. No se devuelve: el llamador no debe crear cuotas ni
+        // marcar el comprobante.
+        TransaccionServidorSupport::assertSigueAbierta();
+        $asientoModel = $asiento->fresh();
+        if (! $asientoModel) {
+            throw new RuntimeException('El asiento ERP no quedó grabado. No se continúa la contabilización.');
+        }
+        $this->assertAsientoBalanceado($asientoId);
+
         $numeroAsiento = trim((string) ($asientoModel->numeroasiento ?? ''));
         if ($numeroAsiento === '') {
             throw new RuntimeException('El asiento ERP no obtuvo número para sincronizar Anita.');
@@ -124,6 +135,27 @@ class ComprobanteProveedorAsientoService
             'numeroasiento' => $numeroAsiento,
             'payload_anita' => $payloadAnita,
         ];
+    }
+
+    private function assertAsientoBalanceado(int $asientoId): void
+    {
+        $lineas = Asiento_Movimiento::query()
+            ->where('asiento_id', $asientoId)
+            ->get(['monto']);
+        if ($lineas->count() < 2) {
+            throw new RuntimeException(
+                'El asiento del comprobante no tiene las líneas de debe y haber. No se contabilizó.'
+            );
+        }
+
+        $neto = round((float) $lineas->sum(fn ($linea) => (float) $linea->monto), 2);
+        if (abs($neto) > 0.05) {
+            throw new RuntimeException(
+                'El asiento del comprobante no balancea (diferencia '
+                .number_format($neto, 2, ',', '.')
+                .'). No se contabilizó.'
+            );
+        }
     }
 
     /**
