@@ -15,7 +15,6 @@ use App\Support\Listado\ReporteResultadoTextoSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Stock\ReporteStockOtDepositoAmbitoSupport;
 use App\Support\Stock\ReporteStockOtListadoFiltros;
-use App\Support\Stock\ReporteStockOtReporteCacheSupport;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Maatwebsite\Excel\Excel;
@@ -227,11 +226,6 @@ class RepStockOtController extends Controller
      */
     private function filasConsulta(array $filtros): array
     {
-        $cache = ReporteStockOtReporteCacheSupport::recuperar($filtros);
-        if ($cache !== null) {
-            return $cache;
-        }
-
         $ret = generaRangoArticulo(
             $this->idRango($filtros['desdearticulo_id'] ?: '', 0),
             $this->idRango($filtros['hastaarticulo_id'] ?: '', 99999999),
@@ -253,10 +247,7 @@ class RepStockOtController extends Controller
             (int) $filtros['deposito_id'],
             $filtros['ambito_deposito']
         );
-        $filas = is_array($filas) ? $filas : [];
-        ReporteStockOtReporteCacheSupport::guardar($filtros, $filas);
-
-        return $filas;
+        return is_array($filas) ? $filas : [];
     }
 
     /**

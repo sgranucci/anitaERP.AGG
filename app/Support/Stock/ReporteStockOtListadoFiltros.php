@@ -80,26 +80,6 @@ final class ReporteStockOtListadoFiltros
     }
 
     /**
-     * Firma de la consulta pesada. El texto del resultado no la cambia.
-     *
-     * @param  array<string, mixed>  $filtros
-     */
-    public static function firmaConsulta(array $filtros): string
-    {
-        $consulta = $filtros;
-        unset(
-            $consulta['filtro_modo'],
-            $consulta['filtro_campo'],
-            $consulta['filtro_operador'],
-            $consulta['filtro_valor'],
-            $consulta['filtro_busqueda_rapida'],
-            $consulta['imprimefoto']
-        );
-
-        return md5(json_encode(self::paraQueryString($consulta)));
-    }
-
-    /**
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>
      */
