@@ -11,6 +11,8 @@ use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
  * percepción a no categorizado (RG 2126, rótulo «Perc.Iva no categ.») y percepción IIBB CABA cuando
  * el comprobante las tiene. Gravado e IVA del pie no se imprimen: el IVA
  * va en el precio y en la leyenda de transparencia.
+ *
+ * Invariante: Subtotal + descuentos + percepciones = Total ({@see self::descuadre()}).
  */
 final class FacturaBTotalesImpresionSupport
 {
@@ -75,70 +77,85 @@ final class FacturaBTotalesImpresionSupport
             ];
         }
 
-        return self::preciosConIvaIncluido($conceptos, $lineas);
+        return self::subtotalQueCierraConElTotal($conceptos, $lineas);
     }
 
     /**
-     * El renglón de la B se imprime con IVA. Subtotal y descuento porcentual
-     * están guardados en neto: se llevan a la misma base para que cierren con el total.
+     * Subtotal del pie derivado del Total, no del neto guardado.
+     *
+     * El renglón de la B se imprime con IVA, así que el Subtotal tiene que ser la
+     * misma base. No se puede obtener multiplicando el Subtotal neto por (1 + IVA):
+     * ese atajo se rompe con exento, impuesto interno, logística, abasto o dos
+     * alícuotas en el mismo comprobante.
+     *
+     * El descuento de cabecera **no se toca**: `AnitaComprobDescuentoSupport` ya lo
+     * guardó sobre bruto en letra ≠ A (a-comprob), y volver a multiplicarlo deja el
+     * pie corto en descuento × tasa_iva.
+     *
+     * Subtotal = Total − percepciones impresas − descuentos (negativos), con lo que
+     * Subtotal + descuentos + percepciones = Total siempre.
      *
      * @param  iterable<int, mixed>  $conceptos
      * @param  list<array{concepto: string, tasa: float, importe: float, es_total: bool}>  $lineas
      * @return list<array{concepto: string, tasa: float, importe: float, es_total: bool}>
      */
-    private static function preciosConIvaIncluido(iterable $conceptos, array $lineas): array
+    private static function subtotalQueCierraConElTotal(iterable $conceptos, array $lineas): array
     {
-        $tasa = self::tasaIvaUnica($conceptos);
-        if ($tasa === null || $tasa <= 0.00001) {
+        $total = null;
+        foreach ($conceptos as $item) {
+            $fila = self::filaComoArray($item);
+            if ((string) ($fila['concepto'] ?? '') === 'Total') {
+                $total = (float) ($fila['importe'] ?? 0);
+            }
+        }
+        if ($total === null) {
             return $lineas;
         }
 
-        $factor = 1 + ($tasa / 100);
-        $exento = 0.0;
-        foreach ($conceptos as $item) {
-            $fila = self::filaComoArray($item);
-            $concepto = (string) ($fila['concepto'] ?? '');
-            if ($concepto === 'Exento' || $concepto === 'No Gravado') {
-                $exento += (float) ($fila['importe'] ?? 0);
-            }
-        }
-
+        $indiceSubtotal = null;
+        $descuentos = 0.0;
+        $percepciones = 0.0;
         foreach ($lineas as $i => $linea) {
+            if ($linea['es_total']) {
+                continue;
+            }
             $concepto = (string) $linea['concepto'];
             if ($concepto === 'Subtotal') {
-                $gravado = (float) $linea['importe'] - $exento;
-                $lineas[$i]['importe'] = round($exento + ($gravado * $factor), 2);
-            } elseif (str_starts_with($concepto, 'Descuento') && abs((float) $linea['tasa']) > 0.00001) {
-                $lineas[$i]['importe'] = round((float) $linea['importe'] * $factor, 2);
+                $indiceSubtotal = $i;
+            } elseif (str_starts_with($concepto, 'Descuento')) {
+                $descuentos += (float) $linea['importe'];
+            } else {
+                $percepciones += (float) $linea['importe'];
             }
         }
+        if ($indiceSubtotal === null) {
+            return $lineas;
+        }
+
+        $lineas[$indiceSubtotal]['importe'] = round($total - $percepciones - $descuentos, 2);
 
         return $lineas;
     }
 
     /**
-     * @param  iterable<int, mixed>  $conceptos
+     * Diferencia entre la suma de las líneas impresas y el Total. Debe ser 0.
+     *
+     * @param  list<array{concepto: string, tasa: float, importe: float, es_total: bool}>  $lineas
      */
-    private static function tasaIvaUnica(iterable $conceptos): ?float
+    public static function descuadre(array $lineas): float
     {
-        $tasa = null;
-        foreach ($conceptos as $item) {
-            $fila = self::filaComoArray($item);
-            $concepto = (string) ($fila['concepto'] ?? '');
-            if (! preg_match('/^Iva\s+([0-9]+(?:\.[0-9]+)?)%/i', $concepto, $coincidencias)) {
+        $total = null;
+        $suma = 0.0;
+        foreach ($lineas as $linea) {
+            if ($linea['es_total']) {
+                $total = (float) $linea['importe'];
+
                 continue;
             }
-            if (abs((float) ($fila['importe'] ?? 0)) < 0.00001) {
-                continue;
-            }
-            $actual = (float) $coincidencias[1];
-            if ($tasa !== null && abs($tasa - $actual) > 0.00001) {
-                return null;
-            }
-            $tasa = $actual;
+            $suma += (float) $linea['importe'];
         }
 
-        return $tasa;
+        return $total === null ? 0.0 : round($suma - $total, 2);
     }
 
     /**

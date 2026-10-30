@@ -1,0 +1,115 @@
+---
+description: Factura B de mostrador (administración) — IVA incluido, pie que cierra, percepciones. Vale para todas las instalaciones
+globs: app/Support/Ventas/FacturaBTotalesImpresionSupport.php,app/Support/Ventas/FacturaLineaPrecioImpresionSupport.php,app/Support/Ventas/AnitaComprobDescuentoSupport.php,app/Services/Ventas/FacturacionService.php,app/Services/Configuracion/ImpuestoService.php,app/Services/Configuracion/IIBBService.php,resources/views/exports/ventas/formulariofactura.blade.php,resources/views/exports/ventas/partials/formulariofactura_pie.blade.php,resources/views/exports/ventas/partials/formulariofactura_items.blade.php
+alwaysApply: false
+---
+
+# Factura B de mostrador: contrato de impresión
+
+Aplica a la **facturación de administración** (`ventas/factura`, pedido, remito) de **todas** las instalaciones: El Bierzo, AGG, Interforming, Ferli mayorista, Frasle.
+
+**No** aplica a los facturadores POS: gastronomía, estacionamiento y Crown arman su ticket aparte (`GastronomiaFacturaTicketService`, `EstacionamientoFacturaTicketService`). No llevar estos cambios ahí.
+
+Reglas hermanas: `elbierzo-factura-b-percepcion-caba`, `nota-credito-percepcion-iibb`, `descuento-cabecera-acomprob-admin`.
+
+## La invariante (lo único que no se negocia)
+
+El pie impreso tiene que cerrar:
+
+```text
+Subtotal + descuentos + percepciones = Total
+```
+
+`FacturaBTotalesImpresionSupport::descuadre($lineas)` devuelve `0.0` cuando cierra. Todo test de pie B lo afirma.
+
+Incidente 29/10/2026: el pie multiplicaba «Descuento Gral.» por `(1 + IVA)` cuando `ImpuestoService` **ya** lo había guardado sobre bruto. Las 14 facturas B de El Bierzo salieron cortas en `descuento_neto × 0,21` (de $484 a $2.223 por comprobante) contra un Total correcto.
+
+## Quién guarda qué
+
+| Dato | Guardado en `venta_impuesto` | Impreso en B |
+|---|---|---|
+| Renglón (`venta_item.precio`) | Neto si `incluyeimpuesto` es `''`/`N`/`2`; si no, con IVA | **Con IVA**: `FacturaLineaPrecioImpresionSupport::conIva()` |
+| `Subtotal` | Neto, **antes** del descuento | **Derivado del Total**, nunca `Subtotal × (1 + IVA)` |
+| `Descuento Gral. X%` | **Ya sobre bruto** en letra ≠ A (`AnitaComprobDescuentoSupport`, a-comprob `tot_dto × (1 + tasa_iva/100)`) | **Tal cual**. No volver a multiplicarlo |
+| `Gravado al X%` | Neto, **después** del descuento neto | No se imprime |
+| `Iva X%` | — | No se imprime; va en la leyenda de transparencia |
+| `Exento`, `No Gravado`, `Impuesto Interno`, `Total Logistica`, `Total Abasto` | — | No se imprimen; quedan dentro del Subtotal derivado |
+| Percepciones (RG 2126 y CABA 901) | — | Sí, con las etiquetas del support |
+
+El `Total` es el que ARCA autorizó: es el ancla del pie, no un número a recalcular.
+
+## Prohibido
+
+```php
+// ❌ Subtotal por atajo: se rompe con exento, logística, abasto,
+//    impuesto interno o dos alícuotas en el mismo comprobante.
+$subtotal = $subtotalNeto * (1 + $tasaIva / 100);
+
+// ❌ Engrosar el descuento: ImpuestoService ya lo guardó sobre bruto.
+$descuento = $descuentoGuardado * (1 + $tasaIva / 100);
+
+// ❌ Asumir una sola alícuota de IVA por comprobante.
+$tasa = self::tasaIvaUnica($conceptos);
+```
+
+```blade
+{{-- ❌ Recalcular precio o totales de B en la vista --}}
+<td>{{ number_format($item['precio'] * 1.21, 2) }}</td>
+```
+
+## Correcto
+
+```php
+// Subtotal = Total − percepciones − descuentos (negativos).
+// Cierra siempre, sin importar cuántas alícuotas ni qué conceptos extra haya.
+$lineas = FacturaBTotalesImpresionSupport::lineas($conceptosTotales);
+```
+
+Punto único de la impresión: `FacturacionService::prepararContextoPdfFactura()` arma
+`lineasTotalesLetraB` y los precios con IVA. La vista solo los muestra.
+
+## Percepciones en letra B
+
+| Percepción | ¿Va en B? |
+|---|---|
+| Perc. IVA RI 3 % (RG 5329) | **No** (`omitir_percepciones`) |
+| IIBB de otras jurisdicciones | **No** |
+| Perc. no categorizado (RG 2126) | **Sí** si el receptor es Sujeto No Categorizado (`PercepcionNoCategorizadoSupport`). Base = `tot_fact` (neto + IVA + otros, ya con descuento). Tributo ARCA **99** |
+| IIBB CABA 901 | **Solo El Bierzo**, ver `elbierzo-factura-b-percepcion-caba` |
+
+`omitir_percepciones` en letra B **no** puede tapar la RG 2126 ni CABA 901:
+`PercepcionNoCategorizadoSupport::aplicarAunqueSeOmitanOtras()` y
+`ElBierzoFacturaBPercepcionCabaSupport::correspondePorLetra()` son los dos escapes.
+
+## Entorno
+
+Para preguntar por la instalación usar **siempre** `EntornoEmpresaSupport::esElBierzo()`.
+
+```php
+// ❌ Paréntesis mal puesto: strtoupper() recibe el bool, no el nombre.
+//    Da "1" cuando EMPRESA es exactamente 'EL BIERZO' y "" (falsy) con cualquier otra grafía.
+if (strtoupper(config('app.empresa') == 'EL BIERZO'))
+
+// ✅
+if (EntornoEmpresaSupport::esElBierzo())
+```
+
+## Antes de cerrar un cambio en el pie o el precio de la B
+
+```bash
+php -l app/Support/Ventas/FacturaBTotalesImpresionSupport.php
+# Autorización del operador primero (regla produccion-bd-y-tests)
+ALLOW_TEST_EXECUTION=1 ./scripts/guard-artisan-test.sh php artisan test \
+  --filter 'FacturaBTotalesImpresionSupportTest|FacturaLineaPrecioImpresionSupportTest|ElBierzoFacturaBPercepcionCabaSupportTest'
+rg -n 'tasaIvaUnica|\* 1\.21|/ 1\.21' app/Support/Ventas resources/views/exports/ventas
+php artisan view:cache
+```
+
+Y verificar contra los comprobantes reales (solo lectura) que el pie cierre:
+
+```php
+// Para cada venta de letra B: descuadre() tiene que dar 0.00
+FacturaBTotalesImpresionSupport::descuadre(
+    FacturaBTotalesImpresionSupport::lineas($conceptosDeVentaImpuesto)
+);
+```

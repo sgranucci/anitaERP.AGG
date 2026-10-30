@@ -109,23 +109,108 @@ final class FacturaBTotalesImpresionSupportTest extends TestCase
         ], $lineas);
     }
 
-    public function test_muestra_descuento_de_cabecera_con_iva_incluido(): void
+    /**
+     * Venta 1139 de El Bierzo (29/10/2026). ImpuestoService guarda «Descuento Gral.»
+     * ya sobre bruto (a-comprob: tot_dto × 1,21) y el gravado neteado con el dto neto.
+     * El pie no puede volver a multiplicarlo.
+     */
+    public function test_no_vuelve_a_sumar_iva_al_descuento_de_cabecera(): void
     {
         $lineas = S::lineas([
-            ['concepto' => 'Subtotal', 'tasa' => 0, 'importe' => 25313.10],
-            ['concepto' => 'Descuento Gral. 20%', 'tasa' => 20, 'importe' => -5062.62],
-            ['concepto' => 'Gravado al 21%', 'tasa' => 21, 'importe' => 20250.48],
-            ['concepto' => 'Iva 21%', 'tasa' => 21, 'importe' => 4252.60],
-            ['concepto' => 'Percepcion no categorizado 10.5%', 'tasa' => 10.5, 'importe' => 2572.82],
-            ['concepto' => 'Total', 'tasa' => 0, 'importe' => 27075.90],
+            ['concepto' => 'Subtotal', 'tasa' => 0, 'importe' => 9519.99],
+            ['concepto' => 'Descuento Gral. 20%', 'tasa' => 20, 'importe' => -2303.84],
+            ['concepto' => 'Gravado al 21.000%', 'tasa' => 21, 'importe' => 7615.99],
+            ['concepto' => 'Iva 21.000%', 'tasa' => 21, 'importe' => 1599.36],
+            ['concepto' => 'Percepcion no categorizado 10.5%', 'tasa' => 10.5, 'importe' => 967.61],
+            ['concepto' => 'Total', 'tasa' => 0, 'importe' => 10182.96],
         ]);
 
         self::assertSame([
-            ['concepto' => 'Subtotal', 'tasa' => 0.0, 'importe' => 30628.85, 'es_total' => false],
-            ['concepto' => 'Descuento Gral. 20%', 'tasa' => 20.0, 'importe' => -6125.77, 'es_total' => false],
-            ['concepto' => S::ETIQUETA_PERCEPCION_IVA, 'tasa' => 10.5, 'importe' => 2572.82, 'es_total' => false],
-            ['concepto' => 'Total', 'tasa' => 0.0, 'importe' => 27075.90, 'es_total' => true],
+            // 9519,99 × 1,21: misma base que el renglón impreso.
+            ['concepto' => 'Subtotal', 'tasa' => 0.0, 'importe' => 11519.19, 'es_total' => false],
+            ['concepto' => 'Descuento Gral. 20%', 'tasa' => 20.0, 'importe' => -2303.84, 'es_total' => false],
+            ['concepto' => S::ETIQUETA_PERCEPCION_IVA, 'tasa' => 10.5, 'importe' => 967.61, 'es_total' => false],
+            ['concepto' => 'Total', 'tasa' => 0.0, 'importe' => 10182.96, 'es_total' => true],
         ], $lineas);
+        self::assertSame(0.0, S::descuadre($lineas));
+    }
+
+    public function test_el_pie_cierra_con_exento_impuesto_interno_logistica_y_abasto(): void
+    {
+        $lineas = S::lineas([
+            ['concepto' => 'Subtotal', 'tasa' => 0, 'importe' => 11000.0],
+            ['concepto' => 'Descuento Gral. 10%', 'tasa' => 10, 'importe' => -1189.0],
+            ['concepto' => 'Exento', 'tasa' => 0, 'importe' => 1000.0],
+            ['concepto' => 'Total Logistica', 'tasa' => 0, 'importe' => 300.0],
+            ['concepto' => 'Gravado al 21%', 'tasa' => 21, 'importe' => 9000.0],
+            ['concepto' => 'Iva 21%', 'tasa' => 21, 'importe' => 1890.0],
+            ['concepto' => 'Impuesto Interno', 'tasa' => 0, 'importe' => 150.0],
+            ['concepto' => 'Total Abasto', 'tasa' => 1.5, 'importe' => 80.0],
+            ['concepto' => 'Percepcion no categorizado 10.5%', 'tasa' => 10.5, 'importe' => 1304.10],
+            ['concepto' => 'Total', 'tasa' => 0, 'importe' => 13724.10],
+        ]);
+
+        self::assertSame(0.0, S::descuadre($lineas));
+        self::assertSame('Subtotal', $lineas[0]['concepto']);
+        self::assertSame(13609.0, $lineas[0]['importe']);
+    }
+
+    public function test_el_pie_cierra_con_dos_alicuotas_de_iva(): void
+    {
+        $lineas = S::lineas([
+            ['concepto' => 'Subtotal', 'tasa' => 0, 'importe' => 2000.0],
+            ['concepto' => 'Gravado al 21%', 'tasa' => 21, 'importe' => 1000.0],
+            ['concepto' => 'Iva 21%', 'tasa' => 21, 'importe' => 210.0],
+            ['concepto' => 'Gravado al 10.5%', 'tasa' => 10.5, 'importe' => 1000.0],
+            ['concepto' => 'Iva 10.5%', 'tasa' => 10.5, 'importe' => 105.0],
+            ['concepto' => 'Total', 'tasa' => 0, 'importe' => 2315.0],
+        ]);
+
+        self::assertSame(0.0, S::descuadre($lineas));
+        self::assertSame(2315.0, $lineas[0]['importe']);
+    }
+
+    public function test_el_pie_cierra_en_nota_de_credito_letra_b(): void
+    {
+        $lineas = S::lineas([
+            ['concepto' => 'Subtotal', 'tasa' => 0, 'importe' => -9519.99],
+            ['concepto' => 'Descuento Gral. 20%', 'tasa' => 20, 'importe' => 2303.84],
+            ['concepto' => 'Gravado al 21%', 'tasa' => 21, 'importe' => -7615.99],
+            ['concepto' => 'Iva 21%', 'tasa' => 21, 'importe' => -1599.36],
+            ['concepto' => 'Percepcion no categorizado 10.5%', 'tasa' => 10.5, 'importe' => -967.61],
+            ['concepto' => 'Total', 'tasa' => 0, 'importe' => -10182.96],
+        ]);
+
+        self::assertSame(0.0, S::descuadre($lineas));
+        self::assertSame(-11519.19, $lineas[0]['importe']);
+    }
+
+    public function test_el_pie_cierra_sin_descuento(): void
+    {
+        $lineas = S::lineas([
+            ['concepto' => 'Subtotal', 'tasa' => 0, 'importe' => 1000.0],
+            ['concepto' => 'Gravado al 21%', 'tasa' => 21, 'importe' => 1000.0],
+            ['concepto' => 'Iva 21%', 'tasa' => 21, 'importe' => 210.0],
+            ['concepto' => 'Perc. Capital Federal 6%', 'tasa' => 6, 'importe' => 60.0, 'jurisdiccion' => 901],
+            ['concepto' => 'Total', 'tasa' => 0, 'importe' => 1270.0],
+        ]);
+
+        self::assertSame(0.0, S::descuadre($lineas));
+        self::assertSame(1210.0, $lineas[0]['importe']);
+    }
+
+    public function test_descuento_por_importe_fijo_no_descuadra_el_pie(): void
+    {
+        $lineas = S::lineas([
+            ['concepto' => 'Subtotal', 'tasa' => 0, 'importe' => 1000.0],
+            ['concepto' => 'Gravado al 21%', 'tasa' => 21, 'importe' => 1000.0],
+            ['concepto' => 'Iva 21%', 'tasa' => 21, 'importe' => 210.0],
+            ['concepto' => 'Descuento por importe', 'tasa' => 0, 'importe' => -100.0],
+            ['concepto' => 'Total', 'tasa' => 0, 'importe' => 1110.0],
+        ]);
+
+        self::assertSame(0.0, S::descuadre($lineas));
+        self::assertSame(1210.0, $lineas[0]['importe']);
     }
 
     public function test_precio_b_incluye_iva_cuando_el_precio_es_neto(): void

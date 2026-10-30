@@ -724,7 +724,7 @@ class FacturacionService
 		}
 		// Arma datos del cliente
 		$provinciaPercepcion = $this->provinciaPercepcionDesdePedido($cliente, $pedido);
-		if (strtoupper(config('app.empresa') == "EL BIERZO"))
+		if (EntornoEmpresaSupport::esElBierzo())
 			$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
 							"numerodocumento" => $cliente->numerodocumento,
 							"retieneiva" => $cliente->retieneiva,
@@ -3320,7 +3320,7 @@ class FacturacionService
 			? ($cliente->provincia_id ? (int) $cliente->provincia_id : null)
 			: ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente);
 
-		if (strtoupper(config('app.empresa') == "EL BIERZO"))
+		if (EntornoEmpresaSupport::esElBierzo())
 			$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
 							"numerodocumento" => $cliente->numerodocumento,
 							"retieneiva" => $cliente->retieneiva,
@@ -6330,7 +6330,7 @@ class FacturacionService
 		$venCondIvaCli = $this->codigoCondicionIvaAnitaDesdeErpId($condicionivaId, $letra);
 		$venCtaCte = $sinCuentaCorrienteAnita ? 'N' : 'S';
 
-		if (strtoupper(config('app.empresa') == 'EL BIERZO'))
+		if (EntornoEmpresaSupport::esElBierzo())
 			$data = array( 	'tabla' => 'venta', 
 						'acc' => 'insert',
             			'campos' => ' 

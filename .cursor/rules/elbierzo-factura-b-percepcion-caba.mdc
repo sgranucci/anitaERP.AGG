@@ -12,6 +12,8 @@ La **nota de crédito** de mostrador no recalcula 901: la hereda de la factura c
 
 Punto único: `App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport`.
 
+Impresión del pie (IVA incluido, subtotal y descuento): `factura-b-mostrador-contrato`.
+
 ## Qué manda
 
 | Caso | IIBB otras jur. | Perc. IVA 3 % | Perc. no categ. RG 2126 | **CABA 901** |
