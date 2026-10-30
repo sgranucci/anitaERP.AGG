@@ -108,13 +108,14 @@ final class CuentaAutomaticaClaves
     public const FACTURACION_LOCAL_VENTAS = 'facturacion_local.ventas';
 
     /**
-     * Neto de notas de crédito varias de locales (sin factura origen).
-     * No usa L-VENTAS ni el efectivo del local.
+     * Contrapartida de la nota de crédito parcial de un local y de la nota varias.
+     * El neto de las varias va a L-VENTAS. La anulación completa no usa esta cuenta:
+     * copia el asiento de la factura al revés.
      */
     public const FACTURACION_LOCAL_NOTAS_CREDITO = 'facturacion_local.notas_credito';
 
     /**
-     * Contrapartida de esas notas de crédito. No es la caja de efectivo del local.
+     * Ya no es la contrapartida de las notas de crédito de locales.
      */
     public const FACTURACION_LOCAL_VALORES = 'facturacion_local.valores';
 
@@ -527,14 +528,14 @@ final class CuentaAutomaticaClaves
             ],
             self::FACTURACION_LOCAL_NOTAS_CREDITO => [
                 'grupo' => 'Facturación local',
-                'descripcion' => 'Neto de notas de crédito varias (L-notas de crédito). No usa L-VENTAS ni el efectivo del local',
+                'descripcion' => 'Contrapartida de la nota parcial y de la nota varias. El neto de las varias va a L-VENTAS',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,
             ],
             self::FACTURACION_LOCAL_VALORES => [
                 'grupo' => 'Facturación local',
-                'descripcion' => 'Contrapartida de notas de crédito varias (cuenta de valores). No mueve el efectivo del local',
+                'descripcion' => 'Sin uso en notas de crédito. La contrapartida es L-notas de crédito',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,

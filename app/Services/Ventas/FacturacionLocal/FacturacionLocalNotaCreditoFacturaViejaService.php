@@ -30,8 +30,8 @@ use Throwable;
 /**
  * Notas de crédito varias: no hay comprobante origen en el ERP.
  * ARCA recibe el período del mes de la nota.
- * El neto va a L-notas de crédito y la contrapartida a la cuenta de valores.
- * No mueve el efectivo del local.
+ * El neto va a ventas de locales (L-VENTAS), igual que la factura.
+ * La contrapartida es la cuenta configurada de L-notas de crédito.
  */
 final class FacturacionLocalNotaCreditoFacturaViejaService
 {
@@ -69,10 +69,6 @@ final class FacturacionLocalNotaCreditoFacturaViejaService
         if ($cuentaNotasId <= 0) {
             return ['ok' => false, 'error' => 'Falta la cuenta de L-notas de crédito en Cuentas automáticas (Facturación local).'];
         }
-        $cuentaValoresId = FacturacionLocalCuentaVentaSupport::cuentaValoresId($empresaId);
-        if ($cuentaValoresId <= 0) {
-            return ['ok' => false, 'error' => 'Falta la cuenta de valores en Cuentas automáticas (Facturación local).'];
-        }
 
         try {
             $fecha = $this->fechaDelPeriodoActual((string) ($input['fecha'] ?? ''));
@@ -87,7 +83,7 @@ final class FacturacionLocalNotaCreditoFacturaViejaService
             return ['ok' => false, 'error' => $e->getMessage()];
         }
 
-        $payload = $this->armarPayload($local, $lineas, $fecha, $tipoNcId, $receptor, $cuentaValoresId);
+        $payload = $this->armarPayload($local, $lineas, $fecha, $tipoNcId, $receptor, $cuentaNotasId);
 
         try {
             return DB::transaction(function () use ($local, $turno, $payload) {
@@ -250,7 +246,7 @@ final class FacturacionLocalNotaCreditoFacturaViejaService
         Carbon $fecha,
         int $tipoNcId,
         array $receptor,
-        int $cuentaValoresId,
+        int $cuentaNotasCreditoId,
     ): array {
         $articuloIds = [];
         $cantidades = [];
@@ -325,8 +321,7 @@ final class FacturacionLocalNotaCreditoFacturaViejaService
                 'origen_facturacion_local' => true,
                 'omitir_cuenta_corriente' => true,
                 'omitir_solicitud_arca_cae' => true,
-                FacturacionLocalCuentaVentaSupport::FLAG_IMPUTAR_NOTAS_CREDITO => true,
-                FacturacionLocalCuentaVentaSupport::FLAG_CONTRAPARTIDA_CUENTA => $cuentaValoresId,
+                FacturacionLocalCuentaVentaSupport::FLAG_CONTRAPARTIDA_CUENTA => $cuentaNotasCreditoId,
             ],
             'arca_receptor' => $receptor['arca_receptor'] ?? [],
             'venta_receptor' => $receptor['venta_receptor'] ?? [],

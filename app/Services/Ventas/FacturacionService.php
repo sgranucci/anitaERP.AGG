@@ -113,6 +113,7 @@ use App\Support\Ventas\Ferli\FacturaAsientoIvaPrecioFerliSupport;
 use App\Support\Ventas\FacturaBTotalesImpresionSupport;
 use App\Support\Ventas\FacturaPdfIdentificacionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalCuentaVentaSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalNotaCreditoAsientoSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
 use App\Support\Ventas\ElBierzoFacturacionCaeaSaltoSupport;
 use App\Models\Stock\Talle;
@@ -3829,17 +3830,6 @@ class FacturacionService
 						(int) $empresa->id,
 						(int) ($puntoventa->id ?? 0),
 					);
-					$opLocalNc = is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : [];
-					if (! empty($opLocalNc[FacturacionLocalCuentaVentaSupport::FLAG_IMPUTAR_NOTAS_CREDITO])) {
-						$cuentaNcLocalId = FacturacionLocalCuentaVentaSupport::cuentaNotasCreditoId((int) $empresa->id);
-						if ($cuentaNcLocalId <= 0) {
-							return ['error' => 'Falta la cuenta de notas de crédito de locales (L-notas de crédito) en Cuentas automáticas.'];
-						}
-						$dataFactura = FacturacionLocalCuentaVentaSupport::aplicarNotasCredito(
-							$dataFactura,
-							(int) $empresa->id
-						);
-					}
 				}
 				if ($esNcpCobranza) {
 					$cuentaNcpId = ParametroSistemaSupport::ncpProntoPagoCuentaIdParaEmpresa((int) $empresa->id);
@@ -3852,8 +3842,8 @@ class FacturacionService
 					$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
 					$this->assertAsientoIvaPrecioFerli($dataFactura, $conceptosTotales, $asientoContable);
 				}
-				// Arma asiento. NC total: invertir el de la FAC origen.
-				// NC parcial: asientoInvertidoDesdeFactura devuelve [] y se arma desde los renglones.
+				// NC con factura. Anulación completa: el asiento de la factura al revés.
+				// Parcial de local: mismas cuentas del haber de la factura, contrapartida L-notas de crédito.
 				elseif (($tipotransaccion->esNotaCredito() || $esReversionNd) && isset($factura))
 				{
 					$factura->loadMissing(['asientos.asiento_movimientos']);
@@ -3867,6 +3857,24 @@ class FacturacionService
 							(float) $totalComprobante,
 							(int) $empresa->id
 						);
+					}
+					$esLocal = is_array($data['opciones_emision'] ?? null)
+						&& ! empty($data['opciones_emision']['origen_facturacion_local']);
+					if ($asientoContable === [] && $esLocal) {
+						$cuentaNcLocalId = FacturacionLocalCuentaVentaSupport::cuentaNotasCreditoId((int) $empresa->id);
+						if ($cuentaNcLocalId <= 0) {
+							return ['error' => 'Falta la cuenta de L-notas de crédito en Cuentas automáticas (Facturación local).'];
+						}
+						if ($asientoFactura) {
+							$asientoContable = FacturacionLocalNotaCreditoAsientoSupport::parcialDesdeFactura(
+								$asientoFactura->asiento_movimientos ?? [],
+								(float) $totalComprobante,
+								(int) $empresa->id,
+								$cuentaNcLocalId,
+							);
+						}
+						$data['opciones_emision']['asiento_medios_pago'] = [];
+						$data['opciones_emision'][FacturacionLocalCuentaVentaSupport::FLAG_CONTRAPARTIDA_CUENTA] = $cuentaNcLocalId;
 					}
 					if ($asientoContable === []) {
 						$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);

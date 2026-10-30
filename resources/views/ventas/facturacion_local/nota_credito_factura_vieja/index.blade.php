@@ -122,9 +122,8 @@ window.FL_NC_VIEJA = {
             <h4>Nota de crédito</h4>
             <p class="small text-muted">
                 No se asocia a una factura. ARCA recibe el período de este mes.
-                El neto va a <strong>L-notas de crédito</strong> y la contrapartida a la <strong>cuenta de valores</strong>.
-                Las dos se eligen en Cuentas automáticas, grupo Facturación local.
-                No mueve el efectivo del local.
+                El neto va a <strong>ventas de locales</strong>, igual que la factura.
+                La contrapartida va a <strong>L-notas de crédito</strong>, la cuenta configurada en Cuentas automáticas.
                 El comprobante queda en Facturas Local del día, igual que el resto.
             </p>
             @if (! $turno)

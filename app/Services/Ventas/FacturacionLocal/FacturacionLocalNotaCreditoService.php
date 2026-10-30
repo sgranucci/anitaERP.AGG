@@ -556,7 +556,8 @@ final class FacturacionLocalNotaCreditoService
                 'origen_facturacion_local' => true,
                 'omitir_cuenta_corriente' => true,
                 'omitir_solicitud_arca_cae' => true,
-                // Si no hay asiento FAC para invertir, imputar medios de la cobranza (no deudores).
+                // Anulación completa: no se usan, el asiento copia el de la factura.
+                // Parcial: FacturacionService los descarta y la contrapartida es L-notas de crédito.
                 'asiento_medios_pago' => $this->cobranzaService->mediosDesdeVentaFac((int) $ventaOrigen->id),
                 // El legajo manda el precio (lista / corregido). Sin esto se pisa con el pagado en la FAC.
                 'respetar_precios_enviados' => $preciosPorEmision !== null,

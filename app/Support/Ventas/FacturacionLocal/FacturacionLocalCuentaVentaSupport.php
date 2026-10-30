@@ -16,11 +16,9 @@ use App\Support\Contable\CuentaAutomaticaResolver;
 final class FacturacionLocalCuentaVentaSupport
 {
     /**
-     * La NC varias imputa el neto a L-notas de crédito, no a L-VENTAS.
-     * La contrapartida es la cuenta de valores, no el efectivo del local.
+     * Contrapartida forzada del asiento (L-notas de crédito en notas varias y en la NC parcial).
+     * El neto de las varias queda en L-VENTAS, igual que la factura del local.
      */
-    public const FLAG_IMPUTAR_NOTAS_CREDITO = 'imputar_cuenta_notas_credito_local';
-
     public const FLAG_CONTRAPARTIDA_CUENTA = 'contrapartida_cuentacontable_id';
 
     public static function cuentaIdParaPuntoventa(int $empresaId, int $puntoventaId): int
@@ -76,34 +74,4 @@ final class FacturacionLocalCuentaVentaSupport
         ) ?? 0);
     }
 
-    public static function cuentaValoresId(int $empresaId): int
-    {
-        if ($empresaId <= 0) {
-            return 0;
-        }
-
-        return (int) (CuentaAutomaticaResolver::resolverId(
-            $empresaId,
-            CuentaAutomaticaClaves::FACTURACION_LOCAL_VALORES
-        ) ?? 0);
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $dataFactura
-     * @return list<array<string, mixed>>
-     */
-    public static function aplicarNotasCredito(array $dataFactura, int $empresaId): array
-    {
-        $cuentaId = self::cuentaNotasCreditoId($empresaId);
-        if ($cuentaId <= 0) {
-            return $dataFactura;
-        }
-
-        foreach ($dataFactura as &$item) {
-            $item['cuentacontable_id'] = $cuentaId;
-        }
-        unset($item);
-
-        return $dataFactura;
-    }
 }
