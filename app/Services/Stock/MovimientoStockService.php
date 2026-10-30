@@ -175,6 +175,14 @@ class MovimientoStockService
 				$this->asientoService->assertCuadreAntesDeGrabar($data, $tipotransaccion, $existente);
 			}
 
+			// Se captura antes de numerar: el alta reemplaza «LOTE DE ALTA» por último id + 500001
+			// y ese número nuevo no es un lote/OT que ya tenga saldo.
+			$loteIngresado = $data['lote'] ?? null;
+			$loteIngresadoEsAlta = $this->loteDocumentoEsAlta($loteIngresado);
+			// True solo si el número que se graba se acaba de inventar. Si en una edición
+			// se conserva el lote ya guardado, el bucket de ese lote sí se controla.
+			$omitirBucketLoteAlta = $loteIngresadoEsAlta;
+
 			if ($funcion == 'create')
 			{
 				// Si no existe el codigo numera secuencial
@@ -192,7 +200,7 @@ class MovimientoStockService
 
 				// Vacío, null o «LOTE DE ALTA»: articulo_movimiento.lote es NOT NULL.
 				// El compare suelto `== 'LOTE DE ALTA'` no toma el null (el form lo manda vacío).
-				if ($this->loteDocumentoEsAlta($data['lote'] ?? null)) {
+				if ($loteIngresadoEsAlta) {
 					$this->asignarNumeroLoteAlta($data, $ultimoMovimiento);
 				}
 
@@ -224,6 +232,7 @@ class MovimientoStockService
 						->value('lote');
 					if ($lotePrevio !== null && ! $this->loteDocumentoEsAlta($lotePrevio)) {
 						$data['lote'] = $lotePrevio;
+						$omitirBucketLoteAlta = false;
 					} else {
 						$this->asignarNumeroLoteAlta($data);
 					}
@@ -296,7 +305,8 @@ class MovimientoStockService
 				) {
 					$loteAviso = trim((string) ($data['lote_consulta_ot'] ?? ''));
 					if ($loteAviso === '') {
-						$loteAviso = (string) ($data['lote'] ?? '');
+						// El número recién asignado al alta no es el lote que escribió el operador.
+						$loteAviso = $omitirBucketLoteAlta ? '' : trim((string) ($data['lote'] ?? ''));
 					}
 					$avisoOt = MovimientoStockConsumoOtAvisoSupport::avisoSiLoteEsOtConStock(
 						$loteAviso,
@@ -361,8 +371,12 @@ class MovimientoStockService
 					}
 				}
 
+				// «LOTE DE ALTA» numera un lote nuevo. Pedirle saldo a ese número
+				// rechaza el egreso (ej. 504275 = id 4274 + 500001) aunque el depósito tenga pares.
+				$validarBucketLoteOt = ! ($omitirBucketLoteAlta && ! $aplicarOtEnEgresos);
 				if (
 					empty($data['omitir_validacion_saldo'])
+					&& $validarBucketLoteOt
 					&& MovimientoStockFerliSupport::esCalzadosFerli()
 					&& MovimientoStockConsumoOtAvisoSupport::esDocumentoEgreso(
 						$tipotransaccion,
@@ -865,7 +879,8 @@ class MovimientoStockService
 	}
 
 	/**
-	 * Ferli: un egreso con lote/OT no puede dejar esa fila de Stock por OT en negativo.
+	 * Ferli: un egreso contra un lote/OT ya existente no puede dejar esa fila en negativo.
+	 * No aplica al número que asigna «LOTE DE ALTA» (último id + 500001): ese lote todavía no existe.
 	 *
 	 * @param  array<string, mixed>  $data
 	 * @param  list<mixed>  $articulos
