@@ -11,6 +11,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
 
@@ -83,8 +84,9 @@ final class PosicionBancariaDiariaGeneradorSupport
 
         $this->aplicarSaldos($wb, $fecha, $saldos['por_codigo']);
         $this->presentarSaldos($wb);
-        // Columna G queda con el importe: la fórmula INDEX/MATCH solo cubría 1/8–31/8
-        // y, al pedir otra fecha, Excel mostraba el 0 cacheado.
+        // Columna G queda con el importe del día pedido. La fórmula INDEX/MATCH
+        // de la plantilla solo cubría 1/8–31/8 y, al pedir otra fecha, Excel
+        // mostraba el 0 cacheado.
         $this->fijarSaldoDia($wb, $saldos['por_codigo']);
         $this->aplicarResumenMeta($wb, $fecha, $usd, $eur);
 
@@ -143,57 +145,141 @@ final class PosicionBancariaDiariaGeneradorSupport
         $maxCol = Coordinate::columnIndexFromString($ws->getHighestColumn(1));
         $fechaCol = null;
         for ($c = 8; $c <= $maxCol; $c++) {
-            $v = $ws->getCell(Coordinate::stringFromColumnIndex($c).'1')->getValue();
-            if ($v instanceof \DateTimeInterface) {
-                $d = Carbon::instance(\DateTimeImmutable::createFromInterface($v));
-            } elseif (is_numeric($v)) {
-                try {
-                    $d = Carbon::instance(\PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $v));
-                } catch (\Throwable) {
-                    continue;
-                }
-            } elseif (is_string($v) && $v !== '') {
-                try {
-                    $d = Carbon::parse($v);
-                } catch (\Throwable) {
-                    continue;
-                }
-            } else {
-                continue;
-            }
-            if ($d->toDateString() === $fecha->toDateString()) {
+            $d = $this->fechaDeCelda($ws->getCell(Coordinate::stringFromColumnIndex($c).'1')->getValue());
+            if ($d !== null && $d->toDateString() === $fecha->toDateString()) {
                 $fechaCol = $c;
                 break;
             }
         }
 
         if ($fechaCol === null) {
-            $fechaCol = $maxCol + 1;
-            $cell = $ws->getCell(Coordinate::stringFromColumnIndex($fechaCol).'1');
-            $cell->setValue(ExcelDate::PHPToExcel($fecha));
-            $cell->getStyle()->getNumberFormat()->setFormatCode('DD/MM/YYYY');
-            // Actualizar fórmulas saldo_dia (col G) al nuevo rango de fechas
-            $lastLetter = Coordinate::stringFromColumnIndex($fechaCol);
-            $maxRow = (int) $ws->getHighestDataRow();
-            for ($r = 2; $r <= $maxRow; $r++) {
-                $ws->setCellValue(
-                    "G{$r}",
-                    '=IFERROR(INDEX(H'.$r.':'.$lastLetter.$r.',MATCH(Resumen!$E$1,H$1:'.$lastLetter.'$1,0)),0)'
-                );
+            $ultima = $this->ultimaFechaColumna($ws);
+            if ($ultima !== null && $fecha->gt($ultima)) {
+                $this->agregarDiasHistoricos($ws, $ultima, $fecha, $porCodigo);
+
+                return;
             }
+            $fechaCol = $maxCol + 1;
+            $this->escribirColumnaSaldo($ws, $fechaCol, $fecha, $porCodigo);
+            $this->actualizarFormulaSaldoDia($ws, $fechaCol);
+
+            return;
         }
 
-        $colLetter = Coordinate::stringFromColumnIndex($fechaCol);
+        $this->escribirColumnaSaldo($ws, $fechaCol, $fecha, $porCodigo, false);
+    }
+
+    /**
+     * La plantilla trae el histórico hasta su última columna (agosto 2026).
+     * Cada generación agrega todos los días siguientes hasta la fecha pedida,
+     * sin reemplazar el día anterior.
+     *
+     * @param  array<string, float>  $porCodigoDiaPedido
+     */
+    private function agregarDiasHistoricos(
+        Worksheet $ws,
+        Carbon $ultimaEnPlantilla,
+        Carbon $fechaPedida,
+        array $porCodigoDiaPedido,
+    ): void {
+        $desde = $ultimaEnPlantilla->copy()->addDay()->startOfDay();
+        $previo = $fechaPedida->copy()->subDay()->startOfDay();
+        $serie = $desde->lte($previo)
+            ? $this->saldosIb->saldosPorCodigoEntre($desde, $previo)
+            : [];
+
+        $col = Coordinate::columnIndexFromString($ws->getHighestColumn(1));
+        $cursor = $desde->copy();
+        $fin = $fechaPedida->copy()->startOfDay();
+        while ($cursor->lte($fin)) {
+            $col++;
+            $ymd = $cursor->toDateString();
+            $valores = $cursor->isSameDay($fin) ? $porCodigoDiaPedido : ($serie[$ymd] ?? []);
+            $this->escribirColumnaSaldo($ws, $col, $cursor->copy(), $valores);
+            $cursor->addDay();
+        }
+        $this->actualizarFormulaSaldoDia($ws, $col);
+    }
+
+    /**
+     * @param  array<string, float>  $porCodigo
+     */
+    private function escribirColumnaSaldo(
+        Worksheet $ws,
+        int $col,
+        Carbon $fecha,
+        array $porCodigo,
+        bool $escribirEncabezado = true,
+    ): void {
+        $colLetter = Coordinate::stringFromColumnIndex($col);
+        if ($escribirEncabezado) {
+            $cell = $ws->getCell($colLetter.'1');
+            $cell->setValue(ExcelDate::PHPToExcel($fecha));
+            $cell->getStyle()->getNumberFormat()->setFormatCode('DD/MM/YYYY');
+        }
+
         $maxRow = (int) $ws->getHighestDataRow();
         for ($r = 2; $r <= $maxRow; $r++) {
             $codigo = trim((string) $ws->getCell("A{$r}")->getValue());
             if ($codigo === '' || ! isset($porCodigo[$codigo])) {
                 continue;
             }
-            // No pisar TRANSITO salvo que venga mapeado
             $ws->setCellValue("{$colLetter}{$r}", $porCodigo[$codigo]);
             $ws->getStyle("{$colLetter}{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
         }
+    }
+
+    private function actualizarFormulaSaldoDia(Worksheet $ws, int $fechaCol): void
+    {
+        $lastLetter = Coordinate::stringFromColumnIndex($fechaCol);
+        $maxRow = (int) $ws->getHighestDataRow();
+        for ($r = 2; $r <= $maxRow; $r++) {
+            $actual = $ws->getCell("G{$r}")->getValue();
+            if (! is_string($actual) || ! str_contains($actual, 'INDEX')) {
+                continue;
+            }
+            $ws->setCellValue(
+                "G{$r}",
+                '=IFERROR(INDEX(H'.$r.':'.$lastLetter.$r.',MATCH(Resumen!$E$1,H$1:'.$lastLetter.'$1,0)),0)'
+            );
+        }
+    }
+
+    private function ultimaFechaColumna(Worksheet $ws): ?Carbon
+    {
+        $maxCol = Coordinate::columnIndexFromString($ws->getHighestColumn(1));
+        $ultima = null;
+        for ($c = 8; $c <= $maxCol; $c++) {
+            $fecha = $this->fechaDeCelda($ws->getCell(Coordinate::stringFromColumnIndex($c).'1')->getValue());
+            if ($fecha !== null && ($ultima === null || $fecha->gt($ultima))) {
+                $ultima = $fecha;
+            }
+        }
+
+        return $ultima;
+    }
+
+    private function fechaDeCelda(mixed $valor): ?Carbon
+    {
+        if ($valor instanceof \DateTimeInterface) {
+            return Carbon::instance(\DateTimeImmutable::createFromInterface($valor))->startOfDay();
+        }
+        if (is_numeric($valor)) {
+            try {
+                return Carbon::instance(ExcelDate::excelToDateTimeObject((float) $valor))->startOfDay();
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+        if (is_string($valor) && $valor !== '') {
+            try {
+                return Carbon::parse($valor)->startOfDay();
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -71,6 +71,104 @@ final class PosicionBancariaSaldosInterbankingSupport
             ->where('cuenta_interbanking', '!=', '')
             ->get();
 
+        $clasificado = $this->clasificarFilas($rows, $cuentas);
+
+        return [
+            'fecha' => $fechaPosicion,
+            'fecha_ib' => $fechaIb,
+            'por_codigo' => $clasificado['por_codigo'],
+            'detalle' => $clasificado['detalle'],
+            'sin_mapear' => $clasificado['sin_mapear'],
+        ];
+    }
+
+    /**
+     * Una columna por cada día del rango. El importe de la columna D es el
+     * cierre de la última foto completa anterior a D (igual que saldosPorCodigo).
+     * Un sábado, un domingo y el lunes siguiente repiten el viernes si no hubo foto.
+     *
+     * @param  list<int>  $empresaIds
+     * @return array<string, array<string, float>> fecha Y-m-d => codigo => importe
+     */
+    public function saldosPorCodigoEntre(Carbon $desde, Carbon $hasta, array $empresaIds = [1, 2, 3]): array
+    {
+        $desde = $desde->copy()->startOfDay();
+        $hasta = $hasta->copy()->startOfDay();
+        if ($hasta->lt($desde)) {
+            return [];
+        }
+
+        $lookback = $desde->copy()->subDays(21)->toDateString();
+        $rows = InterbankingSaldoDiario::query()
+            ->whereDate('fecha', '>=', $lookback)
+            ->whereDate('fecha', '<', $hasta->toDateString())
+            ->whereIn('empresa_id', $empresaIds)
+            ->orderBy('fecha')
+            ->orderBy('empresa_id')
+            ->orderBy('bank_number')
+            ->get();
+
+        $cuentas = Cuentacaja::query()
+            ->with('bancos')
+            ->whereIn('empresa_id', $empresaIds)
+            ->whereNotNull('cuenta_interbanking')
+            ->where('cuenta_interbanking', '!=', '')
+            ->get();
+
+        $porFoto = [];
+        foreach ($rows->groupBy(fn (InterbankingSaldoDiario $ib) => $ib->fecha?->toDateString() ?? '') as $fechaFoto => $grupo) {
+            if ($fechaFoto === '' || $grupo->count() < self::MIN_CUENTAS_DIA) {
+                continue;
+            }
+            $porFoto[$fechaFoto] = $this->clasificarFilas($grupo, $cuentas)['por_codigo'];
+        }
+        $fechasFoto = array_keys($porFoto);
+        sort($fechasFoto);
+
+        $serie = [];
+        $cursor = $desde->copy();
+        while ($cursor->lte($hasta)) {
+            $ymd = $cursor->toDateString();
+            $foto = $this->ultimaFechaCompletaAntes($fechasFoto, $ymd);
+            $serie[$ymd] = $foto !== null ? $porFoto[$foto] : [];
+            $cursor->addDay();
+        }
+
+        return $serie;
+    }
+
+    /**
+     * @param  list<string>  $fechasOrdenadas
+     */
+    private function ultimaFechaCompletaAntes(array $fechasOrdenadas, string $fechaExclusiva): ?string
+    {
+        $lo = 0;
+        $hi = count($fechasOrdenadas) - 1;
+        $elegida = null;
+        while ($lo <= $hi) {
+            $mid = intdiv($lo + $hi, 2);
+            if ($fechasOrdenadas[$mid] < $fechaExclusiva) {
+                $elegida = $fechasOrdenadas[$mid];
+                $lo = $mid + 1;
+            } else {
+                $hi = $mid - 1;
+            }
+        }
+
+        return $elegida;
+    }
+
+    /**
+     * @param  Collection<int, InterbankingSaldoDiario>  $rows
+     * @param  Collection<int, Cuentacaja>  $cuentas
+     * @return array{
+     *   por_codigo: array<string, float>,
+     *   detalle: list<array<string, mixed>>,
+     *   sin_mapear: list<array<string, mixed>>
+     * }
+     */
+    private function clasificarFilas(Collection $rows, Collection $cuentas): array
+    {
         $porCodigo = [];
         $detalle = [];
         $sinMapear = [];
@@ -97,8 +195,6 @@ final class PosicionBancariaSaldosInterbankingSupport
         }
 
         return [
-            'fecha' => $fechaPosicion,
-            'fecha_ib' => $fechaIb,
             'por_codigo' => $porCodigo,
             'detalle' => $detalle,
             'sin_mapear' => $sinMapear,
