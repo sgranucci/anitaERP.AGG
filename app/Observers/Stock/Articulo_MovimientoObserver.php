@@ -4,9 +4,12 @@ namespace App\Observers\Stock;
 
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Articulo_Saldo_Deposito;
+use App\Support\Database\DbContencionSupport;
+use App\Support\Database\TransaccionServidorSupport;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Observer responsable de mantener "on-line" la tabla
@@ -167,9 +170,11 @@ class Articulo_MovimientoObserver
             return;
         }
 
+        // Sin transacción de comprobante: el movimiento ya está commiteado.
+        // Se reintenta el saldo entero (deadlock, lock wait, 1020, alta duplicada).
         try {
-            DB::transaction($aplicar);
-        } catch (\Throwable $e) {
+            $this->reintentarSaldoEnTransaccionPropia($aplicar);
+        } catch (Throwable $e) {
             Log::error('Articulo_MovimientoObserver delta error', [
                 'articulo_id' => $articuloId,
                 'deposito_id' => $depositoId,
@@ -179,5 +184,42 @@ class Articulo_MovimientoObserver
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * @param  callable(): void  $aplicar
+     */
+    private function reintentarSaldoEnTransaccionPropia(callable $aplicar): void
+    {
+        $esperaMs = 40;
+        for ($intento = 1; $intento <= 4; $intento++) {
+            try {
+                DB::transaction($aplicar);
+
+                return;
+            } catch (Throwable $e) {
+                if ($intento >= 4 || ! $this->esReintentoSaldoSuelto($e)) {
+                    throw $e;
+                }
+
+                Log::warning('Articulo_MovimientoObserver delta reintento', [
+                    'intento' => $intento,
+                    'espera_ms' => $esperaMs,
+                    'error' => $e->getMessage(),
+                ]);
+                usleep($esperaMs * 1000);
+                $esperaMs = min(500, $esperaMs * 2);
+            }
+        }
+    }
+
+    private function esReintentoSaldoSuelto(Throwable $e): bool
+    {
+        return TransaccionServidorSupport::esReintentoDeContencion($e)
+            || DbContencionSupport::esViolacionUnicidad(
+                $e,
+                'articulo_saldo_deposito',
+                'uk_artsalddep'
+            );
     }
 }
