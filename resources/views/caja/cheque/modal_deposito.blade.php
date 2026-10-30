@@ -31,8 +31,9 @@
                     'ayuda' => 'Código + Enter, o F1 / lupa para consultar.',
                 ])
                 <div class="form-group mb-0">
-                    <label for="deposito_nro_boleta">Nro. boleta (opcional)</label>
-                    <input type="text" id="deposito_nro_boleta" maxlength="40" class="form-control form-control-sm" />
+                    <label for="deposito_nro_boleta">Nro. boleta</label>
+                    <input type="text" id="deposito_nro_boleta" maxlength="40" class="form-control form-control-sm" placeholder="Vacío = el ERP asigna el siguiente" />
+                    <small class="form-text text-muted">Si lo dejás vacío, el numerador de boletas graba el siguiente número.</small>
                 </div>
             </div>
             <div class="modal-footer">

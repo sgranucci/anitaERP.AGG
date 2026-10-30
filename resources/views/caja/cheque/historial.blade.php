@@ -157,7 +157,7 @@
                     <table class="table table-sm table-bordered table-striped" id="tabla-paginada">
                         <thead style="background:#85C1E9;color:#17202A;">
                             <tr>
-                                <th style="width:2rem;"></th>
+                                <th class="text-center">Detalle</th>
                                 <th>Fecha dep.</th>
                                 <th>Nro. boleta</th>
                                 <th>Cuenta</th>
@@ -184,13 +184,13 @@
                                     $nrosBoleta = collect($g['cheques'] ?? [])->pluck('numerocheque')->filter()->implode(', ');
                                 @endphp
                                 <tr>
-                                    <td class="text-center">
+                                    <td class="text-center text-nowrap">
                                         <button type="button"
-                                                class="btn-accion-tabla hist-dep-toggle"
+                                                class="btn btn-outline-info btn-sm hist-dep-toggle py-0 px-2"
                                                 data-target="#{{ $rowId }}"
-                                                title="Ver cheques de la boleta"
+                                                title="Abrir el detalle de la boleta"
                                                 aria-expanded="false">
-                                            <i class="fa fa-chevron-right"></i>
+                                            <i class="fa fa-chevron-right"></i> Detalle
                                         </button>
                                     </td>
                                     <td>{{ $g['fecha_deposito_dmy'] }}</td>

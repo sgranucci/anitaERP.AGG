@@ -9,10 +9,12 @@ use App\Models\Compras\Pagoproveedor;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\SistemaNumerador;
 use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Numeradores de documento globales del ERP (tabla sistema_numerador).
@@ -23,6 +25,61 @@ final class SistemaNumeradorSupport
     public static function codigoCaja(string $abreviatura): string
     {
         return 'caja.'.strtoupper(trim($abreviatura));
+    }
+
+    public const CODIGO_BOLETA_DEPOSITO_CHEQUE = 'cheque.boleta_deposito';
+
+    /**
+     * Siguiente nro. de boleta de depósito CHT. Solo ERP: no consulta Anita.
+     * Arranca después del mayor número ya grabado en cheques de esa empresa.
+     */
+    public static function reservarSiguienteBoletaDeposito(int $empresaId): int
+    {
+        if ($empresaId <= 0) {
+            throw new \RuntimeException('Empresa inválida para numerar la boleta de depósito.');
+        }
+
+        $row = self::asegurarFilaBoletaDeposito($empresaId);
+
+        return (int) DB::transaction(function () use ($row, $empresaId): int {
+            /** @var SistemaNumerador $locked */
+            $locked = SistemaNumerador::query()
+                ->whereKey($row->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $locked->activo) {
+                throw new \RuntimeException(
+                    'El numerador '.$locked->codigo.' (empresa '.$locked->empresa_id.') está inactivo.'
+                );
+            }
+
+            $siguiente = (int) $locked->ultimo_numero;
+            $saltos = 0;
+            do {
+                $siguiente++;
+                $saltos++;
+                if ($saltos > 200) {
+                    throw new \RuntimeException(
+                        'No hay número libre en el numerador de boletas de depósito (empresa '.$empresaId.').'
+                    );
+                }
+            } while (self::boletaDepositoOcupada($empresaId, $siguiente));
+
+            $locked->ultimo_numero = $siguiente;
+            $locked->save();
+
+            Log::info('sistema_numerador.reservado', [
+                'id' => $locked->id,
+                'codigo' => $locked->codigo,
+                'empresa_id' => $empresaId,
+                'asignado' => $siguiente,
+                'sync_anita' => false,
+                'numera_en_erp' => true,
+            ]);
+
+            return $siguiente;
+        });
     }
 
     public static function codigoStockTransferencia(): string
@@ -394,6 +451,62 @@ final class SistemaNumeradorSupport
         }
 
         return (int) (Empresa::query()->orderBy('id')->value('id') ?: 1);
+    }
+
+    private static function asegurarFilaBoletaDeposito(int $empresaId): SistemaNumerador
+    {
+        $codigo = self::CODIGO_BOLETA_DEPOSITO_CHEQUE;
+        $existente = SistemaNumerador::query()
+            ->where('codigo', $codigo)
+            ->where('empresa_id', $empresaId)
+            ->first();
+
+        if ($existente !== null) {
+            return $existente;
+        }
+
+        $fila = new SistemaNumerador([
+            'codigo' => $codigo,
+            'nombre' => 'Boleta depósito cheques de terceros',
+            'empresa_id' => $empresaId,
+            'modulo' => 'caja',
+            'ultimo_numero' => self::pisoBoletaDeposito($empresaId),
+            'anita_sistema' => null,
+            'anita_fuente' => null,
+            'anita_clave' => null,
+            'activo' => true,
+            'observacion' => 'Numerador nativo del ERP. Vacío al depositar toma el siguiente.',
+        ]);
+        if (Schema::hasColumn('sistema_numerador', 'numera_en_erp')) {
+            $fila->numera_en_erp = true;
+        }
+        $fila->save();
+
+        return $fila;
+    }
+
+    private static function pisoBoletaDeposito(int $empresaId): int
+    {
+        $max = DB::table('cheque')
+            ->where('empresa_id', $empresaId)
+            ->where('origen', 'R')
+            ->whereRaw(SqlDialectSupport::coincideRegex('nro_boleta_deposito'), ['^[0-9]+$'])
+            ->max(DB::raw(SqlDialectSupport::castEntero('nro_boleta_deposito')));
+
+        return max(0, (int) $max);
+    }
+
+    private static function boletaDepositoOcupada(int $empresaId, int $numero): bool
+    {
+        if ($numero <= 0) {
+            return true;
+        }
+
+        return DB::table('cheque')
+            ->where('empresa_id', $empresaId)
+            ->where('origen', 'R')
+            ->where('nro_boleta_deposito', (string) $numero)
+            ->exists();
     }
 
     private static function numeroCajaOcupado(int $empresaId, string $abreviatura, int $numero): bool

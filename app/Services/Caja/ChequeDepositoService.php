@@ -5,6 +5,7 @@ namespace App\Services\Caja;
 use App\Models\Caja\Cheque;
 use App\Models\Caja\Cuentacaja;
 use App\Support\Caja\ChequeTerceroDepositoAnitaSupport;
+use App\Support\Configuracion\SistemaNumeradorSupport;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -158,24 +159,29 @@ final class ChequeDepositoService
         }
 
         $fechaDep = $fecha && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) ? $fecha : date('Y-m-d');
-        $boleta = trim((string) $nroBoleta);
-        if ($boleta === '') {
-            $boleta = null;
-        }
+        $boletaIngresada = trim((string) $nroBoleta);
 
         try {
-            $asientoResultado = DB::transaction(function () use ($cheque, $cuenta, $fechaDep, $boleta) {
+            $asientoResultado = DB::transaction(function () use ($cheque, $cuenta, $fechaDep, $boletaIngresada) {
+                $boleta = $boletaIngresada !== ''
+                    ? $boletaIngresada
+                    : (string) SistemaNumeradorSupport::reservarSiguienteBoletaDeposito((int) $cheque->empresa_id);
                 $cheque->fecha_deposito = $fechaDep;
                 $cheque->cuentacaja_deposito_id = (int) $cuenta->id;
                 $cheque->nro_boleta_deposito = $boleta;
                 $cheque->estado = '*';
                 $cheque->save();
 
-                return $this->acreditacionAsientoService->generarSiCorresponde(
-                    $cheque->fresh(),
-                    $fechaDep,
-                    'Depósito'
-                );
+                $grabado = $cheque->fresh();
+
+                return [
+                    'boleta' => $boleta,
+                    'asiento' => $this->acreditacionAsientoService->generarSiCorresponde(
+                        $grabado,
+                        $fechaDep,
+                        'Depósito'
+                    ),
+                ];
             });
         } catch (InvalidArgumentException $e) {
             throw $e;
@@ -187,11 +193,14 @@ final class ChequeDepositoService
             );
         }
 
+        $boleta = (string) ($asientoResultado['boleta'] ?? '');
+        $asientoResultado = $asientoResultado['asiento'] ?? [];
         $anitaOk = ChequeTerceroDepositoAnitaSupport::marcarDeposito($cheque->fresh(), $fechaDep, $cuenta, $boleta);
 
         return [
             'cheque_id' => (int) $cheque->id,
             'fecha_deposito' => $fechaDep,
+            'nro_boleta' => $boleta,
             'anita_ok' => $anitaOk,
             'asiento_id' => $asientoResultado['asiento_id'] ?? null,
             'asiento_omitido' => (bool) ($asientoResultado['omitido'] ?? false),
@@ -214,12 +223,31 @@ final class ChequeDepositoService
             throw new InvalidArgumentException('Seleccione al menos un cheque.');
         }
 
+        $boletaIngresada = trim((string) $nroBoleta);
+        $boletaPorEmpresa = [];
+        if ($boletaIngresada === '') {
+            $empresas = Cheque::query()->whereIn('id', $ids)->pluck('empresa_id', 'id');
+            foreach ($empresas as $empresaId) {
+                $empresaId = (int) $empresaId;
+                if ($empresaId > 0 && ! isset($boletaPorEmpresa[$empresaId])) {
+                    $boletaPorEmpresa[$empresaId] = (string) SistemaNumeradorSupport::reservarSiguienteBoletaDeposito($empresaId);
+                }
+            }
+        } else {
+            $empresas = collect();
+        }
+
         $ok = 0;
         $error = 0;
         $detalle = [];
         foreach ($ids as $id) {
             try {
-                $r = $this->depositar($id, $cuentacajaId, $fecha, $nroBoleta);
+                $boleta = $boletaIngresada;
+                if ($boleta === '') {
+                    $empresaId = (int) ($empresas[$id] ?? 0);
+                    $boleta = $boletaPorEmpresa[$empresaId] ?? '';
+                }
+                $r = $this->depositar($id, $cuentacajaId, $fecha, $boleta);
                 $ok++;
                 $detalle[] = ['cheque_id' => $id, 'ok' => true, 'anita_ok' => $r['anita_ok']];
             } catch (\Throwable $e) {
