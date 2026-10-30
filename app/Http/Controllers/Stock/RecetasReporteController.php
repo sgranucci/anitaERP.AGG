@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Ventas;
+namespace App\Http\Controllers\Stock;
 
 use App\Exports\Ventas\GastronomiaRecetasReporteHojaExport;
 use App\Exports\Ventas\GastronomiaRecetasReporteWorkbookExport;
@@ -12,9 +12,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Excel;
 
-class GastronomiaRecetasReporteController extends Controller
+class RecetasReporteController extends Controller
 {
-    private const MENU_URL = 'ventas/gastronomia/recetas-reporte';
+    private const MENU_URL = 'stock/reporte-formulas';
 
     public function __construct(
         private readonly GastronomiaRecetasReporteService $reporteService,
@@ -35,8 +35,8 @@ class GastronomiaRecetasReporteController extends Controller
         $consultado = $request->boolean('consultar');
         if ($consultado && ! GastronomiaRecetasReporteFiltros::tieneCriterios($filtros)) {
             return redirect()
-                ->route('gastronomia_recetas_reporte', GastronomiaRecetasReporteFiltros::paraQueryString($filtros))
-                ->with('errores', ['Elegí al menos un criterio: artículos activos, artículos inactivos o recetas sin asignar.']);
+                ->route('stock_recetas_reporte', GastronomiaRecetasReporteFiltros::paraQueryString($filtros))
+                ->with('errores', ['Elegí al menos un criterio: artículos activos, artículos inactivos o fórmulas sin asignar.']);
         }
 
         $resultado = null;
@@ -66,7 +66,7 @@ class GastronomiaRecetasReporteController extends Controller
             $paginador->appends($filtrosQuery);
         }
 
-        return view('ventas.gastronomia.recetas_reporte.index', [
+        return view('stock.recetas_reporte.index', [
             'empresa_query' => $empresaQuery,
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
@@ -94,44 +94,44 @@ class GastronomiaRecetasReporteController extends Controller
 
         if (! $request->boolean('consultar') || ! GastronomiaRecetasReporteFiltros::tieneCriterios($filtros)) {
             return redirect()
-                ->route('gastronomia_recetas_reporte', GastronomiaRecetasReporteFiltros::paraQueryString($filtros))
+                ->route('stock_recetas_reporte', GastronomiaRecetasReporteFiltros::paraQueryString($filtros))
                 ->with('errores', ['Consultá el reporte antes de exportar.']);
         }
 
         $resultado = $this->reporteService->generar($filtros);
         if (($resultado['recetas'] ?? []) === []) {
             return redirect()
-                ->route('gastronomia_recetas_reporte', GastronomiaRecetasReporteFiltros::paraQueryString($filtros) + ['consultar' => 1])
-                ->with('errores', ['No hay recetas para los filtros elegidos.']);
+                ->route('stock_recetas_reporte', GastronomiaRecetasReporteFiltros::paraQueryString($filtros) + ['consultar' => 1])
+                ->with('errores', ['No hay fórmulas para los filtros elegidos.']);
         }
 
         $empresaTexto = $this->etiquetaEmpresa((int) ($filtros['empresa_id'] ?? 0), $empresaQuery);
-        $titulo = 'Recetas';
+        $titulo = 'Fórmulas';
         $subtitulo = 'Empresa: '.$empresaTexto
             .' · '.GastronomiaRecetasReporteFiltros::textoInclusion($filtros)
             .' · Lista de precios '.$resultado['listaprecio_id'];
 
         switch (strtoupper($formato)) {
             case 'PDF':
-                $view = \View::make('ventas.gastronomia.recetas_reporte.listado', [
+                $view = \View::make('stock.recetas_reporte.listado', [
                     'resultado' => $resultado,
                     'titulo' => $titulo,
                     'subtitulo' => $subtitulo,
                     'empresa_nombre' => $empresaTexto,
                 ])->render();
 
-                return $this->descargarPdf($view, 'recetas_gastronomia');
+                return $this->descargarPdf($view, 'formulas');
 
             case 'EXCEL':
                 return (new GastronomiaRecetasReporteWorkbookExport($resultado))
-                    ->download('recetas_gastronomia.xlsx');
+                    ->download('formulas.xlsx');
 
             case 'CSV':
                 return $this->csvRecetas($resultado);
         }
 
         return redirect()->route(
-            'gastronomia_recetas_reporte',
+            'stock_recetas_reporte',
             GastronomiaRecetasReporteFiltros::paraQueryString($filtros) + ['consultar' => 1],
         );
     }
@@ -162,11 +162,11 @@ class GastronomiaRecetasReporteController extends Controller
         }
 
         return (new GastronomiaRecetasReporteHojaExport(
-            'Recetas',
-            ['Código', 'Receta', 'SKU venta', 'Estado artículo', 'Categoría', 'Subcategoría', 'Porciones', 'Costo porción', 'Costo lote', 'Precio vta', 'Precio / costo', 'Líneas', 'Alerta', 'Cant. alertas'],
+            'Fórmulas',
+            ['Código', 'Fórmula', 'SKU venta', 'Estado artículo', 'Categoría', 'Subcategoría', 'Porciones', 'Costo porción', 'Costo lote', 'Precio vta', 'Precio / costo', 'Líneas', 'Alerta', 'Cant. alertas'],
             $filas,
             ['G' => 2, 'H' => 2, 'I' => 2, 'J' => 2, 'K' => 2, 'L' => 0, 'N' => 0],
-        ))->download('recetas_gastronomia.csv', Excel::CSV);
+        ))->download('formulas.csv', Excel::CSV);
     }
 
     private function assertAccesoEmpresa(int $empresaId): void

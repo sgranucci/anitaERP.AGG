@@ -1,8 +1,8 @@
 <thead>
     <tr>
-        <th>Receta</th>
+        <th>Fórmula</th>
         <th>Tipo</th>
-        <th>SKU / subreceta</th>
+        <th>SKU / subfórmula</th>
         <th>Descripción</th>
         <th>UM</th>
         <th class="text-right">Cantidad</th>

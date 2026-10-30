@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 
 final class GastronomiaRecetasReporteFiltros
 {
-    public const VISTA_RECETAS = 'recetas';
+    public const VISTA_RECETAS = 'formulas';
 
     public const VISTA_LINEAS = 'lineas';
 
@@ -108,7 +108,7 @@ final class GastronomiaRecetasReporteFiltros
             $partes[] = 'artículos de venta inactivos';
         }
         if (! empty($filtros['sin_asignar'])) {
-            $partes[] = 'recetas sin artículo';
+            $partes[] = 'fórmulas sin artículo';
         }
 
         return $partes === [] ? 'sin criterio de inclusión' : implode(', ', $partes);
@@ -117,6 +117,9 @@ final class GastronomiaRecetasReporteFiltros
     public static function normalizarVista(mixed $vista): string
     {
         $vista = strtolower(trim((string) $vista));
+        if ($vista === 'recetas') {
+            $vista = self::VISTA_RECETAS;
+        }
 
         return in_array($vista, [
             self::VISTA_RECETAS,

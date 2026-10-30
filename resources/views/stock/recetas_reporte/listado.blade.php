@@ -1,5 +1,5 @@
 @php
-    $tituloReporte = $titulo ?? 'Recetas';
+    $tituloReporte = $titulo ?? 'Fórmulas';
     $subtituloReporte = $subtitulo ?? '';
 @endphp
 <!DOCTYPE html>
@@ -25,7 +25,7 @@
         <thead>
             <tr>
                 <th>Código</th>
-                <th>Receta</th>
+                <th>Fórmula</th>
                 <th>Estado</th>
                 <th>Categoría</th>
                 <th>Subcategoría</th>

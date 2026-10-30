@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Reporte de recetas: costo por última compra, expresado por porción para compararlo
+ * Reporte de fórmulas: costo por última compra, expresado por porción para compararlo
  * con el precio de venta del artículo, y alertas (sin precio, costo en cero, insumo sin costo, nombre duplicado).
  */
 final class GastronomiaRecetasReporteService
@@ -576,7 +576,7 @@ final class GastronomiaRecetasReporteService
             $hijoId = (int) $hijo['formula_hija_id'];
             $articuloId = (int) $hijo['articulo_id'];
             if ($hijoId > 0) {
-                $tipo = 'Sub-receta';
+                $tipo = 'Subfórmula';
                 $descripcion = $this->nombreFormula($hijoId, $porId);
                 $codigoLinea = $this->codigoFormula($hijoId);
                 $um = '';
@@ -639,14 +639,14 @@ final class GastronomiaRecetasReporteService
         if ($nombre === '(sin nombre)') {
             $alertas[] = $this->alerta(
                 'Alta',
-                'Receta sin nombre',
+                'Fórmula sin nombre',
                 $articulo === null
                     ? 'La fórmula no tiene artículo de venta ni detalle.'
                     : 'El artículo de venta no tiene descripción y la fórmula no tiene detalle.',
             );
         }
         if ($lineas === []) {
-            $alertas[] = $this->alerta('Alta', 'Receta incompleta', 'La receta no tiene líneas.');
+            $alertas[] = $this->alerta('Alta', 'Fórmula incompleta', 'La fórmula no tiene líneas.');
         } elseif ($sinCosto > 0) {
             $alertas[] = $this->alerta(
                 'Alta',
@@ -657,7 +657,7 @@ final class GastronomiaRecetasReporteService
             );
         }
         if ($costo <= 0 && $lineas !== [] && $sinCosto === 0) {
-            $alertas[] = $this->alerta('Alta', 'Costo en cero', 'El costo de la receta es 0.');
+            $alertas[] = $this->alerta('Alta', 'Costo en cero', 'El costo de la fórmula es 0.');
         }
         if ($articulo !== null && $precio <= 0) {
             $alertas[] = $this->alerta('Baja', 'Sin precio de venta', 'El artículo de venta asignado no tiene precio vigente en la lista.');
@@ -694,7 +694,7 @@ final class GastronomiaRecetasReporteService
     {
         $formula = $this->formulas[$formulaId] ?? null;
         if ($formula === null) {
-            return 'Sub-receta #'.$formulaId;
+            return 'Subfórmula #'.$formulaId;
         }
         $articulo = $porId[(int) $formula['articulo_id']] ?? null;
         $nombre = trim((string) ($articulo->descripcion ?? ''));
@@ -702,7 +702,7 @@ final class GastronomiaRecetasReporteService
             $nombre = trim((string) $formula['detalle']);
         }
         if ($nombre === '') {
-            $nombre = 'Receta '.$this->codigoFormula($formulaId);
+            $nombre = 'Fórmula '.$this->codigoFormula($formulaId);
         }
 
         return $nombre;
@@ -744,7 +744,7 @@ final class GastronomiaRecetasReporteService
                 $recetas[$indice]['alertas'][] = $this->alerta(
                     'Media',
                     'Nombre duplicado',
-                    'Hay '.count($indices).' recetas con el mismo nombre en este filtro.',
+                    'Hay '.count($indices).' fórmulas con el mismo nombre en este filtro.',
                 );
             }
         }

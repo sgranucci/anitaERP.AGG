@@ -1,7 +1,7 @@
 <thead>
     <tr>
         <th>Código</th>
-        <th>Receta</th>
+        <th>Fórmula</th>
         <th>Categoría</th>
         <th>Gravedad</th>
         <th>Tipo</th>

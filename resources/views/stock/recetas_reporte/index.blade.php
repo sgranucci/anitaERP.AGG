@@ -1,7 +1,7 @@
 @extends("theme.$theme.layout")
 
 @section('titulo')
-    Recetas
+    Fórmulas
 @endsection
 
 @section('scripts')
@@ -10,14 +10,14 @@
 
 @section('contenido')
 @php
-    $vista = $filtros['vista'] ?? 'recetas';
+    $vista = $filtros['vista'] ?? 'formulas';
     $queryBase = $filtrosQuery ?? [];
     $linkVista = function (string $nombre) use ($queryBase) {
         $params = $queryBase;
         $params['vista'] = $nombre;
         unset($params['page']);
 
-        return route('gastronomia_recetas_reporte', $params);
+        return route('stock_recetas_reporte', $params);
     };
 @endphp
 <div class="row">
@@ -26,19 +26,19 @@
         @include('includes.form-error')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Recetas</h3>
+                <h3 class="card-title">Fórmulas</h3>
                 <div class="card-tools">
-                    <a href="{{ route('gastronomia_recetas_reporte') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
+                    <a href="{{ route('stock_recetas_reporte') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>
                 </div>
             </div>
-            <form method="get" action="{{ route('gastronomia_recetas_reporte') }}" class="mb-0">
+            <form method="get" action="{{ route('stock_recetas_reporte') }}" class="mb-0">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        El costo porción es el del lote (última compra de cada insumo y de las subrecetas) dividido por las porciones que rinde la receta, para compararlo con el precio de una unidad.
+                        El costo porción es el del lote (última compra de cada insumo y de las subfórmulas) dividido por las porciones que rinde la fórmula, para compararlo con el precio de una unidad.
                         El precio es el vigente del artículo de venta en la lista {{ (int) config('precio.listaprecio_default_id', 1) }}.
-                        La receta entra si el artículo de venta asignado está activo o inactivo, según lo que marques.
+                        La fórmula entra si el artículo de venta asignado está activo o inactivo, según lo que marques.
                         Las que no tienen artículo de venta salen solo con el tercer criterio, también si filtrás por empresa.
                         En los opcionales, el costo toma el primero de cada grupo; el resto se lista y no suma.
                     </p>
@@ -87,7 +87,7 @@
                             </div>
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="checkbox" name="sin_asignar" id="sin_asignar" value="1" @checked(! empty($filtros['sin_asignar']))>
-                                <label class="form-check-label" for="sin_asignar">Recetas no asignadas a artículos</label>
+                                <label class="form-check-label" for="sin_asignar">Fórmulas no asignadas a artículos</label>
                             </div>
                         </div>
                     </div>
@@ -112,7 +112,7 @@
                             <strong>Empresa:</strong> {{ $empresa_texto ?? 'Todas' }}
                             · <strong>Incluye:</strong> {{ $inclusion_texto ?? '' }}
                             @if (! empty($resultado))
-                                · <strong>Recetas:</strong> {{ (int) ($resultado['totales']['recetas'] ?? 0) }}
+                                · <strong>Fórmulas:</strong> {{ (int) ($resultado['totales']['recetas'] ?? 0) }}
                                 · Alta {{ (int) ($resultado['totales']['alta'] ?? 0) }}
                                 · Media {{ (int) ($resultado['totales']['media'] ?? 0) }}
                                 · Baja {{ (int) ($resultado['totales']['baja'] ?? 0) }}
@@ -123,12 +123,12 @@
                     <div class="d-flex flex-wrap align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
                         <div class="mb-1">
                             @include('includes.exportar-tabla-queryparams', [
-                                'ruta' => 'listar_gastronomia_recetas_reporte',
+                                'ruta' => 'listar_stock_recetas_reporte',
                                 'queryparams' => $filtrosQuery ?? [],
                             ])
                         </div>
                         <div class="btn-group btn-group-sm mb-1" role="group">
-                            <a href="{{ $linkVista('recetas') }}" class="btn btn-outline-primary @if($vista === 'recetas') active @endif">Recetas</a>
+                            <a href="{{ $linkVista('formulas') }}" class="btn btn-outline-primary @if($vista === 'formulas') active @endif">Fórmulas</a>
                             <a href="{{ $linkVista('lineas') }}" class="btn btn-outline-primary @if($vista === 'lineas') active @endif">Líneas</a>
                             <a href="{{ $linkVista('resumen') }}" class="btn btn-outline-primary @if($vista === 'resumen') active @endif">Resumen</a>
                             <a href="{{ $linkVista('alertas') }}" class="btn btn-outline-primary @if($vista === 'alertas') active @endif">Alertas</a>
@@ -161,13 +161,13 @@
                     <div class="table-responsive">
                         <table class="table table-striped table-bordered table-hover mb-0 tabla-recetas-reporte">
                             @if ($vista === 'lineas')
-                                @include('ventas.gastronomia.recetas_reporte.partials.tabla_lineas', ['filas' => $paginador ? $paginador->items() : []])
+                                @include('stock.recetas_reporte.partials.tabla_lineas', ['filas' => $paginador ? $paginador->items() : []])
                             @elseif ($vista === 'resumen')
-                                @include('ventas.gastronomia.recetas_reporte.partials.tabla_resumen', ['filas' => $resultado['resumen'] ?? [], 'totales' => $resultado['totales'] ?? []])
+                                @include('stock.recetas_reporte.partials.tabla_resumen', ['filas' => $resultado['resumen'] ?? [], 'totales' => $resultado['totales'] ?? []])
                             @elseif ($vista === 'alertas')
-                                @include('ventas.gastronomia.recetas_reporte.partials.tabla_alertas', ['filas' => $paginador ? $paginador->items() : []])
+                                @include('stock.recetas_reporte.partials.tabla_alertas', ['filas' => $paginador ? $paginador->items() : []])
                             @else
-                                @include('ventas.gastronomia.recetas_reporte.partials.tabla_recetas', [
+                                @include('stock.recetas_reporte.partials.tabla_recetas', [
                                     'filas' => $paginador ? $paginador->items() : [],
                                     'puede_editar_formula' => $puede_editar_formula ?? false,
                                 ])

@@ -46,7 +46,7 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
 
         return new GastronomiaRecetasReporteHojaExport(
             'Resumen',
-            ['Categoría', 'Subcategoría', 'Recetas', 'Con alerta Alta', 'Con alerta Media'],
+            ['Categoría', 'Subcategoría', 'Fórmulas', 'Con alerta Alta', 'Con alerta Media'],
             $filas,
             ['C' => 0, 'D' => 0, 'E' => 0],
         );
@@ -75,8 +75,8 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
         }
 
         return new GastronomiaRecetasReporteHojaExport(
-            'Recetas',
-            ['Código', 'Receta', 'SKU venta', 'Estado artículo', 'Categoría', 'Subcategoría', 'Porciones', 'Costo porción', 'Costo lote', 'Precio vta', 'Precio / costo', 'Líneas', 'Alerta', 'Cant. alertas'],
+            'Fórmulas',
+            ['Código', 'Fórmula', 'SKU venta', 'Estado artículo', 'Categoría', 'Subcategoría', 'Porciones', 'Costo porción', 'Costo lote', 'Precio vta', 'Precio / costo', 'Líneas', 'Alerta', 'Cant. alertas'],
             $filas,
             ['G' => 2, 'H' => 2, 'I' => 2, 'J' => 2, 'K' => 2, 'L' => 0, 'N' => 0],
         );
@@ -105,7 +105,7 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
 
         return new GastronomiaRecetasReporteHojaExport(
             'Detalle',
-            ['Receta', 'Código', 'Tipo línea', 'SKU / subreceta', 'Descripción', 'UM', 'Cant. c/ desp.', 'Costo unitario', 'Costo línea', 'Costo porción', 'Precio vta', 'Porciones', 'Entra al costo'],
+            ['Fórmula', 'Código', 'Tipo línea', 'SKU / subfórmula', 'Descripción', 'UM', 'Cant. c/ desp.', 'Costo unitario', 'Costo línea', 'Costo porción', 'Precio vta', 'Porciones', 'Entra al costo'],
             $filas,
             ['G' => 4, 'H' => 2, 'I' => 2, 'J' => 2, 'K' => 2, 'L' => 2],
             true,
@@ -147,7 +147,7 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
 
         return new GastronomiaRecetasReporteHojaExport(
             'Líneas',
-            ['Receta', 'Código', 'SKU / subreceta', 'Descripción', 'UM', 'Tipo línea', 'Cantidad', 'Factor desp.', 'Cant. c/ desp.', 'Costo unitario', 'Costo línea', 'Costo porción', 'Costo lote', 'Precio vta', 'Opcional', 'Entra al costo', 'Porciones', 'Categoría', 'Subcategoría', 'Estado artículo', 'Alerta'],
+            ['Fórmula', 'Código', 'SKU / subfórmula', 'Descripción', 'UM', 'Tipo línea', 'Cantidad', 'Factor desp.', 'Cant. c/ desp.', 'Costo unitario', 'Costo línea', 'Costo porción', 'Costo lote', 'Precio vta', 'Opcional', 'Entra al costo', 'Porciones', 'Categoría', 'Subcategoría', 'Estado artículo', 'Alerta'],
             $filas,
             ['G' => 4, 'H' => 4, 'I' => 4, 'J' => 2, 'K' => 2, 'L' => 2, 'M' => 2, 'N' => 2, 'Q' => 2],
         );
@@ -169,7 +169,7 @@ class GastronomiaRecetasReporteWorkbookExport implements WithMultipleSheets
 
         return new GastronomiaRecetasReporteHojaExport(
             'Alertas',
-            ['Código', 'Receta', 'Categoría', 'Gravedad', 'Tipo', 'Detalle'],
+            ['Código', 'Fórmula', 'Categoría', 'Gravedad', 'Tipo', 'Detalle'],
             $filas,
         );
     }

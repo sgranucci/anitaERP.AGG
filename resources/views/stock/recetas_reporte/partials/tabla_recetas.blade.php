@@ -1,7 +1,7 @@
 <thead>
     <tr>
         <th>Código</th>
-        <th>Receta</th>
+        <th>Fórmula</th>
         <th>Artículo de venta</th>
         <th>Estado</th>
         <th>Categoría</th>
@@ -51,7 +51,7 @@
         </tr>
     @empty
         <tr>
-            <td colspan="13" class="text-center text-muted">No hay recetas para los filtros elegidos.</td>
+            <td colspan="13" class="text-center text-muted">No hay fórmulas para los filtros elegidos.</td>
         </tr>
     @endforelse
 </tbody>

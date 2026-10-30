@@ -1683,6 +1683,8 @@ Route::get('stock/formula-articulo/{id}/editar', 'Stock\FormulaArticuloControlle
 Route::put('stock/formula-articulo/{id}', 'Stock\FormulaArticuloController@actualizar')->name('actualizar_formula_articulo');
 Route::delete('stock/formula-articulo/{id}', 'Stock\FormulaArticuloController@eliminar')->name('eliminar_formula_articulo');
 Route::get('stock/lista-formula-articulo/{formato?}/{busqueda?}', 'Stock\FormulaArticuloController@listar')->name('listar_formula_articulo');
+Route::get('stock/reporte-formulas', 'Stock\RecetasReporteController@index')->name('stock_recetas_reporte')->middleware('modo.consulta');
+Route::get('stock/listar-reporte-formulas/{formato}', 'Stock\RecetasReporteController@exportar')->name('listar_stock_recetas_reporte');
 Route::get('stock/formula-articulo/{id}/archivo/{archivo}', 'Stock\FormulaArticuloController@descargarArchivo')->name('formula_articulo_archivo');
 Route::get('stock/leer_historia_formula_articulo/{formula_articulo_id}', 'Stock\FormulaArticuloController@leerHistoria')->name('leer_historia_formula_articulo');
 Route::get('stock/formula-articulo/articulos-compra-por-insumo/{articulo_id}', 'Stock\FormulaArticuloController@articulosCompraPorInsumo')->name('articulos_compra_por_insumo_formula');
@@ -2618,8 +2620,6 @@ Route::get('ventas/gastronomia/descuento-reporte/leer-mozo/{codigo}', 'Ventas\Ga
 Route::post('ventas/gastronomia/descuento-reporte/consulta-clientevip', 'Ventas\GastronomiaDescuentoReporteController@consultaClienteVip')->name('gastronomia_descuento_reporte_consulta_clientevip');
 Route::get('ventas/gastronomia/descuento-reporte/leer-clientevip/{codigo}', 'Ventas\GastronomiaDescuentoReporteController@leerClienteVipPorCodigo')->name('gastronomia_descuento_reporte_leer_clientevip');
 Route::get('ventas/listar-gastronomia-descuento-reporte/{formato}', 'Ventas\GastronomiaDescuentoReporteController@exportar')->name('listar_gastronomia_descuento_reporte');
-Route::get('ventas/gastronomia/recetas-reporte', 'Ventas\GastronomiaRecetasReporteController@index')->name('gastronomia_recetas_reporte')->middleware('modo.consulta');
-Route::get('ventas/listar-gastronomia-recetas-reporte/{formato}', 'Ventas\GastronomiaRecetasReporteController@exportar')->name('listar_gastronomia_recetas_reporte');
 Route::get('ventas/gastronomia/ventas-articulos-reporte', 'Ventas\GastronomiaVentasArticulosReporteController@index')->name('gastronomia_ventas_articulos_reporte')->middleware('modo.consulta');
 Route::get('ventas/gastronomia/ventas-articulos-reporte/conciliacion', 'Ventas\GastronomiaVentasArticulosReporteController@conciliacion')->name('gastronomia_ventas_articulos_conciliacion')->middleware('modo.consulta');
 Route::get('ventas/listar-gastronomia-ventas-articulos-reporte/{formato}', 'Ventas\GastronomiaVentasArticulosReporteController@exportar')->name('listar_gastronomia_ventas_articulos_reporte');

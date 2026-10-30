@@ -2,7 +2,7 @@
     <tr>
         <th>Categoría</th>
         <th>Subcategoría</th>
-        <th class="text-right">Recetas</th>
+        <th class="text-right">Fórmulas</th>
         <th class="text-right">Con alerta Alta</th>
         <th class="text-right">Con alerta Media</th>
     </tr>
@@ -18,7 +18,7 @@
         </tr>
     @empty
         <tr>
-            <td colspan="5" class="text-center text-muted">No hay recetas para los filtros elegidos.</td>
+            <td colspan="5" class="text-center text-muted">No hay fórmulas para los filtros elegidos.</td>
         </tr>
     @endforelse
 </tbody>
