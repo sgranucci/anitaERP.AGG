@@ -4,12 +4,12 @@
             <select name="concepto_ivacompra_ids[]" data-placeholder="Concepto de iva compra" class="form-control concepto_ivacompra_id" data-fouc>
                 <option value="">-- Elija concepto de iva compra --</option>
                 @foreach ($concepto_ivacompra_query as $concepto)
-                    <option value="{{ $concepto->id }}" data-codigo-anita="{{ $concepto->codigo }}">{{ $concepto->nombre }}</option>
+                    <option value="{{ $concepto->id }}" data-codigo-anita="{{ $concepto->codigo }}" data-tipoconcepto="{{ $concepto->tipoconcepto }}">{{ $concepto->nombre }}</option>
                 @endforeach
             </select>
         </td>
         <td>
-            <input type="number" name="montos[]" class="form-control monto" value="" />
+            <input type="text" name="montos[]" class="form-control monto" inputmode="decimal" value="" />
         </td>                    
         <td>
             <button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_concepto tooltipsC">

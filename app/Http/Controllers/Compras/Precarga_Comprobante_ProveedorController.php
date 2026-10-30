@@ -443,12 +443,16 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
         try {
             DB::transaction(function () use ($request) {
-                $payload = $this->payloadCargaManual($request, null);
+                $lineas = $this->lineasConceptosPrecarga($request);
+                $payload = $this->aplicarTotalesDeConceptos(
+                    $this->payloadCargaManual($request, null),
+                    $lineas
+                );
                 $payload['origen_entrada'] = \App\Support\Compras\PrecargaComprobanteOrigenEntrada::MANUAL;
                 $payload['estado'] = PrecargaComprobanteEstados::PENDIENTE;
                 $precarga = $this->precarga_comprobante_proveedorRepository->create($payload);
 
-                $this->guardarConceptosPrecarga($request, (int) $precarga->id);
+                $this->guardarConceptosPrecarga((int) $precarga->id, $lineas);
             });
         } catch (\Throwable $e) {
             return redirect()
@@ -617,13 +621,17 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
         try {
             DB::transaction(function () use ($request, $id, $precargaActual) {
-                $payload = $this->payloadCargaManual($request, $precargaActual->rutaalmacenamiento);
+                $lineas = $this->lineasConceptosPrecarga($request);
+                $payload = $this->aplicarTotalesDeConceptos(
+                    $this->payloadCargaManual($request, $precargaActual->rutaalmacenamiento),
+                    $lineas
+                );
                 $this->precarga_comprobante_proveedorRepository->update($payload, $id);
 
                 $this->precarga_comprobante_proveedor_conceptoRepository
                     ->deletePorPrecargaComprobanteProveedor($id);
 
-                $this->guardarConceptosPrecarga($request, (int) $id);
+                $this->guardarConceptosPrecarga((int) $id, $lineas);
             });
         } catch (\Throwable $e) {
             return redirect()
@@ -749,16 +757,46 @@ class Precarga_Comprobante_ProveedorController extends Controller
         return $payload;
     }
 
-    private function guardarConceptosPrecarga(Request $request, int $precargaId): void
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function lineasConceptosPrecarga(Request $request): array
     {
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
             $request->input('concepto_ivacompra_ids', []),
             $request->input('montos', []),
         );
-        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
+
+        return ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
             ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas)
         );
+    }
 
+    /**
+     * Si hay conceptos, la cabecera sigue a esos importes. Si no, queda el subtotal/total tipeado.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  list<array<string, mixed>>  $lineas
+     * @return array<string, mixed>
+     */
+    private function aplicarTotalesDeConceptos(array $payload, array $lineas): array
+    {
+        $totales = ComprobanteProveedorConceptosIvaCoherenciaSupport::totalesCabeceraDesdeLineas($lineas);
+        if ($totales === null) {
+            return $payload;
+        }
+
+        $payload['subtotal'] = $totales['subtotal'];
+        $payload['total'] = $totales['total'];
+
+        return $payload;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    private function guardarConceptosPrecarga(int $precargaId, array $lineas): void
+    {
         foreach ($lineas as $linea) {
             $conceptoId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
             if ($conceptoId <= 0) {

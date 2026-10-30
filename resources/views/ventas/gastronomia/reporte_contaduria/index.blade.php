@@ -96,7 +96,7 @@
                         <label for="depositos" class="col-lg-2 control-label text-right pr-2">Dep&oacute;sitos</label>
                         <div class="col-lg-3">
                             <input type="text" name="depositos" id="depositos" class="form-control" value="{{ $depositos ?? '1, 8' }}">
-                            <small class="form-text text-muted">C&oacute;digos separados por coma. Vac&iacute;o = todos los dep&oacute;sitos de la empresa. Biyemas suele ser 1, 8. En Kandiko y Rebisco, dejalo vac&iacute;o para que entre todo el inventario.</small>
+                            <small class="form-text text-muted">C&oacute;digos separados por coma. Vac&iacute;o = todos los dep&oacute;sitos de la empresa. Biyemas suele ser 1, 8. Los dep&oacute;sitos de cigarrillos se suman solos. En Kandiko y Rebisco, vac&iacute;o trae tambi&eacute;n log&iacute;stica, farmacia y librer&iacute;a.</small>
                         </div>
                     </div>
 
@@ -108,11 +108,13 @@
                                 <option value="saldo" @selected(($origen_inventario ?? '') === 'saldo')>Saldo vigente</option>
                             </select>
                             <small class="form-text text-muted">
-                                El mes de arriba es solo para los descuentos. El inventario usa esta fecha.
+                                El mes de arriba es para los descuentos y la lista de precios. El inventario usa esta fecha.
                                 Saldo vigente es la existencia del sistema a la fecha de cierre.
-                                &Uacute;ltimo recuento: de cada dep&oacute;sito, el cerrado m&aacute;s reciente hasta el d&iacute;a siguiente
-                                (el 30/09 toma el 1/10, RC-000160, y no uno posterior como el RC-000180 del 20/10).
-                                Si ese d&iacute;a hay varios, entran todos. El Excel dice cu&aacute;l us&oacute;.
+                                &Uacute;ltimo recuento: hasta el d&iacute;a siguiente al cierre (el 30/09 toma el 1/10 y no un recuento del 20/10).
+                                De cada rubro se queda el d&iacute;a m&aacute;s reciente, as&iacute; un recuento posterior de solo bebidas
+                                o un ajuste de una l&iacute;nea no borra alimentos, limpieza ni cigarrillos.
+                                Los dep&oacute;sitos de cigarrillos (Kandiko 5005, Biyemas 1007) entran aunque el filtro sea 1, 8.
+                                El Excel dice qu&eacute; recuentos us&oacute;.
                             </small>
                         </div>
                     </div>
@@ -128,6 +130,23 @@
                                 Un zip: un Excel de totales (sector y costo por dep&oacute;sito) y un Excel por dep&oacute;sito.
                                 Cada dep&oacute;sito se abre en solapas por rubro (alimentos, bebidas, descartables, cigarrillos, limpieza y, si hay stock, farmacia, librer&iacute;a y otros).
                                 Cada solapa indica el n&uacute;mero de recuento (RC-000000), igual que el listado de contadur&iacute;a.
+                            </p>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="form-group row mb-2">
+                        <div class="col-lg-8 offset-lg-2">
+                            <button type="submit"
+                                class="btn btn-outline-primary"
+                                formaction="{{ route('gastronomia_reporte_contaduria_ventas') }}">
+                                <i class="fa fa-file-excel-o"></i> Descargar lista de precios
+                            </button>
+                            <p class="text-muted small mb-0 mt-2">
+                                El Excel de ventas de art&iacute;culos del mes: costo unitario, precio de venta,
+                                venta externa, invitaciones y staff. Usa la lista de precio de venta y la lista de costo
+                                vigentes al cierre del mes. Es un archivo aparte del inventario.
                             </p>
                         </div>
                     </div>

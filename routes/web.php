@@ -2605,6 +2605,7 @@ Route::get('ventas/listar-gastronomia-control-contable-cigarrillos/{formato}', '
 Route::get('ventas/gastronomia/reporte-contaduria', 'Ventas\ContaduriaGastronomiaReporteController@index')->name('gastronomia_reporte_contaduria')->middleware('modo.consulta');
 Route::get('ventas/gastronomia/reporte-contaduria/descuentos', 'Ventas\ContaduriaGastronomiaReporteController@descargarDescuentos')->name('gastronomia_reporte_contaduria_descuentos');
 Route::get('ventas/gastronomia/reporte-contaduria/inventario', 'Ventas\ContaduriaGastronomiaReporteController@descargarInventario')->name('gastronomia_reporte_contaduria_inventario');
+Route::get('ventas/gastronomia/reporte-contaduria/ventas-articulos', 'Ventas\ContaduriaGastronomiaReporteController@descargarVentasArticulos')->name('gastronomia_reporte_contaduria_ventas');
 Route::get('ventas/gastronomia/descuento-reporte', 'Ventas\GastronomiaDescuentoReporteController@index')->name('gastronomia_descuento_reporte')->middleware('modo.consulta');
 Route::post('ventas/gastronomia/descuento-reporte/consulta-facturas', 'Ventas\GastronomiaDescuentoReporteController@consultaFacturasBloque')->name('gastronomia_descuento_reporte_consulta_facturas');
 Route::post('ventas/gastronomia/descuento-reporte/consulta-mozo', 'Ventas\GastronomiaDescuentoReporteController@consultaMozo')->name('gastronomia_descuento_reporte_consulta_mozo');

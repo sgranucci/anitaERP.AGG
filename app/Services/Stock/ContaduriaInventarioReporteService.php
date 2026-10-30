@@ -233,15 +233,22 @@ final class ContaduriaInventarioReporteService
             ];
         }
 
+        $idsPedidos = array_column($depositos, 'id');
+        $depositos = $this->sumarDepositosCigarrillos($filtros, $depositos);
+
         $resuelto = ContaduriaInventarioRecuentoSupport::resolver(
             array_column($depositos, 'id'),
             $fecha,
         );
         $omitirSinRecuento = ! empty($filtros['omitir_sin_recuento']);
-        if ($resuelto['faltantes'] !== [] && ! $omitirSinRecuento) {
+        $faltantesQueCortan = array_values(array_filter(
+            $resuelto['faltantes'],
+            static fn (int $id) => in_array($id, $idsPedidos, true),
+        ));
+        if ($faltantesQueCortan !== [] && ! $omitirSinRecuento) {
             $nombres = [];
             foreach ($depositos as $deposito) {
-                if (in_array($deposito['id'], $resuelto['faltantes'], true)) {
+                if (in_array($deposito['id'], $faltantesQueCortan, true)) {
                     $nombres[] = 'depósito '.$deposito['codigo'].' '.$deposito['nombre'];
                 }
             }
@@ -255,11 +262,27 @@ final class ContaduriaInventarioReporteService
             ];
         }
 
-        if ($omitirSinRecuento && $resuelto['faltantes'] !== []) {
+        if ($resuelto['faltantes'] !== []) {
             $faltan = array_flip($resuelto['faltantes']);
             $depositos = array_values(array_filter(
                 $depositos,
                 static fn (array $deposito) => ! isset($faltan[$deposito['id']]),
+            ));
+        }
+
+        $idsExtra = array_flip(array_diff(array_column($depositos, 'id'), $idsPedidos));
+        if ($idsExtra !== []) {
+            $mesDesde = Carbon::parse($fecha)->startOfMonth()->format('Y-m-d');
+            $depositos = array_values(array_filter(
+                $depositos,
+                static function (array $deposito) use ($idsExtra, $resuelto, $mesDesde): bool {
+                    if (! isset($idsExtra[$deposito['id']])) {
+                        return true;
+                    }
+                    $fechaOrigen = (string) ($resuelto['por_deposito'][$deposito['id']]['fecha'] ?? '');
+
+                    return $fechaOrigen !== '' && $fechaOrigen >= $mesDesde;
+                },
             ));
         }
 
@@ -463,6 +486,7 @@ final class ContaduriaInventarioReporteService
         $estados = [];
         $usuarios = [];
         $comentarios = [];
+        $fechas = [];
         foreach ($recuentos as $recuento) {
             $codigo = trim((string) ($recuento['codigo'] ?? ''));
             if ($codigo !== '') {
@@ -480,6 +504,10 @@ final class ContaduriaInventarioReporteService
             if ($comentario !== '') {
                 $comentarios[$comentario] = $comentario;
             }
+            $fechaRecuento = trim((string) ($recuento['fecha'] ?? ''));
+            if ($fechaRecuento !== '') {
+                $fechas[$fechaRecuento] = Carbon::parse($fechaRecuento)->format('d/m/Y');
+            }
         }
 
         $titulo = count($codigos) === 1
@@ -488,6 +516,10 @@ final class ContaduriaInventarioReporteService
         $estadoTxt = count($estados) === 1
             ? Recuento::etiquetaEstado(array_values($estados)[0])
             : 'Cerrado parcial y total';
+        if (count($fechas) > 1) {
+            ksort($fechas);
+            $fechaTxt = 'entre el '.reset($fechas).' y el '.end($fechas);
+        }
         $datos = 'Fecha: '.$fechaTxt.' | Estado: '.$estadoTxt.' | Depósito: '.$depositoTxt;
         if ($usuarios !== []) {
             $datos .= ' | Usuario: '.implode(', ', array_values($usuarios));
@@ -502,6 +534,44 @@ final class ContaduriaInventarioReporteService
             'datos' => $datos,
             'pie' => $pie,
         ];
+    }
+
+    /**
+     * El filtro 1 y 8 no alcanza: los cigarrillos de Kandiko están en el depósito 5005
+     * y los de Biyemas también tienen depósito propio. Se suman siempre, y si no
+     * tienen recuento al corte no cortan la descarga.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @param  list<array{id:int,codigo:string,nombre:string}>  $depositos
+     * @return list<array{id:int,codigo:string,nombre:string}>
+     */
+    private function sumarDepositosCigarrillos(array $filtros, array $depositos): array
+    {
+        if (trim((string) ($filtros['depositos_filtro'] ?? '')) === '') {
+            return $depositos;
+        }
+
+        $sinFiltro = $filtros;
+        $sinFiltro['depositos_filtro'] = '';
+        $ids = array_column($depositos, 'id');
+        foreach ($this->existencias->depositosAutorizadosParaFiltros($sinFiltro) as $deposito) {
+            $id = (int) $deposito->id;
+            if (in_array($id, $ids, true)) {
+                continue;
+            }
+            $nombre = trim((string) $deposito->nombre);
+            if (! ContaduriaInventarioRubroSupport::textoMencionaCigarrillos($nombre)) {
+                continue;
+            }
+            $depositos[] = [
+                'id' => $id,
+                'codigo' => trim((string) $deposito->codigo),
+                'nombre' => $nombre,
+            ];
+            $ids[] = $id;
+        }
+
+        return $depositos;
     }
 
     private function tituloHoja(string $rubro): string

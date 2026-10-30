@@ -7,10 +7,14 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Último recuento cerrado de cada depósito para el inventario de contaduría.
- * La fecha pedida es el corte: entra el más reciente con fecha hasta el día
+ * Recuentos cerrados de cada depósito para el inventario de contaduría.
+ * La fecha pedida es el corte: entran los que tienen fecha hasta el día
  * siguiente (el cierre del 30 se cuenta el 1). No salta a uno posterior.
- * Si ese día hay varios, entran todos. El mes del listado no interviene.
+ * De cada rubro que el comentario nombra se queda el día más reciente,
+ * así un recuento posterior de solo bebidas o un ajuste de una línea
+ * no borra alimentos, limpieza o cigarrillos contados antes.
+ * Un recuento sin rubro en el comentario actualiza los artículos que trae
+ * y deja el resto. Si ese día hay varios del mismo rubro, entran todos.
  */
 final class ContaduriaInventarioRecuentoSupport
 {
@@ -45,32 +49,35 @@ final class ContaduriaInventarioRecuentoSupport
             ->orderBy('id')
             ->get(['id', 'codigo', 'fecha', 'deposito_id', 'estado', 'comentario', 'usuario_id']);
 
-        $porFecha = [];
+        $porDeposito = [];
         foreach ($recuentos as $recuento) {
             $depositoId = (int) $recuento->deposito_id;
             $fecha = $recuento->fecha instanceof Carbon
                 ? $recuento->fecha->format('Y-m-d')
                 : substr((string) $recuento->fecha, 0, 10);
-            $porFecha[$depositoId][$fecha][] = [
+            $comentario = trim((string) ($recuento->comentario ?? ''));
+            $porDeposito[$depositoId][] = [
                 'id' => (int) $recuento->id,
                 'codigo' => trim((string) $recuento->codigo),
                 'estado' => (string) $recuento->estado,
-                'comentario' => trim((string) ($recuento->comentario ?? '')),
+                'comentario' => $comentario,
                 'usuario' => trim((string) ($recuento->usuario?->nombre ?? '')),
+                'fecha' => $fecha,
+                'rubro' => ContaduriaInventarioRubroSupport::rubroDelComentario($comentario),
             ];
         }
 
         $fechaPorDeposito = [];
         $elegidos = [];
-        foreach ($porFecha as $depositoId => $fechas) {
-            $candidatas = array_keys($fechas);
-            if ($candidatas === []) {
+        foreach ($porDeposito as $depositoId => $lista) {
+            $seleccion = self::elegirRecuentos($lista);
+            if ($seleccion === []) {
                 continue;
             }
-            rsort($candidatas);
-            $fechaElegida = $candidatas[0];
-            $fechaPorDeposito[$depositoId] = $fechaElegida;
-            $elegidos[$depositoId] = $fechas[$fechaElegida];
+            $fechas = array_column($seleccion, 'fecha');
+            rsort($fechas);
+            $fechaPorDeposito[$depositoId] = $fechas[0];
+            $elegidos[$depositoId] = $seleccion;
         }
 
         $faltantes = [];
@@ -119,13 +126,26 @@ final class ContaduriaInventarioRecuentoSupport
                 continue;
             }
             $codigos = array_map(static fn (array $recuento) => $recuento['codigo'], $info['recuentos']);
-            $fecha = Carbon::parse($info['fecha'])->format('d/m/Y');
+            $fechas = [];
+            foreach ($info['recuentos'] as $recuento) {
+                $fechaRecuento = trim((string) ($recuento['fecha'] ?? ''));
+                if ($fechaRecuento !== '') {
+                    $fechas[$fechaRecuento] = Carbon::parse($fechaRecuento)->format('d/m/Y');
+                }
+            }
+            if ($fechas === []) {
+                $fechas[$info['fecha']] = Carbon::parse($info['fecha'])->format('d/m/Y');
+            }
+            ksort($fechas);
+            $fechaTxt = count($fechas) === 1
+                ? 'del '.reset($fechas)
+                : 'entre el '.reset($fechas).' y el '.end($fechas);
             $estados = array_values(array_unique(array_column($info['recuentos'], 'estado')));
             $estado = count($estados) === 1
                 ? mb_strtolower(Recuento::etiquetaEstado($estados[0]))
                 : 'cerrado parcial y total';
             $partes[] = 'Dep. '.$deposito['codigo'].' '.$deposito['nombre'].': '
-                .self::unir($codigos).' del '.$fecha.' ('.$estado.')';
+                .self::unir($codigos).' '.$fechaTxt.' ('.$estado.')';
         }
 
         return 'Origen: último recuento de cada depósito · '.implode(' · ', $partes);
@@ -168,7 +188,11 @@ final class ContaduriaInventarioRecuentoSupport
         $recuentoPorArticulo = [];
         foreach ($elegidos as $depositoId => $lista) {
             $ordenados = $lista;
-            usort($ordenados, static fn (array $a, array $b) => $a['id'] <=> $b['id']);
+            usort($ordenados, static function (array $a, array $b): int {
+                $fecha = strcmp((string) ($a['fecha'] ?? ''), (string) ($b['fecha'] ?? ''));
+
+                return $fecha !== 0 ? $fecha : ($a['id'] <=> $b['id']);
+            });
             foreach ($ordenados as $recuento) {
                 foreach ($sumas[$recuento['id']] ?? [] as $articuloId => $cantidad) {
                     $cantidades[$depositoId][(int) $articuloId] = (float) $cantidad;
@@ -181,6 +205,64 @@ final class ContaduriaInventarioRecuentoSupport
             'cantidades' => $cantidades,
             'recuento_por_articulo' => $recuentoPorArticulo,
         ];
+    }
+
+    /**
+     * @param  list<array{id:int,fecha:string,rubro:?string}>  $lista
+     * @return list<array{id:int,fecha:string,rubro:?string}>
+     */
+    private static function elegirRecuentos(array $lista): array
+    {
+        $porRubro = [];
+        $sinRubro = [];
+        foreach ($lista as $recuento) {
+            $rubro = $recuento['rubro'] ?? null;
+            if ($rubro === null || $rubro === '') {
+                $sinRubro[] = $recuento;
+                continue;
+            }
+            $porRubro[$rubro][] = $recuento;
+        }
+
+        $seleccion = [];
+        $fechaMinNombrado = null;
+        foreach ($porRubro as $grupo) {
+            $fechas = array_column($grupo, 'fecha');
+            rsort($fechas);
+            $maxFecha = $fechas[0] ?? '';
+            if ($maxFecha === '') {
+                continue;
+            }
+            if ($fechaMinNombrado === null || $maxFecha < $fechaMinNombrado) {
+                $fechaMinNombrado = $maxFecha;
+            }
+            foreach ($grupo as $recuento) {
+                if ($recuento['fecha'] === $maxFecha) {
+                    $seleccion[] = $recuento;
+                }
+            }
+        }
+
+        if ($sinRubro !== []) {
+            if ($fechaMinNombrado === null) {
+                $fechas = array_column($sinRubro, 'fecha');
+                rsort($fechas);
+                $maxFecha = $fechas[0] ?? '';
+                foreach ($sinRubro as $recuento) {
+                    if ($recuento['fecha'] === $maxFecha) {
+                        $seleccion[] = $recuento;
+                    }
+                }
+            } else {
+                foreach ($sinRubro as $recuento) {
+                    if ($recuento['fecha'] >= $fechaMinNombrado) {
+                        $seleccion[] = $recuento;
+                    }
+                }
+            }
+        }
+
+        return $seleccion;
     }
 
     /**

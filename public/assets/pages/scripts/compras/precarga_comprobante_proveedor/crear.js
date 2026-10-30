@@ -25,6 +25,10 @@
         actualizarTipoComprobante();
         filtrarConceptosPorTipo(false);
         sincronizarCotizacionPorMoneda(true);
+        recalcularTotalesDesdeConceptos();
+
+        $(document).on('input change', '#tbody-concepto-table .monto, #tbody-concepto-table .concepto_ivacompra_id', recalcularTotalesDesdeConceptos);
+        $('#form-general').on('submit', recalcularTotalesDesdeConceptos);
     });
     function leerCatalogoConceptos() {
         if (catalogoConceptos !== null) {
@@ -38,7 +42,8 @@
                 catalogoConceptos.push({
                     id: v,
                     nombre: $(this).text(),
-                    codigo: String($(this).attr('data-codigo-anita') || '')
+                    codigo: String($(this).attr('data-codigo-anita') || ''),
+                    tipo: String($(this).attr('data-tipoconcepto') || '')
                 });
             }
         });
@@ -56,7 +61,7 @@
                 return;
             }
             var texto = permitido ? c.nombre : c.nombre + ' (no es de ' + abrev + ')';
-            var $opt = $('<option>').val(c.id).attr('data-codigo-anita', c.codigo).text(texto);
+            var $opt = $('<option>').val(c.id).attr('data-codigo-anita', c.codigo).attr('data-tipoconcepto', c.tipo || '').text(texto);
             if (c.id === valor) {
                 $opt.prop('selected', true);
                 estaValor = true;
@@ -117,6 +122,7 @@
             var nuevo = equivalencias[actual] ? String(equivalencias[actual]) : actual;
             armarOpcionesConcepto($(this), nuevo, abrev);
         });
+        recalcularTotalesDesdeConceptos();
     }
 
 
@@ -197,5 +203,49 @@
     	$("#tbody-concepto-table .iiconcepto").each(function() {
     		$(this).val(item++);
     	});
+    	recalcularTotalesDesdeConceptos();
+    }
+
+    function parseMontoPrecarga(raw) {
+        var t = String(raw || '').replace(/\s/g, '').replace(/\u00a0/g, '');
+        if (t.indexOf(',') >= 0) {
+            t = t.replace(/\./g, '').replace(',', '.');
+        } else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
+            t = t.replace(/\./g, '');
+        }
+        var n = parseFloat(t);
+        return isNaN(n) ? 0 : n;
+    }
+
+    function fmtMontoPrecarga(n) {
+        return (Math.round(n * 100) / 100).toLocaleString('es-AR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function recalcularTotalesDesdeConceptos() {
+        var subtotal = 0;
+        var total = 0;
+        var hay = false;
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var $tr = $(this);
+            var conceptoId = parseInt($tr.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+            var monto = parseMontoPrecarga($tr.find('.monto').val());
+            if (conceptoId <= 0 || Math.abs(monto) < 0.0001) {
+                return;
+            }
+            hay = true;
+            total += monto;
+            var tipo = String($tr.find('.concepto_ivacompra_id option:selected').attr('data-tipoconcepto') || '').toUpperCase();
+            if (tipo === 'N' || tipo === 'G' || tipo === 'E') {
+                subtotal += monto;
+            }
+        });
+        if (!hay) {
+            return;
+        }
+        $('#subtotal').val(fmtMontoPrecarga(subtotal));
+        $('#total').val(fmtMontoPrecarga(total));
     }
 

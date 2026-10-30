@@ -138,6 +138,38 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
     }
 
     /**
+     * Subtotal (neto N/G/E) y total de la cabecera a partir de las líneas ya normalizadas.
+     * Null si no hay conceptos: la cabecera queda con lo que se tipeó.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return array{subtotal: float, total: float}|null
+     */
+    public static function totalesCabeceraDesdeLineas(array $lineas): ?array
+    {
+        if ($lineas === []) {
+            return null;
+        }
+
+        $conceptos = self::cargarConceptos($lineas);
+        $subtotal = 0.0;
+        $total = 0.0;
+        foreach ($lineas as $linea) {
+            $monto = round((float) ($linea['monto'] ?? 0), 2);
+            $total = round($total + $monto, 2);
+            $concepto = $conceptos->get((int) ($linea['concepto_ivacompra_id'] ?? 0));
+            $tipo = strtoupper((string) ($concepto->tipoconcepto ?? ''));
+            if (ComprobanteProveedorConceptoIvaTipos::esNeto($tipo)) {
+                $subtotal = round($subtotal + $monto, 2);
+            }
+        }
+
+        return [
+            'subtotal' => $subtotal,
+            'total' => $total,
+        ];
+    }
+
+    /**
      * Cuadre de la suma de conceptos contra el total del comprobante.
      *
      * No corta el circuito: el total es el árbitro que confirma la reparación de gravados,

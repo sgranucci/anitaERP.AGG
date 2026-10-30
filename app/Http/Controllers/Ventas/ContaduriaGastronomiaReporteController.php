@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Ventas;
 
 use App\Exports\Stock\ContaduriaInventarioTotalesExport;
 use App\Exports\Stock\ContaduriaInventarioWorkbookExport;
+use App\Exports\Ventas\GastronomiaVentasArticulosReporteExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Stock\ContaduriaInventarioReporteService;
 use App\Services\Ventas\ContaduriaGastronomiaReporteService;
+use App\Services\Ventas\GastronomiaVentasArticulosReporteService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +24,7 @@ class ContaduriaGastronomiaReporteController extends Controller
     public function __construct(
         private readonly ContaduriaGastronomiaReporteService $descuentos,
         private readonly ContaduriaInventarioReporteService $inventario,
+        private readonly GastronomiaVentasArticulosReporteService $ventasArticulos,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {
         $this->middleware('auth');
@@ -168,6 +171,48 @@ class ContaduriaGastronomiaReporteController extends Controller
         return response()
             ->download($zipPath, 'inventario_contaduria_'.$fecha.'.zip')
             ->deleteFileAfterSend(true);
+    }
+
+    public function descargarVentasArticulos(Request $request)
+    {
+        $this->assertAccesoMenu();
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        [$mes, $mesNum, $anio] = $this->resolverPeriodo($request, false);
+        $this->assertAccesoEmpresa($empresaId);
+
+        if ($empresaId <= 0 || $mesNum < 1 || $anio < 2000) {
+            return redirect()
+                ->route('gastronomia_reporte_contaduria', $this->parametrosReporte($request))
+                ->with('errores', ['Seleccione la empresa y el mes.']);
+        }
+
+        $desde = sprintf('%04d-%02d-01', $anio, $mesNum);
+        $hasta = Carbon::create($anio, $mesNum, 1)->endOfMonth()->format('Y-m-d');
+        $filtros = [
+            'empresa_id' => $empresaId,
+            'fecha_desde' => $desde,
+            'fecha_hasta' => $hasta,
+        ];
+        $resultado = $this->ventasArticulos->generar($filtros);
+        if (($resultado['filas'] ?? []) === []) {
+            return redirect()
+                ->route('gastronomia_reporte_contaduria', $this->parametrosReporte($request))
+                ->with('errores', ['No hay ventas de artículos en el mes para armar la lista de precios.']);
+        }
+
+        $empresaNombre = $this->etiquetaEmpresa($empresaId, $this->empresaRepository->allFiltrado());
+        $titulo = 'Ventas de artículos';
+        $subtitulo = 'Empresa: '.$empresaNombre
+            .' · '.$resultado['periodo_texto']
+            .' · P.Vta. lista '.$resultado['listaprecio_venta_codigo']
+            .' · Costo lista '.($resultado['listas_costo']['lista_actual'] ?? '');
+
+        return (new GastronomiaVentasArticulosReporteExport($this->ventasArticulos))
+            ->parametros($filtros, $titulo, $subtitulo, $empresaNombre)
+            ->download('ventas_articulos_contaduria_'.$mes.'.xlsx');
     }
 
     /**

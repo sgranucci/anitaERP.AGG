@@ -191,7 +191,7 @@
 			<label for="total" class="col-lg-4 col-form-label text-right pr-2">Total</label>
             <div class="col-lg-3">
 			    <input type="text" id="total" name="total" class="form-control" value="{{ old('total', number_format((float) ($data->total ?? 0), 2, ',', '.')) }}">
-                <small class="form-text text-muted">Opcional. Si no los conoc&eacute;s, dej&aacute;los en 0: se completan al cargar la factura.</small>
+                <small class="form-text text-muted">Si hay conceptos, al actualizar el subtotal y el total se toman de esos importes. Sin conceptos, pod&eacute;s dejarlos en 0.</small>
             </div>
 		</div>              
     </div>
@@ -208,8 +208,21 @@
             </tr>
         </thead>
         <tbody id="tbody-concepto-table">
+        @php
+            $idsConceptoOld = old('concepto_ivacompra_ids');
+            $montosOld = old('montos');
+        @endphp
         @if ($data->precarga_comprobante_proveedor_conceptos ?? '') 
             @foreach ($data->precarga_comprobante_proveedor_conceptos as $precarga_concepto)
+                @php
+                    $idxConcepto = $loop->index;
+                    $conceptoIdFila = is_array($idsConceptoOld)
+                        ? (int) ($idsConceptoOld[$idxConcepto] ?? 0)
+                        : (int) ($precarga_concepto->concepto_ivacompra_id ?? 0);
+                    $montoFila = is_array($montosOld) && array_key_exists($idxConcepto, $montosOld)
+                        ? $montosOld[$idxConcepto]
+                        : number_format((float) ($precarga_concepto->monto ?? 0), 2, ',', '.');
+                @endphp
                 <tr class="item-concepto">
                     <td>
                         <select name="concepto_ivacompra_ids[]" data-placeholder="Concepto de iva compra" class="form-control concepto_ivacompra_id" data-fouc>
@@ -217,13 +230,14 @@
                             @foreach ($concepto_ivacompra_query as $concepto)
                                 <option value="{{ $concepto->id }}"
                                     data-codigo-anita="{{ $concepto->codigo }}"
-                                    @if (old('concepto_ivacompra_ids', $precarga_concepto->concepto_ivacompra_id ?? '') == $concepto->id) selected @endif
+                                    data-tipoconcepto="{{ $concepto->tipoconcepto }}"
+                                    @if ($conceptoIdFila === (int) $concepto->id) selected @endif
                                     >{{ $concepto->nombre }}</option>
                             @endforeach
                         </select>
                     </td>
                     <td>
-                        <input type="number" name="montos[]" class="form-control monto" value="{{ $precarga_concepto->monto }}" />
+                        <input type="text" name="montos[]" class="form-control monto" inputmode="decimal" value="{{ $montoFila }}" />
                     </td>                    
                     <td>
                         <button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_concepto tooltipsC">

@@ -37,9 +37,24 @@ final class ContaduriaInventarioRubroSupport
      */
     public static function claveDesdeRecuento(string $comentario, array $fila): string
     {
+        $rubro = self::rubroDelComentario($comentario);
+        if ($rubro === null || $rubro === 'limpieza_descartables') {
+            return self::clave($fila);
+        }
+
+        return $rubro;
+    }
+
+    /**
+     * Rubro que el comentario declara para todo el recuento.
+     * Limpieza y descartables contados juntos quedan en un mismo grupo
+     * y después se abren por artículo. Sin palabra de rubro, null.
+     */
+    public static function rubroDelComentario(string $comentario): ?string
+    {
         $texto = self::normalizar($comentario);
         if ($texto === '') {
-            return self::clave($fila);
+            return null;
         }
         if (str_contains($texto, 'CIGARRILLO')) {
             return 'cigarrillos';
@@ -48,7 +63,7 @@ final class ContaduriaInventarioRubroSupport
             return 'bebidas';
         }
         if (str_contains($texto, 'LIMPIEZA') && str_contains($texto, 'DESCARTABLE')) {
-            return self::clave($fila);
+            return 'limpieza_descartables';
         }
         if (str_contains($texto, 'ALMACEN') || str_contains($texto, 'ALIMENTO')) {
             return 'alimento';
@@ -60,7 +75,12 @@ final class ContaduriaInventarioRubroSupport
             return 'descartables';
         }
 
-        return self::clave($fila);
+        return null;
+    }
+
+    public static function textoMencionaCigarrillos(string $texto): bool
+    {
+        return str_contains(self::normalizar($texto), 'CIGARRILLO');
     }
 
     /**
