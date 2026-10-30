@@ -845,6 +845,7 @@
 				}
 				$('#condicionventa_id').val(condicionventa_id);
 				$('#descuentopie').val(descuento);
+				espejarDescuentoPieDesde('arriba');
 				descuentoCliente = $('#descuentopie').val();
 				if (facturaTieneRenglonCalculable()) {
 					calculaFactura();
@@ -1557,16 +1558,55 @@
 		}, 350);
 	}
 
+	function espejarDescuentoPieDesde(origen)
+	{
+		var $arriba = $('#descuentopie');
+		var $abajo = $('#descuentopie_abajo');
+		if (!$arriba.length || !$abajo.length) {
+			return;
+		}
+		if (origen === 'abajo') {
+			if ($arriba.val() !== $abajo.val()) {
+				$arriba.val($abajo.val());
+			}
+			return;
+		}
+		if ($abajo.val() !== $arriba.val()) {
+			$abajo.val($arriba.val());
+		}
+	}
+
 	function activaEventosDescuentoCabeceraFactura()
 	{
 		$('#descuentopie, #descuentolinea, #descuentoimportepie')
 			.off('input.facturaDto change.facturaDto keydown.facturaDto')
 			.on('input.facturaDto change.facturaDto', function () {
+				if (this.id === 'descuentopie') {
+					espejarDescuentoPieDesde('arriba');
+				}
 				programarCalculaFacturaPorDescuento();
 			})
 			.on('keydown.facturaDto', function (e) {
 				if (e.key === 'Enter' || e.which === 13) {
 					e.preventDefault();
+					if (this.id === 'descuentopie') {
+						espejarDescuentoPieDesde('arriba');
+					}
+					clearTimeout(calculaFacturaDescuentoTimer);
+					calculaFactura();
+				}
+			});
+
+		$('#descuentopie_abajo')
+			.off('input.facturaDto change.facturaDto keydown.facturaDto')
+			.on('input.facturaDto change.facturaDto', function () {
+				espejarDescuentoPieDesde('abajo');
+				programarCalculaFacturaPorDescuento();
+			})
+			.on('keydown.facturaDto', function (e) {
+				if (e.key === 'Enter' || e.which === 13) {
+					e.preventDefault();
+					espejarDescuentoPieDesde('abajo');
 					clearTimeout(calculaFacturaDescuentoTimer);
 					calculaFactura();
 				}

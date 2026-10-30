@@ -1023,6 +1023,15 @@
 						@endif
 					</div>
 				@endif
+				<div class="form-group mb-2 d-flex align-items-center justify-content-end">
+					<label for="descuentopie_abajo" class="mb-0 mr-2 font-weight-bold">Dto. pie</label>
+					<input type="number" id="descuentopie_abajo" class="form-control form-control-sm text-right"
+						style="max-width:6rem;" step="0.01" inputmode="decimal"
+						value="{{ $data->descuento ?? '' }}"
+						title="Mismo descuento de pie de arriba. Se aplica al comprobante."
+						@if (! empty($flGeneraNotaDeDebito)) readonly @endif>
+					<span class="ml-1">%</span>
+				</div>
 				<table class="table table-sm table-bordered" id="total-factura-table">
 					<thead style="background:#85C1E9;color:#17202A;">
 						<tr>
