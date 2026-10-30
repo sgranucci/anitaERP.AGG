@@ -134,7 +134,7 @@ class BuscadorGlobalRegistrosSupport
     private function proveedores(string $q): array
     {
         $query = Proveedor::query()->select(['proveedor.id', 'proveedor.codigo', 'proveedor.nombre', 'proveedor.fantasia']);
-        $query->whereIn('proveedor.estado', ['0', '3']);
+        $query->whereIn('proveedor.estado', Proveedor::$estadosHabilitadosOperacion);
         if (ProveedorListadoFiltros::filtroEmpresaActivo()) {
             $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor.empresa_id', true);
         }
@@ -517,7 +517,7 @@ class BuscadorGlobalRegistrosSupport
     private function consultaProveedor(): Builder
     {
         $query = Proveedor::query()->select(['proveedor.id', 'proveedor.codigo', 'proveedor.nombre']);
-        $query->whereIn('proveedor.estado', ['0', '3']);
+        $query->whereIn('proveedor.estado', Proveedor::$estadosHabilitadosOperacion);
         if (ProveedorListadoFiltros::filtroEmpresaActivo()) {
             $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor.empresa_id', true);
         }
