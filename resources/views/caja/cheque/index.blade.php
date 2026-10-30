@@ -188,6 +188,24 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                     @endif
                 </div>
             </div>
+            @php
+                $totalesListado = $totalesListado ?? ['cantidad' => 0, 'por_moneda' => []];
+                $cantTotalListado = (int) ($totalesListado['cantidad'] ?? 0);
+            @endphp
+            <div class="px-3 py-1 border-bottom bg-white d-flex flex-wrap align-items-baseline"
+                 style="gap:.25rem .6rem;font-size:.85rem;line-height:1.3;"
+                 title="Total del filtro completo, no solo esta página">
+                <span class="text-muted">{{ $etiquetaTotalListado ?? 'Listado' }}</span>
+                <strong>{{ number_format($cantTotalListado, 0, ',', '.') }}</strong>
+                <span class="text-muted">{{ $cantTotalListado === 1 ? 'cheque' : 'cheques' }}</span>
+                @forelse ($totalesListado['por_moneda'] as $totalMoneda)
+                    <span class="text-nowrap">
+                        <strong>{{ $totalMoneda['moneda'] }} {{ number_format((float) $totalMoneda['monto'], 2, ',', '.') }}</strong>
+                    </span>
+                @empty
+                    <span class="text-nowrap"><strong>$ 0,00</strong></span>
+                @endforelse
+            </div>
             @if (! ($workbenchListo ?? false))
                 <div class="alert alert-warning lw-aviso-migracion mb-0">
                     <strong>Migración pendiente.</strong>

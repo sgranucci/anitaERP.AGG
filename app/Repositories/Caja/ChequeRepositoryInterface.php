@@ -19,6 +19,14 @@ interface ChequeRepositoryInterface extends RepositoryInterface
      */
     public function cortesCheque(array $filtros): array;
 
+    /**
+     * Cantidad y suma de monto del filtro completo, partido por moneda.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array{cantidad: int, por_moneda: list<array{moneda: string, cantidad: int, monto: float}>}
+     */
+    public function totalesPorMoneda(array $filtros): array;
+
     public function sincronizarConAnita();
 
     /**

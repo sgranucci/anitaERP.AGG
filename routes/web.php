@@ -3090,6 +3090,8 @@ Route::post('caja/cheque', 'Caja\ChequeController@guardar')->name('guardar_chequ
 Route::post('caja/cheque/consulta-cartera', 'Caja\ChequeController@consultaCartera')->name('consulta_cheque_cartera');
 Route::post('caja/cheque/resolver-cartera', 'Caja\ChequeController@resolverCartera')->name('resolver_cheque_cartera');
 Route::post('caja/cheque/depositar-masivo', 'Caja\ChequeController@depositarMasivo')->name('depositar_masivo_cheque');
+Route::post('caja/cheque/deposito/anular', 'Caja\ChequeController@anularDepositoBoleta')->name('anular_deposito_cheque');
+Route::post('caja/cheque/deposito/revertir', 'Caja\ChequeController@revertirDepositoBoleta')->name('revertir_deposito_cheque');
 Route::get('caja/cheque/comprobante-deposito', 'Caja\ChequeController@comprobanteDeposito')->name('comprobante_deposito_cheque');
 Route::get('caja/cheque/{id}/aviso-rechazo', 'Caja\ChequeController@avisoRechazo')->name('aviso_rechazo_cheque');
 Route::post('caja/cheque/acreditar-masivo', 'Caja\ChequeController@acreditarMasivo')->name('acreditar_masivo_cheque');

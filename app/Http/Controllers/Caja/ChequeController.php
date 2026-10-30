@@ -20,6 +20,7 @@ use App\Repositories\Caja\CuentacajaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Caja\ChequeCaucionService;
+use App\Services\Caja\ChequeDepositoAnularService;
 use App\Services\Caja\ChequeDepositoService;
 use App\Services\Caja\ChequeEcheqService;
 use App\Services\Caja\ChequeIngresoMasivoService;
@@ -65,6 +66,7 @@ class ChequeController extends Controller
     private $monedaRepository;
     private ChequeRechazadoNotaDebitoService $chequeRechazadoNdService;
     private ChequeDepositoService $chequeDepositoService;
+    private ChequeDepositoAnularService $chequeDepositoAnularService;
     private ChequeIngresoMasivoService $chequeIngresoMasivoService;
     private ChequeCaucionService $chequeCaucionService;
     private ChequeEcheqService $chequeEcheqService;
@@ -76,6 +78,7 @@ class ChequeController extends Controller
                                 MonedaRepositoryInterface $monedarepository,
                                 ChequeRechazadoNotaDebitoService $chequeRechazadoNdService,
                                 ChequeDepositoService $chequeDepositoService,
+                                ChequeDepositoAnularService $chequeDepositoAnularService,
                                 ChequeIngresoMasivoService $chequeIngresoMasivoService,
                                 ChequeCaucionService $chequeCaucionService,
                                 ChequeEcheqService $chequeEcheqService)
@@ -87,6 +90,7 @@ class ChequeController extends Controller
         $this->monedaRepository = $monedarepository;
         $this->chequeRechazadoNdService = $chequeRechazadoNdService;
         $this->chequeDepositoService = $chequeDepositoService;
+        $this->chequeDepositoAnularService = $chequeDepositoAnularService;
         $this->chequeIngresoMasivoService = $chequeIngresoMasivoService;
         $this->chequeCaucionService = $chequeCaucionService;
         $this->chequeEcheqService = $chequeEcheqService;
@@ -207,6 +211,8 @@ class ChequeController extends Controller
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
             'cortes' => $cortes,
             'graficoCheque' => $this->graficoMontoPorEstado($filtros),
+            'totalesListado' => $this->repository->totalesPorMoneda($filtros),
+            'etiquetaTotalListado' => $this->etiquetaTotalListado($filtros),
             'graficoSeries' => ($graficoSeries = ListadoVisualSupport::seriesDeConsulta(
                 $filtros,
                 ChequeListadoFiltros::camposOrdenables(),
@@ -215,6 +221,33 @@ class ChequeController extends Controller
             )),
             'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function etiquetaTotalListado(array $filtros): string
+    {
+        if (! empty($filtros['para_depositar'])) {
+            return 'Para depositar';
+        }
+        if (! empty($filtros['cartera'])) {
+            return 'Cartera';
+        }
+        if (($filtros['origen'] ?? '') === 'E') {
+            return 'Emitidos';
+        }
+        if (($filtros['origen'] ?? '') === 'R' && ($filtros['estado'] ?? '') === '') {
+            return 'Recibidos';
+        }
+        if (($filtros['estado'] ?? '') === 'R') {
+            return 'Rechazados';
+        }
+        if (ChequeListadoFiltros::tieneCriteriosAplicados($filtros) || ChequeListadoFiltros::tieneCriteriosTexto($filtros)) {
+            return 'Filtro';
+        }
+
+        return 'Listado';
     }
 
     /**
@@ -627,6 +660,68 @@ class ChequeController extends Controller
         } catch (Exception $e) {
             return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Anula la boleta: borra el asiento del depósito y devuelve los cheques a cartera.
+     */
+    public function anularDepositoBoleta(Request $request)
+    {
+        can('anular-deposito-cheque');
+
+        return $this->responderAnulacionDeposito($request, ChequeDepositoAnularService::MODO_BORRAR);
+    }
+
+    /**
+     * Revierte la boleta: graba el asiento compensatorio y devuelve los cheques a cartera.
+     */
+    public function revertirDepositoBoleta(Request $request)
+    {
+        can('revertir-deposito-cheque');
+
+        return $this->responderAnulacionDeposito($request, ChequeDepositoAnularService::MODO_REVERTIR);
+    }
+
+    private function responderAnulacionDeposito(Request $request, string $modo)
+    {
+        $ids = $request->input('cheque_ids', []);
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+
+        try {
+            $resultado = $this->chequeDepositoAnularService->anularBoleta($ids, $modo);
+        } catch (InvalidArgumentException $e) {
+            return redirect()->back()->with('mensaje_error', $e->getMessage());
+        } catch (Exception $e) {
+            return redirect()->back()->with('mensaje_error', $e->getMessage());
+        }
+
+        $n = (int) $resultado['cheques'];
+        $asientos = (int) $resultado['asientos'];
+        $texto = ($modo === ChequeDepositoAnularService::MODO_REVERTIR ? 'Boleta revertida. ' : 'Boleta anulada. ')
+            .$n.' '.($n === 1 ? 'cheque volvió' : 'cheques volvieron').' a cartera';
+        if ($modo === ChequeDepositoAnularService::MODO_REVERTIR) {
+            $texto .= match ($asientos) {
+                0 => '.',
+                1 => ' y se grabó el asiento compensatorio.',
+                default => ' y se grabaron '.$asientos.' asientos compensatorios.',
+            };
+        } else {
+            $texto .= match ($asientos) {
+                0 => '.',
+                1 => ' y se borró el asiento del depósito.',
+                default => ' y se borraron '.$asientos.' asientos del depósito.',
+            };
+        }
+
+        $redirect = redirect()->back()->with('mensaje', $texto);
+        $fallos = $resultado['anita_fallos'] ?? [];
+        if ($fallos !== []) {
+            $redirect->with('mensaje_aviso', $fallos);
+        }
+
+        return $redirect;
     }
 
     /**

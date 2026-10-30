@@ -69,4 +69,47 @@ final class ChequeTerceroDepositoAnitaSupport
             return false;
         }
     }
+
+    /**
+     * Deja el CHT otra vez en cartera en Anita (sin fecha, cuenta ni boleta de depósito).
+     * Sin número interno no hay fila que tocar: se considera hecho.
+     */
+    public static function desmarcarDeposito(Cheque $cheque): bool
+    {
+        $nroInterno = (int) ($cheque->nro_interno_anita ?? 0);
+        if ($nroInterno <= 0) {
+            return true;
+        }
+
+        $set = "
+            cter_fecha_dep = '0',
+            cter_cuenta = '0',
+            cter_nro_boleta = '0',
+            cter_estado = ' '
+        ";
+
+        $data = [
+            'acc' => 'update',
+            'tabla' => 'ctermae',
+            'sistema' => 'che_ban',
+            'valores' => $set,
+            'whereArmado' => ' WHERE cter_nro_interno = '.$nroInterno.' ',
+        ];
+
+        try {
+            $api = new ApiAnita();
+            $api->apiCallEscritura($data);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('Cheque CHT anular depósito Anita falló', [
+                'nro_interno' => $nroInterno,
+                'cheque_id' => $cheque->id,
+                'ferli' => EntornoEmpresaSupport::esFerli(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
 }

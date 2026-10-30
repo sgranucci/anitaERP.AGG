@@ -18,6 +18,7 @@ use App\Support\Caja\ChequePropioInstrumentoSupport;
 use App\Support\Caja\ChequeTerceroCtermaeAnitaMapper;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
 use App\Repositories\Caja\BancoRepositoryInterface;
@@ -175,6 +176,38 @@ class ChequeRepository implements ChequeRepositoryInterface
             $etiquetas,
             ChequeListadoColumnas::MEDIDAS
         );
+    }
+
+    public function totalesPorMoneda(array $filtros): array
+    {
+        $query = $this->queryChequeListado($filtros)->reorder()->setEagerLoads([]);
+        $query->getQuery()->columns = null;
+
+        $filas = $query
+            ->select('moneda.abreviatura as moneda_abrev')
+            ->selectRaw('COUNT(cheque.id) as cantidad')
+            ->selectRaw(SqlDialectSupport::coalesce('SUM(cheque.monto)', '0').' as monto')
+            ->groupBy('moneda.abreviatura')
+            ->orderBy('moneda.abreviatura')
+            ->get();
+
+        $porMoneda = [];
+        $cantidad = 0;
+        foreach ($filas as $fila) {
+            $cant = (int) $fila->cantidad;
+            $cantidad += $cant;
+            $moneda = trim((string) ($fila->moneda_abrev ?? ''));
+            $porMoneda[] = [
+                'moneda' => $moneda !== '' ? $moneda : '$',
+                'cantidad' => $cant,
+                'monto' => round((float) $fila->monto, 2),
+            ];
+        }
+
+        return [
+            'cantidad' => $cantidad,
+            'por_moneda' => $porMoneda,
+        ];
     }
 
     /**

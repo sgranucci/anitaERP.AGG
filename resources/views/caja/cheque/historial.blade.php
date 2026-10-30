@@ -12,6 +12,8 @@
 @php
     $filtrosQuery = $filtrosQuery ?? [];
     $puedeEditarCheque = can('editar-cheque', false);
+    $puedeAnularDeposito = can('anular-deposito-cheque', false);
+    $puedeRevertirDeposito = can('revertir-deposito-cheque', false);
     $puedeEditarCliente = can('editar-clientes', false) || can('editar-cliente', false);
     $cuentaFiltroId = (int) ($filtros['cuentacaja_id'] ?? 0);
 @endphp
@@ -138,6 +140,19 @@
                     'subtitulo' => 'Generando archivo. Pulse Esc para cerrar este aviso.',
                 ])
 
+                @if ($puedeAnularDeposito || $puedeRevertirDeposito)
+                    <p class="small text-muted mb-2">
+                        En tránsito:
+                        @if ($puedeAnularDeposito)
+                            <strong>Anular</strong> borra el asiento del depósito.
+                        @endif
+                        @if ($puedeRevertirDeposito)
+                            <strong>Revertir</strong> graba el asiento compensatorio.
+                        @endif
+                        En los dos casos los cheques vuelven a cartera. El ícono de la fila aplica a toda la boleta; en el detalle, a un solo cheque.
+                    </p>
+                @endif
+
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered table-striped" id="tabla-paginada">
                         <thead style="background:#85C1E9;color:#17202A;">
@@ -166,6 +181,7 @@
                                     $monedasTxt = collect($g['totales_moneda'] ?? [])->map(function ($tm) {
                                         return $tm['moneda'].' '.number_format((float) $tm['monto'], 2, ',', '.');
                                     })->implode(' · ');
+                                    $nrosBoleta = collect($g['cheques'] ?? [])->pluck('numerocheque')->filter()->implode(', ');
                                 @endphp
                                 <tr>
                                     <td class="text-center">
@@ -204,6 +220,32 @@
                                         </div>
                                     </td>
                                     <td class="text-nowrap text-center">
+                                        @if ($g['estado'] === 'transito' && $puedeAnularDeposito)
+                                            <form method="post" action="{{ route('anular_deposito_cheque') }}" class="d-inline"
+                                                  data-confirm="Anular la boleta del {{ $g['fecha_deposito_dmy'] }}: {{ $nrosBoleta }}. Borra el asiento y los devuelve a cartera."
+                                                  onsubmit="return confirm(this.getAttribute('data-confirm'));">
+                                                @csrf
+                                                @foreach ($g['cheque_ids'] as $chequeIdBoleta)
+                                                    <input type="hidden" name="cheque_ids[]" value="{{ $chequeIdBoleta }}">
+                                                @endforeach
+                                                <button type="submit" class="btn-accion-tabla tooltipsC" title="Anular boleta (borra el asiento)">
+                                                    <i class="fa fa-times-circle text-danger"></i>
+                                                </button>
+                                            </form>
+                                        @endif
+                                        @if ($g['estado'] === 'transito' && $puedeRevertirDeposito)
+                                            <form method="post" action="{{ route('revertir_deposito_cheque') }}" class="d-inline"
+                                                  data-confirm="Revertir la boleta del {{ $g['fecha_deposito_dmy'] }}: {{ $nrosBoleta }}. Graba el asiento compensatorio y los devuelve a cartera."
+                                                  onsubmit="return confirm(this.getAttribute('data-confirm'));">
+                                                @csrf
+                                                @foreach ($g['cheque_ids'] as $chequeIdBoleta)
+                                                    <input type="hidden" name="cheque_ids[]" value="{{ $chequeIdBoleta }}">
+                                                @endforeach
+                                                <button type="submit" class="btn-accion-tabla tooltipsC" title="Revertir boleta (asiento compensatorio)">
+                                                    <i class="fa fa-undo text-warning"></i>
+                                                </button>
+                                            </form>
+                                        @endif
                                         @if (! empty($g['url_comprobante_pdf']))
                                             <a href="{{ $g['url_comprobante_pdf'] }}"
                                                class="btn-accion-tabla tooltipsC"
@@ -232,6 +274,9 @@
                                                     <th>Cliente</th>
                                                     <th>Acreditación</th>
                                                     <th>Estado</th>
+                                                    @if ($puedeAnularDeposito || $puedeRevertirDeposito)
+                                                        <th class="text-center">Acciones</th>
+                                                    @endif
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -261,6 +306,32 @@
                                                                 {{ $ch['estado_label'] }}
                                                             </span>
                                                         </td>
+                                                        @if ($puedeAnularDeposito || $puedeRevertirDeposito)
+                                                            <td class="text-nowrap text-center">
+                                                                @if ($ch['estado'] === 'transito' && $puedeAnularDeposito)
+                                                                    <form method="post" action="{{ route('anular_deposito_cheque') }}" class="d-inline"
+                                                                          data-confirm="Anular el cheque {{ $ch['numerocheque'] }}. Borra su asiento y lo devuelve a cartera."
+                                                                          onsubmit="return confirm(this.getAttribute('data-confirm'));">
+                                                                        @csrf
+                                                                        <input type="hidden" name="cheque_ids[]" value="{{ $ch['id'] }}">
+                                                                        <button type="submit" class="btn-accion-tabla tooltipsC" title="Anular este cheque (borra el asiento)">
+                                                                            <i class="fa fa-times-circle text-danger"></i>
+                                                                        </button>
+                                                                    </form>
+                                                                @endif
+                                                                @if ($ch['estado'] === 'transito' && $puedeRevertirDeposito)
+                                                                    <form method="post" action="{{ route('revertir_deposito_cheque') }}" class="d-inline"
+                                                                          data-confirm="Revertir el cheque {{ $ch['numerocheque'] }}. Graba el asiento compensatorio y lo devuelve a cartera."
+                                                                          onsubmit="return confirm(this.getAttribute('data-confirm'));">
+                                                                        @csrf
+                                                                        <input type="hidden" name="cheque_ids[]" value="{{ $ch['id'] }}">
+                                                                        <button type="submit" class="btn-accion-tabla tooltipsC" title="Revertir este cheque (asiento compensatorio)">
+                                                                            <i class="fa fa-undo text-warning"></i>
+                                                                        </button>
+                                                                    </form>
+                                                                @endif
+                                                            </td>
+                                                        @endif
                                                     </tr>
                                                 @endforeach
                                             </tbody>
