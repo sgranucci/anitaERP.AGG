@@ -55,6 +55,11 @@ class ImpuestoService extends FacturacionService
 
 	private bool $impuestoIva21PorDefectoResuelto = false;
 
+	/** Exento (alícuota 0) para clientes que no llevan IVA. */
+	private ?Impuesto $impuestoExentoCache = null;
+
+	private bool $impuestoExentoResuelto = false;
+
 	/** Cache local de fórmulas resueltas (id => Formula_Articulo con hijos). */
 	private array $formulaImpuestoInternoCache = [];
 
@@ -330,9 +335,18 @@ class ImpuestoService extends FacturacionService
 						$conceptoNeto = ($valorTasaImpuesto == 0. ? 'Exento' : 'Gravado al '.$valorTasaImpuesto.'%');
 					}
 
-					if (($item['tratamiento_fiscal'] ?? '') === 'nogravado') {
-						$valorTasaImpuesto = 0;
-						$conceptoNeto = 'No Gravado';
+					[$valorTasaImpuesto, $conceptoNeto, $impuesto_id, $impuesto_codigo, $impuesto_codigoarca, $forzarExentoItem]
+						= $this->netoSegunCondicionIva(
+							$flConIva,
+							(string) ($item['tratamiento_fiscal'] ?? ''),
+							(float) $valorTasaImpuesto,
+							(string) $conceptoNeto,
+							$impuesto_id,
+							$impuesto_codigo,
+							$impuesto_codigoarca,
+						);
+					if ($forzarExentoItem) {
+						$dataItem[$off - 1]['impuesto_id'] = $impuesto_id;
 					}
 
 					$totalNeto = VentaImporteDosDecimalesSupport::redondear($neto['totalConDescuento']);
@@ -682,25 +696,39 @@ class ImpuestoService extends FacturacionService
 			$descuentoFinal += $neto['totalDescuento'];
 			$porcDescuento = $neto['porcentajeDescuento'];
 			$impuesto = $this->impuestoDeItem($item);
-			$valorTasaImpuesto = $impuesto->valor;
+			$valorTasaImpuesto = (float) $impuesto->valor;
+			$conceptoNeto = $valorTasaImpuesto == 0. ? 'Exento' : 'Gravado al '.$valorTasaImpuesto.'%';
+			$impuestoCodigo = AnitaVengravCodigoTasaSupport::normalizarCodigoMaestro(
+				$impuesto->codigo,
+				$impuesto->codigoarca,
+				$valorTasaImpuesto,
+			);
+			[$valorTasaImpuesto, $conceptoNeto, $impuestoIdNeto, $impuestoCodigo, $impuestoCodigoarca] = array_slice(
+				$this->netoSegunCondicionIva(
+					$flConIva,
+					(string) ($item['tratamiento_fiscal'] ?? ''),
+					$valorTasaImpuesto,
+					$conceptoNeto,
+					$impuesto->id,
+					$impuestoCodigo,
+					$impuesto->codigoarca,
+				),
+				0,
+				5,
+			);
 			$totalNetoLinea = round((float) $neto['totalConDescuento'], 2);
 			$dataItem[$idx]['totalcondescuento'] = $totalNetoLinea;
 			if (! empty($neto['impuestoInternoMonto'])) {
 				$totalImpuestoInterno += (float) $neto['impuestoInternoMonto'];
 				$dataItem[$idx]['impuesto_interno_monto'] = (float) $neto['impuestoInternoMonto'];
 			}
-			if (($item['tratamiento_fiscal'] ?? '') === 'nogravado') {
-				$valorTasaImpuesto = 0;
-			}
 			self::agregaItemTotales(
-				($item['tratamiento_fiscal'] ?? '') === 'nogravado'
-					? 'No Gravado'
-					: ($valorTasaImpuesto == 0. ? 'Exento' : 'Gravado al '.$valorTasaImpuesto.'%'),
+				$conceptoNeto,
 				$valorTasaImpuesto,
 				$totalNetoLinea,
-				$impuesto->id,
-				$impuesto->codigo,
-				$impuesto->codigoarca,
+				$impuestoIdNeto,
+				$impuestoCodigo,
+				$impuestoCodigoarca,
 				$netos
 			);
 
@@ -906,6 +934,42 @@ class ImpuestoService extends FacturacionService
 	}
 
 	/**
+	 * Cliente con condicioniva.coniva = N (exento, exportación): el neto no queda
+	 * gravado aunque el artículo tenga alícuota. El libro IVA y Anita toman Exento.
+	 * No gravado se conserva.
+	 *
+	 * @return array{0: float, 1: string, 2: mixed, 3: mixed, 4: mixed, 5: bool}
+	 */
+	private function netoSegunCondicionIva(
+		bool $flConIva,
+		string $tratamientoFiscal,
+		float $valorTasaImpuesto,
+		string $conceptoNeto,
+		mixed $impuesto_id,
+		mixed $impuesto_codigo,
+		mixed $impuesto_codigoarca,
+	): array {
+		if ($tratamientoFiscal === 'nogravado') {
+			return [0.0, 'No Gravado', $impuesto_id, $impuesto_codigo, $impuesto_codigoarca, false];
+		}
+
+		if ($flConIva || $valorTasaImpuesto == 0.) {
+			return [$valorTasaImpuesto, $conceptoNeto, $impuesto_id, $impuesto_codigo, $impuesto_codigoarca, false];
+		}
+
+		$exento = $this->impuestoExento();
+
+		return [
+			0.0,
+			'Exento',
+			$exento->id,
+			AnitaVengravCodigoTasaSupport::normalizarCodigoMaestro($exento->codigo, $exento->codigoarca, 0.0),
+			$exento->codigoarca,
+			true,
+		];
+	}
+
+	/**
 	 * Impuesto del renglón. Si el maestro no tiene uno (o el id no existe), IVA 21 %.
 	 *
 	 * @param  array<string, mixed>  $item
@@ -944,6 +1008,32 @@ class ImpuestoService extends FacturacionService
 		}
 
 		return $this->impuestoIva21PorDefecto;
+	}
+
+	private function impuestoExento(): Impuesto
+	{
+		if (! $this->impuestoExentoResuelto) {
+			$this->impuestoExentoResuelto = true;
+			$this->impuestoExentoCache = Impuesto::query()
+				->soloNacionales()
+				->where('valor', 0)
+				->where('nombre', 'Exento')
+				->orderBy('id')
+				->first();
+			if (! $this->impuestoExentoCache instanceof Impuesto) {
+				$this->impuestoExentoCache = Impuesto::query()
+					->soloNacionales()
+					->where('valor', 0)
+					->orderBy('id')
+					->first();
+			}
+		}
+
+		if (! $this->impuestoExentoCache instanceof Impuesto) {
+			throw new \InvalidArgumentException('No hay un impuesto Exento (alícuota 0) cargado en el maestro de impuestos.');
+		}
+
+		return $this->impuestoExentoCache;
 	}
 
 	/**
