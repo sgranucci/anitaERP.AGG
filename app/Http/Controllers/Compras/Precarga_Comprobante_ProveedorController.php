@@ -20,6 +20,7 @@ use App\Services\Compras\PrecargaComprobanteMarcarCargadaAnitaService;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
 use App\Support\Compras\PrecargaRecepcionErrorRegistrar;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
+use App\Support\Compras\ComprobanteProveedorDuplicadoException;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\OrdencompraLegajoFacturaArcaSupport;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
@@ -454,6 +455,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
                 $this->guardarConceptosPrecarga((int) $precarga->id, $lineas);
             });
+        } catch (ComprobanteProveedorDuplicadoException $e) {
+            return $this->redirectFacturaYaCargada($e);
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
@@ -521,6 +524,22 @@ class Precarga_Comprobante_ProveedorController extends Controller
             'retornoListadoQuery',
             'bloquearTiposProrrateados'
         ));
+    }
+
+    private function redirectFacturaYaCargada(ComprobanteProveedorDuplicadoException $e)
+    {
+        $id = $e->comprobanteId();
+        $titulo = $e->titulo() !== '' ? $e->titulo() : 'Esta factura ya está cargada';
+
+        return redirect()
+            ->back()
+            ->withInput()
+            ->with('errores_titulo', $titulo)
+            ->with('errores', [$e->getMessage()])
+            ->with('errores_enlace', [
+                'url' => route('editar_comprobante_proveedor', ['id' => $id]),
+                'texto' => 'Abrir comprobante #'.$id,
+            ]);
     }
 
     private function motivoTipoProrrateado(Request $request): ?string
@@ -633,6 +652,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
                 $this->guardarConceptosPrecarga((int) $id, $lineas);
             });
+        } catch (ComprobanteProveedorDuplicadoException $e) {
+            return $this->redirectFacturaYaCargada($e);
         } catch (\Throwable $e) {
             return redirect()
                 ->back()

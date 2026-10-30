@@ -43,13 +43,26 @@
     </div>
 @endif
 @if (session("errores"))
+    @php
+        $enlaceError = session('errores_enlace');
+        $urlEnlaceError = is_array($enlaceError) ? trim((string) ($enlaceError['url'] ?? '')) : '';
+        $textoEnlaceError = is_array($enlaceError) ? trim((string) ($enlaceError['texto'] ?? '')) : '';
+        $tituloError = trim((string) session('errores_titulo', ''));
+    @endphp
     <div class="alert alert-danger">
-        <h4 class="mb-2"><i class="icon fa fa-ban"></i> No se pudo completar la operación</h4>
-        <ul class="mb-0">
+        <h4 class="mb-2"><i class="icon fa fa-ban"></i> {{ $tituloError !== '' ? $tituloError : 'No se pudo completar la operación' }}</h4>
+        <ul class="mb-2">
             @foreach (\Illuminate\Support\Arr::wrap(session("errores")) as $error)
                 <li>{{ $error }}</li>
             @endforeach
         </ul>
+        @if ($urlEnlaceError !== '' && $textoEnlaceError !== '')
+            <p class="mb-0">
+                <a href="{{ $urlEnlaceError }}" class="btn btn-warning btn-sm" target="_blank" rel="noopener">
+                    <i class="fa fa-edit"></i> {{ $textoEnlaceError }}
+                </a>
+            </p>
+        @endif
     </div>
 @endif
 @if (session("advertencias"))

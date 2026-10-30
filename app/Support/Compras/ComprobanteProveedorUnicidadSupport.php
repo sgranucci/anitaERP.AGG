@@ -712,29 +712,22 @@ final class ComprobanteProveedorUnicidadSupport
     ): string {
         $existente->loadMissing('tipotransaccion_compras', 'proveedores');
 
-        $afip = $codigoAfip ?? self::normalizarCodigoAfip((string) ($existente->tipotransaccion_compras?->codigoafip ?? ''));
-        $afipLabel = $afip !== '' ? str_pad($afip, 2, '0', STR_PAD_LEFT) : '??';
-        $comprobante = trim(sprintf(
-            'AFIP %s %s %s-%s',
-            $afipLabel,
-            strtoupper((string) $existente->letra),
+        $factura = self::rotuloFactura(
+            (string) ($existente->tipotransaccion_compras?->abreviatura ?? 'FAC'),
+            (string) $existente->letra,
             $existente->sucursal,
             $existente->numerocomprobante,
-        ));
-
-        $cuit = self::normalizarCuitDigitos($existente->identificacion_proveedor_cuit ?? $existente->proveedores?->nroinscripcion);
-        $cuitFmt = $cuit !== '' ? self::formatearCuit($cuit) : 'sin CUIT';
-        $oc = trim((string) ($existente->numeroordencompra ?? ''));
-        $detalleOc = $oc !== '' ? ', OC '.$oc : '';
-        $origen = PrecargaComprobanteOrigenEntrada::etiqueta($existente->origen_entrada ?? null);
+        );
+        $deQuien = self::rotuloProveedorCuit(
+            trim((string) ($existente->proveedores?->nombre ?? '')),
+            self::normalizarCuitDigitos($existente->identificacion_proveedor_cuit ?? $existente->proveedores?->nroinscripcion),
+        );
 
         return sprintf(
-            'Factura duplicada: ya existe una precarga %s para el CUIT %s (id %d, origen %s%s). No se puede cargar dos veces desde distintos orígenes.',
-            $comprobante,
-            $cuitFmt,
+            'La factura %s%s ya está en la precarga #%d. No la cargues de nuevo: abrí esa precarga.',
+            $factura,
+            $deQuien,
             $existente->id,
-            $origen,
-            $detalleOc,
         );
     }
 
@@ -743,58 +736,56 @@ final class ComprobanteProveedorUnicidadSupport
         $estado = strtoupper(trim((string) ($existente->estado ?? '')));
 
         return $estado === ComprobanteProveedorEstados::CONTABILIZADO
-            ? 'Factura ya cargada'
-            : 'Esta factura no está contabilizada';
+            ? 'Esta factura ya está contabilizada'
+            : 'Esta factura ya está cargada';
     }
 
     public static function mensajeDuplicado(Comprobante_Proveedor $existente, ?string $codigoAfip = null): string
     {
-        $existente->loadMissing('tipotransaccion_compras');
+        $existente->loadMissing('tipotransaccion_compras', 'proveedores');
 
-        $afip = $codigoAfip ?? self::normalizarCodigoAfip((string) ($existente->tipotransaccion_compras?->codigoafip ?? ''));
-        $afipLabel = $afip !== '' ? str_pad($afip, 2, '0', STR_PAD_LEFT) : '??';
-        $abrev = strtoupper((string) ($existente->tipotransaccion_compras?->abreviatura ?? 'FAC'));
-        $comprobante = trim(sprintf(
-            '%s %s %s-%s (AFIP %s)',
-            $abrev,
-            strtoupper((string) $existente->letra),
+        $factura = self::rotuloFactura(
+            (string) ($existente->tipotransaccion_compras?->abreviatura ?? 'FAC'),
+            (string) $existente->letra,
             $existente->sucursal,
             $existente->numerocomprobante,
-            $afipLabel,
-        ));
-
-        $cuit = self::cuitDesdeComprobante($existente);
-        $cuitFmt = $cuit !== '' ? self::formatearCuit($cuit) : 'sin CUIT';
+        );
+        $deQuien = self::rotuloProveedorCuit(
+            trim((string) ($existente->proveedores?->nombre ?? '')),
+            self::cuitDesdeComprobante($existente),
+        );
         $estado = strtoupper(trim((string) ($existente->estado ?? '')));
-        $origen = ComprobanteProveedorOrigenEntrada::etiqueta((string) ($existente->origen_entrada ?? ''));
-        $estadoLabel = $estado !== '' ? $estado : 'sin estado';
+        $id = (int) $existente->id;
 
         if ($estado === ComprobanteProveedorEstados::CONTABILIZADO) {
             return sprintf(
-                'Ya existe el comprobante #%d (%s, CUIT %s, estado %s, origen %s). '
-                .'No se puede cargar dos veces: abrí ese registro.',
-                $existente->id,
-                $comprobante,
-                $cuitFmt,
-                $estadoLabel,
-                $origen,
+                'La factura %s%s ya está contabilizada. Es el comprobante #%d. No la cargues de nuevo.',
+                $factura,
+                $deQuien,
+                $id,
+            );
+        }
+
+        if ($estado === ComprobanteProveedorEstados::ANULADO) {
+            return sprintf(
+                'La factura %s%s ya figuró como comprobante #%d, que está anulado. Revisá ese comprobante antes de cargarla otra vez.',
+                $factura,
+                $deQuien,
+                $id,
             );
         }
 
         $texto = sprintf(
-            'El comprobante #%d (%s, CUIT %s) quedó en estado %s, origen %s. '
-            .'Todavía no genera cuenta corriente ni compra en Anita. '
-            .'Abrí ese registro, corregilo y contabilizalo. No se puede cargar de nuevo.',
-            $existente->id,
-            $comprobante,
-            $cuitFmt,
-            $estadoLabel,
-            $origen,
+            'La factura %s%s ya está cargada. Es el comprobante #%d y %s. No la cargues de nuevo. Abrí ese comprobante, completá los datos y contabilizalo.',
+            $factura,
+            $deQuien,
+            $id,
+            self::situacionNoContabilizada($estado),
         );
 
         $motivo = trim((string) ($existente->anita_sync_error ?? ''));
         if ($motivo !== '') {
-            $texto .= ' Motivo: '.$motivo;
+            $texto .= ' No se contabilizó por: '.$motivo;
         }
 
         return $texto;
@@ -825,6 +816,54 @@ final class ComprobanteProveedorUnicidadSupport
             $existente->sucursal,
             $existente->numerocomprobante,
         );
+    }
+
+    private static function rotuloFactura(string $abreviatura, string $letra, mixed $sucursal, mixed $numero): string
+    {
+        $abrev = strtoupper(trim($abreviatura));
+        if ($abrev === '') {
+            $abrev = 'FAC';
+        }
+
+        return trim(sprintf(
+            '%s %s %s-%s',
+            $abrev,
+            strtoupper(substr(trim($letra), 0, 1)),
+            $sucursal,
+            $numero,
+        ));
+    }
+
+    private static function rotuloProveedorCuit(string $proveedor, string $cuitDigitos): string
+    {
+        $cuit = self::formatearCuit($cuitDigitos);
+        $partes = [];
+        if ($proveedor !== '') {
+            $partes[] = 'de '.$proveedor;
+        }
+        if ($cuit !== '') {
+            $partes[] = 'CUIT '.$cuit;
+        }
+        if ($partes === []) {
+            return '';
+        }
+
+        return ' ('.implode(', ', $partes).')';
+    }
+
+    private static function situacionNoContabilizada(string $estado): string
+    {
+        return match ($estado) {
+            ComprobanteProveedorEstados::BORRADOR,
+            ComprobanteProveedorEstados::PRECARGA,
+            '' => 'sigue en borrador: no tiene cuenta corriente y no está en Anita',
+            ComprobanteProveedorEstados::PENDIENTE_REVISION => 'está pendiente de revisión: todavía no tiene cuenta corriente ni está en Anita',
+            ComprobanteProveedorEstados::PENDIENTE_APROBACION => 'está pendiente de aprobación: todavía no tiene cuenta corriente ni está en Anita',
+            ComprobanteProveedorEstados::PENDIENTE_DIFERENCIA => 'está pendiente por una diferencia: todavía no tiene cuenta corriente ni está en Anita',
+            ComprobanteProveedorEstados::APROBADO => 'está aprobado, pero todavía no está contabilizado',
+            ComprobanteProveedorEstados::ERROR_SYNC => 'quedó con error al pasarlo a Anita',
+            default => 'todavía no está contabilizado: no tiene cuenta corriente ni está en Anita',
+        };
     }
 
     public static function formatearCuit(string $cuitDigitos): string

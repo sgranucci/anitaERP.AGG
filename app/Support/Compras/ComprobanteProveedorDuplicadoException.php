@@ -14,18 +14,18 @@ final class ComprobanteProveedorDuplicadoException extends RuntimeException
         string $message,
         private readonly int $comprobanteId,
         private readonly bool $estaEliminado = false,
+        private readonly string $titulo = '',
     ) {
         parent::__construct($message);
     }
 
     public static function desdeExistente(Comprobante_Proveedor $existente, ?string $codigoAfip = null): self
     {
-        $eliminado = false;
-
         return new self(
             ComprobanteProveedorUnicidadSupport::mensajeDuplicado($existente, $codigoAfip),
             (int) $existente->id,
-            $eliminado,
+            false,
+            ComprobanteProveedorUnicidadSupport::tituloDuplicado($existente),
         );
     }
 
@@ -42,5 +42,10 @@ final class ComprobanteProveedorDuplicadoException extends RuntimeException
     public function puedeAbrirEdicion(): bool
     {
         return $this->comprobanteId > 0 && ! $this->estaEliminado;
+    }
+
+    public function titulo(): string
+    {
+        return $this->titulo;
     }
 }
