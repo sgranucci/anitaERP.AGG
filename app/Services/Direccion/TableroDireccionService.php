@@ -5,7 +5,9 @@ namespace App\Services\Direccion;
 use App\Models\Caja\Cheque;
 use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Configuracion\CotizacionVigenteSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
+use App\Support\Stock\ReporteStockOtSituacionSupport;
 use App\Support\Ventas\ClienteCuentacorrienteDeudaAlcanceSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
@@ -24,6 +26,8 @@ use Illuminate\Support\Facades\DB;
 class TableroDireccionService
 {
     private const TOP = 8;
+
+    private const TOP_LINEAS = 12;
 
     private const DETALLE = 40;
 
@@ -54,7 +58,18 @@ class TableroDireccionService
         $antHasta = $periodo['anterior_hasta'];
 
         if ($empresaIds === []) {
-            return $this->payload($periodo, $this->kpisVacios(), [], [], [], [], [], []);
+            return $this->payload(
+                $periodo,
+                $this->kpisVacios(),
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                $this->paresSiFerli($periodo, [])
+            );
         }
 
         $ventas = $this->flujoVentas($empresaIds, $desde, $hasta);
@@ -116,7 +131,8 @@ class TableroDireccionService
             [
                 'para_depositar' => $depositar['cantidad'],
                 'vencen_semana' => $vencen['cantidad'],
-            ]
+            ],
+            $this->paresSiFerli($periodo, $empresaIds)
         );
     }
 
@@ -1209,6 +1225,7 @@ class TableroDireccionService
      * @param  list<array<string, mixed>>  $comprados
      * @param  list<array<string, mixed>>  $vencimientos
      * @param  array{para_depositar?: int, vencen_semana?: int}  $alertas
+     * @param  array<string, mixed>|null  $pares
      * @return array<string, mixed>
      */
     private function payload(
@@ -1220,7 +1237,8 @@ class TableroDireccionService
         array $vendidos,
         array $comprados,
         array $vencimientos = [],
-        array $alertas = []
+        array $alertas = [],
+        ?array $pares = null
     ): array {
         $avisos = [];
         if ($this->cotizacionesAjenas > 0) {
@@ -1241,6 +1259,7 @@ class TableroDireccionService
             'vencimientos' => $vencimientos,
             'alertas' => $alertas,
             'avisos' => $avisos,
+            'pares' => $pares,
         ];
     }
 
@@ -1299,6 +1318,309 @@ class TableroDireccionService
     private function detalleVacio(string $titulo): array
     {
         return ['titulo' => $titulo, 'nota' => 'No hay empresas en el alcance.', 'secciones' => []];
+    }
+
+    /**
+     * Pares de Ferli. En otros entornos el tablero no los muestra.
+     *
+     * @param  array{desde: string, hasta: string, anterior_desde: string, anterior_hasta: string}  $periodo
+     * @param  list<int>  $empresaIds
+     * @return array<string, mixed>|null
+     */
+    private function paresSiFerli(array $periodo, array $empresaIds): ?array
+    {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            return null;
+        }
+
+        $desde = $periodo['desde'];
+        $hasta = $periodo['hasta'];
+        $vendidos = $this->totalParesVendidos($empresaIds, $desde, $hasta);
+        $vendidosAnt = $this->totalParesVendidos($empresaIds, $periodo['anterior_desde'], $periodo['anterior_hasta']);
+        $producidos = $this->totalParesProducidos($empresaIds, $desde, $hasta);
+        $producidosAnt = $this->totalParesProducidos($empresaIds, $periodo['anterior_desde'], $periodo['anterior_hasta']);
+
+        return [
+            'vendidos' => $this->cajaPares($vendidos, $vendidosAnt, 'Pares de los comprobantes del libro IVA. Una nota de crédito resta.'),
+            'producidos' => $this->cajaPares($producidos, $producidosAnt, 'Pares que salieron de producción, con la misma regla de Stock por OT.'),
+            'serie' => $this->seriePares($empresaIds, $hasta),
+            'lineas_venta' => $this->rankingLineasVendidas($empresaIds, $desde, $hasta, $vendidos),
+            'lineas_produccion' => $this->rankingLineasProducidas($empresaIds, $desde, $hasta, $producidos),
+        ];
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     */
+    private function totalParesVendidos(array $empresaIds, string $desde, string $hasta): float
+    {
+        if ($empresaIds === []) {
+            return 0.0;
+        }
+
+        $total = $this->ventasPares($empresaIds, $desde, $hasta)->sum(DB::raw('e.cantidad * tt.signo'));
+
+        return round((float) $total, 0);
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     */
+    private function ventasPares(array $empresaIds, string $desde, string $hasta): Builder
+    {
+        return DB::table('venta_emision as e')
+            ->join('venta as v', 'v.id', '=', 'e.venta_id')
+            ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
+            ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
+            ->where('tt.iva_ventas', 1)
+            ->whereIn('pv.empresa_id', $empresaIds)
+            ->whereBetween('v.fecha', [$desde, $hasta]);
+    }
+
+    /**
+     * Pares de OT que dejaron de estar en producción en el período.
+     * Misma lectura de tareas que Stock por OT: empaque con fecha de fin en todas
+     * sus filas, o tarea de cierre (Terminada, Terminada stock, Facturada).
+     * Cuenta el día en que eso ocurre por primera vez. El depósito del reporte
+     * de stock es una foto de hoy y no fecha la producción.
+     *
+     * @param  list<int>  $empresaIds
+     */
+    private function totalParesProducidos(array $empresaIds, string $desde, string $hasta): float
+    {
+        if ($empresaIds === []) {
+            return 0.0;
+        }
+
+        $total = $this->produccionPares($empresaIds, $desde, $hasta)->sum('pct.cantidad');
+
+        return round((float) $total, 0);
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     */
+    private function produccionPares(array $empresaIds, string $desde, string $hasta): Builder
+    {
+        $q = DB::query()
+            ->fromSub($this->otSalieronDeProduccion(), 'term')
+            ->join('ordentrabajo_combinacion_talle as oct', 'oct.ordentrabajo_id', '=', 'term.ordentrabajo_id')
+            ->join('pedido_combinacion_talle as pct', 'pct.id', '=', 'oct.pedido_combinacion_talle_id')
+            ->join('pedido_combinacion as pc', 'pc.id', '=', 'pct.pedido_combinacion_id')
+            ->leftJoin('articulo as a', 'a.id', '=', 'pc.articulo_id')
+            ->whereBetween('term.fecha', [$desde, $hasta]);
+
+        $this->filtrarArticuloEmpresa($q, $empresaIds);
+
+        return $q;
+    }
+
+    /**
+     * Una fila por OT, con la fecha en que pasó a entrega inmediata según las tareas.
+     */
+    private function otSalieronDeProduccion(): Builder
+    {
+        $empaqueId = ReporteStockOtSituacionSupport::idTareaEmpaque();
+        $cierres = ReporteStockOtSituacionSupport::idsTareasCierre();
+        $fechaReal = static function (string $columna): string {
+            return 'CASE WHEN '.$columna." IS NOT NULL AND ".$columna." > '1900-01-01' THEN ".$columna.' ELSE NULL END';
+        };
+
+        $empaque = DB::table('ordentrabajo_tarea')
+            ->where('tarea_id', $empaqueId)
+            ->groupBy('ordentrabajo_id')
+            ->selectRaw(
+                'ordentrabajo_id, COUNT(*) as empaques, '
+                .'SUM(CASE WHEN NOT (hastafecha IS NOT NULL AND hastafecha > \'1900-01-01\') THEN 1 ELSE 0 END) as abiertos, '
+                .'MAX('.$fechaReal('hastafecha').') as fecha_empaque'
+            );
+
+        $fechaCierre = 'COALESCE('.$fechaReal('hastafecha').', '.$fechaReal('desdefecha').')';
+        $cierre = DB::table('ordentrabajo_tarea')
+            ->whereIn('tarea_id', $cierres)
+            ->groupBy('ordentrabajo_id')
+            ->selectRaw('ordentrabajo_id, MIN('.$fechaCierre.') as fecha_cierre');
+
+        $fecha = 'CASE
+            WHEN e.empaques > 0 AND e.abiertos = 0 AND c.fecha_cierre IS NOT NULL THEN LEAST(e.fecha_empaque, c.fecha_cierre)
+            WHEN e.empaques > 0 AND e.abiertos = 0 THEN e.fecha_empaque
+            ELSE c.fecha_cierre
+        END';
+
+        $ids = DB::table('ordentrabajo_tarea')
+            ->where(function (Builder $q) use ($empaqueId, $cierres) {
+                $q->where('tarea_id', $empaqueId);
+                if ($cierres !== []) {
+                    $q->orWhereIn('tarea_id', $cierres);
+                }
+            })
+            ->select('ordentrabajo_id')
+            ->distinct();
+
+        return DB::query()
+            ->fromSub($ids, 'ots')
+            ->leftJoinSub($empaque, 'e', 'e.ordentrabajo_id', '=', 'ots.ordentrabajo_id')
+            ->leftJoinSub($cierre, 'c', 'c.ordentrabajo_id', '=', 'ots.ordentrabajo_id')
+            ->selectRaw('ots.ordentrabajo_id as ordentrabajo_id, '.$fecha.' as fecha')
+            ->whereRaw('('.$fecha.') IS NOT NULL');
+    }
+
+    /**
+     * El artículo sin empresa es de la planta y entra en cualquier filtro.
+     *
+     * @param  list<int>  $empresaIds
+     */
+    private function filtrarArticuloEmpresa(Builder $q, array $empresaIds): void
+    {
+        $q->where(function (Builder $w) use ($empresaIds) {
+            $w->whereIn('a.empresa_id', $empresaIds)
+                ->orWhereNull('a.empresa_id')
+                ->orWhere('a.empresa_id', 0);
+        });
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     * @return list<array{mes: string, etiqueta: string, vendidos: float, producidos: float}>
+     */
+    private function seriePares(array $empresaIds, string $hasta): array
+    {
+        $fin = Carbon::parse($hasta)->startOfMonth();
+        $inicio = $fin->copy()->subMonths(11)->toDateString();
+        $finDia = Carbon::parse($hasta)->toDateString();
+        $vendidos = $this->paresPorMes(
+            $this->ventasPares($empresaIds, $inicio, $finDia),
+            'v.fecha',
+            'e.cantidad * tt.signo'
+        );
+        $producidos = $this->paresPorMes(
+            $this->produccionPares($empresaIds, $inicio, $finDia),
+            'term.fecha',
+            'pct.cantidad'
+        );
+
+        $serie = [];
+        $cursor = Carbon::parse($inicio)->startOfMonth();
+        while ($cursor->lte($fin)) {
+            $clave = $cursor->format('Y-m');
+            $serie[] = [
+                'mes' => $clave,
+                'etiqueta' => self::MESES[(int) $cursor->format('n')].' '.$cursor->format('y'),
+                'vendidos' => round((float) ($vendidos[$clave] ?? 0), 0),
+                'producidos' => round((float) ($producidos[$clave] ?? 0), 0),
+            ];
+            $cursor->addMonth();
+        }
+
+        return $serie;
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    private function paresPorMes(Builder $query, string $fecha, string $cantidad): array
+    {
+        $mes = SqlDialectSupport::periodoAnioMes($fecha);
+        $filas = (clone $query)
+            ->groupBy(DB::raw($mes))
+            ->selectRaw($mes.' as mes, SUM('.$cantidad.') as pares')
+            ->get();
+        $mapa = [];
+        foreach ($filas as $fila) {
+            $mapa[(string) $fila->mes] = (float) $fila->pares;
+        }
+
+        return $mapa;
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     * @return list<array{nombre: string, pares: float, fmt: string, pct: float}>
+     */
+    private function rankingLineasVendidas(array $empresaIds, string $desde, string $hasta, float $total): array
+    {
+        if ($empresaIds === []) {
+            return [];
+        }
+
+        $nombre = "COALESCE(NULLIF(TRIM(l.nombre), ''), 'Sin línea')";
+        $filas = $this->ventasPares($empresaIds, $desde, $hasta)
+            ->leftJoin('articulo as a', 'a.id', '=', 'e.articulo_id')
+            ->leftJoin('linea as l', 'l.id', '=', 'a.linea_id')
+            ->groupBy(DB::raw($nombre))
+            ->selectRaw($nombre.' as nombre, SUM(e.cantidad * tt.signo) as pares')
+            ->orderByDesc('pares')
+            ->limit(self::TOP_LINEAS)
+            ->get();
+
+        return $this->mapLineas($filas, $total);
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     * @return list<array{nombre: string, pares: float, fmt: string, pct: float}>
+     */
+    private function rankingLineasProducidas(array $empresaIds, string $desde, string $hasta, float $total): array
+    {
+        if ($empresaIds === []) {
+            return [];
+        }
+
+        $nombre = "COALESCE(NULLIF(TRIM(l.nombre), ''), 'Sin línea')";
+        $filas = $this->produccionPares($empresaIds, $desde, $hasta)
+            ->leftJoin('linea as l', 'l.id', '=', 'a.linea_id')
+            ->groupBy(DB::raw($nombre))
+            ->selectRaw($nombre.' as nombre, SUM(pct.cantidad) as pares')
+            ->orderByDesc('pares')
+            ->limit(self::TOP_LINEAS)
+            ->get();
+
+        return $this->mapLineas($filas, $total);
+    }
+
+    /**
+     * @param  iterable<int, object>  $filas
+     * @return list<array{nombre: string, pares: float, fmt: string, pct: float}>
+     */
+    private function mapLineas(iterable $filas, float $total): array
+    {
+        $out = [];
+        foreach ($filas as $fila) {
+            $pares = round((float) $fila->pares, 0);
+            $out[] = [
+                'nombre' => (string) $fila->nombre,
+                'pares' => $pares,
+                'fmt' => $this->entero($pares),
+                'pct' => $total > 0 ? round($pares / $total * 100, 1) : 0.0,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array{cantidad: float, fmt: string, anterior: float, anterior_fmt: string, variacion: float|null, ayuda: string}
+     */
+    private function cajaPares(float $actual, float $anterior, string $ayuda): array
+    {
+        $variacion = null;
+        if (abs($anterior) >= 1) {
+            $variacion = round(($actual - $anterior) / abs($anterior) * 100, 1);
+        }
+
+        return [
+            'cantidad' => $actual,
+            'fmt' => $this->entero($actual),
+            'anterior' => $anterior,
+            'anterior_fmt' => $this->entero($anterior),
+            'variacion' => $variacion,
+            'ayuda' => $ayuda,
+        ];
+    }
+
+    private function entero(float $n): string
+    {
+        return number_format($n, 0, ',', '.');
     }
 
     private function dinero(float $n): string

@@ -9,11 +9,15 @@
 
 @section('scripts')
 <script src="{{ asset('assets/lte/plugins/chart.js/Chart.min.js') }}"></script>
+@php
+    $tableroDireccionJson = [
+        'serie' => $tablero['serie'] ?? [],
+        'vencimientos' => $tablero['vencimientos'] ?? [],
+        'pares' => $tablero['pares'] ?? null,
+    ];
+@endphp
 <script>
-window.TABLERO_DIRECCION = @json([
-    'serie' => $tablero['serie'] ?? [],
-    'vencimientos' => $tablero['vencimientos'] ?? [],
-]);
+window.TABLERO_DIRECCION = @json($tableroDireccionJson);
 </script>
 <script src="{{ asset('assets/pages/scripts/direccion/tablero.js') }}?v={{ filemtime(public_path('assets/pages/scripts/direccion/tablero.js')) }}"></script>
 @endsection
@@ -77,6 +81,10 @@ window.TABLERO_DIRECCION = @json([
             <a href="{{ route('cheque', ['origen' => 'E']) }}">{{ $vencenSemana }} cheques propios vencen en 7 días</a>
         @endif
     </div>
+    @endif
+
+    @if (! empty($tablero['pares']))
+        @include('direccion.tablero.partials.pares', ['pares' => $tablero['pares']])
     @endif
 
     <div class="td-kpis">

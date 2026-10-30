@@ -12,6 +12,90 @@
         return v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    function paresFmt(n) {
+        var v = Number(n) || 0;
+        return v.toLocaleString('es-AR', { maximumFractionDigits: 0 });
+    }
+
+    function graficoPares(lienzo, etiquetas, series) {
+        if (!lienzo || !window.Chart) {
+            return;
+        }
+        new Chart(lienzo.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: etiquetas,
+                datasets: series
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                legend: { position: 'bottom' },
+                tooltips: {
+                    callbacks: {
+                        label: function (item, data) {
+                            var ds = data.datasets[item.datasetIndex].label;
+                            return ds + ': ' + paresFmt(item.yLabel) + ' pares';
+                        }
+                    }
+                },
+                scales: {
+                    yAxes: [{
+                        ticks: {
+                            beginAtZero: true,
+                            callback: function (value) { return paresFmt(value); }
+                        }
+                    }]
+                }
+            }
+        });
+    }
+
+    function graficoLineas(lienzo, filas, color) {
+        if (!lienzo || !window.Chart || lienzo.getAttribute('data-listo') === '1') {
+            return;
+        }
+        lienzo.setAttribute('data-listo', '1');
+        new Chart(lienzo.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: filas.map(function (p) { return p.nombre; }),
+                datasets: [{
+                    label: 'Pares',
+                    data: filas.map(function (p) { return p.pares; }),
+                    backgroundColor: color
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                legend: { display: false },
+                tooltips: {
+                    callbacks: {
+                        label: function (item) {
+                            return paresFmt(item.yLabel) + ' pares';
+                        }
+                    }
+                },
+                scales: {
+                    yAxes: [{
+                        ticks: {
+                            beginAtZero: true,
+                            callback: function (value) { return paresFmt(value); }
+                        }
+                    }],
+                    xAxes: [{
+                        ticks: {
+                            autoSkip: false,
+                            maxRotation: 60,
+                            minRotation: 40
+                        }
+                    }]
+                }
+            }
+        });
+    }
+
     listo(function () {
         var preset = document.getElementById('td-preset');
         var desdeInput = document.getElementById('td-desde');
@@ -151,6 +235,40 @@
                     }
                 });
             }
+        }
+
+        var pares = datos.pares;
+        if (window.Chart && pares && pares.serie) {
+            graficoPares(
+                document.getElementById('td-chart-pares'),
+                pares.serie.map(function (p) { return p.etiqueta; }),
+                [
+                    {
+                        label: 'Vendidos',
+                        data: pares.serie.map(function (p) { return p.vendidos; }),
+                        borderColor: '#1A5276',
+                        backgroundColor: 'rgba(26,82,118,.12)',
+                        fill: true,
+                        lineTension: 0.25,
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Producidos',
+                        data: pares.serie.map(function (p) { return p.producidos; }),
+                        borderColor: '#0E6655',
+                        backgroundColor: 'rgba(14,102,85,.08)',
+                        fill: false,
+                        lineTension: 0.25,
+                        pointRadius: 3
+                    }
+                ]
+            );
+        }
+        if (window.jQuery && pares) {
+            window.jQuery('#td-rank-lineas').on('shown.bs.collapse', function () {
+                graficoLineas(document.getElementById('td-chart-linea-venta'), pares.lineas_venta || [], '#2471A3');
+                graficoLineas(document.getElementById('td-chart-linea-prod'), pares.lineas_produccion || [], '#148F77');
+            });
         }
 
         var modal = document.getElementById('modal-tablero-detalle');

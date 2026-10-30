@@ -217,3 +217,139 @@
   color: #fff;
   opacity: .85;
 }
+
+.td-panel-pares {
+  margin-bottom: 1rem;
+}
+
+.td-pares {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+  margin-bottom: .85rem;
+}
+
+.td-par {
+  border-radius: .6rem;
+  padding: 1rem 1.15rem .9rem;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(23, 32, 42, .12);
+}
+
+.td-par-venta {
+  background: linear-gradient(135deg, #1A365D 0%, #2471A3 100%);
+}
+
+.td-par-prod {
+  background: linear-gradient(135deg, #0B5345 0%, #148F77 100%);
+}
+
+.td-par-titulo {
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  opacity: .92;
+}
+
+.td-par-num {
+  font-size: 2.15rem;
+  font-weight: 700;
+  line-height: 1.1;
+  margin: .15rem 0 .2rem;
+  letter-spacing: -.02em;
+}
+
+.td-par-extra {
+  font-size: .86rem;
+  font-weight: 600;
+}
+
+.td-par-ayuda {
+  margin-top: .35rem;
+  font-size: .78rem;
+  opacity: .88;
+}
+
+.td-pares-leyenda {
+  margin: 0 0 .35rem;
+  color: var(--td-muted);
+  font-size: .8rem;
+}
+
+.td-chart-pares {
+  height: 260px;
+  margin-bottom: .85rem;
+}
+
+.td-rank-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.td-rank-btn {
+  background: #fff;
+  border: 1px solid var(--td-accent);
+  color: var(--td-accent);
+  border-radius: 999px;
+  padding: .4rem .9rem;
+  font-size: .86rem;
+  font-weight: 700;
+}
+
+.td-rank-btn:hover,
+.td-rank-btn:focus {
+  background: var(--td-surface);
+  outline: none;
+}
+
+.td-rank-btn .fa-chevron-down {
+  display: none;
+}
+
+.td-rank-btn[aria-expanded="true"] {
+  background: #2471A3;
+  color: #fff;
+}
+
+.td-rank-btn[aria-expanded="true"] .fa-chevron-right {
+  display: none;
+}
+
+.td-rank-btn[aria-expanded="true"] .fa-chevron-down {
+  display: inline;
+}
+
+.td-rank-panel {
+  margin-top: .75rem;
+  padding-top: .25rem;
+}
+
+.td-rank-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.td-rank-col h3 {
+  margin: 0 0 .5rem;
+  font-size: .92rem;
+  color: var(--td-ink);
+}
+
+.td-chart-linea {
+  height: 280px;
+  margin-bottom: .75rem;
+}
+
+@media (max-width: 768px) {
+  .td-pares,
+  .td-rank-split {
+    grid-template-columns: 1fr;
+  }
+
+  .td-par-num {
+    font-size: 1.8rem;
+  }
+}
