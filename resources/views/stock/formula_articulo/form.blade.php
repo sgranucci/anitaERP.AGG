@@ -51,7 +51,7 @@
 @endphp
 <div id="tab1" class="form1 tab-content">
         <div class="form-group row">
-            <label class="col-lg-3 col-form-label" for="formula_cabecera_sku_show">Art&iacute;culo (cabecera)</label>
+            <label class="col-lg-3 control-label text-right pr-2" for="formula_cabecera_sku_show">Art&iacute;culo (cabecera)</label>
             <div class="col-lg-9">
                 <small class="d-block text-muted mb-1">Opcional. La misma f&oacute;rmula puede reutilizarse en varios art&iacute;culos (v&iacute;nculo desde cada art&iacute;culo).</small>
                 <input type="hidden" name="articulo_id" id="formula_cabecera_articulo_id" value="{{ $cabeceraArticuloId }}" />
@@ -70,7 +70,7 @@
             </div>
         </div>
         <div class="form-group row">
-            <label for="codigo" class="col-lg-3 col-form-label">C&oacute;digo f&oacute;rmula</label>
+            <label for="codigo" class="col-lg-3 control-label text-right pr-2">C&oacute;digo f&oacute;rmula</label>
             <div class="col-lg-9">
                 <input type="text" name="codigo" id="codigo" class="form-control" maxlength="50" value="{{ old('codigo', $data?->codigo ?? '') }}" placeholder="{{ $esEdicion ? 'Código de fórmula' : 'Número de fórmula en Anita (stkcm_formula)' }}" />
                 @if (! $esEdicion)
@@ -79,11 +79,11 @@
             </div>
         </div>
         <div class="form-group row">
-            <label for="cantidadunidad" class="col-lg-3 col-form-label requerido">Cantidad unidad</label>
+            <label for="cantidadunidad" class="col-lg-3 control-label text-right pr-2 requerido">Cantidad unidad</label>
             <div class="col-lg-3">
                 <input type="number" step="0.01" name="cantidadunidad" id="cantidadunidad" class="form-control" value="{{ old('cantidadunidad', $data?->cantidadunidad ?? '1') }}" required />
             </div>
-            <label for="estado" class="col-lg-2 col-form-label requerido">Estado</label>
+            <label for="estado" class="col-lg-2 control-label text-right pr-2 requerido">Estado</label>
             <div class="col-lg-4">
                 <select name="estado" id="estado" class="form-control" required>
                     @foreach($estado_enum as $est)
@@ -93,13 +93,17 @@
             </div>
         </div>
         <div class="form-group row">
-            <label for="detalle" class="col-lg-3 col-form-label">Detalle</label>
+            <label for="detalle" class="col-lg-3 control-label text-right pr-2">Detalle</label>
             <div class="col-lg-9">
                 <textarea name="detalle" id="detalle" class="form-control" rows="2">{{ old('detalle', $data?->detalle ?? '') }}</textarea>
             </div>
         </div>
 
-        <h5 class="mb-3">&Iacute;tems de la f&oacute;rmula</h5>
+        <div class="card card-outline card-info mt-2">
+            <div class="card-header py-2">
+                <h5 class="card-title mb-0">Ítems de la fórmula</h5>
+            </div>
+            <div class="card-body p-2">
         @if (! empty($costoTotal ?? null))
             @include('stock.formula_articulo.partials.costo_total_resumen', ['costoTotal' => $costoTotal])
         @endif
@@ -165,7 +169,7 @@
         </style>
         <div class="table-responsive">
             <table class="table table-bordered" id="tabla-formula-hijos" data-gastronomia-opcional="{{ $formulaGastronomiaOpcional ? '1' : '0' }}">
-                <thead class="thead-light">
+                <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
                         <th style="min-width: 300px;">Art&iacute;culo</th>
                         <th style="width:100px;">Cantidad</th>
@@ -297,5 +301,7 @@
                 </tbody>
             </table>
         </div>
-        <button type="button" class="btn btn-sm btn-secondary mb-3" id="js-agregar-fila-formula"><i class="fa fa-plus"></i> Agregar l&iacute;nea</button>
+        <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="js-agregar-fila-formula"><i class="fa fa-plus"></i> Agregar línea</button>
+            </div>
+        </div>
 </div>

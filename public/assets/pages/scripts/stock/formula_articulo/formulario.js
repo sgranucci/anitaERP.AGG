@@ -330,6 +330,11 @@ function buscarFormulasAjax() {
 }
 
 $(document).ready(function () {
+    function marcarSolapa(id) {
+        $('#botonform1, #botonform3, #botonform4').removeClass('active');
+        $(id).addClass('active');
+    }
+
     $('.formula-solapa-archivos.form4').hide();
     $('.formula-solapa-historia.form3').hide();
     $('.form1').show();
@@ -338,12 +343,14 @@ $(document).ready(function () {
         $('.form1').show();
         $('.formula-solapa-archivos.form4').hide();
         $('.formula-solapa-historia.form3').hide();
+        marcarSolapa('#botonform1');
     });
     if ($('#botonform3').length) {
         $('#botonform3').on('click', function () {
             $('.form1').hide();
             $('.formula-solapa-archivos.form4').hide();
             $('.formula-solapa-historia.form3').show();
+            marcarSolapa('#botonform3');
             leeHistoriaFormulaArticulo();
             var sol = document.getElementById('formula-solapa-historia');
             if (sol) {
@@ -355,6 +362,7 @@ $(document).ready(function () {
         $('.form1').hide();
         $('.formula-solapa-historia.form3').hide();
         $('.formula-solapa-archivos.form4').show();
+        marcarSolapa('#botonform4');
         var sol = document.getElementById('formula-solapa-archivos');
         if (sol) {
             sol.scrollIntoView({ behavior: 'smooth', block: 'start' });

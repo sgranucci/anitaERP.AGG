@@ -12,11 +12,11 @@
                 Seleccione un archivo por renglón o use <strong>+ Agrega renglón</strong> para adjuntar varios.
                 Los archivos ya cargados aparecen arriba; puede quitarlos con <strong>Quitar</strong> en cada tarjeta.
             </p>
-            <table class="table" id="formula-archivo-table">
-                <thead>
+            <table class="table table-sm table-bordered" id="formula-archivo-table">
+                <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
                         <th>Archivo nuevo</th>
-                        <th style="width: 90px;"></th>
+                        <th style="width: 90px;">Acciones</th>
                     </tr>
                 </thead>
                 <tbody id="formula-tbody-tabla-archivo">
@@ -37,7 +37,7 @@
             @include('stock.formula_articulo.partials.template_archivos_formula')
             <div class="row">
                 <div class="col-md-12">
-                    <button id="agrega_renglon_archivo_formula" type="button" class="pull-right btn btn-danger">+ Agrega renglón</button>
+                    <button id="agrega_renglon_archivo_formula" type="button" class="btn btn-outline-primary btn-sm">+ Agrega renglón</button>
                 </div>
             </div>
         </div>

@@ -1,0 +1,359 @@
+(function ($) {
+    'use strict';
+
+    var FORM = '#form-filtros-formula-articulo';
+
+    function syncColumnasHidden() {
+        var keys = [];
+        $('#lw-grilla-config-tbody tr.lw-grilla-fila').each(function () {
+            var $tr = $(this);
+            if ($tr.find('input[type=checkbox][name*="[visible]"]').is(':checked')) {
+                keys.push($tr.data('key'));
+            }
+        });
+        $('#lw_columnas_csv').val(keys.join(','));
+    }
+
+    function reindexGrillaRows() {
+        $('#lw-grilla-config-tbody tr.lw-grilla-fila').each(function (i) {
+            var $tr = $(this);
+            $tr.find('.lw-grilla-orden-num').text(i + 1);
+            $tr.find('.lw-grilla-orden').val(i);
+            $tr.find('input, select').each(function () {
+                var name = $(this).attr('name');
+                if (!name) {
+                    return;
+                }
+                $(this).attr('name', name.replace(/grilla\[\d+]/, 'grilla[' + i + ']'));
+            });
+        });
+    }
+
+    function cloneGrillaIntoVistaForm() {
+        var $box = $('#lw-grilla-vista-clone').empty();
+        $('#lw-grilla-config-tbody tr.lw-grilla-fila').each(function (i) {
+            var $tr = $(this);
+            var key = $tr.data('key');
+            var titulo = $tr.find('input[name*="[titulo]"]').val() || '';
+            var visible = $tr.find('input[type=checkbox][name*="[visible]"]').is(':checked') ? '1' : '0';
+            var ancho = $tr.find('input[name*="[ancho]"]').val() || '120';
+            var alinea = $tr.find('select[name*="[alinea]"]').val() || 'izquierda';
+            $box.append('<input type="hidden" name="grilla[' + i + '][key]" value="' + $('<div/>').text(key).html() + '">');
+            $box.append('<input type="hidden" name="grilla[' + i + '][titulo]" value="' + $('<div/>').text(titulo).html() + '">');
+            $box.append('<input type="hidden" name="grilla[' + i + '][visible]" value="' + visible + '">');
+            $box.append('<input type="hidden" name="grilla[' + i + '][ancho]" value="' + ancho + '">');
+            $box.append('<input type="hidden" name="grilla[' + i + '][alinea]" value="' + alinea + '">');
+            $box.append('<input type="hidden" name="grilla[' + i + '][orden]" value="' + i + '">');
+        });
+        $('#form-lw-grilla-vista').find('input[name^="sort["]').remove();
+        var si = 0;
+        $('#lw-orden-criterios .lw-orden-chip').each(function () {
+            var campo = $(this).find('.lw-orden-campo').val() || '';
+            var dir = $(this).find('.lw-orden-dir').val() || 'asc';
+            if (!campo) {
+                return;
+            }
+            $box.append('<input type="hidden" name="sort[' + si + '][campo]" value="' + $('<div/>').text(campo).html() + '">');
+            $box.append('<input type="hidden" name="sort[' + si + '][dir]" value="' + $('<div/>').text(dir).html() + '">');
+            si++;
+        });
+        $('#form-lw-grilla-vista').find('[name^="qbe["]').remove();
+        if (typeof window.lwQbeReindex === 'function') {
+            window.lwQbeReindex();
+        }
+        $('#lw-qbe-panel').find('input[name^="qbe["], select[name^="qbe["]').each(function () {
+            var $el = $(this);
+            var name = $el.attr('name');
+            if (!name || name.indexOf('__g__') >= 0 || name.indexOf('__i__') >= 0) {
+                return;
+            }
+            if ($el.closest('template').length) {
+                return;
+            }
+            if ($el.is(':checkbox') && !$el.prop('checked')) {
+                return;
+            }
+            var val = $el.val();
+            if (val === null || typeof val === 'undefined') {
+                val = '';
+            }
+            $box.append($('<input type="hidden">').attr('name', name).val(val));
+        });
+        if (typeof window.lwGroupCloneInto === 'function') {
+            window.lwGroupCloneInto($box);
+        }
+    }
+
+    $(function () {
+        if (!$(FORM).length || !$('.lw-workbench').length) {
+            return;
+        }
+
+        $('#lw-search-rapida').on('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                $('#filtro_busqueda_rapida').val('1');
+                $('#filtro_modo').val('todos');
+                $('#filtro_valor').val($(this).val());
+                syncColumnasHidden();
+                $(FORM).trigger('submit');
+            }
+        });
+
+        $('#btn-lw-buscar-rapida').on('click', function () {
+            $('#filtro_busqueda_rapida').val('1');
+            $('#filtro_modo').val('todos');
+            $('#filtro_valor').val($('#lw-search-rapida').val());
+            syncColumnasHidden();
+            $(FORM).trigger('submit');
+        });
+
+        $('#btn-lw-aplicar-qbe').on('click', function () {
+            $('#filtro_modo').val('qbe');
+            $('#filtro_busqueda_rapida').val('');
+            $('#lw-aplicar-qbe').val('1');
+            syncColumnasHidden();
+        });
+
+        $('#lw-qbe-panel').on('keydown', 'input, select', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                $('#filtro_modo').val('qbe');
+                $('#filtro_busqueda_rapida').val('');
+                $('#lw-aplicar-qbe').val('1');
+                syncColumnasHidden();
+                $(FORM).trigger('submit');
+            }
+        });
+
+        function queryExternos() {
+            var keep = ['filtro_estado', 'filtro_articulos', 'con_opcionales'];
+            var params = new URLSearchParams(window.location.search);
+            var $form = $(FORM);
+            var extra = [];
+            keep.forEach(function (k) {
+                var val = params.has(k) ? params.get(k) : '';
+                if (!val) {
+                    val = $form.find('input[name="' + k + '"]').val() || '';
+                }
+                if (val !== '') {
+                    extra.push(encodeURIComponent(k) + '=' + encodeURIComponent(val));
+                }
+            });
+            return extra.length ? '&' + extra.join('&') : '';
+        }
+
+        $('#lw-vista-select').on('change', function () {
+            var id = $(this).val();
+            var base = $(this).data('base-url') || window.location.pathname;
+            var extra = queryExternos();
+            if (!id) {
+                window.location = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'vista_estandar=1' + extra;
+                return;
+            }
+            window.location = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'vista_id=' + encodeURIComponent(id) + extra;
+        });
+
+        $(document).on('click', '.lw-grilla-up', function () {
+            var $tr = $(this).closest('tr');
+            var $prev = $tr.prev('tr');
+            if ($prev.length) {
+                $tr.insertBefore($prev);
+                reindexGrillaRows();
+            }
+        });
+
+        $(document).on('click', '.lw-grilla-down', function () {
+            var $tr = $(this).closest('tr');
+            var $next = $tr.next('tr');
+            if ($next.length) {
+                $tr.insertAfter($next);
+                reindexGrillaRows();
+            }
+        });
+
+        $('#form-lw-grilla-aplicar').on('submit', function () {
+            reindexGrillaRows();
+            syncColumnasHidden();
+            var n = $('#lw-grilla-config-tbody input[type=checkbox][name*="[visible]"]:checked').length;
+            if (n < 1) {
+                alert('Deje al menos una columna visible.');
+                return false;
+            }
+        });
+
+        $('#form-lw-grilla-vista').on('submit', function () {
+            if (typeof window.lwOrdenEnsureInForm === 'function') {
+                window.lwOrdenEnsureInForm();
+            }
+            reindexGrillaRows();
+            cloneGrillaIntoVistaForm();
+            var n = $('#lw-grilla-config-tbody input[type=checkbox][name*="[visible]"]:checked').length;
+            if (n < 1) {
+                alert('Deje al menos una columna visible antes de guardar la vista.');
+                return false;
+            }
+        });
+
+        $('#btn-lw-eliminar-vista-ref').on('click', function () {
+            if (confirm('¿Eliminar esta vista?')) {
+                $('#form-lw-eliminar-vista').trigger('submit');
+            }
+        });
+
+        $(FORM).on('submit', function () {
+            syncColumnasHidden();
+            if (typeof window.lwOrdenEnsureInForm === 'function') {
+                window.lwOrdenEnsureInForm();
+            }
+            if (typeof window.lwOrdenReindex === 'function') {
+                window.lwOrdenReindex();
+            }
+            if (typeof window.lwGroupEnsureInForm === 'function') {
+                window.lwGroupEnsureInForm();
+            }
+            if (typeof window.lwGroupBeforeSubmit === 'function') {
+                window.lwGroupBeforeSubmit();
+            }
+            var hay = typeof window.lwQbeBeforeSubmit === 'function'
+                ? window.lwQbeBeforeSubmit()
+                : false;
+            if (hay && $('#filtro_busqueda_rapida').val() !== '1') {
+                $('#filtro_modo').val('qbe');
+            }
+        });
+
+        if (typeof window.initListadoQbeGrupos === 'function') {
+            window.initListadoQbeGrupos();
+        }
+        if (typeof window.initListadoOrden === 'function') {
+            window.initListadoOrden();
+        }
+        if (typeof window.initListadoAgrupacion === 'function') {
+            window.initListadoAgrupacion();
+        }
+        if (typeof window.initListadoDisenadorPreview === 'function') {
+            window.initListadoDisenadorPreview();
+        }
+
+        $('.eliminar-formula').on('click', function () {
+            if (!confirm('¿Eliminar esta fórmula?')) {
+                return;
+            }
+            var url = $(this).data('url');
+            var token = $('meta[name="csrf-token"]').attr('content') || '';
+            $.ajax({
+                url: url,
+                type: 'POST',
+                dataType: 'json',
+                data: { _token: token, _method: 'DELETE' },
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': token
+                },
+                success: function (r) {
+                    if (r.mensaje === 'ok') {
+                        location.reload();
+                    } else {
+                        alert(r.error || 'No se pudo eliminar');
+                    }
+                },
+                error: function (xhr) {
+                    var msg = 'Error de red';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        msg = xhr.responseJSON.message;
+                    } else if (xhr.responseJSON && xhr.responseJSON.error) {
+                        msg = xhr.responseJSON.error;
+                    } else if (xhr.status === 419) {
+                        msg = 'Sesión expirada o token CSRF inválido. Actualice la página e intente de nuevo.';
+                    } else if (xhr.status === 403) {
+                        msg = 'Sin permiso para eliminar.';
+                    }
+                    alert(msg);
+                }
+            });
+        });
+
+        var overlay = document.getElementById('formula-export-overlay');
+        var exportAbort = null;
+        function mostrarExport(titulo) {
+            if (!overlay) {
+                return;
+            }
+            var t = document.getElementById('formula-export-titulo');
+            if (t && titulo) {
+                t.textContent = titulo;
+            }
+            overlay.classList.remove('d-none');
+            overlay.style.display = 'flex';
+            overlay.setAttribute('aria-hidden', 'false');
+        }
+        function ocultarExport() {
+            if (!overlay) {
+                return;
+            }
+            overlay.classList.add('d-none');
+            overlay.style.display = '';
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+        function nombreArchivo(disposition, fallback) {
+            var m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition || '');
+            if (!m) {
+                return fallback;
+            }
+            try {
+                return decodeURIComponent(m[1] || m[2] || fallback);
+            } catch (e) {
+                return m[1] || m[2] || fallback;
+            }
+        }
+        $(document).on('click', 'a[href*="lista-formula-articulo/"]', function (e) {
+            var a = this;
+            if (!a.href) {
+                return;
+            }
+            e.preventDefault();
+            if (exportAbort) {
+                exportAbort.abort();
+            }
+            exportAbort = new AbortController();
+            mostrarExport('Exportando…');
+            fetch(a.href, {
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                signal: exportAbort.signal
+            }).then(function (res) {
+                if (!res.ok) {
+                    throw new Error('No se pudo exportar');
+                }
+                return res.blob().then(function (blob) {
+                    return { blob: blob, filename: nombreArchivo(res.headers.get('Content-Disposition'), 'formulas_articulos') };
+                });
+            }).then(function (pack) {
+                var url = URL.createObjectURL(pack.blob);
+                var link = document.createElement('a');
+                link.href = url;
+                link.download = pack.filename;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(url);
+                ocultarExport();
+            }).catch(function (err) {
+                ocultarExport();
+                if (err && err.name === 'AbortError') {
+                    return;
+                }
+                window.alert((err && err.message) || 'No se pudo exportar');
+            });
+        });
+        window.addEventListener('pageshow', ocultarExport);
+        document.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape' && exportAbort) {
+                exportAbort.abort();
+                ocultarExport();
+            }
+        });
+    });
+})(jQuery);

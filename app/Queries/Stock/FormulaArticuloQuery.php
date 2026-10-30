@@ -4,6 +4,11 @@ namespace App\Queries\Stock;
 
 use App\Models\Stock\Formula_Articulo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoCortesSupport;
+use App\Support\Stock\FormulaArticuloListadoColumnas;
+use App\Support\Stock\FormulaArticuloListadoFiltros;
+use Illuminate\Database\Eloquent\Builder;
 
 class FormulaArticuloQuery implements FormulaArticuloQueryInterface
 {
@@ -22,10 +27,76 @@ class FormulaArticuloQuery implements FormulaArticuloQueryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $empresas = $this->empresaRepository->traeEmpresasAsignadas();
-        $conOpcionales = in_array($conOpcionales, ['si', 'no'], true) ? $conOpcionales : null;
+        $filtros = FormulaArticuloListadoFiltros::filtrosVacios();
+        $filtros['con_opcionales'] = FormulaArticuloListadoFiltros::normalizarOpcionales($conOpcionales);
+        $texto = trim((string) ($busqueda ?? ''));
+        if ($texto !== '') {
+            $filtros['modo'] = FormulaArticuloListadoFiltros::MODO_TODOS;
+            $filtros['valor'] = $texto;
+            $filtros['busqueda'] = $texto;
+        }
 
-        $q = $this->model->query()
+        return $this->leeListado($filtros, (bool) $flPaginando, (bool) $withHijos);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function leeListado(array $filtros, bool $paginar, bool $withHijos = true)
+    {
+        $q = $this->queryBase();
+        FormulaArticuloListadoFiltros::aplicar($q, $filtros);
+        FormulaArticuloListadoFiltros::aplicarOrden($q, $filtros);
+        if ($withHijos) {
+            $this->cargarHijos($q);
+        }
+
+        if (! $paginar) {
+            return $q->get();
+        }
+
+        $perPage = (int) ($filtros['_per_page'] ?? 10);
+        if ($perPage < 1) {
+            $perPage = 10;
+        }
+        if ($perPage > 100) {
+            $perPage = 100;
+        }
+
+        return $q->paginate($perPage);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesListado(array $filtros): array
+    {
+        $campos = FormulaArticuloListadoFiltros::camposOrdenables();
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        $q = $this->queryBase();
+        FormulaArticuloListadoFiltros::aplicar($q, $filtros);
+
+        return ListadoCortesSupport::calcular(
+            $q,
+            $agrupar,
+            $campos,
+            'formula_articulo.id',
+            [FormulaArticuloListadoColumnas::class, 'valorCelda'],
+            null,
+            [],
+            FormulaArticuloListadoColumnas::MEDIDAS
+        );
+    }
+
+    /**
+     * @return Builder<Formula_Articulo>
+     */
+    private function queryBase(): Builder
+    {
+        $empresas = $this->empresaRepository->traeEmpresasAsignadas();
+
+        return $this->model->query()
             ->select([
                 'formula_articulo.id',
                 'formula_articulo.articulo_id',
@@ -49,58 +120,18 @@ class FormulaArticuloQuery implements FormulaArticuloQueryInterface
                     ->orWhereNull('art_padre.empresa_id')
                     ->orWhereIn('art_padre.empresa_id', $empresas);
             });
+    }
 
-        $columns = [
-            ['columna' => 'formula_articulo.id', 'clausula' => 'LIKE'],
-            ['columna' => 'formula_articulo.codigo', 'clausula' => 'LIKE'],
-            ['columna' => 'art_padre.sku', 'clausula' => 'LIKE'],
-            ['columna' => 'art_padre.descripcion', 'clausula' => 'LIKE'],
-            ['columna' => 'formula_articulo.detalle', 'clausula' => 'LIKE'],
-            ['columna' => 'formula_articulo.estado', 'clausula' => 'LIKE'],
-            ['columna' => 'empresa.nombre', 'clausula' => 'LIKE'],
-            ['columna' => 'usuario.usuario', 'clausula' => 'LIKE'],
-        ];
-
-        if ($busqueda) {
-            $busqueda = trim((string) $busqueda);
-            $q->where(function ($query) use ($busqueda, $columns) {
-                foreach ($columns as $col) {
-                    $query->orWhere($col['columna'], 'LIKE', '%'.$busqueda.'%');
-                }
-            });
-        }
-
-        if ($conOpcionales === 'si') {
-            $q->whereExists(function ($sub) {
-                $sub->select(\DB::raw(1))
-                    ->from('formula_articulo_hijo')
-                    ->whereColumn('formula_articulo_hijo.formula_articulo_id', 'formula_articulo.id')
-                    ->where('formula_articulo_hijo.esopcional', 1);
-            });
-        } elseif ($conOpcionales === 'no') {
-            $q->whereNotExists(function ($sub) {
-                $sub->select(\DB::raw(1))
-                    ->from('formula_articulo_hijo')
-                    ->whereColumn('formula_articulo_hijo.formula_articulo_id', 'formula_articulo.id')
-                    ->where('formula_articulo_hijo.esopcional', 1);
-            });
-        }
-
-        $q->orderBy('formula_articulo.id', 'desc');
-
-        if ($withHijos) {
-            $q->with([
-                'articulos',
-                'formula_articulo_hijos.articulos',
-                'formula_articulo_hijos.formula_hija.articulos',
-                'formula_articulo_hijos.depositos',
-            ]);
-        }
-
-        if ($flPaginando) {
-            return $q->paginate(10);
-        }
-
-        return $q->get();
+    /**
+     * @param  Builder<Formula_Articulo>  $q
+     */
+    private function cargarHijos(Builder $q): void
+    {
+        $q->with([
+            'articulos',
+            'formula_articulo_hijos.articulos',
+            'formula_articulo_hijos.formula_hija.articulos',
+            'formula_articulo_hijos.depositos',
+        ]);
     }
 }

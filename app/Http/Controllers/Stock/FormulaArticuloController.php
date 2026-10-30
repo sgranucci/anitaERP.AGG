@@ -8,7 +8,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionFormulaArticulo;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
-use App\Models\Stock\Formula_Articulo;
 use App\Models\Stock\Formula_Articulo_Archivo;
 use App\Models\Stock\Formula_Articulo_Estado;
 use App\Queries\Stock\FormulaArticuloQueryInterface;
@@ -18,11 +17,26 @@ use App\Services\Stock\FormulaArticuloAnitaSyncService;
 use App\Services\Stock\FormulaArticuloService;
 use App\Services\Stock\FormulaArticuloVinculoService;
 use App\Services\Stock\FormulaArticuloCostoTotalService;
+use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoExportPresentacionSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Listado\ListadoVisualSupport;
+use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Stock\ArticuloFormulasUsoSupport;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Stock\FormulaArticuloListadoColumnas;
+use App\Support\Stock\FormulaArticuloListadoFiltros;
+use App\Support\Stock\FormulaArticuloListadoPreferenciasUsuario;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use Auth;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -42,34 +56,27 @@ class FormulaArticuloController extends Controller
     {
         can('listar-formula-articulo');
 
-        $busqueda = $request->busqueda;
-        $conOpcionales = $this->normalizarConOpcionales($request->input('con_opcionales'));
+        if (! FormulaArticuloListadoFiltros::requestTraeFiltros($request)) {
+            $guardados = FormulaArticuloListadoFiltros::guardados();
+            if ($guardados !== []) {
+                $redirect = redirect()->route('consultar_formula_articulo', $guardados);
+                foreach (['mensaje', 'errores', 'error'] as $flash) {
+                    $valor = session($flash);
+                    if ($valor) {
+                        $redirect->with($flash, $valor);
+                    }
+                }
 
-        $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, true, true, $conOpcionales);
-        ArticuloPrecioUltimaCompraSupport::enriquecerFormulasPaginadasConCosto($formulas);
-        $this->formulaArticuloCostoTotalService->enriquecerFormulasConCostoTotal($formulas);
-        if ($conOpcionales !== null && $busqueda) {
-            $formulas->appends(['busqueda' => $busqueda, 'con_opcionales' => $conOpcionales]);
-        } elseif ($conOpcionales !== null) {
-            $formulas->appends(['con_opcionales' => $conOpcionales]);
+                return $redirect;
+            }
         }
-        $sinFormulasCargadas = Formula_Articulo::query()->count() === 0;
 
-        return view('stock.formula_articulo.index', [
-            'formulas' => $formulas,
-            'busqueda' => $busqueda,
-            'conOpcionales' => $conOpcionales,
-            'opcionalesHabilitados' => FormulaArticuloGastronomia::opcionalesHabilitados(),
-            'estado_enum' => Formula_Articulo_Estado::$enumEstado,
-            'sinFormulasCargadas' => $sinFormulasCargadas,
-        ]);
-    }
+        $armado = $this->armarListado($request);
+        if ($armado instanceof RedirectResponse) {
+            return $armado;
+        }
 
-    private function normalizarConOpcionales($valor): ?string
-    {
-        $valor = is_string($valor) ? strtolower(trim($valor)) : null;
-
-        return in_array($valor, ['si', 'no'], true) ? $valor : null;
+        return view('stock.formula_articulo.index', $armado);
     }
 
     /**
@@ -118,50 +125,176 @@ class FormulaArticuloController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        if (($busqueda === null || $busqueda === '') && $request->query('busqueda') !== null) {
-            $busqueda = (string) $request->query('busqueda');
-        }
-        $conOpcionales = $this->normalizarConOpcionales($request->query('con_opcionales'));
+        $filtros = $this->resolverFiltrosListado($request, is_string($busqueda) ? $busqueda : null);
+        $columnasVisibles = $this->columnasDesdeRequest($request);
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            FormulaArticuloListadoColumnas::RECURSO,
+            FormulaArticuloListadoColumnas::catalogoActivo()
+        );
+        $subtitulo = $this->subtituloListado($filtros, $etiquetas);
 
         switch ($formato) {
             case 'PDF':
-                $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, false, true, $conOpcionales);
+                $formulas = $this->formulaArticuloQuery->leeListado($filtros, false, true);
                 ArticuloPrecioUltimaCompraSupport::enriquecerFormulasPaginadasConCosto($formulas);
-                $this->formulaArticuloCostoTotalService->enriquecerFormulasConCostoTotal($formulas);
-                $view = \View::make('stock.formula_articulo.listado', compact('formulas'))->render();
-                $path = storage_path('pdf/listados');
-                $nombre_pdf = 'listado_formula_articulo';
-                if (! is_dir($path)) {
-                    mkdir($path, 0777, true);
+                $logos = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($formulas);
+                $html = view('stock.formula_articulo.listado', [
+                    'formulas' => $formulas,
+                    'columnasVisibles' => $columnasVisibles,
+                    'etiquetasColumnas' => $etiquetas,
+                    'subtitulo' => $subtitulo,
+                    'totalFilas' => $formulas->count(),
+                    'logosCabecera' => $logos,
+                ])->render();
+                $ruta = storage_path('pdf/listados/listado_formula_articulo.pdf');
+                if (! is_dir(dirname($ruta))) {
+                    mkdir(dirname($ruta), 0777, true);
                 }
-                $pdf = \App::make('dompdf.wrapper');
-                $pdf->setPaper('legal', 'landscape');
-                $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombre_pdf.'.pdf');
+                DompdfListadoSupport::guardarLegalLandscape($html, $ruta, [
+                    'titulo_corto' => 'Fórmulas de artículos',
+                ]);
 
-                return response()->download($path.'/'.$nombre_pdf.'.pdf');
+                return response()->download($ruta, 'formulas_articulos.pdf');
 
             case 'EXCEL':
                 return (new FormulaArticuloExport($this->formulaArticuloQuery))
-                    ->parametros($busqueda, $conOpcionales)
+                    ->parametros($filtros, $columnasVisibles, $etiquetas, $subtitulo)
                     ->download('formula_articulo.xlsx');
 
             case 'CSV':
                 return (new FormulaArticuloExport($this->formulaArticuloQuery))
-                    ->parametros($busqueda, $conOpcionales)
+                    ->parametros($filtros, $columnasVisibles, $etiquetas, $subtitulo)
                     ->download('formula_articulo.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
-        $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, true, true, $conOpcionales);
-        ArticuloPrecioUltimaCompraSupport::enriquecerFormulasPaginadasConCosto($formulas);
-        $this->formulaArticuloCostoTotalService->enriquecerFormulasConCostoTotal($formulas);
+        return redirect()->route('consultar_formula_articulo', FormulaArticuloListadoFiltros::paraQueryString($filtros));
+    }
 
-        return view('stock.formula_articulo.index', [
-            'formulas' => $formulas,
-            'busqueda' => $busqueda,
-            'conOpcionales' => $conOpcionales,
-            'opcionalesHabilitados' => FormulaArticuloGastronomia::opcionalesHabilitados(),
-            'estado_enum' => Formula_Articulo_Estado::$enumEstado,
-        ]);
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-formula-articulo');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
+        $layout = FormulaArticuloListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $page = $this->formulaArticuloQuery->leeListado($filtros, true, true);
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            FormulaArticuloListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            FormulaArticuloListadoFiltros::camposOrdenables()
+        );
+        $filtrosCortes = $filtros;
+        $filtrosCortes['agrupar'] = $agrupar;
+        $cortes = $agrupar !== []
+            ? $this->formulaArticuloQuery->cortesListado($filtrosCortes)
+            : ['activo' => false];
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => FormulaArticuloListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
+        ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-formula-articulo');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $layout = FormulaArticuloListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $orden = $filtros['sort'] ?? [];
+        $vista = ListadoVistaSupport::guardar(
+            FormulaArticuloListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'],
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $orden,
+                'orden' => $orden,
+                'agrupar' => $filtros['agrupar'] ?? [],
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('consultar_formula_articulo', FormulaArticuloListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        $qs = FormulaArticuloListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+        FormulaArticuloListadoFiltros::persistir($qs);
+
+        return redirect()->route('consultar_formula_articulo', $qs)
+            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        can('listar-formula-articulo');
+        $ok = ListadoVistaSupport::eliminar($id, FormulaArticuloListadoColumnas::RECURSO, (int) auth()->id());
+        FormulaArticuloListadoFiltros::olvidar();
+
+        return redirect()->route('consultar_formula_articulo', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-formula-articulo');
+        $layout = FormulaArticuloListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario($vistaId, FormulaArticuloListadoColumnas::RECURSO, (int) auth()->id());
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            FormulaArticuloListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = $this->resolverFiltrosListado($request);
+        $qs = FormulaArticuloListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs[$vistaId > 0 ? 'vista_id' : 'vista_estandar'] = $vistaId > 0 ? $vistaId : 1;
+
+        return redirect()->route('consultar_formula_articulo', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-formula-articulo');
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            FormulaArticuloListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(FormulaArticuloListadoColumnas::catalogoActivo())
+        );
+
+        return redirect()->route(
+            'consultar_formula_articulo',
+            FormulaArticuloListadoFiltros::paraQueryString($this->resolverFiltrosListado($request))
+        )->with('mensaje', 'Etiquetas actualizadas.');
     }
 
     /**
@@ -515,6 +648,213 @@ class FormulaArticuloController extends Controller
         }
 
         return response()->json(['datos' => $out]);
+    }
+
+    /**
+     * @return array<string, mixed>|RedirectResponse
+     */
+    private function armarListado(Request $request): array|RedirectResponse
+    {
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(FormulaArticuloListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar')
+            || $request->input('vista_modo') === 'estandar';
+
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                FormulaArticuloListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('busqueda')
+            && ! $request->has('qbe')
+            && ! $request->boolean('limpiar_filtros')
+            && ! $request->boolean('filtro_limpiar')
+            && ! $request->has('filtro_estado')
+            && ! $request->has('filtro_articulos')
+            && ! $request->has('con_opcionales')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(FormulaArticuloListadoColumnas::RECURSO, $usuarioId)
+                ?? ListadoVistaSupport::defaultDelRol(FormulaArticuloListadoColumnas::RECURSO, (int) session('rol_id'));
+        }
+
+        $filtrosRequest = ListadoVistaSupport::prepararQbeContraVista(
+            $this->resolverFiltrosListado($request),
+            $request
+        );
+        $filtros = $filtrosRequest;
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = FormulaArticuloListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+        unset($filtros['_qbe_explicito']);
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null,
+            FormulaArticuloListadoFiltros::camposOrdenables()
+        );
+        ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
+        if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
+            if ($request->exists('group')) {
+                $filtros['agrupar'] = $filtrosRequest['agrupar'] ?? [];
+            }
+            if ($request->exists('sort')) {
+                $filtros['sort'] = $filtrosRequest['sort'] ?? [];
+            }
+            ListadoVistaSupport::recordarOrdenYAgrupar(
+                $vistaActiva,
+                $filtros['sort'] ?? [],
+                $filtros['agrupar'] ?? []
+            );
+        }
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = FormulaArticuloListadoFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif ($forzarEstandar) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('consultar_formula_articulo', $params)
+                ->with('mensaje', 'Se quitó el orden de la grilla.');
+        }
+
+        $catalogo = FormulaArticuloListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            FormulaArticuloListadoColumnas::RECURSO,
+            $catalogo
+        );
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = FormulaArticuloListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = FormulaArticuloListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+
+        $formulas = $this->formulaArticuloQuery->leeListado($filtros, true, true);
+        ArticuloPrecioUltimaCompraSupport::enriquecerFormulasPaginadasConCosto($formulas);
+        $this->formulaArticuloCostoTotalService->enriquecerFormulasConCostoTotal($formulas);
+
+        $cortes = ['activo' => false];
+        if (ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], FormulaArticuloListadoFiltros::camposOrdenables()) !== []) {
+            $cortes = $this->formulaArticuloQuery->cortesListado($filtros);
+        }
+
+        $camposFiltro = FormulaArticuloListadoFiltros::camposQbeDisponibles();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
+
+        $filtrosQuery = FormulaArticuloListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
+        $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
+        if ($vistaActiva) {
+            $filtrosQuery['vista_id'] = $vistaActiva->id;
+        } elseif ($forzarEstandar) {
+            $filtrosQuery['vista_estandar'] = 1;
+        }
+
+        if ($request->boolean('filtro_limpiar')) {
+            FormulaArticuloListadoFiltros::olvidar();
+        } elseif (FormulaArticuloListadoFiltros::requestTraeFiltros($request)) {
+            $page = (int) $request->query('page', 0);
+            $guardar = $filtrosQuery;
+            if ($page > 1) {
+                $guardar['page'] = $page;
+            }
+            FormulaArticuloListadoFiltros::persistir($guardar);
+        }
+
+        return [
+            'formulas' => $formulas,
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'camposFiltro' => $camposFiltro,
+            'opcionalesHabilitados' => FormulaArticuloGastronomia::opcionalesHabilitados(),
+            'estado_enum' => Formula_Articulo_Estado::$enumEstado,
+            'sinFormulasCargadas' => (int) ($formulas->total() ?? 0) === 0 && ! FormulaArticuloListadoFiltros::tieneCriteriosAplicados($filtros),
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'etiquetasInstalacion' => $etiquetasInstalacion,
+            'vistasListado' => $vistas,
+            'vistaActiva' => $vistaActiva,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'cortes' => $cortes,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        return FormulaArticuloListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function columnasDesdeRequest(Request $request): array
+    {
+        $columnasRequest = $request->input('columnas');
+        if (is_string($columnasRequest)) {
+            $columnasRequest = array_filter(array_map('trim', explode(',', $columnasRequest)));
+        }
+
+        return FormulaArticuloListadoPreferenciasUsuario::resolverColumnas(
+            is_array($columnasRequest) ? $columnasRequest : null
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, string>  $etiquetas
+     */
+    private function subtituloListado(array $filtros, array $etiquetas): string
+    {
+        $partes = [];
+        $estado = FormulaArticuloListadoFiltros::normalizarEstado($filtros['estado'] ?? '');
+        if ($estado !== '') {
+            $partes[] = 'Estado: '.$estado;
+        }
+        $articulos = FormulaArticuloListadoFiltros::etiquetaArticulos((string) ($filtros['articulos'] ?? ''));
+        if ($articulos !== '') {
+            $partes[] = $articulos;
+        }
+        $opc = FormulaArticuloListadoFiltros::normalizarOpcionales($filtros['con_opcionales'] ?? '');
+        if ($opc === 'si') {
+            $partes[] = 'Con opcionales';
+        } elseif ($opc === 'no') {
+            $partes[] = 'Sin opcionales';
+        }
+        $presentacion = $filtros;
+        $presentacion['orden'] = $filtros['sort'] ?? [];
+        $texto = ListadoExportPresentacionSupport::subtitulo(
+            $presentacion,
+            $etiquetas,
+            FormulaArticuloListadoFiltros::camposOrdenables()
+        );
+        if ($texto !== '') {
+            $partes[] = $texto;
+        }
+
+        return implode(' · ', $partes);
     }
 
     /**

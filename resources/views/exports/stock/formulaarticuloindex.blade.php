@@ -1,56 +1,42 @@
-@php
-	use App\Support\Stock\FormulaArticuloNumero;
-	$excelMostrarCodigo = FormulaArticuloNumero::mostrarCodigo();
-	$excelColSpan = $excelMostrarCodigo ? 9 : 10;
-@endphp
 <table>
 	@if (!empty($reservarFilaLogoExcel))
-		<tbody>
-			<tr>
-				<td colspan="{{ $excelColSpan }}" style="height: 52px;">&#160;</td>
-			</tr>
-		</tbody>
-	@endif
-	<tbody>
 		<tr>
-			<td colspan="{{ $excelColSpan }}"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">F&oacute;rmulas de art&iacute;culos</h2></td>
+			<td colspan="{{ max(1, count($columnasVisibles ?? [])) }}" style="height: 52px;">&#160;</td>
 		</tr>
-	</tbody>
+	@endif
+	<tr>
+		<td colspan="{{ max(1, count($columnasVisibles ?? [])) }}"><strong>Fórmulas de artículos</strong></td>
+	</tr>
+	<tr>
+		<td colspan="{{ max(1, count($columnasVisibles ?? [])) }}">Generado {{ date('d/m/Y H:i') }}</td>
+	</tr>
+	@if (trim($subtitulo ?? '') !== '')
+		<tr>
+			<td colspan="{{ max(1, count($columnasVisibles ?? [])) }}">{{ $subtitulo }}</td>
+		</tr>
+	@endif
+	<tr>
+		<td colspan="{{ max(1, count($columnasVisibles ?? [])) }}">Registros: {{ number_format($totalFilas ?? 0, 0, ',', '.') }}</td>
+	</tr>
 	<thead>
 		<tr>
-			@if ($excelMostrarCodigo)
-				<th>C&oacute;d. f&oacute;rmula</th>
-			@else
-				<th>ID f&oacute;rmula</th>
-				<th>C&oacute;digo f&oacute;rmula</th>
-			@endif
-			<th>ID art&iacute;culo</th>
-			<th>SKU art&iacute;culo</th>
-			<th>Descripci&oacute;n art&iacute;culo</th>
-			<th>Cant. unidad</th>
-			<th>Estado</th>
-			<th>Detalle cabecera</th>
-			<th>Usuario alta</th>
-			<th>&Iacute;tems (l&iacute;neas)</th>
+			@foreach ($columnasVisibles as $keyColumna)
+				<th>{{ ($etiquetasColumnas ?? [])[$keyColumna] ?? $keyColumna }}</th>
+			@endforeach
 		</tr>
 	</thead>
 	<tbody>
 		@foreach ($formulas as $data)
 			<tr>
-				@if ($excelMostrarCodigo)
-					<td>{{ FormulaArticuloNumero::paraFormula($data) }}</td>
-				@else
-					<td>{{ $data->id }}</td>
-					<td>{{ $data->codigo }}</td>
-				@endif
-				<td>{{ $data->articulo_id }}</td>
-				<td>{{ $data->articulo_sku ?? '' }}</td>
-				<td>{{ $data->articulo_descripcion ?? '' }}</td>
-				<td>{{ number_format((float) ($data->cantidadunidad ?? 0), 2, ',', '.') }}</td>
-				<td>{{ $data->estado }}</td>
-				<td>{{ $data->detalle }}</td>
-				<td>{{ $data->nombreusuario ?? '' }}</td>
-				<td>@include('stock.formula_articulo.partials.export_lineas', ['data' => $data, 'separator' => "\n", 'enlaces' => false])</td>
+				@foreach ($columnasVisibles as $keyColumna)
+					@if ($keyColumna === 'cantidadunidad')
+						<td>{{ number_format((float) ($data->cantidadunidad ?? 0), 2, '.', '') }}</td>
+					@elseif ($keyColumna === 'items')
+						<td>@include('stock.formula_articulo.partials.export_lineas', ['data' => $data, 'separator' => "\n", 'enlaces' => false])</td>
+					@else
+						<td>{{ \App\Support\Stock\FormulaArticuloListadoColumnas::valorCelda($data, $keyColumna) }}</td>
+					@endif
+				@endforeach
 			</tr>
 		@endforeach
 	</tbody>

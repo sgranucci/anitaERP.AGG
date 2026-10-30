@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-Nueva f&oacute;rmula de art&iacute;culo
+Nueva fórmula de artículo
 @endsection
 
 @section("scripts")
@@ -23,9 +23,9 @@ window.formulaArticuloSubformulaConsulta = {
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Nueva f&oacute;rmula de art&iacute;culo</h3>
+                <h3 class="card-title">Nueva fórmula de artículo</h3>
                 <div class="card-tools">
                     <a href="{{ route('consultar_formula_articulo') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
@@ -34,18 +34,21 @@ window.formulaArticuloSubformulaConsulta = {
             </div>
             <form action="{{ route('guardar_formula_articulo') }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf
-                <div align="center" style="margin: 5px;">
-                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
-                        <i class="fa fa-flask"></i> Datos principales
-                    </button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">
-                        <span class="fa fa-paperclip"></span> Archivos asociados
-                    </button>
-                </div>
+                <ul class="nav nav-tabs px-3 pt-3 bg-white" role="tablist">
+                    <li class="nav-item">
+                        <button type="button" class="nav-link active" id="botonform1">
+                            <i class="fa fa-flask"></i> Datos principales
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button type="button" class="nav-link" id="botonform4">
+                            <i class="fa fa-paperclip"></i> Archivos asociados
+                        </button>
+                    </li>
+                </ul>
                 <div class="card-body">
                     @include('stock.formula_articulo.form')
                     <div class="form4 formula-solapa-archivos" id="formula-solapa-archivos" style="display:none;">
-                        <p class="text-muted small mb-2">Archivos actuales</p>
                         @include('stock.formula_articulo.partials.archivos_adjuntos', ['data' => $data ?? null, 'ocultarInputsConservar' => false])
                         @include('stock.formula_articulo.partials.solapa_agregar_archivos_formula', ['data' => $data ?? null])
                     </div>

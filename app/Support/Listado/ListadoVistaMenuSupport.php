@@ -53,6 +53,11 @@ final class ListadoVistaMenuSupport
             'icono' => 'fa-bookmark',
             'etiqueta_padre' => 'Movimientos de OT',
         ],
+        'stock.formula_articulo' => [
+            'url_base' => 'stock/formula-articulo',
+            'icono' => 'fa-bookmark',
+            'etiqueta_padre' => 'Fórmulas de artículos',
+        ],
     ];
 
     public static function columnaMenuDisponible(): bool

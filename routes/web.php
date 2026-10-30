@@ -1666,6 +1666,11 @@ Route::post('stock/articulo/{id}/waitry/baja', 'Stock\ArticuloWaitryController@b
 Route::get('stock/listaarticulo/{formato?}/{busqueda?}', 'Stock\ArticuloController@listar')->name('lista_articulo');
 
 Route::get('stock/formula-articulo', 'Stock\FormulaArticuloController@index')->name('consultar_formula_articulo');
+Route::post('stock/formula-articulo/workbench/vista', 'Stock\FormulaArticuloController@guardarVistaListado')->name('guardar_vista_listado_formula_articulo');
+Route::delete('stock/formula-articulo/workbench/vista/{id}', 'Stock\FormulaArticuloController@eliminarVistaListado')->name('eliminar_vista_listado_formula_articulo')->whereNumber('id');
+Route::post('stock/formula-articulo/workbench/columnas', 'Stock\FormulaArticuloController@guardarColumnasListado')->name('guardar_columnas_listado_formula_articulo');
+Route::post('stock/formula-articulo/workbench/etiquetas', 'Stock\FormulaArticuloController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_formula_articulo');
+Route::post('stock/formula-articulo/workbench/preview', 'Stock\FormulaArticuloController@previewWorkbench')->name('preview_workbench_formula_articulo');
 Route::get('stock/formula-articulo/crear', 'Stock\FormulaArticuloController@crear')->name('crear_formula_articulo');
 Route::post('stock/formula-articulo', 'Stock\FormulaArticuloController@guardar')->name('guardar_formula_articulo');
 Route::get('stock/formula-articulo/buscar', 'Stock\FormulaArticuloController@buscarJson')->name('buscar_formula_articulo');

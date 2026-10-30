@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-Editar f&oacute;rmula de art&iacute;culo
+Editar fórmula de artículo
 @endsection
 
 @section("scripts")
@@ -23,14 +23,14 @@ window.formulaArticuloSubformulaConsulta = {
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 @php
                     $numeroFormulaEditar = \App\Support\Stock\FormulaArticuloNumero::paraFormula($data);
                     $etiquetaNumeroEditar = \App\Support\Stock\FormulaArticuloNumero::mostrarCodigo() ? 'Cód.' : 'Id:';
                 @endphp
                 <h3 class="card-title">
-                    Editar f&oacute;rmula
+                    Editar fórmula
                     @if ($numeroFormulaEditar !== '')
                         {{ $etiquetaNumeroEditar }} {{ $numeroFormulaEditar }}
                     @endif
@@ -60,28 +60,34 @@ window.formulaArticuloSubformulaConsulta = {
                     <input type="hidden" name="origen" value="modal_consulta">
                 @endif
                 <input type="hidden" id="formula_articulo_id_edit" value="{{ $data->id }}" />
-                <div align="center" style="margin: 5px;">
-                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
-                        <i class="fa fa-flask"></i> Datos principales
-                    </button>
-                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
-                        <i class="fa fa-history"></i> Historia
-                    </button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">
-                        <span class="fa fa-paperclip"></span> Archivos asociados
-                    </button>
-                </div>
+                <ul class="nav nav-tabs px-3 pt-3 bg-white" role="tablist">
+                    <li class="nav-item">
+                        <button type="button" class="nav-link active" id="botonform1">
+                            <i class="fa fa-flask"></i> Datos principales
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button type="button" class="nav-link" id="botonform3">
+                            <i class="fa fa-history"></i> Historia
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button type="button" class="nav-link" id="botonform4">
+                            <i class="fa fa-paperclip"></i> Archivos asociados
+                        </button>
+                    </li>
+                </ul>
                 <div class="card-body">
                     @include('stock.formula_articulo.form', ['costoTotal' => $costoTotal ?? null])
                     <div class="form3 formula-solapa-historia" id="formula-solapa-historia" style="display:none;">
                         <h5 class="mb-3">Historia de estados</h5>
-                        <table class="table table-bordered table-sm">
-                            <thead class="thead-light">
+                        <table class="table table-sm table-bordered">
+                            <thead style="background:#85C1E9;color:#17202A;">
                                 <tr>
                                     <th>Fecha y hora</th>
                                     <th>Estado</th>
                                     <th>Usuario</th>
-                                    <th>Observaci&oacute;n</th>
+                                    <th>Observación</th>
                                 </tr>
                             </thead>
                             <tbody class="container-historia-formula"></tbody>
@@ -93,7 +99,6 @@ window.formulaArticuloSubformulaConsulta = {
                         </div>
                     </div>
                     <div class="form4 formula-solapa-archivos" id="formula-solapa-archivos" style="display:none;">
-                        <p class="text-muted small mb-2">Archivos actuales</p>
                         @include('stock.formula_articulo.partials.archivos_adjuntos', ['data' => $data, 'ocultarInputsConservar' => false])
                         @include('stock.formula_articulo.partials.solapa_agregar_archivos_formula', ['data' => $data])
                     </div>

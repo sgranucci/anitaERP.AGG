@@ -5,6 +5,11 @@
     $ocultarInputsConservar = $ocultarInputsConservar ?? false;
 @endphp
 
+<div class="card card-outline card-info mb-3">
+    <div class="card-header py-2">
+        <h5 class="card-title mb-0">Archivos asociados</h5>
+    </div>
+    <div class="card-body">
 @if ($archivosList->count())
     <div class="formula-archivos-preview row">
         @foreach ($archivosList as $arch)
@@ -58,3 +63,5 @@
 @else
     <p class="text-muted mb-0">No hay archivos adjuntos.</p>
 @endif
+    </div>
+</div>
