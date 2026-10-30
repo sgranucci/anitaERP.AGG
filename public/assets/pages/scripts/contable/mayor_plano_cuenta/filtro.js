@@ -539,8 +539,6 @@ function mayorPlanoSincronizarTildeSubdiario() {
     var ocultar = $erp.length > 0 && $erp.is(':checked');
     $wrap.toggleClass('d-none', ocultar);
     $wrap.find('input[name="incluye_subdiario"]').prop('disabled', ocultar);
-    $('#mpc-ayuda-subdiario-anita').toggleClass('d-none', ocultar);
-    $('#mpc-ayuda-subdiario-erp').toggleClass('d-none', !ocultar);
 }
 
 function mayorPlanoOnKeydownF1Capture(e) {

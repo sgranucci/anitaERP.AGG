@@ -217,18 +217,6 @@
                                             </label>
                                         </div>
                                     </div>
-                                    <small class="text-muted d-block mt-2">
-                                        <span id="mpc-ayuda-subdiario-anita" class="{{ $ocultarIncluyeSubdiario ? 'd-none' : '' }}">
-                                            Fuente Anita: el subdiario Informix completa imputaciones que no est&aacute;n en ctamov.
-                                        </span>
-                                        <span id="mpc-ayuda-subdiario-erp" class="{{ $ocultarIncluyeSubdiario ? '' : 'd-none' }}">
-                                            Fuente ERP nativo: todos los asientos de <code>asiento</code> entran (incluye los importados de subdiario, nro. 5.xxx.xxx).
-                                        </span>
-                                        Con un m&oacute;dulo elegido se usa ese subdiario (V ventas, C compras, T caja;
-                                        cuentas a pagar = &oacute;rdenes de pago) m&aacute;s el ctamov de origen ERP, sin saldo anterior.
-                                        Totales agrupa por cuenta; Movimientos muestra cada imputaci&oacute;n.
-                                        La columna de centro de costo, la de moneda de referencia, el t&iacute;tulo de cuenta y si va en una sola l&iacute;nea quedan grabados como preferencia del usuario.
-                                    </small>
                                 </div>
                             </div>
                         </div>
