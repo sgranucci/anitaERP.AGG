@@ -7,6 +7,7 @@ use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\PercepcionIibbJurisdiccionEntregaSupport;
 use App\Support\Interbanking\InterbankingCalendarioSync;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalShoppingCaballitoSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubeStockCatalogoSupport;
 use Carbon\Carbon;
@@ -739,6 +740,15 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/tiendanube-health.log'))
             ->when(fn () => EntornoEmpresaSupport::esFerli()
                 && (bool) config('tiendanube.health_cron_habilitado', true));
+
+        // Ferli, solo Caballito: TXT del shopping por correo. La hora sale de Parámetros Facturación Local.
+        $schedule->command('facturacion-local:exportar-shopping-caballito')
+            ->dailyAt(FacturacionLocalShoppingCaballitoSupport::hora())
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/facturacion-local-shopping-caballito.log'))
+            ->when(fn () => EntornoEmpresaSupport::esFerli()
+                && FacturacionLocalShoppingCaballitoSupport::habilitado());
 
         $schedule->command('tiendanube:sincronizar-pedidos')
             ->everyTwoHours()

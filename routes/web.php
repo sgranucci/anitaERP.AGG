@@ -848,6 +848,10 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('ventas/facturacion-local/parametros', 'Ventas\FacturacionLocal\FacturacionLocalParametroController@index')->name('facturacion_local_parametros');
     Route::put('ventas/facturacion-local/parametros', 'Ventas\FacturacionLocal\FacturacionLocalParametroController@actualizar')->name('actualizar_facturacion_local_parametros');
 
+    Route::get('ventas/facturacion-local/shopping-caballito', 'Ventas\FacturacionLocal\FacturacionLocalShoppingEnvioController@index')->name('facturacion_local_shopping_caballito');
+    Route::post('ventas/facturacion-local/shopping-caballito/enviar', 'Ventas\FacturacionLocal\FacturacionLocalShoppingEnvioController@enviar')->name('facturacion_local_shopping_enviar');
+    Route::get('ventas/facturacion-local/shopping-caballito/{id}/archivo', 'Ventas\FacturacionLocal\FacturacionLocalShoppingEnvioController@descargar')->name('facturacion_local_shopping_descargar');
+
     Route::get('ventas/facturacion-local/motivos-devolucion', 'Ventas\FacturacionLocal\MotivoDevolucionController@index')->name('facturacion_local_motivos_devolucion');
     Route::get('ventas/facturacion-local/motivos-devolucion/lista/{formato?}', 'Ventas\FacturacionLocal\MotivoDevolucionController@listar')->name('lista_motivo_devolucion');
     Route::get('ventas/facturacion-local/motivos-devolucion/crear', 'Ventas\FacturacionLocal\MotivoDevolucionController@crear')->name('crear_motivo_devolucion');
