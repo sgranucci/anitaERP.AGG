@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Models\Configuracion\Pais;
 use App\Models\Ventas\Cliente;
 
 final class ClienteDocumentoUnicoSupport
@@ -18,6 +19,45 @@ final class ClienteDocumentoUnicoSupport
     public static function permiteCuitDuplicado(): bool
     {
         return filter_var(config('cliente.permitir_cuit_duplicado', false), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * País distinto de Argentina: el documento es el del país (o el CUIT país compartido)
+     * y puede repetirse entre clientes de exportación.
+     */
+    public static function documentoRepetiblePorPais(?int $paisId): bool
+    {
+        if ($paisId === null || $paisId <= 0) {
+            return false;
+        }
+
+        $pais = Pais::query()->find($paisId, ['id', 'nombre', 'codigo', 'codigo_afip']);
+        if ($pais === null) {
+            return false;
+        }
+
+        return ! self::paisEsArgentina($pais->codigo, $pais->nombre, $pais->codigo_afip);
+    }
+
+    public static function bloqueaDocumentoDuplicado(?int $paisId): bool
+    {
+        if (self::permiteCuitDuplicado() || self::documentoRepetiblePorPais($paisId)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static function paisEsArgentina(?string $codigo, ?string $nombre, ?string $codigoAfip): bool
+    {
+        if (trim((string) $codigoAfip) === '200' || trim((string) $codigo) === '200') {
+            return true;
+        }
+
+        $nombreNorm = mb_strtoupper(trim((string) $nombre));
+        $nombreNorm = preg_replace('/^\d+\s*-\s*/', '', $nombreNorm) ?? $nombreNorm;
+
+        return $nombreNorm === 'ARGENTINA';
     }
 
     public static function findOtroCliente(?string $numerodocumento, ?int $excluirClienteId = null): ?Cliente

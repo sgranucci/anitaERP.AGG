@@ -31,7 +31,11 @@ class ValidacionCliente extends FormRequest
     public function rules()
     {
         $excluirClienteId = $this->route('id') ? (int) $this->route('id') : null;
-        $reglaDocumentoUnico = new RuleClienteDocumentoUnico($excluirClienteId);
+        $paisId = (int) $this->input('pais_id');
+        $reglaDocumentoUnico = new RuleClienteDocumentoUnico(
+            $excluirClienteId,
+            $paisId > 0 ? $paisId : null,
+        );
 
         if (config('app.empresa') == 'Calzados Ferli')
             return [

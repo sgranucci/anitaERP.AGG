@@ -98,7 +98,7 @@
 					<select name="pais_id" id="pais_id" data-placeholder="País" class="form-control" required data-fouc>
 						<option value="">-- Seleccionar --</option>
 						@foreach($pais_query as $key => $value)
-							<option value="{{ $value->id }}" {{ (int) $value->id === (int) old('pais_id', $data->pais_id ?? '') ? 'selected' : '' }}>{{ $value->nombre }}</option>
+							<option value="{{ $value->id }}" data-codigo-afip="{{ $value->codigo_afip }}" {{ (int) $value->id === (int) old('pais_id', $data->pais_id ?? '') ? 'selected' : '' }}>{{ $value->nombre }}</option>
 						@endforeach
 					</select>
 				</div>

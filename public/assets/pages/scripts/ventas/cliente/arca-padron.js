@@ -514,6 +514,30 @@
 		return !!(cfg && cfg.getAttribute('data-permitir-cuit-duplicado') === '1');
 	}
 
+	function nombrePaisNormalizado(texto) {
+		return (texto || '')
+			.toString()
+			.replace(/^\d+\s*-\s*/, '')
+			.trim()
+			.toUpperCase();
+	}
+
+	/** País distinto de Argentina: el documento del país puede repetirse. */
+	function paisSeleccionadoPermiteDocumentoRepetido() {
+		const sel = byId('pais_id');
+		if (!sel || !sel.value) return false;
+		const opt = sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0] : null;
+		if (!opt) return false;
+		const afip = (opt.getAttribute('data-codigo-afip') || '').trim();
+		if (afip === '200') return false;
+		return nombrePaisNormalizado(opt.textContent) !== 'ARGENTINA';
+	}
+
+	function getPaisIdDocumento() {
+		const n = parseInt(getVal('pais_id') || '0', 10);
+		return Number.isFinite(n) && n > 0 ? n : 0;
+	}
+
 	function getExcluirClienteIdDocumento() {
 		const form = byId('form-general');
 		if (!form) return 0;
@@ -579,6 +603,11 @@
 
 	async function verificarDocumentoDuplicado(options) {
 		options = options || {};
+		if (paisSeleccionadoPermiteDocumentoRepetido()) {
+			ocultarAlertaDocumentoDuplicado();
+			return;
+		}
+
 		const url = getVerificarDocumentoUrl();
 		if (!url) return;
 
@@ -603,6 +632,7 @@
 					body: JSON.stringify({
 						numerodocumento: digitos,
 						excluir_cliente_id: getExcluirClienteIdDocumento(),
+						pais_id: getPaisIdDocumento(),
 					}),
 				});
 
@@ -668,6 +698,14 @@
 			verificarDocumentoDuplicado({ debounce: false });
 		});
 		nroDoc.addEventListener('input', onInputDocumento);
+
+		const pais = byId('pais_id');
+		if (pais && pais.getAttribute('data-verificar-documento-bound') !== '1') {
+			pais.setAttribute('data-verificar-documento-bound', '1');
+			pais.addEventListener('change', function () {
+				verificarDocumentoDuplicado({ debounce: false });
+			});
+		}
 	}
 
 	async function consultarArcaConValidacionImpuestos(options) {
@@ -952,6 +990,11 @@
 		const formGeneral = byId('form-general');
 		if (formGeneral) {
 			formGeneral.addEventListener('submit', function (ev) {
+				if (paisSeleccionadoPermiteDocumentoRepetido()) {
+					clienteDocumentoDuplicadoActivo = false;
+					ocultarAlertaDocumentoDuplicado();
+					return;
+				}
 				if (!clienteDocumentoDuplicadoActivo) {
 					return;
 				}

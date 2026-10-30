@@ -1180,7 +1180,20 @@ class ClienteController extends Controller
         }
 
         $excluirId = (int) $request->input('excluir_cliente_id', 0);
+        $paisId = (int) $request->input('pais_id', 0);
         $permitirDuplicado = ClienteDocumentoUnicoSupport::permiteCuitDuplicado();
+        $repetiblePorPais = ClienteDocumentoUnicoSupport::documentoRepetiblePorPais($paisId > 0 ? $paisId : null);
+
+        if ($repetiblePorPais) {
+            return response()->json([
+                'ok' => true,
+                'duplicado' => false,
+                'bloquear' => false,
+                'permitir_duplicado' => true,
+                'documento_repetible_por_pais' => true,
+            ]);
+        }
+
         $cliente = ClienteDocumentoUnicoSupport::findOtroCliente(
             (string) $request->input('numerodocumento', ''),
             $excluirId > 0 ? $excluirId : null
