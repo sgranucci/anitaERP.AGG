@@ -52,10 +52,10 @@ final class TiendanubePedidoReceptorSupport
         }
 
         if ($letra === self::LETRA_A) {
-            $clienteId = (int) config('tiendanube.cliente_ri_id', 0);
-            // El default histórico (id 1) está dado de baja: sin un RI vivo no hay Factura A.
+            // El CUIT va en el comprobante. El cliente es el de contado, no un RI inventado.
+            $clienteId = (int) config('tiendanube.cliente_cf_id', 0);
             if ($clienteId <= 0 || ! Cliente::query()->whereKey($clienteId)->exists()) {
-                $clienteId = FacturacionLocalReceptorSupport::clienteRiId();
+                $clienteId = FacturacionLocalReceptorSupport::clienteContadoId();
             }
             $tipodoc = 80; // CUIT
             if ($doc === '' || strlen($doc) < 11) {

@@ -169,7 +169,7 @@ class VentaDeudaImportarDesdeAnitaService
             return $vacio;
         }
 
-        $prep = $this->preparar($fila, null, 'Importado Anita climov (COA contrapartida)');
+        $prep = $this->preparar($fila, null, 'Importado Anita climov ('.$tipo.')');
         if (($prep['estado'] ?? '') !== 'ok') {
             $vacio['error'] = (string) ($prep['error'] ?? 'No se pudo armar '.$etiqueta);
 
@@ -184,6 +184,7 @@ class VentaDeudaImportarDesdeAnitaService
         $ocupada = Venta::query()
             ->where('puntoventa_id', (int) ($prep['data']['puntoventa_id'] ?? 0))
             ->where('numerocomprobante', (int) ($prep['data']['numerocomprobante'] ?? 0))
+            ->where('tipotransaccion_id', (int) ($prep['data']['tipotransaccion_id'] ?? 0))
             ->orderBy('id')
             ->first();
         if ($ocupada) {
@@ -199,6 +200,21 @@ class VentaDeudaImportarDesdeAnitaService
                 : $etiqueta;
 
             return $vacio;
+        }
+        $codigoAfip = $prep['data']['codigo_afip'] ?? null;
+        if ($codigoAfip !== null && $codigoAfip !== '') {
+            $choqueOtroTipo = Venta::query()
+                ->where('puntoventa_id', (int) ($prep['data']['puntoventa_id'] ?? 0))
+                ->where('numerocomprobante', (int) ($prep['data']['numerocomprobante'] ?? 0))
+                ->where('codigo_afip', $codigoAfip)
+                ->where('tipotransaccion_id', '!=', (int) ($prep['data']['tipotransaccion_id'] ?? 0))
+                ->exists();
+            if ($choqueOtroTipo) {
+                // COB y COA pueden compartir número. El unique fiscal no distingue el tipo,
+                // y estos comprobantes no son un comprobante AFIP: se graban sin codigo_afip
+                // para no pisar el documento del otro tipo.
+                $prep['data']['codigo_afip'] = null;
+            }
         }
         $vacio['total'] = round((float) ($prep['data']['total'] ?? 0), 4);
         if ($dryRun) {

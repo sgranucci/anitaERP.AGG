@@ -98,13 +98,13 @@ final class ClienteCuentacorrienteAplicacionFilaSupport
         $nombre = strtoupper((string) ($tt?->nombre ?? ''));
 
         if ($lado === 'credito') {
-            if ((int) ($fila->cobranza_id ?? 0) > 0) {
-                return self::TIPO_PAGO;
-            }
-            if ($signo === 'R' || str_contains($abrev, 'NC')) {
+            if ($signo === 'R' || str_contains($abrev, 'NC') || str_starts_with($abrev, 'CIM')) {
                 return self::TIPO_NC;
             }
-            if ($venta) {
+            if (str_starts_with($abrev, 'COA') || (int) ($fila->cobranza_id ?? 0) > 0) {
+                return self::TIPO_PAGO;
+            }
+            if ($venta && ! str_starts_with($abrev, 'COB')) {
                 return self::TIPO_NC;
             }
 

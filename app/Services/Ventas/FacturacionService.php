@@ -3703,6 +3703,17 @@ class FacturacionService
 		if (preg_match('/^[ABCEM]$/', $letraForzada) === 1) {
 			$letra = $letraForzada;
 		}
+		// Factura A eventual: el cliente es el de contado. La condición de IVA del
+		// comprobante es responsable inscripto, sin tocar el maestro.
+		if ($letra === 'A' && strtoupper((string) ($condicioniva->letra ?? '')) !== 'A') {
+			$condicionRiId = (int) \App\Models\Configuracion\Condicioniva::query()
+				->where('letra', 'A')
+				->orderBy('id')
+				->value('id');
+			if ($condicionRiId > 0) {
+				$clienteGraba->condicioniva_id = $condicionRiId;
+			}
+		}
 
 		$this->aplicarTipotransaccionSegunClienteMonto(
 			$data,
@@ -3904,7 +3915,11 @@ class FacturacionService
 				$detalleContable = $tipoAnita." ".$letra." ".$puntoventa->codigo." ".$numero;
 
 				// Procesa Factura electronica (o NC Villafranca: Anita usa el mismo payload).
-				if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido)
+				// La NDR de cheque rechazado sale de un PV manual y igual arma el
+				// payload fiscal para poder grabar venta y climov en Anita.
+				$forzarSincronizacionAnita = is_array($data['opciones_emision'] ?? null)
+					&& ! empty($data['opciones_emision']['forzar_sincronizacion_anita']);
+				if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido || $forzarSincronizacionAnita)
 				{
 					// Arma tributos
 					$tributos = [];
@@ -3970,7 +3985,7 @@ class FacturacionService
 							'codigoempresa' => $empresa->codigo,
 							'tipodoc' => $arcaTipodoc,
 							'numerodocumento' => $arcaNumerodoc,
-							'condicioniva_id' => $cliente->condicioniva_id,
+							'condicioniva_id' => $clienteGraba->condicioniva_id,
 							'numerocomprobante' => $numero,
 							'fechacomprobante' => date('Ymd', strtotime($fechaFactura)),
 							'total' => $totalComprobante,
@@ -5552,7 +5567,9 @@ class FacturacionService
 				'remito_id' => $emiteRemitoMostrador ? (int) ($vta->fresh()->remito_id ?? 0) : 0,
 			];
 
-			if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido)
+			$forzarSincronizacionAnita = is_array($opcionesEmision)
+				&& ! empty($opcionesEmision['forzar_sincronizacion_anita']);
+			if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido || $forzarSincronizacionAnita)
 			{
 				$deferAnitaMostrador = ! $transaccionExterna
 					&& PedidoFacturaAnitaDeferSupport::debeDiferir();
@@ -6173,6 +6190,178 @@ class FacturacionService
 	}
 
 	// Graba factura en Anita
+	/**
+	 * Réplica de una NDR ya emitida en un punto de venta manual.
+	 * Graba venta y climov. El cobrado queda en lo que el ERP ya aplicó,
+	 * para que la deuda de Anita coincida con la cuenta corriente.
+	 *
+	 * @return array{ok:bool, codigo:string, monto:float, cobrado:float, error:?string}
+	 */
+	public function replicarNotaDebitoManualEnAnita(int $ventaId): array
+	{
+		$venta = Venta::query()->find($ventaId);
+		if ($venta === null) {
+			return ['ok' => false, 'codigo' => '', 'monto' => 0.0, 'cobrado' => 0.0, 'error' => 'No está la venta '.$ventaId.'.'];
+		}
+
+		$codigo = (string) $venta->codigo;
+		if (! str_starts_with($codigo, 'NDR ')) {
+			return ['ok' => false, 'codigo' => $codigo, 'monto' => 0.0, 'cobrado' => 0.0, 'error' => 'No es una nota de débito NDR.'];
+		}
+
+		$partes = explode(' ', $codigo);
+		$resto = explode('-', $partes[1] ?? '');
+		$letra = (string) ($resto[0] ?? '');
+		$sucursal = (string) ($resto[1] ?? '');
+		$numero = (int) $venta->numerocomprobante;
+		$monto = round(abs((float) $venta->total), 2);
+		if ($letra === '' || $sucursal === '' || $numero <= 0 || $monto < 0.01) {
+			return ['ok' => false, 'codigo' => $codigo, 'monto' => $monto, 'cobrado' => 0.0, 'error' => 'La nota no tiene letra, sucursal o importe.'];
+		}
+
+		$tipo = DB::table('tipotransaccion')->where('id', (int) $venta->tipotransaccion_id)->first();
+		$cliente = DB::table('cliente')->where('id', (int) $venta->cliente_id)->first();
+		$empresaCodigo = (string) DB::table('puntoventa as pv')
+			->join('empresa as e', 'e.id', '=', 'pv.empresa_id')
+			->where('pv.id', (int) $venta->puntoventa_id)
+			->value('e.codigo');
+		if ($tipo === null || $cliente === null) {
+			return ['ok' => false, 'codigo' => $codigo, 'monto' => $monto, 'cobrado' => 0.0, 'error' => 'Falta el tipo o el cliente de la nota.'];
+		}
+
+		$conceptostotales = [];
+		foreach (DB::table('venta_impuesto')->where('venta_id', $ventaId)->orderBy('id')->get() as $imp) {
+			$conceptostotales[] = [
+				'concepto' => (string) $imp->concepto,
+				'baseimponible' => (float) $imp->baseimponible,
+				'tasa' => (float) $imp->tasa,
+				'importe' => (float) $imp->importe,
+				'impuesto_id' => $imp->impuesto_id,
+			];
+		}
+
+		$lineas = [];
+		foreach (DB::table('venta_emision')->where('venta_id', $ventaId)->orderBy('numeroitem')->get() as $item) {
+			$lineas[] = [
+				'cantidad' => (float) $item->cantidad,
+				'precio' => (float) $item->precio,
+				'descuento' => (float) $item->descuento,
+				'impuesto_id' => (int) $item->impuesto_id,
+				'incluyeimpuesto' => (string) ($item->incluyeimpuesto ?: 'N'),
+				'detalle' => str_replace(["'", '\\'], ' ', (string) $item->detalle),
+				'descripcion' => str_replace(["'", '\\'], ' ', (string) $item->detalle),
+			];
+		}
+
+		$vencimiento = (string) (DB::table('cliente_cuentacorriente')
+			->where('venta_id', $ventaId)
+			->where('total', '>', 0)
+			->orderBy('id')
+			->value('fechavencimiento') ?: $venta->fecha);
+		$cuentacorriente = [[
+			'fechavencimiento' => $vencimiento,
+			'total' => $monto,
+		]];
+
+		$cobrado = round((float) DB::table('cliente_cuentacorriente_aplicacion as a')
+			->join('cliente_cuentacorriente as cc', 'cc.id', '=', 'a.cliente_cuentacorriente_id')
+			->where('cc.venta_id', $ventaId)
+			->where('cc.total', '>', 0)
+			->where('a.total', '<', 0)
+			->sum(DB::raw('ABS(a.total)')), 2);
+		if ($cobrado > $monto) {
+			$cobrado = $monto;
+		}
+
+		$fecha = $venta->fecha instanceof \DateTimeInterface
+			? $venta->fecha->format('Y-m-d')
+			: (string) $venta->fecha;
+		$payloadVenta = [
+			'fecha' => $fecha,
+			'fechajornada' => $fecha,
+			'cliente_id' => (int) $venta->cliente_id,
+			'numerocomprobante' => $numero,
+			'codigo' => $codigo,
+			'total' => $monto,
+			'moneda_id' => (int) $venta->moneda_id,
+			'cotizacion' => ((float) $venta->cotizacion) > 0 ? (float) $venta->cotizacion : 1,
+			'leyenda' => str_replace(["'", '\\'], ' ', (string) $venta->leyenda),
+			'descuento' => (float) $venta->descuento,
+			'descuentointegrado' => ' ',
+			'usuario_id' => (int) $venta->usuario_id,
+			'vendedor_id' => (int) $venta->vendedor_id,
+			'condicioniva_id' => (int) $venta->condicioniva_id,
+			'nombre' => (string) $venta->nombre,
+			'nroinscripcion' => (string) $venta->nroinscripcion,
+			'domicilio' => (string) $venta->domicilio,
+			'condicionventa_id' => (int) $venta->condicionventa_id,
+			'transporte_id' => $venta->transporte_id,
+		];
+		$dataCAE = [
+			'codigoempresa' => $empresaCodigo,
+			'gravado' => \App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptostotales, $monto),
+			'iva' => (float) $this->impuestoService->buscaValor($conceptostotales, 'concepto', 'Iva ', 'importe'),
+			'exento' => (float) $this->impuestoService->buscaValor($conceptostotales, 'concepto', 'Exento', 'importe'),
+			'nogravado' => (float) $this->impuestoService->buscaValor($conceptostotales, 'concepto', 'No Gravado', 'importe'),
+			'items' => $lineas,
+		];
+
+		$anita = $this->grabaAnita(
+			$sucursal,
+			$letra,
+			0,
+			0,
+			$payloadVenta,
+			$dataCAE,
+			$conceptostotales,
+			$cuentacorriente,
+			$lineas,
+			1,
+			(string) ($tipo->codigo ?? '002'),
+			0,
+			false,
+			0,
+			0,
+			'',
+			null,
+			null,
+			false,
+			false,
+			true,
+			true,
+			'M'
+		);
+		if (is_array($anita) && isset($anita['error']) && ! $this->esErrorDuplicadoComprobanteEnAnita((string) ($anita['mensaje'] ?? $anita['error']))) {
+			$this->borraAnita(substr($codigo, 0, 3), $letra, $sucursal, $numero, '', true, 'M');
+
+			return [
+				'ok' => false,
+				'codigo' => $codigo,
+				'monto' => $monto,
+				'cobrado' => $cobrado,
+				'error' => (string) ($anita['mensaje'] ?? $anita['error']),
+			];
+		}
+
+		if ($cobrado > 0.009) {
+			$estado = $cobrado >= $monto - 0.02 ? 'C' : 'I';
+			$clienteAnita = str_pad(ltrim((string) $cliente->codigo, '0'), 6, '0', STR_PAD_LEFT);
+			$api = new ApiAnita();
+			$api->apiCallEscritura([
+				'acc' => 'update',
+				'tabla' => 'climov',
+				'sistema' => 'ventas',
+				'valores' => "cliv_t_cobrado = '".$cobrado."', cliv_estado = '".$estado."'",
+				'whereArmado' => " WHERE cliv_tipo = 'NDR' AND cliv_letra = '".$letra."'"
+					.' AND cliv_sucursal = '.(int) $sucursal
+					.' AND cliv_nro = '.$numero
+					." AND cliv_cliente = '".$clienteAnita."' ",
+			], 'climov cobrado NDR '.$numero);
+		}
+
+		return ['ok' => true, 'codigo' => $codigo, 'monto' => $monto, 'cobrado' => $cobrado, 'error' => null];
+	}
+
 	public function grabaAnita($puntoventa, $letra, $puntoventaremito, $numeroremito, $venta, 
 								$dataCAE, $conceptostotales, $cuentacorriente, $datatalle, $signo, 
 								$codigoTipoTransaccion, $pedido_id,
@@ -6336,7 +6525,29 @@ class FacturacionService
 			$condicionivaId = (int) $cliente->condicioniva_id;
 		}
 		$venCondIvaCli = $this->codigoCondicionIvaAnitaDesdeErpId($condicionivaId, $letra);
-		$venCtaCte = $sinCuentaCorrienteAnita ? 'N' : 'S';
+		// Receptor eventual: Anita no hereda el cliente cáscara. Queda en contado,
+		// con el nombre y el CUIT de la factura, y sin movimiento de deuda.
+		$receptorEventual = ReceptorEventualContactoSupport::identidadDistintaDelMaestro(
+			(string) ($venta['nombre'] ?? ''),
+			(string) ($venta['nroinscripcion'] ?? ''),
+			(string) ($nombre ?? ''),
+			(string) ($numerodocumento ?? ''),
+		);
+		if ($receptorEventual) {
+			$codigoCliente = '0';
+			if (trim((string) ($venta['nombre'] ?? '')) !== '') {
+				$nombre = (string) $venta['nombre'];
+			}
+			$docVenta = trim((string) ($venta['nroinscripcion'] ?? ''));
+			if ($docVenta !== '') {
+				$numerodocumento = $docVenta;
+			}
+			if (trim((string) ($venta['domicilio'] ?? '')) !== '') {
+				$domicilio = (string) $venta['domicilio'];
+			}
+		}
+		$omiteClimovAnita = $sinCuentaCorrienteAnita || $receptorEventual;
+		$venCtaCte = $omiteClimovAnita ? 'N' : 'S';
 
 		if (EntornoEmpresaSupport::esElBierzo())
 			$data = array( 	'tabla' => 'venta', 
@@ -6575,8 +6786,11 @@ class FacturacionService
 			}
 		}
 		
-		// Graba climov
+		// Graba climov. Contado y factura eventual no abren cuenta corriente.
 		$nroCuota = 0;
+		if ($omiteClimovAnita) {
+			$cuentacorriente = [];
+		}
 		$fechaVencimiento = 0;
 		foreach($cuentacorriente as $cuota)
 		{

@@ -673,6 +673,7 @@ final class FacturacionLocalEmisionService
             'opciones_emision' => $opciones,
             'arca_receptor' => $receptorResuelto['arca_receptor'],
             'venta_receptor' => $receptorResuelto['venta_receptor'],
+            'letra_forzada' => $letra,
             '_descuentos_linea_item' => $descuentos,
             'omitir_stock_por_item' => $omitirStockPorItem,
         ];

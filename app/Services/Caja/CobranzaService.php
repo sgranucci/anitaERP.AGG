@@ -52,6 +52,7 @@ use App\Models\Caja\Caja_Movimiento_Estado;
 use App\Models\Caja\Cobranza_Estado;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Cliente;
+use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -237,6 +238,9 @@ class CobranzaService
 								$this->persistirDescuentosCobranza($cobranza->id, $data);
 							}
 
+							if ($cobranza) {
+								$data['cobranza_id'] = $cobranza->id;
+							}
 							$anita = self::grabaAnita(
 								$data['fecha'],
 								'COB',
@@ -1385,7 +1389,234 @@ class CobranzaService
 			}
 		}
 
+		$cobranzaId = (int) ($data['cobranza_id'] ?? 0);
+		if ($cobranzaId > 0) {
+			$this->grabarAnticiposEnAnita($cobranzaId, (int) $empresa);
+		}
+
 		return ['Success'];
+	}
+
+	/**
+	 * El recibo de caja queda en tesorería. El saldo a favor, propio o de un pago de más,
+	 * entra además en la cuenta corriente de Anita como COA sin cobrar.
+	 *
+	 * @return list<array{numero:int,cliente:string,monto:float}>
+	 */
+	public function anticiposAnitaDeCobranza(int $cobranzaId): array
+	{
+		$coaTipoId = $this->tipoCajaIdPorAbreviatura('COA');
+		if ($coaTipoId <= 0 || $cobranzaId <= 0) {
+			return [];
+		}
+
+		$cobranzas = Cobranza::query()
+			->where(function ($q) use ($cobranzaId) {
+				$q->where('id', $cobranzaId)->orWhere('cobranza_origen_id', $cobranzaId);
+			})
+			->where('tipotransaccion_caja_id', $coaTipoId)
+			->get();
+
+		$salida = [];
+		foreach ($cobranzas as $coa) {
+			$anticipo = $this->anticipoDesdeCobranza($coa);
+			if ($anticipo !== null) {
+				$salida[] = $anticipo;
+			}
+		}
+
+		return $salida;
+	}
+
+	/**
+	 * @param  list<array{numero:int,cliente:string,monto:float}>  $anticipos
+	 */
+	public function assertAnticiposAnitaSinCobrar(array $anticipos): void
+	{
+		foreach ($anticipos as $anticipo) {
+			foreach ([['X', 0], ['A', 1]] as [$letra, $sucursal]) {
+				$fila = $this->leerClimovAnticipo($anticipo, $letra, $sucursal);
+				if ($fila === null) {
+					continue;
+				}
+				if (abs((float) ($fila['cliv_t_cobrado'] ?? 0)) > 0.05) {
+					throw new Exception(
+						'El anticipo COA '.$anticipo['numero'].' ya está cobrado en Anita. '
+						.'Desaplicalo antes de anular la cobranza.'
+					);
+				}
+			}
+		}
+	}
+
+	/**
+	 * @param  list<array{numero:int,cliente:string,monto:float}>  $anticipos
+	 */
+	public function borrarClimovAnticiposAnita(array $anticipos): void
+	{
+		$api = new ApiAnita();
+		foreach ($anticipos as $anticipo) {
+			$api->apiCallEscritura([
+				'acc' => 'delete',
+				'tabla' => 'climov',
+				'sistema' => 'ventas',
+				'whereArmado' => $this->whereClimovAnticipo($anticipo, 'X', 0),
+			], 'climov delete COA '.$anticipo['numero']);
+
+			$anterior = $this->leerClimovAnticipo($anticipo, 'A', 1);
+			$mismoMonto = $anterior !== null
+				&& abs((float) ($anterior['cliv_monto'] ?? 0) - $anticipo['monto']) <= 0.05
+				&& abs((float) ($anterior['cliv_t_cobrado'] ?? 0)) <= 0.05;
+			if ($mismoMonto) {
+				$api->apiCallEscritura([
+					'acc' => 'delete',
+					'tabla' => 'climov',
+					'sistema' => 'ventas',
+					'whereArmado' => $this->whereClimovAnticipo($anticipo, 'A', 1),
+				], 'climov delete COA A '.$anticipo['numero']);
+			}
+		}
+	}
+
+	private function grabarAnticiposEnAnita(int $cobranzaId, int $empresaId): void
+	{
+		foreach ($this->anticiposAnitaDeCobranza($cobranzaId) as $anticipo) {
+			$existente = $this->leerClimovAnticipo($anticipo, 'X', 0);
+			if ($existente !== null) {
+				$mismoCliente = trim((string) ($existente['cliv_cliente'] ?? '')) === $anticipo['cliente'];
+				$mismoMonto = abs((float) ($existente['cliv_monto'] ?? 0) - $anticipo['monto']) <= 0.05;
+				if ($mismoCliente && $mismoMonto) {
+					continue;
+				}
+				throw new Exception(
+					'Anita ya tiene el COA '.$anticipo['numero'].' con otro cliente o importe. No se grabó el anticipo.'
+				);
+			}
+
+			$payload = CobranzaAnitaCheBanEsquemaSupport::payloadClimovAnticipo([
+				'codigoCliente' => $anticipo['cliente'],
+				'fecha' => $anticipo['fecha'],
+				'letra' => 'X',
+				'puntoVenta' => 0,
+				'numero' => $anticipo['numero'],
+				'monto' => $anticipo['monto'],
+				'monedaId' => $anticipo['monedaId'],
+				'cotizacion' => $anticipo['cotizacion'],
+				'empresa' => $empresaId,
+			]);
+			(new ApiAnita())->apiCallEscritura([
+				'tabla' => 'climov',
+				'acc' => 'insert',
+				'sistema' => 'ventas',
+				'campos' => $payload['campos'],
+				'valores' => $payload['valores'],
+			], 'climov COA '.$anticipo['numero']);
+		}
+	}
+
+	/**
+	 * @return array{numero:int,cliente:string,monto:float,fecha:string,monedaId:int,cotizacion:float}|null
+	 */
+	private function anticipoDesdeCobranza(Cobranza $coa): ?array
+	{
+		$numero = (int) $coa->numerotransaccion;
+		if ($numero <= 0) {
+			return null;
+		}
+
+		$cliente = $this->clienteRepository->find((int) $coa->cliente_id);
+		$codigo = trim((string) ($cliente->codigo ?? ''));
+		if ($codigo === '') {
+			throw new Exception('La cobranza '.$numero.' no tiene código de cliente para grabar el anticipo en Anita.');
+		}
+
+		$filas = Cliente_Cuentacorriente::query()
+			->where('cobranza_id', $coa->id)
+			->where(function ($q) {
+				$q->whereNull('venta_id')->orWhere('venta_id', 0);
+			})
+			->get();
+
+		$monedas = [];
+		foreach ($filas as $fila) {
+			$importe = round(abs((float) $fila->total), 2);
+			if ($importe < 0.01) {
+				continue;
+			}
+			$monedaId = (int) ($fila->moneda_id ?: 1);
+			if (! isset($monedas[$monedaId])) {
+				$monedas[$monedaId] = [
+					'monto' => 0.0,
+					'cotizacion' => (float) ($fila->cotizacion ?: 1),
+					'fecha' => (string) $fila->fecha,
+				];
+			}
+			$monedas[$monedaId]['monto'] = round($monedas[$monedaId]['monto'] + $importe, 2);
+		}
+
+		if ($monedas === []) {
+			return null;
+		}
+		if (count($monedas) > 1) {
+			throw new Exception(
+				'La cobranza '.$numero.' tiene saldo a favor en más de una moneda. Anita guarda un solo COA por recibo.'
+			);
+		}
+
+		$monedaId = (int) array_key_first($monedas);
+		$dato = $monedas[$monedaId];
+
+		return [
+			'numero' => $numero,
+			'cliente' => str_pad($codigo, 6, '0', STR_PAD_LEFT),
+			'monto' => $dato['monto'],
+			'fecha' => $dato['fecha'],
+			'monedaId' => $monedaId,
+			'cotizacion' => $dato['cotizacion'] > 0 ? $dato['cotizacion'] : 1.0,
+		];
+	}
+
+	/**
+	 * @param  array{numero:int,cliente:string}  $anticipo
+	 * @return array<string, mixed>|null
+	 */
+	private function leerClimovAnticipo(array $anticipo, string $letra, int $sucursal): ?array
+	{
+		$api = new ApiAnita();
+		$raw = (string) $api->apiCall([
+			'acc' => 'list',
+			'sistema' => 'ventas',
+			'tabla' => 'climov',
+			'campos' => 'cliv_cliente,cliv_monto,cliv_t_cobrado,cliv_estado,cliv_nro',
+			'whereArmado' => $this->whereClimovAnticipo($anticipo, $letra, $sucursal),
+			'orderBy' => 'cliv_nro',
+		]);
+		$err = ApiAnita::extraerMensajeError($raw === '' ? null : $raw);
+		if ($err !== null) {
+			throw new Exception('No se pudo leer el COA '.$anticipo['numero'].' en Anita. '.$err);
+		}
+		$filas = ApiAnita::decodificarListaFilas($raw);
+		if ($filas === []) {
+			return null;
+		}
+
+		return (array) $filas[0];
+	}
+
+	/**
+	 * @param  array{numero:int,cliente:string}  $anticipo
+	 */
+	private function whereClimovAnticipo(array $anticipo, string $letra, int $sucursal): string
+	{
+		$cliente = str_replace("'", '', (string) $anticipo['cliente']);
+		$numero = (int) $anticipo['numero'];
+		$letra = str_replace("'", '', substr($letra, 0, 1));
+
+		return " WHERE cliv_tipo = 'COA'"
+			." AND cliv_letra = '".$letra."'"
+			." AND cliv_sucursal = '".$sucursal."'"
+			." AND cliv_nro = '".$numero."'"
+			." AND cliv_cliente = '".$cliente."'";
 	}
 
 	// Borra cobranza en Anita

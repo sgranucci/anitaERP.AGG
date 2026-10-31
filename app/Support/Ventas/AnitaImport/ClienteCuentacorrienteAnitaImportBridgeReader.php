@@ -186,6 +186,52 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
     }
 
     /**
+     * aplmov donde el crédito es uno de estos comprobantes (COA, COB, NC).
+     *
+     * @param  list<string>  $clavesCredito  tipo|letra|suc|nro
+     * @return list<array<string, mixed>>
+     */
+    public function listarAplmovPorCreditos(array $clavesCredito): array
+    {
+        $clavesCredito = array_values(array_unique(array_filter($clavesCredito)));
+        if ($clavesCredito === []) {
+            return [];
+        }
+
+        $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $out = [];
+        foreach (array_chunk($clavesCredito, 40) as $chunk) {
+            $ors = [];
+            foreach ($chunk as $clave) {
+                $partes = explode('|', $clave);
+                if (count($partes) < 4) {
+                    continue;
+                }
+                [$tipo, $letra, $suc, $nro] = $partes;
+                $ors[] = "(aplv_tipo_cob = '".$this->esc($tipo)
+                    ."' AND aplv_letra_cob = '".$this->esc($letra)
+                    ."' AND aplv_sucursal_cob = ".(int) $suc
+                    .' AND aplv_nro_cob = '.(int) $nro.')';
+            }
+            if ($ors === []) {
+                continue;
+            }
+            $where = ' WHERE ('.implode(' OR ', $ors).')';
+            foreach ($this->listar(
+                $perfil['tabla_aplmov'],
+                $perfil['campos_aplmov'],
+                $where,
+                'aplv_fecha, aplv_tipo, aplv_nro',
+                $perfil
+            ) as $fila) {
+                $out[] = $fila;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * climov de esos comprobantes, cerrados incluidos.
      * El listado de deuda abierta no los trae (cliv_estado = C).
      *

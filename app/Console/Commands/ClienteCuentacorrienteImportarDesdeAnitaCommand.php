@@ -19,7 +19,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
                             {--incluir-saldados : Incluye climov no cancelados aunque monto = t_cobrado}
                             {--forzar-aplicaciones : Reaplica aplicaciones sintéticas Anita sync si el aplicado no cierra}
                             {--sin-importar-ventas : No crea cabeceras venta ERP faltantes (solo CC de las que ya existen)}
-                            {--cerrar-sin-deuda-anita : (default) Salda CC ERP pendiente que Anita ya canceló}
+                            {--cerrar-sin-deuda-anita : (default) Aplica el comprobante de aplmov a la CC que Anita ya canceló}
                             {--sin-cerrar-sin-deuda-anita : No salda extras; solo importa climov abierto}
                             {--reparar-contrapartidas : Reemplaza el cierre sin movimiento por el comprobante que aplica la factura}
                             {--reparar-cob-multifila : Amplía COB/COA cortos (varias filas climov) y completa FAC+aplicaciones}
@@ -117,7 +117,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
         ));
         $this->line('Filtro: Anita venta + créditos climov sin venta (COA). Luego climov+aplmov → cliente_cuentacorriente.');
         $this->line($cerrarSinDeudaAnita
-            ? 'Cierre de extras: ON (CC ERP que Anita ya canceló se saldan).'
+            ? 'Cierre de extras: ON (aplica el COA, el COB o la nota de aplmov; no cierra sin comprobante).'
             : 'Cierre de extras: OFF (--sin-cerrar-sin-deuda-anita).');
         if ($cerrarSinDeudaAnita && $cliente === '') {
             $this->warn('Cierre de extras para TODOS los clientes con deuda ERP abierta.');

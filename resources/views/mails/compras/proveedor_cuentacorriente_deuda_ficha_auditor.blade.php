@@ -31,13 +31,13 @@
         @if ($alertaFicha && $alertaDelta)
             ALERTA — la ficha no cuadra y el delta de proveedores se movió al {{ $fecha }}
         @elseif ($alertaFicha && $alertaAnticipos)
-            ALERTA — la ficha no cuadra y el sin explicar de anticipos se movió al {{ $fecha }}
+            ALERTA — la ficha no cuadra y el delta de anticipos se movió al {{ $fecha }}
         @elseif ($alertaDelta && $alertaAnticipos)
-            ALERTA — se movió el delta de proveedores y el sin explicar de anticipos al {{ $fecha }}
+            ALERTA — se movió el delta de proveedores y el de anticipos al {{ $fecha }}
         @elseif ($alertaDelta)
             ALERTA — el delta de proveedores se movió al {{ $fecha }}
         @elseif ($alertaAnticipos)
-            ALERTA — el sin explicar de anticipos se movió al {{ $fecha }}
+            ALERTA — el delta de anticipos se movió al {{ $fecha }}
         @elseif ($alertaFicha)
             ALERTA — hay diferencias deuda vs ficha al {{ $fecha }}
         @else
@@ -54,7 +54,8 @@
     Control <strong>deuda vs ficha</strong>, delta de <strong>proveedores</strong> y, aparte, <strong>anticipos</strong>
     · Corte <strong>{{ $fecha }}</strong>
     · Expresión <strong>{{ $expresion }}</strong>
-    · La deuda es la verdad. Una factura anticipada debita anticipos y acredita proveedores: no mueve ninguno de los dos controles.
+    · La deuda es la verdad: facturas impagas, notas de crédito sin aplicar y OPA sin aplicar.
+    La cuenta de anticipos cuadra con las OPA. Aplicar una OPA a una factura acredita anticipos y debita proveedores por el mismo importe: no mueve ninguno de los dos deltas.
 </p>
 
 <h3 style="margin:16px 0 6px 0;">Resumen</h3>
@@ -148,6 +149,7 @@
 <h3 style="margin:22px 0 6px 0;">Delta de proveedores</h3>
 <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
     En pesos, con el mismo signo del mayor (negativo = débito). Delta = mayor − deuda.
+    La deuda es una sola: facturas impagas, notas de crédito sin aplicar y OPA sin aplicar que no están en anticipos.
     Solo cuentas de proveedores de rubro Pasivo y del plan de proveedores (MN, ME y no corrientes).
     Anticipos no entra en esta tabla.
     @if (! empty($delta['hay_base_anterior']))
@@ -203,14 +205,13 @@
 
 <h3 style="margin:22px 0 6px 0;">Anticipos a proveedores</h3>
 <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
-    Control aparte. Explicado = OP adelantadas imputadas a la cuenta + neto de facturas anticipadas que la recepción todavía no cerró.
-    Sin explicar = mayor − explicado.
-    La factura anticipada suma el neto en el mayor y en Facturas anticipadas; el cierre por recepción lo resta de los dos.
-    El sin explicar no cambia por eso.
+    La cuenta cuadra con las OPA imputadas ahí. El sobrante de una OPP también: el debe está en el asiento de la OPP y la OPA abierta es el crédito.
+    Aplicar esa OPA a una factura acredita anticipos y debita proveedores por el mismo importe, y baja la OPA y la factura. El delta no se mueve.
+    Una factura anticipada suma el neto en el mayor y en Facturas anticipadas; el cierre por recepción lo resta de los dos. El delta tampoco se mueve.
     @if (! empty($delta['hay_base_anterior']))
-        Avisa solo si el sin explicar se mueve más de {{ $fmt($delta['tolerancia'] ?? 1) }} respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+        Avisa solo si el delta se mueve más de {{ $fmt($delta['tolerancia'] ?? 1) }} respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
     @else
-        Primera medición: el sin explicar queda como base.
+        Primera medición: el delta queda como base.
     @endif
 </p>
 @if ($cuentasAnticipo === [])
@@ -221,9 +222,9 @@
             <th align="left">Cuenta</th>
             <th align="right">OP adelantadas</th>
             <th align="right">Facturas anticipadas</th>
-            <th align="right">Explicado</th>
+            <th align="right">OPA + facturas</th>
             <th align="right">Mayor</th>
-            <th align="right">Sin explicar</th>
+            <th align="right">Delta</th>
             <th align="right">Anterior</th>
             <th align="right">Variación</th>
         </tr>
@@ -252,11 +253,11 @@
     </table>
     @if ($alertaAnticipos)
         <p style="margin:8px 0 0 0; color:#7b241c; font-size:13px;">
-            El sin explicar de anticipos cambió. Una factura anticipada o su recepción no producen este aviso.
+            El delta de anticipos cambió. Una factura anticipada, su recepción o la aplicación de una OPA no producen este aviso.
         </p>
     @elseif (! empty($delta['hay_base_anterior']))
         <p style="margin:8px 0 0 0; color:#145a32; font-size:13px;">
-            El sin explicar de anticipos no se movió respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+            El delta de anticipos no se movió respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
         </p>
     @endif
 @endif

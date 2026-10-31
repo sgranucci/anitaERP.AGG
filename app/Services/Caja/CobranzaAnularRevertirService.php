@@ -120,6 +120,9 @@ class CobranzaAnularRevertirService
         string $numeroTransaccion,
         ?Cobranza $borrarCabecera,
     ): void {
+        $anticiposAnita = $this->cobranzaService->anticiposAnitaDeCobranza($cobranzaId);
+        $this->cobranzaService->assertAnticiposAnitaSinCobrar($anticiposAnita);
+
         app(CobranzaPagoDeMasCoaService::class)->eliminarCoaHijas($cobranzaId);
 
         $snapshots = [];
@@ -189,6 +192,15 @@ class CobranzaAnularRevertirService
                 $empresaAnita,
                 'cobranza anular '.$cobranzaId
             );
+        }
+
+        try {
+            $this->cobranzaService->borrarClimovAnticiposAnita($anticiposAnita);
+        } catch (Throwable $e) {
+            Log::warning('cobranza.anular.borra_anita_coa', [
+                'cobranza_id' => $cobranzaId,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         try {

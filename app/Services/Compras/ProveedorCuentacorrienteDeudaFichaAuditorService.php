@@ -18,7 +18,7 @@ use Throwable;
 /**
  * Auditor diario: deuda vs ficha, delta de proveedores y control aparte de anticipos.
  * Cada delta se guarda por día. El mail avisa si el de proveedores se movió, o si
- * el sin explicar de anticipos se movió. Una factura anticipada no dispara ninguno.
+ * el de anticipos se movió. Una factura anticipada o la aplicación de una OPA no disparan ninguno.
  * No graba ajustes de ficha. La deuda es la verdad.
  */
 final class ProveedorCuentacorrienteDeudaFichaAuditorService

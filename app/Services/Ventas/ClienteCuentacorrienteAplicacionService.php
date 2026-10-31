@@ -9,6 +9,7 @@ use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\ClienteCuentacorrienteAplicacionFilaSupport;
 use App\Support\Ventas\ClienteCuentacorrienteAplicacionMatcherSupport;
+use App\Support\Ventas\ClienteCuentacorrienteDeudaAlcanceSupport;
 use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -16,7 +17,9 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Aplica NC y cobranzas a cuenta contra facturas de clientes.
+ * Aplica comprobantes a cuenta (COA y notas de crédito) contra facturas y débitos.
+ * Un COB no entra: el sobrante de una cobranza es una COA, y aplicarlo baja la deuda
+ * sin mover la ficha.
  * Subledger siempre; asiento de DC solo si las cotizaciones difieren.
  * Después del commit MySQL espeja a Anita: aplmov + climov.cliv_t_cobrado.
  */
@@ -65,6 +68,10 @@ class ClienteCuentacorrienteAplicacionService
                 ->keyBy('id');
 
             $aplicados = $this->sumasAplicadas($ids);
+
+            foreach ($bloqueados as $cc) {
+                $this->assertComprobanteAplicable($cc);
+            }
 
             $creditosById = [];
             $deudasById = [];
@@ -323,13 +330,37 @@ class ClienteCuentacorrienteAplicacionService
     public static function sqlLadoCredito(): string
     {
         return 'cliente_cuentacorriente.total < 0 AND '.SqlDialectSupport::sqlSaldoPendienteClienteCc()
-            .' AND '.ClienteCuentacorrienteGrillaSupport::sqlExcluirAjuste();
+            .' AND '.ClienteCuentacorrienteGrillaSupport::sqlExcluirAjuste()
+            .' AND '.ClienteCuentacorrienteDeudaAlcanceSupport::sql('cliente_cuentacorriente');
     }
 
     public static function sqlLadoDeuda(): string
     {
         return 'cliente_cuentacorriente.total > 0 AND '.SqlDialectSupport::sqlSaldoPendienteClienteCc()
-            .' AND '.ClienteCuentacorrienteGrillaSupport::sqlExcluirAjuste();
+            .' AND '.ClienteCuentacorrienteGrillaSupport::sqlExcluirAjuste()
+            .' AND '.ClienteCuentacorrienteDeudaAlcanceSupport::sql('cliente_cuentacorriente');
+    }
+
+    /**
+     * Crédito: COA o nota de crédito. Débito: factura o nota de débito.
+     * El COB queda afuera aunque tenga saldo.
+     */
+    private function assertComprobanteAplicable(Cliente_Cuentacorriente $cc): void
+    {
+        $codigo = $cc->ventas->codigo ?? null;
+        $abreviatura = $cc->cobranzas?->tipotransaccioncajas?->abreviatura ?? null;
+        if (ClienteCuentacorrienteDeudaAlcanceSupport::esComprobanteDeuda(
+            $codigo !== null ? (string) $codigo : null,
+            $abreviatura !== null ? (string) $abreviatura : null,
+        )) {
+            return;
+        }
+
+        $etiqueta = trim((string) ($codigo ?: $abreviatura ?: ('movimiento '.$cc->id)));
+        throw new RuntimeException(
+            'Solo se aplican comprobantes a cuenta (COA o nota de crédito) contra facturas y débitos. '
+            .$etiqueta.' no se puede aplicar.'
+        );
     }
 
     public static function saldoAbsoluto(Cliente_Cuentacorriente $fila): float

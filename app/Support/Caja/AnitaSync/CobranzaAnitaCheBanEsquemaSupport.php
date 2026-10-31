@@ -425,6 +425,90 @@ final class CobranzaAnitaCheBanEsquemaSupport
         ];
     }
 
+    /**
+     * Anticipo sin aplicar: un climov COA abierto (cobrado 0, estado vacío).
+     * Letra y sucursal son las del recibo de caja. El tipo COA es el que entra en la deuda.
+     *
+     * @param  array{
+     *   codigoCliente:string,
+     *   fecha:string,
+     *   letra:string,
+     *   puntoVenta:int|string,
+     *   numero:int|string,
+     *   monto:float|string,
+     *   monedaId?:int|string,
+     *   cotizacion?:float|string,
+     *   empresa?:int|string
+     * }  $ctx
+     * @return array{campos:string,valores:string}
+     */
+    public static function payloadClimovAnticipo(array $ctx): array
+    {
+        $cliente = self::padCliente((string) $ctx['codigoCliente']);
+        $fecha = date('Ymd', strtotime((string) $ctx['fecha']));
+        $monedaAnita = MonedaAnitaCodigoSupport::normalizar($ctx['monedaId'] ?? 1);
+        $cotizacion = (string) ($ctx['cotizacion'] ?? 1);
+        if ($cotizacion === '' || (float) $cotizacion <= 0) {
+            $cotizacion = '1';
+        }
+
+        $baseCampos = '
+            cliv_cliente,
+            cliv_tipo,
+            cliv_letra,
+            cliv_sucursal,
+            cliv_nro,
+            cliv_ref_tipo,
+            cliv_ref_letra,
+            cliv_ref_sucursal,
+            cliv_ref_nro,
+            cliv_fecha,
+            cliv_fecha_vto,
+            cliv_monto,
+            cliv_cod_mon,
+            cliv_cotizacion,
+            cliv_nro_cuota,
+            cliv_t_cobrado,
+            cliv_fecha_cobro,
+            cliv_cedio_a,
+            cliv_estado';
+
+        $baseValores = "
+            '".$cliente."',
+            'COA',
+            '".$ctx['letra']."',
+            '".$ctx['puntoVenta']."',
+            '".$ctx['numero']."',
+            ' ',
+            ' ',
+            '0',
+            '0',
+            '".$fecha."',
+            '".$fecha."',
+            '".$ctx['monto']."',
+            '".$monedaAnita."',
+            '".$cotizacion."',
+            '0',
+            '0',
+            '0',
+            '0',
+            ''";
+
+        if (EntornoEmpresaSupport::esFerli()) {
+            return [
+                'campos' => $baseCampos,
+                'valores' => $baseValores,
+            ];
+        }
+
+        return [
+            'campos' => $baseCampos.',
+            cliv_empresa',
+            'valores' => $baseValores.",
+            '".$ctx['empresa']."'",
+        ];
+    }
+
     public static function omitirEmpresaEnCtermae(): bool
     {
         return EntornoEmpresaSupport::esFerli();

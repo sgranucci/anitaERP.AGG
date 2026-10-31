@@ -346,6 +346,10 @@ final class ChequeRechazadoNotaDebitoService
                 'incluyeimpuestos' => array_column($lineasNormalizadas, 'incluyeimpuesto'),
                 'tratamientos_fiscales' => array_column($lineasNormalizadas, 'tratamiento_fiscal'),
                 'cuentacontable_ids_linea' => array_column($lineasNormalizadas, 'cuentacontable_id'),
+                'opciones_emision' => [
+                    'forzar_sincronizacion_anita' => true,
+                    'omitir_numera_anita_fin' => true,
+                ],
             ],
         ];
     }

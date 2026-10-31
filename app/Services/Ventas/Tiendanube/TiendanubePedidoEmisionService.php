@@ -433,8 +433,11 @@ final class TiendanubePedidoEmisionService
             'observacion' => 'Tiendanube pedido #'.$nroPedido.$marcaParcial,
             'venta_receptor' => $fiscal['venta_receptor'],
             'arca_receptor' => $fiscal['arca_receptor'],
+            'letra_forzada' => $fiscal['letra'],
             'opciones_emision' => [
                 'omitir_movimiento_stock' => false,
+                // Tiendanube se cobra en el acto: no abre cuenta corriente.
+                'omitir_cuenta_corriente' => true,
                 // El FAC de Ferli está en «sin operación». Tiendanube igual descuenta el depósito.
                 'forzar_operacion_stock' => TipotransaccionOperacionStockSupport::SALIDA,
                 'permitir_caea' => false,

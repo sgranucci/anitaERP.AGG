@@ -9,7 +9,7 @@ use InvalidArgumentException;
 
 /**
  * Receptor eventual del POS Local: datos solo en la venta (venta_receptor / arca_receptor).
- * No crea ni actualiza el maestro de clientes. Aislado de AGG.
+ * El cliente del maestro es el de contado. No se usa un cliente cáscara. Aislado de AGG.
  */
 final class FacturacionLocalReceptorSupport
 {
@@ -21,7 +21,7 @@ final class FacturacionLocalReceptorSupport
 
     public const MODO_CF = 'cf';
 
-    /** Código del cliente shell de Factura A eventual. No es un cliente real. */
+    /** Código histórico del cliente cáscara. La Factura A eventual ya no lo usa. */
     public const CODIGO_CLIENTE_RI = 'EVENTUAL';
 
     /**
@@ -136,7 +136,8 @@ final class FacturacionLocalReceptorSupport
             throw new InvalidArgumentException('Indicá la provincia del receptor (Factura A).');
         }
 
-        $clienteId = self::clienteRiId();
+        // Contado: el comprador va en la factura. No se cuelga de un cliente cáscara.
+        $clienteId = self::clienteContadoId();
 
         return [
             'modo' => self::MODO_MANUAL_A,

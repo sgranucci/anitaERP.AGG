@@ -16,18 +16,20 @@ use Illuminate\Support\Facades\DB;
 /**
  * Dos controles separados, en pesos, con el signo del mayor (negativo = débito).
  *
- * Proveedores: delta = mayor − deuda abierta, solo cuentas de rubro Pasivo que
- * además estén en el plan (MN, ME y no corrientes). Avisa si ese delta cambia.
- * Una factura anticipada acredita proveedores y suma la misma deuda abierta:
- * el delta de proveedores no se mueve. Un banco, un gasto u otra cuenta cargada
- * en el proveedor no entra.
+ * Proveedores: la deuda es una sola (facturas impagas, notas de crédito sin
+ * aplicar y OPA sin aplicar que no están en anticipos). Delta = mayor − deuda,
+ * solo cuentas de rubro Pasivo del plan (MN, ME y no corrientes). Avisa si ese
+ * delta cambia. Una factura anticipada acredita proveedores y suma la misma
+ * deuda: el delta no se mueve. Un banco, un gasto u otra cuenta del proveedor
+ * no entra.
  *
- * Anticipos: control aparte, solo si la empresa tiene `pago.anticipo_proveedor`.
- * Lo explicado es la OP adelantada imputada ahí más el neto de la factura
- * anticipada que la recepción todavía no cerró. Sin explicar = mayor − explicado.
- * Alta de factura y cierre por recepción mueven el mayor y lo explicado por el
- * mismo importe, así que este control no avisa. Avisa si el sin explicar cambia.
- * Sin cuenta de anticipos configurada, el anticipo sigue en proveedores.
+ * Anticipos: la cuenta cuadra con las OPA imputadas ahí, si la empresa tiene
+ * `pago.anticipo_proveedor`. El sobrante de una OPP también: el debe está en el
+ * asiento de la OPP y el crédito abierto en la OPA hija. Aplicar esa OPA a una
+ * factura acredita anticipos y debita proveedores por el mismo importe, y baja
+ * la OPA y la factura: ningún delta se mueve. La factura anticipada y su
+ * recepción mueven el mayor y las facturas anticipadas juntas, y tampoco avisan.
+ * Sin cuenta de anticipos configurada, la OPA sigue en proveedores.
  */
 final class ProveedorDeudaMayorDeltaSupport
 {
@@ -344,8 +346,9 @@ final class ProveedorDeudaMayorDeltaSupport
     }
 
     /**
-     * Pagos cuyo asiento debitó la cuenta de anticipos. Esas OP abiertas no viven
-     * en el mayor de proveedores.
+     * Pagos cuyo asiento debitó anticipos, y la OPA de sobrante de esa OPP.
+     * El debe está en el asiento de la OPP; el crédito abierto está en la OPA hija,
+     * que no tiene asiento propio. Esas OPA cuadran con anticipos, no con proveedores.
      *
      * @return array<int, true>
      */
@@ -377,6 +380,19 @@ final class ProveedorDeudaMayorDeltaSupport
             $id = (int) $id;
             if ($id > 0) {
                 $set[$id] = true;
+            }
+        }
+
+        if ($set !== []) {
+            $hijas = DB::table('pagoproveedor')
+                ->where('tipocomprobante', 'OPA')
+                ->whereIn('pagoproveedor_origen_id', array_keys($set))
+                ->pluck('id');
+            foreach ($hijas as $id) {
+                $id = (int) $id;
+                if ($id > 0) {
+                    $set[$id] = true;
+                }
             }
         }
 
