@@ -4,8 +4,10 @@ namespace App\Models\Compras;
 
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
+use App\Support\Compras\ProveedorCuentacorrienteAplicacionBorradoSupport;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
+use RuntimeException;
 
 class Proveedor_Cuentacorriente_Aplicacion extends Model implements Auditable
 {
@@ -22,6 +24,18 @@ class Proveedor_Cuentacorriente_Aplicacion extends Model implements Auditable
     protected $casts = [
         'fecha' => 'date',
     ];
+
+    protected static function booted(): void
+    {
+        static::deleting(function (self $aplicacion) {
+            if ((int) ($aplicacion->pagoproveedor_id ?? 0) > 0
+                && ! ProveedorCuentacorrienteAplicacionBorradoSupport::permitido()) {
+                throw new RuntimeException(
+                    'Esta aplicación pertenece a una orden de pago. Revierta la OP.'
+                );
+            }
+        });
+    }
 
     public function proveedor_cuentacorrientes()
     {

@@ -171,23 +171,75 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 'proveedor_cuentacorriente_dc_id' => null,
             ]);
         }
+
+        self::assertParesPersistidos($pago);
     }
 
     public static function revertirAplicacionesExistentes(Pagoproveedor $pago): void
     {
         $pagoId = (int) $pago->id;
 
-        Proveedor_Cuentacorriente_Aplicacion::query()
-            ->where('pagoproveedor_id', $pagoId)
-            ->delete();
+        ProveedorCuentacorrienteAplicacionBorradoSupport::permitir(function () use ($pagoId) {
+            ProveedorCuentacorrienteAplicacionBorradoSupport::borrar(
+                Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->where('pagoproveedor_id', $pagoId)
+            );
 
-        Proveedor_Cuentacorriente::query()
-            ->where('pagoproveedor_id', $pagoId)
-            ->delete();
+            Proveedor_Cuentacorriente::query()
+                ->where('pagoproveedor_id', $pagoId)
+                ->delete();
 
-        Pagoproveedor_Comprobante::query()
+            Pagoproveedor_Comprobante::query()
+                ->where('pagoproveedor_id', $pagoId)
+                ->delete();
+        });
+    }
+
+    /**
+     * Cada renglón de pagoproveedor_comprobante tiene que tener las dos aplicaciones
+     * (documento y fila de la OP). Si falta una, el débito de la OP queda en la ficha
+     * y el crédito sigue abierto.
+     */
+    private static function assertParesPersistidos(Pagoproveedor $pago): void
+    {
+        $pagoId = (int) $pago->id;
+        $comprobantes = Pagoproveedor_Comprobante::query()
             ->where('pagoproveedor_id', $pagoId)
-            ->delete();
+            ->get(['id', 'proveedor_cuentacorriente_id', 'montoaplicado']);
+
+        foreach ($comprobantes as $comp) {
+            $ccId = (int) $comp->proveedor_cuentacorriente_id;
+            if ($ccId <= 0 || round(abs((float) $comp->montoaplicado), 4) <= 0) {
+                continue;
+            }
+
+            $sobreDocumento = Proveedor_Cuentacorriente_Aplicacion::query()
+                ->where('pagoproveedor_id', $pagoId)
+                ->where('proveedor_cuentacorriente_id', $ccId)
+                ->get(['id', 'proveedor_cuentacorriente_aplicado_id']);
+            if ($sobreDocumento->isEmpty()) {
+                throw new RuntimeException(
+                    'La OP '.$pago->etiquetaComprobante()
+                    .' quedó sin la aplicación de la cuenta corriente #'.$ccId.'.'
+                );
+            }
+
+            foreach ($sobreDocumento as $apl) {
+                $parId = (int) $apl->proveedor_cuentacorriente_aplicado_id;
+                $tienePar = $parId > 0 && Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->where('pagoproveedor_id', $pagoId)
+                    ->where('proveedor_cuentacorriente_id', $parId)
+                    ->where('proveedor_cuentacorriente_aplicado_id', $ccId)
+                    ->exists();
+                if (! $tienePar) {
+                    throw new RuntimeException(
+                        'La OP '.$pago->etiquetaComprobante()
+                        .' aplicó la cuenta corriente #'.$ccId
+                        .' sin la aplicación contraria.'
+                    );
+                }
+            }
+        }
     }
 
     /**

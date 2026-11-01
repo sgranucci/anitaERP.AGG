@@ -104,9 +104,13 @@ final class CuentacorrientePagoACuentaColapsarSupport
                 }
                 $cc->total = round((float) $fila->saldo, 4);
                 $cc->save();
-                EloquentAuditDeleteSupport::each(
-                    Proveedor_Cuentacorriente_Aplicacion::query()
-                        ->where('proveedor_cuentacorriente_id', (int) $fila->cc_id)
+                \App\Support\Compras\ProveedorCuentacorrienteAplicacionBorradoSupport::permitir(
+                    function () use ($fila) {
+                        \App\Support\Compras\ProveedorCuentacorrienteAplicacionBorradoSupport::borrar(
+                            Proveedor_Cuentacorriente_Aplicacion::query()
+                                ->where('proveedor_cuentacorriente_id', (int) $fila->cc_id)
+                        );
+                    }
                 );
             },
             'proveedor'

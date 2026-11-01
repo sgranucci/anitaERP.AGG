@@ -268,9 +268,10 @@ class ProveedorCuentacorrienteAplicacionService
                 $this->asientoDcService->revertirSiCorresponde($asientoId, $fechaReverso);
             }
 
-            Proveedor_Cuentacorriente_Aplicacion::query()
-                ->whereIn('id', $idsBorrar)
-                ->delete();
+            \App\Support\Compras\ProveedorCuentacorrienteAplicacionBorradoSupport::borrar(
+                Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->whereIn('id', $idsBorrar)
+            );
         });
 
         if ($snapshot === null) {

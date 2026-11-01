@@ -29,8 +29,20 @@ final class PagoproveedorOpaSobranteSupport
 
     public static function assertSinAplicar(Pagoproveedor $opa): void
     {
+        $pagoId = (int) $opa->id;
+        $ccIds = Proveedor_Cuentacorriente::query()
+            ->where('pagoproveedor_id', $pagoId)
+            ->pluck('id');
+        // La OPP que consume esta OPA graba el par con su propio pagoproveedor_id,
+        // no con el de la OPA. Borrar la CC igual dispara el cascade y se lleva el par.
         $aplicada = Proveedor_Cuentacorriente_Aplicacion::query()
-            ->where('pagoproveedor_id', (int) $opa->id)
+            ->where(function ($q) use ($pagoId, $ccIds) {
+                $q->where('pagoproveedor_id', $pagoId);
+                if ($ccIds->isNotEmpty()) {
+                    $q->orWhereIn('proveedor_cuentacorriente_id', $ccIds)
+                        ->orWhereIn('proveedor_cuentacorriente_aplicado_id', $ccIds);
+                }
+            })
             ->exists();
         if ($aplicada || (int) ($opa->caja_movimiento_id ?? 0) > 0 || (int) ($opa->asiento_id ?? 0) > 0) {
             throw new RuntimeException(

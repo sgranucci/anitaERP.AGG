@@ -255,9 +255,12 @@ final class ComprobanteProveedorPagoSupport
             return;
         }
 
-        Proveedor_Cuentacorriente_Aplicacion::query()
-            ->whereIn('proveedor_cuentacorriente_id', $deudaIds)
-            ->delete();
+        ProveedorCuentacorrienteAplicacionBorradoSupport::permitir(function () use ($deudaIds) {
+            ProveedorCuentacorrienteAplicacionBorradoSupport::borrar(
+                Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->whereIn('proveedor_cuentacorriente_id', $deudaIds)
+            );
+        });
 
         Pagoproveedor_Comprobante::query()
             ->whereIn('proveedor_cuentacorriente_id', $deudaIds)
