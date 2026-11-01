@@ -16,11 +16,11 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
                             {--hasta= : Fecha ISO hasta}
                             {--limite= : Máximo de cuotas/deuda a procesar}
                             {--usuario-id=1 : usuario_id de auditoría}
-                            {--solo-cerrar-pagadas : Solo cierra ANITA_IMPORT que Anita ya pagó por completo}
+                            {--solo-cerrar-pagadas : Solo las ANITA_IMPORT que Anita ya pagó: aplica aplmovp, no reescribe el saldo}
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Persiste en ERP (no escribe Anita)}';
 
-    protected $description = 'Alinea deuda abierta Anita↔ERP (cierra ANITA_IMPORT que Anita ya pagó; nativas solo apps)';
+    protected $description = 'Alinea deuda abierta Anita↔ERP (aplica aplmovp; no cierra sin comprobante; nativas solo el hueco)';
 
     public function handle(ProveedorCuentacorrienteImportarDesdeAnitaService $service): int
     {
@@ -52,7 +52,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
             $proveedor !== '' ? $proveedor : 'todos',
             $dryRun ? 'DRY-RUN' : 'EJECUTAR',
         ));
-        $this->line('Filtro: promov pendiente + nativas con apps; ANITA_IMPORT saldadas en Anita; OPA; no pisa CP nativos.');
+        $this->line('Filtro: promov pendiente + nativas con el hueco de aplmovp; no reescribe el saldo; OPA; no pisa CP nativos.');
 
         try {
             $stats = $service->importar(
@@ -94,7 +94,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
             ['OPA a crear / creados', $stats['a_crear_opa'].' / '.$stats['opa_creados']],
             ['CC a crear / creadas', $stats['a_crear_cc'].' / '.$stats['cc_creadas']],
             ['Importe CC nuevas', number_format((float) ($stats['importe_cc_nuevas'] ?? 0), 2, ',', '.')],
-            ['Alinear ANITA_IMPORT', $stats['a_alinear_anita_import'] ?? 0],
+            ['OPA a alinear', $stats['a_alinear_anita_import'] ?? 0],
             ['aplmovp Anita', $stats['anita_aplmovp']],
             ['Aplicaciones Anita (pares)', $stats['aplicaciones_anita']],
             ['Docs con apps a importar', $stats['a_actualizar_aplicaciones'] ?? 0],

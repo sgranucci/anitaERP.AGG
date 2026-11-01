@@ -67,6 +67,28 @@ final class ProveedorCuentacorrienteAnitaImportCcGuardSupport
      * del comprobante (la suma de aplmovp) y no lo cobrado de esta cuota.
      * Tratarlo como pagado deja el pendiente en cero y la orden de pago no la lista.
      */
+    /**
+     * Cuánto de aplmovp se puede aplicar sobre el saldo del ERP.
+     *
+     * Si el saldo ya es el pendiente de Anita, el cobrado está descontado en el
+     * total: aplicarlo de nuevo deja el comprobante por debajo de Anita.
+     * Si el ERP está más cerrado que Anita, no se reabre.
+     *
+     * @return array{aplicar: bool, a_cubrir: float, reabrir: bool}
+     */
+    public static function cupoAplicacionSobreSaldo(float $saldoErp, float $pendienteAnita, float $tolerancia = 0.02): array
+    {
+        $hueco = round(abs($saldoErp) - abs($pendienteAnita), 4);
+        if (abs($hueco) <= $tolerancia) {
+            return ['aplicar' => false, 'a_cubrir' => 0.0, 'reabrir' => false];
+        }
+        if ($hueco < 0) {
+            return ['aplicar' => false, 'a_cubrir' => 0.0, 'reabrir' => true];
+        }
+
+        return ['aplicar' => true, 'a_cubrir' => $hueco, 'reabrir' => false];
+    }
+
     public static function pagadoAplicableACuota(float $montoCuota, float $pagadoAnita, float $tolerancia = 0.02): float
     {
         $montoCuota = round(abs($montoCuota), 4);

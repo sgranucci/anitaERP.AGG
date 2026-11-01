@@ -156,10 +156,16 @@ final class ProveedorCuentacorrienteAnitaImportBridgeReader
         array $perfil,
         ?int $empresaCodigoAnita = null,
     ): array {
-        $where = ' WHERE prov_fecha >= '.(int) $desdeYmd
-            .' AND prov_fecha <= '.(int) $hastaYmd
-            .' AND ABS(prov_monto) <> ABS(prov_t_pagado)';
-        if ($proveedorCodigo !== null && trim($proveedorCodigo) !== '') {
+        // Informix devuelve 0 filas si el WHERE junta prov_proveedor con un rango
+        // de prov_fecha. Con proveedor, la fecha se filtra después de leer.
+        $porProveedor = $proveedorCodigo !== null && trim($proveedorCodigo) !== '';
+        $where = ' WHERE ABS(prov_monto) <> ABS(prov_t_pagado)';
+        if (! $porProveedor) {
+            $where = ' WHERE prov_fecha >= '.(int) $desdeYmd
+                .' AND prov_fecha <= '.(int) $hastaYmd
+                .' AND ABS(prov_monto) <> ABS(prov_t_pagado)';
+        }
+        if ($porProveedor) {
             $prov = ComprobanteProveedorAnitaImportClaveSupport::proveedorCodigoAnita($proveedorCodigo);
             $where .= " AND prov_proveedor = '".$this->esc($prov)."'";
         }
@@ -167,13 +173,22 @@ final class ProveedorCuentacorrienteAnitaImportBridgeReader
             $where .= ' AND prov_empresa = '.(int) $empresaCodigoAnita;
         }
 
-        return $this->listar(
+        $filas = $this->listar(
             $perfil['tabla_promov'],
             $perfil['campos_promov'],
             $where,
             'prov_fecha, prov_proveedor, prov_nro, prov_nro_cuota',
             $perfil
         );
+        if (! $porProveedor) {
+            return $filas;
+        }
+
+        return array_values(array_filter($filas, static function (array $fila) use ($desdeYmd, $hastaYmd): bool {
+            $fecha = (int) (preg_replace('/\D/', '', (string) ($fila['prov_fecha'] ?? '')) ?? '');
+
+            return $fecha >= $desdeYmd && $fecha <= $hastaYmd;
+        }));
     }
 
     /**

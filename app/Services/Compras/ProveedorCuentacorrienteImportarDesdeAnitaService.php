@@ -38,8 +38,8 @@ use Throwable;
  *
  * - Altas solo-Anita: CP+CC con monto original + aplicaciones aplmovp.
  * - Facturas nativas (origen ≠ ANITA_IMPORT): no se pisan; solo se traen apps faltantes.
- * - ANITA_IMPORT abiertas en ERP y saldadas en Anita (todas las cuotas con monto = pagado):
- *   el residual de la CC pasa a cero para que la deuda abierta coincida. Sin promov, no se tocan.
+ * - ANITA_IMPORT abiertas en ERP y saldadas en Anita: se aplica la OP, la OPA o la nota
+ *   de aplmovp. Si no alcanza, el saldo queda abierto. No se reescribe el total.
  * - OPA pendientes: pagoproveedor + CC negativa.
  * - Nunca alinea ni borra apps de CC con pagoproveedor_id (crédito OP/OPA ERP).
  * - Al alinear deuda documento solo borra apps sintéticas (sin pagoproveedor_id).
@@ -327,7 +327,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
 
         return DB::transaction(function () use ($plan, $pares, $stats, $usuarioId) {
             $ccPorClave = [];
-            foreach ($plan as $item) {
+            foreach ($plan as $indicePlan => $item) {
                 if (($item['kind'] ?? 'deuda') === 'opa') {
                     $res = $this->persistirOpa($item, $usuarioId);
                     $stats['opa_creados'] += $res['pago_creado'] ? 1 : 0;
@@ -349,6 +349,9 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                     continue;
                 }
                 $res = $this->persistirItem($item, $usuarioId, $ccPorClave);
+                if (! empty($res['cc_id'])) {
+                    $plan[$indicePlan]['cc_id'] = (int) $res['cc_id'];
+                }
                 $stats['cp_creados'] += $res['cp_creado'] ? 1 : 0;
                 $stats['cc_creadas'] += $res['cc_creada'] ? 1 : 0;
                 $stats['saldos_alineados'] += $res['saldo_alineado'] ? 1 : 0;
@@ -358,14 +361,26 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             }
 
             $this->enriquecerCcPorClaveDesdeErp($ccPorClave, $pares);
-            $apl = $this->persistirAplicaciones($pares, $ccPorClave);
+            $topePorCc = [];
+            foreach ($plan as $itemTope) {
+                if (($itemTope['accion_apl'] ?? '') !== 'importar') {
+                    continue;
+                }
+                $ccTope = (int) ($itemTope['cc_id'] ?? 0);
+                if ($ccTope > 0) {
+                    $topePorCc[$ccTope] = round((float) ($itemTope['a_cubrir_apl'] ?? 0), 4);
+                }
+            }
+            $apl = $this->persistirAplicaciones($pares, $ccPorClave, $topePorCc);
             $stats['aplicaciones_creadas'] = $apl['creadas'];
             $stats['aplicaciones_omitidas'] = $apl['omitidas'];
             $stats['pagos_sinteticos'] = $apl['pagos_sinteticos'];
             foreach ($apl['errores'] as $e) {
                 $stats['errores'][] = $e;
             }
-            $stats['saldos_alineados'] += $this->alinearResidualesTrasApps($plan);
+            foreach ($this->avisarSaldoSinComprobante($plan) as $aviso) {
+                $stats['errores'][] = $aviso;
+            }
             $stats['modo'] = 'ejecutar';
 
             return $stats;
@@ -935,55 +950,37 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         $accionSaldo = 'omitir';
         $accionApl = 'omitir';
 
+        $aCubrirApl = 0.0;
         if ($esNativo) {
-            // Nunca pisar CP/CC nativos: solo aplicaciones faltantes.
+            // Nunca pisar CP/CC nativos: solo el hueco que Anita todavía tiene pago y el ERP no.
             $accionSaldo = 'omitir';
-            $faltaApps = abs(abs($aplicadoErpFirmado) - $pagado) > $tol
-                || ($saldoErp !== null && abs($saldoErp - $pendienteFirmado) > $tol);
-            if ($faltaApps) {
-                $accionApl = 'importar';
-            }
-            if ($accionCc === 'existente' && $accionApl === 'omitir') {
-                return ['estado' => 'ok_al_dia'];
-            }
             if ($accionCc === 'crear') {
-                // CC faltante sobre nativa: monto del CP (no residual).
                 $totalFirmado = round(abs((float) ($cp->total ?? $monto)) * $signo, 4);
-                $accionApl = 'importar';
+                $aCubrirApl = round(max(0, abs($totalFirmado) - abs($pendienteFirmado)), 4);
+                $accionApl = $aCubrirApl > $tol ? 'importar' : 'omitir';
+            } else {
+                $decision = $this->decidirAplicacionesSobreSaldo($saldoErp, $pendienteFirmado, $tol, $etiqueta);
+                if ($decision['estado'] !== 'ok') {
+                    return $decision;
+                }
+                $accionApl = $decision['accion_apl'];
+                $aCubrirApl = $decision['a_cubrir'];
             }
         } elseif ($cp === null) {
-            $accionApl = $pagado > $tol ? 'importar' : 'importar';
+            $aCubrirApl = round(max(0, $monto - $pendienteAbs), 4);
+            $accionApl = $aCubrirApl > $tol ? 'importar' : 'omitir';
         } else {
-            // ANITA_IMPORT existente.
-            if ($cc && $saldoErp !== null && abs($saldoErp - $pendienteFirmado) <= $tol) {
-                return ['estado' => 'ok_al_dia'];
-            }
-            if ($cc) {
-                $ccEsResidual = abs(abs((float) $cc->total) - $pendienteAbs) <= $tol
-                    && abs($aplicadoErpFirmado) <= $tol;
-                $ccEsMonto = abs(abs((float) $cc->total) - $monto) <= $tol;
-                if ($ccEsResidual) {
-                    // Ferli-style residual ya refleja deuda Anita: al día.
-                    return ['estado' => 'ok_al_dia'];
-                }
-                if (ProveedorCuentacorrienteAnitaImportCcGuardSupport::tieneAplicacionOperativa((int) $cc->id)) {
-                    // Ya aplicada por OP ERP: no alinear ni colapsar apps.
-                    if ($pagado > abs($aplicadoErpFirmado) + $tol) {
-                        $accionApl = 'importar';
-                    } else {
-                        return ['estado' => 'ok_al_dia'];
-                    }
-                } elseif (! $ccEsMonto || abs($saldoErp - $pendienteFirmado) > $tol) {
-                    // Piso residual = pendiente Anita (aplmovp incompleto o apps de más).
-                    $accionSaldo = 'alinear';
-                    $accionApl = 'omitir';
-                } elseif ($pagado > abs($aplicadoErpFirmado) + $tol) {
-                    $accionApl = 'importar';
-                } else {
-                    return ['estado' => 'ok_al_dia'];
-                }
+            // ANITA_IMPORT existente. El total no se reescribe para fingir el pendiente.
+            if ($cc === null) {
+                $aCubrirApl = round(max(0, $monto - $pendienteAbs), 4);
+                $accionApl = $aCubrirApl > $tol ? 'importar' : 'omitir';
             } else {
-                $accionApl = 'importar';
+                $decision = $this->decidirAplicacionesSobreSaldo($saldoErp, $pendienteFirmado, $tol, $etiqueta);
+                if ($decision['estado'] !== 'ok') {
+                    return $decision;
+                }
+                $accionApl = $decision['accion_apl'];
+                $aCubrirApl = $decision['a_cubrir'];
             }
         }
 
@@ -1008,6 +1005,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'accion_cc' => $accionCc,
             'accion_apl' => $accionApl,
             'accion_saldo' => $accionSaldo,
+            'a_cubrir_apl' => $aCubrirApl,
             'fecha' => $fecha,
             'fecha_comprobante' => $fechaComprobante,
             'fechaiva' => $fechaIva,
@@ -1334,6 +1332,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'cp_creado' => false,
             'cc_creada' => false,
             'saldo_alineado' => false,
+            'cc_id' => $item['cc_id'] ? (int) $item['cc_id'] : null,
             'errores' => [],
         ];
 
@@ -1341,7 +1340,6 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         $proveedor = $item['proveedor'];
         /** @var Tipotransaccion_Compra $tipo */
         $tipo = $item['tipo'];
-        $esNativo = ! empty($item['es_nativo']);
 
         $cpId = $item['cp_id'] ? (int) $item['cp_id'] : null;
         if ($item['accion_cp'] === 'crear') {
@@ -1422,6 +1420,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             $reusarCuota = $ccDeCuota !== null && ! $this->cuotaPerteneceAOtroInterno($ccDeCuota, $item);
             if ($reusarCuota) {
                 $ccId = (int) $ccDeCuota->id;
+                $out['cc_id'] = $ccId;
             } elseif ($cpId && $ccDeCuota !== null) {
                 $nueva = $this->crearCcEnCuotaSiguiente($item, $proveedor, $cpId);
                 $ccId = $nueva['cc_id'];
@@ -1441,24 +1440,15 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                 ]);
                 $ccId = (int) $cc->id;
                 $out['cc_creada'] = true;
+                $out['cc_id'] = $ccId;
                 if ($cuotaRow) {
                     $cuotaRow->proveedor_cuentacorriente_id = $ccId;
                     $cuotaRow->save();
                 }
             }
-        } elseif ($ccId && ($item['accion_saldo'] ?? '') === 'alinear' && ! $esNativo) {
-            $cc = Proveedor_Cuentacorriente::query()->find($ccId);
-            if ($cc) {
-                // Residual Anita (no el monto bruto). Guard: no tocar OP ni apps operativas.
-                $objetivo = array_key_exists('pendiente_anita', $item)
-                    ? (float) $item['pendiente_anita']
-                    : (float) $item['total'];
-                if (ProveedorCuentacorrienteAnitaImportCcGuardSupport::alinearTotalDeudaDocumento($cc, $objetivo)) {
-                    $out['saldo_alineado'] = true;
-                }
-            }
         }
 
+        $out['cc_id'] = $ccId;
         if ($ccId) {
             $ccPorClave[$item['clave']][] = [
                 'id' => $ccId,
@@ -1515,62 +1505,31 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
     }
 
     /**
-     * Tras aplmovp: si el residual ERP ≠ pendiente Anita en docs ANITA_IMPORT, pisar a residual.
-     * Nunca toca CC de pago ni deudas con apps de OP ERP.
+     * Después de aplmovp, el saldo que no llegó al pendiente de Anita queda abierto.
+     * No se reescribe el total del comprobante.
      *
      * @param  list<array<string, mixed>>  $plan
+     * @return list<string>
      */
-    private function alinearResidualesTrasApps(array $plan): int
+    private function avisarSaldoSinComprobante(array $plan): array
     {
-        $alineados = 0;
+        $avisos = [];
         $tol = 0.02;
         foreach ($plan as $item) {
-            if (($item['kind'] ?? 'deuda') !== 'deuda' || ! empty($item['es_nativo'])) {
-                continue;
-            }
-            // La CC nueva ya nace con el importe de este promov. Alinear acá
-            // tomaría la primera CC del comprobante y le pisaría el saldo del otro interno.
-            if (($item['accion_cc'] ?? '') === 'crear' || ($item['forzar_cc_nueva'] ?? false)) {
+            if (($item['kind'] ?? 'deuda') !== 'deuda' || ($item['accion_apl'] ?? '') !== 'importar') {
                 continue;
             }
             if (! array_key_exists('pendiente_anita', $item)) {
                 continue;
             }
-
-            $cc = null;
             $ccId = (int) ($item['cc_id'] ?? 0);
-            if ($ccId > 0) {
-                $cc = Proveedor_Cuentacorriente::query()->find($ccId);
+            if ($ccId <= 0) {
+                continue;
             }
-            if ($cc === null) {
-                $cpId = (int) ($item['cp_id'] ?? 0);
-                if ($cpId <= 0 && isset($item['proveedor'], $item['tipo'])) {
-                    /** @var Proveedor $proveedor */
-                    $proveedor = $item['proveedor'];
-                    /** @var Tipotransaccion_Compra $tipo */
-                    $tipo = $item['tipo'];
-                    $cpId = (int) (Comprobante_Proveedor::query()
-                        ->where('empresa_id', (int) $item['empresa_id'])
-                        ->where('proveedor_id', $proveedor->id)
-                        ->where('tipotransaccion_compra_id', $tipo->id)
-                        ->where('letra', $item['letra'])
-                        ->where('sucursal', (int) $item['sucursal'])
-                        ->where('numerocomprobante', (int) $item['numero'])
-                        ->value('id') ?: 0);
-                }
-                if ($cpId > 0) {
-                    $cc = ProveedorCuentacorrienteAnitaImportCcGuardSupport::soloDeudaDocumento(
-                        Proveedor_Cuentacorriente::query()
-                            ->where('comprobante_proveedor_id', $cpId)
-                    )
-                        ->orderBy('id')
-                        ->first();
-                }
-            }
+            $cc = Proveedor_Cuentacorriente::query()->find($ccId);
             if ($cc === null) {
                 continue;
             }
-
             $aplicado = round((float) Proveedor_Cuentacorriente_Aplicacion::query()
                 ->where('proveedor_cuentacorriente_id', $cc->id)
                 ->sum('total'), 4);
@@ -1579,12 +1538,44 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             if (abs($residual - $objetivo) <= $tol) {
                 continue;
             }
-            if (ProveedorCuentacorrienteAnitaImportCcGuardSupport::alinearTotalDeudaDocumento($cc, $objetivo)) {
-                $alineados++;
-            }
+            $etiqueta = (string) ($item['resumen']['etiqueta'] ?? ('CC #'.$cc->id));
+            $avisos[] = $etiqueta.': Anita deja pendiente '
+                .number_format(abs($objetivo), 2, ',', '.')
+                .' y en el ERP quedan '.number_format(abs($residual), 2, ',', '.')
+                .' sin OP, OPA ni nota de crédito en aplmovp. No se cierra sin comprobante.';
         }
 
-        return $alineados;
+        return $avisos;
+    }
+
+    /**
+     * @return array{estado:string, error?:string, accion_apl:string, a_cubrir:float}
+     */
+    private function decidirAplicacionesSobreSaldo(?float $saldoErp, float $pendienteFirmado, float $tol, string $etiqueta): array
+    {
+        if ($saldoErp === null) {
+            return ['estado' => 'ok', 'accion_apl' => 'omitir', 'a_cubrir' => 0.0];
+        }
+        $cupo = ProveedorCuentacorrienteAnitaImportCcGuardSupport::cupoAplicacionSobreSaldo(
+            $saldoErp,
+            $pendienteFirmado,
+            $tol,
+        );
+        if ($cupo['reabrir']) {
+            return [
+                'estado' => 'saldo_distinto',
+                'error' => $etiqueta.': el ERP tiene '.number_format(abs($saldoErp), 2, ',', '.')
+                    .' y Anita '.number_format(abs($pendienteFirmado), 2, ',', '.')
+                    .'. No se reabre ni se reaplica.',
+                'accion_apl' => 'omitir',
+                'a_cubrir' => 0.0,
+            ];
+        }
+        if (! $cupo['aplicar']) {
+            return ['estado' => 'ok_al_dia', 'accion_apl' => 'omitir', 'a_cubrir' => 0.0];
+        }
+
+        return ['estado' => 'ok', 'accion_apl' => 'importar', 'a_cubrir' => $cupo['a_cubrir']];
     }
 
     /**
@@ -1770,7 +1761,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
      * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
      * @return array{creadas:int,pagos_sinteticos:int,omitidas:int,errores:list<string>}
      */
-    private function persistirAplicaciones(array $pares, array &$ccPorClave): array
+    private function persistirAplicaciones(array $pares, array &$ccPorClave, array &$topePorCc = []): array
     {
         $creadas = 0;
         $pagos = 0;
@@ -1809,6 +1800,19 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                 $omitidas++;
 
                 continue;
+            }
+            $deudaId = (int) $deuda['id'];
+            if (array_key_exists($deudaId, $topePorCc)) {
+                $cupo = round((float) $topePorCc[$deudaId], 4);
+                if ($cupo <= 0.02) {
+                    $omitidas++;
+
+                    continue;
+                }
+                if ($monto > $cupo) {
+                    $monto = $cupo;
+                }
+                $topePorCc[$deudaId] = round($cupo - $monto, 4);
             }
 
             $credito = $this->peekCc($ccPorClave, $par['credito']['clave'], $monto);

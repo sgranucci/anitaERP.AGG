@@ -44,6 +44,32 @@ class ProveedorCuentacorrienteAnitaImportCcGuardSupportTest extends TestCase
         );
     }
 
+    public function test_no_reaplica_si_el_saldo_ya_es_el_pendiente_de_anita(): void
+    {
+        $cupo = ProveedorCuentacorrienteAnitaImportCcGuardSupport::cupoAplicacionSobreSaldo(400.0, 400.0);
+
+        $this->assertFalse($cupo['aplicar']);
+        $this->assertSame(0.0, $cupo['a_cubrir']);
+        $this->assertFalse($cupo['reabrir']);
+    }
+
+    public function test_aplica_solo_el_hueco_entre_el_erp_y_anita(): void
+    {
+        $cupo = ProveedorCuentacorrienteAnitaImportCcGuardSupport::cupoAplicacionSobreSaldo(1000.0, 400.0);
+
+        $this->assertTrue($cupo['aplicar']);
+        $this->assertSame(600.0, $cupo['a_cubrir']);
+        $this->assertFalse($cupo['reabrir']);
+    }
+
+    public function test_no_reabre_si_el_erp_esta_mas_cerrado_que_anita(): void
+    {
+        $cupo = ProveedorCuentacorrienteAnitaImportCcGuardSupport::cupoAplicacionSobreSaldo(200.0, 400.0);
+
+        $this->assertFalse($cupo['aplicar']);
+        $this->assertTrue($cupo['reabrir']);
+    }
+
     public function test_pagado_mayor_que_la_cuota_no_la_da_por_cobrada(): void
     {
         $this->assertSame(
