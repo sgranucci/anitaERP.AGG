@@ -47,6 +47,9 @@ final class PadronIibbBandejaIngresoService
 
         $resultados = [];
         foreach (PadronIibbBandejaSupport::carpetas() as $clave => $def) {
+            foreach ($this->sanearCarpeta($clave, $dryRun) as $aviso) {
+                $resultados[] = $aviso;
+            }
             $resultado = $this->tomarCarpeta($clave, $def, $dryRun);
             if ($resultado !== null) {
                 $resultados[] = $resultado;
@@ -57,13 +60,127 @@ final class PadronIibbBandejaIngresoService
     }
 
     /**
+     * Saca de procesando lo que ya no es una carga viva: restos descomprimidos
+     * y archivos tomados más viejos que el timeout del worker, si la cola no
+     * los tiene. Sin esto la carpeta queda cerrada y el padrón siguiente no entra.
+     *
+     * @return list<array{clave: string, estado: string, archivo?: string, mensaje?: string}>
+     */
+    private function sanearCarpeta(string $clave, bool $dryRun): array
+    {
+        $avisos = [];
+        $maxima = PadronIibbBandejaSupport::edadMaximaEnProceso();
+
+        foreach (PadronIibbBandejaSupport::archivosTomados($clave) as $tomado) {
+            if ($tomado['edad'] < $maxima || $this->referenciadoPorCola($tomado['ruta'])) {
+                continue;
+            }
+
+            $mensaje = sprintf(
+                'en procesando hace %ds, sin job en la cola. Se pasa a error para no frenar el siguiente.',
+                $tomado['edad']
+            );
+            if ($dryRun) {
+                $avisos[] = [
+                    'clave' => $clave,
+                    'estado' => 'liberaria',
+                    'archivo' => $tomado['ruta'],
+                    'mensaje' => $mensaje,
+                ];
+                continue;
+            }
+
+            $this->marcarCargaInterrumpida($tomado['ruta'], $mensaje);
+            PadronIibbBandejaSupport::archivar($tomado['ruta'], false);
+            Log::warning('padron_iibb:bandeja:liberada', [
+                'clave' => $clave,
+                'archivo' => $tomado['ruta'],
+                'edad' => $tomado['edad'],
+            ]);
+            $avisos[] = [
+                'clave' => $clave,
+                'estado' => 'liberada',
+                'archivo' => $tomado['ruta'],
+                'mensaje' => $mensaje,
+            ];
+        }
+
+        if ($dryRun || PadronIibbBandejaSupport::hayEnProceso($clave)) {
+            return $avisos;
+        }
+
+        $sobrantes = PadronIibbBandejaSupport::borrarSobrantes($clave);
+        if ($sobrantes > 0) {
+            $avisos[] = [
+                'clave' => $clave,
+                'estado' => 'sobrante',
+                'mensaje' => 'se borraron '.$sobrantes.' archivo(s) sueltos en procesando',
+            ];
+        }
+
+        return $avisos;
+    }
+
+    private function referenciadoPorCola(string $ruta): bool
+    {
+        $nombre = basename($ruta);
+        if ($nombre === '') {
+            return false;
+        }
+
+        $like = '%'.addcslashes($nombre, '%_\\').'%';
+
+        return DB::table('jobs')->where('payload', 'like', $like)->exists();
+    }
+
+    private function marcarCargaInterrumpida(string $ruta, string $mensaje): void
+    {
+        $id = DB::table('padron_iibb_carga')
+            ->where('estado', 'en_proceso')
+            ->where('archivo', $ruta)
+            ->orderByDesc('id')
+            ->value('id');
+        if ($id === null) {
+            return;
+        }
+
+        PadronIibbCargaRegistroSupport::fallar((int) $id, $mensaje);
+    }
+
+    /**
      * @param  array{jurisdiccion: int, tipo: ?string}  $def
      * @return array{clave: string, estado: string, archivo?: string, mensaje?: string}|null
      */
     private function tomarCarpeta(string $clave, array $def, bool $dryRun): ?array
     {
         if (PadronIibbBandejaSupport::hayEnProceso($clave)) {
-            return null;
+            $esperando = PadronIibbBandejaSupport::archivoListo($clave);
+            if ($esperando === null) {
+                return null;
+            }
+
+            $edad = 0;
+            $tomados = PadronIibbBandejaSupport::archivosTomados($clave);
+            if ($tomados !== []) {
+                $edad = max(array_column($tomados, 'edad'));
+            }
+            $mensaje = sprintf(
+                'en curso hace %ds; espera %s',
+                $edad,
+                basename($esperando)
+            );
+            Log::warning('padron_iibb:bandeja:ocupada', [
+                'clave' => $clave,
+                'espera' => $esperando,
+                'edad' => $edad,
+            ]);
+
+            return [
+                'clave' => $clave,
+                'estado' => 'ocupada',
+                'archivo' => $esperando,
+                'mensaje' => $mensaje,
+            ];
         }
 
         $origen = PadronIibbBandejaSupport::archivoListo($clave);

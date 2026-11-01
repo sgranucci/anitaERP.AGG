@@ -113,6 +113,8 @@ final class PadronIibbVigenciaSupport
 
         $agentes = array_flip(self::jurisdiccionesAgente());
         $consulta = array_flip(EmpresaJurisdiccionIibbSupport::jurisdiccionesConsulta());
+        $publican = EmpresaJurisdiccionIibbSupport::jurisdiccionesQuePublicanPadron();
+        $publicanFlip = $publican === null ? null : array_flip($publican);
         $jurisdicciones = array_keys($agentes + $consulta);
         sort($jurisdicciones);
 
@@ -120,6 +122,9 @@ final class PadronIibbVigenciaSupport
 
         foreach ($jurisdicciones as $jurisdiccion) {
             $jurisdiccion = (int) $jurisdiccion;
+            if ($publicanFlip !== null && ! isset($publicanFlip[$jurisdiccion])) {
+                continue;
+            }
             $provincia = $provincias->get($jurisdiccion);
             if ($provincia === null) {
                 continue;

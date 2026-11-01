@@ -101,6 +101,7 @@ class ImportarPadronIibbProvinciaJob implements ShouldQueue
         );
 
         $this->limpiarArchivoSiCorresponde();
+        PadronIibbBandejaSupport::archivar($this->archivo, false);
     }
 
     /**

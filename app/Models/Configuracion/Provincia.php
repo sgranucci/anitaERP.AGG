@@ -15,6 +15,7 @@ class Provincia extends Model implements Auditable
         'nombre',
         'abreviatura',
         'jurisdiccion',
+        'tiene_padron',
         'codigo',
         'pais_id',
         'codigoexterno',
@@ -27,6 +28,7 @@ class Provincia extends Model implements Auditable
     protected $casts = [
         'minimocoeficientecm05' => 'float',
         'tope_alicuota_percepcion' => 'float',
+        'tiene_padron' => 'boolean',
     ];
 
     public function paises()

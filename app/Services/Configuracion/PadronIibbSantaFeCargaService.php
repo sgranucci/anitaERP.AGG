@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Services\Configuracion;
 
+use App\Support\Configuracion\PadronIibb\PadronIibbArchivoSupport;
 use DateTime;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
-use ZipArchive;
 
 /**
  * Carga masiva padrón IIBB Santa Fe (API PARP) en padron_iibb + padron_iibb_tasa.
@@ -45,6 +45,52 @@ class PadronIibbSantaFeCargaService
         $provinciaId = max(1, $provinciaId);
 
         $archivo = $this->resolverArchivoCsv($entrada);
+        try {
+            return $this->cargarArchivo($entrada, $archivo, $provinciaId, $batchSize, $pauseMs, $keepPeriod);
+        } finally {
+            PadronIibbArchivoSupport::limpiarTemporal($archivo);
+        }
+    }
+
+    /**
+     * El ZIP se abre en un temporal, nunca al lado del archivo de procesando.
+     * Un CSV suelto en esa carpeta hacía que el mes siguiente no entrara.
+     */
+    public function resolverArchivoCsv(string $entrada): string
+    {
+        return PadronIibbArchivoSupport::resolver(
+            $entrada,
+            ['csv', 'txt'],
+            static function (array $entradas): ?array {
+                if ($entradas === []) {
+                    return null;
+                }
+                usort($entradas, static function (array $a, array $b): int {
+                    $sa = str_contains(strtoupper((string) $a['nombre']), 'PARP') ? 0 : 1;
+                    $sb = str_contains(strtoupper((string) $b['nombre']), 'PARP') ? 0 : 1;
+
+                    return $sa <=> $sb ?: strcmp((string) $a['nombre'], (string) $b['nombre']);
+                });
+
+                return $entradas[0];
+            }
+        );
+    }
+
+    /**
+     * @return array{
+     *   leidas:int,insertadas_cuit:int,insertadas_tasa:int,omitidas:int,errores:int,lotes:int,
+     *   borrados:int,desdefecha:?string,hastafecha:?string,archivo:string,provincia_id:int
+     * }
+     */
+    private function cargarArchivo(
+        string $entrada,
+        string $archivo,
+        int $provinciaId,
+        int $batchSize,
+        int $pauseMs,
+        bool $keepPeriod
+    ): array {
         if (! is_file($archivo) || ! is_readable($archivo)) {
             throw new RuntimeException("No se puede leer: {$archivo}");
         }
@@ -149,60 +195,6 @@ class PadronIibbSantaFeCargaService
         Log::info('padron_iibb_santafe:carga:fin', $stats);
 
         return $stats;
-    }
-
-    public function resolverArchivoCsv(string $entrada): string
-    {
-        if (! is_file($entrada)) {
-            throw new RuntimeException("No existe: {$entrada}");
-        }
-
-        $ext = strtolower(pathinfo($entrada, PATHINFO_EXTENSION));
-        if ($ext !== 'zip') {
-            return $entrada;
-        }
-
-        $destDir = dirname($entrada);
-        $zip = new ZipArchive;
-        if ($zip->open($entrada) !== true) {
-            throw new RuntimeException("Error al abrir zip: {$entrada}");
-        }
-
-        $candidatos = [];
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $name = (string) ($zip->statIndex($i)['name'] ?? '');
-            $base = basename($name);
-            if ($base === '' || str_ends_with($base, '/')) {
-                continue;
-            }
-            $e = strtolower(pathinfo($base, PATHINFO_EXTENSION));
-            if ($e !== 'csv' && $e !== 'txt') {
-                continue;
-            }
-            $candidatos[] = $base;
-        }
-
-        if ($candidatos === []) {
-            $zip->close();
-            throw new RuntimeException('El ZIP no contiene CSV/TXT del padrón Santa Fe.');
-        }
-
-        usort($candidatos, static function (string $a, string $b): int {
-            $sa = str_contains(strtoupper($a), 'PARP') ? 0 : 1;
-            $sb = str_contains(strtoupper($b), 'PARP') ? 0 : 1;
-
-            return $sa <=> $sb ?: strcmp($a, $b);
-        });
-
-        $zip->extractTo($destDir);
-        $zip->close();
-
-        $csv = $destDir . DIRECTORY_SEPARATOR . $candidatos[0];
-        if (! is_file($csv)) {
-            throw new RuntimeException("No se pudo extraer {$candidatos[0]} desde el ZIP.");
-        }
-
-        return $csv;
     }
 
     private function prepararSesion(\PDO $pdo): void

@@ -95,6 +95,7 @@ class ImportarPadronIibbCabaJob implements ShouldQueue
             $e?->getMessage()
         );
         $this->limpiarArchivoSiCorresponde();
+        PadronIibbBandejaSupport::archivar($this->archivo, false);
     }
 
     private function limpiarArchivoSiCorresponde(): void

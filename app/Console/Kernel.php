@@ -148,6 +148,8 @@ class Kernel extends ConsoleKernel
                 PercepcionIibbJurisdiccionEntregaSupport::JURISDICCION_BUENOS_AIRES,
                 EmpresaJurisdiccionIibbSupport::jurisdiccionesAgente(),
                 true
+            ) && EmpresaJurisdiccionIibbSupport::publicaPadron(
+                PercepcionIibbJurisdiccionEntregaSupport::JURISDICCION_BUENOS_AIRES
             ));
 
         // Salvo ARBA, los padrones se bajan a mano con clave fiscal. Se avisa antes

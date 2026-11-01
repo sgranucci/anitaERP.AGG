@@ -158,6 +158,59 @@ final class EmpresaJurisdiccionIibbSupport
     }
 
     /**
+     * Jurisdicciones cuyo fisco publica padrón.
+     * null = la columna todavía no existe y no hay que filtrar.
+     *
+     * @return list<int>|null
+     */
+    public static function jurisdiccionesQuePublicanPadron(): ?array
+    {
+        if (! Schema::hasTable('provincia') || ! Schema::hasColumn('provincia', 'tiene_padron')) {
+            return null;
+        }
+
+        return Provincia::query()
+            ->where('tiene_padron', true)
+            ->whereNotNull('jurisdiccion')
+            ->orderBy('jurisdiccion')
+            ->pluck('jurisdiccion')
+            ->map(static fn ($j) => (int) $j)
+            ->filter(static fn (int $j) => $j >= 900)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Agente o consulta, y la provincia publica padrón.
+     * Carpeta de bajada y mail de vigencia.
+     *
+     * @return list<int>
+     */
+    public static function jurisdiccionesPadronEsperado(?int $empresaId = null): array
+    {
+        $jurs = self::jurisdiccionesConPadron($empresaId);
+        $publican = self::jurisdiccionesQuePublicanPadron();
+        if ($publican === null) {
+            return $jurs;
+        }
+
+        $jurs = array_values(array_intersect($jurs, $publican));
+        sort($jurs);
+
+        return $jurs;
+    }
+
+    public static function publicaPadron(int $jurisdiccion): bool
+    {
+        $publican = self::jurisdiccionesQuePublicanPadron();
+        if ($publican === null) {
+            return true;
+        }
+
+        return in_array($jurisdiccion, $publican, true);
+    }
+
+    /**
      * @return list<int>
      */
     private static function jurisdicciones(string $flag, ?int $empresaId, string $envClave): array
@@ -269,6 +322,7 @@ final class EmpresaJurisdiccionIibbSupport
                 'provincia_id' => (int) $provincia->id,
                 'nombre' => (string) $provincia->nombre,
                 'jurisdiccion' => $jur,
+                'tiene_padron' => (bool) ($provincia->tiene_padron ?? false),
                 'empresas' => $celdas,
             ];
         }
@@ -281,12 +335,17 @@ final class EmpresaJurisdiccionIibbSupport
      */
     public static function provinciasParaMatriz()
     {
+        $columnas = ['id', 'nombre', 'jurisdiccion'];
+        if (Schema::hasColumn('provincia', 'tiene_padron')) {
+            $columnas[] = 'tiene_padron';
+        }
+
         $provincias = Provincia::query()
             ->whereNotNull('jurisdiccion')
             ->where('jurisdiccion', '!=', '')
             ->orderBy('jurisdiccion')
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'jurisdiccion']);
+            ->get($columnas);
 
         $conAfip = $provincias->filter(
             static fn (Provincia $p) => (int) $p->jurisdiccion >= 900
@@ -339,6 +398,41 @@ final class EmpresaJurisdiccionIibbSupport
                 }
             }
         });
+    }
+
+    /**
+     * Tilde por provincia: el fisco publica padrón. Arma la carpeta de bajada
+     * y decide si el mail de vigencia la incluye.
+     *
+     * @param  array<int|string, mixed>  $flags  [provincia_id => 0|1]
+     */
+    public static function guardarTienePadron(array $flags): void
+    {
+        if (! Schema::hasColumn('provincia', 'tiene_padron')) {
+            return;
+        }
+
+        $validos = [];
+        foreach (self::provinciasParaMatriz() as $provincia) {
+            $validos[(int) $provincia->id] = true;
+        }
+
+        foreach ($flags as $provinciaId => $valor) {
+            $provinciaId = (int) $provinciaId;
+            if ($provinciaId <= 0 || ! isset($validos[$provinciaId])) {
+                continue;
+            }
+            $modelo = Provincia::query()->find($provinciaId);
+            if ($modelo === null) {
+                continue;
+            }
+            $nuevo = self::flagActivo($valor);
+            if ((bool) $modelo->tiene_padron === $nuevo) {
+                continue;
+            }
+            $modelo->tiene_padron = $nuevo;
+            $modelo->save();
+        }
     }
 
     /**

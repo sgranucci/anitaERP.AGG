@@ -7,8 +7,10 @@ use App\Http\Requests\ValidacionConfiguracionGeneral;
 use App\Http\Requests\ValidacionEmpresaJurisdiccionIibb;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
+use App\Support\Configuracion\PadronIibbBandejaSupport;
 use App\Support\Configuracion\PadronIibbVigenciaSupport;
 use App\Support\Configuracion\ParametroSistemaSupport;
+use Illuminate\Support\Facades\Schema;
 
 class ConfiguracionGeneralController extends Controller
 {
@@ -25,6 +27,7 @@ class ConfiguracionGeneralController extends Controller
         $matrizIibb = EmpresaJurisdiccionIibbSupport::matrizParaFormulario($empresasIibb);
         $matrizIibbUsaEnv = EmpresaJurisdiccionIibbSupport::matrizUsaFallbackEnv();
         $matrizIibbJursEnv = EmpresaJurisdiccionIibbSupport::desdeEnv('agente_percepcion_iibb');
+        $iibbColumnaPadron = Schema::hasColumn('provincia', 'tiene_padron');
 
         return view('configuracion.general.editar', compact(
             'grupos',
@@ -32,6 +35,7 @@ class ConfiguracionGeneralController extends Controller
             'matrizIibb',
             'matrizIibbUsaEnv',
             'matrizIibbJursEnv',
+            'iibbColumnaPadron',
         ));
     }
 
@@ -66,9 +70,16 @@ class ConfiguracionGeneralController extends Controller
             ARRAY_FILTER_USE_BOTH
         );
 
+        $padron = $request->input('padron', []);
+        if (! is_array($padron)) {
+            $padron = [];
+        }
+
         try {
             EmpresaJurisdiccionIibbSupport::guardarMatriz($agentes);
+            EmpresaJurisdiccionIibbSupport::guardarTienePadron($padron);
             PadronIibbVigenciaSupport::olvidar();
+            PadronIibbBandejaSupport::asegurarDirectorios();
         } catch (\RuntimeException $e) {
             return redirect()
                 ->route('configuracion_general')

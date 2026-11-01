@@ -247,6 +247,8 @@ Configuración general del sistema
                     <p class="text-muted mb-3">
                         Tilde en qué jurisdicciones cada empresa jurídica percibe (ventas) o retiene (compras).
                         Consulta carga el padrón para identificar percepciones en la precarga, sin percibir ni retener.
+                        Padrón indica que esa provincia publica padrón: solo esas arman la carpeta de bajada y entran en el mail de vigencia.
+                        Si percibe o retiene y el padrón está destildado, factura con la tasa de descarte y no se avisa.
                         Las alícuotas y mínimos se cargan en el ABM de provincia: son del fisco, no de la empresa.
                         No es el catálogo PIVA/PNC (percepción IVA nacional).
                     </p>
@@ -280,6 +282,9 @@ Configuración general del sistema
                                 <tr>
                                     <th rowspan="2" class="align-middle">Jur.</th>
                                     <th rowspan="2" class="align-middle">Provincia</th>
+                                    @if (! empty($iibbColumnaPadron))
+                                        <th rowspan="2" class="text-center align-middle" title="La provincia publica padrón. Arma la carpeta de bajada y el mail de vigencia.">Padrón</th>
+                                    @endif
                                     @foreach ($empresasIibb as $empresa)
                                         <th colspan="3" class="text-center">{{ $empresa->nombre }}</th>
                                     @endforeach
@@ -297,6 +302,14 @@ Configuración general del sistema
                                     <tr>
                                         <td>{{ $fila['jurisdiccion'] }}</td>
                                         <td>{{ $fila['nombre'] }}</td>
+                                        @if (! empty($iibbColumnaPadron))
+                                            <td class="text-center">
+                                                <input type="hidden" name="padron[{{ $fila['provincia_id'] }}]" value="0">
+                                                <input type="checkbox" name="padron[{{ $fila['provincia_id'] }}]" value="1"
+                                                    title="Hay padrón publicado. Carpeta de bajada y aviso si no está vigente."
+                                                    {{ ! empty($fila['tiene_padron']) ? 'checked' : '' }}>
+                                            </td>
+                                        @endif
                                         @foreach ($empresasIibb as $empresa)
                                             @php
                                                 $celda = $fila['empresas'][(int) $empresa->id] ?? ['percepcion' => false, 'retencion' => false, 'consulta' => false];

@@ -11,7 +11,7 @@ use Throwable;
 /**
  * Carpeta externa donde se pegan los padrones IIBB.
  * Aparecen las jurisdicciones tildadas como agente (percepción o retención)
- * y las tildadas solo como consulta de padrón. ARBA (902) no usa esta bandeja:
+ * o como consulta, y además con el tilde Padrón. ARBA (902) no usa esta bandeja:
  * se baja solo por DFE.
  *
  * entrada/{clave} → procesando/{clave} → ok|error/{clave}
@@ -69,14 +69,14 @@ final class PadronIibbBandejaSupport
 
     /**
      * Subcarpetas que el vigilador lee: las del catálogo cuya jurisdicción está
-     * tildada como agente o como consulta de padrón (o, si la grilla todavía
-     * no se guardó, las de agente del .env).
+     * tildada como agente o consulta y con el tilde Padrón (o, si la grilla
+     * todavía no se guardó, las de agente del .env).
      *
      * @return array<string, array{jurisdiccion: int, tipo: ?string}>
      */
     public static function carpetas(): array
     {
-        $agentes = array_flip(EmpresaJurisdiccionIibbSupport::jurisdiccionesConPadron());
+        $agentes = array_flip(EmpresaJurisdiccionIibbSupport::jurisdiccionesPadronEsperado());
         $visibles = [];
         foreach (self::CATALOGO as $clave => $def) {
             if (! isset($agentes[$def['jurisdiccion']])) {
@@ -137,7 +137,8 @@ final class PadronIibbBandejaSupport
     }
 
     /**
-     * Hay un archivo todavía en procesando para esa jurisdicción: no se toma otro.
+     * Hay un archivo tomado (nombre con fecha) todavía en procesando.
+     * El CSV que Santa Fe descomprime al lado no cuenta: si contara, el mes siguiente no entra.
      */
     public static function hayEnProceso(string $clave): bool
     {
@@ -150,12 +151,77 @@ final class PadronIibbBandejaSupport
             if ($nombre === '.' || $nombre === '..') {
                 continue;
             }
-            if (is_file($dir . '/' . $nombre)) {
+            if (is_file($dir . '/' . $nombre) && self::esArchivoTomado($nombre)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * El worker corta el job a los job_timeout segundos. Pasado ese plazo,
+     * más un margen, un archivo tomado ya no puede estar en curso.
+     */
+    public static function edadMaximaEnProceso(): int
+    {
+        return max(600, (int) config('padrones_iibb.job_timeout', 7200)) + 900;
+    }
+
+    /**
+     * @return list<array{ruta: string, nombre: string, edad: int}>
+     */
+    public static function archivosTomados(string $clave): array
+    {
+        $dir = self::directorio() . '/procesando/' . $clave;
+        if (! is_dir($dir)) {
+            return [];
+        }
+
+        $salida = [];
+        foreach (scandir($dir) ?: [] as $nombre) {
+            $ruta = $dir . '/' . $nombre;
+            if (! is_file($ruta) || ! self::esArchivoTomado($nombre)) {
+                continue;
+            }
+            $mtime = filemtime($ruta);
+            if ($mtime === false) {
+                continue;
+            }
+            $salida[] = [
+                'ruta' => $ruta,
+                'nombre' => $nombre,
+                'edad' => max(0, time() - $mtime),
+            ];
+        }
+
+        return $salida;
+    }
+
+    /**
+     * Borra CSV/TXT que no son el archivo tomado. Son restos de una
+     * descompresión vieja y no representan una carga en curso.
+     */
+    public static function borrarSobrantes(string $clave): int
+    {
+        $dir = self::directorio() . '/procesando/' . $clave;
+        if (! is_dir($dir)) {
+            return 0;
+        }
+
+        $borrados = 0;
+        foreach (scandir($dir) ?: [] as $nombre) {
+            if (! self::esExtraidoSuelto($nombre)) {
+                continue;
+            }
+            $ruta = $dir . '/' . $nombre;
+            if (is_file($ruta) && @unlink($ruta)) {
+                $borrados++;
+                Log::warning('padron_iibb:bandeja:sobrante', ['clave' => $clave, 'archivo' => $ruta]);
+            }
+        }
+
+        return $borrados;
     }
 
     /**
@@ -312,9 +378,9 @@ final class PadronIibbBandejaSupport
 Padrones de Ingresos Brutos
 ===========================
 
-No hay jurisdicciones tildadas como agente de percepción o de retención,
-ni como consulta de padrón.
-Marquelas en Configuración general, tarjeta Agentes IIBB.
+No hay jurisdicciones con padrón publicado y tildadas como agente
+o como consulta.
+Marque Padrón y Percibe, Retiene o Consulta en Configuración general.
 Ahí se definen las carpetas de esta bandeja.
 
 La pantalla Importar Padrón IIBB sigue sirviendo para cargar a mano.
@@ -328,13 +394,65 @@ TXT;
         return "Padrones de Ingresos Brutos\n"
             ."===========================\n\n"
             ."Pegue el archivo en la carpeta de la jurisdicción. No lo deje en la raíz.\n"
-            ."Las carpetas son las jurisdicciones tildadas en Agentes IIBB\n"
-            ."(percibe, retiene o consulta de padrón).\n\n"
+            ."Las carpetas son las provincias con tilde Padrón en Agentes IIBB\n"
+            ."que además perciben, retienen o consultan el padrón.\n\n"
             .$arba
             .implode("\n", $lineas)."\n\n"
             ."Espere a que termine de copiarse. En un par de minutos el archivo pasa a\n"
             ."procesando y, al terminar, a ok o a error.\n\n"
             ."La pantalla Importar Padrón IIBB sigue sirviendo para cargar a mano.\n";
+    }
+
+    /**
+     * El ZIP de Santa Fe se descomprime al lado del archivo tomado. Ese CSV no
+     * es un job en curso: si se cuenta, el mes siguiente nunca entra.
+     */
+    public static function limpiarExtraidosJuntoA(string $archivo): void
+    {
+        $dir = dirname($archivo);
+        if (! is_dir($dir)) {
+            return;
+        }
+
+        $realDir = realpath($dir);
+        $raiz = realpath(self::directorio());
+        if ($realDir === false || $raiz === false) {
+            return;
+        }
+
+        $prefijo = $raiz . DIRECTORY_SEPARATOR . 'procesando' . DIRECTORY_SEPARATOR;
+        if (! str_starts_with($realDir, $prefijo)) {
+            return;
+        }
+
+        foreach (scandir($realDir) ?: [] as $nombre) {
+            if (! self::esExtraidoSuelto($nombre)) {
+                continue;
+            }
+            $ruta = $realDir . DIRECTORY_SEPARATOR . $nombre;
+            if (is_file($ruta)) {
+                @unlink($ruta);
+            }
+        }
+    }
+
+    /**
+     * Nombre que pone tomar(): 20261030_151200_archivo.ext
+     */
+    private static function esArchivoTomado(string $nombre): bool
+    {
+        return (bool) preg_match('/^\d{8}_\d{6}_/', $nombre);
+    }
+
+    private static function esExtraidoSuelto(string $nombre): bool
+    {
+        if ($nombre === '' || $nombre[0] === '.' || self::esArchivoTomado($nombre)) {
+            return false;
+        }
+
+        $ext = strtolower((string) pathinfo($nombre, PATHINFO_EXTENSION));
+
+        return in_array($ext, ['csv', 'txt'], true);
     }
 
     private static function nombreSeguro(string $nombre): string

@@ -82,6 +82,7 @@ class ImportarPadronIibbSantaFeJob implements ShouldQueue
         } finally {
             $this->limpiarArchivoSiCorresponde();
             PadronIibbBandejaSupport::archivar($this->archivo, $ok);
+            PadronIibbBandejaSupport::limpiarExtraidosJuntoA($this->archivo);
         }
     }
 
@@ -101,6 +102,8 @@ class ImportarPadronIibbSantaFeJob implements ShouldQueue
             $e?->getMessage()
         );
         $this->limpiarArchivoSiCorresponde();
+        PadronIibbBandejaSupport::archivar($this->archivo, false);
+        PadronIibbBandejaSupport::limpiarExtraidosJuntoA($this->archivo);
     }
 
     private function limpiarArchivoSiCorresponde(): void

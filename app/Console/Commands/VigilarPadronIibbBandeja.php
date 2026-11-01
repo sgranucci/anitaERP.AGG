@@ -22,7 +22,7 @@ class VigilarPadronIibbBandeja extends Command
             PadronIibbBandejaSupport::asegurarDirectorios();
             $claves = array_keys(PadronIibbBandejaSupport::carpetas());
             $this->info($claves === []
-                ? 'Sin jurisdicciones tildadas como agente ni como consulta: no hay carpetas de padrón.'
+                ? 'Sin provincias con padrón y tildadas como agente o consulta: no hay carpetas.'
                 : 'Carpetas: '.implode(', ', $claves));
 
             return self::SUCCESS;
@@ -33,11 +33,16 @@ class VigilarPadronIibbBandeja extends Command
 
         foreach ($resultados as $fila) {
             $texto = trim(($fila['clave'] !== '' ? $fila['clave'] . ': ' : '') . ($fila['mensaje'] ?? $fila['archivo'] ?? ''));
+            $linea = ($dryRun ? '[dry-run] ' : '') . $fila['estado'] . ' ' . $texto;
             if ($fila['estado'] === 'error' || $fila['estado'] === 'sin_directorio') {
-                $this->error($fila['estado'] . ' ' . $texto);
+                $this->error($linea);
                 continue;
             }
-            $this->info(($dryRun ? '[dry-run] ' : '') . $fila['estado'] . ' ' . $texto);
+            if (in_array($fila['estado'], ['ocupada', 'liberada', 'liberaria'], true)) {
+                $this->warn($linea);
+                continue;
+            }
+            $this->info($linea);
         }
 
         if ($dryRun && $resultados === []) {
