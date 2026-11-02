@@ -1316,7 +1316,10 @@ class RendicionEstacionamientoCajaService
             $totalGrilla += round((float) ($m['monto'] ?? 0), 2);
         }
         $totalGrilla = round($totalGrilla, 2);
-        $totalAjustado = round($totalGrilla + $redondeo + $redondeoInvitacion + $sobranteFaltante, 2);
+        // $redondeo y $redondeoInvitacion no se suman: el de invitaciones es el importe de las
+        // invitaciones (ya está fuera de lo cobrado) y el de turno suele espejar esos centavos.
+        // Sumarlos rechaza un cierre que ya cuadra (p. ej. $0,19 de invitación sobre $118.000).
+        $totalAjustado = round($totalGrilla + $sobranteFaltante, 2);
         $diferencia = round($totalAjustado - $totalCobradoTurno, 2);
         $cuadra = abs($diferencia) <= self::TOLERANCIA;
 
@@ -1387,6 +1390,7 @@ class RendicionEstacionamientoCajaService
      * El total de los medios más el sobrante/faltante tiene que cerrar con lo cobrado.
      * Un pase entre medios (efectivo y Mercado Pago) deja el sobrante en cero:
      * no es diferencia de caja. El faltante o sobrante es solo cuando el total no cierra.
+     * Las invitaciones y su redondeo no entran: lo cobrado ya las tiene afuera.
      *
      * @param  array<string, mixed>  $cabecera
      * @param  list<array{cuentacaja_id?:int, monto?:float}>  $movimientos
@@ -1395,23 +1399,20 @@ class RendicionEstacionamientoCajaService
     {
         $suma = 0.0;
         foreach ($movimientos as $mov) {
-            $suma += (float) ($mov['monto'] ?? 0);
+            $suma += round((float) ($mov['monto'] ?? 0), 2);
         }
-        $ajustado = round(
-            $suma
-            + (float) ($cabecera['sobrantefaltante'] ?? 0)
-            + (float) ($cabecera['totalredondeo'] ?? 0)
-            + (float) ($cabecera['totalredondeoinvitacion'] ?? 0),
-            2,
-        );
+        $suma = round($suma, 2);
+        $sobrante = round((float) ($cabecera['sobrantefaltante'] ?? 0), 2);
+        $ajustado = round($suma + $sobrante, 2);
         $cobrado = round((float) ($cabecera['totalcobrado'] ?? 0), 2);
         if (abs($ajustado - $cobrado) <= self::TOLERANCIA) {
             return;
         }
 
         throw new InvalidArgumentException(
-            'Los medios rendidos ($'.number_format($suma, 2, ',', '.').') más sobrante/faltante'
-            .' no cierran con lo cobrado ($'.number_format($cobrado, 2, ',', '.').').'
+            'Los medios rendidos ($'.number_format($suma, 2, ',', '.').')'
+            .' más el sobrante/faltante ($'.number_format($sobrante, 2, ',', '.').')'
+            .' dan $'.number_format($ajustado, 2, ',', '.').' y lo cobrado es $'.number_format($cobrado, 2, ',', '.').'.'
             .' Si solo cambió el reparto entre efectivo y otro medio, el total tiene que seguir igual'
             .' y el sobrante/faltante queda en cero. Eso no es diferencia de caja.'
         );

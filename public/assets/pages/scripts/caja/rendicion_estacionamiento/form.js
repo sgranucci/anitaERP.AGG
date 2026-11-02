@@ -567,8 +567,6 @@
 
     function recalcularDiferencias() {
         var totalCobrado = parseFloat(val('totalcobrado')) || 0;
-        var redondeo = parseFloat(val('totalredondeo')) || 0;
-        var redInv = parseFloat(val('totalredondeoinvitacion')) || 0;
         var sobrante = parseFloat(val('sobrantefaltante')) || 0;
         var totalGrilla = 0;
 
@@ -584,7 +582,8 @@
             totalGrillaEl.textContent = '$' + fmt(totalGrilla);
         }
 
-        var totalAjustado = Math.round((totalGrilla + redondeo + redInv + sobrante) * 100) / 100;
+        // Invitaciones y redondeo de turno no son plata rendida: lo cobrado ya las excluye.
+        var totalAjustado = Math.round((totalGrilla + sobrante) * 100) / 100;
         var diff = Math.round((totalAjustado - totalCobrado) * 100) / 100;
         var cuadra = Math.abs(diff) <= 0.02;
 
@@ -604,7 +603,7 @@
             var tipoDiff = diff > 0 ? 'Sobra' : 'Falta';
             alertDiff.innerHTML = '<strong>Diferencia a compensar:</strong> ' + tipoDiff + ' $' + fmt(Math.abs(diff))
                 + ' — Total grilla $' + fmt(totalGrilla)
-                + ' + ajustes $' + fmt(redondeo + redInv + sobrante)
+                + ' + sobrante/faltante $' + fmt(sobrante)
                 + ' = $' + fmt(totalAjustado)
                 + ' vs cobrado $' + fmt(totalCobrado) + '.';
         }
