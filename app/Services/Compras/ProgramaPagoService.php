@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\Models\Compras\ProgramaPago;
 use App\Models\Compras\ProgramaPagoAsignacion;
+use App\Models\Compras\ProgramaPagoCheque;
 use App\Models\Compras\ProgramaPagoLinea;
 use App\Repositories\Compras\ProgramaPagoRepositoryInterface;
 use App\Support\Caja\ProgramaPagoAsignarChequesSupport;
@@ -136,6 +137,50 @@ class ProgramaPagoService
         }
 
         return $actualizados;
+    }
+
+    /**
+     * Vuelve a leer la cartera de cheques del ERP (los que ya están cargados)
+     * y alinea el monto guardado de los ya asignados al programa.
+     *
+     * @return array{cantidad: int, total: float, montos_asignados: int}
+     */
+    public function refrescarCheques(ProgramaPago $programa): array
+    {
+        $this->assertEditable($programa);
+
+        $columnas = ProgramaPagoMesesSupport::columnas(
+            (string) $programa->anio_mes_inicio,
+            (int) $programa->cantidad_meses,
+            (bool) $programa->incluye_transf
+        );
+        $cartera = ProgramaPagoChequesCarteraSupport::montosPorColumna(
+            (int) $programa->empresa_id,
+            $columnas
+        );
+
+        $montos = 0;
+        $asignados = ProgramaPagoCheque::query()
+            ->whereHas('linea', static fn ($q) => $q->where('programa_pago_id', $programa->id))
+            ->with('cheque:id,monto')
+            ->get();
+        foreach ($asignados as $fila) {
+            if ($fila->cheque === null) {
+                continue;
+            }
+            $monto = round((float) $fila->cheque->monto, 2);
+            if (abs((float) $fila->monto_cheque - $monto) <= 0.009) {
+                continue;
+            }
+            $fila->update(['monto_cheque' => $monto]);
+            $montos++;
+        }
+
+        return [
+            'cantidad' => (int) ($cartera['cantidad'] ?? 0),
+            'total' => round((float) ($cartera['total'] ?? 0), 2),
+            'montos_asignados' => $montos,
+        ];
     }
 
     /**

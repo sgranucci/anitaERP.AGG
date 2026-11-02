@@ -362,6 +362,12 @@ window.programaPagoCfg = {
                             <i class="fa fa-sync"></i> Refrescar saldos
                         </button>
                     </form>
+                    <form action="{{ route('refrescar_cheques_programa_pago', $data->id) }}" method="POST" class="d-inline mr-2">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-info" onclick="return confirm('¿Actualizar la fila de cheques en cartera con los cheques del ERP?');">
+                            <i class="fa fa-sync"></i> Refrescar cheques
+                        </button>
+                    </form>
                     <form action="{{ route('cerrar_programa_pago', $data->id) }}" method="POST" class="d-inline mr-2">
                         @csrf
                         <button type="submit" class="btn btn-outline-warning" onclick="return confirm('¿Cerrar el programa? Quedará solo lectura.');">

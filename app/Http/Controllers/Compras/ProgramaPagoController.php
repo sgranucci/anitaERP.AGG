@@ -214,6 +214,31 @@ class ProgramaPagoController extends Controller
         return back()->with('mensaje', "Saldos actualizados ({$n}). Proveedores nuevos: {$creadas}.");
     }
 
+    public function refrescarCheques(int $id)
+    {
+        $this->assertFerli();
+        can('actualizar-programa-pago');
+
+        $programa = $this->programaPagoRepository->find($id);
+        if (! $this->empresaRepository->empresaIdPermitida((int) $programa->empresa_id)) {
+            abort(403);
+        }
+
+        try {
+            $stats = $this->programaPagoService->refrescarCheques($programa);
+        } catch (Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $mensaje = 'Cheques en cartera actualizados: '.$stats['cantidad']
+            .' cheque(s), total '.number_format((float) $stats['total'], 2, ',', '.').'.';
+        if ((int) $stats['montos_asignados'] > 0) {
+            $mensaje .= ' Montos de cheques ya asignados actualizados: '.$stats['montos_asignados'].'.';
+        }
+
+        return back()->with('mensaje', $mensaje);
+    }
+
     public function agregarProveedor(Request $request, int $id)
     {
         $this->assertFerli();

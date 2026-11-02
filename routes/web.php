@@ -4240,6 +4240,7 @@ Route::get('compras/programa-pago/{id}/editar', 'Compras\ProgramaPagoController@
 Route::put('compras/programa-pago/{id}', 'Compras\ProgramaPagoController@actualizar')->name('actualizar_programa_pago');
 Route::delete('compras/programa-pago/{id}', 'Compras\ProgramaPagoController@eliminar')->name('eliminar_programa_pago');
 Route::post('compras/programa-pago/{id}/refrescar-saldos', 'Compras\ProgramaPagoController@refrescarSaldos')->name('refrescar_saldos_programa_pago');
+Route::post('compras/programa-pago/{id}/refrescar-cheques', 'Compras\ProgramaPagoController@refrescarCheques')->name('refrescar_cheques_programa_pago');
 Route::post('compras/programa-pago/{id}/agregar-proveedor', 'Compras\ProgramaPagoController@agregarProveedor')->name('agregar_proveedor_programa_pago');
 Route::post('compras/programa-pago/{id}/cerrar', 'Compras\ProgramaPagoController@cerrar')->name('cerrar_programa_pago');
 Route::post('compras/programa-pago/{id}/reabrir', 'Compras\ProgramaPagoController@reabrir')->name('reabrir_programa_pago');

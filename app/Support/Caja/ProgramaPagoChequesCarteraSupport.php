@@ -11,7 +11,7 @@ final class ProgramaPagoChequesCarteraSupport
 {
     /**
      * @param  list<array{clave: string, etiqueta: string, anio_mes: ?string}>  $columnas
-     * @return array{por_clave: array<string, float>, total: float}
+     * @return array{por_clave: array<string, float>, total: float, cantidad: int}
      */
     public static function montosPorColumna(int $empresaId, array $columnas): array
     {
@@ -24,7 +24,7 @@ final class ProgramaPagoChequesCarteraSupport
         }
 
         if ($porClave === []) {
-            return ['por_clave' => [], 'total' => 0.0];
+            return ['por_clave' => [], 'total' => 0.0, 'cantidad' => 0];
         }
 
         $claves = array_keys($porClave);
@@ -35,12 +35,14 @@ final class ProgramaPagoChequesCarteraSupport
         $query = ProgramaPagoAsignarChequesSupport::queryCarteraDisponible($empresaId)
             ->whereBetween('fechapago', [$desde, $hasta]);
 
+        $cantidad = 0;
         foreach ($query->get(['fechapago', 'monto']) as $cheque) {
             $clave = Carbon::parse((string) $cheque->fechapago)->format('Y-m');
             if (! array_key_exists($clave, $porClave)) {
                 continue;
             }
             $porClave[$clave] += (float) $cheque->monto;
+            $cantidad++;
         }
 
         foreach ($porClave as $k => $v) {
@@ -50,6 +52,7 @@ final class ProgramaPagoChequesCarteraSupport
         return [
             'por_clave' => $porClave,
             'total' => round(array_sum($porClave), 2),
+            'cantidad' => $cantidad,
         ];
     }
 }
