@@ -681,6 +681,7 @@ class IngresoEgresoComprobanteIvaService
                 null,
                 $payload['numerocae'] ?? null,
                 $tipoAutorizacion,
+                (bool) ($payload['es_fce'] ?? false),
             );
         } catch (RuntimeException $e) {
             return $e->getMessage();
@@ -706,6 +707,7 @@ class IngresoEgresoComprobanteIvaService
             null,
             $cabecera['numerocae'] ?? null,
             $cabecera['tipo_autorizacion'] ?? null,
+            (bool) ($cabecera['es_fce'] ?? false),
         );
     }
 

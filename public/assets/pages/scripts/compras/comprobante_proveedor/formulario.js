@@ -4079,7 +4079,8 @@ $(function () {
                 numerocomprobante: parseInt($('#numerocomprobante').val() || '0', 10) || 0,
                 excluir_comprobante_id: comprobanteId > 0 ? comprobanteId : undefined,
                 excluir_precarga_id: precargaId > 0 ? precargaId : undefined,
-                excluir_anita_nro_interno: anitaNro > 0 ? anitaNro : undefined
+                excluir_anita_nro_interno: anitaNro > 0 ? anitaNro : undefined,
+                es_fce: $('#es_fce').is(':checked') ? 1 : 0
             };
         }
 
@@ -4090,7 +4091,8 @@ $(function () {
                 p.tipotransaccion_compra_id,
                 p.letra,
                 p.sucursal,
-                p.numerocomprobante
+                p.numerocomprobante,
+                p.es_fce
             ].join('|');
         }
 
@@ -4174,7 +4176,7 @@ $(function () {
             window.cpVerificarDuplicadoCabecera({ alertar: true });
         });
 
-        $('#letra, #sucursal, #empresa_id, #proveedor_id, #tipotransaccion_compra_id').on('change', function () {
+        $('#letra, #sucursal, #empresa_id, #proveedor_id, #tipotransaccion_compra_id, #es_fce').on('change', function () {
             if (parseInt($('#numerocomprobante').val() || '0', 10) > 0) {
                 window.cpVerificarDuplicadoCabecera({ alertar: true });
             }

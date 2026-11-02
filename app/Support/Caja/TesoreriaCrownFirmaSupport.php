@@ -160,6 +160,19 @@ final class TesoreriaCrownFirmaSupport
             ->exists();
     }
 
+    public static function puedeAjustarCaja(Usuario $usuario): bool
+    {
+        $roles = $usuario->roles()->get(['rol.id', 'rol.nombre']);
+        if ($roles->contains(fn ($rol) => (string) $rol->nombre === 'administrador')) {
+            return true;
+        }
+
+        return Permiso::query()
+            ->where('slug', TesoreriaCrownCierreSupport::PERMISO_AJUSTAR)
+            ->whereHas('roles', fn ($q) => $q->whereIn('rol.id', $roles->pluck('id')))
+            ->exists();
+    }
+
     public static function aplicar(TesoreriaCrownComprobante $comprobante, string $lado, Usuario $usuario): void
     {
         if ($lado === 'entrega' && $comprobante->entrega_at === null) {

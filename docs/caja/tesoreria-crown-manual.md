@@ -39,7 +39,7 @@ Al asignar se elige la caja, el cajero, el turno (mañana, tarde o noche) y la t
 | Tarea | Para qué se usa |
 |---|---|
 | Venta y pago | Caja de sala. |
-| Gastronomía | Abre los datos de X, notas de crédito e IVA. |
+| Gastronomía | Abre los datos de X y notas de crédito. |
 | Hotel | Igual que gastronomía, y además entra la cuenta corriente del hotel en el resultado. |
 | Kiosco | Caja de kiosco. |
 | Empleados | Caja de empleados. |
@@ -59,7 +59,7 @@ La rendición pide una habilitación conforme de esa misma caja, que no haya sid
 
 En la habilitación se cargan cantidades de pesos, dólares y euros. Las fichas no entran en la habilitación.
 
-En la rendición se cargan las mismas monedas y, además, las fichas. Después van los medios: cashless, apuestas, online, débito, crédito, recargo, vouchers y QR. Si la caja se abrió como gastronomía u hotel, la rendición muestra los cierres de ventas pendientes de esa fecha. Salen de `p-cierrefact` (tabla `cierrefiscal`), no de `p-vtagastro`. El Z es el cierre fiscal de una barra. El X es el informe que la rendición de hotel toma. Se marcan los que corresponden a esa caja y **Aplicar a la rendición** completa el X, el Z, las notas de crédito, el IVA y el último ticket. Esos importes se pueden corregir antes de guardar. El cierre de Anita no se modifica. En hotel, además, se cargan la cuenta corriente y la transferencia.
+En la rendición se cargan las mismas monedas y, además, las fichas. Después van los medios, en el orden de la pantalla de Anita: número de Z cashless, pagos y ventas cashless, pagos parcial, apuestas, ventas y pagos de casino on-line, débito, crédito, recargo, cuenta corriente, transferencia, vouchers y QR. En sala el recargo no se tipea: es la tarjeta de crédito menos ese crédito dividido 1,05 (desde el 8/11/2024; antes, dividido 1,10). Gastronomía y hotel no calculan ese recargo. Si la caja se abrió como gastronomía u hotel, la rendición muestra los cierres de ventas pendientes de esa fecha. Salen de `p-cierrefact` (tabla `cierrefiscal`), no de `p-vtagastro`. El Z es el cierre fiscal de una barra. El X es el informe que la rendición de hotel toma. Se marcan los que corresponden a esa caja y **Aplicar a la rendición** completa el X, el Z, las notas de crédito y el último ticket. Esos importes se pueden corregir antes de guardar. El cierre de Anita no se modifica. En hotel, además, se cargan la cuenta corriente y la transferencia. Si el cajero tiene código PXSol, **Traer de PXSol** pide facturado, crédito, IVA de facturas e IVA de notas de crédito entre la primera habilitación y el momento de la consulta. El facturado completa el X y el Z, y el crédito completa las notas de crédito. Esos importes se pueden corregir antes de guardar. El comando vive en `TESORERIA_CROWN_PXSOL_COMANDO`; si está vacío, el botón avisa que PXSol no está configurado.
 
 Los dólares y los euros quedan en su moneda en el comprobante. El cierre los pasa a pesos con la cotización de venta de esa jornada. Pesos y fichas de cotización fija entran por su valor. Si falta la cotización de una moneda usada, la caja no se puede cerrar hasta cargarla. Una cotización en cero no se usa.
 
@@ -105,11 +105,13 @@ Al cerrar firman los dos en el momento: tesorería con usuario y clave, y el caj
 
 Todo el cierre se expresa en pesos. Entran solo los comprobantes conformes. Una reversa conforme resta, porque sus cantidades y sus medios van al revés.
 
-El efectivo de cada comprobante es pesos, más dólares y euros por la cotización de la jornada, más la tarjeta de crédito menos el recargo, más el débito y el QR. Las fichas no van dentro de ese efectivo.
+La habilitación es el efectivo: pesos, más dólares y euros por la cotización de la jornada. En el listado, la rendición se ve en las mismas líneas que Anita: valores varios (efectivo, crédito, débito, QR y cuenta corriente, con el recargo incluido) y, debajo, el recargo en negativo. Las fichas no van dentro de valores varios.
+
+La rendición pide los mismos importes que la pantalla de Anita: pagos y ventas cashless, pagos parcial, apuestas, ventas y pagos de casino on-line, débito, crédito, recargo, hotel, vouchers y QR. El cashless del cierre es pagos del Z menos ventas. El on-line es pagos menos ventas. Los vouchers son pagos menos ventas.
 
 | Tarea | Diferencia |
 |---|---|
-| Venta y pago, kiosco y cashless | Efectivo rendido + fichas + cashless + vouchers + online + apuestas − efectivo habilitado. |
+| Venta y pago, kiosco y cashless | Efectivo rendido + fichas + (pagos Z − ventas cashless) + (pagos − ventas de vouchers) + (pagos − ventas online) + (pagos − ventas de apuestas) − efectivo habilitado. |
 | Gastronomía y hotel | Efectivo rendido + fichas + transferencia + cuenta corriente − efectivo habilitado − (X − notas de crédito − fallo de mozo). |
 | Empleados | Cero. |
 
@@ -213,9 +215,40 @@ Cada mesa apunta a un código de banca. La banca que se usa es la última vigenc
 
 En la jornada, la solapa Mesas es el piso del día: cada mesa muestra si está sin movimiento, en juego, con estado final o con un borrador. Al elegirla se ven apertura, stock, estado final y drop, y desde ahí se abre el movimiento. El número del movimiento abre el detalle para cargar cantidades y confirmar. La vigencia de la banca se cambia desde el enlace de esa mesa.
 
+## Slots
+
+El drop de máquinas y el recuento del stacker entran en la solapa **Slots** de la jornada. Los dos salen del mismo archivo de Anita: el drop es el tipo Drop y el recuento es Contadora, Manual o Corrección. Cada movimiento trae el número de Anita, la máquina, el total y el billetaje.
+
+La solapa lista el día y, al abrir un número, muestra las denominaciones que lo arman. Pdf, Excel y Csv salen de la barra de la sala con ese día.
+
+## Poder del público
+
+Está en la jornada, solapa **Poder público**. Sale de `l-stockfichm.c`.
+
+Por cada ficha, la conversión inicial es la conversión final de ayer, más la asignación inicial de hoy y los otros movimientos de ficha del día. La conversión final le suma la variación de mesas y la de cajeros:
+
+- Mesas: estado final − (habilitación + reposición − crédito) + canje.
+- Cajeros: rendición de pago + rendición de venta − habilitación.
+
+El poder público del día es (conversión inicial − conversión final) × valor, sumado de todas las fichas. Si la conversión final sube, el día da negativo: volvió ficha de la sala. Ese importe es la línea **Fichas poder público** del anexo I. El mes y el acumulado arrancan en el día anterior y le suman este día. El 1 del mes, el mes arranca en cero.
+
+La reserva es la de los cierres de ficha más las asignaciones iniciales posteriores a ese cierre. El poder público en cantidad es reserva − conversión final − mesas de la banca − habilitación del cajero. La pantalla no graba en Anita.
+
+El 30/10/2026 el cálculo da −6.500, el mismo día, mes y acumulado que Anita tiene en `ppublico`.
+
+## Anexo I
+
+Está en la jornada, solapa **Anexo I**. Sigue el orden de `l-anexo1.c`: ingresos, egresos y caja, con día, mes y anual.
+
+Si Anita cerró el día, el listado sale de `acumanexo1` y el poder público de `ppublico`. La caja final por variación es la que Anita grabó. Si el recálculo no cierra con esa cifra, la pantalla lo avisa.
+
+Octubre de 2026 no tiene ese detalle: Anita solo dejó la caja final. En esos días la solapa calcula lo que sí está en la base: poder público, recargo, tarjetas, débito, QR y los movimientos de bóveda (compras, depósitos, dólares, euros y otros egresos). No completa con cero la recaudación de mesas, slots, gastronomía ni hotel, porque esas líneas las arma otro programa y Anita no las grabó. La cuenta corriente de hotel tampoco está en la base SQL.
+
+Pdf, Excel y Csv salen de la barra de la sala. La pantalla no graba en Anita.
+
 ## Ajuste de auditoría
 
-Este tramo está definido para Crown y todavía no está en la pantalla. Es la corrección habitual después del cierre, cuando el cajero ya no está.
+Está en el cierre de la caja, **Ajuste de caja**. El permiso es `ajustar-tesoreria-crown-caja`. No se asigna a ningún rol al instalarlo: Sistemas lo tilda en Permiso - Rol. El rol administrador entra igual. Es la corrección habitual después del cierre, cuando el cajero ya no está.
 
 El ajuste es un comprobante nuevo. No reescribe la habilitación, la rendición ni los números originales del cierre.
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Sueldos;
 
 use App\Http\Controllers\Controller;
 use App\Repositories\Sueldos\Empleado_SueldosRepositoryInterface;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Http\Request;
 
 class EmpleadoConsulta_SueldosController extends Controller
@@ -86,6 +87,13 @@ class EmpleadoConsulta_SueldosController extends Controller
             || can('crear-novedad-sueldos', false)
             || can('editar-novedad-sueldos', false)
             || can('actualizar-novedad-sueldos', false);
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            $permitido = $permitido
+                || can('crear-tesoreria-crown-boveda', false)
+                || can('editar-tesoreria-crown-boveda', false)
+                || can('listar-tesoreria-crown-boveda', false);
+        }
 
         abort_unless($permitido, 403);
     }

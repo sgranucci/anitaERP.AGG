@@ -5,7 +5,34 @@ Cuentas automáticas del sistema
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/contable/cuentacontable/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/cuenta_automatica/editar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cuenta_automatica/editar.js')) ?: time() }}" type="text/javascript"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var filtro = document.getElementById('filtro-pv-crown');
+    var tabla = document.getElementById('tabla-pv-crown');
+    var scrollBox = document.getElementById('tabla-pv-crown-scroll');
+    if (filtro && tabla) {
+        filtro.addEventListener('input', function () {
+            var texto = filtro.value.toLowerCase().trim();
+            tabla.querySelectorAll('tbody tr').forEach(function (tr) {
+                var visible = texto === '' || (tr.getAttribute('data-busca') || '').indexOf(texto) !== -1;
+                tr.style.display = visible ? '' : 'none';
+            });
+        });
+    }
+    // Abrir PV: dejar el editor en el mismo lugar de la grilla (sin saltar al tope de la página).
+    var editor = document.querySelector('.pv-crown-editor');
+    var fila = editor ? editor.previousElementSibling : (location.hash ? document.querySelector(location.hash) : null);
+    if (fila && scrollBox) {
+        var top = fila.offsetTop;
+        scrollBox.scrollTop = Math.max(0, top - 12);
+        if (typeof fila.scrollIntoView === 'function') {
+            fila.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+    }
+});
+</script>
 @endsection
 
 @section('contenido')
@@ -62,9 +89,18 @@ Cuentas automáticas del sistema
                 </div>
             </form>
         </div>
+
+        @if (! empty($imputacionesCrown))
+            @include('contable.cuenta_automatica.partials.transferencia_crown', [
+                'imputacionesCrown' => $imputacionesCrown,
+                'pvEdicion' => $pvEdicion,
+                'empresa_id' => $empresa_id,
+            ])
+        @endif
     </div>
 </div>
 @include('includes.contable.modalconsultacuentacontable')
+@include('includes.contable.modalconsultacentrocosto')
 <template id="cuenta-auto-multi-template">
     @include('contable.cuenta_automatica.partials.fila_multiple_renglon', [
         'clave' => '__CLAVE__',

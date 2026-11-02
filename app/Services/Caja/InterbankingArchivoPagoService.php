@@ -12,8 +12,10 @@ use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\InterbankingArchivoPagoAnitaReader;
 use App\Support\Caja\InterbankingArchivoPagoFiltros;
 use App\Support\Caja\InterbankingArchivoPagoFormatoSupport;
+use App\Support\Caja\Macro\MacroArchivoPagoFiltros;
 use App\Support\Compras\CbuSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\DB;
 
@@ -48,14 +50,19 @@ class InterbankingArchivoPagoService
             return $this->vacio('Indique empresa y rango de fechas.');
         }
 
-        $cbuOrigen = $this->cbuOrigenDesdeFiltros($filtros);
-        $valCbu = CbuSupport::validarConMensaje($cbuOrigen);
-        if (! $valCbu['ok']) {
+        $empresaId = (int) $filtros['empresa_id'];
+        $cuenta = $this->resolverCuentaOrigen(
+            $empresaId,
+            (int) ($filtros['cuentacaja_id'] ?? 0),
+            (string) ($filtros['cbu_origen'] ?? '')
+        );
+        $valCbu = CbuSupport::validarConMensaje($cuenta ? (string) $cuenta->cbu : '');
+        if ($cuenta === null || ! $valCbu['ok']) {
             return $this->vacio('Seleccione una cuenta de caja con CBU válido. '.($valCbu['mensaje'] ?? ''));
         }
         $cbuOrigen = $valCbu['cbu'];
-
-        $empresaId = (int) $filtros['empresa_id'];
+        $cuentacajaId = (int) $cuenta->id;
+        $codigoCuenta = trim((string) $cuenta->codigo);
         $fechaDesde = (string) $filtros['fecha_desde'];
         $fechaHasta = (string) $filtros['fecha_hasta'];
         $tipoOp = (string) ($filtros['tipo_op'] ?? 'OPP');
@@ -82,7 +89,8 @@ class InterbankingArchivoPagoService
                 $fechaHasta,
                 $tipoOp,
                 $opDesde,
-                $opHasta
+                $opHasta,
+                $cuentacajaId
             );
             foreach ($filasErp as $f) {
                 $clave = $this->claveOp((string) $f['tipo'], (int) $f['numero'], (string) $f['cbu']);
@@ -106,6 +114,7 @@ class InterbankingArchivoPagoService
                 $opDesde,
                 $opHasta,
                 $tipoAp,
+                $codigoCuenta,
                 $errores
             );
             foreach ($filasAnita as $f) {
@@ -164,8 +173,10 @@ class InterbankingArchivoPagoService
 
         $total = round(array_sum(array_column($filas, 'importe')), 2);
         $mensaje = count($filas) > 0
-            ? 'Listo: '.count($filas).' transferencia(s) por $'.number_format($total, 2, ',', '.')
-            : 'Sin transferencias en el rango (revise CBU proveedor / tipo aplicación Anita).';
+            ? 'Listo: '.count($filas).' transferencia(s) de la cuenta '.$codigoCuenta
+                .' por $'.number_format($total, 2, ',', '.')
+            : 'Sin transferencias de la cuenta '.$codigoCuenta
+                .' en el rango (revise CBU proveedor / tipo aplicación Anita).';
         if ($chequesAparte > 0) {
             $mensaje .= ' Quedaron afuera '.$chequesAparte.' orden(es) pagada(s) con cheque.';
         }
@@ -289,10 +300,15 @@ class InterbankingArchivoPagoService
         string $tipoOp,
         int $opDesde,
         int $opHasta,
+        int $cuentacajaId,
     ): array {
         $filas = [];
         $omitidas = [];
         $clavesCheque = [];
+
+        if ($cuentacajaId <= 0) {
+            return [[], [], []];
+        }
 
         $ops = Pagoproveedor::query()
             ->with(['proveedores', 'pagoproveedor_retenciones'])
@@ -302,6 +318,10 @@ class InterbankingArchivoPagoService
             ->whereNotIn('estado', ['BAJA', 'REVERTIDA', 'PAGADA', 'CONCILIADA'])
             ->where(function ($q) {
                 $q->whereNull('bloqueado_banco')->orWhere('bloqueado_banco', false);
+            })
+            ->whereHas('caja_movimientos.caja_movimiento_cuentacajas', function ($q) use ($cuentacajaId) {
+                $q->where('cuentacaja_id', $cuentacajaId)
+                    ->whereRaw('ABS(monto) >= 0.005');
             })
             ->where(function ($q) use ($tipoOp) {
                 if ($tipoOp !== '' && $tipoOp !== '0') {
@@ -358,9 +378,13 @@ class InterbankingArchivoPagoService
             // IE unificado solo emite OPP; otros tipos se omiten
             $ieQuery->whereRaw('1 = 0');
         }
+        $ieQuery->whereHas('caja_movimiento_cuentacajas', function ($q) use ($cuentacajaId) {
+            $q->where('cuentacaja_id', $cuentacajaId)
+                ->whereRaw('ABS(monto) >= 0.005');
+        });
 
         foreach ($ieQuery->orderBy('numerotransaccion')->get() as $mov) {
-            $fila = $this->filaDesdeIeOpp($mov);
+            $fila = $this->filaDesdeIeOpp($mov, $cuentacajaId);
             if ($fila === null) {
                 $omitidas[] = [
                     'origen' => 'ERP-IE',
@@ -459,7 +483,7 @@ class InterbankingArchivoPagoService
         ];
     }
 
-    private function filaDesdeIeOpp(Caja_Movimiento $mov): ?array
+    private function filaDesdeIeOpp(Caja_Movimiento $mov, int $cuentacajaId): ?array
     {
         $mov->loadMissing(['proveedores']);
         $proveedorId = (int) ($mov->proveedor_id ?? 0);
@@ -480,6 +504,7 @@ class InterbankingArchivoPagoService
 
         $monto = (float) DB::table('caja_movimiento_cuentacaja as cmc')
             ->where('cmc.caja_movimiento_id', $mov->id)
+            ->where('cmc.cuentacaja_id', $cuentacajaId)
             ->selectRaw(
                 'COALESCE(SUM(ABS(cmc.monto * CASE WHEN COALESCE(cmc.moneda_id, 1) > 1 THEN COALESCE(cmc.cotizacion, 1) ELSE 1 END)), 0) as monto_mn'
             )
@@ -547,6 +572,7 @@ class InterbankingArchivoPagoService
         int $opDesde,
         int $opHasta,
         string $tipoAp,
+        string $codigoCuenta,
         array &$errores,
     ): array {
         $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
@@ -578,24 +604,43 @@ class InterbankingArchivoPagoService
             $empresaAnita,
             $desdeYmd,
             $hastaYmd,
-            $errores
+            $errores,
+            $codigoCuenta
         );
 
         // Match pago↔auxpag por empresa + tipo + nro OP (no por sucursal:
         // TMB suele ir con axp_sucursal=0 y pago.pag_sucursal = sucursal operativa).
         $auxPorOp = [];
         foreach ($auxpag as $axp) {
+            if (! $this->auxpagEsDeCuenta($axp, $codigoCuenta)) {
+                continue;
+            }
             $tipo = strtoupper(substr(trim((string) ($axp->axp_tipo ?? '')), 0, 3));
             $rec = (int) ($axp->axp_rec ?? 0);
-            $emp = (int) ($axp->axp_empresa ?? 0);
+            $emp = InterbankingArchivoPagoAnitaReader::empresaClave(
+                (int) ($axp->axp_empresa ?? 0),
+                $empresaAnita
+            );
             if ($tipo === '' || $rec <= 0) {
                 continue;
             }
             $auxPorOp[$emp.'|'.$tipo.'|'.$rec][] = $axp;
         }
+        if ($auxPorOp === []) {
+            return [];
+        }
 
         $codigos = [];
         foreach ($pagos as $pag) {
+            $tipo = strtoupper(substr(trim((string) ($pag->pag_tipo ?? '')), 0, 3));
+            $rec = (int) ($pag->pag_rec ?? 0);
+            $emp = InterbankingArchivoPagoAnitaReader::empresaClave(
+                (int) ($pag->pag_empresa ?? 0),
+                $empresaAnita
+            );
+            if (! isset($auxPorOp[$emp.'|'.$tipo.'|'.$rec])) {
+                continue;
+            }
             $codigos[] = (string) ($pag->pag_pro ?? '');
         }
         $mapaCbu = $this->anitaReader->mapaCbuPropago($codigos, $errores);
@@ -608,10 +653,10 @@ class InterbankingArchivoPagoService
                 continue;
             }
             $rec = (int) ($pag->pag_rec ?? 0);
-            $empPag = (int) ($pag->pag_empresa ?? 0);
-            if ($empPag <= 0) {
-                $empPag = $empresaAnita;
-            }
+            $empPag = InterbankingArchivoPagoAnitaReader::empresaClave(
+                (int) ($pag->pag_empresa ?? 0),
+                $empresaAnita
+            );
             $suc = (int) ($pag->pag_sucursal ?? 0);
             if ($rec < $opDesde || $rec > $opHasta) {
                 continue;
@@ -685,6 +730,29 @@ class InterbankingArchivoPagoService
         }
 
         return $filas;
+    }
+
+    /**
+     * Crown guarda en axp_banco el código de la cuenta de caja (071080/1).
+     * Otro entorno guarda la imputación en 8 dígitos.
+     */
+    private function auxpagEsDeCuenta(object $axp, string $codigoCuenta): bool
+    {
+        $banco = trim((string) ($axp->axp_banco ?? ''));
+        $codigo = trim($codigoCuenta);
+        if ($banco === '' || $codigo === '') {
+            return false;
+        }
+        if (strcasecmp($banco, $codigo) === 0) {
+            return true;
+        }
+        if (EntornoEmpresaSupport::esCrown()) {
+            return false;
+        }
+        $bancoPad = MacroArchivoPagoFiltros::padCuentaAnita($banco);
+        $codigoPad = MacroArchivoPagoFiltros::padCuentaAnita($codigo);
+
+        return $bancoPad !== '' && $bancoPad === $codigoPad;
     }
 
     /**

@@ -14,15 +14,82 @@
     function texto(numero) {
         return numero.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    function recalcular(panel) {
+    function importePanel(panel) {
+        var inputs = panel.querySelectorAll('input[data-denom]');
+        if (!inputs.length) {
+            return null;
+        }
         var total = 0;
-        panel.querySelectorAll('input[data-denom]').forEach(function (input) {
+        inputs.forEach(function (input) {
             var cantidad = parseFloat(String(input.value).replace(',', '.'));
             var denominacion = parseFloat(input.getAttribute('data-denom'));
             if (!isNaN(cantidad) && !isNaN(denominacion)) {
                 total += cantidad * denominacion;
             }
         });
+        return total;
+    }
+    function actualizarTotalPesos() {
+        var total = 0;
+        var hayCantidades = false;
+        document.querySelectorAll('.js-panel-valor[data-en-pesos="1"]').forEach(function (panel) {
+            var subtotal = importePanel(panel);
+            if (subtotal === null) {
+                return;
+            }
+            hayCantidades = true;
+            var tasa = parseFloat(panel.getAttribute('data-tasa'));
+            var codigo = panel.getAttribute('data-grupo');
+            var pesos = tasa > 0 ? subtotal * tasa : 0;
+            if (tasa > 0) {
+                total += pesos;
+            }
+            if (!codigo) {
+                return;
+            }
+            document.querySelectorAll('.js-pesos-origen[data-grupo="' + codigo + '"]').forEach(function (nodo) {
+                nodo.textContent = texto(subtotal);
+            });
+            document.querySelectorAll('.js-pesos-linea[data-grupo="' + codigo + '"], .js-total-en-pesos[data-grupo="' + codigo + '"]').forEach(function (nodo) {
+                nodo.textContent = texto(pesos);
+            });
+        });
+        if (hayCantidades) {
+            document.querySelectorAll('.js-total-pesos').forEach(function (nodo) {
+                nodo.textContent = texto(total);
+            });
+        }
+        var medios = sumaMedios();
+        if (!hayCantidades && !medios.hay) {
+            return;
+        }
+        var efectivo = hayCantidades ? total : NaN;
+        document.querySelectorAll('.js-total-final').forEach(function (nodo) {
+            var base = hayCantidades ? efectivo : parseFloat(nodo.getAttribute('data-efectivo'));
+            if (isNaN(base)) {
+                return;
+            }
+            nodo.textContent = texto(base + medios.extra);
+        });
+    }
+    function sumaMedios() {
+        var extra = 0;
+        var hay = false;
+        document.querySelectorAll('input[data-total-final]').forEach(function (input) {
+            hay = true;
+            var signo = parseFloat(input.getAttribute('data-total-final'));
+            var valor = parseFloat(String(input.value).replace(',', '.'));
+            if (!isNaN(signo) && !isNaN(valor)) {
+                extra += valor * signo;
+            }
+        });
+        return { extra: extra, hay: hay };
+    }
+    function recalcular(panel) {
+        var total = importePanel(panel);
+        if (total === null) {
+            return;
+        }
         var escrito = texto(total);
         panel.querySelectorAll('.js-total-valor').forEach(function (nodo) {
             nodo.textContent = escrito;
@@ -33,11 +100,31 @@
                 nodo.textContent = escrito;
             });
         }
+        actualizarTotalPesos();
     }
     document.querySelectorAll('.js-panel-valor').forEach(function (panel) {
         recalcular(panel);
         panel.addEventListener('input', function () { recalcular(panel); });
     });
+    document.querySelectorAll('input[data-total-final]').forEach(function (input) {
+        input.addEventListener('input', actualizarTotalPesos);
+    });
+    var credito = document.getElementById('medio-tarjeta_credito');
+    var recargo = document.getElementById('medio-recargo_fin');
+    if (credito && recargo && recargo.hasAttribute('data-recargo-divisor')) {
+        var ponerRecargo = function () {
+            var importe = parseFloat(String(credito.value).replace(',', '.'));
+            var divisor = parseFloat(recargo.getAttribute('data-recargo-divisor'));
+            if (isNaN(importe) || isNaN(divisor) || divisor === 0) {
+                recargo.value = '';
+            } else {
+                recargo.value = (Math.round((importe - importe / divisor) * 100) / 100).toFixed(2);
+            }
+            actualizarTotalPesos();
+        };
+        credito.addEventListener('input', ponerRecargo);
+        ponerRecargo();
+    }
 
     var primero = document.querySelector('#form-cantidades-crown input[data-denom], #form-cantidades-crown input.js-importe');
     if (primero) {
@@ -62,6 +149,29 @@
     $cajeroFirma = $comprobante->asignacion->cajero;
     $reversa = $comprobante->reversa;
     $yaRevertido = $reversa !== null;
+    $fechaJornada = $comprobante->jornada->fecha->format('Y-m-d');
+    $efectivoPesos = $esHabilitacion
+        ? null
+        : \App\Support\Caja\TesoreriaCrownCierreCalculo::efectivoEnPesos(
+            (int) $comprobante->sala_id,
+            $fechaJornada,
+            $grupos,
+            $cantidades,
+        );
+    $monedasPesos = [];
+    foreach ($efectivoPesos['monedas'] ?? [] as $monedaPesos) {
+        $monedasPesos[$monedaPesos['codigo']] = $monedaPesos;
+    }
+    $cambiosDia = \App\Support\Caja\TesoreriaCrownCierreCalculo::cambiosDelDia((int) $comprobante->sala_id, $fechaJornada);
+    $totalFinal = $efectivoPesos
+        ? \App\Support\Caja\TesoreriaCrownCierreCalculo::totalFinal(
+            (float) $efectivoPesos['total'],
+            (float) $comprobante->tarjeta_credito,
+            (float) $comprobante->tarjeta_debito,
+            (float) $comprobante->recargo_fin,
+            (float) $comprobante->total_qr,
+        )
+        : null;
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -75,6 +185,27 @@
                     — {{ $comprobante->asignacion->cajero->nombre ?? '' }}
                 </h3>
                 <div class="card-tools d-flex align-items-center" style="gap:.35rem;">
+                    @if ($cambiosDia !== [])
+                        <span class="small mr-1" style="opacity:.85;white-space:nowrap;" title="Cotización de venta de la jornada">
+                            @foreach ($cambiosDia as $cambio)
+                                @if (! $loop->first)
+                                    ·
+                                @endif
+                                {{ $cambio['codigo'] }}
+                                @if ($cambio['tasa'] > 0)
+                                    @php
+                                        $decimalesCambio = abs($cambio['tasa'] - round($cambio['tasa'], 2)) < 0.0000001 ? 2 : 4;
+                                    @endphp
+                                    {{ number_format($cambio['tasa'], $decimalesCambio, ',', '.') }}
+                                    @if (! $cambio['exacta'] && $cambio['fecha'])
+                                        ({{ \Carbon\Carbon::parse($cambio['fecha'])->format('d/m') }})
+                                    @endif
+                                @else
+                                    sin cambio
+                                @endif
+                            @endforeach
+                        </span>
+                    @endif
                     <a href="{{ route('pdf_tesoreria_crown_movimiento', $comprobante->id) }}" class="btn btn-light btn-sm" target="_blank" rel="noopener">
                         <i class="fa fa-file-pdf"></i> Imprimir
                     </a>
@@ -84,9 +215,13 @@
                             <button type="submit" class="btn btn-outline-light btn-sm">Revertir</button>
                         </form>
                     @endif
-                    <a href="{{ route('ver_tesoreria_crown_jornada', $comprobante->jornada_id) }}" class="btn btn-outline-light btn-sm">
-                        <i class="fa fa-reply-all"></i> Volver a la jornada
-                    </a>
+                    @if (request()->input('vista') === 'consulta')
+                        <button type="button" class="btn btn-outline-light btn-sm" onclick="window.close()">Cerrar solapa</button>
+                    @else
+                        <a href="{{ route('ver_tesoreria_crown_jornada', $comprobante->jornada_id) }}" class="btn btn-outline-light btn-sm">
+                            <i class="fa fa-reply-all"></i> Volver a la jornada
+                        </a>
+                    @endif
                 </div>
             </div>
             <div class="card-body">
@@ -138,18 +273,48 @@
                                     <strong class="js-total-barra" data-grupo="{{ $grupoBarra['codigo'] }}">{{ number_format($totalBarra, 2, ',', '.') }}</strong>
                                 </span>
                             @endforeach
+                            @if ($efectivoPesos)
+                                <span class="ml-auto mb-1">
+                                    <span class="text-muted">Total final $</span>
+                                    <strong class="js-total-final" data-efectivo="{{ number_format((float) $efectivoPesos['total'], 2, '.', '') }}">{{ number_format($totalFinal, 2, ',', '.') }}</strong>
+                                </span>
+                            @endif
                         </div>
                     @endif
-                    <div class="row">
-                        @foreach ($grupos as $grupo)
+                    @php
+                        $bloquesValor = [];
+                        foreach ($grupos as $grupoBloque) {
+                            $claveBloque = ! empty($grupoBloque['colapsado']) ? 'fichas' : 'billetes';
+                            $bloquesValor[$claveBloque]['titulo'] = $claveBloque === 'fichas' ? 'Fichas' : 'Billetes';
+                            $bloquesValor[$claveBloque]['abierto'] = $claveBloque !== 'fichas';
+                            $bloquesValor[$claveBloque]['grupos'][] = $grupoBloque;
+                        }
+                    @endphp
+                    @foreach ($bloquesValor as $claveBloque => $bloqueValor)
+                        <div class="card card-outline card-info mb-3">
+                            <div class="card-header py-2 d-flex align-items-center tc-bloque-toggle{{ $bloqueValor['abierto'] ? '' : ' collapsed' }}" data-toggle="collapse" data-target="#bloque-valor-{{ $claveBloque }}" role="button" aria-expanded="{{ $bloqueValor['abierto'] ? 'true' : 'false' }}" title="{{ $bloqueValor['abierto'] ? 'Ocultar' : 'Mostrar' }}">
+                                <i class="fa fa-chevron-down mr-2 tc-bloque-chevron"></i>
+                                <h3 class="card-title mb-0">{{ $bloqueValor['titulo'] }}</h3>
+                            </div>
+                            <div id="bloque-valor-{{ $claveBloque }}" class="collapse{{ $bloqueValor['abierto'] ? ' show' : '' }}">
+                                <div class="card-body pb-2">
+                                    <div class="row">
+                        @foreach ($bloqueValor['grupos'] as $grupo)
                             @php
                                 $totalGrupo = 0.0;
                                 foreach ($grupo['filas'] as $filaTotal) {
                                     $totalGrupo += (float) $filaTotal->denominacion * (float) ($cantidades[$filaTotal->id] ?? 0);
                                 }
+                                $monedaPesos = $monedasPesos[$grupo['codigo']] ?? null;
+                                $tasaTexto = '';
+                                if ($monedaPesos && $monedaPesos['extranjera'] && ! $monedaPesos['falta']) {
+                                    $tasaNumero = (float) $monedaPesos['tasa'];
+                                    $decimalesTasa = abs($tasaNumero - round($tasaNumero, 2)) < 0.0000001 ? 2 : 4;
+                                    $tasaTexto = number_format($tasaNumero, $decimalesTasa, ',', '.');
+                                }
                             @endphp
                             <div class="col-lg-4 col-md-6 mb-3">
-                                <div class="card card-outline card-info h-100 mb-0 js-panel-valor" data-grupo="{{ $grupo['codigo'] }}">
+                                <div class="card card-outline card-info h-100 mb-0 js-panel-valor" data-grupo="{{ $grupo['codigo'] }}" data-en-pesos="{{ $monedaPesos ? '1' : '0' }}" data-tasa="{{ $monedaPesos ? number_format((float) $monedaPesos['tasa'], 6, '.', '') : '0' }}">
                                     <div class="card-header py-2 d-flex justify-content-between align-items-center">
                                         <h3 class="card-title mb-0">{{ $grupo['titulo'] }}</h3>
                                         <strong class="js-total-valor">{{ number_format($totalGrupo, 2, ',', '.') }}</strong>
@@ -188,13 +353,84 @@
                                     </div>
                                     <div class="card-footer py-2 text-right">
                                         Total <strong class="js-total-valor">{{ number_format($totalGrupo, 2, ',', '.') }}</strong>
+                                        @if ($monedaPesos && $monedaPesos['extranjera'])
+                                            <div class="text-muted small mt-1">
+                                                @if ($monedaPesos['falta'])
+                                                    Sin cotización de venta para el {{ $comprobante->jornada->fecha->format('d/m/Y') }}
+                                                @else
+                                                    Cambio {{ $tasaTexto }}
+                                                    @if ($monedaPesos['fecha'] === $fechaJornada)
+                                                        del día
+                                                    @else
+                                                        del {{ \Carbon\Carbon::parse($monedaPesos['fecha'])->format('d/m/Y') }}
+                                                    @endif
+                                                    · En pesos <strong class="js-total-en-pesos" data-grupo="{{ $grupo['codigo'] }}">{{ number_format($monedaPesos['pesos'], 2, ',', '.') }}</strong>
+                                                @endif
+                                            </div>
+                                        @endif
                                     </div>
                                 </div>
                             </div>
                         @endforeach
-                    </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                    @if ($efectivoPesos)
+                        <div class="card card-outline card-primary mb-3">
+                            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                                <h3 class="card-title mb-0">Total en pesos</h3>
+                                <strong class="js-total-pesos">{{ number_format($efectivoPesos['total'], 2, ',', '.') }}</strong>
+                            </div>
+                            <div class="card-body py-2">
+                                <p class="text-muted small mb-2">Pesos al nominal. Dólares y euros al cambio de venta de la jornada {{ $comprobante->jornada->fecha->format('d/m/Y') }}. Las fichas no entran en este total.</p>
+                                @foreach ($efectivoPesos['monedas'] as $monedaLinea)
+                                    <div class="d-flex justify-content-between align-items-baseline mb-1">
+                                        <span>
+                                            {{ $monedaLinea['titulo'] }}
+                                            @if ($monedaLinea['extranjera'] && ! $monedaLinea['falta'])
+                                                @php
+                                                    $tasaLinea = (float) $monedaLinea['tasa'];
+                                                    $decimalesLinea = abs($tasaLinea - round($tasaLinea, 2)) < 0.0000001 ? 2 : 4;
+                                                @endphp
+                                                <span class="text-muted small">
+                                                    <span class="js-pesos-origen" data-grupo="{{ $monedaLinea['codigo'] }}">{{ number_format($monedaLinea['origen'], 2, ',', '.') }}</span>
+                                                    × {{ number_format($tasaLinea, $decimalesLinea, ',', '.') }}
+                                                    @if ($monedaLinea['fecha'] !== $fechaJornada)
+                                                        ({{ \Carbon\Carbon::parse($monedaLinea['fecha'])->format('d/m/Y') }})
+                                                    @endif
+                                                </span>
+                                            @elseif ($monedaLinea['falta'])
+                                                <span class="text-danger small">Sin cotización de venta</span>
+                                            @endif
+                                        </span>
+                                        <strong class="js-pesos-linea" data-grupo="{{ $monedaLinea['codigo'] }}">{{ number_format($monedaLinea['pesos'], 2, ',', '.') }}</strong>
+                                    </div>
+                                @endforeach
+                                @if (! $efectivoPesos['completo'])
+                                    <p class="text-danger small mb-0 mt-2">Falta la cotización de una moneda extranjera. Esa moneda no entra en el total.</p>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
                     @if (! $esHabilitacion)
                         @include('caja.tesoreria_crown.movimiento.partials.medios_rendicion')
+                    @endif
+                    @if ($efectivoPesos)
+                        <div class="border rounded px-3 py-2 mb-3 d-flex flex-wrap justify-content-between align-items-center" style="background:#EAF2F8;">
+                            <div class="mr-3">
+                                <strong>Total final $</strong>
+                                <div class="text-muted small">
+                                    @if ($esHabilitacion)
+                                        Pesos más dólares y euros al cambio de la jornada. Las fichas no entran.
+                                    @else
+                                        Pesos más dólares y euros al cambio, más crédito y débito, menos el recargo, más el QR. Las fichas no entran.
+                                    @endif
+                                </div>
+                            </div>
+                            <strong class="js-total-final h5 mb-0" data-efectivo="{{ number_format((float) $efectivoPesos['total'], 2, '.', '') }}">{{ number_format($totalFinal, 2, ',', '.') }}</strong>
+                        </div>
                     @endif
                     @if ($editable && can('crear-tesoreria-crown-movimiento', false))
                         <button type="submit" class="btn btn-primary" name="accion" value="guardar" id="btn-guardar-cantidades">Guardar borrador</button>
@@ -216,7 +452,7 @@
                                 <strong>{{ $etiqueta }}</strong>
                                 <p class="mb-2">{{ \App\Support\Caja\TesoreriaCrownFirmaSupport::textoFirma($usuarioFirma, $cuando, $lado === $ladoCajero ? ($cajeroFirma->nombre ?? null) : null) }}</p>
                                 @if ($lado === $ladoCajero && $comprobante->estado === 'P' && $cuando === null && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('listar-tesoreria-crown-movimiento', false))
-                                    <form method="POST" action="{{ route('firmar_cajero_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-campos="1">
+                                    <form method="POST" action="{{ route('firmar_cajero_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-campos="1" data-enter-boton="1">
                                         @csrf
                                         <p class="small text-muted mb-2">{{ $cajeroFirma->nombre ?? 'El cajero' }} firma en este teclado con su número y su PIN.</p>
                                         <div class="form-row">
@@ -224,14 +460,14 @@
                                                 <input type="text" name="cajero_numero" class="form-control form-control-sm" placeholder="Número de cajero" inputmode="numeric" autocomplete="off" required value="{{ old('cajero_numero') }}">
                                             </div>
                                             <div class="col-6 mb-2">
-                                                <input type="password" name="cajero_pin" class="form-control form-control-sm" placeholder="PIN" inputmode="numeric" autocomplete="new-password" required>
+                                                <input type="text" name="cajero_pin" class="form-control form-control-sm tc-pin-cajero" placeholder="PIN" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" required>
                                             </div>
                                         </div>
                                         <button type="submit" class="btn btn-success btn-sm">Firmar {{ $etiqueta }}</button>
                                     </form>
                                 @endif
                                 @if ($lado === $ladoTesoreria && $comprobante->estado === 'P' && $cuando === null && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('editar-tesoreria-crown-movimiento', false))
-                                    <form method="POST" action="{{ route('firmar_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-campos="1">
+                                    <form method="POST" action="{{ route('firmar_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-boton="1" data-enter-campos="1">
                                         @csrf
                                         <p class="small text-muted">Tesorería firma con usuario y clave del sistema.</p>
                                         <div class="form-row">
@@ -272,6 +508,9 @@
                         @csrf
                         <button type="submit" class="btn btn-outline-danger btn-sm">Revertir</button>
                     </form>
+                @endif
+                @if (request()->input('vista') === 'consulta')
+                    <button type="button" class="btn btn-secondary btn-sm ml-2" onclick="window.close()">Cerrar solapa</button>
                 @endif
             </div>
         </div>

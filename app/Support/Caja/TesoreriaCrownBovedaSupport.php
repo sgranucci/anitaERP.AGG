@@ -89,6 +89,75 @@ final class TesoreriaCrownBovedaSupport
     }
 
     /**
+     * Tipos que a-efeboveda deja cargar a mano. La apertura entra aunque esté inactiva.
+     * La habilitación y la rendición las graba el conforme del cajero.
+     *
+     * @return Collection<int, TesoreriaCrownBovedaTipo>
+     */
+    public static function tiposParaCarga(int $salaId): Collection
+    {
+        return TesoreriaCrownBovedaTipo::query()
+            ->where('sala_id', $salaId)
+            ->whereNotIn('abreviatura', ['HAB', 'REN'])
+            ->where(function ($q) {
+                $q->where('activo', true)->orWhere('abreviatura', 'APER');
+            })
+            ->orderBy('codigo')
+            ->get();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function monedasDelTipo(TesoreriaCrownBovedaTipo $tipo): array
+    {
+        if ((string) $tipo->operacion !== '2') {
+            return ['ARS', 'USD', 'EUR'];
+        }
+        $abreviatura = strtoupper(trim((string) $tipo->abreviatura));
+        if (in_array($abreviatura, ['DEEU', 'INEU'], true)) {
+            return ['EUR'];
+        }
+        if (in_array($abreviatura, ['DEUS', 'INUS', 'DTES'], true)) {
+            return ['USD'];
+        }
+
+        return ['USD', 'EUR'];
+    }
+
+    public static function referenciaDelTipo(TesoreriaCrownBovedaTipo $tipo): ?string
+    {
+        return match ((string) $tipo->operacion) {
+            '6' => 'cliente',
+            '3', '4' => 'legajo',
+            default => null,
+        };
+    }
+
+    /**
+     * Billetes de pesos, dólares y euros, como BILL_carga_denominacion de a-efeboveda.
+     *
+     * @return Collection<int, TesoreriaCrownValor>
+     */
+    public static function filasEfectivo(int $salaId): Collection
+    {
+        $orden = ['ARS' => 0, 'USD' => 1, 'EUR' => 2];
+
+        return TesoreriaCrownValor::query()
+            ->with('tipoValor')
+            ->where('sala_id', $salaId)
+            ->where('activo', true)
+            ->whereHas('tipoValor', fn ($q) => $q->whereIn('codigo', ['ARS', 'USD', 'EUR']))
+            ->get()
+            ->sort(function (TesoreriaCrownValor $a, TesoreriaCrownValor $b) use ($orden): int {
+                $moneda = ($orden[$a->tipoValor->codigo ?? ''] ?? 9) <=> ($orden[$b->tipoValor->codigo ?? ''] ?? 9);
+
+                return $moneda !== 0 ? $moneda : ((float) $b->denominacion <=> (float) $a->denominacion);
+            })
+            ->values();
+    }
+
+    /**
      * Saldo en cantidad por valor, de los movimientos confirmados hasta esa fecha de jornada.
      *
      * @return array<int, float>
@@ -115,6 +184,63 @@ final class TesoreriaCrownBovedaSupport
         }
 
         return $saldos;
+    }
+
+    /**
+     * Movimientos confirmados que arman el stock de un billete hasta la fecha.
+     * La cantidad ya viene con el signo del tipo: entra suma, sale resta.
+     *
+     * @return array{saldo: float, filas: list<array<string, mixed>>}
+     */
+    public static function composicionBillete(int $depositoId, string $hastaYmd, int $valorId): array
+    {
+        $filas = DB::table('tesoreria_crown_boveda_linea as l')
+            ->join('tesoreria_crown_boveda as b', 'b.id', '=', 'l.boveda_id')
+            ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
+            ->join('tesoreria_crown_jornada as j', 'j.id', '=', 'b.jornada_id')
+            ->where('b.deposito_id', $depositoId)
+            ->where('l.valor_id', $valorId)
+            ->where('b.estado', TesoreriaCrownBoveda::CONFIRMADO)
+            ->whereDate('j.fecha', '<=', $hastaYmd)
+            ->orderBy('j.fecha')
+            ->orderBy('b.numero')
+            ->orderBy('b.id')
+            ->get([
+                'b.id',
+                'b.numero',
+                'b.comentario',
+                'j.fecha',
+                't.abreviatura',
+                't.nombre as tipo_nombre',
+                't.signo',
+                'l.cantidad',
+            ]);
+
+        $saldo = 0.0;
+        $out = [];
+        foreach ($filas as $fila) {
+            $efecto = self::efecto((string) $fila->signo);
+            if ($efecto === 0 || abs((float) $fila->cantidad) < 0.0001) {
+                continue;
+            }
+            $delta = round((float) $fila->cantidad * $efecto, 2);
+            $saldo = round($saldo + $delta, 2);
+            $fecha = $fila->fecha instanceof \DateTimeInterface
+                ? $fila->fecha->format('d/m/Y')
+                : \Carbon\Carbon::parse((string) $fila->fecha)->format('d/m/Y');
+            $out[] = [
+                'id' => (int) $fila->id,
+                'fecha' => $fecha,
+                'numero' => TesoreriaCrownNumeradorSupport::visible((int) $fila->numero),
+                'tipo' => trim((string) $fila->abreviatura.' '.(string) $fila->tipo_nombre),
+                'efecto' => self::efectoTexto((string) $fila->signo),
+                'cantidad' => $delta,
+                'saldo' => $saldo,
+                'comentario' => trim((string) $fila->comentario),
+            ];
+        }
+
+        return ['saldo' => $saldo, 'filas' => $out];
     }
 
     /**
@@ -153,6 +279,42 @@ final class TesoreriaCrownBovedaSupport
         }
 
         return array_values($grupos);
+    }
+
+    /**
+     * Importes del movimiento en la moneda de cada denominación.
+     * Entra suma, sale resta. Un tipo que no mueve saldo queda en positivo, solo asentado.
+     *
+     * @return list<array{codigo: string, monto: float, mueve: bool}>
+     */
+    public static function importesMovimiento(TesoreriaCrownBoveda $movimiento): array
+    {
+        $efecto = self::efecto((string) ($movimiento->tipo->signo ?? '2'));
+        $porCodigo = [];
+        foreach ($movimiento->lineas as $linea) {
+            $valor = $linea->valor;
+            if ($valor === null) {
+                continue;
+            }
+            $codigo = trim((string) ($valor->tipoValor->codigo ?? ''));
+            if ($codigo === '') {
+                $codigo = 'VAL';
+            }
+            $monto = (float) $linea->cantidad * (float) $valor->denominacion;
+            if ($efecto !== 0) {
+                $monto *= $efecto;
+            }
+            $porCodigo[$codigo] = ($porCodigo[$codigo] ?? 0.0) + $monto;
+        }
+        $filas = [];
+        foreach ($porCodigo as $codigo => $monto) {
+            if (abs($monto) < 0.001) {
+                continue;
+            }
+            $filas[] = ['codigo' => $codigo, 'monto' => $monto, 'mueve' => $efecto !== 0];
+        }
+
+        return $filas;
     }
 
     /**

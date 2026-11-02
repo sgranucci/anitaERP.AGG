@@ -11,8 +11,11 @@ use RuntimeException;
 
 /**
  * Unicidad de factura de proveedor (cualquier origen):
- * empresa + CUIT proveedor + código AFIP (01/02/…) + letra + sucursal + número.
+ * empresa + CUIT proveedor + código AFIP (01/02/…) + letra + sucursal + número + marca FCE.
+ * Una factura común y una FCE del mismo punto de venta y número son dos comprobantes
+ * (Anita las separa con com_es_fce). Si $esFce es null, no se filtra la marca: choca con cualquiera.
  * Si el código de autorización es CAE/CAI (no CAEA), también se controla CUIT + número CAE.
+ * La precarga no tiene marca FCE: ese control sigue sin distinguir las dos series.
  */
 final class ComprobanteProveedorUnicidadSupport
 {
@@ -31,6 +34,21 @@ final class ComprobanteProveedorUnicidadSupport
         }
 
         return (string) (int) $digits;
+    }
+
+    /** Marca Anita/ERP: S, 1 o true. N, vacío y null no son FCE. */
+    public static function esMarcaFce(mixed $valor): bool
+    {
+        if (is_bool($valor)) {
+            return $valor;
+        }
+        if (is_int($valor) || is_float($valor)) {
+            return (int) $valor === 1;
+        }
+
+        $texto = strtoupper(trim((string) $valor));
+
+        return $texto === 'S' || $texto === '1' || $texto === 'TRUE';
     }
 
     public static function normalizarNumeroCae(?string $numerocae): string
@@ -108,6 +126,7 @@ final class ComprobanteProveedorUnicidadSupport
         ?int $excluirPrecargaId = null,
         ?string $numerocae = null,
         ?string $tipoAutorizacion = null,
+        ?bool $esFce = null,
     ): void {
         $cuit = self::resolverCuitDigitos($proveedorId, $documentoEventual);
         if ($cuit === '') {
@@ -131,6 +150,7 @@ final class ComprobanteProveedorUnicidadSupport
             $numerocomprobante,
             $cuit,
             $excluirComprobanteId,
+            $esFce,
         );
 
         if ($duplicado !== null) {
@@ -145,6 +165,7 @@ final class ComprobanteProveedorUnicidadSupport
             $numerocomprobante,
             $cuit,
             $excluirComprobanteId,
+            $esFce,
         );
         if ($duplicadoClave !== null) {
             throw ComprobanteProveedorDuplicadoException::desdeExistente($duplicadoClave, $codigoAfip);
@@ -189,6 +210,7 @@ final class ComprobanteProveedorUnicidadSupport
         ?int $excluirPrecargaId = null,
         ?string $numerocae = null,
         ?string $tipoAutorizacion = null,
+        ?bool $esFce = null,
     ): void {
         self::assertUnico(
             $empresaId,
@@ -202,6 +224,7 @@ final class ComprobanteProveedorUnicidadSupport
             $excluirPrecargaId,
             $numerocae,
             $tipoAutorizacion,
+            $esFce,
         );
     }
 
@@ -245,6 +268,7 @@ final class ComprobanteProveedorUnicidadSupport
         int $numerocomprobante,
         string $cuitDigitos,
         ?int $excluirComprobanteId = null,
+        ?bool $esFce = null,
     ): ?Comprobante_Proveedor {
         $cuitDigitos = self::normalizarCuitDigitos($cuitDigitos);
         $codigoAfipNorm = self::normalizarCodigoAfip($codigoAfipNorm);
@@ -265,8 +289,9 @@ final class ComprobanteProveedorUnicidadSupport
             ->where(function ($q) {
                 $q->whereNull('estado')
                     ->orWhere('estado', '!=', ComprobanteProveedorEstados::ANULADO);
-            })
-            ->where(function ($q) use ($cuitDigitos): void {
+            });
+        self::aplicarFiltroEsFce($query, $esFce);
+        $query->where(function ($q) use ($cuitDigitos): void {
                 $q->where('identificacion_proveedor_cuit', $cuitDigitos)
                     ->orWhereHas('proveedores', function ($p) use ($cuitDigitos): void {
                         $p->whereRaw(
@@ -297,6 +322,7 @@ final class ComprobanteProveedorUnicidadSupport
         int $numerocomprobante,
         string $cuitDigitos,
         ?int $excluirComprobanteId = null,
+        ?bool $esFce = null,
     ): ?Comprobante_Proveedor {
         return self::findDuplicadoPorAfip(
             $empresaId,
@@ -306,6 +332,7 @@ final class ComprobanteProveedorUnicidadSupport
             $numerocomprobante,
             $cuitDigitos,
             $excluirComprobanteId,
+            $esFce,
         );
     }
 
@@ -334,6 +361,7 @@ final class ComprobanteProveedorUnicidadSupport
         ?string $documentoEventual = null,
         ?int $excluirComprobanteId = null,
         ?int $excluirPrecargaId = null,
+        ?bool $esFce = null,
     ): array {
         $vacio = [
             'listo' => false,
@@ -369,6 +397,7 @@ final class ComprobanteProveedorUnicidadSupport
             $numerocomprobante,
             $cuit,
             $excluirComprobanteId,
+            $esFce,
         );
         if ($duplicado === null) {
             $duplicado = self::findDuplicadoPorClaveUnica(
@@ -379,6 +408,7 @@ final class ComprobanteProveedorUnicidadSupport
                 $numerocomprobante,
                 $cuit,
                 $excluirComprobanteId,
+                $esFce,
             );
         }
         if ($duplicado !== null) {
@@ -428,7 +458,7 @@ final class ComprobanteProveedorUnicidadSupport
 
     /**
      * Misma clave que el índice único uq_comprobante_proveedor_por_cuit
-     * (empresa + tipo interno + letra + sucursal + número + CUIT).
+     * (empresa + tipo interno + letra + sucursal + número + CUIT + marca FCE).
      */
     public static function findDuplicadoPorClaveUnica(
         int $empresaId,
@@ -438,6 +468,7 @@ final class ComprobanteProveedorUnicidadSupport
         int $numerocomprobante,
         string $cuitDigitos,
         ?int $excluirComprobanteId = null,
+        ?bool $esFce = null,
     ): ?Comprobante_Proveedor {
         $cuitDigitos = self::normalizarCuitDigitos($cuitDigitos);
         if ($cuitDigitos === '' || $tipotransaccionCompraId <= 0) {
@@ -455,6 +486,7 @@ final class ComprobanteProveedorUnicidadSupport
             ->where('sucursal', $sucursal)
             ->where('numerocomprobante', $numerocomprobante)
             ->where('identificacion_proveedor_cuit', $cuitDigitos);
+        self::aplicarFiltroEsFce($query, $esFce);
 
         if ($excluirComprobanteId !== null && $excluirComprobanteId > 0) {
             $query->where('id', '!=', $excluirComprobanteId);
@@ -478,6 +510,7 @@ final class ComprobanteProveedorUnicidadSupport
         ?int $proveedorId,
         ?string $documentoEventual = null,
         ?int $excluirComprobanteId = null,
+        ?bool $esFce = null,
     ): void {
         if (! self::esViolacionUnicidadFiscal($e)) {
             return;
@@ -492,6 +525,7 @@ final class ComprobanteProveedorUnicidadSupport
             $numerocomprobante,
             $cuit,
             $excluirComprobanteId,
+            $esFce,
         );
 
         if ($dup !== null) {
@@ -502,7 +536,7 @@ final class ComprobanteProveedorUnicidadSupport
         }
 
         throw new RuntimeException(
-            'Ya existe un comprobante con la misma empresa, tipo, letra, sucursal, número y CUIT. '
+            'Ya existe un comprobante con la misma empresa, tipo, letra, sucursal, número, CUIT y marca FCE. '
             .'Buscalo en Cuentas a pagar.'
         );
     }
@@ -750,6 +784,9 @@ final class ComprobanteProveedorUnicidadSupport
             $existente->sucursal,
             $existente->numerocomprobante,
         );
+        if ($existente->es_fce) {
+            $factura .= ' (FCE)';
+        }
         $deQuien = self::rotuloProveedorCuit(
             trim((string) ($existente->proveedores?->nombre ?? '')),
             self::cuitDesdeComprobante($existente),
@@ -866,6 +903,15 @@ final class ComprobanteProveedorUnicidadSupport
         };
     }
 
+    private static function aplicarFiltroEsFce($query, ?bool $esFce): void
+    {
+        if ($esFce === null) {
+            return;
+        }
+
+        $query->where('es_fce', $esFce);
+    }
+
     public static function formatearCuit(string $cuitDigitos): string
     {
         $cuitDigitos = self::normalizarCuitDigitos($cuitDigitos);
@@ -885,7 +931,7 @@ final class ComprobanteProveedorUnicidadSupport
     {
         if (self::esViolacionUnicidadFiscal($e)) {
             return $prefijo.'. Ya existe un comprobante con la misma identificación fiscal '
-                .'(empresa, tipo, letra, sucursal, número y CUIT). Buscalo en el listado de Cuentas a pagar.';
+                .'(empresa, tipo, letra, sucursal, número, CUIT y marca FCE). Buscalo en el listado de Cuentas a pagar.';
         }
 
         if (DbContencionSupport::esViolacionUnicidad(

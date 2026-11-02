@@ -15,7 +15,7 @@
         td { padding: 3px 4px; border: 1px solid #ccc; }
         .sin-borde td { border: none; padding: 1px 4px; }
         .right { text-align: right; }
-        .logo { max-height: 46px; max-width: 150px; }
+        .logo { max-height: 64px; max-width: 200px; }
         .firma td { border: none; text-align: center; }
         .linea { border-top: 1px solid #333; width: 78%; margin: 28px auto 4px; }
         .muted { color: #555; font-size: 9px; }
@@ -26,8 +26,10 @@
     use App\Support\Caja\TesoreriaCrownComprobanteSupport;
     use App\Support\Caja\TesoreriaCrownFirmaSupport;
     use App\Support\Caja\TesoreriaCrownNumeradorSupport;
+    use App\Support\Caja\TesoreriaCrownCierreCalculo;
     use App\Support\Caja\TesoreriaCrownRendicionCampos;
     use App\Support\Configuracion\EmpresaLogoArchivo;
+    $cambiosDia = TesoreriaCrownCierreCalculo::cambiosDelDia((int) $comprobante->sala_id, $comprobante->jornada->fecha->format('Y-m-d'));
     $logo = EmpresaLogoArchivo::dataUriDesdeNombre($comprobante->empresa->nombre ?? null);
     $numero = TesoreriaCrownNumeradorSupport::visible($comprobante->numero);
 @endphp
@@ -56,7 +58,23 @@
             </tr>
             <tr>
                 <td>Caja: {{ $comprobante->asignacion->deposito->codigo ?? '' }} {{ $comprobante->asignacion->deposito->nombre ?? '' }}</td>
-                <td colspan="2">Cajero: {{ $comprobante->asignacion->cajero->nombre ?? '' }}</td>
+                <td>Cajero: {{ $comprobante->asignacion->cajero->nombre ?? '' }}</td>
+                <td class="muted">
+                    @foreach ($cambiosDia as $cambio)
+                        @if (! $loop->first)
+                            ·
+                        @endif
+                        {{ $cambio['codigo'] }}
+                        @if ($cambio['tasa'] > 0)
+                            {{ number_format($cambio['tasa'], abs($cambio['tasa'] - round($cambio['tasa'], 2)) < 0.0000001 ? 2 : 4, ',', '.') }}
+                            @if (! $cambio['exacta'] && $cambio['fecha'])
+                                ({{ \Carbon\Carbon::parse($cambio['fecha'])->format('d/m') }})
+                            @endif
+                        @else
+                            sin cambio
+                        @endif
+                    @endforeach
+                </td>
             </tr>
         </table>
         @foreach ($grupos as $grupo)
@@ -97,6 +115,66 @@
                 </table>
             @endif
         @endforeach
+        @if ($comprobante->tipo === TesoreriaCrownComprobanteSupport::RENDICION)
+            @php
+                $fechaJornada = $comprobante->jornada->fecha->format('Y-m-d');
+                $efectivoPesos = TesoreriaCrownCierreCalculo::efectivoEnPesos(
+                    (int) $comprobante->sala_id,
+                    $fechaJornada,
+                    $grupos,
+                    $cantidades,
+                );
+            @endphp
+            <h2>Total en pesos</h2>
+            <p class="muted">Pesos al nominal. Dólares y euros al cambio de venta de la jornada {{ $comprobante->jornada->fecha->format('d/m/Y') }}. Las fichas no entran en este total.</p>
+            <table>
+                <tbody>
+                    @foreach ($efectivoPesos['monedas'] as $monedaLinea)
+                        @php
+                            $detalle = $monedaLinea['titulo'];
+                            if ($monedaLinea['extranjera'] && ! $monedaLinea['falta']) {
+                                $tasaLinea = (float) $monedaLinea['tasa'];
+                                $decimalesLinea = abs($tasaLinea - round($tasaLinea, 2)) < 0.0000001 ? 2 : 4;
+                                $detalle .= ' '.number_format($monedaLinea['origen'], 2, ',', '.').' × '.number_format($tasaLinea, $decimalesLinea, ',', '.');
+                                if ($monedaLinea['fecha'] !== $fechaJornada && $monedaLinea['fecha']) {
+                                    $detalle .= ' ('.\Carbon\Carbon::parse($monedaLinea['fecha'])->format('d/m/Y').')';
+                                }
+                            } elseif ($monedaLinea['falta']) {
+                                $detalle .= ' — sin cotización de venta';
+                            }
+                        @endphp
+                        <tr>
+                            <td>{{ $detalle }}</td>
+                            <td class="right">{{ $monedaLinea['falta'] ? '—' : number_format($monedaLinea['pesos'], 2, ',', '.') }}</td>
+                        </tr>
+                    @endforeach
+                    <tr>
+                        <th>Total en pesos</th>
+                        <th class="right">{{ number_format($efectivoPesos['total'], 2, ',', '.') }}</th>
+                    </tr>
+                    <tr>
+                        <td>Tarjeta de crédito</td>
+                        <td class="right">{{ number_format((float) $comprobante->tarjeta_credito, 2, ',', '.') }}</td>
+                    </tr>
+                    <tr>
+                        <td>Tarjeta de débito</td>
+                        <td class="right">{{ number_format((float) $comprobante->tarjeta_debito, 2, ',', '.') }}</td>
+                    </tr>
+                    <tr>
+                        <td>Recargo financiación</td>
+                        <td class="right">{{ number_format((float) $comprobante->recargo_fin, 2, ',', '.') }}</td>
+                    </tr>
+                    <tr>
+                        <td>QR</td>
+                        <td class="right">{{ number_format((float) $comprobante->total_qr, 2, ',', '.') }}</td>
+                    </tr>
+                    <tr>
+                        <th>Total final $</th>
+                        <th class="right">{{ number_format(\App\Support\Caja\TesoreriaCrownCierreCalculo::totalFinal((float) $efectivoPesos['total'], (float) $comprobante->tarjeta_credito, (float) $comprobante->tarjeta_debito, (float) $comprobante->recargo_fin, (float) $comprobante->total_qr), 2, ',', '.') }}</th>
+                    </tr>
+                </tbody>
+            </table>
+        @endif
         @if ($comprobante->tipo === TesoreriaCrownComprobanteSupport::RENDICION)
             @foreach (TesoreriaCrownRendicionCampos::gruposParaTarea($comprobante->asignacion->tipo_tarea ?? '') as $grupoMedio)
                 <h2>{{ $grupoMedio['titulo'] }}</h2>

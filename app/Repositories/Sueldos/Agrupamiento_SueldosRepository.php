@@ -4,6 +4,7 @@ namespace App\Repositories\Sueldos;
 
 use App\ApiAnita;
 use App\Models\Sueldos\Agrupamiento_Sueldos;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Sueldos\AgrupamientoSueldosListadoFiltros;
 use App\Support\Sueldos\FalloCajaTipo;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -131,11 +132,15 @@ class Agrupamiento_SueldosRepository implements Agrupamiento_SueldosRepositoryIn
         ini_set('max_execution_time', '600');
 
         $api = new ApiAnita();
+        // Crown: sueldos.agrupamiento no tiene agr_id_fallo. Pedirla desplaza el CSV.
+        $campos = EntornoEmpresaSupport::esCrown()
+            ? 'agr_agrupamiento, agr_desc, agr_variable1, agr_variable2, agr_variable3, agr_variable4'
+            : 'agr_agrupamiento, agr_desc, agr_id_fallo, agr_variable1, agr_variable2, agr_variable3, agr_variable4';
         $data = [
             'acc' => 'list',
             'sistema' => 'sueldos',
             'tabla' => $this->tableAnita,
-            'campos' => 'agr_agrupamiento, agr_desc, agr_id_fallo, agr_variable1, agr_variable2, agr_variable3, agr_variable4',
+            'campos' => $campos,
             'orderBy' => 'agr_agrupamiento',
         ];
         $parsed = ApiAnita::parsearRespuestaLista($api->apiCall($data));

@@ -390,6 +390,7 @@ class ComprobanteProveedorPersistenciaService
             (int) ($request->input('precarga_comprobante_proveedor_id', 0) ?: 0) ?: null,
             $payload['numerocae'] ?? null,
             $payload['tipo_autorizacion'] ?? null,
+            (bool) ($payload['es_fce'] ?? false),
         );
 
         ComprobanteProveedorAnitaCompraExistenciaSupport::assertNoDuplicadoEnAnita(
@@ -399,6 +400,8 @@ class ComprobanteProveedorPersistenciaService
             (string) $payload['letra'],
             (int) $payload['sucursal'],
             (int) $payload['numerocomprobante'],
+            null,
+            (bool) ($payload['es_fce'] ?? false),
         );
 
         $this->ejecutarControlesDesdeRequest($request, $payload, null);
@@ -425,6 +428,8 @@ class ComprobanteProveedorPersistenciaService
                     (int) $payload['numerocomprobante'],
                     (int) $payload['proveedor_id'],
                     null,
+                    null,
+                    (bool) ($payload['es_fce'] ?? false),
                 );
                 throw $e;
             }
@@ -540,6 +545,7 @@ class ComprobanteProveedorPersistenciaService
             (int) ($request->input('precarga_comprobante_proveedor_id', 0) ?: 0) ?: null,
             $payload['numerocae'] ?? null,
             $payload['tipo_autorizacion'] ?? null,
+            (bool) ($payload['es_fce'] ?? false),
         );
 
         ComprobanteProveedorAnitaCompraExistenciaSupport::assertNoDuplicadoEnAnita(
@@ -550,6 +556,7 @@ class ComprobanteProveedorPersistenciaService
             (int) $payload['sucursal'],
             (int) $payload['numerocomprobante'],
             (int) ($comprobante->anita_nro_interno ?? 0) ?: null,
+            (bool) ($payload['es_fce'] ?? false),
         );
 
         $this->ejecutarControlesDesdeRequest($request, $payload, $id);
@@ -577,6 +584,7 @@ class ComprobanteProveedorPersistenciaService
                     (int) $payload['proveedor_id'],
                     null,
                     $id,
+                    (bool) ($payload['es_fce'] ?? false),
                 );
                 throw $e;
             }
@@ -687,6 +695,7 @@ class ComprobanteProveedorPersistenciaService
             $precargaId,
             $payload['numerocae'] ?? null,
             $payload['tipo_autorizacion'] ?? null,
+            (bool) ($payload['es_fce'] ?? false),
         );
 
         ComprobanteProveedorAnitaCompraExistenciaSupport::assertNoDuplicadoEnAnita(
@@ -696,6 +705,8 @@ class ComprobanteProveedorPersistenciaService
             (string) $payload['letra'],
             (int) $payload['sucursal'],
             (int) $payload['numerocomprobante'],
+            null,
+            (bool) ($payload['es_fce'] ?? false),
         );
 
         $seleccionCom = $prefill['recepciones_seleccionadas'] ?? [];
@@ -797,6 +808,8 @@ class ComprobanteProveedorPersistenciaService
                 (int) $payload['numerocomprobante'],
                 isset($payload['proveedor_id']) ? (int) $payload['proveedor_id'] : null,
                 $payload['proveedor_documento_eventual'] ?? null,
+                null,
+                (bool) ($payload['es_fce'] ?? false),
             );
             throw $e;
         }

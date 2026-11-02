@@ -577,6 +577,7 @@ class Comprobante_ProveedorController extends Controller
         $excluirComprobanteId = (int) $request->input('excluir_comprobante_id', 0) ?: null;
         $excluirPrecargaId = (int) $request->input('excluir_precarga_id', 0) ?: null;
         $excluirAnitaNro = (int) $request->input('excluir_anita_nro_interno', 0) ?: null;
+        $esFce = $request->exists('es_fce') ? $request->boolean('es_fce') : null;
 
         $erp = ComprobanteProveedorUnicidadSupport::consultarDuplicadoCabecera(
             $empresaId,
@@ -588,6 +589,7 @@ class Comprobante_ProveedorController extends Controller
             $documentoEventual !== '' ? $documentoEventual : null,
             $excluirComprobanteId,
             $excluirPrecargaId,
+            $esFce,
         );
 
         if (! ($erp['listo'] ?? false)) {
@@ -643,6 +645,7 @@ class Comprobante_ProveedorController extends Controller
                     $sucursal,
                     $numero,
                     $excluirAnitaNro,
+                    $esFce,
                 );
                 if ($fila !== null) {
                     $tipoArca = ComprobanteProveedorAnitaCompraExistenciaSupport::tipoArcaDesdeTipoId($tipoId, $letra);

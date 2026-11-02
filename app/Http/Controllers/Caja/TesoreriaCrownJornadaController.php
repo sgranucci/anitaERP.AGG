@@ -5,6 +5,12 @@ namespace App\Http\Controllers\Caja;
 use App\Http\Controllers\Controller;
 use App\Models\Caja\CajeroCrown;
 use App\Models\Caja\TesoreriaCrownAsignacion;
+use App\Models\Caja\TesoreriaCrownBoveda;
+use App\Models\Caja\TesoreriaCrownCierre;
+use App\Models\Caja\TesoreriaCrownCierreEvento;
+use App\Models\Caja\TesoreriaCrownCierreFiscal;
+use App\Models\Caja\TesoreriaCrownComprobante;
+use App\Models\Caja\TesoreriaCrownComprobanteLinea;
 use App\Models\Caja\TesoreriaCrownDeposito;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownTipoDeposito;
@@ -12,11 +18,18 @@ use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownAsignacionCatalogo;
 use App\Support\Caja\TesoreriaCrownBovedaSupport;
 use App\Support\Caja\TesoreriaCrownCierreSupport;
+use App\Support\Caja\TesoreriaCrownCajeroListadoColumnas;
+use App\Support\Caja\TesoreriaCrownCajeroListadoFiltros;
 use App\Support\Caja\TesoreriaCrownJornadaListadoColumnas;
 use App\Support\Caja\TesoreriaCrownJornadaListadoFiltros;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
+use App\Models\Caja\TesoreriaCrownSlot;
 use App\Support\Caja\TesoreriaCrownMesaSupport;
+use App\Support\Caja\TesoreriaCrownAnexo1Calculo;
+use App\Support\Caja\TesoreriaCrownPoderPublicoCalculo;
+use App\Support\Caja\TesoreriaCrownNumeradorSupport;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
+use App\Support\Caja\TesoreriaCrownSlotSupport;
 use App\Support\Caja\TesoreriaCrownWorkbenchSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoVistaSupport;
@@ -125,6 +138,89 @@ class TesoreriaCrownJornadaController extends Controller
         return redirect()->route('tesoreria_crown_jornada', $request->query())->with('mensaje', 'Etiquetas actualizadas.');
     }
 
+    public function previewCajeros(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-jornada');
+        $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
+
+        return TesoreriaCrownWorkbenchSupport::preview(
+            $request,
+            TesoreriaCrownCajeroListadoColumnas::catalogoActivo(),
+            fn (Request $req) => $this->filtrosCajeros($req, (int) $jornada->id),
+            TesoreriaCrownCajeroListadoColumnas::RECURSO,
+            fn (array $filtros) => TesoreriaCrownCajeroListadoFiltros::consulta((int) $jornada->id, $filtros),
+            [TesoreriaCrownCajeroListadoColumnas::class, 'valorCelda'],
+            [TesoreriaCrownCajeroListadoFiltros::class, 'camposOrdenables'],
+        );
+    }
+
+    public function guardarVistaCajeros(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-jornada');
+        $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
+
+        return TesoreriaCrownWorkbenchSupport::guardarVista(
+            $request,
+            TesoreriaCrownCajeroListadoColumnas::RECURSO,
+            'ver_tesoreria_crown_jornada',
+            TesoreriaCrownCajeroListadoColumnas::catalogoActivo(),
+            fn (Request $req) => $this->filtrosCajeros($req, (int) $jornada->id),
+            [TesoreriaCrownCajeroListadoFiltros::class, 'paraQueryString'],
+        );
+    }
+
+    public function eliminarVistaCajeros(Request $request, int $id)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-jornada');
+        $jornadaId = (int) $request->post('id');
+        if ($jornadaId > 0) {
+            $this->jornadaEnAlcance($jornadaId);
+        }
+        $ok = ListadoVistaSupport::eliminar($id, TesoreriaCrownCajeroListadoColumnas::RECURSO, (int) auth()->id());
+        $destino = $jornadaId > 0
+            ? redirect()->route('ver_tesoreria_crown_jornada', ['id' => $jornadaId, 'panel' => 'cajeros', 'vista_estandar' => 1])
+            : redirect()->route('tesoreria_crown_jornada', ['vista_estandar' => 1]);
+
+        return $destino->with($ok ? 'mensaje' : 'mensaje-error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasCajeros(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-jornada');
+        $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
+
+        return TesoreriaCrownWorkbenchSupport::guardarColumnas(
+            $request,
+            TesoreriaCrownCajeroListadoColumnas::RECURSO,
+            'ver_tesoreria_crown_jornada',
+            TesoreriaCrownCajeroListadoColumnas::catalogoActivo(),
+            fn (Request $req) => $this->filtrosCajeros($req, (int) $jornada->id),
+            [TesoreriaCrownCajeroListadoFiltros::class, 'paraQueryString'],
+        );
+    }
+
+    public function guardarEtiquetasCajeros(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-jornada');
+        $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
+        $etiquetas = $request->input('etiquetas', []);
+        ListadoColumnaEtiquetaSupport::guardar(
+            TesoreriaCrownCajeroListadoColumnas::RECURSO,
+            is_array($etiquetas) ? $etiquetas : [],
+            array_keys(TesoreriaCrownCajeroListadoColumnas::catalogoActivo())
+        );
+
+        return redirect()->route('ver_tesoreria_crown_jornada', [
+            'id' => $jornada->id,
+            'panel' => 'cajeros',
+        ])->with('mensaje', 'Etiquetas actualizadas.');
+    }
+
     /**
      * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
      */
@@ -146,6 +242,32 @@ class TesoreriaCrownJornadaController extends Controller
     /**
      * @return array<string, mixed>
      */
+    /**
+     * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
+     */
+    private function workbenchCajeros(Request $request, int $jornadaId): array|\Illuminate\Http\RedirectResponse
+    {
+        return TesoreriaCrownWorkbenchSupport::preparar(
+            $request,
+            TesoreriaCrownCajeroListadoColumnas::RECURSO,
+            'ver_tesoreria_crown_jornada',
+            TesoreriaCrownCajeroListadoColumnas::catalogoActivo(),
+            fn (Request $req) => $this->filtrosCajeros($req, $jornadaId),
+            [TesoreriaCrownCajeroListadoFiltros::class, 'camposOrdenables'],
+            [TesoreriaCrownCajeroListadoFiltros::class, 'camposQbe'],
+            [TesoreriaCrownCajeroListadoFiltros::class, 'normalizarOperador'],
+            [TesoreriaCrownCajeroListadoFiltros::class, 'paraQueryString'],
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function filtrosCajeros(Request $request, int $jornadaId): array
+    {
+        return TesoreriaCrownCajeroListadoFiltros::resolverDesdeRequest($request, $jornadaId);
+    }
+
     private function filtrosDe(Request $request, int $salaId): array
     {
         $filtros = TesoreriaCrownJornadaListadoFiltros::resolverDesdeRequest($request);
@@ -206,6 +328,259 @@ class TesoreriaCrownJornadaController extends Controller
         );
     }
 
+    public function listarCajeros(Request $request, $formato = null)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-jornada');
+
+        $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
+        if ($formato === null || $formato === '') {
+            return redirect()->route('ver_tesoreria_crown_jornada', $jornada->id);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = TesoreriaCrownCajeroListadoFiltros::resolverDesdeRequest($request, (int) $jornada->id);
+        $filas = TesoreriaCrownCajeroListadoFiltros::consulta((int) $jornada->id, $filtros)->get();
+        $claves = $this->columnasExport($request, TesoreriaCrownCajeroListadoColumnas::COLUMNAS);
+        $jornada->loadMissing('empresa');
+        $nombreEmpresa = (string) ($jornada->empresa->nombre ?? '');
+        foreach ($filas as $fila) {
+            $fila->nombreempresa = $nombreEmpresa;
+        }
+        $columnas = [];
+        foreach ($claves as $clave) {
+            $columnas[] = [
+                'label' => TesoreriaCrownCajeroListadoColumnas::COLUMNAS[$clave]['label'],
+                'ancho' => 18,
+                'wrap' => in_array($clave, ['caja', 'cajero'], true),
+            ];
+        }
+
+        return $this->documentoListado((string) $formato, [
+            'titulo' => 'Cajeros '.$jornada->fecha->format('d/m/Y'),
+            'subtitulo' => 'Jornada '.$jornada->fecha->format('d/m/Y'),
+            'archivo' => 'cajeros_tesoreria_'.$jornada->fecha->format('Ymd'),
+            'titulo_corto' => 'Cajeros',
+            'columnas' => $columnas,
+            'filas' => $filas->map(function (TesoreriaCrownAsignacion $fila) use ($claves) {
+                $celda = [];
+                foreach ($claves as $clave) {
+                    $celda[] = TesoreriaCrownCajeroListadoColumnas::valorCelda($fila, $clave);
+                }
+
+                return $celda;
+            })->all(),
+            'coleccion' => $filas,
+        ], 'ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'cajeros']);
+    }
+
+    public function listarMesas(Request $request, $formato = null)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-mesa');
+
+        $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
+        if ($formato === null || $formato === '') {
+            return redirect()->route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'mesas']);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $tablero = TesoreriaCrownMesaSupport::tablero($jornada);
+        $jornada->loadMissing('empresa');
+        $estado = [
+            'juego' => 'En juego',
+            'final' => 'Con estado final',
+            'borrador' => 'Borrador',
+            'vacia' => 'Sin movimiento',
+        ];
+        $filas = [];
+        foreach ($tablero['mesas'] as $fila) {
+            $filas[] = [
+                (string) $fila['mesa']->codigo,
+                (string) $fila['mesa']->nombre,
+                $fila['banca'] ? trim($fila['banca']->codigo.' '.$fila['banca']->nombre) : '',
+                $estado[$fila['estado']] ?? $fila['estado'],
+                (int) $fila['borradores'],
+                $fila['drop'] ? 'Sí' : '',
+            ];
+        }
+
+        return $this->documentoListado((string) $formato, [
+            'titulo' => 'Mesas '.$jornada->fecha->format('d/m/Y'),
+            'subtitulo' => 'Jornada '.$jornada->fecha->format('d/m/Y'),
+            'archivo' => 'mesas_tesoreria_'.$jornada->fecha->format('Ymd'),
+            'titulo_corto' => 'Mesas',
+            'columnas' => [
+                ['label' => 'Mesa', 'ancho' => 12, 'texto' => true],
+                ['label' => 'Nombre', 'ancho' => 28, 'wrap' => true],
+                ['label' => 'Banca', 'ancho' => 24, 'wrap' => true],
+                ['label' => 'Estado', 'ancho' => 18],
+                ['label' => 'Borradores', 'ancho' => 14],
+                ['label' => 'Drop', 'ancho' => 10],
+            ],
+            'filas' => $filas,
+            'coleccion' => collect([(object) ['nombreempresa' => (string) ($jornada->empresa->nombre ?? '')]]),
+        ], 'ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'mesas']);
+    }
+
+    public function listarSlots(Request $request, $formato = null)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-slot');
+
+        $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
+        if ($formato === null || $formato === '') {
+            return redirect()->route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'slots']);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $jornada->loadMissing('empresa');
+        $filas = [];
+        foreach (TesoreriaCrownSlotSupport::delDia($jornada) as $fila) {
+            $filas[] = [
+                TesoreriaCrownNumeradorSupport::visible($fila->numero),
+                (string) $fila->maquina,
+                (string) $fila->maquina_nombre,
+                TesoreriaCrownSlot::tipo($fila->tipo),
+                TesoreriaCrownSlot::estado($fila->estado),
+                (string) $fila->hora,
+                (float) $fila->total,
+            ];
+        }
+
+        return $this->documentoListado((string) $formato, [
+            'titulo' => 'Slots '.$jornada->fecha->format('d/m/Y'),
+            'subtitulo' => 'Jornada '.$jornada->fecha->format('d/m/Y'),
+            'archivo' => 'slots_tesoreria_'.$jornada->fecha->format('Ymd'),
+            'titulo_corto' => 'Slots',
+            'columnas' => [
+                ['label' => 'Número', 'ancho' => 14, 'texto' => true],
+                ['label' => 'Máquina', 'ancho' => 14, 'texto' => true],
+                ['label' => 'Nombre', 'ancho' => 28, 'wrap' => true],
+                ['label' => 'Tipo', 'ancho' => 16],
+                ['label' => 'Estado', 'ancho' => 14],
+                ['label' => 'Hora', 'ancho' => 12],
+                ['label' => 'Total', 'ancho' => 16, 'numero' => true],
+            ],
+            'filas' => $filas,
+            'coleccion' => collect([(object) ['nombreempresa' => (string) ($jornada->empresa->nombre ?? '')]]),
+        ], 'ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'slots']);
+    }
+
+    public function listarPoderPublico(Request $request, $formato = null)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-poder-publico');
+
+        $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
+        if ($formato === null || $formato === '') {
+            return redirect()->route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'poder']);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $jornada->loadMissing('empresa');
+        $armado = $this->poderDelDia($request, $jornada);
+        $filas = [];
+        foreach ($armado['filas'] as $fila) {
+            $filas[] = [
+                $fila['serie'],
+                $fila['descripcion'],
+                (float) $fila['valor'],
+                (int) $fila['reserva'],
+                (int) $fila['otros'],
+                (int) $fila['inicial'],
+                (int) $fila['final'],
+                (int) $fila['habilitacion'],
+                (int) $fila['pp_diario'],
+                (int) $fila['poder'],
+                (int) $fila['mesas'],
+                (int) $fila['total'],
+            ];
+        }
+        $filas[] = ['', 'Día que entra al anexo', (float) $armado['diario'], '', '', '', '', '', '', '', '', ''];
+        $filas[] = ['', 'Mes', (float) $armado['mes'], '', '', '', '', '', '', '', '', ''];
+        $filas[] = ['', 'Acumulado', (float) $armado['acumulado'], '', '', '', '', '', '', '', '', ''];
+
+        return $this->documentoListado((string) $formato, [
+            'titulo' => 'Poder del público '.$jornada->fecha->format('d/m/Y'),
+            'subtitulo' => 'Día '.$armado['diario'].' · mes '.$armado['mes'].' · acumulado '.$armado['acumulado'],
+            'archivo' => 'poder_publico_'.$jornada->fecha->format('Ymd'),
+            'titulo_corto' => 'Poder público',
+            'columnas' => [
+                ['label' => 'Serie', 'ancho' => 10, 'texto' => true],
+                ['label' => 'Descripción', 'ancho' => 28, 'wrap' => true],
+                ['label' => 'Valor', 'ancho' => 14, 'numero' => true],
+                ['label' => 'Reserva', 'ancho' => 12, 'numero' => true],
+                ['label' => 'Otros ing.', 'ancho' => 12, 'numero' => true],
+                ['label' => 'Conv. inicial', 'ancho' => 14, 'numero' => true],
+                ['label' => 'Conv. final', 'ancho' => 14, 'numero' => true],
+                ['label' => 'Habilitación', 'ancho' => 14, 'numero' => true],
+                ['label' => 'P.P. diario', 'ancho' => 12, 'numero' => true],
+                ['label' => 'Poder público', 'ancho' => 14, 'numero' => true],
+                ['label' => 'Mesas', 'ancho' => 12, 'numero' => true],
+                ['label' => 'Total', 'ancho' => 12, 'numero' => true],
+            ],
+            'filas' => $filas,
+            'coleccion' => collect([(object) ['nombreempresa' => (string) ($jornada->empresa->nombre ?? '')]]),
+        ], 'ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'poder']);
+    }
+
+    public function listarAnexo1(Request $request, $formato = null)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-anexo');
+
+        $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
+        if ($formato === null || $formato === '') {
+            return redirect()->route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'anexo']);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $jornada->loadMissing('empresa');
+        $armado = $this->anexoDelDia($request, $jornada);
+        $filas = [];
+        foreach ($armado['filas'] as $fila) {
+            if ($fila['seccion']) {
+                $filas[] = [$fila['concepto'], '', '', ''];
+
+                continue;
+            }
+            $filas[] = [
+                $fila['concepto'],
+                $fila['dia'] === null ? '' : (float) $fila['dia'],
+                $fila['mes'] === null ? '' : (float) $fila['mes'],
+                $fila['anio'] === null ? '' : (float) $fila['anio'],
+            ];
+        }
+
+        return $this->documentoListado((string) $formato, [
+            'titulo' => 'Anexo I '.$jornada->fecha->format('d/m/Y'),
+            'subtitulo' => $armado['cerrado']
+                ? 'Detalle grabado en Anita'
+                : 'Líneas calculadas de efectivo, bóveda y poder público',
+            'archivo' => 'anexo1_'.$jornada->fecha->format('Ymd'),
+            'titulo_corto' => 'Anexo I',
+            'columnas' => [
+                ['label' => 'Concepto', 'ancho' => 70, 'wrap' => true],
+                ['label' => 'Día', 'ancho' => 18, 'numero' => true],
+                ['label' => 'Mes', 'ancho' => 18, 'numero' => true],
+                ['label' => 'Anual', 'ancho' => 18, 'numero' => true],
+            ],
+            'filas' => $filas,
+            'coleccion' => collect([(object) ['nombreempresa' => (string) ($jornada->empresa->nombre ?? '')]]),
+        ], 'ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'anexo']);
+    }
+
     public function ver(Request $request, int $id)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
@@ -216,8 +591,11 @@ class TesoreriaCrownJornadaController extends Controller
         $sala = TesoreriaCrownSalaSupport::exigida((int) $jornada->sala_id);
         $puedeMesas = can('listar-tesoreria-crown-mesa', false);
         $puedeBoveda = can('listar-tesoreria-crown-boveda', false);
+        $puedeSlots = can('listar-tesoreria-crown-slot', false);
+        $puedePoder = can('listar-tesoreria-crown-poder-publico', false);
+        $puedeAnexo = can('listar-tesoreria-crown-anexo', false);
         $panel = (string) $request->query('panel', 'cajeros');
-        if (! in_array($panel, ['cajeros', 'mesas', 'boveda'], true)) {
+        if (! in_array($panel, ['cajeros', 'mesas', 'boveda', 'slots', 'poder', 'anexo'], true)) {
             $panel = 'cajeros';
         }
         $tableroMesas = $puedeMesas
@@ -234,19 +612,61 @@ class TesoreriaCrownJornadaController extends Controller
                 fn (array $fila) => strtoupper((string) $fila['mesa']->codigo) === $mesaCodigo
             );
         }
-        if (($panel === 'mesas' && ! $puedeMesas) || ($panel === 'boveda' && ! $puedeBoveda)) {
+        if (($panel === 'mesas' && ! $puedeMesas) || ($panel === 'boveda' && ! $puedeBoveda) || ($panel === 'slots' && ! $puedeSlots) || ($panel === 'poder' && ! $puedePoder) || ($panel === 'anexo' && ! $puedeAnexo)) {
             $panel = 'cajeros';
+        }
+        $poderPublico = null;
+        $poderError = null;
+        if ($panel === 'poder') {
+            try {
+                $poderPublico = $this->poderDelDia($request, $jornada);
+            } catch (\RuntimeException $e) {
+                $poderError = $e->getMessage();
+            }
+        }
+        $anexo = null;
+        $anexoError = null;
+        if ($panel === 'anexo') {
+            try {
+                $anexo = $this->anexoDelDia($request, $jornada);
+            } catch (\RuntimeException $e) {
+                $anexoError = $e->getMessage();
+            }
+        }
+        if ($panel === 'boveda') {
+            return redirect()->route('tesoreria_crown_boveda', [
+                'sala_id' => $jornada->sala_id,
+                'jornada_id' => $jornada->id,
+            ]);
+        }
+        $asignacionesTodas = $jornada->asignaciones()
+            ->with(['deposito', 'cajero', 'comprobantes', 'cierre', 'cierres'])
+            ->orderBy('turno')
+            ->orderBy('deposito_id')
+            ->get();
+        $armadoCajeros = null;
+        $asignaciones = $asignacionesTodas;
+        if ($panel === 'cajeros') {
+            $armadoCajeros = $this->workbenchCajeros($request, (int) $jornada->id);
+            if ($armadoCajeros instanceof \Illuminate\Http\RedirectResponse) {
+                return $armadoCajeros;
+            }
+            $asignaciones = TesoreriaCrownCajeroListadoFiltros::consulta((int) $jornada->id, $armadoCajeros['filtros'])->get();
         }
         $fecha = $jornada->fecha->format('Y-m-d');
         $stock = $mesaFila
             ? TesoreriaCrownMesaSupport::stock((int) $mesaFila['mesa']->id, (int) $sala->id, $fecha)
             : null;
 
-        return view('caja.tesoreria_crown.jornada.dia', [
+        return view('caja.tesoreria_crown.jornada.dia', array_merge($armadoCajeros ?? [], [
             'salas' => $salas,
             'sala' => $sala,
             'jornada' => $jornada,
-            'asignaciones' => $jornada->asignaciones()->with(['deposito', 'cajero', 'comprobantes', 'cierre', 'cierres'])->orderBy('turno')->orderBy('deposito_id')->get(),
+            'asignaciones' => $asignaciones,
+            'asignacionesTodas' => $asignacionesTodas,
+            'tieneCriterios' => is_array($armadoCajeros)
+                ? TesoreriaCrownCajeroListadoFiltros::tieneCriteriosAplicados($armadoCajeros['filtros'])
+                : false,
             'recientes' => TesoreriaCrownJornada::query()
                 ->where('sala_id', $sala->id)
                 ->orderByDesc('fecha')
@@ -261,6 +681,23 @@ class TesoreriaCrownJornadaController extends Controller
             'boveda' => $puedeBoveda ? TesoreriaCrownBovedaSupport::resumenJornada($jornada) : null,
             'puedeMesas' => $puedeMesas,
             'puedeBoveda' => $puedeBoveda,
+            'puedeSlots' => $puedeSlots,
+            'puedePoder' => $puedePoder,
+            'puedeAnexo' => $puedeAnexo,
+            'poderPublico' => $poderPublico,
+            'poderError' => $poderError,
+            'anexo' => $anexo,
+            'anexoError' => $anexoError,
+            'navSlots' => $puedeSlots
+                ? TesoreriaCrownSlot::query()->where('jornada_id', $jornada->id)->count()
+                : 0,
+            'slots' => $panel === 'slots'
+                ? TesoreriaCrownSlotSupport::delDia($jornada, (string) $request->query('q', ''))
+                : collect(),
+            'slotDetalle' => $panel === 'slots' ? $this->slotDeLaJornada($jornada, (int) $request->query('slot', 0)) : null,
+            'resumenSlots' => $panel === 'slots'
+                ? TesoreriaCrownSlotSupport::resumen(TesoreriaCrownSlotSupport::delDia($jornada))
+                : ['drops' => 0, 'drop_total' => 0, 'recuentos' => 0, 'recuento_total' => 0],
             'panel' => $panel,
             'tableroMesas' => $tableroMesas,
             'mesaFila' => $mesaFila,
@@ -268,7 +705,8 @@ class TesoreriaCrownJornadaController extends Controller
             'saldoMesa' => $stock ? TesoreriaCrownMesaSupport::filas((int) $sala->id, $stock['saldo']) : [],
             'estadoFinalMesa' => $stock ? TesoreriaCrownMesaSupport::filas((int) $sala->id, $stock['estado_final']) : [],
             'dropMesa' => $stock ? TesoreriaCrownMesaSupport::filas((int) $sala->id, $stock['drop']) : [],
-        ]);
+            'esAdministrador' => session('rol_nombre') === 'administrador',
+        ]));
     }
 
     public function abrir(Request $request)
@@ -424,6 +862,64 @@ class TesoreriaCrownJornadaController extends Controller
         $asignacion->delete();
 
         return redirect()->route('ver_tesoreria_crown_jornada', $jornada->id)->with('mensaje', 'Asignación quitada.');
+    }
+
+    /**
+     * Borra habilitaciones, rendiciones, reversas y cierres de una caja.
+     * No hay permiso: can() deja pasar a todo administrador, y esta herramienta es solo de ese rol.
+     */
+    public function vaciar(int $id)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        if (session('rol_nombre') !== 'administrador') {
+            abort(403);
+        }
+
+        $asignacion = TesoreriaCrownAsignacion::query()->findOrFail($id);
+        $jornada = $this->jornadaEnAlcance((int) $asignacion->jornada_id);
+        $comprobanteIds = $asignacion->comprobantes()->pluck('id');
+        $cierreIds = $asignacion->cierres()->pluck('id');
+        if ($comprobanteIds->isEmpty() && $cierreIds->isEmpty()) {
+            return back()->with('mensaje-error', 'Esta caja no tiene comprobantes ni cierres.');
+        }
+
+        DB::transaction(function () use ($asignacion, $comprobanteIds, $cierreIds) {
+            if ($comprobanteIds->isNotEmpty()) {
+                TesoreriaCrownBoveda::query()
+                    ->whereIn('comprobante_id', $comprobanteIds)
+                    ->get()
+                    ->each(function (TesoreriaCrownBoveda $movimiento) {
+                        $movimiento->comprobante_id = null;
+                        $movimiento->save();
+                    });
+                EloquentAuditDeleteSupport::each(
+                    TesoreriaCrownCierreFiscal::query()->whereIn('comprobante_id', $comprobanteIds)
+                );
+                EloquentAuditDeleteSupport::each(
+                    TesoreriaCrownComprobanteLinea::query()->whereIn('comprobante_id', $comprobanteIds)
+                );
+                EloquentAuditDeleteSupport::each(
+                    TesoreriaCrownComprobante::query()
+                        ->where('asignacion_id', $asignacion->id)
+                        ->whereNotNull('revierte_id')
+                );
+                EloquentAuditDeleteSupport::each(
+                    TesoreriaCrownComprobante::query()->where('asignacion_id', $asignacion->id)
+                );
+            }
+            if ($cierreIds->isNotEmpty()) {
+                EloquentAuditDeleteSupport::each(
+                    TesoreriaCrownCierreEvento::query()->whereIn('cierre_id', $cierreIds)
+                );
+                EloquentAuditDeleteSupport::each(
+                    TesoreriaCrownCierre::query()->where('asignacion_id', $asignacion->id)
+                );
+            }
+        });
+
+        return redirect()
+            ->route('ver_tesoreria_crown_jornada', $jornada->id)
+            ->with('mensaje', 'Se borraron los comprobantes y los cierres de la caja. El cajero sigue asignado.');
     }
 
     public function resolverDeposito(Request $request)
@@ -628,6 +1124,39 @@ class TesoreriaCrownJornadaController extends Controller
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function poderDelDia(Request $request, TesoreriaCrownJornada $jornada): array
+    {
+        $clave = 'tc-poder-'.$jornada->fecha->format('Ymd');
+        if ($request->query('recalcular') !== '1') {
+            $guardado = session($clave);
+            if (is_array($guardado)) {
+                return $guardado;
+            }
+        }
+        $armado = TesoreriaCrownPoderPublicoCalculo::delDia($jornada->fecha->format('Y-m-d'));
+        session([$clave => $armado]);
+
+        return $armado;
+    }
+
+    private function anexoDelDia(Request $request, TesoreriaCrownJornada $jornada): array
+    {
+        $clave = 'tc-anexo1-'.$jornada->fecha->format('Ymd');
+        if ($request->query('recalcular') !== '1') {
+            $guardado = session($clave);
+            if (is_array($guardado)) {
+                return $guardado;
+            }
+        }
+        $armado = TesoreriaCrownAnexo1Calculo::delDia($jornada->fecha->format('Y-m-d'));
+        session([$clave => $armado]);
+
+        return $armado;
+    }
+
     private function exigirConsultaCajero(): void
     {
         if (can('listar-tesoreria-crown-jornada', false)
@@ -652,5 +1181,53 @@ class TesoreriaCrownJornadaController extends Controller
             'legajo' => $legajo > 0 ? (string) $legajo : '',
             'nombre' => (string) $cajero->nombre,
         ];
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $catalogo
+     * @return list<string>
+     */
+    private function slotDeLaJornada(TesoreriaCrownJornada $jornada, int $id): ?TesoreriaCrownSlot
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        return TesoreriaCrownSlot::query()
+            ->with(['lineas.valor.tipoValor'])
+            ->where('jornada_id', $jornada->id)
+            ->whereKey($id)
+            ->first();
+    }
+
+    private function columnasExport(Request $request, array $catalogo): array
+    {
+        $pedidas = array_values(array_filter(explode(',', (string) $request->query('columnas', ''))));
+        $pedidas = array_values(array_intersect($pedidas, array_keys($catalogo)));
+        if ($pedidas !== []) {
+            return $pedidas;
+        }
+        $default = [];
+        foreach ($catalogo as $clave => $meta) {
+            if (! empty($meta['default'])) {
+                $default[] = $clave;
+            }
+        }
+
+        return $default;
+    }
+
+    /**
+     * @param  array<string, mixed>  $armado
+     * @param  array<string, mixed>  $volver
+     */
+    private function documentoListado(string $formato, array $armado, string $ruta, array $volver)
+    {
+        $respuesta = TesoreriaCrownListadoDocumento::responder($formato, $armado);
+        if ($respuesta) {
+            return $respuesta;
+        }
+
+        return redirect()->route($ruta, $volver);
     }
 }

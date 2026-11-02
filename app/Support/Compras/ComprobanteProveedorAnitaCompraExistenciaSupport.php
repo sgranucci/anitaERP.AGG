@@ -17,8 +17,9 @@ use RuntimeException;
  * que ya existe en Anita (nativo u otro origen).
  *
  * Unicidad fiscal: proveedor + tipo ARCA (001/002/003, …) + letra + sucursal + número
- * (+ empresa cuando se puede resolver). El tipo ARCA agrupa abreviaturas distintas
- * (FAC, FNB, …) que informan el mismo código AFIP.
+ * + marca FCE (com_es_fce) (+ empresa cuando se puede resolver). El tipo ARCA agrupa
+ * abreviaturas distintas (FAC, FNB, …) que informan el mismo código AFIP. Una FCE y
+ * una factura común del mismo número no son el mismo comprobante.
  */
 final class ComprobanteProveedorAnitaCompraExistenciaSupport
 {
@@ -37,6 +38,7 @@ final class ComprobanteProveedorAnitaCompraExistenciaSupport
         int $sucursal,
         int $numerocomprobante,
         ?int $excluirAnitaNroInterno = null,
+        ?bool $esFce = null,
     ): void {
         $fila = self::buscar(
             $empresaId,
@@ -46,6 +48,7 @@ final class ComprobanteProveedorAnitaCompraExistenciaSupport
             $sucursal,
             $numerocomprobante,
             $excluirAnitaNroInterno,
+            $esFce,
         );
 
         if ($fila === null) {
@@ -91,6 +94,7 @@ final class ComprobanteProveedorAnitaCompraExistenciaSupport
                 (int) ($comprobante->sucursal ?? 0),
                 (int) ($comprobante->numerocomprobante ?? 0),
                 (int) ($comprobante->anita_nro_interno ?? 0) ?: null,
+                (bool) ($comprobante->es_fce ?? false),
             );
         } catch (\Throwable $e) {
             Log::warning('comprobante_proveedor.anita_compra_aviso_error', [
@@ -134,6 +138,7 @@ final class ComprobanteProveedorAnitaCompraExistenciaSupport
             (int) ($comprobante->sucursal ?? 0),
             (int) ($comprobante->numerocomprobante ?? 0),
             (int) ($comprobante->anita_nro_interno ?? 0) ?: null,
+            (bool) ($comprobante->es_fce ?? false),
         );
     }
 
@@ -148,6 +153,7 @@ final class ComprobanteProveedorAnitaCompraExistenciaSupport
         int $sucursal,
         int $numerocomprobante,
         ?int $excluirAnitaNroInterno = null,
+        ?bool $esFce = null,
     ): ?array {
         if ($proveedorId <= 0 || $numerocomprobante <= 0) {
             return null;
@@ -184,7 +190,14 @@ final class ComprobanteProveedorAnitaCompraExistenciaSupport
             $where .= ' AND com_nro_interno <> '.(int) $excluirAnitaNroInterno;
         }
 
+        if ($esFce === true) {
+            $where .= " AND com_es_fce = 'S'";
+        } elseif ($esFce === false) {
+            $where .= " AND (com_es_fce IS NULL OR com_es_fce <> 'S')";
+        }
+
         // Descripción al final por convención del bridge (corrimiento por |).
+        // com_nombre_prov puede traer | y correr los campos siguientes: va último.
         $campos = implode(', ', [
             'com_proveedor',
             'com_tipo',
@@ -196,6 +209,7 @@ final class ComprobanteProveedorAnitaCompraExistenciaSupport
             ...($filtraEmpresa ? ['com_empresa'] : []),
             'com_monto',
             'com_cuit_prov',
+            'com_es_fce',
             'com_nombre_prov',
         ]);
 

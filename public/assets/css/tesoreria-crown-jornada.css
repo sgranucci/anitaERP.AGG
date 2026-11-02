@@ -310,9 +310,15 @@
     color: #1a5276;
 }
 
-.tc-papel-marca.is-vigente {
+.tc-papel-marca.is-vigente,
+.tc-papel-marca.is-abierta {
     background: #d5f5e3;
     color: #196f3d;
+}
+
+.tc-papel-marca.is-cerrada {
+    background: #f5b7b1;
+    color: #7b241c;
 }
 
 .tc-cierre-historia {
@@ -350,8 +356,232 @@
     color: #1a5276;
 }
 
+.tc-bloque-toggle {
+    cursor: pointer;
+}
+
+.tc-bloque-toggle .card-title {
+    float: none;
+}
+
+.tc-bloque-toggle .tc-bloque-chevron {
+    transition: transform .15s ease;
+}
+
+.tc-bloque-toggle.collapsed .tc-bloque-chevron {
+    transform: rotate(-90deg);
+}
+
+.tc-cierre-trabajo {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(18rem, .8fr);
+    gap: 1rem;
+    align-items: start;
+    margin-bottom: 1rem;
+}
+
+.tc-cierre-tabla tfoot th {
+    background: #f4f6f7;
+    color: #17202a;
+}
+
+.tc-cierre-nro {
+    margin-left: .45rem;
+    color: #1a5276;
+    font-variant-numeric: tabular-nums;
+}
+
+.tc-cierre-accion {
+    width: 4.2rem;
+    text-align: center;
+}
+
+.tc-cierre-ver {
+    border: 1px solid #85c1e9;
+    background: #fff;
+    color: #1a5276;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 700;
+    padding: .15rem .65rem;
+    line-height: 1.4;
+}
+
+.tc-cierre-ver:hover,
+.tc-cierre-ver.is-on {
+    background: #1a5276;
+    border-color: #1a5276;
+    color: #fff;
+}
+
+.tc-cierre-resumen {
+    margin-top: .85rem;
+    border: 1px solid #d5d8dc;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.tc-cierre-resumen-fila {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: .75rem;
+    align-items: center;
+    padding: .55rem .85rem;
+    border-top: 1px solid #e5e8eb;
+}
+
+.tc-cierre-resumen-fila:first-child {
+    border-top: 0;
+}
+
+.tc-cierre-resumen-fila strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.tc-cierre-resumen-fila.is-diferencia {
+    background: #f4f6f7;
+    font-size: 1.05rem;
+}
+
+.tc-cierre-resumen.is-cero .is-diferencia {
+    background: #e8f8f5;
+    color: #0e6655;
+}
+
+.tc-cierre-resumen.is-excedente .is-diferencia {
+    background: #fef9e7;
+    color: #7d6608;
+}
+
+.tc-cierre-resumen.is-faltante .is-diferencia {
+    background: #fdedec;
+    color: #922b21;
+}
+
+.tc-cierre-ecuacion {
+    margin: 0;
+    padding: .45rem .85rem .65rem;
+    color: #5d6d7e;
+    font-size: .8rem;
+}
+
+.tc-cierre-panel {
+    position: sticky;
+    top: .75rem;
+    border: 1px solid #d4e6f1;
+    border-radius: 12px;
+    background: #f8fbfc;
+    padding: .85rem .9rem;
+    min-height: 12rem;
+}
+
+.tc-cierre-panel-titulo {
+    margin: 0 0 .6rem;
+    font-size: 1rem;
+    color: #1a5276;
+}
+
+.tc-cierre-panel-vacio {
+    margin: 0;
+    color: #5d6d7e;
+}
+
+.tc-cierre-doc {
+    background: #fff;
+    border: 1px solid #e5e8eb;
+    border-radius: 10px;
+    margin-bottom: .65rem;
+    overflow: hidden;
+}
+
+.tc-cierre-doc header,
+.tc-cierre-doc li {
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+}
+
+.tc-cierre-doc header {
+    padding: .45rem .7rem;
+    background: #eaf2f8;
+    color: #17202a;
+}
+
+.tc-cierre-doc ul {
+    list-style: none;
+    margin: 0;
+    padding: .35rem .7rem .5rem;
+}
+
+.tc-cierre-doc li {
+    padding: .18rem 0;
+    font-size: .85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.tc-cierre-doc .js-arqueo-billete {
+    min-width: 0;
+    min-height: 0;
+    padding: 0 .35rem 0 0;
+    color: #1a5276;
+    line-height: 1;
+}
+
+.tc-cierre-doc-estado {
+    margin: 0;
+    padding: .25rem .7rem 0;
+    color: #5d6d7e;
+    font-size: .75rem;
+}
+
+.tc-cierre-doc-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    padding: .45rem .7rem .65rem;
+}
+
+.tc-pin-cajero {
+    -webkit-text-security: disc;
+    text-security: disc;
+}
+
+.tc-boveda-valor {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@media (max-width: 991.98px) {
+    .tc-cierre-trabajo {
+        grid-template-columns: 1fr;
+    }
+
+    .tc-cierre-panel {
+        position: static;
+    }
+}
+
 @media (max-width: 767.98px) {
     .tc-mesa-metricas {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+}
+
+.tc-efeb-totales {
+    min-width: 14rem;
+}
+
+.tc-efeb-totales div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .35rem 0;
+    border-bottom: 1px solid #d5e1ea;
+}
+
+.tc-efeb-fila.is-off,
+.tc-efeb-total.is-off,
+.tc-efeb-moneda.is-off,
+.tc-efeb-ref.is-off {
+    display: none;
 }

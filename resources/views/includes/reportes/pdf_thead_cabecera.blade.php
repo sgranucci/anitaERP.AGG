@@ -23,7 +23,7 @@
             <tr style="background-color:#ffffff;">
                 <td style="width:28%;border:none;vertical-align:middle;padding:0;background-color:#ffffff;">
                     @foreach ($logosCab as $logo)
-                        <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] ?? '' }}" style="max-height:40px;max-width:140px;margin-right:6px;vertical-align:middle;">
+                        <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] ?? '' }}" style="max-height:56px;max-width:190px;margin-right:6px;vertical-align:middle;">
                     @endforeach
                 </td>
                 <td style="width:48%;border:none;text-align:center;vertical-align:middle;padding:0;background-color:#ffffff;">

@@ -9,6 +9,7 @@ use App\Models\Contable\Asiento;
 use App\Services\Contable\AnitaAsientoImportService;
 use App\Support\Contable\AsientoAnitaMetadatosSupport;
 use App\Support\Contable\AsientoOrigenProcesoSupport;
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -106,6 +107,25 @@ final class MayorPlanoCuentaErpAsientoReader
         $desdeIso = $this->ymdAIso($fechaDesdeYmd);
         $hastaIso = $this->ymdAIso($fechaHastaYmd);
         $cuentasSet = $cuentas !== [] ? array_fill_keys($cuentas, true) : null;
+        // El filtro de cuenta va en SQL. Sin esto el cursor recorre asiento_movimiento
+        // entero (~2 M de renglones) y descarta la cuenta en PHP: una cuenta de octubre
+        // tardaba ~12 s, casi todo en el saldo desde el 01/01.
+        $idsCuenta = $this->idsCuentacontableFiltro($empresaIds, $cuentaDesde, $cuentaHasta, $cuentas);
+        if ($idsCuenta === []) {
+            return [
+                'ctamov' => [],
+                'subdiario' => [],
+                'errores' => $errores,
+                'timings' => [
+                    'erp_asientos_ms' => round((microtime(true) - $t0) * 1000, 1),
+                    'erp_asientos_filas' => 0,
+                    'erp_asientos_movimientos_origen' => 0,
+                    'erp_asientos_grupos' => 0,
+                    'erp_subhist_emisores_ms' => 0,
+                    'erp_subhist_emisores_resueltos' => 0,
+                ],
+            ];
+        }
         // El id y las FK de origen viajan en la misma lectura: evita que los enrichers
         // vuelvan a consultar asiento por numeroasiento y por id.
         $columnasFk = $this->columnasFkDisponibles();
@@ -119,6 +139,7 @@ final class MayorPlanoCuentaErpAsientoReader
             ->leftJoin('moneda as m', 'm.id', '=', 'am.moneda_id')
             ->whereIn('a.empresa_id', $empresaIds)
             ->whereBetween('a.fecha', [$desdeIso, $hastaIso])
+            ->when($idsCuenta !== null, fn ($q) => $q->whereIn('am.cuentacontable_id', $idsCuenta))
             ->orderBy('a.fecha')
             ->orderBy('a.numeroasiento')
             ->orderBy('a.id')
@@ -494,6 +515,42 @@ final class MayorPlanoCuentaErpAsientoReader
         }
 
         return 0;
+    }
+
+    /**
+     * IDs de cuenta del filtro. null = sin filtro (todas las cuentas).
+     *
+     * @param  list<int>  $empresaIds
+     * @param  list<int>  $cuentas
+     * @return list<int>|null
+     */
+    private function idsCuentacontableFiltro(
+        array $empresaIds,
+        int $cuentaDesde,
+        int $cuentaHasta,
+        array $cuentas,
+    ): ?array {
+        $cuentas = array_values(array_unique(array_filter(
+            array_map('intval', $cuentas),
+            fn (int $cuenta) => $cuenta > 0,
+        )));
+        if ($cuentas === [] && $cuentaDesde <= 0 && $cuentaHasta <= 0) {
+            return null;
+        }
+
+        $query = DB::table('cuentacontable')->whereIn('empresa_id', $empresaIds);
+        if ($cuentas !== []) {
+            $query->whereIn('codigo', array_map('strval', $cuentas));
+        }
+        $codigoEntero = SqlDialectSupport::castEntero('codigo');
+        if ($cuentaDesde > 0) {
+            $query->whereRaw($codigoEntero.' >= ?', [$cuentaDesde]);
+        }
+        if ($cuentaHasta > 0) {
+            $query->whereRaw($codigoEntero.' <= ?', [$cuentaHasta]);
+        }
+
+        return array_map('intval', $query->pluck('id')->all());
     }
 
     /**

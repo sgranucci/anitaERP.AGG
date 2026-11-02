@@ -69,4 +69,14 @@ class ComprobanteProveedorUnicidadMensajePersistenciaTest extends TestCase
             $msg,
         );
     }
+
+    public function test_marca_fce_solo_s_o_uno(): void
+    {
+        $this->assertTrue(ComprobanteProveedorUnicidadSupport::esMarcaFce('S'));
+        $this->assertTrue(ComprobanteProveedorUnicidadSupport::esMarcaFce(1));
+        $this->assertTrue(ComprobanteProveedorUnicidadSupport::esMarcaFce(true));
+        $this->assertFalse(ComprobanteProveedorUnicidadSupport::esMarcaFce('N'));
+        $this->assertFalse(ComprobanteProveedorUnicidadSupport::esMarcaFce(null));
+        $this->assertFalse(ComprobanteProveedorUnicidadSupport::esMarcaFce(''));
+    }
 }

@@ -4,6 +4,7 @@ namespace App\Support\Configuracion;
 
 use App\Models\Caja\Cuentacaja;
 use App\Models\Compras\Concepto_Ivacompra;
+use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Parametro_Sistema;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Ventas\Puntoventa;
@@ -55,6 +56,9 @@ final class ParametroSistemaSupport
 
     /** Diferencia de cierre de caja Crown que pasa el caso a auditoría. */
     public const CLAVE_TESORERIA_CROWN_TOLERANCIA_AUDITORIA = 'tesoreria_crown_tolerancia_auditoria';
+
+    /** Empresa de sueldos que la bóveda Crown usa para resolver el legajo. */
+    public const CLAVE_TESORERIA_CROWN_EMPRESA_ID = 'tesoreria_crown_empresa_id';
 
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
@@ -165,6 +169,13 @@ final class ParametroSistemaSupport
         }
 
         if (EntornoEmpresaSupport::esCrown()) {
+            $defs[self::CLAVE_TESORERIA_CROWN_EMPRESA_ID] = [
+                'grupo' => 'Tesorería Crown',
+                'etiqueta' => 'Empresa de legajos',
+                'ayuda' => 'Empresa de sueldos con la que la bóveda resuelve el legajo (fallo de bóveda y a cuenta de terceros). Arranca en la empresa 1.',
+                'tipo' => 'empresa',
+                'orden' => 5,
+            ];
             $defs[self::CLAVE_TESORERIA_CROWN_TOLERANCIA_AUDITORIA] = [
                 'grupo' => 'Tesorería Crown',
                 'etiqueta' => 'Tolerancia de auditoría',
@@ -532,8 +543,26 @@ final class ParametroSistemaSupport
             self::CLAVE_PROVEEDOR_ALTA_CUENTACONTABLE_ID => '',
             self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB => '0',
             self::CLAVE_MAIL_CONSULTA_PROVEEDOR => '',
+            self::CLAVE_TESORERIA_CROWN_EMPRESA_ID => '1',
             default => '0',
         };
+    }
+
+    /**
+     * Empresa de sueldos de la bóveda Crown. Fuera de Crown no aplica.
+     */
+    public static function empresaTesoreriaCrownId(): int
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return 0;
+        }
+
+        $id = (int) (self::mapa()[self::CLAVE_TESORERIA_CROWN_EMPRESA_ID] ?? 0);
+        if ($id <= 0) {
+            $id = 1;
+        }
+
+        return Empresa::query()->whereKey($id)->exists() ? $id : 0;
     }
 
     private static function normalizarBooleanGuardar(mixed $valor): bool

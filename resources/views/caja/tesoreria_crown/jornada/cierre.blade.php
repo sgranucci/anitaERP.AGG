@@ -29,6 +29,26 @@
         ? ($cierre->componentes['filas'] ?? null)
         : ($cierre ? null : ($calculo['componentes']['filas'] ?? []));
     $anteriores = $anteriores ?? collect();
+    $filasVivas = $calculo['componentes']['filas'] ?? [];
+    $piezas = $calculo['piezas'] ?? [];
+    $deClave = function (string $clave) use ($piezas): array {
+        return array_values(array_filter($piezas, function (array $pieza) use ($clave) {
+            return abs((float) ($pieza['aportes'][$clave] ?? 0)) > 0.001;
+        }));
+    };
+    $ajustes = $ajustes ?? collect();
+    $numerosVigentes = ($ajustes->isNotEmpty() && is_array($vigente ?? null)) ? $vigente : [
+        'habilitado' => $calculo['habilitado'],
+        'rendido' => $calculo['rendido'],
+        'resultado' => $calculo['resultado'],
+        'diferencia' => $calculo['diferencia'],
+        'signo' => $calculo['signo'] ?? '',
+    ];
+    $tonoDiferencia = match ($numerosVigentes['signo'] ?? '') {
+        'Faltante' => 'is-faltante',
+        'Excedente' => 'is-excedente',
+        default => 'is-cero',
+    };
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -41,7 +61,7 @@
                     @endif
                     · {{ $asignacion->jornada->fecha->format('d/m/Y') }}
                     — {{ $asignacion->deposito->codigo ?? '' }} {{ $asignacion->deposito->nombre ?? '' }}
-                    — {{ $asignacion->cajero->nombre ?? '' }}
+                    — {{ $asignacion->cajero->codigo ?? '' }} {{ $asignacion->cajero->nombre ?? '' }}
                 </h3>
                 <div class="card-tools">
                     <a href="{{ route('ver_tesoreria_crown_jornada', $asignacion->jornada_id) }}" class="btn btn-outline-light btn-sm">
@@ -89,37 +109,151 @@
                     <div class="alert alert-warning">La diferencia supera la tolerancia de {{ $pesos($calculo['tolerancia']) }}. El cierre va a quedar en auditoría.</div>
                 @endif
 
-                <div class="table-responsive mb-3">
-                    <table class="table table-sm table-bordered mb-0" style="max-width:42rem;">
-                        <thead style="background:#85C1E9;color:#17202A;">
-                            <tr><th>Concepto</th><th class="text-right" style="width:10rem;">Pesos</th></tr>
-                        </thead>
-                        <tbody>
-                            @if (is_array($detalle))
-                                @foreach ($detalle as $filaDetalle)
+                <div class="tc-cierre-trabajo">
+                    <div class="tc-cierre-lista">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0 tc-cierre-tabla">
+                                <thead style="background:#85C1E9;color:#17202A;">
                                     <tr>
-                                        <td>
-                                            {{ $filaDetalle['concepto'] }}
-                                            @if (empty($filaDetalle['entra']))
-                                                <span class="text-muted">· no entra en la diferencia</span>
-                                            @endif
-                                        </td>
-                                        <td class="text-right">{{ $pesos($filaDetalle['importe'] ?? 0) }}</td>
+                                        <th>Concepto</th>
+                                        <th class="text-right">Habilitación</th>
+                                        <th class="text-right">Rendición</th>
+                                        <th class="tc-cierre-accion"></th>
                                     </tr>
-                                @endforeach
-                            @else
-                                <tr><td>Efectivo habilitado</td><td class="text-right">{{ $pesos($habilitado) }}</td></tr>
-                                <tr><td>Efectivo rendido</td><td class="text-right">{{ $pesos($rendido) }}</td></tr>
-                                <tr><td>Resultado</td><td class="text-right">{{ $pesos($resultado) }}</td></tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($filasVivas as $filaDetalle)
+                                        @php
+                                            $claveFila = (string) ($filaDetalle['clave'] ?? '');
+                                            $docsFila = $claveFila !== '' ? $deClave($claveFila) : [];
+                                            $numeroFila = count($docsFila) === 1 ? $docsFila[0]['numero'] : '';
+                                            $columnaFila = (string) ($filaDetalle['columna'] ?? '');
+                                        @endphp
+                                        <tr>
+                                            <td>
+                                                {{ $filaDetalle['concepto'] }}
+                                                @if ($numeroFila !== '')
+                                                    <span class="tc-cierre-nro">{{ $numeroFila }}</span>
+                                                @endif
+                                                @if (empty($filaDetalle['entra']))
+                                                    <span class="text-muted">· no entra en la diferencia</span>
+                                                @endif
+                                            </td>
+                                            <td class="text-right">{{ $columnaFila === 'habilitacion' ? $pesos($filaDetalle['importe'] ?? 0) : '' }}</td>
+                                            <td class="text-right">{{ $columnaFila === 'rendicion' ? $pesos($filaDetalle['importe'] ?? 0) : '' }}</td>
+                                            <td class="tc-cierre-accion">
+                                                @if ($claveFila !== '' && $docsFila !== [])
+                                                    <button type="button" class="tc-cierre-ver" data-clave="{{ $claveFila }}">Ver</button>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th>Totales</th>
+                                        <th class="text-right">{{ $pesos($calculo['habilitado']) }}</th>
+                                        <th class="text-right">{{ $pesos($calculo['rendido']) }}</th>
+                                        <th></th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <div class="tc-cierre-resumen {{ $tonoDiferencia }}">
+                            @foreach ([
+                                ['clave' => 'efectivo_habilitado', 'concepto' => 'Efectivo habilitado', 'importe' => $numerosVigentes['habilitado']],
+                                ['clave' => 'resultado', 'concepto' => 'Resultado de caja', 'importe' => $numerosVigentes['resultado']],
+                                ['clave' => 'valores_rendidos', 'concepto' => 'Valores rendidos', 'importe' => $numerosVigentes['rendido']],
+                            ] as $lineaResumen)
+                                <div class="tc-cierre-resumen-fila">
+                                    <span>{{ $lineaResumen['concepto'] }}</span>
+                                    <strong>{{ $pesos($lineaResumen['importe']) }}</strong>
+                                    <button type="button" class="tc-cierre-ver" data-clave="{{ $lineaResumen['clave'] }}">Ver</button>
+                                </div>
+                            @endforeach
+                            <div class="tc-cierre-resumen-fila is-diferencia">
+                                <span>Diferencia · {{ $numerosVigentes['signo'] }}</span>
+                                <strong>{{ $pesos($numerosVigentes['diferencia']) }}</strong>
+                                <button type="button" class="tc-cierre-ver" data-clave="diferencia">Ver</button>
+                            </div>
+                            <p class="tc-cierre-ecuacion">Diferencia = valores rendidos − efectivo habilitado − resultado de caja.</p>
+                            @if ($ajustes->isNotEmpty())
+                                <p class="text-muted mb-0">Cierre vigente: originales más ajustes. Ver abre los comprobantes originales.</p>
                             @endif
-                            <tr>
-                                <td><strong>Diferencia · {{ $signo }}</strong></td>
-                                <td class="text-right"><strong>{{ $pesos($diferencia) }}</strong></td>
-                            </tr>
-                        </tbody>
-                    </table>
+                        </div>
+                    </div>
+
+                    <aside class="tc-cierre-panel" id="tc-cierre-panel">
+                        <h4 class="tc-cierre-panel-titulo" id="tc-cierre-panel-titulo">Comprobantes</h4>
+                        <p class="tc-cierre-panel-vacio" id="tc-cierre-panel-vacio">Elegí Ver para listar los movimientos de ese importe. Desde ahí se abre el comprobante y, si la caja sigue abierta, se puede revertir o modificar.</p>
+                        <div class="tc-cierre-panel-cuerpo" id="tc-cierre-panel-diferencia" hidden>
+                            <p class="tc-cierre-ecuacion">{{ $pesos($calculo['rendido']) }} − {{ $pesos($calculo['habilitado']) }} − {{ $pesos($calculo['resultado']) }} = {{ $pesos($calculo['diferencia']) }}</p>
+                            <p>Un positivo es excedente. Un negativo es faltante. Cero es sin diferencia.</p>
+                        </div>
+                        @php
+                            $urlComprobante = function ($id) {
+                                return route('editar_tesoreria_crown_movimiento', [
+                                    'id' => $id,
+                                    'origen' => 'modal_consulta',
+                                    'vista' => 'consulta',
+                                ]);
+                            };
+                        @endphp
+                        @foreach (['habilitacion', 'valores', 'recargo', 'fichas', 'cashless', 'voucher', 'online', 'apuestas', 'arendir', 'hotel', 'ventaz', 'efectivo_habilitado', 'resultado', 'valores_rendidos'] as $clavePanel)
+                            @php $docsPanel = $clavePanel === 'resultado' ? $deClave('arendir') : $deClave($clavePanel); @endphp
+                            <div class="tc-cierre-panel-cuerpo" data-clave="{{ $clavePanel }}" hidden>
+                                @forelse ($docsPanel as $docPanel)
+                                    <article class="tc-cierre-doc">
+                                        <header>
+                                            <a class="text-primary" target="_blank" rel="noopener" href="{{ $urlComprobante($docPanel['id']) }}">{{ $docPanel['tipo'] }} {{ $docPanel['numero'] }}</a>
+                                            <span>{{ $pesos($docPanel['aportes'][$clavePanel === 'resultado' ? 'arendir' : $clavePanel] ?? 0) }}</span>
+                                        </header>
+                                        <p class="tc-cierre-doc-estado">{{ $docPanel['estado'] }}</p>
+                                        <ul>
+                                            @foreach ($docPanel['renglones'][$clavePanel === 'resultado' ? 'arendir' : $clavePanel] ?? [] as $renglon)
+                                                @if (abs((float) $renglon['importe']) > 0.001)
+                                                    <li>
+                                                        <span>{{ $renglon['etiqueta'] }}</span>
+                                                        <span>{{ $pesos($renglon['importe']) }}</span>
+                                                    </li>
+                                                @endif
+                                            @endforeach
+                                        </ul>
+                                        <div class="tc-cierre-doc-acciones">
+                                            <a class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener" href="{{ $urlComprobante($docPanel['id']) }}">Abrir</a>
+                                            @if ($docPanel['puede_modificar'] && can('crear-tesoreria-crown-movimiento', false))
+                                                <a class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener" href="{{ $urlComprobante($docPanel['id']) }}">Modificar</a>
+                                            @endif
+                                            @if ($docPanel['puede_volver'] && can('crear-tesoreria-crown-movimiento', false))
+                                                <form method="POST" target="_blank" action="{{ route('volver_borrador_tesoreria_crown_movimiento', ['id' => $docPanel['id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}" class="d-inline mb-0" onsubmit="return confirm('¿Volver este comprobante a borrador para modificarlo?');">
+                                                    @csrf
+                                                    <input type="hidden" name="origen" value="modal_consulta">
+                                                    <input type="hidden" name="vista" value="consulta">
+                                                    <button type="submit" class="btn btn-outline-primary btn-sm">Modificar</button>
+                                                </form>
+                                            @endif
+                                            @if ($docPanel['puede_revertir'] && can('editar-tesoreria-crown-movimiento', false))
+                                                <form method="POST" target="_blank" action="{{ route('revertir_tesoreria_crown_movimiento', ['id' => $docPanel['id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}" class="d-inline mb-0" onsubmit="return confirm('¿Revertir este comprobante? La reversa queda pendiente de las dos firmas.');">
+                                                    @csrf
+                                                    <input type="hidden" name="origen" value="modal_consulta">
+                                                    <input type="hidden" name="vista" value="consulta">
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm">Revertir</button>
+                                                </form>
+                                            @endif
+                                            @if ($docPanel['reversa_id'])
+                                                <a class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener" href="{{ $urlComprobante($docPanel['reversa_id']) }}">Reversa {{ $docPanel['reversa_numero'] }}</a>
+                                            @endif
+                                        </div>
+                                    </article>
+                                @empty
+                                    <p class="text-muted mb-0">Ningún comprobante conforme aporta a este importe.</p>
+                                @endforelse
+                            </div>
+                        @endforeach
+                    </aside>
                 </div>
-                <p class="text-muted">La cuenta es la de Anita. El efectivo es pesos, moneda extranjera por la cotización de la jornada, crédito menos el recargo, débito y QR. Las fichas van aparte. En venta, kiosco y cashless se suma lo rendido y se resta lo habilitado. En gastronomía y hotel se resta el X menos las notas de crédito y el fallo de mozo, y se suma la transferencia con la cuenta corriente. En empleados la diferencia queda en cero. Un número negativo es faltante.</p>
+                <p class="text-muted">El detalle sigue el listado de Anita. Abajo, el resumen: efectivo habilitado, resultado de caja, valores rendidos y la diferencia. Ver abre los comprobantes de ese importe.</p>
 
                 @if ($cierre)
                     <p class="mb-1">Tesorería: {{ $cierre->tesoreriaUsuario->nombre ?? '' }} @if ($cierre->tesoreria_at) · {{ $cierre->tesoreria_at->format('d/m/Y H:i') }} @endif</p>
@@ -178,7 +312,7 @@
                         <div class="form-group row">
                             <label for="clave_cajero" class="col-lg-4 control-label text-right pr-2">Cajero</label>
                             <div class="col-lg-8">
-                                <input type="password" name="clave_cajero" id="clave_cajero" class="form-control" placeholder="Clave del cajero" inputmode="numeric" autocomplete="off" required style="max-width:16rem;">
+                                <input type="text" name="clave_cajero" id="clave_cajero" class="form-control tc-pin-cajero" placeholder="Clave del cajero" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" required style="max-width:16rem;">
                             </div>
                         </div>
                         <button type="submit" class="btn btn-primary">Cerrar caja</button>
@@ -208,6 +342,81 @@
                             </form>
                         </div>
                     </div>
+                @endif
+
+                @if ($ajustes->isNotEmpty())
+                    <h4 class="h6 mt-3">Ajustes</h4>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead style="background:#85C1E9;color:#17202A;">
+                                <tr>
+                                    <th>Número</th>
+                                    <th>Corrige</th>
+                                    <th class="text-right">Importe</th>
+                                    <th>Motivo</th>
+                                    <th>Audita</th>
+                                    <th>Tesorería</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($ajustes as $ajuste)
+                                    <tr>
+                                        <td>{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($ajuste->numero) }}</td>
+                                        <td>{{ $ajuste->concepto() }}</td>
+                                        <td class="text-right">{{ $pesos($ajuste->importe) }}</td>
+                                        <td>{{ $ajuste->motivo }}</td>
+                                        <td>{{ $ajuste->auditor->nombre ?? '' }}</td>
+                                        <td>{{ $ajuste->tesoreria->nombre ?? '' }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+
+                @if ($cierre && can(\App\Support\Caja\TesoreriaCrownCierreSupport::PERMISO_AJUSTAR, false))
+                    <form method="POST" action="{{ route('ajustar_tesoreria_crown_cierre', $asignacion->id) }}" class="border rounded p-3 mb-3 form-horizontal form--label-right" style="max-width:44rem;" data-enter-campos="1">
+                        @csrf
+                        <h4 class="h6">Ajuste de caja</h4>
+                        <p class="text-muted">Comprobante nuevo sobre este cierre. No reescribe la habilitación, la rendición ni los números originales, y no reabre la caja ni el día. Un importe positivo suma al concepto; uno negativo lo resta. Si la diferencia vigente supera la tolerancia, el caso vuelve a auditoría.</p>
+                        <div class="form-group row">
+                            <label for="ajuste_corrige" class="col-lg-4 control-label text-right pr-2">Corrige</label>
+                            <div class="col-lg-8">
+                                <select name="corrige" id="ajuste_corrige" class="form-control form-control-sm" required>
+                                    @foreach (\App\Models\Caja\TesoreriaCrownAjuste::CORRIGE as $codigoCorrige => $etiquetaCorrige)
+                                        <option value="{{ $codigoCorrige }}" @selected(old('corrige') === $codigoCorrige)>{{ $etiquetaCorrige }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label for="ajuste_importe" class="col-lg-4 control-label text-right pr-2">Importe</label>
+                            <div class="col-lg-8">
+                                <input type="number" name="importe" id="ajuste_importe" class="form-control form-control-sm" step="0.01" value="{{ old('importe') }}" required style="max-width:12rem;">
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label for="ajuste_motivo" class="col-lg-4 control-label text-right pr-2">Motivo</label>
+                            <div class="col-lg-8">
+                                <input type="text" name="motivo" id="ajuste_motivo" class="form-control form-control-sm" maxlength="500" value="{{ old('motivo') }}" required>
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label for="auditor_usuario" class="col-lg-4 control-label text-right pr-2">Audita</label>
+                            <div class="col-lg-8">
+                                <input type="text" name="auditor_usuario" id="auditor_usuario" class="form-control form-control-sm mb-2" placeholder="Usuario" value="{{ old('auditor_usuario') }}" autocomplete="username" required>
+                                <input type="password" name="auditor_password" class="form-control form-control-sm" placeholder="Clave" autocomplete="current-password" required>
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label for="tesoreria_usuario" class="col-lg-4 control-label text-right pr-2">Tesorería</label>
+                            <div class="col-lg-8">
+                                <input type="text" name="tesoreria_usuario" id="tesoreria_usuario" class="form-control form-control-sm mb-2" placeholder="Usuario" value="{{ old('tesoreria_usuario') }}" autocomplete="username" required>
+                                <input type="password" name="tesoreria_password" class="form-control form-control-sm" placeholder="Clave" autocomplete="current-password" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">Grabar ajuste</button>
+                    </form>
                 @endif
 
                 @if ($cierre && can(\App\Support\Caja\TesoreriaCrownCierreSupport::PERMISO_REABRIR, false))
@@ -268,4 +477,39 @@
         </div>
     </div>
 </div>
+@endsection
+
+@section('scripts')
+<script>
+(function () {
+    var panel = document.getElementById('tc-cierre-panel');
+    if (!panel) {
+        return;
+    }
+    var titulo = document.getElementById('tc-cierre-panel-titulo');
+    var vacio = document.getElementById('tc-cierre-panel-vacio');
+    var cuerpos = panel.querySelectorAll('.tc-cierre-panel-cuerpo');
+    document.querySelectorAll('.tc-cierre-ver').forEach(function (boton) {
+        boton.addEventListener('click', function () {
+            var clave = boton.getAttribute('data-clave');
+            document.querySelectorAll('.tc-cierre-ver.is-on').forEach(function (otro) {
+                otro.classList.remove('is-on');
+            });
+            boton.classList.add('is-on');
+            if (vacio) {
+                vacio.hidden = true;
+            }
+            cuerpos.forEach(function (cuerpo) {
+                cuerpo.hidden = cuerpo.getAttribute('data-clave') !== clave && cuerpo.id !== 'tc-cierre-panel-' + clave;
+            });
+            var fila = boton.closest('tr, .tc-cierre-resumen-fila');
+            var nombre = fila ? fila.querySelector('td, span') : null;
+            if (titulo && nombre) {
+                titulo.textContent = nombre.textContent.trim();
+            }
+            panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        });
+    });
+})();
+</script>
 @endsection

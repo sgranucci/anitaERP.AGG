@@ -64,6 +64,7 @@ class TesoreriaCrownListadoExport implements FromView, WithColumnFormatting, Wit
             'subtitulo' => $subtitulo,
             'columnas' => $this->armado['columnas'] ?? [],
             'filas' => $this->armado['filas'] ?? [],
+            'totales' => $this->armado['totales'] ?? null,
             'totalFilas' => count($this->armado['filas'] ?? []),
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'mostrarSubtitulo' => $subtitulo !== '',
@@ -157,17 +158,20 @@ class TesoreriaCrownListadoExport implements FromView, WithColumnFormatting, Wit
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
 
                 $cantidad = count($this->armado['filas'] ?? []);
-                if ($cantidad < 1) {
+                $tieneTotales = ! empty($this->armado['totales']) && is_array($this->armado['totales']);
+                if ($cantidad < 1 && ! $tieneTotales) {
                     return;
                 }
-                $filaFin = $this->filaPrimeraDatosExcel + $cantidad - 1;
+                $filaFin = $this->filaPrimeraDatosExcel + max(0, $cantidad - 1);
+                $filaTotales = $tieneTotales ? ($cantidad > 0 ? $filaFin + 1 : $this->filaPrimeraDatosExcel) : null;
+                $filaFormatoHasta = $filaTotales ?? $filaFin;
                 foreach ($this->armado['columnas'] ?? [] as $i => $columna) {
                     $letra = $this->letra($i);
-                    $rango = $letra.$this->filaPrimeraDatosExcel.':'.$letra.$filaFin;
+                    $rango = $letra.$this->filaPrimeraDatosExcel.':'.$letra.$filaFormatoHasta;
                     if (! empty($columna['numero'])) {
                         $sheet->getStyle($rango)->getNumberFormat()->setFormatCode('#,##0.00');
                         $sheet->getStyle($rango)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-                        for ($fila = $this->filaPrimeraDatosExcel; $fila <= $filaFin; $fila++) {
+                        for ($fila = $this->filaPrimeraDatosExcel; $fila <= $filaFormatoHasta; $fila++) {
                             $valor = $sheet->getCell($letra.$fila)->getValue();
                             if ($valor === null || $valor === '') {
                                 continue;
@@ -176,7 +180,7 @@ class TesoreriaCrownListadoExport implements FromView, WithColumnFormatting, Wit
                         }
                     } elseif (! empty($columna['texto'])) {
                         $sheet->getStyle($rango)->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
-                        for ($fila = $this->filaPrimeraDatosExcel; $fila <= $filaFin; $fila++) {
+                        for ($fila = $this->filaPrimeraDatosExcel; $fila <= $filaFormatoHasta; $fila++) {
                             $valor = $sheet->getCell($letra.$fila)->getValue();
                             $sheet->setCellValueExplicit($letra.$fila, (string) $valor, DataType::TYPE_STRING);
                         }
@@ -184,6 +188,11 @@ class TesoreriaCrownListadoExport implements FromView, WithColumnFormatting, Wit
                     if (! empty($columna['wrap'])) {
                         $sheet->getStyle($rango)->getAlignment()->setWrapText(true);
                     }
+                }
+                if ($filaTotales !== null) {
+                    $sheet->getStyle('A'.$filaTotales.':'.$ultima.$filaTotales)->applyFromArray([
+                        'font' => ['bold' => true, 'name' => 'Arial', 'size' => 11, 'color' => ['rgb' => '17202A']],
+                    ]);
                 }
             },
         ];

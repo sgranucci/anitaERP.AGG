@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Caja;
 
 use App\Http\Controllers\Controller;
+use App\Models\Caja\TesoreriaCrownAjuste;
 use App\Models\Caja\TesoreriaCrownAsignacion;
 use App\Models\Caja\TesoreriaCrownCierre;
 use App\Models\Caja\TesoreriaCrownCierreEvento;
@@ -25,10 +26,15 @@ class TesoreriaCrownCierreController extends Controller
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('listar-tesoreria-crown-jornada');
         $fila = $this->asignacion($asignacion);
+        $ajustes = $fila->cierre
+            ? $fila->cierre->ajustes()->with(['auditor', 'tesoreria'])->get()
+            : collect();
 
         return view('caja.tesoreria_crown.jornada.cierre', [
             'asignacion' => $fila,
             'cierre' => $fila->cierre,
+            'ajustes' => $ajustes,
+            'vigente' => $fila->cierre ? TesoreriaCrownCierreSupport::vigente($fila->cierre, $ajustes) : null,
             'anteriores' => $fila->cierres()
                 ->whereNotNull('reabierta_at')
                 ->with(['reabiertaUsuario', 'eventos.usuario'])
@@ -223,6 +229,80 @@ class TesoreriaCrownCierreController extends Controller
             : 'Caja reabierta. El cierre anterior queda en la historia.';
 
         return redirect()->route('ver_tesoreria_crown_cierre', $fila->id)->with('mensaje', $mensaje);
+    }
+
+    public function ajustar(Request $request, int $asignacion)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can(TesoreriaCrownCierreSupport::PERMISO_AJUSTAR);
+        $fila = $this->asignacion($asignacion);
+        $cierre = $fila->cierre;
+        if ($cierre === null) {
+            return back()->with('mensaje-error', 'El ajuste se carga sobre una caja cerrada.');
+        }
+        $datos = $request->validate([
+            'corrige' => ['required', Rule::in(array_keys(TesoreriaCrownAjuste::CORRIGE))],
+            'importe' => ['required', 'numeric', 'not_in:0'],
+            'motivo' => ['required', 'string', 'max:500'],
+            'auditor_usuario' => ['required', 'string'],
+            'auditor_password' => ['required', 'string'],
+            'tesoreria_usuario' => ['required', 'string'],
+            'tesoreria_password' => ['required', 'string'],
+        ]);
+        $auditor = TesoreriaCrownFirmaSupport::usuarioPorClave($datos['auditor_usuario'], $datos['auditor_password']);
+        if ($auditor === null) {
+            return back()->with('mensaje-error', 'Usuario o clave de quien audita incorrectos.')->withInput();
+        }
+        if (! TesoreriaCrownFirmaSupport::puedeAjustarCaja($auditor)) {
+            return back()->with('mensaje-error', 'Ese usuario no tiene permiso para ajustar el cierre.')->withInput();
+        }
+        $tesoreria = TesoreriaCrownFirmaSupport::usuarioPorClave($datos['tesoreria_usuario'], $datos['tesoreria_password']);
+        if ($tesoreria === null) {
+            return back()->with('mensaje-error', 'Usuario o clave de tesorería incorrectos.')->withInput();
+        }
+        if ((int) $auditor->id === (int) $tesoreria->id) {
+            return back()->with('mensaje-error', 'Quien audita y quien confirma en tesorería tienen que ser dos personas.')->withInput();
+        }
+
+        $importe = round((float) $datos['importe'], 2);
+        $motivo = trim($datos['motivo']);
+        DB::transaction(function () use ($fila, $cierre, $datos, $auditor, $tesoreria, $importe, $motivo) {
+            $ajuste = TesoreriaCrownAjuste::query()->create([
+                'sala_id' => $fila->sala_id,
+                'empresa_id' => $fila->jornada->empresa_id,
+                'jornada_id' => $fila->jornada_id,
+                'asignacion_id' => $fila->id,
+                'cierre_id' => $cierre->id,
+                'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $fila->sala_id, 'J'),
+                'corrige' => $datos['corrige'],
+                'importe' => $importe,
+                'motivo' => $motivo,
+                'auditor_usuario_id' => $auditor->id,
+                'auditor_at' => now(),
+                'tesoreria_usuario_id' => $tesoreria->id,
+                'tesoreria_at' => now(),
+            ]);
+            $detalle = TesoreriaCrownNumeradorSupport::visible($ajuste->numero)
+                .' '.$ajuste->concepto().' '.number_format($importe, 2, ',', '.').'. '.$motivo;
+            $this->evento($cierre, TesoreriaCrownCierreSupport::AJUSTE, $auditor, $detalle);
+
+            $vigente = TesoreriaCrownCierreSupport::vigente(
+                $cierre,
+                $cierre->ajustes()->get()
+            );
+            if ($vigente['supera'] && $cierre->estado !== TesoreriaCrownCierreSupport::AUDITORIA) {
+                $cierre->estado = TesoreriaCrownCierreSupport::AUDITORIA;
+                $cierre->save();
+                $this->evento(
+                    $cierre,
+                    TesoreriaCrownCierreSupport::AUDITORIA,
+                    $tesoreria,
+                    'La diferencia vigente supera la tolerancia.'
+                );
+            }
+        });
+
+        return redirect()->route('ver_tesoreria_crown_cierre', $fila->id)->with('mensaje', 'Ajuste de caja grabado. El cierre original no se modificó.');
     }
 
     /**

@@ -156,6 +156,24 @@ Configuración general del sistema
                                         </div>
                                     </div>
                                 </div>
+                            @elseif ($parametro['tipo'] === 'empresa')
+                                @include('includes.form-empresa-asignada', [
+                                    'label' => $parametro['etiqueta'],
+                                    'col_label' => 'col-lg-4 text-right pr-2',
+                                    'col_input' => 'col-lg-4',
+                                    'required' => true,
+                                    'permite_vacio' => false,
+                                    'mostrar_opcion_vacia' => false,
+                                    'id' => 'param_'.$parametro['clave'],
+                                    'name' => 'parametros['.$parametro['clave'].']',
+                                    'empresa_id' => (int) old('parametros.'.$parametro['clave'], $parametro['valor']),
+                                    'empresa_query' => $empresasIibb,
+                                ])
+                                <div class="form-group row">
+                                    <div class="col-lg-7 offset-lg-4">
+                                        <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
+                                    </div>
+                                </div>
                             @elseif ($parametro['tipo'] === 'boolean')
                                 @php
                                     $idCampo = 'param_'.$parametro['clave'];

@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MODEL="${OLLAMA_FACTURA_MODEL:-factura-proveedor-anita}"
-BASE="${OLLAMA_FACTURA_BASE:-qwen2.5:3b-instruct}"
+BASE="${OLLAMA_FACTURA_BASE:-qwen2.5:7b-instruct}"
 MODEFILE="$ROOT/deploy/infra/ollama/Modelfile.factura-proveedor-anita"
 
 if ! command -v ollama >/dev/null 2>&1; then

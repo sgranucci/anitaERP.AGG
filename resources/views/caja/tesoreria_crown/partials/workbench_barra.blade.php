@@ -1,8 +1,9 @@
 @php
     $qbeAbierto = (bool) ($qbeAbierto ?? false);
-    $limpiarParams = ($sala ?? null)
+    $limpiarParams = $limpiarParams ?? (($sala ?? null)
         ? ['sala_id' => $sala->id, 'vista_estandar' => 1]
-        : ['vista_estandar' => 1];
+        : ['vista_estandar' => 1]);
+    $baseUrl = $baseUrl ?? route($rutaListado);
 @endphp
 @if (! ($workbenchListo ?? false))
     <div class="alert alert-warning lw-aviso-migracion mb-0 rounded-0">
@@ -13,7 +14,7 @@
 <div class="lw-toolbar">
     <div class="lw-toolbar-left">
         <select id="lw-vista-select" class="form-control form-control-sm lw-vista-select"
-                data-base-url="{{ route($rutaListado) }}"
+                data-base-url="{{ $baseUrl }}"
                 title="Vistas guardadas"
                 @if (! ($workbenchListo ?? false)) disabled @endif>
             <option value="">Vista estándar</option>

@@ -81,6 +81,11 @@ class TesoreriaCrownCierre extends Model implements Auditable
         return $this->hasMany(TesoreriaCrownCierreEvento::class, 'cierre_id');
     }
 
+    public function ajustes(): HasMany
+    {
+        return $this->hasMany(TesoreriaCrownAjuste::class, 'cierre_id')->orderBy('numero');
+    }
+
     public function estadoTexto(): string
     {
         return TesoreriaCrownCierreSupport::estado((string) $this->estado);

@@ -100,6 +100,7 @@ class ValidacionConfiguracionGeneral extends FormRequest
                         }
                     },
                 ],
+                'empresa' => 'required|integer|min:1|exists:empresa,id',
                 'boolean' => 'required|in:0,1',
                 'email' => 'nullable|email|max:255',
                 'select' => 'required|in:'.implode(',', array_keys($def['opciones'] ?? [])),

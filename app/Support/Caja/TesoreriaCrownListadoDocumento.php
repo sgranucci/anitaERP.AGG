@@ -17,6 +17,7 @@ class TesoreriaCrownListadoDocumento
      *     titulo_corto: string,
      *     columnas: list<array{label: string, ancho: int, numero?: bool, texto?: bool, wrap?: bool}>,
      *     filas: list<list<mixed>>,
+     *     totales?: list<mixed>,
      *     coleccion: mixed
      * }  $armado
      */
@@ -42,6 +43,7 @@ class TesoreriaCrownListadoDocumento
             'subtitulo' => $armado['subtitulo'],
             'columnas' => $armado['columnas'],
             'filas' => $armado['filas'],
+            'totales' => $armado['totales'] ?? null,
             'logosCabecera' => $logos,
             'totalFilas' => count($armado['filas']),
         ])->render();

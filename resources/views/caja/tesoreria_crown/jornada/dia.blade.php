@@ -6,11 +6,19 @@
 
 @section('styles')
     <link rel="stylesheet" href="{{ asset('assets/css/tesoreria-crown-jornada.css') }}?v={{ filemtime(public_path('assets/css/tesoreria-crown-jornada.css')) }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
 @endsection
 
 @section('scripts')
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/jornada.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/jornada.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/cajero.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/cajero.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-qbe-grupos.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-orden.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/listado/workbench-agrupar.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-agrupar.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-disenador-preview.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-vista-guardar.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/workbench.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/workbench.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/listado.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/listado.js')) }}"></script>
 @endsection
 
 @section('contenido')
@@ -18,6 +26,24 @@
     $abrirCaja = request()->boolean('abrir') || $errors->any() || old('deposito_id') || old('cajero_crown_id');
 @endphp
 @include('includes.mensaje')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'tesoreria-crown-overlay',
+    'tituloId' => 'tesoreria-crown-overlay-titulo',
+    'subtituloId' => 'tesoreria-crown-overlay-subtitulo',
+    'titulo' => 'Exportando…',
+    'subtitulo' => 'Generando el archivo.',
+])
+@if ($jornada)
+    @include('caja.tesoreria_crown.jornada.partials.desk_nav', [
+        'navActivo' => $panel,
+        'navAsignaciones' => $asignacionesTodas->count(),
+        'navMesas' => count($tableroMesas['mesas'] ?? []),
+        'navBorradoresMesa' => collect($tableroMesas['movimientos'] ?? [])->where('estado', 'B')->count(),
+        'navBoveda' => ($boveda['movimientos'] ?? collect())->count(),
+        'puedeSlots' => $puedeSlots ?? false,
+        'navSlots' => $navSlots ?? 0,
+    ])
+@endif
 <div class="row">
     <div class="col-lg-12">
         <div class="card card-info">
@@ -34,7 +60,29 @@
                     </a>
                 </div>
             </div>
-            @include('caja.tesoreria_crown.partials.sala_chips', ['ruta' => 'tesoreria_crown_jornada'])
+            @php
+                $exportDeskRuta = null;
+                $exportDeskParams = [];
+                if ($jornada) {
+                    $exportDeskRuta = match ($panel ?? '') {
+                        'mesas' => 'listar_mesas_tesoreria_crown_jornada',
+                        'slots' => 'listar_slots_tesoreria_crown_jornada',
+                        'poder' => 'listar_poder_publico_tesoreria_crown_jornada',
+                        'anexo' => 'listar_anexo1_tesoreria_crown_jornada',
+                        default => 'listar_cajeros_tesoreria_crown_jornada',
+                    };
+                    $exportDeskParams = ($panel ?? '') === 'cajeros'
+                        ? array_merge($filtrosQuery ?? ['id' => $jornada->id, 'panel' => 'cajeros'], [
+                            'columnas' => implode(',', $columnasVisibles ?? []),
+                        ])
+                        : ['id' => $jornada->id];
+                }
+            @endphp
+            @include('caja.tesoreria_crown.partials.sala_chips', [
+                'ruta' => 'tesoreria_crown_jornada',
+                'exportRuta' => $exportDeskRuta,
+                'exportQueryparams' => $exportDeskParams,
+            ])
             <div class="card-body">
                 <p class="text-muted mb-3">
                     La jornada es el día de trabajo de la sala. Con la jornada abierta se asigna un cajero a una caja, en un turno, con la tarea que va a hacer.
@@ -124,16 +172,11 @@
 
                 @if ($jornada)
                     @php
-                        $pendientesFirma = $asignaciones->flatMap(function ($fila) {
+                        $pendientesFirma = $asignacionesTodas->flatMap(function ($fila) {
                             return $fila->comprobantes
                                 ->filter(fn ($doc) => $doc->estado === 'P')
                                 ->each(fn ($doc) => $doc->setRelation('asignacion', $fila));
                         });
-                        $borradoresMesa = collect($tableroMesas['movimientos'] ?? [])->where('estado', 'B')->count();
-                        $movimientosBoveda = ($boveda['movimientos'] ?? collect())->count();
-                        $urlEscritorio = function (string $panelElegido) use ($jornada): string {
-                            return route('ver_tesoreria_crown_jornada', $jornada->id).'?'.http_build_query(['panel' => $panelElegido]);
-                        };
                     @endphp
                     @if ($pendientesFirma->isNotEmpty())
                         <div class="tc-aviso">
@@ -147,133 +190,93 @@
                             @endforeach
                         </div>
                     @endif
-                    <nav class="tc-desk-nav" aria-label="Escritorio de la jornada">
-                        <a href="{{ $urlEscritorio('cajeros') }}" class="{{ $panel === 'cajeros' ? 'is-on' : '' }}">
-                            Cajeros <span class="tc-count">{{ $asignaciones->count() }}</span>
-                        </a>
-                        @if ($puedeMesas)
-                            <a href="{{ $urlEscritorio('mesas') }}#piso" class="{{ $panel === 'mesas' ? 'is-on' : '' }}">
-                                Mesas
-                                <span class="tc-count {{ $borradoresMesa > 0 ? 'is-alerta' : '' }}">{{ count($tableroMesas['mesas'] ?? []) }}</span>
-                            </a>
-                        @endif
-                        @if ($puedeBoveda)
-                            <a href="{{ $urlEscritorio('boveda') }}" class="{{ $panel === 'boveda' ? 'is-on' : '' }}">
-                                Bóveda <span class="tc-count">{{ $movimientosBoveda }}</span>
-                            </a>
-                        @endif
-                    </nav>
-
                     @if ($panel === 'mesas')
                         @include('caja.tesoreria_crown.jornada.partials.mesa')
-                    @elseif ($panel === 'boveda')
-                        @include('caja.tesoreria_crown.jornada.partials.boveda')
+                    @elseif ($panel === 'slots')
+                        @include('caja.tesoreria_crown.jornada.partials.slots')
+                    @elseif ($panel === 'poder')
+                        @include('caja.tesoreria_crown.jornada.partials.poder_publico')
+                    @elseif ($panel === 'anexo')
+                        @include('caja.tesoreria_crown.jornada.partials.anexo1')
                     @else
+                    @php
+                        $muestraAcciones = $jornada->estaAbierta() || ($esAdministrador ?? false);
+                    @endphp
+                    <div class="lw-workbench mb-2" data-form="#form-filtros-tesoreria-crown-cajeros">
+                        <form method="get" action="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}" id="form-filtros-tesoreria-crown-cajeros" class="mb-0">
+                            <input type="hidden" name="id" value="{{ $jornada->id }}">
+                            <input type="hidden" name="panel" value="cajeros">
+                            <input type="hidden" name="vista_id" value="{{ $vistaActiva->id ?? '' }}">
+                            <input type="hidden" name="filtro_valor" id="filtro_valor" value="{{ $filtros['valor'] ?? '' }}">
+                            <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+                            <input type="hidden" name="columnas" id="lw_columnas_csv" value="{{ implode(',', $columnasVisibles ?? []) }}">
+                            @include('caja.tesoreria_crown.partials.workbench_barra', [
+                                'rutaListado' => 'ver_tesoreria_crown_jornada',
+                                'baseUrl' => route('ver_tesoreria_crown_jornada', $jornada->id),
+                                'limpiarParams' => ['id' => $jornada->id, 'panel' => 'cajeros', 'vista_estandar' => 1],
+                            ])
+                            @include('caja.tesoreria_crown.partials.workbench_qbe')
+                        </form>
+                    </div>
                     <div class="table-responsive">
-                        <table class="table table-sm table-bordered mb-0">
+                        <table class="table table-sm table-bordered mb-0" id="tabla-paginada">
                             <thead style="background:#85C1E9;color:#17202A;">
                                 <tr>
-                                    <th>Turno</th>
-                                    <th>Caja</th>
-                                    <th>Cajero</th>
-                                    <th>Tarea</th>
-                                    <th>Habilitación</th>
-                                    <th>Rendición</th>
-                                    <th>Cierre</th>
-                                    @if ($jornada->estaAbierta())
-                                        <th class="text-center" style="width:70px;">Acciones</th>
+                                    @foreach ($columnasVisibles as $keyColumna)
+                                        @include('caja.tesoreria_crown.partials.workbench_th', ['key' => $keyColumna, 'rutaListado' => 'ver_tesoreria_crown_jornada'])
+                                    @endforeach
+                                    @if ($muestraAcciones)
+                                        <th class="text-center" style="width:110px;">Acciones</th>
                                     @endif
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse ($asignaciones as $fila)
-                                    <tr>
-                                        <td>{{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::turno($fila->turno) }}</td>
-                                        <td>{{ $fila->deposito->codigo ?? '' }} — {{ $fila->deposito->nombre ?? '' }}</td>
-                                        <td>{{ $fila->cajero->codigo ?? '' }} — {{ $fila->cajero->nombre ?? '' }}</td>
-                                        <td>{{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::tarea($fila->tipo_tarea) }}</td>
-                                        @php
-                                            $idsRevertidos = $fila->comprobantes->pluck('revierte_id')->filter()->map(fn ($id) => (int) $id)->all();
-                                            $papeles = function (string $tipo) use ($fila) {
-                                                $docs = $fila->comprobantes->filter(fn ($doc) => $doc->tipo === $tipo)->sortBy('numero')->values();
-                                                $reversas = $docs->filter(fn ($doc) => $doc->revierte_id !== null)->groupBy(fn ($doc) => (int) $doc->revierte_id);
-                                                $orden = collect();
-                                                foreach ($docs->filter(fn ($doc) => $doc->revierte_id === null) as $doc) {
-                                                    $orden->push($doc);
-                                                    foreach ($reversas->get((int) $doc->id, collect()) as $reversa) {
-                                                        $orden->push($reversa);
-                                                    }
+                                    @php
+                                        $idsRevertidos = $fila->comprobantes->pluck('revierte_id')->filter()->map(fn ($id) => (int) $id)->all();
+                                        $papeles = function (string $tipo) use ($fila) {
+                                            $docs = $fila->comprobantes->filter(fn ($doc) => $doc->tipo === $tipo)->sortBy('numero')->values();
+                                            $reversas = $docs->filter(fn ($doc) => $doc->revierte_id !== null)->groupBy(fn ($doc) => (int) $doc->revierte_id);
+                                            $orden = collect();
+                                            foreach ($docs->filter(fn ($doc) => $doc->revierte_id === null) as $doc) {
+                                                $orden->push($doc);
+                                                foreach ($reversas->get((int) $doc->id, collect()) as $reversa) {
+                                                    $orden->push($reversa);
                                                 }
+                                            }
 
-                                                return $orden;
-                                            };
-                                            $habilitaciones = $papeles('H');
-                                            $rendiciones = $papeles('F');
-                                            $hayHabilitacionConforme = $fila->comprobantes->contains(function ($doc) use ($idsRevertidos) {
-                                                return $doc->tipo === 'H'
-                                                    && $doc->estado === 'C'
-                                                    && $doc->revierte_id === null
-                                                    && ! in_array((int) $doc->id, $idsRevertidos, true);
-                                            });
-                                            $cajaCerrada = $fila->cierre !== null;
-                                        @endphp
-                                        <td>
-                                            @foreach ($habilitaciones as $doc)
-                                                @include('caja.tesoreria_crown.jornada.partials.papel_grilla', ['doc' => $doc, 'idsRevertidos' => $idsRevertidos])
-                                            @endforeach
-                                            @if ($jornada->estaAbierta() && ! $cajaCerrada && can('crear-tesoreria-crown-movimiento', false))
-                                                <form method="POST" action="{{ route('crear_tesoreria_crown_movimiento') }}" class="d-inline">
-                                                    @csrf
-                                                    <input type="hidden" name="asignacion_id" value="{{ $fila->id }}">
-                                                    <input type="hidden" name="tipo" value="H">
-                                                    <button type="submit" class="btn btn-link btn-sm p-0">{{ $habilitaciones->isEmpty() ? 'Habilitar' : 'Otra habilitación' }}</button>
-                                                </form>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @foreach ($rendiciones as $doc)
-                                                @include('caja.tesoreria_crown.jornada.partials.papel_grilla', ['doc' => $doc, 'idsRevertidos' => $idsRevertidos])
-                                            @endforeach
-                                            @if ($jornada->estaAbierta() && ! $cajaCerrada && $hayHabilitacionConforme && can('crear-tesoreria-crown-movimiento', false))
-                                                <form method="POST" action="{{ route('crear_tesoreria_crown_movimiento') }}" class="d-inline">
-                                                    @csrf
-                                                    <input type="hidden" name="asignacion_id" value="{{ $fila->id }}">
-                                                    <input type="hidden" name="tipo" value="F">
-                                                    <button type="submit" class="btn btn-link btn-sm p-0">{{ $rendiciones->isEmpty() ? 'Rendir' : 'Otra rendición' }}</button>
-                                                </form>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @php
-                                                $cierresReabiertos = $fila->cierres->filter(fn ($cierreFila) => $cierreFila->reabierta_at !== null);
-                                            @endphp
-                                            @if ($cajaCerrada && $cierresReabiertos->isEmpty())
-                                                <a class="text-primary" href="{{ route('ver_tesoreria_crown_cierre', $fila->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($fila->cierre->numero) }} · {{ $fila->cierre->estadoTexto() }}</a>
-                                            @elseif ($cajaCerrada)
-                                                <div class="tc-papel">
-                                                    <a class="tc-papel-nro text-primary" href="{{ route('ver_tesoreria_crown_cierre', $fila->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($fila->cierre->numero) }}</a>
-                                                    <span class="tc-papel-marca is-vigente">Vigente</span>
-                                                    <span class="tc-papel-estado">{{ $fila->cierre->estadoTexto() }}</span>
-                                                </div>
-                                            @elseif ($jornada->estaAbierta())
-                                                <a class="text-primary" href="{{ route('ver_tesoreria_crown_cierre', $fila->id) }}">Cerrar caja</a>
-                                            @elseif ($cierresReabiertos->isEmpty())
-                                                —
-                                            @endif
-                                            @foreach ($cierresReabiertos as $cierreAnterior)
-                                                <div class="tc-papel is-reabierto">
-                                                    <a class="tc-papel-nro" href="{{ route('ver_tesoreria_crown_cierre', $fila->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($cierreAnterior->numero) }}</a>
-                                                    <span class="tc-papel-marca is-reabierto"><i class="fa fa-unlock-alt"></i> Reabierto</span>
-                                                </div>
-                                            @endforeach
-                                        </td>
-                                        @if ($jornada->estaAbierta())
+                                            return $orden;
+                                        };
+                                        $habilitaciones = $papeles('H');
+                                        $rendiciones = $papeles('F');
+                                        $hayHabilitacionConforme = $fila->comprobantes->contains(function ($doc) use ($idsRevertidos) {
+                                            return $doc->tipo === 'H'
+                                                && $doc->estado === 'C'
+                                                && $doc->revierte_id === null
+                                                && ! in_array((int) $doc->id, $idsRevertidos, true);
+                                        });
+                                        $cajaCerrada = $fila->cierre !== null;
+                                    @endphp
+                                    <tr>
+                                        @foreach ($columnasVisibles as $keyColumna)
+                                            <td>
+                                                @include('caja.tesoreria_crown.jornada.partials.cajero_celda', ['key' => $keyColumna])
+                                            </td>
+                                        @endforeach
+                                        @if ($muestraAcciones)
                                             <td class="text-center">
-                                                @if (! $cajaCerrada && $fila->comprobantes->isEmpty() && can('editar-tesoreria-crown-jornada', false))
+                                                @if ($jornada->estaAbierta() && ! $cajaCerrada && $fila->comprobantes->isEmpty() && $fila->cierres->isEmpty() && can('editar-tesoreria-crown-jornada', false))
                                                     <form action="{{ route('quitar_tesoreria_crown_asignacion', $fila->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Quitar esta asignación?');">
                                                         @csrf
                                                         @method('DELETE')
                                                         <button type="submit" class="btn-accion-tabla" title="Quitar"><i class="fa fa-times-circle text-danger"></i></button>
+                                                    </form>
+                                                @endif
+                                                @if (($esAdministrador ?? false) && ($fila->comprobantes->isNotEmpty() || $fila->cierres->isNotEmpty()))
+                                                    <form action="{{ route('vaciar_tesoreria_crown_asignacion', $fila->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Borrar todo de esta caja? Se eliminan habilitaciones, rendiciones, reversas y cierres. El cajero sigue asignado.');">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit" class="btn btn-outline-danger btn-sm">Borrar todo</button>
                                                     </form>
                                                 @endif
                                             </td>
@@ -281,12 +284,19 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="{{ $jornada->estaAbierta() ? 8 : 7 }}" class="text-center text-muted py-3">No hay cajeros asignados.</td>
+                                        <td colspan="{{ count($columnasVisibles) + ($muestraAcciones ? 1 : 0) }}" class="text-center text-muted py-3">{{ $tieneCriterios ? 'No hay cajeros para esta búsqueda.' : 'No hay cajeros asignados.' }}</td>
                                     </tr>
                                 @endforelse
                             </tbody>
                         </table>
                     </div>
+                    @include('caja.tesoreria_crown.partials.workbench_modales', [
+                        'rutaGuardarColumnas' => 'guardar_columnas_tesoreria_crown_cajero',
+                        'rutaGuardarVista' => 'guardar_vista_tesoreria_crown_cajero',
+                        'rutaEliminarVista' => 'eliminar_vista_tesoreria_crown_cajero',
+                        'rutaPreview' => 'preview_tesoreria_crown_cajero',
+                        'rutaGuardarEtiquetas' => 'guardar_etiquetas_tesoreria_crown_cajero',
+                    ])
                     @endif
                 @endif
             </div>

@@ -11,6 +11,7 @@ use App\Models\Caja\TesoreriaCrownValor;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Models\Caja\TesoreriaCrownCierreFiscal;
 use App\Support\Caja\TesoreriaCrownCierreFiscalReader;
+use App\Support\Caja\TesoreriaCrownCierreCalculo;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
 use App\Support\Seguridad\UsuarioOperativoSupport;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownMovimientoListadoColumnas;
 use App\Support\Caja\TesoreriaCrownNumeradorSupport;
+use App\Support\Caja\TesoreriaCrownPxsolSupport;
 use App\Support\Caja\TesoreriaCrownRendicionCampos;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Support\Caja\TesoreriaCrownMovimientoListadoFiltros;
@@ -254,7 +256,25 @@ class TesoreriaCrownComprobanteController extends Controller
                 && $comprobante->jornada->estaAbierta()
                 && $comprobante->asignacion->cierre === null,
             'cierresFiscales' => $this->cierresFiscalesDe($comprobante),
+            'pxsolCodigos' => TesoreriaCrownPxsolSupport::codigos($comprobante),
         ]);
+    }
+
+    public function traerPxsol(int $id)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('crear-tesoreria-crown-movimiento');
+        $comprobante = $this->comprobanteEnAlcance($id);
+        if ($error = $this->errorBorradorAbierto($comprobante)) {
+            return response()->json(['ok' => false, 'mensaje' => $error], 422);
+        }
+        try {
+            $lectura = TesoreriaCrownPxsolSupport::leer($comprobante);
+        } catch (\RuntimeException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true] + $lectura);
     }
 
     public function guardar(Request $request, int $id)
@@ -287,6 +307,9 @@ class TesoreriaCrownComprobanteController extends Controller
         if ($camposMedio !== [] && TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) {
             $reglas['cierre_fiscal'] = ['array'];
             $reglas['cierre_fiscal.*'] = ['string', 'max:40'];
+            $reglas['pxsol_aplicado'] = ['nullable', 'in:1'];
+            $reglas['pxsol_iva_facturas'] = ['required_if:pxsol_aplicado,1', 'nullable', 'numeric'];
+            $reglas['pxsol_iva_nc'] = ['required_if:pxsol_aplicado,1', 'nullable', 'numeric'];
         }
         $datos = $request->validate($reglas);
         $cierresElegidos = [];
@@ -335,6 +358,16 @@ class TesoreriaCrownComprobanteController extends Controller
                     } else {
                         $comprobante->{$clave} = round((float) $crudo, 2);
                     }
+                }
+                if (! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) {
+                    $comprobante->recargo_fin = TesoreriaCrownCierreCalculo::recargoFinanciacion(
+                        (float) $comprobante->tarjeta_credito,
+                        $comprobante->jornada->fecha->format('Y-m-d'),
+                    );
+                }
+                if (($datos['pxsol_aplicado'] ?? '') === '1') {
+                    $comprobante->iva_facturas = round((float) $datos['pxsol_iva_facturas'], 2);
+                    $comprobante->iva_nc = round((float) $datos['pxsol_iva_nc'], 2);
                 }
                 $comprobante->save();
             }
@@ -566,6 +599,7 @@ class TesoreriaCrownComprobanteController extends Controller
                     $nuevo->{$clave} = $comprobante->{$clave};
                 }
             }
+            $nuevo->pago_apuesta = round((float) $comprobante->pago_apuesta * -1, 2);
             $nuevo->save();
             foreach ($comprobante->lineas as $linea) {
                 TesoreriaCrownComprobanteLinea::query()->create([

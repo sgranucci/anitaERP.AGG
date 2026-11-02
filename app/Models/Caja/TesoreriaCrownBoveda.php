@@ -8,6 +8,7 @@ use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class TesoreriaCrownBoveda extends Model implements Auditable
@@ -31,7 +32,12 @@ class TesoreriaCrownBoveda extends Model implements Auditable
         'numero',
         'estado',
         'comentario',
+        'motivo',
+        'hora',
+        'legajo',
+        'cliente_id',
         'comprobante_id',
+        'revierte_id',
         'usuario_id',
         'confirmado_at',
     ];
@@ -69,6 +75,24 @@ class TesoreriaCrownBoveda extends Model implements Auditable
     public function comprobante(): BelongsTo
     {
         return $this->belongsTo(TesoreriaCrownComprobante::class, 'comprobante_id');
+    }
+
+    public function revierte(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'revierte_id');
+    }
+
+    public function reversa(): HasOne
+    {
+        return $this->hasOne(self::class, 'revierte_id');
+    }
+
+    public function puedeRevertir(): bool
+    {
+        return $this->estado === self::CONFIRMADO
+            && $this->revierte_id === null
+            && $this->comprobante_id === null
+            && $this->reversa === null;
     }
 
     public function usuario(): BelongsTo

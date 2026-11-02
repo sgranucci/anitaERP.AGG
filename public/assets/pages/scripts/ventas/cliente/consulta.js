@@ -257,6 +257,9 @@ function aceptarCodigoClienteDesdeInput($input) {
         if ($('#acc-workbench').length) {
             $('#cliente_id').trigger('change.cpClienteCargado');
         }
+        if ($input.prop('required') && $input.get(0) && typeof $input.get(0).reportValidity === 'function') {
+            $input.get(0).reportValidity();
+        }
         return;
     }
     leeUnCliente(0, codigo, true);

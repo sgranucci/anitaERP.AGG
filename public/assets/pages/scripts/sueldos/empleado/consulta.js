@@ -5,6 +5,8 @@
     var $campoActivo = $();
     var filasActuales = [];
     var abriendoModal = false;
+    var busquedaLista = null;
+    var busquedaSeq = 0;
 
     function modalAbierto() {
         var $modal = $('#consultaempleado_sueldosModal');
@@ -134,6 +136,9 @@
         }).done(function (respuesta) {
             if (respuesta && respuesta.ok) {
                 aplicar($campo, respuesta);
+                if (modalAbierto()) {
+                    cerrarModal();
+                }
                 if (avanzarAlFinal) {
                     avanzar($campo);
                 }
@@ -178,18 +183,115 @@
         $('#datosempleado_sueldos').html(html);
     }
 
-    function buscar(texto) {
+    function elegirPrimeraFila() {
+        var boton = document.querySelector('#datosempleado_sueldos .elegir-empleado-sueldos');
+        if (!boton) {
+            return false;
+        }
+        boton.click();
+        return true;
+    }
+
+    function buscar(texto, elegirAlVolver) {
         if (!$campoActivo.length) {
             return;
         }
+        var termino = texto || '';
+        var seq = ++busquedaSeq;
         $.getJSON(endpoint('buscar'), {
-            consulta: texto || '',
+            consulta: termino,
             empresa_id: empresaId($campoActivo)
         }).done(function (respuesta) {
+            if (seq !== busquedaSeq) {
+                return;
+            }
+            busquedaLista = termino;
             renderFilas(respuesta && respuesta.data ? respuesta.data : []);
+            if (elegirAlVolver) {
+                elegirPrimeraFila();
+            }
         }).fail(function () {
+            if (seq !== busquedaSeq) {
+                return;
+            }
+            busquedaLista = termino;
             renderFilas([]);
         });
+    }
+
+    function esEnter(evento) {
+        return evento.key === 'Enter' || evento.code === 'Enter' || evento.keyCode === 13 || evento.which === 13;
+    }
+
+    function modalEstaAbierto(modal) {
+        if (!modal) {
+            return false;
+        }
+        return modal.classList.contains('show')
+            || modal.classList.contains('in')
+            || modal.getAttribute('aria-hidden') === 'false';
+    }
+
+    function validarCodigo(termino) {
+        var $input = $campoActivo.find('.codigoempleado_sueldos');
+        if (!$input.length) {
+            return;
+        }
+        $input.val(termino);
+        $input.removeData('empleadoLegajoInvalido');
+        resolver($input, { avanzarFoco: true, avisar: true });
+    }
+
+    function enterEnCodigo(evento) {
+        if (!esEnter(evento)) {
+            return;
+        }
+        var target = evento.target;
+        if (!target || !target.classList || !target.classList.contains('codigoempleado_sueldos')) {
+            return;
+        }
+        if (target.disabled || target.readOnly) {
+            return;
+        }
+        var modal = document.getElementById('consultaempleado_sueldosModal');
+        if (modalEstaAbierto(modal)) {
+            return;
+        }
+        evento.preventDefault();
+        evento.stopImmediatePropagation();
+        resolver($(target), { avanzarFoco: true, avisar: true });
+    }
+
+    function enterEnBuscador(evento) {
+        if (!esEnter(evento)) {
+            return;
+        }
+        var buscador = document.getElementById('consultaempleado_sueldos');
+        if (!buscador) {
+            return;
+        }
+        var target = evento.target;
+        var esBuscador = target === buscador;
+        var modal = document.getElementById('consultaempleado_sueldosModal');
+        if (!esBuscador) {
+            if (!modalEstaAbierto(modal)) {
+                return;
+            }
+            if (target && target.closest && target.closest('#consultaempleado_sueldosModal')) {
+                return;
+            }
+        }
+        evento.preventDefault();
+        evento.stopImmediatePropagation();
+        var termino = String(buscador.value || '').trim();
+        if (/^\d+$/.test(termino)) {
+            validarCodigo(termino);
+            return;
+        }
+        if (termino === busquedaLista && elegirPrimeraFila()) {
+            return;
+        }
+        buscar(termino, true);
     }
 
     function abrir($campo) {
@@ -206,6 +308,7 @@
         }
         $campoActivo = $campo;
         abriendoModal = true;
+        busquedaLista = null;
         $('#consultaempleado_sueldos').val('');
         buscar('');
         $('#consultaempleado_sueldosModal').modal('show');
@@ -239,14 +342,6 @@
                 resolver($(this), { avanzarFoco: false, avisar: false });
             }
         })
-        .on('keydown', '#consultaempleado_sueldos', function (e) {
-            if (e.key !== 'Enter' && e.keyCode !== 13) {
-                return;
-            }
-            e.preventDefault();
-            e.stopPropagation();
-            $('#datosempleado_sueldos .elegir-empleado-sueldos').first().trigger('click');
-        })
         .on('keyup', '#consultaempleado_sueldos', function (e) {
             if (e.key === 'Enter' || e.keyCode === 13) {
                 return;
@@ -268,10 +363,21 @@
             });
         });
 
+    if (!window.__empleadoSueldosEnterModal) {
+        document.addEventListener('keydown', enterEnCodigo, true);
+        document.addEventListener('keydown', enterEnBuscador, true);
+        window.__empleadoSueldosEnterModal = true;
+    }
+
     $('#consultaempleado_sueldosModal')
         .on('shown.bs.modal', function () {
             abriendoModal = false;
-            $('#consultaempleado_sueldos').trigger('focus');
+            var buscador = document.getElementById('consultaempleado_sueldos');
+            if (buscador) {
+                window.setTimeout(function () {
+                    buscador.focus();
+                }, 0);
+            }
         })
         .on('hidden.bs.modal', function () {
             abriendoModal = false;

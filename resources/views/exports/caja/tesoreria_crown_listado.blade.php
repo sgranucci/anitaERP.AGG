@@ -34,12 +34,23 @@
         <tr>
             @foreach ($fila as $i => $celda)
                 @if (!empty($columnas[$i]['numero']))
-                    <td>{{ number_format((float) $celda, 2, '.', '') }}</td>
+                    <td>{{ $celda === null || $celda === '' ? '' : number_format((float) $celda, 2, '.', '') }}</td>
                 @else
                     <td>{{ $celda }}</td>
                 @endif
             @endforeach
         </tr>
     @endforeach
+    @if (!empty($totales) && is_array($totales))
+        <tr>
+            @foreach ($totales as $i => $celda)
+                @if (!empty($columnas[$i]['numero']))
+                    <td>{{ $celda === null || $celda === '' ? '' : number_format((float) $celda, 2, '.', '') }}</td>
+                @else
+                    <td><strong>{{ $celda }}</strong></td>
+                @endif
+            @endforeach
+        </tr>
+    @endif
 </tbody>
 </table>

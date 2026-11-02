@@ -62,8 +62,9 @@ class TesoreriaCrownComprobanteSupport
      * Habilitación: solo efectivo, como a-transfefe (carga_billetes; las fichas quedan fuera de la carga).
      * Moneda 1, 2 y 3 (pesos, dólares, euros) y, dentro de cada una, denominación de mayor a menor.
      * Rendición: el mismo efectivo, y las fichas en el orden de carga de fichamae.
+     * colapsado agrupa el bloque: el billetaje arranca abierto y las fichas cerradas.
      *
-     * @return list<array{codigo: string, titulo: string, filas: Collection<int, TesoreriaCrownValor>}>
+     * @return list<array{codigo: string, titulo: string, colapsado: bool, filas: Collection<int, TesoreriaCrownValor>}>
      */
     public static function gruposEdicion(int $salaId, string $tipo): array
     {
@@ -86,6 +87,7 @@ class TesoreriaCrownComprobanteSupport
                 $grupos[] = [
                     'codigo' => $codigo,
                     'titulo' => (string) ($filas->first()->tipoValor->nombre ?? $titulo),
+                    'colapsado' => false,
                     'filas' => $filas,
                 ];
             }
@@ -109,6 +111,7 @@ class TesoreriaCrownComprobanteSupport
                 $grupos[] = [
                     'codigo' => $codigo,
                     'titulo' => (string) ($filas->first()->tipoValor->nombre ?? $titulo),
+                    'colapsado' => true,
                     'filas' => $filas,
                 ];
             }

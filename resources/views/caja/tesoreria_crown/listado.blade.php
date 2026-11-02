@@ -42,6 +42,19 @@
                 @endforeach
             </tr>
         @endforeach
+        @if (!empty($totales) && is_array($totales))
+            <tr>
+                @foreach ($totales as $i => $celda)
+                    <td style="font-weight:bold;{{ !empty($columnas[$i]['numero']) ? 'text-align:right;' : '' }}">
+                        @if (!empty($columnas[$i]['numero']) && $celda !== '' && $celda !== null)
+                            {{ number_format((float) $celda, 2, ',', '.') }}
+                        @else
+                            {{ $celda }}
+                        @endif
+                    </td>
+                @endforeach
+            </tr>
+        @endif
     </tbody>
 </table>
 </body>

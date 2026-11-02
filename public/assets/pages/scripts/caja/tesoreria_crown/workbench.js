@@ -57,7 +57,11 @@
             var id = $(this).val();
             var base = $(this).data('base-url') || window.location.pathname;
             var sala = $form.find('input[name="sala_id"]').val();
+            var panel = $form.find('input[name="panel"]').val();
             var extra = sala ? '&sala_id=' + encodeURIComponent(sala) : '';
+            if (panel) {
+                extra += '&panel=' + encodeURIComponent(panel);
+            }
             if (!id) {
                 window.location = base + '?vista_estandar=1' + extra;
                 return;

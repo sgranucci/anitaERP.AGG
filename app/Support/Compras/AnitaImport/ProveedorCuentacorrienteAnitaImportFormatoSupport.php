@@ -46,6 +46,7 @@ final class ProveedorCuentacorrienteAnitaImportFormatoSupport
         'com_nombre_prov',
         'com_leyenda',
         'com_cond_iva_prov',
+        'com_es_fce',
     ];
 
     /** @var list<string> */

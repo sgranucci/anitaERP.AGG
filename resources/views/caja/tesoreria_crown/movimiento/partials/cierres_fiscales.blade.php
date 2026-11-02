@@ -6,12 +6,29 @@
 <div class="card card-outline card-info mt-3 mb-0">
     <div class="card-header py-2 d-flex justify-content-between align-items-center">
         <h3 class="card-title mb-0">Cierres de ventas</h3>
-        @if ($editable && $filasFiscales !== [])
-            <button type="button" class="btn btn-outline-primary btn-sm" id="btn-aplicar-cierre-fiscal">Aplicar a la rendición</button>
-        @endif
+        <span>
+            @if ($editable && ($pxsolCodigos ?? []) !== [])
+                <button type="button" class="btn btn-outline-primary btn-sm" id="btn-traer-pxsol">Traer de PXSol</button>
+            @endif
+            @if ($editable && $filasFiscales !== [])
+                <button type="button" class="btn btn-outline-primary btn-sm" id="btn-aplicar-cierre-fiscal">Aplicar a la rendición</button>
+            @endif
+        </span>
     </div>
     <div class="card-body pb-2">
         <p class="text-muted small mb-3">Pendientes de {{ $comprobante->jornada->fecha->format('d/m/Y') }} en el cierre de facturación. El Z es el cierre fiscal. El X es el informe que la rendición de hotel deja rendido. No se modifica el cierre en Anita.</p>
+        @if ($editable && ($pxsolCodigos ?? []) !== [])
+            <input type="hidden" name="pxsol_aplicado" id="pxsol_aplicado" value="{{ old('pxsol_aplicado') }}">
+            <input type="hidden" name="pxsol_iva_facturas" id="pxsol_iva_facturas" value="{{ old('pxsol_iva_facturas', $comprobante->iva_facturas) }}">
+            <input type="hidden" name="pxsol_iva_nc" id="pxsol_iva_nc" value="{{ old('pxsol_iva_nc', $comprobante->iva_nc) }}">
+            <p class="small mb-3" id="pxsol-aviso">
+                @if ((float) $comprobante->iva_facturas != 0.0 || (float) $comprobante->iva_nc != 0.0)
+                    IVA facturas {{ number_format((float) $comprobante->iva_facturas, 2, ',', '.') }} · IVA notas de crédito {{ number_format((float) $comprobante->iva_nc, 2, ',', '.') }}
+                @else
+                    Si este cajero es de hotel, Traer de PXSol completa el X, el Z y las notas de crédito desde la primera habilitación hasta ahora.
+                @endif
+            </p>
+        @endif
         @if ($errorFiscal)
             <div class="alert alert-warning">No se pudieron leer los cierres de ventas. {{ $errorFiscal }}</div>
         @endif
@@ -34,7 +51,6 @@
                             <th class="text-right">Número</th>
                             <th class="text-right">Venta</th>
                             <th class="text-right">Notas de crédito</th>
-                            <th class="text-right">IVA</th>
                             <th class="text-right">Último ticket</th>
                         </tr>
                     </thead>
@@ -48,8 +64,6 @@
                                 data-numero="{{ $fila['numero'] }}"
                                 data-venta="{{ $fila['venta'] }}"
                                 data-credito="{{ $fila['credito'] }}"
-                                data-iva="{{ $fila['iva'] }}"
-                                data-iva-credito="{{ $fila['iva_credito'] }}"
                                 data-ticket="{{ $fila['ult_ticket'] }}">
                                 @if ($editable)
                                     <td class="text-center">
@@ -62,7 +76,6 @@
                                 <td class="text-right">{{ $fila['numero'] }}</td>
                                 <td class="text-right">{{ number_format($fila['venta'], 2, ',', '.') }}</td>
                                 <td class="text-right">{{ number_format($fila['credito'], 2, ',', '.') }}</td>
-                                <td class="text-right">{{ number_format($fila['iva'], 2, ',', '.') }}</td>
                                 <td class="text-right">{{ $fila['ult_ticket'] > 0 ? $fila['ult_ticket'] : '' }}</td>
                             </tr>
                         @endforeach
@@ -72,6 +85,67 @@
         @endif
     </div>
 </div>
+@if ($editable && ($pxsolCodigos ?? []) !== [])
+<script>
+(function () {
+    var boton = document.getElementById('btn-traer-pxsol');
+    if (!boton) {
+        return;
+    }
+    var token = document.querySelector('meta[name="csrf-token"]');
+    boton.addEventListener('click', function () {
+        boton.disabled = true;
+        fetch(@json(route('pxsol_tesoreria_crown_movimiento', $comprobante->id)), {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        }).then(function (respuesta) {
+            return respuesta.json().then(function (datos) {
+                return { ok: respuesta.ok, datos: datos };
+            });
+        }).then(function (resultado) {
+            var aviso = document.getElementById('pxsol-aviso');
+            if (!resultado.ok || !resultado.datos.ok) {
+                if (aviso) {
+                    aviso.textContent = (resultado.datos && resultado.datos.mensaje) ? resultado.datos.mensaje : 'PXSol no respondió.';
+                }
+                return;
+            }
+            function poner(id, valor) {
+                var campo = document.getElementById(id);
+                if (campo) {
+                    campo.value = valor;
+                }
+            }
+            poner('medio-total_x', resultado.datos.facturado);
+            poner('medio-total_z', resultado.datos.facturado);
+            poner('medio-total_nc', resultado.datos.credito);
+            poner('pxsol_aplicado', '1');
+            poner('pxsol_iva_facturas', resultado.datos.iva_facturas);
+            poner('pxsol_iva_nc', resultado.datos.iva_nc);
+            if (aviso) {
+                aviso.textContent = 'PXSol de ' + resultado.datos.desde + ' a ' + resultado.datos.hasta
+                    + '. Facturado y Z: ' + resultado.datos.facturado
+                    + '. Notas de crédito: ' + resultado.datos.credito
+                    + '. IVA facturas: ' + resultado.datos.iva_facturas
+                    + '. IVA notas de crédito: ' + resultado.datos.iva_nc
+                    + '. Se guardan con el borrador.';
+            }
+        }).catch(function () {
+            var aviso = document.getElementById('pxsol-aviso');
+            if (aviso) {
+                aviso.textContent = 'PXSol no respondió.';
+            }
+        }).then(function () {
+            boton.disabled = false;
+        });
+    });
+})();
+</script>
+@endif
 @if ($editable && $filasFiscales !== [])
 <script>
 (function () {
@@ -91,8 +165,6 @@
         var totalZ = 0;
         var creditoX = 0;
         var creditoZ = 0;
-        var iva = 0;
-        var ivaNc = 0;
         var ticket = 0;
         var numerosZ = [];
         var numerosX = [];
@@ -104,11 +176,7 @@
             }
             var venta = parseFloat(fila.getAttribute('data-venta')) || 0;
             var credito = parseFloat(fila.getAttribute('data-credito')) || 0;
-            var ivaFila = parseFloat(fila.getAttribute('data-iva')) || 0;
-            var ivaCredito = parseFloat(fila.getAttribute('data-iva-credito')) || 0;
             var ultimo = parseInt(fila.getAttribute('data-ticket'), 10) || 0;
-            iva += ivaFila;
-            ivaNc += ivaCredito;
             if (ultimo > ticket) {
                 ticket = ultimo;
             }
@@ -127,8 +195,6 @@
         poner('medio-total_x', totalX.toFixed(2));
         poner('medio-total_z', totalZ.toFixed(2));
         poner('medio-total_nc', (hayZ ? creditoZ : creditoX).toFixed(2));
-        poner('medio-iva_facturas', iva.toFixed(2));
-        poner('medio-iva_nc', ivaNc.toFixed(2));
         poner('medio-nro_z', numeros.slice(0, 20));
         poner('medio-ult_ticket', ticket > 0 ? ticket : '');
     });

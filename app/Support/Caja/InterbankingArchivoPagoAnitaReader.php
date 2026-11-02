@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Support\Caja;
 
 use App\ApiAnita;
+use App\Support\Compras\AnitaImport\PagoproveedorAnitaImportEmpresaSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -38,7 +40,7 @@ final class InterbankingArchivoPagoAnitaReader
         int $opHasta,
         array &$errores,
     ): array {
-        $where = ' WHERE pag_empresa='.$empresaAnita
+        $where = ' WHERE '.$this->whereEmpresaPago($empresaAnita)
             .' AND pag_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
             .' AND pag_rec BETWEEN '.$opDesde.' AND '.$opHasta;
 
@@ -64,7 +66,7 @@ final class InterbankingArchivoPagoAnitaReader
         int $opHasta,
         array &$errores,
     ): array {
-        $where = ' WHERE pag_empresa='.$empresaAnita
+        $where = ' WHERE '.$this->whereEmpresaPago($empresaAnita)
             ." AND pag_tipo = 'AOP'"
             .' AND pag_rec BETWEEN '.$opDesde.' AND '.$opHasta;
         $filas = $this->listar('che_ban', 'pago', self::PAGO_CAMPOS, $where, $errores, 'pago-aop-ib');
@@ -74,7 +76,7 @@ final class InterbankingArchivoPagoAnitaReader
             if ($rec <= 0) {
                 continue;
             }
-            $emp = (int) ($fila->pag_empresa ?? 0) ?: $empresaAnita;
+            $emp = self::empresaClave((int) ($fila->pag_empresa ?? 0), $empresaAnita);
             $mapa[$emp.'|'.$rec] = true;
         }
 
@@ -90,11 +92,58 @@ final class InterbankingArchivoPagoAnitaReader
         int $fechaDesdeYmd,
         int $fechaHastaYmd,
         array &$errores,
+        string $codigoCuenta = '',
     ): array {
-        $where = ' WHERE axp_empresa='.$empresaAnita
-            .' AND axp_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd;
+        $tieneEmpresa = PagoproveedorAnitaImportEmpresaSupport::auxpagTieneEmpresa();
+        // Crown no tiene axp_empresa ni axp_cbu; axp_banco guarda el código de caja (071080/1).
+        $campos = $tieneEmpresa
+            ? self::AUXPAG_CAMPOS.',axp_banco'
+            : 'axp_pro,axp_fecha,axp_rec,axp_tipo,axp_nro,axp_tipo_ap,axp_monto_ap,axp_sucursal,axp_banco';
+        $where = ' WHERE axp_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd;
+        if ($tieneEmpresa) {
+            $where .= ' AND axp_empresa='.$empresaAnita;
+        }
+        $codigo = trim($codigoCuenta);
+        if ($codigo !== '' && EntornoEmpresaSupport::esCrown()) {
+            $where .= " AND axp_banco = '".str_replace("'", "''", $codigo)."'";
+        }
 
-        return $this->listar('che_ban', 'auxpag', self::AUXPAG_CAMPOS, $where, $errores, 'auxpag-ib-archivo');
+        $filas = $this->listar('che_ban', 'auxpag', $campos, $where, $errores, 'auxpag-ib-archivo');
+        if ($tieneEmpresa) {
+            return $filas;
+        }
+        foreach ($filas as $fila) {
+            if (! isset($fila->axp_empresa)) {
+                $fila->axp_empresa = 0;
+            }
+        }
+
+        return $filas;
+    }
+
+    /**
+     * Crown guarda pag_empresa = 0. AGG filtra la empresa del formulario.
+     */
+    public static function empresaClave(int $pagEmpresa, int $empresaAnita): int
+    {
+        if (! PagoproveedorAnitaImportEmpresaSupport::auxpagTieneEmpresa()) {
+            return 0;
+        }
+
+        return $pagEmpresa > 0 ? $pagEmpresa : $empresaAnita;
+    }
+
+    private function whereEmpresaPago(int $empresaAnita): string
+    {
+        if (PagoproveedorAnitaImportEmpresaSupport::auxpagTieneEmpresa()) {
+            return 'pag_empresa='.$empresaAnita;
+        }
+        $ids = PagoproveedorAnitaImportEmpresaSupport::empresasAnitaImport();
+        if ($ids === []) {
+            $ids = [0];
+        }
+
+        return 'pag_empresa IN ('.implode(',', array_map('intval', $ids)).')';
     }
 
     /**
@@ -119,6 +168,7 @@ final class InterbankingArchivoPagoAnitaReader
 
         $mapa = [];
         foreach (array_keys($codigos) as $cod) {
+            $cod = (string) $cod;
             $where = " WHERE prop_proveedor = '".addslashes($cod)."'";
             $filas = $this->listar('compras', 'propago', self::PROPAGO_CAMPOS, $where, $errores, 'propago-'.$cod);
             $cbu = '';
@@ -145,7 +195,7 @@ final class InterbankingArchivoPagoAnitaReader
     {
         $mapa = [];
         foreach ($codigosProveedor as $cod) {
-            $p = self::padProveedor($cod);
+            $p = self::padProveedor((string) $cod);
             if ($p === '' || isset($mapa[$p])) {
                 continue;
             }

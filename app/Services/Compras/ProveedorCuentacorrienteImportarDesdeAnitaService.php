@@ -12,6 +12,7 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportAplmovpSupport;
+use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportExistenciaSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportOpaSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportOrigenSupport;
@@ -849,6 +850,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             return ['estado' => 'sin_fecha', 'error' => 'Fecha inválida '.$etiqueta];
         }
 
+        $esFce = ComprobanteProveedorAnitaImportExistenciaSupport::esFceDeCompra($compra);
         $cpQuery = Comprobante_Proveedor::query()
             ->where('proveedor_id', $proveedor->id)
             ->where('tipotransaccion_compra_id', $tipo->id)
@@ -857,6 +859,9 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             ->where('numerocomprobante', $nro);
         if ($perfil['tiene_empresa']) {
             $cpQuery->where('empresa_id', $empresaId);
+        }
+        if ($esFce !== null) {
+            $cpQuery->where('es_fce', $esFce);
         }
         $cp = $cpQuery->first();
 
@@ -874,6 +879,8 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                 $suc,
                 $nro,
                 $cuit,
+                null,
+                $esFce,
             );
         }
 

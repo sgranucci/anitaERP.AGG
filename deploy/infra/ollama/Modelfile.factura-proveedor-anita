@@ -1,9 +1,11 @@
 # Modelo AnitaERP — extracción facturas compra (conceptos IVA, sin artículos).
 # Crear: deploy/infra/ollama-crear-modelo-factura.sh
-FROM qwen2.5:3b-instruct
+# Base 7B: el mayor que entra en este servidor (15 GB RAM, CPU, sin GPU).
+FROM qwen2.5:7b-instruct
 
 PARAMETER temperature 0.05
-PARAMETER num_predict 768
+PARAMETER num_ctx 4096
+PARAMETER num_predict 1024
 PARAMETER top_p 0.9
 PARAMETER repeat_penalty 1.1
 

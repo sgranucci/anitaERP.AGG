@@ -2,6 +2,9 @@
 
 namespace App\Support\Contable;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownCuentaClaves;
+
 /**
  * Catálogo de claves de cuentas contables automáticas del sistema (patás fijas por proceso).
  */
@@ -189,7 +192,7 @@ final class CuentaAutomaticaClaves
      */
     public static function catalogo(): array
     {
-        return [
+        $catalogo = [
             self::RECEPCION_PROVISION_FACTURAS => [
                 'grupo' => 'Recepción proveedores',
                 'descripcion' => 'Provisión de facturas a recibir (haber en recepción normal)',
@@ -673,6 +676,12 @@ final class CuentaAutomaticaClaves
                 'env_config' => null,
             ],
         ];
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            $catalogo = array_merge($catalogo, TransferenciaCrownCuentaClaves::compartidas());
+        }
+
+        return $catalogo;
     }
 
     /** @return list<string> */

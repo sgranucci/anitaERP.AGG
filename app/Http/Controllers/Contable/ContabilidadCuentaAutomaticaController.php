@@ -9,8 +9,10 @@ use App\Models\Contable\Contabilidad_CuentaAutomatica;
 use App\Models\Contable\Contabilidad_CuentaAutomaticaDetalle;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\ContabilidadCuentaAutomaticaSeedService;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
+use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownImputacionSupport;
 use Illuminate\Support\Facades\DB;
 
 class ContabilidadCuentaAutomaticaController extends Controller
@@ -34,8 +36,23 @@ class ContabilidadCuentaAutomaticaController extends Controller
         }
 
         $filas = $empresa_id > 0 ? $this->armarFilasParaVista($empresa_id) : [];
+        $imputacionesCrown = [];
+        $pvEdicion = null;
+        if (EntornoEmpresaSupport::esCrown() && $empresa_id > 0) {
+            $imputacionesCrown = TransferenciaCrownImputacionSupport::listar($empresa_id);
+            $pv = (int) request('pv', 0);
+            if ($pv > 0) {
+                $pvEdicion = TransferenciaCrownImputacionSupport::fila($empresa_id, $pv);
+            }
+        }
 
-        return view('contable.cuenta_automatica.editar', compact('empresa_query', 'empresa_id', 'filas'));
+        return view('contable.cuenta_automatica.editar', compact(
+            'empresa_query',
+            'empresa_id',
+            'filas',
+            'imputacionesCrown',
+            'pvEdicion',
+        ));
     }
 
     public function actualizar(ValidacionContabilidadCuentaAutomatica $request)
@@ -43,6 +60,10 @@ class ContabilidadCuentaAutomaticaController extends Controller
         can('actualizar-cuentas-automaticas-contables');
 
         $empresaId = (int) $request->validated('empresa_id');
+
+        if ($request->boolean('solo_transferencia_pv')) {
+            return $this->guardarImputacionPv($empresaId);
+        }
 
         if (! $this->empresaRepository->empresaTieneUsuariosAsignados($empresaId)) {
             return redirect(self::RUTA_INDEX)
@@ -100,6 +121,38 @@ class ContabilidadCuentaAutomaticaController extends Controller
 
         return redirect(self::RUTA_INDEX.'?empresa_id='.$empresaId)
             ->with('mensaje', 'Cuentas automáticas guardadas.');
+    }
+
+    private function guardarImputacionPv(int $empresaId)
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            abort(404);
+        }
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            return redirect(self::RUTA_INDEX)
+                ->with('errores', ['No tiene permiso para configurar cuentas automáticas de esa empresa.']);
+        }
+
+        $sucursal = (int) request('pv_sucursal', 0);
+        $cuentas = request('pv_cuentas', []);
+        if (! is_array($cuentas)) {
+            $cuentas = [];
+        }
+        $centrocostoId = (int) request('centrocosto_id', 0);
+        try {
+            TransferenciaCrownImputacionSupport::guardar(
+                $empresaId,
+                $sucursal,
+                $cuentas,
+                $centrocostoId > 0 ? $centrocostoId : null,
+            );
+        } catch (\Throwable $e) {
+            return redirect(self::RUTA_INDEX.'?empresa_id='.$empresaId.'&pv='.$sucursal.'#pv-crown-'.$sucursal)
+                ->with('errores', [$e->getMessage()]);
+        }
+
+        return redirect(self::RUTA_INDEX.'?empresa_id='.$empresaId.'&pv='.$sucursal.'#pv-crown-'.$sucursal)
+            ->with('mensaje', 'Imputación del punto de venta '.$sucursal.' guardada.');
     }
 
     /**

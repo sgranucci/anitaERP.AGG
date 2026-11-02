@@ -1,5 +1,7 @@
 @php
     $gruposMedio = \App\Support\Caja\TesoreriaCrownRendicionCampos::gruposParaTarea($comprobante->asignacion->tipo_tarea ?? '');
+    $calculaRecargo = ! \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '');
+    $divisorRecargo = \App\Support\Caja\TesoreriaCrownCierreCalculo::divisorRecargo($comprobante->jornada->fecha->format('Y-m-d'));
 @endphp
 @if ($comprobante->tipo === \App\Support\Caja\TesoreriaCrownComprobanteSupport::RENDICION
     && \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? ''))
@@ -35,6 +37,12 @@
                                 @if ($meta['tipo'] !== 'texto') step="{{ $meta['tipo'] === 'entero' ? '1' : '0.01' }}" @endif
                                 @if ($meta['tipo'] !== 'texto' && ! $meta['negativo']) min="0" @endif
                                 @if ($meta['tipo'] === 'texto') maxlength="20" @endif
+                                @if (in_array($clave, ['tarjeta_credito', 'tarjeta_debito', 'total_qr'], true))
+                                    data-total-final="1"
+                                @elseif ($clave === 'recargo_fin')
+                                    data-total-final="-1"
+                                    @if ($calculaRecargo) readonly data-recargo-divisor="{{ $divisorRecargo }}" title="Sale de la tarjeta de crédito" @endif
+                                @endif
                                 value="{{ $vacio ? '' : $valorCampo }}"
                                 autocomplete="off">
                         @else

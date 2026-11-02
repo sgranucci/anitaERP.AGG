@@ -43,6 +43,7 @@ final class ComprobanteProveedorAnitaImportExistenciaSupport
                 'sucursal',
                 'numerocomprobante',
                 'anita_nro_interno',
+                'es_fce',
             ]);
 
         $porInterno = [];
@@ -68,7 +69,7 @@ final class ComprobanteProveedorAnitaImportExistenciaSupport
             $porClave[self::claveFiscal(
                 (int) $fila->empresa_id,
                 (int) $fila->proveedor_id,
-                $claveDocumento,
+                self::claveDocumentoConFce($claveDocumento, (bool) $fila->es_fce),
             )] = $id;
         }
 
@@ -104,6 +105,8 @@ final class ComprobanteProveedorAnitaImportExistenciaSupport
                 (int) ($compra['com_sucursal'] ?? 0),
                 (int) ($compra['com_nro'] ?? 0),
                 $cuitDigitos,
+                null,
+                self::esFceDeCompra($compra),
             );
             if ($dup !== null) {
                 return [
@@ -144,7 +147,11 @@ final class ComprobanteProveedorAnitaImportExistenciaSupport
             (int) ($compra['com_sucursal'] ?? 0),
             (int) ($compra['com_nro'] ?? 0),
         );
-        $claveFiscal = self::claveFiscal($empresaId, $proveedorId, $claveDocumento);
+        $claveFiscal = self::claveFiscal(
+            $empresaId,
+            $proveedorId,
+            self::claveDocumentoConFce($claveDocumento, self::esFceDeCompra($compra) ?? false),
+        );
         if (isset($indice['por_clave'][$claveFiscal])) {
             return [
                 'id' => $indice['por_clave'][$claveFiscal],
@@ -163,6 +170,24 @@ final class ComprobanteProveedorAnitaImportExistenciaSupport
     public static function claveFiscal(int $empresaId, int $proveedorId, string $claveDocumento): string
     {
         return $empresaId.'#'.$proveedorId.'#'.$claveDocumento;
+    }
+
+    /** La marca FCE parte la serie: el mismo número puede ser factura común y FCE. */
+    public static function claveDocumentoConFce(string $claveDocumento, bool $esFce): string
+    {
+        return $claveDocumento.'|'.($esFce ? '1' : '0');
+    }
+
+    /**
+     * @param  array<string, mixed>  $compra
+     */
+    public static function esFceDeCompra(array $compra): ?bool
+    {
+        if (! array_key_exists('com_es_fce', $compra)) {
+            return null;
+        }
+
+        return ComprobanteProveedorUnicidadSupport::esMarcaFce($compra['com_es_fce']);
     }
 
     /**
