@@ -9,6 +9,7 @@ use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
+use App\Support\Stock\RecepcionProveedorAnitaSalidaSupport;
 use App\Support\Stock\RecepcionProveedorAsientoAuditoriaSupport;
 use App\Support\Stock\RecepcionProveedorCuadreContableSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
@@ -318,24 +319,26 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
             $claveAnita['nro'],
         );
 
-        $cabecerasRecepmae = $this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion);
-        $base['recepmae_anita'] = count($cabecerasRecepmae);
-        if ($cabecerasRecepmae === []) {
-            $base['problemas'][] = sprintf(
-                'Falta cabecera recepmae en Anita (clave %s no encontrada en compras).',
-                $base['clave_anita'],
-            );
-        }
+        if (! RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            $cabecerasRecepmae = $this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion);
+            $base['recepmae_anita'] = count($cabecerasRecepmae);
+            if ($cabecerasRecepmae === []) {
+                $base['problemas'][] = sprintf(
+                    'Falta cabecera recepmae en Anita (clave %s no encontrada en compras).',
+                    $base['clave_anita'],
+                );
+            }
 
-        $detalleAnita = $this->anitaBridge->diagnosticoDetalleComAnita($recepcion);
-        $base['items_erp'] = (int) ($detalleAnita['lineas_erp'] ?? 0);
-        $base['recepmov_anita'] = (int) ($detalleAnita['recepmov'] ?? 0);
-        if (array_key_exists('stkmov', $detalleAnita) && $detalleAnita['stkmov'] !== null) {
-            $base['stkmov_anita'] = (int) $detalleAnita['stkmov'];
-        }
-        if ($detalleAnita['incompleto'] ?? false) {
-            $base['problemas'][] = (string) ($detalleAnita['mensaje']
-                ?? 'Detalle Anita incompleto (recepmov/stkmov con menos ítems que el ERP).');
+            $detalleAnita = $this->anitaBridge->diagnosticoDetalleComAnita($recepcion);
+            $base['items_erp'] = (int) ($detalleAnita['lineas_erp'] ?? 0);
+            $base['recepmov_anita'] = (int) ($detalleAnita['recepmov'] ?? 0);
+            if (array_key_exists('stkmov', $detalleAnita) && $detalleAnita['stkmov'] !== null) {
+                $base['stkmov_anita'] = (int) $detalleAnita['stkmov'];
+            }
+            if ($detalleAnita['incompleto'] ?? false) {
+                $base['problemas'][] = (string) ($detalleAnita['mensaje']
+                    ?? 'Detalle Anita incompleto (recepmov/stkmov con menos ítems que el ERP).');
+            }
         }
 
         $movimientos = $asiento->asiento_movimientos ?? collect();

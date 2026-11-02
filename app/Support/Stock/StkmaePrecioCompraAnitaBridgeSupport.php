@@ -85,6 +85,10 @@ final class StkmaePrecioCompraAnitaBridgeSupport
 
     public static function actualizarDesdeRecepcion(Recepcion_Proveedor $recepcion): int
     {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            return 0;
+        }
+
         if ($recepcion->tipo !== Recepcion_Proveedor::TIPO_RECEPCION) {
             return 0;
         }

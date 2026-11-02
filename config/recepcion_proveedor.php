@@ -16,6 +16,9 @@ return [
         'sistema_ventas' => env('RECEPCION_PROVEEDOR_ANITA_SISTEMA_VENTAS', 'ventas'),
         // false: COM no replica stkmov (stock en ERP); sigue recepmae/recepmov/aplicped/pendmovp.
         'stkmov_habilitado' => filter_var(env('RECEPCION_PROVEEDOR_ANITA_STKMOV_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
+        // true: confirmar COM/DEP solo escribe contab.ctamov. No sale recepmae, recepmov, aplicped,
+        // stkmov, stkmae, pendmovp, recpunica ni numerador al bridge de cada empresa.
+        'solo_escritura_ctamov' => filter_var(env('RECEPCION_PROVEEDOR_ANITA_SOLO_CTAMOV', true), FILTER_VALIDATE_BOOLEAN),
         // Clave t_comp (ventas) para resolver tcomp_refer → numerador COM
         't_comp_clave_numerador' => env('RECEPCION_PROVEEDOR_ANITA_T_COMP_CLAVE', 'COM'),
         'sistema_contab' => env('RECEPCION_PROVEEDOR_ANITA_CONTAB', 'contab'),
@@ -134,7 +137,8 @@ return [
     ],
 
     /*
-    | Tras confirmar COM en ERP: job en cola verifica recepmae + ctamov Anita y repara.
+    | Tras confirmar COM en ERP: job en cola verifica ctamov Anita y lo repara.
+    | Con solo_escritura_ctamov no reescribe recepmae ni stock.
     */
     'anita_tras_confirmacion' => [
         'habilitada' => filter_var(env('RECEPCION_PROVEEDOR_ANITA_TRAS_CONFIRMACION', true), FILTER_VALIDATE_BOOLEAN),

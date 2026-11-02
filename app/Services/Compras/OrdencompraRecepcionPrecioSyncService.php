@@ -8,6 +8,7 @@ use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
 use App\Support\Compras\OrdencompraArticuloPrecioHistoriaOrigen;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
+use App\Support\Stock\RecepcionProveedorAnitaSalidaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
@@ -230,6 +231,10 @@ class OrdencompraRecepcionPrecioSyncService
         Recepcion_Proveedor_Articulo $linea,
         float $precio
     ): void {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            return;
+        }
+
         $oc = $recepcion->ordencompras;
         if (! $oc) {
             return;

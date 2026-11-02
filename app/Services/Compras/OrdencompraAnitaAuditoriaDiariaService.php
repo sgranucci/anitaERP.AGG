@@ -13,6 +13,7 @@ use App\Services\Stock\RecepcionProveedorAnitaBridgeService;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaWhereSupport;
 use App\Support\Compras\SuscripcionSupport;
 use App\Support\Stock\RecepcionProveedorAnitaReferenciaSupport;
+use App\Support\Stock\RecepcionProveedorAnitaSalidaSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -260,6 +261,10 @@ final class OrdencompraAnitaAuditoriaDiariaService
         $acciones = [];
         $problemas = [];
         $reparo = false;
+
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            return compact('acciones', 'problemas', 'reparo');
+        }
 
         $recepciones = Recepcion_Proveedor::query()
             ->where('ordencompra_id', $oc->id)

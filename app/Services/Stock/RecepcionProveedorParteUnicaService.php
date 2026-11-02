@@ -6,6 +6,7 @@ use App\Models\Stock\Articulo_ParteUnica;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
 use App\Models\Stock\Recepcion_Proveedor_ParteUnica;
+use App\Support\Stock\RecepcionProveedorAnitaSalidaSupport;
 use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 use App\Support\Stock\RecpunicaAnitaBridgeSupport;
 use App\Support\Stock\StkParteUnicaAnitaBridgeSupport;
@@ -37,9 +38,13 @@ class RecepcionProveedorParteUnicaService
 
         $partesNuevas = collect();
 
+        $soloCtamov = RecepcionProveedorAnitaSalidaSupport::soloCtamov();
+
         if (! Recepcion_Proveedor_ParteUnica::query()->where('recepcion_proveedor_id', $recepcion->id)->exists()) {
-            $partesNuevas = DB::transaction(function () use ($recepcion) {
-                $siguienteNumero = $this->articuloParteUnicaService->siguienteNumeroparteGlobalConBloqueo();
+            $partesNuevas = DB::transaction(function () use ($recepcion, $soloCtamov) {
+                $siguienteNumero = $soloCtamov
+                    ? ((int) Articulo_ParteUnica::query()->lockForUpdate()->max('numeroparte')) + 1
+                    : $this->articuloParteUnicaService->siguienteNumeroparteGlobalConBloqueo();
                 $creadas = collect();
 
                 foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
@@ -58,10 +63,14 @@ class RecepcionProveedorParteUnicaService
                 return $creadas;
             });
 
-            $this->sincronizarStkParteUnica($partesNuevas);
+            if (! $soloCtamov) {
+                $this->sincronizarStkParteUnica($partesNuevas);
+            }
         }
 
-        $this->sincronizarRecpunica($recepcion);
+        if (! $soloCtamov) {
+            $this->sincronizarRecpunica($recepcion);
+        }
     }
 
     /**
@@ -82,16 +91,18 @@ class RecepcionProveedorParteUnicaService
             'recepcion_proveedor_partes_unicas.recepcion_proveedor_articulos.articulos',
         ]);
 
-        $clave = \App\Support\Stock\RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        if (! RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            $clave = \App\Support\Stock\RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
 
-        foreach ($partes as $parte) {
-            RecpunicaAnitaBridgeSupport::eliminarDesdeParte($parte, $clave);
-            $apu = Articulo_ParteUnica::query()
-                ->where('numeroparte', $parte->numeroparte)
-                ->first();
+            foreach ($partes as $parte) {
+                RecpunicaAnitaBridgeSupport::eliminarDesdeParte($parte, $clave);
+                $apu = Articulo_ParteUnica::query()
+                    ->where('numeroparte', $parte->numeroparte)
+                    ->first();
 
-            if ($apu) {
-                StkParteUnicaAnitaBridgeSupport::eliminar($apu);
+                if ($apu) {
+                    StkParteUnicaAnitaBridgeSupport::eliminar($apu);
+                }
             }
         }
 

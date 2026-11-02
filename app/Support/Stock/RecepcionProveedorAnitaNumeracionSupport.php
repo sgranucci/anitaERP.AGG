@@ -107,6 +107,12 @@ final class RecepcionProveedorAnitaNumeracionSupport
 
     public static function actualizarNumerador(string $claveNumerador, int $numero, ?int $empresaId = null): void
     {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            RecepcionProveedorAnitaSalidaSupport::logOmitida('numerador COM');
+
+            return;
+        }
+
         if ($numero <= 0) {
             throw new \InvalidArgumentException('Número de recepción Anita inválido.');
         }
@@ -192,6 +198,10 @@ final class RecepcionProveedorAnitaNumeracionSupport
     /** Tras asignar numerorecepcion en ERP, deja numerador ≥ max(ERP, recepmae, número asignado). */
     public static function registrarNumeroAsignadoEnNumerador(int $numero, ?int $empresaId = null): void
     {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            return;
+        }
+
         if ($numero <= 0) {
             return;
         }

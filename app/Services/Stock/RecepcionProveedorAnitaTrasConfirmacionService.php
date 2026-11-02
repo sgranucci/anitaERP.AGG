@@ -6,6 +6,7 @@ namespace App\Services\Stock;
 
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Support\Stock\RecepcionProveedorAnitaSalidaSupport;
 use App\Support\Stock\RecepcionProveedorCtamovCuadreSupport;
 use App\Support\Stock\RecepcionProveedorCuadreContableSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
@@ -118,18 +119,20 @@ final class RecepcionProveedorAnitaTrasConfirmacionService
         $problemas = [];
         $requiereReparacion = false;
 
-        if ($this->resincronizacionErpService->requiereResincronizacion($recepcion)) {
-            $requiereReparacion = true;
-            $problemas[] = 'Falta recepmae Anita o claves COM incorrectas.';
-        } elseif ($this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion) === []) {
-            $requiereReparacion = true;
-            $problemas[] = 'Falta cabecera recepmae en Anita para la clave COM.';
-        }
+        if (! RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            if ($this->resincronizacionErpService->requiereResincronizacion($recepcion)) {
+                $requiereReparacion = true;
+                $problemas[] = 'Falta recepmae Anita o claves COM incorrectas.';
+            } elseif ($this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion) === []) {
+                $requiereReparacion = true;
+                $problemas[] = 'Falta cabecera recepmae en Anita para la clave COM.';
+            }
 
-        $detalle = $this->anitaBridge->diagnosticoDetalleComAnita($recepcion);
-        if ($detalle['incompleto'] ?? false) {
-            $requiereReparacion = true;
-            $problemas[] = (string) ($detalle['mensaje'] ?? 'Detalle Anita incompleto (recepmov/stkmov).');
+            $detalle = $this->anitaBridge->diagnosticoDetalleComAnita($recepcion);
+            if ($detalle['incompleto'] ?? false) {
+                $requiereReparacion = true;
+                $problemas[] = (string) ($detalle['mensaje'] ?? 'Detalle Anita incompleto (recepmov/stkmov).');
+            }
         }
 
         $ctamov = null;
@@ -167,7 +170,9 @@ final class RecepcionProveedorAnitaTrasConfirmacionService
             'requiere_reparacion' => $requiereReparacion,
             'problemas' => $problemas,
             'ctamov' => $ctamov,
-            'recepmae_anita' => count($this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion)),
+            'recepmae_anita' => RecepcionProveedorAnitaSalidaSupport::soloCtamov()
+                ? 0
+                : count($this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion)),
         ];
     }
 
@@ -180,28 +185,30 @@ final class RecepcionProveedorAnitaTrasConfirmacionService
             'recepcion_proveedor_articulos.centrocostos',
         ];
 
-        if ($this->resincronizacionErpService->requiereResincronizacion($recepcion)) {
-            $this->resincronizacionErpService->repararRecepcionConfirmada((int) $recepcion->id);
-            $recepcion = $recepcion->fresh(array_merge(['asientos'], $relacionesDetalle)) ?? $recepcion;
-        } elseif ($this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion) === []) {
-            $this->anitaBridge->sincronizarRecepcion($recepcion->fresh($relacionesDetalle));
-            $recepcion = $recepcion->fresh(array_merge(['asientos'], $relacionesDetalle)) ?? $recepcion;
-        } elseif ($this->resincronizacionErpService->requiereReparacionDetalleIncompleto($recepcion)
-            || $this->anitaBridge->detalleComIncompletoEnAnita($recepcion)
-        ) {
-            if ($this->resincronizacionErpService->requiereReparacionDetalleIncompleto($recepcion)) {
-                $this->anitaBridge->repararDetallePreservandoCabecera($recepcion->fresh($relacionesDetalle));
-            } else {
-                // Cabecera por clave sin vínculo usable: -pendmovp y resync completo.
-                if ($this->anitaBridge->tieneDetalleComEnAnita($recepcion)) {
-                    $this->anitaBridge->ajustarPendmovpRecepcion($recepcion->fresh([
-                        'ordencompras',
-                        'recepcion_proveedor_articulos.articulos',
-                    ]), -1);
-                }
+        if (! RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            if ($this->resincronizacionErpService->requiereResincronizacion($recepcion)) {
+                $this->resincronizacionErpService->repararRecepcionConfirmada((int) $recepcion->id);
+                $recepcion = $recepcion->fresh(array_merge(['asientos'], $relacionesDetalle)) ?? $recepcion;
+            } elseif ($this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion) === []) {
                 $this->anitaBridge->sincronizarRecepcion($recepcion->fresh($relacionesDetalle));
+                $recepcion = $recepcion->fresh(array_merge(['asientos'], $relacionesDetalle)) ?? $recepcion;
+            } elseif ($this->resincronizacionErpService->requiereReparacionDetalleIncompleto($recepcion)
+                || $this->anitaBridge->detalleComIncompletoEnAnita($recepcion)
+            ) {
+                if ($this->resincronizacionErpService->requiereReparacionDetalleIncompleto($recepcion)) {
+                    $this->anitaBridge->repararDetallePreservandoCabecera($recepcion->fresh($relacionesDetalle));
+                } else {
+                    // Cabecera por clave sin vínculo usable: -pendmovp y resync completo.
+                    if ($this->anitaBridge->tieneDetalleComEnAnita($recepcion)) {
+                        $this->anitaBridge->ajustarPendmovpRecepcion($recepcion->fresh([
+                            'ordencompras',
+                            'recepcion_proveedor_articulos.articulos',
+                        ]), -1);
+                    }
+                    $this->anitaBridge->sincronizarRecepcion($recepcion->fresh($relacionesDetalle));
+                }
+                $recepcion = $recepcion->fresh(array_merge(['asientos'], $relacionesDetalle)) ?? $recepcion;
             }
-            $recepcion = $recepcion->fresh(array_merge(['asientos'], $relacionesDetalle)) ?? $recepcion;
         }
 
         if (

@@ -18,6 +18,7 @@ use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEsquemaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaReferenciaSupport;
+use App\Support\Stock\RecepcionProveedorAnitaSalidaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
 use App\Support\Stock\RecepcionProveedorAnitaCorrespondenciaSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
@@ -109,6 +110,12 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function sincronizarRecepcion(Recepcion_Proveedor $recepcion): array
     {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            RecepcionProveedorAnitaSalidaSupport::logOmitida('sincronizarRecepcion', (int) $recepcion->id);
+
+            return ['cabecera_nueva' => false, 'pendmov_aplicado' => false];
+        }
+
         if ((int) $recepcion->numerorecepcion <= 0) {
             throw new \RuntimeException('La recepción debe tener numerorecepcion asignado.');
         }
@@ -196,6 +203,10 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function revertirSincronizacionConfirmacion(Recepcion_Proveedor $recepcion, array $estado): void
     {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            return;
+        }
+
         $this->ejecutarConPathRecepcion($recepcion, function () use ($recepcion, $estado) {
             $this->revertirSincronizacionConfirmacionInterno($recepcion, $estado);
         });
@@ -292,6 +303,12 @@ class RecepcionProveedorAnitaBridgeService
 
     public function anularRecepcion(Recepcion_Proveedor $recepcion): void
     {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            RecepcionProveedorAnitaSalidaSupport::logOmitida('anularRecepcion', (int) $recepcion->id);
+
+            return;
+        }
+
         $this->ejecutarConPathRecepcion($recepcion, function () use ($recepcion) {
             if ((int) $recepcion->numerorecepcion <= 0) {
                 return;
@@ -382,6 +399,12 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function ajustarPendmovpRecepcion(Recepcion_Proveedor $recepcion, int $multiplicador): void
     {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            RecepcionProveedorAnitaSalidaSupport::logOmitida('ajustarPendmovpRecepcion', (int) $recepcion->id);
+
+            return;
+        }
+
         $this->fijarEmpresaPath($recepcion);
         if ($multiplicador === 0) {
             return;
@@ -541,6 +564,17 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function repararAplicpedSiFalta(Recepcion_Proveedor $recepcion): array
     {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            RecepcionProveedorAnitaSalidaSupport::logOmitida('repararAplicpedSiFalta', (int) $recepcion->id);
+
+            return [
+                'recepcion_id' => (int) $recepcion->id,
+                'com' => (int) $recepcion->numerorecepcion,
+                'acciones' => [],
+                'problemas' => [],
+            ];
+        }
+
         $this->fijarEmpresaPath($recepcion);
         $recepcion->loadMissing([
             'proveedores',
@@ -622,6 +656,12 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function repararDetallePreservandoCabecera(Recepcion_Proveedor $recepcion): void
     {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            RecepcionProveedorAnitaSalidaSupport::logOmitida('repararDetallePreservandoCabecera', (int) $recepcion->id);
+
+            return;
+        }
+
         $this->fijarEmpresaPath($recepcion);
         if ((int) $recepcion->numerorecepcion <= 0) {
             throw new \RuntimeException('La recepción debe tener numerorecepcion asignado.');
@@ -729,6 +769,12 @@ class RecepcionProveedorAnitaBridgeService
         array $clave,
         bool $revertirPendmovp = true
     ): void {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            RecepcionProveedorAnitaSalidaSupport::logOmitida('revertirClaveComEnAnita', (int) $recepcion->id);
+
+            return;
+        }
+
         $this->fijarEmpresaPath($recepcion);
         if ((int) ($clave['nro'] ?? 0) <= 0 || (int) ($clave['sucursal'] ?? 0) <= 0) {
             return;
@@ -802,6 +848,12 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function actualizarCotizacionRecepmov(Recepcion_Proveedor $recepcion, float $nuevaCotizacion): void
     {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            RecepcionProveedorAnitaSalidaSupport::logOmitida('actualizarCotizacionRecepmov', (int) $recepcion->id);
+
+            return;
+        }
+
         $this->fijarEmpresaPath($recepcion);
         if ((int) $recepcion->numerorecepcion <= 0) {
             return;
@@ -901,6 +953,21 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function repararRecepmaeYRecepmovSinStkmov(Recepcion_Proveedor $recepcion): array
     {
+        if (RecepcionProveedorAnitaSalidaSupport::soloCtamov()) {
+            RecepcionProveedorAnitaSalidaSupport::logOmitida('repararRecepmaeYRecepmovSinStkmov', (int) $recepcion->id);
+
+            return [
+                'lineas_erp' => 0,
+                'lineas_recepmov' => 0,
+                'recepmae_estado' => '',
+                'recepmae_documentoid' => 0,
+                'ctamov_debe' => 0.0,
+                'ctamov_haber' => 0.0,
+                'ctamov_lineas' => 0,
+                'subdiario_lineas' => 0,
+            ];
+        }
+
         $this->fijarEmpresaPath($recepcion);
         if ((int) $recepcion->numerorecepcion <= 0) {
             throw new \RuntimeException('La recepción debe tener numerorecepcion asignado.');
