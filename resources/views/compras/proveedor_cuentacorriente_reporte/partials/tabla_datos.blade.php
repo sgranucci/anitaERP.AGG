@@ -26,7 +26,30 @@
         ]];
     }
     $cantSaldoFicha = $modoDeuda ? 1 : max(1, count($columnasSaldo));
-    $colSpan = ($modoDeuda ? 11 : (9 + $cantSaldoFicha)) + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
+    $colSpan = ($modoDeuda ? 12 : (10 + $cantSaldoFicha)) + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
+    $fmtCotizacion = static function ($fila) use ($paraExcel) {
+        if (! isset($fila['cotizacion']) || $fila['cotizacion'] === '' || $fila['cotizacion'] === null) {
+            return '';
+        }
+        $n = (float) $fila['cotizacion'];
+        if ($n <= 0) {
+            return '';
+        }
+        if ($paraExcel) {
+            return number_format($n, 4, '.', '');
+        }
+
+        return number_format($n, 4, ',', '.');
+    };
+    $tituloCotizacion = static function ($fila): string {
+        return match ($fila['cotizacion_origen'] ?? '') {
+            'comprobante' => 'Cotización del comprobante',
+            'dia' => 'Cotización vigente del día',
+            'local' => 'Moneda local',
+            'fallback' => 'Sin cotización cargada; se usó 1',
+            default => '',
+        };
+    };
     $soloTotalesDeuda = $modoDeuda && ! empty($filtros['solo_totales']);
     $totalesReporte = $totales ?? [];
     $mostrarTotalGeneral = $soloTotalesDeuda && ! empty($mostrar_total_general);
@@ -116,17 +139,18 @@
     <tr>
         @if ($paraPdf)
             <th class="col-nowrap" style="width: 4%;">Código</th>
-            <th style="width: {{ $modoDeuda ? '11%' : '14%' }};">Proveedor</th>
-            <th style="width: {{ $modoDeuda ? '9%' : '10%' }};">Empresa</th>
-            <th class="col-nowrap" style="width: {{ $modoDeuda ? '7%' : '7%' }};">Fecha</th>
-            <th class="col-nowrap" style="width: {{ $modoDeuda ? '7%' : '7%' }};">Vencimiento</th>
-            <th style="width: {{ $modoDeuda ? '16%' : '18%' }};">Comprobante</th>
-            <th class="col-moneda" style="width: 12%;">Moneda</th>
+            <th style="width: {{ $modoDeuda ? '9%' : '12%' }};">Proveedor</th>
+            <th style="width: {{ $modoDeuda ? '8%' : '9%' }};">Empresa</th>
+            <th class="col-nowrap" style="width: 7%;">Fecha</th>
+            <th class="col-nowrap" style="width: 7%;">Vencimiento</th>
+            <th style="width: {{ $modoDeuda ? '12%' : '13%' }};">Comprobante</th>
+            <th class="col-moneda" style="width: 8%;">Moneda</th>
+            <th class="text-right col-cotizacion" style="width: 8%;">Cotización</th>
             @if ($modoDeuda)
                 <th class="text-right" style="width: 8%;">Importe</th>
                 <th class="text-right" style="width: 8%;">Aplicado</th>
-                <th class="text-right" style="width: 9%;">Saldo pend.</th>
-                <th class="text-right" style="width: 9%;">Saldo</th>
+                <th class="text-right" style="width: 10%;">Saldo pend.</th>
+                <th class="text-right" style="width: 11%;">Saldo</th>
             @else
                 <th class="text-right" style="width: 8%;">Debe</th>
                 <th class="text-right" style="width: 8%;">Haber</th>
@@ -144,6 +168,7 @@
             <th>Vencimiento</th>
             <th>Comprobante</th>
             <th>Moneda</th>
+            <th class="text-right" title="Cotización usada en el movimiento">Cotización</th>
             @if ($modoDeuda)
                 <th class="text-right" title="Monto total del comprobante">Importe</th>
                 <th class="text-right" title="Total ya aplicado o pagado">Aplicado</th>
@@ -234,6 +259,7 @@
             @endif
         </td>
         <td class="col-moneda">{!! CuentacorrienteSaldosPorMoneda::etiquetaMonedaHtml((string) ($fila['etiqueta_moneda'] ?? ($fila['abreviatura'] ?? ''))) !!}</td>
+        <td class="text-right col-nowrap col-cotizacion" @if ($tituloCotizacion($fila) !== '') title="{{ $tituloCotizacion($fila) }}" @endif>{{ $fmtCotizacion($fila) }}</td>
         @if ($modoDeuda)
             <td class="text-right">
                 @if ($esTotal)

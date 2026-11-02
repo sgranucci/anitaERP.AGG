@@ -974,7 +974,8 @@ class ComprobanteProveedorPersistenciaService
             $request->input('cuentacontabledebe_ids', []),
             $request->input('concepto_centrocosto_ids', []),
         );
-        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas);
+        // Importes del formulario: no recalcular el gravado desde el IVA.
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas, [], true);
         $fechaYmd = null;
         if ($comprobante->fechacomprobante instanceof \DateTimeInterface) {
             $fechaYmd = $comprobante->fechacomprobante->format('Y-m-d');

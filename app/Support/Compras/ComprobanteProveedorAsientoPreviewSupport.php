@@ -632,7 +632,8 @@ final class ComprobanteProveedorAsientoPreviewSupport
             $request->input('concepto_centrocosto_ids', []),
         );
 
-        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas);
+        // La vista previa usa los montos del formulario, sin recalcular el gravado desde el IVA.
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas, [], true);
         $lineas = OrdencompraContratoRutaFacturaSupport::rellenarCuentaManualEnLineas($ordencompra, $lineas, $fechaYmd);
 
         $conceptos = collect();

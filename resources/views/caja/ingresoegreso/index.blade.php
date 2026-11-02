@@ -371,4 +371,5 @@
 {{ $caja_movimiento->appends($filtrosQuery ?? [])->links() }}
 @include('caja.ingresoegreso.partials.workbench_modales')
 @include('compras.pagoproveedor.partials.modal_enviar_proveedor')
+@include('caja.ingresoegreso.revertiringresoegresomodal')
 @endsection

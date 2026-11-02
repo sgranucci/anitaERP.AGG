@@ -124,74 +124,7 @@ var brutoSpIe = 0;
 			$('#copiaringresoegresoModal').modal('hide');
 		});
 
-		// revierte ingresoegreso
-		$("#boton-revierte-ie").click(function(){
-			$('#revertiringresoegresoModal').modal('show');
-        });
-
-		$('#aceptarevertiringresoegresoModal').on('click', function () {
-
-			$('#revertiringresoegresoModal').modal('hide');
-
-			var ui = window.IngresoEgresoAnularRevertirUi;
-			if (ui && ui.estaEnCurso && ui.estaEnCurso()) {
-				return;
-			}
-			if (ui && ui.setEnCurso) {
-				ui.setEnCurso(true);
-			}
-			if (ui && ui.mostrarProcesando) {
-				ui.mostrarProcesando('Revirtiendo OP…');
-			}
-
-			let url = carpetaBase+'/caja/revertir_ingresoegreso';
-
-			$.post(url, {_token: $('input[name=_token]').val(), 
-						id: $('#id').val(),
-						fecha: $('#fechacopia').val()}, function(data)
-						{ 
-							if (data && data.mensaje === 'ok') {
-								var resultado = data.resultado || {};
-								var nro = resultado.numerotransaccion ? resultado.numerotransaccion : '';
-								var texto = 'Transacción revertida.';
-								if (nro) {
-									texto += resultado.pagoproveedor_reverso_id
-										? (' Compensatoria N°: ' + nro + '.')
-										: (' Anulación N°: ' + nro + '.');
-								}
-								if (resultado.aviso) {
-									texto += ' ' + resultado.aviso;
-								}
-								if (ui && ui.mostrarProcesando) {
-									ui.mostrarProcesando('Listo', texto + ' Actualizando…');
-								}
-								window.setTimeout(function () {
-									window.location.reload();
-								}, 400);
-								return;
-							}
-							if (ui && ui.setEnCurso) {
-								ui.setEnCurso(false);
-							}
-							if (ui && ui.ocultarProcesando) {
-								ui.ocultarProcesando();
-							}
-							alert((data && data.mensaje) ? data.mensaje : 'No se pudo revertir');
-						}).fail(function(xhr){
-							if (ui && ui.setEnCurso) {
-								ui.setEnCurso(false);
-							}
-							if (ui && ui.ocultarProcesando) {
-								ui.ocultarProcesando();
-							}
-							var msg = (xhr.responseJSON && xhr.responseJSON.mensaje) ? xhr.responseJSON.mensaje : 'No se pudo revertir';
-							alert(msg);
-						});
-    	});
-
-		$('#cierrarevertiringresoegresoModal').on('click', function () {
-			$('#revertiringresoegresoModal').modal('hide');
-		});
+		// La reversión (fecha incluida) la confirma anular_revertir.js.
 
 		// Alta: 1 renglón vacío. Transferencia (TRA) pasa a 2 vía asegurarRenglonesCuentaPorTipo.
 		if (flCrear && $("#tbody-cuenta-table .item-cuenta").length === 0) {

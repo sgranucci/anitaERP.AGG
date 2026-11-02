@@ -479,4 +479,5 @@
 @include('compras.pagoproveedor.partials.modal_enviar_proveedor')
 @include('compras.pagoproveedor.partials.modal_devolver_retenciones')
 @include('compras.pagoproveedor.partials.documentos_relacionados_modal')
+@include('caja.ingresoegreso.revertiringresoegresomodal')
 @endsection

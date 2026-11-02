@@ -788,8 +788,9 @@ class Precarga_Comprobante_ProveedorController extends Controller
             $request->input('montos', []),
         );
 
+        // El operador corrige la factura. No reescribir el gravado desde el IVA del agente.
         return ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
-            ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas)
+            ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas, [], true)
         );
     }
 

@@ -172,6 +172,13 @@ class AyudaManuales
                 'etiqueta_boton' => 'Abrir guía paso a paso',
             ],
             [
+                'modulo' => 'Tickets — Sistemas, Tecnología y Mantenimiento',
+                'bajada' => 'Carga, estados, asignación de Tecnología (Sistemas) y cola de Mantenimiento: bandeja, tomar, asignar y avisos.',
+                'url' => route('manual_ticket'),
+                'icono' => 'fa-ticket-alt',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'Plataforma IA (SAP-aligned)',
                 'bajada' => 'Skills, Document AI, panel, gobernanza, HITL, RAG de manuales, MCP, permisos y runbook operativo.',
                 'url' => route('manual_ia'),

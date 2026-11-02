@@ -17,7 +17,7 @@
         ]];
     }
     $cantSaldoFicha = max(1, count($columnasSaldo));
-    $colspan = $soloTotalesDeuda ? 3 : ($modoDeuda ? 12 : (9 + $cantSaldoFicha));
+    $colspan = $soloTotalesDeuda ? 3 : ($modoDeuda ? 13 : (10 + $cantSaldoFicha));
 @endphp
 <table>
     @if ($filaLogo)
@@ -99,6 +99,7 @@
             <th>Vencimiento</th>
             <th>Comprobante</th>
             <th>Moneda</th>
+            <th>Cotización</th>
             @if ($modoDeuda)
                 <th>Importe</th>
                 <th>Aplicado</th>
@@ -143,6 +144,7 @@
                 <td>{{ $fila['fechavencimiento'] ?? '' }}</td>
                 <td>{{ $tipo === 'header_proveedor' ? '' : ($fila['comprobante'] ?? '') }}</td>
                 <td>{{ $fila['etiqueta_moneda'] ?? ($fila['abreviatura'] ?? '') }}</td>
+                <td>{{ isset($fila['cotizacion']) && $fila['cotizacion'] !== '' && (float) $fila['cotizacion'] > 0 ? number_format((float) $fila['cotizacion'], 4, '.', '') : '' }}</td>
                 @if ($modoDeuda)
                     <td>{{ isset($fila['importe']) ? number_format((float) $fila['importe'], 2, '.', '') : '' }}</td>
                     <td>{{ isset($fila['aplicado']) ? number_format((float) $fila['aplicado'], 2, '.', '') : '' }}</td>

@@ -61,6 +61,7 @@
         .text-right { text-align: right; white-space: nowrap; }
         .col-nowrap { white-space: nowrap; }
         .col-moneda { white-space: normal; line-height: 1.15; }
+        .col-cotizacion { white-space: nowrap; }
         .listado-header {
             width: 100%;
             margin: 0 0 4px 0;

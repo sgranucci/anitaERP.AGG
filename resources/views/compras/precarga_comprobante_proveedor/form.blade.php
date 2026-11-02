@@ -191,7 +191,7 @@
 			<label for="total" class="col-lg-4 col-form-label text-right pr-2">Total</label>
             <div class="col-lg-3">
 			    <input type="text" id="total" name="total" class="form-control" value="{{ old('total', number_format((float) ($data->total ?? 0), 2, ',', '.')) }}">
-                <small class="form-text text-muted">Si hay conceptos, al actualizar el subtotal y el total se toman de esos importes. Sin conceptos, pod&eacute;s dejarlos en 0.</small>
+                <small class="form-text text-muted">Si hay conceptos, al actualizar el subtotal y el total se toman de esos importes. Esos montos se graban como los carg&aacute;s: no se recalculan desde el IVA. Sin conceptos, pod&eacute;s dejarlos en 0.</small>
             </div>
 		</div>              
     </div>

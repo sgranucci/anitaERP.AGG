@@ -92,6 +92,18 @@ class ComprobanteProveedorConceptosIvaCoherenciaSupportTest extends TestCase
         $this->assertCount(3, $resultado['lineas']);
     }
 
+    public function test_formulario_manual_conserva_el_gravado_aunque_no_cierre_con_el_iva(): void
+    {
+        $lineas = [
+            ['concepto_ivacompra_id' => 10, 'monto' => 28350.0],
+            ['concepto_ivacompra_id' => 20, 'monto' => 156022.0],
+        ];
+
+        $out = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas, [], true);
+
+        $this->assertSame($lineas, $out);
+    }
+
     public function test_plantilla_en_cero_no_entra_al_grabar_ni_a_coherencia(): void
     {
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(

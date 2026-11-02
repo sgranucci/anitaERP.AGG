@@ -10,11 +10,12 @@ use Illuminate\Support\Facades\DB;
  * Recuentos cerrados de cada depósito para el inventario de contaduría.
  * La fecha pedida es el corte: entran los que tienen fecha hasta el día
  * siguiente (el cierre del 30 se cuenta el 1). No salta a uno posterior.
- * De cada rubro que el comentario nombra se queda el día más reciente,
- * así un recuento posterior de solo bebidas o un ajuste de una línea
- * no borra alimentos, limpieza o cigarrillos contados antes.
- * Un recuento sin rubro en el comentario actualiza los artículos que trae
- * y deja el resto. Si ese día hay varios del mismo rubro, entran todos.
+ * De cada rubro que el comentario nombra se queda el día más reciente.
+ * Ese día reemplaza al recuento anterior del mismo rubro: no se mezclan
+ * fechas. Un recuento posterior de solo bebidas no borra alimentos,
+ * limpieza ni cigarrillos. Si ese día hay varios del mismo rubro, entran todos.
+ * Un recuento sin rubro en el comentario solo entra si ningún recuento
+ * del depósito nombra un rubro, y en ese caso también queda el día más reciente.
  */
 final class ContaduriaInventarioRecuentoSupport
 {
@@ -225,44 +226,34 @@ final class ContaduriaInventarioRecuentoSupport
         }
 
         $seleccion = [];
-        $fechaMinNombrado = null;
         foreach ($porRubro as $grupo) {
-            $fechas = array_column($grupo, 'fecha');
-            rsort($fechas);
-            $maxFecha = $fechas[0] ?? '';
-            if ($maxFecha === '') {
-                continue;
-            }
-            if ($fechaMinNombrado === null || $maxFecha < $fechaMinNombrado) {
-                $fechaMinNombrado = $maxFecha;
-            }
-            foreach ($grupo as $recuento) {
-                if ($recuento['fecha'] === $maxFecha) {
-                    $seleccion[] = $recuento;
-                }
-            }
+            array_push($seleccion, ...self::delDiaMasReciente($grupo));
         }
 
-        if ($sinRubro !== []) {
-            if ($fechaMinNombrado === null) {
-                $fechas = array_column($sinRubro, 'fecha');
-                rsort($fechas);
-                $maxFecha = $fechas[0] ?? '';
-                foreach ($sinRubro as $recuento) {
-                    if ($recuento['fecha'] === $maxFecha) {
-                        $seleccion[] = $recuento;
-                    }
-                }
-            } else {
-                foreach ($sinRubro as $recuento) {
-                    if ($recuento['fecha'] >= $fechaMinNombrado) {
-                        $seleccion[] = $recuento;
-                    }
-                }
-            }
+        if ($porRubro === [] && $sinRubro !== []) {
+            array_push($seleccion, ...self::delDiaMasReciente($sinRubro));
         }
 
         return $seleccion;
+    }
+
+    /**
+     * @param  list<array{fecha:string}>  $grupo
+     * @return list<array{fecha:string}>
+     */
+    private static function delDiaMasReciente(array $grupo): array
+    {
+        $fechas = array_column($grupo, 'fecha');
+        rsort($fechas);
+        $maxFecha = $fechas[0] ?? '';
+        if ($maxFecha === '') {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $grupo,
+            static fn (array $recuento): bool => $recuento['fecha'] === $maxFecha,
+        ));
     }
 
     /**

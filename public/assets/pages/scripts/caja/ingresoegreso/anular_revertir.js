@@ -70,11 +70,20 @@
         $form.find('button[type="submit"], input[type="submit"]').prop('disabled', !!deshabilitar);
     }
 
+    function fechaHoyLocal() {
+        var d = new Date();
+        var mes = String(d.getMonth() + 1).padStart(2, '0');
+        var dia = String(d.getDate()).padStart(2, '0');
+        return d.getFullYear() + '-' + mes + '-' + dia;
+    }
+
+    var $formRevertirPendiente = null;
+
     function postForm($form, confirmMsg, tituloProceso, okMsg) {
         if (enCurso) {
             return;
         }
-        if (!window.confirm(confirmMsg)) {
+        if (confirmMsg && !window.confirm(confirmMsg)) {
             return;
         }
 
@@ -139,13 +148,61 @@
 
     $(document).on('submit', '.form-revertir-ie', function (event) {
         event.preventDefault();
+        if (enCurso) {
+            return;
+        }
         var $form = $(this);
+        var $modal = $('#revertiringresoegresoModal');
+        var $fecha = $('#fecha-reversion-ie');
+        if (!$modal.length || !$fecha.length) {
+            postForm(
+                $form,
+                $form.attr('data-confirm') || '¿Revertir este movimiento?',
+                $form.attr('data-titulo') || 'Revirtiendo…',
+                $form.attr('data-ok') || 'Movimiento revertido.'
+            );
+            return;
+        }
+        $formRevertirPendiente = $form;
+        $fecha.val(fechaHoyLocal());
+        $modal.modal('show');
+    });
+
+    $(document).on('keydown', '#fecha-reversion-ie', function (event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            $('#aceptarevertiringresoegresoModal').trigger('click');
+        }
+    });
+
+    $(document).on('click', '#aceptarevertiringresoegresoModal', function () {
+        if (!$formRevertirPendiente || !$formRevertirPendiente.length) {
+            return;
+        }
+        var fecha = $.trim($('#fecha-reversion-ie').val() || '');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+            notificar('Indique la fecha de la reversión.', 'error');
+            return;
+        }
+        var $form = $formRevertirPendiente;
+        $formRevertirPendiente = null;
+        $('#revertiringresoegresoModal').modal('hide');
+        var $input = $form.find('input[name="fecha"]');
+        if (!$input.length) {
+            $input = $('<input type="hidden" name="fecha">');
+            $form.append($input);
+        }
+        $input.val(fecha);
         postForm(
             $form,
-            $form.attr('data-confirm') || '¿Revertir este movimiento? Si es una orden de pago a proveedores, se genera el AOP compensatorio y la OP queda REVERTIDA. Si es un pago de solicitud, la solicitud vuelve a AUTORIZADA.',
-            $form.attr('data-titulo') || 'Revirtiendo OP…',
-            $form.attr('data-ok') || 'OP revertida.'
+            null,
+            $form.attr('data-titulo') || 'Revirtiendo…',
+            $form.attr('data-ok') || 'Movimiento revertido.'
         );
+    });
+
+    $(document).on('hidden.bs.modal', '#revertiringresoegresoModal', function () {
+        $formRevertirPendiente = null;
     });
 
     // API para el modal de editar (crear.js)

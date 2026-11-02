@@ -81,7 +81,9 @@
                                 El consumo personal toma la factura con descuento 10. La car&aacute;tula lista el staff 80-105
                                 (factura m&aacute;s vianda del centro, en blanco si no hubo consumo), mandos medios y directorio
                                 (solo su factura, con el centro de costo del legajo en rojo) y el comedor.
-                                El detalle del staff junta la factura y la vianda en columnas. Mandos y directorio van en solapas aparte.
+                                El detalle del staff junta la factura y la vianda en columnas. El costo unitario de la vianda
+                                sale de la lista {{ (int) config('vianda.costo_lista_base', 5000) }}+mes vigente al cierre,
+                                igual que el reporte de viandas. Mandos y directorio van en solapas aparte.
                             </p>
                         </div>
                     </div>
@@ -111,8 +113,9 @@
                                 El mes de arriba es para los descuentos y la lista de precios. El inventario usa esta fecha.
                                 Saldo vigente es la existencia del sistema a la fecha de cierre.
                                 &Uacute;ltimo recuento: hasta el d&iacute;a siguiente al cierre (el 30/09 toma el 1/10 y no un recuento del 20/10).
-                                De cada rubro se queda el d&iacute;a m&aacute;s reciente, as&iacute; un recuento posterior de solo bebidas
-                                o un ajuste de una l&iacute;nea no borra alimentos, limpieza ni cigarrillos.
+                                De cada rubro se queda el d&iacute;a m&aacute;s reciente y ese d&iacute;a reemplaza al anterior:
+                                no se mezclan dos recuentos de fechas distintas. Un recuento posterior de solo bebidas
+                                no borra alimentos, limpieza ni cigarrillos.
                                 Los dep&oacute;sitos de cigarrillos (Kandiko 5005, Biyemas 1007) entran aunque el filtro sea 1, 8.
                                 El Excel dice qu&eacute; recuentos us&oacute;.
                             </small>

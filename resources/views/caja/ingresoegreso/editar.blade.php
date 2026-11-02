@@ -95,9 +95,14 @@
                         && empty($data->caja_movimiento_origen_id)
                         && empty($data->caja_movimiento_revertido_por_id)
                     )
-                    <button type="button" id="boton-revierte-ie" class="btn btn-outline-warning btn-sm">
-                        <i class="fa fa-history"></i> Revertir
-                    </button>
+                    <form action="{{ route('revertir_ingresoegreso_id', ['id' => $data->id]) }}"
+                          class="d-inline form-revertir-ie" method="POST">
+                        @csrf
+                        <input type="hidden" name="id" value="{{ $data->id }}">
+                        <button type="submit" class="btn btn-outline-warning btn-sm">
+                            <i class="fa fa-history"></i> Revertir
+                        </button>
+                    </form>
                     @endif
                     @if (
                         can('anular-ingresos-egresos-caja', false)

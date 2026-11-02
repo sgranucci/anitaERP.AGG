@@ -189,7 +189,7 @@
                     </button>
                 @endif
                 @if ($puedeRevertir)
-                    <form action="{{ route('revertir_pagoproveedor', $data->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Revertir esta OP (compensatoria)?');">
+                    <form action="{{ route('revertir_pagoproveedor', $data->id) }}" method="POST" class="d-inline form-revertir-ie" data-confirm="¿Revertir esta OP? Se genera el compensatorio con la fecha indicada.">
                         @csrf
                         <button type="submit" class="btn btn-warning"><i class="fa fa-undo"></i> Revertir</button>
                     </form>
@@ -227,4 +227,5 @@
 @include('includes.contable.modalconsultacuentacontable')
 @include('compras.pagoproveedor.partials.documentos_relacionados_modal')
 @include('compras.pagoproveedor.partials.modal_devolver_retenciones')
+@include('caja.ingresoegreso.revertiringresoegresomodal')
 @endsection

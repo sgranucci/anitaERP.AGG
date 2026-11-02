@@ -70,12 +70,18 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
      *                                           comprobante (lista OC / listaConcepto).
      *                                           Si viene informada, el gravado reparado
      *                                           se elige solo de esa lista.
+     * @param  bool  $respetarImportesInformados  Formulario manual (precarga o comprobante):
+     *                                           se graban los montos tipeados. La corrección
+     *                                           gravado = IVA / alícuota es solo para el agente.
      * @return list<array<string, mixed>>
      */
-    public static function normalizarYValidar(array $lineas, array $conceptoIdsPermitidos = []): array
-    {
-        if ($lineas === []) {
-            return [];
+    public static function normalizarYValidar(
+        array $lineas,
+        array $conceptoIdsPermitidos = [],
+        bool $respetarImportesInformados = false,
+    ): array {
+        if ($lineas === [] || $respetarImportesInformados) {
+            return $lineas;
         }
 
         $conceptoIdsPermitidos = self::normalizarIdsPermitidos($conceptoIdsPermitidos);

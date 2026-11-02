@@ -4893,6 +4893,10 @@ Route::put('ticket/configuracion', 'Ticket\Configuracion_TicketController@actual
 Route::put('ticket/configuracion/areadestino', 'Ticket\Configuracion_TicketController@actualizarAreadestino')->name('actualiza_configuracion_ticket_areadestino');
 Route::put('ticket/configuracion/exclusion', 'Ticket\Configuracion_TicketController@actualizarExclusion')->name('actualiza_configuracion_ticket_exclusion');
 
+Route::get('ticket/manual', 'Ticket\ManualTicketController@index')->name('manual_ticket');
+Route::get('ticket/manual/descargar-pdf', 'Ticket\ManualTicketController@descargarPdf')->name('manual_ticket_pdf');
+Route::get('ticket/manual/descargar-word', 'Ticket\ManualTicketController@descargarWord')->name('manual_ticket_word');
+
 /*
  * Salas
  */

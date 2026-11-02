@@ -26,7 +26,7 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'L';
+    private const COL_ULTIMA = 'M';
 
     private bool $hayFilaLogos = false;
 
@@ -69,7 +69,7 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
             $this->colUltima = 'C';
         } elseif (($this->filtros['modo'] ?? '') === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA) {
             $cantSaldo = max(1, count($this->resultado['columnas_saldo'] ?? []));
-            $this->colUltima = self::letraColumna(9 + $cantSaldo);
+            $this->colUltima = self::letraColumna(10 + $cantSaldo);
         }
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion(
@@ -127,11 +127,12 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'G' => NumberFormat::FORMAT_TEXT,
+            'H' => '#,##0.0000',
         ];
         $hasta = ($this->filtros['modo'] ?? '') === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA
-            ? 9 + max(1, count($this->resultado['columnas_saldo'] ?? []))
-            : 11;
-        for ($indice = 8; $indice <= $hasta; $indice++) {
+            ? 10 + max(1, count($this->resultado['columnas_saldo'] ?? []))
+            : 12;
+        for ($indice = 9; $indice <= $hasta; $indice++) {
             $formatos[self::letraColumna($indice)] = '#,##0.00';
         }
 
@@ -174,14 +175,15 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
             'E' => 11,
             'F' => 28,
             'G' => 14,
-            'H' => 16,
+            'H' => 14,
             'I' => 16,
             'J' => 16,
             'K' => 16,
             'L' => 16,
+            'M' => 16,
         ];
         if (($this->filtros['modo'] ?? '') === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA) {
-            $hasta = 9 + max(1, count($this->resultado['columnas_saldo'] ?? []));
+            $hasta = 10 + max(1, count($this->resultado['columnas_saldo'] ?? []));
             for ($indice = 13; $indice <= $hasta; $indice++) {
                 $anchos[self::letraColumna($indice)] = 16;
             }

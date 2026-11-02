@@ -8,6 +8,7 @@ use App\Models\Ventas\DescuentoGastronomia;
 use App\Support\Ventas\ContaduriaGastronomiaReporteCatalogo;
 use App\Support\Ventas\GastronomiaDescuentoReporteFiltros;
 use App\Support\Ventas\GastronomiaDescuentoReporteTipoArticuloSupport;
+use App\Support\Ventas\Vianda\ViandaPrecioSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -233,6 +234,8 @@ final class ContaduriaGastronomiaReporteService
     /**
      * Suma la vianda del centro a la factura del cliente STAFF de ese código.
      * No toca mandos, directorio ni comedor: la vianda de esas personas ya entra por el centro.
+     * El costo unitario es el de la lista 5000+mes vigente al cierre del período, el mismo
+     * que el reporte de viandas. No promedia el costo grabado al marchar.
      *
      * @param  array<string, mixed>  $resultado
      * @param  array<int, array{codigo:string,nombre:string}>  $staff
@@ -268,7 +271,7 @@ final class ContaduriaGastronomiaReporteService
             ->selectRaw('MAX(vcl.descripcion) as descripcion')
             ->selectRaw('MAX(COALESCE(ta.nombre, vcl.tipoarticulo_nombre)) as tipoarticulo_nombre')
             ->selectRaw('SUM(vcl.cantidad) as unidades')
-            ->selectRaw('SUM(vcl.cantidad * vcl.precio_costo_unitario) as costo_total')
+            ->selectRaw('SUM(vcl.cantidad * vcl.precio_costo_unitario) as costo_historico')
             ->selectRaw('SUM(vcl.cantidad * vcl.precio_venta_unitario) as total_venta')
             ->get();
 
@@ -293,6 +296,9 @@ final class ContaduriaGastronomiaReporteService
             }
             $porCentro[$codigo][] = $linea;
         }
+
+        /** @var array<int, float> $cacheCosto */
+        $cacheCosto = [];
 
         foreach ($porCentro as $codigo => $filasCentro) {
             if (! isset($indice[$codigo])) {
@@ -330,6 +336,11 @@ final class ContaduriaGastronomiaReporteService
                 if ($articuloId <= 0) {
                     continue;
                 }
+                $costoCatalogo = $this->costoCatalogoVianda($articuloId, $hasta, $cacheCosto);
+                $costoUnit = $costoCatalogo > 0
+                    ? $costoCatalogo
+                    : round((float) $linea->costo_historico / $unidades, 2);
+                $costoTotal = round($unidades * $costoUnit, 2);
                 if (! isset($map[$articuloId])) {
                     $tipoId = (int) ($linea->tipoarticulo_id ?? 0);
                     $map[$articuloId] = [
@@ -339,18 +350,19 @@ final class ContaduriaGastronomiaReporteService
                         'tipoarticulo_id' => $tipoId > 0 ? $tipoId : null,
                         'tipoarticulo_nombre' => trim((string) ($linea->tipoarticulo_nombre ?? '')),
                         'unidades' => 0.0,
-                        'costo_unitario' => 0.0,
+                        'costo_unitario' => $costoUnit,
                         'costo_total' => 0.0,
                         'precio_venta' => 0.0,
                         'total_venta' => 0.0,
                     ];
+                } elseif ($costoCatalogo > 0) {
+                    $map[$articuloId]['costo_unitario'] = $costoCatalogo;
                 }
                 $map[$articuloId]['unidades'] = round((float) $map[$articuloId]['unidades'] + $unidades, 4);
-                $map[$articuloId]['costo_total'] = round((float) $map[$articuloId]['costo_total'] + (float) $linea->costo_total, 2);
+                $map[$articuloId]['costo_total'] = round((float) $map[$articuloId]['costo_total'] + $costoTotal, 2);
                 $map[$articuloId]['total_venta'] = round((float) $map[$articuloId]['total_venta'] + (float) $linea->total_venta, 2);
                 $unidadesFila = (float) $map[$articuloId]['unidades'];
                 if ($unidadesFila > 0) {
-                    $map[$articuloId]['costo_unitario'] = round((float) $map[$articuloId]['costo_total'] / $unidadesFila, 2);
                     $map[$articuloId]['precio_venta'] = round((float) $map[$articuloId]['total_venta'] / $unidadesFila, 2);
                 }
             }
@@ -362,6 +374,23 @@ final class ContaduriaGastronomiaReporteService
         $resultado['bloques'] = array_values($bloques);
 
         return $resultado;
+    }
+
+    /**
+     * @param  array<int, float>  $cache
+     */
+    private function costoCatalogoVianda(int $articuloId, string $fechaCosto, array &$cache): float
+    {
+        if ($articuloId <= 0) {
+            return 0.0;
+        }
+        if (array_key_exists($articuloId, $cache)) {
+            return $cache[$articuloId];
+        }
+
+        $cache[$articuloId] = round(ViandaPrecioSupport::precioCostoUnitario($articuloId, $fechaCosto), 2);
+
+        return $cache[$articuloId];
     }
 
     /**

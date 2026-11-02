@@ -275,6 +275,9 @@
                             line-height: 1.2;
                             min-width: 7.5rem;
                         }
+                        #tabla-cc-proveedores-reporte .col-cotizacion {
+                            white-space: nowrap;
+                        }
                     </style>
 
                     <div class="table-responsive">

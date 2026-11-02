@@ -65,7 +65,9 @@ final class ContaduriaInventarioRubroSupport
         if (str_contains($texto, 'LIMPIEZA') && str_contains($texto, 'DESCARTABLE')) {
             return 'limpieza_descartables';
         }
-        if (str_contains($texto, 'ALMACEN') || str_contains($texto, 'ALIMENTO')) {
+        // ALIEMENTO cubre el typo "ALIEMENTOS" (una E de más). Si no entra
+        // como alimento, el reporte lo mezcla con el recuento anterior.
+        if (str_contains($texto, 'ALMACEN') || str_contains($texto, 'ALIMENTO') || str_contains($texto, 'ALIEMENTO')) {
             return 'alimento';
         }
         if (str_contains($texto, 'LIMPIEZA')) {
