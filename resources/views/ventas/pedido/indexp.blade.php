@@ -92,7 +92,6 @@ function eliminarPedido(event) {
                             <i class="fa fa-fw fa-times-circle"></i> Cierre de pedidos
                         </a>
                     @endif
-                    @include('includes.ventas.link_mi_impresora', ['claseBtnMiImpresora' => 'btn btn-outline-secondary btn-sm ml-1'])
                     <a href="#" onclick="return configurarSalida();" class="btn btn-outline-secondary btn-sm ml-1">
                         <i class="fa fa-fw fa-cog"></i> Configura salida
                     </a>
