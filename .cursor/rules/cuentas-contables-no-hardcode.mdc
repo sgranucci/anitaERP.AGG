@@ -1,0 +1,40 @@
+---
+description: Un código de cuenta contable no se escribe en config ni en PHP
+alwaysApply: true
+---
+
+# Cuentas contables: no hardcodear el código
+
+Un código de `cuentacontable` (`213100016`, `411000001`, etc.) no se escribe en `config/*.php`, `.env`, constantes ni arrays de PHP. Lo asigna el operador en la pantalla, sin deploy.
+
+`config/iva_ventas.php` no es esa pantalla. El comentario «editar acá el rango» no se copia. Los mapas que ya están ahí son legado: no se les agrega otro código.
+
+El lugar es **cuentas automáticas** (`CuentaAutomaticaResolver`) o la tabla de configuración del módulo que ya tenga pantalla. El código lee el id; no conoce el número de cuenta.
+
+## Si piden «agregá la cuenta X»
+
+1. Buscar la pantalla o la tabla que ya lista las cuentas de ese proceso.
+2. Si existe, la cuenta se carga ahí. En producción no se graba la base sin preguntar.
+3. Si el proceso solo tiene un array fijo en `config/` o en PHP, no sumar otro código. Decir que hoy está hardcodeado y ofrecer pasarlo a la pantalla.
+
+## Prohibido
+
+```php
+'cuentas_iva_debito_por_empresa' => [
+    1 => [213100001, 213100016],
+],
+```
+
+## Correcto
+
+```php
+$cuentaId = CuentaAutomaticaResolver::resolverId($empresaId, CuentaAutomaticaClaves::VENTAS_IVA_DEBITO_FISCAL);
+```
+
+## Qué sí puede quedar en config
+
+Flags técnicos (`true` / `false`), nombres de clase, rutas. No códigos del plan de cuentas, depósitos, artículos ni clientes.
+
+## Al cerrar
+
+Un código de cuenta nuevo en el diff no se deja. Complementa `sin-hardcode-valores-negocio`.

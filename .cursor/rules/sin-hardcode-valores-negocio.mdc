@@ -5,7 +5,9 @@ alwaysApply: true
 
 # Sin valores de negocio hardcodeados
 
-Umbrales, porcentajes, cuentas, mails, logins, destinatarios, plazos y textos que el operador puede cambiar van a la **configuración del módulo**. El código solo los lee.
+Umbrales, porcentajes, cuentas, mails, logins, destinatarios, plazos y textos que el operador puede cambiar van a la **pantalla del módulo**. El código solo los lee.
+
+Un array en `config/*.php` no es esa pantalla. Códigos de cuenta: regla `cuentas-contables-no-hardcode`.
 
 ## Dónde se guarda
 
