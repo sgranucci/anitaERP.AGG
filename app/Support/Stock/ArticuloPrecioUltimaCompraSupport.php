@@ -418,6 +418,7 @@ final class ArticuloPrecioUltimaCompraSupport
             ->whereIn('rpa.articulo_id', $articuloIds)
             ->where('rp.estado', RecepcionProveedorEstados::CONFIRMADA)
             ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION)
+            ->where('rpa.cantidad', '>', 0)
             ->where('rpa.precio', '>', 0);
 
         if (Schema::hasColumn('recepcion_proveedor', 'deleted_at')) {
@@ -635,7 +636,8 @@ final class ArticuloPrecioUltimaCompraSupport
             ))
             ->whereIn('rpa.articulo_id', $articuloIds)
             ->where('rp.estado', RecepcionProveedorEstados::CONFIRMADA)
-            ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION);
+            ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION)
+            ->where('rpa.cantidad', '>', 0);
 
         if (Schema::hasColumn('recepcion_proveedor', 'deleted_at')) {
             $recepcionesQuery->whereNull('rp.deleted_at');

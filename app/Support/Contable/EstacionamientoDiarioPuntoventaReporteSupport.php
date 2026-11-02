@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Support\Contable;
 
+use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
+use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Venta;
+use App\Support\Caja\Estacionamiento\RendicionEstacionamientoReclasificacionMediosSupport;
 use App\Services\Caja\Estacionamiento\EstacionamientoFacturacionService;
 use App\Support\Caja\Estacionamiento\EstacionamientoVentaDetalleSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
@@ -42,6 +45,7 @@ final class EstacionamientoDiarioPuntoventaReporteSupport
         }
 
         $emisiones = $this->cargarEmisiones($empresaId, $desde, $hasta, $puntoventaId);
+        $contadoPorDiaPv = $this->contadoPorDiaPv($empresaId, $desde, $hasta, $puntoventaId);
         /** @var array<string, array<int, list<VentaEstacionamientoEmision>>> $porDiaPv */
         $porDiaPv = [];
 
@@ -83,6 +87,7 @@ final class EstacionamientoDiarioPuntoventaReporteSupport
             ksort($porPv);
             foreach ($porPv as $pvId => $grupo) {
                 $fila = $this->armarFilaPuntoventa($grupo);
+                $fila = $this->aplicarReclasificacionConteo($fila, $contadoPorDiaPv[$fecha][$pvId] ?? null);
                 $puntoventas[] = $fila;
                 $this->acumularBloque($totDia, $fila);
                 $this->acumularBloque($resumen, $fila);
@@ -154,6 +159,108 @@ final class EstacionamientoDiarioPuntoventaReporteSupport
                 'venta.caja_movimientos.cobranzas',
             ])
             ->get();
+    }
+
+    /**
+     * Importe contado por la rendición, por jornada y punto de venta.
+     *
+     * @return array<string, array<int, array<int, float>>>
+     */
+    private function contadoPorDiaPv(int $empresaId, string $desde, string $hasta, ?int $puntoventaId): array
+    {
+        $rendiciones = RendicionEstacionamientoCaja::query()
+            ->with(['movimientos', 'turnoOperativo.jornada'])
+            ->where('empresa_id', $empresaId)
+            ->where(function ($q) {
+                $q->where('tipo', RendicionEstacionamientoCaja::TIPO_TURNO)
+                    ->orWhereNull('tipo')
+                    ->orWhere('tipo', '');
+            })
+            ->when($puntoventaId !== null && $puntoventaId > 0, function ($q) use ($puntoventaId) {
+                $q->where('puntoventa_cae_id', $puntoventaId);
+            })
+            ->whereHas('turnoOperativo.jornada', function ($q) use ($desde, $hasta) {
+                $q->whereBetween('fecha_jornada', [$desde, $hasta]);
+            })
+            ->get();
+
+        $out = [];
+        foreach ($rendiciones as $rendicion) {
+            $fecha = $rendicion->turnoOperativo?->jornada?->fecha_jornada?->format('Y-m-d');
+            $pvId = (int) ($rendicion->puntoventa_cae_id ?? 0);
+            if ($fecha === null || $pvId <= 0) {
+                continue;
+            }
+            foreach ($rendicion->movimientos as $mov) {
+                $cuentaId = (int) ($mov->cuentacaja_id ?? 0);
+                if ($cuentaId <= 0) {
+                    continue;
+                }
+                $out[$fecha][$pvId][$cuentaId] = round(
+                    ($out[$fecha][$pvId][$cuentaId] ?? 0) + (float) $mov->monto,
+                    2,
+                );
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Si el total contado cierra con lo facturado, el informe muestra el reparto contado
+     * (el pase entre efectivo y Mercado Pago). Si el total no cierra, no se toca: eso es sobrante/faltante.
+     *
+     * @param  array<string, mixed>  $fila
+     * @param  array<int, float>|null  $contado
+     * @return array<string, mixed>
+     */
+    private function aplicarReclasificacionConteo(array $fila, ?array $contado): array
+    {
+        if ($contado === null || $contado === []) {
+            return $fila;
+        }
+
+        $facturado = [];
+        foreach ($fila['medios'] as $medio) {
+            $cuentaId = (int) ($medio['cuentacaja_id'] ?? 0);
+            if ($cuentaId <= 0) {
+                continue;
+            }
+            $facturado[$cuentaId] = round(($facturado[$cuentaId] ?? 0) + (float) ($medio['neto'] ?? 0), 2);
+        }
+
+        $distribucion = RendicionEstacionamientoReclasificacionMediosSupport::distribucionContada($facturado, $contado);
+        if ($distribucion === null) {
+            return $fila;
+        }
+
+        $medios = [];
+        foreach ($fila['medios'] as $medio) {
+            $cuentaId = (int) ($medio['cuentacaja_id'] ?? 0);
+            if ($cuentaId <= 0 || ! array_key_exists($cuentaId, $distribucion)) {
+                continue;
+            }
+            $neto = $distribucion[$cuentaId];
+            $medio['neto'] = $neto;
+            $medio['cobros'] = $neto >= 0 ? $neto : 0.0;
+            $medio['devoluciones_nc'] = $neto < 0 ? abs($neto) : 0.0;
+            $medios[$cuentaId] = $medio;
+            unset($distribucion[$cuentaId]);
+        }
+        foreach ($distribucion as $cuentaId => $neto) {
+            $cuenta = Cuentacaja::query()->find($cuentaId);
+            $medios[$cuentaId] = [
+                'cuentacaja_id' => $cuentaId,
+                'codigo' => (string) ($cuenta->codigo ?? ''),
+                'nombre' => trim((string) ($cuenta->nombre ?? '')),
+                'cobros' => $neto >= 0 ? $neto : 0.0,
+                'devoluciones_nc' => $neto < 0 ? abs($neto) : 0.0,
+                'neto' => $neto,
+            ];
+        }
+        $fila['medios'] = array_values($medios);
+
+        return $fila;
     }
 
     /**

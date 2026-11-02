@@ -6,6 +6,7 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Models\Contable\Cuentacontable;
+use App\Support\Caja\Estacionamiento\RendicionEstacionamientoReclasificacionMediosSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -98,6 +99,10 @@ final class CierreRendicionEstacionamientoAsientoSupport
             ->values();
 
         $datos = self::datosDesdeEmisiones($emisionesConsolidadas, $empresaId);
+        $datos['debe_por_cuentacaja'] = self::mediosSegunConteoSiReclasificacion(
+            $datos['debe_por_cuentacaja'],
+            $rendiciones,
+        );
         $advertencias = array_merge($advertencias, $datos['advertencias'] ?? []);
 
         $cuentaVentas = (int) ($config['cuenta_ventas_id'] ?? 0);
@@ -364,6 +369,60 @@ final class CierreRendicionEstacionamientoAsientoSupport
                 'venta.caja_movimientos.cobranzas',
             ])
             ->get();
+    }
+
+    /**
+     * Si lo contado en las rendiciones suma igual que lo cobrado en las facturas,
+     * el asiento toma el reparto contado. El pase entre medios no va a diferencia de caja.
+     *
+     * @param  list<array{concepto:string,cuentacaja_id:int,monto:float}>  $debePorCuentacaja
+     * @param  Collection<int, RendicionEstacionamientoCaja>  $rendiciones
+     * @return list<array{concepto:string,cuentacaja_id:int,monto:float}>
+     */
+    private static function mediosSegunConteoSiReclasificacion(array $debePorCuentacaja, Collection $rendiciones): array
+    {
+        $rendiciones->loadMissing('movimientos.cuentacaja');
+        $contado = [];
+        foreach ($rendiciones as $rendicion) {
+            foreach ($rendicion->movimientos as $mov) {
+                $cuentaId = (int) ($mov->cuentacaja_id ?? 0);
+                if ($cuentaId <= 0) {
+                    continue;
+                }
+                $contado[$cuentaId] = round(($contado[$cuentaId] ?? 0) + (float) $mov->monto, 2);
+            }
+        }
+
+        $facturado = [];
+        $concepto = [];
+        foreach ($debePorCuentacaja as $row) {
+            $cuentaId = (int) ($row['cuentacaja_id'] ?? 0);
+            if ($cuentaId <= 0) {
+                continue;
+            }
+            $facturado[$cuentaId] = round(($facturado[$cuentaId] ?? 0) + (float) ($row['monto'] ?? 0), 2);
+            $concepto[$cuentaId] = (string) ($row['concepto'] ?? 'Medio de cobro');
+        }
+
+        $distribucion = RendicionEstacionamientoReclasificacionMediosSupport::distribucionContada($facturado, $contado);
+        if ($distribucion === null) {
+            return $debePorCuentacaja;
+        }
+
+        $out = [];
+        foreach ($distribucion as $cuentaId => $monto) {
+            if (! isset($concepto[$cuentaId])) {
+                $nombre = trim((string) (Cuentacaja::query()->whereKey($cuentaId)->value('nombre') ?? ''));
+                $concepto[$cuentaId] = $nombre !== '' ? 'Medio de cobro — '.$nombre : 'Medio de cobro';
+            }
+            $out[] = [
+                'concepto' => $concepto[$cuentaId],
+                'cuentacaja_id' => $cuentaId,
+                'monto' => $monto,
+            ];
+        }
+
+        return $out;
     }
 
     /**

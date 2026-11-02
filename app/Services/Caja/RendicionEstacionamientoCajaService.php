@@ -871,6 +871,7 @@ class RendicionEstacionamientoCajaService
             }
 
             $this->exigirMovimientosSiHayCobranzasEnTurno($cabecera, $movimientos);
+            $this->exigirCuadreMedios($cabecera, $movimientos);
 
             $this->exigirRendicionTurnoModificablePorTurnoId($turnoId);
 
@@ -1042,6 +1043,7 @@ class RendicionEstacionamientoCajaService
                 }
 
                 $this->exigirMovimientosSiHayCobranzasEnTurno($cabecera, $movimientos);
+                $this->exigirCuadreMedios($cabecera, $movimientos);
 
                 $this->exigirRendicionTurnoModificablePorTurnoId($turnoId);
             }
@@ -1289,6 +1291,7 @@ class RendicionEstacionamientoCajaService
                 'nombre' => (string) ($p['nombre'] ?? $p['codigo'] ?? ''),
                 'monto' => $monto,
                 'esperado' => $esperado,
+                'contado' => $desdeContadoCierre ? round((float) $p['contado'], 2) : null,
                 'cotizacion' => CotizacionTesoreriaConsultaSupport::calculaVenta($fechaYmd, $monedaId, $empresaId),
                 'desde_contado_cierre' => $desdeContadoCierre,
             ];
@@ -1380,6 +1383,40 @@ class RendicionEstacionamientoCajaService
      * @param  array<string, mixed>  $cabecera
      * @param  list<array{cuentacaja_id?:int, es_nota_credito?:bool, monto?:float, cotizacion?:float}>  $movimientos
      */
+    /**
+     * El total de los medios más el sobrante/faltante tiene que cerrar con lo cobrado.
+     * Un pase entre medios (efectivo y Mercado Pago) deja el sobrante en cero:
+     * no es diferencia de caja. El faltante o sobrante es solo cuando el total no cierra.
+     *
+     * @param  array<string, mixed>  $cabecera
+     * @param  list<array{cuentacaja_id?:int, monto?:float}>  $movimientos
+     */
+    private function exigirCuadreMedios(array $cabecera, array $movimientos): void
+    {
+        $suma = 0.0;
+        foreach ($movimientos as $mov) {
+            $suma += (float) ($mov['monto'] ?? 0);
+        }
+        $ajustado = round(
+            $suma
+            + (float) ($cabecera['sobrantefaltante'] ?? 0)
+            + (float) ($cabecera['totalredondeo'] ?? 0)
+            + (float) ($cabecera['totalredondeoinvitacion'] ?? 0),
+            2,
+        );
+        $cobrado = round((float) ($cabecera['totalcobrado'] ?? 0), 2);
+        if (abs($ajustado - $cobrado) <= self::TOLERANCIA) {
+            return;
+        }
+
+        throw new InvalidArgumentException(
+            'Los medios rendidos ($'.number_format($suma, 2, ',', '.').') más sobrante/faltante'
+            .' no cierran con lo cobrado ($'.number_format($cobrado, 2, ',', '.').').'
+            .' Si solo cambió el reparto entre efectivo y otro medio, el total tiene que seguir igual'
+            .' y el sobrante/faltante queda en cero. Eso no es diferencia de caja.'
+        );
+    }
+
     private function exigirMovimientosSiHayCobranzasEnTurno(array $cabecera, array $movimientos): void
     {
         if ($this->tieneMovimientosMedioPago($movimientos)) {

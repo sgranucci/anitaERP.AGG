@@ -256,18 +256,16 @@
             return '';
         }
         var esperado = esperadosSistema[ccId];
+        var rendido = typeof montoRendido === 'number' ? montoRendido : parseDecimal(montoRendido);
         if (esperado == null) {
             return '';
         }
-        var rendido = typeof montoRendido === 'number' ? montoRendido : parseDecimal(montoRendido);
         var diff = Math.round((rendido - esperado) * 100) / 100;
-        if (Math.abs(diff) <= 0.02) {
-            return '';
+        if (Math.abs(diff) > 0.02) {
+            return '<small class="d-block text-muted js-hint-diff-medio mt-1">Pase de $'
+                + esc(fmt(Math.abs(diff))) + ' respecto de lo facturado. Si el total del turno no cambia, no es diferencia de caja.</small>';
         }
-        var tipo = diff > 0 ? 'sobra' : 'falta';
-        return '<small class="d-block text-warning js-hint-diff-medio mt-1">Δ $' + esc(fmt(Math.abs(diff)))
-            + ' (' + tipo + ' vs sistema). '
-            + 'Se compensa en <strong>sobrante / faltante</strong> abajo.</small>';
+        return '';
     }
 
     function actualizarHintsDiffMedios() {
@@ -316,7 +314,7 @@
             return;
         }
         thMonto.textContent = desdeContadoCierre
-            ? 'Monto rendido (desde cierre)'
+            ? 'Monto facturado'
             : 'Monto rendido';
     }
 
@@ -629,7 +627,8 @@
             var esNc = !!(m.es_nota_credito);
             var ccId = parseInt(m.cuentacaja_id, 10) || 0;
             var esEfectivo = !esNc && esFilaEfectivo(ccId);
-            var montoFmt = fmt(parseFloat(m.monto) || 0);
+            var montoNum = parseFloat(m.monto) || 0;
+            var montoFmt = fmt(montoNum);
             var cotFmt = fmt(parseFloat(m.cotizacion != null ? m.cotizacion : 1) || 1);
             var trStyle = esNc ? ' style="background:#fdecea;"' : '';
             var trClass = esEfectivo ? ' gastro-rendicion-fila-efectivo' : '';
@@ -641,7 +640,7 @@
                 html += ' <span class="badge badge-info badge-sm">Efectivo</span>';
             }
             if (!esNc && m.desde_contado_cierre) {
-                html += ' <span class="badge badge-success badge-sm" title="Precargado del arqueo del cierre de turno">Cierre</span>';
+                html += ' <span class="badge badge-success badge-sm" title="Igual a lo facturado. El conteo distinto queda en sobrante/faltante.">Facturado</span>';
             }
             if (!esNc) {
                 html += '<input type="hidden" name="movimientos[' + idxPersistido + '][cuentacaja_id]" value="' + esc(m.cuentacaja_id) + '"/>';
@@ -655,7 +654,7 @@
             } else {
                 html += '<input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-monto-medio js-monto-medio-rendicion js-monto-decimal js-recalcula" ';
                 html += 'name="movimientos[' + idxPersistido + '][monto]" value="' + esc(montoFmt) + '"/>';
-                html += '<div class="js-contenedor-hint-medio">' + htmlHintDiffMedio(ccId, montoFmt) + '</div>';
+                html += '<div class="js-contenedor-hint-medio">' + htmlHintDiffMedio(ccId, montoNum) + '</div>';
             }
             html += '</div></td>';
             html += '<td class="gastro-col-cotiz text-right"' + tdStyle + '><div class="gastro-celda-numero">';

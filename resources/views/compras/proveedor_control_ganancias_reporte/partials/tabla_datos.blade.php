@@ -4,7 +4,7 @@
         <th>Razón social</th>
         <th>Condición IVA ABM</th>
         <th>Cód. ret. actual</th>
-        <th>Actividad ARCA</th>
+        <th>Actividades declaradas</th>
         <th>Cód. ret. propuesto</th>
         <th>Padrón</th>
         <th>Obs.</th>
@@ -35,10 +35,26 @@
             <div class="small text-muted">{{ $fila['retencion_actual_nombre'] ?? '' }}</div>
         </td>
         <td>
-            @if (! empty($fila['actividad_id']))
-                <span class="text-nowrap">{{ $fila['actividad_id'] }}</span>
-            @endif
-            <div class="small">{{ $fila['actividad_descripcion'] ?? '—' }}</div>
+            @forelse ($fila['actividades'] ?? [] as $act)
+                <div class="{{ empty($act['principal']) && count($fila['actividades'] ?? []) > 1 ? 'small text-muted' : '' }}">
+                    @if (! empty($act['id']))
+                        <span class="text-nowrap">{{ $act['id'] }}</span>
+                    @endif
+                    {{ $act['descripcion'] ?? '' }}
+                    @if (! empty($act['principal']) && count($fila['actividades'] ?? []) > 1)
+                        <span class="badge badge-light">principal</span>
+                    @endif
+                </div>
+            @empty
+                @if (! empty($fila['actividad_id']) || ($fila['actividad_descripcion'] ?? '') !== '')
+                    @if (! empty($fila['actividad_id']))
+                        <span class="text-nowrap">{{ $fila['actividad_id'] }}</span>
+                    @endif
+                    <div class="small">{{ $fila['actividad_descripcion'] ?? '' }}</div>
+                @else
+                    <span class="text-muted">—</span>
+                @endif
+            @endforelse
         </td>
         <td class="text-nowrap">
             {{ $fila['retencion_propuesta_codigo'] !== '' ? $fila['retencion_propuesta_codigo'] : '—' }}

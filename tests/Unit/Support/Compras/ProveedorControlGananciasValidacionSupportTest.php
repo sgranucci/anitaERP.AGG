@@ -73,10 +73,90 @@ class ProveedorControlGananciasValidacionSupportTest extends TestCase
         $this->assertSame('ri', $fila['segmento']);
         $this->assertSame(620100, $fila['actividad_id']);
         $this->assertSame('Servicios de software', $fila['actividad_descripcion']);
+        $this->assertCount(1, $fila['actividades']);
+        $this->assertTrue($fila['actividades'][0]['principal']);
         $this->assertSame('78', $fila['retencion_actual_codigo']);
         $this->assertSame('', $fila['retencion_propuesta_codigo']);
         $this->assertTrue($fila['discrepancia']);
         $this->assertStringContainsString('mapeo', mb_strtolower($fila['observaciones']));
+    }
+
+    public function test_fila_lista_todas_las_actividades_y_marca_la_principal(): void
+    {
+        $prov = $this->proveedor(
+            $this->condicion(1, 'Responsable Inscripto'),
+            $this->retencion('78', 'Servicios')
+        );
+
+        $fila = ProveedorControlGananciasValidacionSupport::armarFila($prov, [
+            'actividadPrincipal' => [
+                'idActividad' => 620100,
+                'descripcionActividad' => 'Servicios de software',
+                'orden' => 1,
+                'fuente' => 'regimen_general',
+            ],
+            'actividades' => [
+                [
+                    'idActividad' => 461011,
+                    'descripcionActividad' => 'Venta al por mayor en comisión',
+                    'orden' => 2,
+                ],
+                [
+                    'idActividad' => 620100,
+                    'descripcionActividad' => 'Servicios de software',
+                    'orden' => 1,
+                ],
+            ],
+            'datosMonotributo' => [
+                'actividadMonotributista' => [
+                    'idActividad' => 620100,
+                    'descripcionActividad' => 'Servicios de software',
+                ],
+            ],
+            'impuestos' => [
+                ['idImpuesto' => 30, 'estadoImpuesto' => 'AC', 'fuente' => 'regimen_general'],
+            ],
+            'error' => null,
+        ]);
+
+        $this->assertCount(2, $fila['actividades']);
+        $this->assertSame(620100, $fila['actividades'][0]['id']);
+        $this->assertTrue($fila['actividades'][0]['principal']);
+        $this->assertSame(461011, $fila['actividades'][1]['id']);
+        $this->assertFalse($fila['actividades'][1]['principal']);
+        $this->assertStringContainsString('620100 — Servicios de software (principal)', $fila['actividades_detalle']);
+        $this->assertStringContainsString('461011 — Venta al por mayor en comisión', $fila['actividades_detalle']);
+    }
+
+    public function test_fila_sin_regimen_general_toma_la_actividad_monotributista(): void
+    {
+        $prov = $this->proveedor(
+            $this->condicion(1, 'Responsable Inscripto'),
+            $this->retencion('78', 'Servicios')
+        );
+
+        $fila = ProveedorControlGananciasValidacionSupport::armarFila($prov, [
+            'actividadPrincipal' => [
+                'idActividad' => 960990,
+                'descripcionActividad' => 'Servicios personales n.c.p.',
+                'fuente' => 'monotributo',
+            ],
+            'actividades' => [],
+            'datosMonotributo' => [
+                'actividadMonotributista' => [
+                    'idActividad' => 960990,
+                    'descripcionActividad' => 'Servicios personales n.c.p.',
+                ],
+            ],
+            'impuestos' => [
+                ['idImpuesto' => 20, 'estadoImpuesto' => 'AC', 'fuente' => 'monotributo'],
+            ],
+            'error' => null,
+        ]);
+
+        $this->assertCount(1, $fila['actividades']);
+        $this->assertSame(960990, $fila['actividades'][0]['id']);
+        $this->assertSame('960990 — Servicios personales n.c.p.', $fila['actividades_detalle']);
     }
 
     public function test_fila_sin_consulta_arca_no_propone_codigo(): void

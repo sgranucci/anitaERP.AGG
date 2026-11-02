@@ -38,6 +38,7 @@ final class ProveedorControlGananciasValidacionSupport
         $descActividad = isset($actividad['descripcionActividad'])
             ? (string) $actividad['descripcionActividad']
             : null;
+        $actividades = self::actividadesDeclaradas($padronData, $idActividad > 0 ? $idActividad : null);
 
         if ($segmento === self::SEGMENTO_MONO) {
             $propuesta = ProveedorActividadRetencionGananciasSupport::proponerSinRetencion();
@@ -122,6 +123,8 @@ final class ProveedorControlGananciasValidacionSupport
             'actividad_id' => $idActividad > 0 ? $idActividad : null,
             'actividad_descripcion' => $descActividad ?? '',
             'actividad_fuente' => isset($actividad['fuente']) ? (string) $actividad['fuente'] : '',
+            'actividades' => $actividades,
+            'actividades_detalle' => self::textoActividades($actividades),
             'retencion_propuesta_codigo' => $codigoPropuesto,
             'retencion_propuesta_nombre' => $propuesta['nombre'] ?? '',
             'retencion_propuesta_origen' => $propuesta['origen'] ?? '',
@@ -130,6 +133,150 @@ final class ProveedorControlGananciasValidacionSupport
             'discrepancia' => $discrepancia,
             'observaciones' => implode(' | ', $obs),
         ];
+    }
+
+    /**
+     * Todas las actividades de la constancia. La de orden 1 (o la monotributista) queda marcada como principal.
+     *
+     * @param  array<string, mixed>|null  $padronData
+     * @return list<array{id: int|null, descripcion: string, orden: int|null, principal: bool, fuente: string}>
+     */
+    private static function actividadesDeclaradas(?array $padronData, ?int $idPrincipal): array
+    {
+        if (! is_array($padronData)) {
+            return [];
+        }
+
+        $items = [];
+        foreach (is_array($padronData['actividades'] ?? null) ? $padronData['actividades'] : [] as $act) {
+            $item = self::itemActividad(is_array($act) ? $act : null, 'regimen_general');
+            if ($item !== null) {
+                $items[] = $item;
+            }
+        }
+
+        $mono = $padronData['datosMonotributo']['actividadMonotributista'] ?? null;
+        $itemMono = self::itemActividad(is_array($mono) ? $mono : null, 'monotributo');
+        if ($itemMono !== null) {
+            $items[] = $itemMono;
+        }
+
+        if ($items === []) {
+            $principal = is_array($padronData['actividadPrincipal'] ?? null) ? $padronData['actividadPrincipal'] : null;
+            $item = self::itemActividad($principal, (string) ($principal['fuente'] ?? ''));
+            if ($item !== null) {
+                $items[] = $item;
+            }
+        }
+
+        $vistas = [];
+        $out = [];
+        foreach ($items as $item) {
+            $clave = ($item['id'] ?? 0).'|'.mb_strtolower($item['descripcion']);
+            if (isset($vistas[$clave])) {
+                continue;
+            }
+            $vistas[$clave] = true;
+            $out[] = $item;
+        }
+
+        $marcoPrincipal = false;
+        if ($idPrincipal !== null && $idPrincipal > 0) {
+            foreach ($out as &$item) {
+                if ($item['id'] === $idPrincipal) {
+                    $item['principal'] = true;
+                    $marcoPrincipal = true;
+                }
+            }
+            unset($item);
+        }
+
+        if (! $marcoPrincipal) {
+            foreach ($out as &$item) {
+                if ((int) ($item['orden'] ?? 0) === 1) {
+                    $item['principal'] = true;
+                    $marcoPrincipal = true;
+                    break;
+                }
+            }
+            unset($item);
+        }
+
+        if (! $marcoPrincipal && $out !== []) {
+            $out[0]['principal'] = true;
+        }
+
+        usort($out, static function (array $a, array $b): int {
+            if ($a['principal'] !== $b['principal']) {
+                return $a['principal'] ? -1 : 1;
+            }
+
+            return ($a['orden'] ?? PHP_INT_MAX) <=> ($b['orden'] ?? PHP_INT_MAX);
+        });
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $act
+     * @return array{id: int|null, descripcion: string, orden: int|null, principal: bool, fuente: string}|null
+     */
+    private static function itemActividad(?array $act, string $fuente): ?array
+    {
+        if ($act === null) {
+            return null;
+        }
+
+        $id = isset($act['idActividad']) && $act['idActividad'] !== '' && $act['idActividad'] !== null
+            ? (int) $act['idActividad']
+            : null;
+        if ($id !== null && $id <= 0) {
+            $id = null;
+        }
+
+        $desc = trim((string) ($act['descripcionActividad'] ?? ''));
+        if ($id === null && $desc === '') {
+            return null;
+        }
+
+        $orden = isset($act['orden']) && $act['orden'] !== '' && $act['orden'] !== null
+            ? (int) $act['orden']
+            : null;
+
+        return [
+            'id' => $id,
+            'descripcion' => $desc,
+            'orden' => $orden,
+            'principal' => false,
+            'fuente' => $fuente !== '' ? $fuente : (string) ($act['fuente'] ?? ''),
+        ];
+    }
+
+    /**
+     * @param  list<array{id: int|null, descripcion: string, orden: int|null, principal: bool, fuente: string}>  $actividades
+     */
+    private static function textoActividades(array $actividades): string
+    {
+        $varias = count($actividades) > 1;
+        $lineas = [];
+        foreach ($actividades as $act) {
+            $partes = [];
+            if (! empty($act['id'])) {
+                $partes[] = (string) $act['id'];
+            }
+            if (($act['descripcion'] ?? '') !== '') {
+                $partes[] = $act['descripcion'];
+            }
+            $linea = implode(' — ', $partes);
+            if ($varias && ! empty($act['principal'])) {
+                $linea .= ' (principal)';
+            }
+            if ($linea !== '') {
+                $lineas[] = $linea;
+            }
+        }
+
+        return implode("\n", $lineas);
     }
 
     public static function segmento(?Condicioniva $condicion): string

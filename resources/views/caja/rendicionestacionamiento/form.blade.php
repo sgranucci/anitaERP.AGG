@@ -392,7 +392,7 @@
         <div class="card card-outline card-secondary mb-3">
             <div class="card-header py-2">
                 <strong>Medios rendidos en caja</strong>
-                <small class="text-muted d-block font-weight-normal mt-1">Indique lo que ingresa físicamente a caja por cada medio. Si el turno tiene arqueo en el cierre, los montos se precargan con lo <strong>contado por el cajero</strong> (eso es lo que se graba en Anita como rendvalor). Si algún monto rendido difiere del <strong>esperado sistema</strong>, el campo <strong>sobrante / faltante</strong> se ajusta automáticamente para mantener la rendición cuadrada.</small>
+                <small class="text-muted d-block font-weight-normal mt-1">Puede mover importe de un medio a otro (efectivo y Mercado Pago) si el <strong>total</strong> del turno no cambia. Ese reparto es el que queda en la posición, el informe de parking y el asiento. No es diferencia de caja. Sobrante/faltante es solo cuando el total contado no cierra con lo facturado.</small>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -436,7 +436,7 @@
                     <div class="form-group col-md-4">
                         <label for="sobrantefaltante">Sobrante / faltante</label>
                         <input type="number" step="0.01" name="sobrantefaltante" id="sobrantefaltante" class="form-control js-recalcula" value="{{ old('sobrantefaltante', $esEdicion ? $data->sobrantefaltante : 0) }}"/>
-                        <small class="text-muted">Positivo = sobrante, negativo = faltante. Se recalcula al modificar cualquier medio rendido (compensa la diferencia con el sistema).</small>
+                        <small class="text-muted">Positivo = sobrante, negativo = faltante. Solo si el total contado no cierra. Un pase entre medios deja este campo en cero.</small>
                     </div>
                 </div>
                 <div id="alert-diferencias" class="alert mb-0 d-none"></div>

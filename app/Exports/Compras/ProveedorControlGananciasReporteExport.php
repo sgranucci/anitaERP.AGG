@@ -97,8 +97,8 @@ class ProveedorControlGananciasReporteExport implements FromView, WithColumnForm
             'E' => 12,  // Estado
             'F' => 16,  // Cód. ret. actual
             'G' => 34,  // Retención actual
-            'H' => 16,  // Id actividad ARCA
-            'I' => 48,  // Actividad principal ARCA
+            'H' => 18,  // Id actividad principal
+            'I' => 62,  // Actividades declaradas
             'J' => 18,  // Cód. ret. propuesto
             'K' => 34,  // Retención propuesta
             'L' => 12,  // Padrón OK
@@ -136,6 +136,13 @@ class ProveedorControlGananciasReporteExport implements FromView, WithColumnForm
                     ->setWrapText(true);
                 $sheet->getRowDimension($this->filaCabecerasExcel)->setRowHeight(32);
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                for ($fila = $this->filaPrimeraDatosExcel; $fila <= $ultimaFila; $fila++) {
+                    $texto = (string) $sheet->getCell('I'.$fila)->getValue();
+                    $lineas = max(1, substr_count($texto, "\n") + 1);
+                    if ($lineas > 1) {
+                        $sheet->getRowDimension($fila)->setRowHeight(min(16 * $lineas, 160));
+                    }
+                }
             },
         ];
     }

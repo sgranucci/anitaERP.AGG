@@ -417,6 +417,13 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(120)
             ->when(fn () => (bool) config('recepcion_proveedor.auditoria_asientos_com_diaria.habilitada', true));
 
+        $schedule->command('recepcion-proveedor:auditar-costos')
+            ->dailyAt((string) config('recepcion_proveedor.auditoria_costos_diaria.hora', '09:30'))
+            ->runInBackground()
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/recepcion-proveedor-auditor-costos-schedule.log'))
+            ->when(fn () => (bool) config('recepcion_proveedor.auditoria_costos_diaria.habilitada', true));
+
         $ventanaAuditoriaOc = max(1, (int) config('ordencompra_anita.auditoria_diaria.ventana_dias', 7));
         $schedule->command('ordencompra:auditoria-anita-diaria', [
             '--desde' => Carbon::today()->subDays($ventanaAuditoriaOc - 1)->toDateString(),

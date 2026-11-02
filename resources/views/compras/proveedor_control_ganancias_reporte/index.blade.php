@@ -28,6 +28,7 @@
                     <p class="text-muted small mb-3">
                         Cruza el ABM de proveedores con la constancia de inscripción ARCA y propone el código de retención
                         de ganancias según la actividad principal (RI) o “No aplica retención” (Monotributistas).
+                        El listado muestra todas las actividades declaradas en la constancia; la propuesta sigue la principal.
                         <strong>Solo genera el reporte</strong>; no actualiza el maestro.
                         El mapeo actividad→código se configura en <code>config/compras_control_ganancias.php</code>.
                     </p>

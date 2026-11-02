@@ -28,8 +28,8 @@
         <th>Estado</th>
         <th>Cód. ret. actual</th>
         <th>Retención actual</th>
-        <th>Id actividad ARCA</th>
-        <th>Actividad principal ARCA</th>
+        <th>Id actividad principal</th>
+        <th>Actividades declaradas</th>
         <th>Cód. ret. propuesto</th>
         <th>Retención propuesta</th>
         <th>Padrón OK</th>
@@ -46,7 +46,7 @@
             <td>{{ $fila['retencion_actual_codigo'] ?? '' }}</td>
             <td>{{ $fila['retencion_actual_nombre'] ?? '' }}</td>
             <td>{{ $fila['actividad_id'] ?? '' }}</td>
-            <td>{{ $fila['actividad_descripcion'] ?? '' }}</td>
+            <td>{!! nl2br(e(($fila['actividades_detalle'] ?? '') !== '' ? $fila['actividades_detalle'] : ($fila['actividad_descripcion'] ?? ''))) !!}</td>
             <td>{{ $fila['retencion_propuesta_codigo'] ?? '' }}</td>
             <td>{{ $fila['retencion_propuesta_nombre'] ?? '' }}</td>
             <td>{{ ($fila['padron_ok'] ?? null) === null ? '—' : (! empty($fila['padron_ok']) ? 'Sí' : 'No') }}</td>

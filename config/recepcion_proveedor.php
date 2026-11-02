@@ -137,6 +137,39 @@ return [
     ],
 
     /*
+    | Auditoría diaria de costos de compra (recepcion-proveedor:auditar-costos).
+    | Solo lectura: precio vs OC e historia, UM/coeficientes, cambios de maestro,
+    | costo destino de transferencias y recetas con costo ≥ precio de venta.
+    */
+    'auditoria_costos_diaria' => [
+        'habilitada' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_HORA', '09:30'),
+        'email' => env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_EMAIL', 'sergiogranucci@gmail.com'),
+        'ventana_dias' => max(1, (int) env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_VENTANA_DIAS', 3)),
+        // Precio fuera de [1/umbral, umbral] respecto de la OC o de la mediana histórica.
+        'umbral_ratio' => max(1.05, (float) env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_UMBRAL_RATIO', 1.5)),
+        'historia_dias' => max(30, (int) env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_HISTORIA_DIAS', 180)),
+        'historia_compras' => max(2, (int) env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_HISTORIA_COMPRAS', 6)),
+        // Nombres de tipoarticulo con precio variable por naturaleza (servicios, honorarios, alquileres).
+        'tipos_articulo_excluidos' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env(
+                'RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_TIPOS_EXCLUIDOS',
+                'BIEN ECONOMICO,BIEN DE USO,SERVICIO,CONTABLE,IMPUESTO,CAPEX,ALQUILERES'
+            ))
+        ))),
+        'incluir_recetas' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_RECETAS', true), FILTER_VALIDATE_BOOLEAN),
+        // Recetas con precio simbólico (cortesías, invitaciones, refrigerios) no alertan.
+        'receta_precio_minimo' => (float) env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_RECETA_PRECIO_MIN', 100),
+        'receta_codigos_excluidos' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_RECETA_EXCLUIR', ''))
+        ))),
+        'mail_siempre' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_MAIL_SIEMPRE', false), FILTER_VALIDATE_BOOLEAN),
+        'max_filas_mail' => max(10, (int) env('RECEPCION_PROVEEDOR_AUDITORIA_COSTOS_MAX_FILAS', 80)),
+    ],
+
+    /*
     | Tras confirmar COM en ERP: job en cola verifica ctamov Anita y lo repara.
     | Con solo_escritura_ctamov no reescribe recepmae ni stock.
     */
