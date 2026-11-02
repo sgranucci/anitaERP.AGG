@@ -259,13 +259,21 @@ function unidadMedidaEsKilos(unidadmedida) {
     return um === 'KG' || um === 'KIL' || um === 'KILO' || um === 'KILOS' || um === 'KGS';
 }
 
+function pedidoLineaCargaEnPiezas($tr) {
+    return !!(window.pedidoCargaEnPiezas && $tr && $tr.closest('#itemspedido-table').length);
+}
+
 function resolverInputCantidadLineaArticulo($tr, unidadmedida) {
     if (!$tr || !$tr.length) {
         return $();
     }
     var um = (unidadmedida || '').toString().trim().toUpperCase();
     var $target = $();
-    if (um === 'CAJ') {
+    if (pedidoLineaCargaEnPiezas($tr)) {
+        $target = um === 'CAJ'
+            ? $tr.find('.caja').filter(':visible:not([readonly])')
+            : $tr.find('.pieza').filter(':visible:not([readonly])');
+    } else if (um === 'CAJ') {
         $target = $tr.find('.caja').filter(':visible:not([readonly])');
     } else if (unidadMedidaEsKilos(um)) {
         $target = $tr.find('.kilo').filter(':visible:not([readonly])');

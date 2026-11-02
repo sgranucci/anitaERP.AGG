@@ -1335,9 +1335,16 @@
 
 			$(this).parents("tr").find(".unidadmedida").val(unidadmedida);
 
-			if (unidadmedida.toUpperCase() == 'CAJ') {
+			var umCarga = unidadmedida.toUpperCase();
+			if (window.pedidoCargaEnPiezas) {
+				if (umCarga === 'CAJ') {
+					$(this).parents("tr").find(".caja").focus();
+				} else {
+					$(this).parents("tr").find(".pieza").focus();
+				}
+			} else if (umCarga == 'CAJ') {
 				$(this).parents("tr").find(".caja").focus();
-			} else if (unidadmedida.toUpperCase() == 'UN' || unidadmedida.toUpperCase() == 'KG') {
+			} else if (umCarga == 'UN' || umCarga == 'KG') {
 				$(this).parents("tr").find(".pieza").focus();
 			} else {
 				$(this).parents("tr").find(".kilo").focus();
