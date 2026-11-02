@@ -27,6 +27,9 @@ use App\Support\Contable\CuentacontableInhabilitadaSupport;
 use App\Support\Contable\AsientoListadoFiltros;
 use App\Support\Contable\AsientoOrigenProcesoSupport;
 use App\Support\Contable\AsientoReferenciaAnitaSupport;
+use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
+use App\Support\Caja\IngresoEgresoBancoAsientoSupport;
+use App\Models\Caja\Caja_Movimiento;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -441,6 +444,23 @@ class AsientoController extends Controller
                     }
                 }
                 $this->asientoRepository->sincronizarCtamovAnita($payloadAnita);
+            }
+
+            $cajaMovimientoId = (int) ($fresh->caja_movimiento_id ?? 0);
+            if (
+                $cajaMovimientoId > 0
+                && ($fresh->estado_aprobacion ?? Asiento::ESTADO_APROBACION_CONFIRMADO)
+                    === Asiento::ESTADO_APROBACION_CONFIRMADO
+            ) {
+                $cambiosBanco = IngresoEgresoBancoAsientoSupport::alinearCuentasCajaDesdeAsiento($cajaMovimientoId);
+                if ($cambiosBanco !== []) {
+                    $movCaja = Caja_Movimiento::query()->find($cajaMovimientoId);
+                    if ($movCaja !== null) {
+                        IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($movCaja);
+                        IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($movCaja);
+                        IngresoEgresoAnitaTesmovSupport::actualizarEmisorPorCambioDeBanco($movCaja, $cambiosBanco);
+                    }
+                }
             }
 
             DB::commit();

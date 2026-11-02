@@ -87,7 +87,8 @@ class PeriodoCierreProgramadoService
      *   fecha_hasta_sugerida: string,
      *   fecha_ejecucion_sugerida: string,
      *   cierre_vigente: ?string,
-     *   cierre_vigente_alcance: ?string
+     *   cierre_vigente_alcance: ?string,
+     *   cierre_ejecutado_vigente: bool
      * }>
      */
     public function filasAgendaPorAlcance(int $empresaId, int $anioMes): Collection
@@ -117,6 +118,11 @@ class PeriodoCierreProgramadoService
                     : ($prog?->fecha_ejecucion?->format('Y-m-d') ?? now()->format('Y-m-d'));
 
                 $vigente = $this->cierreVigenteParaAlcance($alcance, $cierresPorAlcance);
+                $fechaRegistradaAlcance = $cierresPorAlcance[$alcance] ?? null;
+                $cierreEjecutadoVigente = $ejecutado
+                    && $prog->fecha_hasta !== null
+                    && $fechaRegistradaAlcance !== null
+                    && $fechaRegistradaAlcance >= $prog->fecha_hasta->format('Y-m-d');
 
                 // Proponer siempre una fecha que avance: cerrar hasta una ya cubierta no cambia nada.
                 if ($vigente['fecha'] !== null && $vigente['fecha'] > $fechaHastaSugerida) {
@@ -139,6 +145,7 @@ class PeriodoCierreProgramadoService
                     'fecha_ejecucion_sugerida' => $fechaEjecucionSugerida,
                     'cierre_vigente' => $vigente['fecha'],
                     'cierre_vigente_alcance' => $vigente['alcance'],
+                    'cierre_ejecutado_vigente' => $cierreEjecutadoVigente,
                 ];
             });
     }
@@ -292,15 +299,56 @@ class PeriodoCierreProgramadoService
     }
 
     /**
-     * Un alcance ya ejecutado solo se puede volver a programar si el cierre avanza.
+     * Un alcance ya ejecutado se vuelve a programar si la fecha avanza,
+     * o si esa fecha ya no tiene cierre registrado (se borró el último cierre).
      */
     private function fechaHastaAvanza(PeriodoCierreProgramado $existente, Carbon $fechaHasta): bool
     {
-        if ($existente->fecha_hasta === null) {
+        return self::fechaHastaPuedeReprogramarse(
+            $existente->fecha_hasta,
+            $fechaHasta,
+            $this->fechaCierreRegistradaDelAlcance($existente)
+        );
+    }
+
+    /**
+     * Último cierre que sigue grabado para el alcance de la programación.
+     * No incluye el cierre general ni el del módulo padre.
+     */
+    private function fechaCierreRegistradaDelAlcance(PeriodoCierreProgramado $existente): ?Carbon
+    {
+        $max = PeriodoCierreContable::query()
+            ->where('empresa_id', (int) $existente->empresa_id)
+            ->where('alcance', (string) $existente->alcance)
+            ->max('fecha_hasta');
+
+        return $max !== null ? Carbon::parse($max)->startOfDay() : null;
+    }
+
+    /**
+     * La misma fecha de un cierre ejecutado se puede repetir cuando ese cierre ya no está registrado.
+     */
+    public static function fechaHastaPuedeReprogramarse(
+        ?Carbon $fechaEjecutada,
+        Carbon $fechaNueva,
+        ?Carbon $cierreRegistradoDelAlcance
+    ): bool {
+        if ($fechaEjecutada === null) {
             return true;
         }
 
-        return $fechaHasta->gt($existente->fecha_hasta->copy()->startOfDay());
+        $ejecutada = $fechaEjecutada->copy()->startOfDay();
+        $nueva = $fechaNueva->copy()->startOfDay();
+
+        if ($nueva->gt($ejecutada)) {
+            return true;
+        }
+
+        if ($cierreRegistradoDelAlcance === null) {
+            return true;
+        }
+
+        return $cierreRegistradoDelAlcance->copy()->startOfDay()->lt($ejecutada);
     }
 
     /**

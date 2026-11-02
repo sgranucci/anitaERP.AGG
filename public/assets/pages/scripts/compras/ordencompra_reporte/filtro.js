@@ -177,9 +177,17 @@ function ocReporteAbrirModalCentrocosto() {
 }
 
 function ocReporteAbrirModalProveedor() {
-    var valor = $('#oc-reporte-proveedor-campo .codigoproveedor').val().trim();
+    var valor = $('#oc-reporte-proveedor-campo .oc-codigo-proveedor').val().trim();
     ocReporteBuscarProveedoresModal(valor);
     $('#consultaproveedorModal').modal('show');
+}
+
+function ocReporteTextoCelda($tr, selector) {
+    var $td = $tr.find(selector).first();
+    if (!$td.length) {
+        return '';
+    }
+    return $.trim($td.clone().children().remove().end().text());
 }
 
 function ocReporteExpandirRangoOrdencompra($campo) {
@@ -347,7 +355,7 @@ function ocReporteBuscarUsuariosModal(consulta) {
 }
 
 function ocReporteResolverProveedores($campo) {
-    var valor = ocReporteNormalizarValor($campo.find('.codigoproveedor').val());
+    var valor = ocReporteNormalizarValor($campo.find('.oc-codigo-proveedor').val());
     var $meta = $campo.find('.metaproveedor');
 
     if (valor === '') {
@@ -364,20 +372,39 @@ function ocReporteResolverProveedores($campo) {
     $meta.val(valor);
 }
 
-function ocReporteAgregarProveedor(codigo) {
+function ocReporteAgregarProveedor(codigo, nombre) {
     var $campo = $('#oc-reporte-proveedor-campo');
-    var $inp = $campo.find('.codigoproveedor');
+    var $inp = $campo.find('.oc-codigo-proveedor');
     var actual = ocReporteNormalizarValor($inp.val());
     var codigos = actual === '' ? [] : actual.split(/[,;]+/).map(function (s) { return s.trim(); }).filter(Boolean);
     var codigoStr = String(codigo).trim();
+    var nombreStr = String(nombre || '').trim();
 
     if (codigoStr !== '' && codigos.indexOf(codigoStr) < 0) {
         codigos.push(codigoStr);
     }
 
     $inp.val(codigos.join(','));
+    if (codigos.length === 1 && nombreStr !== '') {
+        $campo.find('.metaproveedor').val(codigoStr + ' — ' + nombreStr);
+        return;
+    }
     ocReporteResolverProveedores($campo);
 }
+
+// La consulta general de proveedores escribe en #codigoproveedor. Este filtro
+// es una lista de códigos: al elegir, quedarse acá y no disparar esa carga.
+window.onProveedorElegidoEnConsulta = function (fila) {
+    if (!document.getElementById('form-ordencompra-reporte')) {
+        return false;
+    }
+    var codigo = fila && fila.codigo ? String(fila.codigo).trim() : '';
+    if (codigo !== '') {
+        ocReporteAgregarProveedor(codigo, fila.nombre || '');
+    }
+    $('#consultaproveedorModal').modal('hide');
+    return true;
+};
 
 function ocReporteBuscarProveedoresModal(consulta) {
     $.ajax({
@@ -537,8 +564,8 @@ function activaEventosOrdencompraReporteFiltro() {
         });
 
     $(document)
-        .off('change.ocreporte', '#oc-reporte-proveedor-campo .codigoproveedor')
-        .on('change.ocreporte', '#oc-reporte-proveedor-campo .codigoproveedor', function () {
+        .off('change.ocreporte', '#oc-reporte-proveedor-campo .oc-codigo-proveedor')
+        .on('change.ocreporte', '#oc-reporte-proveedor-campo .oc-codigo-proveedor', function () {
             ocReporteResolverProveedores($('#oc-reporte-proveedor-campo'));
         });
 
@@ -649,7 +676,7 @@ function activaEventosOrdencompraReporteFiltro() {
             if (!$('#form-ordencompra-reporte').length) {
                 return;
             }
-            var valor = $('#oc-reporte-proveedor-campo .codigoproveedor').val().trim();
+            var valor = $('#oc-reporte-proveedor-campo .oc-codigo-proveedor').val().trim();
             $('#consultaproveedor').val(valor);
             ocReporteBuscarProveedoresModal(valor);
             $(this).find('#consultaproveedor').focus();
@@ -673,10 +700,11 @@ function activaEventosOrdencompraReporteFiltro() {
             e.stopImmediatePropagation();
 
             var $trModal = $(this).closest('tr');
-            var codigo = $trModal.find('.codigo').first().text().trim();
+            var codigo = ocReporteTextoCelda($trModal, 'td.codigoproveedor, td.codigo');
+            var nombre = ocReporteTextoCelda($trModal, 'td.nombreproveedor, td.nombre');
 
             if (codigo !== '') {
-                ocReporteAgregarProveedor(codigo);
+                ocReporteAgregarProveedor(codigo, nombre);
             }
 
             $('#consultaproveedorModal').modal('hide');
@@ -732,7 +760,7 @@ function ocReporteAtajoF1Handler(e) {
         return;
     }
 
-    if (target.classList.contains('codigoproveedor')) {
+    if (target.classList.contains('oc-codigo-proveedor')) {
         if (ocReporteModalAbierto('#consultaproveedorModal')) {
             return;
         }

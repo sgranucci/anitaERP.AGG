@@ -183,7 +183,7 @@
                         <div class="{{ $colInput }}">
                             <div id="oc-reporte-proveedor-campo">
                                 <div class="input-group mb-1">
-                                    <input type="text" name="proveedores" id="proveedores" class="form-control codigoproveedor"
+                                    <input type="text" name="proveedores" id="proveedores" class="form-control oc-codigo-proveedor"
                                         placeholder="Vac&iacute;o = todos; c&oacute;digos separados por coma" autocomplete="off"
                                         title="F1 o lupa: consulta proveedores"
                                         value="{{ $filtros['proveedores'] ?? '' }}">

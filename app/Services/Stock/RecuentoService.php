@@ -33,6 +33,13 @@ use Illuminate\Support\Facades\DB;
 
 class RecuentoService
 {
+    private ?string $avisoSaldoNegativoCierre = null;
+
+    public function avisoSaldoNegativoCierre(): ?string
+    {
+        return $this->avisoSaldoNegativoCierre;
+    }
+
     public function __construct(
         private readonly RecuentoRepositoryInterface $recuentoRepository,
         private readonly Recuento_ItemRepositoryInterface $itemRepository,
@@ -200,7 +207,7 @@ class RecuentoService
             $modo,
             $items->pluck('articulo_id')->map(static fn ($id) => (int) $id)->all()
         );
-        $this->assertCierreFechaNoDejaNegativos(
+        $this->registrarAvisoCierreFechaNegativos(
             $recuento,
             $modo,
             $items->map(static function ($item) {
@@ -317,7 +324,7 @@ class RecuentoService
                 'sku' => $skusPorArticulo[$articuloId] ?? (string) $articuloId,
             ];
         }
-        $this->assertCierreFechaNoDejaNegativos($recuento, $modo, $lineasValidacion);
+        $this->registrarAvisoCierreFechaNegativos($recuento, $modo, $lineasValidacion);
 
         return DB::transaction(function () use ($recuento, $obs, $modo, $conteos, $variantes) {
             $ajustes = [];
@@ -1053,10 +1060,14 @@ class RecuentoService
     }
 
     /**
+     * No bloquea el cierre. Si el conteo más los movimientos posteriores deja
+     * saldo vigente negativo, guarda un aviso para mostrarlo al confirmar.
+     *
      * @param  list<array{articulo_id:int, color_id?:int, talle_id?:int, cantidad_contada:float, sku?:string}>  $lineas
      */
-    private function assertCierreFechaNoDejaNegativos(Recuento $recuento, string $modoCierre, array $lineas): void
+    private function registrarAvisoCierreFechaNegativos(Recuento $recuento, string $modoCierre, array $lineas): void
     {
+        $this->avisoSaldoNegativoCierre = null;
         if (RecuentoModoCierreSupport::resolverModo($modoCierre) !== RecuentoModoCierreSupport::MODO_FECHA_RECUENTO) {
             return;
         }
@@ -1074,8 +1085,9 @@ class RecuentoService
             return;
         }
 
-        throw new \RuntimeException(
-            RecuentoModoCierreSupport::mensajeBloqueoSaldoNegativoTrasCierreFecha($recuento, $conflictos)
+        $this->avisoSaldoNegativoCierre = RecuentoModoCierreSupport::mensajeAvisoSaldoNegativoTrasCierreFecha(
+            $recuento,
+            $conflictos
         );
     }
 
@@ -1224,6 +1236,9 @@ class RecuentoService
         $texto = $mensajeBase.' (modo: '.RecuentoModoCierreSupport::etiqueta($modoCierre).')';
         if ($obs !== null && trim($obs) !== '') {
             $texto .= ' — '.trim($obs);
+        }
+        if ($this->avisoSaldoNegativoCierre) {
+            $texto .= ' '.$this->avisoSaldoNegativoCierre;
         }
 
         return $texto;

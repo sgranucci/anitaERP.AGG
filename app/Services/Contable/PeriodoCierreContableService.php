@@ -3,6 +3,7 @@
 namespace App\Services\Contable;
 
 use App\Models\Contable\PeriodoCierreContable;
+use App\Models\Contable\PeriodoCierreProgramado;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
@@ -181,6 +182,20 @@ class PeriodoCierreContableService
         }
 
         DB::transaction(function () use ($cierre) {
+            $programados = PeriodoCierreProgramado::query()
+                ->where('periodo_cierre_id', $cierre->id)
+                ->where('estado', PeriodoCierreProgramado::ESTADO_EJECUTADO)
+                ->get();
+
+            foreach ($programados as $programado) {
+                $programado->update([
+                    'estado' => PeriodoCierreProgramado::ESTADO_CANCELADO,
+                    'ejecutado_en' => null,
+                    'periodo_cierre_id' => null,
+                    'error_mensaje' => null,
+                ]);
+            }
+
             $cierre->delete();
         });
 

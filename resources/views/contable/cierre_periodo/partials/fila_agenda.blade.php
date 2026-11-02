@@ -86,7 +86,11 @@
                 'cierre_vigente_alcance' => $cierreVigenteAlcance,
             ])
             @if ($estado === 'ejecutado')
-                <small class="d-block text-muted">Reprogramable con fecha posterior.</small>
+                @if (!empty($fila['cierre_ejecutado_vigente']))
+                    <small class="d-block text-muted">Reprogramable con fecha posterior.</small>
+                @else
+                    <small class="d-block text-muted">El cierre fue anulado: puede volver a programar la misma fecha.</small>
+                @endif
             @endif
         </td>
         <td class="align-middle">

@@ -228,6 +228,7 @@
                                 Hora de ejecución por defecto: <strong>24:00</strong> (fin del día).
                                 Los submódulos están colapsados: use el chevron de cada módulo (o <strong>Submódulos</strong>) para cerrar selectivo.
                                 «Cerrado hasta» muestra el cierre que hoy bloquea cada fila, aunque provenga del módulo padre o del cierre general.
+                                Si se borra el último cierre, esa fila se puede volver a programar con la misma fecha.
                             </div>
                         </div>
                     </div>

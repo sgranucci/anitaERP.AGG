@@ -125,9 +125,13 @@
                                 </td>
                             @endforeach 
                             <td>
-                       			@if (can('editar-ingresos-egresos-caja', false))
+                       			@if (can('actualizar-ingresos-egresos-caja', false))
                                 	<a href="{{route('editar_ingresoegreso', ['id' => $data->caja_movimiento_id, 'origen' => 'movimientocaja'])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
+                                	</a>
+								@elseif (can('listar-ingresos-egresos-caja', false) || can('editar-ingresos-egresos-caja', false))
+                                	<a href="{{route('editar_ingresoegreso', ['id' => $data->caja_movimiento_id, 'origen' => 'movimientocaja'])}}" class="btn-accion-tabla tooltipsC" title="Consultar (solo lectura)">
+                                    <i class="fa fa-eye"></i>
                                 	</a>
 								@endif
                             </td>

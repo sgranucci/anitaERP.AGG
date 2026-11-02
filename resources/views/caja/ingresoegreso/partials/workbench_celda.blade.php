@@ -6,7 +6,7 @@
 <td class="{{ $alineado }}">
     @switch($key)
         @case('id')
-            @if (can('editar-ingresos-egresos-caja', false))
+            @if (can('editar-ingresos-egresos-caja', false) || can('listar-ingresos-egresos-caja', false))
                 <a href="{{ route('editar_ingresoegreso', ['id' => $data->id, 'origen' => 'ingresoegreso'] + ($retornoListadoQuery ?? [])) }}" class="text-primary">{{ $data->id }}</a>
             @else
                 {{ $data->id }}

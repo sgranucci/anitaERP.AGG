@@ -314,10 +314,11 @@
                                         <i class="fa fa-print"></i>
                                     </a>
                                 @endif
-                                @if (can('editar-ingresos-egresos-caja', false))
+                                @if (can('editar-ingresos-egresos-caja', false) || can('listar-ingresos-egresos-caja', false))
                                     @php
                                         $ieSoloLectura = ! empty($data->caja_movimiento_origen_id)
-                                            || ! empty($data->caja_movimiento_revertido_por_id);
+                                            || ! empty($data->caja_movimiento_revertido_por_id)
+                                            || ! can('actualizar-ingresos-egresos-caja', false);
                                     @endphp
                                     <a href="{{ route('editar_ingresoegreso', ['id' => $data->id, 'origen' => 'ingresoegreso'] + $retornoListadoQuery) }}"
                                        class="btn-accion-tabla tooltipsC"

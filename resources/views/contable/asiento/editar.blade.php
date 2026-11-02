@@ -208,9 +208,13 @@
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
+                            @if (can('actualizar-asiento', false))
                         	<button type="button" id="botonform0" class="btn btn-success">
                                 <i class="fa fa-save"></i> Actualizar
                             </button>
+                            @else
+                            <p class="text-muted mb-0">Un asiento ya ingresado no se modifica desde acá. Si quedó mal, hay que revertirlo y volver a cargarlo.</p>
+                            @endif
                     	</div>
                     </div>
                 </div>

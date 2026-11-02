@@ -34,6 +34,7 @@ use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
 use App\Support\Caja\IngresoEgresoLiquidacionTarjetaSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
+use App\Support\Caja\IngresoEgresoBancoAsientoSupport;
 use App\Support\Caja\IngresoEgresoCuadreCajaAsientoSupport;
 use App\Support\Caja\IngresoEgresoGrabacionTimingSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
@@ -434,9 +435,13 @@ class IngresoEgresoService
 			}
 		}
 
+		$cambiosBanco = IngresoEgresoBancoAsientoSupport::alinearCuentasCajaDesdeAsiento((int) $id);
 		$mov = $this->caja_movimientoRepository->find($id);
 		IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($movAntes);
 		IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($mov);
+		if ($cambiosBanco !== []) {
+			IngresoEgresoAnitaTesmovSupport::actualizarEmisorPorCambioDeBanco($mov, $cambiosBanco);
+		}
 		IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport::persistirDesdeMovimiento($mov);
 	}
 

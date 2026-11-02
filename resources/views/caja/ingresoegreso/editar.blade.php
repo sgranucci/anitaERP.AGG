@@ -35,7 +35,9 @@
         ? route('consulta_movimiento_caja')
         : route('ingresoegreso');
     $tituloIe = trim(($data->tipotransaccioncajas->nombre ?? '').' · N° '.($data->numerotransaccion ?? ''));
-    $ieSoloLectura = ! \App\Support\Caja\IngresoEgresoEdicionCandadoSupport::esEditable($data);
+    $ieBloqueadoPorReversion = ! \App\Support\Caja\IngresoEgresoEdicionCandadoSupport::esEditable($data);
+    $iePuedeActualizar = can('actualizar-ingresos-egresos-caja', false);
+    $ieSoloLectura = $ieBloqueadoPorReversion || ! $iePuedeActualizar;
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -45,8 +47,10 @@
             <div class="alert alert-warning">
                 @if (! empty($data->caja_movimiento_origen_id))
                     <strong>Solo lectura:</strong> este movimiento es una anulación compensatoria y no se puede editar.
-                @else
+                @elseif (! empty($data->caja_movimiento_revertido_por_id))
                     <strong>Solo lectura:</strong> este movimiento ya fue revertido y no se puede editar.
+                @else
+                    <strong>Solo lectura:</strong> un movimiento ya ingresado no se modifica. Si quedó mal, revertirlo y volver a cargarlo.
                 @endif
             </div>
         @endif

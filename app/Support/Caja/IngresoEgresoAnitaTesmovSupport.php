@@ -113,6 +113,42 @@ final class IngresoEgresoAnitaTesmovSupport
     }
 
     /**
+     * El mayor de un ING/EGR toma el banco del emisor (subd_emisor / subh_emisor).
+     * Cambiar la cuenta contable actualiza ctamov, pero el emisor sigue en el banco
+     * anterior y Pendientes de Tesorería no se mueve. Tesmov se reescribe aparte;
+     * acá se corrige el emisor del subdiario para que el mayor muestre el banco nuevo.
+     *
+     * @param  list<array{codigo_anterior: string, codigo_nuevo: string}>  $cambios
+     */
+    public static function actualizarEmisorPorCambioDeBanco(Caja_Movimiento $movimiento, array $cambios): void
+    {
+        if (! self::estaHabilitada() || $cambios === []) {
+            return;
+        }
+
+        $movimiento->loadMissing(['tipotransaccioncajas', 'movimientoOrigen.tipotransaccioncajas']);
+        $ctx = self::contexto($movimiento);
+        if ($ctx === null) {
+            return;
+        }
+
+        foreach ($cambios as $cambio) {
+            $anterior = trim((string) ($cambio['codigo_anterior'] ?? ''));
+            $nuevo = trim((string) ($cambio['codigo_nuevo'] ?? ''));
+            if ($anterior === '' || $nuevo === '' || $anterior === $nuevo) {
+                continue;
+            }
+            $emisorNuevo = self::imputacionTctesDesdeCodigo($nuevo);
+            $variantes = self::variantesCodigoCuenta($anterior);
+            if ($variantes === [] || $emisorNuevo === '') {
+                continue;
+            }
+            self::actualizarEmisorTabla('subdiario', 'subd', $ctx, $variantes, $emisorNuevo, (int) $movimiento->id);
+            self::actualizarEmisorTabla('subhist', 'subh', $ctx, $variantes, $emisorNuevo, (int) $movimiento->id);
+        }
+    }
+
+    /**
      * Completa auxpag TES + tesmov de retenciones que faltan (RGP/RIP/RSP/RTP).
      * No toca FDT/GPK/CHP ni borra filas existentes.
      *
@@ -2207,5 +2243,69 @@ final class IngresoEgresoAnitaTesmovSupport
     private static function escSql(string $valor): string
     {
         return "'".self::esc($valor)."'";
+    }
+
+    /**
+     * @param  array<string, mixed>  $ctx
+     * @param  list<string>  $emisoresAnteriores
+     */
+    private static function actualizarEmisorTabla(
+        string $tabla,
+        string $prefijo,
+        array $ctx,
+        array $emisoresAnteriores,
+        string $emisorNuevo,
+        int $movimientoId
+    ): void {
+        $lista = implode(',', array_map(static fn (string $codigo) => self::escSql($codigo), $emisoresAnteriores));
+        $where = ' WHERE '.$prefijo.'_tipo = '.self::escSql((string) $ctx['tipo'])
+            .' AND '.$prefijo.'_nro = '.(int) $ctx['nro']
+            .' AND '.$prefijo.'_empresa = '.(int) $ctx['empresa']
+            .' AND '.$prefijo.'_emisor IN ('.$lista.')'
+            .' AND '.$prefijo.'_emisor <> '.self::escSql($emisorNuevo);
+
+        try {
+            $raw = (new ApiAnita)->apiCallEscritura([
+                'tabla' => $tabla,
+                'acc' => 'update',
+                'sistema' => 'contab',
+                'valores' => $prefijo.'_emisor = '.self::escSql($emisorNuevo),
+                'whereArmado' => $where,
+            ], 'caja IE '.$tabla.' emisor banco '.$movimientoId);
+            $err = ApiAnita::extraerMensajeError($raw);
+            if ($err !== null) {
+                Log::warning('caja.ie.anita.emisor_banco', [
+                    'tabla' => $tabla,
+                    'caja_movimiento_id' => $movimientoId,
+                    'error' => $err,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('caja.ie.anita.emisor_banco', [
+                'tabla' => $tabla,
+                'caja_movimiento_id' => $movimientoId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function variantesCodigoCuenta(string $codigo): array
+    {
+        $codigo = trim($codigo);
+        $digits = preg_replace('/\D+/', '', $codigo) ?? '';
+        $sinCeros = ltrim($digits, '0');
+        if ($sinCeros === '') {
+            $sinCeros = '0';
+        }
+
+        return array_values(array_unique(array_filter([
+            $codigo,
+            $digits,
+            $sinCeros,
+            str_pad($sinCeros, 8, '0', STR_PAD_LEFT),
+        ], static fn (string $valor) => $valor !== '')));
     }
 }

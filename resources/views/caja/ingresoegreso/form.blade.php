@@ -18,13 +18,30 @@
     @endif
     <div class="row">
         <div class="col-sm-6">
+            @php
+                $ieYaGrabado = isset($data) && ! empty($data->id);
+                $ieEmpresaSoloLectura = \App\Support\Caja\IngresoEgresoEmpresaSupport::soloLectura($ieYaGrabado);
+            @endphp
             @include('includes.form-empresa-asignada', [
                 'empresa_query' => $empresa_query,
                 'empresa_id' => $data->empresa_id ?? session('empresa_id'),
                 'mostrar_id' => true,
+                'solo_lectura' => $ieEmpresaSoloLectura,
                 'col_label' => 'col-lg-3 control-label text-right pr-2',
                 'col_input' => 'col-lg-7',
             ])
+            @if ($ieEmpresaSoloLectura)
+                <div class="form-group row" style="margin-top:-0.75rem;">
+                    <div class="col-lg-3"></div>
+                    <div class="col-lg-7">
+                        @if ($ieYaGrabado)
+                            <small class="form-text text-muted mb-0">La empresa no se puede cambiar en un movimiento ya ingresado.</small>
+                        @else
+                            <small class="form-text text-muted mb-0">La empresa se toma del listado. Para cargar en otra, elegila ahí y entrá de nuevo.</small>
+                        @endif
+                    </div>
+                </div>
+            @endif
             <div class="form-group row">
                 <label for="tipotransaccion_caja_id" class="col-lg-3 control-label text-right pr-2">Tipo de transacción</label>
                 <div class="col-lg-7">

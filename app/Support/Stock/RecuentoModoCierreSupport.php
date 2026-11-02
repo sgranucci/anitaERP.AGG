@@ -271,7 +271,8 @@ final class RecuentoModoCierreSupport
                 .'Use esta opción si el conteo corresponde a un cierre de período (ej. inventario al 31/5) '
                 .'y hubo movimientos de stock posteriores: el stock vigente quedará coherente con '
                 .'“conteo correcto en esa fecha + movimientos posteriores”. '
-                .'No se permite cerrar si ese resultado vigente quedaría negativo.',
+                .'Si ese saldo vigente queda negativo, el cierre se registra igual: '
+                .'es lo contado en esa fecha más los consumos posteriores.',
             self::MODO_SALDO_ACTUAL => 'Compara lo contado con el saldo vigente hoy en el depósito. '
                 .'El ajuste se registra con la fecha de hoy. '
                 .'Use esta opción si el conteo refleja lo que hay físicamente ahora y desea '
@@ -349,10 +350,23 @@ final class RecuentoModoCierreSupport
         return $conflictos;
     }
 
+    public static function formatoCantidad(float $valor): string
+    {
+        $texto = number_format($valor, 3, ',', '.');
+        if (str_contains($texto, ',')) {
+            $texto = rtrim(rtrim($texto, '0'), ',');
+        }
+
+        return $texto === '-0' ? '0' : $texto;
+    }
+
     /**
+     * El cierre a fecha se permite. El aviso lista los artículos cuyo saldo
+     * vigente (contado + movimientos posteriores) queda negativo.
+     *
      * @param  list<array{articulo_id:int, sku:string, contado:float, posterior:float, vigente:float}>  $conflictos
      */
-    public static function mensajeBloqueoSaldoNegativoTrasCierreFecha(
+    public static function mensajeAvisoSaldoNegativoTrasCierreFecha(
         Recuento $recuento,
         array $conflictos,
     ): string {
@@ -360,19 +374,18 @@ final class RecuentoModoCierreSupport
         $partes = [];
         foreach (array_slice($conflictos, 0, 8) as $c) {
             $partes[] = sprintf(
-                '%s (contado %.0f + mov. posteriores %.0f = vigente %.0f)',
+                '%s (contado %s + mov. posteriores %s = vigente %s)',
                 $c['sku'],
-                $c['contado'],
-                $c['posterior'],
-                $c['vigente']
+                self::formatoCantidad((float) $c['contado']),
+                self::formatoCantidad((float) $c['posterior']),
+                self::formatoCantidad((float) $c['vigente'])
             );
         }
         $extra = count($conflictos) > 8 ? ' … (+'.(count($conflictos) - 8).' más)' : '';
 
-        return "No se puede cerrar «a fecha del recuento» ({$fechaFmt}): "
-            .'hay movimientos posteriores que dejarían saldo vigente negativo. '
-            .'Ejemplos: '.implode('; ', $partes).$extra.'. '
-            .'Corrija el conteo o esos movimientos. Cerrar al saldo actual no sirve: pisaría el saldo de hoy.';
+        return "Atención: el cierre a fecha del recuento ({$fechaFmt}) dejó saldo vigente negativo "
+            .'en '.count($conflictos).' artículo(s), porque lo consumido después supera lo contado. '
+            .implode('; ', $partes).$extra.'.';
     }
 
     /**

@@ -426,7 +426,8 @@ class PeriodoCierreContableController extends Controller
         $etiqueta = $cierre->etiquetaAlcance();
 
         return $this->redirectIndex($request)
-            ->with('mensaje', 'Se eliminó el último cierre ('.$etiqueta.' hasta '.$fecha.').');
+            ->with('mensaje', 'Se eliminó el último cierre ('.$etiqueta.' hasta '.$fecha.'). '
+                .'Si ese cierre tenía una programación en la agenda, quedó liberada y se puede volver a programar la misma fecha.');
     }
 
     private function redirectIndex(Request $request)

@@ -52,6 +52,7 @@ use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
+use App\Support\Caja\IngresoEgresoEmpresaSupport;
 use App\Support\Caja\IngresoEgresoVisibilidadSupport;
 use App\Queries\Caja\Caja_MovimientoQueryInterface;
 use App\Exports\Caja\Caja_MovimientoExport;
@@ -446,6 +447,16 @@ class IngresoEgresoController extends Controller
      */
     public function guardar(ValidacionIngresoEgreso $request)
     {
+        try {
+            IngresoEgresoEmpresaSupport::assertAlGuardar(
+                false,
+                (int) session('empresa_id'),
+                (int) $request->input('empresa_id')
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['errores' => $e->getMessage()]);
+        }
+
         session(['empresa_id' => $request->empresa_id]);
 
 		return $this->ingresoegresoService->guardaIngresoEgreso($request);
@@ -459,7 +470,9 @@ class IngresoEgresoController extends Controller
      */
     public function editar($id, $origen = null)
     {
-        can('editar-ingresos-egresos-caja');
+        if (! can('editar-ingresos-egresos-caja', false) && ! can('listar-ingresos-egresos-caja', false)) {
+            can('editar-ingresos-egresos-caja');
+        }
         IngresoEgresoVisibilidadSupport::abortSiNoAccesible((int) $id);
 
         if (!isset($origen))
@@ -514,6 +527,17 @@ class IngresoEgresoController extends Controller
     {
         can('actualizar-ingresos-egresos-caja');
         IngresoEgresoVisibilidadSupport::abortSiNoAccesible((int) $id);
+
+        $empresaAnterior = (int) ($this->caja_movimientoRepository->find($id)->empresa_id ?? 0);
+        try {
+            IngresoEgresoEmpresaSupport::assertAlGuardar(
+                true,
+                $empresaAnterior,
+                (int) $request->input('empresa_id')
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['errores' => $e->getMessage()]);
+        }
 
         session(['empresa_id' => $request->empresa_id]);
         

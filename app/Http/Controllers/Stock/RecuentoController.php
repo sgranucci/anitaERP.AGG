@@ -286,8 +286,14 @@ class RecuentoController extends Controller
             return back()->with('mensaje', 'No se pudo cerrar parcialmente: '.$e->getMessage());
         }
 
+        $mensaje = 'Recuento cerrado parcialmente ('.RecuentoModoCierreSupport::etiqueta($modo).').';
+        $aviso = $this->service->avisoSaldoNegativoCierre();
+        if ($aviso) {
+            $mensaje .= ' '.$aviso;
+        }
+
         return redirect('stock/recuento/'.$id.'/ver')
-            ->with('mensaje', 'Recuento cerrado parcialmente ('.RecuentoModoCierreSupport::etiqueta($modo).').');
+            ->with('mensaje', $mensaje);
     }
 
     public function cerrarTotal(Request $request, int $id)
@@ -300,8 +306,14 @@ class RecuentoController extends Controller
             return back()->with('mensaje', 'No se pudo cerrar totalmente: '.$e->getMessage());
         }
 
+        $mensaje = 'Recuento cerrado totalmente ('.RecuentoModoCierreSupport::etiqueta($modo).').';
+        $aviso = $this->service->avisoSaldoNegativoCierre();
+        if ($aviso) {
+            $mensaje .= ' '.$aviso;
+        }
+
         return redirect('stock/recuento/'.$id.'/ver')
-            ->with('mensaje', 'Recuento cerrado totalmente ('.RecuentoModoCierreSupport::etiqueta($modo).').');
+            ->with('mensaje', $mensaje);
     }
 
     public function anularCierre(Request $request, int $id)
