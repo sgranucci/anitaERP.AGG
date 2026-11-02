@@ -17,6 +17,7 @@ use App\Models\Compras\Tiposervicio_Proveedor;
 use App\Models\Contable\Cuentacontable;
 use App\Services\Compras\ComprasIvaMaestrosAnitaImportService;
 use App\Support\Compras\ConceptoIvaAnitaEsquemaSupport;
+use App\Support\Compras\ConceptoIvacompraRetieneIibbSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use RuntimeException;
 
@@ -469,7 +470,11 @@ final class ComprasMaestrosAnitaFerliSyncService
                     'cuentacontablehaber_id' => $ctaHaber,
                     'tipoconcepto' => (string) ($fila->concc_tipo_conc ?? 'N'),
                     'retieneganancia' => $retieneGanancia,
-                    'retieneIIBB' => (string) ($fila->concc_retiene_ibr ?? 'N'),
+                    'retieneIIBB' => ConceptoIvacompraRetieneIibbSupport::cuandoAnitaNoTraeMarca(
+                        $codigo,
+                        $contenido,
+                        (string) ($fila->concc_tipo_conc ?? ''),
+                    ),
                     'provincia_id' => null,
                     'impuesto_id' => null,
                 ]);

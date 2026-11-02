@@ -11,6 +11,7 @@ use App\Repositories\Configuracion\ImpuestoRepositoryInterface;
 use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Support\Compras\ConceptoIvaAnitaEsquemaSupport;
+use App\Support\Compras\ConceptoIvacompraRetieneIibbSupport;
 use App\Support\Compras\ConceptoIvacompraListadoFiltros;
 use Auth;
 use DB;
@@ -314,7 +315,16 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
 
             $tipoConc = (string) ($data->concc_tipo_conc ?? 'N');
             $alicuota = $data->concc_alicuota_iva ?? null;
-            $retieneIibb = (string) ($data->concc_retiene_ibr ?? 'N');
+            if (ConceptoIvaAnitaEsquemaSupport::incluyeTipoAlicuotaRetiene()) {
+                $retieneIibb = strtoupper(trim((string) ($data->concc_retiene_ibr ?? '')));
+                $retieneIibb = $retieneIibb === 'S' ? 'S' : 'N';
+            } else {
+                $retieneIibb = ConceptoIvacompraRetieneIibbSupport::cuandoAnitaNoTraeMarca(
+                    (string) ($data->concc_concepto ?? ''),
+                    (string) ($data->concc_contenido ?? ''),
+                    $tipoConc,
+                );
+            }
 
             // Si es ingresos brutos busca la jurisdiccion
             $provincia_id = null;

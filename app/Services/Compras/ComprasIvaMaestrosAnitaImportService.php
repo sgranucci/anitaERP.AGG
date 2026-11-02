@@ -14,6 +14,7 @@ use App\Models\Compras\Tipotransaccion_Compra_Concepto_Ivacompra;
 use App\Models\Contable\Cuentacontable;
 use App\Support\Compras\ConceptoIvaAnitaEsquemaSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
+use App\Support\Compras\ConceptoIvacompraRetieneIibbSupport;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -369,9 +370,15 @@ final class ComprasIvaMaestrosAnitaImportService
         if ($tipoConc === '') {
             $tipoConc = 'N';
         }
-        $retieneIibb = (string) ($fila->concc_retiene_ibr ?? 'N');
-        if ($retieneIibb === '') {
-            $retieneIibb = 'N';
+        if (ConceptoIvaAnitaEsquemaSupport::incluyeTipoAlicuotaRetiene()) {
+            $retieneIibb = strtoupper(trim((string) ($fila->concc_retiene_ibr ?? '')));
+            $retieneIibb = $retieneIibb === 'S' ? 'S' : 'N';
+        } else {
+            $retieneIibb = ConceptoIvacompraRetieneIibbSupport::cuandoAnitaNoTraeMarca(
+                $codigo,
+                $contenido,
+                $tipoConc,
+            );
         }
 
         $columnaId = null;
