@@ -211,6 +211,9 @@
                         <option value="{{ $key }}" @selected(($f['apertura'] ?? 'TOTALIZADO') === $key)>{{ $value }}</option>
                     @endforeach
                 </select>
+                <small class="form-text text-muted">
+                    Totalizado no incluye filas con cantidad negativa. Esas quedan en Movimientos.
+                </small>
             </div>
         </div>
     </div>

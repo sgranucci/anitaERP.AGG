@@ -107,6 +107,17 @@ class ReporteStockOtSituacionSupportTest extends TestCase
         self::assertTrue(S::pasaFiltroEstadoOt('PRODUCCION', S::PENDIENTE_DE_FABRICACION, false));
     }
 
+    public function test_totalizado_omite_saldo_negativo_y_movimientos_lo_conserva(): void
+    {
+        self::assertFalse(S::incluyeSaldoEnApertura(-12, false));
+        self::assertFalse(S::incluyeSaldoEnApertura(-0.5, false));
+        self::assertTrue(S::incluyeSaldoEnApertura(-12, true));
+        self::assertTrue(S::incluyeSaldoEnApertura(8, false));
+        self::assertTrue(S::incluyeSaldoEnApertura(8, true));
+        self::assertFalse(S::incluyeSaldoEnApertura(0, false));
+        self::assertFalse(S::incluyeSaldoEnApertura(0, true));
+    }
+
     public function test_pendiente_y_produccion_van_en_rojo_en_excel(): void
     {
         self::assertTrue(S::colorearRojoEnExcel(S::EN_PRODUCCION, true));

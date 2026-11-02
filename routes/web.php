@@ -1726,6 +1726,9 @@ Route::get('stock/movimientostock', 'Stock\MovimientoStockController@index')->na
 Route::get('stock/movimientostock/transferencia/{id}/consultar', 'Stock\MovimientoStockController@consultarTransferencia')->name('consultar_transferencia_movimientostock');
 Route::get('stock/movimientostock/transferencia/{id}/com-pdf', 'Stock\MovimientoStockController@imprimirTransferenciaCom')->name('transferencia_movimientostock_com_pdf');
 Route::get('stock/movimientostock/crear', 'Stock\MovimientoStockController@crear')->name('crear_movimientostock');
+Route::get('stock/movimientostock/alta-masiva', 'Stock\MovimientoStockAltaMasivaController@crear')->name('alta_masiva_movimientostock');
+Route::post('stock/movimientostock/alta-masiva/preview', 'Stock\MovimientoStockAltaMasivaController@preview')->name('alta_masiva_movimientostock_preview');
+Route::post('stock/movimientostock/alta-masiva', 'Stock\MovimientoStockAltaMasivaController@grabar')->name('alta_masiva_movimientostock_grabar');
 Route::post('stock/movimientostock', 'Stock\MovimientoStockController@guardar')->name('guardar_movimientostock');
 Route::get('stock/movimientostock/{id}/com-pdf', 'Stock\MovimientoStockController@imprimirCom')->name('movimientostock_com_pdf');
 Route::get('stock/movimientostock/{id}/editar', 'Stock\MovimientoStockController@editar')->name('editar_movimientostock');

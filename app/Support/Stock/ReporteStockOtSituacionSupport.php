@@ -265,6 +265,20 @@ final class ReporteStockOtSituacionSupport
     }
 
     /**
+     * Totalizado es el stock que se pasa al cliente: un neto negativo
+     * (consumo que no se neteó con el ingreso) no sale ahí. Se ve en Movimientos.
+     * El cero no sale en ninguna apertura.
+     */
+    public static function incluyeSaldoEnApertura(float $totalPares, bool $esMovimientos): bool
+    {
+        if (abs($totalPares) < 0.0001) {
+            return false;
+        }
+
+        return $esMovimientos || $totalPares > 0;
+    }
+
+    /**
      * Filas en rojo en el Excel Stock por OT: no están listas para entrega inmediata.
      * Incluye EN PRODUCCION y PENDIENTE DE FABRICACION (misma señal visual).
      */

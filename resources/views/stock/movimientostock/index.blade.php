@@ -94,6 +94,11 @@ $puedeNuevaTransferencia = ! $modoSurmar && can('crear-transferencia-mercaderia'
                             <i class="fa fa-fw fa-plus-circle"></i> Nueva transferencia
                         </a>
                     @endif
+                    @if (! $modoSurmar && can('crear-movimientos-de-stock', false))
+                        <a href="{{ route('alta_masiva_movimientostock') }}" class="btn btn-light btn-sm mr-1">
+                            <i class="fa fa-file-excel-o"></i> Alta masiva
+                        </a>
+                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-movimientostock',
                         'filtroValor' => $filtros['valor'] ?? '',

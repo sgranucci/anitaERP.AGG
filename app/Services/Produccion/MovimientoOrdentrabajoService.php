@@ -14,6 +14,7 @@ use App\Repositories\Produccion\OperacionRepositoryInterface;
 use App\Support\Configuracion\CupsRemotoImpresionSupport;
 use App\Support\Produccion\OrdentrabajoTareaFechaSupport;
 use App\Support\Stock\OtTerminadaAltaStockFerliSupport;
+use App\Support\Ventas\Ferli\OtConsultaDivisionPickingSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -558,6 +559,12 @@ class MovimientoOrdentrabajoService
 	 */
 	private function imprimirEtiquetaEmpaque(array $request, int $ordentrabajoId): array
 	{
+		$pedidoCombinacionId = (int) ($request['pedido_combinacion_id'] ?? 0);
+		$divididos = OtConsultaDivisionPickingSupport::ticketsEmpaque($ordentrabajoId, $pedidoCombinacionId);
+		if ($divididos !== []) {
+			return $this->imprimirEtiquetasEmpaqueDivididas($request, $ordentrabajoId, $divididos);
+		}
+
 		$nombreReporte = 'tmp/empaqueOT-'.$ordentrabajoId.'.txt';
 		$reporte = chr(27).chr(33).chr(2);
 		$reporte .= 'Empaque de ORDEN DE TRABAJO NRO. '.$request['codigoordentrabajo']."\n\n";
@@ -617,9 +624,119 @@ class MovimientoOrdentrabajoService
 	}
 
 	/**
+	 * Una etiqueta por cada parte que la consulta ya separó:
+	 * lo que queda en stock y lo que se llevó cada cliente del picking.
+	 *
 	 * @param  array<string, mixed>  $request
+	 * @param  list<array<string, mixed>>  $tickets
+	 * @return array{ok: bool, mensaje: string}
 	 */
-	private function imprimirOtStockAsociadas(array $request, int $ordentrabajoId): void
+	private function imprimirEtiquetasEmpaqueDivididas(array $request, int $ordentrabajoId, array $tickets): array
+	{
+		$impresos = 0;
+		$fallos = [];
+		foreach ($tickets as $ticket) {
+			$pedidoCombinacionId = (int) ($ticket['pedido_combinacion_id'] ?? 0);
+			$nombre = 'tmp/empaqueOT-'.$ordentrabajoId.'-'.$pedidoCombinacionId.'.txt';
+			$resultado = $this->enviarTicketTermicoEmpaque($nombre, $this->textoTicketEmpaque($request, $ticket));
+			if ($resultado['ok'] ?? false) {
+				$impresos++;
+			} else {
+				$cliente = trim((string) ($ticket['cliente'] ?? ''));
+				$fallos[] = ($cliente !== '' ? $cliente.': ' : '').($resultado['mensaje'] ?? 'no se imprimió');
+			}
+		}
+
+		if (($request['cliente'] ?? '') == Config::get('consprod.NOMBRE_CLIENTE_STOCK')) {
+			$yaImpresos = [];
+			foreach ($tickets as $ticket) {
+				$yaImpresos[] = (int) ($ticket['pedido_combinacion_id'] ?? 0);
+			}
+			$this->imprimirOtStockAsociadas($request, $ordentrabajoId, $yaImpresos);
+		}
+
+		if ($fallos !== []) {
+			return [
+				'ok' => false,
+				'mensaje' => 'Se imprimieron '.$impresos.' etiquetas. Falló: '.implode(' ', $fallos),
+			];
+		}
+
+		return [
+			'ok' => true,
+			'mensaje' => 'Se imprimieron '.$impresos.' etiquetas, una por cada parte (lo que queda en stock y lo que se llevó cada cliente).',
+		];
+	}
+
+	/**
+	 * @param  array<string, mixed>  $request
+	 * @param  array<string, mixed>  $ticket
+	 */
+	private function textoTicketEmpaque(array $request, array $ticket): string
+	{
+		$reporte = chr(27).chr(33).chr(2);
+		$reporte .= 'Empaque de ORDEN DE TRABAJO NRO. '.$request['codigoordentrabajo']."\n\n";
+
+		if (($ticket['pedido'] ?? '') !== '') {
+			$reporte .= 'PEDIDO NRO: '.$ticket['pedido']."\n";
+		}
+
+		$reporte .= chr(27).chr(33).chr(32).($ticket['cliente'] ?? '')."\n\n";
+		$reporte .= chr(27).chr(33).chr(2);
+		$reporte .= ($ticket['nombretiposuspensioncliente'] ?? '')."\n";
+
+		$nota = trim((string) ($ticket['nota'] ?? ''));
+		if ($nota !== '') {
+			$reporte .= $nota."\n";
+		}
+
+		$articulo = (string) ($ticket['articulo'] ?? '');
+		if ($articulo === '') {
+			$articulo = (string) ($request['articulo'] ?? '');
+		}
+		$sku = (string) ($ticket['sku'] ?? '');
+		if ($sku === '') {
+			$sku = (string) ($request['sku'] ?? '');
+		}
+		$combinacion = (string) ($ticket['combinacion'] ?? '');
+		if ($combinacion === '') {
+			$combinacion = (string) ($request['combinacion'] ?? '');
+		}
+
+		$reporte .= "Articulo: \n";
+		$reporte .= chr(27).chr(33).chr(32).$articulo."\n";
+		$reporte .= chr(27).chr(33).chr(2).'SKU: '.$sku."\n\n";
+		$reporte .= 'Combinacion: '.$combinacion."\n\n";
+		$reporte .= "MEDIDAS\n";
+
+		foreach ($ticket['medidas'] ?? [] as $medida) {
+			$talle = is_array($medida) ? (string) ($medida['nombretalle'] ?? '') : '';
+			$cantidad = is_array($medida) ? number_format((float) ($medida['cantidad'] ?? 0), 6, '.', '') : '';
+			$reporte .= 'Talle: '.$talle.' Cantidad: '.$cantidad."\n";
+		}
+
+		$observacion = trim((string) ($ticket['observacion'] ?? ''));
+		if ($observacion !== '') {
+			$reporte .= $observacion."\n";
+		}
+
+		$pares = (float) ($ticket['pares'] ?? 0);
+		$paresTexto = abs($pares - round($pares)) < 0.0001
+			? (string) (int) round($pares)
+			: number_format($pares, 2, '.', '');
+
+		$reporte .= chr(27).chr(33).chr(32);
+		$reporte .= "\nTotal pares: ".$paresTexto."\n\n\n\n\n\n\n\n\n\n\n\n\n";
+		$reporte .= chr(27).chr(33).chr(2)."\n";
+
+		return $reporte;
+	}
+
+	/**
+	 * @param  array<string, mixed>  $request
+	 * @param  list<int>  $pedidoCombinacionYaImpresos
+	 */
+	private function imprimirOtStockAsociadas(array $request, int $ordentrabajoId, array $pedidoCombinacionYaImpresos = []): void
 	{
 		$ot = $this->ordentrabajoRepository->find($ordentrabajoId);
 		if (! $ot) {
@@ -631,6 +748,7 @@ class MovimientoOrdentrabajoService
 		$totalPares = 0;
 		$reporte = '';
 		$nombreReporte = '';
+		$yaImpresos = array_fill_keys(array_map('intval', $pedidoCombinacionYaImpresos), true);
 
 		foreach ($otStock as $otItem) {
 			if ($otItem->ordentrabajo_id == $ordentrabajoId) {
@@ -639,6 +757,11 @@ class MovimientoOrdentrabajoService
 
 			$pct = $otItem->pedido_combinacion_talles;
 			if (! $pct || ! $pct->pedidos_combinacion) {
+				continue;
+			}
+
+			$pedidoCombinacionId = (int) $pct->pedidos_combinacion->id;
+			if ($pedidoCombinacionId > 0 && isset($yaImpresos[$pedidoCombinacionId])) {
 				continue;
 			}
 
@@ -685,16 +808,19 @@ class MovimientoOrdentrabajoService
 		}
 	}
 
-	private function enviarTicketTermicoEmpaque(string $nombreRelativo, string $contenido): void
+	/**
+	 * @return array{ok: bool, mensaje: string}
+	 */
+	private function enviarTicketTermicoEmpaque(string $nombreRelativo, string $contenido): array
 	{
 		if ($nombreRelativo === '' || $contenido === '') {
-			return;
+			return ['ok' => false, 'mensaje' => 'Ticket vacío.'];
 		}
 
 		Storage::disk('local')->put($nombreRelativo, $contenido);
 		$path = Storage::path($nombreRelativo);
 		try {
-			CupsRemotoImpresionSupport::imprimirArchivo(
+			return CupsRemotoImpresionSupport::imprimirArchivo(
 				$path,
 				(string) config('impresion_termica.cola_empaque', 'calidad')
 			);

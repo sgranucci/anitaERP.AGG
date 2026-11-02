@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas\Ferli;
 
+use App\Models\Ventas\Ordentrabajo;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport;
@@ -78,6 +79,85 @@ final class OtConsultaDivisionPickingSupport
         unset($fila);
 
         return array_merge($filas, $extras);
+    }
+
+    /**
+     * Etiquetas de empaque ya partidas como la consulta de la OT.
+     * Vacío si esta línea no fue tomada por un picking: se imprime la curva original.
+     *
+     * @return list<array{
+     *     pedido_combinacion_id: int,
+     *     pedido: string,
+     *     cliente: string,
+     *     nombretiposuspensioncliente: string,
+     *     articulo: string,
+     *     sku: string,
+     *     combinacion: string,
+     *     medidas: list<array{nombretalle: string, cantidad: float}>,
+     *     pares: float,
+     *     nota: string,
+     *     observacion: string
+     * }>
+     */
+    public static function ticketsEmpaque(int $ordentrabajoId, int $pedidoCombinacionId): array
+    {
+        if ($ordentrabajoId <= 0 || $pedidoCombinacionId <= 0 || ! PedidoPickingFerliSupport::habilitado()) {
+            return [];
+        }
+
+        $ordentrabajo = Ordentrabajo::query()->find($ordentrabajoId);
+        if (! $ordentrabajo) {
+            return [];
+        }
+
+        $filas = self::filasDeOrdentrabajo($ordentrabajo);
+        if ($filas === []) {
+            return [];
+        }
+
+        $divididas = self::dividir($filas, $ordentrabajoId, (string) $ordentrabajo->codigo);
+
+        $origen = null;
+        foreach ($divididas as $fila) {
+            if (! empty($fila['es_picking'])) {
+                continue;
+            }
+            if ((int) ($fila['id'] ?? 0) === $pedidoCombinacionId) {
+                $origen = $fila;
+                break;
+            }
+        }
+
+        if ($origen === null || ! array_key_exists('medidas_restantes', $origen)) {
+            return [];
+        }
+
+        $articuloId = (int) ($origen['articulo_id'] ?? 0);
+        $combinacionId = (int) ($origen['combinacion_id'] ?? 0);
+        $tickets = [];
+
+        $resto = self::ticketDesdeFila($origen, $origen['medidas_restantes'] ?? []);
+        if ($resto !== null) {
+            $tickets[] = $resto;
+        }
+
+        foreach ($divididas as $fila) {
+            if (empty($fila['es_picking'])) {
+                continue;
+            }
+            if ((int) ($fila['articulo_id'] ?? 0) !== $articuloId) {
+                continue;
+            }
+            if ((int) ($fila['combinacion_id'] ?? 0) !== $combinacionId) {
+                continue;
+            }
+            $ticket = self::ticketDesdeFila($fila, $fila['medidas'] ?? []);
+            if ($ticket !== null) {
+                $tickets[] = $ticket;
+            }
+        }
+
+        return $tickets;
     }
 
     /**
@@ -179,6 +259,13 @@ final class OtConsultaDivisionPickingSupport
             return;
         }
 
+        $restantes = [];
+        foreach ($fila['medidas_saldo'] as $medida) {
+            if ((float) ($medida['cantidad'] ?? 0) > 0.0001) {
+                $restantes[] = $medida;
+            }
+        }
+        $fila['medidas_restantes'] = $restantes;
         $fila['pares'] = $restante;
         $fila['pares_titulo'] = 'Quedan en stock';
     }
@@ -239,6 +326,100 @@ final class OtConsultaDivisionPickingSupport
             'pares_titulo' => $codigoPicking > 0
                 ? 'Se llevó el picking #'.$codigoPicking
                 : 'Se llevó el picking',
+            'observacion' => (string) ($linea->observacion ?? ''),
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function filasDeOrdentrabajo(Ordentrabajo $ordentrabajo): array
+    {
+        $data = [];
+        foreach ($ordentrabajo->ordentrabajoCombinacionTallesVigentes() as $ot) {
+            $pct = $ot->pedido_combinacion_talles;
+            $item = $pct->pedidos_combinacion;
+            $medidas = [
+                'talle' => $pct->talle_id,
+                'nombretalle' => $pct->talles?->nombre ?? '',
+                'cantidad' => $pct->cantidad,
+                'precio' => $pct->precio,
+            ];
+
+            $idItem = (int) $item->id;
+            $indice = null;
+            foreach ($data as $ii => $fila) {
+                if ((int) $fila['id'] === $idItem) {
+                    $indice = $ii;
+                    break;
+                }
+            }
+
+            if ($indice === null) {
+                $data[] = [
+                    'id' => $idItem,
+                    'codigo' => $item->pedido_id,
+                    'cliente' => $ot->clientes?->nombre ?? '',
+                    'cliente_id' => $ot->clientes?->id ?? '',
+                    'nombretiposuspensioncliente' => $ot->clientes?->tipossuspensioncliente?->nombre ?? '',
+                    'articulo' => $item->articulos?->descripcion ?? '',
+                    'sku' => $item->articulos?->sku ?? '',
+                    'articulo_id' => (int) ($item->articulos?->id ?? $item->articulo_id),
+                    'pares' => $item->cantidad,
+                    'combinacion_id' => (int) $item->combinacion_id,
+                    'nombre_combinacion' => $item->combinaciones?->nombre ?? '',
+                    'medidas' => [$medidas],
+                    'observacion' => (string) ($item->observacion ?? ''),
+                ];
+            } else {
+                $data[$indice]['medidas'][] = $medidas;
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     * @param  list<array<string, mixed>>  $medidas
+     * @return array<string, mixed>|null
+     */
+    private static function ticketDesdeFila(array $fila, array $medidas): ?array
+    {
+        $medidasTicket = [];
+        $pares = 0.0;
+        foreach ($medidas as $medida) {
+            $cantidad = (float) ($medida['cantidad'] ?? 0);
+            if ($cantidad <= 0.0001) {
+                continue;
+            }
+            $pares += $cantidad;
+            $medidasTicket[] = [
+                'nombretalle' => (string) ($medida['nombretalle'] ?? ''),
+                'cantidad' => $cantidad,
+            ];
+        }
+
+        if ($pares <= 0.0001 || $medidasTicket === []) {
+            return null;
+        }
+
+        usort($medidasTicket, static function (array $a, array $b): int {
+            return strnatcmp($a['nombretalle'], $b['nombretalle']);
+        });
+
+        return [
+            'pedido_combinacion_id' => (int) ($fila['id'] ?? 0),
+            'pedido' => (string) ($fila['codigo'] ?? ''),
+            'cliente' => (string) ($fila['cliente'] ?? ''),
+            'nombretiposuspensioncliente' => (string) ($fila['nombretiposuspensioncliente'] ?? ''),
+            'articulo' => (string) ($fila['articulo'] ?? ''),
+            'sku' => (string) ($fila['sku'] ?? ''),
+            'combinacion' => (string) ($fila['nombre_combinacion'] ?? ''),
+            'medidas' => $medidasTicket,
+            'pares' => $pares,
+            'nota' => (string) ($fila['pares_titulo'] ?? ''),
+            'observacion' => (string) ($fila['observacion'] ?? ''),
         ];
     }
 

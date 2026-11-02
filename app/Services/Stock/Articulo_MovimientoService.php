@@ -439,7 +439,10 @@ class Articulo_MovimientoService
 		$datas = [];
 		uasort($grupos, static fn ($a, $b) => strcmp((string) $a['_sort'], (string) $b['_sort']));
 		foreach ($grupos as $grupo) {
-			if (abs((float) $grupo['total_pares']) < 0.0001) {
+			if (! ReporteStockOtSituacionSupport::incluyeSaldoEnApertura(
+				(float) $grupo['total_pares'],
+				$esMovimientos
+			)) {
 				continue;
 			}
 			if (! ReporteStockOtSituacionSupport::pasaFiltroEstadoOt(
