@@ -2337,4 +2337,306 @@ class PagoproveedorService
             return ['errores' => $e->getMessage()];
         }
     }
+
+    /**
+     * OP completa desde una celda del programa de pagos.
+     *
+     * Aplica facturas en orden, calcula retenciones, entrega los cheques de
+     * terceros ya elegidos y transfiere la diferencia (neto menos cheques).
+     * Si los cheques superan el neto, no hay transferencia: el sobrante queda
+     * como anticipo. Anita se replica después del commit.
+     *
+     * @param  list<array{proveedor_cuentacorriente_id:int,montoaplicado:float,moneda_id?:int,cotizacion?:float,cotizacion_aplicada?:float}>  $aplicaciones
+     * @param  list<int>  $chequeIds
+     * @return array{mensaje?:string,errores?:string,pagoproveedor_id?:int,numerotransaccion?:string,aviso?:string,transferencia?:float,anticipo?:float}
+     */
+    public function crearDesdeProgramaPago(
+        int $empresaId,
+        int $proveedorId,
+        string $fecha,
+        float $programado,
+        array $aplicaciones,
+        array $chequeIds,
+        ?int $cuentacajaId,
+        string $detalle,
+        bool $sincronizarAnita = true,
+    ): array {
+        $programado = round($programado, 2);
+        $chequeIds = array_values(array_unique(array_filter(array_map('intval', $chequeIds))));
+        $cuentacajaId = ($cuentacajaId && $cuentacajaId > 0) ? $cuentacajaId : null;
+
+        PeriodoContableCierreSupport::assertOperacionPermitida(
+            $empresaId,
+            $fecha,
+            PeriodoContableCierreSupport::ALCANCE_CAJA
+        );
+
+        $monedaId = max(1, (int) config('cotizacion.ID_MONEDA_DEFAULT', 1));
+        $tipoComprobante = 'OPP';
+        $dataPreflight = [
+            'proveedor_id' => $proveedorId,
+            'fecha' => $fecha,
+            'moneda_id' => $monedaId,
+            'cotizacion' => 1,
+            'monto' => $programado,
+            'idcuentacorrientes' => [],
+            'montoaplicadocomprobantes' => [],
+            'monedacomprobante_ids' => [],
+            'cotizacioncomprobantes' => [],
+            'cotizacion_aplicada_dia' => [],
+            'calcular_ganancias' => true,
+            'calcular_iva' => true,
+            'calcular_suss' => true,
+            'calcular_iibb' => true,
+        ];
+        foreach ($aplicaciones as $apl) {
+            $dataPreflight['idcuentacorrientes'][] = (int) ($apl['proveedor_cuentacorriente_id'] ?? 0);
+            $dataPreflight['montoaplicadocomprobantes'][] = (float) ($apl['montoaplicado'] ?? 0);
+            $dataPreflight['monedacomprobante_ids'][] = (int) ($apl['moneda_id'] ?? 0) ?: $monedaId;
+            $cotApl = (float) ($apl['cotizacion'] ?? 0) ?: 1;
+            $dataPreflight['cotizacioncomprobantes'][] = $cotApl;
+            $dataPreflight['cotizacion_aplicada_dia'][] = (float) ($apl['cotizacion_aplicada'] ?? 0) ?: $cotApl;
+        }
+        $this->assertNumeradoresAnitaAntesDeGrabar($empresaId, $dataPreflight, 'CONFIRMADA', $tipoComprobante);
+
+        try {
+            $pago = DB::transaction(function () use (
+                $empresaId,
+                $proveedorId,
+                $fecha,
+                $programado,
+                $aplicaciones,
+                $chequeIds,
+                $cuentacajaId,
+                $detalle,
+                $monedaId,
+                $tipoComprobante,
+                $dataPreflight
+            ) {
+                $cheques = $this->chequesProgramaBloqueados($chequeIds, $empresaId);
+                $sumaCheques = round($cheques->sum(fn (Cheque $ch) => (float) $ch->monto), 2);
+
+                $numero = $this->siguienteNumeroComprobante($empresaId, $tipoComprobante);
+                $sucursal = PagoproveedorAnitaNumeracionSupport::sucursalParaOp($empresaId);
+                $cotizacionPago = PagoproveedorAsientoArmadoSupport::cotizacionUnicaDelPago($monedaId, 1.0, $fecha);
+
+                $pago = $this->pagoproveedorRepository->create([
+                    'empresa_id' => $empresaId,
+                    'tipotransaccion_caja_id' => $this->tipotransaccionCajaIdParaComprobante($tipoComprobante, null),
+                    'tipocomprobante' => $tipoComprobante,
+                    'letra' => PagoproveedorAnitaCrownClaveSupport::letraDocumento(),
+                    'sucursal' => $sucursal,
+                    'numerotransaccion' => (string) $numero,
+                    'fecha' => $fecha,
+                    'proveedor_id' => $proveedorId,
+                    'detalle' => $detalle !== '' ? $detalle : ('OP programa de pagos Nro. '.$numero),
+                    'estado' => 'CONFIRMADA',
+                    'monto' => $programado > 0 ? $programado : $sumaCheques,
+                    'cotizacion' => $cotizacionPago,
+                    'moneda_id' => $monedaId,
+                    'modo_cotizacion' => (string) config('pagoproveedor.modo_cotizacion_default', 'factura'),
+                    'usuario_id' => Auth::id(),
+                ]);
+
+                $this->registrarEstado($pago, 'CONFIRMADA', 'Alta desde programa de pagos');
+                PagoproveedorAplicacionCuentacorrienteSupport::reemplazarAplicaciones($pago, $aplicaciones);
+
+                $hayAplicaciones = $this->hayAplicacionConMonto($aplicaciones);
+                if ($hayAplicaciones) {
+                    $this->persistirRetenciones($pago, array_merge($dataPreflight, [
+                        'importe_neto_retencion' => $programado,
+                        'importe_iva_retencion' => 0,
+                    ]));
+                }
+
+                $pago = $pago->fresh(['pagoproveedor_retenciones']);
+                $retenciones = round($pago->totalRetenciones(), 2);
+                $aplicado = 0.0;
+                foreach ($aplicaciones as $apl) {
+                    $aplicado += abs((float) ($apl['montoaplicado'] ?? 0));
+                }
+                $aplicado = round($aplicado, 2);
+
+                $transferencia = 0.0;
+                $anticipo = 0.0;
+                if ($hayAplicaciones) {
+                    $neto = round(max(0, $aplicado - $retenciones), 2);
+                    if ($sumaCheques <= $neto + 0.009) {
+                        $transferencia = round($neto - $sumaCheques, 2);
+                        $montoFinal = $aplicado;
+                    } else {
+                        $montoFinal = round($sumaCheques + $retenciones, 2);
+                        $anticipo = round(max(0, $montoFinal - $aplicado), 2);
+                    }
+                } else {
+                    $desembolso = $sumaCheques > 0.009 ? $sumaCheques : $programado;
+                    $transferencia = $sumaCheques > 0.009 ? 0.0 : $desembolso;
+                    $montoFinal = $desembolso;
+                    $anticipo = $desembolso;
+                }
+
+                if ($transferencia > 0.009 && ! $cuentacajaId) {
+                    throw new Exception(
+                        'Falta la cuenta de caja para transferir '
+                        .number_format($transferencia, 2, ',', '.')
+                        .' (diferencia después de cheques y retenciones).'
+                    );
+                }
+                if ($transferencia < 0.009 && $sumaCheques < 0.01) {
+                    throw new Exception('No hay cheques ni transferencia para esta orden de pago.');
+                }
+
+                $this->pagoproveedorRepository->update(['monto' => $montoFinal], $pago->id);
+                $pago->monto = $montoFinal;
+
+                if ($hayAplicaciones && $anticipo > 0.01) {
+                    $this->sincronizarOpaDeSobrante($pago, $anticipo);
+                } elseif (! $hayAplicaciones && $anticipo > 0.01) {
+                    PagoproveedorAplicacionCuentacorrienteSupport::crearAnticipo(
+                        $pago,
+                        $anticipo,
+                        $monedaId,
+                        $cotizacionPago,
+                    );
+                    $this->marcarComoOpa($pago);
+                }
+
+                $data = [
+                    'empresa_id' => $empresaId,
+                    'fecha' => $fecha,
+                    'proveedor_id' => $proveedorId,
+                    'moneda_id' => $monedaId,
+                    'cotizacion' => $cotizacionPago,
+                    'monto' => $montoFinal,
+                    'idcuentacorrientes' => $dataPreflight['idcuentacorrientes'],
+                    'montoaplicadocomprobantes' => $dataPreflight['montoaplicadocomprobantes'],
+                    'monedacomprobante_ids' => $dataPreflight['monedacomprobante_ids'],
+                    'cotizacioncomprobantes' => $dataPreflight['cotizacioncomprobantes'],
+                    'cotizacion_aplicada_dia' => $dataPreflight['cotizacion_aplicada_dia'],
+                    'diferencias_cambio' => array_fill(0, count($aplicaciones), 0),
+                ];
+                if ($transferencia > 0.009 && $cuentacajaId) {
+                    $data['cuentacaja_ids'] = [$cuentacajaId];
+                    $data['montos'] = [$transferencia];
+                    $data['moneda_ids'] = [$monedaId];
+                    $data['cotizaciones'] = [
+                        PagoproveedorAsientoArmadoSupport::cotizacionParaLinea($monedaId, $cotizacionPago),
+                    ];
+                    $data['observaciones'] = [$detalle !== '' ? $detalle : 'Transferencia programa de pagos'];
+                }
+                foreach ($cheques as $ch) {
+                    $data['cheque_recibido_ids'][] = (int) $ch->id;
+                    $data['nro_interno_anita_recibidos'][] = $ch->nro_interno_anita;
+                    $data['fechapago_recibidos'][] = (string) $ch->fechapago;
+                    $data['banco_recibido_ids'][] = (int) $ch->banco_id;
+                    $data['numerocheque_recibidos'][] = (string) $ch->numerocheque;
+                    $data['sucursalpago_recibidos'][] = (string) ($ch->sucursalpago ?? '');
+                    $data['cuentalibradora_recibidos'][] = (string) ($ch->cuentalibradora ?? '');
+                    $data['monedacheque_recibido_ids'][] = (int) ($ch->moneda_id ?: $monedaId);
+                    $data['montocheque_recibidos'][] = (float) $ch->monto;
+                    $cotCh = (float) ($ch->cotizacion ?? 0);
+                    $data['cotizacioncheque_recibidos'][] = $cotCh > 0 ? $cotCh : 1;
+                }
+
+                $cajaMovId = $this->persistirCajaMovimiento($pago, $data, true);
+                if ($cheques->isNotEmpty()) {
+                    if ($cajaMovId <= 0) {
+                        throw new Exception('No se pudo grabar el movimiento de caja para entregar los cheques.');
+                    }
+                    $this->chequeRepository->guardarChequeIngresoEgreso($data, 'create', $cajaMovId);
+                    Cheque::query()
+                        ->where('caja_movimiento_id', $cajaMovId)
+                        ->whereNull('pagoproveedor_id')
+                        ->update(['pagoproveedor_id' => $pago->id]);
+                }
+
+                $pago = $pago->fresh();
+                $data = array_merge($data, $this->construirArraysAsientoDesdeOperacion($pago, $data));
+                if (empty($data['cuentacontable_ids'])) {
+                    throw new Exception('No se pudo armar el asiento contable de la OP del programa de pagos.');
+                }
+                AsientoBalanceSupport::assertBalanceadoDesdePayload([
+                    'debes' => $data['debeasientos'] ?? [],
+                    'haberes' => $data['haberasientos'] ?? [],
+                ], 'asiento de la OP del programa de pagos');
+                $this->persistirAsiento($pago, $data);
+
+                return [
+                    'pago' => $pago->fresh(),
+                    'transferencia' => $transferencia,
+                    'anticipo' => $anticipo,
+                ];
+            });
+
+            $out = [
+                'mensaje' => 'ok',
+                'pagoproveedor_id' => (int) $pago['pago']->id,
+                'numerotransaccion' => (string) $pago['pago']->numerotransaccion,
+                'transferencia' => round((float) $pago['transferencia'], 2),
+                'anticipo' => round((float) $pago['anticipo'], 2),
+            ];
+
+            if (! $sincronizarAnita) {
+                return $out;
+            }
+
+            try {
+                $this->sincronizarAnitaTesoreria($pago['pago']->fresh(), false);
+            } catch (\Throwable $eAnita) {
+                Log::error('pagoproveedor.programa.anita.sync_post_commit.fallo', [
+                    'pagoproveedor_id' => $pago['pago']->id,
+                    'numero' => $pago['pago']->numerotransaccion,
+                    'mensaje' => $eAnita->getMessage(),
+                ]);
+                $out['aviso'] = 'OP grabada en ERP (#'.$pago['pago']->numerotransaccion
+                    .') pero falló la réplica Anita: '.$eAnita->getMessage()
+                    .'. No vuelva a generarla; revise sincronización/auditoría.';
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            return ['errores' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * @param  list<int>  $chequeIds
+     * @return \Illuminate\Support\Collection<int, Cheque>
+     */
+    private function chequesProgramaBloqueados(array $chequeIds, int $empresaId)
+    {
+        if ($chequeIds === []) {
+            return collect();
+        }
+
+        $cheques = Cheque::query()
+            ->whereIn('id', $chequeIds)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
+
+        $ordenados = collect();
+        foreach ($chequeIds as $id) {
+            $ch = $cheques->get($id);
+            if ($ch === null) {
+                throw new Exception('El cheque #'.$id.' ya no está en cartera.');
+            }
+            if ((string) $ch->origen !== 'R') {
+                throw new Exception('El cheque '.$ch->numerocheque.' no es de terceros.');
+            }
+            if ((int) ($ch->pagoproveedor_id ?? 0) > 0) {
+                throw new Exception('El cheque '.$ch->numerocheque.' (interno '.$ch->nro_interno_anita.') ya está en otra orden de pago.');
+            }
+            if ($empresaId > 0 && (int) $ch->empresa_id !== $empresaId) {
+                throw new Exception('El cheque '.$ch->numerocheque.' es de otra empresa.');
+            }
+            if ((int) ($ch->banco_id ?? 0) <= 0) {
+                throw new Exception('El cheque '.$ch->numerocheque.' no tiene banco. No se puede entregar.');
+            }
+            $ordenados->push($ch);
+        }
+
+        return $ordenados;
+    }
 }

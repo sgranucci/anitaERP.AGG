@@ -6,10 +6,14 @@ use App\Exports\Compras\ProgramaPagoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionProgramaPago;
 use App\Models\Compras\ProgramaPago;
+use App\Models\Compras\ProgramaPagoCheque;
 use App\Repositories\Compras\ProgramaPagoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Models\Compras\ProgramaPagoOp;
+use App\Services\Compras\ProgramaPagoGenerarOpService;
 use App\Services\Compras\ProgramaPagoService;
 use App\Support\Compras\ProgramaPagoListadoFiltros;
+use App\Support\Compras\ProgramaPagoOpPlanSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -21,6 +25,7 @@ class ProgramaPagoController extends Controller
     public function __construct(
         private ProgramaPagoRepositoryInterface $programaPagoRepository,
         private ProgramaPagoService $programaPagoService,
+        private ProgramaPagoGenerarOpService $programaPagoGenerarOpService,
         private EmpresaRepositoryInterface $empresaRepository,
     ) {
     }
@@ -348,15 +353,323 @@ class ProgramaPagoController extends Controller
         $resumen = $resultado['resumen'] ?? [];
         $nAsig = (int) ($resumen['asignados'] ?? 0);
         $nDisc = (int) ($resumen['discrepancias'] ?? 0);
+        $propuestas = array_values($resultado['propuestas'] ?? []);
         $mensaje = "Asignación de cheques: {$nAsig} cheque(s).";
         if ($nDisc > 0) {
             $mensaje .= " Discrepancias: {$nDisc}.";
         }
+        if ($propuestas !== []) {
+            $mensaje .= ' Hay '.count($propuestas).' propuesta(s) con cheques posteriores: no se grabaron hasta que las aceptes.';
+            session()->put('pp_propuestas_cheques.'.$id, $propuestas);
+        } else {
+            session()->forget('pp_propuestas_cheques.'.$id);
+        }
+        $mensaje .= $this->textoAjustes($resultado['ajustes'] ?? []);
+
+        $redirect = $this->redirectPrograma($id, $lineaId)
+            ->with('mensaje', $mensaje)
+            ->with('pp_asignacion_cheques', $resultado);
+        if ($lineaId !== null) {
+            $redirect->with('pp_foco_linea', $lineaId);
+        }
+
+        return $redirect;
+    }
+
+    public function desasignarCheques(Request $request, int $id)
+    {
+        $this->assertFerli();
+        can('actualizar-programa-pago');
+
+        $programa = $this->programaPagoRepository->find($id);
+        if (! $this->empresaRepository->empresaIdPermitida((int) $programa->empresa_id)) {
+            abort(403);
+        }
+
+        $alcance = (string) $request->input('alcance', '');
+        $lineaId = (int) $request->input('linea_id', 0);
+        $clave = trim((string) $request->input('clave', ''));
+        $asignacionId = (int) $request->input('asignacion_id', 0);
+
+        if (! in_array($alcance, ['todos', 'linea', 'celda', 'uno'], true)) {
+            return back()->with('error', 'No se indicó qué cheques quitar.');
+        }
+        if ($alcance === 'linea' && $lineaId <= 0) {
+            return back()->with('error', 'Seleccioná un proveedor para quitar sus cheques.');
+        }
+        if ($alcance === 'celda' && ($lineaId <= 0 || $clave === '')) {
+            return back()->with('error', 'No se indicó el mes a desasignar.');
+        }
+        if ($alcance === 'uno' && $asignacionId <= 0) {
+            return back()->with('error', 'No se indicó el cheque a quitar.');
+        }
+
+        $foco = $lineaId;
+        if ($foco <= 0 && $asignacionId > 0) {
+            $foco = (int) ProgramaPagoCheque::query()->whereKey($asignacionId)->value('programa_pago_linea_id');
+        }
+
+        try {
+            $n = $this->programaPagoService->desasignarCheques(
+                $programa,
+                $alcance,
+                $lineaId > 0 ? $lineaId : null,
+                $clave !== '' ? $clave : null,
+                $asignacionId > 0 ? $asignacionId : null,
+            );
+        } catch (Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $redirect = $this->redirectPrograma($id, $foco > 0 ? $foco : null)
+            ->with('mensaje', $n > 0
+                ? "Se quitaron {$n} cheque(s) asignados. El monto programado no cambió."
+                : 'Ese proveedor no tenía cheques asignados.');
+        if ($foco > 0) {
+            $redirect->with('pp_foco_linea', $foco);
+        }
+
+        return $redirect;
+    }
+
+    public function aceptarChequesAdelantados(Request $request, int $id)
+    {
+        $this->assertFerli();
+        can('actualizar-programa-pago');
+
+        $programa = $this->programaPagoRepository->find($id);
+        if (! $this->empresaRepository->empresaIdPermitida((int) $programa->empresa_id)) {
+            abort(403);
+        }
+
+        $todas = session('pp_propuestas_cheques.'.$id, []);
+        if (! is_array($todas)) {
+            $todas = [];
+        }
+        $indices = array_values(array_unique(array_map('intval', (array) $request->input('propuestas', []))));
+        $elegidas = [];
+        foreach ($indices as $indice) {
+            if (isset($todas[$indice]) && is_array($todas[$indice])) {
+                $elegidas[$indice] = $todas[$indice];
+            }
+        }
+        if ($elegidas === []) {
+            return back()->with('error', 'Marcá al menos una propuesta para aceptarla.');
+        }
+
+        try {
+            $res = $this->programaPagoService->persistirPropuestasCheques($programa, array_values($elegidas));
+        } catch (Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $ok = array_flip($res['claves_ok'] ?? []);
+        foreach ($elegidas as $indice => $prop) {
+            $claveOk = ((int) ($prop['linea_id'] ?? 0)).'|'.(string) ($prop['clave'] ?? '');
+            if (isset($ok[$claveOk])) {
+                unset($todas[$indice]);
+            }
+        }
+        $todas = array_values($todas);
+        if ($todas === []) {
+            session()->forget('pp_propuestas_cheques.'.$id);
+        } else {
+            session()->put('pp_propuestas_cheques.'.$id, $todas);
+        }
+
+        $grabados = (int) ($res['grabados'] ?? 0);
+        $errores = $res['errores'] ?? [];
+        $mensaje = "Se asignaron {$grabados} cheque(s) de la propuesta.";
+        if ($errores !== []) {
+            $mensaje .= ' '.implode(' ', $errores);
+        }
+
+        $foco = null;
+        $lineaIdsOk = [];
+        foreach ($elegidas as $prop) {
+            $claveOk = ((int) ($prop['linea_id'] ?? 0)).'|'.(string) ($prop['clave'] ?? '');
+            if (! isset($ok[$claveOk])) {
+                continue;
+            }
+            $lid = (int) $prop['linea_id'];
+            $lineaIdsOk[$lid] = true;
+            if ($foco === null) {
+                $foco = $lid;
+            }
+        }
+        if ($grabados > 0 && $lineaIdsOk !== []) {
+            $excluir = [];
+            foreach ($todas as $prop) {
+                $lid = (int) ($prop['linea_id'] ?? 0);
+                $clave = (string) ($prop['clave'] ?? '');
+                if ($lid > 0 && $clave !== '') {
+                    $excluir[$lid][] = $clave;
+                }
+            }
+            try {
+                $ajustes = $this->programaPagoService->alinearMontosACheques(
+                    $programa,
+                    array_keys($lineaIdsOk),
+                    $excluir
+                );
+                $mensaje .= $this->textoAjustes($ajustes);
+            } catch (Throwable $e) {
+                $mensaje .= ' No se pudo reacomodar el programado: '.$e->getMessage();
+            }
+        }
+
+        $redirect = $this->redirectPrograma($id, $foco)
+            ->with($grabados > 0 ? 'mensaje' : 'error', $mensaje);
+        if ($foco !== null) {
+            $redirect->with('pp_foco_linea', $foco);
+        }
+
+        return $redirect;
+    }
+
+    public function descartarChequesAdelantados(int $id)
+    {
+        $this->assertFerli();
+        can('actualizar-programa-pago');
+
+        $programa = $this->programaPagoRepository->find($id);
+        if (! $this->empresaRepository->empresaIdPermitida((int) $programa->empresa_id)) {
+            abort(403);
+        }
+
+        session()->forget('pp_propuestas_cheques.'.$id);
 
         return redirect()
             ->route('editar_programa_pago', $id)
-            ->with('mensaje', $mensaje)
-            ->with('pp_asignacion_cheques', $resultado);
+            ->with('mensaje', 'Se descartaron las propuestas. No se asignó ningún cheque de meses posteriores.');
+    }
+
+    public function prepararGenerarOp(Request $request, int $id)
+    {
+        $this->assertFerli();
+        can('actualizar-programa-pago');
+        can('crear-pagoproveedor');
+
+        $programa = $this->programaPagoRepository->find($id);
+        if (! $this->empresaRepository->empresaIdPermitida((int) $programa->empresa_id)) {
+            abort(403);
+        }
+        if (! $programa->esEditable()) {
+            return redirect()->route('editar_programa_pago', $id)
+                ->with('error', 'El programa está cerrado. Reabrilo para generar órdenes de pago.');
+        }
+
+        $lineaIds = array_map('intval', (array) $request->input('linea_ids', []));
+        $plan = ProgramaPagoOpPlanSupport::armar($programa, $lineaIds);
+        if ($plan === []) {
+            return redirect()->route('editar_programa_pago', $id)
+                ->with('error', 'Tildá al menos un proveedor con montos programados.');
+        }
+
+        $necesitaCuenta = false;
+        foreach ($plan as $fila) {
+            if ($fila['necesita_cuenta'] && ! $fila['pagoproveedor_id']) {
+                $necesitaCuenta = true;
+                break;
+            }
+        }
+
+        return view('compras.programa_pago.generar_op', [
+            'data' => $programa,
+            'plan' => $plan,
+            'necesitaCuenta' => $necesitaCuenta,
+            'fechaHoy' => date('Y-m-d'),
+        ]);
+    }
+
+    public function generarOp(Request $request, int $id)
+    {
+        $this->assertFerli();
+        can('actualizar-programa-pago');
+        can('crear-pagoproveedor');
+
+        $programa = $this->programaPagoRepository->find($id);
+        if (! $this->empresaRepository->empresaIdPermitida((int) $programa->empresa_id)) {
+            abort(403);
+        }
+
+        $pedidos = [];
+        foreach ((array) $request->input('ops', []) as $op) {
+            if (empty($op['incluir'])) {
+                continue;
+            }
+            $pedidos[] = [
+                'linea_id' => (int) ($op['linea_id'] ?? 0),
+                'fecha' => (string) ($op['fecha'] ?? ''),
+            ];
+        }
+
+        $resultado = $this->programaPagoGenerarOpService->generar(
+            $programa,
+            $pedidos,
+            (int) $request->input('cuentacaja_id')
+        );
+
+        return redirect()
+            ->route('resultado_op_programa_pago', $id)
+            ->with('pp_generacion_op', $resultado);
+    }
+
+    public function resultadoGenerarOp(int $id)
+    {
+        $this->assertFerli();
+        can('editar-programa-pago');
+
+        $programa = $this->programaPagoRepository->find($id);
+        if (! $this->empresaRepository->empresaIdPermitida((int) $programa->empresa_id)) {
+            abort(403);
+        }
+
+        $generadas = ProgramaPagoOp::query()
+            ->whereHas('linea', static fn ($q) => $q->where('programa_pago_id', $programa->id))
+            ->with([
+                'linea.proveedores:id,codigo,nombre',
+                'pagoproveedor:id,numerotransaccion,fecha,monto,estado,tipocomprobante,proveedor_id',
+            ])
+            ->orderByDesc('id')
+            ->get();
+
+        return view('compras.programa_pago.resultado_op', [
+            'data' => $programa,
+            'generadas' => $generadas,
+            'corrida' => session('pp_generacion_op'),
+        ]);
+    }
+
+    private function redirectPrograma(int $id, ?int $lineaId = null)
+    {
+        $params = ['id' => $id];
+        if ($lineaId !== null && $lineaId > 0) {
+            $params['linea'] = $lineaId;
+        }
+
+        return redirect()->route('editar_programa_pago', $params);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $ajustes
+     */
+    private function textoAjustes(array $ajustes): string
+    {
+        if (count($ajustes) > 3) {
+            return ' Se alinearon '.count($ajustes).' proveedores a los cheques que tenían. Lo que no cubren quedó en transferencia.';
+        }
+        $partes = [];
+        foreach ($ajustes as $ajuste) {
+            $transf = (float) ($ajuste['transf'] ?? 0);
+            $texto = trim((string) ($ajuste['proveedor'] ?? '')).': los meses quedaron iguales a los cheques';
+            $texto .= $transf > 0.009
+                ? '. Transferencia '.number_format($transf, 2, ',', '.')
+                : '. Sin transferencia';
+            $partes[] = $texto;
+        }
+
+        return $partes === [] ? '' : ' '.implode(' ', $partes).'.';
     }
 
     private function assertFerli(): void

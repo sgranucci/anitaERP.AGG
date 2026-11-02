@@ -532,11 +532,42 @@
         acotarFechaComprobanteIe();
     }
 
+    function diasToleranciaFechaComprobanteIe() {
+        var n = parseInt($('#ie-cp-fecha-comprobante').attr('data-tolerancia-dias') || '0', 10);
+        return isNaN(n) || n < 0 ? 0 : n;
+    }
+
+    function sumarDiasYmdIe(ymd, dias) {
+        var p = String(ymd || '').split('-');
+        if (p.length !== 3) {
+            return '';
+        }
+        var fecha = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])));
+        if (isNaN(fecha.getTime())) {
+            return '';
+        }
+        fecha.setUTCDate(fecha.getUTCDate() + (parseInt(dias, 10) || 0));
+        var mes = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+        var dia = String(fecha.getUTCDate()).padStart(2, '0');
+        return fecha.getUTCFullYear() + '-' + mes + '-' + dia;
+    }
+
+    function topeFechaComprobanteIe(ancla) {
+        var tope = sumarDiasYmdIe(ancla, diasToleranciaFechaComprobanteIe());
+        var maxFuturo = String($('#ie-cp-fecha-comprobante').attr('data-max-futuro') || '').slice(0, 10);
+        if (maxFuturo && tope && tope > maxFuturo) {
+            return maxFuturo;
+        }
+        return tope;
+    }
+
     function acotarFechaComprobanteIe() {
         var $comp = $('#ie-cp-fecha-comprobante');
-        var topeIva = String($('#ie-cp-fecha-iva').attr('max') || '').slice(0, 10);
-        if (topeIva) {
-            $comp.attr('max', topeIva);
+        var iva = String($('#ie-cp-fecha-iva').val() || '').slice(0, 10);
+        var ancla = iva || String($('#ie-cp-fecha-iva').attr('max') || '').slice(0, 10);
+        var tope = ancla ? topeFechaComprobanteIe(ancla) : '';
+        if (tope && String($comp.attr('max') || '') !== tope) {
+            $comp.attr('max', tope);
         }
     }
 
@@ -639,7 +670,12 @@
         if (iva && topeIva && iva > topeIva) {
             return 'La fecha de contabilización no puede ser posterior al ' + topeIva.split('-').reverse().join('/') + '.';
         }
-        if (comp && iva && comp > iva) {
+        var diasTol = diasToleranciaFechaComprobanteIe();
+        var topeComp = iva ? sumarDiasYmdIe(iva, diasTol) : '';
+        if (comp && topeComp && comp > topeComp) {
+            if (diasTol > 0) {
+                return 'La fecha del comprobante no puede ser más de ' + diasTol + ' días posterior a la fecha de contabilización.';
+            }
             return 'La fecha del comprobante no puede ser posterior a la fecha de contabilización.';
         }
         return '';

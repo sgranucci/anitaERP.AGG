@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\Log;
  * Ferli: NC sobre FAC de OT/picking → libera la línea del pedido para refacturar.
  * La NC total quita la tarea FACTURADA, restaura todo el stock que esa factura había sacado y desmarca el picking.
  * La NC parcial devuelve los pares acreditados (la curva completa o una parte), con el mismo lote/OT.
+ * Si el artículo se descontó, la nota lo repone. Si la OT se fabricó para el cliente y nunca
+ * pasó por stock, los pares acreditados entran igual: la mercadería vuelve.
  * Si la línea quedó acreditada por completo y estaba en un picking, vuelve a pendiente en el mismo.
  */
 final class NotaCreditoReabrePedidoOtFerliSupport
@@ -58,6 +60,10 @@ final class NotaCreditoReabrePedidoOtFerliSupport
 
         $movimientosRevertidos = PedidoPickingFerliSupport::revertirConsumoStockPorVenta(
             $ventaOrigenId,
+            $ventaNcId,
+            $fechaNc
+        );
+        $movimientosRevertidos += PedidoPickingFerliSupport::ingresarMercaderiaDevuelta(
             $ventaNcId,
             $fechaNc
         );
@@ -111,10 +117,9 @@ final class NotaCreditoReabrePedidoOtFerliSupport
         $fechaNc = $ventaNcId > 0
             ? Venta::query()->whereKey($ventaNcId)->value('fecha')
             : null;
-        $revertidos = PedidoPickingFerliSupport::devolverParesAcreditados(
-            $ventaNcId,
-            $fechaNc !== null ? (string) $fechaNc : null
-        );
+        $fecha = $fechaNc !== null ? (string) $fechaNc : null;
+        $revertidos = PedidoPickingFerliSupport::devolverParesAcreditados($ventaNcId, $fecha);
+        $revertidos += PedidoPickingFerliSupport::ingresarMercaderiaDevuelta($ventaNcId, $fecha);
         $reabiertos = PedidoPickingFerliSupport::reabrirFacturadoDeLineas($ids);
         $aplicado = $reabiertos > 0 || $revertidos > 0;
 

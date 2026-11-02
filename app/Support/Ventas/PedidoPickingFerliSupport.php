@@ -12,6 +12,7 @@ use App\Models\Stock\Modulo;
 use App\Models\Ventas\Ordentrabajo;
 use App\Models\Ventas\Ordentrabajo_Combinacion_Talle;
 use App\Models\Ventas\Pedido_Combinacion;
+use App\Models\Ventas\Pedido_Combinacion_Talle;
 use App\Models\Ventas\Pedido_Picking;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Emision;
@@ -1882,13 +1883,10 @@ final class PedidoPickingFerliSupport
 
         $revertidos = 0;
         foreach ($grupos as $pcId => $grupo) {
-            $neto = (float) Articulo_Movimiento::query()
-                ->where('pedido_combinacion_id', (int) $pcId)
-                ->sum('cantidad');
-            if ($neto >= -0.0001) {
-                continue;
-            }
-            $aDevolver = min((float) $grupo['cantidad'], abs($neto));
+            // El neto puede dar cero si el alta y el consumo se compensan.
+            // La mercadería igual vuelve: se repone lo descontado que esta nota todavía no devolvió.
+            $pendiente = self::paresPendientesDeDevolver((int) $pcId);
+            $aDevolver = min((float) $grupo['cantidad'], $pendiente);
             if ($aDevolver <= 0.0001) {
                 continue;
             }
@@ -1902,6 +1900,219 @@ final class PedidoPickingFerliSupport
         }
 
         return $revertidos;
+    }
+
+    /**
+     * Pares de la línea que salieron de stock y ninguna devolución repuso todavía.
+     */
+    private static function paresPendientesDeDevolver(int $pedidoCombinacionId): float
+    {
+        if ($pedidoCombinacionId <= 0) {
+            return 0.0;
+        }
+
+        $total = 0.0;
+        $movimientos = Articulo_Movimiento::query()
+            ->where('pedido_combinacion_id', $pedidoCombinacionId)
+            ->where('cantidad', '<', 0)
+            ->get(['id', 'cantidad', 'concepto']);
+
+        foreach ($movimientos as $mov) {
+            if (! self::esConsumoPickingRevertible($mov)) {
+                continue;
+            }
+            $pendiente = abs((float) $mov->cantidad) - self::paresDevueltosDeConsumo((int) $mov->id);
+            if ($pendiente > 0.0001) {
+                $total += $pendiente;
+            }
+        }
+
+        return $total;
+    }
+
+    /**
+     * La nota devuelve lo descontado. Si la OT se fabricó para el cliente y nunca
+     * tuvo movimiento de stock, los pares acreditados entran igual: la mercadería vuelve.
+     * El lote es el número de OT para que Stock por OT los liste.
+     */
+    public static function ingresarMercaderiaDevuelta(int $ventaNcId, ?string $fecha = null): int
+    {
+        if ($ventaNcId <= 0 || ! self::habilitado()) {
+            return 0;
+        }
+
+        $fechaYmd = $fecha ? Carbon::parse($fecha)->format('Y-m-d') : now()->toDateString();
+        $grupos = [];
+        foreach (Venta_Emision::query()
+            ->where('venta_id', $ventaNcId)
+            ->where('pedido_combinacion_id', '>', 0)
+            ->get(['pedido_combinacion_id', 'talle_id', 'cantidad', 'precio', 'deposito_id']) as $emision) {
+            $id = (int) $emision->pedido_combinacion_id;
+            $cant = abs((float) $emision->cantidad);
+            if ($cant <= 0.0001) {
+                continue;
+            }
+            if (! isset($grupos[$id])) {
+                $grupos[$id] = [
+                    'cantidad' => 0.0,
+                    'deposito_id' => (int) ($emision->deposito_id ?? 0),
+                    'talles' => [],
+                ];
+            }
+            $grupos[$id]['cantidad'] += $cant;
+            if ($grupos[$id]['deposito_id'] <= 0) {
+                $grupos[$id]['deposito_id'] = (int) ($emision->deposito_id ?? 0);
+            }
+            $talleId = (int) ($emision->talle_id ?? 0);
+            if ($talleId > 0) {
+                $grupos[$id]['talles'][] = [
+                    'pedido_combinacion_talle_id' => null,
+                    'talle_id' => $talleId,
+                    'cantidad' => $cant,
+                    'precio' => $emision->precio,
+                ];
+            }
+        }
+
+        $ingresos = 0;
+        foreach ($grupos as $pcId => $grupo) {
+            $falta = (float) $grupo['cantidad'] - self::paresYaIngresadosPorNota($ventaNcId, (int) $pcId);
+            if ($falta <= 0.0001) {
+                continue;
+            }
+
+            $pendiente = self::paresPendientesDeDevolver((int) $pcId);
+            if ($pendiente > 0.0001) {
+                $ingresos += self::acreditarDevolucionSobreConsumos(
+                    (int) $pcId,
+                    min($falta, $pendiente),
+                    $grupo['talles'],
+                    $ventaNcId,
+                    $fechaYmd
+                );
+                $falta = (float) $grupo['cantidad'] - self::paresYaIngresadosPorNota($ventaNcId, (int) $pcId);
+            }
+            if ($falta <= 0.0001) {
+                continue;
+            }
+
+            if (self::altaDevolucionSinMovimientoPrevio((int) $pcId, $grupo, $falta, $ventaNcId, $fechaYmd)) {
+                $ingresos++;
+            }
+        }
+
+        return $ingresos;
+    }
+
+    private static function paresYaIngresadosPorNota(int $ventaNcId, int $pedidoCombinacionId): float
+    {
+        if ($ventaNcId <= 0 || $pedidoCombinacionId <= 0) {
+            return 0.0;
+        }
+
+        return (float) Articulo_Movimiento::query()
+            ->where('venta_id', $ventaNcId)
+            ->where('pedido_combinacion_id', $pedidoCombinacionId)
+            ->where('cantidad', '>', 0)
+            ->sum('cantidad');
+    }
+
+    /**
+     * @param  array{cantidad: float, deposito_id: int, talles: list<array{pedido_combinacion_talle_id: mixed, talle_id: int, cantidad: float, precio: mixed}>}  $grupo
+     */
+    private static function altaDevolucionSinMovimientoPrevio(
+        int $pedidoCombinacionId,
+        array $grupo,
+        float $falta,
+        int $ventaNcId,
+        string $fechaYmd
+    ): bool {
+        if (Articulo_Movimiento::query()->where('pedido_combinacion_id', $pedidoCombinacionId)->exists()) {
+            return false;
+        }
+
+        $linea = Pedido_Combinacion::query()->find($pedidoCombinacionId);
+        if (! $linea) {
+            return false;
+        }
+
+        $otId = (int) ($linea->ot_id ?? 0);
+        if (! OtClienteCompartidoStockSupport::esFacturaDeCompanero($linea, $otId)) {
+            return false;
+        }
+
+        $codigoOt = trim((string) (Ordentrabajo::query()->whereKey($otId)->value('codigo') ?? ''));
+        if ($codigoOt === '' || $codigoOt === '0') {
+            return false;
+        }
+
+        $talles = $grupo['talles'];
+        $sumaTalles = 0.0;
+        foreach ($talles as $talle) {
+            $sumaTalles += (float) ($talle['cantidad'] ?? 0);
+        }
+        if ($sumaTalles > $falta + 0.0001) {
+            $talles = self::consumirTallesAcreditados($talles, $falta);
+        }
+        if ($talles === []) {
+            return false;
+        }
+
+        $cantidad = 0.0;
+        $dataTalle = [];
+        foreach ($talles as $talle) {
+            $cant = abs((float) ($talle['cantidad'] ?? 0));
+            if ($cant <= 0.0001) {
+                continue;
+            }
+            $talleId = (int) ($talle['talle_id'] ?? 0);
+            $pctId = $talleId > 0
+                ? (int) (Pedido_Combinacion_Talle::query()
+                    ->where('pedido_combinacion_id', $pedidoCombinacionId)
+                    ->where('talle_id', $talleId)
+                    ->value('id') ?? 0)
+                : 0;
+            $dataTalle[] = [
+                'id' => $pctId > 0 ? $pctId : null,
+                'talle_id' => $talleId,
+                'cantidad' => $cant,
+                'precio' => $talle['precio'] ?? $linea->precio,
+            ];
+            $cantidad += $cant;
+        }
+        if ($cantidad <= 0.0001 || $dataTalle === []) {
+            return false;
+        }
+
+        $depositoId = (int) ($grupo['deposito_id'] ?? 0);
+        if ($depositoId <= 0) {
+            $depositoId = 1;
+        }
+
+        app(Articulo_MovimientoService::class)->guardaArticuloMovimiento('create', [
+            'fecha' => $fechaYmd,
+            'fechajornada' => $fechaYmd,
+            'tipotransaccion_id' => config('consprod.TIPOTRANSACCION_ALTA_PRODUCCION'),
+            'venta_id' => $ventaNcId,
+            'pedido_combinacion_id' => $linea->id,
+            'ordentrabajo_id' => $otId,
+            'lote' => $codigoOt,
+            'articulo_id' => $linea->articulo_id,
+            'combinacion_id' => $linea->combinacion_id,
+            'modulo_id' => $linea->modulo_id,
+            'concepto' => 'Devolución NC',
+            'cantidad' => $cantidad,
+            'precio' => $linea->precio,
+            'costo' => 0,
+            'descuento' => $linea->descuento,
+            'descuentointegrado' => $linea->descuentointegrado,
+            'moneda_id' => $linea->moneda_id,
+            'incluyeimpuesto' => $linea->incluyeimpuesto,
+            'listaprecio_id' => $linea->listaprecio_id,
+            'deposito_id' => $depositoId,
+        ], $dataTalle);
+
+        return true;
     }
 
     /**

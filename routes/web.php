@@ -4286,6 +4286,12 @@ Route::post('compras/programa-pago/{id}/agregar-proveedor', 'Compras\ProgramaPag
 Route::post('compras/programa-pago/{id}/cerrar', 'Compras\ProgramaPagoController@cerrar')->name('cerrar_programa_pago');
 Route::post('compras/programa-pago/{id}/reabrir', 'Compras\ProgramaPagoController@reabrir')->name('reabrir_programa_pago');
 Route::post('compras/programa-pago/{id}/asignar-cheques', 'Compras\ProgramaPagoController@asignarCheques')->name('asignar_cheques_programa_pago');
+Route::post('compras/programa-pago/{id}/desasignar-cheques', 'Compras\ProgramaPagoController@desasignarCheques')->name('desasignar_cheques_programa_pago');
+Route::post('compras/programa-pago/{id}/aceptar-cheques-adelantados', 'Compras\ProgramaPagoController@aceptarChequesAdelantados')->name('aceptar_cheques_adelantados_programa_pago');
+Route::post('compras/programa-pago/{id}/descartar-cheques-adelantados', 'Compras\ProgramaPagoController@descartarChequesAdelantados')->name('descartar_cheques_adelantados_programa_pago');
+Route::post('compras/programa-pago/{id}/preparar-op', 'Compras\ProgramaPagoController@prepararGenerarOp')->name('preparar_op_programa_pago');
+Route::post('compras/programa-pago/{id}/generar-op', 'Compras\ProgramaPagoController@generarOp')->name('generar_op_programa_pago');
+Route::get('compras/programa-pago/{id}/ordenes-generadas', 'Compras\ProgramaPagoController@resultadoGenerarOp')->name('resultado_op_programa_pago');
 Route::get('compras/programa-pago/{id}/exportar/{formato?}', 'Compras\ProgramaPagoController@exportarMatriz')->name('exportar_matriz_programa_pago');
 Route::post('compras/propuesta-pago/{id}/enviar-aprobacion', 'Compras\PropuestaPagoController@enviarAprobacion')->name('enviar_aprobacion_propuesta_pago');
 Route::post('compras/propuesta-pago/{id}/ejecutar', 'Compras\PropuestaPagoController@ejecutar')->name('ejecutar_propuesta_pago');

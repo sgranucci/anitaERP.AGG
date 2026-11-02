@@ -24,6 +24,7 @@ use App\Support\Ventas\QrCodePngSupport;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport;
+use App\Support\Ventas\Ferli\EtiquetaOtCajaFotoZplSupport;
 use App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport;
 use App\Support\Ventas\Ferli\OrdentrabajoMezclaArticuloSupport;
 use App\Support\Ventas\OrdentrabajoEmisionCopiaSupport;
@@ -233,7 +234,8 @@ class OrdentrabajoService
 		try 
 		{
 			if ($funcion === 'update') {
-				// No borrar las tallas de otro artículo ni colgar un renglón distinto.
+				// No borrar las tallas de otro artículo ni colgar una pieza distinta.
+				// Otro pedido de la misma pieza sí entra en la OT.
 				OrdentrabajoMezclaArticuloSupport::assertActualizacionNoIncorporaOtroArticulo(
 					(int) $id,
 					array_map('intval', $ids)
@@ -1018,6 +1020,8 @@ class OrdentrabajoService
 							$fp = fopen($file, "r");
 
 							$contents = fread($fp, filesize($file));
+							fclose($fp);
+							$foto = EtiquetaOtCajaFotoZplSupport::preparar($contents);
 
 							$cod_art = "";
 							$cod_art_red = "";
@@ -1042,14 +1046,22 @@ class OrdentrabajoService
 							$buff[] = "^JMA".chr(13).chr(10);
 							$buff[] = "^MCY".chr(13).chr(10);
 							$buff[] = "^PMN".chr(13).chr(10);
-							$buff[] = "^PW792".chr(13).chr(10);
+							$buff[] = "^CI0".chr(13).chr(10);
+							$buff[] = "^PW".$foto['ancho'].chr(13).chr(10);
 							$buff[] = "~JSN".chr(13).chr(10);
 							$buff[] = "^JZY".chr(13).chr(10);
 							$buff[] = "^LH0,0".chr(13).chr(10);
 							$buff[] = "^XZ".chr(13).chr(10);
 
+							if ($foto['descarga'] !== '') {
+								$buff[] = $foto['descarga'];
+							}
+
 							$buff[] = "^XA".chr(13).chr(10);
-							$buff[] = $contents;
+							$buff[] = "^CI0".chr(13).chr(10);
+							$buff[] = "^PW".$foto['ancho'].chr(13).chr(10);
+							$buff[] = "^LH0,0".chr(13).chr(10);
+							$buff[] = $foto['campo'];
 							$buff[] = chr(13).chr(10);
 
 							$buff[] = "^CF0,50".chr(13).chr(10);
@@ -1116,6 +1128,8 @@ class OrdentrabajoService
 					$fp = fopen($file, "r");
 
 					$contents = fread($fp, filesize($file));
+					fclose($fp);
+					$foto = EtiquetaOtCajaFotoZplSupport::preparar($contents);
 
 					$cod_art = "";
 					$cod_art_red = "";
@@ -1140,14 +1154,22 @@ class OrdentrabajoService
 					$buff[] = "^JMA".chr(13).chr(10);
 					$buff[] = "^MCY".chr(13).chr(10);
 					$buff[] = "^PMN".chr(13).chr(10);
-					$buff[] = "^PW792".chr(13).chr(10);
+					$buff[] = "^CI0".chr(13).chr(10);
+					$buff[] = "^PW".$foto['ancho'].chr(13).chr(10);
 					$buff[] = "~JSN".chr(13).chr(10);
 					$buff[] = "^JZY".chr(13).chr(10);
 					$buff[] = "^LH0,0".chr(13).chr(10);
 					$buff[] = "^XZ".chr(13).chr(10);
 
+					if ($foto['descarga'] !== '') {
+						$buff[] = $foto['descarga'];
+					}
+
 					$buff[] = "^XA".chr(13).chr(10);
-					$buff[] = $contents;
+					$buff[] = "^CI0".chr(13).chr(10);
+					$buff[] = "^PW".$foto['ancho'].chr(13).chr(10);
+					$buff[] = "^LH0,0".chr(13).chr(10);
+					$buff[] = $foto['campo'];
 					$buff[] = chr(13).chr(10);
 
 					$buff[] = "^CF0,50".chr(13).chr(10);

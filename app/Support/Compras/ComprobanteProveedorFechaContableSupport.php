@@ -3,6 +3,7 @@
 namespace App\Support\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -16,8 +17,9 @@ use RuntimeException;
  * En edición arranca en la fecha ya grabada y sube hasta la fecha impresa del
  * comprobante, y hasta el primer día operable si la grabada cayó en un período
  * cerrado. Nunca posterior a hoy.
- * La fecha impresa del comprobante no puede ser posterior a la de contabilización.
- * Un período cerrado la frena igual que cualquier otra operación.
+ * La fecha impresa puede adelantarse unos días a la de contabilización
+ * (fin de semana o carga del mes siguiente). Un período cerrado la frena
+ * igual que cualquier otra operación.
  * fechacomprobante es la fecha impresa de la factura y no define el período.
  */
 final class ComprobanteProveedorFechaContableSupport
@@ -111,13 +113,16 @@ final class ComprobanteProveedorFechaContableSupport
     }
 
     /**
-     * La fecha impresa no puede pasar la de contabilización, y esa no puede pasar hoy.
-     * $hoyYmd solo para pruebas; en carga se usa el día del servidor.
+     * La fecha impresa puede adelantarse a la de contabilización dentro de la tolerancia
+     * (por ejemplo, cargar el viernes 30/10 una factura con fecha 1/11).
+     * La contabilización no puede pasar de hoy.
+     * $hoyYmd y $diasTolerancia solo para pruebas; en carga se usa el día del servidor y la config.
      */
     public static function assertFechasCargaCoherentes(
         mixed $fechaComprobante,
         mixed $fechaContabilizacion,
         ?string $hoyYmd = null,
+        ?int $diasTolerancia = null,
     ): void {
         $hoy = self::formatear($hoyYmd) ?? self::fechaCargaHoy();
         $contab = self::formatear($fechaContabilizacion) ?? $hoy;
@@ -130,9 +135,19 @@ final class ComprobanteProveedorFechaContableSupport
         }
 
         $comp = self::formatear($fechaComprobante);
-        if ($comp !== null && $comp > $contab) {
+        $dias = $diasTolerancia ?? self::diasToleranciaComprobantePosteriorAContabilizacion();
+        $topeComp = self::topeFechaComprobanteContraContabilizacion($contab, $dias);
+        if ($comp !== null && $comp > $topeComp) {
+            if ($dias <= 0) {
+                throw new RuntimeException(
+                    'La fecha del comprobante ('.self::aDiaMesAnio($comp).') no puede ser posterior a la fecha de contabilización ('
+                    .self::aDiaMesAnio($contab).').'
+                );
+            }
+
             throw new RuntimeException(
-                'La fecha del comprobante ('.self::aDiaMesAnio($comp).') no puede ser posterior a la fecha de contabilización ('
+                'La fecha del comprobante ('.self::aDiaMesAnio($comp).') no puede ser más de '
+                .$dias.' días posterior a la fecha de contabilización ('
                 .self::aDiaMesAnio($contab).').'
             );
         }
@@ -211,12 +226,69 @@ final class ComprobanteProveedorFechaContableSupport
 
     public static function maxDiasFuturoComprobante(): int
     {
-        return max(0, (int) config('comprobante_proveedor.fecha_comprobante_max_dias_futuro', 30));
+        return max(0, self::configEntero('comprobante_proveedor.fecha_comprobante_max_dias_futuro', 30));
+    }
+
+    /**
+     * Días que la fecha impresa puede adelantarse a la de contabilización.
+     * Lo define Configuración general, grupo Compras. El config/.env es el respaldo.
+     */
+    public static function diasToleranciaComprobantePosteriorAContabilizacion(): int
+    {
+        try {
+            return ParametroSistemaSupport::comprobanteFechaToleranciaDias();
+        } catch (\Throwable) {
+            return max(0, self::configEntero(
+                'comprobante_proveedor.fecha_comprobante_tolerancia_dias_contabilizacion',
+                5
+            ));
+        }
+    }
+
+    /**
+     * Último día admitido para la fecha impresa, contado desde la contabilización.
+     */
+    public static function topeFechaComprobanteContraContabilizacion(mixed $fechaContabilizacion, ?int $dias = null): string
+    {
+        $contab = self::formatear($fechaContabilizacion) ?? self::fechaCargaHoy();
+        $delta = max(0, $dias ?? self::diasToleranciaComprobantePosteriorAContabilizacion());
+
+        return (new DateTimeImmutable($contab))
+            ->modify('+'.$delta.' days')
+            ->format('Y-m-d');
+    }
+
+    /**
+     * Tope del input de fecha impresa: la tolerancia contra la contabilización,
+     * sin pasar el límite de días a futuro (año o mes mal tipeado).
+     */
+    public static function maxInputFechaComprobante(mixed $fechaContabilizacion, ?int $dias = null): string
+    {
+        $porTolerancia = self::topeFechaComprobanteContraContabilizacion($fechaContabilizacion, $dias);
+        $porFuturo = self::fechaComprobanteMaximaYmd();
+
+        return $porTolerancia < $porFuturo ? $porTolerancia : $porFuturo;
     }
 
     public static function anioMinimoComprobante(): int
     {
-        return max(1900, (int) config('comprobante_proveedor.fecha_comprobante_anio_minimo', 2000));
+        return max(1900, self::configEntero('comprobante_proveedor.fecha_comprobante_anio_minimo', 2000));
+    }
+
+    /**
+     * config() sin contenedor (tests unitarios puros) devuelve el default.
+     */
+    private static function configEntero(string $clave, int $default): int
+    {
+        if (! function_exists('config')) {
+            return $default;
+        }
+
+        try {
+            return (int) config($clave, $default);
+        } catch (\Throwable) {
+            return $default;
+        }
     }
 
     public static function fechaComprobanteMaximaYmd(?string $fechaReferenciaYmd = null, ?int $maxDias = null): string

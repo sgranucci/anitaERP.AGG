@@ -648,8 +648,58 @@ class PedidoImportarTareasDesdeL8Service
     }
 
     /**
-     * Tras importar: remapea OCT que siguen apuntando a PCT ajenos al pedido
-     * y elimina OCT huérfanas (id inexistente en L8 / PCT inexistente / duplicadas).
+     * Pieza (artículo|combinación) de las líneas de este pedido, por OT.
+     *
+     * @param  list<int>  $pedidoCombinacionIds
+     * @return array<int, array<string, true>>
+     */
+    private function firmaPiezaPorOt(array $pedidoCombinacionIds): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $pedidoCombinacionIds), static fn (int $id) => $id > 0));
+        if ($ids === []) {
+            return [];
+        }
+
+        $porOt = [];
+        foreach (DB::table('pedido_combinacion')->whereIn('id', $ids)->get(['ot_id', 'articulo_id', 'combinacion_id']) as $linea) {
+            $otId = (int) $linea->ot_id;
+            if ($otId <= 0) {
+                continue;
+            }
+            $porOt[$otId][(int) $linea->articulo_id.'|'.(int) $linea->combinacion_id] = true;
+        }
+
+        return $porOt;
+    }
+
+    /**
+     * La línea es de otro pedido, está ligada a esta OT y es la misma pieza.
+     *
+     * @param  array<int, array<string, true>>  $firmaPorOt
+     */
+    private function octEsOtroPedidoDeLaMismaPieza(int $otId, int $pedidoCombinacionId, array $firmaPorOt): bool
+    {
+        $firmas = $firmaPorOt[$otId] ?? [];
+        if (count($firmas) !== 1) {
+            return false;
+        }
+
+        $linea = DB::table('pedido_combinacion')
+            ->where('id', $pedidoCombinacionId)
+            ->first(['ot_id', 'articulo_id', 'combinacion_id']);
+        if (! $linea || (int) $linea->ot_id !== $otId) {
+            return false;
+        }
+
+        $firma = (int) $linea->articulo_id.'|'.(int) $linea->combinacion_id;
+
+        return isset($firmas[$firma]);
+    }
+
+    /**
+     * Remapea OCT que apuntan a un PCT ajeno al pedido y elimina huérfanas
+     * (PCT inexistente, duplicadas o de otra pieza). Otro pedido de la misma
+     * pieza en la OT compartida se conserva.
      *
      * @param  list<int>  $otCodigos
      * @param  array<int, int>  $mapaPcL8aL12
@@ -664,6 +714,7 @@ class PedidoImportarTareasDesdeL8Service
 
         $pcsPedido = array_values($mapaPcL8aL12);
         $mapaPct = $this->mapaPctL8aL12($mapaPcL8aL12);
+        $firmaPorOt = $this->firmaPiezaPorOt($pcsPedido);
         $vistos = [];
 
         try {
@@ -683,6 +734,17 @@ class PedidoImportarTareasDesdeL8Service
                 $pct = DB::table('pedido_combinacion_talle')->where('id', $pctId)->first();
                 $pcId = $pct ? (int) $pct->pedido_combinacion_id : 0;
                 $esDelPedido = $pcId > 0 && in_array($pcId, $pcsPedido, true);
+
+                if (! $esDelPedido && $pcId > 0 && $this->octEsOtroPedidoDeLaMismaPieza((int) $ot, $pcId, $firmaPorOt)) {
+                    $clave = $ot.'|'.$pctId;
+                    if (isset($vistos[$clave])) {
+                        DB::table('ordentrabajo_combinacion_talle')->where('id', (int) $oct->id)->delete();
+                        $out['eliminados']++;
+                        continue;
+                    }
+                    $vistos[$clave] = true;
+                    continue;
+                }
 
                 if ($esDelPedido) {
                     $clave = $ot.'|'.$pctId;

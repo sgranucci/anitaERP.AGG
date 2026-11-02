@@ -18,6 +18,7 @@ use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\ArticuloMovimientoReferenciasSupport;
 use App\Support\Stock\OtListaEntregaSupport;
 use App\Support\Stock\ReporteStockOtDepositoAmbitoSupport;
+use App\Support\Stock\ReporteStockOtPrecioSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -388,6 +389,7 @@ class Articulo_MovimientoService
 					'foto' => $movimiento['foto'] ?? null,
 					'nombrelinea' => $movimiento['nombrelinea'] ?? '',
 					'sku' => $movimiento['sku'] ?? '',
+					'combinacion_id' => (int) ($movimiento['combinacion_id'] ?? 0),
 					'codigocombinacion' => $movimiento['codigocombinacion'] ?? '',
 					'nombrecombinacion' => $movimiento['nombrecombinacion'] ?? '',
 					'lote' => ReporteStockOtSituacionSupport::identificadorExcel(
@@ -480,11 +482,12 @@ class Articulo_MovimientoService
 				(string) $grupo['deposito_nombre'],
 				(string) ($grupo['modulo_nombre'] ?? ''),
 				(int) ($grupo['ordentrabajo_id'] ?? 0),
-				(int) ($grupo['articulo_id'] ?? 0)
+				(int) ($grupo['articulo_id'] ?? 0),
+				(int) ($grupo['combinacion_id'] ?? 0)
 			);
 		}
 
-		return $datas;
+		return ReporteStockOtPrecioSupport::aplicar($datas);
 	}
 
 	// Lee stock por numero de lote antes de generar OT consumiendo de stock
@@ -964,7 +967,8 @@ class Articulo_MovimientoService
 		string $depositoNombre = '',
 		string $moduloNombre = '',
 		int $ordentrabajoId = 0,
-		int $articuloId = 0
+		int $articuloId = 0,
+		int $combinacionId = 0
 	): array {
 		$totalPares = 0.0;
 		foreach ($medidas as $m) {
@@ -996,6 +1000,7 @@ class Articulo_MovimientoService
 			'deposito_nombre' => $depositoNombre,
 			'ordentrabajo_id' => $ordentrabajoId,
 			'articulo_id' => $articuloId,
+			'combinacion_id' => $combinacionId,
 		];
 	}
 

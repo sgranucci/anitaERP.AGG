@@ -193,14 +193,52 @@ class ComprobanteProveedorFechaContableSupportTest extends TestCase
         );
     }
 
-    public function test_fecha_comprobante_no_puede_superar_contabilizacion(): void
+    public function test_fecha_comprobante_no_puede_superar_contabilizacion_sin_tolerancia(): void
     {
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('no puede ser posterior a la fecha de contabilización');
         ComprobanteProveedorFechaContableSupport::assertFechasCargaCoherentes(
             '2026-10-15',
             '2026-10-09',
-            '2026-10-09'
+            '2026-10-09',
+            0
+        );
+    }
+
+    public function test_fecha_comprobante_viernes_con_factura_del_domingo_pasa(): void
+    {
+        ComprobanteProveedorFechaContableSupport::assertFechasCargaCoherentes(
+            '2026-11-01',
+            '2026-10-30',
+            '2026-10-30',
+            5
+        );
+        $this->assertSame(
+            '2026-11-04',
+            ComprobanteProveedorFechaContableSupport::topeFechaComprobanteContraContabilizacion('2026-10-30', 5)
+        );
+    }
+
+    public function test_fecha_comprobante_en_el_limite_de_tolerancia_pasa(): void
+    {
+        ComprobanteProveedorFechaContableSupport::assertFechasCargaCoherentes(
+            '2026-11-04',
+            '2026-10-30',
+            '2026-10-30',
+            5
+        );
+        $this->assertTrue(true);
+    }
+
+    public function test_fecha_comprobante_fuera_de_la_tolerancia_corta(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('más de 5 días posterior a la fecha de contabilización');
+        ComprobanteProveedorFechaContableSupport::assertFechasCargaCoherentes(
+            '2026-11-05',
+            '2026-10-30',
+            '2026-10-30',
+            5
         );
     }
 

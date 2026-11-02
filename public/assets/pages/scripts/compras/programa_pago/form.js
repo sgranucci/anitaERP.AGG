@@ -232,57 +232,73 @@
         wrap.style.setProperty('--pp-head', head + 'px');
         wrap.style.setProperty('--pp-foot', foot + 'px');
         fijarPieGrilla();
-        alinearScrollAFilas();
+        if (focoLineaId) {
+            posicionarEnLinea(focoLineaId);
+        }
     }
 
-    function alinearScrollAFilas() {
-        var wrap = document.querySelector('.pp-matriz-wrap');
-        var filaEl = filaVisible();
-        if (!wrap || !filaEl) {
+    function claveLineaGuardada() {
+        return 'pp-linea-' + String(cfg.programaId || 0);
+    }
+
+    function recordarLinea(id) {
+        id = parseInt(id || 0, 10);
+        if (!id) {
             return;
         }
-        var fila = filaEl.getBoundingClientRect().height;
-        if (fila < 1) {
-            return;
-        }
-        var destino = Math.round(wrap.scrollTop / fila) * fila;
-        var maximo = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-        if (destino > maximo) {
-            destino = Math.floor(maximo / fila) * fila;
-        }
-        if (Math.abs(wrap.scrollTop - destino) > 0.5) {
-            wrap.scrollTop = destino;
+        focoLineaId = id;
+        try {
+            sessionStorage.setItem(claveLineaGuardada(), String(id));
+        } catch (e) {
+            /* el navegador puede bloquear el almacenamiento */
         }
     }
+
+    function lineaRecordada() {
+        var id = parseInt(cfg.focoLinea || 0, 10);
+        if (id) {
+            return id;
+        }
+        try {
+            return parseInt(sessionStorage.getItem(claveLineaGuardada()) || '0', 10) || 0;
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    var posicionManual = false;
+    var focoLineaId = lineaRecordada();
 
     function scrollAFila($tr) {
         var wrap = document.querySelector('.pp-matriz-wrap');
         var row = $tr && $tr[0];
         var thead = document.querySelector('#tabla-programa-pago thead');
-        var tfoot = document.querySelector('#tabla-programa-pago tfoot');
         if (!wrap || !row || !$tr.is(':visible') || !thead) {
             return;
         }
-        var fila = row.getBoundingClientRect().height;
-        if (fila < 1) {
-            return;
-        }
-        var visibles = $('#tbody-programa-pago tr:visible').toArray();
-        var idx = visibles.indexOf(row);
-        if (idx < 0) {
-            return;
-        }
         var head = thead.getBoundingClientRect().height;
-        var foot = tfoot ? tfoot.getBoundingClientRect().height : 0;
-        var cupo = Math.max(1, Math.floor((wrap.clientHeight - head - foot + 0.5) / fila));
-        var primero = Math.round(wrap.scrollTop / fila);
-        var destino = primero * fila;
-        if (idx < primero) {
-            destino = idx * fila;
-        } else if (idx >= primero + cupo) {
-            destino = (idx - cupo + 1) * fila;
+        var destino = row.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - head;
+        if (destino < 0) {
+            destino = 0;
         }
+        posicionManual = true;
         wrap.scrollTop = destino;
+        window.setTimeout(function () {
+            posicionManual = false;
+        }, 400);
+    }
+
+    function posicionarEnLinea(lineaId) {
+        var lista = filas();
+        var idx = -1;
+        lista.forEach(function ($tr, i) {
+            if (parseInt($tr.data('linea-id') || '0', 10) === lineaId) {
+                idx = i;
+            }
+        });
+        if (idx >= 0) {
+            setActivo(idx);
+        }
     }
 
     function setActivo(i, scroll) {
@@ -301,6 +317,7 @@
         }
         idxActivo = i;
         actualizarEstilosFilas();
+        recordarLinea(lista[idxActivo].data('linea-id'));
         if (scroll !== false) {
             scrollAFila(lista[idxActivo]);
         }
@@ -510,12 +527,10 @@
 
         $('#pp-solo-pendientes').on('change', function () {
             aplicarFiltroVista();
-            alinearScrollAFilas();
+            if (focoLineaId) {
+                posicionarEnLinea(focoLineaId);
+            }
         });
-        var wrapGrilla = document.querySelector('.pp-matriz-wrap');
-        if (wrapGrilla) {
-            wrapGrilla.addEventListener('scrollend', alinearScrollAFilas);
-        }
 
         $('#pp-btn-limpiar-chips').on('click', limpiarChips);
 
@@ -579,9 +594,10 @@
         });
 
         function confirmarAsignarCheques(soloActivo) {
+            var tol = parseInt(cfg.toleranciaPct || 10, 10);
             var msg = soloActivo
-                ? '¿Asignar cheques en cartera diferidos al proveedor activo?\n\nUsa los montos YA GUARDADOS (Guardá antes si hay cambios). Tolerancia ±30%.'
-                : '¿Asignar cheques en cartera diferidos a TODOS los proveedores programados?\n\nUsa los montos YA GUARDADOS. Tolerancia ±30%. Reemplaza asignaciones previas de esas líneas.';
+                ? '¿Asignar cheques en cartera al proveedor activo?\n\nUsa los montos YA GUARDADOS (Guardá antes si hay cambios). Si un mes no entra en ±' + tol + '%, se proponen cheques de meses posteriores: no se graban hasta que los aceptes. Después los meses se igualan a los cheques y lo que no cubren queda en TRANSF.'
+                : '¿Asignar cheques en cartera a TODOS los proveedores programados?\n\nUsa los montos YA GUARDADOS. Reemplaza asignaciones previas. Si un mes no entra en ±' + tol + '%, se proponen cheques posteriores. Después los meses se igualan a los cheques y lo que no cubren queda en TRANSF.';
             if (!confirm(msg)) {
                 return;
             }
@@ -602,8 +618,13 @@
                     return;
                 }
                 $('#pp-asignar-linea-id').val(String(lineaId));
+                recordarLinea(lineaId);
             } else {
                 $('#pp-asignar-linea-id').val('');
+                var $activa = filaActiva();
+                if ($activa) {
+                    recordarLinea($activa.data('linea-id'));
+                }
             }
             $form.trigger('submit');
         }
@@ -614,6 +635,74 @@
 
         $('#pp-btn-asignar-cheques-todos').on('click', function () {
             confirmarAsignarCheques(false);
+        });
+
+        function enviarDesasignar(alcance, extra) {
+            extra = extra || {};
+            var mensajes = {
+                todos: '¿Quitar TODOS los cheques asignados de este programa?\n\nLos montos programados no se modifican.',
+                linea: '¿Quitar los cheques asignados al proveedor activo?\n\nLos montos programados no se modifican.',
+                celda: '¿Quitar los cheques asignados de este mes?\n\nEl monto programado no se modifica.',
+                uno: '¿Quitar este cheque de la asignación?\n\nEl monto programado no se modifica.'
+            };
+            if (!confirm(mensajes[alcance] || '¿Quitar los cheques asignados?')) {
+                return;
+            }
+            var lineaId = extra.lineaId || 0;
+            if (alcance === 'linea' || alcance === 'todos') {
+                var $tr = filaActiva();
+                if (alcance === 'linea' && !$tr) {
+                    alert('Seleccioná un proveedor.');
+                    return;
+                }
+                if ($tr) {
+                    lineaId = parseInt($tr.data('linea-id') || '0', 10);
+                }
+            }
+            if ((alcance === 'linea' || alcance === 'celda') && !lineaId) {
+                alert('Guardá el programa antes de quitar cheques.');
+                return;
+            }
+            recordarLinea(lineaId);
+            $('#pp-desasignar-alcance').val(alcance);
+            $('#pp-desasignar-linea-id').val(lineaId ? String(lineaId) : '');
+            $('#pp-desasignar-clave').val(extra.clave || '');
+            $('#pp-desasignar-id').val(extra.id ? String(extra.id) : '');
+            $('#form-desasignar-cheques-pp').trigger('submit');
+        }
+
+        $('#pp-btn-quitar-cheques-activo').on('click', function () {
+            enviarDesasignar('linea');
+        });
+        $('#pp-btn-quitar-cheques-todos').on('click', function () {
+            enviarDesasignar('todos');
+        });
+        $(document).on('click', '.pp-quitar-cheques-celda', function () {
+            enviarDesasignar('celda', {
+                lineaId: parseInt($(this).data('linea-id') || '0', 10),
+                clave: String($(this).data('clave') || '')
+            });
+        });
+        $(document).on('click', '.pp-quitar-cheque', function () {
+            enviarDesasignar('uno', {
+                id: parseInt($(this).data('id') || '0', 10),
+                lineaId: parseInt($(this).data('linea-id') || '0', 10)
+            });
+        });
+        $(document).on('click', '.pp-marcar-propuestas', function () {
+            var formId = $(this).data('form');
+            $('#' + formId).find('input[name="propuestas[]"]').prop('checked', true);
+        });
+        $(document).on('submit', 'form[id^="form-aceptar-adelanto"]', function (e) {
+            var n = $(this).find('input[name="propuestas[]"]:checked').length;
+            if (n < 1) {
+                e.preventDefault();
+                alert('Marcá al menos una propuesta.');
+                return;
+            }
+            if (!window.confirm('¿Grabar los cheques de ' + n + ' propuesta(s)?')) {
+                e.preventDefault();
+            }
         });
 
         if (cfg.mostrarResultadoAsignacion && $('#ppAsignacionChequesModal').length) {
@@ -629,13 +718,40 @@
             }
         });
 
+        $('#pp-op-todos').on('change', function () {
+            $('.pp-op-check').prop('checked', $(this).is(':checked'));
+        });
+        $('#form-generar-op-pp').on('submit', function (e) {
+            var n = $('.pp-op-check:checked').length;
+            if (n < 1) {
+                e.preventDefault();
+                alert('Tildá al menos un proveedor.');
+                return;
+            }
+            if (!window.confirm('Se van a preparar las órdenes de pago de ' + n + ' proveedor(es).')) {
+                e.preventDefault();
+            }
+        });
+
         recalcular();
         ajustarAltoGrilla();
         window.addEventListener('resize', ajustarAltoGrilla);
-        window.addEventListener('load', ajustarAltoGrilla);
-        irSiguientePendiente();
-        if (idxActivo < 0 && filas().length) {
-            setActivo(0);
+        window.addEventListener('load', function () {
+            ajustarAltoGrilla();
+            if (focoLineaId) {
+                posicionarEnLinea(focoLineaId);
+            }
+        });
+        if (focoLineaId) {
+            posicionarEnLinea(focoLineaId);
+            window.setTimeout(function () {
+                posicionarEnLinea(focoLineaId);
+            }, 250);
+        } else {
+            irSiguientePendiente();
+            if (idxActivo < 0 && filas().length) {
+                setActivo(0);
+            }
         }
     });
 })(jQuery);

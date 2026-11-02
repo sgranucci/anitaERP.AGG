@@ -54,6 +54,11 @@ final class ParametroSistemaSupport
      */
     public const CLAVE_MAIL_CONSULTA_PROVEEDOR = 'mail_consulta_proveedor';
 
+    /**
+     * Días que la fecha impresa de la factura puede adelantarse a la de contabilización.
+     */
+    public const CLAVE_COMPROBANTE_FECHA_TOLERANCIA_DIAS = 'comprobante_fecha_tolerancia_dias';
+
     /** Diferencia de cierre de caja Crown que pasa el caso a auditoría. */
     public const CLAVE_TESORERIA_CROWN_TOLERANCIA_AUDITORIA = 'tesoreria_crown_tolerancia_auditoria';
 
@@ -117,6 +122,13 @@ final class ParametroSistemaSupport
                 'ayuda' => 'Casilla que sí se lee. Aparece en el mail de la orden de pago y de la orden de compra, y es adonde llega si el proveedor responde. La casilla AnitaERP no atiende esas consultas. Vacío: el mail avisa que no recibe respuestas, pero la respuesta sigue cayendo en AnitaERP.',
                 'tipo' => 'email',
                 'orden' => 56,
+            ],
+            self::CLAVE_COMPROBANTE_FECHA_TOLERANCIA_DIAS => [
+                'grupo' => 'Compras',
+                'etiqueta' => 'Días de tolerancia de la fecha de factura',
+                'ayuda' => 'La fecha impresa puede adelantarse estos días a la de contabilización. Permite cargar el viernes una factura fechada el domingo o el lunes siguiente. 0 no admite adelanto. La contabilización sigue sin poder pasar de hoy.',
+                'tipo' => 'entero',
+                'orden' => 57,
             ],
             self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => [
                 'grupo' => 'Recepción de proveedor',
@@ -377,6 +389,24 @@ final class ParametroSistemaSupport
     }
 
     /**
+     * Días de adelanto admitidos entre la fecha impresa y la de contabilización.
+     * Prioridad: Configuración general → config/.env.
+     */
+    public static function comprobanteFechaToleranciaDias(): int
+    {
+        $fallback = max(0, (int) config(
+            'comprobante_proveedor.fecha_comprobante_tolerancia_dias_contabilizacion',
+            5
+        ));
+        $valor = self::mapa()[self::CLAVE_COMPROBANTE_FECHA_TOLERANCIA_DIAS] ?? null;
+        if ($valor === null || $valor === '') {
+            return $fallback;
+        }
+
+        return max(0, (int) $valor);
+    }
+
+    /**
      * Email de consultas del proveedor, o cadena vacía si no hay uno válido.
      */
     public static function mailConsultaProveedor(): string
@@ -543,6 +573,10 @@ final class ParametroSistemaSupport
             self::CLAVE_PROVEEDOR_ALTA_CUENTACONTABLE_ID => '',
             self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB => '0',
             self::CLAVE_MAIL_CONSULTA_PROVEEDOR => '',
+            self::CLAVE_COMPROBANTE_FECHA_TOLERANCIA_DIAS => (string) max(0, (int) config(
+                'comprobante_proveedor.fecha_comprobante_tolerancia_dias_contabilizacion',
+                5
+            )),
             self::CLAVE_TESORERIA_CROWN_EMPRESA_ID => '1',
             default => '0',
         };

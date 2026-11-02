@@ -24,7 +24,7 @@ Configuración general del sistema
                 <div class="card-body">
                     <div class="alert alert-info py-2">
                         Estos valores mandan sobre los defaults de <code>config/</code> y <code>.env</code>.
-                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos, umbrales de Compras / Suscripciones, el correo de consultas del proveedor, la cantidad recibida de la recepción de proveedor, el concepto y la sucursal del débito por cheque rechazado, y la cuenta del neto de la nota de crédito por pronto pago.
+                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos, umbrales de Compras / Suscripciones, los días de tolerancia de la fecha de factura, el correo de consultas del proveedor, la cantidad recibida de la recepción de proveedor, el concepto y la sucursal del débito por cheque rechazado, y la cuenta del neto de la nota de crédito por pronto pago.
                     </div>
 
                     @foreach ($grupos as $nombreGrupo => $parametros)

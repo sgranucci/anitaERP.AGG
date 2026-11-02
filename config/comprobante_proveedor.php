@@ -54,7 +54,10 @@ return [
     | Fecha impresa del comprobante.
     | A futuro: no más de N días (año o mes mal tipeado).
     | Año mínimo: un año de dos dígitos (0026) no es una factura atrasada.
+    | Tolerancia: respaldo si Configuración general (grupo Compras) todavía no tiene fila.
+    | La pantalla manda. Default 5 días (viernes 30/10, factura fechada el 1/11).
     */
     'fecha_comprobante_max_dias_futuro' => max(0, (int) env('COMPROBANTE_PROVEEDOR_FECHA_MAX_DIAS_FUTURO', 30)),
     'fecha_comprobante_anio_minimo' => (int) env('COMPROBANTE_PROVEEDOR_FECHA_ANIO_MINIMO', 2000),
+    'fecha_comprobante_tolerancia_dias_contabilizacion' => max(0, (int) env('COMPROBANTE_PROVEEDOR_FECHA_TOLERANCIA_DIAS', 5)),
 ];

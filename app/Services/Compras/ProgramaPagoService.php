@@ -360,7 +360,7 @@ class ProgramaPagoService
     }
 
     /**
-     * Asigna CHT diferidos en cartera a los montos programados (±30%).
+     * Asigna CHT diferidos en cartera a los montos programados (tolerancia de ProgramaPagoAsignarChequesSupport).
      *
      * @return array{
      *   asignados: list<array<string, mixed>>,
@@ -373,6 +373,41 @@ class ProgramaPagoService
         $this->assertEditable($programa);
 
         return ProgramaPagoAsignarChequesSupport::asignar($programa, $lineaId);
+    }
+
+    public function desasignarCheques(
+        ProgramaPago $programa,
+        string $alcance,
+        ?int $lineaId,
+        ?string $clave,
+        ?int $asignacionId
+    ): int {
+        $this->assertEditable($programa);
+
+        return ProgramaPagoAsignarChequesSupport::desasignar($programa, $alcance, $lineaId, $clave, $asignacionId);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $propuestas
+     * @return array{grabados: int, errores: list<string>, claves_ok: list<string>}
+     */
+    public function persistirPropuestasCheques(ProgramaPago $programa, array $propuestas): array
+    {
+        $this->assertEditable($programa);
+
+        return ProgramaPagoAsignarChequesSupport::persistirPropuestas($programa, $propuestas);
+    }
+
+    /**
+     * @param  list<int>  $lineaIds
+     * @param  array<int, list<string>>  $excluirPorLinea
+     * @return list<array<string, mixed>>
+     */
+    public function alinearMontosACheques(ProgramaPago $programa, array $lineaIds, array $excluirPorLinea = []): array
+    {
+        $this->assertEditable($programa);
+
+        return ProgramaPagoAsignarChequesSupport::alinearProgramado($programa, $lineaIds, $excluirPorLinea);
     }
 
     /**
@@ -491,6 +526,12 @@ class ProgramaPagoService
                 ->where('programa_pago_linea_id', $linea->id)
                 ->when($clavesConservar !== [], fn ($q) => $q->whereNotIn('clave', $clavesConservar))
         );
+
+        $cheques = ProgramaPagoCheque::query()->where('programa_pago_linea_id', $linea->id);
+        if ($clavesConservar !== []) {
+            $cheques->whereNotIn('clave', $clavesConservar);
+        }
+        EloquentAuditDeleteSupport::each($cheques);
     }
 
     private function assertEditable(ProgramaPago $programa): void

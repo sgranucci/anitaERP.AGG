@@ -13,12 +13,6 @@
         border: 1px solid #dee2e6;
         border-radius: 4px;
         max-height: 55vh;
-        scroll-snap-type: y mandatory;
-        scroll-padding-top: var(--pp-head, 0px);
-        scroll-padding-bottom: var(--pp-foot, 0px);
-    }
-    .pp-matriz tbody tr {
-        scroll-snap-align: start;
     }
     .pp-matriz {
         margin-bottom: 0;
@@ -97,6 +91,17 @@
     .pp-matriz thead th.pp-th-seleccionada {
         box-shadow: inset 0 -3px 0 #2471A3;
     }
+    .pp-cheques-celda {
+        font-size: 0.72rem;
+        line-height: 1.25;
+        margin-top: 0.2rem;
+        color: #1B4F72;
+        white-space: nowrap;
+    }
+    .pp-cheques-celda .pp-ch-dif-falta { color: #c0392b; font-weight: 600; }
+    .pp-cheques-celda .pp-ch-dif-sobra { color: #b9770e; font-weight: 600; }
+    .pp-cheques-celda .pp-ch-dif-ok { color: #1e8449; font-weight: 600; }
+    #pp-cheques-asignados tr.pp-cheque-foco > td { background: #D6EAF8; }
 </style>
 @endsection
 
@@ -115,7 +120,10 @@ window.programaPagoCfg = {
     columnas: @json($ppColumnasJs),
     tieneTransf: @json((bool) ($data->incluye_transf ?? true)),
     urlAsignarCheques: @json(route('asignar_cheques_programa_pago', $data->id)),
-    mostrarResultadoAsignacion: @json(session()->has('pp_asignacion_cheques'))
+    mostrarResultadoAsignacion: @json(session()->has('pp_asignacion_cheques')),
+    programaId: @json((int) $data->id),
+    focoLinea: @json((int) request()->query('linea', session('pp_foco_linea', 0))),
+    toleranciaPct: @json((int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100))
 };
 </script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}"></script>
@@ -130,7 +138,20 @@ window.programaPagoCfg = {
     $cheques = $matriz['cheques']['por_clave'] ?? [];
     $diferencia = $matriz['diferencia'] ?? [];
     $chequesAsignados = $matriz['cheques_asignados'] ?? [];
+    $chequesPorCelda = [];
+    $chequesPorLinea = [];
+    foreach ($chequesAsignados as $asigCh) {
+        $lidCh = (int) ($asigCh['linea_id'] ?? 0);
+        $claveCh = (string) ($asigCh['clave'] ?? '');
+        $chequesPorCelda[$lidCh][$claveCh][] = $asigCh;
+        $chequesPorLinea[$lidCh] = ($chequesPorLinea[$lidCh] ?? 0) + 1;
+    }
     $resultadoAsignacion = session('pp_asignacion_cheques');
+    $propuestasAdelanto = session('pp_propuestas_cheques.'.$data->id, []);
+    if (! is_array($propuestasAdelanto)) {
+        $propuestasAdelanto = [];
+    }
+    $puedeGenerarOp = $puedeEditar && can('crear-pagoproveedor', false);
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -143,11 +164,31 @@ window.programaPagoCfg = {
                     <small class="ml-2">{{ $data->estado }} · {{ optional($data->fecha_base)->format('d/m/Y') }} · {{ $data->empresas->nombre ?? '' }}</small>
                 </h3>
                 <div class="card-tools">
+                    @if ($puedeGenerarOp)
+                        <a href="{{ route('resultado_op_programa_pago', $data->id) }}" class="btn btn-outline-secondary btn-sm mr-1">
+                            Órdenes generadas
+                        </a>
+                    @endif
                     <a href="{{ route('programa_pago') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
+
+            @if ($puedeEditar && count($propuestasAdelanto) > 0)
+                <div class="card card-outline card-warning m-2" id="pp-propuestas-adelanto">
+                    <div class="card-header py-2">
+                        <h3 class="card-title">Cheques de meses posteriores para aceptar</h3>
+                    </div>
+                    <div class="card-body py-2">
+                        @include('compras.programa_pago.partials.propuestas_cheques_adelantados', [
+                            'propuestas' => $propuestasAdelanto,
+                            'programaId' => $data->id,
+                            'formId' => 'form-aceptar-adelanto-pagina',
+                        ])
+                    </div>
+                </div>
+            @endif
 
             <form id="form-programa-pago" method="POST" action="{{ route('actualizar_programa_pago', $data->id) }}">
                 @csrf
@@ -236,13 +277,35 @@ window.programaPagoCfg = {
                                     Siguiente sin marcar
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-dark" id="pp-btn-asignar-cheques-activo"
-                                        title="Asigna CHT diferidos en cartera al proveedor activo (usa montos ya guardados, ±30%)">
+                                        title="Asigna CHT del mes dentro de ±{{ (int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100) }}%. Si no entra, propone cheques de meses posteriores para aceptar">
                                     <i class="fa fa-money-check"></i> Cheques (este)
                                 </button>
                                 <button type="button" class="btn btn-sm btn-dark" id="pp-btn-asignar-cheques-todos"
-                                        title="Asigna CHT diferidos a todos los proveedores ya programados (montos guardados, ±30%)">
+                                        title="Asigna CHT a todos los programados. Si un mes no entra en ±{{ (int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100) }}%, propone cheques posteriores">
                                     <i class="fa fa-money-check-alt"></i> Cheques (todos programados)
                                 </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" id="pp-btn-quitar-cheques-activo"
+                                        title="Quita los cheques asignados al proveedor activo. No toca los montos">
+                                    Quitar cheques (este)
+                                </button>
+                                @if (count($chequesAsignados) > 0)
+                                    <button type="button" class="btn btn-sm btn-outline-danger" id="pp-btn-quitar-cheques-todos"
+                                            title="Quita todos los cheques asignados del programa. No toca los montos">
+                                        Quitar cheques (todos)
+                                    </button>
+                                @endif
+                                @if (count($chequesAsignados) > 0)
+                                    <a href="#pp-cheques-asignados" class="btn btn-sm btn-outline-info"
+                                       title="Lista de los cheques ya tomados para este programa">
+                                        <i class="fa fa-list"></i> {{ count($chequesAsignados) }} cheques asignados
+                                    </a>
+                                @endif
+                                @if ($puedeGenerarOp)
+                                    <button type="submit" form="form-generar-op-pp" class="btn btn-sm btn-success"
+                                            title="Pide fecha y cuenta, y genera una OP completa por proveedor">
+                                        <i class="fa fa-file-invoice-dollar"></i> Generar OP
+                                    </button>
+                                @endif
                                 <div class="custom-control custom-checkbox ml-md-auto">
                                     <input type="checkbox" class="custom-control-input" id="pp-solo-pendientes">
                                     <label class="custom-control-label" for="pp-solo-pendientes">Ocultar ya marcados</label>
@@ -255,6 +318,11 @@ window.programaPagoCfg = {
                         <table class="table table-sm table-bordered table-hover pp-matriz mb-0" id="tabla-programa-pago">
                             <thead style="background:#85C1E9;color:#17202A;">
                                 <tr>
+                                    @if ($puedeGenerarOp)
+                                        <th style="width:36px;" title="Tildar para generar la orden de pago">
+                                            <input type="checkbox" id="pp-op-todos" title="Tildar todos">
+                                        </th>
+                                    @endif
                                     <th class="pp-col-proveedor">Proveedor</th>
                                     <th class="text-right">Saldo</th>
                                     @foreach($columnas as $col)
@@ -272,21 +340,73 @@ window.programaPagoCfg = {
                             <tbody id="tbody-programa-pago">
                                 @foreach($filas as $idx => $fila)
                                     <tr data-linea-id="{{ $fila['id'] }}">
+                                        @if ($puedeGenerarOp)
+                                            <td class="text-center">
+                                                <input type="checkbox" name="linea_ids[]" value="{{ $fila['id'] }}"
+                                                       form="form-generar-op-pp" class="pp-op-check">
+                                            </td>
+                                        @endif
                                         <td class="pp-col-proveedor">
                                             <input type="hidden" name="lineas[{{ $idx }}][id]" value="{{ $fila['id'] }}">
                                             <input type="hidden" name="lineas[{{ $idx }}][proveedor_id]" value="{{ $fila['proveedor_id'] }}">
                                             <input type="hidden" name="lineas[{{ $idx }}][saldo_adeudado]" value="{{ $fila['saldo_adeudado'] }}">
                                             <span class="badge badge-secondary pp-badge-estado">Pendiente</span>
                                             <span class="pp-nombre-proveedor"><strong>{{ $fila['codigo'] }}</strong> {{ $fila['nombre'] }}</span>
+                                            @if (($chequesPorLinea[$fila['id']] ?? 0) > 0)
+                                                <div>
+                                                    <a href="#pp-cheques-asignados" class="badge badge-info">
+                                                        {{ $chequesPorLinea[$fila['id']] }} cheques
+                                                    </a>
+                                                </div>
+                                            @endif
                                         </td>
                                         <td class="text-right text-nowrap">{{ number_format($fila['saldo_adeudado'], 2, ',', '.') }}</td>
                                         @foreach($columnas as $col)
+                                            @php
+                                                $chsCelda = $chequesPorCelda[$fila['id']][$col['clave']] ?? [];
+                                                $sumaChCelda = 0.0;
+                                                foreach ($chsCelda as $chCelda) {
+                                                    $sumaChCelda += (float) ($chCelda['monto'] ?? 0);
+                                                }
+                                                $progCelda = (float) ($fila['asignaciones'][$col['clave']] ?? 0);
+                                                $difCelda = round($sumaChCelda - $progCelda, 2);
+                                            @endphp
                                             <td>
                                                 <input type="number" step="0.01" class="form-control form-control-sm pp-monto pp-asig"
                                                        name="lineas[{{ $idx }}][asignaciones][{{ $col['clave'] }}]"
                                                        value="{{ $fila['asignaciones'][$col['clave']] ?? 0 }}"
                                                        data-clave="{{ $col['clave'] }}"
                                                        @disabled(! $puedeEditar)>
+                                                @if (count($chsCelda) > 0)
+                                                    <div class="pp-cheques-celda">
+                                                        @foreach ($chsCelda as $chCelda)
+                                                            @php
+                                                                $mesPago = ! empty($chCelda['fechapago'])
+                                                                    ? \Carbon\Carbon::parse($chCelda['fechapago'])->format('Y-m')
+                                                                    : '';
+                                                            @endphp
+                                                            <div title="{{ $chCelda['banco'] ?? '' }}">
+                                                                @if ($mesPago !== '' && $mesPago !== (string) $col['clave'])
+                                                                    <span class="badge badge-warning">Adelanto</span>
+                                                                @endif
+                                                                int {{ $chCelda['nro_interno_anita'] ?? '—' }}
+                                                                · {{ number_format((float) $chCelda['monto'], 2, ',', '.') }}
+                                                            </div>
+                                                        @endforeach
+                                                        <div class="{{ $difCelda < -0.009 ? 'pp-ch-dif-falta' : ($difCelda > 0.009 ? 'pp-ch-dif-sobra' : 'pp-ch-dif-ok') }}">
+                                                            {{ count($chsCelda) }} ch
+                                                            @if (abs($difCelda) >= 0.01)
+                                                                · dif {{ number_format($difCelda, 2, ',', '.') }}
+                                                            @endif
+                                                        </div>
+                                                        @if ($puedeEditar)
+                                                            <button type="button" class="btn btn-link btn-sm p-0 pp-quitar-cheques-celda"
+                                                                    data-linea-id="{{ $fila['id'] }}" data-clave="{{ $col['clave'] }}">
+                                                                Quitar cheques
+                                                            </button>
+                                                        @endif
+                                                    </div>
+                                                @endif
                                             </td>
                                         @endforeach
                                         <td class="text-right text-nowrap pp-total-fila">{{ number_format($fila['total_fila'], 2, ',', '.') }}</td>
@@ -308,6 +428,9 @@ window.programaPagoCfg = {
                             </tbody>
                             <tfoot>
                                 <tr>
+                                    @if ($puedeGenerarOp)
+                                        <td></td>
+                                    @endif
                                     <td class="pp-col-proveedor text-right">Totales programa</td>
                                     <td class="text-right" id="pp-total-saldo">{{ number_format($matriz['total_saldo'] ?? 0, 2, ',', '.') }}</td>
                                     @foreach($columnas as $col)
@@ -319,6 +442,9 @@ window.programaPagoCfg = {
                                     <td @if($puedeEditar) colspan="2" @endif></td>
                                 </tr>
                                 <tr>
+                                    @if ($puedeGenerarOp)
+                                        <td></td>
+                                    @endif
                                     <td class="pp-col-proveedor text-right">Cheques en cartera</td>
                                     <td></td>
                                     @foreach($columnas as $col)
@@ -334,6 +460,9 @@ window.programaPagoCfg = {
                                     <td @if($puedeEditar) colspan="2" @endif></td>
                                 </tr>
                                 <tr>
+                                    @if ($puedeGenerarOp)
+                                        <td></td>
+                                    @endif
                                     <td class="pp-col-proveedor text-right">Diferencia (CHT − pagos)</td>
                                     <td></td>
                                     @foreach($columnas as $col)
@@ -378,6 +507,18 @@ window.programaPagoCfg = {
                         @csrf
                         <input type="hidden" name="linea_id" id="pp-asignar-linea-id" value="">
                     </form>
+                    <form id="form-desasignar-cheques-pp" method="POST" action="{{ route('desasignar_cheques_programa_pago', $data->id) }}" class="d-none">
+                        @csrf
+                        <input type="hidden" name="alcance" id="pp-desasignar-alcance" value="">
+                        <input type="hidden" name="linea_id" id="pp-desasignar-linea-id" value="">
+                        <input type="hidden" name="clave" id="pp-desasignar-clave" value="">
+                        <input type="hidden" name="asignacion_id" id="pp-desasignar-id" value="">
+                    </form>
+                    @if ($puedeGenerarOp)
+                        <form id="form-generar-op-pp" method="POST" action="{{ route('preparar_op_programa_pago', $data->id) }}" class="d-none">
+                            @csrf
+                        </form>
+                    @endif
                 @elseif (can('actualizar-programa-pago', false) && $data->estado === 'CERRADO')
                     <form action="{{ route('reabrir_programa_pago', $data->id) }}" method="POST" class="d-inline mr-2">
                         @csrf
@@ -390,7 +531,7 @@ window.programaPagoCfg = {
         </div>
 
         @if (count($chequesAsignados) > 0)
-            <div class="card card-outline card-info mt-3">
+            <div class="card card-outline card-info mt-3" id="pp-cheques-asignados">
                 <div class="card-header">
                     <h3 class="card-title">Cheques asignados ({{ count($chequesAsignados) }})</h3>
                 </div>
@@ -407,12 +548,25 @@ window.programaPagoCfg = {
                                     <th>Banco</th>
                                     <th class="text-right">Monto cheque</th>
                                     <th class="text-right">Programado</th>
+                                    @if ($puedeEditar)
+                                        <th style="width:36px;"></th>
+                                    @endif
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach ($chequesAsignados as $asigCh)
-                                    <tr>
-                                        <td>{{ $asigCh['clave'] }}</td>
+                                    @php
+                                        $mesPagoLista = ! empty($asigCh['fechapago'])
+                                            ? \Carbon\Carbon::parse($asigCh['fechapago'])->format('Y-m')
+                                            : '';
+                                    @endphp
+                                    <tr data-linea-id="{{ $asigCh['linea_id'] }}" class="{{ (int) session('pp_foco_linea', 0) === (int) $asigCh['linea_id'] ? 'pp-cheque-foco' : '' }}">
+                                        <td>
+                                            {{ $asigCh['clave'] }}
+                                            @if ($mesPagoLista !== '' && $mesPagoLista !== (string) $asigCh['clave'])
+                                                <span class="badge badge-warning">Adelanto</span>
+                                            @endif
+                                        </td>
                                         <td>{{ $asigCh['proveedor'] }}</td>
                                         <td>{{ $asigCh['nro_interno_anita'] ?? '—' }}</td>
                                         <td>{{ $asigCh['numerocheque'] }}</td>
@@ -420,6 +574,14 @@ window.programaPagoCfg = {
                                         <td>{{ $asigCh['banco'] }}</td>
                                         <td class="text-right">{{ number_format($asigCh['monto'], 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format($asigCh['monto_programado'], 2, ',', '.') }}</td>
+                                        @if ($puedeEditar)
+                                            <td class="text-center">
+                                                <button type="button" class="btn-accion-tabla pp-quitar-cheque" title="Quitar este cheque"
+                                                        data-id="{{ $asigCh['id'] }}" data-linea-id="{{ $asigCh['linea_id'] }}">
+                                                    <i class="fa fa-times-circle text-danger"></i>
+                                                </button>
+                                            </td>
+                                        @endif
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -494,7 +656,15 @@ window.programaPagoCfg = {
                             · Sin cubrir: <strong class="text-danger">{{ number_format((float) $ppResumen['monto_sin_cubrir'], 2, ',', '.') }}</strong>
                         @endif
                     </p>
-                    <p class="small text-muted">Tolerancia permitida: ±30% entre programado y suma de cheques del mes.</p>
+                    <p class="small text-muted">Tolerancia del mes: ±{{ (int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100) }}%. Si no entra, se proponen cheques de cualquier mes posterior. Esos no se graban hasta aceptarlos.</p>
+
+                    @if (count($propuestasAdelanto) > 0)
+                        @include('compras.programa_pago.partials.propuestas_cheques_adelantados', [
+                            'propuestas' => $propuestasAdelanto,
+                            'programaId' => $data->id,
+                            'formId' => 'form-aceptar-adelanto-modal',
+                        ])
+                    @endif
 
                     @if (count($ppDiscrepancias) > 0)
                         <h6 class="text-danger">Discrepancias</h6>
@@ -506,6 +676,7 @@ window.programaPagoCfg = {
                                         <th>Mes</th>
                                         <th class="text-right">Programado</th>
                                         <th class="text-right">Asignado</th>
+                                        <th class="text-right">Propuesto</th>
                                         <th>Detalle</th>
                                     </tr>
                                 </thead>
@@ -516,6 +687,7 @@ window.programaPagoCfg = {
                                             <td>{{ $disc['clave'] ?? '' }}</td>
                                             <td class="text-right">{{ number_format((float) ($disc['monto_programado'] ?? 0), 2, ',', '.') }}</td>
                                             <td class="text-right">{{ number_format((float) ($disc['monto_asignado'] ?? 0), 2, ',', '.') }}</td>
+                                            <td class="text-right">{{ number_format((float) ($disc['monto_propuesto'] ?? 0), 2, ',', '.') }}</td>
                                             <td>{{ $disc['detalle'] ?? '' }}</td>
                                         </tr>
                                     @endforeach

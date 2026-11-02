@@ -2722,6 +2722,36 @@ $(function () {
         return tope;
     }
 
+    function sumarDiasYmd(ymd, dias) {
+        var p = String(ymd || '').split('-');
+        if (p.length !== 3) {
+            return '';
+        }
+        var fecha = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])));
+        if (isNaN(fecha.getTime())) {
+            return '';
+        }
+        fecha.setUTCDate(fecha.getUTCDate() + (parseInt(dias, 10) || 0));
+        var mes = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+        var dia = String(fecha.getUTCDate()).padStart(2, '0');
+        return fecha.getUTCFullYear() + '-' + mes + '-' + dia;
+    }
+
+    function topeFechaComprobanteContraIva(ancla, dias, maxFuturo) {
+        var tope = sumarDiasYmd(ancla, dias);
+        if (maxFuturo && tope && tope > maxFuturo) {
+            return maxFuturo;
+        }
+        return tope;
+    }
+
+    function mensajeFechaComprobantePosterior(dias) {
+        if ((parseInt(dias, 10) || 0) > 0) {
+            return 'La fecha del comprobante no puede ser más de ' + dias + ' días posterior a la fecha de contabilización.';
+        }
+        return 'La fecha del comprobante no puede ser posterior a la fecha de contabilización.';
+    }
+
     function mensajeFechasCargaComprobante() {
         var compEl = document.getElementById('fechacomprobante');
         var ivaEl = document.getElementById('fechaiva');
@@ -2737,12 +2767,16 @@ $(function () {
             hoy = ymdFechaCarga(ivaEl.getAttribute('max')) || comp;
         }
         var topeIva = techoFechaContabilizacion(hoy, guardada, comp, minOp);
+        var diasTol = parseInt(compEl.getAttribute('data-tolerancia-dias') || '0', 10) || 0;
+        var maxFuturo = ymdFechaCarga(compEl.getAttribute('data-max-futuro'));
+        var anclaComp = iva || topeIva || hoy;
+        var topeComp = anclaComp ? topeFechaComprobanteContraIva(anclaComp, diasTol, maxFuturo) : '';
         // Reescribir max/min con el mismo valor reinicia el año en Chrome de Windows (queda 0004).
         if (topeIva && ivaEl.max !== topeIva) {
             ivaEl.max = topeIva;
         }
-        if (topeIva && compEl.max !== topeIva) {
-            compEl.max = topeIva;
+        if (topeComp && compEl.max !== topeComp) {
+            compEl.max = topeComp;
         }
         if (minOp && topeIva && minOp <= topeIva) {
             if (ivaEl.min !== minOp) {
@@ -2753,7 +2787,8 @@ $(function () {
         }
         var ivaFutura = !!(iva && topeIva && iva > topeIva);
         var ivaCerrada = !!(iva && minOp && topeIva && minOp <= topeIva && iva < minOp);
-        var compPosterior = !!(comp && iva && comp > iva);
+        var topeCompContraIva = iva ? topeFechaComprobanteContraIva(iva, diasTol, '') : '';
+        var compPosterior = !!(comp && topeCompContraIva && comp > topeCompContraIva);
         function ymdADia(ymd) {
             var p = String(ymd || '').split('-');
             return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : ymd;
@@ -2765,16 +2800,15 @@ $(function () {
             avisoIva = 'La fecha de contabilización no puede ser anterior al ' + ymdADia(minOp) + '.';
         }
         ivaEl.setCustomValidity(avisoIva);
-        compEl.setCustomValidity(compPosterior
-            ? 'La fecha del comprobante no puede ser posterior a la fecha de contabilización.'
-            : '');
+        var avisoComp = compPosterior ? mensajeFechaComprobantePosterior(diasTol) : '';
+        compEl.setCustomValidity(avisoComp);
         $(ivaEl).toggleClass('is-invalid', !!(avisoIva));
         $(compEl).toggleClass('is-invalid', compPosterior);
         if (avisoIva) {
             return avisoIva;
         }
-        if (compPosterior) {
-            return 'La fecha del comprobante no puede ser posterior a la fecha de contabilización.';
+        if (avisoComp) {
+            return avisoComp;
         }
         return '';
     }

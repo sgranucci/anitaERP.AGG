@@ -6,9 +6,9 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Una OT no puede pasar a otro artículo.
- * El caso 31178: se imprimió el ZIMBA del pedido 4816 y después las tallas
- * quedaron en el NELLIE de otro pedido.
+ * Una OT puede juntar varios pedidos de la misma pieza.
+ * No puede mezclar artículo o combinación: el caso 31178 imprimió el ZIMBA
+ * del pedido 4816 y después las tallas quedaron en el NELLIE de otro pedido.
  */
 final class OrdentrabajoMezclaArticuloSupport
 {
@@ -21,20 +21,22 @@ final class OrdentrabajoMezclaArticuloSupport
             return;
         }
 
-        $permitidos = self::ids($pedidoCombinacionIds);
         $existentes = self::pedidoCombinacionIds($otId);
         if ($existentes === []) {
             return;
         }
 
+        $permitidos = self::ids($pedidoCombinacionIds);
         $nuevos = array_values(array_diff($permitidos, $existentes));
         if ($nuevos === []) {
             return;
         }
 
-        throw new RuntimeException(
-            'La OT '.$otId.' ya tiene otro artículo. No se puede cargar un renglón distinto sobre la misma OT.'
-        );
+        if (self::lineasMezclanOtraPieza($existentes, $nuevos)) {
+            throw new RuntimeException(
+                'La OT '.$otId.' ya tiene otro artículo. No se puede cargar un renglón distinto sobre la misma OT.'
+            );
+        }
     }
 
     public static function talleMezclaOtroArticulo(int $otId, int $pedidoCombinacionTalleId): bool
@@ -51,11 +53,40 @@ final class OrdentrabajoMezclaArticuloSupport
         }
 
         $existentes = self::pedidoCombinacionIds($otId);
-        if ($existentes === []) {
+        if ($existentes === [] || in_array($pcId, $existentes, true)) {
             return false;
         }
 
-        return ! in_array($pcId, $existentes, true);
+        return self::lineasMezclanOtraPieza($existentes, [$pcId]);
+    }
+
+    /**
+     * True cuando la OT ya no tiene una sola pieza, o el renglón nuevo no es esa pieza.
+     * Varios pedidos del mismo artículo y combinación no mezclan.
+     *
+     * @param  list<int>  $existentes
+     * @param  list<int>  $nuevos
+     */
+    private static function lineasMezclanOtraPieza(array $existentes, array $nuevos): bool
+    {
+        $firmasExistentes = self::firmasDeLineas($existentes);
+        if (count($firmasExistentes) !== 1) {
+            return true;
+        }
+
+        $firmasNuevas = self::firmasDeLineas($nuevos);
+        if ($firmasNuevas === []) {
+            return true;
+        }
+
+        $esperada = $firmasExistentes[0];
+        foreach ($firmasNuevas as $firma) {
+            if ($firma !== $esperada) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -68,6 +99,28 @@ final class OrdentrabajoMezclaArticuloSupport
             array_map('intval', $ids),
             static fn (int $id) => $id > 0
         )));
+    }
+
+    /**
+     * Artículo y combinación. Dos pedidos de la misma pieza comparten firma.
+     *
+     * @param  list<int>  $pedidoCombinacionIds
+     * @return list<string>
+     */
+    private static function firmasDeLineas(array $pedidoCombinacionIds): array
+    {
+        $ids = self::ids($pedidoCombinacionIds);
+        if ($ids === []) {
+            return [];
+        }
+
+        return DB::table('pedido_combinacion')
+            ->whereIn('id', $ids)
+            ->get(['articulo_id', 'combinacion_id'])
+            ->map(static fn ($linea) => (int) $linea->articulo_id.'|'.(int) $linea->combinacion_id)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

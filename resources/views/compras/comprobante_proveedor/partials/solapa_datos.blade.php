@@ -361,6 +361,11 @@
                     $fechaIvaModelo = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::formatear($data->fechaiva ?? null);
                     $fechaIvaValor = old('fechaiva', $fechaIvaModelo ?: $fechaIvaTope);
                     $fechaHoyCarga = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaCargaHoy();
+                    $fechaCompToleranciaDias = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::diasToleranciaComprobantePosteriorAContabilizacion();
+                    $fechaCompMax = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::maxInputFechaComprobante(
+                        $fechaIvaValor ?: $fechaIvaTope
+                    );
+                    $fechaCompMaxFuturo = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaComprobanteMaximaYmd();
                     $fechaIvaTopeTxt = \Carbon\Carbon::parse($fechaIvaTope)->format('d/m/Y');
                     $fechaIvaCierreTxt = $fechaIvaMin
                         ? \Carbon\Carbon::parse($fechaIvaMin)->subDay()->format('d/m/Y')
@@ -368,12 +373,15 @@
                 @endphp
                 <input type="date" name="fechacomprobante" id="fechacomprobante" class="form-control"
                     min="{{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::anioMinimoComprobante() }}-01-01"
-                    max="{{ $fechaIvaTope }}"
+                    max="{{ $fechaCompMax }}"
+                    data-tolerancia-dias="{{ $fechaCompToleranciaDias }}"
+                    data-max-futuro="{{ $fechaCompMaxFuturo }}"
                     value="{{ $fechaCompValor }}" required>
                 <small class="form-text text-muted">
                     Fecha impresa de la factura. El a&ntilde;o no puede ser anterior a
-                    {{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::anioMinimoComprobante() }}
-                    ni la fecha posterior a la de contabilizaci&oacute;n.
+                    {{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::anioMinimoComprobante() }}.
+                    Puede adelantarse hasta {{ $fechaCompToleranciaDias }} d&iacute;as a la fecha de contabilizaci&oacute;n
+                    (Configuraci&oacute;n general, grupo Compras).
                 </small>
             </div>
         </div>
