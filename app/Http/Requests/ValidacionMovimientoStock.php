@@ -4,10 +4,12 @@ namespace App\Http\Requests;
 
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
+use App\Models\Stock\Transferencia_Mercaderia;
 use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockCanjeSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
+use App\Support\Stock\TransferenciaMercaderiaEstados;
 use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
 use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
@@ -42,7 +44,19 @@ class ValidacionMovimientoStock extends FormRequest
 
         $this->normalizarDepositoIdOpcional('deposito_id');
 
-        // Campos del panel transferencia siguen en el DOM; evitar exists:depmae con id 0.
+        // La salida pendiente muestra el destino para corregirlo. El resto de la edición
+        // no usa esos campos: siguen en el DOM oculto y un 0 rompe exists:depmae.
+        if ($this->conservaDepositoEntradaEnEdicion()) {
+            $this->normalizarDepositoIdOpcional('deposito_entrada_id');
+            $this->merge([
+                'deposito_salida_id' => null,
+                'bien_uso_destino_id' => null,
+                'bien_uso_origen_id' => null,
+            ]);
+
+            return;
+        }
+
         $this->merge([
             'deposito_salida_id' => null,
             'deposito_entrada_id' => null,
@@ -290,6 +304,29 @@ class ValidacionMovimientoStock extends FormRequest
             'mventa_id.integer' => 'La marca indicada no es válida.',
             'precios' => 'Debe indicar el precio en cada línea con artículo.',
         ];
+    }
+
+    private function conservaDepositoEntradaEnEdicion(): bool
+    {
+        if (! $this->isMethod('put') && ! $this->isMethod('patch')) {
+            return false;
+        }
+
+        $id = (int) ($this->route('id') ?? 0);
+        if ($id <= 0) {
+            return false;
+        }
+
+        $transferencia = Transferencia_Mercaderia::query()
+            ->where('movimientostock_salida_id', $id)
+            ->first(['estado', 'movimientostock_entrada_id', 'bien_uso_destino_id']);
+        if ($transferencia === null) {
+            return false;
+        }
+
+        return (string) ($transferencia->estado ?? '') === TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION
+            && (int) ($transferencia->movimientostock_entrada_id ?? 0) <= 0
+            && (int) ($transferencia->bien_uso_destino_id ?? 0) <= 0;
     }
 
     private function validarComoTransferenciaNueva(): bool

@@ -105,6 +105,7 @@ class MovimientoStockService
 			$data['leyenda'] = ' ';
 
 		$movimientostock_id = null;
+		$destinoActualizado = false;
 		$asientoIdNuevo = null;
 		$ctamovNuevo = null;
 		$ctamovSincronizadoEnEdicion = false;
@@ -181,7 +182,8 @@ class MovimientoStockService
 			$loteIngresadoEsAlta = $this->loteDocumentoEsAlta($loteIngresado);
 			// True solo si el número que se graba se acaba de inventar. Si en una edición
 			// se conserva el lote ya guardado, el bucket de ese lote sí se controla.
-			$omitirBucketLoteAlta = $loteIngresadoEsAlta;
+			// La TRA numera antes de llegar acá (TR-00001215): ese lote no es stock.
+			$omitirBucketLoteAlta = $loteIngresadoEsAlta || $this->loteTransferenciaEsNumeracionNueva($data);
 
 			if ($funcion == 'create')
 			{
@@ -620,6 +622,13 @@ class MovimientoStockService
 				}
 			}
 
+			if ($funcion === 'update' && (int) ($data['deposito_entrada_id'] ?? 0) > 0) {
+				$destinoActualizado = app(TransferenciaMercaderiaService::class)->cambiarDepositoDestinoPendiente(
+					(int) $movimientostock_id,
+					(int) $data['deposito_entrada_id']
+				);
+			}
+
 			DB::commit();
 
 			if ((int) $movimientostock_id > 0 && ! $this->omitirAsientoContable($data)) {
@@ -690,6 +699,9 @@ class MovimientoStockService
 		}
 		
 		$resultado = ['id' => $movimientostock_id, 'codigo' => $data['codigo']];
+		if ($destinoActualizado) {
+			$resultado['destino_actualizado'] = true;
+		}
 		$npusGenerados = $data['_npus_generados_alta'] ?? null;
 		if (is_array($npusGenerados) && $npusGenerados !== []) {
 			$resultado['npus_generados'] = array_values(array_map('intval', $npusGenerados));
@@ -901,7 +913,10 @@ class MovimientoStockService
 		bool $aplicarOtEnEgresos,
 		int $ordentrabajoIdConsumo
 	): void {
-		$loteDoc = trim((string) ($data['lote'] ?? ''));
+		$loteDoc = $this->loteParaValidarBucket($data, $aplicarOtEnEgresos, $ordentrabajoIdConsumo);
+		if ($loteDoc === null) {
+			return;
+		}
 		$depositoId = (int) ($data['deposito_id'] ?? 0);
 		$depositoLote = $depositoId > 0 ? Depmae::query()->find($depositoId) : null;
 		if (DepmaeControlStockSupport::localFerliPermiteNegativo($depositoLote)
@@ -1001,6 +1016,44 @@ class MovimientoStockService
 		}
 
 		return $curva;
+	}
+
+	/**
+	 * La TRA reserva el correlativo (1215) y lo graba como lote del comprobante.
+	 * Si el operador dejó «LOTE DE ALTA», ese número no es un lote/OT con saldo.
+	 * El control de pares del depósito sigue en MovimientoStockSalidaSaldoSupport.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function loteTransferenciaEsNumeracionNueva(array $data): bool
+	{
+		if (empty($data['lote_es_numeracion_nueva'])) {
+			return false;
+		}
+
+		$loteForm = trim((string) ($data['lote_formulario'] ?? $data['lote_consulta_ot'] ?? ''));
+
+		return $this->loteDocumentoEsAlta($loteForm);
+	}
+
+	/**
+	 * null = no hay bucket previo que controlar (número recién asignado).
+	 * Si el operador escribió un lote, se controla ese, no el correlativo de la TRA.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function loteParaValidarBucket(array $data, bool $aplicarOtEnEgresos, int $ordentrabajoIdConsumo): ?string
+	{
+		if (! empty($data['lote_es_numeracion_nueva']) && ! ($aplicarOtEnEgresos && $ordentrabajoIdConsumo > 0)) {
+			$loteForm = trim((string) ($data['lote_formulario'] ?? $data['lote_consulta_ot'] ?? ''));
+			if ($this->loteDocumentoEsAlta($loteForm)) {
+				return null;
+			}
+
+			return $loteForm;
+		}
+
+		return trim((string) ($data['lote'] ?? ''));
 	}
 
 	/**

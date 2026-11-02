@@ -442,8 +442,9 @@ class MovimientoStockController extends Controller
             return redirect()->back()->withInput()->with('mensaje', MovimientoStockEdicionVentanaSupport::mensajeBloqueo());
         }
 
+		$resultado = null;
 		try {
-			$this->movimientoStockService->guardaMovimientoStock($request->all(), 'update', $id);
+			$resultado = $this->movimientoStockService->guardaMovimientoStock($request->all(), 'update', $id);
             $tipoStockId = (int) ($request->input('tipotransaccion_stock_id') ?: $request->input('tipotransaccion_id'));
             MovimientoStockPreferenciasUsuario::persistirDesdeDatos(array_merge(
                 $request->all(),
@@ -453,7 +454,12 @@ class MovimientoStockController extends Controller
 			return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
 		}
 
-        return redirect($urlIndex)->with('mensaje', 'Movimiento de Stock actualizado con éxito');
+        $mensaje = 'Movimiento de Stock actualizado con éxito';
+        if (is_array($resultado) && ! empty($resultado['destino_actualizado'])) {
+            $mensaje .= ' El depósito destino de la transferencia quedó actualizado.';
+        }
+
+        return redirect($urlIndex)->with('mensaje', $mensaje);
     }
 
     public function eliminar(Request $request, $id)

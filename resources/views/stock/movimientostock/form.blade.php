@@ -4,6 +4,7 @@
     use App\Support\Stock\MovimientoStockFormLineasSupport;
     use App\Support\Stock\TransferenciaBienUsoSupport;
     use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
+    use App\Support\Stock\TransferenciaMercaderiaEstados;
 
     $lineasFormulario = MovimientoStockFormLineasSupport::lineasParaFormulario($movimientostock);
     $tipoTransaccionSeleccionada = (int) old(
@@ -63,6 +64,24 @@
         $usuarioDestinoNombreMs = (string) (Usuario::query()->whereKey($usuarioDestinoIdMs)->value('nombre') ?? '');
     }
     $mostrarDepositoSimple = ! $mostrarPanelTransferencia;
+    $movimientoIdForm = (int) ($movimientostock->id ?? 0);
+    $esSalidaVinculada = $transferenciaVinculada
+        && $movimientoIdForm > 0
+        && (int) ($transferenciaVinculada->movimientostock_salida_id ?? 0) === $movimientoIdForm;
+    $esEntradaVinculada = $transferenciaVinculada
+        && $movimientoIdForm > 0
+        && (int) ($transferenciaVinculada->movimientostock_entrada_id ?? 0) === $movimientoIdForm;
+    // La salida ya descontó el origen. El destino se puede corregir mientras no haya ingreso.
+    $editaDestinoPendiente = $esSalidaVinculada
+        && (string) ($transferenciaVinculada->estado ?? '') === TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION
+        && (int) ($transferenciaVinculada->movimientostock_entrada_id ?? 0) <= 0
+        && (int) ($transferenciaVinculada->bien_uso_destino_id ?? 0) <= 0;
+    $labelDepositoSimple = 'Depósito';
+    if ($esSalidaVinculada) {
+        $labelDepositoSimple = 'Depósito origen';
+    } elseif ($esEntradaVinculada) {
+        $labelDepositoSimple = 'Depósito destino';
+    }
 @endphp
 
 @if($mostrarSolapaAsiento ?? false)
@@ -167,7 +186,7 @@
                     @include('stock.partials.campo_consulta_deposito', [
                         'prefix' => 'movimientostock',
                         'layout' => 'form_row',
-                        'label' => 'Depósito',
+                        'label' => $labelDepositoSimple,
                         'inputName' => 'deposito_id',
                         'inputId' => 'deposito_id',
                         'depositoId' => $depositoIdMov,
@@ -179,6 +198,24 @@
                         'col_input' => 'col-lg-8',
                     ])
                 </div>
+
+                @if ($editaDestinoPendiente)
+                    @include('stock.partials.campo_consulta_deposito', [
+                        'prefix' => 'entrada',
+                        'layout' => 'form_row',
+                        'label' => 'Depósito destino',
+                        'inputName' => 'deposito_entrada_id',
+                        'inputId' => 'deposito_entrada_id',
+                        'depositoId' => $depositoEntradaId,
+                        'codigo' => old('deposito_entrada_codigo', $depositoEntradaModel->codigo ?? ''),
+                        'descripcion' => old('deposito_entrada_descripcion', $depositoEntradaModel->nombre ?? ''),
+                        'tipodeposito' => $depositoEntradaModel->tipodeposito ?? '',
+                        'canal' => $depositoEntradaModel->canal ?? '',
+                        'col_label' => 'col-lg-4 col-form-label',
+                        'col_input' => 'col-lg-8',
+                        'ayuda' => 'Todavía no ingresó. Al actualizar, la transferencia queda pendiente en este depósito.',
+                    ])
+                @endif
 
                 <div id="ms_panel_transferencia" @if(! $mostrarPanelTransferencia) style="display:none;" @endif>
                     @include('stock.partials.campo_consulta_deposito', [
@@ -208,6 +245,7 @@
                             </select>
                         </div>
                     </div>
+                    @if (! $editaDestinoPendiente)
                     @include('stock.partials.campo_consulta_deposito', [
                         'prefix' => 'entrada',
                         'layout' => 'form_row',
@@ -222,6 +260,7 @@
                         'col_label' => 'col-lg-4 col-form-label',
                         'col_input' => 'col-lg-8',
                     ])
+                    @endif
                     <div class="form-group row mb-2" id="ms_panel_bien_destino" style="display:none;">
                         <label for="bien_uso_destino_id" class="col-lg-4 col-form-label requerido">Bien de uso destino</label>
                         <div class="col-lg-8">

@@ -666,12 +666,7 @@ class TransferenciaMercaderiaService
                             esSalida: true,
                             bienUsoId: $origenBienUso ? $bienUsoOrigenId : null,
                             empresaId: $empresaId > 0 ? $empresaId : TransferenciaMercaderiaIntercompanySupport::empresaIdDesdeDepositos($depositoEntrada, $depositoSalida),
-                            extra: array_key_exists('aplicar_consumo_ot', $cabecera)
-                                ? [
-                                    'aplicar_consumo_ot' => $cabecera['aplicar_consumo_ot'],
-                                    'lote_consulta_ot' => (string) ($cabecera['lote_formulario'] ?? ''),
-                                ]
-                                : []
+                            extra: $this->extraSalidaLoteNuevo($cabecera)
                         );
                         $transferencia->movimientostock_salida_id = (int) $salida['id'];
                         $transferencia->save();
@@ -1366,6 +1361,27 @@ class TransferenciaMercaderiaService
         }
     }
 
+    /**
+     * El correlativo de la TRA se graba como lote del movimiento. No es un lote
+     * que ya tenga saldo, salvo que el operador haya escrito otro número.
+     *
+     * @param  array<string, mixed>  $cabecera
+     * @return array<string, mixed>
+     */
+    private function extraSalidaLoteNuevo(array $cabecera): array
+    {
+        $extra = [
+            'lote_es_numeracion_nueva' => true,
+            'lote_formulario' => (string) ($cabecera['lote_formulario'] ?? ''),
+        ];
+        if (array_key_exists('aplicar_consumo_ot', $cabecera)) {
+            $extra['aplicar_consumo_ot'] = $cabecera['aplicar_consumo_ot'];
+            $extra['lote_consulta_ot'] = (string) ($cabecera['lote_formulario'] ?? '');
+        }
+
+        return $extra;
+    }
+
     private function grabarMovimiento(
         int $tipotransaccionId,
         ?int $depositoId,
@@ -1483,6 +1499,86 @@ class TransferenciaMercaderiaService
             ->where('transferencia_mercaderia_id', $transferencia->id)
             ->whereNull('usado_el')
             ->update(['usado_el' => now()]);
+    }
+
+    /**
+     * Corrige el depósito destino de una transferencia que todavía no ingresó.
+     * La salida ya descontó el origen; el destino solo está en la cabecera.
+     */
+    public function cambiarDepositoDestinoPendiente(int $movimientoSalidaId, int $depositoEntradaId): bool
+    {
+        if ($movimientoSalidaId <= 0 || $depositoEntradaId <= 0) {
+            return false;
+        }
+
+        $transferencia = Transferencia_Mercaderia::query()
+            ->where('movimientostock_salida_id', $movimientoSalidaId)
+            ->first();
+        if ($transferencia === null || (int) ($transferencia->bien_uso_destino_id ?? 0) > 0) {
+            return false;
+        }
+
+        $destinoActualId = (int) ($transferencia->deposito_destino_id ?? 0);
+        $yaRecibida = (string) ($transferencia->estado ?? '') !== TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION
+            || (int) ($transferencia->movimientostock_entrada_id ?? 0) > 0;
+        if ($yaRecibida) {
+            if ($destinoActualId !== $depositoEntradaId) {
+                throw new \RuntimeException('La transferencia ya fue recibida. El depósito destino no se puede cambiar desde este movimiento.');
+            }
+
+            return false;
+        }
+
+        if ($destinoActualId === $depositoEntradaId) {
+            return false;
+        }
+
+        $origenId = (int) ($transferencia->deposito_origen_id ?? 0);
+        if ($origenId > 0 && $origenId === $depositoEntradaId) {
+            throw new \RuntimeException('El depósito destino debe ser distinto al de origen.');
+        }
+
+        $empresaId = (int) ($transferencia->empresa_id ?? 0);
+        if (! TransferenciaMercaderiaIntercompanySupport::depositoEntradaAutorizado($depositoEntradaId, $empresaId)) {
+            throw new \RuntimeException(
+                TransferenciaMercaderiaIntercompanySupport::puedeUsar()
+                    ? 'El depósito destino no existe o no es válido.'
+                    : 'El depósito destino no pertenece a la empresa de la transferencia.'
+            );
+        }
+
+        $deposito = Depmae::query()->find($depositoEntradaId);
+        if ($deposito === null) {
+            throw new \RuntimeException('El depósito destino no existe.');
+        }
+
+        $usuarioActualId = (int) ($transferencia->usuario_destino_id ?? 0);
+        $usuarioActual = $usuarioActualId > 0
+            ? \App\Models\Seguridad\Usuario::query()->find($usuarioActualId)
+            : null;
+        $conservaDestinatario = $usuarioActual !== null
+            && TransferenciaMercaderiaDestinatarioSupport::usuarioPuedeRecibirAprobacion($depositoEntradaId, $usuarioActual);
+        if (! $conservaDestinatario) {
+            $nuevoDestinatario = TransferenciaMercaderiaDestinatarioSupport::resolverUsuarioDestino($depositoEntradaId);
+            $transferencia->usuario_destino_id = $nuevoDestinatario?->id;
+        }
+
+        $transferencia->deposito_destino_id = $depositoEntradaId;
+        $transferencia->save();
+
+        $movimiento = MovimientoStock::query()->find($movimientoSalidaId);
+        if ($movimiento !== null) {
+            $movimiento->leyenda = 'Transferencia a '.(string) $deposito->nombre;
+            $movimiento->save();
+        }
+
+        $this->generarTokensYNotificarAprobacion($transferencia->fresh([
+            'articulos',
+            'depositoOrigen',
+            'depositoDestino',
+        ]));
+
+        return true;
     }
 
     /**
