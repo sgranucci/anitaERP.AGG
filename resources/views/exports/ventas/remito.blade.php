@@ -61,6 +61,32 @@
 			margin-top: 8px;
 			font-weight: bold;
 		}
+		table.remito-pie { width: 100%; border-collapse: collapse; margin-top: 12px; }
+		table.remito-pie > tbody > tr > td { border: none; vertical-align: top; padding: 0; }
+		.remito-obs {
+			border: 1px solid #000;
+			min-height: 78px;
+			padding: 4px 8px;
+			font-size: 12px;
+			margin-right: 12px;
+		}
+		.remito-obs .etiq { font-size: 11px; font-weight: bold; }
+		.remito-caja-total {
+			border: 1px solid #000;
+			margin: 0 0 6px auto;
+			width: 210px;
+			padding: 3px 8px 5px 8px;
+			text-align: center;
+		}
+		.remito-caja-total .etiq {
+			font-size: 11px;
+			font-weight: bold;
+		}
+		.remito-caja-total .valor {
+			font-size: 14px;
+			font-weight: bold;
+			margin-top: 2px;
+		}
 	</style>
 </head>
 <body>
@@ -92,7 +118,14 @@
 	}
 	$repartoNombre = trim((string) ($remito->transportes->nombre ?? ''));
 
-	$lineasPdf = \App\Support\Ventas\PedidoRemitoPdfLineasSupport::armar($remito->remito_articulos);
+	$esElBierzo = \App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo();
+	$articulosPdf = $remito->remito_articulos;
+	if ($esElBierzo) {
+		$articulosPdf = collect($articulosPdf)->filter(function ($item) {
+			return (string) ($item->estado ?? '') !== 'A';
+		});
+	}
+	$lineasPdf = \App\Support\Ventas\PedidoRemitoPdfLineasSupport::armar($articulosPdf);
 	$filas = $lineasPdf['filas'];
 	$totales = $lineasPdf['totales'];
 	$valorAsegurado = \App\Support\Ventas\RemitoValorAseguradoSupport::desdeArticulos(
@@ -107,7 +140,7 @@
 		$ajusteDivision = round($totalNetoDivision * ($coeficienteDivision - 1), 2);
 		$totalDivision = round($totalNetoDivision + $ajusteDivision, 2);
 	}
-	$paginasRemito = FacturaPdfPaginacionSupport::paginas($filas, 'remito_horizontal');
+	$paginasRemito = FacturaPdfPaginacionSupport::paginas($filas, $esElBierzo ? 'remito' : 'remito_horizontal');
 	$caiRemito = $caiRemito ?? \App\Support\Ventas\CaiRemitoVigenteSupport::paraRemito($remito);
 @endphp
 @foreach ($paginasRemito as $pagIdx => $itemsPagina)
@@ -142,6 +175,24 @@
 				</td>
 			</tr>
 		</table>
+		@if ($esElBierzo)
+			<table class="remito-items">
+				<tr class="remito-items-head">
+					<td style="width: 18%;">Artículo</td>
+					<td style="width: 46%;">Descripción</td>
+					<td style="width: 18%; text-align: right;">Piezas</td>
+					<td style="width: 18%; text-align: right;">Cantidad</td>
+				</tr>
+				@foreach ($itemsPagina as $item)
+					<tr>
+						<td>{{ $item['sku'] }}</td>
+						<td>{{ $item['descripcion'] }}</td>
+						<td style="text-align: right;">{{ number_format($item['pieza'], 2) }}</td>
+						<td style="text-align: right;">{{ number_format($item['kilo'], 2) }}</td>
+					</tr>
+				@endforeach
+			</table>
+		@else
 		<table class="remito-items">
 			<tr class="remito-items-head">
 				<td style="width: 7%;">Sku</td>
@@ -184,8 +235,46 @@
 				</tr>
 			@endif
 		</table>
+		@endif
 		@if (! $esUltima)
 			<p class="remito-continua">Continúa en la página siguiente…</p>
+		@elseif ($esElBierzo)
+			<table class="remito-pie">
+				<tr>
+					<td style="width: 58%;">
+						<div class="remito-obs">
+							<div class="etiq">Observaciones</div>
+							<div>{{ $remito->leyenda ?? '' }}</div>
+						</div>
+						@if ($repartoNombre !== '')
+							<div class="remito-obs" style="margin-top: 8px; min-height: 36px;">
+								<div class="etiq">Transporte</div>
+								<div>{{ $repartoNombre }}</div>
+							</div>
+						@endif
+					</td>
+					<td style="width: 42%;">
+						<div class="remito-caja-total">
+							<div class="etiq">TOTAL KILOS</div>
+							<div class="valor">{{ number_format($totales['kilo'], 2) }}</div>
+						</div>
+						<div class="remito-caja-total">
+							<div class="etiq">TOTAL BULTOS</div>
+							<div class="valor">Cajas = {{ number_format($totales['caja'], 2) }}</div>
+						</div>
+						<div class="remito-caja-total">
+							<div class="etiq">TOTAL ASEGURADO</div>
+							<div class="valor">{{ number_format($valorAsegurado, 2) }}</div>
+						</div>
+					</td>
+				</tr>
+			</table>
+			@if ($caiRemito && $caiRemito->numero_cai)
+				<div class="remito-cai">
+					CAI: {{ $caiRemito->numero_cai }}<br>
+					Fecha Vencimiento CAI: {{ optional($caiRemito->fecha_vencimiento)->format('d/m/Y') }}
+				</div>
+			@endif
 		@else
 			<div class="remito-valor-asegurado">
 				Valor asegurado: {{ number_format($valorAsegurado, 2) }}

@@ -29,6 +29,7 @@
         padding-top: 6px;
     }
     .mpc-modulo-opcion {
+        position: relative;
         display: inline-flex;
         align-items: center;
         gap: 4px;
@@ -44,8 +45,16 @@
     }
     .mpc-modulo-opcion input {
         position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
         opacity: 0;
-        pointer-events: none;
+        cursor: pointer;
+        z-index: 2;
     }
     .mpc-modulo-opcion .mpc-modulo-letra {
         font-size: 10px;
@@ -65,17 +74,17 @@
 </style>
 <div class="mpc-modulo-filtro mb-2">
     <button type="button"
-        class="btn btn-sm btn-outline-info btn-block text-left mpc-modulo-toggle d-flex align-items-center collapsed"
+        class="btn btn-sm btn-outline-info btn-block text-left mpc-modulo-toggle d-flex align-items-center"
         data-toggle="collapse"
         data-target="#mpc-modulo-opciones"
-        aria-expanded="false"
+        aria-expanded="true"
         aria-controls="mpc-modulo-opciones">
         <i class="fa fa-sitemap mr-1"></i>
         <span>M&oacute;dulo</span>
-        <span class="badge badge-pill {{ $moduloActual === '' ? 'badge-light border' : 'badge-info' }} ml-2">{{ $etiquetaModulo }}</span>
+        <span class="badge badge-pill {{ $moduloActual === '' ? 'badge-light border' : 'badge-info' }} ml-2" id="mpc-modulo-badge">{{ $etiquetaModulo }}</span>
         <i class="fa fa-chevron-down ml-auto"></i>
     </button>
-    <div class="collapse" id="mpc-modulo-opciones">
+    <div class="collapse show" id="mpc-modulo-opciones">
         <div class="mpc-modulo-opciones" role="radiogroup" aria-label="Modulo de movimientos">
             @foreach ($opcionesModulo as $valor => $opcion)
                 <label class="mpc-modulo-opcion{{ $moduloActual === $valor ? ' activa' : '' }}">

@@ -396,7 +396,7 @@ class PedidoQuery implements PedidoQueryInterface
 
     public function leePedidoporId($id)
     {
-        $mod = $this->model->with('clientes:id,nombre')->with('mventas:id,nombre')->with('transportes')->with('vendedores')->with('zonavtas')->with('pedido_articulos')->where('id',$id)->get();
+        $mod = $this->model->with('clientes:id,nombre,codigo')->with('mventas:id,nombre')->with('transportes')->with('vendedores')->with('zonavtas')->with('pedido_articulos')->where('id',$id)->get();
 
         return $mod;
     }

@@ -745,12 +745,42 @@ $(function () {
     mayorPlanoActualizarExcelSolapasSeparadas();
     mayorPlanoActualizarPresentacionModulo();
     mayorPlanoActivarOverlayProceso();
-    $(document).on('change.mpcModulo', 'input[name="modulo_movimientos"]', mayorPlanoActualizarPresentacionModulo);
+    $(document).on('click.mpcModulo', '.mpc-modulo-opcion', function () {
+        var $input = $(this).find('input[type="radio"]');
+        if (!$input.length || $input.prop('disabled')) {
+            return;
+        }
+        if (!$input.prop('checked')) {
+            $input.prop('checked', true).trigger('change');
+        }
+    });
+    $(document).on('change.mpcModulo', 'input[name="modulo_movimientos"], input[name="presentacion_modulo"]', function () {
+        mayorPlanoMarcarOpcionActiva($(this));
+        if (this.name === 'modulo_movimientos') {
+            mayorPlanoActualizarPresentacionModulo();
+        }
+    });
 });
 
+function mayorPlanoMarcarOpcionActiva($input) {
+    var nombre = $input.attr('name');
+    $('input[name="' + nombre + '"]').each(function () {
+        $(this).closest('.mpc-modulo-opcion').toggleClass('activa', this.checked);
+    });
+}
+
 function mayorPlanoActualizarPresentacionModulo() {
-    var modulo = $('input[name="modulo_movimientos"]:checked').val() || '';
+    var $elegido = $('input[name="modulo_movimientos"]:checked');
+    var modulo = $elegido.val() || '';
     $('#mpc-modulo-presentacion').toggleClass('d-none', modulo === '');
+    var etiqueta = $.trim($elegido.closest('.mpc-modulo-opcion').children('span').first().text()) || 'Todos';
+    var $badge = $('#mpc-modulo-badge');
+    $badge.text(etiqueta);
+    $badge.toggleClass('badge-info', modulo !== '');
+    $badge.toggleClass('badge-light border', modulo === '');
+    if ($elegido.length) {
+        mayorPlanoMarcarOpcionActiva($elegido);
+    }
 }
 
 var MAYOR_PLANO_OVERLAY_ID = 'mayor-plano-cuenta-overlay';

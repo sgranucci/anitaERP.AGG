@@ -1,12 +1,14 @@
 @php
+	use App\Support\Configuracion\EntornoEmpresaSupport;
 	use App\Support\Ventas\FacturaPdfPaginacionSupport;
 
 	$montosReparto101 = \App\Support\Ventas\VillafrancaFacturacionSupport::montosPedidoDesdeFactura($pedido);
 	$codigoClientePedido = trim((string) ($pedido->clientes->codigo ?? ''));
 	$nombreClientePedido = trim((string) ($pedido->clientes->nombre ?? ''));
-	$clientePedidoDisplay = $codigoClientePedido !== '' && $nombreClientePedido !== ''
-		? $codigoClientePedido.' - '.$nombreClientePedido
-		: ($nombreClientePedido !== '' ? $nombreClientePedido : $codigoClientePedido);
+	$clientePedidoDisplay = $nombreClientePedido !== '' ? $nombreClientePedido : $codigoClientePedido;
+	if (EntornoEmpresaSupport::esElBierzo() && $codigoClientePedido !== '' && $nombreClientePedido !== '') {
+		$clientePedidoDisplay = $nombreClientePedido.' - '.$codigoClientePedido;
+	}
 	$numeroPedido = trim((string) ($pedido->codigo ?? ''));
 	if ($numeroPedido === '') {
 		$numeroPedido = (string) ($pedido->id ?? '');

@@ -159,7 +159,11 @@ class RemitoService
         }
 
         $pdf = App::make('dompdf.wrapper');
-        $pdf->setPaper('legal', 'landscape');
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            $pdf->setPaper('a4', 'portrait');
+        } else {
+            $pdf->setPaper('legal', 'landscape');
+        }
         $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
         return $path.'/'.$nombre_pdf.'.pdf';
