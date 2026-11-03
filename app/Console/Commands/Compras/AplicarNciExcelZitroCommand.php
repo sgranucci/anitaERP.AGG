@@ -15,14 +15,14 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 class AplicarNciExcelZitroCommand extends Command
 {
     protected $signature = 'compras:aplicar-nci-excel-zitro
-                            {excel : Ruta al xlsx (solapas Biyemas y Kandiko)}
+                            {excel : Ruta al xlsx (solapas Biyemas/Kandiko/Rebisco)}
                             {--codigo=3968 : Código proveedor}
                             {--fecha= : Fecha Y-m-d (default hoy)}
                             {--usuario=1 : usuario_id}
                             {--sync-anita : Tras ERP, escribe compra/promov y aplmovp en Anita}
                             {--ejecutar : Graba. Sin este flag solo informa}';
 
-    protected $description = 'NCI interna sobre cuotas coloreadas del Excel Zitro BSA (Biyemas+Kandiko), opcional sync Anita';
+    protected $description = 'NCI interna sobre cuotas coloreadas del Excel Zitro BSA, opcional sync Anita';
 
     public function handle(
         ProveedorSaldarDeudaInternaSinAsientoService $service,
@@ -59,8 +59,12 @@ class AplicarNciExcelZitroCommand extends Command
             return self::FAILURE;
         }
 
-        foreach ([1 => 'Biyemas', 2 => 'Kandiko'] as $empId => $nombre) {
+        $nombresEmp = [1 => 'Biyemas', 2 => 'Kandiko', 3 => 'Rebisco'];
+        foreach ($nombresEmp as $empId => $nombre) {
             $filas = array_values(array_filter($matched, static fn (array $m): bool => $m['empresa_id'] === $empId));
+            if ($filas === []) {
+                continue;
+            }
             $totPes = 0.0;
             $totDol = 0.0;
             foreach ($filas as $f) {
@@ -85,7 +89,7 @@ class AplicarNciExcelZitroCommand extends Command
             return self::FAILURE;
         }
 
-        foreach ([1, 2] as $empresaId) {
+        foreach ([1, 2, 3] as $empresaId) {
             $filas = array_values(array_filter(
                 $matched,
                 static fn (array $m): bool => $m['empresa_id'] === $empresaId
@@ -154,10 +158,21 @@ class AplicarNciExcelZitroCommand extends Command
         $ss = IOFactory::load($path);
         $out = [];
         foreach ($ss->getWorksheetIterator() as $ws) {
-            $title = $ws->getTitle();
-            $empresaId = str_contains(strtolower($title), 'kandiko') ? 2 : 1;
+            $title = strtolower($ws->getTitle());
+            $empresaId = match (true) {
+                str_contains($title, 'kandiko') => 2,
+                str_contains($title, 'rebisco') => 3,
+                default => 1,
+            };
             $maxR = $ws->getHighestDataRow();
             $maxCi = Coordinate::columnIndexFromString($ws->getHighestDataColumn());
+            $header = strtoupper(trim(implode(' ', [
+                (string) $ws->getCell('G6')->getCalculatedValue(),
+                (string) $ws->getCell('H6')->getCalculatedValue(),
+            ])));
+            // Kandiko/Rebisco: G=Moneda H=Cotización I=Importe J=Aplicado K=Saldo
+            // Biyemas: G=Moneda H=Importe I=Aplicado J=Saldo
+            $conCotizacion = str_contains($header, 'COTIZ');
             for ($r = 7; $r <= $maxR; $r++) {
                 $comp = $ws->getCell('F'.$r)->getCalculatedValue();
                 $mon = $ws->getCell('G'.$r)->getCalculatedValue();
@@ -168,8 +183,7 @@ class AplicarNciExcelZitroCommand extends Command
                 if ($color === null || in_array($color, ['85C1E9', 'F9E79F'], true)) {
                     continue;
                 }
-                $isKandiko = $empresaId === 2;
-                $saldo = (float) ($isKandiko
+                $saldo = (float) ($conCotizacion
                     ? $ws->getCell('K'.$r)->getCalculatedValue()
                     : $ws->getCell('J'.$r)->getCalculatedValue());
                 $out[] = [
@@ -220,7 +234,7 @@ class AplicarNciExcelZitroCommand extends Command
         }
 
         $matched = [];
-        foreach ([1, 2] as $empresaId) {
+        foreach ([1, 2, 3] as $empresaId) {
             $deudas = $repo->listarPendientesAplicacion($proveedorId, 'deuda', $empresaId);
             $index = [];
             foreach ($deudas as $d) {
