@@ -19,6 +19,7 @@ use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownComprobante;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownImputacionSupport;
+use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownImpuestoConceptos;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -461,25 +462,13 @@ final class TransferenciaCrownFacturaWriter
      */
     private function grabarImpuestos(int $ventaId, array $fila): void
     {
-        $conceptos = [
-            ['concepto' => 'Gravado al 21%', 'tasa' => 21.0, 'base' => (float) ($fila['gravado21'] ?? 0), 'importe' => (float) ($fila['iva21'] ?? 0)],
-            ['concepto' => 'Gravado al 10.5%', 'tasa' => 10.5, 'base' => (float) ($fila['gravado105'] ?? 0), 'importe' => (float) ($fila['iva105'] ?? 0)],
-            ['concepto' => 'Gravado al 27%', 'tasa' => 27.0, 'base' => (float) ($fila['gravado27'] ?? 0), 'importe' => (float) ($fila['iva27'] ?? 0)],
-            ['concepto' => 'Exento', 'tasa' => 0.0, 'base' => (float) ($fila['exento'] ?? 0), 'importe' => 0.0],
-            ['concepto' => 'IVA no inscripto', 'tasa' => 0.0, 'base' => (float) ($fila['noi'] ?? 0), 'importe' => (float) ($fila['noi'] ?? 0)],
-            ['concepto' => 'Percepción IVA', 'tasa' => 0.0, 'base' => (float) ($fila['percepcion_iva'] ?? 0), 'importe' => (float) ($fila['percepcion_iva'] ?? 0)],
-            ['concepto' => 'Otros tributos', 'tasa' => 0.0, 'base' => (float) ($fila['otros'] ?? 0), 'importe' => (float) ($fila['otros'] ?? 0)],
-        ];
-        foreach ($conceptos as $concepto) {
-            if (round($concepto['base'], 2) == 0.0 && round($concepto['importe'], 2) == 0.0) {
-                continue;
-            }
+        foreach (TransferenciaCrownImpuestoConceptos::filas($fila) as $concepto) {
             Venta_Impuesto::query()->create([
                 'venta_id' => $ventaId,
                 'concepto' => $concepto['concepto'],
-                'baseimponible' => round($concepto['base'], 2),
+                'baseimponible' => $concepto['base'],
                 'tasa' => $concepto['tasa'],
-                'importe' => round($concepto['importe'], 2),
+                'importe' => $concepto['importe'],
                 'impuesto_id' => $concepto['tasa'] > 0 ? $this->impuestoPorValor($concepto['tasa']) : $this->impuestoPorValor(0),
             ]);
         }
