@@ -14,22 +14,21 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Dos controles separados, en pesos, con el signo del mayor (negativo = débito).
+ * Delta conjunto de proveedores + anticipos, en pesos, signo del mayor
+ * (negativo = débito). Delta de cada cuenta = mayor − deuda.
  *
- * Proveedores: la deuda es una sola (facturas impagas, notas de crédito sin
- * aplicar y OPA sin aplicar que no están en anticipos). Delta = mayor − deuda,
- * solo cuentas de rubro Pasivo del plan (MN, ME y no corrientes). Avisa si ese
- * delta cambia. Una factura anticipada acredita proveedores y suma la misma
- * deuda: el delta no se mueve. Un banco, un gasto u otra cuenta del proveedor
- * no entra.
+ * El aviso es la suma. Una aplicación debita una cuenta y acredita la otra por
+ * el mismo importe, y baja la OPA y la factura: el delta conjunto no se mueve.
+ * Lo mismo una factura anticipada y su recepción. El detalle por cuenta queda
+ * para ver de dónde salió el número.
  *
- * Anticipos: la cuenta cuadra con las OPA imputadas ahí, si la empresa tiene
- * `pago.anticipo_proveedor`. El sobrante de una OPP también: el debe está en el
- * asiento de la OPP y el crédito abierto en la OPA hija. Aplicar esa OPA a una
- * factura acredita anticipos y debita proveedores por el mismo importe, y baja
- * la OPA y la factura: ningún delta se mueve. La factura anticipada y su
- * recepción mueven el mayor y las facturas anticipadas juntas, y tampoco avisan.
- * Sin cuenta de anticipos configurada, la OPA sigue en proveedores.
+ * Proveedores: facturas impagas, notas de crédito sin aplicar y OPA sin aplicar
+ * que no están en anticipos. Entran las cuentas de rubro Pasivo del proveedor
+ * (MN y ME) y las del plan configurado. Un banco o un gasto no entra.
+ *
+ * Anticipos: la cuenta configurada en `pago.anticipo_proveedor`, con las OPA
+ * que debitaron esa cuenta y el neto de facturas anticipadas. Sin esa cuenta,
+ * la OPA sigue en proveedores.
  */
 final class ProveedorDeudaMayorDeltaSupport
 {
@@ -71,6 +70,13 @@ final class ProveedorDeudaMayorDeltaSupport
      *   tolerancia: float,
      *   variaciones: int,
      *   variaciones_anticipos: int,
+     *   delta_proveedores: float,
+     *   delta_anticipos: float,
+     *   delta_conjunto: float,
+     *   delta_conjunto_anterior: ?float,
+     *   variacion_conjunto: ?float,
+     *   conjunto_movio: bool,
+     *   cuentas_sin_base: int,
      *   cuentas: list<array<string, mixed>>,
      *   cuentas_total: int,
      *   anticipos: list<array<string, mixed>>
@@ -152,6 +158,7 @@ final class ProveedorDeudaMayorDeltaSupport
 
         $filasProveedor = $this->ordenarPorVariacion($filasProveedor);
         $filasAnticipo = $this->ordenarPorVariacion($filasAnticipo);
+        $conjunto = $this->deltaConjunto($filasProveedor, $filasAnticipo, $fechaAnterior !== null, $tolerancia);
 
         $this->guardar($empresaId, $fecha, $aGuardar);
 
@@ -163,9 +170,71 @@ final class ProveedorDeudaMayorDeltaSupport
             'tolerancia' => $tolerancia,
             'variaciones' => $variaciones,
             'variaciones_anticipos' => $variacionesAnticipo,
+            'delta_proveedores' => $conjunto['delta_proveedores'],
+            'delta_anticipos' => $conjunto['delta_anticipos'],
+            'delta_conjunto' => $conjunto['delta_conjunto'],
+            'delta_conjunto_anterior' => $conjunto['delta_conjunto_anterior'],
+            'variacion_conjunto' => $conjunto['variacion_conjunto'],
+            'conjunto_movio' => $conjunto['conjunto_movio'],
+            'cuentas_sin_base' => $conjunto['cuentas_sin_base'],
             'cuentas' => $filasProveedor,
             'cuentas_total' => count($filasProveedor),
             'anticipos' => $filasAnticipo,
+        ];
+    }
+
+    /**
+     * La variación del conjunto suma solo las cuentas que ya tenían base.
+     * Una cuenta que entra hoy no dispara el aviso: queda como medición inicial.
+     *
+     * @param  list<array<string, mixed>>  $filasProveedor
+     * @param  list<array<string, mixed>>  $filasAnticipo
+     * @return array{
+     *   delta_proveedores: float,
+     *   delta_anticipos: float,
+     *   delta_conjunto: float,
+     *   delta_conjunto_anterior: ?float,
+     *   variacion_conjunto: ?float,
+     *   conjunto_movio: bool,
+     *   cuentas_sin_base: int
+     * }
+     */
+    private function deltaConjunto(array $filasProveedor, array $filasAnticipo, bool $hayBase, float $tolerancia): array
+    {
+        $deltaProveedores = round(array_sum(array_map(
+            static fn (array $fila): float => (float) ($fila['delta'] ?? 0),
+            $filasProveedor
+        )), 2);
+        $deltaAnticipos = round(array_sum(array_map(
+            static fn (array $fila): float => (float) ($fila['delta'] ?? 0),
+            $filasAnticipo
+        )), 2);
+        $variacion = null;
+        $anterior = null;
+        $sinBase = 0;
+        if ($hayBase) {
+            $variacion = 0.0;
+            $anterior = 0.0;
+            foreach (array_merge($filasProveedor, $filasAnticipo) as $fila) {
+                if ($fila['variacion'] === null) {
+                    $sinBase++;
+                    continue;
+                }
+                $variacion += (float) $fila['variacion'];
+                $anterior += (float) $fila['delta_anterior'];
+            }
+            $variacion = round($variacion, 2);
+            $anterior = round($anterior, 2);
+        }
+
+        return [
+            'delta_proveedores' => $deltaProveedores,
+            'delta_anticipos' => $deltaAnticipos,
+            'delta_conjunto' => round($deltaProveedores + $deltaAnticipos, 2),
+            'delta_conjunto_anterior' => $anterior,
+            'variacion_conjunto' => $variacion,
+            'conjunto_movio' => $variacion !== null && abs($variacion) >= $tolerancia,
+            'cuentas_sin_base' => $sinBase,
         ];
     }
 
@@ -230,8 +299,8 @@ final class ProveedorDeudaMayorDeltaSupport
     }
 
     /**
-     * Cuentas del plan de proveedores (MN/ME) y de rubro Pasivo, homologadas al plan
-     * de cada empresa, más la cuenta de anticipos configurada.
+     * Cuentas de rubro Pasivo del proveedor (MN/ME) y del plan configurado,
+     * homologadas al plan de cada empresa, más la cuenta de anticipos.
      *
      * @return array<int, true>
      */
@@ -308,7 +377,8 @@ final class ProveedorDeudaMayorDeltaSupport
     }
 
     /**
-     * Cuentas de proveedores MN/ME (y no corrientes) de la config, en cada plan.
+     * Cuentas de proveedores de rubro Pasivo: las del maestro (MN y ME) y las
+     * del plan configurado cuando ese código existe en el plan de la empresa.
      *
      * @return array<int, true>
      */
@@ -319,8 +389,21 @@ final class ProveedorDeudaMayorDeltaSupport
         }
 
         $catalogo = ComprobanteProveedorImputacionApCuentasSupport::armar();
+        $cuentas = $catalogo['mn'] + $catalogo['me'];
+        Proveedor::query()
+            ->select(['id', 'cuentacontable_id', 'cuentacontableme_id'])
+            ->orderBy('id')
+            ->chunkById(200, function ($proveedores) use (&$cuentas) {
+                foreach ($proveedores as $proveedor) {
+                    foreach ([(int) $proveedor->cuentacontable_id, (int) $proveedor->cuentacontableme_id] as $id) {
+                        if ($id > 0) {
+                            $cuentas[$id] = true;
+                        }
+                    }
+                }
+            });
 
-        return $this->cuentasProveedorValidas = $catalogo['mn'] + $catalogo['me'];
+        return $this->cuentasProveedorValidas = $this->soloRubroPasivo($cuentas);
     }
 
     /**

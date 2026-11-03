@@ -2,7 +2,6 @@
     $alerta = ! empty($informe['requiere_alerta']);
     $alertaFicha = ! empty($informe['alerta_ficha']);
     $alertaDelta = ! empty($informe['alerta_delta']);
-    $alertaAnticipos = ! empty($informe['alerta_anticipos']);
     $delta = $informe['delta_mayor'] ?? [];
     $cuentasDelta = $delta['cuentas'] ?? [];
     $cuentasAnticipo = $delta['anticipos'] ?? [];
@@ -29,33 +28,27 @@
     <div style="font-size:20px; font-weight:700; margin:0 0 4px 0;">{{ $empresa }}</div>
     <div style="font-size:15px; margin:0;">
         @if ($alertaFicha && $alertaDelta)
-            ALERTA — la ficha no cuadra y el delta de proveedores se movió al {{ $fecha }}
-        @elseif ($alertaFicha && $alertaAnticipos)
-            ALERTA — la ficha no cuadra y el delta de anticipos se movió al {{ $fecha }}
-        @elseif ($alertaDelta && $alertaAnticipos)
-            ALERTA — se movió el delta de proveedores y el de anticipos al {{ $fecha }}
+            ALERTA — la ficha no cuadra y el delta conjunto se movió al {{ $fecha }}
         @elseif ($alertaDelta)
-            ALERTA — el delta de proveedores se movió al {{ $fecha }}
-        @elseif ($alertaAnticipos)
-            ALERTA — el delta de anticipos se movió al {{ $fecha }}
+            ALERTA — el delta de proveedores + anticipos se movió al {{ $fecha }}
         @elseif ($alertaFicha)
             ALERTA — hay diferencias deuda vs ficha al {{ $fecha }}
         @else
             @if (! empty($delta['hay_base_anterior']))
-                OK — ficha cuadrada y delta de proveedores estable al {{ $fecha }}
+                OK — ficha cuadrada y delta conjunto estable al {{ $fecha }}
             @else
-                OK — ficha cuadrada. El delta de proveedores queda como base al {{ $fecha }}
+                OK — ficha cuadrada. El delta conjunto queda como base al {{ $fecha }}
             @endif
         @endif
     </div>
 </div>
 
 <p style="margin:0 0 12px 0;">
-    Control <strong>deuda vs ficha</strong>, delta de <strong>proveedores</strong> y, aparte, <strong>anticipos</strong>
+    Control <strong>deuda vs ficha</strong> y delta conjunto de <strong>proveedores + anticipos</strong>
     · Corte <strong>{{ $fecha }}</strong>
     · Expresión <strong>{{ $expresion }}</strong>
     · La deuda es la verdad: facturas impagas, notas de crédito sin aplicar y OPA sin aplicar.
-    La cuenta de anticipos cuadra con las OPA. Aplicar una OPA a una factura acredita anticipos y debita proveedores por el mismo importe: no mueve ninguno de los dos deltas.
+    Aplicar una OPA a una factura debita una cuenta y acredita la otra por el mismo importe: el delta conjunto no se mueve.
 </p>
 
 <h3 style="margin:16px 0 6px 0;">Resumen</h3>
@@ -88,6 +81,73 @@
         </tr>
     @endif
 </table>
+
+<h3 style="margin:18px 0 6px 0;">Delta conjunto</h3>
+<p style="margin:0 0 8px 0; color:#555; font-size:13px;">
+    Suma del delta de proveedores y el de anticipos. Es el número que se controla.
+    Una aplicación, una factura anticipada o su recepción pueden mover una cuenta y compensarla en la otra.
+    @if (! empty($delta['hay_base_anterior']))
+        Avisa si la variación pasa de {{ $fmt($delta['tolerancia'] ?? 1) }} respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+    @else
+        Primera medición: el conjunto queda como base.
+    @endif
+</p>
+<table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; font-size:13px;">
+    <tr style="background:#85C1E9; color:#17202A;">
+        <th align="left">Control</th>
+        <th align="right">Valor</th>
+    </tr>
+    <tr>
+        <td>Delta proveedores</td>
+        <td align="right">{{ $fmt($delta['delta_proveedores'] ?? 0) }}</td>
+    </tr>
+    <tr>
+        <td>Delta anticipos</td>
+        <td align="right">{{ $fmt($delta['delta_anticipos'] ?? 0) }}</td>
+    </tr>
+    <tr>
+        <td>Delta conjunto</td>
+        <td align="right"><strong>{{ $fmt($delta['delta_conjunto'] ?? 0) }}</strong></td>
+    </tr>
+    <tr>
+        <td>Conjunto anterior</td>
+        <td align="right">
+            @if (($delta['delta_conjunto_anterior'] ?? null) === null)
+                —
+            @else
+                {{ $fmt($delta['delta_conjunto_anterior']) }}
+            @endif
+        </td>
+    </tr>
+    <tr
+        @if ($alertaDelta)
+            style="background:#fadbd8;"
+        @endif
+    >
+        <td>Variación del conjunto</td>
+        <td align="right">
+            @if (($delta['variacion_conjunto'] ?? null) === null)
+                —
+            @else
+                <strong>{{ $fmt($delta['variacion_conjunto']) }}</strong>
+            @endif
+        </td>
+    </tr>
+</table>
+@if ($alertaDelta)
+    <p style="margin:8px 0 0 0; color:#7b241c; font-size:13px;">
+        El delta conjunto cambió. Abajo está el detalle por cuenta.
+    </p>
+@elseif (! empty($delta['hay_base_anterior']))
+    <p style="margin:8px 0 0 0; color:#145a32; font-size:13px;">
+        El delta conjunto no se movió respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+    </p>
+@endif
+@if ((int) ($delta['cuentas_sin_base'] ?? 0) > 0)
+    <p style="margin:8px 0 0 0; color:#555; font-size:13px;">
+        {{ (int) $delta['cuentas_sin_base'] }} cuenta(s) entran hoy como base y no forman parte de la variación.
+    </p>
+@endif
 
 @if ($alertaFicha)
     <h3 style="margin:18px 0 6px 0;">Diferencias proveedor por proveedor</h3>
@@ -150,14 +210,8 @@
 <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
     En pesos, con el mismo signo del mayor (negativo = débito). Delta = mayor − deuda.
     La deuda es una sola: facturas impagas, notas de crédito sin aplicar y OPA sin aplicar que no están en anticipos.
-    Solo cuentas de proveedores de rubro Pasivo y del plan de proveedores (MN, ME y no corrientes).
-    Anticipos no entra en esta tabla.
-    @if (! empty($delta['hay_base_anterior']))
-        Se compara contra el {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
-        Avisa si la variación pasa de {{ $fmt($delta['tolerancia'] ?? 1) }}.
-    @else
-        Primera medición: estos números quedan como base. La próxima corrida avisa si alguno se mueve.
-    @endif
+    Entran las cuentas de rubro Pasivo del proveedor. Anticipos no entra en esta tabla.
+    El aviso no sale de una fila: sale de la suma con anticipos.
 </p>
 @if ($cuentasDelta === [])
     <p style="margin:0;">No hay saldo de deuda ni de mayor en cuentas de proveedores.</p>
@@ -192,13 +246,9 @@
             </tr>
         @endforeach
     </table>
-    @if ($alertaDelta)
-        <p style="margin:8px 0 0 0; color:#7b241c; font-size:13px;">
-            {{ (int) ($delta['variaciones'] ?? 0) }} cuenta(s) cambiaron el delta. Conviene revisar el movimiento del día.
-        </p>
-    @elseif (! empty($delta['hay_base_anterior']))
-        <p style="margin:8px 0 0 0; color:#145a32; font-size:13px;">
-            El delta de proveedores no se movió respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+    @if ((int) ($delta['variaciones'] ?? 0) > 0)
+        <p style="margin:8px 0 0 0; color:#555; font-size:13px;">
+            {{ (int) ($delta['variaciones'] ?? 0) }} cuenta(s) de proveedores cambiaron su delta. El control es la suma con anticipos.
         </p>
     @endif
 @endif
@@ -206,13 +256,7 @@
 <h3 style="margin:22px 0 6px 0;">Anticipos a proveedores</h3>
 <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
     La cuenta cuadra con las OPA imputadas ahí. El sobrante de una OPP también: el debe está en el asiento de la OPP y la OPA abierta es el crédito.
-    Aplicar esa OPA a una factura acredita anticipos y debita proveedores por el mismo importe, y baja la OPA y la factura. El delta no se mueve.
-    Una factura anticipada suma el neto en el mayor y en Facturas anticipadas; el cierre por recepción lo resta de los dos. El delta tampoco se mueve.
-    @if (! empty($delta['hay_base_anterior']))
-        Avisa solo si el delta se mueve más de {{ $fmt($delta['tolerancia'] ?? 1) }} respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
-    @else
-        Primera medición: el delta queda como base.
-    @endif
+    Aplicar esa OPA acredita esta cuenta y debita proveedores. El delta de esta fila puede cambiar; el conjunto no, si la otra cuenta se mueve por el mismo importe.
 </p>
 @if ($cuentasAnticipo === [])
     <p style="margin:0;">No hay saldo en la cuenta de anticipos.</p>
@@ -251,13 +295,9 @@
             </tr>
         @endforeach
     </table>
-    @if ($alertaAnticipos)
-        <p style="margin:8px 0 0 0; color:#7b241c; font-size:13px;">
-            El delta de anticipos cambió. Una factura anticipada, su recepción o la aplicación de una OPA no producen este aviso.
-        </p>
-    @elseif (! empty($delta['hay_base_anterior']))
-        <p style="margin:8px 0 0 0; color:#145a32; font-size:13px;">
-            El delta de anticipos no se movió respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+    @if ((int) ($delta['variaciones_anticipos'] ?? 0) > 0 && ! $alertaDelta)
+        <p style="margin:8px 0 0 0; color:#555; font-size:13px;">
+            Esta cuenta se movió y la variación quedó compensada en el delta conjunto.
         </p>
     @endif
 @endif

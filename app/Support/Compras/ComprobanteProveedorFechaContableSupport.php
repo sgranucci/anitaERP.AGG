@@ -18,8 +18,8 @@ use RuntimeException;
  * comprobante, y hasta el primer día operable si la grabada cayó en un período
  * cerrado. Nunca posterior a hoy.
  * La fecha impresa puede adelantarse unos días a la de contabilización
- * (fin de semana o carga del mes siguiente). Un período cerrado la frena
- * igual que cualquier otra operación.
+ * (el 30/10 se contabiliza el 30/10 y la factura puede decir 1/11).
+ * Un período cerrado la frena igual que cualquier otra operación.
  * fechacomprobante es la fecha impresa de la factura y no define el período.
  */
 final class ComprobanteProveedorFechaContableSupport

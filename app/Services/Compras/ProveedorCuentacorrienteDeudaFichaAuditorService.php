@@ -16,9 +16,9 @@ use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 /**
- * Auditor diario: deuda vs ficha, delta de proveedores y control aparte de anticipos.
- * Cada delta se guarda por día. El mail avisa si el de proveedores se movió, o si
- * el de anticipos se movió. Una factura anticipada o la aplicación de una OPA no disparan ninguno.
+ * Auditor diario: deuda vs ficha y delta conjunto de proveedores + anticipos.
+ * Cada cuenta se guarda por día. El mail avisa si se movió la suma de los dos
+ * deltas. Una aplicación, o una factura anticipada y su recepción, no la mueven.
  * No graba ajustes de ficha. La deuda es la verdad.
  */
 final class ProveedorCuentacorrienteDeudaFichaAuditorService
@@ -83,8 +83,7 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
             $hayDiferencia = $grupos !== [];
             $resumen = $informe['resumen'] ?? [];
             $delta = $this->deltaMayor->controlar((int) $empresa->id, $fecha, $toleranciaDelta);
-            $deltaMovio = (int) ($delta['variaciones'] ?? 0) > 0;
-            $anticipoMovio = (int) ($delta['variaciones_anticipos'] ?? 0) > 0;
+            $conjuntoMovio = ! empty($delta['conjunto_movio']);
             $paquete = [
                 'fecha' => $fecha,
                 'fecha_fmt' => Carbon::parse($fecha)->format('d/m/Y'),
@@ -92,10 +91,10 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
                 'empresa_id' => (int) $empresa->id,
                 'empresa_nombre' => trim((string) $empresa->nombre),
                 'tolerancia' => $tolerancia,
-                'requiere_alerta' => $hayDiferencia || $deltaMovio || $anticipoMovio,
+                'requiere_alerta' => $hayDiferencia || $conjuntoMovio,
                 'alerta_ficha' => $hayDiferencia,
-                'alerta_delta' => $deltaMovio,
-                'alerta_anticipos' => $anticipoMovio,
+                'alerta_delta' => $conjuntoMovio,
+                'alerta_anticipos' => false,
                 'resumen' => $resumen,
                 'grupos' => array_slice($grupos, 0, $limite),
                 'grupos_total' => count($grupos),
@@ -106,7 +105,7 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
                 'mail_error' => null,
             ];
 
-            if ($hayDiferencia || $deltaMovio || $anticipoMovio) {
+            if ($hayDiferencia || $conjuntoMovio) {
                 $salida['requiere_alerta'] = true;
             }
 

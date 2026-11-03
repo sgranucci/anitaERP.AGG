@@ -29,49 +29,27 @@ class ProveedorCuentacorrienteDeudaFichaAuditorMail extends Mailable
         $fecha = (string) ($this->informe['fecha_fmt'] ?? $this->informe['fecha'] ?? '');
         $alertaFicha = ! empty($this->informe['alerta_ficha']);
         $alertaDelta = ! empty($this->informe['alerta_delta']);
-        $alertaAnticipos = ! empty($this->informe['alerta_anticipos']);
-        $variaciones = (int) ($this->informe['delta_mayor']['variaciones'] ?? 0);
-        $variacionesAnticipos = (int) ($this->informe['delta_mayor']['variaciones_anticipos'] ?? 0);
+        $variacion = $this->informe['delta_mayor']['variacion_conjunto'] ?? null;
+        $variacionTxt = $variacion === null
+            ? 'base'
+            : number_format((float) $variacion, 2, ',', '.');
         $cantidad = (int) ($this->informe['grupos_total'] ?? count($this->informe['grupos'] ?? []));
 
         // Nombre de empresa primero: en la bandeja se distinguen aunque el resto del asunto se vea igual.
         if ($alertaFicha && $alertaDelta) {
             $asunto = sprintf(
-                '%s — Deuda vs ficha y delta mayor — %s — ALERTA (ficha %d, delta %d)',
+                '%s — Deuda vs ficha y delta conjunto — %s — ALERTA (ficha %d, delta %s)',
                 $empresa,
                 $fecha,
                 $cantidad,
-                $variaciones
-            );
-        } elseif ($alertaDelta && $alertaAnticipos) {
-            $asunto = sprintf(
-                '%s — Proveedores y anticipos — %s — ALERTA (delta %d, anticipos %d)',
-                $empresa,
-                $fecha,
-                $variaciones,
-                $variacionesAnticipos
+                $variacionTxt
             );
         } elseif ($alertaDelta) {
             $asunto = sprintf(
-                '%s — Delta mayor vs deuda proveedores — %s — ALERTA (%d)',
+                '%s — Delta proveedores + anticipos — %s — ALERTA (%s)',
                 $empresa,
                 $fecha,
-                $variaciones
-            );
-        } elseif ($alertaFicha && $alertaAnticipos) {
-            $asunto = sprintf(
-                '%s — Deuda vs ficha y anticipos — %s — ALERTA (ficha %d, anticipos %d)',
-                $empresa,
-                $fecha,
-                $cantidad,
-                $variacionesAnticipos
-            );
-        } elseif ($alertaAnticipos) {
-            $asunto = sprintf(
-                '%s — Anticipos a proveedores — %s — ALERTA (%d)',
-                $empresa,
-                $fecha,
-                $variacionesAnticipos
+                $variacionTxt
             );
         } elseif ($alertaFicha) {
             $asunto = sprintf(

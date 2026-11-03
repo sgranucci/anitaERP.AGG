@@ -552,23 +552,9 @@
         return fecha.getUTCFullYear() + '-' + mes + '-' + dia;
     }
 
-    function topeFechaComprobanteIe(ancla) {
-        var tope = sumarDiasYmdIe(ancla, diasToleranciaFechaComprobanteIe());
-        var maxFuturo = String($('#ie-cp-fecha-comprobante').attr('data-max-futuro') || '').slice(0, 10);
-        if (maxFuturo && tope && tope > maxFuturo) {
-            return maxFuturo;
-        }
-        return tope;
-    }
-
     function acotarFechaComprobanteIe() {
-        var $comp = $('#ie-cp-fecha-comprobante');
-        var iva = String($('#ie-cp-fecha-iva').val() || '').slice(0, 10);
-        var ancla = iva || String($('#ie-cp-fecha-iva').attr('max') || '').slice(0, 10);
-        var tope = ancla ? topeFechaComprobanteIe(ancla) : '';
-        if (tope && String($comp.attr('max') || '') !== tope) {
-            $comp.attr('max', tope);
-        }
+        // Sin max nativo: con 30/10 y tope 04/11 Chrome no deja pasar el mes a noviembre.
+        $('#ie-cp-fecha-comprobante').removeAttr('max');
     }
 
     function copiarFechaComprobanteAIvaSiSigue() {
@@ -669,6 +655,10 @@
         var topeIva = String($('#ie-cp-fecha-iva').attr('max') || '').slice(0, 10);
         if (iva && topeIva && iva > topeIva) {
             return 'La fecha de contabilización no puede ser posterior al ' + topeIva.split('-').reverse().join('/') + '.';
+        }
+        var maxFuturo = String($('#ie-cp-fecha-comprobante').attr('data-max-futuro') || '').slice(0, 10);
+        if (comp && maxFuturo && comp > maxFuturo) {
+            return 'La fecha del comprobante no puede ser posterior al ' + maxFuturo.split('-').reverse().join('/') + '. Revisá el año o el mes.';
         }
         var diasTol = diasToleranciaFechaComprobanteIe();
         var topeComp = iva ? sumarDiasYmdIe(iva, diasTol) : '';

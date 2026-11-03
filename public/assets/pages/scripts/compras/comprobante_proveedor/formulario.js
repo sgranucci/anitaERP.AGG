@@ -2769,14 +2769,14 @@ $(function () {
         var topeIva = techoFechaContabilizacion(hoy, guardada, comp, minOp);
         var diasTol = parseInt(compEl.getAttribute('data-tolerancia-dias') || '0', 10) || 0;
         var maxFuturo = ymdFechaCarga(compEl.getAttribute('data-max-futuro'));
-        var anclaComp = iva || topeIva || hoy;
-        var topeComp = anclaComp ? topeFechaComprobanteContraIva(anclaComp, diasTol, maxFuturo) : '';
+        // La fecha impresa no lleva max nativo: con valor 30/10 y tope 04/11, Chrome
+        // no deja pasar el mes a noviembre (intentaría 30/11). La tolerancia se valida acá.
+        if (compEl.hasAttribute('max')) {
+            compEl.removeAttribute('max');
+        }
         // Reescribir max/min con el mismo valor reinicia el año en Chrome de Windows (queda 0004).
         if (topeIva && ivaEl.max !== topeIva) {
             ivaEl.max = topeIva;
-        }
-        if (topeComp && compEl.max !== topeComp) {
-            compEl.max = topeComp;
         }
         if (minOp && topeIva && minOp <= topeIva) {
             if (ivaEl.min !== minOp) {
@@ -2788,7 +2788,8 @@ $(function () {
         var ivaFutura = !!(iva && topeIva && iva > topeIva);
         var ivaCerrada = !!(iva && minOp && topeIva && minOp <= topeIva && iva < minOp);
         var topeCompContraIva = iva ? topeFechaComprobanteContraIva(iva, diasTol, '') : '';
-        var compPosterior = !!(comp && topeCompContraIva && comp > topeCompContraIva);
+        var compMuyFutura = !!(comp && maxFuturo && comp > maxFuturo);
+        var compPosterior = !compMuyFutura && !!(comp && topeCompContraIva && comp > topeCompContraIva);
         function ymdADia(ymd) {
             var p = String(ymd || '').split('-');
             return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : ymd;
@@ -2800,10 +2801,15 @@ $(function () {
             avisoIva = 'La fecha de contabilización no puede ser anterior al ' + ymdADia(minOp) + '.';
         }
         ivaEl.setCustomValidity(avisoIva);
-        var avisoComp = compPosterior ? mensajeFechaComprobantePosterior(diasTol) : '';
+        var avisoComp = '';
+        if (compMuyFutura) {
+            avisoComp = 'La fecha del comprobante no puede ser posterior al ' + ymdADia(maxFuturo) + '. Revisá el año o el mes.';
+        } else if (compPosterior) {
+            avisoComp = mensajeFechaComprobantePosterior(diasTol);
+        }
         compEl.setCustomValidity(avisoComp);
         $(ivaEl).toggleClass('is-invalid', !!(avisoIva));
-        $(compEl).toggleClass('is-invalid', compPosterior);
+        $(compEl).toggleClass('is-invalid', !!(avisoComp));
         if (avisoIva) {
             return avisoIva;
         }

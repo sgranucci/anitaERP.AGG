@@ -362,27 +362,13 @@
                     $fechaIvaValor = old('fechaiva', $fechaIvaModelo ?: $fechaIvaTope);
                     $fechaHoyCarga = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaCargaHoy();
                     $fechaCompToleranciaDias = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::diasToleranciaComprobantePosteriorAContabilizacion();
-                    $fechaCompMax = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::maxInputFechaComprobante(
-                        $fechaIvaValor ?: $fechaIvaTope
-                    );
                     $fechaCompMaxFuturo = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaComprobanteMaximaYmd();
-                    $fechaIvaTopeTxt = \Carbon\Carbon::parse($fechaIvaTope)->format('d/m/Y');
-                    $fechaIvaCierreTxt = $fechaIvaMin
-                        ? \Carbon\Carbon::parse($fechaIvaMin)->subDay()->format('d/m/Y')
-                        : '';
                 @endphp
                 <input type="date" name="fechacomprobante" id="fechacomprobante" class="form-control"
                     min="{{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::anioMinimoComprobante() }}-01-01"
-                    max="{{ $fechaCompMax }}"
                     data-tolerancia-dias="{{ $fechaCompToleranciaDias }}"
                     data-max-futuro="{{ $fechaCompMaxFuturo }}"
                     value="{{ $fechaCompValor }}" required>
-                <small class="form-text text-muted">
-                    Fecha impresa de la factura. El a&ntilde;o no puede ser anterior a
-                    {{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::anioMinimoComprobante() }}.
-                    Puede adelantarse hasta {{ $fechaCompToleranciaDias }} d&iacute;as a la fecha de contabilizaci&oacute;n
-                    (Configuraci&oacute;n general, grupo Compras).
-                </small>
             </div>
         </div>
         <div class="form-group row">
@@ -395,13 +381,6 @@
                     data-fecha-guardada="{{ $fechaIvaGuardada }}"
                     data-min-operable="{{ $fechaIvaMinOperable }}"
                     value="{{ $fechaIvaValor }}">
-                <small class="form-text text-muted">
-                    Entra al asiento, al per&iacute;odo y al libro IVA compras.
-                    Se puede correr hacia atr&aacute;s. Si qued&oacute; antes que la fecha del comprobante, o en un per&iacute;odo cerrado, se puede adelantar hasta el {{ $fechaIvaTopeTxt }}.
-                    @if ($fechaIvaCierreTxt !== '')
-                        Cuentas a pagar est&aacute; cerrado hasta el {{ $fechaIvaCierreTxt }}.
-                    @endif
-                </small>
             </div>
         </div>
         <div class="form-group row">

@@ -164,10 +164,8 @@
                             <div class="form-group col-md-3 mb-2">
                                 <label class="ie-cp-label" for="ie-cp-fecha-comprobante">Fecha comprobante</label>
                                 <input type="date" class="form-control form-control-sm ie-cp-fecha" id="ie-cp-fecha-comprobante"
-                                    max="{{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::maxInputFechaComprobante(now()->format('Y-m-d')) }}"
                                     data-tolerancia-dias="{{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::diasToleranciaComprobantePosteriorAContabilizacion() }}"
-                                    data-max-futuro="{{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaComprobanteMaximaYmd() }}"
-                                    title="Puede adelantarse hasta {{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::diasToleranciaComprobantePosteriorAContabilizacion() }} d&iacute;as a la fecha de contabilizaci&oacute;n">
+                                    data-max-futuro="{{ \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaComprobanteMaximaYmd() }}">
                             </div>
                             <div class="form-group col-md-3 mb-2">
                                 <label class="ie-cp-label" for="ie-cp-fecha-iva">Fecha IVA</label>

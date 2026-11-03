@@ -12,7 +12,7 @@ class AuditarDeudaFichaProveedorCommand extends Command
                             {--empresa= : Solo esta empresa_id}
                             {--sin-mail : No envía correo}';
 
-    protected $description = 'Auditor deuda vs ficha, delta de proveedores y control aparte de anticipos';
+    protected $description = 'Auditor deuda vs ficha y delta conjunto de proveedores + anticipos';
 
     public function handle(ProveedorCuentacorrienteDeudaFichaAuditorService $service): int
     {
@@ -41,7 +41,7 @@ class AuditarDeudaFichaProveedorCommand extends Command
         }
 
         $this->line(sprintf(
-            'Auditor deuda vs ficha, proveedores y anticipos · corte %s · expresión %s · empresas %s%s',
+            'Auditor deuda vs ficha y delta conjunto · corte %s · expresión %s · empresas %s%s',
             $fecha !== '' ? $fecha : 'hoy',
             (string) config('compras.deuda_ficha_auditor.expresion', 'origen'),
             $permitidas === [] ? '(ninguna)' : implode(',', $permitidas),
@@ -63,27 +63,24 @@ class AuditarDeudaFichaProveedorCommand extends Command
         $filas = [];
         foreach ($informe['empresas'] as $empresa) {
             $delta = $empresa['delta_mayor'] ?? [];
-            $variaciones = (int) ($delta['variaciones'] ?? 0);
-            $variacionesAnticipos = (int) ($delta['variaciones_anticipos'] ?? 0);
-            $estadoDelta = $variaciones > 0
-                ? (string) $variaciones
-                : (! empty($delta['hay_base_anterior']) ? 'estable' : 'base');
-            $estadoAnticipos = $variacionesAnticipos > 0
-                ? (string) $variacionesAnticipos
-                : (($delta['anticipos'] ?? []) === [] ? '—' : (! empty($delta['hay_base_anterior']) ? 'estable' : 'base'));
+            $variacion = $delta['variacion_conjunto'] ?? null;
+            $estadoDelta = $variacion === null
+                ? 'base'
+                : (abs((float) $variacion) >= (float) ($delta['tolerancia'] ?? 1)
+                    ? number_format((float) $variacion, 2, ',', '.')
+                    : 'estable');
             $filas[] = [
                 $empresa['empresa_id'],
                 $empresa['empresa_nombre'],
                 ! empty($empresa['requiere_alerta']) ? 'ALERTA' : 'OK',
                 (string) ($empresa['grupos_total'] ?? 0),
                 $estadoDelta,
-                $estadoAnticipos,
                 ! empty($empresa['mail_enviado'])
                     ? ('sí → '.$empresa['mail_destino'])
                     : (! empty($empresa['mail_error']) ? 'error: '.$empresa['mail_error'] : 'no'),
             ];
         }
-        $this->table(['Empresa', 'Nombre', 'Estado', 'Dif. ficha', 'Delta prov.', 'Anticipos', 'Mail'], $filas);
+        $this->table(['Empresa', 'Nombre', 'Estado', 'Dif. ficha', 'Delta conjunto', 'Mail'], $filas);
 
         $this->info(sprintf(
             'Mails enviados: %d · omitidos: %d',

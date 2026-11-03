@@ -126,7 +126,7 @@ final class ParametroSistemaSupport
             self::CLAVE_COMPROBANTE_FECHA_TOLERANCIA_DIAS => [
                 'grupo' => 'Compras',
                 'etiqueta' => 'Días de tolerancia de la fecha de factura',
-                'ayuda' => 'La fecha impresa puede adelantarse estos días a la de contabilización. Permite cargar el viernes una factura fechada el domingo o el lunes siguiente. 0 no admite adelanto. La contabilización sigue sin poder pasar de hoy.',
+                'ayuda' => 'La fecha impresa puede adelantarse estos días a la de contabilización. Permite cargar el 30/10 una factura con fecha 1/11, contabilizándola el 30/10. 0 no admite adelanto. La contabilización sigue sin poder pasar de hoy.',
                 'tipo' => 'entero',
                 'orden' => 57,
             ],
