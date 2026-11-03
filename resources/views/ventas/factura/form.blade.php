@@ -811,6 +811,10 @@
 									'otGrupoIndiceLinea' => $valorOldIndice('ot_grupo_indices', $idxItem, ''),
 									'pickingPedidoCombinacionIdLinea' => $valorOldIndice('picking_pedido_combinacion_ids', $idxItem, ''),
 									'pickingGrupoIndiceLinea' => $valorOldIndice('picking_grupo_indices', $idxItem, ''),
+									'combinacionIdLinea' => $valorOldIndice('combinacion_ids', $idxItem, $item->combinacion_id ?? ''),
+									'talleIdLinea' => $valorOldIndice('talle_ids', $idxItem, $item->talle_id ?? ''),
+									'moduloIdLinea' => $valorOldIndice('modulo_ids', $idxItem, $item->modulo_id ?? ''),
+									'loteStockLinea' => $valorOldIndice('lotes_stock', $idxItem, ''),
 								])
 								@if ($layoutItemsPedido)
 									<input type="hidden" name="cantidades[]" class="form-control cantidad" value="{{ number_format((float) $kiloItem, 2, '.', '') }}" />
@@ -925,6 +929,7 @@
 								</button>
 								@include('ventas.factura.partials.boton_ot_pedido')
 								@include('ventas.factura.partials.boton_picking_pedido')
+								@include('ventas.factura.partials.boton_nc_sin_factura')
 								@if (empty($flGeneraNotaDeDebito))
 								<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
                             		<i class="fa fa-times-circle text-danger"></i>
@@ -964,6 +969,9 @@
 				Mercader&iacute;a: lupa o F1 en el c&oacute;digo. Comentario de la l&iacute;nea: &iacute;cono de p&aacute;rrafo (como en OC). Sin art&iacute;culo: en cada rengl&oacute;n con precio eleg&iacute; la al&iacute;cuota (Exento, 10,5% o 21%). El &iacute;cono de documento, o F1 en el detalle, carga un concepto.
 				@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli() && empty($flGeneraNotaDeCredito) && empty($flGeneraNotaDeDebito) && empty($modoNc))
 					OT de un pedido: &iacute;cono #. Picking pendiente: &iacute;cono de lista.
+				@endif
+				@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli() && ! empty($modoNc))
+					NC sin factura: &iacute;cono de cubos para combinaci&oacute;n y talles (sube stock).
 				@endif
 				@if ($layoutItemsPedido && can('entregar-articulo-sin-cargo-pedido-venta', false) && empty($flGeneraNotaDeCredito))
 					Regalo: &iacute;cono de regalo (art&iacute;culo sin cargo, mismo tope que pedidos).
@@ -1158,6 +1166,10 @@ window.ncPercepcionesOrigen = @json($ncPercepcionesOrigen);
 </div>
 @include('ventas.factura.partials.modal_ot_pedido')
 @include('ventas.factura.partials.modal_picking_pedido')
+@include('ventas.factura.partials.modal_nc_sin_factura')
+@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
+@include('includes.stock.modalconsultacombinacion')
+@endif
 @include('ventas.factura.modal')
 @include('ventas.factura.templatetotalfactura')
 @include('includes.stock.modalconsultaarticulo')

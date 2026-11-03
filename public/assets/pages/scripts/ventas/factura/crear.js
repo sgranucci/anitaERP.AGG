@@ -443,6 +443,14 @@
 			return;
 		}
 
+		if (typeof window.ncSinFacturaValidarSubmit === 'function'
+			&& window.ncSinFacturaValidarSubmit() === false) {
+			if (window.FacturaProcesoOverlay) {
+				window.FacturaProcesoOverlay.detener();
+			}
+			return;
+		}
+
 		// El padrón ARCA se valida solo en validarSubmitFacturaConOverlay / onsubmit.
 		// Revalidarlo acá reentraba con trigger('submit') y tras un error ARCA
 		// el Grabar quedaba sin respuesta (overlay/huérfano o bucle de submit).
@@ -606,6 +614,11 @@
 
 		if (typeof window.ncDevolucionValidarSubmit === 'function'
 			&& window.ncDevolucionValidarSubmit() === false) {
+			return;
+		}
+
+		if (typeof window.ncSinFacturaValidarSubmit === 'function'
+			&& window.ncSinFacturaValidarSubmit() === false) {
 			return;
 		}
 
@@ -2909,6 +2922,7 @@
 		var op = (metaTipoFacturaMostrador().attr('data-operacion') || '').toString().toUpperCase();
 		return op === 'C';
 	}
+	window.facturaTipoEsNotaCreditoMostrador = facturaTipoEsNotaCreditoMostrador;
 
 	function facturaTipoCodigoAfipMostrador() {
 		var raw = (metaTipoFacturaMostrador().attr('data-codigo') || '').toString();

@@ -64,6 +64,7 @@ use App\Support\Contable\NotaCreditoIvaCuentaSupport;
 use App\Support\Ventas\Ferli\FacturaDespachoFerliSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorOtFerliSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorPickingFerliSupport;
+use App\Support\Ventas\Ferli\NotaCreditoSinFacturaStockFerliSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
 use setasign\Fpdi\Fpdi;
@@ -2798,6 +2799,14 @@ class FacturacionService
 		if (! is_array($talleIdsInput)) {
 			$talleIdsInput = [];
 		}
+		$moduloIdsInput = $data['modulo_ids'] ?? [];
+		if (! is_array($moduloIdsInput)) {
+			$moduloIdsInput = [];
+		}
+		$lotesStockInput = $data['lotes_stock'] ?? [];
+		if (! is_array($lotesStockInput)) {
+			$lotesStockInput = [];
+		}
 		$colorIdsInput = $data['color_ids'] ?? [];
 		if (! is_array($colorIdsInput)) {
 			$colorIdsInput = [];
@@ -3172,6 +3181,8 @@ class FacturacionService
 			$combinacionIdLinea = (int) ($combinacionIdsInput[$offItem] ?? 0);
 			$talleIdLinea = (int) ($talleIdsInput[$offItem] ?? 0);
 			$colorIdLinea = (int) ($colorIdsInput[$offItem] ?? 0);
+			$moduloIdDesdeRequest = (int) ($moduloIdsInput[$offItem] ?? 0);
+			$loteStockLinea = trim((string) ($lotesStockInput[$offItem] ?? ''));
 			$otLineaMostrador = FacturaMostradorPickingFerliSupport::lineaSiCorresponde(
 				$data,
 				$offItem,
@@ -3228,6 +3239,17 @@ class FacturacionService
 				$despachoLinea = trim((string) ($otLineaMostrador['despacho'] ?? ''));
 				$loteImpMostrador = (int) ($otLineaMostrador['loteimportacion_id'] ?? 0);
 				$loteImportacionIdLinea = $loteImpMostrador > 0 ? $loteImpMostrador : null;
+			} elseif ($moduloIdLinea === null && $moduloIdDesdeRequest > 0) {
+				$moduloIdLinea = $moduloIdDesdeRequest;
+			} elseif ($moduloIdLinea === null
+				&& EntornoEmpresaSupport::esFerli()
+				&& $combinacionIdLinea > 0
+				&& $talleIdLinea > 0
+				&& (int) ($data['venta_id'] ?? 0) <= 0
+				&& $tipotransaccionCalculo
+				&& $tipotransaccionCalculo->esNotaCredito()
+			) {
+				$moduloIdLinea = NotaCreditoSinFacturaStockFerliSupport::MODULO_ABIERTO_ID;
 			}
 
 			if (EntornoEmpresaSupport::esElBierzo() && $this->flDivide && ! $esPosMostrador && ! $esNcMostrador) {
@@ -3309,6 +3331,7 @@ class FacturacionService
 				'pedido_combinacion_id' => $pedidoCombinacionIdLinea,
 				'despacho' => $despachoLinea,
 				'loteimportacion_id' => $loteImportacionIdLinea,
+				'lote_stock' => $loteStockLinea,
 				'origen_mostrador' => is_array($otLineaMostrador) ? ($otLineaMostrador['origen_mostrador'] ?? null) : null,
 			];
 			$totCantidad += $cantidadLinea;
@@ -3324,6 +3347,9 @@ class FacturacionService
 		}
 		if ($errorOtMostrador = FacturaMostradorOtFerliSupport::errorSiFaltanGrupos()) {
 			return $errorOtMostrador;
+		}
+		if ($errorNcSinFactura = NotaCreditoSinFacturaStockFerliSupport::validarLineas($dataFactura, $data)) {
+			return $errorNcSinFactura;
 		}
 		// Arma datos del cliente
 		$provinciaDatosCliente = $this->esEmisionPos($data)
@@ -5703,6 +5729,15 @@ class FacturacionService
 					(int) $vta->id,
 					(string) $fechaFactura
 				);
+				if (empty($opcionesNc['omitir_movimiento_stock'])) {
+					NotaCreditoSinFacturaStockFerliSupport::alGrabarNcSinOrigen(
+						(int) $vta->id,
+						$dataFactura,
+						(string) $fechaFactura,
+						$depositoIdEmision,
+						(int) $venta_id
+					);
+				}
 			}
 
 			// Tiendanube: NC total sobre FAC del staging → libera cantidades para refacturar

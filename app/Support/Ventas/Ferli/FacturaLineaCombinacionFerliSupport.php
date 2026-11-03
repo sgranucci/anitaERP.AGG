@@ -44,6 +44,17 @@ final class FacturaLineaCombinacionFerliSupport
 
         $emisionesPorId = self::cargarEmisiones($requestData);
         if ($emisionesPorId === []) {
+            // NC sin factura (o canje-like): el renglón ya trae combinación/talle propios.
+            foreach ($dataFactura as $i => $item) {
+                if (! is_array($item) || empty($item['articulo_id'])) {
+                    continue;
+                }
+                if ((int) ($item['combinacion_id'] ?? 0) <= 0 && (int) ($item['talle_id'] ?? 0) <= 0) {
+                    continue;
+                }
+                $dataFactura[$i] = self::completarVariantePropia($item);
+            }
+
             return $dataFactura;
         }
 

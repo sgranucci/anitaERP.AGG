@@ -35,6 +35,7 @@
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear.js')) ?: time() }}" type="text/javascript"></script>
 @include('ventas.factura.partials.ot_pedido_scripts')
 @include('ventas.factura.partials.picking_pedido_scripts')
+@include('ventas.factura.partials.nc_sin_factura_scripts')
 <script src="{{asset("assets/pages/scripts/ventas/factura/consulta_referencia.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/consulta_referencia.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/factura/nc_devolucion.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/nc_devolucion.js')) ?: time() }}" type="text/javascript"></script>
 @if ($layoutItemsPedido)

@@ -62,6 +62,7 @@
 			</button>
 			@include('ventas.factura.partials.boton_ot_pedido')
 			@include('ventas.factura.partials.boton_picking_pedido')
+			@include('ventas.factura.partials.boton_nc_sin_factura')
 			<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
         		<i class="fa fa-times-circle text-danger"></i>
 			</button>

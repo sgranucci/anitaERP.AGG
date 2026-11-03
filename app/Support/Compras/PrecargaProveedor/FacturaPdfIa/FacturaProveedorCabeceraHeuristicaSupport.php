@@ -447,19 +447,37 @@ final class FacturaProveedorCabeceraHeuristicaSupport
 
     /**
      * Tipo de cambio escrito en la factura (también en pesos): «tc.1561.51», «T.C.: 1.561,51».
-     * El pie AFIP «tipo de cambio … por cada dólar» no trae el número pegado al rótulo y no entra.
+     * También en observaciones / leyenda, con texto de por medio y el importe en la línea
+     * siguiente: «tipo de cambio aplicado es de $1.570,00 por cada dólar».
      */
     private function parsearCotizacionExplicita(string $texto): ?float
     {
-        if (! preg_match(
-            '/(?:tipo\s+de\s+cambio|cotizaci[oó]n|(?<![A-Za-z])t\s*[\.\/]?\s*c\s*\.?)\s*[:.]?\s*(\d[\d.,]*)/iu',
-            $texto,
-            $m
-        )) {
-            return null;
+        $patrones = [
+            // Pegado al rótulo: «tc.1561.51», «T.C.: 1.561,51», «tipo de cambio: 1561,51».
+            '/(?:tipo\s+de\s+cambio|cotizaci[oó]n|(?<![A-Za-z])t\s*[\.\/]?\s*c\s*\.?)\s*[:.]?\s*(\d(?:[\d.,]*\d)?)/iu',
+            // Leyenda: «tipo de cambio aplicado es de» y el importe en esa línea o la siguiente.
+            '/(?:tipo\s+de\s+cambio|cotizaci[oó]n)\b[^\n]{0,80}?\bes\s+de\b[^\n]{0,240}\s*\$\s*(\d(?:[\d.,]*\d)?)/iu',
+            '/(?:tipo\s+de\s+cambio|cotizaci[oó]n)\b[^\n]{0,80}?\bes\s+de\b[^\n]{0,240}\s*\$?\s*(\d(?:[\d.,]*\d)?)\s*por\s+cada\s+d[oó]lar/iu',
+        ];
+
+        foreach ($patrones as $patron) {
+            if (! preg_match_all($patron, $texto, $todos, PREG_SET_ORDER)) {
+                continue;
+            }
+            foreach ($todos as $m) {
+                $parsed = $this->cotizacionExplicitaValida($m[1]);
+                if ($parsed !== null) {
+                    return $parsed;
+                }
+            }
         }
 
-        $parsed = $this->importeParser->parsear($m[1]);
+        return null;
+    }
+
+    private function cotizacionExplicitaValida(string $raw): ?float
+    {
+        $parsed = $this->importeParser->parsear($raw);
         if ($parsed === null || $parsed <= 1.0001 || $parsed > 100000) {
             return null;
         }

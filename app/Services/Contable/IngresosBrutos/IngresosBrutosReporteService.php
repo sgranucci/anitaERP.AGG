@@ -112,13 +112,21 @@ final class IngresosBrutosReporteService
         $periodo = (string) ($filtros['periodo'] ?? date('Ym'));
         $archivos = $this->armarArchivos($registros, $tipo, $esRetencion);
         if ($archivos['cantidad_nc'] > 0) {
-            $avisoNc = 'Hay '.$archivos['cantidad_nc'].' nota'
-                .($archivos['cantidad_nc'] === 1 ? '' : 's').' de crédito. AGIP las importa en un archivo aparte.'
-                .' El comprobante de origen no viene en el puente de ventas: se informó el número de la propia nota.'
-                .' Si e-ARCIBA lo rechaza, hay que completar la factura aplicada.';
-            $advertenciaDatos = $advertenciaDatos === null
-                ? $avisoNc
-                : $advertenciaDatos.' '.$avisoNc;
+            $sinOrigen = 0;
+            foreach ($registros as $reg) {
+                if (IngresosBrutosFormatoAgipSupport::esNotaCredito($reg) && (int) ($reg['origen_nro'] ?? 0) <= 0) {
+                    $sinOrigen++;
+                }
+            }
+            if ($sinOrigen > 0) {
+                $avisoNc = 'Hay '.$sinOrigen.' nota'
+                    .($sinOrigen === 1 ? '' : 's').' de crédito sin la factura aplicada.'
+                    .' En el archivo se informó el número de la propia nota.'
+                    .' Si e-ARCIBA lo rechaza, hay que completar la factura de origen.';
+                $advertenciaDatos = $advertenciaDatos === null
+                    ? $avisoNc
+                    : $advertenciaDatos.' '.$avisoNc;
+            }
         }
 
         if (IngresosBrutosListadoFiltros::esPresentacionAgip($tipo)) {

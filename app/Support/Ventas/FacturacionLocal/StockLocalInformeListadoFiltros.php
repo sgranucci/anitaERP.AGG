@@ -58,7 +58,10 @@ final class StockLocalInformeListadoFiltros
      *   desde_color: ?int,
      *   hasta_color: ?int,
      *   mventa_id: ?int,
-     *   solo_con_saldo: bool
+     *   solo_con_saldo: bool,
+     *   tipo_comprobante: string,
+     *   tipo_comprobante_nombre: string,
+     *   tipo_comprobante_invalida: bool
      * }
      */
     public static function resolverDesdeRequest(Request $request): array
@@ -91,6 +94,19 @@ final class StockLocalInformeListadoFiltros
             $estadoLocal = self::ESTADO_LOCAL_ACTIVO;
         }
 
+        $tipoCodigo = strtoupper(self::textoOpcional($request->input('tipo_comprobante')));
+        $tipoNombre = '';
+        $tipoInvalida = false;
+        if ($tipoCodigo !== '') {
+            $tipo = StockLocalErpMovimientosSupport::buscarTipoComprobante($tipoCodigo);
+            if ($tipo === null) {
+                $tipoInvalida = true;
+            } else {
+                $tipoCodigo = $tipo['abreviatura'];
+                $tipoNombre = $tipo['nombre'];
+            }
+        }
+
         $filtros = [
             'local_venta_id' => self::enteroOpcional($request->input('local_venta_id')),
             'deposito_anita' => self::enteroOpcional($request->input('deposito_anita')),
@@ -115,6 +131,9 @@ final class StockLocalInformeListadoFiltros
             'hasta_color' => self::enteroRangoOpcional($request->input('hasta_color')),
             'mventa_id' => self::enteroOpcional($request->input('mventa_id')),
             'solo_con_saldo' => $request->input('solo_con_saldo', '1') !== '0',
+            'tipo_comprobante' => $tipoCodigo,
+            'tipo_comprobante_nombre' => $tipoNombre,
+            'tipo_comprobante_invalida' => $tipoInvalida,
         ];
 
         if ($request->boolean('consultar')) {
@@ -146,6 +165,7 @@ final class StockLocalInformeListadoFiltros
             'desde_color' => $filtros['desde_color'] ?? null,
             'hasta_color' => $filtros['hasta_color'] ?? null,
             'mventa_id' => $filtros['mventa_id'] ?? null,
+            'tipo_comprobante' => ($filtros['tipo_comprobante'] ?? '') !== '' ? $filtros['tipo_comprobante'] : null,
             'solo_con_saldo' => ($filtros['solo_con_saldo'] ?? true) ? '1' : '0',
             'consultar' => 1,
         ], static fn ($v) => $v !== null && $v !== '');
@@ -171,6 +191,8 @@ final class StockLocalInformeListadoFiltros
             || isset($filtros['desde_color'])
             || isset($filtros['hasta_color'])
             || ! empty($filtros['mventa_id'])
+            || trim((string) ($filtros['tipo_comprobante'] ?? '')) !== ''
+            || ! empty($filtros['tipo_comprobante_invalida'])
             || ! ($filtros['solo_con_saldo'] ?? true);
     }
 

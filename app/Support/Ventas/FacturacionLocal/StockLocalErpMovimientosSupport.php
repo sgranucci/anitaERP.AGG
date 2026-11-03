@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class StockLocalErpMovimientosSupport
 {
+    /** @var list<array{abreviatura:string,nombre:string}>|null */
+    private static ?array $catalogoTiposComprobante = null;
+
     /**
      * Depósitos de locales (no fábrica). Vacío en la consulta = solo estos códigos.
      *
@@ -325,6 +328,65 @@ final class StockLocalErpMovimientosSupport
     }
 
     /**
+     * Tipos que se pueden filtrar en el informe: los de stock y los de venta
+     * que ya generaron un movimiento. Una abreviatura, un renglón.
+     *
+     * @return list<array{abreviatura:string,nombre:string}>
+     */
+    public static function catalogoTiposComprobante(): array
+    {
+        if (self::$catalogoTiposComprobante !== null) {
+            return self::$catalogoTiposComprobante;
+        }
+
+        /** @var array<string, array{abreviatura:string,nombre:string}> $map */
+        $map = [];
+
+        $stock = DB::table('tipotransaccion_stock')
+            ->whereNull('deleted_at')
+            ->where('abreviatura', '!=', '')
+            ->orderBy('abreviatura')
+            ->get(['abreviatura', 'nombre']);
+        foreach ($stock as $row) {
+            self::sumarTipoCatalogo($map, (string) $row->abreviatura, (string) $row->nombre);
+        }
+
+        $ventas = DB::table('articulo_movimiento as am')
+            ->join('tipotransaccion as tt', 'tt.id', '=', 'am.tipotransaccion_id')
+            ->whereNull('tt.deleted_at')
+            ->where('tt.abreviatura', '!=', '')
+            ->groupBy('tt.abreviatura', 'tt.nombre')
+            ->orderBy('tt.abreviatura')
+            ->get(['tt.abreviatura', 'tt.nombre']);
+        foreach ($ventas as $row) {
+            self::sumarTipoCatalogo($map, (string) $row->abreviatura, (string) $row->nombre);
+        }
+
+        ksort($map, SORT_STRING);
+        self::$catalogoTiposComprobante = array_values($map);
+
+        return self::$catalogoTiposComprobante;
+    }
+
+    /**
+     * @return array{abreviatura:string,nombre:string}|null
+     */
+    public static function buscarTipoComprobante(string $codigo): ?array
+    {
+        $codigo = strtoupper(trim($codigo));
+        if ($codigo === '') {
+            return null;
+        }
+        foreach (self::catalogoTiposComprobante() as $fila) {
+            if ($fila['abreviatura'] === $codigo) {
+                return $fila;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Tipo de comprobante (misma lógica que kardex / RecuentoMovimientosArticuloSupport).
      */
     public static function tipoComprobanteDesdeFila(object $row): string
@@ -353,5 +415,20 @@ final class StockLocalErpMovimientosSupport
         $concepto = trim((string) ($row->concepto ?? ''));
 
         return $concepto !== '' ? $concepto : '—';
+    }
+
+    /**
+     * @param  array<string, array{abreviatura:string,nombre:string}>  $map
+     */
+    private static function sumarTipoCatalogo(array &$map, string $abreviatura, string $nombre): void
+    {
+        $codigo = strtoupper(trim($abreviatura));
+        if ($codigo === '' || isset($map[$codigo])) {
+            return;
+        }
+        $map[$codigo] = [
+            'abreviatura' => $codigo,
+            'nombre' => trim($nombre),
+        ];
     }
 }

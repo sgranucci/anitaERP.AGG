@@ -125,7 +125,25 @@ final class IngresosBrutosFormatoAgipSupport
     {
         $sucursal = (int) ($reg['sucursal'] ?? 0);
         $nro = (int) ($reg['nro_comp'] ?? $reg['nro_cert'] ?? 0);
-        $fecha = self::fecha((string) ($reg['fecha_retencion'] ?? $reg['fecha_comp'] ?? ''));
+        $fechaNcIso = substr((string) ($reg['fecha_retencion'] ?? $reg['fecha_comp'] ?? ''), 0, 10);
+        $fechaOrigenIso = substr((string) ($reg['origen_fecha'] ?? ''), 0, 10);
+        $sucursalOrigen = (int) ($reg['origen_sucursal'] ?? 0);
+        $nroOrigen = (int) ($reg['origen_nro'] ?? 0);
+        if ($sucursalOrigen <= 0) {
+            $sucursalOrigen = $sucursal;
+        }
+        if ($nroOrigen <= 0) {
+            $nroOrigen = $nro;
+        }
+        if ($fechaOrigenIso === '') {
+            $fechaOrigenIso = $fechaNcIso;
+        }
+        // e-ARCIBA rechaza la nota si su fecha es anterior a la factura percibida.
+        if ($fechaNcIso !== '' && $fechaOrigenIso !== '' && $fechaNcIso < $fechaOrigenIso) {
+            $fechaNcIso = $fechaOrigenIso;
+        }
+        $fecha = self::fecha($fechaNcIso);
+        $fechaOrigen = self::fecha($fechaOrigenIso);
         $base = abs((float) ($reg['base_calculo'] ?? 0));
         $practicada = abs((float) ($reg['importe'] ?? 0));
         $letra = $esRetencion ? ' ' : self::letra((string) ($reg['letra'] ?? ' '));
@@ -138,10 +156,10 @@ final class IngresosBrutosFormatoAgipSupport
             .str_repeat('0', 16)
             .$tipoOrigen
             .$letra
-            .sprintf('%04d%04d%08d', 0, $sucursal, $nro)
+            .sprintf('%04d%04d%08d', 0, $sucursalOrigen, $nroOrigen)
             .IngresosBrutosFormatoArbaSupport::normalizarCuit((string) ($reg['nro_documento'] ?? ''))
             .self::CODIGO_NORMA
-            .$fecha
+            .$fechaOrigen
             .self::monto16($practicada)
             .self::alicuota5((float) ($reg['alicuota'] ?? 0));
 

@@ -9,8 +9,10 @@ use App\Models\Contable\Iibb_Presentacion_Config;
 use App\Models\Configuracion\Provincia;
 use App\Models\Ventas\Venta;
 use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
+use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoAgipSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreVentaImpuestoSupport;
 
@@ -35,7 +37,11 @@ final class IngresosBrutosPercepcionesDatosService
         // Preferir Anita si hay datos; ERP complementa cuando no hay venibr (ventas solo ERP).
         // Las percepciones de gastos bancarios (ICO/IDO) no van en esta liquidación:
         // no están en la cuenta de percepciones a terceros del agente.
-        return $anita !== [] ? $anita : $erp;
+        $filas = $anita !== [] ? $anita : $erp;
+
+        // IVA ventas muestra el CUIT de la factura. El archivo de AGIP tiene que
+        // usar ese mismo, y la nota de crédito tiene que apuntar a la factura percibida.
+        return $this->completarDesdeVentaErp($filas);
     }
 
     /**
@@ -228,8 +234,9 @@ final class IngresosBrutosPercepcionesDatosService
                     'base_calculo' => round(abs((float) ($venta->total ?? 0)) * $coef, 2),
                     'importe' => $importe,
                     'alicuota' => $alicuota,
-                    'nro_documento' => IngresosBrutosFormatoArbaSupport::normalizarCuit(
-                        (string) ($cliente?->numerodocumento ?? $venta->nroinscripcion ?? '')
+                    'nro_documento' => $this->cuitInformado(
+                        (string) ($cliente?->numerodocumento ?? ''),
+                        (string) ($venta->nroinscripcion ?? ''),
                     ),
                     'codigo_proveedor' => (string) ($cliente?->codigo ?? ''),
                     'razon_social' => substr(trim((string) ($cliente?->nombre ?? $venta->nombre ?? '')), 0, 30),
@@ -263,8 +270,9 @@ final class IngresosBrutosPercepcionesDatosService
     }
 
     /**
-     * El maestro (climae) manda. Si la factura no tiene cliente en el ABM,
-     * el CUIT queda en la cabecera (ven_cuit_cli).
+     * El maestro (climae) manda cuando tiene un CUIT real.
+     * El cáscara RECEPTOR EVENTUAL guarda la palabra EVENTUAL: no es CUIT.
+     * En ese caso manda el documento de la factura (ven_cuit_cli o nroinscripcion).
      */
     private function cuitInformado(string $maestro, string $comprobante): string
     {
@@ -283,6 +291,248 @@ final class IngresosBrutosPercepcionesDatosService
         $digits = preg_replace('/\D/', '', $cuit) ?? '';
 
         return strlen($digits) === 11 && $digits !== '00000000000';
+    }
+
+    /**
+     * El CUIT que muestra IVA ventas está en la venta, no en el cliente cáscara.
+     * La nota de crédito de AGIP tiene que citar la factura que percibió.
+     *
+     * @param  list<array<string, mixed>>  $registros
+     * @return list<array<string, mixed>>
+     */
+    private function completarDesdeVentaErp(array $registros): array
+    {
+        if ($registros === []) {
+            return $registros;
+        }
+
+        $nros = [];
+        $fechas = [];
+        foreach ($registros as $reg) {
+            $nro = (int) ($reg['nro_comp'] ?? 0);
+            if ($nro > 0) {
+                $nros[$nro] = $nro;
+            }
+            $fecha = substr((string) ($reg['fecha_comp'] ?? ''), 0, 10);
+            if ($fecha !== '') {
+                $fechas[] = $fecha;
+            }
+        }
+        if ($nros === [] || $fechas === []) {
+            return $registros;
+        }
+
+        $ventas = Venta::query()
+            ->select([
+                'venta.id',
+                'venta.nombre',
+                'venta.total',
+                'venta.nroinscripcion',
+                'venta.numerocomprobante',
+                'venta.fecha',
+                'venta.codigo',
+                'venta.puntoventa_id',
+                'venta.venta_origen_id',
+                'puntoventa.codigo as pv_codigo',
+            ])
+            ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
+            ->whereBetween('venta.fecha', [min($fechas), max($fechas)])
+            ->whereIn('venta.numerocomprobante', array_values($nros))
+            ->get();
+
+        $indice = [];
+        foreach ($ventas as $venta) {
+            $indice[$this->claveVenta($venta)] = $venta;
+        }
+
+        foreach ($registros as $i => $reg) {
+            $clave = $this->claveRegistro($reg);
+            $venta = $indice[$clave] ?? null;
+            if (! $venta instanceof Venta) {
+                continue;
+            }
+
+            $cuit = IngresosBrutosFormatoArbaSupport::normalizarCuit((string) ($venta->nroinscripcion ?? ''));
+            if ($this->cuitUtil($cuit)) {
+                $registros[$i]['nro_documento'] = $cuit;
+            }
+
+            if (! IngresosBrutosFormatoAgipSupport::esNotaCredito($reg)) {
+                continue;
+            }
+
+            $origen = $this->facturaOrigen($venta);
+            if ($origen === null) {
+                continue;
+            }
+
+            $registros[$i]['origen_sucursal'] = (int) preg_replace('/\D/', '', (string) ($origen->pv_codigo ?? ''));
+            $registros[$i]['origen_nro'] = (int) $origen->numerocomprobante;
+            $registros[$i]['origen_fecha'] = substr((string) $origen->fecha, 0, 10);
+        }
+
+        return $registros;
+    }
+
+    private function claveVenta(Venta $venta): string
+    {
+        $sucursal = (int) preg_replace('/\D/', '', (string) ($venta->pv_codigo ?? ''));
+        $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) ($venta->codigo ?? ''));
+        $tipo = $this->tipoDocumentoDesdeCodigoVenta((string) ($venta->codigo ?? ''));
+
+        return $tipo.'|'.$letra.'|'.$sucursal.'|'.(int) $venta->numerocomprobante.'|'.substr((string) $venta->fecha, 0, 10);
+    }
+
+    /**
+     * @param  array<string, mixed>  $reg
+     */
+    private function claveRegistro(array $reg): string
+    {
+        return strtoupper(substr((string) ($reg['tipo_documento'] ?? 'F'), 0, 1))
+            .'|'.strtoupper(substr(trim((string) ($reg['letra'] ?? '')).' ', 0, 1))
+            .'|'.(int) ($reg['sucursal'] ?? 0)
+            .'|'.(int) ($reg['nro_comp'] ?? 0)
+            .'|'.substr((string) ($reg['fecha_comp'] ?? ''), 0, 10);
+    }
+
+    /**
+     * Primero el comprobante aplicado. Si la nota no lo tiene, la factura del
+     * mismo punto de venta, letra e importe (la 155 de Blinken no quedó enlazada).
+     */
+    private function facturaOrigen(Venta $nc): ?Venta
+    {
+        $origenId = (int) ($nc->venta_origen_id ?? 0);
+        if ($origenId > 0) {
+            $origen = $this->ventaConPuntoVenta($origenId);
+            if ($origen !== null) {
+                return $origen;
+            }
+        }
+
+        return $this->facturaOrigenPorImporte($nc);
+    }
+
+    private function ventaConPuntoVenta(int $ventaId): ?Venta
+    {
+        $venta = Venta::query()
+            ->select([
+                'venta.id',
+                'venta.nombre',
+                'venta.total',
+                'venta.nroinscripcion',
+                'venta.numerocomprobante',
+                'venta.fecha',
+                'venta.codigo',
+                'venta.puntoventa_id',
+                'puntoventa.codigo as pv_codigo',
+            ])
+            ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
+            ->where('venta.id', $ventaId)
+            ->first();
+
+        return $venta instanceof Venta ? $venta : null;
+    }
+
+    private function facturaOrigenPorImporte(Venta $nc): ?Venta
+    {
+        $total = round(abs((float) $nc->total), 2);
+        $fecha = substr((string) $nc->fecha, 0, 10);
+        $puntoventaId = (int) ($nc->puntoventa_id ?? 0);
+        if ($total < 0.01 || $fecha === '' || $puntoventaId <= 0) {
+            return null;
+        }
+
+        $tsDesde = strtotime($fecha.' -120 days');
+        $tsHasta = strtotime($fecha.' +60 days');
+        if ($tsDesde === false || $tsHasta === false) {
+            return null;
+        }
+        $desde = date('Y-m-d', $tsDesde);
+        $hasta = date('Y-m-d', $tsHasta);
+        $letraNc = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) ($nc->codigo ?? ''));
+        $nombreNc = $this->nombreClave((string) ($nc->nombre ?? ''));
+
+        $candidatos = Venta::query()
+            ->select([
+                'venta.id',
+                'venta.nombre',
+                'venta.total',
+                'venta.nroinscripcion',
+                'venta.numerocomprobante',
+                'venta.fecha',
+                'venta.codigo',
+                'venta.puntoventa_id',
+                'puntoventa.codigo as pv_codigo',
+            ])
+            ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
+            ->where('venta.puntoventa_id', $puntoventaId)
+            ->where('venta.id', '!=', (int) $nc->id)
+            ->where('venta.total', '>', 0)
+            ->whereBetween('venta.fecha', [$desde, $hasta])
+            ->whereRaw('ABS(venta.total - ?) < 0.05', [$total])
+            ->get();
+
+        $mismaLetra = [];
+        $mismoNombre = [];
+        foreach ($candidatos as $candidato) {
+            if (! $candidato instanceof Venta) {
+                continue;
+            }
+            if ($this->tipoDocumentoDesdeCodigoVenta((string) $candidato->codigo) !== 'F') {
+                continue;
+            }
+            if (LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $candidato->codigo) !== $letraNc) {
+                continue;
+            }
+            $mismaLetra[] = $candidato;
+            if ($nombreNc !== '' && $this->nombreClave((string) $candidato->nombre) === $nombreNc) {
+                $mismoNombre[] = $candidato;
+            }
+        }
+
+        $pool = $mismoNombre !== [] ? $mismoNombre : $mismaLetra;
+        if ($pool === []) {
+            return null;
+        }
+        if (count($pool) === 1) {
+            return $pool[0];
+        }
+
+        usort($pool, function (Venta $a, Venta $b) use ($fecha): int {
+            $da = abs((int) strtotime(substr((string) $a->fecha, 0, 10)) - (int) strtotime($fecha));
+            $db = abs((int) strtotime(substr((string) $b->fecha, 0, 10)) - (int) strtotime($fecha));
+
+            return $da <=> $db;
+        });
+
+        $fechaA = substr((string) $pool[0]->fecha, 0, 10);
+        $fechaB = substr((string) $pool[1]->fecha, 0, 10);
+        $distA = abs((int) strtotime($fechaA) - (int) strtotime($fecha));
+        $distB = abs((int) strtotime($fechaB) - (int) strtotime($fecha));
+
+        return $distA < $distB ? $pool[0] : null;
+    }
+
+    private function nombreClave(string $nombre): string
+    {
+        $nombre = strtoupper(trim($nombre));
+        $nombre = preg_replace('/[^A-Z0-9 ]/', ' ', $nombre) ?? $nombre;
+        $nombre = preg_replace('/\s+/', ' ', $nombre) ?? $nombre;
+
+        return trim($nombre);
+    }
+
+    private function tipoDocumentoDesdeCodigoVenta(string $codigo): string
+    {
+        $codigo = strtoupper(trim($codigo));
+        if (str_starts_with($codigo, 'NC')) {
+            return 'C';
+        }
+        if (str_starts_with($codigo, 'ND')) {
+            return 'D';
+        }
+
+        return 'F';
     }
 
     /**

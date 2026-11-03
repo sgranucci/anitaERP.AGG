@@ -91,6 +91,29 @@
                             </select>
                             <small class="form-text text-muted">Detalle: un renglón por movimiento con tipo y número de comprobante (solo ERP).</small>
                         </div>
+                        <label for="tipo_comprobante" class="{{ $colLabel }}">Tipo de comprobante</label>
+                        <div class="{{ $colInput }}">
+                            <div class="d-flex flex-nowrap align-items-center w-100" id="sli-tipo-comprobante" style="gap: 4px;">
+                                <button type="button" id="sli-tipo-lupa" title="Consulta tipos de comprobante (F1)" class="btn-accion-tabla flex-shrink-0">
+                                    <i class="fa fa-search text-primary"></i>
+                                </button>
+                                <input type="text" name="tipo_comprobante" id="tipo_comprobante" class="form-control"
+                                    value="{{ $filtros['tipo_comprobante'] ?? '' }}"
+                                    placeholder="Cód." title="Abreviatura; Enter resuelve; F1 consulta" autocomplete="off"
+                                    style="width: 6.5rem; flex-shrink: 0;"
+                                    @if (! empty($filtros['tipo_comprobante_invalida'])) data-invalido="1" @endif>
+                                <input type="text" id="tipo_comprobante_nombre" class="form-control text-truncate" readonly
+                                    value="{{ $filtros['tipo_comprobante_nombre'] ?? '' }}"
+                                    placeholder="Descripción" style="min-width: 0; flex: 1 1 auto;">
+                            </div>
+                            <small class="form-text text-muted">Vacío = todos los comprobantes. F1 o la lupa eligen el tipo. El saldo y el detalle cuentan solo esos movimientos.</small>
+                            @if (! empty($filtros['tipo_comprobante_invalida']))
+                                <small class="form-text text-danger">No existe el tipo {{ $filtros['tipo_comprobante'] ?? '' }}.</small>
+                            @endif
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
                         <label for="orden" class="{{ $colLabel }}">Orden</label>
                         <div class="{{ $colInput }}">
                             <select name="orden" id="orden" class="form-control">
@@ -285,6 +308,7 @@
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.stock.modalconsultacategoria')
 @include('includes.stock.modalconsultasubcategoria')
+@include('ventas.facturacion_local.stock_local_informe.partials.modal_tipo_comprobante')
 @endsection
 
 @section('scripts')
@@ -294,6 +318,169 @@
 <script>
 (function () {
     var form = document.getElementById('form-stock-local-informe');
+    var tiposComprobante = @json($tiposComprobante);
+    var inputTipo = document.getElementById('tipo_comprobante');
+    var nombreTipo = document.getElementById('tipo_comprobante_nombre');
+    var lupaTipo = document.getElementById('sli-tipo-lupa');
+    var modalTipo = document.getElementById('sliTipoComprobanteModal');
+    var buscarTipo = document.getElementById('sli-tipo-buscar');
+    var tipoModalAbriendo = false;
+    var tipoModalAbierto = false;
+
+    function focoTrasTipo() {
+        var siguiente = document.getElementById('orden');
+        if (siguiente) {
+            siguiente.focus();
+        }
+    }
+
+    function resolverTipo(avanzar) {
+        if (!inputTipo) {
+            return;
+        }
+        var codigo = (inputTipo.value || '').trim().toUpperCase();
+        inputTipo.value = codigo;
+        if (codigo === '') {
+            if (nombreTipo) {
+                nombreTipo.value = '';
+            }
+            inputTipo.removeAttribute('data-invalido');
+            if (avanzar) {
+                focoTrasTipo();
+            }
+            return;
+        }
+        var fila = null;
+        for (var i = 0; i < tiposComprobante.length; i++) {
+            if ((tiposComprobante[i].abreviatura || '').toUpperCase() === codigo) {
+                fila = tiposComprobante[i];
+                break;
+            }
+        }
+        if (!fila) {
+            if (nombreTipo) {
+                nombreTipo.value = '';
+            }
+            inputTipo.setAttribute('data-invalido', '1');
+        } else {
+            if (nombreTipo) {
+                nombreTipo.value = fila.nombre || '';
+            }
+            inputTipo.removeAttribute('data-invalido');
+        }
+        if (avanzar) {
+            focoTrasTipo();
+        }
+    }
+
+    function aplicarTipoElegido(codigo, nombre) {
+        if (!inputTipo) {
+            return;
+        }
+        inputTipo.value = codigo || '';
+        if (nombreTipo) {
+            nombreTipo.value = nombre || '';
+        }
+        inputTipo.removeAttribute('data-invalido');
+        if (window.jQuery && modalTipo) {
+            window.jQuery(modalTipo).modal('hide');
+        }
+        focoTrasTipo();
+    }
+
+    function filtrarTiposModal() {
+        var q = ((buscarTipo && buscarTipo.value) || '').trim().toLowerCase();
+        document.querySelectorAll('#sli-tipo-tbody .sli-tipo-fila').forEach(function (tr) {
+            var texto = tr.getAttribute('data-busca') || '';
+            var visible = q === '' || texto.indexOf(q) !== -1;
+            tr.classList.toggle('d-none', !visible);
+        });
+    }
+
+    function abrirModalTipo() {
+        tipoModalAbriendo = true;
+        if (!window.jQuery || !modalTipo) {
+            return;
+        }
+        if (buscarTipo) {
+            buscarTipo.value = '';
+        }
+        filtrarTiposModal();
+        window.jQuery(modalTipo).modal('show');
+    }
+
+    if (lupaTipo) {
+        lupaTipo.addEventListener('mousedown', function () {
+            tipoModalAbriendo = true;
+        });
+        lupaTipo.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            abrirModalTipo();
+        });
+    }
+    if (inputTipo) {
+        inputTipo.addEventListener('keydown', function (ev) {
+            if (ev.key === 'F1' || ev.code === 'F1' || ev.keyCode === 112) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                abrirModalTipo();
+                return;
+            }
+            if (ev.key !== 'Enter' && ev.keyCode !== 13) {
+                return;
+            }
+            ev.preventDefault();
+            ev.stopPropagation();
+            resolverTipo(true);
+        });
+        inputTipo.addEventListener('input', function () {
+            inputTipo.removeAttribute('data-invalido');
+        });
+        inputTipo.addEventListener('blur', function () {
+            if (tipoModalAbriendo || tipoModalAbierto) {
+                return;
+            }
+            resolverTipo(false);
+        });
+    }
+    if (window.jQuery && modalTipo) {
+        window.jQuery(modalTipo)
+            .on('shown.bs.modal', function () {
+                tipoModalAbriendo = false;
+                tipoModalAbierto = true;
+                if (buscarTipo) {
+                    buscarTipo.focus();
+                }
+            })
+            .on('hidden.bs.modal', function () {
+                tipoModalAbierto = false;
+                tipoModalAbriendo = false;
+            });
+    }
+    if (buscarTipo) {
+        buscarTipo.addEventListener('input', filtrarTiposModal);
+        buscarTipo.addEventListener('keydown', function (ev) {
+            if (ev.key !== 'Enter' && ev.keyCode !== 13) {
+                return;
+            }
+            ev.preventDefault();
+            var fila = document.querySelector('#sli-tipo-tbody .sli-tipo-fila:not(.d-none)');
+            if (!fila) {
+                return;
+            }
+            aplicarTipoElegido(fila.getAttribute('data-codigo') || '', fila.getAttribute('data-nombre') || '');
+        });
+    }
+    document.querySelectorAll('.sli-elige-tipo').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var tr = btn.closest('tr');
+            if (!tr) {
+                return;
+            }
+            aplicarTipoElegido(tr.getAttribute('data-codigo') || '', tr.getAttribute('data-nombre') || '');
+        });
+    });
+
     var overlay = document.getElementById('sli-overlay');
     var selectLocal = document.getElementById('local_venta_id');
     var selectDepErp = document.getElementById('deposito_erp_id');

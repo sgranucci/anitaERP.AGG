@@ -10,6 +10,7 @@ use App\Models\Ventas\LocalVenta;
 use App\Services\Ventas\FacturacionLocal\StockLocalInformeService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
+use App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalInformeListadoFiltros;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -112,6 +113,7 @@ class StockLocalInformeController extends Controller
             'depositoAnita' => $depositoAnita,
             'depositoErpId' => $depositoErpId,
             'puede_ver_articulo' => can('editar-articulos', false) || can('listar-articulos', false),
+            'tiposComprobante' => StockLocalErpMovimientosSupport::catalogoTiposComprobante(),
         ]);
     }
 

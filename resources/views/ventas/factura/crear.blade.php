@@ -33,6 +33,7 @@
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear.js')) ?: time() }}" type="text/javascript"></script>
 @include('ventas.factura.partials.ot_pedido_scripts')
 @include('ventas.factura.partials.picking_pedido_scripts')
+@include('ventas.factura.partials.nc_sin_factura_scripts')
 <script src="{{asset("assets/pages/scripts/ventas/factura/consulta_referencia.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/consulta_referencia.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/factura/nc_devolucion.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/nc_devolucion.js')) ?: time() }}" type="text/javascript"></script>
 @if ($layoutItemsPedido)
@@ -90,7 +91,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="factura" data-sin-bloqueo-grabacion="1" data-factura-redirect="{{ route('factura') }}" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
+            <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="{{ ! empty($modoNc) ? 'nc' : 'factura' }}" data-sin-bloqueo-grabacion="1" data-factura-redirect="{{ route('factura') }}" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
                 @csrf
                 <div class="card-body">
                     @php $datos = ["funcion" => "crear", "layoutItemsPedido" => $layoutItemsPedido, "modoNc" => ! empty($modoNc)]; @endphp

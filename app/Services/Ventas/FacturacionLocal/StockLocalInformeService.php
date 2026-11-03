@@ -230,6 +230,13 @@ final class StockLocalInformeService
             }
             $parts[] = 'Marca '.($nombreMarca !== '' ? $nombreMarca : '#'.$mventaId);
         }
+        $tipoComprobante = trim((string) ($filtros['tipo_comprobante'] ?? ''));
+        if (! empty($filtros['tipo_comprobante_invalida'])) {
+            $parts[] = 'Tipo de comprobante no encontrado ('.$tipoComprobante.')';
+        } elseif ($tipoComprobante !== '') {
+            $nombreTipo = trim((string) ($filtros['tipo_comprobante_nombre'] ?? ''));
+            $parts[] = 'Tipo '.$tipoComprobante.($nombreTipo !== '' ? ' '.$nombreTipo : '');
+        }
 
         return implode(' · ', $parts);
     }
@@ -395,6 +402,9 @@ final class StockLocalInformeService
         );
 
         foreach ($rows as $row) {
+            if ($this->excluirPorTipoComprobante($row, $filtros)) {
+                continue;
+            }
             $articuloId = (int) $row->articulo_id;
             $cantidad = (float) $row->cantidad;
             if (abs($cantidad) < 0.000001) {
@@ -587,6 +597,9 @@ final class StockLocalInformeService
         );
 
         foreach ($rows as $row) {
+            if ($this->excluirPorTipoComprobante($row, $filtros)) {
+                continue;
+            }
             $amId = (int) ($row->am_id ?? 0);
             if ($amId <= 0) {
                 continue;
@@ -711,7 +724,7 @@ final class StockLocalInformeService
             (string) ($filtros['estado_local'] ?? StockLocalInformeListadoFiltros::ESTADO_LOCAL_ACTIVO),
         );
 
-        if (! empty($filtros['categoria_invalida']) || ! empty($filtros['subcategoria_invalida'])) {
+        if (! empty($filtros['categoria_invalida']) || ! empty($filtros['subcategoria_invalida']) || ! empty($filtros['tipo_comprobante_invalida'])) {
             $query->whereRaw('1 = 0');
         }
 
@@ -748,6 +761,25 @@ final class StockLocalInformeService
         }
 
         return $query->get();
+    }
+
+    /**
+     * Vacío = todos los comprobantes. Con tipo, solo los movimientos de esa abreviatura.
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    private function excluirPorTipoComprobante(object $row, array $filtros): bool
+    {
+        if (! empty($filtros['tipo_comprobante_invalida'])) {
+            return true;
+        }
+        $tipo = strtoupper(trim((string) ($filtros['tipo_comprobante'] ?? '')));
+        if ($tipo === '') {
+            return false;
+        }
+        $deFila = strtoupper(trim(StockLocalErpMovimientosSupport::tipoComprobanteDesdeFila($row)));
+
+        return $deFila !== $tipo;
     }
 
     /**

@@ -4,4 +4,8 @@
 <input type="hidden" name="ot_grupo_indices[]" class="ot_grupo_indice" value="{{ $otGrupoIndiceLinea ?? '' }}">
 <input type="hidden" name="picking_pedido_combinacion_ids[]" class="picking_pedido_combinacion_id" value="{{ $pickingPedidoCombinacionIdLinea ?? '' }}">
 <input type="hidden" name="picking_grupo_indices[]" class="picking_grupo_indice" value="{{ $pickingGrupoIndiceLinea ?? '' }}">
+<input type="hidden" name="combinacion_ids[]" class="combinacion_id" value="{{ $combinacionIdLinea ?? '' }}">
+<input type="hidden" name="talle_ids[]" class="talle_id" value="{{ $talleIdLinea ?? '' }}">
+<input type="hidden" name="modulo_ids[]" class="modulo_id" value="{{ $moduloIdLinea ?? '' }}">
+<input type="hidden" name="lotes_stock[]" class="lote_stock" value="{{ $loteStockLinea ?? '' }}">
 @endif

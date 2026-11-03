@@ -176,7 +176,7 @@ IMPORTANTE Argentina: el símbolo "$" significa PESOS, NUNCA dólares.
 "Son Pesos:", "Importe $" y el pie "tipo de cambio … por cada dolar" son PESOS (solo referencia impositiva).
 Solo poné "DOLARES" si hay "Moneda: USD/U\$S", importes con U\$S/USD, o "facturado/importe en dólares".
 La palabra "dólar" suelta en el pie NO alcanza. Sin señal fuerte → "PESOS".
-cotizacion: si el texto trae un tipo de cambio explícito pegado al rótulo ("tc.1561.51", "T.C.: 1.561,51", "tipo de cambio: 1561,51", "cotización 1561.51"), usá ESE número aunque la moneda sea PESOS. Si no hay ese número, cotizacion=1.
+cotizacion: si el texto trae un tipo de cambio explícito, usá ESE número aunque la moneda sea PESOS. Puede estar pegado al rótulo ("tc.1561.51", "T.C.: 1.561,51", "tipo de cambio: 1561,51", "cotización 1561.51") o escrito en observaciones / leyenda, con palabras de por medio y el importe en la misma línea o en la siguiente ("AL SOLO EFECTO IMPOSITIVO, EL TIPO DE CAMBIO APLICADO ES DE $1.570,00 POR CADA DOLAR" → 1570.00). El "$" de ese importe es el valor en pesos de la moneda extranjera: no cambia la moneda del comprobante. Si no hay ese número, cotizacion=1.
 
 Heurísticas previas (pueden tener errores, corregí con el OCR):
 {$hints}
