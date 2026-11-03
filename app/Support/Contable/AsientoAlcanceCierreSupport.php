@@ -2,18 +2,18 @@
 
 namespace App\Support\Contable;
 
-use App\Models\Stock\MovimientoStock;
-
 /**
- * Alcance de cierre contable que corresponde a un asiento.
+ * Alcance de cierre que corresponde a un asiento.
  *
- * El alta lo define el documento que origina el asiento (cobranza, caja, venta, recepción,
- * factura de proveedor, stock). Un asiento cargado desde el ABM es "Asientos contables
- * manuales": el tipo (VTA, TES, COM, STK…) clasifica, no es el circuito que lo generó.
+ * Un asiento del sistema contable se valida siempre contra el cierre de Contabilidad.
+ * La referencia (factura de proveedor, OC, venta, recepción, cobranza, stock) clasifica
+ * el comprobante y no cambia el cierre.
  *
- * Corregir o borrar un asiento ya existente depende solo del cierre de Contable.
- * Si Contable sigue abierto, se puede modificar el asiento aunque Compras, Ventas
- * u otro subsistema ya esté cerrado.
+ * El circuito que origina el documento (factura, venta, caja, stock) puede mandar
+ * alcance_cierre_contable con el cierre de ese subsistema: ese control es del
+ * documento, no de la referencia del asiento. Corregir o borrar un asiento ya
+ * existente depende solo del cierre de Contabilidad, aunque el circuito lo haya
+ * generado con otro alcance.
  */
 class AsientoAlcanceCierreSupport
 {
@@ -33,7 +33,7 @@ class AsientoAlcanceCierreSupport
             return $explicito;
         }
 
-        return self::inferir($data);
+        return PeriodoContableCierreSupport::ALCANCE_CONTABLE;
     }
 
     /**
@@ -44,53 +44,5 @@ class AsientoAlcanceCierreSupport
         $explicito = trim((string) ($data['alcance_cierre_contable'] ?? ''));
 
         return $explicito !== '' && PeriodoContableCierreSupport::alcanceEsValido($explicito);
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     */
-    public static function inferir(array $data): string
-    {
-        if (! empty($data['cobranza_id'])) {
-            return PeriodoContableCierreSupport::ALCANCE_COBRANZA;
-        }
-
-        if (! empty($data['caja_movimiento_id'])) {
-            return PeriodoContableCierreSupport::ALCANCE_CAJA;
-        }
-
-        if (! empty($data['movimientostock_id'])) {
-            $abreviatura = strtoupper((string) (
-                MovimientoStock::query()
-                    ->whereKey((int) $data['movimientostock_id'])
-                    ->with('tipotransaccion_stock:id,abreviatura')
-                    ->first()
-                    ?->tipotransaccion_stock
-                    ?->abreviatura
-                ?? ''
-            ));
-
-            return $abreviatura === 'EIND'
-                ? PeriodoContableCierreSupport::ALCANCE_INDUMENTARIA
-                : PeriodoContableCierreSupport::ALCANCE_STOCK;
-        }
-
-        if (! empty($data['venta_id'])) {
-            return PeriodoContableCierreSupport::ALCANCE_FACTURACION;
-        }
-
-        if (! empty($data['recepcionproveedor_id'])) {
-            return PeriodoContableCierreSupport::ALCANCE_RECEPCION_PROVEEDOR;
-        }
-
-        if (! empty($data['comprobante_proveedor_id'])) {
-            return PeriodoContableCierreSupport::ALCANCE_CUENTAS_PAGAR;
-        }
-
-        if (! empty($data['liquidacion_sueldos_id'])) {
-            return PeriodoContableCierreSupport::ALCANCE_CONTABLE;
-        }
-
-        return PeriodoContableCierreSupport::ALCANCE_CONTABLE;
     }
 }

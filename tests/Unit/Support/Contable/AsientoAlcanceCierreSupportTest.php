@@ -37,6 +37,20 @@ class AsientoAlcanceCierreSupportTest extends TestCase
         );
     }
 
+    public function test_alta_manual_con_factura_de_proveedor_sigue_el_cierre_contable(): void
+    {
+        $data = [
+            'comprobante_proveedor_id' => 15,
+            'ordencompra_id' => 8,
+            'alcance_cierre_contable' => PeriodoContableCierreSupport::ALCANCE_CONTABLE,
+        ];
+
+        $this->assertSame(
+            PeriodoContableCierreSupport::ALCANCE_CONTABLE,
+            AsientoAlcanceCierreSupport::alcanceParaValidar($data, false)
+        );
+    }
+
     public function test_alta_de_factura_de_proveedor_sigue_el_cierre_de_compras(): void
     {
         $data = [
@@ -51,12 +65,25 @@ class AsientoAlcanceCierreSupportTest extends TestCase
         $this->assertTrue(AsientoAlcanceCierreSupport::tieneAlcanceExplicito($data));
     }
 
-    public function test_alta_sin_alcance_explicito_infiere_el_origen(): void
+    public function test_alta_con_cualquier_referencia_sigue_el_cierre_contable(): void
     {
-        $this->assertSame(
-            PeriodoContableCierreSupport::ALCANCE_FACTURACION,
-            AsientoAlcanceCierreSupport::alcanceParaValidar(['venta_id' => 3], false)
-        );
-        $this->assertFalse(AsientoAlcanceCierreSupport::tieneAlcanceExplicito(['venta_id' => 3]));
+        $referencias = [
+            ['venta_id' => 3],
+            ['cobranza_id' => 4],
+            ['caja_movimiento_id' => 5],
+            ['movimientostock_id' => 6],
+            ['recepcionproveedor_id' => 7],
+            ['comprobante_proveedor_id' => 15, 'ordencompra_id' => 8],
+            ['liquidacion_sueldos_id' => 2],
+            [],
+        ];
+
+        foreach ($referencias as $data) {
+            $this->assertSame(
+                PeriodoContableCierreSupport::ALCANCE_CONTABLE,
+                AsientoAlcanceCierreSupport::alcanceParaValidar($data, false)
+            );
+            $this->assertFalse(AsientoAlcanceCierreSupport::tieneAlcanceExplicito($data));
+        }
     }
 }

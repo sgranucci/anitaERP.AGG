@@ -276,6 +276,12 @@ final class CierreJornadaProcesoJornadaSupport
             return true;
         }
 
+        // La purga de 48 h sacó las líneas Waitry. Al reabrir el proceso se vuelven a leer
+        // y se conservan factura, asientos y rendición ya grabados.
+        if (! empty($payload['lineas_purgadas'])) {
+            return true;
+        }
+
         $estadoSnapshot = (string) ($payload['jornada_estado'] ?? '');
         $estadoActual = (string) ($jornada->estado ?? '');
 

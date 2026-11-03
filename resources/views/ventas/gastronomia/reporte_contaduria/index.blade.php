@@ -112,10 +112,11 @@
                             <small class="form-text text-muted">
                                 El mes de arriba es para los descuentos y la lista de precios. El inventario usa esta fecha.
                                 Saldo vigente es la existencia del sistema a la fecha de cierre.
-                                &Uacute;ltimo recuento: hasta el d&iacute;a siguiente al cierre (el 30/09 toma el 1/10 y no un recuento del 20/10).
-                                De cada rubro se queda el d&iacute;a m&aacute;s reciente y ese d&iacute;a reemplaza al anterior:
-                                no se mezclan dos recuentos de fechas distintas. Un recuento posterior de solo bebidas
-                                no borra alimentos, limpieza ni cigarrillos.
+                                &Uacute;ltimo recuento: los de los &uacute;ltimos d&iacute;as del mes y el d&iacute;a 1 del mes siguiente
+                                (el 31/10 toma el 1/11, no un recuento de junio ni uno del 20/10).
+                                El 2 o el 3 del mes siguiente solo entran si ese dep&oacute;sito no tiene ninguno de esos d&iacute;as.
+                                Si la fecha es el 1, el 2 o el 3, el cierre es el del mes anterior.
+                                No se mira el comentario del recuento.
                                 Los dep&oacute;sitos de cigarrillos (Kandiko 5005, Biyemas 1007) entran aunque el filtro sea 1, 8.
                                 El Excel dice qu&eacute; recuentos us&oacute;.
                             </small>

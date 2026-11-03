@@ -17,47 +17,62 @@ class ContaduriaInventarioRecuentoSupportTest extends TestCase
         );
     }
 
-    public function test_de_cada_rubro_queda_solo_el_dia_mas_reciente(): void
+    public function test_el_cierre_de_fin_de_mes_incluye_el_dia_1_siguiente(): void
     {
-        $elegidos = $this->elegir([
-            $this->recuento(148, '2026-10-01', 'alimento'),
-            $this->recuento(194, '2026-10-31', 'alimento'),
-            $this->recuento(149, '2026-10-01', 'bebidas'),
-            $this->recuento(195, '2026-10-31', 'bebidas'),
-            $this->recuento(191, '2026-10-31', 'bebidas'),
-            $this->recuento(181, '2026-10-27', null),
-        ]);
-
-        $this->assertSame([194, 195, 191], array_column($elegidos, 'id'));
+        $this->assertSame(
+            ['2026-10-29', '2026-11-01', '2026-11-03'],
+            ContaduriaInventarioRecuentoSupport::ventana('2026-10-31'),
+        );
     }
 
-    public function test_sin_rubro_solo_cuando_nadie_nombra_un_rubro(): void
+    public function test_el_dia_1_al_3_siguen_siendo_el_cierre_del_mes_anterior(): void
     {
-        $elegidos = $this->elegir([
-            $this->recuento(10, '2026-09-30', null),
-            $this->recuento(11, '2026-10-31', null),
-            $this->recuento(12, '2026-10-31', null),
-        ]);
+        $this->assertSame(
+            ['2026-10-29', '2026-11-01', '2026-11-03'],
+            ContaduriaInventarioRecuentoSupport::ventana('2026-11-03'),
+        );
+    }
 
-        $this->assertSame([11, 12], array_column($elegidos, 'id'));
+    public function test_si_hay_recuento_del_mes_no_usa_el_2_ni_el_3(): void
+    {
+        [$desde, $corte, $extension] = ContaduriaInventarioRecuentoSupport::ventana('2026-11-03');
+        $elegidos = $this->elegir([
+            $this->recuento(17, '2026-06-30'),
+            $this->recuento(181, '2026-10-27'),
+            $this->recuento(187, '2026-10-31'),
+            $this->recuento(190, '2026-11-02'),
+        ], $desde, $corte, $extension);
+
+        $this->assertSame([187], array_column($elegidos, 'id'));
+    }
+
+    public function test_el_2_entra_solo_cuando_el_deposito_no_tiene_cierre_del_mes(): void
+    {
+        [$desde, $corte, $extension] = ContaduriaInventarioRecuentoSupport::ventana('2026-11-03');
+        $elegidos = $this->elegir([
+            $this->recuento(16, '2026-06-30'),
+            $this->recuento(217, '2026-11-02'),
+        ], $desde, $corte, $extension);
+
+        $this->assertSame([217], array_column($elegidos, 'id'));
     }
 
     /**
-     * @param  list<array{id:int,fecha:string,rubro:?string}>  $lista
-     * @return list<array{id:int,fecha:string,rubro:?string}>
+     * @param  list<array{id:int,fecha:string}>  $lista
+     * @return list<array{id:int,fecha:string}>
      */
-    private function elegir(array $lista): array
+    private function elegir(array $lista, string $desde, string $corte, string $extension): array
     {
         $metodo = new ReflectionMethod(ContaduriaInventarioRecuentoSupport::class, 'elegirRecuentos');
 
-        return $metodo->invoke(null, $lista);
+        return $metodo->invoke(null, $lista, $desde, $corte, $extension);
     }
 
     /**
-     * @return array{id:int,fecha:string,rubro:?string}
+     * @return array{id:int,fecha:string}
      */
-    private function recuento(int $id, string $fecha, ?string $rubro): array
+    private function recuento(int $id, string $fecha): array
     {
-        return ['id' => $id, 'fecha' => $fecha, 'rubro' => $rubro];
+        return ['id' => $id, 'fecha' => $fecha];
     }
 }

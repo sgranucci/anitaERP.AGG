@@ -235,6 +235,17 @@ return [
     ],
 
     /**
+     * Snapshot del proceso de cierre Waitry. Las líneas se regeneran al pedir el proceso.
+     * Factura, asientos y rendición Anita ya grabados se conservan en la fila.
+     * Comando: gastronomia:purgar-snapshots-proceso
+     */
+    'snapshot_proceso_purga' => [
+        'habilitado' => filter_var(env('GASTRONOMIA_SNAPSHOT_PROCESO_PURGA_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('GASTRONOMIA_SNAPSHOT_PROCESO_PURGA_HORA', '04:40'),
+        'horas' => max(1, (int) env('GASTRONOMIA_SNAPSHOT_PROCESO_PURGA_HORAS', 48)),
+    ],
+
+    /**
      * Reporte mensual solo Anita (venta/vengrav/ctamov/rendg) — CSV por mail.
      */
     'auditoria_mes_totales_anita' => [

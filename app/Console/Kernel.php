@@ -180,6 +180,11 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(60)
             ->appendOutputTo(storage_path('logs/cache-archivos-purge.log'));
 
+        $schedule->command('pdf-temporarios:purge')
+            ->dailyAt('04:25')
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/pdf-temporarios-purge.log'));
+
         // Deshabilitada por defecto: activar con AUDITS_PURGA_HABILITADA=true.
         $schedule->command('audits:purge')
             ->dailyAt('03:50')
@@ -192,6 +197,12 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(60)
             ->appendOutputTo(storage_path('logs/purge-anita-caches-schedule.log'))
             ->when(fn () => (bool) config('gastronomia.anita_storage_cache_purge.habilitado', true));
+
+        $schedule->command('gastronomia:purgar-snapshots-proceso')
+            ->dailyAt((string) config('gastronomia.snapshot_proceso_purga.hora', '04:40'))
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/purgar-snapshots-proceso.log'))
+            ->when(fn () => (bool) config('gastronomia.snapshot_proceso_purga.habilitado', true));
 
         // Costo de insumos diferido: la emisión graba costo 0 y acá se completa (liviano: 1 resolución por artículo).
         $schedule->command('gastronomia:completar-costo-insumos')

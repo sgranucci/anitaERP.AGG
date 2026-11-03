@@ -258,6 +258,10 @@ class AsientoController extends Controller
 
         $data = $request->all();
         $data = AsientoReferenciaAnitaSupport::aplicarAPayload($data);
+        // El ABM es un asiento contable: la referencia (OC, factura, venta) solo
+        // clasifica el comprobante. El cierre que aplica es el de Contabilidad,
+        // no el del subsistema de origen (cuentas a pagar, facturación, etc.).
+        $data['alcance_cierre_contable'] = \App\Support\Contable\PeriodoContableCierreSupport::ALCANCE_CONTABLE;
         if ($evaluacion['requiere_aprobacion']) {
             $data['estado_aprobacion'] = Asiento::ESTADO_APROBACION_PENDIENTE;
             $data['cuentas_no_autorizadas'] = json_encode($evaluacion['cuentas_no_autorizadas']);

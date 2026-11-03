@@ -270,22 +270,6 @@ final class ContaduriaInventarioReporteService
             ));
         }
 
-        $idsExtra = array_flip(array_diff(array_column($depositos, 'id'), $idsPedidos));
-        if ($idsExtra !== []) {
-            $mesDesde = Carbon::parse($fecha)->startOfMonth()->format('Y-m-d');
-            $depositos = array_values(array_filter(
-                $depositos,
-                static function (array $deposito) use ($idsExtra, $resuelto, $mesDesde): bool {
-                    if (! isset($idsExtra[$deposito['id']])) {
-                        return true;
-                    }
-                    $fechaOrigen = (string) ($resuelto['por_deposito'][$deposito['id']]['fecha'] ?? '');
-
-                    return $fechaOrigen !== '' && $fechaOrigen >= $mesDesde;
-                },
-            ));
-        }
-
         if ($depositos === []) {
             return [
                 'error' => 'No hay recuento cerrado al '.($fecha !== '' ? date('d/m/Y', strtotime($fecha)) : 'cierre').' para los depósitos de la empresa.',

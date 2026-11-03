@@ -24,6 +24,31 @@ final class CierreJornadaProcesoJornadaSupportTest extends TestCase
         $this->assertSame('auditoria_en_curso', $ctx['modo']);
     }
 
+    public function test_lineas_purgadas_obligan_a_releer_el_tramo(): void
+    {
+        $jornada = new JornadaGastronomia([
+            'estado' => JornadaGastronomia::ESTADO_CERRADA,
+            'cierre_en' => Carbon::parse('2026-06-03 22:00:00'),
+        ]);
+
+        $snapshot = new GastronomiaCierreJornadaProcesoSnapshot([
+            'payload' => [
+                'lineas_purgadas' => true,
+                'jornada_estado' => JornadaGastronomia::ESTADO_CERRADA,
+                'jornada_cierre_en' => '2026-06-03T22:00:00-03:00',
+                'snapshot_provisional' => false,
+                'lineas_schema_version' => CierreJornadaProcesoJornadaSupport::LINEAS_SCHEMA_VERSION,
+                'asientos_proceso_grabacion' => ['asientos' => [['asiento_id' => 1]]],
+            ],
+        ]);
+
+        $this->assertTrue(CierreJornadaProcesoJornadaSupport::debeInvalidarSnapshot($jornada, $snapshot));
+        $this->assertArrayHasKey(
+            'asientos_proceso_grabacion',
+            CierreJornadaProcesoJornadaSupport::payloadProcesoPersistente($snapshot)
+        );
+    }
+
     public function test_snapshot_provisional_invalida_al_cerrar_jornada(): void
     {
         $jornada = new JornadaGastronomia([
