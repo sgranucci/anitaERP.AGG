@@ -4241,6 +4241,10 @@ class FacturacionService
 					if ($talle)
 					{
 						$precio = $this->asignaPrecioLineaItemOt($articulo, $combinacion_id, $talle, $fechaFactura);
+						$precio = PedidoPickingFerliSupport::preferirPrecioTallePedido(
+							$precio,
+							$item->pedido_combinacion_talles->precio ?? 0
+						);
 
 						if ($precio[0]['precio'] == 0)
 						{

@@ -222,6 +222,8 @@
 											];
 										})
 										->all();
+									// Mismo criterio que picking/factura: manda el precio de los talles.
+									$precioLineaVisible = \App\Support\Ventas\PedidoPickingFerliSupport::precioUnitarioLinea($pedidoitem);
 								@endphp
                 				<input type="hidden" name="medidas[]" class="form-control medidas" readonly value="{{ json_encode($medidasParaForm) }}" />
                 				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{old('listaprecios_id', $pedidoitem->listaprecio_id??'')}}" />
@@ -272,7 +274,7 @@
                 				<input type="text" id="icantidad" name="cantidades[]" class="form-control cantidad" readonly value="{{number_format(old('cantidades.'.$loop->index, optional($pedidoitem)->cantidad),0)}}" />
                 			</td>
                 			<td>
-                				<input type="text" style="text-align: right;" id="iprecio" name="precios[]" class="form-control precio" readonly value="{{number_format(old('precios.'.$loop->index, optional($pedidoitem)->precio),2)}}" />
+                				<input type="text" style="text-align: right;" id="iprecio" name="precios[]" class="form-control precio" readonly value="{{number_format(old('precios.'.$loop->index, $precioLineaVisible),2)}}" />
                 			</td>
                 			<td>
                 				<input type="text" name="ot_codigos[]" class="form-control otcodigo" 

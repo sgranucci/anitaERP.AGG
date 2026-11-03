@@ -3097,6 +3097,25 @@ final class PedidoPickingFerliSupport
     }
 
     /**
+     * Prefactura / factura OT: el precio grabado en el talle del pedido manda.
+     * La lista solo aporta si el talle no tiene precio (y el flag de impuesto).
+     *
+     * @param  list<array{precio:mixed,listaprecio_id?:mixed,moneda_id?:mixed,incluyeimpuesto?:mixed}>|array{0?:array{precio:mixed}}  $precioLista
+     * @return list<array{precio:mixed,listaprecio_id?:mixed,moneda_id?:mixed,incluyeimpuesto?:mixed}>|array{0?:array{precio:mixed}}
+     */
+    public static function preferirPrecioTallePedido(array $precioLista, mixed $precioTalle): array
+    {
+        $precioPedido = round((float) $precioTalle, 4);
+        if ($precioPedido <= 0 || ! isset($precioLista[0]) || ! is_array($precioLista[0])) {
+            return $precioLista;
+        }
+
+        $precioLista[0]['precio'] = $precioPedido;
+
+        return $precioLista;
+    }
+
+    /**
      * Descuentos del modal de factura picking.
      * El pie sale del cliente (igual que la prefactura Ferli). Si el cliente está en cero,
      * usa el descuento del pedido cuando todas las líneas coinciden.

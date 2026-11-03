@@ -689,6 +689,7 @@ class PedidoServiceFerli
 
 					$precio = $this->precioService->
                                         asignaPrecio($articulo->id, $pedidoitem->combinacion_id, $talle->id, Carbon::now());
+					$precio = PedidoPickingFerliSupport::preferirPrecioTallePedido($precio, $item->precio);
 
 					if ($descuentoLinea > 0)
 						$precioArticulo = $precio[0]['precio'] * (1 - ($descuentoLinea / 100));
@@ -1147,6 +1148,10 @@ class PedidoServiceFerli
 									$talleId,
 									Carbon::now()
 								);
+								$precio = PedidoPickingFerliSupport::preferirPrecioTallePedido(
+									$precio,
+									$value->precio ?? 0
+								);
 								$medidasSync[$talleId] = [
 									'talle_id' => $talleId,
 									'cantidad' => $value->cantidad,
@@ -1274,6 +1279,9 @@ class PedidoServiceFerli
 				$contextoOt
 			);
 			$totPares = $syncTalles['total_pares'];
+
+			$pedidoCombinacion = $this->pedido_combinacionRepository->find($pedidoCombinacionId);
+			$this->alinearPrecioLineaConTalles($pedidoCombinacion, $medidasSync);
 
 			if ($funcion == 'update' && $ordentrabajoId > 0 && (int) $ordentrabajo_stock_id > 0) {
 				$errorStock = PedidoPickingFerliSupport::errorSiConsumoOtStockSuperaSaldo(

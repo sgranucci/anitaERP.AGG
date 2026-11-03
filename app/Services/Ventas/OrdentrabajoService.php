@@ -1051,16 +1051,14 @@ class OrdentrabajoService
 							$buff[] = "~JSN".chr(13).chr(10);
 							$buff[] = "^JZY".chr(13).chr(10);
 							$buff[] = "^LH0,0".chr(13).chr(10);
+							$buff[] = "^LS".EtiquetaOtCajaFotoZplSupport::CORRIMIENTO_LS.chr(13).chr(10);
 							$buff[] = "^XZ".chr(13).chr(10);
-
-							if ($foto['descarga'] !== '') {
-								$buff[] = $foto['descarga'];
-							}
 
 							$buff[] = "^XA".chr(13).chr(10);
 							$buff[] = "^CI0".chr(13).chr(10);
 							$buff[] = "^PW".$foto['ancho'].chr(13).chr(10);
 							$buff[] = "^LH0,0".chr(13).chr(10);
+							$buff[] = "^LS".EtiquetaOtCajaFotoZplSupport::CORRIMIENTO_LS.chr(13).chr(10);
 							$buff[] = $foto['campo'];
 							$buff[] = chr(13).chr(10);
 
@@ -1159,16 +1157,14 @@ class OrdentrabajoService
 					$buff[] = "~JSN".chr(13).chr(10);
 					$buff[] = "^JZY".chr(13).chr(10);
 					$buff[] = "^LH0,0".chr(13).chr(10);
+					$buff[] = "^LS".EtiquetaOtCajaFotoZplSupport::CORRIMIENTO_LS.chr(13).chr(10);
 					$buff[] = "^XZ".chr(13).chr(10);
-
-					if ($foto['descarga'] !== '') {
-						$buff[] = $foto['descarga'];
-					}
 
 					$buff[] = "^XA".chr(13).chr(10);
 					$buff[] = "^CI0".chr(13).chr(10);
 					$buff[] = "^PW".$foto['ancho'].chr(13).chr(10);
 					$buff[] = "^LH0,0".chr(13).chr(10);
+					$buff[] = "^LS".EtiquetaOtCajaFotoZplSupport::CORRIMIENTO_LS.chr(13).chr(10);
 					$buff[] = $foto['campo'];
 					$buff[] = chr(13).chr(10);
 

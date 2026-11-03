@@ -147,45 +147,52 @@ class PrecioImportFerli implements OnEachRow, WithHeadingRow
                 $hastatalle = $this->cacheTalles[(string) $listaprecio->hastatalle] ?? null;
             }
 
-            if (! empty($precio['aplica_pedidos'])) {
-                $pedidos = DB::table('pedido_combinacion')->where('articulo_id', $precio['articulo_id']);
+            // Solo listas con curva de talles (mayorista). WEB/OFERTA/LUGANO no tienen
+            // desdetalle/hastatalle: si se actualiza solo la cabecera, el pedido muestra un
+            // precio y picking/factura usan el de los talles.
+            if (! empty($precio['aplica_pedidos']) && $desdetalle && $hastatalle) {
+                $tallesPedido = DB::table('pedido_combinacion_talle')
+                    ->join('pedido_combinacion', 'pedido_combinacion_talle.pedido_combinacion_id', 'pedido_combinacion.id')
+                    ->where('pedido_combinacion.articulo_id', $precio['articulo_id'])
+                    ->whereBetween('pedido_combinacion_talle.talle_id', [$desdetalle->id, $hastatalle->id]);
                 if ($precio['combinacion_id'] != null) {
-                    $pedidos->where('combinacion_id', $precio['combinacion_id']);
+                    $tallesPedido->where('pedido_combinacion.combinacion_id', $precio['combinacion_id']);
                 }
-                $pedidos->update(['precio' => $precio['precio']]);
 
-                if ($desdetalle && $hastatalle) {
-                    $tallesPedido = DB::table('pedido_combinacion_talle')
-                        ->join('pedido_combinacion', 'pedido_combinacion_talle.pedido_combinacion_id', 'pedido_combinacion.id')
-                        ->where('pedido_combinacion.articulo_id', $precio['articulo_id'])
-                        ->whereBetween('pedido_combinacion_talle.talle_id', [$desdetalle->id, $hastatalle->id]);
+                $pedidoCombinacionIds = (clone $tallesPedido)
+                    ->distinct()
+                    ->pluck('pedido_combinacion.id');
+
+                if ($pedidoCombinacionIds->isNotEmpty()) {
+                    DB::table('pedido_combinacion')
+                        ->whereIn('id', $pedidoCombinacionIds)
+                        ->update(['precio' => $precio['precio']]);
+                }
+
+                $tallesPedido->update(['pedido_combinacion_talle.precio' => $precio['precio']]);
+            }
+
+            // Movimientos: misma regla — sin curva de talles no se pisa el precio operativo.
+            if ($desdetalle && $hastatalle) {
+                $movimientos = DB::table('articulo_movimiento')->where('articulo_id', $precio['articulo_id']);
+                if ($precio['combinacion_id'] != null) {
+                    $movimientos->where('combinacion_id', $precio['combinacion_id']);
+                } elseif (empty($precio['aplica_pedidos'])) {
+                    $movimientos = null;
+                }
+
+                if ($movimientos) {
+                    $movimientos->update(['precio' => $precio['precio']]);
+
+                    $tallesMov = DB::table('articulo_movimiento_talle')
+                        ->join('articulo_movimiento', 'articulo_movimiento_talle.articulo_movimiento_id', 'articulo_movimiento.id')
+                        ->where('articulo_movimiento.articulo_id', $precio['articulo_id'])
+                        ->whereBetween('articulo_movimiento_talle.talle_id', [$desdetalle->id, $hastatalle->id]);
                     if ($precio['combinacion_id'] != null) {
-                        $tallesPedido->where('pedido_combinacion.combinacion_id', $precio['combinacion_id']);
+                        $tallesMov->where('articulo_movimiento.combinacion_id', $precio['combinacion_id']);
                     }
-                    $tallesPedido->update(['pedido_combinacion_talle.precio' => $precio['precio']]);
+                    $tallesMov->update(['articulo_movimiento_talle.precio' => $precio['precio']]);
                 }
-            }
-
-            $movimientos = DB::table('articulo_movimiento')->where('articulo_id', $precio['articulo_id']);
-            if ($precio['combinacion_id'] != null) {
-                $movimientos->where('combinacion_id', $precio['combinacion_id']);
-            } elseif (empty($precio['aplica_pedidos'])) {
-                $movimientos = null;
-            }
-
-            if ($movimientos) {
-                $movimientos->update(['precio' => $precio['precio']]);
-            }
-
-            if ($movimientos && $desdetalle && $hastatalle) {
-                $tallesMov = DB::table('articulo_movimiento_talle')
-                    ->join('articulo_movimiento', 'articulo_movimiento_talle.articulo_movimiento_id', 'articulo_movimiento.id')
-                    ->where('articulo_movimiento.articulo_id', $precio['articulo_id'])
-                    ->whereBetween('articulo_movimiento_talle.talle_id', [$desdetalle->id, $hastatalle->id]);
-                if ($precio['combinacion_id'] != null) {
-                    $tallesMov->where('articulo_movimiento.combinacion_id', $precio['combinacion_id']);
-                }
-                $tallesMov->update(['articulo_movimiento_talle.precio' => $precio['precio']]);
             }
         }
     }
