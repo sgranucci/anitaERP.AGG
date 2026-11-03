@@ -206,6 +206,17 @@
             </div>
         </div>
 
+        @if (isset($data) && $data->id)
+        <div class="form-group row">
+            <label class="col-lg-4 col-form-label">Fecha de pago</label>
+            <div class="col-lg-5">
+                <input type="text" class="form-control" readonly
+                       value="{{ $data->fecha_pago ? $data->fecha_pago->format('d/m/Y') : 'Sin asignar' }}">
+                <small class="form-text text-muted">La asigna tesorería en Fecha de pago. La posición bancaria diaria usa ese día; sin fecha, la solicitud no entra.</small>
+            </div>
+        </div>
+        @endif
+
         <div class="form-group row">
             <label for="estado_mostrar" class="col-lg-4 col-form-label">Estado</label>
             <div class="col-lg-8">

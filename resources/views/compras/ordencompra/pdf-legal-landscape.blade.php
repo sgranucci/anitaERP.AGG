@@ -322,7 +322,7 @@
                     $art = $linea->articulos;
                     $refPartCpx = trim(implode(' ', array_filter([
                         optional($part)->codigo,
-                        optional($cpx)->codigo,
+                        \App\Support\Presupuesto\CapexEtiqueta::numeroYCodigoProyecto($cpx),
                     ])));
                     if ($refPartCpx === '') {
                         $refPartCpx = '—';

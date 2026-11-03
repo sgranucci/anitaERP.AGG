@@ -48,6 +48,15 @@ class Kernel extends ConsoleKernel
             ->daily()->at('07:15')
             ->when(fn () => ! EntornoEmpresaSupport::esFerli());
 
+        // Macro y BIND a veces publican después de las 07:15. Si el cierre
+        // del día hábil anterior no está completo, se vuelve a bajar.
+        foreach (['09:30', '11:30', '13:30'] as $horaReintentoSaldos) {
+            $schedule->command('interbanking:persistir-saldos-diarios --solo-si-incompleta')
+                ->dailyAt($horaReintentoSaldos)
+                ->withoutOverlapping(25)
+                ->when(fn () => ! EntornoEmpresaSupport::esFerli());
+        }
+
         $diasMovimientos = max(1, min(60, (int) config('interbanking.movimientos_sync_dias_ventana', 14)));
         $schedule->command('interbanking:persistir-movimientos', ['--dias' => $diasMovimientos])
             ->dailyAt('07:30')

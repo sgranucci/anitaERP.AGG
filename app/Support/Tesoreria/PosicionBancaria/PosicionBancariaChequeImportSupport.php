@@ -48,7 +48,9 @@ final class PosicionBancariaChequeImportSupport
             }
             $ws = $wb->getSheetByName($hoja);
             $max = (int) $ws->getHighestDataRow();
-            for ($r = 43; $r <= $max; $r++) {
+            /** @var array<string, array<string, mixed>> $neto */
+            $neto = [];
+            for ($r = 1; $r <= $max; $r++) {
                 $tip = trim((string) $ws->getCell('A'.$r)->getValue());
                 $nroRaw = $ws->getCell('B'.$r)->getValue();
                 $bancoRaw = $ws->getCell('H'.$r)->getValue();
@@ -70,42 +72,74 @@ final class PosicionBancariaChequeImportSupport
                 $fechaEmision = $this->celdaFecha($ws->getCell('C'.$r)->getValue());
                 $fechaCheque = $this->celdaFecha($ws->getCell('D'.$r)->getValue());
                 $entregado = trim((string) $ws->getCell('E'.$r)->getValue());
-                $importe = abs((float) $ws->getCell('G'.$r)->getCalculatedValue());
-                if ($importe < 0.005 && $fechaCheque === null) {
+                $importe = round((float) $ws->getCell('G'.$r)->getCalculatedValue(), 2);
+                if (abs($importe) < 0.005 && $fechaCheque === null) {
                     $stats['skipped']++;
                     continue;
                 }
 
-                $cuentacajaId = PosicionBancariaChequeAgingSupport::resolverCuentacajaId($empresaId, $banco);
                 $key = $empresaId.'|'.$banco.'|'.$nro;
-                $vistos[$key] = true;
+                if (! isset($neto[$key])) {
+                    $neto[$key] = [
+                        'empresa_id' => $empresaId,
+                        'banco' => $banco,
+                        'nro' => $nro,
+                        'banco_raw' => (string) $bancoRaw,
+                        'tip' => $tip !== '' ? strtoupper($tip) : 'CHP',
+                        'fecha_emision' => $fechaEmision,
+                        'fecha_cheque' => $fechaCheque,
+                        'entregado' => $entregado,
+                        'fila' => $r,
+                        'importe' => 0.0,
+                        'fila_importe' => 0.0,
+                    ];
+                }
+                $neto[$key]['importe'] = round($neto[$key]['importe'] + $importe, 2);
+                // La fecha que vale es la del renglón que deja saldo (el crédito), no la baja.
+                if ($importe > $neto[$key]['fila_importe']) {
+                    $neto[$key]['fila_importe'] = $importe;
+                    $neto[$key]['fecha_cheque'] = $fechaCheque;
+                    $neto[$key]['fecha_emision'] = $fechaEmision;
+                    $neto[$key]['entregado'] = $entregado;
+                    $neto[$key]['fila'] = $r;
+                    $neto[$key]['tip'] = $tip !== '' ? strtoupper($tip) : 'CHP';
+                }
+            }
 
+            foreach ($neto as $key => $item) {
+                // Un crédito y su baja (importe negativo) se compensan: el cheque no está vigente.
+                if ($item['importe'] <= 0.005) {
+                    $stats['skipped']++;
+                    continue;
+                }
+                $vistos[$key] = true;
+                $cuentacajaId = PosicionBancariaChequeAgingSupport::resolverCuentacajaId($empresaId, $item['banco']);
                 $payload = [
                     'cuentacaja_id' => $cuentacajaId,
-                    'tip' => $tip !== '' ? strtoupper($tip) : 'CHP',
-                    'fecha_emision' => $fechaEmision,
-                    'fecha_cheque' => $fechaCheque,
-                    'importe' => $importe,
+                    'tip' => $item['tip'],
+                    'fecha_emision' => $item['fecha_emision'],
+                    'fecha_cheque' => $item['fecha_cheque'],
+                    'importe' => round((float) $item['importe'], 2),
                     'estado' => ' ',
-                    'entregado_a' => mb_substr($entregado, 0, 120),
+                    'entregado_a' => mb_substr((string) $item['entregado'], 0, 120),
                     'activo' => true,
                     'en_portfolio_posicion' => true,
                     'origen' => 'excel_posicion',
                     'origen_json' => [
                         'hoja' => $hoja,
-                        'fila' => $r,
-                        'banco_raw' => (string) $bancoRaw,
+                        'fila' => $item['fila'],
+                        'banco_raw' => $item['banco_raw'],
                         'importado_at' => now()->toIso8601String(),
                     ],
                 ];
 
                 $existing = PosicionBancariaCheque::query()
                     ->where('empresa_id', $empresaId)
-                    ->where('numero_cheque', $nro)
+                    ->where('numero_cheque', $item['nro'])
                     ->when(
                         $cuentacajaId !== null,
                         fn ($q) => $q->where('cuentacaja_id', $cuentacajaId),
-                        fn ($q) => $q->where('banco_canonico', $banco),
+                        fn ($q) => $q->where('banco_canonico', $item['banco']),
                     )
                     ->first();
 
@@ -116,8 +150,8 @@ final class PosicionBancariaChequeImportSupport
                 } else {
                     PosicionBancariaCheque::query()->create(array_merge($payload, [
                         'empresa_id' => $empresaId,
-                        'banco_canonico' => $banco,
-                        'numero_cheque' => $nro,
+                        'banco_canonico' => $item['banco'],
+                        'numero_cheque' => $item['nro'],
                     ]));
                     $stats['inserted']++;
                 }

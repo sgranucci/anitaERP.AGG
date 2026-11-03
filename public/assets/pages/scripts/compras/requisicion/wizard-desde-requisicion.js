@@ -531,7 +531,7 @@
 					'<td><span class="small">' + htmlEsc(lin.codigopartidagasto || '—') + (lin.descripcionpartidagasto ? '<br><span class="text-muted small">' + htmlEsc(lin.descripcionpartidagasto) + '</span>' : '') + '</span></td>'
 				);
 				$tr.append(
-					'<td><span class="small">' + htmlEsc(lin.codigocapex || '—') + (lin.descripcioncapex ? '<br><span class="text-muted small">' + htmlEsc(lin.descripcioncapex) + '</span>' : '') + '</span></td>'
+					'<td><span class="small">' + htmlEsc(lin.codigocapex || '—') + (lin.codigoproyectocapex && String(lin.codigoproyectocapex) !== String(lin.codigocapex || '') ? '<br><span class="text-muted small" title="Código de proyecto">' + htmlEsc(lin.codigoproyectocapex) + '</span>' : '') + (lin.descripcioncapex ? '<br><span class="text-muted small">' + htmlEsc(lin.descripcioncapex) + '</span>' : '') + '</span></td>'
 				);
 			}
 			$tr.append(
@@ -794,6 +794,7 @@
 				descripcionpartidagasto: a.descripcionpartidagasto || '',
 				capex_id: a.capex_id || '',
 				codigocapex: a.codigocapex || '',
+				codigoproyectocapex: a.codigoproyectocapex || '',
 				descripcioncapex: a.descripcioncapex || '',
 				detalle: a.detalle || '',
 				proveedor_id: parseInt(a.proveedor_id || 0, 10) || 0,

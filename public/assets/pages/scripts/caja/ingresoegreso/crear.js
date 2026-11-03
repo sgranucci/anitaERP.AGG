@@ -1664,6 +1664,24 @@ var brutoSpIe = 0;
 			var nro = String($tr.find('.numerocheque_reemplazo').val() || '').trim();
 			var monto = parseTotalAsientoCampo($tr.find('.montocheque_reemplazo').val());
 			var origen = String($tr.find('.origen_reemplazo').val() || 'R').toUpperCase();
+			if (origen === 'T') {
+				if (!(monto > 0.000001)) {
+					mensaje = 'Indique el importe de la transferencia que reemplaza el cheque.';
+					if (typeof enfocarCampoCheque === 'function') {
+						enfocarCampoCheque($tr.find('.montocheque_reemplazo')[0]);
+					}
+					return false;
+				}
+				if (!(parseInt($tr.find('.cuentacaja_reemplazo_id').val() || '0', 10) > 0)) {
+					mensaje = 'Indique la cuenta de banco de la transferencia que reemplaza el cheque.';
+					if (typeof enfocarCampoCheque === 'function') {
+						enfocarCampoCheque($tr.find('.codigo_reemplazo')[0]);
+					}
+					return false;
+				}
+				completos++;
+				return;
+			}
 			if (nro === '' || !(monto > 0.000001)) {
 				mensaje = 'Complete número e importe del cheque de reemplazo en cada renglón de anulación.';
 				if (typeof enfocarCampoCheque === 'function') {

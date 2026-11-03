@@ -410,6 +410,7 @@ class CapexController extends Controller
             'id' => $row->id,
             'codigo' => $row->codigo,
             'descripcion' => $descripcion,
+            'codigoproyecto' => (string) ($row->codigoproyecto ?? ''),
         ]);
     }
 

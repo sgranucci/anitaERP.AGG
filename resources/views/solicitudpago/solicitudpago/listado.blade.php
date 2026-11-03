@@ -66,14 +66,15 @@
 		<thead>
 			<tr>
 				<th style="width: 6%;">C&oacute;digo</th>
-				<th style="width: 9%;">Empresa</th>
+				<th style="width: 8%;">Empresa</th>
 				<th style="width: 6%;">Fecha</th>
 				<th style="width: 6%;">Vencimiento</th>
-				<th style="width: 10%;">Concepto</th>
+				<th style="width: 6%;">Fecha pago</th>
+				<th style="width: 8%;">Concepto</th>
 				<th style="width: 8%;">Sector</th>
 				<th style="width: 8%;">Forma de pago</th>
 				<th style="width: 6%;">N&deg; prov.</th>
-				<th style="width: 11%;">Proveedor / Benef.</th>
+				<th style="width: 8%;">Proveedor / Benef.</th>
 				<th style="width: 7%;">Monto</th>
 				<th style="width: 6%;">Tratamiento</th>
 				<th style="width: 6%;">Estado</th>
@@ -88,6 +89,7 @@
 					<td>{{ $data->nombreempresa ?? (optional($data->empresas)->nombre ?? '') }}</td>
 					<td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
 					<td>{{ optional($data->fecha_vencimiento)->format('d/m/Y') }}</td>
+					<td>{{ optional($data->fecha_pago)->format('d/m/Y') }}</td>
 					<td>{{ optional($data->conceptos)->nombre ?? '' }}</td>
 					<td>{{ optional($data->sectores)->nombre ?? '' }}</td>
 					<td>{{ optional($data->formapagosol)->nombre ?? '' }}</td>

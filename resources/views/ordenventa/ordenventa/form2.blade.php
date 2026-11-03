@@ -44,7 +44,7 @@
         <div class="col-sm-6">
             <div class="form-group row">
                 <label for="tratamiento" class="col-lg-3 col-form-label">Total Orden de Venta</label>
-                <input type="text" name="montoordenventa" id="montoordenventa" class="col-lg-4 form-control" placeholder="Monto sin iva" aria-label="Monto sin iva" value="{{$data->monto??''}}" readonly>
+                <input type="text" name="montoordenventa" id="montoordenventa" class="col-lg-4 form-control" placeholder="Total con percepciones e IVA" aria-label="Total final" value="{{ number_format((float) data_get($data ?? null, 'monto', 0), 2, '.', '') }}" readonly>
             </div>
         </div>
         @include('ordenventa.ordenventa.template2')

@@ -19,16 +19,16 @@
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
 			<tr>
-				<td colspan="14" style="height: 52px;">&#160;</td>
+				<td colspan="15" style="height: 52px;">&#160;</td>
 			</tr>
 		</tbody>
 	@endif
 	<tbody>
 		<tr>
-			<td colspan="14"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de solicitudes de pago</h2></td>
+			<td colspan="15"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de solicitudes de pago</h2></td>
 		</tr>
 		<tr>
-			<td colspan="14"><strong>{{ $subtitulo }}</strong></td>
+			<td colspan="15"><strong>{{ $subtitulo }}</strong></td>
 		</tr>
 	</tbody>
 	<thead>
@@ -36,6 +36,7 @@
 			<th>C&oacute;digo</th>
 			<th>Fecha</th>
 			<th>Vencimiento</th>
+			<th>Fecha de pago</th>
 			<th>Concepto</th>
 			<th>Sector</th>
 			<th>Forma de pago</th>
@@ -59,6 +60,7 @@
 				<td>{{ $data->codigo }}</td>
 				<td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
 				<td>{{ optional($data->fecha_vencimiento)->format('d/m/Y') }}</td>
+				<td>{{ optional($data->fecha_pago)->format('d/m/Y') }}</td>
 				<td>{{ optional($data->conceptos)->nombre ?? '' }}</td>
 				<td>{{ optional($data->sectores)->nombre ?? '' }}</td>
 				<td>{{ optional($data->formapagosol)->nombre ?? '' }}</td>

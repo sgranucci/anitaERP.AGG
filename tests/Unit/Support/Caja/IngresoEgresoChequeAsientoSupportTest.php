@@ -9,6 +9,13 @@ use ReflectionMethod;
 
 class IngresoEgresoChequeAsientoSupportTest extends TestCase
 {
+    public function test_transferencia_reemplaza_emitido_en_haber_y_recibido_en_debe(): void
+    {
+        $this->assertSame('H', IngresoEgresoChequeAsientoSupport::dhTransferenciaReemplazo('E'));
+        $this->assertSame('D', IngresoEgresoChequeAsientoSupport::dhTransferenciaReemplazo('R'));
+        $this->assertSame('H', IngresoEgresoChequeAsientoSupport::dhTransferenciaReemplazo(''));
+    }
+
     public function test_cheque_emitido_siempre_haber_en_op_egreso(): void
     {
         $this->assertSame('H', IngresoEgresoChequeAsientoSupport::dhEmitido());

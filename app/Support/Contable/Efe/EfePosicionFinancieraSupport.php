@@ -49,10 +49,33 @@ class EfePosicionFinancieraSupport
 
     private const FECHA_CORTE_TURNO_MAQUINA = 20100300;
 
-    /** Desde este YYYYMM la posición se arma con anitaERP (Anita = máquinas/remesas faltantes). */
-    private const CORTE_FUENTE_ERP_YM = 202608;
+    /**
+     * Desde este YYYYMM la posición se arma con anitaERP
+     * (Anita solo completa máquinas/remesas faltantes).
+     * Antes: híbrido Anita-first / completa huecos.
+     */
+    public const CORTE_FUENTE_ERP_YM = 202608;
 
     private bool $fuenteErpPura = false;
+
+    /**
+     * Fuente predominante del mes: 'anita' (híbrido, pre-corte) o 'erp' (pura).
+     */
+    public static function fuenteDelPeriodo(int $anio, int $mes): string
+    {
+        if ($anio <= 0 || $mes <= 0) {
+            return 'anita';
+        }
+
+        return (($anio * 100) + $mes) >= self::CORTE_FUENTE_ERP_YM ? 'erp' : 'anita';
+    }
+
+    public static function etiquetaFuente(string $fuente): string
+    {
+        return $fuente === 'erp'
+            ? 'ERP (anitaERP)'
+            : 'Anita (híbrido)';
+    }
 
     /** Destinos rememae (rememae.def). */
     private const REMEM_MACRO = '1';
@@ -151,7 +174,7 @@ class EfePosicionFinancieraSupport
         $this->dias = range(1, (int) $finMes->day);
         $fechaDesde = (int) $inicioMes->format('Ymd');
         $fechaHasta = (int) $finMes->format('Ymd');
-        $this->fuenteErpPura = (($anio * 100) + $mes) >= self::CORTE_FUENTE_ERP_YM;
+        $this->fuenteErpPura = self::fuenteDelPeriodo($anio, $mes) === 'erp';
 
         $errores = [];
         /** @var list<array{etiqueta: string, valor: float, por_dia: array<int, float>, bloque: string, tipo_fila: string}> $filasOrdenadas */
@@ -611,6 +634,8 @@ class EfePosicionFinancieraSupport
 
         $totales = $this->mapaUltimaEtiqueta($filasOrdenadas);
 
+        $fuente = $this->fuenteErpPura ? 'erp' : 'anita';
+
         return [
             'totales_por_etiqueta' => $totales,
             'filas_ordenadas' => $filasOrdenadas,
@@ -619,6 +644,10 @@ class EfePosicionFinancieraSupport
             'saldo_final' => $saldoFinal,
             'saldo_inicial_origen' => $saldoInicialOrigen,
             'saldo_cierre_anterior_id' => $saldoCierreErp?->id,
+            'fuente' => $fuente,
+            'fuente_etiqueta' => self::etiquetaFuente($fuente),
+            'mes' => $mes,
+            'anio' => $anio,
             'bingo' => $this->mapaTotales($bingo),
             'premios_bingo' => $this->mapaTotales($premios),
             'gastronomia' => $this->mapaTotales($gastronomia),
@@ -3118,6 +3147,10 @@ class EfePosicionFinancieraSupport
             'saldo_final' => null,
             'saldo_inicial_origen' => null,
             'saldo_cierre_anterior_id' => null,
+            'fuente' => 'anita',
+            'fuente_etiqueta' => self::etiquetaFuente('anita'),
+            'mes' => null,
+            'anio' => null,
             'bingo' => [],
             'premios_bingo' => [],
             'gastronomia' => [],

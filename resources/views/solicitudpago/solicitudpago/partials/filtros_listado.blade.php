@@ -16,7 +16,6 @@
     $fScope = $f['empresa_scope'] ?? 'una';
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-solicitudpago" data-listado-filtros-panel>
-    <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
     @if ($fScope === 'todas')
         <input type="hidden" name="empresa_todas" value="1">
     @elseif ($fEmp > 0)
@@ -37,7 +36,7 @@
                 <label class="small mb-1" for="filtro_campo">Campo</label>
                 <select name="filtro_campo" id="filtro_campo" class="form-control form-control-sm">
                     <option value="">— (búsqueda rápida) —</option>
-                    @foreach($camposFiltro ?? SolicitudpagoListadoFiltros::CAMPOS as $clave => $meta)
+                    @foreach(SolicitudpagoListadoFiltros::CAMPOS as $clave => $meta)
                         <option value="{{ $clave }}" data-type="{{ $meta['tipo'] }}" @selected($campoActivo === $clave)>{{ $meta['etiqueta'] }}</option>
                     @endforeach
                 </select>

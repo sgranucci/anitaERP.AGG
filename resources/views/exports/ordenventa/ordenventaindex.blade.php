@@ -4,7 +4,7 @@
     $esExcel = ! empty($esExcel);
     $reservarFilaLogoExcel = ! empty($reservarFilaLogoExcel);
     $ordenventa = $ordenventa ?? collect();
-    $colspan = 11;
+    $colspan = 14;
 
     $logosCabecera = $esExcel ? [] : EmpresaLogoArchivo::logosCabeceraDesdeColeccion($ordenventa);
     $subtitulo = 'Generado '.date('d/m/Y H:i').' — '.(is_countable($ordenventa) ? count($ordenventa) : 0).' registro(s)';
@@ -86,7 +86,10 @@
             <th>Tratamiento</th>
             <th>Centro de Costo</th>
             <th>Cliente</th>
-            <th class="num">Monto</th>
+            <th class="num">Subtotal</th>
+            <th class="num">Percepciones</th>
+            <th class="num">IVA</th>
+            <th class="num">Total</th>
             <th>Moneda</th>
             <th>Estado</th>
             <th>Detalle</th>
@@ -102,6 +105,9 @@
                 <td>{{ $data->tratamiento ?? '' }}</td>
                 <td>{{ $data->nombrecentrocosto ?? '' }}</td>
                 <td>{{ $data->nombrecliente ?? '' }}</td>
+                <td class="num">{{ $fmtMonto($data->subtotal ?? $data->monto) }}</td>
+                <td class="num">{{ $fmtMonto($data->percepcion ?? 0) }}</td>
+                <td class="num">{{ $fmtMonto($data->iva ?? 0) }}</td>
                 <td class="num">{{ $fmtMonto($data->monto) }}</td>
                 <td>{{ $data->abreviaturamoneda }}</td>
                 <td>{{ $data->estado }}</td>

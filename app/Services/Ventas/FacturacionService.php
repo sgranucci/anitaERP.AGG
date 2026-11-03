@@ -2074,7 +2074,8 @@ class FacturacionService
 
 		$moneda_id = $ordenventa->moneda_id;
 		$impuesto_id = config('ordenventa.IMPUESTO_ID');
-		$incluyeimpuesto = config('ordenventa.INCLUYEIMPUESTO');
+		// El concepto es el bruto de la OV. El IVA y las percepciones van aparte.
+		$incluyeimpuesto = 'N';
 
 		foreach($ordenventa->ordenventa_conceptos as $concepto)
 		{
@@ -2120,8 +2121,16 @@ class FacturacionService
 						  "empresa_id" => $empresa_id,
 						];
 
-		// Calcula impuestos
+		// Calcula el neto y después deja el IVA y las percepciones cargados en la orden,
+		// para que el total del comprobante coincida con el de la OV.
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fechaFactura);
+		$conceptosTotales = \App\Support\Ventas\OrdenventaFacturaImportesSupport::aplicar(
+			$conceptosTotales,
+			round((float) ($ordenventa->iva ?? 0) * $coeficienteCuota, 2),
+			round((float) ($ordenventa->percepcion ?? 0) * $coeficienteCuota, 2),
+			isset($datosCliente['provincia']) ? (int) $datosCliente['provincia'] : null,
+			(int) $impuesto_id
+		);
 
 		// Arma total de comprobante
 		$totalComprobante = $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total', 'importe');

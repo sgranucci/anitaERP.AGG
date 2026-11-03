@@ -3,6 +3,7 @@
 namespace App\Repositories\Caja;
 
 use App\Models\Caja\Cheque;
+use App\Models\Caja\ChequeReemplazoTransferencia;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Estadocheque_Banco;
 use App\Models\Contable\Cuentacontable;
@@ -765,7 +766,12 @@ class ChequeRepository implements ChequeRepositoryInterface
         ?int $cajaId
     ): array {
         $ids = [];
+        $idsTransferencia = [];
         if (! isset($data['cheque_anulado_ids']) || ! is_array($data['cheque_anulado_ids'])) {
+            if ($funcion === 'update') {
+                $this->sincronizarTransferenciasReemplazo($cajaMovimientoId, []);
+            }
+
             return $ids;
         }
 
@@ -796,14 +802,31 @@ class ChequeRepository implements ChequeRepositoryInterface
 
             $montoReemplazo = (float) ($montosReemplazo[$i] ?? $anulado->monto);
             $numeroReemplazo = trim((string) ($numerosReemplazo[$i] ?? ''));
+            $tipoReemplazo = strtoupper((string) ($origenReemplazo[$i] ?? 'E'));
+            $fechaPago = (string) ($fechasReemplazo[$i] ?? $fechaOperacion);
+
+            if ($tipoReemplazo === 'T') {
+                $this->persistirUnaTransferenciaReemplazo(
+                    $anulado,
+                    $i,
+                    $montoReemplazo,
+                    $fechaPago,
+                    $fechaOperacion,
+                    $cajaMovimientoId,
+                    $cuentacajaReemplazo,
+                    $monedaReemplazo,
+                    $cotizReemplazo
+                );
+                $idsTransferencia[] = $anuladoId;
+
+                continue;
+            }
+
             if ($numeroReemplazo === '' || $montoReemplazo <= 0) {
                 throw new Exception(
                     'Complete número e importe del cheque de reemplazo (cheque anulado '.$anulado->numerocheque.').'
                 );
             }
-
-            $tipoReemplazo = strtoupper((string) ($origenReemplazo[$i] ?? 'E'));
-            $fechaPago = (string) ($fechasReemplazo[$i] ?? $fechaOperacion);
             $anombredeNuevo = trim((string) ($anombredeReemplazo[$i] ?? ''));
             if ($anombredeNuevo === '') {
                 $anombredeNuevo = (string) ($anulado->anombrede ?? '');
@@ -906,8 +929,77 @@ class ChequeRepository implements ChequeRepositoryInterface
         }
 
         $this->actualizarNumeradorAnitaDesdeReemplazos($data);
+        $this->sincronizarTransferenciasReemplazo($cajaMovimientoId, $idsTransferencia);
 
         return $ids;
+    }
+
+    /**
+     * @param  array<int, mixed>  $cuentacajaReemplazo
+     * @param  array<int, mixed>  $monedaReemplazo
+     * @param  array<int, mixed>  $cotizReemplazo
+     */
+    private function persistirUnaTransferenciaReemplazo(
+        Cheque $anulado,
+        int $i,
+        float $montoReemplazo,
+        string $fechaPago,
+        string $fechaOperacion,
+        int $cajaMovimientoId,
+        array $cuentacajaReemplazo,
+        array $monedaReemplazo,
+        array $cotizReemplazo
+    ): void {
+        if ($montoReemplazo <= 0) {
+            throw new Exception(
+                'Indique el importe de la transferencia que reemplaza el cheque '.$anulado->numerocheque.'.'
+            );
+        }
+        $cuentacajaId = (int) ($cuentacajaReemplazo[$i] ?? 0);
+        if ($cuentacajaId <= 0) {
+            throw new Exception(
+                'Indique la cuenta de banco de la transferencia que reemplaza el cheque '.$anulado->numerocheque.'.'
+            );
+        }
+        $cuentacaja = $this->cuentacajaRepository->find($cuentacajaId);
+        if ($cuentacaja === null) {
+            throw new Exception('Cuenta de caja de la transferencia no encontrada (id '.$cuentacajaId.').');
+        }
+
+        $anulado->estado = 'A';
+        $anulado->save();
+
+        ChequeReemplazoTransferencia::query()->updateOrCreate(
+            [
+                'caja_movimiento_id' => $cajaMovimientoId,
+                'cheque_id' => (int) $anulado->id,
+            ],
+            [
+                'cuentacaja_id' => $cuentacajaId,
+                'fecha' => $fechaPago !== '' ? $fechaPago : $fechaOperacion,
+                'monto' => $montoReemplazo,
+                'moneda_id' => (int) ($monedaReemplazo[$i] ?? $anulado->moneda_id),
+                'cotizacion' => (float) ($cotizReemplazo[$i] ?? $anulado->cotizacion ?: 1),
+            ]
+        );
+    }
+
+    /**
+     * @param  list<int>  $chequeIdsConservados
+     */
+    private function sincronizarTransferenciasReemplazo(int $cajaMovimientoId, array $chequeIdsConservados): void
+    {
+        $q = ChequeReemplazoTransferencia::query()
+            ->where('caja_movimiento_id', $cajaMovimientoId);
+        if ($chequeIdsConservados !== []) {
+            $q->whereNotIn('cheque_id', $chequeIdsConservados);
+        }
+        $viejas = $q->get();
+        foreach ($viejas as $vieja) {
+            $chequeId = (int) $vieja->cheque_id;
+            $vieja->delete();
+            ChequeReemplazoTransferencia::restaurarChequeSiQuedoSinReemplazo($chequeId, $cajaMovimientoId);
+        }
     }
 
     /**

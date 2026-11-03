@@ -129,17 +129,28 @@ class ArticuloListadoFiltros
     ];
 
     /**
+     * Códigos: comparación directa (la collation ya es insensible a mayúsculas)
+     * para que el índice de SKU sirva. La coincidencia flexible no aplica: un
+     * sufijo corto de un código («23») arrastra decenas de artículos ajenos.
+     *
+     * @var list<string>
+     */
+    private const COLUMNAS_CODIGO = [
+        'articulo.sku',
+        'articulo.codigobarra',
+        'articulo.numeroparte',
+        'articulo.skualternativo',
+    ];
+
+    /**
      * Columnas donde aplica coincidencia flexible (tolerancia a errores de tipeo).
      *
      * @var list<string>
      */
     private const COLUMNAS_COINCIDENCIA_FLEXIBLE = [
-        'articulo.sku',
-        'articulo.codigobarra',
         'articulo.descripcion',
         'unidadmedida.nombre',
         'articulo.ubicacionparte',
-        'articulo.numeroparte',
         'categoria.nombre',
         'tipoarticulo.nombre',
         'usoarticulo.nombre',
@@ -561,6 +572,12 @@ class ArticuloListadoFiltros
             return;
         }
 
+        if (self::terminoPareceCodigo($valor) && in_array($operador, ['contiene', 'empieza', 'termina', 'igual'], true)) {
+            self::aplicarBusquedaCodigo($query, $operador, $valor);
+
+            return;
+        }
+
         $id = filter_var($valor, FILTER_VALIDATE_INT);
         $like = self::patronLike($operador, $valor);
 
@@ -606,6 +623,75 @@ class ArticuloListadoFiltros
     private static function usaCoincidenciaFlexibleEnColumna(string $column): bool
     {
         return in_array($column, self::COLUMNAS_COINCIDENCIA_FLEXIBLE, true);
+    }
+
+    /**
+     * Un SKU o código (MAN0000004323, 203967, LAB6888): sin espacios, con algún dígito.
+     * Un texto de descripción («tornillo») no entra y sigue por la búsqueda amplia.
+     */
+    public static function terminoPareceCodigo(string $valor): bool
+    {
+        $valor = trim($valor);
+        $len = mb_strlen($valor);
+        if ($len < 4 || $len > 64 || preg_match('/\s/u', $valor)) {
+            return false;
+        }
+
+        return preg_match('/^[\p{L}0-9._\-\/]+$/u', $valor) === 1
+            && preg_match('/\d/u', $valor) === 1;
+    }
+
+    /**
+     * Búsqueda de un código contra SKU, barra, parte y descripción.
+     * Evita el OR con LOWER() y la coincidencia flexible, que no pueden usar el índice.
+     *
+     * @param  Builder<\App\Models\Stock\Articulo>  $query
+     */
+    private static function aplicarBusquedaCodigo(Builder $query, string $operador, string $valor): void
+    {
+        $columnas = [
+            'articulo.sku',
+            'articulo.codigobarra',
+            'articulo.numeroparte',
+            'articulo.skualternativo',
+            'articulo.descripcion',
+        ];
+
+        $query->where(function ($q) use ($columnas, $operador, $valor) {
+            foreach ($columnas as $col) {
+                $q->orWhere(function ($inner) use ($col, $operador, $valor) {
+                    if ($operador === 'igual') {
+                        self::whereCodigoIgual($inner, $col, $valor);
+
+                        return;
+                    }
+                    self::whereTextoInsensitive($inner, $col, self::patronLike($operador, $valor));
+                });
+            }
+            $id = filter_var($valor, FILTER_VALIDATE_INT);
+            if ($id !== false && in_array($operador, ['contiene', 'igual'], true)) {
+                $q->orWhere('articulo.id', (int) $id);
+            }
+        });
+    }
+
+    /**
+     * @param  Builder<\App\Models\Stock\Articulo>  $query
+     */
+    private static function whereCodigoIgual(Builder $query, string $column, string $valor): void
+    {
+        if (self::esColumnaCodigo($column) && ! SqlDialectSupport::esPostgres()) {
+            $query->where($column, $valor);
+
+            return;
+        }
+
+        $query->whereRaw(self::expresionTextoMinusculas($column).' = ?', [self::normalizarTextoBusqueda($valor)]);
+    }
+
+    private static function esColumnaCodigo(string $column): bool
+    {
+        return in_array($column, self::COLUMNAS_CODIGO, true);
     }
 
     /**
@@ -735,7 +821,7 @@ class ArticuloListadoFiltros
                 self::whereTextoInsensitive($query, $column, '%'.self::escapeLike($valor));
                 break;
             case 'igual':
-                $query->whereRaw(self::expresionTextoMinusculas($column).' = ?', [self::normalizarTextoBusqueda($valor)]);
+                self::whereCodigoIgual($query, $column, $valor);
                 break;
             case 'distinto':
                 $query->whereRaw(self::expresionTextoMinusculas($column).' != ?', [self::normalizarTextoBusqueda($valor)]);
@@ -765,6 +851,12 @@ class ArticuloListadoFiltros
      */
     private static function whereTextoInsensitive(Builder $query, string $column, string $patronLike): void
     {
+        if (self::esColumnaCodigo($column) && ! SqlDialectSupport::esPostgres()) {
+            $query->where($column, 'like', $patronLike);
+
+            return;
+        }
+
         $query->whereRaw(self::expresionTextoMinusculas($column).' LIKE ?', [self::normalizarTextoBusqueda($patronLike)]);
     }
 

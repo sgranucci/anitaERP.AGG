@@ -14,8 +14,9 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * Hojas de proyección del día (Macro / BMA / BAPRO / Bi Bank / BIND)
  * + Resumen descubierto. Esqueletos editables enlazados al Resumen/ResumenCheques.
  *
- * Los movimientos (TRF, RRHH, impuestos, etc.) quedan en blanco para carga
- * operativa en Excel; cheques del día se prellenan desde ResumenCheques.
+ * Los movimientos operativos quedan en blanco para carga en Excel.
+ * TRF PROYECCION sale de la proyección de pagos (vencidos y del día, medio transferencia).
+ * Los cheques del día se prellenan desde ResumenCheques.
  */
 final class PosicionBancariaProyeccionSupport
 {

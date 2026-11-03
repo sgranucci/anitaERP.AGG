@@ -56,7 +56,10 @@
                             <th>Tratamiento</th>
                             <th>Centro de Costo</th>
                             <th>Cliente</th>
-                            <th>Monto</th>
+                            <th class="text-right">Subtotal</th>
+                            <th class="text-right">Percepciones</th>
+                            <th class="text-right">IVA</th>
+                            <th class="text-right">Total</th>
                             <th>Moneda</th>
                             <th>Estado</th>
                             <th>Detalle</th>
@@ -74,7 +77,10 @@
                             <td>{{$data->tratamiento ?? ''}}</td>
                             <td>{{$data->nombrecentrocosto ?? '' }}</td>
                             <td>{{$data->nombrecliente ?? ''}}</td>
-                            <td>{{number_format($data->monto,2) ?? ''}}</td>
+                            <td class="text-right">{{number_format((float) ($data->subtotal ?? $data->monto), 2, ',', '.')}}</td>
+                            <td class="text-right">{{number_format((float) ($data->percepcion ?? 0), 2, ',', '.')}}</td>
+                            <td class="text-right">{{number_format((float) ($data->iva ?? 0), 2, ',', '.')}}</td>
+                            <td class="text-right">{{number_format((float) $data->monto, 2, ',', '.')}}</td>
                             <td>{{$data->abreviaturamoneda}}</td>
                             <td>{{$data->estado}}</td>
                             <td>{{$data->detalle}}</td>

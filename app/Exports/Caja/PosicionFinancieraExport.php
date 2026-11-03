@@ -32,6 +32,8 @@ class PosicionFinancieraExport implements FromView, ShouldAutoSize, WithColumnWi
 
     private string $periodoTexto = '';
 
+    private string $tituloHoja = 'Posición financiera';
+
     private bool $csv = false;
 
     private bool $hayFilaLogos = false;
@@ -51,13 +53,22 @@ class PosicionFinancieraExport implements FromView, ShouldAutoSize, WithColumnWi
      * @param  list<array{etiqueta: string, valor: float, por_dia?: array<int, float>}>  $filas
      * @param  list<int>  $dias
      */
-    public function parametros(array $filas, array $dias, mixed $empresa, string $periodoTexto, bool $csv = false): self
-    {
+    public function parametros(
+        array $filas,
+        array $dias,
+        mixed $empresa,
+        string $periodoTexto,
+        bool $csv = false,
+        ?string $tituloHoja = null,
+    ): self {
         $this->filas = $filas;
         $this->dias = $dias;
         $this->empresa = $empresa;
         $this->periodoTexto = $periodoTexto;
         $this->csv = $csv;
+        if ($tituloHoja !== null && trim($tituloHoja) !== '') {
+            $this->tituloHoja = substr(trim($tituloHoja), 0, 31);
+        }
 
         return $this;
     }
@@ -93,7 +104,7 @@ class PosicionFinancieraExport implements FromView, ShouldAutoSize, WithColumnWi
 
     public function title(): string
     {
-        return 'Posición financiera';
+        return $this->tituloHoja !== '' ? $this->tituloHoja : 'Posición financiera';
     }
 
     public function columnWidths(): array

@@ -1,6 +1,8 @@
 @php
-    $cheque = $cheque ?? null;
-    $anulado = $cheque?->chequeReemplazado;
+    $transferencia = $transferencia ?? null;
+    $esTransferencia = $transferencia !== null;
+    $cheque = $esTransferencia ? null : ($cheque ?? null);
+    $anulado = $esTransferencia ? $transferencia->chequeAnulado : $cheque?->chequeReemplazado;
     $chequeraFila = $cheque?->chequeras;
     $etiquetaChequera = '';
     $tipoChequeraFila = '';
@@ -13,18 +15,33 @@
         );
         $tipoChequeraFila = (string) ($chequeraFila->tipocheque ?? '');
     }
-    $origenVal = (string) ($cheque?->origen ?? 'E');
+    $origenVal = (string) ($cheque?->origen ?? ($anulado?->origen ?? 'E'));
     $esEmitido = $origenVal === 'E';
+    $tipoReemplazo = $esTransferencia ? 'T' : ($cheque ? ($esEmitido ? 'E' : 'R') : 'E');
+    $cuentaReemplazo = $esTransferencia ? $transferencia->cuentacajas : $cheque?->cuentacajas;
+    $montoReemplazo = $esTransferencia ? $transferencia->monto : $cheque?->monto;
+    $monedaReemplazoId = $esTransferencia ? $transferencia->moneda_id : $cheque?->moneda_id;
+    $cotizacionReemplazo = $esTransferencia ? $transferencia->cotizacion : ($cheque?->cotizacion ?? 1);
+    $fechaReemplazo = $esTransferencia ? $transferencia->fecha : $cheque?->fechapago;
+    $fechaAnulado = $anulado?->fechapago;
+    if ($fechaAnulado instanceof \DateTimeInterface) {
+        $fechaAnulado = $fechaAnulado->format('Y-m-d');
+    }
+    if ($fechaReemplazo instanceof \DateTimeInterface) {
+        $fechaReemplazo = $fechaReemplazo->format('Y-m-d');
+    }
     $detalleAnulado = '';
     if ($anulado) {
-        $detalleAnulado = trim(($anulado->numerocheque ?? '').' ('.($anulado->bancos->nombre ?? '').')');
+        $detalleAnulado = trim(($anulado->numerocheque ?? '').' ('.($anulado->bancos?->nombre ?? '').')');
     }
 @endphp
 <tr class="item-cheque-reemplazo">
     <td>
-        <input type="hidden" name="cheque_anulado_ids[]" class="cheque_anulado_id" value="{{ $cheque?->cheque_reemplaza_id ?? '' }}">
+        <input type="hidden" name="cheque_anulado_ids[]" class="cheque_anulado_id" value="{{ $esTransferencia ? ($transferencia->cheque_id ?? '') : ($cheque?->cheque_reemplaza_id ?? '') }}">
         <input type="hidden" name="origen_anulado[]" class="origen_anulado" value="{{ $anulado?->origen ?? '' }}">
-        @if ($cheque)
+        <input type="hidden" name="cuentacaja_anulado_ids[]" class="cuentacaja_anulado_id" value="{{ $anulado?->cuentacaja_id ?? '' }}">
+        <input type="hidden" name="fechapago_anulado[]" class="fechapago_anulado" value="{{ $fechaAnulado ?? '' }}">
+        @if ($cheque || $esTransferencia)
             <input type="text" class="form-control form-control-sm numerocheque_anulado" readonly value="{{ $detalleAnulado }}">
         @else
             <div class="d-flex align-items-center flex-nowrap mb-1" style="gap:4px;">
@@ -40,29 +57,30 @@
         </small>
     </td>
     <td>
-        <select name="origen_reemplazo[]" class="form-control form-control-sm origen_reemplazo" title="Tipo del cheque de reemplazo">
-            <option value="E" @selected($esEmitido)>Emitido</option>
-            <option value="R" @selected(! $esEmitido)>Recibido</option>
+        <select name="origen_reemplazo[]" class="form-control form-control-sm origen_reemplazo" title="Cheque nuevo o transferencia">
+            <option value="E" @selected($tipoReemplazo === 'E')>Emitido</option>
+            <option value="R" @selected($tipoReemplazo === 'R')>Recibido</option>
+            <option value="T" @selected($tipoReemplazo === 'T')>Transferencia</option>
         </select>
     </td>
     <td>
-        <input type="hidden" name="cuentacaja_reemplazo_ids[]" class="cuentacaja_reemplazo_id" value="{{ $cheque?->cuentacaja_id ?? '' }}">
+        <input type="hidden" name="cuentacaja_reemplazo_ids[]" class="cuentacaja_reemplazo_id" value="{{ $esTransferencia ? ($transferencia->cuentacaja_id ?? '') : ($cheque?->cuentacaja_id ?? '') }}">
         <input type="hidden" name="banco_reemplazo_ids[]" class="banco_reemplazo_id" value="{{ $cheque?->banco_id ?? '' }}">
         <input type="hidden" name="chequera_reemplazo_ids[]" class="chequera_reemplazo_id" value="{{ $cheque?->chequera_id ?? '' }}">
         <input type="hidden" class="chequera_reemplazo_tipo" value="{{ $tipoChequeraFila }}">
         <input type="hidden" class="chequera_reemplazo_tipochequera" value="{{ $chequeraFila?->tipochequera ?? '' }}">
 
-        <div class="bloque-reemplazo-emitido" @if (! $esEmitido) style="display:none" @endif>
+        <div class="bloque-reemplazo-emitido" @if ($tipoReemplazo === 'R') style="display:none" @endif>
             <div class="d-flex align-items-center flex-nowrap mb-1" style="gap:4px;">
                 <button type="button" class="btn-accion-tabla consultacuentacaja_reemplazo tooltipsC flex-shrink-0" title="Cuenta banco (F1)">
                     <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" class="codigo_reemplazo form-control form-control-sm" value="{{ $cheque?->cuentacajas?->codigo ?? '' }}"
+                <input type="text" class="codigo_reemplazo form-control form-control-sm" value="{{ $cuentaReemplazo?->codigo ?? '' }}"
                     placeholder="C&oacute;d." title="C&oacute;digo cuenta; Enter valida; F1 consulta" autocomplete="off" style="width:5rem;">
             </div>
             <input type="text" class="nombre_reemplazo form-control form-control-sm mb-1" readonly
-                value="{{ $cheque?->cuentacajas?->nombre ?? '' }}" placeholder="Cuenta tesorer&iacute;a">
-            <div class="d-flex align-items-center flex-nowrap" style="gap:4px;">
+                value="{{ $cuentaReemplazo?->nombre ?? '' }}" placeholder="Cuenta tesorer&iacute;a">
+            <div class="bloque-reemplazo-chequera align-items-center flex-nowrap" style="gap:4px; display:{{ $tipoReemplazo === 'E' ? 'flex' : 'none' }};">
                 <button type="button" class="btn-accion-tabla consultachequera_reemplazo tooltipsC flex-shrink-0" title="Chequera (puede ser otra)">
                     <i class="fa fa-search text-primary"></i>
                 </button>
@@ -73,7 +91,7 @@
             </div>
         </div>
 
-        <div class="bloque-reemplazo-recibido" @if ($esEmitido) style="display:none" @endif>
+        <div class="bloque-reemplazo-recibido" @if ($tipoReemplazo !== 'R') style="display:none" @endif>
             <div class="d-flex align-items-center flex-nowrap mb-1" style="gap:4px;">
                 <button type="button" class="btn-accion-tabla consultabanco_reemplazo tooltipsC flex-shrink-0" title="Banco">
                     <i class="fa fa-search text-primary"></i>
@@ -92,33 +110,37 @@
     <td>
         <input type="text" name="numerocheque_reemplazo[]" class="form-control form-control-sm numerocheque_reemplazo"
             value="{{ $cheque?->numerocheque ?? '' }}" placeholder="Nro. nuevo"
-            title="Se completa al buscar el cheque a anular (talonario ERP o Anita)" inputmode="numeric">
+            title="Se completa al buscar el cheque a anular (talonario ERP o Anita). En transferencia queda vac&iacute;o." inputmode="numeric"
+            @if ($esTransferencia) readonly @endif>
+        <small class="aviso-reemplazo-transferencia text-muted" style="font-size:10px;line-height:1.2;@if ($esTransferencia) display:block @else display:none @endif">
+            Transferencia: solo la cuenta, sin n&uacute;mero de cheque.
+        </small>
         <small class="tctes_reemplazo_lbl text-muted d-block" style="font-size:10px;line-height:1.2;"></small>
     </td>
     <td>
         <input type="date" name="fechapago_reemplazo[]" class="form-control form-control-sm fechapago_reemplazo"
-            value="{{ $cheque?->fechapago ?? '' }}">
+            value="{{ $fechaReemplazo ?? '' }}">
     </td>
     <td>
         <input type="text" name="anombrede_reemplazo[]" class="form-control form-control-sm anombrede_reemplazo bloque-reemplazo-emitido-extra"
-            value="{{ $cheque?->anombrede ?? '' }}" placeholder="A nombre de" maxlength="40"
-            @if (! $esEmitido) style="display:none" @endif title="Beneficiario (emitido)">
-        <span class="text-muted small bloque-reemplazo-recibido-extra" @if ($esEmitido) style="display:none" @endif>—</span>
+            value="{{ $cheque?->anombrede ?? ($anulado?->anombrede ?? '') }}" placeholder="A nombre de" maxlength="40"
+            @if ($tipoReemplazo === 'R') style="display:none" @endif title="Beneficiario (emitido o transferencia)">
+        <span class="text-muted small bloque-reemplazo-recibido-extra" @if ($tipoReemplazo !== 'R') style="display:none" @endif>—</span>
     </td>
     <td>
         <input type="number" name="montocheque_reemplazo[]" class="form-control form-control-sm montocheque_reemplazo text-right"
-            min="0" step="0.01" value="{{ $cheque?->monto ?? '' }}">
+            min="0" step="0.01" value="{{ $montoReemplazo ?? '' }}">
     </td>
     <td>
         <select name="moneda_reemplazo_ids[]" class="form-control form-control-sm moneda_reemplazo_id">
             @foreach ($moneda_query as $m)
-                <option value="{{ $m->id }}" @selected(($cheque && (int) $m->id === (int) $cheque->moneda_id) || (! $cheque && (int) $m->id === (int) config('cotizacion.ID_MONEDA_DEFAULT', 1)))>{{ $m->abreviatura }}</option>
+                <option value="{{ $m->id }}" @selected(($monedaReemplazoId && (int) $m->id === (int) $monedaReemplazoId) || (! $monedaReemplazoId && (int) $m->id === (int) config('cotizacion.ID_MONEDA_DEFAULT', 1)))>{{ $m->abreviatura }}</option>
             @endforeach
         </select>
     </td>
     <td>
         <input type="number" name="cotizacioncheque_reemplazo[]" class="form-control form-control-sm cotizacioncheque_reemplazo"
-            step="0.0001" value="{{ $cheque?->cotizacion ?? 1 }}">
+            step="0.0001" value="{{ $cotizacionReemplazo ?? 1 }}">
     </td>
     <td class="text-center">
         <button type="button" class="btn-accion-tabla eliminar_cheque_reemplazo tooltipsC" title="Eliminar">

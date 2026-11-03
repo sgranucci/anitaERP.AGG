@@ -880,8 +880,10 @@
                                         <i class="fa fa-search text-primary"></i>
                                     </button>
                                 @endif
-                                <input type="text" class="codigocapex form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigocapexs[]"
+                                <input type="text" class="codigocapex form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigocapexs[]" title="Número de proyecto"
                                     value="{{ old('codigocapexs.'.$idx, optional($linea->capexs)->codigo ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}>
+                                <input type="text" class="codigoproyectocapex form-control form-control-sm ml-1" style="width: 8.5rem; flex: 0 1 9rem; font-size: 0.75rem;" readonly tabindex="-1" title="Código de proyecto" placeholder="Cód. proyecto"
+                                    value="{{ optional($linea->capexs)->codigoproyecto ?? '' }}">
                                 <input type="text" class="descripcioncapex form-control form-control-sm ml-1 flex-grow-1" style="min-width: 0; font-size: 0.8rem;" name="descripcioncapexs[]"
                                     value="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}" readonly title="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}">
                             </div>

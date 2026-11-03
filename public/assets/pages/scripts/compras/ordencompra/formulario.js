@@ -3024,6 +3024,7 @@ $(function () {
 					$row.find('.descripcionpartidagasto').val(a.descripcionpartidagasto || '');
 					$row.find('.capex_id').val(a.capex_id || '');
 					$row.find('.codigocapex').val(a.codigocapex || '');
+					$row.find('.codigoproyectocapex').val(a.codigoproyectocapex || '');
 					$row.find('.descripcioncapex').val(a.descripcioncapex || '');
 					if (ocMostrarPeso) {
 						var pesoU = parseFloat(a.peso_unitario != null ? a.peso_unitario : a.peso) || 0;

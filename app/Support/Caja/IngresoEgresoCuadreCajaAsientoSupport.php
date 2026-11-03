@@ -184,6 +184,7 @@ final class IngresoEgresoCuadreCajaAsientoSupport
         $montos = array_values((array) ($data['montocheque_reemplazo'] ?? []));
         $origenes = array_values((array) ($data['origen_reemplazo'] ?? []));
         $anulados = array_values((array) ($data['cheque_anulado_ids'] ?? []));
+        $origenesAnulados = array_values((array) ($data['origen_anulado'] ?? []));
         $n = max(count($montos), count($origenes), count($anulados));
 
         for ($i = 0; $i < $n; $i++) {
@@ -195,7 +196,14 @@ final class IngresoEgresoCuadreCajaAsientoSupport
                 continue;
             }
             $origen = strtoupper(trim((string) ($origenes[$i] ?? 'R')));
-            if ($origen === 'E') {
+            if ($origen === 'T') {
+                $anulado = strtoupper(trim((string) ($origenesAnulados[$i] ?? 'E')));
+                if ($anulado === 'R') {
+                    $debe += $v;
+                } else {
+                    $haber += $v;
+                }
+            } elseif ($origen === 'E') {
                 $haber += $v;
             } else {
                 $debe += $v;
@@ -219,7 +227,14 @@ final class IngresoEgresoCuadreCajaAsientoSupport
                     continue;
                 }
                 $origen = strtoupper(trim((string) ($par['origen_reemplazo'] ?? 'R')));
-                if ($origen === 'E') {
+                if ($origen === 'T') {
+                    $anulado = strtoupper(trim((string) ($par['origen_anulado'] ?? 'E')));
+                    if ($anulado === 'R') {
+                        $debe += $v;
+                    } else {
+                        $haber += $v;
+                    }
+                } elseif ($origen === 'E') {
                     $haber += $v;
                 } else {
                     $debe += $v;

@@ -1,6 +1,19 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
-    $coleccionLogos = collect($filas)->map(function ($fila) use ($empresa) {
+
+    $resultadosPdf = $resultados ?? null;
+    if (! is_array($resultadosPdf) || $resultadosPdf === []) {
+        $resultadosPdf = [[
+            'filas_ordenadas' => $filas ?? [],
+            'dias' => $dias ?? [],
+            'mes' => null,
+            'anio' => null,
+            'fuente_etiqueta' => null,
+        ]];
+    }
+
+    $filasLogo = $resultadosPdf[0]['filas_ordenadas'] ?? ($filas ?? []);
+    $coleccionLogos = collect($filasLogo)->map(function ($fila) use ($empresa) {
         return (object) [
             'etiqueta' => $fila['etiqueta'] ?? '',
             'valor' => $fila['valor'] ?? 0,
@@ -8,7 +21,6 @@
         ];
     });
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($coleccionLogos);
-    $dias = $dias ?? [];
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -53,38 +65,56 @@
         .listado-header td { vertical-align: middle; border: none; }
         .meta { font-size: 7px; color: #444; margin-top: 3px; }
         table.data td.num, table.data th.num, td.num, th.num { text-align: right; }
+        .posfin-salto { page-break-before: always; }
     </style>
 </head>
 <body>
-    <table class="listado-header">
-        <tr>
-            <td style="width: 28%;">
-                @foreach ($logosCabecera as $logo)
-                    <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" style="max-height: 48px; max-width: 160px; margin-right: 8px; margin-bottom: 4px; vertical-align: middle;">
-                @endforeach
-            </td>
-            <td style="width: 72%; text-align: center;">
-                <h2 style="margin: 0; font-size: 14px; font-weight: bold;">Posición financiera</h2>
-                <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
-                @if (($periodo_texto ?? '') !== '' || $empresa)
-                    <div class="meta">
-                        @if ($empresa)
-                            {{ $empresa->nombre }}
-                        @endif
-                        @if (($periodo_texto ?? '') !== '')
-                            · Período {{ $periodo_texto }}
-                        @endif
-                    </div>
-                @endif
-                <div class="meta">{{ count($filas) }} conceptos · una columna por día</div>
-            </td>
-        </tr>
-    </table>
+@foreach ($resultadosPdf as $idxPdf => $resultadoPdf)
+    @php
+        $filasPdf = $resultadoPdf['filas_ordenadas'] ?? [];
+        $diasPdf = $resultadoPdf['dias'] ?? [];
+        $mesPdf = (int) ($resultadoPdf['mes'] ?? 0);
+        $anioPdf = (int) ($resultadoPdf['anio'] ?? 0);
+        $periodoPdf = $mesPdf > 0 && $anioPdf > 0
+            ? str_pad((string) $mesPdf, 2, '0', STR_PAD_LEFT).'/'.$anioPdf
+            : ($periodo_texto ?? '');
+        $fuentePdf = (string) ($resultadoPdf['fuente_etiqueta'] ?? '');
+    @endphp
+    <div class="{{ $idxPdf > 0 ? 'posfin-salto' : '' }}">
+        <table class="listado-header">
+            <tr>
+                <td style="width: 28%;">
+                    @foreach ($logosCabecera as $logo)
+                        <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" style="max-height: 48px; max-width: 160px; margin-right: 8px; margin-bottom: 4px; vertical-align: middle;">
+                    @endforeach
+                </td>
+                <td style="width: 72%; text-align: center;">
+                    <h2 style="margin: 0; font-size: 14px; font-weight: bold;">Posición financiera</h2>
+                    <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
+                    @if ($periodoPdf !== '' || $empresa)
+                        <div class="meta">
+                            @if ($empresa)
+                                {{ $empresa->nombre }}
+                            @endif
+                            @if ($periodoPdf !== '')
+                                · Período {{ $periodoPdf }}
+                            @endif
+                            @if ($fuentePdf !== '')
+                                · {{ $fuentePdf }}
+                            @endif
+                        </div>
+                    @endif
+                    <div class="meta">{{ count($filasPdf) }} conceptos · una columna por día</div>
+                </td>
+            </tr>
+        </table>
 
-    @include('caja.posicion_financiera.partials.tabla_datos', [
-        'filas' => $filas,
-        'dias' => $dias,
-        'modo' => 'pdf',
-    ])
+        @include('caja.posicion_financiera.partials.tabla_datos', [
+            'filas' => $filasPdf,
+            'dias' => $diasPdf,
+            'modo' => 'pdf',
+        ])
+    </div>
+@endforeach
 </body>
 </html>

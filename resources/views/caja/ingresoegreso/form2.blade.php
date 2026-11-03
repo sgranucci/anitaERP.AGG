@@ -3,6 +3,9 @@
     $chequesEmitidos = $chequesMovimiento->where('origen', 'E')->whereNull('cheque_reemplaza_id')->values();
     $chequesRecibidos = $chequesMovimiento->where('origen', 'R')->whereNull('cheque_reemplaza_id')->values();
     $chequesReemplazo = $chequesMovimiento->whereNotNull('cheque_reemplaza_id')->values();
+    $transferenciasReemplazo = (isset($data) && is_object($data) && method_exists($data, 'chequeReemplazoTransferencias'))
+        ? $data->chequeReemplazoTransferencias
+        : collect();
     if ($chequesEmitidos->isEmpty()) {
         $chequesEmitidos = \App\Support\Caja\ChequeFormOldInputSupport::emitidosDesdeOld();
     }
@@ -104,11 +107,11 @@
             </div>
             <div class="tab-pane fade" id="panel-cheques-reemplazo" role="tabpanel">
                 <p class="text-muted small mb-2">
-                    Anula un cheque existente y registra el reemplazo (emitido o recibido).
+                    Anula un cheque existente y registra el reemplazo: otro cheque (emitido o recibido)
+                    o una <strong>transferencia</strong>. En transferencia elija solo la cuenta de banco;
+                    no hace falta número de cheque ni chequera.
                     La empresa se toma de <strong>Datos principales</strong>.
-                    Tras Buscar, el <strong>Nro. nuevo</strong> se propone desde la chequera
-                    (mismo criterio que OP / cheques emitidos) y el resto queda editable
-                    (cuenta, chequera distinta, banco, sucursal, montos, etc.).
+                    Si el reemplazo es un cheque, tras Buscar el <strong>Nro. nuevo</strong> se propone desde la chequera.
                 </p>
                 <div class="alert alert-warning py-2 px-3 small d-none" id="ie-reemplazo-aviso-empresa-banner" role="alert">
                     Seleccione la <strong>empresa</strong> en Datos principales antes de buscar el cheque a anular.
@@ -118,7 +121,7 @@
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th style="min-width:11rem;">Cheque a anular</th>
-                            <th style="width:6rem;">Tipo</th>
+                            <th style="width:8.5rem;">Tipo</th>
                             <th style="min-width:14rem;">Cuenta / Chequera / Banco</th>
                             <th style="width:6rem;">Nro. nuevo</th>
                             <th style="width:7.5rem;">F. pago</th>
@@ -131,7 +134,10 @@
                     </thead>
                     <tbody id="tbody-cheque-reemplazo-table">
                         @foreach ($chequesReemplazo as $cheque)
-                            @include('caja.ingresoegreso.partials.fila_cheque_reemplazo', ['cheque' => $cheque])
+                            @include('caja.ingresoegreso.partials.fila_cheque_reemplazo', ['cheque' => $cheque, 'transferencia' => null])
+                        @endforeach
+                        @foreach ($transferenciasReemplazo as $transferencia)
+                            @include('caja.ingresoegreso.partials.fila_cheque_reemplazo', ['cheque' => null, 'transferencia' => $transferencia])
                         @endforeach
                     </tbody>
                 </table>

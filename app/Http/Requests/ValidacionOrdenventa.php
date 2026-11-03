@@ -18,11 +18,15 @@ class ValidacionOrdenventa extends FormRequest
         return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array
-     */
+    protected function prepareForValidation()
+    {
+        $this->merge([
+            'subtotal' => $this->normalizaImporte($this->input('subtotal', $this->input('monto', 0))),
+            'percepcion' => $this->normalizaImporte($this->input('percepcion', 0)),
+            'iva' => $this->normalizaImporte($this->input('iva', 0)),
+        ]);
+    }
+
     public function rules()
     {
         return [
@@ -31,7 +35,26 @@ class ValidacionOrdenventa extends FormRequest
             'pais_id' => ['integer', 'nullable'],
             'condicionventa_id' => ['integer', 'nullable'],
             'nroinscripcion' => [new RuleCliente('nroinscripcion')],
-            'monto' => 'required'
+            'subtotal' => 'required|numeric',
+            'percepcion' => 'nullable|numeric',
+            'iva' => 'nullable|numeric',
         ];
+    }
+
+    private function normalizaImporte($valor): string
+    {
+        $texto = trim((string) ($valor ?? '0'));
+        $texto = str_replace(' ', '', $texto);
+        if ($texto === '') {
+            return '0';
+        }
+        if (str_contains($texto, ',') && str_contains($texto, '.')) {
+            $texto = str_replace('.', '', $texto);
+            $texto = str_replace(',', '.', $texto);
+        } else {
+            $texto = str_replace(',', '.', $texto);
+        }
+
+        return $texto;
     }
 }

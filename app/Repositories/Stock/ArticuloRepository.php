@@ -165,7 +165,10 @@ class ArticuloRepository implements ArticuloRepositoryInterface
             ->leftJoin('empresa', 'empresa.id', '=', 'articulo.empresa_id');
 
         if (ArticuloListadoSaldoSupport::debeAplicar($filtros)) {
-            ArticuloListadoSaldoSupport::aplicar($articulo);
+            ArticuloListadoSaldoSupport::aplicar(
+                $articulo,
+                ArticuloListadoSaldoSupport::requiereJoin($filtros)
+            );
         }
         if (ArticuloProveedorRelacion::debeAplicarColumnas($filtros)) {
             ArticuloProveedorRelacion::aplicarColumnas($articulo);

@@ -81,6 +81,8 @@ class Liquidacion_Recibo_Sueldos extends Model implements Auditable
 
     public const ORIGEN_AUXCONF = 'anita_auxconf';
 
+    public const ORIGEN_AUXHIST = 'anita_auxhist';
+
     public function liquidacion()
     {
         return $this->belongsTo(Liquidacion_Sueldos::class, 'liquidacion_id');

@@ -14,7 +14,7 @@
         $subtotal = (float) ($item->cantidad ?? 0) * (float) ($item->precio ?? 0);
         $partidaCod = optional($item->partidagastos)->codigo ?? '';
         $partidaDesc = optional(optional($item->partidagastos)->articulos)->detalle ?? '';
-        $capexCod = optional($item->capexs)->codigo ?? '';
+        $capexCod = \App\Support\Presupuesto\CapexEtiqueta::numeroYCodigoProyecto($item->capexs ?? null);
         $capexNom = optional($item->capexs)->nombre ?? '';
         $detalleLinea = trim((string) ($item->detalle ?? ''));
         $fechaEntregaLinea = $item->fechaentrega ? substr((string) $item->fechaentrega, 0, 10) : '';

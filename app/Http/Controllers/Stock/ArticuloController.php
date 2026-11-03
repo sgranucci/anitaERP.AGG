@@ -1593,8 +1593,7 @@ class ArticuloController extends Controller
             'articulo.categoria_id as categoria_id', 'articulo.subcategoria_id as subcategoria_id',
             'articulo.depositoentrega_id as depositoentrega_id')
             ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
-            ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
-            ->leftJoin('linea', 'articulo.linea_id', '=', 'linea.id');
+            ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id');
 
         if (ArticuloListadoFiltros::filtroEmpresaActivo() && $request->filled('empresa_id')) {
             $query->paraEmpresa((int) $request->input('empresa_id'));
@@ -1678,6 +1677,17 @@ class ArticuloController extends Controller
                 0,
                 'articulo.sku',
             );
+        } elseif (ArticuloListadoFiltros::terminoPareceCodigo($consulta)) {
+            $like = '%'.addcslashes($consulta, '%_\\').'%';
+            $query->where(function ($q) use ($consulta, $like) {
+                $q->where('articulo.sku', 'like', $like)
+                    ->orWhere('articulo.codigobarra', 'like', $like)
+                    ->orWhere('articulo.descripcion', 'like', $like);
+                $id = filter_var($consulta, FILTER_VALIDATE_INT);
+                if ($id !== false) {
+                    $q->orWhere('articulo.id', (int) $id);
+                }
+            });
         } else {
             $tokens = preg_split('/\s+/u', $consulta, -1, PREG_SPLIT_NO_EMPTY);
             if (! is_array($tokens) || $tokens === []) {

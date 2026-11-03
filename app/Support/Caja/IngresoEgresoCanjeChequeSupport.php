@@ -67,6 +67,19 @@ final class IngresoEgresoCanjeChequeSupport
             return;
         }
 
+        self::assertFilasReemplazo($data);
+    }
+
+    /**
+     * Valida los renglones de anulación sin consultar el tipo de transacción.
+     * Origen T = transferencia: cuenta de banco e importe, sin número de cheque.
+     *
+     * @param  array<string, mixed>  $data
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function assertFilasReemplazo(array $data): void
+    {
         $anulados = array_values((array) ($data['cheque_anulado_ids'] ?? []));
         $numeros = array_values((array) ($data['numerocheque_reemplazo'] ?? []));
         $montos = array_values((array) ($data['montocheque_reemplazo'] ?? []));
@@ -75,19 +88,34 @@ final class IngresoEgresoCanjeChequeSupport
         $bancos = array_values((array) ($data['banco_reemplazo_ids'] ?? []));
 
         $completos = 0;
-        $n = max(count($anulados), count($numeros), count($montos));
+        $n = max(count($anulados), count($numeros), count($montos), count($origenes));
         for ($i = 0; $i < $n; $i++) {
             if ((int) ($anulados[$i] ?? 0) <= 0) {
                 continue;
             }
-            $nro = trim((string) ($numeros[$i] ?? ''));
             $monto = is_numeric($montos[$i] ?? null) ? (float) $montos[$i] : 0.0;
+            $origen = strtoupper(trim((string) ($origenes[$i] ?? 'R')));
+            if ($origen === 'T') {
+                if ($monto <= 0) {
+                    throw new \InvalidArgumentException(
+                        'Indique el importe de la transferencia que reemplaza el cheque.'
+                    );
+                }
+                if ((int) ($cuentas[$i] ?? 0) <= 0) {
+                    throw new \InvalidArgumentException(
+                        'Indique la cuenta de banco de la transferencia que reemplaza el cheque.'
+                    );
+                }
+                $completos++;
+
+                continue;
+            }
+            $nro = trim((string) ($numeros[$i] ?? ''));
             if ($nro === '' || $monto <= 0) {
                 throw new \InvalidArgumentException(
                     'Complete número e importe del cheque de reemplazo en cada renglón de anulación.'
                 );
             }
-            $origen = strtoupper(trim((string) ($origenes[$i] ?? 'R')));
             if ($origen === 'E' && (int) ($cuentas[$i] ?? 0) <= 0) {
                 throw new \InvalidArgumentException(
                     'Indique la cuenta de tesorería del cheque de reemplazo emitido.'
@@ -128,6 +156,8 @@ final class IngresoEgresoCanjeChequeSupport
             $origen = strtoupper(trim((string) ($ch['origen'] ?? ''))) === 'E' ? 'propio' : 'terceros';
             $monto = self::formatearMonto($ch['monto'] ?? null);
             $aNombre = trim((string) ($ch['anombrede'] ?? ''));
+            $medio = strtoupper(trim((string) ($ch['medio'] ?? '')));
+            $cuenta = trim((string) ($ch['cuentacaja_nombre'] ?? ''));
 
             $frag = 'ch. '.$origen.' N° '.$nro;
             if ($banco !== '') {
@@ -138,6 +168,12 @@ final class IngresoEgresoCanjeChequeSupport
             }
             if ($aNombre !== '') {
                 $frag .= ' a '.$aNombre;
+            }
+            if ($medio === 'T' || $medio === 'TRANSFERENCIA') {
+                $frag .= ' reemplazado por transferencia';
+                if ($cuenta !== '') {
+                    $frag .= ' '.$cuenta;
+                }
             }
             $partes[] = $frag;
         }

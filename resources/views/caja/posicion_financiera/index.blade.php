@@ -102,16 +102,69 @@
 
     var form = document.getElementById('form-posicion-financiera');
     if (form) {
+        var mesDesde = document.getElementById('posfin-mes-desde');
+        var anioDesde = document.getElementById('posfin-anio-desde');
+        var mesHasta = document.getElementById('posfin-mes-hasta');
+        var anioHasta = document.getElementById('posfin-anio-hasta');
+        var hastaManual = false;
+
+        function ymValor(mesEl, anioEl) {
+            var m = parseInt(mesEl && mesEl.value ? mesEl.value : '0', 10) || 0;
+            var a = parseInt(anioEl && anioEl.value ? anioEl.value : '0', 10) || 0;
+            return (a * 100) + m;
+        }
+
+        function syncHastaDesdeDesde() {
+            if (hastaManual || ! mesDesde || ! anioDesde || ! mesHasta || ! anioHasta) {
+                return;
+            }
+            mesHasta.value = mesDesde.value;
+            anioHasta.value = anioDesde.value;
+        }
+
+        if (mesDesde) {
+            mesDesde.addEventListener('change', syncHastaDesdeDesde);
+        }
+        if (anioDesde) {
+            anioDesde.addEventListener('change', syncHastaDesdeDesde);
+            anioDesde.addEventListener('input', syncHastaDesdeDesde);
+        }
+        function marcarHastaManual() {
+            hastaManual = ymValor(mesHasta, anioHasta) !== ymValor(mesDesde, anioDesde);
+        }
+        if (mesHasta) {
+            mesHasta.addEventListener('change', marcarHastaManual);
+        }
+        if (anioHasta) {
+            anioHasta.addEventListener('change', marcarHastaManual);
+            anioHasta.addEventListener('input', marcarHastaManual);
+        }
+        // Si al cargar ya hay rango distinto, no pisar el hasta al editar desde.
+        marcarHastaManual();
+
         form.addEventListener('submit', function () {
             if (! form.checkValidity()) {
                 return;
+            }
+            // Si quedó igual, no mandamos hasta → el backend trata un solo mes.
+            if (mesHasta && anioHasta && mesDesde && anioDesde
+                && ymValor(mesHasta, anioHasta) === ymValor(mesDesde, anioDesde)) {
+                mesHasta.disabled = true;
+                anioHasta.disabled = true;
             }
             var btn = document.getElementById('btn-consultar');
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando…';
             }
-            mostrarOverlay('Calculando posición financiera…', 'Puede demorar según el período. No cierre la página.');
+            var rango = mesHasta && anioHasta && mesDesde && anioDesde
+                && ymValor(mesHasta, anioHasta) !== ymValor(mesDesde, anioDesde);
+            mostrarOverlay(
+                'Calculando posición financiera…',
+                rango
+                    ? 'Consultando varios meses (Anita/ERP según período). Puede demorar. No cierre la página.'
+                    : 'Puede demorar según el período. No cierre la página.'
+            );
         });
     }
 
@@ -323,6 +376,9 @@
                     <p class="text-muted small mb-3">
                         Posición financiera del mes con una columna por día, cortada por unidad de negocio
                         (bingo, gastronomía, estacionamiento, vending y máquinas), más apertura de medios y egresos.
+                        El <strong>Hasta</strong> es optativo: por defecto copia el Desde; si lo cambiás, se consulta el rango de meses
+                        (máx. {{ \App\Support\Contable\EfeMensualListadoFiltros::MAX_MESES_RANGO }}).
+                        {{ $fuente_corte_texto ?? 'Anita hasta 07/2026; ERP desde 08/2026' }}.
                     </p>
 
                     @include('includes.form-empresa-asignada', [
@@ -333,24 +389,47 @@
                         'col_input' => 'col-lg-4',
                     ])
 
+                    @php
+                        $mesDesdeUi = (int) ($filtros['mes'] ?? $mes_actual);
+                        $anioDesdeUi = (int) ($filtros['anio'] ?? $anio_actual);
+                        $mesHastaUi = (int) ($filtros['mes_hasta'] ?? $mesDesdeUi);
+                        $anioHastaUi = (int) ($filtros['anio_hasta'] ?? $anioDesdeUi);
+                    @endphp
                     <div class="form-group row mb-0">
-                        <label class="col-lg-2 control-label text-right pr-2 requerido">Mes / Año</label>
+                        <label class="col-lg-2 control-label text-right pr-2 requerido">Desde / Hasta</label>
                         <div class="col-lg-9">
-                            <div class="row">
-                                <div class="col-md-3">
-                                    <select name="mes" class="form-control">
+                            <div class="row align-items-center">
+                                <div class="col-md-2">
+                                    <select name="mes_desde" id="posfin-mes-desde" class="form-control" title="Mes desde">
                                         @for ($m = 1; $m <= 12; $m++)
-                                            <option value="{{ $m }}" @selected((int) ($filtros['mes'] ?? $mes_actual) === $m)>
+                                            <option value="{{ $m }}" @selected($mesDesdeUi === $m)>
                                                 {{ str_pad((string) $m, 2, '0', STR_PAD_LEFT) }}
                                             </option>
                                         @endfor
                                     </select>
                                 </div>
-                                <div class="col-md-3">
-                                    <input type="number" name="anio" class="form-control" min="2000" max="2100"
-                                        value="{{ $filtros['anio'] ?? $anio_actual }}">
+                                <div class="col-md-2">
+                                    <input type="number" name="anio_desde" id="posfin-anio-desde" class="form-control"
+                                        min="2000" max="2100" value="{{ $anioDesdeUi }}" title="Año desde">
+                                </div>
+                                <div class="col-md-1 text-center pt-1 text-muted">a</div>
+                                <div class="col-md-2">
+                                    <select name="mes_hasta" id="posfin-mes-hasta" class="form-control" title="Mes hasta (optativo)">
+                                        @for ($m = 1; $m <= 12; $m++)
+                                            <option value="{{ $m }}" @selected($mesHastaUi === $m)>
+                                                {{ str_pad((string) $m, 2, '0', STR_PAD_LEFT) }}
+                                            </option>
+                                        @endfor
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="number" name="anio_hasta" id="posfin-anio-hasta" class="form-control"
+                                        min="2000" max="2100" value="{{ $anioHastaUi }}" title="Año hasta (optativo)">
                                 </div>
                             </div>
+                            <small class="form-text text-muted">
+                                Si no tocás el Hasta, se consulta solo el mes del Desde.
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -375,78 +454,120 @@
                 </div>
             @endif
 
-            <div class="card card-outline card-secondary">
-                <div class="card-header">
-                    <h3 class="card-title">
-                        Resultado
-                        @if (($periodo_texto ?? '') !== '')
-                            <small class="text-muted">({{ $periodo_texto }}{{ $empresa ? ' — '.$empresa->nombre : '' }})</small>
-                        @endif
-                    </h3>
-                    <div class="card-tools">
-                        @php
-                            $periodoFinalizado = \Carbon\Carbon::createFromDate(
-                                (int) ($filtros['anio'] ?? 0),
-                                (int) ($filtros['mes'] ?? 0),
-                                1
-                            )->endOfMonth()->isBefore(\Carbon\Carbon::today());
-                        @endphp
-                        @if ($saldo_confirmado)
-                            <span class="badge badge-success mr-2" title="Saldo final confirmado">
-                                <i class="fa fa-lock"></i> Cierre confirmado
-                            </span>
-                            @if (can('anular-saldo-posicion-financiera', false))
-                                <button type="button" class="btn btn-outline-danger btn-sm mr-2"
-                                        data-toggle="modal" data-target="#modal-anular-saldo-posfin">
-                                    <i class="fa fa-unlock"></i> Anular cierre
-                                </button>
+            @php
+                $resultadosVista = $resultados ?? [];
+                if ($resultadosVista === [] && ! empty($filas)) {
+                    $resultadosVista = [[
+                        'filas_ordenadas' => $filas,
+                        'dias' => $dias ?? [],
+                        'saldo_inicial' => $saldo_inicial ?? null,
+                        'saldo_final' => $saldo_final ?? null,
+                        'saldo_inicial_origen' => $saldo_inicial_origen ?? null,
+                        'fuente' => $fuente ?? null,
+                        'fuente_etiqueta' => $fuente_etiqueta ?? null,
+                        'mes' => $filtros['mes'] ?? null,
+                        'anio' => $filtros['anio'] ?? null,
+                    ]];
+                }
+                $esRangoVista = ! empty($es_rango) || count($resultadosVista) > 1;
+            @endphp
+
+            @foreach ($resultadosVista as $idxResultado => $resultadoMes)
+                @php
+                    $filasMes = $resultadoMes['filas_ordenadas'] ?? [];
+                    $diasMes = $resultadoMes['dias'] ?? [];
+                    $mesRes = (int) ($resultadoMes['mes'] ?? ($filtros['mes'] ?? 0));
+                    $anioRes = (int) ($resultadoMes['anio'] ?? ($filtros['anio'] ?? 0));
+                    $periodoMesTexto = $mesRes > 0 && $anioRes > 0
+                        ? str_pad((string) $mesRes, 2, '0', STR_PAD_LEFT).'/'.$anioRes
+                        : ($periodo_texto ?? '');
+                    $fuenteMes = (string) ($resultadoMes['fuente'] ?? '');
+                    $fuenteEtiquetaMes = (string) ($resultadoMes['fuente_etiqueta'] ?? '');
+                    $auditoriaQueryMes = array_merge($filtrosQuery ?? [], [
+                        'mes' => $mesRes,
+                        'anio' => $anioRes,
+                    ]);
+                    $periodoFinalizado = $mesRes > 0 && $anioRes > 0
+                        && \Carbon\Carbon::createFromDate($anioRes, $mesRes, 1)->endOfMonth()->isBefore(\Carbon\Carbon::today());
+                @endphp
+                <div class="card card-outline card-secondary{{ $idxResultado > 0 ? ' mt-3' : '' }}">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            Resultado
+                            @if ($periodoMesTexto !== '')
+                                <small class="text-muted">({{ $periodoMesTexto }}{{ $empresa ? ' — '.$empresa->nombre : '' }})</small>
                             @endif
-                        @elseif ($periodoFinalizado && can('confirmar-saldo-posicion-financiera', false))
-                            <form method="post" action="{{ route('posicion_financiera_confirmar_saldo') }}" class="d-inline">
-                                @csrf
-                                @foreach (($filtrosQuery ?? []) as $clave => $valor)
-                                    <input type="hidden" name="{{ $clave }}" value="{{ $valor }}">
-                                @endforeach
-                                <button type="submit" class="btn btn-outline-success btn-sm mr-2"
-                                        onclick="return confirm('¿Confirmar el saldo final de este período?');">
-                                    <i class="fa fa-lock"></i> Confirmar saldo
-                                </button>
-                            </form>
-                        @endif
-                        @include('includes.exportar-tabla-queryparams', [
-                            'ruta' => 'listar_posicion_financiera',
-                            'queryparams' => $filtrosQuery ?? [],
+                            @if ($fuenteEtiquetaMes !== '')
+                                <span class="badge badge-{{ $fuenteMes === 'erp' ? 'primary' : 'info' }} ml-1"
+                                      title="{{ $fuente_corte_texto ?? '' }}">
+                                    {{ $fuenteEtiquetaMes }}
+                                </span>
+                            @endif
+                        </h3>
+                        <div class="card-tools">
+                            @if (! $esRangoVista && $saldo_confirmado)
+                                <span class="badge badge-success mr-2" title="Saldo final confirmado">
+                                    <i class="fa fa-lock"></i> Cierre confirmado
+                                </span>
+                                @if (can('anular-saldo-posicion-financiera', false))
+                                    <button type="button" class="btn btn-outline-danger btn-sm mr-2"
+                                            data-toggle="modal" data-target="#modal-anular-saldo-posfin">
+                                        <i class="fa fa-unlock"></i> Anular cierre
+                                    </button>
+                                @endif
+                            @elseif (! $esRangoVista && $periodoFinalizado && can('confirmar-saldo-posicion-financiera', false))
+                                <form method="post" action="{{ route('posicion_financiera_confirmar_saldo') }}" class="d-inline">
+                                    @csrf
+                                    @foreach (($filtrosQuery ?? []) as $clave => $valor)
+                                        <input type="hidden" name="{{ $clave }}" value="{{ $valor }}">
+                                    @endforeach
+                                    <button type="submit" class="btn btn-outline-success btn-sm mr-2"
+                                            onclick="return confirm('¿Confirmar el saldo final de este período?');">
+                                        <i class="fa fa-lock"></i> Confirmar saldo
+                                    </button>
+                                </form>
+                            @elseif ($esRangoVista && $idxResultado === 0)
+                                <span class="badge badge-secondary mr-2" title="Confirmá el cierre mes a mes">
+                                    Rango: cierre solo en consulta de un mes
+                                </span>
+                            @endif
+                            @if ($idxResultado === 0)
+                                @include('includes.exportar-tabla-queryparams', [
+                                    'ruta' => 'listar_posicion_financiera',
+                                    'queryparams' => $filtrosQuery ?? [],
+                                ])
+                            @endif
+                        </div>
+                    </div>
+                    <div class="card-body table-responsive p-0 posfin-wrap">
+                        @include('caja.posicion_financiera.partials.tabla_datos', [
+                            'filas' => $filasMes,
+                            'dias' => $diasMes,
+                            'modo' => 'pantalla',
+                            'auditoriaUrl' => route('posicion_financiera_auditoria'),
+                            'auditoriaQuery' => $auditoriaQueryMes,
                         ])
                     </div>
-                </div>
-                <div class="card-body table-responsive p-0 posfin-wrap">
-                    @include('caja.posicion_financiera.partials.tabla_datos', [
-                        'filas' => $filas,
-                        'dias' => $dias ?? [],
-                        'modo' => 'pantalla',
-                        'auditoriaUrl' => route('posicion_financiera_auditoria'),
-                        'auditoriaQuery' => $filtrosQuery ?? [],
-                    ])
-                </div>
-                @if (count($filas) > 0)
-                    <div class="card-footer clearfix small text-muted">
-                        {{ count($filas) }} conceptos
-                        @if ($saldo_inicial !== null)
-                            · Saldo inicial {{ number_format((float) $saldo_inicial, 2, ',', '.') }}
-                            ({{ ($saldo_inicial_origen ?? '') === 'erp' ? 'cierre ERP' : 'semilla Anita' }})
-                        @endif
-                        @if ($saldo_final !== null)
-                            · Saldo final {{ number_format((float) $saldo_final, 2, ',', '.') }}
-                        @endif
-                        @if ($saldo_confirmado)
-                            · Confirmado {{ optional($saldo_confirmado->confirmado_at)->format('d/m/Y H:i') }}
-                            @if ($saldo_confirmado->confirmadoPor)
-                                por {{ $saldo_confirmado->confirmadoPor->nombre }}
+                    @if (count($filasMes) > 0)
+                        <div class="card-footer clearfix small text-muted">
+                            {{ count($filasMes) }} conceptos
+                            @if (($resultadoMes['saldo_inicial'] ?? null) !== null)
+                                · Saldo inicial {{ number_format((float) $resultadoMes['saldo_inicial'], 2, ',', '.') }}
+                                ({{ ($resultadoMes['saldo_inicial_origen'] ?? '') === 'erp' ? 'cierre ERP' : 'semilla Anita' }})
                             @endif
-                        @endif
-                    </div>
-                @endif
-            </div>
+                            @if (($resultadoMes['saldo_final'] ?? null) !== null)
+                                · Saldo final {{ number_format((float) $resultadoMes['saldo_final'], 2, ',', '.') }}
+                            @endif
+                            @if (! $esRangoVista && $saldo_confirmado)
+                                · Confirmado {{ optional($saldo_confirmado->confirmado_at)->format('d/m/Y H:i') }}
+                                @if ($saldo_confirmado->confirmadoPor)
+                                    por {{ $saldo_confirmado->confirmadoPor->nombre }}
+                                @endif
+                            @endif
+                        </div>
+                    @endif
+                </div>
+            @endforeach
 
             @if ($saldo_confirmado && can('anular-saldo-posicion-financiera', false))
                 <div class="modal fade" id="modal-anular-saldo-posfin" tabindex="-1" role="dialog" aria-hidden="true">

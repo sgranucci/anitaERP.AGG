@@ -26,10 +26,10 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'N';
+    private const COL_ULTIMA = 'O';
 
-    /** Congela Código, Fecha y Vencimiento (A–C): freeze arranca en D. */
-    private const COL_FREEZE = 'D';
+    /** Congela Código, Fecha, Vencimiento y Fecha de pago (A–D): freeze arranca en E. */
+    private const COL_FREEZE = 'E';
 
     private SolicitudpagoRepositoryInterface $repository;
 
@@ -104,7 +104,7 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
             return [];
         }
 
-        // Identificadores/textos como texto; I = Monto; M = cuotas (entero).
+        // Identificadores/textos como texto; J = Monto; N = cuotas (entero).
         return [
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
@@ -114,12 +114,13 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
             'F' => NumberFormat::FORMAT_TEXT,
             'G' => NumberFormat::FORMAT_TEXT,
             'H' => NumberFormat::FORMAT_TEXT,
-            'I' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
-            'J' => NumberFormat::FORMAT_TEXT,
+            'I' => NumberFormat::FORMAT_TEXT,
+            'J' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
             'K' => NumberFormat::FORMAT_TEXT,
             'L' => NumberFormat::FORMAT_TEXT,
-            'M' => NumberFormat::FORMAT_NUMBER,
-            'N' => NumberFormat::FORMAT_TEXT,
+            'M' => NumberFormat::FORMAT_TEXT,
+            'N' => NumberFormat::FORMAT_NUMBER,
+            'O' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -162,17 +163,18 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
             'A' => 10,
             'B' => 12,
             'C' => 12,
-            'D' => 22,
-            'E' => 16,
+            'D' => 14,
+            'E' => 22,
             'F' => 16,
-            'G' => 12,
-            'H' => 28,
-            'I' => 12,
-            'J' => 14,
+            'G' => 16,
+            'H' => 12,
+            'I' => 28,
+            'J' => 12,
             'K' => 14,
-            'L' => 12,
-            'M' => 10,
-            'N' => 18,
+            'L' => 14,
+            'M' => 12,
+            'N' => 10,
+            'O' => 18,
         ];
     }
 

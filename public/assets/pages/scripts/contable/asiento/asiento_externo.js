@@ -1009,7 +1009,9 @@ var totalHaberAsiento = 0;
 
 	function leeCotizacionAsiento(ptr)
 	{
-		let fecha = $('#fecha').val();
+		let fecha = (typeof window.asientoFechaIso === 'function')
+			? window.asientoFechaIso()
+			: $('#fecha_iso').val() || $('#fecha').val();
 		let moneda_id = $(ptr).parents("tr").find('.monedaasiento').val();
 		let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 	

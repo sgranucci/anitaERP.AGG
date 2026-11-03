@@ -128,10 +128,14 @@ function activa_eventos_consultacapex() {
 		var id = $tr.find('td.id').text().trim();
 		var codigo = $tr.find('td.codigo').text().trim();
 		var concepto = $tr.find('td.concepto').text().trim();
+		var codigoProyecto = $tr.attr('data-codigoproyecto') || '';
 
 		$(ptrCapexId).val(id).trigger('change');
 		$(ptrCodigoCapex).val(codigo);
 		$(ptrDetalleCapex).val(concepto);
+		if (ptrFilaCapex && ptrFilaCapex.length) {
+			ptrFilaCapex.find('.codigoproyectocapex').val(codigoProyecto);
+		}
 
 		$('#consultacapexModal').modal('hide');
 	});
@@ -156,6 +160,7 @@ function activa_eventos_consultacapex() {
 		if (!codigo) {
 			$row.find('.capex_id').val('').trigger('change');
 			$row.find('.descripcioncapex').val('');
+			$row.find('.codigoproyectocapex').val('');
 			$inp.trigger('req:codigo-validado', [true]);
 			return;
 		}
@@ -182,10 +187,12 @@ function activa_eventos_consultacapex() {
 					$row.find('.capex_id').val(res.id).trigger('change');
 					$inp.val(res.codigo);
 					$row.find('.descripcioncapex').val(res.descripcion || '');
+					$row.find('.codigoproyectocapex').val(res.codigoproyecto || '');
 					$inp.trigger('req:codigo-validado', [true]);
 				} else {
 					$row.find('.capex_id').val('').trigger('change');
 					$row.find('.descripcioncapex').val('');
+					$row.find('.codigoproyectocapex').val('');
 					alert((res && res.mensaje) ? res.mensaje : 'CAPEX no encontrado.');
 					$inp.trigger('req:codigo-validado', [false]);
 				}
@@ -193,6 +200,7 @@ function activa_eventos_consultacapex() {
 			.fail(function (xhr) {
 				$row.find('.capex_id').val('').trigger('change');
 				$row.find('.descripcioncapex').val('');
+				$row.find('.codigoproyectocapex').val('');
 				var msg = 'CAPEX no encontrado o no disponible para el centro de costo / presupuesto actual.';
 				if (xhr.responseJSON && xhr.responseJSON.mensaje) {
 					msg = xhr.responseJSON.mensaje;

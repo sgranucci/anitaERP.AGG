@@ -49,9 +49,46 @@ class OrdenventaService
 		$this->arbolaprobacionService = $arbolaprobacionservice;
     }
 
+	/**
+	 * El bruto es el subtotal. El monto que aprueba, factura y cobran las cuotas
+	 * es el total final: bruto + percepciones + IVA.
+	 */
+	private function completaImportes(array $data): array
+	{
+		$subtotal = array_key_exists('subtotal', $data)
+			? $this->importeOrdenventa($data['subtotal'])
+			: $this->importeOrdenventa($data['monto'] ?? 0);
+		$percepcion = $this->importeOrdenventa($data['percepcion'] ?? 0);
+		$iva = $this->importeOrdenventa($data['iva'] ?? 0);
+
+		$data['subtotal'] = $subtotal;
+		$data['percepcion'] = $percepcion;
+		$data['iva'] = $iva;
+		$data['monto'] = round($subtotal + $percepcion + $iva, 4);
+
+		return $data;
+	}
+
+	private function importeOrdenventa($valor): float
+	{
+		$texto = trim((string) ($valor ?? '0'));
+		$texto = str_replace(' ', '', $texto);
+		if ($texto === '') {
+			return 0.0;
+		}
+		if (str_contains($texto, ',') && str_contains($texto, '.')) {
+			$texto = str_replace('.', '', $texto);
+			$texto = str_replace(',', '.', $texto);
+		} else {
+			$texto = str_replace(',', '.', $texto);
+		}
+
+		return round((float) $texto, 4);
+	}
+
 	public function guardaOrdenventa($request, $origen = null)
 	{
-		$data = $request->all();
+		$data = $this->completaImportes($request->all());
 
    		// Crea estado
 	   	$data['fechas'][] = Carbon::now();
@@ -110,7 +147,7 @@ class OrdenventaService
 
     public function actualizaOrdenventa($request, $id, $origen = null)
     {
-		$data = $request->all();
+		$data = $this->completaImportes($request->all());
 		$nombreSolicitada = Ordenventa_Estado::$enumEstado[array_search('S', array_column(Ordenventa_Estado::$enumEstado, 'valor'))]['nombre'];
 
 		if (($data['estado'] ?? '') === $nombreSolicitada) {

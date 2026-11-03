@@ -70,6 +70,7 @@
                     <li>Tipo de transacción: Canje de cheques</li>
                     <li>Requiere empresa en Datos principales</li>
                     <li>Abre Cheques → Anulación / reemplazo</li>
+                    <li>Reemplazo por otro cheque o por transferencia</li>
                     <li>Detalle precargado con lo canjeado</li>
                 </ul>
             </button>

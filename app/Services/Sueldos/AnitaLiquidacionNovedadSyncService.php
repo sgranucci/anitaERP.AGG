@@ -26,12 +26,12 @@ class AnitaLiquidacionNovedadSyncService
      *   novedades: array{en_anita: int, importados: int, actualizados: int, eliminados: int, omitidos: int, errores: list<string>}
      * }
      */
-    public function sincronizarEmpresaDesdeFechaLiq(int $empresaId, int $fechaLiqDesde): array
+    public function sincronizarEmpresaDesdeFechaLiq(int $empresaId, int $fechaLiqDesde, ?int $fechaLiqHasta = null): array
     {
         ini_set('max_execution_time', '900');
         ini_set('memory_limit', '-1');
 
-        $liq = $this->sincronizarMaeliq($empresaId, $fechaLiqDesde);
+        $liq = $this->sincronizarMaeliq($empresaId, $fechaLiqDesde, $fechaLiqHasta);
         $nov = [
             'en_anita' => 0,
             'importados' => 0,
@@ -59,7 +59,7 @@ class AnitaLiquidacionNovedadSyncService
     /**
      * @return array{en_anita: int, importadas: int, actualizadas: int, omitidas: int, numeros: list<int>, errores: list<string>}
      */
-    public function sincronizarMaeliq(int $empresaId, int $fechaLiqDesde): array
+    public function sincronizarMaeliq(int $empresaId, int $fechaLiqDesde, ?int $fechaLiqHasta = null): array
     {
         $resultado = [
             'en_anita' => 0,
@@ -92,6 +92,9 @@ class AnitaLiquidacionNovedadSyncService
             $fecha = (int) ($f->mael_fecha_liq ?? 0);
             $num = (int) ($f->mael_liquidacion ?? 0);
             if ($emp !== $empresaId || $fecha < $fechaLiqDesde || $num <= 0) {
+                continue;
+            }
+            if ($fechaLiqHasta !== null && $fecha > $fechaLiqHasta) {
                 continue;
             }
             $candidatas[] = $f;

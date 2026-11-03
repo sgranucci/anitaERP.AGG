@@ -61,9 +61,21 @@
                             <input type="number" id="descuentoimportepie" name="descuentoimportepie" value=""></input>
                         </div>
                         <div class="form-group row">
-                            <label for="recipient-name" class="col-lg-4 col-form-label">Monto Total</label>
+                            <label class="col-lg-4 col-form-label">Subtotal</label>
+                            <input type="text" class="col-lg-3 form-control" value="{{ number_format((float) ($data->subtotal ?? $data->monto), 2, '.', '') }}" readonly>
+                        </div>
+                        <div class="form-group row">
+                            <label class="col-lg-4 col-form-label">Percepciones</label>
+                            <input type="text" class="col-lg-3 form-control" value="{{ number_format((float) ($data->percepcion ?? 0), 2, '.', '') }}" readonly>
+                        </div>
+                        <div class="form-group row">
+                            <label class="col-lg-4 col-form-label">IVA</label>
+                            <input type="text" class="col-lg-3 form-control" value="{{ number_format((float) ($data->iva ?? 0), 2, '.', '') }}" readonly>
+                        </div>
+                        <div class="form-group row">
+                            <label for="recipient-name" class="col-lg-4 col-form-label">Total</label>
                             <input type="text" name="moneda" id="moneda" class="col-lg-2 form-control" value="{{$data->monedas->abreviatura}}" readonly>
-                            <input type="text" name="monto" id="montototalfactura" class="col-lg-3 form-control" placeholder="Monto Total" aria-label="Monto Total" value="{{number_format($data->monto,2,'.',',')}}" readonly>
+                            <input type="text" name="monto" id="montototalfactura" class="col-lg-3 form-control" placeholder="Total" aria-label="Total" value="{{number_format($data->monto,2,'.','')}}" readonly>
                         </div>
                     </div>
                 </div>

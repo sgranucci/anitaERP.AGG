@@ -48,6 +48,19 @@ class IngresoEgresoCuadreCajaAsientoSupportTest extends TestCase
         $this->assertSame(0.0, $totales['haber']);
     }
 
+    public function test_transferencia_que_reemplaza_emitido_suma_en_haber(): void
+    {
+        $totales = IngresoEgresoCuadreCajaAsientoSupport::totalesChequesReemplazo([
+            'cheque_anulado_ids' => [8],
+            'origen_reemplazo' => ['T'],
+            'origen_anulado' => ['E'],
+            'montocheque_reemplazo' => [437151.8],
+        ]);
+
+        $this->assertSame(0.0, $totales['debe']);
+        $this->assertSame(437151.8, $totales['haber']);
+    }
+
     public function test_opa_con_retenciones_acepta_caja_neta_y_asiento_bruto(): void
     {
         IngresoEgresoCuadreCajaAsientoSupport::assertCuadre([

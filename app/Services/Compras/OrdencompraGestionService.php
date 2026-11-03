@@ -185,6 +185,7 @@ class OrdencompraGestionService
                 'descripcionpartidagasto' => ($pg && $pg->articulos) ? (string) ($pg->articulos->detalle ?? '') : '',
                 'capex_id' => $lin->capex_id,
                 'codigocapex' => $cpx ? (string) ($cpx->codigo ?? '') : '',
+                'codigoproyectocapex' => $cpx ? (string) ($cpx->codigoproyecto ?? '') : '',
                 'descripcioncapex' => $cpx ? (string) ($cpx->nombre ?? '') : '',
                 'cotizacion' => 1,
                 'requisicion_articulo_id' => (int) $lin->id,

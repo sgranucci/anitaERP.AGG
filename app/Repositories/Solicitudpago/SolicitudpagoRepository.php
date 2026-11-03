@@ -15,6 +15,10 @@ use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Solicitudpago\ConceptoSolicitudpagoFormaPago;
 use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoCortesSupport;
+use App\Support\Solicitudpago\SolicitudpagoListadoColumnas;
 use App\Support\Solicitudpago\SolicitudpagoListadoFiltros;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
 use App\Support\Solicitudpago\SolicitudpagoRetencionCalculoSupport;
@@ -65,7 +69,67 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             $this->sincronizarConAnita();
         }
 
+        $q = $this->queryListado(is_array($filtros) ? $filtros : []);
+        SolicitudpagoListadoFiltros::aplicarCalculadas($q, is_array($filtros) ? $filtros : []);
+        SolicitudpagoListadoFiltros::aplicarOrden($q, is_array($filtros) ? $filtros : []);
+
+        if (! $paginar) {
+            return $q->get();
+        }
+
+        $perPage = (int) ($filtros['_per_page'] ?? 10);
+        if ($perPage < 1) {
+            $perPage = 10;
+        }
+
+        return $q->paginate(min($perPage, 100));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesSolicitudpago(array $filtros): array
+    {
+        $campos = SolicitudpagoListadoFiltros::camposOrdenables();
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            SolicitudpagoListadoColumnas::RECURSO,
+            SolicitudpagoListadoColumnas::catalogoActivo()
+        );
+
+        return ListadoCortesSupport::calcular(
+            $this->queryListado($filtros),
+            $agrupar,
+            $campos,
+            'solicitudpago.id',
+            static fn (object $row, string $key): string => SolicitudpagoListadoColumnas::valorCelda($row, $key),
+            static fn (string $key): ?array => SolicitudpagoListadoColumnas::sqlAgrupacion($key),
+            $etiquetas,
+            [[
+                'key' => 'monto',
+                'column' => 'solicitudpago.monto',
+                'label' => 'Monto',
+            ]]
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\Solicitudpago\Solicitudpago>
+     */
+    private function queryListado(array $filtros)
+    {
         $q = $this->model->newQuery()
+            ->select('solicitudpago.*')
+            ->leftJoin('empresa as sp_empresa', 'sp_empresa.id', '=', 'solicitudpago.empresa_id')
+            ->leftJoin('proveedor as sp_proveedor', 'sp_proveedor.id', '=', 'solicitudpago.proveedor_id')
+            ->leftJoin('concepto_solicitudpago as sp_concepto', 'sp_concepto.id', '=', 'solicitudpago.concepto_solicitudpago_id')
+            ->leftJoin('sector_solicitudpago as sp_sector', 'sp_sector.id', '=', 'solicitudpago.sector_solicitudpago_id')
+            ->leftJoin('formapagosol as sp_forma', 'sp_forma.id', '=', 'solicitudpago.formapagosol_id')
+            ->leftJoin('moneda as sp_moneda', 'sp_moneda.id', '=', 'solicitudpago.moneda_id')
+            ->leftJoin('centrocosto as sp_cc', 'sp_cc.id', '=', 'solicitudpago.centrocosto_id')
+            ->leftJoin('solicitudpago as sp_madre', 'sp_madre.id', '=', 'solicitudpago.solicitudpago_madre_id')
             ->with([
                 'empresas',
                 'proveedores',
@@ -81,19 +145,17 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
                 'cuotas as cuotas_pendientes_count' => fn ($qq) => $qq->whereNull('solicitudpago_hija_id'),
                 'cuotas as cuotas_total_count',
                 'hijas as hijas_count',
-            ])
-            ->orderByDesc('fecha')
-            ->orderByDesc('codigo');
+            ]);
 
         SolicitudpagoVisibilidadSupport::aplicarFiltroListado(
             $q,
             'solicitudpago.empresa_id',
             'solicitudpago.centrocosto_id',
-            SolicitudpagoVisibilidadSupport::forzarAlcanceCentrocostoDesdeFiltros(is_array($filtros) ? $filtros : [])
+            SolicitudpagoVisibilidadSupport::forzarAlcanceCentrocostoDesdeFiltros($filtros)
         );
         SolicitudpagoListadoFiltros::aplicar($q, $filtros);
 
-        return $paginar ? $q->paginate(10) : $q->get();
+        return $q;
     }
 
     public function create(array $data)

@@ -5300,6 +5300,14 @@ Route::delete('solicitudpago/concepto_solicitudpago/{id}', 'Solicitudpago\Concep
 /*
  * Solicitudes de pago (Anita che_ban / solpago*)
  */
+Route::get('solicitudpago/fecha-pago', 'Solicitudpago\SolicitudpagoFechaPagoController@index')->name('programar_fecha_pago_solicitud');
+Route::get('solicitudpago/fecha-pago/reporte/{formato}', 'Solicitudpago\SolicitudpagoFechaPagoController@reporte')->name('reporte_fecha_pago_solicitud');
+Route::post('solicitudpago/fecha-pago', 'Solicitudpago\SolicitudpagoFechaPagoController@grabar')->name('grabar_fecha_pago_solicitud');
+Route::post('solicitudpago/solicitudpago/workbench/vista', 'Solicitudpago\SolicitudpagoController@guardarVistaListado')->name('guardar_vista_listado_solicitudpago');
+Route::delete('solicitudpago/solicitudpago/workbench/vista/{id}', 'Solicitudpago\SolicitudpagoController@eliminarVistaListado')->name('eliminar_vista_listado_solicitudpago');
+Route::post('solicitudpago/solicitudpago/workbench/columnas', 'Solicitudpago\SolicitudpagoController@guardarColumnasListado')->name('guardar_columnas_listado_solicitudpago');
+Route::post('solicitudpago/solicitudpago/workbench/etiquetas', 'Solicitudpago\SolicitudpagoController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_solicitudpago');
+Route::post('solicitudpago/solicitudpago/workbench/preview', 'Solicitudpago\SolicitudpagoController@previewWorkbench')->name('preview_workbench_solicitudpago');
 Route::get('solicitudpago/solicitudpago', 'Solicitudpago\SolicitudpagoController@index')->name('consultar_solicitudpago');
 Route::get('solicitudpago/lista_solicitudpago/{formato?}/{busqueda?}', 'Solicitudpago\SolicitudpagoController@listar')->name('lista_solicitudpago');
 Route::get('solicitudpago/solicitudpago/crear', 'Solicitudpago\SolicitudpagoController@crear')->name('crear_solicitudpago');

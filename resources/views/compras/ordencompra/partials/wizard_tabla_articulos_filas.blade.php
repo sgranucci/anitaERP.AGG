@@ -15,6 +15,7 @@
         $partidaCodigo = (string) ($a['codigopartidagasto'] ?? '');
         $partidaDesc = (string) ($a['descripcionpartidagasto'] ?? '');
         $capexCodigo = (string) ($a['codigocapex'] ?? '');
+        $capexCodigoProyecto = (string) ($a['codigoproyectocapex'] ?? '');
         $capexDesc = (string) ($a['descripcioncapex'] ?? '');
         $colorNombre = (string) ($a['color_nombre'] ?? '');
         $talleNombre = (string) ($a['talle_nombre'] ?? '');
@@ -81,6 +82,9 @@
             <td>
                 <span class="small">
                     {{ $capexCodigo !== '' ? $capexCodigo : '—' }}
+                    @if ($capexCodigoProyecto !== '' && strcasecmp($capexCodigoProyecto, $capexCodigo) !== 0)
+                        <br><span class="text-muted small" title="Código de proyecto">{{ $capexCodigoProyecto }}</span>
+                    @endif
                     @if ($capexDesc !== '')
                         <br><span class="text-muted small">{{ $capexDesc }}</span>
                     @endif

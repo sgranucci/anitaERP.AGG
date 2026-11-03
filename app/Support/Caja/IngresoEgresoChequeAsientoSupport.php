@@ -138,9 +138,24 @@ final class IngresoEgresoChequeAsientoSupport
         CuentacajaRepositoryInterface $cuentacajaRepository,
         CuentacontableRepositoryInterface $cuentacontableRepository
     ): void {
-        if ($origen === 'E') {
+        $origenReemplazo = strtoupper((string) ($par->origen_reemplazo ?? ''));
+        if ($origen === 'T') {
+            $cuentacajaId = (int) ($par->cuentacaja_reemplazo_ids ?? $par->cuentacaja_ids ?? 0);
+            $cuentacaja = $cuentacajaId > 0 ? $cuentacajaRepository->find($cuentacajaId) : null;
+            $cuentacontableId = $cuentacaja ? ((int) ($cuentacaja->cuentacontable_id ?? 0) ?: null) : null;
+        } elseif ($origen === 'E') {
             $cuentacajaId = (int) ($par->cuentacaja_reemplazo_ids ?? $par->cuentacaja_ids ?? 0);
             $fechaPago = (string) ($par->fechapago_reemplazo ?? $par->fechapagos ?? $fechaOperacion);
+            if ($esAnulacion && $origenReemplazo === 'T') {
+                $cuentaAnulada = (int) ($par->cuentacaja_anulado_ids ?? 0);
+                if ($cuentaAnulada > 0) {
+                    $cuentacajaId = $cuentaAnulada;
+                }
+                $fechaAnulada = trim((string) ($par->fechapago_anulado ?? ''));
+                if ($fechaAnulada !== '') {
+                    $fechaPago = $fechaAnulada;
+                }
+            }
             $cuentacontableId = ChequePropioImputacionSupport::resolverCuentacontableIdEmitido(
                 $empresaId,
                 $cuentacajaId,
@@ -163,13 +178,24 @@ final class IngresoEgresoChequeAsientoSupport
         $monedaId = (int) ($par->moneda_ids ?? $par->moneda_reemplazo_ids ?? 1);
         $cotizacion = (float) ($par->cotizaciones ?? $par->cotizacion_reemplazo ?? 1);
 
-        if ($origen === 'E') {
+        if ($origen === 'T') {
+            $d_h = self::dhTransferenciaReemplazo((string) ($par->origen_anulado ?? 'E'));
+        } elseif ($origen === 'E') {
             $d_h = self::dhEmitido($esAnulacion);
         } else {
             $d_h = self::dhRecibido($signo, $esAnulacion);
         }
 
         self::agregaCuenta($asiento, $cuentacontableId, $monedaId, $cotizacion, $d_h, $monto, $cuentacontableRepository);
+    }
+
+    /**
+     * Transferencia que reemplaza un cheque: sale de la cuenta si el anulado
+     * era propio (Haber) y entra si era de terceros (Debe).
+     */
+    public static function dhTransferenciaReemplazo(string $origenAnulado): string
+    {
+        return strtoupper(trim($origenAnulado)) === 'R' ? 'D' : 'H';
     }
 
     /** Cheque propio emitido: sale plata del banco. Anulación revierte. */

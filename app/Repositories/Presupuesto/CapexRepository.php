@@ -163,7 +163,7 @@ class CapexRepository implements CapexRepositoryInterface
 
 		foreach ($data as $row) {
 			$nombre = $row->nombre ?? '';
-			$output['data'] .= '<tr>';
+			$output['data'] .= '<tr data-codigoproyecto="'.e($row->codigoproyecto).'">';
 			$output['data'] .= '<td class="id">'.e($row->id).'</td>';
 			$output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
 			$output['data'] .= '<td class="detalle">'.e($row->detalle).'</td>';

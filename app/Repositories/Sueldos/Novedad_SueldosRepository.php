@@ -140,7 +140,7 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
         if (! empty($filtros['numeros_liquidacion']) && is_array($filtros['numeros_liquidacion'])) {
             foreach ($filtros['numeros_liquidacion'] as $n) {
                 $n = (int) $n;
-                if ($n > 0) {
+                if ($n >= 0) {
                     $numerosFiltro[$n] = true;
                 }
             }
@@ -282,6 +282,10 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
 
                 if (isset($existentes[$clave])) {
                     $existente = $existentes[$clave];
+                    if ((int) ($existente->id ?? 0) === 0) {
+                        $resultado['omitidos']++;
+                        continue;
+                    }
                     if ((string) $existente->origen !== NovedadSueldosCatalogo::ORIGEN_SYNC_ANITA) {
                         // Una novedad manual/importada manda sobre el espejo de Anita.
                         $resultado['omitidos']++;

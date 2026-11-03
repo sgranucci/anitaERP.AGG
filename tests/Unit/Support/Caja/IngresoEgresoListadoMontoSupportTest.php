@@ -54,4 +54,28 @@ class IngresoEgresoListadoMontoSupportTest extends TestCase
         $res = IngresoEgresoListadoMontoSupport::resumen($mov);
         $this->assertSame(1000.0, $res['monto']);
     }
+
+    public function test_canje_por_transferencia_muestra_la_cuenta(): void
+    {
+        $mov = (object) [
+            'caja_movimiento_cuentacajas' => [],
+            'cheques' => [],
+            'chequeReemplazoTransferencias' => [
+                (object) [
+                    'moneda_id' => 1,
+                    'cotizacion' => 1,
+                    'monto' => 2500.5,
+                    'chequeAnulado' => (object) ['origen' => 'E', 'numerocheque' => '8200303'],
+                    'cuentacajas' => (object) ['nombre' => 'Banco Macro'],
+                ],
+            ],
+        ];
+
+        $res = IngresoEgresoListadoMontoSupport::resumen($mov);
+
+        $this->assertSame(2500.5, $res['egreso']);
+        $this->assertStringContainsString('8200303', $res['lineas'][0]);
+        $this->assertStringContainsString('transferencia', $res['lineas'][0]);
+        $this->assertStringContainsString('Banco Macro', $res['lineas'][0]);
+    }
 }

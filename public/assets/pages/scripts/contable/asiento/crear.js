@@ -494,7 +494,9 @@
 
 	function leeCotizacion(ptr)
 	{
-		let fecha = $('#fecha').val();
+		let fecha = (typeof window.asientoFechaIso === 'function')
+			? window.asientoFechaIso()
+			: $('#fecha_iso').val() || $('#fecha').val();
 		let moneda_id = $(ptr).parents("tr").find('.moneda').val();
 		let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 	
@@ -965,8 +967,17 @@
 				return;
 			}
 
-			if (campo.id === 'empresa_id' || campo.id === 'tipoasiento_id' || campo.id === 'fecha') {
-				if ((campo.id === 'empresa_id' || campo.id === 'tipoasiento_id') && !String($(campo).val() || '').trim()) {
+			if (campo.id === 'fecha') {
+				if (typeof window.asientoCommitFechaLibre === 'function' && !window.asientoCommitFechaLibre(false)) {
+					enfocarCampoAsientoForm(campo);
+					return;
+				}
+				avanzarCabeceraAsientoForm(campo);
+				return;
+			}
+
+			if (campo.id === 'empresa_id' || campo.id === 'tipoasiento_id') {
+				if (!String($(campo).val() || '').trim()) {
 					alert(campo.id === 'empresa_id' ? 'Debe ingresar empresa' : 'Seleccione el tipo de asiento');
 					enfocarCampoAsientoForm(campo);
 					return;

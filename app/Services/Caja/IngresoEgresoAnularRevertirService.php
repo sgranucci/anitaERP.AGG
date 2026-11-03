@@ -3,6 +3,7 @@
 namespace App\Services\Caja;
 
 use App\Models\Caja\Caja_Movimiento;
+use App\Models\Caja\ChequeReemplazoTransferencia;
 use App\Models\Caja\Caja_Movimiento_Estado;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Pagoproveedor;
@@ -87,6 +88,7 @@ class IngresoEgresoAnularRevertirService
             if ((int) ($movimiento->cobranza_id ?? 0) > 0) {
                 ChequeOperacionActivaSupport::marcarCobranzaRevertida((int) $movimiento->cobranza_id);
             }
+            ChequeReemplazoTransferencia::restaurarChequesDelMovimiento((int) $movimiento->id);
             $movimiento->unsetRelation('cheques');
             foreach ($movimiento->cheques()->get() as $cheque) {
                 $cheque->delete();

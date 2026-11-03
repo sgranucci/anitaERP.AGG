@@ -155,6 +155,8 @@
                     $cpx = $linea->capexs;
                     $art = $linea->articulos;
                     $detLin = trim((string) ($linea->detalle ?? ''));
+                    $capexEtiqueta = \App\Support\Presupuesto\CapexEtiqueta::numeroYCodigoProyecto($cpx);
+                    $capexNombre = $cpx ? trim((string) ($cpx->nombre ?? '')) : '';
                 @endphp
                 <tr>
                     <td class="cen">{{ $i + 1 }}</td>
@@ -167,7 +169,7 @@
                     <td class="num">{{ number_format((float) ($linea->cantidadalternativa ?? 0), 4, ',', '.') }}</td>
                     <td>{{ optional($ccDest)->codigo ?? '' }} {{ optional($ccDest)->nombre ?? '' }}</td>
                     <td>{{ $part->codigo ?? '' }} @if($part) — {{ optional($part->articulos)->detalle ?? $part->detalle ?? '' }} @endif</td>
-                    <td>{{ $cpx->codigo ?? '' }} @if($cpx) — {{ $cpx->nombre ?? '' }} @endif</td>
+                    <td>{{ $capexEtiqueta }}@if($capexNombre !== '') — {{ $capexNombre }}@endif</td>
                     <td class="num">{{ number_format($sub, 2, ',', '.') }}</td>
                 </tr>
                 @if ($detLin !== '')

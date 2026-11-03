@@ -35,11 +35,19 @@ final class ContaduriaInventarioRubroSupport
      *
      * @param  array<string, mixed>  $fila
      */
-    public static function claveDesdeRecuento(string $comentario, array $fila): string
+    public static function claveDesdeRecuento(string $comentario, array $fila, string $depositoNombre = ''): string
     {
         $rubro = self::rubroDelComentario($comentario);
         if ($rubro === null || $rubro === 'limpieza_descartables') {
-            return self::clave($fila);
+            $porArticulo = self::clave($fila);
+            if ($rubro === 'limpieza_descartables' || $porArticulo !== self::OTROS) {
+                return $porArticulo;
+            }
+            $porDeposito = self::rubroDelComentario($depositoNombre);
+
+            return $porDeposito !== null && $porDeposito !== 'limpieza_descartables'
+                ? $porDeposito
+                : $porArticulo;
         }
 
         return $rubro;
@@ -61,6 +69,12 @@ final class ContaduriaInventarioRubroSupport
         }
         if (str_contains($texto, 'BEBIDA')) {
             return 'bebidas';
+        }
+        if (str_contains($texto, 'FARMACIA')) {
+            return 'farmacia';
+        }
+        if (str_contains($texto, 'LIBRERIA')) {
+            return 'libreria';
         }
         if (str_contains($texto, 'LIMPIEZA') && str_contains($texto, 'DESCARTABLE')) {
             return 'limpieza_descartables';

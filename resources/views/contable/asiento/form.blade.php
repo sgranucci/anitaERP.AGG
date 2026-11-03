@@ -54,14 +54,43 @@
                 </div>
             </div>
             <div class="col-sm-6">
+                @php
+                    $fechaIsoAsiento = old('fecha', isset($data) && $data->fecha
+                        ? \Illuminate\Support\Carbon::parse($data->fecha)->format('Y-m-d')
+                        : date('Y-m-d'));
+                    try {
+                        $fechaIsoAsiento = \Illuminate\Support\Carbon::parse($fechaIsoAsiento)->format('Y-m-d');
+                        $fechaTextoAsiento = \Illuminate\Support\Carbon::createFromFormat('Y-m-d', $fechaIsoAsiento)->format('d/m/Y');
+                    } catch (\Throwable $e) {
+                        $fechaIsoAsiento = date('Y-m-d');
+                        $fechaTextoAsiento = date('d/m/Y');
+                    }
+                @endphp
                 <div class="form-group row">
                     <label for="fecha" class="col-lg-4 control-label text-right pr-2">Fecha</label>
                     <div class="col-lg-5">
-                        <input type="date" name="fecha" id="fecha" class="form-control"
-                               value="{{ old('fecha', isset($data) && $data->fecha ? (\Illuminate\Support\Carbon::parse($data->fecha)->format('Y-m-d')) : date('Y-m-d')) }}"
-                               data-cierre-url="{{ rtrim((string) config('app.app_carpeta'), '/') }}/contable/cierre-periodo/validar-fecha"
-                               onchange="window.anitaValidarCierreAsiento && window.anitaValidarCierreAsiento(true)"
-                               onblur="window.anitaValidarCierreAsiento && window.anitaValidarCierreAsiento(true)">
+                        <div class="input-group">
+                            <input type="text" id="fecha" class="form-control"
+                                   value="{{ $fechaTextoAsiento }}"
+                                   placeholder="dd/mm/aaaa"
+                                   inputmode="numeric"
+                                   autocomplete="off"
+                                   spellcheck="false"
+                                   maxlength="10"
+                                   data-fecha-libre="1"
+                                   data-cierre-url="{{ rtrim((string) config('app.app_carpeta'), '/') }}/contable/cierre-periodo/validar-fecha"
+                                   title="Escribí la fecha completa: 03/01/2026 o 03012026">
+                            <div class="input-group-append">
+                                <label class="input-group-text mb-0 px-2 position-relative" for="fecha_calendario" title="Calendario" style="cursor:pointer;overflow:hidden;">
+                                    <i class="fa fa-calendar"></i>
+                                    <input type="date" id="fecha_calendario" tabindex="-1" aria-label="Abrir calendario"
+                                           value="{{ $fechaIsoAsiento }}"
+                                           style="position:absolute;top:0;left:0;right:0;bottom:0;opacity:0;cursor:pointer;width:100%;height:100%;">
+                                </label>
+                            </div>
+                        </div>
+                        <input type="hidden" name="fecha" id="fecha_iso" value="{{ $fechaIsoAsiento }}">
+                        <small id="fecha-libre-error" class="form-text text-danger mb-0 d-none"></small>
                     </div>
                 </div>
                 @if ((int) ($data->anita_nro_asiento ?? 0) > 0)

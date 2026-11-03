@@ -25,9 +25,20 @@ use App\Services\Solicitudpago\SolicitudpagoPaqueteMailPdfService;
 use App\Services\Caja\IngresoEgresoAnularRevertirService;
 use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoLienzoSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
+use App\Support\Solicitudpago\SolicitudpagoListadoColumnas;
 use App\Support\Solicitudpago\SolicitudpagoListadoFiltros;
+use App\Support\Solicitudpago\SolicitudpagoListadoPreferenciasUsuario;
 use App\Support\Solicitudpago\SolicitudpagoRetencionCalculoSupport;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
 use App\Support\Solicitudpago\SolicitudpagoVisibilidadSupport;
@@ -207,13 +218,22 @@ class SolicitudpagoController extends Controller
             );
         }
 
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(SolicitudpagoListadoColumnas::RECURSO, $usuarioId);
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $vistaActiva = null;
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                SolicitudpagoListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        }
+
         // Memoria de filtros: con query se persiste; sin query se restaura el último filtro
         if ($this->requestTraeFiltrosListado($request)) {
-            $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
-            if (! SolicitudpagoVisibilidadSupport::puedeVerTodasSinRestriccion()) {
-                $filtros['alcance'] = SolicitudpagoVisibilidadSupport::ALCANCE_TODAS;
-            }
-            $filtrosQuery = SolicitudpagoListadoFiltros::paraQueryString($filtros);
+            $filtros = $this->filtrosWorkbench($request, $empresaDefault, $vistaActiva);
+            $filtrosQuery = $this->queryWorkbench($filtros, $vistaActiva, $forzarEstandar);
             $page = (int) $request->input('page', 0);
             if ($page > 1) {
                 $filtrosQuery['page'] = $page;
@@ -223,6 +243,7 @@ class SolicitudpagoController extends Controller
                 || SolicitudpagoListadoFiltros::tieneAlcanceMiCentrocosto($filtros)
                 || SolicitudpagoListadoFiltros::paraQueryStringEmpresa($filtros) !== []
                 || $page > 1
+                || $vistaActiva
             ) {
                 session([self::SESSION_FILTROS => $filtrosQuery]);
             } else {
@@ -230,15 +251,47 @@ class SolicitudpagoController extends Controller
             }
         } else {
             $guardados = session(self::SESSION_FILTROS, []);
-            if (is_array($guardados) && $guardados !== []) {
+            if (is_array($guardados) && $guardados !== [] && ! $forzarEstandar) {
                 return redirect()->route('consultar_solicitudpago', $guardados);
             }
-            $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
-            $filtrosQuery = SolicitudpagoListadoFiltros::paraQueryString($filtros);
+            if (! $forzarEstandar) {
+                $vistaActiva = ListadoVistaSupport::defaultDelUsuario(SolicitudpagoListadoColumnas::RECURSO, $usuarioId);
+            }
+            $filtros = $this->filtrosWorkbench($request, $empresaDefault, $vistaActiva);
+            $filtrosQuery = $this->queryWorkbench($filtros, $vistaActiva, $forzarEstandar);
         }
 
-        $camposFiltro = SolicitudpagoListadoFiltros::CAMPOS;
+        $camposFiltro = SolicitudpagoListadoFiltros::camposQbeDisponibles();
+        $catalogo = SolicitudpagoListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            SolicitudpagoListadoColumnas::RECURSO,
+            $catalogo
+        );
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = SolicitudpagoListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = SolicitudpagoListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
+        $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
         $coleccion = $this->repository->leeSolicitudpago($filtros, true);
+        $agruparActivo = ListadoAgrupacionSupport::normalizar(
+            $filtros['agrupar'] ?? [],
+            SolicitudpagoListadoFiltros::camposOrdenables()
+        );
+        $cortes = $agruparActivo !== []
+            ? $this->repository->cortesSolicitudpago($filtros)
+            : ['activo' => false];
+        $graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+            $filtros,
+            SolicitudpagoListadoFiltros::camposOrdenables(),
+            $etiquetas,
+            fn (array $para): array => $this->repository->cortesSolicitudpago($para)
+        );
         $estado_enum = SolicitudpagoEstados::opciones();
         $tratamiento_enum = SolicitudpagoTratamientos::opciones();
         $limpiarFiltrosUrl = route(
@@ -270,8 +323,96 @@ class SolicitudpagoController extends Controller
             'puedeVerTodas',
             'alcanceListado',
             'alcanceToggleUrl',
-            'empresa_query'
-        ));
+            'empresa_query',
+            'columnasVisibles',
+            'grillaLayout',
+            'catalogo',
+            'etiquetas',
+            'etiquetasInstalacion',
+            'vistas',
+            'vistaActiva',
+            'cortes',
+            'graficoSeries'
+        ) + [
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'vistasListado' => $vistas,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function filtrosWorkbench(Request $request, ?int $empresaDefault, mixed $vistaActiva): array
+    {
+        $filtros = ListadoVistaSupport::prepararQbeContraVista(
+            SolicitudpagoListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault),
+            $request
+        );
+        if (
+            $vistaActiva
+            && is_array($vistaActiva->filtros_json)
+            && ! $request->has('empresa_id')
+            && ! $request->has('empresa_todas')
+            && ! $request->boolean('empresa_todas')
+            && $request->input('empresa_scope') !== 'todas'
+        ) {
+            $filtros['empresa_id'] = null;
+            $filtros['empresa_scope'] = 'una';
+        }
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = SolicitudpagoListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+        unset($filtros['_qbe_explicito']);
+        if (! SolicitudpagoVisibilidadSupport::puedeVerTodasSinRestriccion()) {
+            $filtros['alcance'] = SolicitudpagoVisibilidadSupport::ALCANCE_TODAS;
+        }
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $filtros,
+            $request,
+            ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null,
+            SolicitudpagoListadoFiltros::camposOrdenables()
+        );
+        if ($request->exists('calculadas')) {
+            $filtros['calculadas'] = SolicitudpagoListadoFiltros::normalizarCalculadas($request->input('calculadas'));
+        } elseif ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros['calculadas'] = SolicitudpagoListadoFiltros::normalizarCalculadas($vistaActiva->filtros_json['calculadas'] ?? $filtros['calculadas'] ?? []);
+        }
+        ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
+        if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
+            ListadoVistaSupport::recordarOrdenYAgrupar(
+                $vistaActiva,
+                $filtros['orden'] ?? [],
+                $filtros['agrupar'] ?? []
+            );
+        }
+        if (($filtros['empresa_scope'] ?? 'una') !== 'todas' && empty($filtros['empresa_id']) && $empresaDefault) {
+            $filtros['empresa_id'] = $empresaDefault;
+            $filtros['empresa_scope'] = 'una';
+        }
+
+        return $filtros;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function queryWorkbench(array $filtros, mixed $vistaActiva, bool $forzarEstandar): array
+    {
+        $filtrosQuery = array_merge(
+            SolicitudpagoListadoFiltros::paraQueryString($filtros),
+            ListadoVisualSupport::paraQueryString($filtros)
+        );
+        if ($vistaActiva) {
+            $filtrosQuery['vista_id'] = $vistaActiva->id;
+        } elseif ($forzarEstandar) {
+            $filtrosQuery['vista_estandar'] = 1;
+        }
+
+        return $filtrosQuery;
     }
 
     /**
@@ -294,6 +435,22 @@ class SolicitudpagoController extends Controller
             'empresa_todas',
             'empresa_scope',
             'page',
+            'qbe',
+            'sort',
+            'group',
+            'filtro_modo',
+            'vista_id',
+            'vista_estandar',
+            'graficos',
+            'grafico',
+            'grafico_click',
+            'grafico_off',
+            'formato',
+            'calculadas',
+            'aplicar_qbe',
+            'quitar_qbe',
+            'quitar_orden',
+            'columnas',
         ] as $key) {
             if ($request->query->has($key)) {
                 return true;
@@ -342,6 +499,188 @@ class SolicitudpagoController extends Controller
             default:
                 return redirect()->route('consultar_solicitudpago', SolicitudpagoListadoFiltros::paraQueryString($filtros));
         }
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-solicitud-pago');
+
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest(
+            $request,
+            null,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
+        $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
+        $layout = SolicitudpagoListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $page = $this->repository->leeSolicitudpago($filtros, true);
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['orden'] ?? []),
+            SolicitudpagoListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            SolicitudpagoListadoFiltros::camposOrdenables()
+        );
+        $filtrosCortes = $filtros;
+        $filtrosCortes['agrupar'] = $agrupar;
+        $cortes = $agrupar !== []
+            ? $this->repository->cortesSolicitudpago($filtrosCortes)
+            : ['activo' => false];
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => SolicitudpagoListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
+        ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-solicitud-pago');
+
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest(
+            $request,
+            null,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
+        $layout = SolicitudpagoListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $graficosVista = ListadoLienzoSupport::normalizar(
+            $request->input('graficos'),
+            $request->input('grafico'),
+            $request->exists('graficos'),
+            SolicitudpagoListadoFiltros::camposOrdenables()
+        );
+        $vista = ListadoVistaSupport::guardar(
+            SolicitudpagoListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'],
+                'campo' => $filtros['campo'],
+                'operador' => $filtros['operador'],
+                'valor' => $filtros['valor'],
+                'valor_hasta' => $filtros['valor_hasta'] ?? '',
+                'qbe' => $filtros['qbe'] ?? [],
+                'orden' => $filtros['orden'] ?? [],
+                'agrupar' => $filtros['agrupar'] ?? [],
+                'estado' => $filtros['estado'] ?? '',
+                'tratamiento' => $filtros['tratamiento'] ?? '',
+                'madre_hija' => $filtros['madre_hija'] ?? '',
+                'fecha_desde' => $filtros['fecha_desde'] ?? '',
+                'fecha_hasta' => $filtros['fecha_hasta'] ?? '',
+                'alcance' => $filtros['alcance'] ?? '',
+                'empresa_id' => $filtros['empresa_id'] ?? null,
+                'empresa_scope' => $filtros['empresa_scope'] ?? 'una',
+                'calculadas' => SolicitudpagoListadoFiltros::normalizarCalculadas($request->input('calculadas', $filtros['calculadas'] ?? [])),
+                'grafico' => ListadoLienzoSupport::primero($graficosVista),
+                'graficos' => $graficosVista,
+                'formato' => ListadoVisualSupport::normalizarFormato(
+                    $request->input('formato', []),
+                    SolicitudpagoListadoFiltros::camposOrdenables()
+                ),
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('consultar_solicitudpago', SolicitudpagoListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        $qs = SolicitudpagoListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('consultar_solicitudpago', $qs)
+            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(Request $request, int $id)
+    {
+        can('listar-solicitud-pago');
+        $ok = ListadoVistaSupport::eliminar($id, SolicitudpagoListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('consultar_solicitudpago', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-solicitud-pago');
+
+        $layout = SolicitudpagoListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario(
+                $vistaId,
+                SolicitudpagoListadoColumnas::RECURSO,
+                (int) auth()->id()
+            );
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            SolicitudpagoListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest(
+            $request,
+            null,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
+        $qs = SolicitudpagoListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        if ($vistaId > 0) {
+            $qs['vista_id'] = $vistaId;
+        } else {
+            $qs['vista_estandar'] = 1;
+        }
+
+        return redirect()->route('consultar_solicitudpago', $qs)
+            ->with('mensaje', $vistaId > 0 ? 'Grilla de la vista actualizada.' : 'Vista estándar actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-solicitud-pago');
+
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            SolicitudpagoListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(SolicitudpagoListadoColumnas::catalogoActivo())
+        );
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest(
+            $request,
+            null,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
+        $qs = SolicitudpagoListadoFiltros::paraQueryString($filtros);
+        if ($request->filled('vista_id')) {
+            $qs['vista_id'] = (int) $request->input('vista_id');
+        }
+
+        return redirect()->route('consultar_solicitudpago', $qs)
+            ->with('mensaje', 'Etiquetas por defecto de la instalación actualizadas.');
     }
 
     public function crear()

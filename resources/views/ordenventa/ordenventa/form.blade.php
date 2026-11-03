@@ -18,9 +18,16 @@
                 'mostrar_id' => true,
                 'col_input' => 'col-lg-7',
             ])
+            @php
+                $ov = isset($data) ? $data : null;
+                $ovSubtotal = old('subtotal', data_get($ov, 'subtotal', data_get($ov, 'monto', 0)));
+                $ovPercepcion = old('percepcion', data_get($ov, 'percepcion', 0));
+                $ovIva = old('iva', data_get($ov, 'iva', 0));
+                $ovTotal = (float) $ovSubtotal + (float) $ovPercepcion + (float) $ovIva;
+            @endphp
             <div class="form-group row">
                 <div class="input-group mb-3">
-                    <label for="moneda" class="col-lg-3 col-form-label requerido">Monto Total</label>
+                    <label for="subtotal" class="col-lg-3 col-form-label requerido">Subtotal</label>
                     <select name="moneda_id" id="moneda_id" data-placeholder="Moneda" class="col-lg-2 form-control required" data-fouc>
                         @foreach($moneda_query as $key => $value)
                             @if( (int) $value->id == (int) old('moneda_id', $data->moneda_id ?? ''))
@@ -31,7 +38,8 @@
                         @endforeach
                     </select>
                     <span class="input-group-text">#</span>
-                    <input type="text" name="monto" id="monto" class="col-lg-3 form-control" placeholder="Monto total" aria-label="Monto total" value="{{number_format($data->monto??0,2,'.','')??''}}" required>
+                    <input type="text" name="subtotal" id="subtotal" class="col-lg-3 form-control text-right" placeholder="Bruto" aria-label="Subtotal bruto" title="Bruto, sin percepciones ni IVA" value="{{ number_format((float) $ovSubtotal, 2, '.', '') }}" required>
+                    <input type="hidden" name="monto" id="monto" value="{{ number_format($ovTotal, 2, '.', '') }}">
                 </div>
             </div>
         </div>
@@ -135,9 +143,21 @@
             </div>
         </div>
         <div class="col-sm-6">
-            <div class="form-group row  justify-content-end">
-                <label for="totalconcepto" class="col-lg-2 col-form-label">Total conceptos</label>
-                <input type="text" id="totalconcepto" class="col-lg-3 form-control totalconcepto" value="" readonly>
+            <div class="form-group row justify-content-end mb-2">
+                <label for="totalconcepto" class="col-lg-4 col-form-label text-right">Total conceptos</label>
+                <input type="text" id="totalconcepto" class="col-lg-4 form-control totalconcepto text-right" value="" readonly title="Suma de los conceptos. Tiene que coincidir con el subtotal bruto.">
+            </div>
+            <div class="form-group row justify-content-end mb-2">
+                <label for="percepcion" class="col-lg-4 col-form-label text-right">Percepciones</label>
+                <input type="text" name="percepcion" id="percepcion" class="col-lg-4 form-control text-right" value="{{ number_format((float) $ovPercepcion, 2, '.', '') }}" title="Percepciones que se suman al bruto">
+            </div>
+            <div class="form-group row justify-content-end mb-2">
+                <label for="iva" class="col-lg-4 col-form-label text-right">IVA</label>
+                <input type="text" name="iva" id="iva" class="col-lg-4 form-control text-right" value="{{ number_format((float) $ovIva, 2, '.', '') }}" title="IVA que se suma al bruto">
+            </div>
+            <div class="form-group row justify-content-end mb-2">
+                <label for="totalordenventa" class="col-lg-4 col-form-label text-right"><strong>TOTAL</strong></label>
+                <input type="text" id="totalordenventa" class="col-lg-4 form-control text-right font-weight-bold" value="{{ number_format($ovTotal, 2, '.', '') }}" readonly title="Total final: subtotal + percepciones + IVA">
             </div>
         </div>
     </div>

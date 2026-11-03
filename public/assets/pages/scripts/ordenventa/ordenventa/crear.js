@@ -42,6 +42,7 @@
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
 
+			recalculaTotalOrdenventa();
 			let monto = $("#monto").val();
 
 			$("#montoordenventa").val(monto);
@@ -133,27 +134,29 @@
 
 			// Suma totales
 			sumaCuota();
+			recalculaTotalOrdenventa();
 
-			let totalCuota = $("#totalcuota").val();
-			let totalOrdenventa = $("#monto").val();
+			let totalCuota = numeroImporte($("#totalcuota").val());
+			let totalOrdenventa = numeroImporte($("#monto").val());
 			let flError = false;
 			let total = totalCuota - totalOrdenventa;
 
 			if (Math.abs(total) > 0.09)
 			{
-				alert('No coincide total de cuotas a facturar con monto total de orden de venta');
+				alert('No coincide total de cuotas a facturar con el total final de la orden de venta');
 				flError = true;
 			}
 
 			if (!flError)
 			{
-				// Controla conceptos
-				let totalConcepto = $("#totalconcepto").val();
-				let controlConcepto = totalConcepto - totalOrdenventa;
+				// Los conceptos cierran contra el bruto. Percepciones e IVA van aparte.
+				let totalConcepto = numeroImporte($("#totalconcepto").val());
+				let subtotal = numeroImporte($("#subtotal").val());
+				let controlConcepto = totalConcepto - subtotal;
 
 				if (Math.abs(controlConcepto) > 0.09)
 				{
-					alert('No coincide total de conceptos con monto total de orden de venta');
+					alert('No coincide total de conceptos con el subtotal (bruto) de la orden de venta');
 					flError = true;
 				}
 
@@ -238,9 +241,12 @@
 			}, 300);
 		}
 
+		window.programarVerificacionAvisoArbolOv = programarVerificacionAvisoArbolOv;
 		$(document).on('change', '#centrocosto_id, #moneda_id, #fecha, #estado', programarVerificacionAvisoArbolOv);
-		$(document).on('input change blur', '#monto', programarVerificacionAvisoArbolOv);
-		programarVerificacionAvisoArbolOv();
+		$(document).on('input change blur', '#subtotal, #percepcion, #iva', function () {
+			recalculaTotalOrdenventa();
+		});
+		recalculaTotalOrdenventa();
 
 		let cliente_id = $('#cliente_id').val();
 
@@ -1116,6 +1122,37 @@
 				$('#anulaordenventa').html('<i class="fas fa-cross"></i>Anular la Orden de Venta');
 				$( "#anulaordenventa" ).css( "background-color", "yellow" ); 
 				break;
+		}
+	}
+
+	function numeroImporte(valor)
+	{
+		var texto = String(valor == null ? '' : valor).trim().replace(/\s/g, '');
+		if (texto === '') {
+			return 0;
+		}
+		if (texto.indexOf(',') >= 0 && texto.indexOf('.') >= 0) {
+			texto = texto.replace(/\./g, '').replace(',', '.');
+		} else {
+			texto = texto.replace(',', '.');
+		}
+		var n = parseFloat(texto);
+		return isNaN(n) ? 0 : n;
+	}
+
+	function recalculaTotalOrdenventa()
+	{
+		var subtotal = numeroImporte($('#subtotal').val());
+		var percepcion = numeroImporte($('#percepcion').val());
+		var iva = numeroImporte($('#iva').val());
+		var total = subtotal + percepcion + iva;
+
+		$('#monto').val(total.toFixed(2));
+		$('#totalordenventa').val(total.toFixed(2));
+		$('#montoordenventa').val(total.toFixed(2));
+
+		if (typeof programarVerificacionAvisoArbolOv === 'function') {
+			programarVerificacionAvisoArbolOv();
 		}
 	}
 

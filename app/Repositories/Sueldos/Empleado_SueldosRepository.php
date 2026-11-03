@@ -878,10 +878,12 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             foreach (DB::table('empleado_base_sueldos')
                 ->whereIn('empleado_id', $empleadoIds)
                 ->whereIn('nombrebase_id', $nombrebaseIds)
-                ->get(['empleado_id', 'nombrebase_id']) as $filaExistente) {
-                $existentes[(int) $filaExistente->empleado_id.':'.(int) $filaExistente->nombrebase_id] = true;
+                ->orderBy('fecha_vigencia')
+                ->get(['empleado_id', 'nombrebase_id', 'valor']) as $filaExistente) {
+                $existentes[(int) $filaExistente->empleado_id.':'.(int) $filaExistente->nombrebase_id] = (float) $filaExistente->valor;
             }
         }
+        $vigenciaNueva = now()->startOfMonth()->toDateString();
 
         foreach ($meta as $key => $m) {
             $empleadoId = $idPorKey[$key] ?? null;
@@ -898,20 +900,36 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                     continue;
                 }
                 $par = (int) $empleadoId.':'.(int) $nbId;
+                $valorNuevo = (float) $valor;
                 if (isset($existentes[$par])) {
+                    if (abs($existentes[$par] - $valorNuevo) < 0.0001) {
+                        continue;
+                    }
+                    $filas[] = [
+                        'empleado_id' => $empleadoId,
+                        'nombrebase_id' => $nbId,
+                        'valor' => $valorNuevo,
+                        'fecha_vigencia' => $vigenciaNueva,
+                        'valor_anterior' => $existentes[$par],
+                        'usuario_id' => null,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                    $existentes[$par] = $valorNuevo;
+
                     continue;
                 }
                 $filas[] = [
                     'empleado_id' => $empleadoId,
                     'nombrebase_id' => $nbId,
-                    'valor' => (float) $valor,
+                    'valor' => $valorNuevo,
                     'fecha_vigencia' => $fecha,
                     'valor_anterior' => null,
                     'usuario_id' => null,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
-                $existentes[$par] = true;
+                $existentes[$par] = $valorNuevo;
             }
         }
         foreach (array_chunk($filas, 500) as $chunk) {

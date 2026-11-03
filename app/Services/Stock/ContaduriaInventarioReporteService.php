@@ -99,6 +99,7 @@ final class ContaduriaInventarioReporteService
                 $clave = ContaduriaInventarioRubroSupport::claveDesdeRecuento(
                     is_array($recuento) ? (string) ($recuento['comentario'] ?? '') : '',
                     $fila,
+                    (string) ($deposito['nombre'] ?? ''),
                 );
                 $valor = round($saldo * $precio, 2);
                 $acumulado[$clave]['saldos'][$deposito['id']] = round(

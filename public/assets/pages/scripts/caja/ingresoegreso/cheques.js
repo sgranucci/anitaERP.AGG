@@ -495,6 +495,12 @@ function aplicarCuentaChequeReemplazo($tr, data, forzarNumero) {
     if (data.moneda_id) {
         $tr.find('.moneda_reemplazo_id').val(data.moneda_id);
     }
+    if (esReemplazoPorTransferencia($tr)) {
+        if (typeof flModificaAsiento !== 'undefined') {
+            flModificaAsiento = true;
+        }
+        return;
+    }
     filtrarChequerasChequeReemplazo($tr, data.id, !!data.diferido, data.chequeras || []);
     aceptarChequeraVigenteSiTipoNoCoincide($tr, data, {
         campoId: '.chequera_reemplazo_id',
@@ -741,7 +747,17 @@ function activaEventosChequesIngresoEgreso() {
         flModificaAsiento = true;
     });
     $(document).on('change', '.montocheque_reemplazo, .cotizacioncheque_reemplazo, .moneda_reemplazo_id, .origen_reemplazo', function () {
-        toggleBloqueReemplazo($(this).closest('tr'));
+        var $tr = $(this).closest('tr');
+        toggleBloqueReemplazo($tr);
+        if ($(this).hasClass('origen_reemplazo')) {
+            if (esReemplazoPorTransferencia($tr)) {
+                enfocarCampoCheque($tr.find('.codigo_reemplazo')[0]);
+            } else if (String($tr.find('.origen_reemplazo').val() || '').toUpperCase() === 'E'
+                && parseInt($tr.find('.cuentacaja_reemplazo_id').val() || '0', 10) > 0) {
+                $tr.find('.numerocheque_reemplazo').data('auto', 1);
+                cargarEmisionChequeReemplazo($tr, { forzarNumero: true });
+            }
+        }
         if (typeof sumaMonto === 'function') sumaMonto();
         flModificaAsiento = true;
     });
@@ -818,7 +834,8 @@ function activaEventosChequesIngresoEgreso() {
 
     $(document).on('change', '.fechapago_reemplazo', function () {
         var $tr = $(this).closest('tr');
-        if ($tr.find('.origen_reemplazo').val() === 'E'
+        if (!esReemplazoPorTransferencia($tr)
+            && $tr.find('.origen_reemplazo').val() === 'E'
             && parseInt($tr.find('.cuentacaja_reemplazo_id').val() || '0', 10) > 0) {
             cargarEmisionChequeReemplazo($tr, {
                 forzarNumero: $tr.find('.numerocheque_reemplazo').data('auto') === 1
@@ -951,6 +968,10 @@ function activaEventosChequesIngresoEgreso() {
                 alert(msg);
             });
     });
+
+    $('#tbody-cheque-reemplazo-table tr.item-cheque-reemplazo').each(function () {
+        toggleBloqueReemplazo($(this));
+    });
 }
 
 function precargarDetalleCanjeChequesConIa() {
@@ -973,6 +994,7 @@ function precargarDetalleCanjeChequesConIa() {
             id: id,
             numerocheque: nro,
             origen: $tr.find('.origen_anulado').val() || $tr.find('.origen_reemplazo').val() || 'R',
+            medio: esReemplazoPorTransferencia($tr) ? 'T' : '',
             monto: $tr.find('.montocheque_reemplazo').val() || '',
             banco: String($tr.find('.nombrebanco_reemplazo').val() || '').trim()
                 || (nroLbl.match(/\(([^)]+)\)/) ? nroLbl.match(/\(([^)]+)\)/)[1] : ''),
@@ -1029,14 +1051,23 @@ function precargarDetalleCanjeChequesConIa() {
         });
 }
 
+function esReemplazoPorTransferencia($tr) {
+    return String($tr.find('.origen_reemplazo').val() || '').toUpperCase() === 'T';
+}
+
 function aplicarChequeAnuladoEnFilaReemplazo(row, cheque) {
     var origen = cheque.origen === 'E' ? 'E' : 'R';
+    var conservarTransferencia = esReemplazoPorTransferencia(row);
     row.find('.cheque_anulado_id').val(cheque.id);
     row.find('.origen_anulado').val(origen);
+    row.find('.cuentacaja_anulado_id').val(cheque.cuentacaja_id || '');
+    row.find('.fechapago_anulado').val(cheque.fechapago || '');
     row.find('.numerocheque_anulado').val(
         (cheque.numerocheque || '') + (cheque.banco ? ' (' + cheque.banco + ')' : '')
     );
-    row.find('.origen_reemplazo').val(origen);
+    if (!conservarTransferencia) {
+        row.find('.origen_reemplazo').val(origen);
+    }
     row.find('.montocheque_reemplazo').val(cheque.monto);
     row.find('.moneda_reemplazo_id').val(cheque.moneda_id);
     row.find('.cotizacioncheque_reemplazo').val(cheque.cotizacion != null ? cheque.cotizacion : 1);
@@ -1080,6 +1111,13 @@ function aplicarChequeAnuladoEnFilaReemplazo(row, cheque) {
     row.find('.numerocheque_reemplazo').val('').data('auto', 1);
     row.find('.tctes_reemplazo_lbl').text('');
     toggleBloqueReemplazo(row);
+    if (conservarTransferencia) {
+        if (typeof sumaMonto === 'function') {
+            sumaMonto();
+        }
+        enfocarCampoCheque(row.find('.codigo_reemplazo')[0]);
+        return;
+    }
     if (origen === 'E' && parseInt(row.find('.cuentacaja_reemplazo_id').val() || '0', 10) > 0) {
         var extras = { forzarNumero: true };
         var tipo = String(row.find('.chequera_reemplazo_tipo').val() || '').toUpperCase();
@@ -1101,7 +1139,8 @@ function aplicarChequeAnuladoEnFilaReemplazo(row, cheque) {
 }
 
 function toggleBloqueReemplazo(row) {
-    var tipo = row.find('.origen_reemplazo').val();
+    var tipo = String(row.find('.origen_reemplazo').val() || 'E').toUpperCase();
+    var transferencia = tipo === 'T';
     if (tipo === 'R') {
         row.find('.bloque-reemplazo-emitido').hide();
         row.find('.bloque-reemplazo-recibido').show();
@@ -1112,6 +1151,13 @@ function toggleBloqueReemplazo(row) {
         row.find('.bloque-reemplazo-emitido').show();
         row.find('.bloque-reemplazo-recibido-extra').hide();
         row.find('.bloque-reemplazo-emitido-extra').show();
+    }
+    row.find('.bloque-reemplazo-chequera').css('display', transferencia ? 'none' : 'flex');
+    row.find('.aviso-reemplazo-transferencia').css('display', transferencia ? 'block' : 'none');
+    row.find('.numerocheque_reemplazo').prop('readonly', transferencia);
+    if (transferencia) {
+        row.find('.numerocheque_reemplazo').val('');
+        row.find('.tctes_reemplazo_lbl').text('');
     }
 }
 
@@ -1267,7 +1313,8 @@ function sumaMontosChequesIngresoEgreso() {
         var moneda = $(this).find('.moneda_reemplazo_id').val();
         var cot = $(this).find('.cotizacioncheque_reemplazo').val();
         var coef = calculaCoeficienteMoneda(monedaDefault, moneda, cot);
-        if (origen === 'E') {
+        var alHaber = origen === 'E' || (origen === 'T' && String($(this).find('.origen_anulado').val() || 'E').toUpperCase() !== 'R');
+        if (alHaber) {
             extraHaber += monto * coef;
         } else {
             extraDebe += monto * coef;
@@ -1326,7 +1373,9 @@ function serializarChequesReemplazo() {
             moneda_ids: $(this).find('.moneda_reemplazo_id').val(),
             cotizaciones: $(this).find('.cotizacioncheque_reemplazo').val(),
             cuentacaja_reemplazo_ids: $(this).find('.cuentacaja_reemplazo_id').val(),
-            fechapago_reemplazo: $(this).find('.fechapago_reemplazo').val()
+            cuentacaja_anulado_ids: $(this).find('.cuentacaja_anulado_id').val(),
+            fechapago_reemplazo: $(this).find('.fechapago_reemplazo').val(),
+            fechapago_anulado: $(this).find('.fechapago_anulado').val()
         });
     });
     return JSON.stringify(datos);

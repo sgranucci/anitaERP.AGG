@@ -264,6 +264,9 @@ final class IngresoEgresoAnitaTesmovSupport
             'cheques.chequeras',
             'cheques.chequeReemplazado.cuentacajas',
             'cheques.chequeReemplazado.proveedores',
+            'chequeReemplazoTransferencias.cuentacajas',
+            'chequeReemplazoTransferencias.chequeAnulado.cuentacajas',
+            'chequeReemplazoTransferencias.chequeAnulado.proveedores',
         ]);
 
         $ctx = self::contexto($movimiento, $refOverride);
@@ -366,6 +369,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 }
                 self::anularChequePropioAnita($cheque, $ctx);
             }
+            self::grabarReemplazosPorTransferencia($movimientoChequesOrigen, $ctx);
 
             return;
         }
@@ -389,6 +393,8 @@ final class IngresoEgresoAnitaTesmovSupport
             }
             self::grabarChequePropio($movimiento, $cheque, $ctx);
         }
+
+        self::grabarReemplazosPorTransferencia($movimiento, $ctx);
     }
 
     public static function eliminarDesdeMovimiento(Caja_Movimiento $movimiento): void
@@ -413,6 +419,8 @@ final class IngresoEgresoAnitaTesmovSupport
             }
             self::eliminarChequePropio($cheque, $ctx);
         }
+
+        self::revertirAnulacionesDeTransferencias($movimiento);
 
         if (self::esTransferenciaTipo((string) $ctx['tipo'])) {
             self::eliminarTesmovTedTehDeTransferencia($ctx, $movimiento->id);
@@ -864,6 +872,10 @@ final class IngresoEgresoAnitaTesmovSupport
             if (strtoupper((string) $cheque->origen) === 'E') {
                 $total += abs((float) $cheque->monto);
             }
+        }
+        $movimiento->loadMissing('chequeReemplazoTransferencias');
+        foreach ($movimiento->chequeReemplazoTransferencias as $transferencia) {
+            $total += abs((float) $transferencia->monto);
         }
 
         $spCodigo = 0;
@@ -1877,6 +1889,98 @@ final class IngresoEgresoAnitaTesmovSupport
         $err = ApiAnita::extraerMensajeError($raw);
         if ($err !== null) {
             Log::warning('caja.ie.anita.cpromae_fecha_anula_fail', [
+                'cheque_id' => $cheque->id,
+                'error' => $err,
+            ]);
+        }
+    }
+
+    /**
+     * Canje por transferencia: anula el cheque propio en cpromae y mueve la cuenta
+     * de banco (tesmov/auxpag). Salida si el anulado era emitido; entrada si era de terceros.
+     * El factor del contexto invierte el signo en una anulación.
+     *
+     * @param  array<string, mixed>  $ctx
+     */
+    private static function grabarReemplazosPorTransferencia(Caja_Movimiento $movimiento, array $ctx): void
+    {
+        $movimiento->loadMissing([
+            'chequeReemplazoTransferencias.cuentacajas',
+            'chequeReemplazoTransferencias.chequeAnulado.cuentacajas',
+            'chequeReemplazoTransferencias.chequeAnulado.proveedores',
+        ]);
+
+        foreach ($movimiento->chequeReemplazoTransferencias as $transferencia) {
+            $anulado = $transferencia->chequeAnulado;
+            if ($anulado !== null && strtoupper((string) $anulado->origen) === 'E') {
+                if ((float) $ctx['factor'] < 0) {
+                    self::revertirFechaAnulaCpromae($anulado);
+                } else {
+                    self::marcarFechaAnulaCpromae($anulado, (string) $ctx['fecha']);
+                }
+            }
+
+            $cuenta = $transferencia->cuentacajas;
+            $codigoCuenta = $cuenta ? trim((string) $cuenta->codigo) : '';
+            if ($codigoCuenta === '') {
+                Log::warning('caja.ie.anita.transferencia_reemplazo_sin_cuenta', [
+                    'caja_movimiento_id' => $movimiento->id,
+                    'transferencia_id' => $transferencia->id,
+                ]);
+
+                continue;
+            }
+
+            $salida = $anulado === null || strtoupper((string) $anulado->origen) !== 'R';
+            $importe = round(abs((float) $transferencia->monto) * ($salida ? -1.0 : 1.0) * (float) $ctx['factor'], 2);
+            if (abs($importe) < 0.01) {
+                continue;
+            }
+            $monedaId = (int) ($transferencia->moneda_id ?: 1);
+            $cotizacion = self::cotizacionTesmov($monedaId, (float) ($transferencia->cotizacion ?: 1));
+            self::insertAuxpagCuentaCaja($ctx, $codigoCuenta, $importe, $monedaId, $cotizacion);
+            self::insertTesmovComprobante($ctx, $codigoCuenta, $importe, $monedaId, $cotizacion);
+        }
+    }
+
+    private static function revertirAnulacionesDeTransferencias(Caja_Movimiento $movimiento): void
+    {
+        $movimiento->loadMissing([
+            'chequeReemplazoTransferencias.chequeAnulado.cuentacajas',
+        ]);
+        foreach ($movimiento->chequeReemplazoTransferencias as $transferencia) {
+            $anulado = $transferencia->chequeAnulado;
+            if ($anulado === null || strtoupper((string) $anulado->origen) !== 'E') {
+                continue;
+            }
+            self::revertirFechaAnulaCpromae($anulado);
+        }
+    }
+
+    private static function revertirFechaAnulaCpromae(Cheque $cheque): void
+    {
+        $cuenta = $cheque->cuentacajas;
+        $codigoCuenta = $cuenta ? trim((string) $cuenta->codigo) : '';
+        $nroCheque = (int) preg_replace('/\D/', '', (string) $cheque->numerocheque);
+        if ($nroCheque <= 0) {
+            $nroCheque = (int) $cheque->numerocheque;
+        }
+        if ($codigoCuenta === '' || $nroCheque <= 0) {
+            return;
+        }
+
+        $cuentaPad = str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT);
+        $raw = (new ApiAnita)->apiCallEscritura([
+            'tabla' => 'cpromae',
+            'acc' => 'update',
+            'sistema' => self::sistema(),
+            'valores' => "cpro_fecha_anula = '0'",
+            'whereArmado' => ' WHERE cpro_cuenta = '.self::escSql($cuentaPad)
+                .' AND cpro_nro_cheque = '.$nroCheque,
+        ], 'caja IE cpromae fecha_anula revierte '.$cheque->id);
+        $err = ApiAnita::extraerMensajeError($raw);
+        if ($err !== null) {
+            Log::warning('caja.ie.anita.cpromae_fecha_anula_revierte_fail', [
                 'cheque_id' => $cheque->id,
                 'error' => $err,
             ]);

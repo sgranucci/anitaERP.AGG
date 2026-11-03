@@ -23,7 +23,7 @@ class Ordenventa extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 	use OrdenventaTrait;
     protected $fillable = ['fecha', 'empresa_id', 'numeroordenventa', 'centrocosto_id', 'comentario', 'detalle', 
-							'monto', 'moneda_id', 'tratamiento', 'cliente_id', 'nombrecliente', 'fantasiacliente', 
+							'monto', 'subtotal', 'percepcion', 'iva', 'moneda_id', 'tratamiento', 'cliente_id', 'nombrecliente', 'fantasiacliente', 
 							'domicilio', 'localidad_id', 
 							'codigopostal', 'provincia_id', 'pais_id', 'nroinscripcion', 'telefono', 'email', 'formapago_id',
 							'estado', 'creousuario_id'];

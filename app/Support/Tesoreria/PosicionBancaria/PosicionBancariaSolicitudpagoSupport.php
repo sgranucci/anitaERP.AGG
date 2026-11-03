@@ -14,8 +14,9 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Solicitudes de pago por fecha de vencimiento, no suspendidas,
+ * Solicitudes de pago por fecha de pago, no suspendidas,
  * ubicadas en el banco de la cuenta de caja.
+ * Sin fecha de pago no entran en la posición.
  * Sin pagar: la cuenta contable del asiento de la SP.
  * Pagada: la cuenta de caja del ingreso/egreso.
  */
@@ -28,7 +29,7 @@ final class PosicionBancariaSolicitudpagoSupport
      */
     public function lineasPorFechaYHoja(Carbon $desde, Carbon $hasta): array
     {
-        if (! Schema::hasTable('solicitudpago')) {
+        if (! Schema::hasTable('solicitudpago') || ! Schema::hasColumn('solicitudpago', 'fecha_pago')) {
             return [];
         }
 
@@ -47,15 +48,16 @@ final class PosicionBancariaSolicitudpagoSupport
             ])
             ->whereDoesntHave('hijas')
             ->whereNotIn('estado', [SolicitudpagoEstados::SUSPENDIDA, SolicitudpagoEstados::RECHAZADA])
-            ->whereDate('fecha_vencimiento', '>=', $desde->toDateString())
-            ->whereDate('fecha_vencimiento', '<=', $hasta->toDateString())
-            ->orderBy('fecha_vencimiento')
+            ->whereNotNull('fecha_pago')
+            ->whereDate('fecha_pago', '>=', $desde->toDateString())
+            ->whereDate('fecha_pago', '<=', $hasta->toDateString())
+            ->orderBy('fecha_pago')
             ->orderBy('id')
             ->get();
 
         $out = [];
         foreach ($solicitudes as $solicitud) {
-            $fecha = $solicitud->fecha_vencimiento?->toDateString() ?? '';
+            $fecha = $solicitud->fecha_pago?->toDateString() ?? '';
             if ($fecha === '') {
                 continue;
             }
@@ -144,7 +146,7 @@ final class PosicionBancariaSolicitudpagoSupport
     private function piernasDesdeAsiento(Solicitudpago $solicitud, $cuentasPorContable): array
     {
         $out = [];
-        $fecha = $solicitud->fecha_vencimiento?->format('Y-m-d') ?? date('Y-m-d');
+        $fecha = $solicitud->fecha_pago?->format('Y-m-d') ?? date('Y-m-d');
         foreach ($solicitud->cuentas as $linea) {
             $cuenta = $cuentasPorContable->get((int) $linea->cuentacontable_id);
             $hoja = FinanzaPosicionHojaSupport::hojaDesdeCuenta($cuenta);

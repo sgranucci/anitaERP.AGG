@@ -46,6 +46,50 @@ class ContaduriaInventarioRecuentoSupportTest extends TestCase
         $this->assertSame([187], array_column($elegidos, 'id'));
     }
 
+    public function test_el_2_entra_en_el_rubro_que_no_se_conto_a_fin_de_mes(): void
+    {
+        [$desde, $corte, $extension] = ContaduriaInventarioRecuentoSupport::ventana('2026-10-31');
+        $elegidos = $this->elegir([
+            $this->recuento(181, '2026-10-27'),
+            $this->recuento(191, '2026-10-31', 'bebidas'),
+            $this->recuento(190, '2026-11-02', 'alimento'),
+            $this->recuento(213, '2026-11-02', 'cigarrillos'),
+        ], $desde, $corte, $extension);
+
+        $ids = array_column($elegidos, 'id');
+        sort($ids);
+        $this->assertSame([190, 191, 213], $ids);
+    }
+
+    public function test_el_mismo_rubro_del_2_no_pisa_el_del_31(): void
+    {
+        [$desde, $corte, $extension] = ContaduriaInventarioRecuentoSupport::ventana('2026-10-31');
+        $elegidos = $this->elegir([
+            $this->recuento(189, '2026-10-31', 'limpieza'),
+            $this->recuento(197, '2026-10-31', 'cigarrillos'),
+            $this->recuento(201, '2026-11-02', 'alimento'),
+            $this->recuento(205, '2026-11-02', 'bebidas'),
+            $this->recuento(208, '2026-11-02', 'descartables'),
+            $this->recuento(156, '2026-10-01', 'alimento'),
+        ], $desde, $corte, $extension);
+
+        $ids = array_column($elegidos, 'id');
+        sort($ids);
+        $this->assertSame([189, 197, 201, 205, 208], $ids);
+    }
+
+    public function test_farmacia_sin_categoria_sale_del_nombre_del_deposito(): void
+    {
+        $this->assertSame(
+            'farmacia',
+            ContaduriaInventarioRubroSupport::claveDesdeRecuento('', [
+                'tipo' => 'OTRO',
+                'uso' => 'COMPRA',
+                'categoria' => '',
+            ], 'LOG FARMACIA'),
+        );
+    }
+
     public function test_el_2_entra_solo_cuando_el_deposito_no_tiene_cierre_del_mes(): void
     {
         [$desde, $corte, $extension] = ContaduriaInventarioRecuentoSupport::ventana('2026-11-03');
@@ -69,10 +113,10 @@ class ContaduriaInventarioRecuentoSupportTest extends TestCase
     }
 
     /**
-     * @return array{id:int,fecha:string}
+     * @return array{id:int,fecha:string,rubro:?string}
      */
-    private function recuento(int $id, string $fecha): array
+    private function recuento(int $id, string $fecha, ?string $rubro = null): array
     {
-        return ['id' => $id, 'fecha' => $fecha];
+        return ['id' => $id, 'fecha' => $fecha, 'rubro' => $rubro];
     }
 }

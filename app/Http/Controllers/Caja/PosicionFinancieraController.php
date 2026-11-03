@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Caja;
 
 use App\Exports\Caja\PosicionFinancieraExport;
+use App\Exports\Caja\PosicionFinancieraMultiExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionPosicionFinancieraOrdenConceptos;
 use App\Models\Caja\PosicionFinancieraSaldo;
@@ -50,33 +51,35 @@ class PosicionFinancieraController extends Controller
         }
 
         $consultado = false;
-        $filas = [];
-        $dias = [];
-        $saldoInicial = null;
-        $saldoFinal = null;
-        $saldoInicialOrigen = null;
-        $saldoConfirmado = null;
+        $resultados = [];
         $erroresBridge = [];
+        $saldoConfirmado = null;
+        $esRango = false;
 
         if ($request->boolean('consultar') && EfeMensualListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            $resultado = $this->posicionFinancieraSupport->generar($filtros);
-            $filas = $resultado['filas_ordenadas'] ?? [];
-            $dias = $resultado['dias'] ?? [];
-            $saldoInicial = $resultado['saldo_inicial'] ?? null;
-            $saldoFinal = $resultado['saldo_final'] ?? null;
-            $saldoInicialOrigen = $resultado['saldo_inicial_origen'] ?? null;
-            $erroresBridge = $resultado['errores_bridge'] ?? [];
-            $saldoConfirmado = PosicionFinancieraSaldo::query()
-                ->with(['confirmadoPor:id,nombre', 'anuladoPor:id,nombre'])
-                ->where('empresa_id', (int) ($filtros['empresa_id'] ?? 0))
-                ->whereDate('fecha_cierre', Carbon::createFromDate(
-                    (int) ($filtros['anio'] ?? 0),
-                    (int) ($filtros['mes'] ?? 0),
-                    1,
-                )->endOfMonth()->toDateString())
-                ->whereNull('anulado_at')
-                ->latest('id')
-                ->first();
+            $esRango = EfeMensualListadoFiltros::esRango($filtros);
+            $resultados = $this->generarPeriodos($filtros);
+            foreach ($resultados as $resultado) {
+                foreach ($resultado['errores_bridge'] ?? [] as $err) {
+                    $erroresBridge[] = $err;
+                }
+            }
+            $erroresBridge = array_values(array_unique($erroresBridge));
+
+            if (! $esRango && $resultados !== []) {
+                $unico = $resultados[0];
+                $saldoConfirmado = PosicionFinancieraSaldo::query()
+                    ->with(['confirmadoPor:id,nombre', 'anuladoPor:id,nombre'])
+                    ->where('empresa_id', (int) ($filtros['empresa_id'] ?? 0))
+                    ->whereDate('fecha_cierre', Carbon::createFromDate(
+                        (int) ($unico['anio'] ?? $filtros['anio'] ?? 0),
+                        (int) ($unico['mes'] ?? $filtros['mes'] ?? 0),
+                        1,
+                    )->endOfMonth()->toDateString())
+                    ->whereNull('anulado_at')
+                    ->latest('id')
+                    ->first();
+            }
             $consultado = true;
         }
 
@@ -87,20 +90,29 @@ class PosicionFinancieraController extends Controller
             ? $this->empresaRepository->find((int) $filtros['empresa_id'])
             : null;
 
+        $primero = $resultados[0] ?? null;
+
         return view('caja.posicion_financiera.index', [
             'empresa_query' => $empresaQuery,
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
             'consultado' => $consultado,
-            'filas' => $filas,
-            'dias' => $dias,
-            'saldo_inicial' => $saldoInicial,
-            'saldo_final' => $saldoFinal,
-            'saldo_inicial_origen' => $saldoInicialOrigen,
+            'resultados' => $resultados,
+            'es_rango' => $esRango,
+            // Compat vista/export de un solo mes:
+            'filas' => $primero['filas_ordenadas'] ?? [],
+            'dias' => $primero['dias'] ?? [],
+            'saldo_inicial' => $primero['saldo_inicial'] ?? null,
+            'saldo_final' => $primero['saldo_final'] ?? null,
+            'saldo_inicial_origen' => $primero['saldo_inicial_origen'] ?? null,
+            'fuente' => $primero['fuente'] ?? null,
+            'fuente_etiqueta' => $primero['fuente_etiqueta'] ?? null,
             'saldo_confirmado' => $saldoConfirmado,
             'errores_bridge' => $erroresBridge,
             'empresa' => $empresa,
             'periodo_texto' => $this->periodoTexto($filtros),
+            'corte_fuente_erp_ym' => EfePosicionFinancieraSupport::CORTE_FUENTE_ERP_YM,
+            'fuente_corte_texto' => $this->fuenteCorteTexto(),
             'mes_actual' => (int) date('n'),
             'anio_actual' => (int) date('Y'),
         ]);
@@ -159,6 +171,13 @@ class PosicionFinancieraController extends Controller
                 ->with('error', 'Debe indicar empresa y período.');
         }
 
+        if (EfeMensualListadoFiltros::esRango($filtros)) {
+            return redirect()->route('posicion_financiera', array_merge(
+                EfeMensualListadoFiltros::paraQueryString($filtros),
+                ['consultar' => 1],
+            ))->with('error', 'El cierre de saldo solo aplica a un mes (deje Hasta igual a Desde).');
+        }
+
         try {
             $resultado = $this->posicionFinancieraSupport->generar($filtros);
             $fechaCierre = Carbon::createFromDate(
@@ -214,6 +233,13 @@ class PosicionFinancieraController extends Controller
 
         $filtros = EfeMensualListadoFiltros::resolverDesdeRequest($request);
         unset($filtros['solo_moneda_origen']);
+        // Auditoría de celda: mes puntual (ignora rango; usa mes/anio del link).
+        if ($request->filled('mes') || $request->filled('anio')) {
+            $filtros['mes'] = max(1, min(12, (int) $request->input('mes', $filtros['mes'])));
+            $filtros['anio'] = max(2000, min(2100, (int) $request->input('anio', $filtros['anio'])));
+            $filtros['mes_hasta'] = $filtros['mes'];
+            $filtros['anio_hasta'] = $filtros['anio'];
+        }
         $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
 
         $dia = (int) $request->input('dia');
@@ -237,8 +263,8 @@ class PosicionFinancieraController extends Controller
     public function exportar(Request $request, string $formato)
     {
         can('listar-posicion-financiera');
-        ini_set('memory_limit', '512M');
-        set_time_limit(300);
+        ini_set('memory_limit', '1024M');
+        set_time_limit(600);
 
         $filtros = EfeMensualListadoFiltros::resolverDesdeRequest($request);
         unset($filtros['solo_moneda_origen']);
@@ -248,42 +274,106 @@ class PosicionFinancieraController extends Controller
             return redirect()->route('posicion_financiera');
         }
 
-        $resultado = $this->posicionFinancieraSupport->generar($filtros);
-        $filas = $resultado['filas_ordenadas'] ?? [];
-        $dias = $resultado['dias'] ?? [];
+        $resultados = $this->generarPeriodos($filtros);
         $empresa = $this->empresaRepository->find((int) ($filtros['empresa_id'] ?? 0));
         $periodo = $this->periodoTexto($filtros);
         $formato = strtoupper($formato);
+        $esRango = count($resultados) > 1;
 
         $slugEmpresa = $empresa
             ? preg_replace('/[^A-Za-z0-9]+/', '_', (string) $empresa->nombre)
             : 'empresa';
         $mes = str_pad((string) ($filtros['mes'] ?? 0), 2, '0', STR_PAD_LEFT);
         $anio = (string) ($filtros['anio'] ?? '');
-        $baseNombre = 'posicion_financiera_'.$slugEmpresa.'_'.$anio.$mes;
+        $sufijoRango = '';
+        if ($esRango) {
+            $mesHasta = str_pad((string) ($filtros['mes_hasta'] ?? $filtros['mes'] ?? 0), 2, '0', STR_PAD_LEFT);
+            $anioHasta = (string) ($filtros['anio_hasta'] ?? $filtros['anio'] ?? '');
+            $sufijoRango = '_a_'.$anioHasta.$mesHasta;
+        }
+        $baseNombre = 'posicion_financiera_'.$slugEmpresa.'_'.$anio.$mes.$sufijoRango;
 
-        return match ($formato) {
-            'PDF' => $this->exportarPdf($filas, $dias, $empresa, $periodo, $baseNombre),
-            'EXCEL', 'CSV' => Excel::download(
-                (new PosicionFinancieraExport)->parametros($filas, $dias, $empresa, $periodo, $formato === 'CSV'),
-                $baseNombre.($formato === 'CSV' ? '.csv' : '.xlsx')
-            ),
-            default => redirect()->route('posicion_financiera', array_merge(
-                EfeMensualListadoFiltros::paraQueryString($filtros),
-                ['consultar' => 1],
-            )),
-        };
+        if ($formato === 'PDF') {
+            return $this->exportarPdf($resultados, $empresa, $periodo, $baseNombre);
+        }
+
+        if (in_array($formato, ['EXCEL', 'CSV'], true)) {
+            if ($formato === 'CSV' || ! $esRango) {
+                $primero = $resultados[0] ?? [
+                    'filas_ordenadas' => [],
+                    'dias' => [],
+                ];
+
+                return Excel::download(
+                    (new PosicionFinancieraExport)->parametros(
+                        $primero['filas_ordenadas'] ?? [],
+                        $primero['dias'] ?? [],
+                        $empresa,
+                        $this->periodoMesTexto(
+                            (int) ($primero['mes'] ?? $filtros['mes'] ?? 0),
+                            (int) ($primero['anio'] ?? $filtros['anio'] ?? 0),
+                        ),
+                        $formato === 'CSV',
+                    ),
+                    $baseNombre.($formato === 'CSV' ? '.csv' : '.xlsx')
+                );
+            }
+
+            $periodosExport = [];
+            foreach ($resultados as $resultado) {
+                $texto = $this->periodoMesTexto(
+                    (int) ($resultado['mes'] ?? 0),
+                    (int) ($resultado['anio'] ?? 0),
+                );
+                $periodosExport[] = [
+                    'filas' => $resultado['filas_ordenadas'] ?? [],
+                    'dias' => $resultado['dias'] ?? [],
+                    'periodo_texto' => $texto,
+                    'titulo_hoja' => $texto !== '' ? $texto : 'Posición financiera',
+                ];
+            }
+
+            return Excel::download(
+                new PosicionFinancieraMultiExport($periodosExport, $empresa),
+                $baseNombre.'.xlsx'
+            );
+        }
+
+        return redirect()->route('posicion_financiera', array_merge(
+            EfeMensualListadoFiltros::paraQueryString($filtros),
+            ['consultar' => 1],
+        ));
     }
 
     /**
-     * @param  list<array{etiqueta: string, valor: float, por_dia?: array<int, float>}>  $filas
-     * @param  list<int>  $dias
+     * @param  array<string, mixed>  $filtros
+     * @return list<array<string, mixed>>
      */
-    private function exportarPdf(array $filas, array $dias, $empresa, string $periodo, string $baseNombre)
+    private function generarPeriodos(array $filtros): array
+    {
+        $periodos = EfeMensualListadoFiltros::periodosMensuales($filtros);
+        $resultados = [];
+        foreach ($periodos as $periodo) {
+            $filtrosMes = $filtros;
+            $filtrosMes['mes'] = $periodo['mes'];
+            $filtrosMes['anio'] = $periodo['anio'];
+            $filtrosMes['mes_hasta'] = $periodo['mes'];
+            $filtrosMes['anio_hasta'] = $periodo['anio'];
+            $resultados[] = $this->posicionFinancieraSupport->generar($filtrosMes);
+        }
+
+        return $resultados;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $resultados
+     */
+    private function exportarPdf(array $resultados, $empresa, string $periodo, string $baseNombre)
     {
         $pdf = Pdf::loadView('caja.posicion_financiera.listado', [
-            'filas' => $filas,
-            'dias' => $dias,
+            'resultados' => $resultados,
+            'filas' => $resultados[0]['filas_ordenadas'] ?? [],
+            'dias' => $resultados[0]['dias'] ?? [],
             'empresa' => $empresa,
             'periodo_texto' => $periodo,
         ])->setPaper('legal', 'landscape');
@@ -337,12 +427,44 @@ class PosicionFinancieraController extends Controller
      */
     private function periodoTexto(array $filtros): string
     {
-        $mes = (int) ($filtros['mes'] ?? 0);
-        $anio = (int) ($filtros['anio'] ?? 0);
+        $desde = $this->periodoMesTexto(
+            (int) ($filtros['mes'] ?? 0),
+            (int) ($filtros['anio'] ?? 0),
+        );
+        if ($desde === '') {
+            return '';
+        }
+
+        if (! EfeMensualListadoFiltros::esRango($filtros)) {
+            return $desde;
+        }
+
+        $hasta = $this->periodoMesTexto(
+            (int) ($filtros['mes_hasta'] ?? 0),
+            (int) ($filtros['anio_hasta'] ?? 0),
+        );
+
+        return $hasta !== '' ? $desde.' a '.$hasta : $desde;
+    }
+
+    private function periodoMesTexto(int $mes, int $anio): string
+    {
         if ($mes <= 0 || $anio <= 0) {
             return '';
         }
 
         return str_pad((string) $mes, 2, '0', STR_PAD_LEFT).'/'.$anio;
+    }
+
+    private function fuenteCorteTexto(): string
+    {
+        $corte = EfePosicionFinancieraSupport::CORTE_FUENTE_ERP_YM;
+        $mesErp = $corte % 100;
+        $anioErp = intdiv($corte, 100);
+        $mesAnitaHasta = $mesErp === 1 ? 12 : $mesErp - 1;
+        $anioAnitaHasta = $mesErp === 1 ? $anioErp - 1 : $anioErp;
+
+        return 'Anita hasta '.$this->periodoMesTexto($mesAnitaHasta, $anioAnitaHasta)
+            .'; ERP desde '.$this->periodoMesTexto($mesErp, $anioErp);
     }
 }

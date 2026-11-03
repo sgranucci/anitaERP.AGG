@@ -1,6 +1,10 @@
 /**
  * Cierre contable: valida fecha del asiento contra empresa.
  * URL desde data-cierre-url del input #fecha (APP_CARPETA).
+ *
+ * #fecha es texto libre (dd/mm/aaaa o ddmmaaaa). El valor que se graba
+ * va en #fecha_iso (Y-m-d). No avisa por empresa faltante mientras se tipea:
+ * ese alert cortaba la carga de la fecha.
  */
 (function () {
     'use strict';
@@ -10,6 +14,147 @@
 
     function qs(id) {
         return document.getElementById(id);
+    }
+
+    function esFechaLibre() {
+        var el = qs('fecha');
+        return !!(el && el.getAttribute('data-fecha-libre') === '1');
+    }
+
+    function isoEl() {
+        return qs('fecha_iso');
+    }
+
+    function pad2(n) {
+        n = String(n);
+        return n.length < 2 ? '0' + n : n;
+    }
+
+    function fechaDesdePartes(dia, mes, anio) {
+        dia = parseInt(dia, 10);
+        mes = parseInt(mes, 10);
+        anio = parseInt(anio, 10);
+        if (!dia || !mes || !anio) {
+            return null;
+        }
+        if (anio < 100) {
+            anio += 2000;
+        }
+        if (anio < 1900 || anio > 2100 || mes < 1 || mes > 12 || dia < 1 || dia > 31) {
+            return null;
+        }
+        var dt = new Date(anio, mes - 1, dia);
+        if (dt.getFullYear() !== anio || dt.getMonth() !== mes - 1 || dt.getDate() !== dia) {
+            return null;
+        }
+        return {
+            iso: anio + '-' + pad2(mes) + '-' + pad2(dia),
+            texto: pad2(dia) + '/' + pad2(mes) + '/' + anio
+        };
+    }
+
+    function parseFechaLibre(valor) {
+        var t = String(valor || '').trim();
+        if (!t) {
+            return { vacia: true };
+        }
+        var m = t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+        if (m) {
+            var conSep = fechaDesdePartes(m[1], m[2], m[3]);
+            return conSep ? { ok: true, iso: conSep.iso, texto: conSep.texto } : { ok: false };
+        }
+        if (/[^\d]/.test(t)) {
+            return { ok: false };
+        }
+        if (t.length === 8) {
+            var ocho = fechaDesdePartes(t.slice(0, 2), t.slice(2, 4), t.slice(4));
+            return ocho ? { ok: true, iso: ocho.iso, texto: ocho.texto } : { ok: false };
+        }
+        if (t.length === 6) {
+            var seis = fechaDesdePartes(t.slice(0, 2), t.slice(2, 4), t.slice(4));
+            return seis ? { ok: true, iso: seis.iso, texto: seis.texto } : { ok: false };
+        }
+        return { ok: false };
+    }
+
+    function mostrarErrorFecha(texto) {
+        var err = qs('fecha-libre-error');
+        if (!err) {
+            return;
+        }
+        if (!texto) {
+            err.textContent = '';
+            err.classList.add('d-none');
+            return;
+        }
+        err.textContent = texto;
+        err.classList.remove('d-none');
+    }
+
+    /**
+     * Normaliza lo escrito y copia Y-m-d a #fecha_iso.
+     * @param {boolean} avisar  true = alert si la fecha no se puede leer (al guardar)
+     * @return {boolean}
+     */
+    function commitFechaLibre(avisar) {
+        if (!esFechaLibre()) {
+            return true;
+        }
+        var el = qs('fecha');
+        var parsed = parseFechaLibre(el ? el.value : '');
+        var hidden = isoEl();
+        var cal = qs('fecha_calendario');
+        if (parsed.vacia) {
+            if (hidden) {
+                hidden.value = '';
+            }
+            if (cal) {
+                cal.value = '';
+            }
+            mostrarErrorFecha('');
+            return true;
+        }
+        if (!parsed.ok) {
+            if (hidden) {
+                hidden.value = '';
+            }
+            mostrarErrorFecha('Fecha inválida. Escribila como dd/mm/aaaa o 03012026.');
+            if (avisar) {
+                window.alert('La fecha no es válida. Escribila como dd/mm/aaaa (por ejemplo 03/01/2026) o como 03012026.');
+                if (el) {
+                    el.focus();
+                }
+            }
+            return false;
+        }
+        if (el) {
+            el.value = parsed.texto;
+        }
+        if (hidden) {
+            hidden.value = parsed.iso;
+        }
+        if (cal) {
+            cal.value = parsed.iso;
+        }
+        mostrarErrorFecha('');
+        return true;
+    }
+
+    function fechaIsoConsulta() {
+        if (!esFechaLibre()) {
+            var plano = qs('fecha');
+            return plano ? String(plano.value || '').trim() : '';
+        }
+        var el = qs('fecha');
+        var parsed = parseFechaLibre(el ? el.value : '');
+        if (parsed.vacia) {
+            return '';
+        }
+        if (parsed.ok) {
+            return parsed.iso;
+        }
+        var hidden = isoEl();
+        return hidden ? String(hidden.value || '').trim() : '';
     }
 
     function urlCierre() {
@@ -27,6 +172,10 @@
     }
 
     function fechaVal() {
+        if (esFechaLibre()) {
+            var hidden = isoEl();
+            return hidden ? String(hidden.value || '').trim() : '';
+        }
         var el = qs('fecha');
         return el ? String(el.value || '').trim() : '';
     }
@@ -74,8 +223,16 @@
 
     function bloquearFecha(mensaje) {
         var el = qs('fecha');
+        var hidden = isoEl();
+        var cal = qs('fecha_calendario');
         if (el) {
             el.value = '';
+        }
+        if (hidden) {
+            hidden.value = '';
+        }
+        if (cal) {
+            cal.value = '';
         }
         avisar(mensaje, 'bloqueo');
         if (el) {
@@ -107,13 +264,6 @@
             return true;
         }
         if (emp <= 0) {
-            if (avisarSinEmpresa) {
-                window.alert('Seleccione la empresa para validar si la fecha está dentro de un período cerrado.');
-                var e = qs('empresa_id');
-                if (e) {
-                    e.focus();
-                }
-            }
             return true;
         }
 
@@ -178,12 +328,26 @@
         return true;
     }
 
-    window.anitaValidarCierreAsiento = function (avisarSinEmpresa) {
-        return validar(!!avisarSinEmpresa, false);
+    window.asientoCommitFechaLibre = function (avisar) {
+        return commitFechaLibre(!!avisar);
+    };
+
+    window.asientoFechaIso = function () {
+        return fechaIsoConsulta();
+    };
+
+    window.anitaValidarCierreAsiento = function () {
+        if (esFechaLibre() && !commitFechaLibre(false)) {
+            return false;
+        }
+        return validar(false, false);
     };
 
     window.asientoFechaCierrePermitidaSync = function () {
-        return validar(true, true);
+        if (esFechaLibre() && !commitFechaLibre(true)) {
+            return false;
+        }
+        return validar(false, true);
     };
 
     // Alias usado por includes previos
@@ -201,13 +365,26 @@
         }
         el.setAttribute('data-cierre-bind', '1');
         el.addEventListener('change', function () {
+            if (esFechaLibre()) {
+                commitFechaLibre(false);
+            }
             validar(false, false);
         });
         if (window.jQuery) {
             window.jQuery(el).on('change.anitaCierre select2:select.anitaCierre', function () {
+                if (esFechaLibre()) {
+                    commitFechaLibre(false);
+                }
                 validar(false, false);
             });
         }
+    }
+
+    function validarSiHayEmpresa() {
+        if (!fechaVal() || empresaId() <= 0) {
+            return;
+        }
+        validar(false, false);
     }
 
     function init() {
@@ -215,6 +392,34 @@
             return;
         }
         bindEmpresa();
+        if (esFechaLibre()) {
+            var el = qs('fecha');
+            el.addEventListener('focus', function () {
+                if (typeof el.select === 'function') {
+                    el.select();
+                }
+            });
+            el.addEventListener('blur', function () {
+                if (!commitFechaLibre(false)) {
+                    return;
+                }
+                validarSiHayEmpresa();
+            });
+            var cal = qs('fecha_calendario');
+            if (cal) {
+                cal.addEventListener('change', function () {
+                    var iso = String(cal.value || '').trim();
+                    var partes = iso.split('-');
+                    if (partes.length === 3 && el) {
+                        el.value = partes[2] + '/' + partes[1] + '/' + partes[0];
+                    }
+                    if (!commitFechaLibre(false)) {
+                        return;
+                    }
+                    validarSiHayEmpresa();
+                });
+            }
+        }
         // Si al abrir ya hay empresa+fecha (alta), validar.
         var edicion = document.querySelector('input[name="_method"][value="PUT"], input[name="_method"][value="put"]');
         if (!edicion && fechaVal() && empresaId() > 0) {

@@ -63,6 +63,30 @@ final class IngresoEgresoListadoMontoSupport
             }
         }
 
+        foreach ($movimiento->chequeReemplazoTransferencias ?? [] as $transferencia) {
+            $coef = self::coeficiente($transferencia->moneda_id ?? 1, $transferencia->cotizacion ?? 1, $fecha, $cotizacionesMovimiento);
+            $montoAbs = abs((float) ($transferencia->monto ?? 0));
+            if ($montoAbs < 0.000001) {
+                continue;
+            }
+            $anulado = $transferencia->chequeAnulado ?? $transferencia->cheque_anulado ?? null;
+            $origenAnulado = strtoupper(trim((string) (is_object($anulado) ? ($anulado->origen ?? 'E') : 'E')));
+            if ($origenAnulado === 'R') {
+                $ingreso += $montoAbs * $coef;
+            } else {
+                $egreso += $montoAbs * $coef;
+            }
+            $nroAnulado = trim((string) (is_object($anulado) ? ($anulado->numerocheque ?? '') : ''));
+            $cuentaCaja = $transferencia->cuentacajas ?? null;
+            $cuenta = trim((string) (is_object($cuentaCaja) ? ($cuentaCaja->nombre ?? '') : ($transferencia->cuentacaja_nombre ?? '')));
+            $etiqueta = 'Canje';
+            if ($nroAnulado !== '') {
+                $etiqueta .= ' CHP '.$nroAnulado.' →';
+            }
+            $etiqueta .= ' transferencia';
+            $lineas[] = trim($etiqueta.' '.$cuenta.' '.self::fmt($origenAnulado === 'R' ? $montoAbs : -$montoAbs));
+        }
+
         // Canje: sin caja ni cheques “normales”; una pata = monto del cheque nuevo.
         if (abs($ingreso) < 0.000001 && abs($egreso) < 0.000001 && $chequesReemplazo !== []) {
             foreach ($chequesReemplazo as $cheque) {

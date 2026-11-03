@@ -62,6 +62,15 @@ class Caja_Movimiento extends Model implements Auditable
             ->with('chequeReemplazado');
     }
 
+    public function chequeReemplazoTransferencias()
+    {
+        return $this->hasMany(ChequeReemplazoTransferencia::class, 'caja_movimiento_id')
+            ->with('chequeAnulado.bancos')
+            ->with('chequeAnulado.cuentacajas')
+            ->with('cuentacajas')
+            ->with('monedas');
+    }
+
     public function asientos()
 	{
     	return $this->hasOne(Asiento::class, 'caja_movimiento_id')->with('asiento_movimientos');

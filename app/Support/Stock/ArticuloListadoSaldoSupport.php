@@ -67,12 +67,63 @@ final class ArticuloListadoSaldoSupport
     }
 
     /**
+     * El join agregado recorre todo el maestro. Solo hace falta para filtrar,
+     * ordenar, agrupar o graficar por saldo. En la grilla paginada el saldo se
+     * calcula por fila.
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function requiereJoin(array $filtros): bool
+    {
+        if ((array) ($filtros['agrupar'] ?? []) !== []) {
+            return true;
+        }
+        foreach ((array) ($filtros['sort'] ?? []) as $fila) {
+            $campo = is_array($fila) ? (string) ($fila['campo'] ?? '') : (string) $fila;
+            if ($campo === self::CLAVE) {
+                return true;
+            }
+        }
+        $qbe = is_array($filtros['qbe'] ?? null) ? $filtros['qbe'] : [];
+        foreach ((array) ($qbe['grupos'] ?? []) as $grupo) {
+            foreach ((array) ($grupo['criterios'] ?? []) as $criterio) {
+                if ((string) ($criterio['campo'] ?? '') === self::CLAVE) {
+                    return true;
+                }
+            }
+        }
+        if ((string) ($filtros['campo'] ?? '') === self::CLAVE && ($filtros['modo'] ?? '') === 'campo') {
+            return true;
+        }
+        $graficos = is_array($filtros['graficos'] ?? null) ? $filtros['graficos'] : [];
+        if ($graficos === [] && is_array($filtros['grafico'] ?? null)) {
+            $graficos = [$filtros['grafico']];
+        }
+        foreach ($graficos as $grafico) {
+            if (! is_array($grafico)) {
+                continue;
+            }
+            if ((string) ($grafico['medida'] ?? '') === self::CLAVE || (string) ($grafico['dimension'] ?? '') === self::CLAVE) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param  Builder<\App\Models\Stock\Articulo>  $query
      */
-    public static function aplicar(Builder $query): void
+    public static function aplicar(Builder $query, bool $unido = true): void
     {
-        $query->leftJoinSub(self::subconsulta(), 'saldo_dep', 'saldo_dep.articulo_id', '=', 'articulo.id');
-        $query->addSelect('saldo_dep.saldo as saldo');
+        if ($unido) {
+            $query->leftJoinSub(self::subconsulta(), 'saldo_dep', 'saldo_dep.articulo_id', '=', 'articulo.id');
+            $query->addSelect('saldo_dep.saldo as saldo');
+
+            return;
+        }
+
+        $query->selectRaw(self::expresionSaldoFila().' as saldo');
     }
 
     /** @return list<array{key: string, column: string, label: string}> */
@@ -94,5 +145,17 @@ final class ArticuloListadoSaldoSupport
             ->groupBy('art_dep.id')
             ->select('art_dep.id as articulo_id')
             ->selectRaw('COALESCE(SUM(asd.cantidad), 0) as saldo');
+    }
+
+    /**
+     * Mismo criterio que el join: sin depósito de entrega queda nulo; con depósito
+     * y sin movimientos, cero. Solo lee el saldo del artículo de la fila.
+     */
+    private static function expresionSaldoFila(): string
+    {
+        return '(CASE WHEN articulo.depositoentrega_id > 0 THEN ('
+            .'SELECT COALESCE(SUM(asd.cantidad), 0) FROM articulo_saldo_deposito as asd '
+            .'WHERE asd.articulo_id = articulo.id AND asd.deposito_id = articulo.depositoentrega_id'
+            .') END)';
     }
 }

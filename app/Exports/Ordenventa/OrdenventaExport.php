@@ -24,7 +24,7 @@ class OrdenventaExport implements FromView, WithColumnFormatting, WithColumnWidt
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'K';
+    private const COL_ULTIMA = 'N';
 
     /** Congela ID y Fecha (A y B): el freeze arranca en C. */
     private const COL_FREEZE = 'C';
@@ -77,8 +77,10 @@ class OrdenventaExport implements FromView, WithColumnFormatting, WithColumnWidt
         return [
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
-            // H = Monto: número real con máscara neutra (sumable/adaptable).
             'H' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+            'I' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+            'J' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+            'K' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
         ];
     }
 
@@ -97,10 +99,13 @@ class OrdenventaExport implements FromView, WithColumnFormatting, WithColumnWidt
             'E' => 14,
             'F' => 20,
             'G' => 24,
-            'H' => 16,
-            'I' => 8,
-            'J' => 12,
-            'K' => 30,
+            'H' => 14,
+            'I' => 14,
+            'J' => 14,
+            'K' => 14,
+            'L' => 8,
+            'M' => 12,
+            'N' => 30,
         ];
     }
 

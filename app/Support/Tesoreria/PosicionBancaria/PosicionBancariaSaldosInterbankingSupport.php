@@ -4,6 +4,7 @@ namespace App\Support\Tesoreria\PosicionBancaria;
 
 use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\InterbankingSaldoDiario;
+use App\Support\Caja\InterbankingSaldoFotoSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -17,8 +18,6 @@ use Illuminate\Support\Collection;
  */
 final class PosicionBancariaSaldosInterbankingSupport
 {
-    /** Una foto real trae ~28 cuentas; el día en curso a veces queda en 1 fila. */
-    private const MIN_CUENTAS_DIA = 10;
 
     /** @var array<string, string> bank_number BCRA → banco canónico */
     private const BANCO_POR_BCRA = [
@@ -53,7 +52,7 @@ final class PosicionBancariaSaldosInterbankingSupport
     public function saldosPorCodigo(Carbon $fecha, array $empresaIds = [1, 2, 3]): array
     {
         $fechaPosicion = $fecha->toDateString();
-        $fechaIb = $this->fechaCierreAnterior($fechaPosicion, $empresaIds);
+        $fechaIb = (new InterbankingSaldoFotoSupport())->fechaCierreRealAnterior($fechaPosicion, $empresaIds);
         $rows = collect();
         if ($fechaIb !== null) {
             $rows = InterbankingSaldoDiario::query()
@@ -98,7 +97,7 @@ final class PosicionBancariaSaldosInterbankingSupport
             return [];
         }
 
-        $lookback = $desde->copy()->subDays(21)->toDateString();
+        $lookback = $desde->copy()->subDays(45)->toDateString();
         $rows = InterbankingSaldoDiario::query()
             ->whereDate('fecha', '>=', $lookback)
             ->whereDate('fecha', '<', $hasta->toDateString())
@@ -116,12 +115,18 @@ final class PosicionBancariaSaldosInterbankingSupport
             ->get();
 
         $porFoto = [];
+        $clavesPorFecha = [];
         foreach ($rows->groupBy(fn (InterbankingSaldoDiario $ib) => $ib->fecha?->toDateString() ?? '') as $fechaFoto => $grupo) {
-            if ($fechaFoto === '' || $grupo->count() < self::MIN_CUENTAS_DIA) {
+            if ($fechaFoto === '') {
                 continue;
+            }
+            foreach ($grupo as $ib) {
+                $clavesPorFecha[$fechaFoto][$ib->empresa_id.'|'.$ib->bank_number.'|'.$ib->account_number.'|'.$ib->currency] = true;
             }
             $porFoto[$fechaFoto] = $this->clasificarFilas($grupo, $cuentas)['por_codigo'];
         }
+        $reales = array_fill_keys((new InterbankingSaldoFotoSupport())->fechasReales($clavesPorFecha), true);
+        $porFoto = array_intersect_key($porFoto, $reales);
         $fechasFoto = array_keys($porFoto);
         sort($fechasFoto);
 
@@ -199,27 +204,6 @@ final class PosicionBancariaSaldosInterbankingSupport
             'detalle' => $detalle,
             'sin_mapear' => $sinMapear,
         ];
-    }
-
-    /**
-     * Último día con foto completa estrictamente anterior a la posición.
-     */
-    private function fechaCierreAnterior(string $fechaPosicion, array $empresaIds): ?string
-    {
-        $row = InterbankingSaldoDiario::query()
-            ->selectRaw('fecha, COUNT(*) as cuentas')
-            ->whereDate('fecha', '<', $fechaPosicion)
-            ->whereIn('empresa_id', $empresaIds)
-            ->groupBy('fecha')
-            ->havingRaw('COUNT(*) >= ?', [self::MIN_CUENTAS_DIA])
-            ->orderByDesc('fecha')
-            ->first();
-
-        if ($row === null || $row->fecha === null) {
-            return null;
-        }
-
-        return Carbon::parse($row->fecha)->toDateString();
     }
 
     /**

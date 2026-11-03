@@ -67,7 +67,11 @@
                     cheques del portfolio, <strong>Disponible HOY</strong> y hojas de proyección
                     (Macro / BMA / BAPRO / Bi Bank / BIND + Resumen descubierto).
                     Los movimientos del día salen con el detalle de cada precarga y de las solicitudes de pago
-                    por vencimiento (sin las suspendidas). La proyección de pagos entra totalizada en Macro:
+                    que tienen fecha de pago ese día. Las suspendidas y las que no tienen fecha de pago no entran.
+                    @if (can('programar-fecha-pago-solicitud', false))
+                        <a href="{{ route('programar_fecha_pago_solicitud') }}">Asignar fecha de pago</a>.
+                    @endif
+                    La proyección de pagos entra totalizada en Macro:
                     transferencias del día como TRF PROYECCION y cheques, en cada diferimiento, como CHEQUES PROYECCION.
                     El estado queda en la columna F.
                     @if (can('listar-finanza-movimiento-precarga', false))

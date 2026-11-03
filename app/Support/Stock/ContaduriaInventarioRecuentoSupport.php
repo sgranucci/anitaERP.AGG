@@ -11,9 +11,10 @@ use Illuminate\Support\Facades\DB;
  * El mes es el de la fecha pedida. Si esa fecha es el 1, el 2 o el 3,
  * el cierre es el del mes anterior (se cuenta el primer día y, si el 1
  * cae domingo, el lunes).
- * Entran los de los últimos tres días de ese mes y el día 1 del mes
- * siguiente. El 2 o el 3 solo entran si el depósito no tiene ninguno
- * de esos. No se mira el comentario y no se vuelve a un mes anterior.
+ * De cada rubro que el comentario nombra se toma el de los últimos tres
+ * días de ese mes o el del día 1 del mes siguiente. Si ese rubro no tiene
+ * ninguno, entra el del 2 o el 3. Un depósito puede mezclar el 31 con el 2
+ * cuando son rubros distintos. No se vuelve a un mes anterior.
  */
 final class ContaduriaInventarioRecuentoSupport
 {
@@ -227,26 +228,62 @@ final class ContaduriaInventarioRecuentoSupport
     }
 
     /**
-     * El 2 y el 3 del mes siguiente solo si el depósito no tiene recuento
-     * en los últimos días del mes ni el día 1.
+     * Por rubro: el día más reciente entre los últimos del mes y el día 1.
+     * El 2 y el 3 solo si ese rubro no tiene ninguno de esos días.
+     * Sin rubro en el comentario, el grupo es el del depósito.
      *
-     * @param  list<array{id:int,fecha:string}>  $lista
+     * @param  list<array{id:int,fecha:string,rubro?:?string}>  $lista
      * @return list<array{id:int,fecha:string}>
      */
     private static function elegirRecuentos(array $lista, string $desde, string $corte, string $extension): array
     {
-        $delMes = [];
-        $tardios = [];
+        $grupos = [];
         foreach ($lista as $recuento) {
+            $rubro = $recuento['rubro'] ?? null;
+            $clave = ($rubro === null || $rubro === '') ? '' : (string) $rubro;
+            $grupos[$clave][] = $recuento;
+        }
+
+        $seleccion = [];
+        foreach ($grupos as $grupo) {
+            foreach (self::elegirGrupo($grupo, $desde, $corte, $extension) as $recuento) {
+                $seleccion[] = $recuento;
+            }
+        }
+
+        return $seleccion;
+    }
+
+    /**
+     * @param  list<array{id:int,fecha:string}>  $grupo
+     * @return list<array{id:int,fecha:string}>
+     */
+    private static function elegirGrupo(array $grupo, string $desde, string $corte, string $extension): array
+    {
+        $primarios = [];
+        $tardios = [];
+        foreach ($grupo as $recuento) {
             $fecha = $recuento['fecha'];
             if ($fecha >= $desde && $fecha <= $corte) {
-                $delMes[] = $recuento;
+                $primarios[] = $recuento;
             } elseif ($fecha > $corte && $fecha <= $extension) {
                 $tardios[] = $recuento;
             }
         }
 
-        return $delMes !== [] ? $delMes : $tardios;
+        $banda = $primarios !== [] ? $primarios : $tardios;
+        if ($banda === []) {
+            return [];
+        }
+
+        $fechas = array_column($banda, 'fecha');
+        rsort($fechas);
+        $max = $fechas[0];
+
+        return array_values(array_filter(
+            $banda,
+            static fn (array $recuento) => $recuento['fecha'] === $max,
+        ));
     }
 
     /**

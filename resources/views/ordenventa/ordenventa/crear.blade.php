@@ -6,7 +6,7 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/arbolaprobacion/panel_ia.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ordenventa/ordenventa/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ordenventa/ordenventa/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ordenventa/ordenventa/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/localidad-cascada.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/admin/localidad-cascada.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/domicilio.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/domicilio.js')) ?: time() }}" type="text/javascript"></script>
