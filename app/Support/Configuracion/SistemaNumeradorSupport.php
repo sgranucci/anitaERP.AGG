@@ -375,9 +375,10 @@ final class SistemaNumeradorSupport
         }
 
         if ($existente !== null) {
-            // Ferli: alinear semilla AGG (346/223) a tctes/t_comp, o quitar puente TRA.
+            // Ferli y Crown: alinear semilla AGG (346/361/223) a tctes/t_comp.
+            // Ferli TRA no tiene numerador de documento: se le quita el puente.
             // AGG: no tocar claves ya grabadas.
-            if (EntornoEmpresaSupport::esFerli()) {
+            if (EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esCrown()) {
                 if ($sinPuenteDocumento && self::tienePuenteAnita($existente)) {
                     $existente->anita_sistema = null;
                     $existente->anita_fuente = null;

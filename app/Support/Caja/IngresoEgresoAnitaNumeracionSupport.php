@@ -21,11 +21,11 @@ use Illuminate\Support\Facades\Log;
  * - TRA: 334/335/336
  * - CANJE: 334/335/336 — misma serie IEV (tctes X1/X2/X3); en Anita el comprobante es IEV
  *
- * Solo Ferli (no usa esas semillas):
- * - OPP: t_comp OPP
- * - OPA: t_comp OPA (pago.c in_tcomp, no OPP)
- * - ING/EGR: tctes_numero (ambos 304)
- * - TRA: sin numerador de documento en Anita (tesmov nativo TED/TEH 308/309)
+ * Ferli y Crown no usan esas semillas (no existen en su Anita):
+ * - Ferli OPP: t_comp OPP. OPA: t_comp OPA. ING/EGR: tctes_numero (304).
+ *   TRA: sin numerador de documento (tesmov nativo TED/TEH).
+ * - Crown OPP: compras.t_comp OPP (205). OPA: t_comp OPA (280).
+ *   ING: tctes 300. EGR: tctes 308. CANJE: tctes IEV (350). TRA: ventas.t_comp TRA (100).
  *
  * El resto de tipos (COB/REM/RMI/…) sigue con semilla propia ERP (MAX+1).
  * Se puede apagar con CAJA_IE_ANITA_NUMERACION_HABILITADA=false.
@@ -122,29 +122,42 @@ final class IngresoEgresoAnitaNumeracionSupport
             );
         }
 
-        if (EntornoEmpresaSupport::esFerli() && in_array($abrev, ['OPP', 'OPA'], true)) {
+        if (self::usaCatalogoAnitaPropio() && in_array($abrev, ['OPP', 'OPA'], true)) {
             $desdeTcomp = self::claveNumeradorOpDesdeTComp($empresaId, $abrev);
             if ($desdeTcomp > 0) {
                 return $desdeTcomp;
             }
         }
 
-        // Canje: en Anita es IEV (tctes IEV / X1·X2·X3), no "CAN".
-        if ($abrev === IngresoEgresoCanjeChequeSupport::ABREV_CANJE && EntornoEmpresaSupport::esFerli()) {
+        // Canje: en Anita es IEV (tctes IEV), no "CAN".
+        if ($abrev === IngresoEgresoCanjeChequeSupport::ABREV_CANJE && self::usaCatalogoAnitaPropio()) {
             $desdeIev = self::claveNumeradorDesdeTctes(IngresoEgresoCanjeChequeSupport::TIPO_ANITA);
             if ($desdeIev > 0) {
                 return $desdeIev;
             }
         }
 
-        if (EntornoEmpresaSupport::esFerli()) {
+        if ($abrev === 'TRA' && EntornoEmpresaSupport::esCrown()) {
+            $desdeTra = self::claveNumeradorDesdeTComp('TRA', 'ventas');
+            if ($desdeTra > 0) {
+                return $desdeTra;
+            }
+        }
+
+        if (self::usaCatalogoAnitaPropio()) {
             $desdeTctes = self::claveNumeradorDesdeTctes($abrev);
             if ($desdeTctes > 0) {
                 return $desdeTctes;
             }
-            if ($abrev === 'TRA') {
+            if ($abrev === 'TRA' && EntornoEmpresaSupport::esFerli()) {
                 throw new \RuntimeException(
                     'Ferli no tiene numerador Anita de documento para TRA (tesmov nativo TED/TEH).'
+                );
+            }
+            if (EntornoEmpresaSupport::esCrown()) {
+                throw new \RuntimeException(
+                    'Crown no tiene numerador Anita para '.$abrev
+                    .' (che_ban.tctes o t_comp). No se usa la semilla de AGG.'
                 );
             }
         }
@@ -169,12 +182,12 @@ final class IngresoEgresoAnitaNumeracionSupport
     }
 
     /**
-     * Ferli: ING/EGR (y otros) vía tctes_numero → ventas.numerador.
+     * Ferli y Crown: ING/EGR (y otros) vía che_ban.tctes_numero → ventas.numerador.
      * No usar ventas.t_comp ING (en Ferli es ingreso de stock, clave 127).
      */
     public static function claveNumeradorDesdeTctes(string $abreviatura): int
     {
-        if (! EntornoEmpresaSupport::esFerli()) {
+        if (! self::usaCatalogoAnitaPropio()) {
             return 0;
         }
 
@@ -221,12 +234,12 @@ final class IngresoEgresoAnitaNumeracionSupport
     }
 
     /**
-     * Ferli: clave de numerador de OP vía t_comp (pago.c: OPP u OPA según in_tcomp).
+     * Ferli y Crown: clave de numerador de OP vía compras.t_comp (OPP u OPA).
      * AGG MultiEmpresa no usa este camino: OPA comparte O{nroemp} con OPP.
      */
     public static function claveNumeradorOpDesdeTComp(int $empresaId, string $abreviatura = 'OPP'): int
     {
-        if (! EntornoEmpresaSupport::esFerli()) {
+        if (! self::usaCatalogoAnitaPropio()) {
             return 0;
         }
 
@@ -315,6 +328,62 @@ final class IngresoEgresoAnitaNumeracionSupport
             $tipotransaccionCajaId,
             $maxErp
         );
+    }
+
+    /**
+     * Ferli y Crown tienen su propio catálogo Anita. Las semillas 223/346/361/334 son de AGG.
+     */
+    private static function usaCatalogoAnitaPropio(): bool
+    {
+        return EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esCrown();
+    }
+
+    /**
+     * tcomp_refer de un comprobante (Crown: TRA vive en ventas.t_comp, clave 100).
+     */
+    private static function claveNumeradorDesdeTComp(string $claveTcomp, string $sistema): int
+    {
+        $claveTcomp = strtoupper(substr(trim($claveTcomp), 0, 3));
+        if ($claveTcomp === '' || trim($sistema) === '') {
+            return 0;
+        }
+
+        try {
+            $raw = (new ApiAnita)->apiCallEscritura([
+                'acc' => 'list',
+                'sistema' => $sistema,
+                'tabla' => 't_comp',
+                'campos' => 'tcomp_refer',
+                'whereArmado' => ' WHERE tcomp_clave = '.self::escSqlLiteral($claveTcomp),
+            ], 'caja IE t_comp '.$sistema.' '.$claveTcomp);
+
+            $err = ApiAnita::extraerMensajeError($raw);
+            if ($err !== null) {
+                Log::warning('caja.ie.numeracion.tcomp', [
+                    'sistema' => $sistema,
+                    'clave' => $claveTcomp,
+                    'error' => $err,
+                ]);
+
+                return 0;
+            }
+
+            $fila = ApiAnita::primeraFilaLista((string) $raw);
+            $refer = ltrim(trim((string) ($fila->tcomp_refer ?? '')), '0');
+            if ($refer === '' || $refer === '0') {
+                return 0;
+            }
+
+            return max(0, (int) $refer);
+        } catch (\Throwable $e) {
+            Log::warning('caja.ie.numeracion.tcomp_exception', [
+                'sistema' => $sistema,
+                'clave' => $claveTcomp,
+                'error' => $e->getMessage(),
+            ]);
+
+            return 0;
+        }
     }
 
     private static function escSqlLiteral(string $valor): string

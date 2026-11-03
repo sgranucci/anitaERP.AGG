@@ -124,8 +124,9 @@ return [
      * false = solo MAX+1 ERP (semilla propia). true = lee/avanza Anita (hasta apagarlo).
      * Nota: las semillas viven en sistema "ventas" (no shared); OPP=223/224/225 = mismas OP Anita (AGG).
      * Ferli: OPP vía t_comp OPP; OPA vía t_comp OPA (pago.c); ING/EGR vía tctes (304);
-     * TRA sin numerador de documento (tesmov nativo TED/TEH). Las semillas AGG 346/361/334
-     * no existen en Ferli.
+     * TRA sin numerador de documento (tesmov nativo TED/TEH).
+     * Crown: OPP/OPA vía compras.t_comp; ING/EGR/IEV vía che_ban.tctes; TRA vía ventas.t_comp.
+     * Las semillas AGG 346/361/334 no existen en Ferli ni en Crown.
      */
     'ingresoegreso_anita_numeracion_habilitada' => filter_var(
         env('CAJA_IE_ANITA_NUMERACION_HABILITADA', true),
