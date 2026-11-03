@@ -60,7 +60,7 @@ class ReporteDefinibleProcesador
 
         $layoutId = (int) ($filtros['layout_id'] ?? 0);
         $layoutModel = $layoutId > 0 ? $this->layoutResolver->find($layoutId) : null;
-        if ($layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
+        if (ReporteDefinibleSupport::usaColumnasDerivadas($layout)) {
             $layoutModel = null;
         }
 
@@ -111,7 +111,7 @@ class ReporteDefinibleProcesador
             || $usaCcostoDef
             || $filtroCcosto !== null
             || $layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO
-            || $layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES
+            || ReporteDefinibleSupport::usaColumnasDerivadas($layout)
             || $layout === ReporteDefinibleSupport::LAYOUT_CCOSTO
             || ! empty($filtros['incluir_presupuesto']);
 
@@ -145,6 +145,7 @@ class ReporteDefinibleProcesador
 
         /** @var list<array<string, mixed>> $columnas */
         $columnas = [];
+        $notaAnioAnterior = '';
         /** @var array<int, array<string, float>> $directoActual rubroId => [colKey => valor] */
         $directoActual = [];
         /** @var array<int, array<string, float>> $directoPlan */
@@ -244,10 +245,10 @@ class ReporteDefinibleProcesador
                 $directoPlan,
                 $detalleCuentas
             );
-        } elseif ($layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
+        } elseif ($layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_ACUMULADO) {
             $fuente = 'asientos';
-            $advertencias[] = 'Comparativo mes a mes: año anterior, el mes, presupuesto y diferencias.';
-            $this->cargarLayoutComparativoMeses(
+            $advertencias[] = 'Comparativo acumulado: año anterior, año actual, presupuesto y diferencias. El % contra presupuesto se divide por el presupuesto; el % contra el año anterior, por el año actual.';
+            $notaAnioAnterior = $this->cargarLayoutComparativoAcumulado(
                 $reporte,
                 $filtros,
                 $modo,
@@ -268,6 +269,34 @@ class ReporteDefinibleProcesador
                 $directoActual,
                 $detalleCuentas,
                 $advertencias
+            );
+        } elseif (ReporteDefinibleSupport::esComparativoPorMes($layout)) {
+            $fuente = 'asientos';
+            $advertencias[] = $layout === ReporteDefinibleSupport::LAYOUT_CONTROL_MENSUAL
+                ? 'Control mensual: importe de cada mes y, en el último, presupuesto y diferencias contra presupuesto y contra el mes anterior.'
+                : 'Comparativo mes a mes: año anterior, el mes, presupuesto y diferencias.';
+            $this->cargarLayoutComparativoMeses(
+                $reporte,
+                $filtros,
+                $modo,
+                $periodos,
+                $fechaDesde,
+                $fechaHasta,
+                $baseSaldo,
+                $empresaIds,
+                $codigos,
+                $modoAsientos,
+                $monedaId,
+                $soloOrigen,
+                $fechaCierreFx,
+                $reglasEli,
+                $factoresPart,
+                $filtroCcosto,
+                $columnas,
+                $directoActual,
+                $detalleCuentas,
+                $advertencias,
+                $layout === ReporteDefinibleSupport::LAYOUT_CONTROL_MENSUAL
             );
         } elseif ($modo === SumasSaldosListadoFiltros::MODO_RANGO) {
             $columnas[] = [
@@ -365,8 +394,10 @@ class ReporteDefinibleProcesador
         foreach ($columnas as $col) {
             // El plan vive en $directoPlan. Si se acumula acá queda en 0 y tapa el presupuesto del rubro.
             $tiposRollup = ['actual', 'ytd', 'anio_ant'];
-            if ($layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
+            if (ReporteDefinibleSupport::usaColumnasDerivadas($layout)) {
                 $tiposRollup[] = 'plan';
+            }
+            if (ReporteDefinibleSupport::esComparativoPorMes($layout)) {
                 $tiposRollup[] = 'periodo_offset';
             }
             if (in_array($col['tipo'], $tiposRollup, true)) {
@@ -381,10 +412,14 @@ class ReporteDefinibleProcesador
             : [];
 
         $this->aplicarFormulas($reporte, $totalesActual, $totalesPlan, $layout);
-        if ($layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
+        if (ReporteDefinibleSupport::usaColumnasDerivadas($layout)) {
             $this->aplicarColumnasDerivadas($columnas, $totalesActual);
         }
         $this->completarColumnaTotal($columnas, $totalesActual);
+        $columnas = array_values(array_filter(
+            $columnas,
+            static fn (array $col): bool => ($col['visible'] ?? true) !== false
+        ));
 
         $filas = [];
         $this->emitir(
@@ -408,7 +443,8 @@ class ReporteDefinibleProcesador
         return [
             'columnas' => $columnas,
             'filas' => $filas,
-            'criterios' => ReporteDefinibleGrupoCcostoSupport::criterios($filtros, $filtroCcosto),
+            'criterios' => ReporteDefinibleGrupoCcostoSupport::criterios($filtros, $filtroCcosto)
+                .($notaAnioAnterior !== '' ? "\n".$notaAnioAnterior : ''),
             'advertencias' => array_values(array_unique($advertencias)),
             'fuente' => $fuente,
             'layout' => $layout,
@@ -930,6 +966,7 @@ class ReporteDefinibleProcesador
         foreach ($suma as $k => $v) {
             $firmados[$k] = $v === null ? null : round((float) $v, 2);
         }
+        $firmados = $this->recalcularDerivadasCierre($columnas, $firmados, false);
         $filas[] = [
             'kind' => 'subtotal',
             'rubro_id' => 0,
@@ -944,10 +981,7 @@ class ReporteDefinibleProcesador
         ];
 
         if ($this->esEstadoResultados($reporte) && ! $this->yaTieneBeneficio($reporte)) {
-            $beneficio = [];
-            foreach ($firmados as $k => $v) {
-                $beneficio[$k] = $v === null ? null : round(-1 * (float) $v, 2);
-            }
+            $beneficio = $this->recalcularDerivadasCierre($columnas, $firmados, true);
             $filas[] = [
                 'kind' => 'beneficio',
                 'rubro_id' => 0,
@@ -963,6 +997,50 @@ class ReporteDefinibleProcesador
         }
 
         return $filas;
+    }
+
+    /**
+     * El total no suma los porcentajes: los vuelve a calcular sobre los importes ya sumados.
+     * Con $negar invierte los importes (fila Beneficio) y recalcula las diferencias.
+     *
+     * @param  list<array<string, mixed>>  $columnas
+     * @param  array<string, float|null>  $saldos
+     * @return array<string, float|null>
+     */
+    private function recalcularDerivadasCierre(array $columnas, array $saldos, bool $negar): array
+    {
+        $tipos = [];
+        foreach ($columnas as $col) {
+            $tipos[(string) ($col['key'] ?? '')] = (string) ($col['tipo'] ?? '');
+        }
+        $base = [];
+        foreach ($saldos as $k => $v) {
+            $tipo = $tipos[$k] ?? '';
+            if ($tipo === ReporteDefinibleLayoutResolver::TIPO_VAR || str_contains($tipo, 'pct')) {
+                continue;
+            }
+            if ($v === null) {
+                continue;
+            }
+            $valor = round((float) $v, 2);
+            $base[$k] = $negar ? round(-1 * $valor, 2) : $valor;
+        }
+        $resueltos = $this->resolverSaldosDerivados($columnas, $base);
+        $out = [];
+        foreach ($columnas as $col) {
+            $k = (string) ($col['key'] ?? '');
+            if ($k === '') {
+                continue;
+            }
+            $tipo = $tipos[$k] ?? '';
+            if ($tipo === ReporteDefinibleLayoutResolver::TIPO_VAR || str_contains($tipo, 'pct')) {
+                $out[$k] = $resueltos[$k] ?? null;
+                continue;
+            }
+            $out[$k] = array_key_exists($k, $base) ? $base[$k] : ($saldos[$k] ?? null);
+        }
+
+        return $out;
     }
 
     private function esEstadoResultados(ReporteContable $reporte): bool
@@ -1570,7 +1648,14 @@ class ReporteDefinibleProcesador
                 if ($tipo === ReporteDefinibleLayoutResolver::TIPO_VAR) {
                     $out[$k] = $base - $ref;
                 } else {
-                    $out[$k] = abs($ref) < 0.005 ? null : round((($base - $ref) / $ref) * 100, 2);
+                    $denominador = ($meta['pct_denominador'] ?? 'ref') === 'base' ? $base : $ref;
+                    if (abs($denominador) < 0.005) {
+                        $out[$k] = array_key_exists('pct_si_cero', $meta)
+                            ? (float) $meta['pct_si_cero']
+                            : null;
+                    } else {
+                        $out[$k] = round((($base - $ref) / $denominador) * 100, 2);
+                    }
                 }
                 continue;
             }
@@ -1663,7 +1748,7 @@ class ReporteDefinibleProcesador
             return [];
         }
 
-        if ($layout === 'diseñado' || $layout === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
+        if ($layout === 'diseñado' || ReporteDefinibleSupport::usaColumnasDerivadas($layout)) {
             $vals = $actual;
             foreach ($plan as $pk => $pv) {
                 if (! array_key_exists($pk, $vals)) {
@@ -1918,6 +2003,268 @@ class ReporteDefinibleProcesador
     }
 
     /**
+     * Un solo bloque para el rango: año anterior (mismo tramo, un año atrás),
+     * año actual, presupuesto y las dos diferencias.
+     *
+     * @param  list<int>  $periodosVentana
+     * @param  list<int>  $empresaIds
+     * @param  list<int>  $codigos
+     * @param  list<array<string, mixed>>  $reglas
+     * @param  array<int, float>  $factores
+     * @param  array{desde: int, hasta: int}|null  $filtroCcosto
+     * @param  list<array<string, mixed>>  $columnas
+     * @param  array<int, array<string, float>>  $directoActual
+     * @param  array<int, array<string, array<int, float>>>  $detalleCuentas
+     * @param  list<string>  $advertencias
+     * @param  array<string, mixed>  $filtros
+     */
+    private function cargarLayoutComparativoAcumulado(
+        ReporteContable $reporte,
+        array $filtros,
+        string $modo,
+        array $periodosVentana,
+        string $fechaDesde,
+        string $fechaHasta,
+        string $baseSaldo,
+        array $empresaIds,
+        array $codigos,
+        string $modoAsientos,
+        int $monedaId,
+        bool $soloOrigen,
+        ?string $fechaCierreFx,
+        array $reglas,
+        array $factores,
+        ?array $filtroCcosto,
+        array &$columnas,
+        array &$directoActual,
+        array &$detalleCuentas,
+        array &$advertencias,
+    ): string {
+        $ejercicio = $baseSaldo === ReporteDefinibleSupport::BASE_SALDO_EJERCICIO;
+        $periodos = $modo === ReporteDefinibleSupport::MODO_MESES
+            ? ReporteDefinibleListadoFiltros::normalizarListaPeriodos($filtros['periodos'] ?? $periodosVentana)
+            : $periodosVentana;
+        $periodos = array_values(array_unique(array_map('intval', $periodos)));
+        sort($periodos);
+        $trozos = ! $ejercicio
+            && $modo !== SumasSaldosListadoFiltros::MODO_RANGO
+            && $periodos !== []
+            && ! $this->periodosContiguos($periodos);
+
+        /** @var list<array{0: string, 1: string}> $ventanasActual */
+        $ventanasActual = [];
+        /** @var list<array{0: string, 1: string}> $ventanasAnt */
+        $ventanasAnt = [];
+        if ($trozos) {
+            foreach ($periodos as $periodo) {
+                [$fd, $fh] = ReporteDefinibleSaldoReader::fechasDesdePeriodo($periodo);
+                $periodoAnt = (intdiv($periodo, 100) - 1) * 100 + ($periodo % 100);
+                [$fdAnt, $fhAnt] = ReporteDefinibleSaldoReader::fechasDesdePeriodo($periodoAnt);
+                $ventanasActual[] = [
+                    $ejercicio ? sprintf('%04d-01-01', intdiv($periodo, 100)) : $fd,
+                    $fh,
+                ];
+                $ventanasAnt[] = [
+                    $ejercicio ? sprintf('%04d-01-01', intdiv($periodoAnt, 100)) : $fdAnt,
+                    $fhAnt,
+                ];
+            }
+            $advertencias[] = 'Los meses elegidos no son seguidos: año actual y año anterior suman solo esos meses.';
+        } else {
+            $fdAnt = $this->fechaMenosUnAnio($fechaDesde);
+            $fhAnt = $this->fechaMenosUnAnio($fechaHasta);
+            $ventanasActual[] = [
+                $ejercicio ? sprintf('%04d-01-01', (int) substr($fechaDesde, 0, 4)) : $fechaDesde,
+                $fechaHasta,
+            ];
+            $ventanasAnt[] = [
+                $ejercicio ? sprintf('%04d-01-01', (int) substr($fdAnt, 0, 4)) : $fdAnt,
+                $fhAnt,
+            ];
+        }
+
+        $fdCarga = $ventanasActual[0][0];
+        $fhCarga = $ventanasActual[0][1];
+        foreach (array_merge($ventanasActual, $ventanasAnt) as [$fd, $fh]) {
+            if ($fd < $fdCarga) {
+                $fdCarga = $fd;
+            }
+            if ($fh > $fhCarga) {
+                $fhCarga = $fh;
+            }
+        }
+
+        $movs = $this->cargarMovimientosConsolidados(
+            $empresaIds, $fdCarga, $fhCarga, $codigos, $modoAsientos, $monedaId, $soloOrigen,
+            $fechaCierreFx, $reglas, $factores
+        );
+        $fdPlan = $ventanasActual[0][0];
+        $fhPlan = $ventanasActual[0][1];
+        foreach ($ventanasActual as [$fd, $fh]) {
+            if ($fd < $fdPlan) {
+                $fdPlan = $fd;
+            }
+            if ($fh > $fhPlan) {
+                $fhPlan = $fh;
+            }
+        }
+        $fuentePlan = $this->fuentePlan($filtros);
+        $codigosPlan = $this->codigosDelReporte($reporte, ReporteDefinibleSupport::ORIGEN_REAL) ?: $codigos;
+        $movsPlan = $this->movimientosDePlan(
+            $fuentePlan,
+            $empresaIds,
+            $fdPlan,
+            $fhPlan,
+            $codigosPlan,
+            $modoAsientos,
+            $monedaId,
+            $soloOrigen,
+            $fechaCierreFx,
+            $reglas,
+            $factores,
+            isset($filtros['presupuesto_escenario_id']) ? (int) $filtros['presupuesto_escenario_id'] : null,
+            $baseSaldo,
+            $advertencias,
+            $movs
+        );
+        $origenPlan = $fuentePlan === ReporteDefinibleDimensionSupport::FUENTE_PLAN_ASIGNACION_P
+            ? ReporteDefinibleSupport::ORIGEN_PRESUPUESTO
+            : ReporteDefinibleSupport::ORIGEN_REAL;
+
+        $columnas[] = [
+            'key' => 'anio_ant',
+            'label' => 'Año anterior',
+            'tipo' => 'anio_ant',
+            'fecha_desde' => $ventanasAnt[0][0],
+            'fecha_hasta' => $ventanasAnt[array_key_last($ventanasAnt)][1],
+        ];
+        $columnas[] = [
+            'key' => 'actual',
+            'label' => 'Año actual',
+            'tipo' => 'actual',
+            'fecha_desde' => $ventanasActual[0][0],
+            'fecha_hasta' => $ventanasActual[array_key_last($ventanasActual)][1],
+        ];
+        $columnas[] = [
+            'key' => 'plan',
+            'label' => 'Presupuesto',
+            'tipo' => 'plan',
+            'fecha_desde' => $fdPlan,
+            'fecha_hasta' => $fhPlan,
+        ];
+        $columnas[] = [
+            'key' => 'dif_pre',
+            'label' => 'Dif.Act./Pre.',
+            'tipo' => 'var',
+            'meta' => ['base_key' => 'actual', 'ref_key' => 'plan'],
+        ];
+        $columnas[] = [
+            'key' => 'pct_pre',
+            'label' => '%Dif.',
+            'tipo' => 'var_pct',
+            'meta' => ['base_key' => 'actual', 'ref_key' => 'plan', 'pct_si_cero' => 100],
+        ];
+        $columnas[] = [
+            'key' => 'dif_ant',
+            'label' => 'Dif.Act./Ant.',
+            'tipo' => 'var',
+            'meta' => ['base_key' => 'actual', 'ref_key' => 'anio_ant'],
+        ];
+        $columnas[] = [
+            'key' => 'pct_ant',
+            'label' => '%Dif.',
+            'tipo' => 'var_pct',
+            'meta' => [
+                'base_key' => 'actual',
+                'ref_key' => 'anio_ant',
+                'pct_denominador' => 'base',
+                'pct_si_cero' => 100,
+            ],
+        ];
+
+        $movsAnt = [];
+        $movsAct = [];
+        $movsPre = [];
+        foreach ($ventanasAnt as [$fd, $fh]) {
+            $movsAnt = array_merge($movsAnt, $this->filtrarMovimientosPorFecha($movs, $fd, $fh));
+        }
+        foreach ($ventanasActual as [$fd, $fh]) {
+            $movsAct = array_merge($movsAct, $this->filtrarMovimientosPorFecha($movs, $fd, $fh));
+            $movsPre = array_merge($movsPre, $this->filtrarMovimientosPorFecha($movsPlan, $fd, $fh));
+        }
+        $this->cargarDirectosDesdeMovimientos(
+            $reporte, $movsAnt, 'anio_ant', ReporteDefinibleSupport::ORIGEN_REAL,
+            $filtroCcosto, $directoActual, $detalleCuentas
+        );
+        $this->cargarDirectosDesdeMovimientos(
+            $reporte, $movsAct, 'actual', ReporteDefinibleSupport::ORIGEN_REAL,
+            $filtroCcosto, $directoActual, $detalleCuentas
+        );
+        $this->cargarDirectosDesdeMovimientos(
+            $reporte, $movsPre, 'plan', $origenPlan,
+            $filtroCcosto, $directoActual, $detalleCuentas
+        );
+
+        $textoAnt = implode(', ', array_map(
+            fn (array $v): string => $this->textoRangoAnita($v[0], $v[1]),
+            $ventanasAnt
+        ));
+
+        return 'Año anterior: '.$textoAnt;
+    }
+
+    /**
+     * @param  list<int>  $periodos
+     */
+    private function periodosContiguos(array $periodos): bool
+    {
+        for ($i = 1, $n = count($periodos); $i < $n; $i++) {
+            if ($this->periodoMesSiguiente($periodos[$i - 1]) !== $periodos[$i]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function periodoMesSiguiente(int $periodo): int
+    {
+        $anio = intdiv($periodo, 100);
+        $mes = $periodo % 100;
+        if ($mes >= 12) {
+            return ($anio + 1) * 100 + 1;
+        }
+
+        return $anio * 100 + ($mes + 1);
+    }
+
+    private function fechaMenosUnAnio(string $fecha): string
+    {
+        return \Carbon\Carbon::createFromFormat('Y-m-d', substr($fecha, 0, 10))
+            ->subYear()
+            ->format('Y-m-d');
+    }
+
+    private function textoRangoAnita(string $desde, string $hasta): string
+    {
+        $d = \DateTime::createFromFormat('Y-m-d', substr($desde, 0, 10));
+        $h = \DateTime::createFromFormat('Y-m-d', substr($hasta, 0, 10));
+        if (! $d || ! $h) {
+            return $desde.' - '.$hasta;
+        }
+        $finMes = (clone $h)->modify('last day of this month')->format('Y-m-d');
+        if ($d->format('d') === '01' && $h->format('Y-m-d') === $finMes) {
+            if ($d->format('Ym') === $h->format('Ym')) {
+                return $this->labelMesLargo((int) $d->format('Ym'));
+            }
+
+            return $this->labelMesLargo((int) $d->format('Ym')).' - '.$this->labelMesLargo((int) $h->format('Ym'));
+        }
+
+        return $d->format('d/m/Y').' - '.$h->format('d/m/Y');
+    }
+
+    /**
      * Un bloque por mes: año anterior, el mes, presupuesto, dif. vs presupuesto y dif. vs año anterior.
      *
      * @param  list<int>  $periodosVentana
@@ -1931,6 +2278,7 @@ class ReporteDefinibleProcesador
      * @param  array<int, array<string, array<int, float>>>  $detalleCuentas
      * @param  list<string>  $advertencias
      * @param  array<string, mixed>  $filtros
+     * @param  bool  $controlMensual  solo importe de cada mes; presupuesto y diferencias en el último
      */
     private function cargarLayoutComparativoMeses(
         ReporteContable $reporte,
@@ -1953,6 +2301,7 @@ class ReporteDefinibleProcesador
         array &$directoActual,
         array &$detalleCuentas,
         array &$advertencias,
+        bool $controlMensual = false,
     ): void {
         if ($modo === ReporteDefinibleSupport::MODO_MESES) {
             $periodos = ReporteDefinibleListadoFiltros::normalizarListaPeriodos($filtros['periodos'] ?? $periodosVentana);
@@ -2002,11 +2351,22 @@ class ReporteDefinibleProcesador
                 'fdMes' => $fdMesMov,
                 'fhMes' => $fhMes,
             ];
-            $fdCarga = $fdCarga === null || $fdAntMov < $fdCarga ? $fdAntMov : $fdCarga;
-            $fdCarga = $fdMesMov < $fdCarga ? $fdMesMov : $fdCarga;
+            $esUltimo = $periodo === $periodos[array_key_last($periodos)];
+            $desdeCarga = [$fdMov];
+            if (! $controlMensual) {
+                $desdeCarga[] = $fdAntMov;
+            }
+            if (! $controlMensual || $esUltimo) {
+                $desdeCarga[] = $fdMesMov;
+            }
+            foreach ($desdeCarga as $desde) {
+                $fdCarga = $fdCarga === null || $desde < $fdCarga ? $desde : $fdCarga;
+            }
             $fhCarga = $fhCarga === null || $fh > $fhCarga ? $fh : $fhCarga;
-            $fdPlan = $fdPlan === null || $fdMov < $fdPlan ? $fdMov : $fdPlan;
-            $fhPlan = $fhPlan === null || $fh > $fhPlan ? $fh : $fhPlan;
+            if (! $controlMensual || $esUltimo) {
+                $fdPlan = $fdPlan === null || $fdMov < $fdPlan ? $fdMov : $fdPlan;
+                $fhPlan = $fhPlan === null || $fh > $fhPlan ? $fh : $fhPlan;
+            }
         }
 
         $movs = $this->cargarMovimientosConsolidados(
@@ -2037,6 +2397,7 @@ class ReporteDefinibleProcesador
             : ReporteDefinibleSupport::ORIGEN_REAL;
 
         $varios = count($periodos) > 1;
+        $ultimoPeriodo = $periodos[array_key_last($periodos)];
         foreach ($periodos as $periodo) {
             $v = $ventanas[$periodo];
             $etiqueta = $this->labelMesLargo($periodo);
@@ -2045,24 +2406,28 @@ class ReporteDefinibleProcesador
             $keyMes = $periodo.'_mesant';
             $keyAct = $periodo.'_act';
             $keyPlan = $periodo.'_plan';
-            $columnas[] = [
-                'key' => $keyAnt,
-                'label' => 'Año anterior',
-                'tipo' => 'anio_ant',
-                'grupo' => $grupo,
-                'periodo' => $periodo,
-                'fecha_desde' => $v['fdAnt'],
-                'fecha_hasta' => $v['fhAnt'],
-            ];
-            $columnas[] = [
-                'key' => $keyMes,
-                'label' => 'Mes anterior',
-                'tipo' => 'periodo_offset',
-                'grupo' => $grupo,
-                'periodo' => $periodo,
-                'fecha_desde' => $v['fdMes'],
-                'fecha_hasta' => $v['fhMes'],
-            ];
+            $bloqueControl = $controlMensual && $periodo === $ultimoPeriodo;
+
+            if (! $controlMensual) {
+                $columnas[] = [
+                    'key' => $keyAnt,
+                    'label' => 'Año anterior',
+                    'tipo' => 'anio_ant',
+                    'grupo' => $grupo,
+                    'periodo' => $periodo,
+                    'fecha_desde' => $v['fdAnt'],
+                    'fecha_hasta' => $v['fhAnt'],
+                ];
+                $columnas[] = [
+                    'key' => $keyMes,
+                    'label' => 'Mes anterior',
+                    'tipo' => 'periodo_offset',
+                    'grupo' => $grupo,
+                    'periodo' => $periodo,
+                    'fecha_desde' => $v['fdMes'],
+                    'fecha_hasta' => $v['fhMes'],
+                ];
+            }
             $columnas[] = [
                 'key' => $keyAct,
                 'label' => $etiqueta,
@@ -2072,82 +2437,102 @@ class ReporteDefinibleProcesador
                 'fecha_desde' => $v['fd'],
                 'fecha_hasta' => $v['fh'],
             ];
-            $columnas[] = [
-                'key' => $keyPlan,
-                'label' => 'Presupuesto',
-                'tipo' => 'plan',
-                'grupo' => $grupo,
-                'periodo' => $periodo,
-                'fecha_desde' => $v['fd'],
-                'fecha_hasta' => $v['fh'],
-            ];
-            $columnas[] = [
-                'key' => $periodo.'_dif_pre',
-                'label' => 'Dif.Act./Pre.',
-                'tipo' => 'var',
-                'grupo' => $grupo,
-                'periodo' => $periodo,
-                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyPlan],
-            ];
-            $columnas[] = [
-                'key' => $periodo.'_pct_pre',
-                'label' => '%Dif.',
-                'tipo' => 'var_pct',
-                'grupo' => $grupo,
-                'periodo' => $periodo,
-                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyPlan],
-            ];
-            $columnas[] = [
-                'key' => $periodo.'_dif_ant',
-                'label' => 'Dif.Act./Ant.',
-                'tipo' => 'var',
-                'grupo' => $grupo,
-                'periodo' => $periodo,
-                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyAnt],
-            ];
-            $columnas[] = [
-                'key' => $periodo.'_pct_ant',
-                'label' => '%Dif.',
-                'tipo' => 'var_pct',
-                'grupo' => $grupo,
-                'periodo' => $periodo,
-                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyAnt],
-            ];
-            $columnas[] = [
-                'key' => $periodo.'_dif_mes',
-                'label' => 'Dif.Act./Mes ant.',
-                'tipo' => 'var',
-                'grupo' => $grupo,
-                'periodo' => $periodo,
-                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyMes],
-            ];
-            $columnas[] = [
-                'key' => $periodo.'_pct_mes',
-                'label' => '%Dif.',
-                'tipo' => 'var_pct',
-                'grupo' => $grupo,
-                'periodo' => $periodo,
-                'meta' => ['base_key' => $keyAct, 'ref_key' => $keyMes],
-            ];
+            if (! $controlMensual || $bloqueControl) {
+                $columnas[] = [
+                    'key' => $keyPlan,
+                    'label' => 'Presupuesto',
+                    'tipo' => 'plan',
+                    'grupo' => $grupo,
+                    'periodo' => $periodo,
+                    'fecha_desde' => $v['fd'],
+                    'fecha_hasta' => $v['fh'],
+                ];
+                $columnas[] = [
+                    'key' => $periodo.'_dif_pre',
+                    'label' => 'Dif.Act./Pre.',
+                    'tipo' => 'var',
+                    'grupo' => $grupo,
+                    'periodo' => $periodo,
+                    'meta' => ['base_key' => $keyAct, 'ref_key' => $keyPlan],
+                ];
+                $columnas[] = [
+                    'key' => $periodo.'_pct_pre',
+                    'label' => '%Dif.',
+                    'tipo' => 'var_pct',
+                    'grupo' => $grupo,
+                    'periodo' => $periodo,
+                    'meta' => ['base_key' => $keyAct, 'ref_key' => $keyPlan],
+                ];
+            }
+            if (! $controlMensual) {
+                $columnas[] = [
+                    'key' => $periodo.'_dif_ant',
+                    'label' => 'Dif.Act./Ant.',
+                    'tipo' => 'var',
+                    'grupo' => $grupo,
+                    'periodo' => $periodo,
+                    'meta' => ['base_key' => $keyAct, 'ref_key' => $keyAnt],
+                ];
+                $columnas[] = [
+                    'key' => $periodo.'_pct_ant',
+                    'label' => '%Dif.',
+                    'tipo' => 'var_pct',
+                    'grupo' => $grupo,
+                    'periodo' => $periodo,
+                    'meta' => ['base_key' => $keyAct, 'ref_key' => $keyAnt],
+                ];
+            }
+            if ($bloqueControl) {
+                $columnas[] = [
+                    'key' => $keyMes,
+                    'label' => 'Mes anterior',
+                    'tipo' => 'periodo_offset',
+                    'grupo' => $grupo,
+                    'periodo' => $periodo,
+                    'fecha_desde' => $v['fdMes'],
+                    'fecha_hasta' => $v['fhMes'],
+                    'visible' => false,
+                ];
+            }
+            if (! $controlMensual || $bloqueControl) {
+                $columnas[] = [
+                    'key' => $periodo.'_dif_mes',
+                    'label' => 'Dif.Act./Mes ant.',
+                    'tipo' => 'var',
+                    'grupo' => $grupo,
+                    'periodo' => $periodo,
+                    'meta' => ['base_key' => $keyAct, 'ref_key' => $keyMes],
+                ];
+                $columnas[] = [
+                    'key' => $periodo.'_pct_mes',
+                    'label' => '%Dif.',
+                    'tipo' => 'var_pct',
+                    'grupo' => $grupo,
+                    'periodo' => $periodo,
+                    'meta' => ['base_key' => $keyAct, 'ref_key' => $keyMes],
+                ];
+            }
 
-            $this->cargarDirectosDesdeMovimientos(
-                $reporte,
-                $this->filtrarMovimientosPorFecha($movs, $v['fdAnt'], $v['fhAnt']),
-                $keyAnt,
-                ReporteDefinibleSupport::ORIGEN_REAL,
-                $filtroCcosto,
-                $directoActual,
-                $detalleCuentas
-            );
-            $this->cargarDirectosDesdeMovimientos(
-                $reporte,
-                $this->filtrarMovimientosPorFecha($movs, $v['fdMes'], $v['fhMes']),
-                $keyMes,
-                ReporteDefinibleSupport::ORIGEN_REAL,
-                $filtroCcosto,
-                $directoActual,
-                $detalleCuentas
-            );
+            if (! $controlMensual) {
+                $this->cargarDirectosDesdeMovimientos(
+                    $reporte,
+                    $this->filtrarMovimientosPorFecha($movs, $v['fdAnt'], $v['fhAnt']),
+                    $keyAnt,
+                    ReporteDefinibleSupport::ORIGEN_REAL,
+                    $filtroCcosto,
+                    $directoActual,
+                    $detalleCuentas
+                );
+                $this->cargarDirectosDesdeMovimientos(
+                    $reporte,
+                    $this->filtrarMovimientosPorFecha($movs, $v['fdMes'], $v['fhMes']),
+                    $keyMes,
+                    ReporteDefinibleSupport::ORIGEN_REAL,
+                    $filtroCcosto,
+                    $directoActual,
+                    $detalleCuentas
+                );
+            }
             $this->cargarDirectosDesdeMovimientos(
                 $reporte,
                 $this->filtrarMovimientosPorFecha($movs, $v['fd'], $v['fh']),
@@ -2157,15 +2542,28 @@ class ReporteDefinibleProcesador
                 $directoActual,
                 $detalleCuentas
             );
-            $this->cargarDirectosDesdeMovimientos(
-                $reporte,
-                $this->filtrarMovimientosPorFecha($movsPlan, $v['fd'], $v['fh']),
-                $keyPlan,
-                $origenPlan,
-                $filtroCcosto,
-                $directoActual,
-                $detalleCuentas
-            );
+            if (! $controlMensual || $bloqueControl) {
+                if ($controlMensual) {
+                    $this->cargarDirectosDesdeMovimientos(
+                        $reporte,
+                        $this->filtrarMovimientosPorFecha($movs, $v['fdMes'], $v['fhMes']),
+                        $keyMes,
+                        ReporteDefinibleSupport::ORIGEN_REAL,
+                        $filtroCcosto,
+                        $directoActual,
+                        $detalleCuentas
+                    );
+                }
+                $this->cargarDirectosDesdeMovimientos(
+                    $reporte,
+                    $this->filtrarMovimientosPorFecha($movsPlan, $v['fd'], $v['fh']),
+                    $keyPlan,
+                    $origenPlan,
+                    $filtroCcosto,
+                    $directoActual,
+                    $detalleCuentas
+                );
+            }
         }
     }
 

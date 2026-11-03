@@ -5234,6 +5234,7 @@ Route::post('uif/importa_cliente_congelado_uif', 'Uif\Cliente_Congelado_UifContr
 Route::get('ordenventa/ordenventa', 'Ordenventa\OrdenventaController@index')->name('consulta_ordenventa');
 Route::get('ordenventa/ordenventa/crear', 'Ordenventa\OrdenventaController@crear')->name('crea_ordenventa');
 Route::get('ordenventa/ordenventa/aviso-arbol-grabacion', 'Ordenventa\OrdenventaController@avisoArbolGrabacion')->name('ordenventa_aviso_arbol_grabacion');
+Route::post('ordenventa/ordenventa/calcula-impuestos', 'Ordenventa\OrdenventaController@calculaImpuestos')->name('ordenventa_calcula_impuestos');
 Route::post('ordenventa/ordenventa', 'Ordenventa\OrdenventaController@guardar')->name('guarda_ordenventa');
 Route::get('ordenventa/ordenventa/{id}/editar', 'Ordenventa\OrdenventaController@editar')->name('edita_ordenventa');
 Route::put('ordenventa/ordenventa/{id}', 'Ordenventa\OrdenventaController@actualizar')->name('actualiza_ordenventa');

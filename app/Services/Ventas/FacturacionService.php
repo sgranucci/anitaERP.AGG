@@ -2003,6 +2003,66 @@ class FacturacionService
 		return $retorno;
 	}
 
+	/**
+	 * IVA y percepciones del cliente sobre el bruto de la orden (precio sin impuesto).
+	 *
+	 * @return array{iva: float, percepcion: float, bruto: float, total: float}|array{error: string}
+	 */
+	public function calculaImpuestosBrutoOrdenventa(int $clienteId, int $empresaId, string $fecha, float $bruto): array
+	{
+		$cliente = $this->clienteQuery->traeClienteporId($clienteId);
+		if (! $cliente) {
+			return ['error' => 'Cliente inexistente'];
+		}
+
+		$bruto = round($bruto, 2);
+		$dataFactura = [[
+			'precio' => $bruto,
+			'preciosindescuento' => $bruto,
+			'cantidad' => 1,
+			'descuento' => 0,
+			'descuentointegrado' => '',
+			'descuentofinal' => 0,
+			'incluyeimpuesto' => 'N',
+			'impuesto_id' => config('ordenventa.IMPUESTO_ID'),
+			'moneda_id' => 1,
+		]];
+		$datosCliente = [
+			'condicioniva_id' => $cliente->condicioniva_id,
+			'numerodocumento' => $cliente->numerodocumento,
+			'retieneiva' => $cliente->retieneiva,
+			'condicioniibb_id' => $cliente->condicioniibb_id,
+			'provincia' => ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente),
+			'descuentoimportepie' => 0,
+			'id' => $cliente->id,
+			'empresa_id' => $empresaId > 0 ? $empresaId : ($cliente->empresa_id ?? null),
+		];
+
+		$conceptos = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fecha ?: date('Y-m-d'));
+		$iva = 0.0;
+		$neto = 0.0;
+		foreach ($conceptos as $fila) {
+			$nombre = (string) ($fila['concepto'] ?? '');
+			$importe = (float) ($fila['importe'] ?? 0);
+			if (str_starts_with($nombre, 'Iva')) {
+				$iva += $importe;
+			}
+			if ($nombre === 'Exento' || str_contains($nombre, 'Gravado')) {
+				$neto += $importe;
+			}
+		}
+		$total = round((float) $this->impuestoService->buscaValor($conceptos, 'concepto', 'Total', 'importe'), 2);
+		$iva = round($iva, 2);
+		$percepcion = round($total - $neto - $iva, 2);
+
+		return [
+			'iva' => $iva,
+			'percepcion' => $percepcion,
+			'bruto' => round($neto > 0 ? $neto : $bruto, 2),
+			'total' => $total,
+		];
+	}
+
 	// Calcula la factura por orden de venta
 
 	public function calculaFacturaPorOrdenventa(array $data)

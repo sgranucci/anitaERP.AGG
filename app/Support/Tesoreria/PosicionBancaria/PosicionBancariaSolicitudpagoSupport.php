@@ -14,11 +14,10 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Solicitudes de pago por fecha de pago, no suspendidas,
- * ubicadas en el banco de la cuenta de caja.
- * Sin fecha de pago no entran en la posición.
- * Sin pagar: la cuenta contable del asiento de la SP.
- * Pagada: la cuenta de caja del ingreso/egreso.
+ * Solicitudes de pago en el banco de la cuenta de caja.
+ * Con fecha de pago marcada: ese día, esté autorizada o ya pagada.
+ * Pagada sin fecha marcada: el día del ingreso/egreso.
+ * Sin pagar y sin fecha marcada: el día de la solicitud.
  */
 final class PosicionBancariaSolicitudpagoSupport
 {
@@ -33,12 +32,15 @@ final class PosicionBancariaSolicitudpagoSupport
             return [];
         }
 
+        $desdeDia = $desde->toDateString();
+        $hastaDia = $hasta->toDateString();
         $cuentasPorContable = Cuentacaja::query()
             ->with('bancos')
             ->whereNotNull('cuentacontable_id')
             ->where('cuentacontable_id', '>', 0)
+            ->orderBy('id')
             ->get()
-            ->keyBy(fn (Cuentacaja $cuenta) => (int) $cuenta->cuentacontable_id);
+            ->groupBy(fn (Cuentacaja $cuenta) => (int) $cuenta->cuentacontable_id);
 
         $solicitudes = Solicitudpago::query()
             ->with([
@@ -48,23 +50,44 @@ final class PosicionBancariaSolicitudpagoSupport
             ])
             ->whereDoesntHave('hijas')
             ->whereNotIn('estado', [SolicitudpagoEstados::SUSPENDIDA, SolicitudpagoEstados::RECHAZADA])
-            ->whereNotNull('fecha_pago')
-            ->whereDate('fecha_pago', '>=', $desde->toDateString())
-            ->whereDate('fecha_pago', '<=', $hasta->toDateString())
-            ->orderBy('fecha_pago')
+            ->where(function ($q) use ($desdeDia, $hastaDia) {
+                $q->where(function ($w) use ($desdeDia, $hastaDia) {
+                    $w->whereNotNull('fecha_pago')
+                        ->whereDate('fecha_pago', '>=', $desdeDia)
+                        ->whereDate('fecha_pago', '<=', $hastaDia);
+                })->orWhere(function ($w) use ($desdeDia, $hastaDia) {
+                    $w->whereNull('fecha_pago')
+                        ->whereDate('fecha', '>=', $desdeDia)
+                        ->whereDate('fecha', '<=', $hastaDia);
+                })->orWhereHas('cajaMovimientosPago', function ($m) use ($desdeDia, $hastaDia) {
+                    $m->whereDate('fecha', '>=', $desdeDia)
+                        ->whereDate('fecha', '<=', $hastaDia);
+                });
+            })
             ->orderBy('id')
             ->get();
 
         $out = [];
         foreach ($solicitudes as $solicitud) {
-            $fecha = $solicitud->fecha_pago?->toDateString() ?? '';
-            if ($fecha === '') {
+            $pago = $this->pagoVigente($solicitud);
+            $fechaMarcada = $this->dia($solicitud->fecha_pago);
+            $fechaMovimiento = $pago !== null ? $this->dia($pago->fecha) : '';
+            $fechaSolicitud = $this->dia($solicitud->fecha);
+            if ($fechaMarcada !== '' && $fechaMarcada >= $desdeDia && $fechaMarcada <= $hastaDia) {
+                $fecha = $fechaMarcada;
+            } elseif ($fechaMovimiento !== '' && $fechaMovimiento >= $desdeDia && $fechaMovimiento <= $hastaDia) {
+                $fecha = $fechaMovimiento;
+            } elseif ($fechaMarcada === '' && $fechaSolicitud >= $desdeDia && $fechaSolicitud <= $hastaDia) {
+                $fecha = $fechaSolicitud;
+            } else {
                 continue;
             }
-            $pago = $this->pagoVigente($solicitud);
             $piernas = $pago !== null
                 ? $this->piernasDesdeIngresoEgreso($pago)
                 : $this->piernasDesdeAsiento($solicitud, $cuentasPorContable);
+            if ($piernas === [] && $pago !== null) {
+                $piernas = $this->piernasDesdeAsiento($solicitud, $cuentasPorContable);
+            }
             if ($piernas === []) {
                 continue;
             }
@@ -139,16 +162,52 @@ final class PosicionBancariaSolicitudpagoSupport
         return $out;
     }
 
+    private function dia(mixed $valor): string
+    {
+        if ($valor instanceof \DateTimeInterface) {
+            return $valor->format('Y-m-d');
+        }
+        $texto = substr(trim((string) $valor), 0, 10);
+
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $texto) ? $texto : '';
+    }
+
     /**
-     * @param  \Illuminate\Support\Collection<int, Cuentacaja>  $cuentasPorContable
+     * @param  \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, Cuentacaja>>  $cuentasPorContable
+     */
+    private function cuentaDeAsiento($cuentasPorContable, int $contableId, int $empresaId): ?Cuentacaja
+    {
+        $candidatas = $cuentasPorContable->get($contableId);
+        if ($candidatas === null) {
+            return null;
+        }
+        $mismaEmpresa = null;
+        $sinEmpresa = null;
+        foreach ($candidatas as $cuenta) {
+            if (FinanzaPosicionHojaSupport::hojaDesdeCuenta($cuenta) === null) {
+                continue;
+            }
+            if ((int) $cuenta->empresa_id === $empresaId) {
+                $mismaEmpresa ??= $cuenta;
+            } elseif ($cuenta->empresa_id === null) {
+                $sinEmpresa ??= $cuenta;
+            }
+        }
+
+        return $mismaEmpresa ?? $sinEmpresa;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, Cuentacaja>>  $cuentasPorContable
      * @return list<array{hoja: string, empresa_id: int, importe: float}>
      */
     private function piernasDesdeAsiento(Solicitudpago $solicitud, $cuentasPorContable): array
     {
         $out = [];
-        $fecha = $solicitud->fecha_pago?->format('Y-m-d') ?? date('Y-m-d');
+        $fecha = $this->dia($solicitud->fecha_pago) ?: $this->dia($solicitud->fecha) ?: date('Y-m-d');
         foreach ($solicitud->cuentas as $linea) {
-            $cuenta = $cuentasPorContable->get((int) $linea->cuentacontable_id);
+            $empresaLinea = (int) ($linea->empresa_id ?: $solicitud->empresa_id);
+            $cuenta = $this->cuentaDeAsiento($cuentasPorContable, (int) $linea->cuentacontable_id, $empresaLinea);
             $hoja = FinanzaPosicionHojaSupport::hojaDesdeCuenta($cuenta);
             $empresaId = FinanzaPosicionHojaSupport::empresaColumna($cuenta, (int) ($linea->empresa_id ?: $solicitud->empresa_id));
             if ($hoja === null || $empresaId === null) {

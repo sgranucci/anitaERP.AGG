@@ -42,6 +42,18 @@ class ReporteDefinibleSupport
     /** Un bloque de columnas por mes: año anterior, mes, presupuesto y diferencias. */
     public const LAYOUT_COMPARATIVO_MESES = 'comparativo_meses';
 
+    /**
+     * Importe de cada mes del rango. En el último mes: presupuesto,
+     * diferencia contra presupuesto y diferencia contra el mes anterior.
+     */
+    public const LAYOUT_CONTROL_MENSUAL = 'control_mensual';
+
+    /**
+     * Un solo bloque para todo el rango: año anterior, año actual, presupuesto
+     * y las diferencias contra presupuesto y contra el año anterior.
+     */
+    public const LAYOUT_COMPARATIVO_ACUMULADO = 'comparativo_acumulado';
+
     public const LAYOUT_CCOSTO = 'ccosto';
 
     /** Meses sueltos (no hace falta que sean consecutivos). */
@@ -58,8 +70,26 @@ class ReporteDefinibleSupport
             self::LAYOUT_PERIODOS => 'Por período / rango',
             self::LAYOUT_COMPARATIVO => 'Actual / Plan / Var / %',
             self::LAYOUT_COMPARATIVO_MESES => 'Mes a mes · año ant. / mes / presupuesto',
+            self::LAYOUT_CONTROL_MENSUAL => 'Control mensual',
+            self::LAYOUT_COMPARATIVO_ACUMULADO => 'Comparativo acumulado',
             self::LAYOUT_CCOSTO => 'Centros de costo en columnas',
         ];
+    }
+
+    public static function esComparativoPorMes(string $layout): bool
+    {
+        return $layout === self::LAYOUT_COMPARATIVO_MESES
+            || $layout === self::LAYOUT_CONTROL_MENSUAL;
+    }
+
+    /**
+     * Layouts cuyas columnas var / % se resuelven por meta (base_key / ref_key)
+     * y cuyo presupuesto vive en los totales del rubro, no en un arreglo aparte.
+     */
+    public static function usaColumnasDerivadas(string $layout): bool
+    {
+        return self::esComparativoPorMes($layout)
+            || $layout === self::LAYOUT_COMPARATIVO_ACUMULADO;
     }
 
     /**

@@ -553,9 +553,12 @@ class ProyeccionPagosReporteService
      */
     private function queryBase(array $filtros, string $fechaBase): Builder
     {
+        // La posición bancaria pide el saldo anterior a los pagos de la fecha base,
+        // para que el rubro se pueda reconstruir igual cualquier día posterior.
+        $corte = ! empty($filtros['excluir_aplicaciones_de_la_fecha']) ? '<' : '<=';
         $aplicaciones = DB::table('proveedor_cuentacorriente_aplicacion')
             ->selectRaw('proveedor_cuentacorriente_id, SUM(total) AS aplicado')
-            ->where('fecha', '<=', $fechaBase)
+            ->where('fecha', $corte, $fechaBase)
             ->groupBy('proveedor_cuentacorriente_id');
 
         $query = DB::table('proveedor_cuentacorriente as cc')

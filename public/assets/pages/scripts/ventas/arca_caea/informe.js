@@ -26,6 +26,16 @@
         el.setAttribute('aria-hidden', 'false');
     }
 
+    function ocultarOverlay() {
+        var el = overlayEl();
+        if (!el) {
+            return;
+        }
+        el.classList.add('d-none');
+        el.style.display = 'none';
+        el.setAttribute('aria-hidden', 'true');
+    }
+
     function idDesdeAction(action) {
         if (!action) {
             return 0;
@@ -81,10 +91,8 @@
         }
 
         var badge = badgeDeId(id);
-        if (badge) {
-            if (activo) {
-                badge.innerHTML = '<span class="badge badge-warning"><i class="fa fa-spinner fa-spin"></i> Procesando</span>';
-            }
+        if (badge && activo) {
+            badge.innerHTML = '<span class="badge badge-warning"><i class="fa fa-spinner fa-spin"></i> Procesando</span>';
         }
     }
 
@@ -163,8 +171,19 @@
                     try {
                         sessionStorage.removeItem('arca-caea-activo-' + id);
                     } catch (e) {}
-                    // Terminó: refrescar contadores del listado.
-                    window.location.reload();
+                    ocultarOverlay();
+                    detenerPoll();
+                    var reloadKey = 'arca-caea-reload-' + id;
+                    var yaRecargo = false;
+                    try {
+                        yaRecargo = sessionStorage.getItem(reloadKey) === '1';
+                        if (!yaRecargo) {
+                            sessionStorage.setItem(reloadKey, '1');
+                        }
+                    } catch (e) {}
+                    if (!yaRecargo) {
+                        window.location.replace(window.location.pathname + window.location.search);
+                    }
                 }
             }).catch(function () {
                 // Silencio: reintenta en el próximo ciclo.
@@ -268,6 +287,17 @@
         });
         if (hayActivo) {
             asegurarPoll();
+        } else {
+            ocultarOverlay();
+        }
+    });
+
+    // Al volver atrás o al restaurar la página, el banner de "encolando" no debe quedar tapando la pantalla.
+    window.addEventListener('pageshow', ocultarOverlay);
+    window.addEventListener('pagehide', ocultarOverlay);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' || event.keyCode === 27) {
+            ocultarOverlay();
         }
     });
 })();

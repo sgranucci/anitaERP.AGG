@@ -43,9 +43,7 @@
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
 
 			recalculaTotalOrdenventa();
-			let monto = $("#monto").val();
-
-			$("#montoordenventa").val(monto);
+			sincronizaCuotaConTotal();
         });
 		$("#botonform3").click(function(){
 			$(".form1").hide();
@@ -132,10 +130,9 @@
 		
 		$( ".botonsubmit" ).click(function() {
 
-			// Suma totales
-			sumaCuota();
+			// Suma totales y, si no hay cuotas, arma una con el total final.
 			recalculaTotalOrdenventa();
-
+			sincronizaCuotaConTotal();
 			let totalCuota = numeroImporte($("#totalcuota").val());
 			let totalOrdenventa = numeroImporte($("#monto").val());
 			let flError = false;
@@ -143,7 +140,12 @@
 
 			if (Math.abs(total) > 0.09)
 			{
-				alert('No coincide total de cuotas a facturar con el total final de la orden de venta');
+				alert(
+					'No coincide total de cuotas a facturar con el total final de la orden de venta.\n'+
+					'Cuotas: '+totalCuota.toFixed(2)+'\n'+
+					'Total OV (bruto + percepciones + IVA): '+totalOrdenventa.toFixed(2)+'\n'+
+					'Revisá la solapa Cuotas: el monto de las cuotas tiene que ser el total con IVA y percepciones.'
+				);
 				flError = true;
 			}
 
@@ -243,6 +245,8 @@
 
 		window.programarVerificacionAvisoArbolOv = programarVerificacionAvisoArbolOv;
 		$(document).on('change', '#centrocosto_id, #moneda_id, #fecha, #estado', programarVerificacionAvisoArbolOv);
+		$(document).on('change', '#cliente_id, #empresa_id, #fecha', programarCalculoImpuestosOrdenventa);
+		$(document).on('input change blur', '#subtotal', programarCalculoImpuestosOrdenventa);
 		$(document).on('input change blur', '#subtotal, #percepcion, #iva', function () {
 			recalculaTotalOrdenventa();
 		});
@@ -276,20 +280,32 @@
 
 				$(".editarcliente").attr("href", url);
 
-				if (cliente_id > 0)
+				if (cliente_id > 0) {
 					$(".editarcliente").show();
-				else
+					programarCalculoImpuestosOrdenventa();
+				} else {
 					$(".editarcliente").hide();
+				}
 			}
 		}, 500); // Revisa cada 500 milisegundos	
 
+		// Tras la lupa / alta de cliente, recalcula IVA y percepciones.
+		window.completaDatosCliente = function () {
+			programarCalculoImpuestosOrdenventa();
+		};
+
 		// Suma conceptos
 		sumaConcepto();
+		sumaCuota();
 
 		// Muestra boton de anulacion
 		let estadoOrdenVenta = $('#estado').val();
 
 		muestraBotonAnulacion(estadoOrdenVenta);
+
+		if (parseInt($('#cliente_id').val() || '0', 10) > 0) {
+			programarCalculoImpuestosOrdenventa();
+		}
 
     });
 
@@ -457,9 +473,12 @@
 
 		// Hace focus sobre el primer elemento de la tabla
 		let ptrUltimoRenglon = $("#tbody-ordenventa-cuota-table tr:last");
+		var restante = Math.max(0, numeroImporte($('#monto').val()) - sumaMontosCuota(ptrUltimoRenglon));
+		$(ptrUltimoRenglon).find('.montofactura').val(restante > 0 ? restante.toFixed(2) : '');
 		$(ptrUltimoRenglon).find('.fechafactura').focus();
 
 		activa_eventos(false);
+		sumaCuota();
     }
 
 	function borraRenglonOrdenventa_Cuota(event) {
@@ -714,31 +733,67 @@
 		});
 	}
 
+	function sumaMontosCuota(excepto)
+	{
+		var total = 0;
+		$("#tbody-ordenventa-cuota-table .montofactura").each(function() {
+			if (excepto && $(excepto).find('.montofactura')[0] === this) {
+				return;
+			}
+			total += numeroImporte($(this).val());
+		});
+		return total;
+	}
+
+	function filasCuotaOrdenventa()
+	{
+		return $('#tbody-ordenventa-cuota-table tr').filter(function () {
+			return $(this).find('.montofactura').length > 0;
+		});
+	}
+
+	function sincronizaCuotaConTotal()
+	{
+		recalculaTotalOrdenventa();
+		var total = numeroImporte($('#monto').val());
+		$('#montoordenventa').val(total.toFixed(2));
+
+		if (total <= 0) {
+			sumaCuota();
+			return;
+		}
+
+		var $filas = filasCuotaOrdenventa();
+		if ($filas.length === 0) {
+			agregaUnRenglonOrdenventa_Cuota();
+			$filas = filasCuotaOrdenventa();
+		}
+
+		if ($filas.length === 1) {
+			var $fila = $filas.first();
+			var ventaId = parseInt($fila.find('.venta_id').val() || '0', 10) || 0;
+			if (ventaId <= 0) {
+				$fila.find('.montofactura').val(total.toFixed(2));
+				if (!$fila.find('.fechafactura').val()) {
+					$fila.find('.fechafactura').val($('#fecha').val() || '');
+				}
+			}
+		}
+
+		sumaCuota();
+	}
+
 	function sumaCuota()
 	{
 		var wrapper = $(".totales-por-cuota");
 		let descripcionMoneda = $('select[name="moneda_id"] option:selected').text();
 		let detalleLabel = 'Total '+descripcionMoneda;
 
-		// Inicializa total
-		totalCuota = 0;
-
-		$("#tbody-ordenventa-cuota-table .montofactura").each(function() {
-            let valor = parseFloat($(this).val());
-
-			totalCuota += valor;
-        });
+		totalCuota = sumaMontosCuota();
 
 		$(wrapper).empty();
-
-		if (totalCuota != 0)
-		{
-			$(wrapper).append('<label class="col-lg-1 col-form-label">'+detalleLabel+'</label>');
-			if (totalCuota == 0)
-				$(wrapper).append('<input type="text" id="totalcuota" name="totalcuota" class="form-control col-lg-2" readonly value="" />');
-			else
-				$(wrapper).append('<input type="text" id="totalcuota" name="totalcuota" class="form-control col-lg-2" readonly value="'+totalCuota.toFixed(2)+'" />');
-		}
+		$(wrapper).append('<label class="col-lg-1 col-form-label">'+detalleLabel+'</label>');
+		$(wrapper).append('<input type="text" id="totalcuota" name="totalcuota" class="form-control col-lg-2" readonly value="'+totalCuota.toFixed(2)+'" />');
 	}
 
 	function generaFactura()
@@ -1131,8 +1186,14 @@
 		if (texto === '') {
 			return 0;
 		}
-		if (texto.indexOf(',') >= 0 && texto.indexOf('.') >= 0) {
+		var ultimaComa = texto.lastIndexOf(',');
+		var ultimoPunto = texto.lastIndexOf('.');
+		if (ultimaComa > ultimoPunto) {
+			// 1.234,56
 			texto = texto.replace(/\./g, '').replace(',', '.');
+		} else if (ultimoPunto > ultimaComa) {
+			// 1,234.56
+			texto = texto.replace(/,/g, '');
 		} else {
 			texto = texto.replace(',', '.');
 		}
@@ -1142,10 +1203,16 @@
 
 	function recalculaTotalOrdenventa()
 	{
-		var subtotal = numeroImporte($('#subtotal').val());
+		// El TOTAL cierra con los conceptos, no con el subtotal editable de arriba.
+		var bruto = numeroImporte($('#totalconcepto').val());
+		if (bruto <= 0) {
+			bruto = numeroImporte($('#subtotal').val());
+		} else {
+			$('#subtotal').val(bruto.toFixed(2));
+		}
 		var percepcion = numeroImporte($('#percepcion').val());
 		var iva = numeroImporte($('#iva').val());
-		var total = subtotal + percepcion + iva;
+		var total = bruto + percepcion + iva;
 
 		$('#monto').val(total.toFixed(2));
 		$('#totalordenventa').val(total.toFixed(2));
@@ -1169,5 +1236,56 @@
         });
 
 		$('#totalconcepto').val(totalConcepto.toFixed(2));
+		if (totalConcepto > 0) {
+			$('#subtotal').val(totalConcepto.toFixed(2));
+		}
+		recalculaTotalOrdenventa();
+		programarCalculoImpuestosOrdenventa();
+	}
+
+	var timerImpuestosOv = null;
+
+	function programarCalculoImpuestosOrdenventa()
+	{
+		if (timerImpuestosOv) {
+			clearTimeout(timerImpuestosOv);
+		}
+		timerImpuestosOv = setTimeout(calculaImpuestosOrdenventa, 400);
+	}
+
+	function calculaImpuestosOrdenventa()
+	{
+		var clienteId = parseInt($('#cliente_id').val() || '0', 10) || 0;
+		var bruto = numeroImporte($('#totalconcepto').val());
+		if (bruto <= 0) {
+			bruto = numeroImporte($('#subtotal').val());
+		}
+		if (clienteId <= 0 || bruto <= 0) {
+			return;
+		}
+
+		var token = $('#csrf_token').val() || $('input[name="_token"]').val() || '';
+		$.ajax({
+			url: (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/ordenventa/ordenventa/calcula-impuestos',
+			method: 'POST',
+			dataType: 'json',
+			data: {
+				_token: token,
+				cliente_id: clienteId,
+				empresa_id: $('#empresa_id').val() || 0,
+				fecha: $('#fecha').val() || '',
+				bruto: bruto.toFixed(2)
+			}
+		}).done(function (resp) {
+			if (!resp || resp.error) {
+				return;
+			}
+			$('#percepcion').val(numeroImporte(resp.percepcion).toFixed(2));
+			$('#iva').val(numeroImporte(resp.iva).toFixed(2));
+			if (numeroImporte(resp.bruto) > 0) {
+				$('#subtotal').val(numeroImporte(resp.bruto).toFixed(2));
+			}
+			recalculaTotalOrdenventa();
+		});
 	}
 

@@ -149,11 +149,11 @@
             </div>
             <div class="form-group row justify-content-end mb-2">
                 <label for="percepcion" class="col-lg-4 col-form-label text-right">Percepciones</label>
-                <input type="text" name="percepcion" id="percepcion" class="col-lg-4 form-control text-right" value="{{ number_format((float) $ovPercepcion, 2, '.', '') }}" title="Percepciones que se suman al bruto">
+                <input type="text" name="percepcion" id="percepcion" class="col-lg-4 form-control text-right" value="{{ number_format((float) $ovPercepcion, 2, '.', '') }}" title="Se calculan al elegir el cliente, sobre el bruto">
             </div>
             <div class="form-group row justify-content-end mb-2">
                 <label for="iva" class="col-lg-4 col-form-label text-right">IVA</label>
-                <input type="text" name="iva" id="iva" class="col-lg-4 form-control text-right" value="{{ number_format((float) $ovIva, 2, '.', '') }}" title="IVA que se suma al bruto">
+                <input type="text" name="iva" id="iva" class="col-lg-4 form-control text-right" value="{{ number_format((float) $ovIva, 2, '.', '') }}" title="Se calcula al elegir el cliente, sobre el bruto">
             </div>
             <div class="form-group row justify-content-end mb-2">
                 <label for="totalordenventa" class="col-lg-4 col-form-label text-right"><strong>TOTAL</strong></label>

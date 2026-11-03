@@ -14,9 +14,10 @@ use Carbon\Carbon;
  * Proyección de pagos en la posición bancaria (hoja Macro).
  *
  * TRF PROYECCION del día es el total de la proyección de pagos con vencimiento
- * en esa fecha o anterior y medio de pago transferencia. Los cheques de la
- * posición salen de las solapas Cheques (retenidos, tránsito y diferidos por banco),
- * no de esta proyección.
+ * en esa fecha o anterior y medio de pago transferencia, con el saldo anterior
+ * a los pagos de esa fecha. Así el rubro sale igual si la posición se regenera
+ * después. Los cheques de la posición salen de las solapas Cheques
+ * (retenidos, tránsito y diferidos por banco), no de esta proyección.
  */
 final class PosicionBancariaProyeccionPagosSupport
 {
@@ -87,6 +88,7 @@ final class PosicionBancariaProyeccionPagosSupport
             'moneda_id' => (int) config('cotizacion.ID_MONEDA_DEFAULT', 1),
             'incluir_adelantos' => false,
             'estado_aprobacion' => ProyeccionPagosReporteFiltros::APROBACION_TODOS,
+            'excluir_aplicaciones_de_la_fecha' => true,
         ];
         $tramos = ProyeccionPagosTramosSupport::construir($filtros);
 

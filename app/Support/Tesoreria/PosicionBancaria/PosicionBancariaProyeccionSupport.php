@@ -200,6 +200,7 @@ final class PosicionBancariaProyeccionSupport
         }
         $filaSaldoLocal = $fila;
         $filaInicioSum = $filaSaldoLocal;
+        $filaProyectadoAnterior = null;
         $fila++;
 
         $ws->setCellValue("A{$fila}", 'MOVIMIENTOS DEL DÍA');
@@ -210,7 +211,8 @@ final class PosicionBancariaProyeccionSupport
         $fechaClave = $fechaPosicion->toDateString();
         $this->escribirMovimientos($ws, $fila, $movimientosPorFecha[$fechaClave] ?? [], true, $filasDescubierto);
 
-        $this->escribirTotalProyectado($ws, $fila, $filaInicioSum, 'Proyectado del día');
+        $this->escribirTotalProyectado($ws, $fila, $filaInicioSum, 'Proyectado del día', $filaProyectadoAnterior);
+        $filaProyectadoAnterior = $fila;
         $fila++;
         $this->marcarDescubierto($ws, $fila, $filasDescubierto);
 
@@ -241,7 +243,8 @@ final class PosicionBancariaProyeccionSupport
             $titulo = $paso !== null
                 ? 'Proyectado del día T+'.$paso
                 : 'Proyectado al '.$dia->format('d/m/Y');
-            $this->escribirTotalProyectado($ws, $fila, $filaInicioSum, $titulo);
+            $this->escribirTotalProyectado($ws, $fila, $filaInicioSum, $titulo, $filaProyectadoAnterior);
+            $filaProyectadoAnterior = $fila;
             $fila++;
         }
         $filaUltima = $fila - 1;
@@ -460,15 +463,24 @@ final class PosicionBancariaProyeccionSupport
         $fila++;
     }
 
-    private function escribirTotalProyectado(Worksheet $ws, int $fila, int $desde, string $titulo): void
+    private function escribirTotalProyectado(Worksheet $ws, int $fila, int $desde, string $titulo, ?int $filaAnterior = null): void
     {
         $hasta = $fila - 1;
         $ws->setCellValue("A{$fila}", $titulo);
-        if ($hasta >= $desde) {
-            $ws->setCellValue("B{$fila}", "=SUM(B{$desde}:B{$hasta})");
-            $ws->setCellValue("C{$fila}", "=SUM(C{$desde}:C{$hasta})");
-            $ws->setCellValue("D{$fila}", "=SUM(D{$desde}:D{$hasta})");
-            $ws->setCellValue("E{$fila}", "=SUM(E{$desde}:E{$hasta})");
+        foreach (['B', 'C', 'D', 'E'] as $col) {
+            if ($filaAnterior === null) {
+                if ($hasta >= $desde) {
+                    $ws->setCellValue("{$col}{$fila}", "=SUM({$col}{$desde}:{$col}{$hasta})");
+                }
+                continue;
+            }
+            $desdeMov = $filaAnterior + 1;
+            $ws->setCellValue(
+                "{$col}{$fila}",
+                $hasta >= $desdeMov
+                    ? "={$col}{$filaAnterior}+SUM({$col}{$desdeMov}:{$col}{$hasta})"
+                    : "={$col}{$filaAnterior}"
+            );
         }
         $ws->getStyle("A{$fila}:E{$fila}")->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
         $ws->getStyle("A{$fila}:E{$fila}")->getFill()

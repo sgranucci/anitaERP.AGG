@@ -19,6 +19,7 @@ use App\Repositories\Ventas\PuntoventaRepositoryInterface;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\IncotermRepositoryInterface;
 use App\Services\Ordenventa\OrdenventaService;
+use App\Services\Ventas\FacturacionService;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Models\Ordenventa\Ordenventa_Estado;
 use App\Models\Ordenventa\Ordenventa;
@@ -302,6 +303,25 @@ class OrdenventaController extends Controller
         ]);
 
         return response()->json(['aviso' => $aviso]);
+    }
+
+    /**
+     * IVA y percepciones del cliente sobre el bruto de los conceptos.
+     */
+    public function calculaImpuestos(Request $request, FacturacionService $facturacionService)
+    {
+        if (! can('ingresar-orden-de-venta', false) && ! can('editar-orden-de-venta', false) && ! can('actualizar-orden-de-venta', false)) {
+            return response()->json(['error' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $resultado = $facturacionService->calculaImpuestosBrutoOrdenventa(
+            (int) $request->input('cliente_id', 0),
+            (int) $request->input('empresa_id', 0),
+            (string) $request->input('fecha', date('Y-m-d')),
+            (float) str_replace(',', '.', (string) $request->input('bruto', 0))
+        );
+
+        return response()->json($resultado);
     }
 
     /**

@@ -209,7 +209,7 @@ class ReporteDefiniblePublicacionSupport
         if (($filtros['modo_periodo'] ?? '') === ReporteDefinibleSupport::MODO_MESES) {
             $claves[] = 'periodos';
         }
-        if (($filtros['columnas_layout'] ?? '') === ReporteDefinibleSupport::LAYOUT_COMPARATIVO_MESES) {
+        if (ReporteDefinibleSupport::usaColumnasDerivadas((string) ($filtros['columnas_layout'] ?? ''))) {
             $claves[] = 'fuente_plan';
         }
 

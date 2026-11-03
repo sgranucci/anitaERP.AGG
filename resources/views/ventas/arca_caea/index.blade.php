@@ -11,7 +11,7 @@
         @json(url('ventas/arca-caea/__ID__/estado-informe'))
     );
 </script>
-<script src="{{ asset('assets/pages/scripts/ventas/arca_caea/informe.js') }}?v=20260901c"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/arca_caea/informe.js') }}?v=20261103b"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/arca_caea/manual.js') }}?v=20260811a"></script>
 @endsection
 
@@ -43,6 +43,11 @@
                     Use <i class="fa fa-calculator text-secondary"></i> solo para consultar el último autorizado en ARCA (no hace falta para ver las facturas nuevas).
                     En el detalle (ojo) hay una herramienta para presentar un comprobante suelto (ERP o Anita), útil para FCE.
                 </p>
+                @if (! empty($anitaNoRespondio))
+                    <p class="text-muted small mb-3">
+                        Anita no respondió a tiempo. Los contadores de esta pantalla son solo del ERP.
+                    </p>
+                @endif
                 @include('ventas.arca_caea.partials.observaciones_recientes', [
                     'observacionesCaea' => $observacionesCaea ?? collect(),
                     'tituloObservaciones' => 'Observaciones ARCA de los últimos 3 meses',

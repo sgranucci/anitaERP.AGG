@@ -13,6 +13,7 @@ use Illuminate\Support\Collection;
  *   retenidos  = vencimiento <= posición - 30 días
  *   transito   = posición - 30 < vencimiento <= posición
  *   diferidos  = vencimiento > posición
+ * El importe se suma firmado: una baja resta en el tramo de su fecha.
  *
  * Cruce con conciliación: mismos CHP (empresa × cuentacaja × numero × fecha_cheque);
  * carátula de conciliación = diferidos/tránsito con vencimiento en el mes de corte.
@@ -143,7 +144,12 @@ final class PosicionBancariaChequeAgingSupport
             if ($venc === null) {
                 continue;
             }
-            $imp = abs((float) $ch->importe);
+            // El importe va firmado: la baja de un cheque resta en su tramo
+            // y el crédito original queda en el suyo.
+            $imp = round((float) $ch->importe, 2);
+            if (abs($imp) < 0.005) {
+                continue;
+            }
             $banco = (string) $ch->banco_canonico;
             $emp = (int) $ch->empresa_id;
 

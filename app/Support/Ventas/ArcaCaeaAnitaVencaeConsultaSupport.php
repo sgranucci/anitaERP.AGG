@@ -16,9 +16,71 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
     /** @var array<string, list<array<string, mixed>>> */
     private static array $cachePorCaea = [];
 
+    private static ?float $requestMark = null;
+
+    private static float $deadlinePantalla = 0.0;
+
+    private static bool $omitidaEnPantalla = false;
+
     public static function resetCache(): void
     {
         self::$cachePorCaea = [];
+        self::$requestMark = null;
+        self::$deadlinePantalla = 0.0;
+        self::$omitidaEnPantalla = false;
+    }
+
+    /**
+     * Tope de espera a Anita para armar el listado. Si el bridge no contesta,
+     * el resto de quincenas de la misma petición no vuelve a bloquear la pantalla.
+     */
+    public static function reservarPresupuestoPantalla(int $segundos): ?int
+    {
+        $segundos = max(5, $segundos);
+        if (! isset($_SERVER['REQUEST_TIME_FLOAT'])) {
+            return $segundos;
+        }
+
+        self::alinearRequest();
+        if (self::$deadlinePantalla <= 0) {
+            self::$deadlinePantalla = microtime(true) + $segundos;
+        }
+
+        $rest = (int) floor(self::$deadlinePantalla - microtime(true));
+        if ($rest < 5) {
+            self::$omitidaEnPantalla = true;
+
+            return null;
+        }
+
+        return min($segundos, $rest);
+    }
+
+    public static function marcarAnitaOmitidaEnPantalla(): void
+    {
+        self::alinearRequest();
+        self::$omitidaEnPantalla = true;
+    }
+
+    public static function anitaOmitidaEnPantalla(): bool
+    {
+        self::alinearRequest();
+
+        return self::$omitidaEnPantalla;
+    }
+
+    private static function alinearRequest(): void
+    {
+        if (! isset($_SERVER['REQUEST_TIME_FLOAT'])) {
+            return;
+        }
+
+        $mark = (float) $_SERVER['REQUEST_TIME_FLOAT'];
+        if (self::$requestMark !== $mark) {
+            self::$requestMark = $mark;
+            self::$deadlinePantalla = 0.0;
+            self::$omitidaEnPantalla = false;
+        }
     }
 
     /**
@@ -32,7 +94,7 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
      *   nro_caea: string
      * }>
      */
-    public static function listarPorCaeaIvaVentas(string $nroCaea, array $sucursales): array
+    public static function listarPorCaeaIvaVentas(string $nroCaea, array $sucursales, ?int $curlTimeout = null): array
     {
         $nroCaea = trim($nroCaea);
         $sucursales = array_values(array_unique(array_filter(
@@ -49,25 +111,33 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
         }
 
         $in = implode(',', $sucursales);
+        $payload = ArcaCaeaSucursalesInformeSupport::mergePathAnita([
+            'acc' => 'list',
+            'sistema' => 'ventas',
+            'tabla' => 'vencae',
+            'campos' => 'venc_tipo,venc_letra,venc_sucursal,venc_nro,venc_nro_cae',
+            'whereArmado' => " WHERE venc_nro_cae = '".addslashes($nroCaea)."'"
+                .' AND venc_sucursal IN ('.$in.')',
+        ]);
+        if ($curlTimeout !== null && $curlTimeout > 0) {
+            $payload['curl_timeout'] = $curlTimeout;
+        }
         try {
-            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall(
-                ArcaCaeaSucursalesInformeSupport::mergePathAnita([
-                    'acc' => 'list',
-                    'sistema' => 'ventas',
-                    'tabla' => 'vencae',
-                    'campos' => 'venc_tipo,venc_letra,venc_sucursal,venc_nro,venc_nro_cae',
-                    'whereArmado' => " WHERE venc_nro_cae = '".addslashes($nroCaea)."'"
-                        .' AND venc_sucursal IN ('.$in.')',
-                ])
-            ));
+            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall($payload));
         } catch (Throwable $e) {
             Log::warning('arca.caea.anita.vencae_fallo', ['caea' => $nroCaea, 'msg' => $e->getMessage()]);
+            if ($curlTimeout !== null) {
+                self::marcarAnitaOmitidaEnPantalla();
+            }
 
             return [];
         }
 
         if ($parsed['error_lectura'] !== null) {
             Log::warning('arca.caea.anita.vencae_fallo', ['caea' => $nroCaea, 'msg' => $parsed['error_lectura']]);
+            if ($curlTimeout !== null) {
+                self::marcarAnitaOmitidaEnPantalla();
+            }
 
             return [];
         }

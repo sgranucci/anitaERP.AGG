@@ -79,61 +79,110 @@ final class PosicionBancariaChequeImportSupport
                 }
 
                 $key = $empresaId.'|'.$banco.'|'.$nro;
+                $fechaKey = $fechaCheque ?? '';
                 if (! isset($neto[$key])) {
                     $neto[$key] = [
-                        'empresa_id' => $empresaId,
                         'banco' => $banco,
                         'nro' => $nro,
                         'banco_raw' => (string) $bancoRaw,
+                        'fechas' => [],
+                    ];
+                }
+                if (! isset($neto[$key]['fechas'][$fechaKey])) {
+                    $neto[$key]['fechas'][$fechaKey] = [
                         'tip' => $tip !== '' ? strtoupper($tip) : 'CHP',
                         'fecha_emision' => $fechaEmision,
                         'fecha_cheque' => $fechaCheque,
                         'entregado' => $entregado,
                         'fila' => $r,
                         'importe' => 0.0,
-                        'fila_importe' => 0.0,
+                        'referencia' => 0.0,
                     ];
                 }
-                $neto[$key]['importe'] = round($neto[$key]['importe'] + $importe, 2);
-                // La fecha que vale es la del renglón que deja saldo (el crédito), no la baja.
-                if ($importe > $neto[$key]['fila_importe']) {
-                    $neto[$key]['fila_importe'] = $importe;
-                    $neto[$key]['fecha_cheque'] = $fechaCheque;
-                    $neto[$key]['fecha_emision'] = $fechaEmision;
-                    $neto[$key]['entregado'] = $entregado;
-                    $neto[$key]['fila'] = $r;
-                    $neto[$key]['tip'] = $tip !== '' ? strtoupper($tip) : 'CHP';
+                $neto[$key]['fechas'][$fechaKey]['importe'] = round(
+                    $neto[$key]['fechas'][$fechaKey]['importe'] + $importe,
+                    2
+                );
+                if (abs($importe) >= abs($neto[$key]['fechas'][$fechaKey]['referencia'])) {
+                    $neto[$key]['fechas'][$fechaKey]['referencia'] = $importe;
+                    $neto[$key]['fechas'][$fechaKey]['fecha_emision'] = $fechaEmision;
+                    $neto[$key]['fechas'][$fechaKey]['entregado'] = $entregado;
+                    $neto[$key]['fechas'][$fechaKey]['fila'] = $r;
+                    $neto[$key]['fechas'][$fechaKey]['tip'] = $tip !== '' ? strtoupper($tip) : 'CHP';
                 }
             }
 
             foreach ($neto as $key => $item) {
-                // Un crédito y su baja (importe negativo) se compensan: el cheque no está vigente.
-                if ($item['importe'] <= 0.005) {
-                    $stats['skipped']++;
+                $vigentes = [];
+                foreach ($item['fechas'] as $fechaItem) {
+                    if (abs((float) $fechaItem['importe']) < 0.005) {
+                        $stats['skipped']++;
+                        continue;
+                    }
+                    $vigentes[] = $fechaItem;
+                }
+                // Crédito y baja en la misma fecha se anulan. Si quedan en fechas
+                // distintas, se guardan las dos: la baja resta en su tramo y el
+                // crédito queda en el suyo, como en la planilla de finanzas.
+                if ($vigentes === []) {
                     continue;
                 }
                 $vistos[$key] = true;
                 $cuentacajaId = PosicionBancariaChequeAgingSupport::resolverCuentacajaId($empresaId, $item['banco']);
-                $payload = [
-                    'cuentacaja_id' => $cuentacajaId,
-                    'tip' => $item['tip'],
-                    'fecha_emision' => $item['fecha_emision'],
-                    'fecha_cheque' => $item['fecha_cheque'],
-                    'importe' => round((float) $item['importe'], 2),
-                    'estado' => ' ',
-                    'entregado_a' => mb_substr((string) $item['entregado'], 0, 120),
-                    'activo' => true,
-                    'en_portfolio_posicion' => true,
-                    'origen' => 'excel_posicion',
-                    'origen_json' => [
-                        'hoja' => $hoja,
-                        'fila' => $item['fila'],
-                        'banco_raw' => $item['banco_raw'],
-                        'importado_at' => now()->toIso8601String(),
-                    ],
-                ];
+                $fechasGuardadas = [];
+                foreach ($vigentes as $fechaItem) {
+                    $fechasGuardadas[] = $fechaItem['fecha_cheque'];
+                    $payload = [
+                        'cuentacaja_id' => $cuentacajaId,
+                        'tip' => $fechaItem['tip'],
+                        'fecha_emision' => $fechaItem['fecha_emision'],
+                        'fecha_cheque' => $fechaItem['fecha_cheque'],
+                        'importe' => round((float) $fechaItem['importe'], 2),
+                        'estado' => ' ',
+                        'entregado_a' => mb_substr((string) $fechaItem['entregado'], 0, 120),
+                        'activo' => true,
+                        'en_portfolio_posicion' => true,
+                        'origen' => 'excel_posicion',
+                        'origen_json' => [
+                            'hoja' => $hoja,
+                            'fila' => $fechaItem['fila'],
+                            'banco_raw' => $item['banco_raw'],
+                            'importado_at' => now()->toIso8601String(),
+                        ],
+                    ];
 
-                $existing = PosicionBancariaCheque::query()
+                    $existing = PosicionBancariaCheque::query()
+                        ->where('empresa_id', $empresaId)
+                        ->where('numero_cheque', $item['nro'])
+                        ->when(
+                            $fechaItem['fecha_cheque'] !== null,
+                            fn ($q) => $q->whereDate('fecha_cheque', $fechaItem['fecha_cheque']),
+                            fn ($q) => $q->whereNull('fecha_cheque'),
+                        )
+                        ->when(
+                            $cuentacajaId !== null,
+                            fn ($q) => $q->where('cuentacaja_id', $cuentacajaId),
+                            fn ($q) => $q->where('banco_canonico', $item['banco']),
+                        )
+                        ->first();
+
+                    if ($existing) {
+                        $existing->fill($payload);
+                        $existing->save();
+                        $stats['updated']++;
+                    } else {
+                        PosicionBancariaCheque::query()->create(array_merge($payload, [
+                            'empresa_id' => $empresaId,
+                            'banco_canonico' => $item['banco'],
+                            'numero_cheque' => $item['nro'],
+                        ]));
+                        $stats['inserted']++;
+                    }
+                }
+
+                $sobrantes = PosicionBancariaCheque::query()
+                    ->where('origen', 'excel_posicion')
+                    ->where('activo', true)
                     ->where('empresa_id', $empresaId)
                     ->where('numero_cheque', $item['nro'])
                     ->when(
@@ -141,19 +190,14 @@ final class PosicionBancariaChequeImportSupport
                         fn ($q) => $q->where('cuentacaja_id', $cuentacajaId),
                         fn ($q) => $q->where('banco_canonico', $item['banco']),
                     )
-                    ->first();
-
-                if ($existing) {
-                    $existing->fill($payload);
-                    $existing->save();
-                    $stats['updated']++;
-                } else {
-                    PosicionBancariaCheque::query()->create(array_merge($payload, [
-                        'empresa_id' => $empresaId,
-                        'banco_canonico' => $item['banco'],
-                        'numero_cheque' => $item['nro'],
-                    ]));
-                    $stats['inserted']++;
+                    ->get();
+                foreach ($sobrantes as $row) {
+                    $fechaRow = $row->fecha_cheque?->toDateString();
+                    if (! in_array($fechaRow, $fechasGuardadas, true)) {
+                        $row->activo = false;
+                        $row->save();
+                        $stats['updated']++;
+                    }
                 }
             }
         }

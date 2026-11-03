@@ -57,7 +57,9 @@
         var hasDesigned = layoutId && layoutId.value;
         var sel = document.getElementById('rd_columnas_layout');
         var layout = sel ? sel.value : 'periodos';
-        if (layout === 'comparativo_meses' && layoutId && layoutId.value) {
+        var layoutPorMes = layout === 'comparativo_meses' || layout === 'control_mensual';
+        var layoutForzado = layoutPorMes || layout === 'comparativo_acumulado';
+        if (layoutForzado && layoutId && layoutId.value) {
             layoutId.value = '';
             hasDesigned = false;
         }
@@ -68,12 +70,16 @@
             var opt = layoutId.options[layoutId.selectedIndex];
             showPlan = opt && opt.getAttribute('data-usa-plan') === '1';
         } else {
-            showPlan = layout === 'comparativo' || layout === 'comparativo_meses';
+            showPlan = layout === 'comparativo' || layoutForzado;
         }
         if (pPlan) pPlan.style.display = showPlan ? '' : 'none';
         if (pCc) pCc.style.display = (!hasDesigned && layout === 'ccosto') ? '' : 'none';
         var pMesesLay = document.getElementById('ayuda-comparativo-meses-rd');
         if (pMesesLay) pMesesLay.style.display = (!hasDesigned && layout === 'comparativo_meses') ? '' : 'none';
+        var pControl = document.getElementById('ayuda-control-mensual-rd');
+        if (pControl) pControl.style.display = (!hasDesigned && layout === 'control_mensual') ? '' : 'none';
+        var pAcum = document.getElementById('ayuda-comparativo-acumulado-rd');
+        if (pAcum) pAcum.style.display = (!hasDesigned && layout === 'comparativo_acumulado') ? '' : 'none';
         toggleFuentePlan();
     }
     function toggleFuentePlan() {
@@ -390,6 +396,14 @@
                                 Con rango de meses abre todos los del desde/hasta. Con meses en particular, solo los que cargues (aunque no sean seguidos).
                                 Dejá «Layout de columnas» en Legacy para usar esta opción.
                             </p>
+                            <p class="text-muted small mb-0 mt-1" id="ayuda-control-mensual-rd" style="display:none">
+                                Cada mes del rango muestra solo su importe. En el último mes suma presupuesto, la diferencia contra presupuesto y la diferencia contra el mes anterior.
+                                No incluye año anterior. Dejá «Layout de columnas» en Legacy para usar esta opción.
+                            </p>
+                            <p class="text-muted small mb-0 mt-1" id="ayuda-comparativo-acumulado-rd" style="display:none">
+                                Un solo bloque para todo el rango: año anterior (el mismo tramo, un año atrás), año actual, presupuesto, diferencia contra presupuesto y diferencia contra el año anterior.
+                                El % contra presupuesto se divide por el presupuesto; el % contra el año anterior, por el año actual. Si el divisor es cero, el % queda en 100.
+                            </p>
                         </div>
                         <div class="form-group col-md-4">
                             <label>TC consolidación (FX)</label>
@@ -404,7 +418,7 @@
                         </div>
                     </div>
 
-                    <div class="form-row" id="panel-plan-rd" style="@if (!in_array($filtros['columnas_layout'] ?? '', ['comparativo', 'comparativo_meses'], true)) display:none @endif">
+                    <div class="form-row" id="panel-plan-rd" style="@if (!in_array($filtros['columnas_layout'] ?? '', ['comparativo', 'comparativo_meses', 'control_mensual', 'comparativo_acumulado'], true)) display:none @endif">
                         <div class="form-group col-md-4">
                             <label>Fuente del Plan</label>
                             <select name="fuente_plan" id="rd_fuente_plan" class="form-control">

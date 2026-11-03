@@ -268,26 +268,12 @@ final class FlashCajaLFlashCalculoSupport
             + ($budget['budget_ayb'] * $index['season_index'])
             + ($budget['budget_estac'] * $index['sindex_estac']);
 
-        $coefElec = 0.0;
-        if ($budget['total_sslot'] != 0.0) {
-            $coefElec += $budget['budget_slot'] * $diasMes / $budget['total_sslot'] * $index['sindex_slot'];
-        }
-        if ($budget['total_srul'] != 0.0) {
-            $coefElec += $budget['budget_rul'] * $diasMes / $budget['total_srul'] * $index['sindex_rul'];
-        }
-        if ($budget['total_spoker'] != 0.0) {
-            $coefElec += $budget['budget_poker'] * $diasMes / $budget['total_spoker'] * $index['sindex_poker'];
-        }
-
-        $coefBingo = ($budget['total_sbingo'] != 0.0)
-            ? $budget['budget_bingo'] * $diasMes / $budget['total_sbingo'] * $index['sindex_bingo']
-            : 0.0;
-        $coefAyb = ($budget['total_season'] != 0.0)
-            ? $budget['budget_ayb'] * $diasMes / $budget['total_season'] * $index['season_index']
-            : 0.0;
-        $coefEstac = ($budget['total_s_estac'] != 0.0)
-            ? $budget['budget_estac'] * $diasMes / $budget['total_s_estac'] * $index['sindex_estac']
-            : 0.0;
+        $coefElec = self::coefSeason($budget['budget_slot'], $budget['total_sslot'], $index['sindex_slot'], $diasMes)
+            + self::coefSeason($budget['budget_rul'], $budget['total_srul'], $index['sindex_rul'], $diasMes)
+            + self::coefSeason($budget['budget_poker'], $budget['total_spoker'], $index['sindex_poker'], $diasMes);
+        $coefBingo = self::coefSeason($budget['budget_bingo'], $budget['total_sbingo'], $index['sindex_bingo'], $diasMes);
+        $coefAyb = self::coefSeason($budget['budget_ayb'], $budget['total_season'], $index['season_index'], $diasMes);
+        $coefEstac = self::coefSeason($budget['budget_estac'], $budget['total_s_estac'], $index['sindex_estac'], $diasMes);
 
         return [
             'coef_total' => round($coefTotal, 2),
@@ -462,6 +448,23 @@ final class FlashCajaLFlashCalculoSupport
             'vehiculos' => 0, 'vending' => 0.0, 'show' => 0.0, 'otros' => 0.0,
             'revenues' => 0.0, 'revenues_cust' => 0.0, 'pos_online' => 0, 'comentario' => '',
         ];
+    }
+
+    /**
+     * Presupuesto estacional de un rubro para un día.
+     * Mes normalizado (suma de índices = días del mes): budget * días / suma * índice.
+     * Suma que no cierra con el mes: budget * índice, sin repartir el mes sobre los días cargados.
+     */
+    private static function coefSeason(float $budget, float $total, float $index, int $diasMes): float
+    {
+        if ($budget == 0.0 || $index == 0.0) {
+            return 0.0;
+        }
+        if ($total != 0.0 && $diasMes > 0 && abs($total - $diasMes) < 0.001) {
+            return $budget * $diasMes / $total * $index;
+        }
+
+        return $budget * $index;
     }
 
     private static function pct(float $num, float $den): float

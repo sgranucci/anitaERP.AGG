@@ -38,6 +38,9 @@ class ArcaCaeaPresentacionService
         private ArcaCaeaQuincenalOrquestadorService $orquestador,
     ) {}
 
+    /** Segundos máximos de Anita al armar el listado. null = informe en cola, sin tope de pantalla. */
+    private ?int $presupuestoAnitaPantalla = null;
+
     /**
      * Recuento en vivo para la pantalla CAEA. No persiste ni consulta SOAP ARCA.
      * El último autorizado se reusa del máximo ya conocido (esta u otras quincenas).
@@ -52,7 +55,12 @@ class ArcaCaeaPresentacionService
             is_array($prev['ultimos_arca'] ?? null) ? $prev['ultimos_arca'] : [],
         );
 
-        return $this->resumirPeriodo($registro, $ultimos, $incluirAnita);
+        $this->presupuestoAnitaPantalla = 8;
+        try {
+            return $this->resumirPeriodo($registro, $ultimos, $incluirAnita);
+        } finally {
+            $this->presupuestoAnitaPantalla = null;
+        }
     }
 
     /**
@@ -1621,9 +1629,18 @@ class ArcaCaeaPresentacionService
             return [];
         }
 
+        $timeout = null;
+        if ($this->presupuestoAnitaPantalla !== null) {
+            $timeout = ArcaCaeaAnitaVencaeConsultaSupport::reservarPresupuestoPantalla($this->presupuestoAnitaPantalla);
+            if ($timeout === null) {
+                return [];
+            }
+        }
+
         return ArcaCaeaAnitaVencaeConsultaSupport::listarPorCaeaIvaVentas(
             $nroCaea,
             $this->sucursalesCaeaEmpresa((int) $registro->empresa_id),
+            $timeout,
         );
     }
 
