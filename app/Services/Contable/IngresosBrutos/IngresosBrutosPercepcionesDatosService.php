@@ -111,8 +111,12 @@ final class IngresosBrutosPercepcionesDatosService
 
             $tipo = strtoupper(trim((string) ($fila['ven_tipo'] ?? '')));
             $signo = (str_starts_with($tipo, 'NC') || str_starts_with($tipo, 'C')) ? -1.0 : 1.0;
-            $cot = (float) ($fila['ven_cotizacion'] ?? 1);
-            $coef = $cot > 0 ? $cot : 1.0;
+            // p-ingbruto.c: calcula_coef('1', ven_cod_mon, ven_cotizacion).
+            // En pesos la cotización es el dólar del día y no convierte el gravado ni la percepción.
+            $coef = $this->coeficienteMonedaAnita(
+                $fila['ven_cod_mon'] ?? 1,
+                $fila['ven_cotizacion'] ?? 1,
+            );
             $base = round(((float) ($fila['ven_gravado'] ?? 0) + (float) ($fila['ven_gravado_ot'] ?? 0)) * $signo * $coef, 2);
             $importe = round($importe * $signo * $coef, 2);
             $fechaIso = IngresosBrutosFormatoArbaSupport::fechaIsoDesdeAnita((int) ($fila['ven_fecha'] ?? 0));
@@ -188,7 +192,7 @@ final class IngresosBrutosPercepcionesDatosService
         $out = [];
         foreach ($ventas as $venta) {
             $signo = SicoreVentaImpuestoSupport::signoVenta($venta);
-            $coef = SicoreVentaImpuestoSupport::coefMoneda($venta);
+            $coef = $this->coeficienteMonedaAnita($venta->moneda_id ?? 1, $venta->cotizacion ?? 1);
             foreach ($venta->venta_impuestos as $imp) {
                 $concepto = trim((string) $imp->concepto);
                 if (! $this->esPercepcionProvincia($concepto, $fragmentos)) {
@@ -290,6 +294,17 @@ final class IngresosBrutosPercepcionesDatosService
         $nombre = $maestro !== '' ? $maestro : trim($comprobante);
 
         return substr($nombre, 0, 30);
+    }
+
+    /**
+     * Misma moneda que el peso: coeficiente 1. Moneda extranjera: la cotización del comprobante.
+     */
+    private function coeficienteMonedaAnita(mixed $codigoMoneda, mixed $cotizacion): float
+    {
+        $moneda = (int) $codigoMoneda;
+        $cot = (float) $cotizacion;
+
+        return calculaCoeficienteMoneda(1, $moneda > 0 ? $moneda : 1, $cot > 0 ? $cot : 1.0);
     }
 
     private function tipoDocumentoArba(string $tipoCompAnita): string
