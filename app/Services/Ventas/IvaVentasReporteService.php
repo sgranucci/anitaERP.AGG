@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Ventas;
 
 use App\Models\Configuracion\Provincia;
+use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasAuditoriaCorrelatividadSupport;
@@ -251,15 +252,19 @@ final class IvaVentasReporteService
         $puntoventaIds = IvaVentasListadoFiltros::idsDesdeFiltros($filtros);
         $tipotransaccionId = (int) ($filtros['tipotransaccion_id'] ?? 0);
 
+        $puntoventaQuery = Puntoventa::query()->where('empresa_id', $empresaId);
+        if ($filtraIvaVentas) {
+            $puntoventaQuery->where('iva_ventas', true);
+        }
+        $idsPuntoventa = $puntoventaQuery->pluck('id')->all();
+        if ($idsPuntoventa === []) {
+            $idsPuntoventa = [0];
+        }
+
         $query = Venta::query()
-            ->whereHas('puntoventas', function (Builder $q) use ($empresaId, $filtraIvaVentas) {
-                $q->where('empresa_id', $empresaId);
-                if ($filtraIvaVentas) {
-                    $q->where('iva_ventas', true);
-                }
-            })
-            ->whereDate($campoFecha, '>=', $filtros['fecha_desde'])
-            ->whereDate($campoFecha, '<=', $filtros['fecha_hasta']);
+            ->whereIn('puntoventa_id', $idsPuntoventa)
+            ->where($campoFecha, '>=', $filtros['fecha_desde'])
+            ->where($campoFecha, '<=', $filtros['fecha_hasta']);
 
         if ($puntoventaIds !== []) {
             $query->whereIn('puntoventa_id', $puntoventaIds);

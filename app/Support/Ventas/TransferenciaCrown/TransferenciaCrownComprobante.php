@@ -106,4 +106,42 @@ final class TransferenciaCrownComprobante
 
         return round($saldo, 2);
     }
+
+    /**
+     * La emisión (ven_fecha) es la fecha del comprobante.
+     * La jornada (ven_fecha_vto) es el día de venta de Anita: el cierre puede
+     * pasar la medianoche y la emisión queda en el día siguiente.
+     *
+     * @return array{fecha: string, fechajornada: string}
+     */
+    public static function fechasEmisionYJornada(mixed $emision, mixed $vto, string $hoy): array
+    {
+        $fecha = self::fechaYmd($emision);
+        $jornada = self::fechaYmd($vto);
+        if ($fecha === null && $jornada === null) {
+            return ['fecha' => $hoy, 'fechajornada' => $hoy];
+        }
+        if ($fecha === null) {
+            $fecha = $jornada;
+        }
+        if ($jornada === null) {
+            $jornada = $fecha;
+        }
+
+        return ['fecha' => $fecha, 'fechajornada' => $jornada];
+    }
+
+    private static function fechaYmd(mixed $valor): ?string
+    {
+        $digitos = preg_replace('/\D+/', '', (string) $valor) ?? '';
+        if (strlen($digitos) !== 8) {
+            return null;
+        }
+        $dt = \DateTimeImmutable::createFromFormat('!Ymd', $digitos);
+        if ($dt === false || $dt->format('Ymd') !== $digitos) {
+            return null;
+        }
+
+        return $dt->format('Y-m-d');
+    }
 }

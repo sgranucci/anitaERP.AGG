@@ -185,13 +185,19 @@ final class TransferenciaVentaGastronomiaService
         }
 
         $tipoErp = str_starts_with($tipo, 'NC') ? 'NCD' : 'FAC';
+        $fechas = TransferenciaCrownComprobante::fechasEmisionYJornada(
+            $venta->ven_fecha ?? null,
+            $venta->ven_fecha_vto ?? null,
+            Carbon::today()->format('Y-m-d'),
+        );
         $fila = [
             'tipo' => $tipoErp,
             'tipo_anita' => $tipo,
             'letra' => $letra !== '' ? $letra : 'B',
             'sucursal' => $sucursal,
             'numero' => $numero,
-            'fecha' => $this->fecha($venta->ven_fecha ?? null, $venta->ven_fecha_vto ?? null),
+            'fecha' => $fechas['fecha'],
+            'fechajornada' => $fechas['fechajornada'],
             'nombre' => trim((string) ($venta->ven_nombre_cliente ?? '')),
             'cuit' => preg_replace('/\D+/', '', (string) ($venta->ven_cuit_cli ?? '')) ?? '',
             'domicilio' => '',
@@ -269,18 +275,6 @@ final class TransferenciaVentaGastronomiaService
             .'|'.strtoupper(trim((string) ($linea->subd_letra ?? '')))
             .'|'.(int) ($linea->subd_sucursal ?? 0)
             .'|'.(int) ($linea->subd_nro ?? 0);
-    }
-
-    private function fecha(mixed $emision, mixed $vto): string
-    {
-        foreach ([$emision, $vto] as $valor) {
-            $digitos = preg_replace('/\D+/', '', (string) $valor) ?? '';
-            if (strlen($digitos) === 8) {
-                return Carbon::createFromFormat('Ymd', $digitos)->format('Y-m-d');
-            }
-        }
-
-        return Carbon::today()->format('Y-m-d');
     }
 
     /**

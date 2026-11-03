@@ -139,6 +139,10 @@ final class TransferenciaCrownFacturaWriter
         $puntoventa = $this->punto((int) $fila['sucursal']);
         $empresaId = (int) $puntoventa->empresa_id;
         $fecha = (string) $fila['fecha'];
+        $jornada = trim((string) ($fila['fechajornada'] ?? ''));
+        if ($jornada === '') {
+            $jornada = $fecha;
+        }
         if (PeriodoContableCierreSupport::fechaEnPeriodoCerrado($empresaId, $fecha, PeriodoContableCierreSupport::ALCANCE_FACTURACION)
             || PeriodoContableCierreSupport::fechaEnPeriodoCerrado($empresaId, $fecha, PeriodoContableCierreSupport::ALCANCE_CONTABLE)) {
             throw new RuntimeException('La fecha está dentro de un período cerrado.');
@@ -168,11 +172,11 @@ final class TransferenciaCrownFacturaWriter
 
         return DB::transaction(function () use (
             $fila, $usuarioId, $leyenda, $lineas, $tipo, $puntoventa, $empresaId,
-            $fecha, $cliente, $signo, $total, $monedaId, $cotizacion, $nombre, $codigo, $neto
+            $fecha, $jornada, $cliente, $signo, $total, $monedaId, $cotizacion, $nombre, $codigo, $neto
         ): array {
             $venta = Venta::query()->create([
                 'fecha' => $fecha,
-                'fechajornada' => $fecha,
+                'fechajornada' => $jornada,
                 'tipotransaccion_id' => (int) $tipo->id,
                 'puntoventa_id' => (int) $puntoventa->id,
                 'numerocomprobante' => (int) $fila['numero'],

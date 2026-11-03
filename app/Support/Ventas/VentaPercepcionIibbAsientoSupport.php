@@ -29,6 +29,9 @@ final class VentaPercepcionIibbAsientoSupport
             if (self::yaTienePercepcion($venta->venta_impuestos ?? collect())) {
                 continue;
             }
+            if (abs(self::componentesPie($venta)['gap']) <= 0.05) {
+                continue;
+            }
             $pendientes[] = $venta;
         }
         if ($pendientes === []) {
@@ -109,21 +112,28 @@ final class VentaPercepcionIibbAsientoSupport
         return false;
     }
 
-    private static function elTotalIncluye(Venta $venta, float $percepcion): bool
+    /**
+     * @return array{total: float, gravado: float, resto: float, gap: float}
+     */
+    private static function componentesPie(Venta $venta): array
     {
         $total = 0.0;
         $resto = 0.0;
+        $gravado = 0.0;
         foreach ($venta->venta_impuestos ?? [] as $imp) {
             $concepto = trim((string) ($imp->concepto ?? ''));
             $importe = abs((float) ($imp->importe ?? 0));
             if (strcasecmp($concepto, 'Total') === 0) {
                 $total = $importe;
-                continue;
-            }
-            if (strcasecmp($concepto, 'Subtotal') === 0 || str_starts_with($concepto, 'Descuento')) {
+
                 continue;
             }
             if (stripos($concepto, 'Gravado') === 0) {
+                $gravado += $importe;
+
+                continue;
+            }
+            if (strcasecmp($concepto, 'Subtotal') === 0 || str_starts_with($concepto, 'Descuento')) {
                 continue;
             }
             $resto += $importe;
@@ -131,15 +141,18 @@ final class VentaPercepcionIibbAsientoSupport
         if ($total < 0.01) {
             $total = abs((float) ($venta->total ?? 0));
         }
-        $gravado = 0.0;
-        foreach ($venta->venta_impuestos ?? [] as $imp) {
-            $concepto = trim((string) ($imp->concepto ?? ''));
-            if (stripos($concepto, 'Gravado') === 0) {
-                $gravado += abs((float) ($imp->importe ?? 0));
-            }
-        }
 
-        $gap = round($total - $gravado - $resto, 2);
+        return [
+            'total' => $total,
+            'gravado' => $gravado,
+            'resto' => $resto,
+            'gap' => round($total - $gravado - $resto, 2),
+        ];
+    }
+
+    private static function elTotalIncluye(Venta $venta, float $percepcion): bool
+    {
+        $gap = self::componentesPie($venta)['gap'];
 
         return abs($gap - $percepcion) <= 0.05;
     }

@@ -191,6 +191,12 @@ final class IvaVentasConciliacionUnidadCuentaSupport
             return;
         }
 
+        // La fecha del asiento y la jornada difieren a lo sumo un día (corte de medianoche).
+        // Acotar por a.fecha deja que la consulta parta de los asientos del período
+        // en lugar de recorrer todo el historial de movimientos de las cuentas.
+        $query->where('a.fecha', '>=', date('Y-m-d', strtotime($fechaDesde.' -2 days')))
+            ->where('a.fecha', '<=', date('Y-m-d', strtotime($fechaHasta.' +2 days')));
+
         if ($ordenFecha !== IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA) {
             $query->whereDate('a.fecha', '>=', $fechaDesde)
                 ->whereDate('a.fecha', '<=', $fechaHasta);

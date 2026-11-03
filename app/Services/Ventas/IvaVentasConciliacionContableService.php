@@ -11,7 +11,9 @@ use App\Support\Ventas\IvaVentas\IvaVentasConciliacionModoSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasConciliacionUnidadCuentaSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasFeaturesSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasUnidadNegocioSupport;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 final class IvaVentasConciliacionContableService
@@ -40,10 +42,17 @@ final class IvaVentasConciliacionContableService
 
         $ctamov = ['habilitada' => false];
 
-        $statsAsiento = $this->statsAsientoPorVenta($ventaIds);
+        $statsAsiento = $this->statsAsientoPorVenta($empresaId, $filtros, $ventaIds);
         $contableEmpresa = $this->totalesContablesEmpresa($empresaId, $filtros, $cuentas);
         $erpRubro = $this->desgloseErpPorRubro($filas, $empresaId);
-        $contableVinculadoPv = $this->totalesContablesVinculadosPorPv($empresaId, $cuentas, $ventaIds, $filtros);
+        $idsCuentas = array_values(array_unique(array_merge(
+            $cuentas['ventas_gravadas'] ?? [],
+            $cuentas['ventas_kiosco'] ?? [],
+            $cuentas['iva_debito'] ?? [],
+            $cuentas['percepcion_iva'] ?? [],
+        )));
+        $importesPorVenta = $this->importesContablesPorVenta($empresaId, $ventaIds, $idsCuentas, $filtros);
+        $contableVinculadoPv = $this->totalesContablesVinculadosPorPv($cuentas, $importesPorVenta);
 
         $porPuntoventa = $this->armarFilasPorPuntoventa(
             $totalesPorPv,
@@ -66,7 +75,7 @@ final class IvaVentasConciliacionContableService
             $erpRubro,
             $porUnidadNegocio,
         );
-        $porFactura = $this->conciliarPorFacturaVinculada($empresaId, $filtros, $filas, $cuentas, $statsAsiento);
+        $porFactura = $this->conciliarPorFacturaVinculada($filas, $cuentas, $statsAsiento, $importesPorVenta);
         $auditoriaDiaria = $this->auditoriaDiaria($empresaId, $filtros, $filas, $cuentas, $ctamov);
         $auditoriaDiariaUnidad = $conciliarPorUnidad
             ? $this->auditoriaDiariaPorUnidadNegocio($empresaId, $filtros, $filas)
@@ -461,8 +470,7 @@ final class IvaVentasConciliacionContableService
 
         $unidadExpr = IvaVentasConciliacionUnidadCuentaSupport::sqlClasificarUnidadAsiento($vendingPvIds);
 
-        $query = DB::table('asiento as a')
-            ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
+        $query = $this->queryAsientosMovimientos($empresaId, $filtros)
             ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
             ->leftJoin('venta as v', function ($join) {
                 $join->on('v.id', '=', 'a.venta_id');
@@ -552,8 +560,7 @@ final class IvaVentasConciliacionContableService
 
         $diaExpr = IvaVentasConciliacionUnidadCuentaSupport::sqlDiaContableExpr($ordenFecha);
 
-        $query = DB::table('asiento as a')
-            ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
+        $query = $this->queryAsientosMovimientos($empresaId, $filtros)
             ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
             ->leftJoin('venta as v', function ($join) {
                 $join->on('v.id', '=', 'a.venta_id');
@@ -627,8 +634,7 @@ final class IvaVentasConciliacionContableService
             ];
         }
 
-        $query = DB::table('asiento as a')
-            ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
+        $query = $this->queryAsientosMovimientos($empresaId, $filtros)
             ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
             ->leftJoin('venta as v', function ($join) {
                 $join->on('v.id', '=', 'a.venta_id');
@@ -670,71 +676,157 @@ final class IvaVentasConciliacionContableService
     }
 
     /**
-     * @param  array<string, mixed>  $cuentas
+     * Una sola lectura por lote, partiendo de las ventas del reporte.
+     * Recorrer el historial de la cuenta (cientos de miles de movimientos) por cada lote era el costo del reporte.
+     *
      * @param  list<int>  $ventaIds
+     * @param  list<int>  $cuentaIds
      * @param  array<string, mixed>  $filtros
-     * @return array<int, array<string, float>>
+     * @return array<int, array{puntoventa_id: int, cuentas: array<int, float>}>
      */
-    private function totalesContablesVinculadosPorPv(int $empresaId, array $cuentas, array $ventaIds, array $filtros): array
+    private function importesContablesPorVenta(int $empresaId, array $ventaIds, array $cuentaIds, array $filtros): array
     {
-        if ($ventaIds === []) {
+        $ventaIds = array_values(array_unique(array_filter(array_map('intval', $ventaIds))));
+        $cuentaIds = array_values(array_unique(array_filter(array_map('intval', $cuentaIds))));
+        if ($ventaIds === [] || $cuentaIds === []) {
             return [];
         }
 
-        $idsVentas = array_merge(
-            $cuentas['ventas_gravadas'] ?? [],
-            $cuentas['ventas_kiosco'] ?? [],
-        );
-        $idsIva = array_merge(
-            $cuentas['iva_debito'] ?? [],
-            $cuentas['percepcion_iva'] ?? [],
-        );
-        $idsTodos = array_values(array_unique(array_merge($idsVentas, $idsIva)));
+        $buscadas = array_fill_keys($ventaIds, true);
+        $out = [];
+        $coef = $this->sqlCoeficienteMonedaAsiento($filtros);
+        $query = DB::table('venta as v')
+            ->join('asiento as a', function ($join) use ($empresaId) {
+                $join->on('a.venta_id', '=', 'v.id')
+                    ->where('a.empresa_id', '=', $empresaId);
+            })
+            ->join('asiento_movimiento as am', function ($join) use ($cuentaIds) {
+                $join->on('am.asiento_id', '=', 'a.id')
+                    ->whereIn('am.cuentacontable_id', $cuentaIds);
+            })
+            ->groupBy('a.venta_id', 'v.puntoventa_id', 'am.cuentacontable_id')
+            ->selectRaw('a.venta_id, v.puntoventa_id, am.cuentacontable_id as cuenta_id, SUM(-am.monto * ('.$coef.')) as importe');
+        if (! $this->acotarVentasAlPeriodo($query, $filtros)) {
+            $query->whereIn('v.id', $ventaIds);
+        }
 
-        if ($idsTodos === []) {
-            return [];
+        foreach ($query->get() as $row) {
+            $ventaId = (int) ($row->venta_id ?? 0);
+            $cuentaId = (int) ($row->cuenta_id ?? 0);
+            if ($ventaId <= 0 || $cuentaId <= 0 || ! isset($buscadas[$ventaId])) {
+                continue;
+            }
+            if (! isset($out[$ventaId])) {
+                $out[$ventaId] = [
+                    'puntoventa_id' => (int) ($row->puntoventa_id ?? 0),
+                    'cuentas' => [],
+                ];
+            }
+            $out[$ventaId]['cuentas'][$cuentaId] = ($out[$ventaId]['cuentas'][$cuentaId] ?? 0.0) + (float) $row->importe;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $cuentas
+     * @param  array<int, array{puntoventa_id: int, cuentas: array<int, float>}>  $importesPorVenta
+     * @return array<int, array<string, float>>
+     */
+    private function totalesContablesVinculadosPorPv(array $cuentas, array $importesPorVenta): array
+    {
+        $out = [];
+        foreach ($importesPorVenta as $info) {
+            $pvId = (int) ($info['puntoventa_id'] ?? 0);
+            if ($pvId <= 0) {
+                continue;
+            }
+            if (! isset($out[$pvId])) {
+                $out[$pvId] = [
+                    'ventas_gravadas' => 0.0,
+                    'ventas_kiosco' => 0.0,
+                    'iva' => 0.0,
+                    'ventas_total' => 0.0,
+                ];
+            }
+            foreach ($info['cuentas'] as $cuentaId => $importe) {
+                $cuentaId = (int) $cuentaId;
+                if (in_array($cuentaId, $cuentas['iva_debito'] ?? [], true) || in_array($cuentaId, $cuentas['percepcion_iva'] ?? [], true)) {
+                    $out[$pvId]['iva'] += (float) $importe;
+                } elseif (in_array($cuentaId, $cuentas['ventas_kiosco'] ?? [], true)) {
+                    $out[$pvId]['ventas_kiosco'] += (float) $importe;
+                } elseif (in_array($cuentaId, $cuentas['ventas_gravadas'] ?? [], true)) {
+                    $out[$pvId]['ventas_gravadas'] += (float) $importe;
+                }
+            }
+        }
+
+        foreach ($out as &$bucket) {
+            $bucket['ventas_gravadas'] = round($bucket['ventas_gravadas'], 2);
+            $bucket['ventas_kiosco'] = round($bucket['ventas_kiosco'], 2);
+            $bucket['iva'] = round($bucket['iva'], 2);
+            $bucket['ventas_total'] = round($bucket['ventas_gravadas'] + $bucket['ventas_kiosco'], 2);
+        }
+        unset($bucket);
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  list<int>  $ventaIds
+     * @return array{con_asiento: int, sin_asiento: int, ventas_con_asiento: list<int>, asiento_por_venta: array<int, int>}
+     */
+    private function statsAsientoPorVenta(int $empresaId, array $filtros, array $ventaIds): array
+    {
+        if ($ventaIds === []) {
+            return ['con_asiento' => 0, 'sin_asiento' => 0, 'ventas_con_asiento' => [], 'asiento_por_venta' => []];
+        }
+
+        $buscadas = array_fill_keys($ventaIds, true);
+        $asientoPorVenta = [];
+        foreach ($this->asientoIdPorVentaDelPeriodo($empresaId, $filtros, $ventaIds) as $ventaId => $asientoId) {
+            if (isset($buscadas[$ventaId])) {
+                $asientoPorVenta[$ventaId] = $asientoId;
+            }
+        }
+
+        $totalCon = count($asientoPorVenta);
+
+        return [
+            'con_asiento' => $totalCon,
+            'sin_asiento' => max(0, count($ventaIds) - $totalCon),
+            'ventas_con_asiento' => array_keys($asientoPorVenta),
+            'asiento_por_venta' => $asientoPorVenta,
+        ];
+    }
+
+    /**
+     * Asiento de cada venta del período, partiendo de la fecha de la venta.
+     * whereIn sobre asiento.venta_id no usa el índice y recorre la tabla entera.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @param  list<int>  $ventaIds
+     * @return array<int, int>
+     */
+    private function asientoIdPorVentaDelPeriodo(int $empresaId, array $filtros, array $ventaIds): array
+    {
+        $query = DB::table('venta as v')
+            ->join('asiento as a', function ($join) use ($empresaId) {
+                $join->on('a.venta_id', '=', 'v.id')
+                    ->where('a.empresa_id', '=', $empresaId);
+            })
+            ->groupBy('a.venta_id')
+            ->selectRaw('a.venta_id, MAX(a.id) as asiento_id');
+        if (! $this->acotarVentasAlPeriodo($query, $filtros)) {
+            $query->whereIn('v.id', $ventaIds);
         }
 
         $out = [];
-        foreach (array_chunk($ventaIds, 2000) as $chunk) {
-            $rows = DB::table('asiento as a')
-                ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
-                ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
-                ->join('venta as v', 'v.id', '=', 'a.venta_id')
-                ->where('a.empresa_id', $empresaId)
-                ->whereIn('a.venta_id', $chunk)
-                ->whereIn('cc.id', $idsTodos)
-                ->selectRaw('v.puntoventa_id, cc.id as cuenta_id, SUM(-am.monto * ('.$this->sqlCoeficienteMonedaAsiento($filtros).')) as importe')
-                ->groupBy('v.puntoventa_id', 'cc.id')
-                ->get();
-
-            foreach ($rows as $row) {
-                $pvId = (int) ($row->puntoventa_id ?? 0);
-                if ($pvId <= 0) {
-                    continue;
-                }
-
-                if (! isset($out[$pvId])) {
-                    $out[$pvId] = [
-                        'ventas_gravadas' => 0.0,
-                        'ventas_kiosco' => 0.0,
-                        'iva' => 0.0,
-                        'ventas_total' => 0.0,
-                    ];
-                }
-
-                $importe = round((float) ($row->importe ?? 0), 2);
-                $cuentaId = (int) ($row->cuenta_id ?? 0);
-
-                if (in_array($cuentaId, $cuentas['iva_debito'] ?? [], true) || in_array($cuentaId, $cuentas['percepcion_iva'] ?? [], true)) {
-                    $out[$pvId]['iva'] = round($out[$pvId]['iva'] + $importe, 2);
-                } elseif (in_array($cuentaId, $cuentas['ventas_kiosco'] ?? [], true)) {
-                    $out[$pvId]['ventas_kiosco'] = round($out[$pvId]['ventas_kiosco'] + $importe, 2);
-                } elseif (in_array($cuentaId, $cuentas['ventas_gravadas'] ?? [], true)) {
-                    $out[$pvId]['ventas_gravadas'] = round($out[$pvId]['ventas_gravadas'] + $importe, 2);
-                }
-
-                $out[$pvId]['ventas_total'] = round($out[$pvId]['ventas_gravadas'] + $out[$pvId]['ventas_kiosco'], 2);
+        foreach ($query->get() as $row) {
+            $ventaId = (int) ($row->venta_id ?? 0);
+            if ($ventaId > 0) {
+                $out[$ventaId] = (int) $row->asiento_id;
             }
         }
 
@@ -742,35 +834,23 @@ final class IvaVentasConciliacionContableService
     }
 
     /**
-     * @param  list<int>  $ventaIds
-     * @return array{con_asiento: int, sin_asiento: int, ventas_con_asiento: list<int>}
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array<string, mixed>  $filtros
      */
-    private function statsAsientoPorVenta(array $ventaIds): array
+    private function acotarVentasAlPeriodo($query, array $filtros): bool
     {
-        if ($ventaIds === []) {
-            return ['con_asiento' => 0, 'sin_asiento' => 0, 'ventas_con_asiento' => []];
+        $desde = (string) ($filtros['fecha_desde'] ?? '');
+        $hasta = (string) ($filtros['fecha_hasta'] ?? '');
+        if ($desde === '' || $hasta === '') {
+            return false;
         }
 
-        $conAsiento = [];
-        foreach (array_chunk($ventaIds, 2000) as $chunk) {
-            $ids = DB::table('asiento')
-                ->whereIn('venta_id', $chunk)
-                ->pluck('venta_id')
-                ->map(static fn ($id) => (int) $id)
-                ->all();
-            foreach ($ids as $id) {
-                $conAsiento[$id] = true;
-            }
-        }
+        $porEmision = ($filtros['orden_fecha'] ?? IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA)
+            === IvaVentasListadoFiltros::ORDEN_FECHA;
+        $campo = 'v.'.($porEmision ? 'fecha' : 'fechajornada');
+        $query->where($campo, '>=', $desde)->where($campo, '<=', $hasta);
 
-        $totalCon = count($conAsiento);
-        $totalSin = max(0, count($ventaIds) - $totalCon);
-
-        return [
-            'con_asiento' => $totalCon,
-            'sin_asiento' => $totalSin,
-            'ventas_con_asiento' => array_keys($conAsiento),
-        ];
+        return true;
     }
 
     /**
@@ -1271,13 +1351,13 @@ final class IvaVentasConciliacionContableService
     /**
      * Conciliación comprobante a comprobante (solo ventas con asiento vinculado).
      *
-     * @param  array<string, mixed>  $filtros
      * @param  list<array<string, mixed>>  $filas
      * @param  array<string, mixed>  $cuentas
      * @param  array<string, mixed>  $statsAsiento
+     * @param  array<int, array{puntoventa_id: int, cuentas: array<int, float>}>  $importesPorVenta
      * @return array<string, mixed>
      */
-    private function conciliarPorFacturaVinculada(int $empresaId, array $filtros, array $filas, array $cuentas, array $statsAsiento): array
+    private function conciliarPorFacturaVinculada(array $filas, array $cuentas, array $statsAsiento, array $importesPorVenta): array
     {
         $ventasConAsiento = array_flip($statsAsiento['ventas_con_asiento'] ?? []);
         $idsVentasGrav = $cuentas['ventas_gravadas'] ?? [];
@@ -1308,33 +1388,15 @@ final class IvaVentasConciliacionContableService
         }
         $ventaIdsVinculadas = array_values(array_unique($ventaIdsVinculadas));
 
-        $asientoPorVenta = [];
+        $asientoPorVenta = $statsAsiento['asiento_por_venta'] ?? [];
+
         $contablePorVenta = [];
-        foreach (array_chunk($ventaIdsVinculadas, 2000) as $chunk) {
-            $asientos = DB::table('asiento')
-                ->where('empresa_id', $empresaId)
-                ->whereIn('venta_id', $chunk)
-                ->select('id', 'venta_id')
-                ->get();
-            foreach ($asientos as $a) {
-                $asientoPorVenta[(int) $a->venta_id] = (int) $a->id;
+        foreach ($ventaIdsVinculadas as $ventaId) {
+            $cuentasVenta = $importesPorVenta[$ventaId]['cuentas'] ?? null;
+            if ($cuentasVenta === null) {
+                continue;
             }
-
-            $rows = DB::table('asiento as a')
-                ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
-                ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
-                ->where('a.empresa_id', $empresaId)
-                ->whereIn('a.venta_id', $chunk)
-                ->whereIn('cc.id', $idsTodos)
-                ->selectRaw('a.venta_id, cc.id as cuenta_id, SUM(-am.monto * ('.$this->sqlCoeficienteMonedaAsiento($filtros).')) as importe')
-                ->groupBy('a.venta_id', 'cc.id')
-                ->get();
-
-            foreach ($rows as $row) {
-                $ventaId = (int) ($row->venta_id ?? 0);
-                if ($ventaId <= 0) {
-                    continue;
-                }
+            foreach ($cuentasVenta as $cuentaId => $importeRaw) {
                 if (! isset($contablePorVenta[$ventaId])) {
                     $contablePorVenta[$ventaId] = [
                         'ventas_gravadas' => 0.0,
@@ -1342,8 +1404,8 @@ final class IvaVentasConciliacionContableService
                         'iva' => 0.0,
                     ];
                 }
-                $importe = round((float) ($row->importe ?? 0), 2);
-                $cuentaId = (int) ($row->cuenta_id ?? 0);
+                $importe = round((float) $importeRaw, 2);
+                $cuentaId = (int) $cuentaId;
                 if (in_array($cuentaId, $cuentas['iva_debito'] ?? [], true) || in_array($cuentaId, $cuentas['percepcion_iva'] ?? [], true)) {
                     $contablePorVenta[$ventaId]['iva'] = round($contablePorVenta[$ventaId]['iva'] + $importe, 2);
                 } elseif (in_array($cuentaId, $idsKiosco, true)) {
@@ -1476,6 +1538,40 @@ final class IvaVentasConciliacionContableService
         }
 
         return $notas;
+    }
+
+    /**
+     * MySQL/MariaDB entran por el índice de la cuenta y leen todo el historial de movimientos.
+     * STRAIGHT_JOIN obliga a partir del asiento (acotado por fecha). PostgreSQL no tiene esa
+     * cláusula: un subquery con OFFSET 0 materializa los asientos del período y el join sigue
+     * desde ahí. SQLite usa el join normal.
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    private function queryAsientosMovimientos(int $empresaId, array $filtros): Builder
+    {
+        $desde = (string) ($filtros['fecha_desde'] ?? '');
+        $hasta = (string) ($filtros['fecha_hasta'] ?? '');
+        $driver = SqlDialectSupport::driver();
+
+        if (($driver === 'mysql' || $driver === 'mariadb') && $desde !== '' && $hasta !== '') {
+            return DB::table(DB::raw('`asiento` as `a` straight_join `asiento_movimiento` as `am` on `am`.`asiento_id` = `a`.`id`'));
+        }
+
+        if (SqlDialectSupport::esPostgres() && $desde !== '' && $hasta !== '') {
+            $sub = DB::table('asiento')
+                ->select(['id', 'venta_id', 'empresa_id', 'fecha', 'observacion', 'comprobante_proveedor_id'])
+                ->where('empresa_id', $empresaId)
+                ->where('fecha', '>=', date('Y-m-d', strtotime($desde.' -2 days')))
+                ->where('fecha', '<=', date('Y-m-d', strtotime($hasta.' +2 days')))
+                ->offset(0);
+
+            return DB::query()->fromSub($sub, 'a')
+                ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id');
+        }
+
+        return DB::table('asiento as a')
+            ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id');
     }
 
     /**
