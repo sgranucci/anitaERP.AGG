@@ -25,6 +25,7 @@ use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
+use App\Support\Compras\TipotransaccionCompraAsientoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosTipoImputadoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorIvaLineasDesdeOcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
@@ -305,8 +306,12 @@ class ComprobanteProveedorContabilizarService
         // Antes de asentar ERP: si Anita ya tiene la misma clave fiscal, no confirmar.
         ComprobanteProveedorAnitaCompraExistenciaSupport::assertDesdeComprobante($comprobante);
 
-        $escribeAnita = ComprobanteProveedorAnitaBridgeGate::grabacionEnLineaHabilitada();
-        $diferirAnita = $this->anitaEscrituraHabilitada() && ! $escribeAnita;
+        $generaAsiento = TipotransaccionCompraAsientoSupport::generaDesdeComprobante($comprobante);
+        $escribeAnita = $generaAsiento
+            && ComprobanteProveedorAnitaBridgeGate::grabacionEnLineaHabilitada();
+        $diferirAnita = $generaAsiento
+            && $this->anitaEscrituraHabilitada()
+            && ! $escribeAnita;
 
         // Limpia ctamov huérfanos de intentos previos (mismo patrón que recepción COM).
         if ($escribeAnita) {
@@ -331,7 +336,14 @@ class ComprobanteProveedorContabilizarService
                     }
                     $this->assertEstadoPermiteContabilizar($comprobante);
 
-                    $comprobante->load('comprobante_proveedor_recepciones.recepcion_proveedores');
+                    $comprobante->load([
+                        'comprobante_proveedor_recepciones.recepcion_proveedores',
+                        'tipotransaccion_compras',
+                    ]);
+
+                    if (! TipotransaccionCompraAsientoSupport::generaDesdeComprobante($comprobante)) {
+                        return $this->contabilizarSinAsientoEnTransaccion($comprobante);
+                    }
 
                     // 1) Asiento + líneas + saldo, en esta misma transacción.
                     $asientoErp = $this->asientoService->generarAsientoErp($comprobante);
@@ -369,6 +381,24 @@ class ComprobanteProveedorContabilizarService
                     return $asientoErp;
                 });
             });
+
+            if (! empty($resultadoErp['sin_asiento_por_tipo'])) {
+                $this->assertContabilizacionSinAsientoPersistida($comprobanteId);
+
+                $comprobante = Comprobante_Proveedor::query()->findOrFail($comprobanteId);
+                $comprobante->forceFill([
+                    'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::OMITIDO,
+                    'anita_sync_error' => null,
+                    'anita_sync_at' => now(),
+                ])->save();
+
+                $this->enviarLegajoAPagosTrasContabilizar($comprobante);
+
+                app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
+                    ->marcarContabilizado($comprobante, 0);
+
+                return $comprobante->fresh();
+            }
 
             $this->assertContabilizacionPersistida($comprobanteId, (int) $resultadoErp['asiento_id']);
 
@@ -494,6 +524,55 @@ class ComprobanteProveedorContabilizarService
     }
 
     /**
+     * Tipo con asientocontable = N: cuenta corriente sí, asiento/ctamov/Anita no.
+     *
+     * @return array{
+     *     asiento_id: int,
+     *     numeroasiento: string,
+     *     payload_anita: null,
+     *     sin_asiento_por_tipo: true
+     * }
+     */
+    private function contabilizarSinAsientoEnTransaccion(Comprobante_Proveedor $comprobante): array
+    {
+        $this->cuentacorrienteService->generarDesdeComprobante($comprobante);
+        TransaccionServidorSupport::assertSigueAbierta();
+
+        $comprobante->forceFill([
+            'asiento_id' => null,
+            'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
+        ])->save();
+        TransaccionServidorSupport::assertSigueAbierta();
+
+        if ((int) ($comprobante->asiento_id ?? 0) > 0
+            || $comprobante->estado !== ComprobanteProveedorEstados::CONTABILIZADO) {
+            throw new RuntimeException(
+                'El comprobante no quedó contabilizado sin asiento. No se confirmó.'
+            );
+        }
+
+        ComprobanteProveedorConceptogastoResolverSupport::resolverYPersistir($comprobante);
+
+        $abrev = strtoupper(trim((string) ($comprobante->tipotransaccion_compras?->abreviatura ?? '')));
+        Comprobante_Proveedor_Estado::query()->create([
+            'comprobante_proveedor_id' => $comprobante->id,
+            'fecha' => now()->format('Y-m-d'),
+            'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
+            'usuario_id' => Auth::id(),
+            'observacion' => 'Contabilizado en ERP sin asiento (tipo '
+                .($abrev !== '' ? $abrev : '#'.(int) $comprobante->tipotransaccion_compra_id)
+                .' con Asiento contable = No).',
+        ]);
+
+        return [
+            'asiento_id' => 0,
+            'numeroasiento' => '',
+            'payload_anita' => null,
+            'sin_asiento_por_tipo' => true,
+        ];
+    }
+
+    /**
      * Después del commit: comprobante, asiento y líneas tienen que existir juntos.
      * Si no, el catch revierte el ERP antes de tocar Anita.
      */
@@ -513,6 +592,19 @@ class ComprobanteProveedorContabilizarService
         ) {
             throw new RuntimeException(
                 'La contabilización no quedó completa (comprobante, asiento y líneas). Se revierte para no dejar un desajuste.'
+            );
+        }
+    }
+
+    private function assertContabilizacionSinAsientoPersistida(int $comprobanteId): void
+    {
+        $comprobante = Comprobante_Proveedor::query()->find($comprobanteId);
+        if (! $comprobante
+            || (int) ($comprobante->asiento_id ?? 0) > 0
+            || $comprobante->estado !== ComprobanteProveedorEstados::CONTABILIZADO
+        ) {
+            throw new RuntimeException(
+                'La contabilización sin asiento no quedó completa. Se revierte para no dejar un desajuste.'
             );
         }
     }

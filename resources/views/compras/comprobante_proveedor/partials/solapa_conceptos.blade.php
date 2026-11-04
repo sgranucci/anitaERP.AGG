@@ -18,7 +18,7 @@
 @endphp
 
 <div class="row">
-    <div class="{{ $mostrarPreviewAsiento ? 'col-lg-6' : 'col-12' }} mb-3 mb-lg-0">
+    <div id="cp-conceptos-col-iva" class="{{ $mostrarPreviewAsiento ? 'col-lg-6' : 'col-12' }} mb-3 mb-lg-0">
         <h4 class="mb-2">Conceptos de IVA compra</h4>
         <p class="text-muted small mb-3">
             Agregue uno o más renglones. Código + Enter o <kbd>F1</kbd>/lupa para consultar.
@@ -187,8 +187,7 @@
         </div>
     </div>
 
-    @if ($mostrarPreviewAsiento)
-    <div class="col-lg-6">
+    <div id="cp-conceptos-col-asiento" class="col-lg-6 cp-asiento-ui{{ $mostrarPreviewAsiento ? '' : ' d-none' }}">
         <div class="card card-outline card-info h-100 mb-0">
             <div class="card-header py-2 d-flex flex-wrap align-items-center justify-content-between" style="gap:6px;">
                 <strong class="mb-0"><i class="fa fa-calculator"></i> Preview asiento</strong>
@@ -225,5 +224,4 @@
             </div>
         </div>
     </div>
-    @endif
 </div>

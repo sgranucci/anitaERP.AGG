@@ -271,9 +271,14 @@ class Tipotransaccion_CompraController extends Controller
         } else {
             foreach ($data as $row) {
                 $output['data'] .= '<tr>';
+                $asientoFlag = strtoupper(trim((string) ($row->asientocontable ?? 'S')));
+                if ($asientoFlag !== 'N') {
+                    $asientoFlag = 'S';
+                }
                 $output['data'] .= '<td class="id">'.e($row->id).'</td>';
                 $output['data'] .= '<td class="abreviatura">'.e($row->abreviatura).'</td>';
                 $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="asientocontable d-none">'.e($asientoFlag).'</td>';
                 $output['data'] .= '<td>'.e($this->etiquetaRetiene($row->retieneiva ?? null)).'</td>';
                 $output['data'] .= '<td>'.e($this->etiquetaRetiene($row->retieneganancia ?? null)).'</td>';
                 $output['data'] .= '<td>'.e($this->etiquetaRetiene($row->getAttribute('retieneIIBB'))).'</td>';
@@ -314,10 +319,16 @@ class Tipotransaccion_CompraController extends Controller
             return response()->json(['id' => null, 'mensaje' => $motivo]);
         }
 
+        $asientoFlag = strtoupper(trim((string) ($tipo->asientocontable ?? 'S')));
+        if ($asientoFlag !== 'N') {
+            $asientoFlag = 'S';
+        }
+
         return response()->json([
             'id' => (int) $tipo->id,
             'abreviatura' => (string) $tipo->abreviatura,
             'nombre' => (string) $tipo->nombre,
+            'asientocontable' => $asientoFlag,
         ]);
     }
 

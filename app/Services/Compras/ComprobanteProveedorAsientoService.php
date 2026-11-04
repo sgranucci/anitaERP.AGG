@@ -81,6 +81,15 @@ class ComprobanteProveedorAsientoService
      */
     public function generarAsientoErp(Comprobante_Proveedor $comprobante): array
     {
+        if (! \App\Support\Compras\TipotransaccionCompraAsientoSupport::generaDesdeComprobante($comprobante)) {
+            $abrev = strtoupper(trim((string) ($comprobante->tipotransaccion_compras?->abreviatura ?? '')));
+            throw new RuntimeException(
+                'El tipo de comprobante'
+                .($abrev !== '' ? ' '.$abrev : '')
+                .' tiene Asiento contable = No: no se genera asiento.'
+            );
+        }
+
         $preview = $this->armarPreview($comprobante);
         $payload = array_merge($preview['payload_asiento'], ['omitir_anita' => true]);
         unset(
@@ -1056,6 +1065,16 @@ class ComprobanteProveedorAsientoService
             return $this->previewAsientoGrabado($comprobante);
         }
 
+        if (! \App\Support\Compras\TipotransaccionCompraAsientoSupport::generaDesdeComprobante($comprobante)) {
+            return [
+                'activo' => false,
+                'es_preview' => true,
+                'sin_asiento_por_tipo' => true,
+                'avisos' => [],
+                'lineas' => [],
+            ];
+        }
+
         return $this->previewBorrador($comprobante);
     }
 
@@ -1092,6 +1111,16 @@ class ComprobanteProveedorAsientoService
             && (int) ($existente->asiento_id ?? 0) > 0
             && (string) ($existente->origen_entrada ?? '') === ComprobanteProveedorOrigenEntrada::ANITA_IMPORT) {
             return $this->previewAsientoGrabado($existente);
+        }
+
+        if (! \App\Support\Compras\TipotransaccionCompraAsientoSupport::generaDesdeComprobante($comprobante)) {
+            return [
+                'activo' => false,
+                'es_preview' => true,
+                'sin_asiento_por_tipo' => true,
+                'avisos' => [],
+                'lineas' => [],
+            ];
         }
 
         $preview = $this->previewBorrador($comprobante);

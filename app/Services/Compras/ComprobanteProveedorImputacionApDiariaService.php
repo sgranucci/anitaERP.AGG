@@ -153,6 +153,7 @@ final class ComprobanteProveedorImputacionApDiariaService
                 'Solo facturas de origen ERP (excluye importación desde Anita).',
                 'Los comprobantes de ingresos y egresos no tienen cuenta corriente: se comparan con el debe del asiento del movimiento. Su ctamov lo controla el mail de I/E.',
                 'Los comprobantes en BORRADOR se listan aparte: todavía no se contabilizaron, no son un desvío de cuadre.',
+                'Tipos con Asiento contable = No (p. ej. NCI/NDI) se omiten: no llevan asiento ni ctamov.',
                 'El debe a anticipo de una factura anticipada no se netea contra la CC; se controla aparte vs ctamov.',
                 'Importes en $ con la cotización de la operación. Haber suma, Debe resta.',
                 'No incluye OPA ni aplicaciones: solo comprobantes de proveedor.',

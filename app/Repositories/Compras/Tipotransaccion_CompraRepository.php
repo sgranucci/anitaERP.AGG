@@ -139,7 +139,7 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
     public function listarParaConsulta(?string $consulta = null, ?int $centrocostoId = null): \Illuminate\Support\Collection
     {
         $query = $this->model->newQuery()
-            ->select('id', 'abreviatura', 'nombre', 'retieneiva', 'retieneganancia', 'retieneIIBB')
+            ->select('id', 'abreviatura', 'nombre', 'asientocontable', 'retieneiva', 'retieneganancia', 'retieneIIBB')
             ->orderBy('nombre')
             ->limit(200);
 

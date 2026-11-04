@@ -25,15 +25,27 @@
         $horasBridge = ['13:00', '16:00'];
     }
     $textoHorasBridge = implode(' y ', $horasBridge);
-    $textoConfirmContabilizar = $anitaEnLinea
+    $generaAsientoTipoConfirm = (bool) ($generaAsientoTipo ?? true);
+    $textoConfirmContabilizarConAsiento = $anitaEnLinea
         ? '¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.'
         : '¿Confirmar / contabilizar el comprobante? Genera asiento y cuenta corriente. Anita se graba a las '.$textoHorasBridge.'.';
-    $textoConfirmGuardarYContabilizar = $anitaEnLinea
+    $textoConfirmContabilizarSinAsiento = '¿Confirmar / contabilizar el comprobante? Genera cuenta corriente (este tipo no lleva asiento contable).';
+    $textoConfirmGuardarYContabilizarConAsiento = $anitaEnLinea
         ? '¿Guardar y contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.'
         : '¿Guardar y contabilizar el comprobante? Genera asiento y cuenta corriente. Anita se graba a las '.$textoHorasBridge.'.';
+    $textoConfirmGuardarYContabilizarSinAsiento = '¿Guardar y contabilizar el comprobante? Genera cuenta corriente (este tipo no lleva asiento contable).';
+    $textoConfirmContabilizar = $generaAsientoTipoConfirm
+        ? $textoConfirmContabilizarConAsiento
+        : $textoConfirmContabilizarSinAsiento;
+    $textoConfirmGuardarYContabilizar = $generaAsientoTipoConfirm
+        ? $textoConfirmGuardarYContabilizarConAsiento
+        : $textoConfirmGuardarYContabilizarSinAsiento;
     $textoConfirmActualizarContabilizado = $anitaEnLinea
         ? 'El comprobante está contabilizado. Al guardar se regenerará el asiento, la cuenta corriente y Anita. ¿Continuar?'
         : 'El comprobante está contabilizado. Al guardar se regenera el asiento y la cuenta corriente. Si ya estaba en Anita se borra ahora y se vuelve a grabar a las '.$textoHorasBridge.'. ¿Continuar?';
+    if (! $generaAsientoTipoConfirm) {
+        $textoConfirmActualizarContabilizado = 'El comprobante está contabilizado. Al guardar se regenerará la cuenta corriente (este tipo no lleva asiento). ¿Continuar?';
+    }
     $syncAnita = (string) (isset($data) ? ($data->anita_sync_estado ?? '') : '');
 @endphp
 <div class="row">
@@ -88,13 +100,13 @@
                         @if ($esEdicion)
                         <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
                             class="btn btn-warning btn-sm js-cp-contabilizar"
-                            onclick="return confirm(@json($textoConfirmContabilizar));">
+                            onclick="return confirm(window.cpConfirmContabilizar());">
                             <i class="fa fa-check"></i> Contabilizar
                         </button>
                         @else
                         <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
                             class="btn btn-warning btn-sm js-cp-contabilizar"
-                            onclick="return confirm(@json($textoConfirmGuardarYContabilizar));">
+                            onclick="return confirm(window.cpConfirmGuardarYContabilizar());">
                             <i class="fa fa-check"></i> Contabilizar
                         </button>
                         @endif
@@ -272,8 +284,7 @@
                                 <i class="fa fa-calendar"></i> Cuotas / condición
                             </a>
                         </li>
-                        @if ($mostrarSolapaAsiento ?? false)
-                        <li class="nav-item">
+                        <li class="nav-item cp-asiento-ui{{ ($mostrarSolapaAsiento ?? false) ? '' : ' d-none' }}">
                             <a class="nav-link cp-tab-solapa" id="cp-boton-asiento-contable" data-toggle="tab"
                                href="#cp-solapa-asiento-contable" role="tab" aria-controls="cp-solapa-asiento-contable" aria-selected="false">
                                 <i class="fa fa-calculator"></i> Asiento contable
@@ -284,7 +295,6 @@
                                 @endif
                             </a>
                         </li>
-                        @endif
                         <li class="nav-item">
                             <a class="nav-link cp-tab-solapa" id="cp-boton-archivos" data-toggle="tab"
                                href="#cp-solapa-archivos" role="tab" aria-controls="cp-solapa-archivos" aria-selected="false">
@@ -309,7 +319,7 @@
                         $errorInicial = $asientoPreview['error'] ?? null;
                         $hayAvisosIniciales = ! empty($avisosIniciales) || ! empty($errorInicial);
                     @endphp
-                    <div id="cp-asiento-avisos-banner" class="alert alert-warning py-2 mb-3 {{ $hayAvisosIniciales ? '' : 'd-none' }}" role="status" aria-live="polite">
+                    <div id="cp-asiento-avisos-banner" class="alert alert-warning py-2 mb-3 cp-asiento-ui{{ ($mostrarSolapaAsiento ?? false) && $hayAvisosIniciales ? '' : ' d-none' }}" role="status" aria-live="polite">
                         @if ($hayAvisosIniciales)
                         <strong><i class="fa fa-exclamation-triangle"></i> Asiento contable:</strong>
                         <ul class="mb-0 mt-1 pl-3">
@@ -390,14 +400,12 @@
                         <div class="tab-pane fade cp-solapa" id="cp-solapa-cuotas" role="tabpanel">
                             @include('compras.comprobante_proveedor.partials.solapa_cuotas')
                         </div>
-                        @if ($mostrarSolapaAsiento ?? false)
-                        <div class="tab-pane fade cp-solapa" id="cp-solapa-asiento-contable" role="tabpanel">
+                        <div class="tab-pane fade cp-solapa cp-asiento-ui{{ ($mostrarSolapaAsiento ?? false) ? '' : ' d-none' }}" id="cp-solapa-asiento-contable" role="tabpanel">
                             @include('compras.comprobante_proveedor.partials.solapa_asiento_contable', [
                                 'asientoPreview' => $asientoPreview ?? ['activo' => false],
                                 'data' => $data,
                             ])
                         </div>
-                        @endif
                         @if ($esEdicion)
                         <div class="tab-pane fade cp-solapa" id="cp-solapa-estados" role="tabpanel">
                             @include('compras.comprobante_proveedor.partials.solapa_estados')
@@ -471,7 +479,7 @@
                         @if ($mostrarContabilizar)
                         <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
                             class="btn btn-primary mb-1"
-                            onclick="return confirm(@json($textoConfirmContabilizar));">
+                            onclick="return confirm(window.cpConfirmContabilizar());">
                             <i class="fa fa-check"></i> Contabilizar
                         </button>
                         @endif
@@ -485,7 +493,7 @@
                         @if ($mostrarContabilizar)
                         <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
                             class="btn btn-primary mb-1"
-                            onclick="return confirm(@json($textoConfirmGuardarYContabilizar));">
+                            onclick="return confirm(window.cpConfirmGuardarYContabilizar());">
                             <i class="fa fa-check"></i> Contabilizar
                         </button>
                         @endif
@@ -496,7 +504,7 @@
                     <div class="col-lg-3"></div>
                     <div class="col-lg-6">
                         <form action="{{ $rutaContabilizar }}" method="POST" class="d-inline"
-                            onsubmit="return confirm(@json($textoConfirmContabilizar));">
+                            onsubmit="return confirm(window.cpConfirmContabilizar());">
                             @csrf
                             <button type="submit" class="btn btn-primary">
                                 <i class="fa fa-check"></i> Contabilizar
@@ -530,7 +538,41 @@
 @endif
 @include('compras.comprobante_proveedor.partials.template_cp_archivos')
 <script type="application/json" id="cp-conceptos-cuenta-meta">@json($conceptos_cuenta_meta ?? [])</script>
+<script type="application/json" id="cp-tipos-asiento-contable">@json($tipos_asiento_contable ?? [])</script>
 <script>
 window.cpAbrirSolapaComAlInicio = false;
 window.cpCentrocostoOcId = {{ (int) \App\Support\Compras\ComprobanteProveedorCentrocostoSupport::resolverDesdeOc($data->ordencompras ?? null) }};
+window.cpTiposAsientoContable = (function () {
+    try {
+        var el = document.getElementById('cp-tipos-asiento-contable');
+        return el ? JSON.parse(el.textContent || '{}') : {};
+    } catch (e) {
+        return {};
+    }
+})();
+window.cpConfirmContabilizarConAsiento = @json($textoConfirmContabilizarConAsiento);
+window.cpConfirmContabilizarSinAsiento = @json($textoConfirmContabilizarSinAsiento);
+window.cpConfirmGuardarYContabilizarConAsiento = @json($textoConfirmGuardarYContabilizarConAsiento);
+window.cpConfirmGuardarYContabilizarSinAsiento = @json($textoConfirmGuardarYContabilizarSinAsiento);
+window.cpTipoGeneraAsiento = function (tipoId) {
+    var id = parseInt(String(tipoId || '0'), 10) || 0;
+    if (id <= 0) {
+        return true;
+    }
+    var mapa = window.cpTiposAsientoContable || {};
+    var flag = String(mapa[id] || mapa[String(id)] || 'S').toUpperCase();
+    return flag === 'S';
+};
+window.cpConfirmContabilizar = function () {
+    var tipoId = parseInt(String($('#tipotransaccion_compra_id').val() || '0'), 10) || 0;
+    return window.cpTipoGeneraAsiento(tipoId)
+        ? window.cpConfirmContabilizarConAsiento
+        : window.cpConfirmContabilizarSinAsiento;
+};
+window.cpConfirmGuardarYContabilizar = function () {
+    var tipoId = parseInt(String($('#tipotransaccion_compra_id').val() || '0'), 10) || 0;
+    return window.cpTipoGeneraAsiento(tipoId)
+        ? window.cpConfirmGuardarYContabilizarConAsiento
+        : window.cpConfirmGuardarYContabilizarSinAsiento;
+};
 </script>

@@ -64,6 +64,7 @@ use App\Support\Compras\ComprobanteProveedorCupoNcLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
+use App\Support\Compras\TipotransaccionCompraAsientoSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Models\Compras\Ordencompra;
@@ -1461,7 +1462,7 @@ class Comprobante_ProveedorController extends Controller
         $puedeActualizar = (bool) $comprobanteId
             && ! $bloqueadoEdicion
             && can('actualizar-comprobante-proveedor', false);
-        // La solapa de asiento se muestra siempre. En solo lectura no se editan cuentas.
+        // Solapa asiento: solo si el tipo genera asiento (o ya hay asiento grabado).
         $asientoPreview = ['activo' => true, 'es_preview' => true, 'lineas' => []];
 
         $monedaFacturaId = (int) ($data->moneda_id ?? 1);
@@ -1733,10 +1734,23 @@ class Comprobante_ProveedorController extends Controller
         }
 
         $conceptosIva = $this->conceptoIvacompraRepository->all();
+        $tiposCompra = $this->tipotransaccionCompraRepository->all('*');
+        if ($data) {
+            $data->loadMissing('tipotransaccion_compras');
+        }
+        $generaAsientoTipo = TipotransaccionCompraAsientoSupport::generaDesdeTipo(
+            $data?->tipotransaccion_compras
+        );
+        // Sin tipo elegido (alta vacía) se muestra la solapa; al elegir NCI/NDI el JS la oculta.
+        $tipoIdForm = (int) old('tipotransaccion_compra_id', $data->tipotransaccion_compra_id ?? 0);
+        if ($tipoIdForm <= 0) {
+            $generaAsientoTipo = true;
+        }
+        $mostrarSolapaAsiento = $generaAsientoTipo || (int) ($data->asiento_id ?? 0) > 0;
 
         return array_merge($prefill, [
             'empresa_query' => $this->empresaRepository->allFiltrado(),
-            'tipotransaccion_compra_query' => $this->tipotransaccionCompraRepository->all('*'),
+            'tipotransaccion_compra_query' => $tiposCompra,
             'concepto_ivacompra_query' => $conceptosIva,
             'moneda_query' => $this->monedaRepository->all(),
             'modos_carga' => ComprobanteProveedorModoCarga::todos(),
@@ -1757,7 +1771,9 @@ class Comprobante_ProveedorController extends Controller
             'url_devolver_compras' => $urlDevolverCompras,
             'com_resolucion' => $prefill['com_resolucion'] ?? $this->resolverComResolucionFormulario($data, $recepcionesSeleccionadas),
             'asientoPreview' => $asientoPreview,
-            'mostrarSolapaAsiento' => true,
+            'mostrarSolapaAsiento' => $mostrarSolapaAsiento,
+            'generaAsientoTipo' => $generaAsientoTipo,
+            'tipos_asiento_contable' => TipotransaccionCompraAsientoSupport::mapaDesdeColeccion($tiposCompra),
             'tiene_pagos' => $tienePagos,
             'origen_ingreso_egreso' => $origenIngresoEgreso,
             'url_ingreso_egreso' => $urlIngresoEgreso,

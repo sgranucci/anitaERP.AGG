@@ -94,7 +94,7 @@ function abreviaturaTipotransaccionCompraPendiente(input) {
         || abreviaturaTipotransaccionCompraNormalizada(ultima) !== abreviaturaTipotransaccionCompraNormalizada(abrev);
 }
 
-function aplicarTipotransaccionCompraElegido(id, abreviatura, nombre) {
+function aplicarTipotransaccionCompraElegido(id, abreviatura, nombre, asientocontable) {
     if (ptrTipotransaccionCompra_id && ptrTipotransaccionCompra_id.length) {
         var prev = String(ptrTipotransaccionCompra_id.val() || '');
         ptrTipotransaccionCompra_id.val(id || '');
@@ -108,6 +108,18 @@ function aplicarTipotransaccionCompraElegido(id, abreviatura, nombre) {
         }
         if (ptrNombreTipotransaccionCompra && ptrNombreTipotransaccionCompra.length) {
             ptrNombreTipotransaccionCompra.val(nombre || '');
+        }
+        var flagAsiento = String(asientocontable || '').trim().toUpperCase();
+        if (flagAsiento !== 'N') {
+            flagAsiento = 'S';
+        }
+        if (id) {
+            window.cpTiposAsientoContable = window.cpTiposAsientoContable || {};
+            window.cpTiposAsientoContable[parseInt(id, 10) || id] = flagAsiento;
+            window.cpTiposAsientoContable[String(id)] = flagAsiento;
+            ptrTipotransaccionCompra_id.attr('data-asientocontable', flagAsiento);
+        } else {
+            ptrTipotransaccionCompra_id.removeAttr('data-asientocontable');
         }
         var $ctx = ptrTipotransaccionCompra_id.closest('.tm-tipotransaccion-compra-campo');
         var $link = $ctx.find('.btn-link-editar-tipotransaccion-compra');
@@ -214,7 +226,12 @@ function leerTipotransaccionCompraPorAbreviatura(abreviatura, target, callback, 
                 terminarLecturaTipotransaccionCompra(target, null, callbacks);
                 return;
             }
-            aplicarTipotransaccionCompraElegido(data.id, data.abreviatura || abrev, data.nombre || '');
+            aplicarTipotransaccionCompraElegido(
+                data.id,
+                data.abreviatura || abrev,
+                data.nombre || '',
+                data.asientocontable || 'S'
+            );
             terminarLecturaTipotransaccionCompra(target, data, callbacks);
         })
         .fail(function () {
@@ -396,7 +413,8 @@ function activa_eventos_consultatipotransaccioncompra() {
             aplicarTipotransaccionCompraElegido(
                 $tr.find('.id').html(),
                 $tr.find('.abreviatura').html(),
-                $tr.find('.nombre').html()
+                $tr.find('.nombre').html(),
+                $tr.find('.asientocontable').text() || 'S'
             );
             $('#consultatipotransaccioncompraModal').modal('hide');
         });

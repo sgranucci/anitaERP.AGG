@@ -2069,8 +2069,39 @@ $(function () {
             });
     }
 
+    function tipoActualGeneraAsiento() {
+        var tipoId = parseInt(String($('#tipotransaccion_compra_id').val() || '0'), 10) || 0;
+        if (typeof window.cpTipoGeneraAsiento === 'function') {
+            return window.cpTipoGeneraAsiento(tipoId);
+        }
+        return true;
+    }
+
+    function aplicarUiAsientoPorTipo() {
+        var genera = tipoActualGeneraAsiento();
+        var $ui = $('.cp-asiento-ui');
+        var $colIva = $('#cp-conceptos-col-iva');
+        if (genera) {
+            $ui.removeClass('d-none');
+            $colIva.removeClass('col-12').addClass('col-lg-6');
+        } else {
+            $ui.addClass('d-none');
+            $colIva.removeClass('col-lg-6').addClass('col-12');
+            $('#cp-asiento-avisos-banner').addClass('d-none').empty();
+            // Si estaba en la solapa asiento, volver a datos.
+            if ($('#cp-solapa-asiento-contable').hasClass('active')
+                || $('#cp-boton-asiento-contable').hasClass('active')) {
+                $('#cp-boton-principal').tab('show');
+            }
+        }
+    }
+
     function programarPreviewAsiento() {
         if (contabilizado) {
+            return;
+        }
+        if (!tipoActualGeneraAsiento()) {
+            $('#cp-asiento-avisos-banner').addClass('d-none').empty();
             return;
         }
         sincronizarTotalesDesdeConceptos();
@@ -3372,9 +3403,13 @@ $(function () {
     function alCambiarTipoComprobante(tipoId) {
         actualizarAbreviaturaTipoComprobante();
         aplicarExcepcionComPorTipo();
+        aplicarUiAsientoPorTipo();
         // El tipo nuevo trae sus conceptos (FGA → FNS). Si ese tipo no tiene
         // conceptos cargados, se dejan los renglones que ya estaban.
         precargarConceptosPorTipo(tipoId, true);
+        if (tipoActualGeneraAsiento()) {
+            programarPreviewAsiento();
+        }
     }
 
     if (typeof activa_eventos_consultatipotransaccioncompra === 'function') {
@@ -3383,6 +3418,7 @@ $(function () {
 
     actualizarAbreviaturaTipoComprobante();
     aplicarExcepcionComPorTipo();
+    aplicarUiAsientoPorTipo();
 
     $(document).on('cp:tipotransaccion-compra-elegido', function (e, tipoId) {
         alCambiarTipoComprobante(tipoId);

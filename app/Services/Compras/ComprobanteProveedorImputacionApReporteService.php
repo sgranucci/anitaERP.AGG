@@ -17,6 +17,7 @@ use App\Support\Compras\OrdencompraReporteCriteriosSupport;
 use App\Support\Compras\ProveedorAnticipoCuentaContableSupport;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use App\Support\Compras\RequisicionReporteCriteriosSupport;
+use App\Support\Compras\TipotransaccionCompraAsientoSupport;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 
@@ -148,7 +149,7 @@ class ComprobanteProveedorImputacionApReporteService
         $query = Comprobante_Proveedor::query()
             ->with([
                 'proveedores:id,codigo,nombre,cuentacontable_id,cuentacontableme_id,cuentacontablecompra_id',
-                'tipotransaccion_compras:id,abreviatura,signo',
+                'tipotransaccion_compras:id,abreviatura,signo,asientocontable',
                 'monedas:id,abreviatura,nombre',
                 'empresas:id,nombre',
                 'ordencompras.ordencompra_articulos',
@@ -184,6 +185,11 @@ class ComprobanteProveedorImputacionApReporteService
 
         $filas = [];
         foreach ($comprobantes as $comp) {
+            // Tipos con Asiento contable = N (NCI/NDI, FIN, etc.): no exigen asiento ni ctamov.
+            if (! TipotransaccionCompraAsientoSupport::generaDesdeTipo($comp->tipotransaccion_compras)) {
+                continue;
+            }
+
             $fecha = ComprobanteProveedorFechaContableSupport::fechaYmd($comp);
             $esNc = ComprobanteProveedorImputacionApSupport::esNotaCredito(
                 (string) ($comp->tipotransaccion_compras?->signo ?? 'S')
