@@ -30,7 +30,7 @@
 						<input type="text" class="form-control form-control-sm" id="factura_nc_sf_lote" placeholder="0 = sin lote" autocomplete="off">
 					</div>
 					<div class="col-lg-5">
-						<small class="text-muted">Vac&iacute;o o 0 = lote 0. M&oacute;dulo abierto (99).</small>
+						<small class="text-muted">Vac&iacute;o o 0 = lote 0. M&oacute;dulo abierto (99). La combinaci&oacute;n incluye colores inactivos: el stock sube con ese color y con los talles cargados.</small>
 					</div>
 				</div>
 				<div class="table-responsive mb-2">

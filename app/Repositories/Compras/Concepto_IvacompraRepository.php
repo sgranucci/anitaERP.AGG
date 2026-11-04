@@ -416,64 +416,45 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
         $this->armaVariablesParaGrabar($request, $columnaSubdiario, $contenido, $cuentaDebe,
                                             $cuentaHaber, $alicuotaIva);
 
+        $campos = [
+            'concc_concepto',
+            'concc_desc',
+            'concc_formula',
+            'concc_columna_sub',
+            'concc_contenido',
+            'concc_cta_debe',
+            'concc_cta_haber',
+            'concc_ctapte_debe',
+            'concc_ctapte_haber',
+        ];
+        $valores = [
+            "'".$request['codigo']."'",
+            "'".$request['nombre']."'",
+            "'".$request['formula']."'",
+            "'".$columnaSubdiario."'",
+            "'".$contenido."'",
+            "'".$cuentaDebe."'",
+            "'".$cuentaHaber."'",
+            "'0'",
+            "'0'",
+        ];
+        if (ConceptoIvaAnitaEsquemaSupport::incluyeTipoAlicuotaRetiene()) {
+            $campos[] = 'concc_tipo_conc';
+            $campos[] = 'concc_alicuota_iva';
+            $campos[] = 'concc_retiene_ibr';
+            $valores[] = "'".$request['tipoconcepto']."'";
+            $valores[] = "'".$alicuotaIva."'";
+            $valores[] = "'".$request['retieneIIBB']."'";
+        }
+
         $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
             'sistema' => 'compras',
-            'campos' => ' 
-                concc_concepto,
-                concc_desc,
-                concc_formula,
-                concc_columna_sub,
-                concc_contenido,
-                concc_cta_debe,
-                concc_cta_haber,
-                concc_ctapte_debe,
-                concc_ctapte_haber,
-                concc_tipo_conc,
-                concc_alicuota_iva,
-                concc_retiene_ibr
-				',
-            'valores' => " 
-				'".$request['codigo']."', 
-                '".$request['nombre']."', 
-                '".$request['formula']."', 
-                '".$columnaSubdiario."', 
-                '".$contenido."', 
-                '".$cuentaDebe."', 
-                '".$cuentaHaber."', 
-                '".'0'."', 
-                '".'0'."', 
-                '".$request['tipoconcepto']."',
-                '".$alicuotaIva."',
-                '".$request['retieneIIBB']."' "
+            'campos' => implode(",\n                ", $campos),
+            'valores' => implode(", \n                ", $valores),
         );
         $apiAnita->apiCallEscritura($data);
 
-        if (isset($request['condicioniva_ids']))
-        {
-            $condicioniva_ids = $request['condicioniva_ids'];
-
-            for ($i_rango=0; $i_rango < count($condicioniva_ids); $i_rango++) 
-            {
-                if ($condicioniva_ids[$i_rango] > 0)
-                {
-                    $apiAnita = new ApiAnita();
-
-                    $data = array( 'tabla' => 'concciva', 
-                        'acc' => 'insert',
-                        'sistema' => 'compras',
-                        'campos' => '
-                                conci_concepto,
-                                conci_cond_iva
-                                ',
-                        'valores' => " 
-                                '".$request['codigo']."', 
-                                '".$condicioniva_ids[$i_rango]."' "
-                        );
-                        
-                    $apiAnita->apiCallEscritura($data);
-                }
-            }
-        }
+        $this->sincronizarConccivaAnita((string) $request['codigo'], $request['condicioniva_ids'] ?? []);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -482,59 +463,69 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
         $this->armaVariablesParaGrabar($request, $columnaSubdiario, $contenido, $cuentaDebe,
                                             $cuentaHaber, $alicuotaIva);
 
+        $asignaciones = [
+            "concc_concepto = '".$request['codigo']."'",
+            "concc_desc = '".$request['nombre']."'",
+            "concc_formula = '".$request['formula']."'",
+            "concc_columna_sub = '".$columnaSubdiario."'",
+            "concc_contenido = '".$contenido."'",
+            "concc_cta_debe = '".$cuentaDebe."'",
+            "concc_cta_haber = '".$cuentaHaber."'",
+        ];
+        if (ConceptoIvaAnitaEsquemaSupport::incluyeTipoAlicuotaRetiene()) {
+            $asignaciones[] = "concc_tipo_conc = '".$request['tipoconcepto']."'";
+            $asignaciones[] = "concc_alicuota_iva = '".$alicuotaIva."'";
+            $asignaciones[] = "concc_retiene_ibr = '".$request['retieneIIBB']."'";
+        }
+
 		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
                 'sistema' => 'compras',
-				'valores' => " 
-                concc_concepto 	        = '".$request['codigo']."',
-                concc_desc              = '".$request['nombre']."',
-                concc_formula           = '".$request['formula']."',
-                concc_columna_sub       = '".$columnaSubdiario."',
-                concc_contenido         = '".$contenido."',
-                concc_cta_debe          = '".$cuentaDebe."',
-                concc_cta_haber         = '".$cuentaHaber."',
-                concc_tipo_conc         = '".$request['tipoconcepto']."',
-                concc_alicuota_iva      = '".$alicuotaIva."',
-                concc_retiene_ibr       = '".$request['retieneIIBB']." ' ",
+				'valores' => implode(",\n                ", $asignaciones),
 				'whereArmado' => " WHERE concc_concepto = '".$id."' " );
         $apiAnita->apiCallEscritura($data);
 
-        // Elimina los movimientos
-        $apiAnita = new ApiAnita();
+        $this->sincronizarConccivaAnita((string) $id, $request['condicioniva_ids'] ?? []);
+	}
 
-        $data = array( 'acc' => 'delete', 
+    /**
+     * Ferli no tiene la tabla compras.concciva.
+     *
+     * @param  list<int|string>  $condicionivaIds
+     */
+    private function sincronizarConccivaAnita(string $codigoConcepto, array $condicionivaIds): void
+    {
+        if (! ConceptoIvaAnitaEsquemaSupport::leeConcciva()) {
+            return;
+        }
+
+        $apiAnita = new ApiAnita();
+        $apiAnita->apiCallEscritura([
+            'acc' => 'delete',
             'tabla' => 'concciva',
             'sistema' => 'compras',
-            'whereArmado' => " WHERE conci_concepto = '".$id."' " );
-        $apiAnita->apiCallEscritura($data);
+            'whereArmado' => " WHERE conci_concepto = '".$codigoConcepto."' ",
+        ]);
 
-        if (isset($request['condicioniva_ids']))
-        {
-            $condicioniva_ids = $request['condicioniva_ids'];
+        foreach ($condicionivaIds as $condicionivaId) {
+            if ((int) $condicionivaId <= 0) {
+                continue;
+            }
 
-            // Graba los movimientos
-            for ($i_rango=0; $i_rango < count($condicioniva_ids); $i_rango++) 
-            {
-                if ($condicioniva_ids[$i_rango] > 0)
-                {
-                    $apiAnita = new ApiAnita();
-
-                    $data = array( 'tabla' => 'concciva', 
-                        'acc' => 'insert',
-                        'sistema' => 'compras',
-                        'campos' => '
+            $apiAnita = new ApiAnita();
+            $apiAnita->apiCallEscritura([
+                'tabla' => 'concciva',
+                'acc' => 'insert',
+                'sistema' => 'compras',
+                'campos' => '
                                 conci_concepto,
                                 conci_cond_iva
                                 ',
-                        'valores' => " 
-                                '".$id."', 
-                                '".$condicioniva_ids[$i_rango]."' "
-                        );
-
-                    $apiAnita->apiCallEscritura($data);
-                }
-            }
+                'valores' => " 
+                                '".$codigoConcepto."', 
+                                '".$condicionivaId."' ",
+            ]);
         }
-	}
+    }
 
     private function armaVariablesParaGrabar($request, &$columnaSubdiario, &$contenido, &$cuentaDebe,
                                             &$cuentaHaber, &$alicuotaIva)
@@ -612,7 +603,10 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
 				'whereArmado' => " WHERE concc_concepto = '".$id."' " );
         $apiAnita->apiCallEscritura($data);
 
-        // Elimina los movimientos
+        if (! ConceptoIvaAnitaEsquemaSupport::leeConcciva()) {
+            return;
+        }
+
         $apiAnita = new ApiAnita();
 
         $data = array( 'acc' => 'delete', 

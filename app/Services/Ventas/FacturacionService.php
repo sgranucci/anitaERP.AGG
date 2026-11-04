@@ -3269,6 +3269,7 @@ class FacturacionService
 			}
 			$moduloIdLinea = null;
 			$codigoCombinacionLinea = null;
+			$medidaLinea = '';
 			$ordentrabajoIdLinea = null;
 			$pedidoCombinacionIdLinea = null;
 			$despachoLinea = '';
@@ -3310,6 +3311,12 @@ class FacturacionService
 				&& $tipotransaccionCalculo->esNotaCredito()
 			) {
 				$moduloIdLinea = NotaCreditoSinFacturaStockFerliSupport::MODULO_ABIERTO_ID;
+			}
+			if (($codigoCombinacionLinea === null || $codigoCombinacionLinea === '') && $combinacionIdLinea > 0) {
+				$codigoCombinacionLinea = (string) (Combinacion::query()->whereKey($combinacionIdLinea)->value('codigo') ?? '');
+			}
+			if ($talleIdLinea > 0) {
+				$medidaLinea = (string) (Talle::query()->whereKey($talleIdLinea)->value('nombre') ?? '');
 			}
 
 			if (EntornoEmpresaSupport::esElBierzo() && $this->flDivide && ! $esPosMostrador && ! $esNcMostrador) {
@@ -3387,6 +3394,7 @@ class FacturacionService
 				'color_id' => $colorIdLinea > 0 ? $colorIdLinea : null,
 				'modulo_id' => $moduloIdLinea,
 				'codigocombinacion' => $codigoCombinacionLinea,
+				'medida' => $medidaLinea,
 				'ordentrabajo_id' => $ordentrabajoIdLinea,
 				'pedido_combinacion_id' => $pedidoCombinacionIdLinea,
 				'despacho' => $despachoLinea,

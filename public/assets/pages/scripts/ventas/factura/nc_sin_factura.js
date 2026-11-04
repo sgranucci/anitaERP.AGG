@@ -94,7 +94,7 @@
 	}
 
 	function cargarCombinaciones(articuloId) {
-		return $.get(carpetaBase + '/stock/leercombinacionesactivas/' + articuloId).then(function (data) {
+		return $.get(carpetaBase + '/stock/leercombinaciones/' + articuloId).then(function (data) {
 			var lista = [];
 			$.each(data || [], function (_i, value) {
 				lista.push({
