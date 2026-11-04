@@ -96,6 +96,57 @@
         $('#pedido-procesando-resultado-cerrar').text(btnLabel);
 
         onResultadoCerrar = typeof opts.onCerrar === 'function' ? opts.onCerrar : null;
+        activarEnterResultado();
+    }
+
+    function resultadoVisible() {
+        var panel = document.getElementById('pedido-procesando-resultado');
+        var ov = document.getElementById('pedido-procesando-overlay');
+        return !!(panel && ov
+            && !panel.classList.contains('d-none')
+            && !ov.classList.contains('d-none')
+            && ov.getAttribute('aria-hidden') === 'false');
+    }
+
+    function onTeclaResultado(evento) {
+        if (evento.key !== 'Enter' || evento.repeat || evento.isComposing) {
+            return;
+        }
+        if (!resultadoVisible()) {
+            return;
+        }
+        evento.preventDefault();
+        evento.stopPropagation();
+        cerrarResultado();
+    }
+
+    function activarEnterResultado() {
+        document.removeEventListener('keydown', onTeclaResultado, true);
+        document.addEventListener('keydown', onTeclaResultado, true);
+        window.setTimeout(function () {
+            var btn = document.getElementById('pedido-procesando-resultado-cerrar');
+            if (btn && resultadoVisible()) {
+                btn.focus();
+            }
+        }, 0);
+    }
+
+    function desactivarEnterResultado() {
+        document.removeEventListener('keydown', onTeclaResultado, true);
+    }
+
+    function cerrarResultado() {
+        var visible = resultadoVisible();
+        var cb = onResultadoCerrar;
+        if (!visible && cb == null) {
+            return;
+        }
+        onResultadoCerrar = null;
+        desactivarEnterResultado();
+        overlay(false);
+        if (typeof cb === 'function') {
+            cb();
+        }
     }
 
     window.PedidoProcesoOverlay = {
@@ -105,6 +156,7 @@
                 overlayTimer = null;
             }
             onResultadoCerrar = null;
+            desactivarEnterResultado();
             overlay(false);
         },
 
@@ -133,11 +185,6 @@
     };
 
     $(document).on('click', '#pedido-procesando-resultado-cerrar', function () {
-        var cb = onResultadoCerrar;
-        onResultadoCerrar = null;
-        overlay(false);
-        if (typeof cb === 'function') {
-            cb();
-        }
+        cerrarResultado();
     });
 })(jQuery);

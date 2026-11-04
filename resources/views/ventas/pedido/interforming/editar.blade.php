@@ -22,7 +22,7 @@ Editar pedido Interforming
 @if (!empty($mostrarFacturarPedido))
 <script>window.pedidoModoIndexFacturacion = true;</script>
 <script>window.pedidoSinRemitoObligatorio = true;</script>
-<script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/proceso-overlay.js')) ?: time() }}" type="text/javascript"></script>
 @include('includes.ventas.preferencias_facturacion_scripts')
 @include('includes.ventas.facturacion_circuito_scripts')
 @include('ventas.partials.aviso_deposito_facturacion')

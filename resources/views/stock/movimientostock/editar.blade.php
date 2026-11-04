@@ -46,7 +46,7 @@
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/atajos-consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-formula-conversion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/movimientostock/form-formula-conversion.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-saldo-origen.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/movimientostock/form-saldo-origen.js')) ?: time() }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/proceso-overlay.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-baja-npu.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-alta-npu.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/consulta-npu-baja.js') }}" type="text/javascript"></script>

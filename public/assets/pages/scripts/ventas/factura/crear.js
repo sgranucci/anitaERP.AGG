@@ -187,6 +187,57 @@
 			var btnLabel = opts.boton || (tipo === 'ok' ? 'Continuar' : 'Cerrar');
 			$('#factura-procesando-resultado-cerrar').text(btnLabel);
 			onResultadoCerrar = typeof opts.onCerrar === 'function' ? opts.onCerrar : null;
+			activarEnterResultado();
+		}
+
+		function resultadoVisible() {
+			var panel = document.getElementById('factura-procesando-resultado');
+			var ov = overlayEl();
+			return !!(panel && ov
+				&& !panel.classList.contains('d-none')
+				&& !ov.classList.contains('d-none')
+				&& ov.getAttribute('aria-hidden') === 'false');
+		}
+
+		function onTeclaResultado(evento) {
+			if (evento.key !== 'Enter' || evento.repeat || evento.isComposing) {
+				return;
+			}
+			if (!resultadoVisible()) {
+				return;
+			}
+			evento.preventDefault();
+			evento.stopPropagation();
+			cerrarResultadoFactura();
+		}
+
+		function activarEnterResultado() {
+			document.removeEventListener('keydown', onTeclaResultado, true);
+			document.addEventListener('keydown', onTeclaResultado, true);
+			window.setTimeout(function () {
+				var btn = document.getElementById('factura-procesando-resultado-cerrar');
+				if (btn && resultadoVisible()) {
+					btn.focus();
+				}
+			}, 0);
+		}
+
+		function desactivarEnterResultado() {
+			document.removeEventListener('keydown', onTeclaResultado, true);
+		}
+
+		function cerrarResultadoFactura() {
+			var visible = resultadoVisible();
+			var cb = onResultadoCerrar;
+			if (!visible && cb == null) {
+				return;
+			}
+			onResultadoCerrar = null;
+			desactivarEnterResultado();
+			window.FacturaProcesoOverlay.detener();
+			if (typeof cb === 'function') {
+				cb();
+			}
 		}
 
 		window.FacturaProcesoOverlay = {
@@ -216,6 +267,7 @@
 				}
 				overlayActivo = false;
 				onResultadoCerrar = null;
+				desactivarEnterResultado();
 				$('.factura-carga-bloqueable').filter('button, .btn, input[type="submit"], input[type="button"]').prop('disabled', false);
 				$('[data-padron-accion-factura]').prop('disabled', false).removeClass('disabled');
 				mostrarOverlay(false);
@@ -236,12 +288,7 @@
 		};
 
 		$(document).on('click', '#factura-procesando-resultado-cerrar', function () {
-			var cb = onResultadoCerrar;
-			onResultadoCerrar = null;
-			window.FacturaProcesoOverlay.detener();
-			if (typeof cb === 'function') {
-				cb();
-			}
+			cerrarResultadoFactura();
 		});
 
 		window.addEventListener('pageshow', function () {

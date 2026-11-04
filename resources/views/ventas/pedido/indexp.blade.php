@@ -15,7 +15,7 @@ Pedidos de Clientes
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/salida.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/configurar_salida.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/proceso-overlay.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/imprimir.js') }}" type="text/javascript"></script>
 <script>window.pedidoRetornoIndexUrl = @json(route('pedido', $retornoListadoQuery));</script>
 <script>window.pedidoRetornoIndexPath = @json($retornoImpresionPath);</script>
