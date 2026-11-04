@@ -21,7 +21,7 @@
                style="max-width:8rem;">
         <input type="text" class="form-control tc-cajero-nombre" readonly tabindex="-1" placeholder="Nombre" value="{{ $cajeroNombre }}">
         <div class="input-group-append">
-            <button type="button" class="btn btn-outline-secondary tc-cajero-lupa" title="Buscar cajero (F1)">
+            <button type="button" class="btn-accion-tabla tooltipsC tc-cajero-lupa" title="Buscar cajero (F1)">
                 <i class="fa fa-search"></i>
             </button>
         </div>

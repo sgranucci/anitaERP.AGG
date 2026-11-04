@@ -5,13 +5,18 @@ namespace App\Support\Compras;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
- * Esquema Anita `conccomp` / `concciva` por instalación.
+ * Esquema Anita `conccomp` / `concciva` / `ccostcomp` por instalación.
  *
  * Calzados Ferli (verificado 11/sep/2026 contra syscolumns /usr2/ferli):
  * - conccomp no tiene concc_tipo_conc, concc_alicuota_iva, concc_retiene_ibr.
  * - no existe la tabla concciva.
  * - no existe compras.ccostcomp (centros de costo por tipo de comprobante).
  *   t_comp y cont_comp sí existen (verificado 9/oct/2026).
+ *
+ * Crown /usr2/casino (verificado 4/nov/2026):
+ * - conccomp completo (con tipo/alicuota/retiene) y concciva existen.
+ * - no existe compras.ccostcomp. t_comp y cont_comp sí (canal reducido del ABM tipo).
+ *   Ver {@see \App\Support\Compras\AnitaSync\TipotransaccionCompra\TipotransaccionCompraAnitaEsquemaSupport}.
  */
 final class ConceptoIvaAnitaEsquemaSupport
 {
@@ -58,10 +63,11 @@ final class ConceptoIvaAnitaEsquemaSupport
 
     /**
      * Tabla compras.ccostcomp (centros de costo habilitados por tipo de comprobante).
-     * En Ferli no está en el esquema: no leer ni escribir.
+     * Ferli y Crown no la tienen: no leer ni escribir (vínculo solo en el ERP).
      */
     public static function leeCcostcomp(): bool
     {
-        return ! EntornoEmpresaSupport::esFerli();
+        return ! EntornoEmpresaSupport::esFerli()
+            && ! EntornoEmpresaSupport::esCrown();
     }
 }

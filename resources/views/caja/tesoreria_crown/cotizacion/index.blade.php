@@ -75,7 +75,7 @@
                                 @endforeach
                                 <td class="text-center">
                                     @if (can('editar-tesoreria-crown-cotizacion', false))
-                                        <a href="{{ route('editar_tesoreria_crown_cotizacion', ['sala_id' => $sala->id, 'jornada' => $fila['jornada']]) }}" class="btn-accion-tabla" title="Editar">
+                                        <a href="{{ route('editar_tesoreria_crown_cotizacion', ['sala_id' => $sala->id, 'jornada' => $fila['jornada']]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>
                                         </a>
                                     @endif

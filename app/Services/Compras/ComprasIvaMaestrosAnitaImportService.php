@@ -63,7 +63,7 @@ final class ComprasIvaMaestrosAnitaImportService
         $diagnostico = [
             'Orden: columnas IVA → conceptos → tipos de transacción (con vínculos cont_comp).',
             'Anita es fuente de verdad en altas y actualización de cabecera; no borra vínculos ERP extra.',
-            'concciva / ccostcomp se omiten si UNLOAD falla (esquema Ferli).',
+            'concciva / ccostcomp se omiten si UNLOAD falla (esquema Ferli / Crown sin ccostcomp).',
         ];
 
         $columnas = $this->syncColumnas($api, $path, $persistir, $errores);
@@ -748,7 +748,7 @@ final class ComprasIvaMaestrosAnitaImportService
         if ($parsed['error_lectura'] !== null) {
             $msg = "Anita compras.{$tabla}: {$parsed['error_lectura']}";
             if ($silenciarError) {
-                // Esquema incompleto (Ferli: sin concciva / ccostcomp): no es fallo del import.
+                // Esquema incompleto (Ferli sin concciva/ccostcomp; Crown sin ccostcomp): no es fallo del import.
                 return [];
             }
             throw new RuntimeException($msg);

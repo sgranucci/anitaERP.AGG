@@ -106,18 +106,18 @@
                                         </td>
                                     @endforeach
                                     <td class="text-center text-nowrap">
-                                        <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}" class="btn-accion-tabla" title="Editar">
+                                        <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>
                                         </a>
                                         @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-jornada', false))
-                                            <a href="{{ route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'abrir' => 1]) }}" class="btn-accion-tabla" title="Abrir caja">
+                                            <a href="{{ route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'abrir' => 1]) }}" class="btn-accion-tabla tooltipsC" title="Abrir caja">
                                                 <i class="fa fa-plus"></i>
                                             </a>
                                         @endif
                                         @if ($jornada->estaAbierta() && can('editar-tesoreria-crown-jornada', false))
                                             <form action="{{ route('cerrar_tesoreria_crown_jornada', $jornada->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Cerrar la jornada del {{ $jornada->fecha->format('d/m/Y') }}?');">
                                                 @csrf
-                                                <button type="submit" class="btn-accion-tabla" title="Cerrar">
+                                                <button type="submit" class="btn-accion-tabla tooltipsC" title="Cerrar">
                                                     <i class="fa fa-lock"></i>
                                                 </button>
                                             </form>
@@ -126,7 +126,7 @@
                                             <form action="{{ route('eliminar_tesoreria_crown_jornada', $jornada->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar la jornada del {{ $jornada->fecha->format('d/m/Y') }}? Se quitan las asignaciones de cajero.');">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit" class="btn-accion-tabla" title="Eliminar">
+                                                <button type="submit" class="btn-accion-tabla tooltipsC" title="Eliminar">
                                                     <i class="fa fa-times-circle text-danger"></i>
                                                 </button>
                                             </form>

@@ -207,12 +207,12 @@
                         </span>
                     @endif
                     <a href="{{ route('pdf_tesoreria_crown_movimiento', $comprobante->id) }}" class="btn btn-light btn-sm" target="_blank" rel="noopener">
-                        <i class="fa fa-file-pdf"></i> Imprimir
+                        <i class="fa fa-print"></i> Imprimir
                     </a>
                     @if ($comprobante->estado === 'C' && $comprobante->revierte_id === null && ! $yaRevertido && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('editar-tesoreria-crown-movimiento', false))
                         <form method="POST" action="{{ route('revertir_tesoreria_crown_movimiento', $comprobante->id) }}" class="d-inline mb-0" onsubmit="return confirm('¿Revertir este comprobante? La reversa queda pendiente de las dos firmas.');">
                             @csrf
-                            <button type="submit" class="btn btn-outline-light btn-sm">Revertir</button>
+                            <button type="submit" class="btn btn-outline-light btn-sm"><i class="fa fa-undo"></i> Revertir</button>
                         </form>
                     @endif
                     @if (request()->input('vista') === 'consulta')
@@ -506,7 +506,7 @@
                 @if ($comprobante->estado === 'C' && $comprobante->revierte_id === null && ! $yaRevertido && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('editar-tesoreria-crown-movimiento', false))
                     <form method="POST" action="{{ route('revertir_tesoreria_crown_movimiento', $comprobante->id) }}" class="d-inline ml-2" onsubmit="return confirm('¿Revertir este comprobante? La reversa queda pendiente de las dos firmas.');">
                         @csrf
-                        <button type="submit" class="btn btn-outline-danger btn-sm">Revertir</button>
+                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-undo"></i> Revertir</button>
                     </form>
                 @endif
                 @if (request()->input('vista') === 'consulta')

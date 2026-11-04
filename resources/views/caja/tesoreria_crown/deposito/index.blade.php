@@ -82,7 +82,7 @@
                                 <td>{{ $deposito->activo ? 'Sí' : 'No' }}</td>
                                 <td class="text-center text-nowrap">
                                     @if (can('editar-tesoreria-crown-deposito', false))
-                                        <a href="{{ route('editar_tesoreria_crown_deposito', $deposito->id) }}" class="btn-accion-tabla" title="Editar">
+                                        <a href="{{ route('editar_tesoreria_crown_deposito', $deposito->id) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>
                                         </a>
                                     @endif
@@ -90,7 +90,7 @@
                                         <form action="{{ route('eliminar_tesoreria_crown_deposito', $deposito->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar este depósito?');">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="btn-accion-tabla" title="Eliminar">
+                                            <button type="submit" class="btn-accion-tabla tooltipsC" title="Eliminar">
                                                 <i class="fa fa-times-circle text-danger"></i>
                                             </button>
                                         </form>

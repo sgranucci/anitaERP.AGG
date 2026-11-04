@@ -224,8 +224,10 @@ class Tipotransaccion_CompraController extends Controller
         } catch (\Exception $e) {
             DB::rollback();
 
-            dd($e->getMessage());
-            return ['errores' => $e->getMessage()];
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('mensaje_error', 'No se pudo actualizar el tipo de transacción: '.$e->getMessage());
         }
 
         return redirect('compras/tipotransaccion_compra')->with('mensaje', 'Tipo de transacción actualizada con exito');

@@ -31,6 +31,11 @@
                 <h3 class="card-title mb-0 mr-auto">
                     {{ $mesaActiva->codigo }} — {{ $mesaActiva->nombre }}
                 </h3>
+                @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-mesa', false))
+                    <a href="{{ route('nueva_tesoreria_crown_mesa', ['jornada_id' => $jornada->id, 'deposito_id' => $mesaActiva->id]) }}" class="btn btn-primary btn-sm mr-2">
+                        <i class="fa fa-plus-circle"></i> Nuevo movimiento
+                    </a>
+                @endif
                 <a href="{{ $urlMesa() }}#piso" class="small">Ver el piso</a>
             </div>
             <div class="card-body">
@@ -59,27 +64,6 @@
                     </div>
                 </div>
 
-                @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-mesa', false))
-                    <form method="POST" action="{{ route('crear_tesoreria_crown_mesa') }}" class="mb-3" data-enter-campos="1">
-                        @csrf
-                        <input type="hidden" name="jornada_id" value="{{ $jornada->id }}">
-                        <input type="hidden" name="deposito_id" value="{{ $mesaActiva->id }}">
-                        <div class="form-row align-items-end">
-                            @include('caja.tesoreria_crown.partials.campo_cajero', [
-                                'salaId' => $jornada->sala_id,
-                                'codigo' => old('cajero_numero'),
-                                'nombre' => '',
-                                'inputId' => 'cajero_numero_mesa',
-                            ])
-                            <div class="form-group col-md-5 mb-2">
-                                <label for="comentario_mesa">Comentario</label>
-                                <input type="text" name="comentario" id="comentario_mesa" class="form-control" maxlength="80" value="{{ old('comentario') }}">
-                            </div>
-                        </div>
-                        @include('caja.tesoreria_crown.partials.operaciones_mesa')
-                    </form>
-                @endif
-
                 @if ($movimientosActivos->isNotEmpty())
                     <div class="table-responsive mb-3">
                         <table class="table table-sm table-bordered mb-0">
@@ -89,15 +73,29 @@
                                     <th>Tipo</th>
                                     <th>Cajero</th>
                                     <th>Estado</th>
+                                    <th class="text-center" style="width:90px;">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach ($movimientosActivos as $movMesa)
                                     <tr>
                                         <td><a class="text-primary" href="{{ route('editar_tesoreria_crown_mesa', $movMesa->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($movMesa->numero) }}</a></td>
-                                        <td>{{ \App\Support\Caja\TesoreriaCrownMesaSupport::tipo($movMesa->tipo) }}</td>
+                                        <td>
+                                            {{ \App\Support\Caja\TesoreriaCrownMesaSupport::tipo($movMesa->tipo) }}
+                                            @if ($movMesa->esReversa())
+                                                (reversa)
+                                            @endif
+                                        </td>
                                         <td>{{ $movMesa->cajero->nombre ?? '' }}</td>
-                                        <td>{{ \App\Support\Caja\TesoreriaCrownMesaSupport::estado($movMesa->estado) }}</td>
+                                        <td>
+                                            {{ \App\Support\Caja\TesoreriaCrownMesaSupport::estado($movMesa->estado) }}
+                                            @if ($movMesa->reversa)
+                                                · reversado
+                                            @endif
+                                        </td>
+                                        <td class="text-center text-nowrap">
+                                            @include('caja.tesoreria_crown.mesa.partials.accion_fila', ['mov' => $movMesa, 'jornada' => $jornada])
+                                        </td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -178,4 +176,5 @@
             });
         })();
     </script>
+    @include('caja.tesoreria_crown.mesa.partials.modal_revertir')
 @endif

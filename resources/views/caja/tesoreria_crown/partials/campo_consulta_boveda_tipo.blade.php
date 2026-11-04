@@ -19,7 +19,7 @@
                    data-referencia="{{ $referencia ?? '' }}"
                    data-efecto="{{ $efecto ?? '' }}">
             @if ($editable)
-                <button type="button" class="btn-accion-tabla consultabovedatipo flex-shrink-0" title="Consultar transacciones (F1)">
+                <button type="button" class="btn-accion-tabla tooltipsC consultabovedatipo flex-shrink-0" title="Consultar transacciones (F1)">
                     <i class="fa fa-search text-primary"></i>
                 </button>
                 <input type="text" name="tipo_codigo" id="boveda_tipo_codigo" class="form-control codigobovedatipo"

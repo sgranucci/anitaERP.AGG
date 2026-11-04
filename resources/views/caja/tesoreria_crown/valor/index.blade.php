@@ -78,7 +78,7 @@
                                 <td>{{ $valor->activo ? 'Sí' : 'No' }}</td>
                                 <td class="text-center text-nowrap">
                                     @if (can('editar-tesoreria-crown-valor', false))
-                                        <a href="{{ route('editar_tesoreria_crown_valor', $valor->id) }}" class="btn-accion-tabla" title="Editar">
+                                        <a href="{{ route('editar_tesoreria_crown_valor', $valor->id) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>
                                         </a>
                                     @endif
@@ -86,7 +86,7 @@
                                         <form action="{{ route('eliminar_tesoreria_crown_valor', $valor->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar este valor?');">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="btn-accion-tabla" title="Eliminar">
+                                            <button type="submit" class="btn-accion-tabla tooltipsC" title="Eliminar">
                                                 <i class="fa fa-times-circle text-danger"></i>
                                             </button>
                                         </form>

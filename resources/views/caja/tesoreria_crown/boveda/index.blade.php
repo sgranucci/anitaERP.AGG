@@ -162,19 +162,19 @@
                                             </td>
                                         @endforeach
                                         <td class="text-center text-nowrap">
-                                            <a href="{{ route('editar_tesoreria_crown_boveda', $mov->id) }}" class="btn-accion-tabla" title="{{ $mov->esBorrador() ? 'Editar' : 'Consultar' }}">
+                                            <a href="{{ route('editar_tesoreria_crown_boveda', $mov->id) }}" class="btn-accion-tabla tooltipsC" title="{{ $mov->esBorrador() ? 'Editar' : 'Consultar' }}">
                                                 <i class="fa fa-edit"></i>
                                             </a>
                                             @if ($puedeImprimirGrilla)
-                                                <a href="{{ route('pdf_tesoreria_crown_boveda', $mov->id) }}" class="btn-accion-tabla" title="Imprimir" target="_blank" rel="noopener">
+                                                <a href="{{ route('pdf_tesoreria_crown_boveda', $mov->id) }}" class="btn-accion-tabla tooltipsC" title="Imprimir" target="_blank" rel="noopener">
                                                     <i class="fa fa-print"></i>
                                                 </a>
                                             @endif
                                             @if ($puedeRevertirGrilla && $mov->puedeRevertir())
-                                                <button type="button" class="btn-accion-tabla js-revertir-boveda" title="Revertir"
+                                                <button type="button" class="btn-accion-tabla tooltipsC js-revertir-boveda" title="Revertir"
                                                         data-url="{{ route('revertir_tesoreria_crown_boveda', $mov->id) }}"
                                                         data-numero="{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($mov->numero) }}">
-                                                    <i class="fa fa-undo text-danger"></i>
+                                                    <i class="fa fa-undo text-warning"></i>
                                                 </button>
                                             @endif
                                         </td>
@@ -238,7 +238,7 @@
                                         </div>
                                         <div class="modal-footer">
                                             <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal">Cancelar</button>
-                                            <button type="submit" class="btn btn-outline-danger btn-sm">Revertir</button>
+                                            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-undo"></i> Revertir</button>
                                         </div>
                                     </div>
                                 </form>

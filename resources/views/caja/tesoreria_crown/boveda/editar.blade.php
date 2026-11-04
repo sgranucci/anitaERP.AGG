@@ -75,7 +75,7 @@
                     <form method="POST" action="{{ route('eliminar_tesoreria_crown_boveda', $movimiento->id) }}" class="d-inline" onsubmit="return confirm('¿Eliminar este borrador?');">
                         @csrf
                         @method('DELETE')
-                        <button type="submit" class="btn btn-outline-danger btn-sm">Eliminar borrador</button>
+                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-times-circle"></i> Eliminar borrador</button>
                     </form>
                 @endif
                 @if ($movimiento->reversa)
@@ -116,7 +116,7 @@
                                 <input type="password" name="firma_password" class="form-control" placeholder="Clave" autocomplete="new-password" required>
                             </div>
                             <div class="col-md-3 mb-2">
-                                <button type="submit" class="btn btn-outline-danger btn-sm">Revertir</button>
+                                <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-undo"></i> Revertir</button>
                             </div>
                         </div>
                     </form>

@@ -5,7 +5,7 @@ namespace App\Repositories\Compras;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Support\Compras\TipotransaccionCompraListadoFiltros;
 use App\Support\Compras\TipotransaccionCompraRetencionFiltro;
-use App\Support\Compras\ConceptoIvaAnitaEsquemaSupport;
+use App\Support\Compras\AnitaSync\TipotransaccionCompra\TipotransaccionCompraAnitaEsquemaSupport;
 use App\Repositories\Compras\Tipotransaccion_Compra_CentrocostoRepositoryInterface;
 use App\Repositories\Compras\Tipotransaccion_Compra_Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
@@ -279,8 +279,8 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
             	$tipotransaccion = $this->model->findOrFail($data->tcomp_clave)->update($arr_campos);
 
 			// Graba tabla de centros de costo del tipo de transaccion.
-			// Ferli no tiene compras.ccostcomp: el vínculo queda solo en el ERP.
-			if (ConceptoIvaAnitaEsquemaSupport::leeCcostcomp()) {
+			// Ferli/Crown no tienen compras.ccostcomp: el vínculo queda solo en el ERP.
+			if (TipotransaccionCompraAnitaEsquemaSupport::escribeCcostcomp()) {
 			$data = array( 
 				'acc' => 'list', 'tabla' => $this->tableAnita[1], 
 				'sistema' => 'compras',
@@ -388,10 +388,7 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
         );
         $apiAnita->apiCallEscritura($data);
 
-		// Graba centros de costo
 		Self::grabaCentrocosto($request);
-
-		// Graba conceptos de iva
 		Self::grabaConcepto_Ivacompra($request);
 	}
 
@@ -424,7 +421,7 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 				'whereArmado' => " WHERE tcomp_clave = '".$id."' " );
         $apiAnita->apiCallEscritura($data);
 
-		if (ConceptoIvaAnitaEsquemaSupport::leeCcostcomp()) {
+		if (TipotransaccionCompraAnitaEsquemaSupport::escribeCcostcomp()) {
 			// Borra centros de costo
 			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
 					'sistema' => 'compras',
@@ -435,19 +432,20 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 			Self::grabaCentrocosto($request);
 		}
 
-		// Borra formas de pago
-		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
-				'sistema' => 'compras',
-				'whereArmado' => " WHERE contc_tipo = '".$id."' " );
-        $apiAnita->apiCallEscritura($data);
+		// Borra conceptos vinculados (cont_comp; existe en Crown y Ferli)
+		if (TipotransaccionCompraAnitaEsquemaSupport::escribeContComp()) {
+			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
+					'sistema' => 'compras',
+					'whereArmado' => " WHERE contc_tipo = '".$id."' " );
+			$apiAnita->apiCallEscritura($data);
 
-		// Graba formas de pago
-		Self::grabaConcepto_Ivacompra($request);
+			Self::grabaConcepto_Ivacompra($request);
+		}
 	}
 
 	private function grabaCentrocosto($request)
 	{
-		if (! ConceptoIvaAnitaEsquemaSupport::leeCcostcomp()) {
+		if (! TipotransaccionCompraAnitaEsquemaSupport::escribeCcostcomp()) {
 			return;
 		}
 
@@ -488,11 +486,14 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 
 	private function grabaConcepto_Ivacompra($request)
 	{
+		if (! TipotransaccionCompraAnitaEsquemaSupport::escribeContComp()) {
+			return;
+		}
+
 		if (isset($request['concepto_ivacompra_ids']))
 		{
 			$apiAnita = new ApiAnita();
 
-			// Graba Conceptos
 			$concepto_ivacompra_ids = $request['concepto_ivacompra_ids'];
 
 			if ($concepto_ivacompra_ids[0] != null)
@@ -531,19 +532,19 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 				'whereArmado' => " WHERE tcomp_clave = '".$id."' " );
         $apiAnita->apiCallEscritura($data);
 
-		if (ConceptoIvaAnitaEsquemaSupport::leeCcostcomp()) {
-			// Borra centros de costo
+		if (TipotransaccionCompraAnitaEsquemaSupport::escribeCcostcomp()) {
 			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
 					'sistema' => 'compras',
 					'whereArmado' => " WHERE ccostc_tipo = '".$id."' " );
 			$apiAnita->apiCallEscritura($data);
 		}
 
-		// Borra conceptos de iva compra
-		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
-			'sistema' => 'compras',
-			'whereArmado' => " WHERE contc_tipo = '".$id."' " );
-        $apiAnita->apiCallEscritura($data);
+		if (TipotransaccionCompraAnitaEsquemaSupport::escribeContComp()) {
+			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
+				'sistema' => 'compras',
+				'whereArmado' => " WHERE contc_tipo = '".$id."' " );
+			$apiAnita->apiCallEscritura($data);
+		}
 	}
 
 }

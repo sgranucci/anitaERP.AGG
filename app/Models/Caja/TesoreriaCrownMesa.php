@@ -8,6 +8,7 @@ use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class TesoreriaCrownMesa extends Model implements Auditable
@@ -29,10 +30,12 @@ class TesoreriaCrownMesa extends Model implements Auditable
         'deposito_id',
         'cajero_crown_id',
         'banca_id',
+        'revierte_id',
         'tipo',
         'numero',
         'estado',
         'comentario',
+        'motivo',
         'usuario_id',
         'confirmado_at',
     ];
@@ -70,6 +73,28 @@ class TesoreriaCrownMesa extends Model implements Auditable
     public function banca(): BelongsTo
     {
         return $this->belongsTo(TesoreriaCrownBanca::class, 'banca_id');
+    }
+
+    public function revierte(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'revierte_id');
+    }
+
+    public function reversa(): HasOne
+    {
+        return $this->hasOne(self::class, 'revierte_id');
+    }
+
+    public function puedeRevertir(): bool
+    {
+        return $this->estado === self::CONFIRMADO
+            && $this->revierte_id === null
+            && $this->reversa === null;
+    }
+
+    public function esReversa(): bool
+    {
+        return $this->revierte_id !== null;
     }
 
     public function usuario(): BelongsTo

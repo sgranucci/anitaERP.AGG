@@ -3250,12 +3250,14 @@ Route::post('caja/tesoreria-crown/jornada/cajeros/workbench/columnas', 'Caja\Tes
 Route::post('caja/tesoreria-crown/jornada/cajeros/workbench/etiquetas', 'Caja\TesoreriaCrownJornadaController@guardarEtiquetasCajeros')->name('guardar_etiquetas_tesoreria_crown_cajero');
 Route::post('caja/tesoreria-crown/jornada/cajeros/workbench/preview', 'Caja\TesoreriaCrownJornadaController@previewCajeros')->name('preview_tesoreria_crown_cajero');
 Route::get('caja/tesoreria-crown/mesa', 'Caja\TesoreriaCrownMesaController@index')->name('tesoreria_crown_mesa');
+Route::get('caja/tesoreria-crown/mesa/crear', 'Caja\TesoreriaCrownMesaController@formulario')->name('nueva_tesoreria_crown_mesa');
 Route::post('caja/tesoreria-crown/mesa', 'Caja\TesoreriaCrownMesaController@crear')->name('crear_tesoreria_crown_mesa');
 Route::post('caja/tesoreria-crown/mesa/banca', 'Caja\TesoreriaCrownMesaController@guardarBanca')->name('guardar_banca_tesoreria_crown_mesa');
 Route::get('caja/tesoreria-crown/mesa/{id}', 'Caja\TesoreriaCrownMesaController@editar')->name('editar_tesoreria_crown_mesa');
 Route::post('caja/tesoreria-crown/mesa/{id}', 'Caja\TesoreriaCrownMesaController@guardar')->name('guardar_tesoreria_crown_mesa');
 Route::post('caja/tesoreria-crown/mesa/{id}/confirmar', 'Caja\TesoreriaCrownMesaController@confirmar')->name('confirmar_tesoreria_crown_mesa');
 Route::post('caja/tesoreria-crown/mesa/{id}/anular', 'Caja\TesoreriaCrownMesaController@anular')->name('anular_tesoreria_crown_mesa');
+Route::post('caja/tesoreria-crown/mesa/{id}/revertir', 'Caja\TesoreriaCrownMesaController@revertir')->name('revertir_tesoreria_crown_mesa');
 Route::delete('caja/tesoreria-crown/mesa/{id}', 'Caja\TesoreriaCrownMesaController@eliminar')->name('eliminar_tesoreria_crown_mesa');
 Route::get('caja/tesoreria-crown/boveda', 'Caja\TesoreriaCrownBovedaController@index')->name('tesoreria_crown_boveda');
 Route::get('caja/tesoreria-crown/boveda/crear', 'Caja\TesoreriaCrownBovedaController@formulario')->name('nueva_tesoreria_crown_boveda');

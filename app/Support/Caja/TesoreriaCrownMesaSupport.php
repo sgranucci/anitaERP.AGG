@@ -122,7 +122,7 @@ final class TesoreriaCrownMesaSupport
             ->unique('codigo')
             ->keyBy(fn (TesoreriaCrownBanca $banca) => (int) $banca->codigo);
         $movimientos = TesoreriaCrownMesa::query()
-            ->with(['deposito', 'cajero'])
+            ->with(['deposito', 'cajero', 'reversa'])
             ->where('jornada_id', $jornada->id)
             ->where('estado', '<>', TesoreriaCrownMesa::ANULADO)
             ->orderBy('numero')
@@ -134,10 +134,11 @@ final class TesoreriaCrownMesaSupport
             $codigoBanca = $juego ? (int) $juego->banca_codigo : 0;
             $movs = $porMesa->get($mesa->id, collect());
             $confirmados = $movs->where('estado', TesoreriaCrownMesa::CONFIRMADO);
+            $vigentes = $confirmados->filter(fn (TesoreriaCrownMesa $movimiento) => $movimiento->puedeRevertir());
             $borradores = $movs->where('estado', TesoreriaCrownMesa::BORRADOR)->count();
-            $tieneFinal = $confirmados->contains(fn ($movimiento) => $movimiento->tipo === 'F');
-            $enJuego = $confirmados->contains(fn ($movimiento) => in_array($movimiento->tipo, ['A', 'R', 'C'], true));
-            $tieneDrop = $confirmados->contains(fn ($movimiento) => $movimiento->tipo === 'D');
+            $tieneFinal = $vigentes->contains(fn ($movimiento) => $movimiento->tipo === 'F');
+            $enJuego = $vigentes->contains(fn ($movimiento) => in_array($movimiento->tipo, ['A', 'R', 'C'], true));
+            $tieneDrop = $vigentes->contains(fn ($movimiento) => $movimiento->tipo === 'D');
             $estado = 'vacia';
             if ($borradores > 0) {
                 $estado = 'borrador';
@@ -285,6 +286,8 @@ final class TesoreriaCrownMesaSupport
             ->where('deposito_id', $depositoId)
             ->where('tipo', 'F')
             ->where('estado', TesoreriaCrownMesa::CONFIRMADO)
+            ->whereNull('revierte_id')
+            ->whereDoesntHave('reversa')
             ->whereHas('jornada', fn ($q) => $q->whereDate('fecha', '<', $fechaYmd))
             ->orderByDesc('numero')
             ->first();
@@ -292,7 +295,10 @@ final class TesoreriaCrownMesaSupport
 
     private static function ultimoEstadoFinalDelDia(int $depositoId, string $fechaYmd): ?TesoreriaCrownMesa
     {
-        return self::movimientosDelDia($depositoId, $fechaYmd, ['F'])->sortByDesc('numero')->first();
+        return self::movimientosDelDia($depositoId, $fechaYmd, ['F'])
+            ->filter(fn (TesoreriaCrownMesa $movimiento) => $movimiento->puedeRevertir())
+            ->sortByDesc('numero')
+            ->first();
     }
 
     /**
@@ -302,7 +308,7 @@ final class TesoreriaCrownMesaSupport
     private static function movimientosDelDia(int $depositoId, string $fechaYmd, array $tipos): Collection
     {
         return TesoreriaCrownMesa::query()
-            ->with('lineas')
+            ->with(['lineas', 'reversa'])
             ->where('deposito_id', $depositoId)
             ->where('estado', TesoreriaCrownMesa::CONFIRMADO)
             ->whereIn('tipo', $tipos)

@@ -11,6 +11,7 @@ use App\Models\Caja\TesoreriaCrownMesaJuego;
 use App\Models\Caja\TesoreriaCrownMesaLinea;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Support\Caja\TesoreriaCrownAcceso;
+use App\Support\Caja\TesoreriaCrownEscritorioNav;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
 use App\Support\Caja\TesoreriaCrownMesaSupport;
 use App\Support\Caja\TesoreriaCrownNumeradorSupport;
@@ -50,8 +51,37 @@ class TesoreriaCrownMesaController extends Controller
             'gruposFichas' => $salaId > 0 ? TesoreriaCrownMesaSupport::grupos($salaId, 'A') : [],
             'juego' => $mesa ? TesoreriaCrownMesaJuego::query()->where('deposito_id', $mesa->id)->first() : null,
             'movimientos' => ($jornada && $mesa)
-                ? TesoreriaCrownMesa::query()->with(['cajero', 'banca'])->where('jornada_id', $jornada->id)->where('deposito_id', $mesa->id)->orderByDesc('numero')->get()
+                ? TesoreriaCrownMesa::query()->with(['cajero', 'banca', 'reversa', 'revierte'])->where('jornada_id', $jornada->id)->where('deposito_id', $mesa->id)->orderByDesc('numero')->get()
                 : collect(),
+        ]);
+    }
+
+    public function formulario(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('crear-tesoreria-crown-mesa');
+
+        $jornada = $this->jornadaEnAlcance((int) $request->input('jornada_id'));
+        $volver = route('ver_tesoreria_crown_jornada', $jornada->id).'?panel=mesas';
+        if (! $jornada->estaAbierta()) {
+            return redirect()->to($volver)->with('mensaje-error', 'La jornada está cerrada.');
+        }
+        $mesa = TesoreriaCrownMesaSupport::mesas((int) $jornada->sala_id)
+            ->firstWhere('id', (int) $request->input('deposito_id'));
+        if ($mesa === null) {
+            return redirect()->to($volver.'#piso')->with('mensaje-error', 'Esa mesa no es de esta sala.');
+        }
+        $stock = TesoreriaCrownMesaSupport::stock(
+            (int) $mesa->id,
+            (int) $jornada->sala_id,
+            $jornada->fecha->format('Y-m-d')
+        );
+
+        return view('caja.tesoreria_crown.mesa.crear', [
+            'jornada' => $jornada,
+            'mesa' => $mesa,
+            'banca' => $stock['banca'] ?? null,
+            'escritorio' => TesoreriaCrownEscritorioNav::armar($jornada),
         ]);
     }
 
@@ -106,6 +136,9 @@ class TesoreriaCrownMesaController extends Controller
             'grupos' => TesoreriaCrownMesaSupport::grupos((int) $movimiento->sala_id, $movimiento->tipo),
             'cantidades' => $movimiento->lineas->pluck('cantidad', 'valor_id'),
             'editable' => $movimiento->esBorrador() && $movimiento->jornada->estaAbierta(),
+            'escritorio' => $movimiento->jornada
+                ? TesoreriaCrownEscritorioNav::armar($movimiento->jornada)
+                : null,
         ]);
     }
 
@@ -210,10 +243,89 @@ class TesoreriaCrownMesaController extends Controller
         return back()->with('mensaje', 'Movimiento anulado. Dejó de entrar en el stock.');
     }
 
+    public function revertir(Request $request, int $id)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('editar-tesoreria-crown-mesa');
+
+        $movimiento = $this->movimientoEnAlcance($id);
+        if (! $movimiento->jornada->estaAbierta()) {
+            return back()->with('mensaje-error', 'La jornada está cerrada.');
+        }
+        if (! $movimiento->puedeRevertir()) {
+            return back()->with('mensaje-error', 'Solo se revierte un movimiento confirmado, y una sola vez.');
+        }
+        $motivo = trim((string) $request->input('motivo'));
+        if ($motivo === '' || mb_strlen($motivo) > 500) {
+            return back()->with('mensaje-error', 'Escribí el motivo de la reversa.');
+        }
+        $limite = 'tc-mesa:'.$movimiento->id.'|'.$request->ip();
+        if (RateLimiter::tooManyAttempts($limite, 8)) {
+            return back()->with('mensaje-error', 'Demasiados intentos. Esperá un minuto y volvé a probar.');
+        }
+        $usuario = TesoreriaCrownFirmaSupport::usuarioPorClave(
+            (string) $request->input('firma_usuario'),
+            (string) $request->input('firma_password')
+        );
+        if ($usuario === null || ! TesoreriaCrownMesaSupport::puedeConfirmar($usuario)) {
+            RateLimiter::hit($limite, 60);
+
+            return back()->with('mensaje-error', 'Usuario o clave de tesorería incorrectos.');
+        }
+        RateLimiter::clear($limite);
+
+        $lineas = $movimiento->lineas->filter(fn ($linea) => abs((float) $linea->cantidad) >= 0.0001);
+        if ($lineas->isEmpty()) {
+            return back()->with('mensaje-error', 'Este movimiento no tiene cantidades para revertir.');
+        }
+
+        try {
+            $nuevo = DB::transaction(function () use ($movimiento, $usuario, $motivo, $lineas) {
+                $original = TesoreriaCrownMesa::query()->whereKey($movimiento->id)->lockForUpdate()->first();
+                if ($original === null || ! $original->puedeRevertir()) {
+                    throw new \RuntimeException('Solo se revierte un movimiento confirmado, y una sola vez.');
+                }
+
+                $nuevo = TesoreriaCrownMesa::query()->create([
+                    'sala_id' => $original->sala_id,
+                    'empresa_id' => $original->empresa_id,
+                    'jornada_id' => $original->jornada_id,
+                    'deposito_id' => $original->deposito_id,
+                    'cajero_crown_id' => $original->cajero_crown_id,
+                    'banca_id' => $original->banca_id,
+                    'revierte_id' => $original->id,
+                    'tipo' => $original->tipo,
+                    'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $original->sala_id, 'M'),
+                    'estado' => TesoreriaCrownMesa::CONFIRMADO,
+                    'comentario' => 'Reversa de '.TesoreriaCrownNumeradorSupport::visible((int) $original->numero),
+                    'motivo' => $motivo,
+                    'usuario_id' => $usuario->id,
+                    'confirmado_at' => now(),
+                ]);
+                foreach ($lineas as $linea) {
+                    TesoreriaCrownMesaLinea::query()->create([
+                        'mesa_id' => $nuevo->id,
+                        'valor_id' => $linea->valor_id,
+                        'cantidad' => (int) round((float) $linea->cantidad * -1),
+                    ]);
+                }
+
+                return $nuevo;
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('mensaje-error', $e->getMessage());
+        }
+
+        return back()->with(
+            'mensaje',
+            'Reversa '.TesoreriaCrownNumeradorSupport::visible((int) $nuevo->numero).' grabada. El movimiento original sigue y este lo compensa.'
+        );
+    }
+
     public function eliminar(int $id)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
-        can('crear-tesoreria-crown-mesa');
+        can('eliminar-borrador-tesoreria-crown-mesa');
 
         $movimiento = $this->movimientoEnAlcance($id);
         if (! $movimiento->esBorrador() || ! $movimiento->jornada->estaAbierta()) {
@@ -330,7 +442,7 @@ class TesoreriaCrownMesaController extends Controller
     private function movimientoEnAlcance(int $id): TesoreriaCrownMesa
     {
         $movimiento = TesoreriaCrownMesa::query()
-            ->with(['jornada', 'deposito', 'cajero', 'banca', 'lineas.valor', 'usuario'])
+            ->with(['jornada', 'deposito', 'cajero', 'banca', 'lineas.valor', 'usuario', 'reversa', 'revierte'])
             ->find($id);
         if ($movimiento === null) {
             abort(404);

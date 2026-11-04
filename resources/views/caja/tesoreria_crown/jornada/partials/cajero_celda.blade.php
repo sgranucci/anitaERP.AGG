@@ -28,7 +28,7 @@
                 @csrf
                 <input type="hidden" name="asignacion_id" value="{{ $fila->id }}">
                 <input type="hidden" name="tipo" value="H">
-                <button type="submit" class="btn btn-link btn-sm p-0">{{ $habilitaciones->isEmpty() ? 'Habilitar' : 'Otra habilitación' }}</button>
+                <button type="submit" class="btn btn-link btn-sm p-0"><i class="fa fa-plus-circle"></i> {{ $habilitaciones->isEmpty() ? 'Habilitar' : 'Otra habilitación' }}</button>
             </form>
         @endif
         @break
@@ -41,7 +41,7 @@
                 @csrf
                 <input type="hidden" name="asignacion_id" value="{{ $fila->id }}">
                 <input type="hidden" name="tipo" value="F">
-                <button type="submit" class="btn btn-link btn-sm p-0">{{ $rendiciones->isEmpty() ? 'Rendir' : 'Otra rendición' }}</button>
+                <button type="submit" class="btn btn-link btn-sm p-0"><i class="fa fa-plus-circle"></i> {{ $rendiciones->isEmpty() ? 'Rendir' : 'Otra rendición' }}</button>
             </form>
         @endif
         @break

@@ -11,7 +11,6 @@
 
 @section('scripts')
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/jornada.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/jornada.js')) }}"></script>
-    <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/cajero.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/cajero.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-qbe-grupos.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-orden.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-agrupar.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-agrupar.js')) }}"></script>
@@ -19,6 +18,7 @@
     <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-vista-guardar.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/workbench.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/workbench.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/listado.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/listado.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/mesa_revertir.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/mesa_revertir.js')) }}"></script>
 @endsection
 
 @section('contenido')
@@ -133,7 +133,7 @@
                                     <input type="text" class="form-control" id="deposito_codigo" placeholder="Código" autocomplete="off" value="">
                                     <input type="text" class="form-control" id="deposito_nombre" readonly placeholder="Nombre" tabindex="-1">
                                     <div class="input-group-append">
-                                        <button type="button" class="btn btn-outline-secondary" id="btn-consulta-deposito" title="Buscar caja"><i class="fa fa-search"></i></button>
+                                        <button type="button" class="btn-accion-tabla tooltipsC" id="btn-consulta-deposito" title="Buscar caja"><i class="fa fa-search"></i></button>
                                     </div>
                                 </div>
                             </div>
@@ -144,7 +144,7 @@
                                     <input type="text" class="form-control" id="cajero_codigo" placeholder="Código" autocomplete="off">
                                     <input type="text" class="form-control" id="cajero_nombre" readonly placeholder="Nombre" tabindex="-1">
                                     <div class="input-group-append">
-                                        <button type="button" class="btn btn-outline-secondary" id="btn-consulta-cajero" title="Buscar cajero"><i class="fa fa-search"></i></button>
+                                        <button type="button" class="btn-accion-tabla tooltipsC" id="btn-consulta-cajero" title="Buscar cajero"><i class="fa fa-search"></i></button>
                                     </div>
                                 </div>
                             </div>
@@ -269,14 +269,14 @@
                                                     <form action="{{ route('quitar_tesoreria_crown_asignacion', $fila->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Quitar esta asignación?');">
                                                         @csrf
                                                         @method('DELETE')
-                                                        <button type="submit" class="btn-accion-tabla" title="Quitar"><i class="fa fa-times-circle text-danger"></i></button>
+                                                        <button type="submit" class="btn-accion-tabla tooltipsC" title="Quitar"><i class="fa fa-times-circle text-danger"></i></button>
                                                     </form>
                                                 @endif
                                                 @if (($esAdministrador ?? false) && ($fila->comprobantes->isNotEmpty() || $fila->cierres->isNotEmpty()))
                                                     <form action="{{ route('vaciar_tesoreria_crown_asignacion', $fila->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Borrar todo de esta caja? Se eliminan habilitaciones, rendiciones, reversas y cierres. El cajero sigue asignado.');">
                                                         @csrf
                                                         @method('DELETE')
-                                                        <button type="submit" class="btn btn-outline-danger btn-sm">Borrar todo</button>
+                                                        <button type="submit" class="btn-accion-tabla tooltipsC" title="Borrar todo"><i class="fa fa-times-circle text-danger"></i></button>
                                                     </form>
                                                 @endif
                                             </td>
@@ -314,7 +314,6 @@
     </div>
 </div>
 
-@include('caja.tesoreria_crown.partials.modal_consulta_cajero')
 <div class="modal fade" id="modal-consulta-jornada" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">

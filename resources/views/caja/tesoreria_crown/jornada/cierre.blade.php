@@ -221,16 +221,17 @@
                                             @endforeach
                                         </ul>
                                         <div class="tc-cierre-doc-acciones">
-                                            <a class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener" href="{{ $urlComprobante($docPanel['id']) }}">Abrir</a>
-                                            @if ($docPanel['puede_modificar'] && can('crear-tesoreria-crown-movimiento', false))
-                                                <a class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener" href="{{ $urlComprobante($docPanel['id']) }}">Modificar</a>
-                                            @endif
+                                            <a class="btn-accion-tabla tooltipsC" target="_blank" rel="noopener" href="{{ $urlComprobante($docPanel['id']) }}" title="{{ ($docPanel['puede_modificar'] ?? false) ? 'Modificar' : 'Abrir' }}">
+                                                <i class="fa fa-edit"></i>
+                                            </a>
                                             @if ($docPanel['puede_volver'] && can('crear-tesoreria-crown-movimiento', false))
                                                 <form method="POST" target="_blank" action="{{ route('volver_borrador_tesoreria_crown_movimiento', ['id' => $docPanel['id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}" class="d-inline mb-0" onsubmit="return confirm('¿Volver este comprobante a borrador para modificarlo?');">
                                                     @csrf
                                                     <input type="hidden" name="origen" value="modal_consulta">
                                                     <input type="hidden" name="vista" value="consulta">
-                                                    <button type="submit" class="btn btn-outline-primary btn-sm">Modificar</button>
+                                                    <button type="submit" class="btn-accion-tabla tooltipsC" title="Modificar">
+                                                        <i class="fa fa-edit"></i>
+                                                    </button>
                                                 </form>
                                             @endif
                                             @if ($docPanel['puede_revertir'] && can('editar-tesoreria-crown-movimiento', false))
@@ -238,11 +239,15 @@
                                                     @csrf
                                                     <input type="hidden" name="origen" value="modal_consulta">
                                                     <input type="hidden" name="vista" value="consulta">
-                                                    <button type="submit" class="btn btn-outline-danger btn-sm">Revertir</button>
+                                                    <button type="submit" class="btn-accion-tabla tooltipsC" title="Revertir">
+                                                        <i class="fa fa-undo text-warning"></i>
+                                                    </button>
                                                 </form>
                                             @endif
                                             @if ($docPanel['reversa_id'])
-                                                <a class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener" href="{{ $urlComprobante($docPanel['reversa_id']) }}">Reversa {{ $docPanel['reversa_numero'] }}</a>
+                                                <a class="btn-accion-tabla tooltipsC" target="_blank" rel="noopener" href="{{ $urlComprobante($docPanel['reversa_id']) }}" title="Reversa {{ $docPanel['reversa_numero'] }}">
+                                                    <i class="fa fa-undo"></i>
+                                                </a>
                                             @endif
                                         </div>
                                     </article>
@@ -437,7 +442,7 @@
                                 <input type="password" name="firma_password" class="form-control form-control-sm" placeholder="Clave" autocomplete="current-password" required>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('¿Reabrir esta caja? El cierre queda en la historia.');">Reabrir caja</button>
+                        <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('¿Reabrir esta caja? El cierre queda en la historia.');"><i class="fa fa-unlock-alt"></i> Reabrir caja</button>
                     </form>
                 @endif
 

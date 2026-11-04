@@ -5,7 +5,7 @@
 @endsection
 
 @section('scripts')
-    <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/cajero.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/cajero.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/mesa_revertir.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/mesa_revertir.js')) }}"></script>
 @endsection
 
 @section('contenido')
@@ -21,6 +21,11 @@
                     @endif
                 </h3>
                 <div class="card-tools">
+                    @if ($jornada && $mesa && $jornada->estaAbierta() && can('crear-tesoreria-crown-mesa', false))
+                        <a href="{{ route('nueva_tesoreria_crown_mesa', ['jornada_id' => $jornada->id, 'deposito_id' => $mesa->id]) }}" class="btn btn-primary btn-sm mr-1">
+                            <i class="fa fa-plus-circle"></i> Nuevo movimiento
+                        </a>
+                    @endif
                     @if ($jornada)
                         <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel=mesas{{ $mesa ? '&mesa='.urlencode($mesa->codigo) : '' }}#{{ $mesa ? 'detalle' : 'piso' }}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-reply-all"></i> Volver a la jornada
@@ -60,27 +65,6 @@
                         @include('caja.tesoreria_crown.mesa.partials.cantidades', ['titulo' => 'Estado final contado', 'filas' => $estadoFinal])
                         @include('caja.tesoreria_crown.mesa.partials.cantidades', ['titulo' => 'Drop', 'filas' => $drop])
 
-                        @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-mesa', false))
-                            <form method="POST" action="{{ route('crear_tesoreria_crown_mesa') }}" class="border rounded p-3 mt-3" data-enter-campos="1">
-                                @csrf
-                                <input type="hidden" name="jornada_id" value="{{ $jornada->id }}">
-                                <input type="hidden" name="deposito_id" value="{{ $mesa->id }}">
-                                <div class="form-row">
-                                    @include('caja.tesoreria_crown.partials.campo_cajero', [
-                                        'salaId' => $sala->id,
-                                        'codigo' => old('cajero_numero'),
-                                        'nombre' => '',
-                                        'inputId' => 'cajero_numero',
-                                    ])
-                                    <div class="form-group col-md-5 mb-2">
-                                        <label for="comentario">Comentario</label>
-                                        <input type="text" name="comentario" id="comentario" class="form-control" maxlength="80" value="{{ old('comentario') }}">
-                                    </div>
-                                </div>
-                                @include('caja.tesoreria_crown.partials.operaciones_mesa')
-                            </form>
-                        @endif
-
                         <h5 class="mt-4">Movimientos de la mesa</h5>
                         <div class="table-responsive">
                             <table class="table table-sm table-bordered mb-0">
@@ -91,19 +75,33 @@
                                         <th>Cajero</th>
                                         <th>Banca</th>
                                         <th>Estado</th>
+                                        <th class="text-center" style="width:90px;">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse ($movimientos as $mov)
                                         <tr>
                                             <td><a class="text-primary" href="{{ route('editar_tesoreria_crown_mesa', $mov->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($mov->numero) }}</a></td>
-                                            <td>{{ \App\Support\Caja\TesoreriaCrownMesaSupport::tipo($mov->tipo) }}</td>
+                                            <td>
+                                                {{ \App\Support\Caja\TesoreriaCrownMesaSupport::tipo($mov->tipo) }}
+                                                @if ($mov->esReversa())
+                                                    (reversa)
+                                                @endif
+                                            </td>
                                             <td>{{ $mov->cajero->nombre ?? '' }}</td>
                                             <td>{{ $mov->banca ? $mov->banca->nombre.' desde '.$mov->banca->vigencia_desde->format('d/m/Y') : '' }}</td>
-                                            <td>{{ \App\Support\Caja\TesoreriaCrownMesaSupport::estado($mov->estado) }}</td>
+                                            <td>
+                                                {{ \App\Support\Caja\TesoreriaCrownMesaSupport::estado($mov->estado) }}
+                                                @if ($mov->reversa)
+                                                    · reversado
+                                                @endif
+                                            </td>
+                                            <td class="text-center text-nowrap">
+                                                @include('caja.tesoreria_crown.mesa.partials.accion_fila', ['mov' => $mov, 'jornada' => $jornada])
+                                            </td>
                                         </tr>
                                     @empty
-                                        <tr><td colspan="5" class="text-center text-muted py-3">No hay movimientos.</td></tr>
+                                        <tr><td colspan="6" class="text-center text-muted py-3">No hay movimientos.</td></tr>
                                     @endforelse
                                 </tbody>
                             </table>
@@ -151,5 +149,5 @@
         </div>
     </div>
 </div>
-@include('caja.tesoreria_crown.partials.modal_consulta_cajero')
+@include('caja.tesoreria_crown.mesa.partials.modal_revertir')
 @endsection

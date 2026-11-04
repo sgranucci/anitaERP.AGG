@@ -19,7 +19,7 @@
                         <li>
                             <span>
                                 @if (! empty($detalleBillete))
-                                    <button type="button" class="btn-accion-tabla js-arqueo-billete" title="Operaciones de este billete"
+                                    <button type="button" class="btn-accion-tabla tooltipsC js-arqueo-billete" title="Operaciones de este billete"
                                             data-valor="{{ (int) $fila['valor']->id }}">
                                         <i class="fa fa-list"></i>
                                     </button>
