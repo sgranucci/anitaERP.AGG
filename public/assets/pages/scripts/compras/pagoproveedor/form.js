@@ -802,6 +802,29 @@
             + '</td></tr>';
     }
 
+    function fmtFechaIso(iso) {
+        var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? (m[3] + '/' + m[2] + '/' + m[1]) : String(iso || '');
+    }
+
+    function filasExclusion(det) {
+        var exc = det && det.exclusion;
+        if (!exc || !(Number(exc.porcentaje) > 0)) {
+            return '';
+        }
+        var html = filaDetalle('Exclusión %', fmt(exc.porcentaje));
+        if (exc.desdefecha || exc.hastafecha) {
+            html += filaDetalle(
+                'Vigencia exclusión',
+                fmtFechaIso(exc.desdefecha) + ' → ' + fmtFechaIso(exc.hastafecha)
+            );
+        }
+        if (det.importe_antes_exclusion != null) {
+            html += filaDetalle('Antes de exclusión', fmt(det.importe_antes_exclusion));
+        }
+        return html;
+    }
+
     function etiquetaMotivo(motivo) {
         var map = {
             ok: 'Aplica',
@@ -848,6 +871,7 @@
             var acum = res.acumulado_ganancias || null;
             html += filaDetalle('Estado', etiquetaMotivo(r.motivo));
             html += filaDetalle('Importe a retener', '<strong>' + fmt(r.importe) + '</strong>');
+            html += filasExclusion(gd);
             html += filaDetalle('Régimen', (gd.codigo ? gd.codigo + ' — ' : '') + (gd.regimen || '—'));
             html += filaDetalle('Forma / modo', (gd.forma_calculo || '—') + (gd.modo ? ' / ' + gd.modo : ''));
             html += filaDetalle('Inscripto', gd.inscripto === true ? 'Sí' : (gd.inscripto === false ? 'No' : '—'));
@@ -926,6 +950,7 @@
             var jur = r.provincia_nombre || idet.provincia_nombre || idet.jurisdiccion || '—';
             html += filaDetalle('Estado', etiquetaMotivo(r.motivo));
             html += filaDetalle('Importe a retener', '<strong>' + fmt(r.importe) + '</strong>');
+            html += filasExclusion(idet);
             html += filaDetalle('Jurisdicción', $('<div>').text(jur).html()
                 + (idet.jurisdiccion ? ' <span class="text-muted">(cod. ' + idet.jurisdiccion + ')</span>' : ''));
             html += filaDetalle('Origen de tasa', origenTasaLabel(idet.origen_tasa));
@@ -942,6 +967,7 @@
         // IVA / SUSS
         html += filaDetalle('Estado', etiquetaMotivo(r.motivo));
         html += filaDetalle('Importe a retener', '<strong>' + fmt(r.importe) + '</strong>');
+        html += filasExclusion(r.detalle || {});
         html += filaDetalle('Alícuota %', fmt(r.alicuota));
         if (tipo === 'iva') {
             html += filaDetalle('Base neto', fmt(r.base_neto));

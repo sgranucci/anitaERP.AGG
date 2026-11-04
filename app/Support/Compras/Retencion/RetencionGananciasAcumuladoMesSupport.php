@@ -5,6 +5,7 @@ namespace App\Support\Compras\Retencion;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Retencionganancia;
+use App\Support\Compras\PagoproveedorImputacionApSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -18,11 +19,27 @@ use Illuminate\Support\Facades\Log;
  * Neto previo: suma de detalle_calculo.neto_pago (fallback base_calculo).
  * Retenido previo: suma de importe de retenciones G del período.
  *
+ * Excluye OP en REVERTIDA/BAJA (y ANULADA legacy): al revertir se conservan los
+ * certificados en pagoproveedor_retencion, pero no deben entrar al acumulado del mes
+ * (mismo criterio que SICORE/IIBB/SUSS). Si no, una OPP de reemplazo en la misma fecha
+ * “recuerda” Ganancias de la revertida y dobla el neto del período.
+ *
  * Respaldo híbrido: retmov Anita (clave tipo|letra|sucursal|nro|empresa) para OPs
  * que no están en el ERP. Si Anita no responde, queda solo el acumulado ERP.
  */
 final class RetencionGananciasAcumuladoMesSupport
 {
+    /**
+     * Estados de OP cuyas retenciones G no suman al acumulado RG 830.
+     * REVERTIDA/BAJA = circuito actual; ANULADA = por si quedó dato viejo.
+     *
+     * @var list<string>
+     */
+    private const ESTADOS_EXCLUIDOS_ACUMULADO = [
+        ...PagoproveedorImputacionApSupport::ESTADOS_ANULADOS,
+        'ANULADA',
+    ];
+
     /** @var array<int, int> */
     private array $cacheEmpresaAnita = [];
 
@@ -82,7 +99,7 @@ final class RetencionGananciasAcumuladoMesSupport
             ->where('pagoproveedor_retencion.tiporetencion', Pagoproveedor_Retencion::TIPO_GANANCIAS)
             ->where('pp.proveedor_id', $proveedorId)
             ->whereBetween('pp.fecha', [$desde->toDateString(), $hasta->toDateString()])
-            ->where('pp.estado', '!=', 'ANULADA')
+            ->whereNotIn('pp.estado', self::ESTADOS_EXCLUIDOS_ACUMULADO)
             ->where('pagoproveedor_retencion.importe', '>', 0);
 
         if ($empresaId && $empresaId > 0) {
@@ -244,10 +261,11 @@ final class RetencionGananciasAcumuladoMesSupport
         string $hastaIso,
         ?int $empresaId,
     ): void {
+        // Marca claves de OP revertidas/baja para que Anita no las reinyecte al acumulado.
         $q = Pagoproveedor::query()
             ->where('proveedor_id', $proveedorId)
             ->whereBetween('fecha', [$desdeIso, $hastaIso])
-            ->where('estado', 'ANULADA');
+            ->whereIn('estado', self::ESTADOS_EXCLUIDOS_ACUMULADO);
         if ($empresaId && $empresaId > 0) {
             $q->where('empresa_id', $empresaId);
         }
