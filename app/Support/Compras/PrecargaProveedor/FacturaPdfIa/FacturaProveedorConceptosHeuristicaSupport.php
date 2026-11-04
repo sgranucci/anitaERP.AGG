@@ -112,8 +112,16 @@ final class FacturaProveedorConceptosHeuristicaSupport
             return null;
         }
 
+        // Condición IVA del emisor/receptor («I.V.A. Responsable Inscripto» + CUIT), no el impuesto.
+        if ($this->esCondicionIvaResponsable($filaLower)) {
+            return null;
+        }
+
         $importe = $this->importeDeRotulo($fila);
         if ($importe === null || abs($importe) < 0.01) {
+            return null;
+        }
+        if ($this->importeParser->pareceCuitNumerico(abs($importe))) {
             return null;
         }
 
@@ -141,6 +149,20 @@ final class FacturaProveedorConceptosHeuristicaSupport
         }
 
         return null;
+    }
+
+    /**
+     * Encabezado AFIP: «I.V.A. Responsable Inscripto» / «IVA Responsable Inscripto» + CUIT.
+     * No es el renglón de impuesto del pie.
+     */
+    private function esCondicionIvaResponsable(string $filaLower): bool
+    {
+        if (! preg_match('/\bresponsable\s+inscripto\b/u', $filaLower)) {
+            return false;
+        }
+
+        // Pie real: «I.V.A. INSCRIPTO 1.234,56» sin la palabra «responsable».
+        return (bool) preg_match('/\bi\.?\s*v\.?\s*a\.?\b|\biva\b/u', $filaLower);
     }
 
     /**
@@ -178,11 +200,12 @@ final class FacturaProveedorConceptosHeuristicaSupport
         return [
             ['patron' => '/\biva\s+(?:inscripto\s+)?'.$ali.'\s*%/u', 'tipo' => 'iva', 'alicuota' => null],
             ['patron' => '/\bi\.?\s*v\.?\s*a\.?\s*(?:\s*'.$ali.')?\s*%/u', 'tipo' => 'iva', 'alicuota' => null],
-            ['patron' => '/\bi\.?\s*v\.?\s*a\.?\s*inscripto/u', 'tipo' => 'iva', 'alicuota' => null],
-            ['patron' => '/\biva\s+inscripto/u', 'tipo' => 'iva', 'alicuota' => null],
+            // «I.V.A. INSCRIPTO» del pie (no «Responsable Inscripto» del encabezado).
+            ['patron' => '/\bi\.?\s*v\.?\s*a\.?\s*inscripto\b(?!\s*responsable)/u', 'tipo' => 'iva', 'alicuota' => null],
+            ['patron' => '/\biva\s+inscripto\b(?!\s*responsable)/u', 'tipo' => 'iva', 'alicuota' => null],
             ['patron' => '/\biva\s+discriminado/u', 'tipo' => 'iva', 'alicuota' => null],
             // Pie «IVA 60.644,85» (CONT ya descartado). El renglón «IVA 21% … Base:» lo toma el bloque de abajo.
-            ['patron' => '/^(?:i\.?\s*v\.?\s*a\.?)\b(?!.*\bbase\b)/u', 'tipo' => 'iva', 'alicuota' => null],
+            ['patron' => '/^(?:i\.?\s*v\.?\s*a\.?)\b(?!.*\bbase\b)(?!.*responsable)/u', 'tipo' => 'iva', 'alicuota' => null],
             ['patron' => '/\bneto\s+gravado\s+'.$ali.'/u', 'tipo' => 'neto', 'alicuota' => null],
             ['patron' => '/\bimporte\s+neto\s+gravado/u', 'tipo' => 'neto', 'alicuota' => null],
             ['patron' => '/\bgravado\s+'.$ali.'\s*%/u', 'tipo' => 'neto', 'alicuota' => null],
@@ -190,7 +213,11 @@ final class FacturaProveedorConceptosHeuristicaSupport
             ['patron' => '/\boperaciones\s+exentas/u', 'tipo' => 'exento', 'alicuota' => 0.0],
             ['patron' => '/\bimporte\s+exento/u', 'tipo' => 'exento', 'alicuota' => 0.0],
             ['patron' => '/\bimp\.?\s*exento/u', 'tipo' => 'exento', 'alicuota' => 0.0],
+            // Orden: «No Gravado» antes que «Gravado» (pie Cianbox / e-tiquetas).
             ['patron' => '/\bno\s+gravado/u', 'tipo' => 'no_gravado', 'alicuota' => 0.0],
+            ['patron' => '/\bgravado\b/u', 'tipo' => 'neto', 'alicuota' => null],
+            ['patron' => '/\bexento\b/u', 'tipo' => 'exento', 'alicuota' => 0.0],
+            ['patron' => '/\bredondeo\b/u', 'tipo' => 'redondeo', 'alicuota' => null],
             // RG 5329 / 3337 / Perc. IVA 3% (concepto 103). «Percepción de IVA» AFIP.
             ['patron' => '/\brg\s*(?:5329|3337)\b/u', 'tipo' => 'percepcion_iva', 'alicuota' => 3.0],
             ['patron' => '/\bpercep(?:ci[oó]n)?\s+(?:de\s+)?(?:iva|i\.?\s*v\.?\s*a)/u', 'tipo' => 'percepcion_iva', 'alicuota' => null],
@@ -268,7 +295,23 @@ final class FacturaProveedorConceptosHeuristicaSupport
                 continue;
             }
 
-            $mapa[$clave]['importe'] = round((float) $mapa[$clave]['importe'] + (float) $linea['importe'], 2);
+            // No sumar CUIT + IVA real (p. ej. 30.551.587.300 + 153,42).
+            $actual = abs((float) $mapa[$clave]['importe']);
+            $nuevo = abs((float) $linea['importe']);
+            $mayor = max($actual, $nuevo);
+            $menor = min($actual, $nuevo);
+            if ($menor > 0 && $mayor / $menor >= 50) {
+                // Conservar el menor con alícuota, o el que parezca monto de factura.
+                $quedarseConNuevo = $nuevo < $actual
+                    || (($linea['alicuota_iva'] ?? null) !== null && ($mapa[$clave]['alicuota_iva'] ?? null) === null);
+                if ($quedarseConNuevo) {
+                    $mapa[$clave] = $linea;
+                }
+
+                continue;
+            }
+
+            $mapa[$clave]['importe'] = round($actual + $nuevo, 2);
         }
 
         // «IVA CONT.» y «IVA 21.00%» traen el mismo importe con y sin alícuota: una sola línea.
@@ -300,15 +343,19 @@ final class FacturaProveedorConceptosHeuristicaSupport
         $agregar = [];
 
         $bloques = [
-            ['regex' => '/i\.?\s*v\.?\s*a\.?\s*inscripto[^0-9\n]{0,20}([\d.,]+)/iu', 'tipo' => 'iva', 'alicuota' => null, 'desc' => 'I.V.A. INSCRIPTO'],
+            // No capturar «I.V.A. Responsable Inscripto … CUIT».
+            ['regex' => '/i\.?\s*v\.?\s*a\.?\s*inscripto(?!\s*responsable)[^0-9\n]{0,20}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'iva', 'alicuota' => null, 'desc' => 'I.V.A. INSCRIPTO'],
             ['regex' => '/iva\s+(?:inscripto\s+)?21(?:[.,]\d+)?\s*%?\s*[:\s]*((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'iva', 'alicuota' => 21.0, 'desc' => 'IVA 21%'],
             ['regex' => '/i\.?\s*v\.?\s*a\.?\s+c(?:ont(?:ado)?|tdo)\.?[^0-9\n]{0,20}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'iva', 'alicuota' => null, 'desc' => 'IVA'],
             ['regex' => '/iva\s+(?:inscripto\s+)?10[,.]5\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'iva', 'alicuota' => 10.5, 'desc' => 'IVA 10,5%'],
             ['regex' => '/iva\s+(?:inscripto\s+)?27\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'iva', 'alicuota' => 27.0, 'desc' => 'IVA 27%'],
+            ['regex' => '/i\.?\s*v\.?\s*a\.?\s*21(?:[.,]\d+)?\s*%[^\n]{0,40}?u?\$?s?\s*((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'iva', 'alicuota' => 21.0, 'desc' => 'I.V.A. 21%'],
             ['regex' => '/sub[\s\-]*total[^0-9\n]{0,20}([\d.,]+)/iu', 'tipo' => 'neto', 'alicuota' => null, 'desc' => 'SUBTOTAL'],
             ['regex' => '/neto\s+gravado\s+21\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'neto', 'alicuota' => 21.0, 'desc' => 'Neto gravado 21%'],
             ['regex' => '/neto\s+gravado\s+10[,.]5\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'neto', 'alicuota' => 10.5, 'desc' => 'Neto gravado 10,5%'],
             ['regex' => '/neto\s+gravado\s+27\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'neto', 'alicuota' => 27.0, 'desc' => 'Neto gravado 27%'],
+            // Pie clásico Cianbox: «Gravado u$s 730,58» (sin alícuota en el rótulo).
+            ['regex' => '/(?<!no )gravado\s+(?:u\$s|usd|\$)?\s*((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'neto', 'alicuota' => null, 'desc' => 'Gravado'],
             ['regex' => '/operaciones\s+exentas\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'exento', 'alicuota' => 0.0, 'desc' => 'Operaciones exentas'],
             ['regex' => '/rg\s*(?:5329|3337)[^0-9\n]{0,80}?((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'percepcion_iva', 'alicuota' => 3.0, 'desc' => 'Percepción IVA'],
             ['regex' => '/perc(?:ep(?:ci[oó]n)?)?\.?\s*(?:ii\.?\s*bb\.?|iibb)[^%\n]{0,80}?\$?\s*((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'percepcion_iibb', 'alicuota' => null, 'desc' => 'PERCEP II.BB.'],

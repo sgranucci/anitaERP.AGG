@@ -421,7 +421,7 @@ final class PrecargaProveedorConceptosListaSupport
                 'id_concepto' => (int) $concepto->codigo,
                 'concepto_ivacompra_id' => (int) $concepto->id,
                 'nombre' => (string) $concepto->nombre,
-                'descripcion_ai' => (string) ($concepto->nombre_ia ?: $concepto->nombre),
+                'descripcion_ai' => $this->descripcionAiConRotulosClasicos($concepto),
                 'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
                 'alicuota_iva' => $this->inferirAlicuotaDesdeConcepto($concepto),
             ];
@@ -442,5 +442,39 @@ final class PrecargaProveedorConceptosListaSupport
         }
 
         return null;
+    }
+
+    /**
+     * Une nombre_ia del ABM con rótulos de pie AFIP clásicos (Gravado, I.V.A. INSCRIPTO, etc.).
+     */
+    private function descripcionAiConRotulosClasicos(object $concepto): string
+    {
+        $base = trim((string) ($concepto->nombre_ia ?: $concepto->nombre));
+        $tipo = strtoupper((string) ($concepto->tipoconcepto ?? ''));
+        $extra = match ($tipo) {
+            'G' => 'Gravado, Neto gravado, Neto, Subtotal',
+            'I' => 'I.V.A. INSCRIPTO, I.V.A. INSC, IVA inscripto, Impuesto Valor Agregado',
+            'N', 'E' => 'Exento, No Gravado, Operaciones exentas',
+            default => '',
+        };
+        if ($extra === '') {
+            return $base;
+        }
+        $ya = mb_strtolower($base);
+        $agregar = [];
+        foreach (preg_split('/,\s+/', $extra) ?: [] as $alias) {
+            $alias = trim($alias);
+            if ($alias === '') {
+                continue;
+            }
+            if (! str_contains($ya, mb_strtolower($alias))) {
+                $agregar[] = $alias;
+            }
+        }
+        if ($agregar === []) {
+            return $base;
+        }
+
+        return $base === '' ? implode(', ', $agregar) : $base.', '.implode(', ', $agregar);
     }
 }

@@ -35,6 +35,12 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             if ($importe <= 0) {
                 continue;
             }
+            // Defensa: un CUIT mal leído como importe no se imputa.
+            $digitos = preg_replace('/\D+/', '', (string) (int) $importe) ?? '';
+            if (strlen($digitos) === 11 && in_array(substr($digitos, 0, 2), ['20', '23', '24', '25', '26', '27', '30', '33', '34'], true)
+                && abs($importe - (float) (int) $importe) < 0.001) {
+                continue;
+            }
 
             $mejor = $this->elegirConcepto($conceptosCandidatos, $linea, $usados);
             if ($mejor === null) {
@@ -99,6 +105,10 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             if ($nombre !== '') {
                 $aliases[] = $nombre;
             }
+            $alicuotaConceptoTmp = isset($candidato['alicuota_iva']) ? (float) $candidato['alicuota_iva'] : null;
+            foreach ($this->aliasesRotulosClasicos($tipoConcepto, $nombre, $alicuotaConceptoTmp) as $aliasClasico) {
+                $aliases[] = $aliasClasico;
+            }
             $aliases = array_values(array_unique(array_filter($aliases)));
 
             $score = $this->mejorScoreAlias($descLinea, $aliases);
@@ -149,7 +159,8 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
     private function aliasesDescripcionIa(string $descripcionAi): array
     {
         $texto = str_replace(["\r", "\n"], ' ', $descripcionAi);
-        $partes = preg_split('/\s*,\s*/u', $texto) ?: [];
+        // Lista = ", " (coma + espacio). No partir "10,5%" / "Gravado 10,5%".
+        $partes = preg_split('/,\s+/u', $texto) ?: [];
         $aliases = [];
         foreach ($partes as $parte) {
             $norm = $this->normalizar($parte);
@@ -159,6 +170,65 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
         }
 
         return $aliases;
+    }
+
+    /**
+     * Rótulos de pie AFIP clásicos (Cianbox, e-tiquetas, etc.) aunque no estén en nombre_ia.
+     *
+     * @return list<string>
+     */
+    private function aliasesRotulosClasicos(string $tipoConcepto, string $nombre, ?float $alicuota): array
+    {
+        $out = [];
+        $tipo = strtoupper($tipoConcepto);
+
+        if ($tipo === 'G') {
+            $out = [
+                'gravado',
+                'neto gravado',
+                'neto',
+                'importe neto gravado',
+                'subtotal',
+                'compras',
+            ];
+            if ($alicuota !== null && $alicuota > 0) {
+                $ali = $this->formatearAlicuota($alicuota);
+                $out[] = 'gravado '.$ali;
+                $out[] = 'gravado '.$ali.'%';
+                $out[] = 'neto gravado '.$ali;
+                $out[] = 'neto gravado '.$ali.'%';
+            }
+        } elseif ($tipo === 'I') {
+            $out = [
+                'iva inscripto',
+                'i.v.a. inscripto',
+                'i.v.a. insc',
+                'iva insc',
+                'impuesto valor agregado',
+                'iva discriminado',
+            ];
+            if ($alicuota !== null && $alicuota > 0) {
+                $ali = $this->formatearAlicuota($alicuota);
+                $out[] = 'iva '.$ali;
+                $out[] = 'iva '.$ali.'%';
+                $out[] = 'i.v.a. '.$ali.'%';
+                $out[] = 'i.v.a. '.$ali.',00%';
+            }
+        } elseif (in_array($tipo, ['N', 'E'], true)) {
+            $out = [
+                'exento',
+                'no gravado',
+                'operaciones exentas',
+                'importe exento',
+            ];
+        }
+
+        // Si el nombre ya dice monotributo / percepción, no ensuciar con gravado genérico.
+        if (str_contains($nombre, 'monotribut') || str_contains($nombre, 'percep')) {
+            return [];
+        }
+
+        return array_map(fn (string $a): string => $this->normalizar($a), $out);
     }
 
     /**

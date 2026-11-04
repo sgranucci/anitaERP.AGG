@@ -438,8 +438,8 @@ final class FacturaProveedorPieTotalesSupport
     {
         $patrones = match ($clave) {
             'total' => '/\btotal(?:es)?\b/iu',
-            // «SUBTOTAL 2» es índice de columna. No comer el importe («288,785.00» ni «1.208.932,47»).
-            'subtotal' => '/(?:sub[\s\-]*totals?(?:\s+[12])?(?!\d|[.,])|neto(?:\s+gravado)?)\b/iu',
+            // «SUBTOTAL 2» es índice de columna. «Gravado» = neto del pie Cianbox.
+            'subtotal' => '/(?:sub[\s\-]*totals?(?:\s+[12])?(?!\d|[.,])|neto(?:\s+gravado)?|(?<!no )\bgravado)\b/iu',
             'iva' => '/\b[il1]\.?\s*v\.?\s*a\.?v?(?:\s*inscripto)?\b/iu',
             'impuestos_internos' => '/imp(?:uestos?)?\s*\.?\s*int(?:ernos)?\b/iu',
             'percepcion_iva' => self::PATRON_PERCEPCION_IVA,
@@ -465,8 +465,8 @@ final class FacturaProveedorPieTotalesSupport
         // OCR: $253_875.82 · 253.875.X2 (X≈8) · 36.267_97
         $linea = str_replace('_', '', $linea);
         $linea = preg_replace('/(?<=\d)[Xx](?=\d)/u', '8', $linea) ?? $linea;
-        // $ 1.571.612,21 | 1.208.932,47 | 72535.95 | 36,267.97
-        if (! preg_match_all('/(?:\$|S\s)?\s*(-?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})|-?\d+[.,]\d{2})/u', $linea, $m)) {
+        // $ 1.571.612,21 | u$s 730,58 | 1.208.932,47 | 72535.95 | 36,267.97
+        if (! preg_match_all('/(?:u\$s|U\$S|USD|US\$|\$|S\s)?\s*(-?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})|-?\d+[.,]\d{2})/iu', $linea, $m)) {
             return [];
         }
         foreach ($m[1] as $raw) {
@@ -534,8 +534,8 @@ final class FacturaProveedorPieTotalesSupport
         if (in_array(round($importe, 2), [3.0, 6.0, 10.5, 21.0, 27.0], true)) {
             return false;
         }
-        // Para TOTAL/neto/IVA exigir montos de factura reales.
-        if (in_array($clave, ['total', 'subtotal', 'iva'], true) && $importe < 50) {
+        // Para TOTAL/neto/IVA exigir montos de factura reales (ME chicas: u$s 153,42).
+        if (in_array($clave, ['total', 'subtotal', 'iva'], true) && $importe < 1) {
             return false;
         }
 
@@ -545,8 +545,19 @@ final class FacturaProveedorPieTotalesSupport
     private function detectarClaveEnTexto(string $linea): ?string
     {
         $l = mb_strtolower($linea);
+        // Pie Cianbox: estos rótulos no son neto/IVA del cierre.
+        if (preg_match('/\bno\s+gravado\b|\bredondeo\b/iu', $l)) {
+            return null;
+        }
+        if (preg_match('/\bexento\b/iu', $l) && ! preg_match('/operaciones\s+exentas/iu', $l)) {
+            return null;
+        }
         // Orden importa: Per.IVA / RG antes que IVA genérico; TOTAL antes que Subtotal.
         if (preg_match('/sub[\s\-]*totals?/iu', $l)) {
+            return 'subtotal';
+        }
+        // «Gravado u$s 730,58» del pie clásico (no «No Gravado»).
+        if (preg_match('/\bgravado\b/iu', $l)) {
             return 'subtotal';
         }
         if (preg_match('/\btotal(?:es)?\b/iu', $l) && ! preg_match('/precio|unitario|bultos/iu', $l)) {
@@ -565,9 +576,10 @@ final class FacturaProveedorPieTotalesSupport
             return 'impuestos_internos';
         }
         // «IVA CONT.» / «IVA CONTADO» / «IVA CTDO» es IVA. CONT es condición de pago.
+        // «I.V.A. Responsable Inscripto» del encabezado no es el impuesto del pie.
         $l = $this->descartarSufijoContado($l);
         if (preg_match('/\b[il1]\.?\s*v\.?\s*a\.?v?(?:\s*inscripto)?\b/iu', $l)
-            && ! preg_match('/responsable|condicion|cuit/iu', $l)) {
+            && ! preg_match('/responsable|condicion|\bcuit\b/iu', $l)) {
             return 'iva';
         }
         if (preg_match('/\bneto(?:\s+gravado)?\b|sub[\s\-]*totals?\b/iu', $l)) {
@@ -973,20 +985,27 @@ final class FacturaProveedorPieTotalesSupport
             return $this->conLineasMultiAlicuota($vals, $ivas, $origen, $subtotal, $internos, $percIva, $percIibb);
         }
 
+        $alicuotaUnica = null;
+        if (count($ivas) === 1) {
+            $alicuotaUnica = (float) ($ivas[0]['alicuota'] ?? 0) ?: null;
+        }
+
         $lineas = [];
         if ($subtotal > 0) {
             $lineas[] = [
                 'descripcion' => 'Neto gravado',
                 'importe' => $subtotal,
-                'alicuota_iva' => null,
+                'alicuota_iva' => $alicuotaUnica,
                 'tipo' => 'neto',
             ];
         }
         if ($iva > 0) {
             $lineas[] = [
-                'descripcion' => 'I.V.A. INSCRIPTO',
+                'descripcion' => $alicuotaUnica !== null
+                    ? 'IVA '.$this->etiquetaAlicuota($alicuotaUnica)
+                    : 'I.V.A. INSCRIPTO',
                 'importe' => $iva,
-                'alicuota_iva' => null,
+                'alicuota_iva' => $alicuotaUnica,
                 'tipo' => 'iva',
             ];
         }
@@ -1028,12 +1047,15 @@ final class FacturaProveedorPieTotalesSupport
     private function aplicarIvasDiscriminados(array $vals, string $texto): array
     {
         $ivas = $this->ivasDiscriminados($texto);
-        if (count($ivas) < 2) {
+        if ($ivas === []) {
             return $vals;
         }
 
-        $vals['iva'] = round(array_sum(array_column($ivas, 'importe')), 2);
+        // Una o más alícuotas: quedan en ivas para etiquetar líneas; si hay ≥2 se suma el IVA.
         $vals['ivas'] = $ivas;
+        if (count($ivas) >= 2) {
+            $vals['iva'] = round(array_sum(array_column($ivas, 'importe')), 2);
+        }
 
         return $vals;
     }
@@ -1046,7 +1068,7 @@ final class FacturaProveedorPieTotalesSupport
     private function ivasDiscriminados(string $texto): array
     {
         if (! preg_match_all(
-            '/IVA\s*(10[.,]5|27|21|2[.,]5|5)\s*%\s*[:.]?\s*\$?\s*((?:\d{1,3}(?:\.\d{3})+|\d+),\d{2})/iu',
+            '/I\.?\s*V\.?\s*A\.?\s*(10[.,]5|27|21|2[.,]5|5)(?:[.,]\d+)?\s*%\s*[:.]?\s*(?:u\$s|U\$S|USD|US\$|\$)?\s*((?:\d{1,3}(?:\.\d{3})+|\d+),\d{2})/iu',
             $texto,
             $matches,
             PREG_SET_ORDER
