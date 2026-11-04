@@ -76,6 +76,37 @@ final class ComprobanteImpresionSalidaUsuarioSupport
         return (int) (self::resumenImpresora($usuarioId, $formulario)['salida_id'] ?? 0) > 0;
     }
 
+    /**
+     * Tilde de Configura salida del usuario que está facturando.
+     * El papel de la sesión sale por la impresora de ese mismo seteo.
+     */
+    public static function usuarioActualDisparaAlGrabar(): bool
+    {
+        $usuarioId = (int) (session('usuario_id') ?: 0);
+        if ($usuarioId <= 0) {
+            $usuarioId = Auth::id() ? (int) Auth::id() : 0;
+        }
+
+        return self::disparaAlGrabar($usuarioId);
+    }
+
+    public static function disparaAlGrabar(?int $usuarioId): bool
+    {
+        if (! $usuarioId || $usuarioId <= 0) {
+            return false;
+        }
+
+        $repo = app(SeteosalidaRepositoryInterface::class);
+        $unificado = $repo->buscaSeteo($usuarioId, self::programaUnificado());
+        if ($unificado) {
+            return (bool) $unificado->disparar_al_grabar;
+        }
+
+        $factura = $repo->buscaSeteo($usuarioId, SeteoSalidaProgramaSupport::VENTAS_FACTURA);
+
+        return (bool) ($factura?->disparar_al_grabar);
+    }
+
     private static function seteoUsuario(?int $usuarioId, ?string $formulario = null): mixed
     {
         if (! $usuarioId) {

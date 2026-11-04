@@ -20,9 +20,10 @@
         En AGG o en la nube, cada empresa (Biyemas, Kandiko, etc.) tiene sus propios programas.
     </p>
     <p class="mb-2 small">
-        <strong>Al facturar</strong> (pedido, mostrador y picking) el programa usa dos tildes:
-        <em>Disparar impresión</em> abre la sesión; <em>Enviar a impresora automáticamente</em> manda el papel
-        o deja la sesión para elegir copias (Envío, etc.).
+        <strong>Al facturar</strong> (pedido, mostrador y picking) cada usuario decide en su Configura salida,
+        con <em>Disparar al grabar</em>, y el papel sale por la impresora de ese usuario.
+        <em>Disparar impresión</em> en el programa lo abre para todos.
+        <em>Enviar a impresora automáticamente</em> manda el papel o deja la sesión para elegir copias (Envío, etc.).
     </p>
     <p class="mb-0 small">
         <strong>Impresora:</strong> en las copias de papel dej&aacute; <em>Impresora del usuario</em>

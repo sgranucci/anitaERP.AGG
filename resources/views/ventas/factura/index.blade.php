@@ -179,9 +179,16 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
 									@if ($comprobante->total > 0)
 										@php
 											$ncCompletaCodigo = $ncCompletaPorFactura[(int) $comprobante->id] ?? '';
+											$clienteAutorizaNc = \App\Support\Ventas\NotaCreditoClienteAprobacionSupport::habilitadaParaCliente(
+												$comprobante->clientes->emitenotadecredito ?? null
+											);
 										@endphp
 										@if ($ncCompletaCodigo !== '')
 											<span class="btn-accion-tabla tooltipsC" title="Ya tiene nota de crédito completa {{ $ncCompletaCodigo }}">
+												<i class="fa fa-undo text-muted"></i>
+											</span>
+										@elseif (! $clienteAutorizaNc)
+											<span class="btn-accion-tabla tooltipsC" title="{{ \App\Support\Ventas\NotaCreditoClienteAprobacionSupport::mensaje() }}">
 												<i class="fa fa-undo text-muted"></i>
 											</span>
 										@else

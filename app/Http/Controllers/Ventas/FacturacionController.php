@@ -38,6 +38,7 @@ use App\Support\Ventas\ComprobanteImpresionSesionUrlSupport;
 use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
 use App\Support\Ventas\ComprobanteReferenciaConsultaSupport;
+use App\Support\Ventas\NotaCreditoClienteAprobacionSupport;
 use App\Support\Ventas\NotaCreditoCompletaUnicaSupport;
 use App\Support\Ventas\RinBorradoFisicoSupport;
 use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
@@ -45,6 +46,7 @@ use App\Support\Ventas\VentaFacturasPorArticuloClienteSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorOtFerliSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorPickingFerliSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\LogisticaBierzoSupport;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -544,11 +546,18 @@ class FacturacionController extends Controller
         can('generar-nota-de-credito');
 
         $ventaId = (int) $id;
-        $origen = Venta::query()->with('tipotransacciones')->find($ventaId);
+        $origen = Venta::query()->with(['tipotransacciones', 'clientes'])->find($ventaId);
         if (RinBorradoFisicoSupport::es($origen)) {
             return redirect()->route('factura')->with('errores', [
                 'Un remito interno no lleva nota de crédito. Hay que borrarlo para volver a facturar la orden.',
             ]);
+        }
+
+        if ($origen) {
+            $rechazoCliente = NotaCreditoClienteAprobacionSupport::errorSiNoAutoriza($origen->clientes);
+            if ($rechazoCliente !== null) {
+                return redirect()->route('factura')->with('errores', [$rechazoCliente['error']]);
+            }
         }
 
         $ncCompleta = NotaCreditoCompletaUnicaSupport::completaExistente($ventaId);
@@ -585,7 +594,21 @@ class FacturacionController extends Controller
 
     public function calculaFacturaGeneral(Request $request)
     {
-        return $this->facturacionService->calculaFacturaGeneral($request->all());
+        $resultado = $this->facturacionService->calculaFacturaGeneral($request->all());
+        if (
+            is_array($resultado)
+            && isset($resultado['conceptostotales'])
+            && is_array($resultado['conceptostotales'])
+            && EntornoEmpresaSupport::esElBierzo()
+        ) {
+            // En pantalla el gravado es mercadería + logística, la base del IVA.
+            // Lo grabado sigue siendo solo mercadería: Anita suma la logística aparte.
+            $resultado['conceptostotales'] = LogisticaBierzoSupport::prepararConceptosTotalesParaImpresion(
+                $resultado['conceptostotales']
+            );
+        }
+
+        return $resultado;
     }
 
     public function consultaOtPedido(Request $request): JsonResponse
@@ -937,7 +960,9 @@ class FacturacionController extends Controller
         );
 
         $puedeAbm = can('listar-factura', false) || can('editar-factura', false) || can('facturar', false);
-        $puedeNc = can('generar-nota-de-credito', false);
+        $marcaNcCliente = \App\Models\Ventas\Cliente::query()->whereKey($clienteId)->value('emitenotadecredito');
+        $puedeNc = can('generar-nota-de-credito', false)
+            && NotaCreditoClienteAprobacionSupport::habilitadaParaCliente($marcaNcCliente);
         if ($filas === []) {
             $msg = $articuloId > 0
                 ? 'No hay facturas de este cliente con ese artículo.'
@@ -947,6 +972,9 @@ class FacturacionController extends Controller
         }
 
         $html = '';
+        if (can('generar-nota-de-credito', false) && ! $puedeNc) {
+            $html .= '<tr><td colspan="6" class="text-muted">'.e(NotaCreditoClienteAprobacionSupport::mensaje()).'</td></tr>';
+        }
         foreach ($filas as $row) {
             $codigo = (string) ($row['codigo'] ?? '');
             $total = number_format((float) ($row['total'] ?? 0), 2, ',', '.');

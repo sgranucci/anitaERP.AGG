@@ -169,6 +169,7 @@ use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Database\DbContencionSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
+use App\Support\Ventas\NotaCreditoClienteAprobacionSupport;
 use App\Support\Ventas\NotaCreditoCompletaUnicaSupport;
 use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
@@ -3608,6 +3609,12 @@ class FacturacionService
 
 		if ($errorCircuito = $this->errorCircuitoAfipFacturacion($data, $clientePolitica, $tipotransaccion, null)) {
 			return $errorCircuito;
+		}
+
+		if ($tipotransaccion->esNotaCredito() && ! $this->esEmisionPos($data)) {
+			if ($errorNcCliente = NotaCreditoClienteAprobacionSupport::errorSiNoAutoriza($clientePolitica)) {
+				return $errorNcCliente;
+			}
 		}
 
 		$codigoTipoTransaccion = $tipotransaccion->codigo;
@@ -10300,7 +10307,7 @@ class FacturacionService
 			$venta,
 			$venta->venta_impuestos,
 		);
-		if (config('app.empresa') == 'EL BIERZO') {
+		if (EntornoEmpresaSupport::esElBierzo()) {
 			$conceptosTotales = array_values(array_filter(
 				$conceptosTotales,
 				static function ($fila) {
@@ -10315,6 +10322,12 @@ class FacturacionService
 					return true;
 				}
 			));
+			// Subtotal = suma de Total ítem (ya neto de bonificación). Descuento Gral. = solo pie.
+			$conceptosTotales = \App\Support\Ventas\ElBierzoFacturaPieImpresionSupport::ajustarConceptosParaImpresion(
+				$conceptosTotales,
+				$tblItem,
+				(float) ($venta->descuento ?? 0)
+			);
 			// Logística antes del gravado, sin tasa, IVA fusionado, Gravado = mercadería + logística.
 			$conceptosTotales = \App\Support\Ventas\LogisticaBierzoSupport::prepararConceptosTotalesParaImpresion(
 				$conceptosTotales

@@ -11,7 +11,6 @@ use App\Models\Ventas\Venta;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
 use App\Services\Ventas\CotElectronico\CotConstanciaPdfService;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
-use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Ventas\ComprobanteImpresionDespachoSupport;
 use App\Support\Ventas\ComprobanteImpresionFormulario;
 use App\Support\Ventas\ComprobanteImpresionNasPathSupport;
@@ -1285,21 +1284,7 @@ class ComprobanteImpresionSesionService
 
     private function usuarioDisparaAlGrabar(?int $usuarioId): bool
     {
-        if (! $usuarioId) {
-            return false;
-        }
-
-        $unificado = $this->seteosalidaRepository->buscaSeteo(
-            $usuarioId,
-            ComprobanteImpresionSalidaUsuarioSupport::programaUnificado()
-        );
-        if ($unificado) {
-            return (bool) $unificado->disparar_al_grabar;
-        }
-
-        $factura = $this->seteosalidaRepository->buscaSeteo($usuarioId, SeteoSalidaProgramaSupport::VENTAS_FACTURA);
-
-        return (bool) ($factura?->disparar_al_grabar);
+        return ComprobanteImpresionSalidaUsuarioSupport::disparaAlGrabar($usuarioId);
     }
 
     /**

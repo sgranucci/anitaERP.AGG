@@ -2,7 +2,7 @@
 	use App\Support\Configuracion\EntornoEmpresaSupport;
 	use App\Support\Ventas\FacturaPdfPaginacionSupport;
 
-	$montosReparto101 = \App\Support\Ventas\VillafrancaFacturacionSupport::montosPedidoDesdeFactura($pedido);
+	$montosDivision = \App\Support\Ventas\VillafrancaFacturacionSupport::montosPedidoDesdeFactura($pedido);
 	$codigoClientePedido = trim((string) ($pedido->clientes->codigo ?? ''));
 	$nombreClientePedido = trim((string) ($pedido->clientes->nombre ?? ''));
 	$clientePedidoDisplay = $nombreClientePedido !== '' ? $nombreClientePedido : $codigoClientePedido;
@@ -149,11 +149,11 @@
 									<strong>Fecha de Entrega: {{ date('d/m/Y', strtotime($pedido->fechaentrega ?? '')) }}</strong><br>
 									<strong>Reparto: {{ $repartoNombre }}</strong><br>
 									<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
-									@if ($montosReparto101)
+									@if ($montosDivision)
 										<div class="pedido-totales-division">
-											{{ number_format($montosReparto101['neto'], 2, ',', '.') }}<br>
-											{{ number_format($montosReparto101['recargo'], 2, ',', '.') }}<br>
-											{{ number_format($montosReparto101['total'], 2, ',', '.') }}
+											{{ number_format($montosDivision['neto'], 2, ',', '.') }}<br>
+											{{ number_format($montosDivision['recargo'], 2, ',', '.') }}<br>
+											{{ number_format($montosDivision['total'], 2, ',', '.') }}
 										</div>
 									@endif
 								</td>

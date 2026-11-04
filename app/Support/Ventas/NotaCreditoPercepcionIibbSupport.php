@@ -8,6 +8,7 @@ use App\Models\Configuracion\Provincia;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Support\Caja\CobranzaDescuentoConfigSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\PercepcionIibbJurisdiccionEntregaSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
@@ -348,7 +349,12 @@ final class NotaCreditoPercepcionIibbSupport
             ];
         }
 
-        return self::completarJurisdiccion($filas);
+        $filas = self::completarJurisdiccion($filas);
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            $filas = LogisticaBierzoSupport::prepararConceptosTotalesParaImpresion($filas);
+        }
+
+        return $filas;
     }
 
     /**

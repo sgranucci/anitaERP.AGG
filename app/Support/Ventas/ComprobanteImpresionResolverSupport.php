@@ -302,7 +302,9 @@ final class ComprobanteImpresionResolverSupport
     }
 
     /**
-     * Pedido, mostrador y picking: si el programa pide abrir el proceso de impresión.
+     * Pedido, mostrador y picking: abrir la sesión al facturar.
+     * El programa lo hace para todos. Si está apagado, lo decide el tilde
+     * del usuario que factura, y el papel sale por la impresora de ese usuario.
      */
     public static function dispararProcesoImpresionAlFacturar(?int $ventaId, ?int $remitoId, ?int $pedidoId): bool
     {
@@ -310,8 +312,11 @@ final class ComprobanteImpresionResolverSupport
         if (! $programa) {
             return false;
         }
+        if ($programa->permite_disparo_al_grabar) {
+            return true;
+        }
 
-        return (bool) $programa->permite_disparo_al_grabar;
+        return ComprobanteImpresionSalidaUsuarioSupport::usuarioActualDisparaAlGrabar();
     }
 
     /**

@@ -2,7 +2,13 @@
     $clienteCodigo = old('codigocliente', $data->clientes->codigo ?? '');
     $clienteNombre = old('nombrecliente', $data->clientes->nombre ?? '');
     $clienteIdVal = old('cliente_id', $data->cliente_id ?? '');
+    $ncExigeAprobacionCliente = \App\Support\Ventas\NotaCreditoClienteAprobacionSupport::exigeAprobacionDelCliente();
+    $ncClienteAutoriza = \App\Support\Ventas\NotaCreditoClienteAprobacionSupport::clienteAutoriza($data->clientes->emitenotadecredito ?? null);
 @endphp
+<script>
+window.NC_EXIGE_APROBACION_CLIENTE = @json($ncExigeAprobacionCliente);
+window.NC_CLIENTE_AUTORIZA = @json($ncClienteAutoriza);
+</script>
 <div class="card form1">
     <div id="form-errors"></div>
     <div class="card-body">
@@ -294,12 +300,14 @@
                                             <i class="fa fa-edit"></i>
                                         </a>
                                     @endif
-                                    @if ($puede_descuento_cobranza ?? false)
+                                    @if (($puede_descuento_cobranza ?? false)
+                                        && \App\Support\Ventas\NotaCreditoClienteAprobacionSupport::habilitadaParaCliente($data->clientes->emitenotadecredito ?? null))
                                         <button type="button" class="btn-accion-tabla tooltipsC btn-descuento-comprobante" title="Descuento (genera NC al confirmar)">
                                             <i class="fa fa-percent {{ $tieneDescuentoPendiente ? 'text-success' : 'text-warning' }}"></i>
                                         </button>
                                     @endif
-                                    @if (can('generar-nota-de-credito', false) && ($comprobante->total ?? 0) > 0 && $ventaIdFila)
+                                    @if (can('generar-nota-de-credito', false) && ($comprobante->total ?? 0) > 0 && $ventaIdFila
+                                        && \App\Support\Ventas\NotaCreditoClienteAprobacionSupport::habilitadaParaCliente($data->clientes->emitenotadecredito ?? null))
                                         <a href="{{ route('generar_notadecredito', ['id' => $ventaIdFila]) }}" target="_blank" rel="noopener" class="btn-accion-tabla tooltipsC generarnotadecredito" title="Generar nota de cr&eacute;dito">
                                             <i class="fa fa-undo text-danger"></i>
                                         </a>

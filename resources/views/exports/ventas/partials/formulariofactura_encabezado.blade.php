@@ -177,6 +177,16 @@
     </tr>
     @endif
 </table>
+@if ($esRemitoHoja)
+<table class="factura-remito-banda">
+    <tr>
+        <td>
+            <div class="titulo">REMITO</div>
+            <div class="aviso">DOCUMENTO NO VÁLIDO COMO FACTURA</div>
+        </td>
+    </tr>
+</table>
+@endif
 @if ($facturaPdfRemitoDebajoCliente && ! $esRemitoHoja)
 <table class="table borderless factura-cabecera-admin">
     <tr class="factura-cabecera-admin-linea"><td colspan="3">&nbsp;</td></tr>
@@ -185,7 +195,15 @@
 <table class="table borderless factura-bloque-cliente-admin">
     <tr>
         <td class="factura-cliente-izq">
-            <strong>Cliente: {{ $lineaClienteFactura }}</strong>
+            @if ($facturaPdfEsElBierzo ?? false)
+                <table class="factura-cliente-nombre-gris">
+                    <tr>
+                        <td><strong>Cliente: {{ $lineaClienteFactura }}</strong></td>
+                    </tr>
+                </table>
+            @else
+                <strong>Cliente: {{ $lineaClienteFactura }}</strong>
+            @endif
             <p>
                 {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::domicilioReceptorFactura($venta) }}<br>
                 @if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))

@@ -48,11 +48,12 @@
             <input type="checkbox" name="permite_disparo_al_grabar" id="permite_disparo_al_grabar" class="form-check-input" value="1"
                 {{ old('permite_disparo_al_grabar', $data->permite_disparo_al_grabar ?? false) ? 'checked' : '' }}>
             <label class="form-check-label" for="permite_disparo_al_grabar">
-                Al facturar (pedido, mostrador o picking), abrir el proceso de impresión
+                Al facturar, abrir la impresión para todos los usuarios
             </label>
         </div>
         <p class="text-muted small mb-0">
-            Destildado: la factura se genera y no abre la sesión. Tildado: usa el tilde de abajo (impresora o quedarse en el programa).
+            Destildado: solo la abre quien tenga tildado «Disparar al grabar» en su Configura salida, y el papel sale por la impresora de ese usuario.
+            Tildado: la abre para todos y usa el tilde de abajo.
         </p>
     </div>
 </div>

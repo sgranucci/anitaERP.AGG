@@ -14,8 +14,9 @@ use Illuminate\Support\Facades\DB;
  *   /usr2/villafranca y emite en el mismo PV 00001. En pendmae del remito graba
  *   penm_ref_* = FAC / letra / sucursal 1 / número de esa factura.
  * - Vencimiento: siempre la fecha de la factura.
- * - Pedido impreso: Anita `enca_impre_pedido()` muestra neto / recargo / total
- *   solo si hay factura Villafranca (reparto 101, coef 1.10).
+ * - Pedido impreso: neto / recargo / total de la factura Villafranca cuando
+ *   el comprobante va dividido (reparto 101 con 1,10, o Divide con el extra
+ *   del cliente).
  */
 final class VillafrancaFacturacionSupport
 {
@@ -58,24 +59,43 @@ final class VillafrancaFacturacionSupport
     }
 
     /**
-     * Anita lista_pedido.fc / enca_impre_pedido: monto1 = ven_monto/coef,
-     * monto2 = diferencia, monto3 = ven_monto. Solo factura Villafranca 101.
+     * Control de impresión del pedido: neto = total / coeficiente, recargo =
+     * diferencia, total = factura Villafranca. Sale en reparto 101 (1,10) y
+     * en cualquier factura dividida (extra del cliente, 1,05).
      *
      * @return array{neto: float, recargo: float, total: float, coeficiente: float}|null
      */
     public static function montosPedidoDesdeFactura($pedido): ?array
     {
-        if (! self::esReparto101($pedido)) {
-            return null;
-        }
-
         $factura = self::facturaVillafrancaDelPedido($pedido);
         $total = (float) ($factura->total ?? 0);
         if ($factura === null || $total <= 0) {
             return null;
         }
 
-        return self::partirMontoFactura($total);
+        return self::partirMontoFactura($total, self::coeficienteControlImpresion($pedido));
+    }
+
+    /**
+     * 101 usa el 1,10 fijo. El Divide usa el coeficiente extra del cliente.
+     */
+    public static function coeficienteControlImpresion($pedido): float
+    {
+        if (self::esReparto101($pedido)) {
+            return self::coeficienteReparto101();
+        }
+
+        $extra = is_object($pedido) ? (float) ($pedido->clientes->coeficienteextra ?? 0) : 0.0;
+        if ($extra > 1.0001) {
+            return $extra;
+        }
+
+        $configurado = (float) config('cliente.COEFICIENTE_EXTRA', 0);
+        if ($configurado > 1.0001) {
+            return $configurado;
+        }
+
+        return 1.0;
     }
 
     /**

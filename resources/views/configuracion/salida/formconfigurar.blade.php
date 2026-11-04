@@ -44,8 +44,12 @@
             <input type="checkbox" name="disparar_al_grabar" id="disparar_al_grabar" class="form-check-input" value="1"
                 {{ !empty($datas['disparar_al_grabar']) ? 'checked' : '' }}>
             <label class="form-check-label" for="disparar_al_grabar">
-                Disparar el programa de impresión al grabar (también debe estar habilitado en el programa)
+                Al facturar, abrir la impresión en la impresora seteada de este usuario
             </label>
+            <p class="text-muted small mb-0">
+                Se graba con Actualizar y queda solo para el usuario que está logueado.
+                La impresora de arriba es la cola que recibe ese papel.
+            </p>
         </div>
     </div>
 </div>

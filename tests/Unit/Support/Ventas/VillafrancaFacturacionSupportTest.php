@@ -131,9 +131,10 @@ class VillafrancaFacturacionSupportTest extends TestCase
         $this->assertSame(58.8, VillafrancaFacturacionSupport::redondearCantidadDivision(78.40 * 0.75));
     }
 
-    public function test_montos_pedido_solo_con_factura_villafranca_101(): void
+    public function test_montos_pedido_con_factura_villafranca_101_o_dividida(): void
     {
         config()->set('facturacion.COEFICIENTE_EXTRA_REPARTO_101', 1.10);
+        config()->set('cliente.COEFICIENTE_EXTRA', 1.05);
         config()->set('facturacion.PUNTOVENTA_DIVISION_ID', 5);
         config()->set('facturacion.PUNTOVENTA_DIVISION_LOCAL_ID', 6);
         config()->set('facturacion.PUNTOVENTA_DIVISION_REPARTO_101_ID', 9);
@@ -154,11 +155,12 @@ class VillafrancaFacturacionSupportTest extends TestCase
                 (object) ['id' => 3, 'puntoventa_id' => 2, 'total' => 500],
             ]),
         ];
-        $pedidoJunin = (object) [
+        $pedidoDividido = (object) [
             'id' => 12,
             'transportes' => (object) ['tipoexpreso' => '3'],
+            'clientes' => (object) ['coeficienteextra' => 1.05],
             'ventas' => collect([
-                (object) ['id' => 4, 'puntoventa_id' => 5, 'total' => 1100],
+                (object) ['id' => 4, 'puntoventa_id' => 5, 'total' => 1050],
             ]),
         ];
 
@@ -169,9 +171,10 @@ class VillafrancaFacturacionSupportTest extends TestCase
         $this->assertNull(VillafrancaFacturacionSupport::montosPedidoDesdeFactura(
             $this->pedidoConVentasCargadas($pedidoSinFactura)
         ));
-        $this->assertNull(VillafrancaFacturacionSupport::montosPedidoDesdeFactura(
-            $this->pedidoConVentasCargadas($pedidoJunin)
-        ));
+        $this->assertSame(
+            ['neto' => 1000.00, 'recargo' => 50.00, 'total' => 1050.00, 'coeficiente' => 1.05],
+            VillafrancaFacturacionSupport::montosPedidoDesdeFactura($this->pedidoConVentasCargadas($pedidoDividido))
+        );
     }
 
     private function pedidoConVentasCargadas(object $pedido): object
@@ -180,12 +183,14 @@ class VillafrancaFacturacionSupportTest extends TestCase
             public $id;
             public $transportes;
             public $ventas;
+            public $clientes;
 
             public function __construct(object $pedido)
             {
                 $this->id = $pedido->id;
                 $this->transportes = $pedido->transportes;
                 $this->ventas = $pedido->ventas;
+                $this->clientes = $pedido->clientes ?? null;
             }
 
             public function relationLoaded($relation): bool

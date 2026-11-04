@@ -44,6 +44,7 @@ use App\Support\Ventas\ClienteAnitaZonamultSupport;
 use App\Support\Ventas\ClienteDocumentoAnitaSupport;
 use App\Support\Compras\ProveedorExclusionAnitaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\NotaCreditoClienteAprobacionSupport;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Support\Ventas\ClienteCuentacontableDefaultSupport;
 use App\Support\Ventas\ClienteCoeficienteExtraSupport;
@@ -207,10 +208,11 @@ class ClienteRepository implements ClienteRepositoryInterface
     {
         $cliente = $this->model->findOrFail($id);
 
-		if ($cliente->emitenotadecredito == 'No Emite Nota de Credito')
-            $emite = ['emitenotadecredito' => 'Emite Nota de Credito'];
-		else
-			$emite = ['emitenotadecredito' => 'No Emite Nota de Credito'];
+		if (NotaCreditoClienteAprobacionSupport::clienteAutoriza($cliente->emitenotadecredito)) {
+            $emite = ['emitenotadecredito' => NotaCreditoClienteAprobacionSupport::NO_EMITE];
+		} else {
+			$emite = ['emitenotadecredito' => NotaCreditoClienteAprobacionSupport::EMITE];
+		}
 
 		$this->model->find($id)->update($emite);
 

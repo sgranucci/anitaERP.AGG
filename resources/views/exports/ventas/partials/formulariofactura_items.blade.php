@@ -14,7 +14,7 @@
 @endphp
 @if ($facturaPdfEsFerli && $esRemitoHojaItems && $remitoAgrupadoFerli)
 <table class="table table-sm table-bordered table-striped tabla-items-factura factura-items-ferli factura-remito-ferli-agrupado">
-    <tr class="tabla-items-head">
+    <tr class="tabla-items-head tabla-items-head-remito">
         <td style="width:14%;">ARTICULO</td>
         <td style="width:28%;">DESCRIPCION / COLOR</td>
         <td style="width:44%;">MEDIDAS</td>
@@ -77,7 +77,7 @@
 </table>
 @elseif ($facturaPdfEsFerli)
 <table class="table table-sm table-bordered table-striped tabla-items-factura factura-items-ferli">
-    <tr class="tabla-items-head">
+    <tr class="tabla-items-head {{ $esRemitoHojaItems ? 'tabla-items-head-remito' : '' }}">
         <td>ARTICULO</td>
         <td>DESCRIPCION COLOR</td>
         <td class="text-center">{{ $esRemitoHojaItems ? 'PARES' : 'CANTIDAD' }}</td>
@@ -168,7 +168,7 @@
 </table>
 @else
 <table class="table table-sm table-bordered table-striped tabla-items-factura {{ $facturaPdfRemitoDebajoCliente && $mostrarPrecios ? 'factura-items-debajo-remito' : 'factura-items-debajo-cliente' }}">
-    <tr class="tabla-items-head">
+    <tr class="tabla-items-head {{ $esRemitoHojaItems ? 'tabla-items-head-remito' : '' }}">
         <td>Artículo</td>
         <td>Descripción</td>
         @if ($esRemitoHojaItems)

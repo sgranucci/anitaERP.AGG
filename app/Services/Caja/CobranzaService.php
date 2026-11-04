@@ -54,6 +54,7 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
+use App\Support\Ventas\NotaCreditoClienteAprobacionSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
@@ -683,6 +684,15 @@ class CobranzaService
 
 		if (! can('generar-nota-de-credito', false)) {
 			throw new Exception('No tiene permiso para generar notas de crédito por descuento en cobranza.');
+		}
+
+		$clienteDescuentoId = (int) ($data['cliente_id'] ?? 0);
+		if ($clienteDescuentoId > 0) {
+			$clienteDescuento = Cliente::query()->find($clienteDescuentoId, ['id', 'emitenotadecredito']);
+			$rechazoNc = NotaCreditoClienteAprobacionSupport::errorSiNoAutoriza($clienteDescuento);
+			if ($rechazoNc !== null) {
+				throw new Exception($rechazoNc['error']);
+			}
 		}
 
 		$data['_cobranza_descuentos'] = $descuentos;

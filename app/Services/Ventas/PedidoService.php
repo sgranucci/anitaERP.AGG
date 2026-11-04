@@ -22,7 +22,6 @@ use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
-use App\Support\Ventas\VillafrancaFacturacionSupport;
 use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
 use App\Support\Ventas\PuntoventaEmpresaSupport;
 use App\Services\Configuracion\ImpuestoService;
@@ -425,9 +424,7 @@ class PedidoService
 		if (! $pedido) {
 			return null;
 		}
-		if (VillafrancaFacturacionSupport::esReparto101($pedido)) {
-			$pedido->load('ventas');
-		}
+		$pedido->load('ventas');
 
 		return $pedido;
 	}

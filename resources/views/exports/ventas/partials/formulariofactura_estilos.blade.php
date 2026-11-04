@@ -30,6 +30,18 @@
     .factura-bloque-cliente-admin td { font-size: 13px; padding: 2px 4px; }
     .factura-bloque-cliente-admin p { margin: 2px 0 0 0; line-height: 1.2; }
     .factura-cliente-der { text-align: right; }
+    /* El Bierzo: mismo gris del thead de la grilla de artículos (#e8e8e8). */
+    table.factura-cliente-nombre-gris {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0 0 2px 0;
+    }
+    table.factura-cliente-nombre-gris td {
+        background-color: #e8e8e8;
+        padding: 3px 4px;
+        font-size: 13px;
+        vertical-align: middle;
+    }
     .factura-continua { font-size: 11px; text-align: right; margin: 4px 0 0 0; }
     .factura-pie-bloque { page-break-inside: auto; page-break-before: avoid; }
     table.tabla-totales-importes { page-break-inside: avoid; page-break-before: avoid; }
@@ -171,6 +183,34 @@
         margin: 8px 0 0 0;
         line-height: 1.25;
         text-align: center;
+    }
+    table.factura-remito-banda {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 6px 0 4px 0;
+    }
+    table.factura-remito-banda td {
+        border: 2px solid #000;
+        background-color: #d0d0d0;
+        text-align: center;
+        padding: 4px 8px 5px 8px;
+        line-height: 1.15;
+    }
+    table.factura-remito-banda .titulo {
+        font-size: 16px;
+        font-weight: bold;
+        letter-spacing: 1px;
+    }
+    table.factura-remito-banda .aviso {
+        font-size: 11px;
+        font-weight: bold;
+        margin-top: 1px;
+    }
+    table.tabla-items-factura tr.tabla-items-head-remito td {
+        background-color: #a6a6a6;
+        border-top: 3px double #000;
+        border-bottom: 3px double #000;
+        font-weight: bold;
     }
     table.factura-remito-transporte {
         width: 100%;

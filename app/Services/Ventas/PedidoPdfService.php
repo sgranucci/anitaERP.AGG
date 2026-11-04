@@ -24,6 +24,8 @@ class PedidoPdfService
             return null;
         }
 
+        $pedido->load('ventas');
+
         $nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($pedido->clientes)->nombre);
         $nombre = 'pedido-'.$pedidoId.'-'.$nombreCliente.'.pdf';
 

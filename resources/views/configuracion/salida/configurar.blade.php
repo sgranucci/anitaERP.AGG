@@ -90,7 +90,19 @@
                 <div class="row">
                     <div class="col-lg-3"></div>
                     <div class="col-lg-6">
-                        <button type="submit" onclick="actualizar()" class="btn btn-success">Actualizar</button>
+                        <button type="submit" onclick="actualizar()" class="btn btn-success"
+                            title="Graba la impresora de este usuario. Si está el tilde de facturar, también lo graba. No cambia el tilde del programa, que vale para todos.">
+                            Actualizar
+                        </button>
+                        @if (in_array($programa ?? '', [
+                            \App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_FACTURA,
+                            \App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_COMPROBANTES,
+                        ], true))
+                            <p class="text-muted small mb-0 mt-2">
+                                Graba la impresora y el tilde «Al facturar» solo de este usuario.
+                                El tilde para todos está en el programa de impresión (Disparar impresión).
+                            </p>
+                        @endif
                     </div>
                 </div>
             </div>

@@ -287,12 +287,14 @@
                     if ($('#botonemitenc').hasClass('btn-danger'))
                     {
                         $('#botonemitenc').removeClass('btn-danger').addClass('btn-success'); 
-                        $('#iconoemitenc').removeClass('fa-times').addClass('fa-check'); 
+                        $('#iconoemitenc').removeClass('fa-times').addClass('fa-check');
+                        $('#emitenotadecredito').val('Emite Nota de Credito');
                     }
                     else
                     {
                         $('#botonemitenc').removeClass('btn-success').addClass('btn-danger'); 
                         $('#iconoemitenc').removeClass('fa-check').addClass('fa-times');
+                        $('#emitenotadecredito').val('No Emite Nota de Credito');
                     }                    
 				}
 				else	

@@ -1049,8 +1049,25 @@
 						</tr>
 					</thead>
 					<tbody id="tbody-tabla-total-factura">
-						@if ($data->venta_impuestos[0] ?? '') 
-							@foreach ($data->venta_impuestos as $impuesto)
+						@php
+							$filasPieFactura = [];
+							foreach ($data->venta_impuestos ?? [] as $impuestoPie) {
+								$filasPieFactura[] = [
+									'concepto' => $impuestoPie->concepto,
+									'tasa' => $impuestoPie->tasa,
+									'importe' => $impuestoPie->importe,
+									'baseimponible' => $impuestoPie->baseimponible,
+									'provincia_id' => $impuestoPie->provincia_id,
+									'impuesto_id' => $impuestoPie->impuesto_id,
+								];
+							}
+							if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo() && $filasPieFactura !== []) {
+								$filasPieFactura = \App\Support\Ventas\LogisticaBierzoSupport::prepararConceptosTotalesParaImpresion($filasPieFactura);
+							}
+						@endphp
+						@if ($filasPieFactura !== [])
+							@foreach ($filasPieFactura as $filaPie)
+								@php $impuesto = (object) $filaPie; @endphp
 								<tr class="item-total-factura">
 									<td>
 										<input type="text" style="" class="conceptototal form-control" name="conceptototales[]" value="{{$impuesto->concepto}}" readonly>

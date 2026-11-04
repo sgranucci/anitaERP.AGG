@@ -184,6 +184,7 @@ var saldoFinalCobranza = 0;
 			$(".editarcliente").show();
 		else
 			$(".editarcliente").hide();
+		aplicarBotonesNotaCreditoCobranza();
 
 		let valorOriginal = $('#nombrecliente').val();
 		let clienteIdOriginal = String($('#cliente_id').val() || '');
@@ -216,6 +217,11 @@ var saldoFinalCobranza = 0;
 					$(".editarcliente").show();
 				else
 					$(".editarcliente").hide();
+
+				if (window.NC_EXIGE_APROBACION_CLIENTE === true) {
+					window.NC_CLIENTE_AUTORIZA = false;
+				}
+				refrescarAutorizacionNotaCreditoCliente(cliente_id);
 			}
 		}, 500);
 
@@ -1491,6 +1497,36 @@ var saldoFinalCobranza = 0;
 		return '';
 	}
 
+	function ncValorAutorizaCliente(valor) {
+		var texto = String(valor || '').trim().toLowerCase();
+		return texto === 'emite nota de credito' || texto === 's';
+	}
+
+	function aplicarBotonesNotaCreditoCobranza($scope) {
+		if (window.NC_EXIGE_APROBACION_CLIENTE !== true) {
+			return;
+		}
+		var ok = window.NC_CLIENTE_AUTORIZA === true;
+		var $raiz = ($scope && $scope.length) ? $scope : $(document);
+		$raiz.find('.generarnotadecredito, .btn-descuento-comprobante').toggle(ok);
+	}
+
+	function refrescarAutorizacionNotaCreditoCliente(clienteId) {
+		if (window.NC_EXIGE_APROBACION_CLIENTE !== true) {
+			return;
+		}
+		var id = parseInt(clienteId, 10) || 0;
+		if (id <= 0) {
+			window.NC_CLIENTE_AUTORIZA = false;
+			aplicarBotonesNotaCreditoCobranza();
+			return;
+		}
+		$.get(carpetaBase + '/ventas/leeruncliente/' + id).done(function (cli) {
+			window.NC_CLIENTE_AUTORIZA = ncValorAutorizaCliente(cli && cli.emitenotadecredito);
+			aplicarBotonesNotaCreditoCobranza();
+		});
+	}
+
 	function leeCuentaCorriente()
 	{
 		let cliente_id = $("#cliente_id").val();
@@ -1549,7 +1585,8 @@ var saldoFinalCobranza = 0;
 					let urlGenerarNotaDeCredito = route('generar_notadecredito', ':id');
 					let urlListarFactura = route('lista_una_factura', ':id');
 					$fila.find('.editarfactura').attr('href', urlEditarFactura.replace(':id', item.idventa)).show();
-					$fila.find('.generarnotadecredito').attr('href', urlGenerarNotaDeCredito.replace(':id', item.idventa)).show();
+					$fila.find('.generarnotadecredito').attr('href', urlGenerarNotaDeCredito.replace(':id', item.idventa));
+					aplicarBotonesNotaCreditoCobranza($fila);
 					$fila.find('.listarfactura').attr('href', urlListarFactura.replace(':id', item.idventa)).show();
 				} else {
 					$fila.find('.editarfactura, .generarnotadecredito').hide();
