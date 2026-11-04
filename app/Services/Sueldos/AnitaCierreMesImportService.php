@@ -113,6 +113,7 @@ class AnitaCierreMesImportService
         private AnitaLiquidacionNovedadSyncService $liquidacionesAnita,
         private Novedad_SueldosRepositoryInterface $novedades,
         private AnitaAuxLiquidacionSupport $aux,
+        private AnitaVacacionPlanImportService $vacacionesPlan,
     ) {
     }
 
@@ -141,6 +142,12 @@ class AnitaCierreMesImportService
         $res['empleados'] = $this->empleados->sincronizarConAnita();
         if (! empty($res['empleados']['errores'])) {
             $res['errores'] = array_merge($res['errores'], $res['empleados']['errores']);
+        }
+
+        $log('Plan de vacaciones…');
+        $res['vacaciones'] = $this->vacacionesPlan->importar();
+        if (! empty($res['vacaciones']['errores'])) {
+            $res['errores'] = array_merge($res['errores'], $res['vacaciones']['errores']);
         }
 
         $log('Familiares para ganancias…');

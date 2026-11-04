@@ -45,13 +45,17 @@ class SueldosImportarCierreAnitaCommand extends Command
         $this->line('Bases de categoría: '.json_encode($res['bases_categoria'], JSON_UNESCAPED_UNICODE));
         $emp = $res['empleados'];
         $this->line(sprintf(
-            'Empleados en Anita %s · nuevos %s · egreso %s · datos %s · bases %s',
+            'Empleados en Anita %s · nuevos %s · egreso %s · datos %s · bases %s · CBU %s',
             $emp['en_anita'] ?? 0,
             $emp['importados'] ?? 0,
             $emp['actualizados_egreso'] ?? 0,
             $emp['actualizados_datos'] ?? 0,
-            $emp['bases'] ?? 0
+            $emp['bases'] ?? 0,
+            $emp['actualizados_banco'] ?? 0
         ));
+        if (isset($res['vacaciones'])) {
+            $this->line('Vacaciones: '.json_encode($res['vacaciones'], JSON_UNESCAPED_UNICODE));
+        }
         $this->line('Familiares: '.json_encode($res['familiares'], JSON_UNESCAPED_UNICODE));
         $this->line('Ganancias tablas: '.json_encode($res['ganancias_tablas'], JSON_UNESCAPED_UNICODE));
         $this->line('Ganancias movimientos: '.json_encode($res['ganancias_movimientos'], JSON_UNESCAPED_UNICODE));

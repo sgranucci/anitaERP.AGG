@@ -44,37 +44,33 @@ final class ComprobanteProveedorFlujoOcComFacSupportTest extends TestCase
         );
     }
 
-    public function test_recibo_pide_com_igual_que_la_factura(): void
+    public function test_sin_oc_no_pide_com_aunque_haya_recepciones(): void
     {
-        $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
-            null,
-            true,
-            '2026-09-10',
-            'REC'
-        );
-
-        $this->assertFalse($politica['sin_com_por_tipo']);
-        $this->assertTrue($politica['debe_asignar_com']);
-        $this->assertSame(
-            ComprobanteProveedorModoCarga::ASIGNA_RECEPCION,
-            ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido($politica)
-        );
-    }
-
-    public function test_factura_sigue_pidiendo_com_si_hay_disponible(): void
-    {
-        $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
+        $politicaFc = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
             null,
             true,
             '2026-09-10',
             'FC'
         );
-
-        $this->assertFalse($politica['sin_com_por_tipo']);
-        $this->assertTrue($politica['debe_asignar_com']);
+        $this->assertFalse($politicaFc['sin_com_por_tipo']);
+        $this->assertFalse($politicaFc['debe_asignar_com']);
+        $this->assertFalse($politicaFc['bloquea_sin_com']);
         $this->assertSame(
-            ComprobanteProveedorModoCarga::ASIGNA_RECEPCION,
-            ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido($politica)
+            ComprobanteProveedorModoCarga::SIN_RECEPCION,
+            ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido($politicaFc)
+        );
+
+        $politicaRec = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
+            null,
+            true,
+            '2026-09-10',
+            'REC'
+        );
+        $this->assertFalse($politicaRec['sin_com_por_tipo']);
+        $this->assertFalse($politicaRec['debe_asignar_com']);
+        $this->assertSame(
+            ComprobanteProveedorModoCarga::SIN_RECEPCION,
+            ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido($politicaRec)
         );
     }
 

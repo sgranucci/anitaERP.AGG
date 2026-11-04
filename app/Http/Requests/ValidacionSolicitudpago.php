@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Models\Solicitudpago\Concepto_Solicitudpago;
 use App\Models\Solicitudpago\Solicitudpago;
 use App\Support\Solicitudpago\ConceptoSolicitudpagoFormaPago;
+use App\Support\Solicitudpago\SolicitudpagoAsientoCierreSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
 use Illuminate\Foundation\Http\FormRequest;
@@ -196,67 +197,17 @@ class ValidacionSolicitudpago extends FormRequest
 
     private function validarAsientoObligatorio($validator): void
     {
-        $cuentaIds = $this->input('cuentacontable_ids', []);
-        if (! is_array($cuentaIds)) {
-            $cuentaIds = [];
-        }
-        $montosDebe = $this->input('montos_debe');
-        $montosHaber = $this->input('montos_haber');
-        $montos = $this->input('montos_cuenta', []);
-        $dhs = $this->input('debe_haberes', []);
-
-        $ok = false;
-        $totalDebe = 0.0;
-        $totalHaber = 0.0;
-
-        foreach ($cuentaIds as $i => $cuentaId) {
-            if ((int) $cuentaId <= 0) {
-                continue;
-            }
-            if (is_array($montosDebe) || is_array($montosHaber)) {
-                $debe = (float) ($montosDebe[$i] ?? 0);
-                $haber = (float) ($montosHaber[$i] ?? 0);
-                $totalDebe += max(0, $debe);
-                $totalHaber += max(0, $haber);
-                if ($debe > 0 || $haber > 0) {
-                    $ok = true;
-                }
-            } else {
-                $monto = (float) ($montos[$i] ?? 0);
-                $dh = strtoupper((string) ($dhs[$i] ?? 'D'));
-                if ($monto > 0 && in_array($dh, ['D', 'H'], true)) {
-                    $ok = true;
-                    if ($dh === 'H') {
-                        $totalHaber += $monto;
-                    } else {
-                        $totalDebe += $monto;
-                    }
-                }
-            }
-        }
-
-        if (! $ok) {
-            $validator->errors()->add(
-                'cuentacontable_ids',
-                'Debe cargar al menos una cuenta contable con importe en Debe o Haber (solapa Cuentas).'
-            );
-
-            return;
-        }
-
-        if (abs($totalDebe - $totalHaber) >= 0.009) {
-            $validator->errors()->add(
-                'montos_debe',
-                'El asiento no balancea: Debe ('.number_format($totalDebe, 2, ',', '.').') debe ser igual a Haber ('.number_format($totalHaber, 2, ',', '.').').'
-            );
+        $eval = SolicitudpagoAsientoCierreSupport::evaluar($this->all());
+        if ($eval['error'] !== null) {
+            $validator->errors()->add('montos_debe', $eval['error']);
 
             return;
         }
 
         // Con asiento balanceado, Debe (= Haber) debe coincidir con el monto de la SP.
         $montoSp = (float) ($this->input('monto') ?? 0);
-        $totalAsiento = $totalDebe;
-        if (abs($totalAsiento - $montoSp) >= 0.009) {
+        $totalAsiento = $eval['total_debe'];
+        if (abs($totalAsiento - $montoSp) >= SolicitudpagoAsientoCierreSupport::TOLERANCIA) {
             $validator->errors()->add(
                 'monto',
                 'El total del asiento contable ('.number_format($totalAsiento, 2, ',', '.').') '

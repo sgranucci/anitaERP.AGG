@@ -5,6 +5,18 @@ return [
     // Validez por defecto de tokens visualizar en mails (horas). Módulos pueden sobreescribir.
     'publico_horas_validez_token' => (int) env('MODULO_AVISO_PUBLICO_HORAS_TOKEN', 168),
 
+    /**
+     * Avisos cuya frecuencia se edita en Configuración → Avisos por módulo.
+     * El cron avisos:despachar-programados ejecuta el comando cuando corresponde.
+     *
+     * @var array<string, string> modulo.codigo => comando artisan
+     */
+    'programados' => [
+        'sueldos.libreta_sanitaria_pendiente' => 'sueldos:avisar-libreta-sanitaria',
+    ],
+
+    'programados_habilitado' => env('MODULO_AVISO_PROGRAMADOS', true),
+
     /*
     | Handler por clave modulo.codigo → clase que implementa ModuloAvisoHandlerInterface
     | o ModuloAvisoDespachoHandlerInterface.
@@ -51,6 +63,7 @@ return [
         'contable.apertura_periodo_cerrada' => App\Services\Configuracion\Handlers\ContableAperturaPeriodoAvisoHandler::class,
         'uif.cliente_alta' => App\Services\Configuracion\Handlers\UifClienteAltaAvisoHandler::class,
         'sueldos.empleado_alta_provisoria' => App\Services\Configuracion\Handlers\SueldosEmpleadoAltaProvisoriaAvisoHandler::class,
+        'sueldos.libreta_sanitaria_pendiente' => App\Services\Configuracion\Handlers\SueldosLibretaSanitariaAvisoHandler::class,
         'ticket.alta_tecnologia' => App\Services\Configuracion\Handlers\TicketAltaTecnologiaAvisoHandler::class,
         'ticket.asignacion_tecnico' => App\Services\Configuracion\Handlers\TicketAsignacionTecnicoAvisoHandler::class,
         'seguridad.ingreso_proveedor_creado' => App\Services\Configuracion\Handlers\SeguridadIngresoProveedorAvisoHandler::class,

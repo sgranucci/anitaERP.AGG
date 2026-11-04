@@ -62,6 +62,46 @@ Configurar aviso — {{ $tipo->nombre }}
                         </div>
                     </div>
 
+                    @if ($programable ?? false)
+                        @php
+                            $diasMarcados = old('programacion_dias');
+                            if (! is_array($diasMarcados)) {
+                                $diasMarcados = \App\Support\Configuracion\ModuloAvisoProgramacionSupport::diasLista($tipo->programacion_dias);
+                            }
+                            $diasMarcados = array_map('intval', $diasMarcados);
+                            $horaProgramada = old('programacion_hora', \App\Support\Configuracion\ModuloAvisoProgramacionSupport::normalizarHora($tipo->programacion_hora) ?? '08:20');
+                        @endphp
+                        <hr>
+                        <h5>Programación</h5>
+                        <p class="text-muted small">
+                            El módulo de avisos revisa esto cada 15 minutos y envía el correo una vez en el día,
+                            a partir de la hora elegida, solo los días marcados.
+                        </p>
+                        <div class="form-check mb-3">
+                            <input type="hidden" name="programacion_habilitada" value="0">
+                            <input type="checkbox" class="form-check-input" name="programacion_habilitada" id="programacion_habilitada" value="1"
+                                @if(old('programacion_habilitada', $tipo->programacion_habilitada)) checked @endif>
+                            <label class="form-check-label" for="programacion_habilitada">Programación activa</label>
+                        </div>
+                        <div class="form-group" style="max-width: 12rem;">
+                            <label for="programacion_hora">Hora</label>
+                            <input type="time" class="form-control" name="programacion_hora" id="programacion_hora" value="{{ $horaProgramada }}">
+                        </div>
+                        <div class="form-group">
+                            <label class="d-block">Días</label>
+                            @foreach (\App\Support\Configuracion\ModuloAvisoProgramacionSupport::DIAS as $nro => $nombre)
+                                <div class="form-check form-check-inline">
+                                    <input type="checkbox" class="form-check-input" name="programacion_dias[]" id="programacion_dia_{{ $nro }}" value="{{ $nro }}"
+                                        @if(in_array($nro, $diasMarcados, true)) checked @endif>
+                                    <label class="form-check-label" for="programacion_dia_{{ $nro }}">{{ $nombre }}</label>
+                                </div>
+                            @endforeach
+                        </div>
+                        @if ($tipo->programacion_ultima_en)
+                            <p class="text-muted small mb-0">Último envío: {{ $tipo->programacion_ultima_en->format('d/m/Y') }}</p>
+                        @endif
+                    @endif
+
                     <hr>
                     <h5>Destinatarios</h5>
                     <p class="text-muted small">

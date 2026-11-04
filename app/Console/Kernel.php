@@ -414,6 +414,13 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/sueldos-reporte-definible-distribucion.log'))
             ->when(fn () => (bool) config('sueldos.reporte_definible.distribucion.habilitada', true));
 
+        // Día y hora de cada aviso: Configuración → Avisos por módulo.
+        $schedule->command('avisos:despachar-programados')
+            ->everyFifteenMinutes()
+            ->withoutOverlapping(10)
+            ->appendOutputTo(storage_path('logs/modulo-aviso-programados.log'))
+            ->when(fn () => (bool) config('modulo_aviso.programados_habilitado', true));
+
         $schedule->command('gastronomia:auditoria-anita-diaria')
             ->dailyAt((string) config('gastronomia.auditoria_anita_diaria.hora', '06:30'))
             ->runInBackground()

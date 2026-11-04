@@ -8,6 +8,7 @@ use App\Models\Configuracion\ModuloAvisoDestinatario;
 use App\Models\Configuracion\ModuloAvisoTipo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Support\Configuracion\ModuloAvisoProgramacionSupport;
 use Illuminate\Support\Facades\DB;
 
 class ModuloAvisoController extends Controller
@@ -46,6 +47,7 @@ class ModuloAvisoController extends Controller
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'centrocosto_query' => $this->centrocostoRepository->all(),
             'placeholders_ayuda' => $this->placeholdersAyuda($tipo->modulo, $tipo->codigo),
+            'programable' => $this->esProgramable($tipo),
         ]);
     }
 
@@ -56,14 +58,24 @@ class ModuloAvisoController extends Controller
         $tipo = ModuloAvisoTipo::findOrFail($id);
 
         DB::transaction(function () use ($request, $tipo) {
-            $tipo->update([
+            $datos = [
                 'activo' => $request->boolean('activo'),
                 'mail_asunto' => $request->input('mail_asunto'),
                 'mail_texto' => $request->input('mail_texto'),
                 'mail_remitente' => $request->input('mail_remitente') ?: null,
                 'adjuntar_pdf' => $request->boolean('adjuntar_pdf'),
                 'incluir_link_consulta' => $request->boolean('incluir_link_consulta'),
-            ]);
+            ];
+            if ($this->esProgramable($tipo)) {
+                $datos['programacion_habilitada'] = $request->boolean('programacion_habilitada');
+                $datos['programacion_hora'] = ModuloAvisoProgramacionSupport::normalizarHora(
+                    $request->input('programacion_hora')
+                );
+                $datos['programacion_dias'] = ModuloAvisoProgramacionSupport::diasTexto(
+                    $request->input('programacion_dias', [])
+                );
+            }
+            $tipo->update($datos);
 
             $this->sincronizarDestinatarios($tipo, $request->input('destinatarios', []));
         });
@@ -213,6 +225,12 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'sueldos' && $codigo === 'libreta_sanitaria_pendiente') {
+            return array_merge($comunes, [
+                '{fecha}', '{cantidad}', '{empleados}',
+            ]);
+        }
+
         if ($modulo === 'seguridad' && str_starts_with($codigo, 'ingreso_proveedor_')) {
             return array_merge($comunes, [
                 '{id}', '{numero}', '{titulo}', '{proveedor}', '{motivo}',
@@ -222,5 +240,12 @@ class ModuloAvisoController extends Controller
         }
 
         return array_merge($comunes, ['{numero}', '{solicitante}', '{empresa}', '{centro_costo}', '{fecha}']);
+    }
+
+    private function esProgramable(ModuloAvisoTipo $tipo): bool
+    {
+        $mapa = config('modulo_aviso.programados', []);
+
+        return is_array($mapa) && isset($mapa[$tipo->claveCompleta()]);
     }
 }

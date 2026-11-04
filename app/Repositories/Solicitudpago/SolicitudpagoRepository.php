@@ -14,6 +14,7 @@ use App\Services\Solicitudpago\SolicitudpagoAnitaSyncService;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Solicitudpago\ConceptoSolicitudpagoFormaPago;
 use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
+use App\Support\Solicitudpago\SolicitudpagoAsientoCierreSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
@@ -378,57 +379,23 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
      */
     private function guardarCuentas(Solicitudpago $sp, array $data): void
     {
+        $eval = SolicitudpagoAsientoCierreSupport::evaluar($data);
+        if ($eval['error'] !== null) {
+            throw new \InvalidArgumentException($eval['error']);
+        }
+
         EloquentAuditDeleteSupport::each(
             Solicitudpago_Cuenta::query()->where('solicitudpago_id', $sp->id)
         );
 
-        $empresaIds = $data['empresa_ids'] ?? [];
-        $cuentaIds = $data['cuentacontable_ids'] ?? [];
-        $ccIds = $data['centrocosto_ids'] ?? [];
-        $dhs = $data['debe_haberes'] ?? [];
-        $montos = $data['montos_cuenta'] ?? [];
-        $montosDebe = $data['montos_debe'] ?? null;
-        $montosHaber = $data['montos_haber'] ?? null;
-
-        $n = max(count($empresaIds), count($cuentaIds));
-        for ($i = 0; $i < $n; $i++) {
-            $empresaId = (int) ($empresaIds[$i] ?? 0);
-            $cuentaId = (int) ($cuentaIds[$i] ?? 0);
-            if ($empresaId <= 0 || $cuentaId <= 0) {
-                continue;
-            }
-            $cc = $this->nullableInt($ccIds[$i] ?? null);
-
-            if (is_array($montosDebe) || is_array($montosHaber)) {
-                $debe = (float) str_replace(',', '.', (string) (($montosDebe[$i] ?? '') !== '' ? ($montosDebe[$i] ?? 0) : 0));
-                $haber = (float) str_replace(',', '.', (string) (($montosHaber[$i] ?? '') !== '' ? ($montosHaber[$i] ?? 0) : 0));
-                if ($haber > 0 && $debe <= 0) {
-                    $dh = 'H';
-                    $monto = $haber;
-                } elseif ($debe > 0) {
-                    $dh = 'D';
-                    $monto = $debe;
-                } else {
-                    continue;
-                }
-            } else {
-                $dh = strtoupper(trim((string) ($dhs[$i] ?? 'D')));
-                if ($dh !== 'H') {
-                    $dh = 'D';
-                }
-                $monto = (float) str_replace(',', '.', (string) ($montos[$i] ?? 0));
-                if ($monto <= 0) {
-                    continue;
-                }
-            }
-
+        foreach ($eval['lineas'] as $linea) {
             Solicitudpago_Cuenta::query()->create([
                 'solicitudpago_id' => $sp->id,
-                'empresa_id' => $empresaId,
-                'cuentacontable_id' => $cuentaId,
-                'centrocosto_id' => $cc,
-                'debe_haber' => $dh,
-                'monto' => $monto,
+                'empresa_id' => $linea['empresa_id'],
+                'cuentacontable_id' => $linea['cuentacontable_id'],
+                'centrocosto_id' => $linea['centrocosto_id'],
+                'debe_haber' => $linea['debe_haber'],
+                'monto' => $linea['monto'],
             ]);
         }
     }

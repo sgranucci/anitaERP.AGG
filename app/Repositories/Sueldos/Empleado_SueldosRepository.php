@@ -581,11 +581,11 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
 
     /**
      * Sync desde Anita (sueldos.empleado + emping + empley).
-     * Inserta legajos faltantes por (empresa, legajo) y re-sincroniza egreso/estado
-     * y datos organizativos (centro de costo, categoría, lugar de trabajo, etc.)
-     * en los ya existentes. No genera auditoría ni observers.
+     * Inserta legajos faltantes por (empresa, legajo) y re-sincroniza egreso/estado,
+     * datos organizativos (centro de costo, categoría, lugar de trabajo, etc.)
+     * y el CBU (con cuenta y banco) en los ya existentes. No genera auditoría ni observers.
      *
-     * @return array{en_anita:int, importados:int, ya_existia:int, actualizados_egreso:int, actualizados_datos:int, sin_empresa:int, omitidos:int, historia:int, leyendas:int, bases:int, errores:list<string>}
+     * @return array{en_anita:int, importados:int, ya_existia:int, actualizados_egreso:int, actualizados_datos:int, actualizados_banco:int, sin_empresa:int, omitidos:int, historia:int, leyendas:int, bases:int, errores:list<string>}
      */
     public function sincronizarConAnita(): array
     {
@@ -594,7 +594,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
 
         $res = [
             'en_anita' => 0, 'importados' => 0, 'ya_existia' => 0, 'actualizados_egreso' => 0,
-            'actualizados_datos' => 0,
+            'actualizados_datos' => 0, 'actualizados_banco' => 0,
             'sin_empresa' => 0,
             'omitidos' => 0, 'historia' => 0, 'leyendas' => 0, 'bases' => 0, 'errores' => [],
         ];
@@ -634,7 +634,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         foreach (DB::table('empleado_sueldos')->select(
             'id', 'empresa_id', 'legajo', 'estado', 'fecha_egreso', 'motivoegreso_id',
             'centrocosto_id', 'categoria_id', 'agrupamiento_id', 'lugartrabajo_id',
-            'obrasocial_id', 'sindicato_id', 'art_id'
+            'obrasocial_id', 'sindicato_id', 'art_id', 'cbu', 'cuenta_bancaria', 'banco_codigo'
         )->get() as $e) {
             $existentes[$e->empresa_id.':'.$e->legajo] = [
                 'id' => (int) $e->id,
@@ -648,6 +648,9 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 'obrasocial_id' => $e->obrasocial_id !== null ? (int) $e->obrasocial_id : null,
                 'sindicato_id' => $e->sindicato_id !== null ? (int) $e->sindicato_id : null,
                 'art_id' => $e->art_id !== null ? (int) $e->art_id : null,
+                'cbu' => $this->txt($e->cbu ?? null, 30),
+                'cuenta_bancaria' => $this->txt($e->cuenta_bancaria ?? null, 30),
+                'banco_codigo' => $this->intNull($e->banco_codigo ?? null),
             ];
         }
 
@@ -684,6 +687,9 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             $obrasocialId = $this->fk($maps['obrasocial_id'], $f->emp_codigo_o_soc ?? null);
             $sindicatoId = $this->fk($maps['sindicato_id'], $f->emp_gremio ?? null);
             $artId = $this->fk($maps['art_id'], $f->emp_codigo_art ?? null);
+            $cbuAnita = $this->txt($f->emp_cbu ?? null, 30);
+            $cuentaAnita = $this->txt($f->emp_cta_bancaria ?? null, 30);
+            $bancoAnita = $this->intNull($f->emp_cod_banco ?? null);
 
             // Las bases 4..11 pueden ser excepciones individuales aun cuando la
             // categoría use tabla (origen T). Conservar metadata también para
@@ -711,6 +717,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 $patch = [];
                 $tocaEgreso = false;
                 $tocaDatos = false;
+                $tocaBanco = false;
                 if ($cur['estado'] !== $estado) {
                     $patch['estado'] = $estado;
                     $tocaEgreso = true;
@@ -751,6 +758,17 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                     $patch['art_id'] = $artId;
                     $tocaDatos = true;
                 }
+                // CBU vacío en Anita no pisa uno cargado en el ERP.
+                if ($cbuAnita !== null && (
+                    $cur['cbu'] !== $cbuAnita
+                    || $cur['cuenta_bancaria'] !== $cuentaAnita
+                    || $cur['banco_codigo'] !== $bancoAnita
+                )) {
+                    $patch['cbu'] = $cbuAnita;
+                    $patch['cuenta_bancaria'] = $cuentaAnita;
+                    $patch['banco_codigo'] = $bancoAnita;
+                    $tocaBanco = true;
+                }
                 if ($patch !== []) {
                     $patch['updated_at'] = $now;
                     $empleadoUpdates[$cur['id']] = $patch;
@@ -759,6 +777,9 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                     }
                     if ($tocaDatos) {
                         $res['actualizados_datos']++;
+                    }
+                    if ($tocaBanco) {
+                        $res['actualizados_banco']++;
                     }
                     $existentes[$key] = array_merge($cur, [
                         'estado' => $patch['estado'] ?? $cur['estado'],
@@ -771,6 +792,9 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                         'obrasocial_id' => array_key_exists('obrasocial_id', $patch) ? $obrasocialId : $cur['obrasocial_id'],
                         'sindicato_id' => array_key_exists('sindicato_id', $patch) ? $sindicatoId : $cur['sindicato_id'],
                         'art_id' => array_key_exists('art_id', $patch) ? $artId : $cur['art_id'],
+                        'cbu' => array_key_exists('cbu', $patch) ? $cbuAnita : $cur['cbu'],
+                        'cuenta_bancaria' => array_key_exists('cuenta_bancaria', $patch) ? $cuentaAnita : $cur['cuenta_bancaria'],
+                        'banco_codigo' => array_key_exists('banco_codigo', $patch) ? $bancoAnita : $cur['banco_codigo'],
                     ]);
                 }
                 continue;

@@ -8,6 +8,7 @@ use App\Mail\Ventas\ArcaCaeaInformeResultadoMail;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\ArcaCaea;
 use App\Services\Arca\ArcaCaeaPresentacionService;
+use App\Support\Ventas\ArcaCaeaAnitaVencaeConsultaSupport;
 use App\Support\Ventas\ArcaCaeaInformeColaSupport;
 use App\Support\Ventas\ArcaCaeaInformeMailSupport;
 use App\Support\Ventas\ArcaCaeaInformeUiSupport;
@@ -71,6 +72,11 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
 
             return;
         }
+
+        ArcaCaeaAnitaVencaeConsultaSupport::resetCache();
+        ArcaCaeaAnitaVencaeConsultaSupport::fijarTimeoutProceso(
+            (int) config('arca.caea.informe_anita_timeout', 45),
+        );
 
         $this->guardarProgreso($registro, [
             'fase' => 'inicio',
@@ -185,6 +191,10 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
         $detalleFinal['con_observaciones'] = $conObservaciones;
         $detalleFinal['observaciones'] = $observaciones;
         $detalleFinal['lotes'] = $lotes;
+        if (ArcaCaeaAnitaVencaeConsultaSupport::bridgeNoResponde()) {
+            $detalleFinal['anita_no_disponible'] = true;
+            $mensaje = trim($mensaje.' Anita (vencae) no respondió: no se revisaron comprobantes que solo están en Informix.');
+        }
 
         // Reconsultar ARCA al cerrar: el resumen del último lote suele traer ultimo_arca del inicio.
         $resumenFinal = $presentacion->actualizarResumenPeriodo($registro, $this->usuarioId, true);
@@ -337,9 +347,11 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
 
             $detalle['informados'] = $informados;
             $detalle['lotes'] = $lotes;
-            $detalle['errores_lote'] = max(1, (int) ($detalle['errores_lote'] ?? 0));
             $detalle['fallo_worker'] = true;
             $detalle['fallo_worker_msg'] = $msgEx;
+            if (ArcaCaeaAnitaVencaeConsultaSupport::bridgeNoResponde()) {
+                $detalle['anita_no_disponible'] = true;
+            }
             $ultimoInformado = ArcaCaeaInformeMailSupport::ultimoInformadoResumen($resumen);
             if ($ultimoInformado !== null) {
                 $detalle['ultimo_informado'] = $ultimoInformado;
@@ -391,8 +403,8 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
                 .'y QUEUE_RETRY_AFTER por encima del timeout del job.';
         }
 
-        if (stripos($msgEx, 'timeout') !== false) {
-            return 'El proceso superó el tiempo máximo del worker. Revisá ARCA_CAEA_INFORME_JOB_TIMEOUT y el --timeout del queue:work.';
+        if (stripos($msgEx, 'timeout') !== false || stripos($msgEx, 'timed out') !== false) {
+            return 'El proceso superó el tiempo máximo del worker y se cortó. No es un rechazo de ARCA.';
         }
 
         return 'El proceso en segundo plano falló: '.$msgEx;

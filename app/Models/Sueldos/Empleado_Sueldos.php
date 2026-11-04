@@ -65,6 +65,8 @@ class Empleado_Sueldos extends Model implements Auditable
         'jornal_hora',
         'codigo_liquidacion',
         'antiguedad_anterior',
+        'debe_libreta_sanitaria',
+        'fecha_vencimiento_libreta_sanitaria',
         'cbu',
         'cuenta_bancaria',
         'banco_codigo',
@@ -109,6 +111,8 @@ class Empleado_Sueldos extends Model implements Auditable
         'fecha_nacimiento' => 'date',
         'fecha_ingreso' => 'date',
         'fecha_egreso' => 'date',
+        'debe_libreta_sanitaria' => 'boolean',
+        'fecha_vencimiento_libreta_sanitaria' => 'date',
         'autorizado_at' => 'datetime',
     ];
 

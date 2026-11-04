@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\ApiAnita;
 use App\Models\Sueldos\Empleado_Ausencia_Sueldos;
+use App\Services\Sueldos\AnitaVacacionPlanImportService;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Tipo_Ausencia_Sueldos;
 use App\Services\Sueldos\DevengamientoVacacionesService;
@@ -90,6 +91,10 @@ class MigrarVacacionesLegacySueldos extends Command
             $dias = (float) ($f->vacl_dias_tomados ?? $f->VACL_DIAS_TOMADOS ?? 0);
             $periodo = (int) ($f->vacl_periodo ?? $f->VACL_PERIODO ?? 0);
             if ($legajo <= 0 || $dias <= 0) {
+                continue;
+            }
+            // 2026 en adelante entra por el plan (vacempl) con la fecha real de salida.
+            if ($this->anioDesdePeriodo($periodo) >= AnitaVacacionPlanImportService::ANIO_DESDE) {
                 continue;
             }
             $porEmpleado[$empresaId.':'.$legajo][] = [

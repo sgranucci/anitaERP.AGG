@@ -186,6 +186,11 @@ return [
         'informe_vaciar_pendientes' => filter_var(env('ARCA_CAEA_INFORME_VACIAR_PENDIENTES', true), FILTER_VALIDATE_BOOLEAN),
         'informe_max_lotes_job' => (int) env('ARCA_CAEA_INFORME_MAX_LOTES_JOB', 50),
         /**
+         * Tope de cada lectura vencae durante el job. Si el bridge no contesta,
+         * no se reintenta el resto del proceso (el default del bridge es 300 s).
+         */
+        'informe_anita_timeout' => max(8, (int) env('ARCA_CAEA_INFORME_ANITA_TIMEOUT', 45)),
+        /**
          * Datos adicionales FCE (MTXCA t=21 CBU emisor, t=27 opción transferencia).
          * Prioridad: cuenta de Configuración general (si es de esa empresa) →
          * ARCA_FCE_CBU_EMPRESA_{id} / ARCA_FCE_CBU_EMISOR → cuentacaja de la empresa

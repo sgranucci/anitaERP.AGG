@@ -26,6 +26,31 @@
 
         <div class="card card-outline card-info mb-3">
             <div class="card-header py-2">
+                <h3 class="card-title mb-0"><i class="fa fa-notes-medical"></i> Libreta sanitaria</h3>
+            </div>
+            <div class="card-body pb-2">
+                <div class="form-group row">
+                    <div class="col-lg-4"></div>
+                    <div class="col-lg-8">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" name="debe_libreta_sanitaria" id="debe_libreta_sanitaria" value="1"
+                                   {{ old('debe_libreta_sanitaria', $data->debe_libreta_sanitaria ?? false) ? 'checked' : '' }}>
+                            <label class="custom-control-label" for="debe_libreta_sanitaria">Debe libreta sanitaria</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row mb-0">
+                    <label for="fecha_vencimiento_libreta_sanitaria" class="col-lg-4 control-label">Vencimiento</label>
+                    <div class="col-lg-5">
+                        <input type="date" name="fecha_vencimiento_libreta_sanitaria" id="fecha_vencimiento_libreta_sanitaria" class="form-control"
+                               value="{{ old('fecha_vencimiento_libreta_sanitaria', optional($data->fecha_vencimiento_libreta_sanitaria ?? null)->format('Y-m-d')) }}">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card card-outline card-info mb-3">
+            <div class="card-header py-2">
                 <h3 class="card-title mb-0"><i class="fa fa-sitemap"></i> Puesto y organización</h3>
             </div>
             <div class="card-body pb-2">

@@ -28,7 +28,11 @@ $(function () {
         spAplicarLadoDebeHaber($(this).closest('tr'), true);
         spActualizarEstadoAsiento();
     });
-    $(document).on('input change blur', '#monto', function () {
+    $(document).on('input change', '#monto', function () {
+        spActualizarEstadoAsiento();
+    });
+    $(document).on('blur', '#monto', function () {
+        spCompletarMontosVaciosDesdeCabecera();
         spActualizarEstadoAsiento();
     });
 
@@ -83,6 +87,7 @@ $(function () {
         // Antes de validar HTML5 / funciones.js: deshabilitar cuotas si no aplican.
         actualizarVisibilidadCuotas();
         spNormalizarMontosAntesDeEnviar();
+        spCompletarMontosVaciosDesdeCabecera();
         spSincronizarHiddenTodas();
         if (!spAsientoValido()) {
             e.preventDefault();
@@ -109,7 +114,7 @@ $(function () {
             } else if ($tabBal.length) {
                 $tabBal.trigger('click');
             }
-            alert('El asiento no balancea: el total Debe debe ser igual al total Haber.');
+            alert('No se puede cerrar la solicitud: el asiento no balancea. El total Debe tiene que ser igual al total Haber (solapa Cuentas).');
             return false;
         }
         if (!spAsientoIgualMontoSp()) {
@@ -672,15 +677,11 @@ window.spAplicarCuentasDesdeConcepto = function (cuentas) {
         }
 
         var dh = (String(cta.debe_haber || 'D').toUpperCase() === 'H') ? 'H' : 'D';
-        // La plantilla del concepto suele mandar monto 0: usar cabecera en la 1ª línea.
+        // Cada pierna del concepto (el gasto y la cuenta del banco) toma el monto de la solicitud.
+        // Si solo se cargaba la primera línea, la otra quedaba en cero y no se grababa.
         var montoRaw = cta.monto;
         var montoNum = spParseMontoValor(montoRaw);
-        var montoFila;
-        if (!isFinite(montoNum) || montoNum === 0) {
-            montoFila = idx === 0 ? montoCabecera : 0;
-        } else {
-            montoFila = montoNum;
-        }
+        var montoFila = (isFinite(montoNum) && montoNum !== 0) ? montoNum : montoCabecera;
 
         $row.find('select.debe_haber').val(dh);
         $row.find('.monto-debe').val(dh === 'D' && montoFila > 0 ? spFmtMonto(montoFila) : '');
@@ -727,6 +728,37 @@ function spFmtMonto(n) {
 
 function spLeerMontoCabecera() {
     return spParseMontoValor($('#monto').val());
+}
+
+/**
+ * Líneas que el concepto dejó en cero: al cargar el monto de la solicitud,
+ * se completa el lado activo (Debe o Haber), incluida la cuenta del banco.
+ */
+function spCompletarMontosVaciosDesdeCabecera() {
+    var monto = spLeerMontoCabecera();
+    if (!(monto > 0)) {
+        return;
+    }
+    $('#tbody-solicitudpago-cuenta-table tr.item-sp-cuenta').each(function () {
+        var $row = $(this);
+        var cuentaId = parseInt($row.find('.cuentacontable_id').val(), 10) || 0;
+        if (cuentaId <= 0) {
+            return;
+        }
+        var debe = spParseMonto($row.find('.monto-debe'));
+        var haber = spParseMonto($row.find('.monto-haber'));
+        if (debe > 0 || haber > 0) {
+            return;
+        }
+        var dh = (String($row.find('select.debe_haber').val() || 'D').toUpperCase() === 'H') ? 'H' : 'D';
+        if (dh === 'H') {
+            $row.find('.monto-haber').val(spFmtMonto(monto));
+        } else {
+            $row.find('.monto-debe').val(spFmtMonto(monto));
+        }
+        spAplicarLadoDebeHaber($row, false);
+        spSincronizarHiddenFila($row);
+    });
 }
 
 function spNormalizarMontosAntesDeEnviar() {

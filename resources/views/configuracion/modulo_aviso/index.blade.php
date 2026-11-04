@@ -13,7 +13,7 @@ Avisos por módulo
             </div>
             <div class="card-body p-0">
                 <p class="px-3 pt-3 mb-2 text-muted small">
-                    Definí destinatarios y plantillas de correo por evento de cada módulo.
+                    Definí destinatarios, plantillas y, en los avisos que lo permiten, el día y la hora de envío.
                     Los tipos inactivos o sin destinatarios no envían mail.
                 </p>
                 @foreach ($tipos as $modulo => $items)
@@ -24,6 +24,7 @@ Avisos por módulo
                             <th>Evento</th>
                             <th>Código</th>
                             <th class="text-center">Activo</th>
+                            <th>Programación</th>
                             <th class="text-center">Destinatarios</th>
                             <th class="text-center">PDF</th>
                             <th></th>
@@ -44,6 +45,13 @@ Avisos por módulo
                                     <span class="badge badge-success">Sí</span>
                                 @else
                                     <span class="badge badge-secondary">No</span>
+                                @endif
+                            </td>
+                            <td class="small">
+                                @if ($tipo->programacion_habilitada)
+                                    {{ \App\Support\Configuracion\ModuloAvisoProgramacionSupport::etiqueta($tipo->programacion_hora, $tipo->programacion_dias, true) }}
+                                @else
+                                    —
                                 @endif
                             </td>
                             <td class="text-center">{{ (int) $tipo->destinatarios_activos_count }}</td>

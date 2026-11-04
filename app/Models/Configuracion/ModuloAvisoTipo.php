@@ -15,12 +15,15 @@ class ModuloAvisoTipo extends Model implements Auditable
         'modulo', 'codigo', 'nombre', 'descripcion', 'activo',
         'mail_asunto', 'mail_texto', 'mail_remitente',
         'adjuntar_pdf', 'incluir_link_consulta',
+        'programacion_habilitada', 'programacion_hora', 'programacion_dias', 'programacion_ultima_en',
     ];
 
     protected $casts = [
         'activo' => 'boolean',
         'adjuntar_pdf' => 'boolean',
         'incluir_link_consulta' => 'boolean',
+        'programacion_habilitada' => 'boolean',
+        'programacion_ultima_en' => 'date',
     ];
 
     public function destinatarios(): HasMany

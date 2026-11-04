@@ -64,6 +64,8 @@ class ValidacionEmpleado_Sueldos extends FormRequest
             'jornal_hora' => 'nullable|numeric',
             'codigo_liquidacion' => 'nullable|string|max:20',
             'antiguedad_anterior' => 'nullable|string|max:12',
+            'debe_libreta_sanitaria' => 'nullable|boolean',
+            'fecha_vencimiento_libreta_sanitaria' => 'nullable|date',
             'cbu' => 'nullable|string|max:30',
             'cuenta_bancaria' => 'nullable|string|max:30',
             'banco_codigo' => 'nullable|integer',
@@ -108,6 +110,8 @@ class ValidacionEmpleado_Sueldos extends FormRequest
             'nombre' => 'nombre',
             'cuil' => 'CUIL',
             'fecha_ingreso' => 'fecha de ingreso',
+            'debe_libreta_sanitaria' => 'debe libreta sanitaria',
+            'fecha_vencimiento_libreta_sanitaria' => 'vencimiento de libreta sanitaria',
             'categoria_id' => 'categoría',
             'centrocosto_id' => 'centro de costo',
         ];
@@ -128,6 +132,8 @@ class ValidacionEmpleado_Sueldos extends FormRequest
 
         $this->merge([
             'confidencial' => $this->boolean('confidencial'),
+            'debe_libreta_sanitaria' => $this->boolean('debe_libreta_sanitaria'),
+            'fecha_vencimiento_libreta_sanitaria' => $this->input('fecha_vencimiento_libreta_sanitaria') ?: null,
             'lsd_legajo_principal' => $this->boolean('lsd_legajo_principal'),
             'lsd_cct' => $this->boolean('lsd_cct'),
             'lsd_scvo' => $this->boolean('lsd_scvo'),

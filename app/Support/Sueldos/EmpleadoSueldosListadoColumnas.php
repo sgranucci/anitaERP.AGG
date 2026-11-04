@@ -214,6 +214,26 @@ final class EmpleadoSueldosListadoColumnas
             'attr' => 'fecha_ingreso',
             'group' => self::GRUPO_LABORAL,
         ],
+        'debe_libreta_sanitaria' => [
+            'label' => 'Debe libreta sanitaria',
+            'default' => false,
+            'export' => true,
+            'filterable' => true,
+            'type' => 'booleano',
+            'source' => 'empleado_sueldos.debe_libreta_sanitaria',
+            'attr' => 'debe_libreta_sanitaria',
+            'group' => self::GRUPO_LABORAL,
+        ],
+        'fecha_vencimiento_libreta_sanitaria' => [
+            'label' => 'Vencimiento libreta sanitaria',
+            'default' => false,
+            'export' => true,
+            'filterable' => true,
+            'type' => 'fecha',
+            'source' => 'empleado_sueldos.fecha_vencimiento_libreta_sanitaria',
+            'attr' => 'fecha_vencimiento_libreta_sanitaria',
+            'group' => self::GRUPO_LABORAL,
+        ],
         'fecha_egreso' => [
             'label' => 'Egreso',
             'default' => false,
@@ -394,12 +414,13 @@ final class EmpleadoSueldosListadoColumnas
         if ($key === 'estado') {
             return EmpleadoEstados::label($data->estado ?? null);
         }
-        if ($key === 'confidencial') {
-            if ($data->confidencial === null || $data->confidencial === '') {
+        if ($key === 'confidencial' || $key === 'debe_libreta_sanitaria') {
+            $marca = $data->{$key} ?? null;
+            if ($marca === null || $marca === '') {
                 return '';
             }
 
-            return ! empty($data->confidencial) ? 'Sí' : 'No';
+            return ! empty($marca) ? 'Sí' : 'No';
         }
 
         $attr = (string) ($meta['attr'] ?? $key);

@@ -26,9 +26,8 @@ final class ArcaCaeaInformeMailSupport
      */
     public static function resolverFreno(array $detalle, array $resumen = [], string $mensajeGeneral = ''): ?array
     {
-        // Solo hay "freno" con error real del lote/worker. Observaciones ARCA no son freno.
+        // Un corte del worker (timeout) no es un rechazo de ARCA: no inventar PV/número.
         $detenido = (bool) ($detalle['detenido_por_error'] ?? false)
-            || (bool) ($detalle['fallo_worker'] ?? false)
             || (int) ($detalle['errores_lote'] ?? 0) > 0;
         $muestra = is_array($detalle['errores_muestra'] ?? null) ? $detalle['errores_muestra'] : [];
         if (! $detenido) {
@@ -146,7 +145,7 @@ final class ArcaCaeaInformeMailSupport
      */
     public static function resolverCierreQuincena(ArcaCaea $registro, array $detalle, array $resumen): ?array
     {
-        if ((bool) ($detalle['fallo_worker'] ?? false)) {
+        if ((bool) ($detalle['fallo_worker'] ?? false) || (bool) ($detalle['anita_no_disponible'] ?? false)) {
             return null;
         }
         if ((bool) ($detalle['detenido_por_error'] ?? false) || (int) ($detalle['errores_lote'] ?? 0) > 0) {

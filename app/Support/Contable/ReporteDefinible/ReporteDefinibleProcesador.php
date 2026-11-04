@@ -416,11 +416,9 @@ class ReporteDefinibleProcesador
             $this->aplicarColumnasDerivadas($columnas, $totalesActual);
         }
         $this->completarColumnaTotal($columnas, $totalesActual);
-        $columnas = array_values(array_filter(
-            $columnas,
-            static fn (array $col): bool => ($col['visible'] ?? true) !== false
-        ));
 
+        // La columna oculta (mes anterior del control mensual) sigue en la lista
+        // hasta cerrar filas: la diferencia y el total general la usan como base.
         $filas = [];
         $this->emitir(
             0,
@@ -439,6 +437,10 @@ class ReporteDefinibleProcesador
         );
 
         [$columnas, $filas] = $this->cerrarPresentacion($reporte, $columnas, $filas, $filtros);
+        $columnas = array_values(array_filter(
+            $columnas,
+            static fn (array $col): bool => ($col['visible'] ?? true) !== false
+        ));
 
         return [
             'columnas' => $columnas,
@@ -803,6 +805,33 @@ class ReporteDefinibleProcesador
     }
 
     /**
+     * Claves que una diferencia o un % leen y que pueden no estar en la lista
+     * (la columna de mes anterior del control mensual no se muestra).
+     *
+     * @param  list<array<string, mixed>>  $columnas
+     * @return list<string>
+     */
+    private function clavesReferenciaColumnas(array $columnas): array
+    {
+        $presentes = [];
+        foreach ($columnas as $col) {
+            $presentes[(string) ($col['key'] ?? '')] = true;
+        }
+        $refs = [];
+        foreach ($columnas as $col) {
+            $meta = is_array($col['meta'] ?? null) ? $col['meta'] : [];
+            foreach (['base_key', 'ref_key', 'numerador_key', 'denominador_key'] as $campo) {
+                $clave = (string) ($meta[$campo] ?? '');
+                if ($clave !== '' && ! isset($presentes[$clave])) {
+                    $refs[$clave] = true;
+                }
+            }
+        }
+
+        return array_keys($refs);
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $columnas
      * @param  array<int, array<string, array<int, float>>>  $detalleCuentas
      * @param  array<string, mixed>  $filtros
@@ -836,6 +865,12 @@ class ReporteDefinibleProcesador
                 $tipo = (string) ($col['tipo'] ?? '');
                 if (in_array($tipo, ReporteDefinibleLayoutResolver::tiposDatos(), true)) {
                     $valoresCta[(string) $col['key']] = (float) ($detalleCuentas[$rid][$col['key']][$codigo] ?? 0);
+                }
+            }
+            // Dif. contra mes anterior lee una columna que no se muestra.
+            foreach ($this->clavesReferenciaColumnas($columnas) as $refKey) {
+                if (! array_key_exists($refKey, $valoresCta)) {
+                    $valoresCta[$refKey] = (float) ($detalleCuentas[$rid][$refKey][$codigo] ?? 0);
                 }
             }
             foreach ($columnas as $col) {

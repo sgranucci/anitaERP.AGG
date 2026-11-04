@@ -16,7 +16,6 @@ use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
 
 /**
  * Resuelve COM sin facturar del legajo al generar comprobante desde precarga.
@@ -42,15 +41,12 @@ class ComprobanteProveedorComLegajoResolucionService
      */
     public function resolverDesdePrecarga(Precarga_Comprobante_Proveedor $precarga, ?Ordencompra $ordencompra): array
     {
-        $sectorLegajoId = $this->resolverSectorLegajo($precarga, $ordencompra);
         if ($ordencompra) {
             $recepciones = $this->recepcionesSupport->listarDisponibles((int) $ordencompra->id, null, false);
         } else {
-            $recepciones = $this->recepcionesSupport->listarSinFacturarEnLegajo(
-                (int) $precarga->proveedor_id,
-                (int) $precarga->empresa_id,
-                $sectorLegajoId,
-            );
+            // Precarga sin OC: no buscar COM de otros legajos del mismo proveedor
+            // (p. ej. Telefónica/FIS de servicio terminaba exigiendo COM ajena).
+            $recepciones = collect();
         }
 
         $recepciones = $this->recepcionesSupport->enriquecerConImporteEnMonedaFactura(
@@ -139,6 +135,15 @@ class ComprobanteProveedorComLegajoResolucionService
             || ! OrdencompraLegajoDocumentoTipoSupport::exigeCom(
                 OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($precarga)
             )) {
+            /** @var \App\Models\Compras\Comprobante_Proveedor $data */
+            $data = $prefill['data'];
+            $data->modo_carga = ComprobanteProveedorModoCarga::SIN_RECEPCION;
+
+            return $prefill;
+        }
+
+        // Sin OC en precarga ni en el alta: gasto/servicio → no forzar circuito COM.
+        if (! $ordencompra && (int) ($prefill['data']->ordencompra_id ?? 0) <= 0) {
             /** @var \App\Models\Compras\Comprobante_Proveedor $data */
             $data = $prefill['data'];
             $data->modo_carga = ComprobanteProveedorModoCarga::SIN_RECEPCION;
@@ -448,17 +453,6 @@ class ComprobanteProveedorComLegajoResolucionService
             'importe_comparacion' => $importe,
             'etiqueta' => $importeMeta['etiqueta'],
         ];
-    }
-
-    private function resolverSectorLegajo(Precarga_Comprobante_Proveedor $precarga, ?Ordencompra $ordencompra): ?int
-    {
-        if ($ordencompra?->sector_legajocompra_id) {
-            return (int) $ordencompra->sector_legajocompra_id;
-        }
-
-        $sectorUsuario = Auth::user()?->sector_legajocompra_id;
-
-        return $sectorUsuario ? (int) $sectorUsuario : null;
     }
 
     /** @return Collection<int, Concepto_Ivacompra> */

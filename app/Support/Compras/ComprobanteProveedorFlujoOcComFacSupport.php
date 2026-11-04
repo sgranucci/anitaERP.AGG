@@ -100,9 +100,10 @@ final class ComprobanteProveedorFlujoOcComFacSupport
         $bloqueaSinCom = false;
         $permiteAnticipada = false;
         $anticipadaEligeModo = false;
-        $debeAsignarCom = $tieneComDisponibles;
+        // Sin OC (precarga de servicio / gasto): COM de otros legajos del proveedor no obliga.
+        $debeAsignarCom = false;
 
-        if ($exige) {
+        if ($oc && $exige) {
             if ($anticipada && ! $tieneComDisponibles) {
                 $permiteAnticipada = true;
                 $debeAsignarCom = false;
@@ -122,7 +123,7 @@ final class ComprobanteProveedorFlujoOcComFacSupport
             } else {
                 $debeAsignarCom = true;
             }
-        } else {
+        } elseif ($oc) {
             // Crown: COM optativa aunque exista en el legajo. El resto, si hay COM, hay que asignarla.
             $debeAsignarCom = $tieneComDisponibles && ! self::comDisponibleNoObligaAsignacion();
             if ($anticipada && $tieneComDisponibles && ! self::permiteAsignarComEnLegajoAnticipado($oc)) {

@@ -2184,21 +2184,9 @@ class Comprobante_ProveedorController extends Controller
             return $this->recepcionesSupport->listarDisponibles($ordencompraId, $comprobanteId, false);
         }
 
-        $proveedorId = (int) ($data->proveedor_id ?? 0);
-        $empresaId = (int) ($data->empresa_id ?? 0);
-        if ($proveedorId <= 0 || $empresaId <= 0) {
-            return $coleccion;
-        }
-
-        $data?->loadMissing('ordencompras');
-        $sectorId = $data?->ordencompras?->sector_legajocompra_id;
-
-        return $this->recepcionesSupport->listarSinFacturarEnLegajo(
-            $proveedorId,
-            $empresaId,
-            $sectorId ? (int) $sectorId : null,
-            $comprobanteId,
-        );
+        // Precarga/alta sin OC (servicios, gasto): no listar COM de otros legajos del proveedor.
+        // Eso hacía que Biyemas marcara COM obligatoria con recepciones ajenas a la factura.
+        return $coleccion;
     }
 
     /** @param list<int> $recepcionesSeleccionadas */

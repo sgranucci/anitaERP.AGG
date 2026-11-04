@@ -11,12 +11,16 @@
         $erroresLote = (int) ($detalle['errores_lote'] ?? 0);
         $freno = is_array($detalle['freno'] ?? null) ? $detalle['freno'] : null;
         $falloWorker = (bool) ($detalle['fallo_worker'] ?? false);
-        $color = $ok && $erroresLote === 0 ? '#1e7e34' : ($ok ? '#856404' : '#721c24');
+        $color = $ok && $erroresLote === 0
+            ? '#1e7e34'
+            : (($falloWorker && ! $freno) || $ok ? '#856404' : '#721c24');
     @endphp
 
     <h2 style="margin:0 0 12px 0; color:{{ $color }};">
         @if ($ok && $erroresLote === 0)
             Presentación CAEA finalizada
+        @elseif ($falloWorker && ! $freno)
+            Presentación CAEA interrumpida
         @elseif ($freno)
             Presentación CAEA frenada
         @else
@@ -70,6 +74,12 @@
             · Omitidos por hueco: {{ (int) $detalle['omitidos_hueco_numeracion'] }}
         @endif
     </p>
+
+    @if (! empty($detalle['anita_no_disponible']))
+        <p style="font-size:13px; color:#856404; margin:0 0 8px 0;">
+            Anita (vencae) no respondió en este proceso. Los comprobantes que solo están en Informix no se revisaron.
+        </p>
+    @endif
 
     @if (! empty($detalle['ultimo_informado']))
         <p style="font-size:13px; color:#555; margin:0 0 8px 0;">

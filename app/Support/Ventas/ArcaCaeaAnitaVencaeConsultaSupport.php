@@ -22,12 +22,30 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
 
     private static bool $omitidaEnPantalla = false;
 
+    /** El bridge no contestó en este proceso: no volver a esperar otro timeout. */
+    private static bool $bridgeNoResponde = false;
+
+    /** Tope de una lectura Anita en el job de informe. null = timeout del bridge. */
+    private static ?int $timeoutProceso = null;
+
     public static function resetCache(): void
     {
         self::$cachePorCaea = [];
         self::$requestMark = null;
         self::$deadlinePantalla = 0.0;
         self::$omitidaEnPantalla = false;
+        self::$bridgeNoResponde = false;
+        self::$timeoutProceso = null;
+    }
+
+    public static function fijarTimeoutProceso(?int $segundos): void
+    {
+        self::$timeoutProceso = $segundos !== null && $segundos > 0 ? $segundos : null;
+    }
+
+    public static function bridgeNoResponde(): bool
+    {
+        return self::$bridgeNoResponde;
     }
 
     /**
@@ -69,6 +87,30 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
         return self::$omitidaEnPantalla;
     }
 
+    private static function registrarFalloBridge(string $mensaje, bool $presupuestoPantalla): void
+    {
+        if ($presupuestoPantalla) {
+            self::marcarAnitaOmitidaEnPantalla();
+        }
+
+        if (self::esCorteTransporte($mensaje)) {
+            self::$bridgeNoResponde = true;
+        }
+    }
+
+    private static function esCorteTransporte(string $mensaje): bool
+    {
+        $m = strtolower($mensaje);
+
+        return str_contains($m, 'timed out')
+            || str_contains($m, 'timeout')
+            || str_contains($m, 'failed to connect')
+            || str_contains($m, 'could not resolve')
+            || str_contains($m, 'connection refused')
+            || str_contains($m, 'empty reply')
+            || str_contains($m, 'operation timed');
+    }
+
     private static function alinearRequest(): void
     {
         if (! isset($_SERVER['REQUEST_TIME_FLOAT'])) {
@@ -105,6 +147,10 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
             return [];
         }
 
+        if (self::$bridgeNoResponde) {
+            return [];
+        }
+
         $cacheKey = $nroCaea.'|'.implode(',', $sucursales);
         if (isset(self::$cachePorCaea[$cacheKey])) {
             return self::$cachePorCaea[$cacheKey];
@@ -119,6 +165,9 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
             'whereArmado' => " WHERE venc_nro_cae = '".addslashes($nroCaea)."'"
                 .' AND venc_sucursal IN ('.$in.')',
         ]);
+        if (($curlTimeout === null || $curlTimeout <= 0) && self::$timeoutProceso !== null) {
+            $curlTimeout = self::$timeoutProceso;
+        }
         if ($curlTimeout !== null && $curlTimeout > 0) {
             $payload['curl_timeout'] = $curlTimeout;
         }
@@ -126,18 +175,14 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
             $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall($payload));
         } catch (Throwable $e) {
             Log::warning('arca.caea.anita.vencae_fallo', ['caea' => $nroCaea, 'msg' => $e->getMessage()]);
-            if ($curlTimeout !== null) {
-                self::marcarAnitaOmitidaEnPantalla();
-            }
+            self::registrarFalloBridge($e->getMessage(), $curlTimeout !== null);
 
             return [];
         }
 
         if ($parsed['error_lectura'] !== null) {
             Log::warning('arca.caea.anita.vencae_fallo', ['caea' => $nroCaea, 'msg' => $parsed['error_lectura']]);
-            if ($curlTimeout !== null) {
-                self::marcarAnitaOmitidaEnPantalla();
-            }
+            self::registrarFalloBridge((string) $parsed['error_lectura'], $curlTimeout !== null);
 
             return [];
         }
@@ -182,6 +227,10 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
      */
     public static function buscarIvaVentasPorAfip(int $sucursal, int $numero, int $tipoAfip, string $nroCaea = ''): ?array
     {
+        if (self::$bridgeNoResponde) {
+            return null;
+        }
+
         if ($sucursal < 1 || $numero < 1 || $tipoAfip < 1
             || ! ArcaCaeaSucursalesInformeSupport::esSucursalPermitida($sucursal)
         ) {
@@ -194,27 +243,33 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
             $where .= " AND venc_nro_cae = '".addslashes($nroCaea)."'";
         }
 
+        $payload = ArcaCaeaSucursalesInformeSupport::mergePathAnita([
+            'acc' => 'list',
+            'sistema' => 'ventas',
+            'tabla' => 'vencae',
+            'campos' => 'venc_tipo,venc_letra,venc_sucursal,venc_nro,venc_nro_cae',
+            'whereArmado' => $where,
+        ]);
+        if (self::$timeoutProceso !== null) {
+            $payload['curl_timeout'] = self::$timeoutProceso;
+        }
+
         try {
-            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall(
-                ArcaCaeaSucursalesInformeSupport::mergePathAnita([
-                    'acc' => 'list',
-                    'sistema' => 'ventas',
-                    'tabla' => 'vencae',
-                    'campos' => 'venc_tipo,venc_letra,venc_sucursal,venc_nro,venc_nro_cae',
-                    'whereArmado' => $where,
-                ])
-            ));
+            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall($payload));
         } catch (Throwable $e) {
             Log::warning('arca.caea.anita.vencae_buscar_fallo', [
                 'sucursal' => $sucursal,
                 'numero' => $numero,
                 'msg' => $e->getMessage(),
             ]);
+            self::registrarFalloBridge($e->getMessage(), false);
 
             return null;
         }
 
         if ($parsed['error_lectura'] !== null) {
+            self::registrarFalloBridge((string) $parsed['error_lectura'], false);
+
             return null;
         }
 
