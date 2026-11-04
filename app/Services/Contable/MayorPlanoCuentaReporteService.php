@@ -763,9 +763,9 @@ class MayorPlanoCuentaReporteService
     {
         return match ($filtros['modo_inclusion_asientos'] ?? 'sin_cierre_ni_inflacion') {
             'todos' => 'Incluye asiento de cierre y aj. x inflación',
-            'sin_cierre' => 'No incluye asiento de cierre',
+            'sin_cierre' => 'No incluye asiento de cierre ni la apertura que lo reabre',
             'sin_inflacion' => 'No incluye asiento de aj. x inflación',
-            default => 'No incluye asientos de cierre ni de aj. x inflación',
+            default => 'No incluye asientos de cierre ni la apertura que los reabre, ni de aj. x inflación',
         };
     }
 

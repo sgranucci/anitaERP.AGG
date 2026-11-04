@@ -83,7 +83,7 @@ class ReporteDefinibleAnitaSaldoReader
         foreach ($datos['ctamov'] ?? [] as $linea) {
             $mov = $this->desdeCtamov(
                 $linea, $codigosSet, $modoAsientos, $codMonReporte, $monedaId,
-                $soloMonedaOrigen, $empresaIdPorCodigoAnita
+                $soloMonedaOrigen, $empresaIdPorCodigoAnita, $ymdDesde, $ymdHasta
             );
             if ($mov !== null) {
                 $movs[] = $mov;
@@ -125,6 +125,8 @@ class ReporteDefinibleAnitaSaldoReader
         int $monedaId,
         bool $soloMonedaOrigen,
         array $empresaIdPorCodigoAnita,
+        int $ventanaDesde = 0,
+        int $ventanaHasta = 0,
     ): ?array {
         if (strtoupper(trim((string) ($linea->ctav_balancea ?? 'S'))) !== 'S') {
             return null;
@@ -133,6 +135,15 @@ class ReporteDefinibleAnitaSaldoReader
             (string) ($linea->ctav_tipo_asiento ?? ''),
             $modoAsientos,
             (string) ($linea->ctav_desc_mov ?? ''),
+        )) {
+            return null;
+        }
+        if (MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+            (string) ($linea->ctav_tipo_asiento ?? ''),
+            (int) ($linea->ctav_fecha ?? 0),
+            $modoAsientos,
+            $ventanaDesde,
+            $ventanaHasta,
         )) {
             return null;
         }

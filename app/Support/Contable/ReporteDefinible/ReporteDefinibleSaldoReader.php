@@ -100,7 +100,14 @@ class ReporteDefinibleSaldoReader
             if ($descripcion === '') {
                 $descripcion = trim((string) ($row->asiento_obs ?? ''));
             }
-            if (! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoAsientos, $descripcion)) {
+            if (! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoAsientos, $descripcion)
+                || MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+                    $tipo,
+                    MayorPlanoCuentaSupport::ymdDesdeFecha((string) $row->fecha),
+                    $modoAsientos,
+                    MayorPlanoCuentaSupport::ymdDesdeFecha($fechaDesde),
+                    MayorPlanoCuentaSupport::ymdDesdeFecha($fechaHasta),
+                )) {
                 continue;
             }
 

@@ -217,9 +217,9 @@ class SumasSaldosReporteService
         $modo = (string) ($filtros['modo_inclusion_asientos'] ?? '');
         $base = match ($modo) {
             'todos' => 'Incluye cierre e inflación',
-            'sin_cierre' => 'Excluye asientos de cierre',
+            'sin_cierre' => 'Excluye asientos de cierre y la apertura que los reabre',
             'sin_inflacion' => 'Excluye asientos de inflación',
-            default => 'Excluye cierre e inflación',
+            default => 'Excluye cierre, la apertura que lo reabre, e inflación',
         };
 
         if (($filtros['modo_periodo'] ?? '') === SumasSaldosListadoFiltros::MODO_PERIODOS) {

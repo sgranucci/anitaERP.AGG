@@ -469,7 +469,14 @@ class SumasSaldosProcesador
             if ($descripcion === '') {
                 $descripcion = trim((string) ($row->asiento_obs ?? ''));
             }
-            $restarPorTipo = ! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoInclusion, $descripcion);
+            $restarPorTipo = ! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoInclusion, $descripcion)
+                || MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+                    $tipo,
+                    MayorPlanoCuentaSupport::ymdDesdeFecha((string) $row->fecha),
+                    $modoInclusion,
+                    MayorPlanoCuentaSupport::ymdDesdeFecha($fechaEjercicio),
+                    MayorPlanoCuentaSupport::ymdDesdeFecha($fechaHasta),
+                );
             $restarPorSubdiario = $excluirSubdiario && $this->esOrigenSubdiarioObservacion((string) ($row->asiento_obs ?? ''));
             // Solo restar lo que el filtro de inclusión / subdiario NO muestra.
             if (! $restarPorTipo && ! $restarPorSubdiario) {
@@ -624,7 +631,14 @@ class SumasSaldosProcesador
             if ($descripcion === '') {
                 $descripcion = trim((string) ($row->asiento_obs ?? ''));
             }
-            if (! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoInclusion, $descripcion)) {
+            if (! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoInclusion, $descripcion)
+                || MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+                    $tipo,
+                    MayorPlanoCuentaSupport::ymdDesdeFecha((string) $row->fecha),
+                    $modoInclusion,
+                    MayorPlanoCuentaSupport::ymdDesdeFecha($fechaEjercicio),
+                    MayorPlanoCuentaSupport::ymdDesdeFecha($fechaHasta),
+                )) {
                 continue;
             }
 

@@ -69,7 +69,8 @@ class MayorPlanoCuentaSupport
     /**
      * Equivalente a FILA_valida_tipo_asiento() según fl_incluye_asi (help_10) en l-mayor.c:
      * 1 todos | 2 sin cierre (CIR/CIP/CIJ + legacy) | 3 sin inflación (AJ, CIJ + legacy) | 4 sin ambos.
-     * APE y demás tipos no se excluyen en ningún modo.
+     * APE no se filtra acá: si el cierre del ejercicio anterior cae en la misma ventana,
+     * lo saca aperturaOmitidaPorCierreEnVentana (cierre y apertura van juntos).
      * APJ es “ajuste personal” y también la reapertura del ajuste (“Asiento de apertura aj.inflaci”):
      * esa reapertura se excluye solo si la descripción menciona inflación.
      */
@@ -240,6 +241,64 @@ class MayorPlanoCuentaSupport
     public static function esAsientoApertura(string $tipoAsiento): bool
     {
         return strtoupper(trim($tipoAsiento)) === self::TIPO_ASIENTO_APERTURA;
+    }
+
+    public static function modoExcluyeCierre(string $modoInclusion): bool
+    {
+        return match ($modoInclusion) {
+            'todos', 'sin_inflacion' => false,
+            default => true,
+        };
+    }
+
+    /**
+     * La apertura reabre el saldo que el cierre acaba de sacar. Si el modo deja afuera
+     * el cierre y ese cierre cae en la ventana que se está sumando, la apertura también
+     * queda afuera: si no, el saldo del ejercicio anterior entra dos veces.
+     * Si el cierre anterior está fuera de la ventana, la apertura es el arrastre y se conserva.
+     */
+    public static function aperturaOmitidaPorCierreEnVentana(
+        string $tipoAsiento,
+        int $fechaApertura,
+        string $modoInclusion,
+        int $ventanaDesde,
+        int $ventanaHasta,
+    ): bool {
+        if (! self::modoExcluyeCierre($modoInclusion) || ! self::esAsientoApertura($tipoAsiento)) {
+            return false;
+        }
+        if ($fechaApertura <= 0 || $ventanaDesde <= 0 || $ventanaHasta < $ventanaDesde) {
+            return false;
+        }
+        if ($fechaApertura < $ventanaDesde || $fechaApertura > $ventanaHasta) {
+            return false;
+        }
+
+        $cierreAnterior = self::diaAnterior(self::inicioEjercicio($fechaApertura));
+
+        return $cierreAnterior >= $ventanaDesde && $cierreAnterior <= $ventanaHasta;
+    }
+
+    public static function diaAnterior(int $fechaYmd): int
+    {
+        $s = str_pad((string) $fechaYmd, 8, '0', STR_PAD_LEFT);
+        $dt = \DateTimeImmutable::createFromFormat('!Ymd', $s);
+        if (! $dt) {
+            return 0;
+        }
+
+        return (int) $dt->modify('-1 day')->format('Ymd');
+    }
+
+    public static function ymdDesdeFecha(int|string $fecha): int
+    {
+        if (is_int($fecha)) {
+            return $fecha;
+        }
+
+        $digitos = preg_replace('/\D/', '', substr($fecha, 0, 10)) ?? '';
+
+        return strlen($digitos) === 8 ? (int) $digitos : 0;
     }
 
     /**

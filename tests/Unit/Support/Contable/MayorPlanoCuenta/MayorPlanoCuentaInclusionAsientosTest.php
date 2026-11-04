@@ -55,4 +55,51 @@ class MayorPlanoCuentaInclusionAsientosTest extends TestCase
         ));
         $this->assertTrue(MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento('APE', 'sin_cierre_ni_inflacion'));
     }
+
+    public function test_la_apertura_se_omite_solo_cuando_su_cierre_esta_en_la_ventana(): void
+    {
+        $this->assertTrue(MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+            'APE',
+            20260101,
+            'sin_cierre_ni_inflacion',
+            20250101,
+            20261031,
+        ));
+        $this->assertTrue(MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+            'APE',
+            20260101,
+            'sin_cierre',
+            20251201,
+            20260131,
+        ));
+
+        $this->assertFalse(MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+            'APE',
+            20260101,
+            'sin_cierre_ni_inflacion',
+            20260101,
+            20261031,
+        ));
+        $this->assertFalse(MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+            'APE',
+            20250101,
+            'sin_cierre',
+            20250101,
+            20261031,
+        ));
+        $this->assertFalse(MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+            'APE',
+            20260101,
+            'todos',
+            20250101,
+            20261031,
+        ));
+        $this->assertFalse(MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+            'APE',
+            20260101,
+            'sin_inflacion',
+            20250101,
+            20261031,
+        ));
+    }
 }

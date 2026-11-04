@@ -1148,6 +1148,10 @@ class MayorPlanoCuentaProcesador
         $mesActual = 0;
         $acumuladoMes = 0.0;
         $saldoEjercicio = 0.0;
+        // Ventana que arma el saldo: el tramo previo al período más las líneas listadas.
+        $ventanaDesde = ($fechaSaldoDesde > 0 && $fechaSaldoDesde < $fechaDesde)
+            ? $fechaSaldoDesde
+            : $fechaDesde;
 
         usort($lineasCuenta, function (array $a, array $b) {
             return [$a['fecha'], $a['nro_asiento'], $a['orden_sort'], $a['nro_linea']]
@@ -1167,6 +1171,15 @@ class MayorPlanoCuentaProcesador
             if ($saldoInicialPrecalculado !== null && $fechaSaldoDesde <= 0) {
                 continue;
             }
+            if (MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+                (string) ($mov['tipo_asiento'] ?? ''),
+                $fecha,
+                $modoInclusionAsientos,
+                $ventanaDesde,
+                $fechaHasta,
+            )) {
+                continue;
+            }
 
             $delta = $this->calcularDelta($mov, $monedaConverter, $monedaReporteId);
             $saldoEjercicioInicial += $delta;
@@ -1177,6 +1190,15 @@ class MayorPlanoCuentaProcesador
         foreach ($lineasCuenta as $mov) {
             $fecha = (int) ($mov['fecha'] ?? 0);
             if ($fecha < $fechaDesde || $fecha > $fechaHasta) {
+                continue;
+            }
+            if (MayorPlanoCuentaSupport::aperturaOmitidaPorCierreEnVentana(
+                (string) ($mov['tipo_asiento'] ?? ''),
+                $fecha,
+                $modoInclusionAsientos,
+                $ventanaDesde,
+                $fechaHasta,
+            )) {
                 continue;
             }
 
