@@ -30,9 +30,12 @@
         @break
     @case('estado')
         <td>
-            {{ $estadoLabel['nombre'] ?? $data->estado }}
+            {{ $estadoVisible ?? ($estadoLabel['nombre'] ?? $data->estado) }}
             @if ($enCartera)
                 <span class="badge badge-success">Cartera</span>
+            @endif
+            @if (($proveedorEndoso ?? '') !== '')
+                <span class="badge badge-info" style="white-space:normal;text-align:left;" title="Endosado a {{ $proveedorEndoso }}">{{ $proveedorEndoso }}</span>
             @endif
             @if ($estaCaucionado)
                 <span class="badge badge-warning" title="Caución {{ $data->nro_caucion }}">Cauc.</span>

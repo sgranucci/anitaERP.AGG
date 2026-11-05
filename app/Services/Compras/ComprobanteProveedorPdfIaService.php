@@ -19,6 +19,8 @@ use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Compras\PrecargaProveedor\ComprobanteProveedorPdfIaConceptoMatcherSupport;
+use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaPdfIaMonedaDestinoException;
+use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaPdfIaMonedaDestinoSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorImporteParserSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorIibbPadronCruceSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorIvaTasaInversaSupport;
@@ -39,6 +41,12 @@ use RuntimeException;
 
 final class ComprobanteProveedorPdfIaService
 {
+    /** Código de moneda opcional que pisa la leída del PDF. */
+    private ?string $codigoMonedaDestino = null;
+
+    /** Cotización a mano, solo si el PDF no trae tipo de cambio. */
+    private mixed $cotizacionManualDestino = null;
+
     public function __construct(
         private ComprobanteProveedorPdfIaClient $iaClient,
         private PrecargaProveedorResolucionSupport $resolucionSupport,
@@ -71,9 +79,12 @@ final class ComprobanteProveedorPdfIaService
         bool $ejecucionSistema = false,
         bool $sinCentroCostoQuedaParaRevisar = false,
         ?string $tipoAbreviaturaSinOc = null,
+        ?string $codigoMoneda = null,
+        mixed $cotizacionManual = null,
     ): array
     {
         $this->assertHabilitado();
+        $this->fijarMonedaDestino($codigoMoneda, $cotizacionManual);
 
         $extraido = $this->extraerConGobernanza($pdf, $ejecucionSistema);
         $extraido = $this->aplicarOcManualEnExtraccion($extraido, $numeroOcManual);
@@ -88,6 +99,8 @@ final class ComprobanteProveedorPdfIaService
                     $sinCentroCostoQuedaParaRevisar,
                     $tipoElegido,
                 );
+            } catch (FacturaPdfIaMonedaDestinoException $e) {
+                return $this->respuestaMonedaDestino($e, $extraido);
             } catch (RuntimeException $e) {
                 return [
                     'ok' => false,
@@ -106,6 +119,8 @@ final class ComprobanteProveedorPdfIaService
 
         try {
             $resuelto = $this->resolverDesdeExtraccion($extraido, $numeroOc);
+        } catch (FacturaPdfIaMonedaDestinoException $e) {
+            return $this->respuestaMonedaDestino($e, $extraido, $numeroOc);
         } catch (RuntimeException $e) {
             if ($this->esOcInexistente($e->getMessage())) {
                 return $this->previewIgnorandoOcInexistente(
@@ -137,9 +152,14 @@ final class ComprobanteProveedorPdfIaService
      * @param  array<string, mixed>  $extraccion
      * @return array<string, mixed>
      */
-    public function resolverConOcManual(array $extraccion, string $numeroOcManual): array
-    {
+    public function resolverConOcManual(
+        array $extraccion,
+        string $numeroOcManual,
+        ?string $codigoMoneda = null,
+        mixed $cotizacionManual = null,
+    ): array {
         $this->assertHabilitado();
+        $this->fijarMonedaDestino($codigoMoneda, $cotizacionManual);
 
         $extraido = $this->aplicarOcManualEnExtraccion($extraccion, $numeroOcManual);
         $numeroOc = $this->resolverNumeroOc($extraido);
@@ -147,7 +167,11 @@ final class ComprobanteProveedorPdfIaService
             throw new RuntimeException('Ingrese una orden de compra válida de 6 dígitos.');
         }
 
-        $resuelto = $this->resolverDesdeExtraccion($extraido, $numeroOc);
+        try {
+            $resuelto = $this->resolverDesdeExtraccion($extraido, $numeroOc);
+        } catch (FacturaPdfIaMonedaDestinoException $e) {
+            return $this->respuestaMonedaDestino($e, $extraido, $numeroOc);
+        }
 
         return $this->empaquetarPreviewOk($extraido, $resuelto);
     }
@@ -162,16 +186,23 @@ final class ComprobanteProveedorPdfIaService
         array $extraccion,
         bool $sinCentroCostoQuedaParaRevisar = false,
         ?string $tipoAbreviatura = null,
+        ?string $codigoMoneda = null,
+        mixed $cotizacionManual = null,
     ): array {
         $this->assertHabilitado();
+        $this->fijarMonedaDestino($codigoMoneda, $cotizacionManual);
 
         unset($extraccion['numero_oc'], $extraccion['numero_oc_origen']);
-        $resuelto = $this->resolverDesdeExtraccion(
-            $extraccion,
-            null,
-            $sinCentroCostoQuedaParaRevisar,
-            self::normalizarAbreviaturaTipoElegida($tipoAbreviatura),
-        );
+        try {
+            $resuelto = $this->resolverDesdeExtraccion(
+                $extraccion,
+                null,
+                $sinCentroCostoQuedaParaRevisar,
+                self::normalizarAbreviaturaTipoElegida($tipoAbreviatura),
+            );
+        } catch (FacturaPdfIaMonedaDestinoException $e) {
+            return $this->respuestaMonedaDestino($e, $extraccion);
+        }
 
         return $this->empaquetarPreviewOk($extraccion, $resuelto);
     }
@@ -782,8 +813,51 @@ final class ComprobanteProveedorPdfIaService
         }
 
         $resuelto = $this->wscdcConstatacionSupport->constatarYEnriquecer($extraido, $resuelto);
+        $resuelto = $this->apocConsultaSupport->consultarYEnriquecer($resuelto);
 
-        return $this->apocConsultaSupport->consultarYEnriquecer($resuelto);
+        return $this->aplicarMonedaDestinoAlResuelto($resuelto);
+    }
+
+    /**
+     * @param  array<string, mixed>  $resuelto
+     * @return array<string, mixed>
+     */
+    private function aplicarMonedaDestinoAlResuelto(array $resuelto): array
+    {
+        return FacturaPdfIaMonedaDestinoSupport::aplicar(
+            $resuelto,
+            $this->codigoMonedaDestino,
+            $this->cotizacionManualDestino,
+        );
+    }
+
+    private function fijarMonedaDestino(?string $codigoMoneda, mixed $cotizacionManual): void
+    {
+        $codigo = FacturaPdfIaMonedaDestinoSupport::normalizarCodigo($codigoMoneda);
+        $this->codigoMonedaDestino = $codigo !== '' ? $codigo : null;
+        $this->cotizacionManualDestino = $cotizacionManual;
+    }
+
+    /**
+     * @param  array<string, mixed>  $extraido
+     * @return array<string, mixed>
+     */
+    private function respuestaMonedaDestino(
+        FacturaPdfIaMonedaDestinoException $e,
+        array $extraido,
+        ?string $numeroOc = null,
+    ): array {
+        return [
+            'ok' => false,
+            'oc_requerida' => false,
+            'cotizacion_requerida' => $e->cotizacionRequerida,
+            'reintento_sin_ocr' => true,
+            'message' => $e->getMessage(),
+            'extraccion' => $extraido,
+            'extraccion_meta' => $extraido['_meta'] ?? [],
+            'numero_oc_intentado' => $numeroOc,
+            'decision_id' => $this->decisionIdDeExtraccion($extraido),
+        ];
     }
 
     /**
@@ -1421,6 +1495,8 @@ final class ComprobanteProveedorPdfIaService
                 $sinCentroCostoQuedaParaRevisar,
                 $tipoAbreviaturaElegida,
             );
+        } catch (FacturaPdfIaMonedaDestinoException $e) {
+            return $this->respuestaMonedaDestino($e, $extraidoSinOc);
         } catch (RuntimeException $e) {
             return [
                 'ok' => false,

@@ -146,7 +146,7 @@ class ChequeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
                 'C' => 12,
                 'D' => 12,
                 'E' => 10,
-                'F' => 12,
+                'F' => 32,
                 'G' => 12,
                 'H' => 12,
                 'I' => 20,

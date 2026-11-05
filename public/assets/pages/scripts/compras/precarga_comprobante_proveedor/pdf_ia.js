@@ -122,6 +122,205 @@ $(function () {
         return datos;
     }
 
+    function codigoMonedaCargado() {
+        return String($('#precarga_pdf_ia_moneda_id_codigo').val() || '').trim();
+    }
+
+    function claveMonedaRecordada() {
+        var uid = String($modal.data('usuario-id') || '').trim();
+        return 'anitaERP_precarga_pdf_ia_moneda' + (uid ? '_u' + uid : '');
+    }
+
+    function leerMonedaRecordada() {
+        try {
+            var raw = localStorage.getItem(claveMonedaRecordada());
+            if (!raw) {
+                return null;
+            }
+            var data = JSON.parse(raw);
+            if (!data || !String(data.codigo || '').trim()) {
+                return null;
+            }
+            return {
+                id: String(data.id || '').trim(),
+                codigo: String(data.codigo || '').trim(),
+                nombre: String(data.nombre || '').trim()
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function actualizarAvisoMoneda() {
+        var recordada = leerMonedaRecordada();
+        var hayCodigo = codigoMonedaCargado() !== '';
+        $('#precarga-pdf-ia-btn-quitar-moneda').toggleClass('d-none', !hayCodigo && !recordada);
+        $('#precarga-pdf-ia-moneda-recordada').toggleClass('d-none', !recordada);
+    }
+
+    function guardarMonedaRecordada(id, codigo, nombre) {
+        var codigoTxt = String(codigo || '').trim();
+        var idTxt = String(id || '').trim();
+        if (!idTxt || !codigoTxt) {
+            olvidarMonedaRecordada();
+            return;
+        }
+        try {
+            localStorage.setItem(claveMonedaRecordada(), JSON.stringify({
+                id: idTxt,
+                codigo: codigoTxt,
+                nombre: String(nombre || '').trim()
+            }));
+        } catch (e) {
+            // El navegador puede rechazar localStorage; la carga igual sigue.
+        }
+        actualizarAvisoMoneda();
+    }
+
+    function olvidarMonedaRecordada() {
+        try {
+            localStorage.removeItem(claveMonedaRecordada());
+        } catch (e) {
+            // ignore
+        }
+        actualizarAvisoMoneda();
+    }
+
+    function limpiarCampoMoneda() {
+        var input = document.getElementById('precarga_pdf_ia_moneda_id_codigo');
+        if (input && typeof apuntarMonedaDesde === 'function' && typeof aplicarMonedaElegida === 'function') {
+            apuntarMonedaDesde(input);
+            aplicarMonedaElegida('', '', '');
+            return;
+        }
+        $('#precarga_pdf_ia_moneda_id').val('');
+        $('#precarga_pdf_ia_moneda_id_descripcion').val('');
+        $('#precarga_pdf_ia_moneda_id_codigo').val('').removeData('ultima-valida').removeData('invalida');
+        actualizarAvisoMoneda();
+    }
+
+    function quitarMonedaRecordada() {
+        limpiarCampoMoneda();
+        olvidarMonedaRecordada();
+        var input = document.getElementById('precarga_pdf_ia_moneda_id_codigo');
+        if (input) {
+            input.focus();
+        }
+    }
+
+    function monedaCampoCoincideRecordada(data) {
+        if (!data) {
+            return codigoMonedaCargado() === '' && String($('#precarga_pdf_ia_moneda_id').val() || '') === '';
+        }
+        var codigo = codigoMonedaCargado();
+        var id = String($('#precarga_pdf_ia_moneda_id').val() || '').trim();
+        return id !== '' && codigo.toUpperCase() === String(data.codigo || '').toUpperCase();
+    }
+
+    function restaurarMonedaRecordada() {
+        var data = leerMonedaRecordada();
+        if (!data) {
+            actualizarAvisoMoneda();
+            return;
+        }
+        if (monedaCampoCoincideRecordada(data)) {
+            actualizarAvisoMoneda();
+            return;
+        }
+        var input = document.getElementById('precarga_pdf_ia_moneda_id_codigo');
+        if (input && typeof apuntarMonedaDesde === 'function' && typeof aplicarMonedaElegida === 'function') {
+            apuntarMonedaDesde(input);
+            aplicarMonedaElegida(data.id, data.codigo, data.nombre);
+            return;
+        }
+        $('#precarga_pdf_ia_moneda_id').val(data.id);
+        $('#precarga_pdf_ia_moneda_id_codigo').val(data.codigo).data('ultima-valida', data.codigo);
+        $('#precarga_pdf_ia_moneda_id_descripcion').val(data.nombre);
+        actualizarAvisoMoneda();
+    }
+
+    function sincronizarMonedaRecordadaDesdeCampo() {
+        var id = String($('#precarga_pdf_ia_moneda_id').val() || '').trim();
+        var codigo = codigoMonedaCargado();
+        var nombre = String($('#precarga_pdf_ia_moneda_id_descripcion').val() || '').trim();
+        if (!codigo) {
+            olvidarMonedaRecordada();
+            return;
+        }
+        if (!id) {
+            actualizarAvisoMoneda();
+            return;
+        }
+        guardarMonedaRecordada(id, codigo, nombre);
+    }
+
+    function cotizacionManualCargada() {
+        return String($('#precarga-pdf-ia-cotizacion-manual').val() || '').trim();
+    }
+
+    function agregarMoneda(datos) {
+        var codigo = codigoMonedaCargado();
+        var cotizacion = cotizacionManualCargada();
+        if (datos instanceof FormData) {
+            if (codigo) {
+                datos.append('moneda_codigo', codigo);
+            }
+            if (cotizacion) {
+                datos.append('cotizacion_manual', cotizacion);
+            }
+        } else {
+            if (codigo) {
+                datos.moneda_codigo = codigo;
+            }
+            if (cotizacion) {
+                datos.cotizacion_manual = cotizacion;
+            }
+        }
+        return datos;
+    }
+
+    function asegurarMoneda(callback) {
+        var input = document.getElementById('precarga_pdf_ia_moneda_id_codigo');
+        var codigo = codigoMonedaCargado();
+        if (!input || codigo === '') {
+            olvidarMonedaRecordada();
+            callback();
+            return;
+        }
+        var id = String($('#precarga_pdf_ia_moneda_id').val() || '');
+        var ultima = String($(input).data('ultima-valida') || '');
+        if (id !== '' && ultima.toUpperCase() === codigo.toUpperCase()) {
+            callback();
+            return;
+        }
+        if (typeof leerMonedaPorCodigo !== 'function') {
+            callback();
+            return;
+        }
+        leerMonedaPorCodigo(codigo, input, function (data) {
+            if (!data || !data.id) {
+                return;
+            }
+            callback();
+        }, { avisar: true });
+    }
+
+    function esReintentoMoneda(data) {
+        return !!(data && data.reintento_sin_ocr && data.extraccion);
+    }
+
+    function tomarErrorMoneda(data) {
+        if (!esReintentoMoneda(data)) {
+            return false;
+        }
+        previewPayload = data;
+        mostrarError(data.message || 'No se pudo aplicar la moneda.');
+        if (data.cotizacion_requerida) {
+            $('#precarga-pdf-ia-cotizacion-manual').trigger('focus').select();
+        }
+        return true;
+    }
+
     function mostrarOverlay(titulo) {
         if (!overlayId) {
             return;
@@ -251,6 +450,18 @@ $(function () {
         $('#precarga_pdf_ia_tipotransaccion_compra_id_descripcion').val('');
         var $abrevTipo = $('#precarga_pdf_ia_tipotransaccion_compra_id_abreviatura');
         $abrevTipo.val(tipoDefault).removeData('ultima-valida').removeData('invalida');
+        $('#precarga-pdf-ia-cotizacion-manual').val('');
+        if (codigoMonedaCargado() === '') {
+            olvidarMonedaRecordada();
+            if (String($('#precarga_pdf_ia_moneda_id').val() || '') !== ''
+                || String($('#precarga_pdf_ia_moneda_id_descripcion').val() || '') !== '') {
+                limpiarCampoMoneda();
+            } else {
+                actualizarAvisoMoneda();
+            }
+        } else {
+            restaurarMonedaRecordada();
+        }
         mostrarBloqueTipo(false);
         prefijarTipo(tipoDefault, false);
         $('#precarga-pdf-ia-advertencias').addClass('d-none').empty();
@@ -480,9 +691,24 @@ $(function () {
             mostrarError('Seleccione el proveedor antes de analizar la factura.');
             return;
         }
+        asegurarMoneda(function () {
+            analizarPdfConMoneda();
+        });
+    }
+
+    function analizarPdfConMoneda() {
+        if (proveedorIdSelector && !proveedorIdPortal()) {
+            mostrarError('Seleccione el proveedor antes de analizar la factura.');
+            return;
+        }
         var fileInput = document.getElementById('precarga-pdf-ia-archivo');
         if (!fileInput || !fileInput.files || !fileInput.files.length) {
             mostrarError('Seleccione un archivo PDF.');
+            return;
+        }
+
+        if (previewPayload && previewPayload.reintento_sin_ocr && previewPayload.extraccion) {
+            reintentarMonedaSinOcr();
             return;
         }
 
@@ -490,6 +716,7 @@ $(function () {
         fd.append('pdf', fileInput.files[0]);
         fd.append('_token', csrf);
         agregarProveedorPortal(fd);
+        agregarMoneda(fd);
         var oc = String($('#precarga-pdf-ia-numero-oc').val() || '').replace(/\D/g, '');
         if (oc.length > 0) {
             fd.append('numero_oc', oc.padStart(6, '0'));
@@ -523,6 +750,10 @@ $(function () {
                 renderPreview(data);
                 return;
             }
+            if (tomarErrorMoneda(data)) {
+                $btn.prop('disabled', false);
+                return;
+            }
             if (data && data.oc_requerida) {
                 mostrarPasoOcManual(data);
                 return;
@@ -531,6 +762,10 @@ $(function () {
             $btn.prop('disabled', false);
         }).fail(function (xhr) {
             var data = xhr.responseJSON || {};
+            if (tomarErrorMoneda(data)) {
+                $btn.prop('disabled', false);
+                return;
+            }
             if (data.oc_requerida) {
                 mostrarPasoOcManual(data);
                 return;
@@ -556,14 +791,20 @@ $(function () {
             return;
         }
 
-        var $btn = $('#precarga-pdf-ia-btn-aplicar-oc').prop('disabled', true);
         var numeroOc = oc.padStart(6, '0');
+        asegurarMoneda(function () {
+            enviarOcManual(numeroOc);
+        });
+    }
 
-        var datosResolver = agregarProveedorPortal({
+    function enviarOcManual(numeroOc) {
+        var $btn = $('#precarga-pdf-ia-btn-aplicar-oc').prop('disabled', true);
+
+        var datosResolver = agregarMoneda(agregarProveedorPortal({
             _token: csrf,
             extraccion: JSON.stringify(previewPayload.extraccion),
             numero_oc: numeroOc
-        });
+        }));
         mostrarOverlay('Validando orden de compra…');
 
         $.ajax({
@@ -577,10 +818,18 @@ $(function () {
                 renderPreview(data);
                 return;
             }
+            if (tomarErrorMoneda(data)) {
+                $btn.prop('disabled', false);
+                return;
+            }
             mostrarError(mensajeAjax(data, 'No se pudo validar la OC.'));
             $btn.prop('disabled', false);
         }).fail(function (xhr) {
             var data = xhr.responseJSON || {};
+            if (tomarErrorMoneda(data)) {
+                $btn.prop('disabled', false);
+                return;
+            }
             // Mantener el paso OC con el mensaje del servidor (OC inexistente, CUIT, etc.).
             if (data.oc_requerida && data.extraccion) {
                 previewPayload = data;
@@ -604,21 +853,41 @@ $(function () {
             return;
         }
 
-        asegurarTipoSinOc(function (tipo) {
-            if (!tipo) {
-                return;
-            }
-            enviarSinOc(tipo);
+        asegurarMoneda(function () {
+            asegurarTipoSinOc(function (tipo) {
+                if (!tipo) {
+                    return;
+                }
+                enviarSinOc(tipo);
+            });
         });
+    }
+
+    function reintentarMonedaSinOcr() {
+        if (!previewPayload || !previewPayload.extraccion) {
+            mostrarError('No hay datos de la factura. Analice el PDF de nuevo.');
+            return;
+        }
+        var oc = String($('#precarga-pdf-ia-numero-oc').val() || '').replace(/\D/g, '');
+        if (oc.length > 0 && resolverOcUrl) {
+            $('#precarga-pdf-ia-numero-oc-manual').val(oc.padStart(6, '0'));
+            aplicarOcManual();
+            return;
+        }
+        if (!resolverSinOcUrl) {
+            mostrarError('Indique la cotización y vuelva a analizar el PDF.');
+            return;
+        }
+        continuarSinOc();
     }
 
     function enviarSinOc(tipo) {
         var $btn = $('#precarga-pdf-ia-btn-sin-oc').prop('disabled', true);
-        var datos = agregarProveedorPortal({
+        var datos = agregarMoneda(agregarProveedorPortal({
             _token: csrf,
             extraccion: JSON.stringify(previewPayload.extraccion),
             tipo_abreviatura: tipo
-        });
+        }));
         mostrarOverlay('Validando factura sin OC…');
 
         $.ajax({
@@ -632,10 +901,18 @@ $(function () {
                 renderPreview(data);
                 return;
             }
+            if (tomarErrorMoneda(data)) {
+                $btn.prop('disabled', false);
+                return;
+            }
             mostrarError(mensajeAjax(data, 'No se pudo continuar sin OC.'));
             $btn.prop('disabled', false);
         }).fail(function (xhr) {
             var data = xhr.responseJSON || {};
+            if (tomarErrorMoneda(data)) {
+                $btn.prop('disabled', false);
+                return;
+            }
             if (data.extraccion) {
                 previewPayload = data;
             }
@@ -652,11 +929,29 @@ $(function () {
     if (typeof activa_eventos_consultatipotransaccioncompra === 'function') {
         activa_eventos_consultatipotransaccioncompra();
     }
+    if (typeof activa_eventos_consultamoneda === 'function') {
+        activa_eventos_consultamoneda();
+    }
 
     $modal.on('shown.bs.modal', function () {
         if (!String($('#precarga_pdf_ia_tipotransaccion_compra_id').val() || '').trim()) {
             prefijarTipo(tipoDefault, false);
         }
+        restaurarMonedaRecordada();
+    });
+
+    $('#precarga_pdf_ia_moneda_id').on('change.pdfIaRecordar', function () {
+        sincronizarMonedaRecordadaDesdeCampo();
+    });
+
+    $('#precarga_pdf_ia_moneda_id_codigo').on('blur.pdfIaRecordar', function () {
+        if (String(this.value || '').trim() === '') {
+            olvidarMonedaRecordada();
+        }
+    });
+
+    $('#precarga-pdf-ia-btn-quitar-moneda').on('click', function () {
+        quitarMonedaRecordada();
     });
 
     $('#consultatipotransaccioncompraModal')
@@ -675,6 +970,42 @@ $(function () {
                 }
             }
         });
+
+    $('#consultamonedaModal')
+        .on('show.bs.modal.pdfIaMoneda', function () {
+            var z = 1060;
+            $(this).css('z-index', z);
+            setTimeout(function () {
+                $('.modal-backdrop').last().css('z-index', z - 10);
+            }, 0);
+        })
+        .on('hidden.bs.modal.pdfIaMoneda', function () {
+            if ($modal.hasClass('show')) {
+                $('body').addClass('modal-open');
+                if (!$('.modal-backdrop').length) {
+                    $('<div class="modal-backdrop fade show"></div>').appendTo(document.body);
+                }
+            }
+        });
+
+    $('#precarga-pdf-ia-archivo').on('change', function () {
+        if (previewPayload && previewPayload.reintento_sin_ocr) {
+            previewPayload = null;
+        }
+    });
+
+    $('#precarga-pdf-ia-cotizacion-manual').on('keydown', function (e) {
+        if (e.key !== 'Enter' && e.which !== 13) {
+            return;
+        }
+        e.preventDefault();
+        var $analizar = $('#precarga-pdf-ia-btn-analizar');
+        if (!$analizar.hasClass('d-none')) {
+            $analizar.trigger('focus');
+            return;
+        }
+        $('#precarga-pdf-ia-btn-sin-oc').trigger('focus');
+    });
 
     $modal.on('hidden.bs.modal', resetModal);
 
@@ -746,4 +1077,6 @@ $(function () {
     });
 
     window.addEventListener('pageshow', ocultarOverlay);
+
+    restaurarMonedaRecordada();
 });

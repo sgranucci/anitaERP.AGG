@@ -70,14 +70,14 @@
 				<th style="width: 6%;">Int. Anita</th>
 				<th style="width: 7%;">Origen</th>
 				<th style="width: 5%;">Tipo</th>
-				<th style="width: 8%;">Estado</th>
+				<th style="width: 18%;">Estado</th>
 				<th style="width: 7%;">Emisi&oacute;n</th>
 				<th style="width: 7%;">Pago</th>
 				<th style="width: 12%;">Cuenta / Banco</th>
 				<th style="width: 10%;">Empresa</th>
 				<th style="width: 8%;">Monto</th>
 				<th style="width: 5%;">Moneda</th>
-				<th style="width: 18%;">Beneficiario</th>
+				<th style="width: 8%;">Beneficiario</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -86,6 +86,10 @@
 				@php
 					$origenLabel = collect($origen_enum ?? [])->firstWhere('valor', $data->origen);
 					$estadoLabel = collect($estado_enum ?? [])->firstWhere('valor', $data->estado);
+					$estadoTexto = \App\Support\Caja\ChequeListadoColumnas::textoEstadoExport(
+						$data,
+						(string) ($estadoLabel['nombre'] ?? $data->estado)
+					);
 				@endphp
 				<tr>
 					<td>{{ $data->id }}</td>
@@ -93,7 +97,7 @@
 					<td>{{ $data->nro_interno_anita }}</td>
 					<td>{{ $origenLabel['nombre'] ?? $data->origen }}</td>
 					<td>{{ \App\Support\Caja\ChequePropioInstrumentoSupport::etiquetaNegociable($data->negociable ?? null) }}</td>
-					<td>{{ $estadoLabel['nombre'] ?? $data->estado }}</td>
+					<td>{{ $estadoTexto }}</td>
 					<td>{{ \App\Support\Caja\ChequeDepositoComprobanteSupport::fechaDmy($data->fechaemision) }}</td>
 					<td>{{ \App\Support\Caja\ChequeDepositoComprobanteSupport::fechaDmy($data->fechapago) }}</td>
 					<td>

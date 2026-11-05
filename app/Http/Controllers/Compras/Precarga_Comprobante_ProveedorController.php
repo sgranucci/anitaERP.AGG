@@ -108,6 +108,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
             'pdf' => 'required|file|mimes:pdf|max:20480',
             'numero_oc' => 'nullable|string|max:12',
             'tipo_abreviatura' => 'nullable|string|max:10',
+            'moneda_codigo' => 'nullable|string|max:20',
+            'cotizacion_manual' => 'nullable|string|max:30',
         ]);
 
         try {
@@ -117,6 +119,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
                 false,
                 true,
                 $request->input('tipo_abreviatura'),
+                $request->input('moneda_codigo'),
+                $request->input('cotizacion_manual'),
             );
 
             if (! ($preview['ok'] ?? false)) {
@@ -164,6 +168,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $request->validate([
             'extraccion' => 'required|json',
             'numero_oc' => 'required|string|max:12',
+            'moneda_codigo' => 'nullable|string|max:20',
+            'cotizacion_manual' => 'nullable|string|max:30',
         ]);
 
         $extraccion = json_decode((string) $request->input('extraccion'), true);
@@ -174,10 +180,12 @@ class Precarga_Comprobante_ProveedorController extends Controller
         try {
             $preview = $this->pdfIaService->resolverConOcManual(
                 $extraccion,
-                (string) $request->input('numero_oc')
+                (string) $request->input('numero_oc'),
+                $request->input('moneda_codigo'),
+                $request->input('cotizacion_manual'),
             );
 
-            return response()->json($preview);
+            return response()->json($preview, ($preview['ok'] ?? false) ? 200 : 422);
         } catch (RuntimeException $e) {
             PrecargaRecepcionErrorRegistrar::desdePdfIa(
                 'resolver_oc',
@@ -216,6 +224,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $request->validate([
             'extraccion' => 'required|json',
             'tipo_abreviatura' => 'nullable|string|max:10',
+            'moneda_codigo' => 'nullable|string|max:20',
+            'cotizacion_manual' => 'nullable|string|max:30',
         ]);
 
         $extraccion = json_decode((string) $request->input('extraccion'), true);
@@ -228,9 +238,11 @@ class Precarga_Comprobante_ProveedorController extends Controller
                 $extraccion,
                 true,
                 $request->input('tipo_abreviatura'),
+                $request->input('moneda_codigo'),
+                $request->input('cotizacion_manual'),
             );
 
-            return response()->json($preview);
+            return response()->json($preview, ($preview['ok'] ?? false) ? 200 : 422);
         } catch (RuntimeException $e) {
             PrecargaRecepcionErrorRegistrar::desdePdfIa(
                 'resolver_sin_oc',

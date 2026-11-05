@@ -140,16 +140,23 @@ class ChequeRepository implements ChequeRepositoryInterface
      */
     public function queryChequeListado(array $filtros): \Illuminate\Database\Eloquent\Builder
     {
-        $query = $this->model->select('cheque.*')
-            ->leftJoin('banco', 'banco.id', '=', 'cheque.banco_id')
-            ->leftJoin('empresa', 'empresa.id', '=', 'cheque.empresa_id')
-            ->leftJoin('cliente', 'cliente.id', '=', 'cheque.cliente_id')
-            ->leftJoin('moneda', 'moneda.id', '=', 'cheque.moneda_id')
-            ->leftJoin('cuentacaja', 'cuentacaja.id', '=', 'cheque.cuentacaja_id')
-            ->with(['empresas', 'bancos', 'clientes', 'monedas', 'cuentacajas']);
+        $query = $this->model->select('cheque.*');
+        foreach (ChequeListadoFiltros::tablasJoin($filtros) as $tabla) {
+            $query->leftJoin($tabla, $tabla.'.id', '=', 'cheque.'.$tabla.'_id');
+        }
+        $query->with([
+                'empresas',
+                'bancos',
+                'clientes',
+                'monedas',
+                'cuentacajas',
+                'proveedores',
+                'pagoproveedores.proveedores',
+            ]);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'cheque.empresa_id');
 
+        ChequeListadoFiltros::aplicarJoinProveedorEndoso($query, $filtros);
         ChequeListadoFiltros::aplicar($query, $filtros);
         ChequeListadoFiltros::aplicarOrden($query, $filtros);
 
@@ -185,6 +192,16 @@ class ChequeRepository implements ChequeRepositoryInterface
     {
         $query = $this->queryChequeListado($filtros)->reorder()->setEagerLoads([]);
         $query->getQuery()->columns = null;
+        $tieneMoneda = false;
+        foreach ($query->getQuery()->joins ?? [] as $join) {
+            if (($join->table ?? '') === 'moneda') {
+                $tieneMoneda = true;
+                break;
+            }
+        }
+        if (! $tieneMoneda) {
+            $query->leftJoin('moneda', 'moneda.id', '=', 'cheque.moneda_id');
+        }
 
         $filas = $query
             ->select('moneda.abreviatura as moneda_abrev')

@@ -33,6 +33,10 @@
 			@php
 				$origenLabel = collect($origen_enum ?? [])->firstWhere('valor', $data->origen);
 				$estadoLabel = collect($estado_enum ?? [])->firstWhere('valor', $data->estado);
+				$estadoTexto = \App\Support\Caja\ChequeListadoColumnas::textoEstadoExport(
+					$data,
+					(string) ($estadoLabel['nombre'] ?? $data->estado)
+				);
 			@endphp
 			<tr>
 				<td>{{ $data->id }}</td>
@@ -40,7 +44,7 @@
 				<td>{{ $data->nro_interno_anita }}</td>
 				<td>{{ $origenLabel['nombre'] ?? $data->origen }}</td>
 				<td>{{ \App\Support\Caja\ChequePropioInstrumentoSupport::etiquetaNegociable($data->negociable ?? null) }}</td>
-				<td>{{ $estadoLabel['nombre'] ?? $data->estado }}</td>
+				<td>{{ $estadoTexto }}</td>
 				<td>{{ \App\Support\Caja\ChequeDepositoComprobanteSupport::fechaDmy($data->fechaemision) }}</td>
 				<td>{{ \App\Support\Caja\ChequeDepositoComprobanteSupport::fechaDmy($data->fechapago) }}</td>
 				<td>

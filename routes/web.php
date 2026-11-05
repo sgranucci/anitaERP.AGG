@@ -150,8 +150,10 @@ Route::get('configuracion/buscarsalida/{programa?}', 'Configuracion\SalidaContro
 Route::get('configuracion/moneda', 'Configuracion\MonedaController@index')->name('moneda');
 Route::get('configuracion/moneda/crear', 'Configuracion\MonedaController@crear')->name('crear_moneda');
 Route::post('configuracion/moneda', 'Configuracion\MonedaController@guardar')->name('guardar_moneda');
-Route::get('configuracion/moneda/{id}/editar', 'Configuracion\MonedaController@editar')->name('editar_moneda');
-Route::put('configuracion/moneda/{id}', 'Configuracion\MonedaController@actualizar')->name('actualizar_moneda');
+Route::post('configuracion/moneda/consulta', 'Configuracion\MonedaController@consultaMoneda')->name('consulta_moneda');
+Route::get('configuracion/moneda/leer/{codigo}', 'Configuracion\MonedaController@leeUnaMonedaPorCodigo')->name('leer_moneda_codigo');
+Route::get('configuracion/moneda/{id}/editar', 'Configuracion\MonedaController@editar')->name('editar_moneda')->middleware('modo.consulta');
+Route::put('configuracion/moneda/{id}', 'Configuracion\MonedaController@actualizar')->name('actualizar_moneda')->middleware('modo.consulta');
 Route::delete('configuracion/moneda/{id}', 'Configuracion\MonedaController@eliminar')->name('eliminar_moneda');
 Route::get('configuracion/leermoneda', 'Configuracion\MonedaController@leerMoneda')->name('leer_moneda');
 

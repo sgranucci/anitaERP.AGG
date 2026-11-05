@@ -220,6 +220,9 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                 @if (! empty($filtros['cartera']))
                     <input type="hidden" name="cartera" value="1">
                 @endif
+                @if (! empty($filtros['endosado']))
+                    <input type="hidden" name="endosado" value="1">
+                @endif
                 @if (! empty($filtros['para_depositar']))
                     <input type="hidden" name="para_depositar" value="1">
                     <input type="hidden" name="para_depositar_hasta" value="{{ $filtros['para_depositar_hasta'] ?? '' }}">
@@ -352,10 +355,6 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                 });
             </script>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_cheque',
-                    'queryparams' => $filtrosQuery ?? [],
-                ])
                 <table class="table table-sm table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
@@ -375,9 +374,12 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                         @php
                             $origenLabel = collect($origen_enum ?? [])->firstWhere('valor', $data->origen);
                             $estadoLabel = collect($estado_enum ?? [])->firstWhere('valor', $data->estado);
-                            $enCartera = ($data->origen ?? '') === 'R'
-                                && empty($data->pagoproveedor_id)
-                                && in_array((string) ($data->estado ?? ' '), [' ', 'N', ''], true);
+                            $enCartera = \App\Support\Caja\ChequeListadoColumnas::enCartera($data);
+                            $proveedorEndoso = \App\Support\Caja\ChequeListadoColumnas::etiquetaProveedorEndoso($data);
+                            $estadoVisible = \App\Support\Caja\ChequeListadoColumnas::nombreEstadoVisible(
+                                $data,
+                                (string) ($estadoLabel['nombre'] ?? $data->estado)
+                            );
                             $puedeRechazarNd = ($puede_nd_cheque ?? false)
                                 && ($data->origen ?? '') === 'R'
                                 && ! in_array((string) ($data->estado ?? ''), ['R', 'A'], true)

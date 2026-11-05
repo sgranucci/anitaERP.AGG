@@ -100,6 +100,8 @@ final class PortalProveedorController extends Controller
             'pdf' => 'required|file|mimes:pdf|max:20480',
             'numero_oc' => 'nullable|string|max:12',
             'tipo_abreviatura' => 'nullable|string|max:10',
+            'moneda_codigo' => 'nullable|string|max:20',
+            'cotizacion_manual' => 'nullable|string|max:30',
         ]);
 
         $proveedorId = (int) $request->input('proveedor_id');
@@ -112,6 +114,8 @@ final class PortalProveedorController extends Controller
                 false,
                 false,
                 $request->input('tipo_abreviatura'),
+                $request->input('moneda_codigo'),
+                $request->input('cotizacion_manual'),
             );
 
             $this->assertProveedorPreview($preview, $proveedorId);
@@ -146,6 +150,8 @@ final class PortalProveedorController extends Controller
             'proveedor_id' => 'required|integer|min:1',
             'extraccion' => 'required|json',
             'numero_oc' => 'required|string|max:12',
+            'moneda_codigo' => 'nullable|string|max:20',
+            'cotizacion_manual' => 'nullable|string|max:30',
         ]);
 
         $proveedorId = (int) $request->input('proveedor_id');
@@ -159,13 +165,15 @@ final class PortalProveedorController extends Controller
         try {
             $preview = $this->pdfIaService->resolverConOcManual(
                 $extraccion,
-                (string) $request->input('numero_oc')
+                (string) $request->input('numero_oc'),
+                $request->input('moneda_codigo'),
+                $request->input('cotizacion_manual'),
             );
 
             $this->assertProveedorPreview($preview, $proveedorId);
             $preview['portal_proveedor_id'] = $proveedorId;
 
-            return response()->json($preview);
+            return response()->json($preview, ($preview['ok'] ?? false) ? 200 : 422);
         } catch (RuntimeException $e) {
             return response()->json([
                 'ok' => false,
@@ -191,6 +199,8 @@ final class PortalProveedorController extends Controller
             'proveedor_id' => 'required|integer|min:1',
             'extraccion' => 'required|json',
             'tipo_abreviatura' => 'nullable|string|max:10',
+            'moneda_codigo' => 'nullable|string|max:20',
+            'cotizacion_manual' => 'nullable|string|max:30',
         ]);
 
         $proveedorId = (int) $request->input('proveedor_id');
@@ -206,12 +216,14 @@ final class PortalProveedorController extends Controller
                 $extraccion,
                 false,
                 $request->input('tipo_abreviatura'),
+                $request->input('moneda_codigo'),
+                $request->input('cotizacion_manual'),
             );
 
             $this->assertProveedorPreview($preview, $proveedorId);
             $preview['portal_proveedor_id'] = $proveedorId;
 
-            return response()->json($preview);
+            return response()->json($preview, ($preview['ok'] ?? false) ? 200 : 422);
         } catch (RuntimeException $e) {
             return response()->json([
                 'ok' => false,

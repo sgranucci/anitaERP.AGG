@@ -1041,26 +1041,13 @@ final class PedidoPickingFerliSupport
         $porDeposito = self::bucketsSaldoLotePorDeposito($articuloId, $combinacionId, $loteCodigo, $otIdCodigo, 0);
         $buckets = $porDeposito[$depositoId]['buckets'] ?? [];
 
-        // Modal eligió OT (lote=0): usar ese bucket directo.
+        // OT asignada: si el alta está en lote 0 y tiene saldo, se consume ahí
+        // (convención desde el 24/09; el lector junta ese corte con el lote del código).
+        // Si ese bucket no tiene pares, se toma el lote donde sí están (alta vieja o
+        // devolución de una NC). Grabarlo en lote 0 lo deja fuera del Stock por OT
+        // cuando el cliente no es STOCK, y el saldo del código queda sin netear.
         if ($otAsignado > 0) {
-            foreach ($buckets as $b) {
-                if ((int) ($b['ordentrabajo_id'] ?? 0) === $otAsignado
-                    && ! ReporteStockOtSituacionSupport::esLoteImportado($b['lote'] ?? 0)) {
-                    return [
-                        'lote' => 0,
-                        'ordentrabajo_id' => $otAsignado,
-                        'saldo' => (float) ($b['saldo'] ?? 0),
-                        'talles' => is_array($b['talles'] ?? null) ? $b['talles'] : [],
-                    ];
-                }
-            }
-
-            return [
-                'lote' => 0,
-                'ordentrabajo_id' => $otAsignado,
-                'saldo' => 0.0,
-                'talles' => [],
-            ];
+            return self::elegirBucketConsumoDesdeSaldos($buckets, $loteCodigo, $otAsignado);
         }
 
         // Modal eligió lote importado (u ot id vacío): bucket L:codigo.

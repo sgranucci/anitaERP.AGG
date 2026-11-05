@@ -296,25 +296,31 @@ class PedidoPickingFerliSupportTest extends TestCase
         self::assertSame(0.0, $bucket['saldo']);
     }
 
-    public function test_bucket_asignado_ot_no_usa_heuristica_lote(): void
+    public function test_ot_asignada_con_saldo_en_lote_cero_no_toma_el_codigo(): void
     {
-        // Si el modal eligió OT, el consumo debe ir a lote=0 aunque exista bucket L con saldo.
-        $buckets = [
+        // OT 21205: el alta vigente está en lote 0. Aunque el código tenga saldo, se consume el 0.
+        $bucket = S::elegirBucketConsumoDesdeSaldos([
             ['lote' => '21205', 'ordentrabajo_id' => 0, 'saldo' => 50.0, 'talles' => []],
             ['lote' => 0, 'ordentrabajo_id' => 21205, 'saldo' => 72.0, 'talles' => ['36' => 72.0]],
-        ];
-        // Simula elegirBucket solo para el caso OT forzado (misma lógica que resolver con ot asignado).
-        $ot = null;
-        foreach ($buckets as $b) {
-            if ((int) ($b['ordentrabajo_id'] ?? 0) === 21205
-                && ! \App\Support\Stock\ReporteStockOtSituacionSupport::esLoteImportado($b['lote'] ?? 0)) {
-                $ot = $b;
-                break;
-            }
-        }
-        self::assertNotNull($ot);
-        self::assertSame(72.0, (float) $ot['saldo']);
-        self::assertFalse(\App\Support\Stock\ReporteStockOtSituacionSupport::esLoteImportado($ot['lote']));
+        ], '21205', 21205);
+
+        self::assertSame(0, $bucket['lote']);
+        self::assertSame(21205, $bucket['ordentrabajo_id']);
+        self::assertSame(72.0, $bucket['saldo']);
+    }
+
+    public function test_ot_asignada_sin_saldo_en_lote_cero_toma_el_lote_con_pares(): void
+    {
+        // OT 30147: la nota de crédito dejó los pares en el lote del código.
+        // El lote 0 no tiene saldo; grabar el consumo ahí no netea en Stock por OT.
+        $bucket = S::elegirBucketConsumoDesdeSaldos([
+            ['lote' => 0, 'ordentrabajo_id' => 30147, 'saldo' => -13.0, 'talles' => []],
+            ['lote' => '30147', 'ordentrabajo_id' => 30147, 'saldo' => 13.0, 'talles' => ['35' => 1.0]],
+        ], '30147', 30147);
+
+        self::assertSame('30147', $bucket['lote']);
+        self::assertSame(30147, $bucket['ordentrabajo_id']);
+        self::assertSame(13.0, $bucket['saldo']);
     }
 
     public function test_no_deja_bajar_si_el_lote_no_tiene_saldo(): void

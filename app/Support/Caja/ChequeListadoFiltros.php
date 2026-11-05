@@ -2,11 +2,13 @@
 
 namespace App\Support\Caja;
 
+use App\Models\Compras\Proveedor;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\ListadoQbeSupport;
+use Illuminate\Contracts\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -32,6 +34,7 @@ class ChequeListadoFiltros
         'cuentacaja' => ['column' => 'cuentacaja.nombre', 'type' => 'texto', 'label' => 'Cuenta de caja'],
         'empresa' => ['column' => 'empresa.nombre', 'type' => 'texto', 'label' => 'Empresa'],
         'cliente' => ['column' => 'cliente.nombre', 'type' => 'texto', 'label' => 'Cliente'],
+        'proveedor_endoso' => ['column' => 'prov_pago.nombre', 'type' => 'texto', 'label' => 'Proveedor endoso'],
         'monto' => ['column' => 'cheque.monto', 'type' => 'decimal', 'label' => 'Monto'],
         'entregado' => ['column' => 'cheque.entregado', 'type' => 'texto', 'label' => 'Entregado'],
         'anombrede' => ['column' => 'cheque.anombrede', 'type' => 'texto', 'label' => 'A nombre de'],
@@ -59,6 +62,8 @@ class ChequeListadoFiltros
         'banco.nombre',
         'empresa.nombre',
         'cliente.nombre',
+        'proveedor.nombre',
+        'proveedor.codigo',
     ];
 
     /** @var array<string, string> */
@@ -142,6 +147,7 @@ class ChequeListadoFiltros
         }
 
         $cartera = $request->boolean('cartera');
+        $endosado = $request->boolean('endosado');
         $paraDepositar = $request->boolean('para_depositar');
         $paraDepositarHasta = trim((string) $request->input('para_depositar_hasta', ''));
         if ($paraDepositarHasta !== '' && ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $paraDepositarHasta)) {
@@ -163,12 +169,20 @@ class ChequeListadoFiltros
         // Conserva espacio (DIFERIDO) si viene en el query.
         $estadoRaw = $request->input('estado');
         $estado = $estadoRaw === null ? '' : (string) $estadoRaw;
-        if ($cartera || $paraDepositar) {
+        if ($cartera || $paraDepositar || $endosado) {
             $origen = '';
             $estado = '';
         }
         if ($paraDepositar) {
             $cartera = false;
+            $endosado = false;
+        }
+        if ($cartera) {
+            $endosado = false;
+        }
+        if ($endosado) {
+            $cartera = false;
+            $paraDepositar = false;
         }
 
         return [
@@ -182,6 +196,7 @@ class ChequeListadoFiltros
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
             'cartera' => $cartera,
+            'endosado' => $endosado,
             'para_depositar' => $paraDepositar,
             'para_depositar_hasta' => $paraDepositarHasta,
             'origen' => $origen,
@@ -273,6 +288,10 @@ class ChequeListadoFiltros
             return true;
         }
 
+        if (! empty($filtros['endosado'])) {
+            return true;
+        }
+
         if (! empty($filtros['para_depositar'])) {
             return true;
         }
@@ -318,6 +337,7 @@ class ChequeListadoFiltros
             'empresa_id' => null,
             'empresa_scope' => 'una',
             'cartera' => false,
+            'endosado' => false,
             'para_depositar' => false,
             'para_depositar_hasta' => '',
             'origen' => '',
@@ -339,6 +359,9 @@ class ChequeListadoFiltros
 
         if (! empty($filtros['cartera'])) {
             $params['cartera'] = 1;
+        }
+        if (! empty($filtros['endosado'])) {
+            $params['endosado'] = 1;
         }
         if (! empty($filtros['para_depositar'])) {
             $params['para_depositar'] = 1;
@@ -418,6 +441,9 @@ class ChequeListadoFiltros
 
         if (! empty($filtros['cartera'])) {
             $params['cartera'] = 1;
+        }
+        if (! empty($filtros['endosado'])) {
+            $params['endosado'] = 1;
         }
         if (! empty($filtros['para_depositar'])) {
             $params['para_depositar'] = 1;
@@ -501,6 +527,114 @@ class ChequeListadoFiltros
     }
 
     /**
+     * Joins de maestros solo si un filtro, el orden o un corte leen esa tabla.
+     * La búsqueda global resuelve los ids en un subselect y no los necesita.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return list<string>
+     */
+    public static function tablasJoin(array $filtros): array
+    {
+        $mapa = [
+            'banco' => ['banco'],
+            'banco_cta' => ['banco', 'cuentacaja'],
+            'cuentacaja' => ['cuentacaja'],
+            'empresa' => ['empresa'],
+            'cliente' => ['cliente'],
+            'moneda' => ['moneda'],
+        ];
+        $tablas = [];
+        foreach (self::camposQueLeenMaestro($filtros) as $campo) {
+            foreach ($mapa[$campo] ?? [] as $tabla) {
+                $tablas[$tabla] = $tabla;
+            }
+        }
+
+        return array_values($tablas);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<string>
+     */
+    private static function camposQueLeenMaestro(array $filtros): array
+    {
+        $campos = [];
+        $modo = (string) ($filtros['modo'] ?? self::MODO_TODOS);
+        if ($modo === self::MODO_CAMPO && ($filtros['campo'] ?? '') !== '') {
+            $campos[] = (string) $filtros['campo'];
+        }
+        if ($modo === self::MODO_QBE) {
+            $campos = array_merge($campos, self::camposEnQbe(is_array($filtros['qbe'] ?? null) ? $filtros['qbe'] : []));
+        }
+        foreach ((array) ($filtros['agrupar'] ?? []) as $campo) {
+            $campos[] = (string) $campo;
+        }
+        foreach ((array) ($filtros['sort'] ?? []) as $item) {
+            if (is_array($item) && isset($item['campo'])) {
+                $campos[] = (string) $item['campo'];
+            }
+        }
+
+        return $campos;
+    }
+
+    /**
+     * @param  array<mixed>  $nodo
+     * @return list<string>
+     */
+    private static function camposEnQbe(array $nodo): array
+    {
+        $campos = [];
+        if (isset($nodo['campo']) && is_string($nodo['campo'])) {
+            $campos[] = $nodo['campo'];
+        }
+        foreach ($nodo as $valor) {
+            if (is_array($valor)) {
+                $campos = array_merge($campos, self::camposEnQbe($valor));
+            }
+        }
+
+        return $campos;
+    }
+
+    /**
+     * El join al proveedor solo hace falta para agrupar u ordenar por esa columna.
+     * La búsqueda resuelve los ids aparte, sin arrastrar el join en cada fila.
+     *
+     * @param  Builder<\App\Models\Caja\Cheque>  $query
+     */
+    public static function aplicarJoinProveedorEndoso(Builder $query, array $filtros): void
+    {
+        if (! self::necesitaJoinProveedorEndoso($filtros)) {
+            return;
+        }
+
+        $query->leftJoin('pagoproveedor as pp_endoso', 'pp_endoso.id', '=', 'cheque.pagoproveedor_id')
+            ->leftJoin('proveedor as prov_pago', 'prov_pago.id', '=', 'pp_endoso.proveedor_id')
+            ->leftJoin('proveedor as prov_cheque', 'prov_cheque.id', '=', 'cheque.proveedor_id');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private static function necesitaJoinProveedorEndoso(array $filtros): bool
+    {
+        foreach ((array) ($filtros['agrupar'] ?? []) as $campo) {
+            if ($campo === 'proveedor_endoso') {
+                return true;
+            }
+        }
+        foreach ((array) ($filtros['sort'] ?? []) as $item) {
+            if (is_array($item) && ($item['campo'] ?? '') === 'proveedor_endoso') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param  Builder<\App\Models\Caja\Cheque>  $query
      */
     public static function aplicar(Builder $query, array $filtros): void
@@ -518,11 +652,14 @@ class ChequeListadoFiltros
         } elseif (! empty($filtros['cartera'])) {
             $query->where('cheque.origen', 'R')
                 ->whereNull('cheque.pagoproveedor_id')
+                ->whereNull('cheque.proveedor_id')
                 ->where(function ($q) {
                     $q->whereIn('cheque.estado', [' ', 'N'])
                         ->orWhereNull('cheque.estado')
                         ->orWhere('cheque.estado', '');
                 });
+        } elseif (! empty($filtros['endosado'])) {
+            self::restringirEndosados($query);
         } else {
             if (($filtros['origen'] ?? '') !== '') {
                 $query->where('cheque.origen', $filtros['origen']);
@@ -632,12 +769,6 @@ class ChequeListadoFiltros
                 'cheque.estado',
                 'cheque.entregado',
                 'cheque.anombrede',
-                'banco.nombre',
-                'empresa.nombre',
-                'cliente.nombre',
-                'cliente.codigo',
-                'moneda.nombre',
-                'moneda.abreviatura',
             ];
             foreach ($textCols as $col) {
                 $q->orWhere($col, 'like', $like);
@@ -651,6 +782,11 @@ class ChequeListadoFiltros
                     );
                 }
             }
+            self::orWhereFkPorTexto($q, 'cheque.banco_id', 'banco', ['nombre'], $operador, $valor);
+            self::orWhereFkPorTexto($q, 'cheque.empresa_id', 'empresa', ['nombre'], $operador, $valor);
+            self::orWhereFkPorTexto($q, 'cheque.cliente_id', 'cliente', ['nombre', 'codigo'], $operador, $valor);
+            self::orWhereFkPorTexto($q, 'cheque.moneda_id', 'moneda', ['nombre', 'abreviatura'], $operador, $valor);
+            self::aplicarProveedorEndoso($q, $operador, $valor, true);
             self::aplicarCoincidenciaOrigenEstado($q, $valor, $operador);
             if (is_numeric(str_replace([',', '.'], ['', '.'], $valor))) {
                 $monto = (float) str_replace(',', '.', $valor);
@@ -685,8 +821,132 @@ class ChequeListadoFiltros
             $query->orWhere('cheque.estado', '*');
         }
         if (str_contains($valorNorm, 'difer')) {
-            $query->orWhere('cheque.estado', ' ');
+            $query->orWhere(function ($q) {
+                $q->where('cheque.estado', ' ')
+                    ->whereNull('cheque.pagoproveedor_id')
+                    ->whereNull('cheque.proveedor_id');
+            });
         }
+        if (str_contains($valorNorm, 'endos')) {
+            $query->orWhere(function ($q) {
+                self::restringirEndosados($q);
+            });
+        }
+    }
+
+    /**
+     * Nombre o código de un maestro: se resuelve en su tabla y el cheque
+     * se filtra por el id. Así el LIKE no obliga a unir esa tabla con todo el listado.
+     *
+     * @param  Builder<\App\Models\Caja\Cheque>  $query
+     * @param  list<string>  $columnas
+     */
+    private static function orWhereFkPorTexto(Builder $query, string $fk, string $tabla, array $columnas, string $operador, string $valor): void
+    {
+        if ($operador === 'vacio' || trim($valor) === '') {
+            return;
+        }
+
+        $query->orWhereIn($fk, function ($sub) use ($tabla, $columnas, $operador, $valor) {
+            $sub->select($tabla.'.id')->from($tabla)->where(function ($w) use ($tabla, $columnas, $operador, $valor) {
+                foreach ($columnas as $col) {
+                    $full = $tabla.'.'.$col;
+                    if (! ListadoOrdenamientoSupport::esColumnaSqlSegura($full)) {
+                        continue;
+                    }
+                    if ($operador === 'igual') {
+                        $w->orWhere($full, '=', $valor);
+                        continue;
+                    }
+                    if ($operador === 'distinto') {
+                        $w->orWhere($full, '!=', $valor);
+                        continue;
+                    }
+                    $w->orWhere($full, 'like', self::patronLike($operador, $valor));
+                    if ($operador === 'contiene' && self::usaCoincidenciaFlexibleEnColumna($full)) {
+                        CoincidenciaFlexibleTexto::aplicar(
+                            $w,
+                            $full,
+                            $valor,
+                            true,
+                            CoincidenciaFlexibleTexto::LONGITUD_MINIMA_DEFAULT
+                        );
+                    }
+                }
+            });
+        });
+    }
+
+    /**
+     * Proveedor del endoso: primero se buscan los ids en la tabla chica
+     * y después se filtra el cheque por esos ids.
+     *
+     * @param  Builder<\App\Models\Caja\Cheque>  $query
+     */
+    private static function aplicarProveedorEndoso(Builder $query, string $operador, string $valor, bool $comoOr): void
+    {
+        if ($operador === 'vacio') {
+            $callback = function ($q) {
+                $q->whereNull('cheque.proveedor_id')->whereNull('cheque.pagoproveedor_id');
+            };
+            if ($comoOr) {
+                $query->orWhere($callback);
+            } else {
+                $query->where($callback);
+            }
+
+            return;
+        }
+
+        $ids = self::idsProveedorCoincidentes($operador, $valor);
+        if ($ids === []) {
+            if (! $comoOr) {
+                $query->whereRaw('0 = 1');
+            }
+
+            return;
+        }
+
+        $callback = function ($q) use ($ids) {
+            $q->whereIn('cheque.proveedor_id', $ids)
+                ->orWhereIn('cheque.pagoproveedor_id', function ($sub) use ($ids) {
+                    $sub->select('id')->from('pagoproveedor')->whereIn('proveedor_id', $ids);
+                });
+        };
+        if ($comoOr) {
+            $query->orWhere($callback);
+        } else {
+            $query->where($callback);
+        }
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function idsProveedorCoincidentes(string $operador, string $valor): array
+    {
+        if ($operador === 'vacio' || trim($valor) === '') {
+            return [];
+        }
+
+        $q = Proveedor::query()->withoutGlobalScopes()->select('proveedor.id');
+        self::aplicarTextoEnColumnas($q, ['proveedor.nombre', 'proveedor.codigo'], $operador, $valor);
+
+        return $q->pluck('id')->map(static fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * Recibido que ya se entregó a un proveedor.
+     *
+     * @param  Builder<\App\Models\Caja\Cheque>  $query
+     */
+    private static function restringirEndosados(Builder $query): void
+    {
+        $query->where('cheque.origen', 'R')
+            ->where(function ($q) {
+                $q->whereNotNull('cheque.pagoproveedor_id')
+                    ->orWhereNotNull('cheque.proveedor_id');
+            });
     }
 
     private static function usaCoincidenciaFlexibleEnColumna(string $column): bool
@@ -744,6 +1004,12 @@ class ChequeListadoFiltros
             return;
         }
 
+        if ($campoKey === 'proveedor_endoso') {
+            self::aplicarProveedorEndoso($query, $operador, $valor, false);
+
+            return;
+        }
+
         self::aplicarTexto($query, (string) $def['column'], $operador, $valor);
     }
 
@@ -797,6 +1063,12 @@ class ChequeListadoFiltros
         }
 
         $valorNorm = mb_strtolower(trim($valor));
+        if (str_contains($valorNorm, 'endos')) {
+            self::restringirEndosados($query);
+
+            return;
+        }
+
         $codigo = match (true) {
             str_contains($valorNorm, 'difer') => ' ',
             str_contains($valorNorm, 'debit') => '*',
@@ -810,6 +1082,10 @@ class ChequeListadoFiltros
 
         if ($codigo !== null && in_array($operador, ['contiene', 'igual', 'empieza', 'termina'], true)) {
             $query->where('cheque.estado', $codigo);
+            if ($codigo === ' ' && str_contains($valorNorm, 'difer')) {
+                $query->whereNull('cheque.pagoproveedor_id')
+                    ->whereNull('cheque.proveedor_id');
+            }
 
             return;
         }
@@ -817,10 +1093,7 @@ class ChequeListadoFiltros
         self::aplicarTexto($query, 'cheque.estado', $operador, $valor);
     }
 
-    /**
-     * @param  Builder<\App\Models\Caja\Cheque>  $query
-     */
-    private static function aplicarTexto(Builder $query, string $column, string $operador, string $valor): void
+    private static function aplicarTexto(QueryBuilder $query, string $column, string $operador, string $valor): void
     {
         if ($operador === 'vacio') {
             $query->where(function ($q) use ($column) {
@@ -889,13 +1162,9 @@ class ChequeListadoFiltros
     }
 
     /**
-     * @param  Builder<\App\Models\Caja\Cheque>  $query
-     */
-    /**
      * @param  list<string>  $columnas
-     * @param  Builder<\App\Models\Caja\Cheque>  $query
      */
-    private static function aplicarTextoEnColumnas(Builder $query, array $columnas, string $operador, string $valor): void
+    private static function aplicarTextoEnColumnas(QueryBuilder $query, array $columnas, string $operador, string $valor): void
     {
         $columnas = array_values(array_filter(
             $columnas,
@@ -995,6 +1264,7 @@ class ChequeListadoFiltros
             'empresa_id' => $base['empresa_id'] ?? null,
             'empresa_scope' => $base['empresa_scope'] ?? 'una',
             'cartera' => $base['cartera'] ?? false,
+            'endosado' => $base['endosado'] ?? false,
             'para_depositar' => $base['para_depositar'] ?? false,
             'para_depositar_hasta' => $base['para_depositar_hasta'] ?? '',
             'origen' => $base['origen'] ?? '',

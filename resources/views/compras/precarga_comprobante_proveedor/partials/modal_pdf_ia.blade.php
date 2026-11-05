@@ -6,7 +6,8 @@
      data-retorno="{{ $pdfIaRetorno ?? '' }}"
      data-descartar-url="{{ $pdfIaDescartarUrl ?? route('descartar_ai_decision') }}"
      data-proveedor-id-selector="{{ $pdfIaProveedorIdSelector ?? '' }}"
-     data-overlay-id="{{ $pdfIaOverlayId ?? '' }}">
+     data-overlay-id="{{ $pdfIaOverlayId ?? '' }}"
+     data-usuario-id="{{ auth()->id() }}">
     <div class="modal-dialog modal-xl" role="document">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
@@ -26,6 +27,8 @@
                         Identifica empresa, proveedor, conceptos IVA, moneda y cotización.
                         Si hay OC, el tipo lo resuelve la orden. Sin OC, indique el tipo de comprobante
                         (por defecto FAC; cada empresa puede usar otro).
+                        El código de moneda es opcional: si lo carga, pisa la moneda leída del PDF
+                        y queda recordado para las próximas cargas. Puede cambiarlo o quitarlo.
                     </p>
                     <div class="form-group">
                         <label for="precarga-pdf-ia-archivo">Archivo PDF</label>
@@ -50,9 +53,47 @@
                             'col_label' => 'col-lg-4 col-form-label control-label text-right pr-2',
                             'col_input' => 'col-lg-8',
                         ])
-                        <p class="text-muted small mb-0">
+                        <p class="text-muted small mb-2">
                             Sin orden de compra se usa este tipo. Por defecto FAC; puede cambiarlo con F1 o la lupa.
                             Si carga una OC, el tipo lo define la orden.
+                        </p>
+                        @include('configuracion.partials.campo_consulta_moneda', [
+                            'prefix' => 'precarga_pdf_ia',
+                            'label' => 'Moneda',
+                            'monedaId' => 0,
+                            'codigo' => '',
+                            'nombre' => '',
+                            'inputName' => 'pdf_ia_moneda_id',
+                            'inputId' => 'precarga_pdf_ia_moneda_id',
+                            'required' => false,
+                            'mostrar_editar' => true,
+                            'col_label' => 'col-lg-4 col-form-label control-label text-right pr-2',
+                            'col_input' => 'col-lg-8',
+                        ])
+                        <div class="form-group row mb-2">
+                            <div class="col-lg-8 offset-lg-4 d-flex align-items-center flex-wrap" style="gap: 8px;">
+                                <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="precarga-pdf-ia-btn-quitar-moneda"
+                                    title="Borra la moneda recordada. La IA toma la moneda de la factura.">
+                                    <i class="fa fa-eraser"></i> Quitar moneda
+                                </button>
+                                <span class="text-muted small d-none" id="precarga-pdf-ia-moneda-recordada">
+                                    Queda recordada para las próximas cargas.
+                                </span>
+                            </div>
+                        </div>
+                        <div class="form-group row mb-2">
+                            <label for="precarga-pdf-ia-cotizacion-manual" class="col-lg-4 col-form-label control-label text-right pr-2">Cotización</label>
+                            <div class="col-lg-8">
+                                <input type="text" id="precarga-pdf-ia-cotizacion-manual" class="form-control form-control-sm"
+                                    inputmode="decimal" autocomplete="off" placeholder="Opcional"
+                                    title="Solo si el PDF no trae tipo de cambio">
+                            </div>
+                        </div>
+                        <p class="text-muted small mb-0">
+                            La moneda es opcional. Si la carga, reemplaza la del PDF y se recuerda para la siguiente factura.
+                            Puede cambiar el código o quitarla: vacía, la IA toma la moneda de la factura.
+                            Si la factura está en otra moneda, los importes se convierten con el tipo de cambio del PDF.
+                            Si el PDF no lo trae, indíquelo en Cotización. Sin cotización no se carga la factura.
                         </p>
                     </div>
                 </div>
@@ -155,3 +196,4 @@
     </div>
 </div>
 @include('includes.compras.modalconsultatipotransaccioncompra')
+@include('includes.configuracion.modalconsultamoneda')

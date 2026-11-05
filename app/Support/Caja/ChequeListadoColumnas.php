@@ -77,6 +77,82 @@ final class ChequeListadoColumnas
         return $out !== [] ? $out : self::defaultsVisibles();
     }
 
+    /**
+     * Recibido, sin endoso y todavía diferido o no presentado.
+     */
+    public static function enCartera(object $data): bool
+    {
+        return (string) ($data->origen ?? '') === 'R'
+            && ! self::estaEndosado($data)
+            && in_array((string) ($data->estado ?? ' '), [' ', 'N', ''], true);
+    }
+
+    /**
+     * Cheque recibido entregado a un proveedor (orden de pago o proveedor cargado).
+     */
+    public static function estaEndosado(object $data): bool
+    {
+        if ((string) ($data->origen ?? '') !== 'R') {
+            return false;
+        }
+
+        return ! empty($data->pagoproveedor_id) || ! empty($data->proveedor_id);
+    }
+
+    /**
+     * El código Anita sigue en diferido. En pantalla, si ya salió a un proveedor, es Endosado.
+     */
+    public static function nombreEstadoVisible(object $data, string $estadoNombre): string
+    {
+        $estado = (string) ($data->estado ?? ' ');
+        if (self::estaEndosado($data) && in_array($estado, [' ', 'N', ''], true)) {
+            return 'Endosado';
+        }
+
+        return $estadoNombre !== '' ? $estadoNombre : $estado;
+    }
+
+    public static function textoEstadoExport(object $data, string $estadoNombre): string
+    {
+        $texto = self::nombreEstadoVisible($data, $estadoNombre);
+        if (self::enCartera($data)) {
+            $texto .= ' · Cartera';
+        }
+        $endoso = self::etiquetaProveedorEndoso($data);
+        if ($endoso !== '') {
+            $texto .= ' · '.$endoso;
+        }
+
+        return $texto;
+    }
+
+    /**
+     * Proveedor al que se endosó un cheque recibido.
+     * Sale de la orden de pago; si no hay pago, del proveedor cargado en el cheque.
+     */
+    public static function etiquetaProveedorEndoso(object $data): string
+    {
+        if (! self::estaEndosado($data)) {
+            return '';
+        }
+
+        $proveedor = $data->pagoproveedores?->proveedores ?? null;
+        if ($proveedor === null) {
+            $proveedor = $data->proveedores ?? null;
+        }
+
+        $nombre = trim((string) ($proveedor->nombre ?? ''));
+        if ($nombre !== '') {
+            return $nombre;
+        }
+
+        if (! empty($data->pagoproveedor_id) || ! empty($data->proveedor_id)) {
+            return trim((string) ($data->anombrede ?? ''));
+        }
+
+        return '';
+    }
+
     public static function valorCelda(object $data, string $key): string
     {
         return match ($key) {

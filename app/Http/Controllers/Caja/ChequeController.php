@@ -234,6 +234,9 @@ class ChequeController extends Controller
         if (! empty($filtros['cartera'])) {
             return 'Cartera';
         }
+        if (! empty($filtros['endosado'])) {
+            return 'Endosados';
+        }
         if (($filtros['origen'] ?? '') === 'E') {
             return 'Emitidos';
         }

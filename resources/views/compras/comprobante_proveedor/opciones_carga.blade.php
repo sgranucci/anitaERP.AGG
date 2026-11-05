@@ -6,6 +6,7 @@
 @section("scripts")
 @if (!empty($pdfIaHabilitado) && can('crear-precarga-proveedores', false))
 <script src="{{ asset('assets/pages/scripts/compras/tipotransaccion_compra/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/tipotransaccion_compra/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/configuracion/moneda/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/moneda/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/precarga_comprobante_proveedor/pdf_ia.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/precarga_comprobante_proveedor/pdf_ia.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 @if (can('crear-comprobante-proveedor', false))

@@ -4,6 +4,7 @@
     $baseQ = $filtrosQuery ?? [];
     $rutaIndex = 'cheque';
     $carteraActiva = ! empty($filtros['cartera']);
+    $endosadoActiva = ! empty($filtros['endosado']);
     $paraDepositarActiva = ! empty($filtros['para_depositar']);
     $paraDepositarHasta = (string) ($filtros['para_depositar_hasta'] ?? date('Y-m-d'));
     if ($paraDepositarHasta === '' || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $paraDepositarHasta)) {
@@ -26,7 +27,7 @@
 
     $urlQuick = function (array $extra) use ($baseQ, $rutaIndex) {
         $q = $baseQ;
-        unset($q['cartera'], $q['para_depositar'], $q['para_depositar_hasta'], $q['origen'], $q['estado']);
+        unset($q['cartera'], $q['endosado'], $q['para_depositar'], $q['para_depositar_hasta'], $q['origen'], $q['estado']);
         foreach ($extra as $k => $v) {
             if ($v === null || $v === '') {
                 continue;
@@ -37,7 +38,7 @@
         return route($rutaIndex, $q);
     };
 
-    $esTodos = ! $carteraActiva && ! $paraDepositarActiva && $origenActivo === '' && $estadoActivo === '';
+    $esTodos = ! $carteraActiva && ! $endosadoActiva && ! $paraDepositarActiva && $origenActivo === '' && $estadoActivo === '';
 @endphp
 <div class="card-body py-2 border-bottom bg-white">
     @if (\App\Support\Configuracion\EmpresaFiltroExternoSupport::mostrarChips())
@@ -72,20 +73,25 @@
                    class="btn {{ $carteraActiva ? 'btn-success' : 'btn-outline-success' }}">
                     Cartera
                 </a>
+                <a href="{{ $urlQuick(['endosado' => 1]) }}"
+                   class="btn {{ $endosadoActiva ? 'btn-dark' : 'btn-outline-dark' }}"
+                   title="Cheques recibidos entregados a un proveedor">
+                    Endosados
+                </a>
                 <a href="{{ $urlQuick([]) }}"
                    class="btn {{ $esTodos ? 'btn-secondary' : 'btn-outline-secondary' }}">
                     Todos
                 </a>
                 <a href="{{ $urlQuick(['origen' => 'E']) }}"
-                   class="btn {{ (! $carteraActiva && ! $paraDepositarActiva && $origenActivo === 'E') ? 'btn-primary' : 'btn-outline-primary' }}">
+                   class="btn {{ (! $carteraActiva && ! $endosadoActiva && ! $paraDepositarActiva && $origenActivo === 'E') ? 'btn-primary' : 'btn-outline-primary' }}">
                     Emitidos
                 </a>
                 <a href="{{ $urlQuick(['origen' => 'R']) }}"
-                   class="btn {{ (! $carteraActiva && ! $paraDepositarActiva && $origenActivo === 'R' && $estadoActivo === '') ? 'btn-info' : 'btn-outline-info' }}">
+                   class="btn {{ (! $carteraActiva && ! $endosadoActiva && ! $paraDepositarActiva && $origenActivo === 'R' && $estadoActivo === '') ? 'btn-info' : 'btn-outline-info' }}">
                     Recibidos
                 </a>
                 <a href="{{ $urlQuick(['estado' => 'R']) }}"
-                   class="btn {{ (! $carteraActiva && ! $paraDepositarActiva && $estadoActivo === 'R') ? 'btn-danger' : 'btn-outline-danger' }}">
+                   class="btn {{ (! $carteraActiva && ! $endosadoActiva && ! $paraDepositarActiva && $estadoActivo === 'R') ? 'btn-danger' : 'btn-outline-danger' }}">
                     Rechazados
                 </a>
             </div>
@@ -112,7 +118,8 @@
         </div>
         @endif
     </div>
-    <form method="get" action="{{ route('cheque') }}" class="form-inline mt-2 mb-0">
+    <div class="d-flex flex-wrap align-items-center justify-content-between mt-2">
+    <form method="get" action="{{ route('cheque') }}" class="form-inline mb-1">
         @foreach ($baseQ as $k => $v)
             @if (! in_array($k, ['orden', 'orden_dir', 'sort', 'group'], true) && ! is_array($v) && $v !== null && $v !== '')
                 <input type="hidden" name="{{ $k }}" value="{{ $v }}">
@@ -131,6 +138,14 @@
         <button type="submit" class="btn btn-outline-secondary btn-sm">Aplicar orden</button>
         <span class="small text-muted ml-2">El PDF y el Excel salen con este orden.</span>
     </form>
+    <div class="ml-auto mb-1">
+        @include('includes.exportar-tabla-queryparams', [
+            'ruta' => 'lista_cheque',
+            'queryparams' => $filtrosQuery ?? [],
+            'variant' => 'compact',
+        ])
+    </div>
+    </div>
     @if ($paraDepositarActiva)
     <form method="get" action="{{ route('cheque') }}" class="form-inline mt-2 mb-0">
         @foreach ($baseQ as $k => $v)
