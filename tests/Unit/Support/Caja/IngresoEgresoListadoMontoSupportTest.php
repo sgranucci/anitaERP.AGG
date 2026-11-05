@@ -78,4 +78,36 @@ class IngresoEgresoListadoMontoSupportTest extends TestCase
         $this->assertStringContainsString('transferencia', $res['lineas'][0]);
         $this->assertStringContainsString('Banco Macro', $res['lineas'][0]);
     }
+
+    public function test_canje_por_transferencia_no_duplica_si_ya_esta_en_caja(): void
+    {
+        $mov = (object) [
+            'caja_movimiento_cuentacajas' => [
+                (object) [
+                    'cuentacaja_id' => 64,
+                    'moneda_id' => 1,
+                    'cotizacion' => 1,
+                    'monto' => -2500.5,
+                    'cuentacajas' => (object) ['nombre' => 'Banco Macro'],
+                ],
+            ],
+            'cheques' => [],
+            'chequeReemplazoTransferencias' => [
+                (object) [
+                    'cuentacaja_id' => 64,
+                    'moneda_id' => 1,
+                    'cotizacion' => 1,
+                    'monto' => 2500.5,
+                    'chequeAnulado' => (object) ['origen' => 'E', 'numerocheque' => '8200303'],
+                    'cuentacajas' => (object) ['nombre' => 'Banco Macro'],
+                ],
+            ],
+        ];
+
+        $res = IngresoEgresoListadoMontoSupport::resumen($mov);
+
+        $this->assertSame(2500.5, $res['egreso']);
+        $this->assertSame(0.0, $res['ingreso']);
+        $this->assertCount(1, $res['lineas']);
+    }
 }

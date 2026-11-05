@@ -284,8 +284,20 @@ final class IngresoEgresoAnitaTesmovSupport
         self::insertPago($movimiento, $ctx);
 
         $esTra = self::esTransferenciaTipo((string) $ctx['tipo']);
+        $lineasCajaDeTransferencia = [];
 
         foreach ($movimiento->caja_movimiento_cuentacajas as $linea) {
+            // El canje por transferencia ya graba tesmov/auxpag en
+            // grabarReemplazosPorTransferencia. Esta línea solo mueve el saldo
+            // de caja del ERP; volver a mandarla duplicaría la salida en Anita.
+            if (IngresoEgresoCanjeChequeSupport::lineaCajaRepresentaTransferencia(
+                $linea,
+                $movimiento->chequeReemplazoTransferencias,
+                $lineasCajaDeTransferencia
+            )) {
+                continue;
+            }
+
             $cuenta = $linea->cuentacajas;
             $codigoCuenta = $cuenta ? trim((string) $cuenta->codigo) : '';
             if ($codigoCuenta === '') {
@@ -861,7 +873,16 @@ final class IngresoEgresoAnitaTesmovSupport
 
         $total = 0.0;
         $cotizacion = 1.0;
+        $movimiento->loadMissing('chequeReemplazoTransferencias');
+        $lineasCajaDeTransferencia = [];
         foreach ($movimiento->caja_movimiento_cuentacajas as $linea) {
+            if (IngresoEgresoCanjeChequeSupport::lineaCajaRepresentaTransferencia(
+                $linea,
+                $movimiento->chequeReemplazoTransferencias,
+                $lineasCajaDeTransferencia
+            )) {
+                continue;
+            }
             $total += abs((float) $linea->monto);
             if ((float) ($linea->cotizacion ?: 0) > 0) {
                 $monedaLin = (int) ($linea->moneda_id ?: 1);
@@ -873,7 +894,6 @@ final class IngresoEgresoAnitaTesmovSupport
                 $total += abs((float) $cheque->monto);
             }
         }
-        $movimiento->loadMissing('chequeReemplazoTransferencias');
         foreach ($movimiento->chequeReemplazoTransferencias as $transferencia) {
             $total += abs((float) $transferencia->monto);
         }

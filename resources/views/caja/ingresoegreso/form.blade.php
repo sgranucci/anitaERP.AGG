@@ -175,7 +175,11 @@
                 }
                 $lineasCuentas = collect();
                 if (isset($data) && $data->caja_movimiento_cuentacajas && $data->caja_movimiento_cuentacajas->count() > 0) {
-                    $lineasCuentas = $data->caja_movimiento_cuentacajas;
+                    $lineasCuentas = $data->caja_movimiento_cuentacajas->reject(function ($cuenta) {
+                        return \App\Support\Caja\IngresoEgresoCanjeChequeSupport::esObservacionLineaCajaTransferencia(
+                            $cuenta->observacion ?? ''
+                        );
+                    })->values();
                 }
             @endphp
             @foreach ($lineasCuentas as $cuenta)

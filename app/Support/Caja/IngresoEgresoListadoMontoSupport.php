@@ -63,7 +63,32 @@ final class IngresoEgresoListadoMontoSupport
             }
         }
 
+        $cajaYaUsadaPorTransferencia = [];
         foreach ($movimiento->chequeReemplazoTransferencias ?? [] as $transferencia) {
+            $anuladoPrevio = $transferencia->chequeAnulado ?? $transferencia->cheque_anulado ?? null;
+            $origenPrevio = strtoupper(trim((string) (is_object($anuladoPrevio) ? ($anuladoPrevio->origen ?? 'E') : 'E')));
+            $firmado = IngresoEgresoCanjeChequeSupport::montoFirmadoLineaCajaTransferencia(
+                $origenPrevio,
+                (float) ($transferencia->monto ?? 0)
+            );
+            $cubiertaPorCaja = false;
+            foreach ($movimiento->caja_movimiento_cuentacajas ?? [] as $idxCaja => $lineaCaja) {
+                if (isset($cajaYaUsadaPorTransferencia[$idxCaja])) {
+                    continue;
+                }
+                if ((int) ($lineaCaja->cuentacaja_id ?? 0) !== (int) ($transferencia->cuentacaja_id ?? 0)) {
+                    continue;
+                }
+                if (abs(round((float) ($lineaCaja->monto ?? 0), 2) - $firmado) >= 0.02) {
+                    continue;
+                }
+                $cajaYaUsadaPorTransferencia[$idxCaja] = true;
+                $cubiertaPorCaja = true;
+                break;
+            }
+            if ($cubiertaPorCaja) {
+                continue;
+            }
             $coef = self::coeficiente($transferencia->moneda_id ?? 1, $transferencia->cotizacion ?? 1, $fecha, $cotizacionesMovimiento);
             $montoAbs = abs((float) ($transferencia->monto ?? 0));
             if ($montoAbs < 0.000001) {

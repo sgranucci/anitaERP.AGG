@@ -24,6 +24,12 @@ final class IngresoEgresoCanjeChequeSupport
 
     public const NOMBRE = 'Canje de cheques';
 
+    /**
+     * Línea de caja generada al reemplazar un cheque por transferencia.
+     * No se edita en la grilla: se rearma al grabar el reemplazo.
+     */
+    public const PREFIJO_OBS_LINEA_CAJA_TRF = 'Canje TRF ch ';
+
     public static function esCanje(?Tipotransaccion_Caja $tipo): bool
     {
         if (! $tipo) {
@@ -188,6 +194,64 @@ final class IngresoEgresoCanjeChequeSupport
         }
 
         return $texto;
+    }
+
+    public static function observacionLineaCajaTransferencia(string $numerocheque): string
+    {
+        $texto = self::PREFIJO_OBS_LINEA_CAJA_TRF.trim($numerocheque);
+
+        return mb_substr($texto, 0, 255);
+    }
+
+    public static function esObservacionLineaCajaTransferencia(mixed $observacion): bool
+    {
+        return str_starts_with(trim((string) $observacion), self::PREFIJO_OBS_LINEA_CAJA_TRF);
+    }
+
+    /**
+     * Cheque propio anulado: la transferencia sale de la cuenta (negativo).
+     * Cheque de terceros: la transferencia entra (positivo).
+     */
+    public static function montoFirmadoLineaCajaTransferencia(string $origenAnulado, float $monto): float
+    {
+        $signo = strtoupper(trim($origenAnulado)) === 'R' ? 1.0 : -1.0;
+
+        return round(abs($monto) * $signo, 2);
+    }
+
+    /**
+     * La línea de caja ya es la salida/entrada de esa transferencia.
+     * Cada transferencia se consume una sola vez.
+     *
+     * @param  iterable<mixed>  $transferencias
+     * @param  array<int|string, true>  $consumidas
+     */
+    public static function lineaCajaRepresentaTransferencia(object $linea, iterable $transferencias, array &$consumidas): bool
+    {
+        $cuenta = (int) ($linea->cuentacaja_id ?? 0);
+        $monto = round((float) ($linea->monto ?? 0), 2);
+        if ($cuenta <= 0 || abs($monto) < 0.01) {
+            return false;
+        }
+
+        foreach ($transferencias as $i => $tr) {
+            if (! is_object($tr) || isset($consumidas[$i])) {
+                continue;
+            }
+            if ((int) ($tr->cuentacaja_id ?? 0) !== $cuenta) {
+                continue;
+            }
+            $anulado = $tr->chequeAnulado ?? $tr->cheque_anulado ?? null;
+            $origen = is_object($anulado) ? (string) ($anulado->origen ?? 'E') : 'E';
+            $firmado = self::montoFirmadoLineaCajaTransferencia($origen, (float) ($tr->monto ?? 0));
+            if (abs($monto - $firmado) < 0.02) {
+                $consumidas[$i] = true;
+
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function formatearMonto(mixed $monto): string

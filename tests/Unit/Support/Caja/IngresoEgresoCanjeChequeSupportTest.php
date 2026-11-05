@@ -25,6 +25,39 @@ class IngresoEgresoCanjeChequeSupportTest extends TestCase
         $this->assertStringContainsString('Macro', $texto);
     }
 
+    public function test_transferencia_de_cheque_propio_sale_de_la_cuenta(): void
+    {
+        $this->assertSame(
+            -437591.80,
+            IngresoEgresoCanjeChequeSupport::montoFirmadoLineaCajaTransferencia('E', 437591.80)
+        );
+        $this->assertSame(
+            100.0,
+            IngresoEgresoCanjeChequeSupport::montoFirmadoLineaCajaTransferencia('R', 100)
+        );
+
+        $linea = (object) ['cuentacaja_id' => 64, 'monto' => -437591.80];
+        $transferencias = [
+            (object) [
+                'cuentacaja_id' => 64,
+                'monto' => 437591.80,
+                'chequeAnulado' => (object) ['origen' => 'E'],
+            ],
+        ];
+        $consumidas = [];
+
+        $this->assertTrue(IngresoEgresoCanjeChequeSupport::lineaCajaRepresentaTransferencia(
+            $linea,
+            $transferencias,
+            $consumidas
+        ));
+        $this->assertFalse(IngresoEgresoCanjeChequeSupport::lineaCajaRepresentaTransferencia(
+            $linea,
+            $transferencias,
+            $consumidas
+        ));
+    }
+
     public function test_detalle_marca_reemplazo_por_transferencia(): void
     {
         $texto = IngresoEgresoCanjeChequeSupport::detalleDeterministico([

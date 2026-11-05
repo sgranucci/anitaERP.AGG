@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Caja;
 
+use App\Models\Caja\Caja_Movimiento_Cuentacaja;
 use App\Models\Caja\Cheque;
 use App\Models\Caja\ChequeReemplazoTransferencia;
 use App\Models\Caja\Cuentacaja;
@@ -9,6 +10,7 @@ use App\Models\Caja\Estadocheque_Banco;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
 use App\Support\Caja\ChequeAnitaSyncSupport;
+use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
 use App\Support\Caja\ChequeConsultaChequeraSupport;
 use App\Support\Caja\ChequeListadoColumnas;
 use App\Support\Caja\ChequeListadoFiltros;
@@ -969,6 +971,10 @@ class ChequeRepository implements ChequeRepositoryInterface
         $anulado->estado = 'A';
         $anulado->save();
 
+        $monedaId = (int) ($monedaReemplazo[$i] ?? $anulado->moneda_id);
+        $cotizacion = (float) ($cotizReemplazo[$i] ?? $anulado->cotizacion ?: 1);
+        $fecha = $fechaPago !== '' ? $fechaPago : $fechaOperacion;
+
         ChequeReemplazoTransferencia::query()->updateOrCreate(
             [
                 'caja_movimiento_id' => $cajaMovimientoId,
@@ -976,10 +982,32 @@ class ChequeRepository implements ChequeRepositoryInterface
             ],
             [
                 'cuentacaja_id' => $cuentacajaId,
-                'fecha' => $fechaPago !== '' ? $fechaPago : $fechaOperacion,
+                'fecha' => $fecha,
                 'monto' => $montoReemplazo,
-                'moneda_id' => (int) ($monedaReemplazo[$i] ?? $anulado->moneda_id),
-                'cotizacion' => (float) ($cotizReemplazo[$i] ?? $anulado->cotizacion ?: 1),
+                'moneda_id' => $monedaId > 0 ? $monedaId : 1,
+                'cotizacion' => $cotizacion > 0 ? $cotizacion : 1,
+            ]
+        );
+
+        // Salida (o entrada) real de tesorería. Sin esta línea el saldo de la
+        // cuenta de caja no se mueve: el cheque anulado deja de contar y la
+        // transferencia no figuraba en el mayor de caja.
+        Caja_Movimiento_Cuentacaja::query()->updateOrCreate(
+            [
+                'caja_movimiento_id' => $cajaMovimientoId,
+                'observacion' => IngresoEgresoCanjeChequeSupport::observacionLineaCajaTransferencia(
+                    (string) $anulado->numerocheque
+                ),
+            ],
+            [
+                'cuentacaja_id' => $cuentacajaId,
+                'fecha' => $fecha,
+                'monto' => IngresoEgresoCanjeChequeSupport::montoFirmadoLineaCajaTransferencia(
+                    (string) $anulado->origen,
+                    $montoReemplazo
+                ),
+                'moneda_id' => $monedaId > 0 ? $monedaId : 1,
+                'cotizacion' => $cotizacion > 0 ? $cotizacion : 1,
             ]
         );
     }
@@ -997,7 +1025,20 @@ class ChequeRepository implements ChequeRepositoryInterface
         $viejas = $q->get();
         foreach ($viejas as $vieja) {
             $chequeId = (int) $vieja->cheque_id;
+            $numero = trim((string) ($vieja->chequeAnulado->numerocheque ?? ''));
+            if ($numero === '') {
+                $numero = trim((string) (Cheque::query()->whereKey($chequeId)->value('numerocheque') ?? ''));
+            }
             $vieja->delete();
+            if ($numero !== '') {
+                Caja_Movimiento_Cuentacaja::query()
+                    ->where('caja_movimiento_id', $cajaMovimientoId)
+                    ->where(
+                        'observacion',
+                        IngresoEgresoCanjeChequeSupport::observacionLineaCajaTransferencia($numero)
+                    )
+                    ->delete();
+            }
             ChequeReemplazoTransferencia::restaurarChequeSiQuedoSinReemplazo($chequeId, $cajaMovimientoId);
         }
     }
