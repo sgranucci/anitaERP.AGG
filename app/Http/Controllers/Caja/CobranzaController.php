@@ -536,7 +536,7 @@ class CobranzaController extends Controller
         can('borrar-cobranza');
 
         try {
-            $this->cobranzaAnularRevertirService->anularFisicamente((int) $id);
+            $anulacion = $this->cobranzaAnularRevertirService->anularFisicamente((int) $id);
         } catch (RuntimeException $e) {
             if ($request->ajax()) {
                 return response()->json([
@@ -557,15 +557,53 @@ class CobranzaController extends Controller
             return redirect()->back()->with('mensaje', 'No se pudo anular la cobranza: '.$e->getMessage());
         }
 
+        $aviso = trim((string) ($anulacion['aviso'] ?? ''));
+        $mensajeOk = 'Cobranza anulada con éxito';
+        if ($aviso !== '') {
+            $mensajeOk .= '. '.$aviso;
+        }
+
         if ($request->ajax()) {
-            return response()->json(['mensaje' => 'ok']);
+            $json = ['mensaje' => 'ok'];
+            if ($aviso !== '') {
+                $json['aviso'] = $aviso;
+            }
+            if (! empty($anulacion['ndp'])) {
+                $json['ndp'] = $anulacion['ndp'];
+            }
+
+            return response()->json($json);
         }
 
         if ($origen == 'movimientocaja') {
-            return redirect('caja/movimientocaja')->with('mensaje', 'Cobranza anulada con éxito');
+            return redirect('caja/movimientocaja')->with('mensaje', $mensajeOk);
         }
 
-        return redirect('caja/cobranza')->with('mensaje', 'Cobranza anulada con éxito');
+        return redirect('caja/cobranza')->with('mensaje', $mensajeOk);
+    }
+
+    public function revertir(Request $request)
+    {
+        can('revertir-cobranza');
+
+        try {
+            $resultado = $this->cobranzaAnularRevertirService->revertir(
+                (int) $request->input('id'),
+                $request->input('fecha')
+            );
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'mensaje' => 'ng',
+                'errores' => $e->getMessage(),
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'mensaje' => 'ng',
+                'errores' => 'No se pudo revertir la cobranza: '.$e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json($resultado);
     }
 
     public function generaAsientoContable(Request $request)

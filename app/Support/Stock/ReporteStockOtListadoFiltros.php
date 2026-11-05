@@ -76,6 +76,7 @@ final class ReporteStockOtListadoFiltros
             'apertura' => self::enum($request->input('apertura'), ['TOTALIZADO', 'MOVIMIENTOS'], 'TOTALIZADO'),
             'deposito_id' => (int) $request->input('deposito_id', 0),
             'ambito_deposito' => ReporteStockOtDepositoAmbitoSupport::normalizar((string) $request->input('ambito_deposito', 'TODOS')),
+            'avisar_negativos' => self::enum($request->input('avisar_negativos'), ['SI', 'NO'], 'SI'),
         ], $texto);
     }
 
@@ -90,11 +91,11 @@ final class ReporteStockOtListadoFiltros
             'estado', 'mventa_id', 'desdearticulo_id', 'hastaarticulo_id',
             'desdelinea_id', 'hastalinea_id', 'desdecategoria_id', 'hastacategoria_id',
             'desdelote', 'hastalote', 'imprimefoto', 'estadoOt', 'apertura',
-            'deposito_id', 'ambito_deposito',
+            'deposito_id', 'ambito_deposito', 'avisar_negativos',
         ] as $key) {
             $valor = $filtros[$key] ?? null;
             if ($valor === null || $valor === '' || $valor === 0 || $valor === '0') {
-                if (in_array($key, ['estado', 'imprimefoto', 'estadoOt', 'apertura', 'ambito_deposito'], true) && $valor !== null && $valor !== '') {
+                if (in_array($key, ['estado', 'imprimefoto', 'estadoOt', 'apertura', 'ambito_deposito', 'avisar_negativos'], true) && $valor !== null && $valor !== '') {
                     $out[$key] = $valor;
                 }
                 continue;

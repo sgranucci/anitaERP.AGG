@@ -50,6 +50,7 @@ final class PagoproveedorAsientoArmadoSupport
      * @param  list<object|array<string, mixed>>  $datosChequesRecibidos
      * @param  list<object|array<string, mixed>>  $datosComprobantes
      * @param  list<object|array<string, mixed>>  $datosRetenciones
+     * @param  float|null  $sobrante  medios + retenciones − aplicado, en moneda del pago (la OPA). Null con asiento manual.
      * @return list<array<string, mixed>>
      */
     public static function armar(
@@ -68,7 +69,9 @@ final class PagoproveedorAsientoArmadoSupport
         string $numeroOp = '',
         int $monedaPagoId = 1,
         float $cotizacionPago = 1.0,
+        ?float &$sobrante = null,
     ): array {
+        $sobrante = null;
         $monedaLocal = self::monedaLocalId();
         if ($monedaPagoId <= 0) {
             $monedaPagoId = $monedaLocal;
@@ -419,6 +422,11 @@ final class PagoproveedorAsientoArmadoSupport
             $cotizacionPago,
             $dcSoloPnL,
             $empresaId
+        );
+
+        $sobrante = max(
+            0.0,
+            round(PagoproveedorAnticipoAsientoSupport::residual($asiento, $monedaPagoId, $cotizacionPago), 2)
         );
 
         self::agregarAnticipoSiCorresponde(

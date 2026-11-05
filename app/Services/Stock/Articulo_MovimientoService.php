@@ -16,6 +16,7 @@ use App\Models\Stock\Talle;
 use App\Support\Database\DbContencionSupport;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\ArticuloMovimientoReferenciasSupport;
+use App\Support\Stock\OtBucketStockSupport;
 use App\Support\Stock\OtListaEntregaSupport;
 use App\Support\Stock\ReporteStockOtDepositoAmbitoSupport;
 use App\Support\Stock\ReporteStockOtPrecioSupport;
@@ -313,8 +314,9 @@ class Articulo_MovimientoService
 										$desdelinea_id, $hastalinea_id,
 										$desdecategoria_id, $hastacategoria_id,
 										$desdelote, $hastalote, $estadoot, $apertura, $deposito_id,
-										$ambitoDeposito = 'TODOS')
+										$ambitoDeposito = 'TODOS', ?array &$avisoNegativos = null)
 	{
+		$avisoNegativos = ['buckets' => 0, 'pares' => 0.0, 'detalle' => []];
 		$data = collect($this->articulo_movimientoQuery->generaDatosRepStockOt($estado, $mventa_id,
 				$desdearticulo, $hastaarticulo,
 				$desdelinea_id, $hastalinea_id,
@@ -344,13 +346,16 @@ class Articulo_MovimientoService
 			$data = $data->concat($extras);
 		}
 
+		// El alta graba la OT en ordentrabajo_id y el consumo la graba en lote: unificar antes de agrupar.
+		OtBucketStockSupport::precargar($data);
+
 		// Incluir OT con depósito: hace falta la meta de tareas (ej. PENDIENTE vs ENTREGA).
 		$otIdsSituacion = [];
 		foreach ($data as $row) {
 			if (! empty($row['en_produccion_forzada'])) {
 				continue;
 			}
-			$otId = (int) ($row['ordentrabajo_id'] ?? 0);
+			$otId = $this->bucketReporteStockOt($row)['ordentrabajo_id'];
 			if ($otId > 0) {
 				$otIdsSituacion[] = $otId;
 			}
@@ -363,11 +368,8 @@ class Articulo_MovimientoService
 		$esMovimientos = $apertura === 'MOVIMIENTOS';
 
 		foreach ($data as $movimiento) {
-			$claveAgrupacion = ReporteStockOtSituacionSupport::claveAgrupacion(
-				$movimiento['lote'] ?? 0,
-				(int) ($movimiento['ordentrabajo_id'] ?? 0),
-				(int) ($movimiento['deposito_id'] ?? 0)
-			);
+			$bucket = $this->bucketReporteStockOt($movimiento);
+			$claveAgrupacion = $bucket['clave'].'|D:'.(int) ($movimiento['deposito_id'] ?? 0);
 			$clave = implode('|', [
 				(string) ($movimiento['sku'] ?? ''),
 				(string) ($movimiento['codigocombinacion'] ?? ''),
@@ -380,7 +382,7 @@ class Articulo_MovimientoService
 			}
 
 			if (! isset($grupos[$clave])) {
-				$meta = $this->situacionFilaReporteStockOt($movimiento, $situacionesPorOt);
+				$meta = $this->situacionFilaReporteStockOt($movimiento, $situacionesPorOt, $bucket);
 				[$modulo, $cantidadModulo, $moduloNombre] = $this->curvaModuloReporteStockOt(
 					(int) ($movimiento['modulo_id'] ?? 0),
 					$modulosCache
@@ -392,10 +394,7 @@ class Articulo_MovimientoService
 					'combinacion_id' => (int) ($movimiento['combinacion_id'] ?? 0),
 					'codigocombinacion' => $movimiento['codigocombinacion'] ?? '',
 					'nombrecombinacion' => $movimiento['nombrecombinacion'] ?? '',
-					'lote' => ReporteStockOtSituacionSupport::identificadorExcel(
-						$movimiento['lote'] ?? 0,
-						$movimiento['ordentrabajo_codigo'] ?? ''
-					),
+					'lote' => $bucket['identificador'],
 					'precio' => $movimiento['precio'] ?? 0,
 					'situacion' => $meta['situacion'],
 					'en_produccion' => $meta['en_produccion'],
@@ -404,8 +403,8 @@ class Articulo_MovimientoService
 					'cantidadmodulo' => $cantidadModulo,
 					'modulo' => $modulo,
 					'pedido' => $movimiento['pedido'] ?? null,
-					'ordencompra' => $movimiento['ordentrabajo_codigo'] ?? '',
-					'ordentrabajo_id' => (int) ($movimiento['ordentrabajo_id'] ?? 0),
+					'ordencompra' => $bucket['ordentrabajo_codigo'],
+					'ordentrabajo_id' => $bucket['ordentrabajo_id'],
 					'articulo_id' => (int) ($movimiento['articulo_id'] ?? 0),
 					'deposito_id' => (int) ($movimiento['deposito_id'] ?? 0),
 					'deposito_codigo' => (string) ($movimiento['depositocodigo'] ?? ''),
@@ -416,10 +415,7 @@ class Articulo_MovimientoService
 						(string) ($movimiento['nombrelinea'] ?? ''),
 						(string) ($movimiento['sku'] ?? ''),
 						sprintf('%05d', (int) ($movimiento['codigocombinacion'] ?? 0)),
-						ReporteStockOtSituacionSupport::identificadorExcel(
-							$movimiento['lote'] ?? 0,
-							$movimiento['ordentrabajo_codigo'] ?? ''
-						),
+						$bucket['identificador'],
 						sprintf('%010d', (int) ($movimiento['deposito_id'] ?? 0)),
 						$esMovimientos ? sprintf('%010d', (int) ($movimiento['id'] ?? 0)) : '',
 					]),
@@ -441,6 +437,22 @@ class Articulo_MovimientoService
 		$datas = [];
 		uasort($grupos, static fn ($a, $b) => strcmp((string) $a['_sort'], (string) $b['_sort']));
 		foreach ($grupos as $grupo) {
+			if (ReporteStockOtSituacionSupport::esSaldoNegativoOculto(
+				(float) $grupo['total_pares'],
+				$esMovimientos
+			)) {
+				$avisoNegativos['buckets']++;
+				$avisoNegativos['pares'] += (float) $grupo['total_pares'];
+				if (count($avisoNegativos['detalle']) < 50) {
+					$avisoNegativos['detalle'][] = [
+						'lote' => (string) $grupo['lote'],
+						'sku' => (string) $grupo['sku'],
+						'combinacion' => (string) $grupo['codigocombinacion'],
+						'deposito' => (string) $grupo['deposito_codigo'],
+						'pares' => (float) $grupo['total_pares'],
+					];
+				}
+			}
 			if (! ReporteStockOtSituacionSupport::incluyeSaldoEnApertura(
 				(float) $grupo['total_pares'],
 				$esMovimientos
@@ -524,7 +536,13 @@ class Articulo_MovimientoService
 			$lote = trim((string) ($mov->lote ?? ''));
 			$otCodigo = trim((string) ($mov->ordentrabajo_codigo ?? ''));
 			$otIdMov = (int) ($mov->ordentrabajo_id ?? 0);
-			if (ReporteStockOtSituacionSupport::esLoteImportado($lote)) {
+			// El consumo desde otra OT guarda la OT de origen en lote: mismo bucket que su alta.
+			$otPorLote = OtBucketStockSupport::otIdDeLote($lote, $articuloId, $combinacionId);
+			if ($otPorLote > 0) {
+				$clave = 'OT:'.$otPorLote;
+				$numero = $lote;
+				$otIdMov = $otPorLote;
+			} elseif (ReporteStockOtSituacionSupport::esLoteImportado($lote)) {
 				$clave = 'L:'.$lote;
 				$numero = $lote;
 			} elseif ($otIdMov > 0 && $otCodigo !== '' && $otCodigo !== '0') {
@@ -878,13 +896,65 @@ class Articulo_MovimientoService
 	}
 
 	/**
+	 * Bucket al que pertenece el saldo de la fila, ya unificado entre `lote` y `ordentrabajo_id`.
+	 *
+	 * El consumo desde el stock de otra OT guarda la OT de origen en `lote` porque
+	 * `ordentrabajo_id` lo ocupa la OT que consume. Sin unificar, el alta y su consumo
+	 * caen en cortes distintos y el reporte muestra como disponible stock ya consumido.
+	 *
+	 * @param  array<string, mixed>|\ArrayAccess  $movimiento
+	 * @return array{clave: string, ordentrabajo_id: int, ordentrabajo_codigo: string, identificador: string}
+	 */
+	private function bucketReporteStockOt($movimiento): array
+	{
+		$lote = $movimiento['lote'] ?? 0;
+		$codigoJoin = trim((string) ($movimiento['ordentrabajo_codigo'] ?? ''));
+		$articuloId = (int) ($movimiento['articulo_id'] ?? 0);
+		$combinacionId = (int) ($movimiento['combinacion_id'] ?? 0);
+
+		$otPorLote = OtBucketStockSupport::otIdDeLote($lote, $articuloId, $combinacionId);
+		if ($otPorLote > 0) {
+			$codigo = trim((string) $lote);
+
+			return [
+				'clave' => 'OT:'.$otPorLote,
+				'ordentrabajo_id' => $otPorLote,
+				'ordentrabajo_codigo' => $codigo,
+				'identificador' => $codigo,
+			];
+		}
+
+		if (! ReporteStockOtSituacionSupport::esLoteImportado($lote)) {
+			$otId = (int) ($movimiento['ordentrabajo_id'] ?? 0);
+
+			return [
+				'clave' => 'OT:'.$otId,
+				'ordentrabajo_id' => $otId,
+				'ordentrabajo_codigo' => $codigoJoin,
+				'identificador' => $codigoJoin,
+			];
+		}
+
+		$loteTxt = trim((string) $lote);
+
+		return [
+			'clave' => 'L:'.$loteTxt,
+			'ordentrabajo_id' => 0,
+			'ordentrabajo_codigo' => '',
+			'identificador' => $loteTxt,
+		];
+	}
+
+	/**
 	 * @param  array<string, mixed>|\ArrayAccess  $movimiento
 	 * @param  array<int, array{situacion: string, en_produccion: bool}>  $situacionesPorOt
+	 * @param  array{ordentrabajo_id: int, ordentrabajo_codigo: string}|null  $bucket
 	 * @return array{situacion: string, en_produccion: bool}
 	 */
-	private function situacionFilaReporteStockOt($movimiento, array $situacionesPorOt): array
+	private function situacionFilaReporteStockOt($movimiento, array $situacionesPorOt, ?array $bucket = null): array
 	{
-		$otId = (int) ($movimiento['ordentrabajo_id'] ?? 0);
+		$bucket ??= $this->bucketReporteStockOt($movimiento);
+		$otId = $bucket['ordentrabajo_id'];
 		$metaOt = ($otId > 0 && isset($situacionesPorOt[$otId]))
 			? $situacionesPorOt[$otId]
 			: null;
@@ -893,7 +963,7 @@ class Articulo_MovimientoService
 			$otId,
 			(int) ($movimiento['deposito_id'] ?? 0),
 			$metaOt,
-			(string) ($movimiento['ordentrabajo_codigo'] ?? ''),
+			$bucket['ordentrabajo_codigo'],
 			! empty($movimiento['en_produccion_forzada']),
 			(int) ($movimiento['es_altap_excel'] ?? 0) === 1
 		);

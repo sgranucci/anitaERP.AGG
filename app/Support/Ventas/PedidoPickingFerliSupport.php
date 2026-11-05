@@ -22,6 +22,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\ArticuloCombinacionFotoSupport;
 use App\Support\Stock\CurvaModuloPresentacionSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
+use App\Support\Stock\OtBucketStockSupport;
 use App\Support\Stock\OtClienteCompartidoStockSupport;
 use App\Support\Stock\OtListaEntregaSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
@@ -1158,17 +1159,21 @@ final class PedidoPickingFerliSupport
             }
 
             $loteRaw = $row->lote ?? 0;
-            $loteKey = ReporteStockOtSituacionSupport::esLoteImportado($loteRaw)
+            $otKey = (int) ($row->ordentrabajo_id ?? 0);
+            // El consumo desde otra OT guarda la OT de origen en lote y la que consume en
+            // ordentrabajo_id. Unificado contra el alta para que el saldo del bucket sea el neto.
+            $otBucket = OtBucketStockSupport::otIdDeLote($loteRaw, $articuloId, $combinacionId);
+            $loteKey = ($otBucket <= 0 && ReporteStockOtSituacionSupport::esLoteImportado($loteRaw))
                 ? trim((string) $loteRaw)
                 : '0';
-            $otKey = (int) ($row->ordentrabajo_id ?? 0);
-            // Misma clave visual que reporte/modal: lote importado ignora ot_id en el corte L:
-            $clave = ReporteStockOtSituacionSupport::claveAgrupacion($loteRaw, $otKey, 0);
+            $clave = OtBucketStockSupport::claveAgrupacion($loteRaw, $otKey, $articuloId, $combinacionId, 0);
             if (! isset($out[$depId]['buckets'][$clave])) {
                 // Lote importado: ot_id solo si es la OT del código (mismo efecto visual L:codigo).
-                // OT (lote=0): siempre el ordentrabajo_id del movimiento.
+                // OT: el ordentrabajo_id del bucket, no el de la OT que consume.
                 $otWrite = 0;
-                if ($loteKey === '0') {
+                if ($otBucket > 0) {
+                    $otWrite = $otBucket;
+                } elseif ($loteKey === '0') {
                     $otWrite = $otKey;
                 } elseif ($otKey === $otId && $otId > 0) {
                     $otWrite = $otKey;

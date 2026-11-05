@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Models\Ventas\Ordentrabajo;
 use App\Models\Ventas\Venta;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -33,6 +34,15 @@ class Articulo_Movimiento extends Model implements Auditable
         }
 
         return array_values(array_diff($this->fillable, ['pieza', 'caja']));
+    }
+
+    protected static function booted(): void
+    {
+        // La FK borra los talles en cascada desde MySQL y eso no pasa por Eloquent: el
+        // movimiento quedaba en audits sin sus cantidades por talle.
+        static::deleting(function (Articulo_Movimiento $movimiento): void {
+            EloquentAuditDeleteSupport::each($movimiento->articulo_movimiento_talles()->getQuery());
+        });
     }
 
     public function articulo_movimiento_talles()

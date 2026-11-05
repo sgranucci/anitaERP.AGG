@@ -2,6 +2,7 @@
 
 namespace App\Services\Stock;
 
+use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Transferencia_Mercaderia;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
@@ -86,6 +87,8 @@ class MovimientoStockRevertirService
             $revert = MovimientoStock::query()->findOrFail($revertId);
             $revert->movimientostock_origen_id = (int) $movimiento->id;
             $revert->save();
+
+            $this->copiarBucketLineasOriginales($movimiento, $revertId);
 
             $asientoReversoId = null;
             if ((int) ($movimiento->asiento_id ?? 0) > 0 && $movimiento->asientos) {
@@ -295,6 +298,41 @@ class MovimientoStockRevertirService
             $payload['cantidades'] ?? [],
             $this->saldoDepositoRepository,
         );
+    }
+
+    /**
+     * El compensatorio se graba con un solo lote de documento y sin OT. Un consumo de OT
+     * (lote 0 + ordentrabajo_id) o un movimiento con varios lotes quedaba compensado en
+     * otro bucket: el saldo del depósito cerraba pero el de la OT seguía igual.
+     */
+    private function copiarBucketLineasOriginales(MovimientoStock $movimiento, int $revertId): void
+    {
+        $originales = $movimiento->articulos_movimiento->sortBy('id')->values();
+        $reversos = Articulo_Movimiento::query()
+            ->where('movimientostock_id', $revertId)
+            ->orderBy('id')
+            ->get()
+            ->values();
+
+        if ($originales->count() !== $reversos->count()) {
+            return;
+        }
+
+        foreach ($reversos as $i => $reverso) {
+            $original = $originales[$i];
+            if ((int) $original->articulo_id !== (int) $reverso->articulo_id
+                || (int) ($original->combinacion_id ?? 0) !== (int) ($reverso->combinacion_id ?? 0)) {
+                continue;
+            }
+            $reverso->lote = $original->lote;
+            // Filas legadas guardan 0 en vez de null; la FK no acepta 0.
+            $reverso->ordentrabajo_id = (int) ($original->ordentrabajo_id ?? 0) > 0
+                ? (int) $original->ordentrabajo_id
+                : null;
+            if ($reverso->isDirty()) {
+                $reverso->save();
+            }
+        }
     }
 
     private function resolverEmpresaIdMovimiento(MovimientoStock $movimiento): int

@@ -703,6 +703,7 @@ class CobranzaService
 		}
 	}
 
+
 	/**
 	 * @param  array<string, mixed>  $data
 	 */
@@ -1028,6 +1029,11 @@ class CobranzaService
 								$leyenda, $empresa, $data,
 								$servidor = null, $ifx_server = null)
 	{
+		$comprobantesAnita = $data[CobranzaDescuentoNotaCreditoService::CLAVE_COMPROBANTES_ANITA] ?? null;
+		if (is_array($comprobantesAnita)) {
+			$data = array_replace($data, $comprobantesAnita);
+		}
+
 		$cliente = $this->clienteRepository->find($data['cliente_id']);
 		$codigoCliente = $cliente->codigo;
 		$numerodocumento = $cliente->numerodocumento;

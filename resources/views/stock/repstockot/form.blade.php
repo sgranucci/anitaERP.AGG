@@ -216,5 +216,17 @@
                 </small>
             </div>
         </div>
+        <div class="form-group row">
+            <label for="avisar_negativos" class="col-lg-4 col-form-label text-right pr-2">Avisar negativos</label>
+            <div class="col-lg-8">
+                <select name="avisar_negativos" id="avisar_negativos" class="form-control">
+                    <option value="SI" @selected(($f['avisar_negativos'] ?? 'SI') === 'SI')>Sí, avisar</option>
+                    <option value="NO" @selected(($f['avisar_negativos'] ?? 'SI') === 'NO')>No avisar</option>
+                </select>
+                <small class="form-text text-muted">
+                    Avisa cuántas OT o lotes quedan con saldo negativo, que el totalizado no lista.
+                </small>
+            </div>
+        </div>
     </div>
 </div>

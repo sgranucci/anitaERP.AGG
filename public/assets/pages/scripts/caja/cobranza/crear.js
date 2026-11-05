@@ -143,10 +143,28 @@ var saldoFinalCobranza = 0;
 			$.post(url, {_token: $('input[name=_token]').val(), 
 						id: $('#id').val(),
 						fecha: $('#fechacopia').val(),
-						revierte: 1}, function(data)
-						{ 
-							alert("COBRANZA REVERTIDA CORRECTAMENTE GENERO EL ID:"+data.caja_movimiento_id+" NUMERO: "+data.numerotransaccion); 
-						});
+						revierte: 1})
+				.done(function (data) {
+					if (data && data.errores) {
+						alert(data.errores);
+						return;
+					}
+					var msg = "COBRANZA REVERTIDA CORRECTAMENTE GENERO EL ID:"+(data.caja_movimiento_id || '')+" NUMERO: "+(data.numerotransaccion || '');
+					if (data && data.ndp && data.ndp.length) {
+						msg += "\nNota de débito: "+data.ndp.join(', ');
+					}
+					if (data && data.aviso) {
+						msg += "\n"+data.aviso;
+					}
+					alert(msg);
+				})
+				.fail(function (xhr) {
+					var msg = 'No se pudo revertir la cobranza.';
+					if (xhr.responseJSON && xhr.responseJSON.errores) {
+						msg = xhr.responseJSON.errores;
+					}
+					alert(msg);
+				});
     	});
 
 		$('#cierrarevertircobranzaModal').on('click', function () {
@@ -2031,6 +2049,12 @@ var saldoFinalCobranza = 0;
 
 			montos = numeroSeguroCob($tr.find(".montoaplicadocomprobante").val());
 			cotizaciones = $tr.find(".cotizacioncomprobante").val();
+
+			// La NCP del descuento acredita deudores por su cuenta: la cobranza solo el resto.
+			const descuentoFila = numeroSeguroCob($tr.find(".descuento_importe").val());
+			if (!esCreditoComprobante($tr) && descuentoFila > 0) {
+				montos = montos - descuentoFila;
+			}
 
 			if (Math.abs(montos) > 0.000001) {
 				if (esCreditoComprobante($tr)) {

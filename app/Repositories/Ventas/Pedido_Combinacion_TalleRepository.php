@@ -81,12 +81,14 @@ class Pedido_Combinacion_TalleRepository implements Pedido_Combinacion_TalleRepo
 			Ordentrabajo_Combinacion_Talle::query()
 				->whereIn('pedido_combinacion_talle_id', $talleIds)
 				->delete();
-			Articulo_Movimiento_Talle::query()
-				->whereIn('pedido_combinacion_talle_id', $talleIds)
-				->delete();
+			EloquentAuditDeleteSupport::each(
+				Articulo_Movimiento_Talle::query()->whereIn('pedido_combinacion_talle_id', $talleIds)
+			);
 		}
 
-    	return $this->model->where('pedido_combinacion_id', $pedido_combinacion_id)->delete();
+    	return EloquentAuditDeleteSupport::each(
+    		$this->model->newQuery()->where('pedido_combinacion_id', $pedido_combinacion_id)
+    	);
     }
 
 	/**
@@ -154,10 +156,10 @@ class Pedido_Combinacion_TalleRepository implements Pedido_Combinacion_TalleRepo
 			Ordentrabajo_Combinacion_Talle::query()
 				->whereIn('pedido_combinacion_talle_id', $idsBorrar)
 				->delete();
-			Articulo_Movimiento_Talle::query()
-				->whereIn('pedido_combinacion_talle_id', $idsBorrar)
-				->delete();
-			$this->model->whereIn('id', $idsBorrar)->delete();
+			EloquentAuditDeleteSupport::each(
+				Articulo_Movimiento_Talle::query()->whereIn('pedido_combinacion_talle_id', $idsBorrar)
+			);
+			EloquentAuditDeleteSupport::each($this->model->newQuery()->whereIn('id', $idsBorrar));
 		}
 
 		$ordentrabajoId = (int) ($contextoOt['ordentrabajo_id'] ?? 0);

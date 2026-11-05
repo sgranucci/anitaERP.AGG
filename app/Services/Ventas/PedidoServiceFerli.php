@@ -28,6 +28,8 @@ use App\Models\Stock\Mventa;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
 use App\Models\Stock\Talle;
+use App\Models\Stock\Articulo_Movimiento;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Models\Stock\Articulo_Movimiento_Talle;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -1299,9 +1301,9 @@ class PedidoServiceFerli
 			if ($funcion == 'update' && $ordentrabajoId > 0 && $esStock) {
 				$pctIds = $syncTalles['talles']->pluck('id')->all();
 				if ($pctIds !== []) {
-					Articulo_Movimiento_Talle::query()
-						->whereIn('pedido_combinacion_talle_id', $pctIds)
-						->delete();
+					EloquentAuditDeleteSupport::each(
+						Articulo_Movimiento_Talle::query()->whereIn('pedido_combinacion_talle_id', $pctIds)
+					);
 				}
 				foreach ($syncTalles['talles'] as $pct) {
 					$this->articulo_movimientoService->guardaArticuloMovimientoTalle($pedidoCombinacionId, [
@@ -1474,6 +1476,22 @@ class PedidoServiceFerli
 			}
 		}
 
+		// Regrabar el pedido no cambia el bucket de un alta que ya existe: si se grabó con
+		// el código de OT en lote (convención hasta 24/09/2026), se conserva. Cambiarlo
+		// movía el saldo a otro corte y lo dejaba sin netear contra sus consumos.
+        $loteAlta = 0;
+        if (! $esConsumo && (int) $pedido_combinacion->id > 0) {
+            // Solo el alta (cantidad > 0): los renglones negativos del mismo renglón son
+            // reversos y pueden traer el lote de otra OT. pedido_combinacion_id = 0 es un
+            // pseudo-grupo de movimientos sueltos: no se usa como referencia.
+            $loteAlta = (int) (Articulo_Movimiento::query()
+                ->where('pedido_combinacion_id', (int) $pedido_combinacion->id)
+                ->where('lote', '>', 0)
+                ->where('cantidad', '>', 0)
+                ->orderBy('id')
+                ->value('lote') ?? 0);
+        }
+
 		$dataArticuloMovimiento = [
 			'fecha' => $fecha,
 			'fechajornada' => $fecha,
@@ -1482,7 +1500,7 @@ class PedidoServiceFerli
 									: config("consprod.TIPOTRANSACCION_ALTA_PRODUCCION"),
 			'pedido_combinacion_id' => $pedido_combinacion->id,
 			'ordentrabajo_id' => $ordentrabajo ? $ordentrabajo->id : 0,
-			'lote' => $esConsumo ? $ordentrabajo_stock_id : 0,
+			'lote' => $esConsumo ? $ordentrabajo_stock_id : $loteAlta,
 			'articulo_id' => $articulo->id,
 			'combinacion_id' => $combinacion->id,
 			'modulo_id' => $pedido_combinacion->modulo_id,

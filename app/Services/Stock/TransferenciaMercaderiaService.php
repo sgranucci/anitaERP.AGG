@@ -1911,9 +1911,9 @@ class TransferenciaMercaderiaService
         string $signo,
         float $precio
     ): void {
-        Articulo_Movimiento_Talle::query()
-            ->where('articulo_movimiento_id', $destino->id)
-            ->delete();
+        EloquentAuditDeleteSupport::each(
+            Articulo_Movimiento_Talle::query()->where('articulo_movimiento_id', $destino->id)
+        );
 
         foreach ($this->tallesFirmadosDesde($origen, $signo, $precio) as $talle) {
             Articulo_Movimiento_Talle::query()->create([

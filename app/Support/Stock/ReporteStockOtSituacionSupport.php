@@ -279,6 +279,16 @@ final class ReporteStockOtSituacionSupport
     }
 
     /**
+     * Un bucket en negativo es un consumo que no encontró su alta. El totalizado no lo
+     * lista (no es stock que se pueda entregar), así que se cuenta aparte para avisar:
+     * sin ese aviso el desajuste queda invisible en pantalla.
+     */
+    public static function esSaldoNegativoOculto(float $totalPares, bool $esMovimientos): bool
+    {
+        return ! $esMovimientos && $totalPares < -0.0001;
+    }
+
+    /**
      * Filas en rojo en el Excel Stock por OT: no están listas para entrega inmediata.
      * Incluye EN PRODUCCION y PENDIENTE DE FABRICACION (misma señal visual).
      */

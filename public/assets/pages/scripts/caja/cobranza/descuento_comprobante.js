@@ -18,8 +18,7 @@ function initDescuentoComprobanteCobranza() {
 function abrirModalDescuentoComprobante($fila) {
 	filaDescuentoComprobanteModal = $fila;
 	const codigo = $fila.find('.codigocomprobante').val();
-	const saldo = parseFloat($fila.find('.saldocomprobante').val()) || 0;
-	const base = parseFloat($fila.find('.montoaplicadocomprobante').val()) || saldo;
+	const base = baseDescuentoComprobante($fila);
 
 	$('#descuento-modal-codigo').text(codigo);
 	$('#descuento-modal-saldo').text(base.toFixed(2));
@@ -43,12 +42,18 @@ function abrirModalDescuentoComprobante($fila) {
 }
 
 function baseDescuentoComprobante($fila) {
-	const aplicado = parseFloat($fila.find('.montoaplicadocomprobante').val());
-	if (!Number.isNaN(aplicado) && aplicado > 0) {
-		return aplicado;
+	// El descuento es del comprobante marcado. El anticipo y el medio de pago
+	// no achican esta base: monto aplicado puede ser solo el neto a caja.
+	const disponible = parseFloat($fila.find('.saldocomprobante').attr('data-saldo-disponible'));
+	if (!Number.isNaN(disponible) && Math.abs(disponible) > 0) {
+		return Math.abs(disponible);
+	}
+	const monto = parseFloat($fila.find('.montocomprobante').val());
+	if (!Number.isNaN(monto) && Math.abs(monto) > 0) {
+		return Math.abs(monto);
 	}
 	const saldo = parseFloat($fila.find('.saldocomprobante').val());
-	return Number.isNaN(saldo) ? 0 : saldo;
+	return Number.isNaN(saldo) ? 0 : Math.abs(saldo);
 }
 
 function calcularImporteDescuento(tipo, valor, base) {

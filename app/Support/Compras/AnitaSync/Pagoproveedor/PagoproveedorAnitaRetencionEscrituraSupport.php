@@ -11,6 +11,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Compras\PagoproveedorImputacionApSupport;
+use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
@@ -372,6 +373,15 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 retibr_empresa';
         $valorEmpresa = self::omitirColumnaEmpresa('retibr') ? '' : ",
                 '".$ctx['empresa']."'";
+        // Ferli: retibrmov no tiene retibr_provincia (agente único, CABA).
+        $camposProvincia = '';
+        $valorProvincia = '';
+        if (AnitaRetencionEsquemaSupport::retibrmovTieneProvincia()) {
+            $camposProvincia = ',
+                retibr_provincia';
+            $valorProvincia = ",
+                '".$provinciaAnita."'";
+        }
 
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'retibrmov',
@@ -395,8 +405,7 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 retibr_suc_comp,
                 retibr_nro_comp,
                 retibr_fecha_comp,
-                retibr_nro_interno,
-                retibr_provincia'.$camposEmpresa,
+                retibr_nro_interno'.$camposProvincia.$camposEmpresa,
             'valores' => "
                 '".self::codigoProveedor6($proveedor)."',
                 '".self::esc($ctx['tipo'])."',
@@ -415,8 +424,7 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 '".(int) ($det['suc_comp'] ?? 0)."',
                 '".(int) ($det['nro_comp'] ?? 0)."',
                 '".(int) ($det['fecha_comp'] ?? 0)."',
-                '".(int) ($det['nro_interno'] ?? 0)."',
-                '".$provinciaAnita."'".$valorEmpresa,
+                '".(int) ($det['nro_interno'] ?? 0)."'".$valorProvincia.$valorEmpresa,
         ], 'pagoproveedor retibrmov '.$pago->id);
 
         self::assertOk($raw, 'retibrmov', (int) $pago->id);

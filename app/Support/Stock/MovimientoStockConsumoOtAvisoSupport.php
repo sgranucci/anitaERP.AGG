@@ -27,6 +27,10 @@ final class MovimientoStockConsumoOtAvisoSupport
         if ($operacion === 'E') {
             return false;
         }
+        // El compensatorio de un consumo (Revertir) devuelve pares con signo S: no es egreso.
+        if ($operacion === 'S' && self::esSignoSuma($signoCantidad)) {
+            return false;
+        }
         if ($operacion === 'S' || $operacion === 'C') {
             return true;
         }
@@ -35,6 +39,11 @@ final class MovimientoStockConsumoOtAvisoSupport
         }
 
         return MovimientoStockSalidaSaldoSupport::esSignoRestaStock($signoCantidad);
+    }
+
+    private static function esSignoSuma(?string $signoCantidad): bool
+    {
+        return strtoupper(trim((string) ($signoCantidad ?? ''))) === 'S';
     }
 
     public static function lineaEsEgreso(
@@ -52,7 +61,7 @@ final class MovimientoStockConsumoOtAvisoSupport
             return false;
         }
         if ($operacion === 'S') {
-            return true;
+            return ! self::esSignoSuma($signoCantidad);
         }
         if ($operacion === 'T') {
             return MovimientoStockSalidaSaldoSupport::esSignoRestaStock($signoCantidad);

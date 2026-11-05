@@ -34,6 +34,7 @@ use App\Support\Produccion\OrdentrabajoTareaFechaSupport;
 use App\Support\Stock\OtListaEntregaSupport;
 use App\Models\Configuracion\Salida;
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
 use App\Models\Stock\Linea;
@@ -463,6 +464,21 @@ class OrdentrabajoService
 							// Alta cliente STOCK: lote=0 (bucket OT). Consumo OT stock: lote=código origen.
 							$esConsumoOtStock = $ordentrabajo_stock_codigo > 0 && $checkOtStock == 'on'
 								&& $cliente->id != config("consprod.CLIENTE_STOCK");
+
+							// Regrabar no cambia el bucket de un alta que ya existe: si se grabó con
+							// el código de OT en lote (convención hasta 24/09/2026), se conserva.
+							$loteAlta = 0;
+							if (! $esConsumoOtStock && (int) $ids[$i] > 0) {
+								// Solo el alta (cantidad > 0): los renglones negativos del mismo
+								// renglón son reversos y pueden traer el lote de otra OT.
+								$loteAlta = (int) (Articulo_Movimiento::query()
+									->where('pedido_combinacion_id', (int) $ids[$i])
+									->where('lote', '>', 0)
+									->where('cantidad', '>', 0)
+									->orderBy('id')
+									->value('lote') ?? 0);
+							}
+
 							$dataArticuloMovimiento = [
 									'fecha' => Carbon::now(),
 									'fechajornada' => Carbon::now(),
@@ -471,7 +487,7 @@ class OrdentrabajoService
 														: config("consprod.TIPOTRANSACCION_ALTA_PRODUCCION"),
 									'pedido_combinacion_id' => $ids[$i],
 									'ordentrabajo_id' => $ordentrabajo_id,
-									'lote' => $esConsumoOtStock ? $ordentrabajo_stock_codigo : 0,
+									'lote' => $esConsumoOtStock ? $ordentrabajo_stock_codigo : $loteAlta,
 									'articulo_id' => $articulo->id,
 									'combinacion_id' => $combinacion->id,
 									'modulo_id' => $pedido_combinacion->modulo_id,
@@ -3503,10 +3519,12 @@ class OrdentrabajoService
 		$tipoAlta = (int) config('consprod.TIPOTRANSACCION_ALTA_PRODUCCION', 3);
 		foreach ($stock as $movimiento) {
 			$otIdMov = (int) ($movimiento->ordentrabajo_id ?? 0);
+			// El bucket tiene OT si algún movimiento la trae. Decidirlo con el último
+			// renglón dejaba el estado atado al orden que devolvía la consulta.
 			if ($otIdMov > 0) {
 				$estado = 0;
 				$otIds[$otIdMov] = $otIdMov;
-			} else {
+			} elseif ($estado === '-1') {
 				$estado = 1;
 			}
 			$saldo += $movimiento->cantidad;

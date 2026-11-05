@@ -3,6 +3,7 @@
 namespace App\Queries\Stock;
 
 use App\Models\Stock\Articulo_Movimiento;
+use App\Support\Stock\OtBucketStockSupport;
 use App\Support\Stock\OtClienteCompartidoStockSupport;
 use App\Support\Stock\ReporteStockOtDepositoAmbitoSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
@@ -321,13 +322,23 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             ->join('mventa', 'mventa.id', 'articulo.mventa_id')
             ->join('articulo_movimiento_talle', 'articulo_movimiento_talle.articulo_movimiento_id', 'articulo_movimiento.id')
             ->join('talle', 'talle.id', 'articulo_movimiento_talle.talle_id')
-            ->where('articulo_movimiento.lote', '=', $lote)
             ->where('articulo.id', '=', $articulo_id)
-            ->where('combinacion.id', '=', $combinacion_id)
-            ->orderBy('lote', 'ASC')
-            ->get();
+            ->where('combinacion.id', '=', $combinacion_id);
 
-        return $articulo_query;
+        // El alta de la OT puede estar en lote (hasta 24/09/2026) o en ordentrabajo_id
+        // con lote 0. Leer una sola columna deja afuera la mitad del saldo del bucket.
+        $otId = OtBucketStockSupport::otIdDeLote($lote, (int) $articulo_id, (int) $combinacion_id);
+        $articulo_query->where(function ($q) use ($lote, $otId) {
+            $q->where('articulo_movimiento.lote', '=', $lote);
+            if ($otId > 0) {
+                $q->orWhere(function ($w) use ($otId) {
+                    $w->where('articulo_movimiento.ordentrabajo_id', $otId)
+                        ->where('articulo_movimiento.lote', '=', 0);
+                });
+            }
+        });
+
+        return $articulo_query->orderBy('lote', 'ASC')->get();
     }
 
     public function leeMovimientosLotesArticuloCombinacion(int $articuloId, int $combinacionId, ?int $moduloId = null, ?string $texto = null)

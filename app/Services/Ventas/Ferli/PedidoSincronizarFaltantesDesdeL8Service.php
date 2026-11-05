@@ -408,31 +408,31 @@ class PedidoSincronizarFaltantesDesdeL8Service
         }
         $plan['delete_oct_huerfano'] = count($plan['acciones']['oct_huerfanos']);
 
-        if ($otsAfectadas !== []) {
-            $octsL8 = $l8->table('ordentrabajo_combinacion_talle')
-                ->whereIn('ordentrabajo_id', array_keys($otsAfectadas))
-                ->get();
-            foreach ($octsL8 as $oct8) {
-                $otId = (int) $oct8->ordentrabajo_id;
-                $pct8 = (int) $oct8->pedido_combinacion_talle_id;
-                $pct12 = $mapaPctL8aL12[$pct8] ?? 0;
-                if ($pct12 <= 0) {
-                    continue;
-                }
-                $par = $otId.'|'.$pct12;
-                if (isset($oct12Par[$par])) {
-                    continue;
-                }
-                if (OrdentrabajoMezclaArticuloSupport::talleMezclaOtroArticulo($otId, $pct12)) {
-                    $plan['omitidos_mezcla']++;
-                    continue;
-                }
-                $row = (array) $oct8;
-                $row['pedido_combinacion_talle_id'] = $pct12;
-                $plan['acciones']['octs'][] = $row;
-                $plan['insert_oct']++;
-                $oct12Par[$par] = true;
+        // También las OT que ya están en L12 y solo les faltan renglones
+        // (se sumaron en L8 después del alta). Si no, el par OT+talle no entra.
+        foreach ($l8->table('ordentrabajo_combinacion_talle')->cursor() as $oct8) {
+            $otId = (int) $oct8->ordentrabajo_id;
+            if (! isset($ot12Ids[$otId]) && ! isset($otIdsL8PorInsertar[$otId])) {
+                continue;
             }
+            $pct8 = (int) $oct8->pedido_combinacion_talle_id;
+            $pct12 = $mapaPctL8aL12[$pct8] ?? 0;
+            if ($pct12 <= 0) {
+                continue;
+            }
+            $par = $otId.'|'.$pct12;
+            if (isset($oct12Par[$par])) {
+                continue;
+            }
+            if (OrdentrabajoMezclaArticuloSupport::talleMezclaOtroArticulo($otId, $pct12)) {
+                $plan['omitidos_mezcla']++;
+                continue;
+            }
+            $row = (array) $oct8;
+            $row['pedido_combinacion_talle_id'] = $pct12;
+            $plan['acciones']['octs'][] = $row;
+            $plan['insert_oct']++;
+            $oct12Par[$par] = true;
         }
 
         $plan['detalle'][] = sprintf(

@@ -92,9 +92,9 @@ final class PedidoCombinacionTalleDuplicadosSupport
                     ->whereIn('pedido_combinacion_talle_id', $borrarIds)
                     ->update(['pedido_combinacion_talle_id' => $conservarId]);
 
-                $filasBorradas += Pedido_Combinacion_Talle::query()
-                    ->whereIn('id', $borrarIds)
-                    ->delete();
+                $filasBorradas += EloquentAuditDeleteSupport::each(
+                    Pedido_Combinacion_Talle::query()->whereIn('id', $borrarIds)
+                );
 
                 // Tras reasignar, pueden quedar 2+ OCT al mismo PCT: dejar uno solo.
                 $octIds = Ordentrabajo_Combinacion_Talle::query()

@@ -3874,6 +3874,7 @@ Route::put('caja/actualizarcobranza/{id}', 'Caja\CobranzaController@actualizar')
 Route::delete('caja/cobranza/{id}/{origen?}', 'Caja\CobranzaController@eliminar')->name('eliminar_cobranza');
 Route::get('caja/listacobranza/{formato?}/{busqueda?}', 'Caja\CobranzaController@listar')->name('lista_cobranza');
 Route::post('caja/generaasientocontable_cobranza', 'Caja\CobranzaController@generaAsientoContable')->name('generaasientocontable_cobranza');
+Route::post('caja/copiar_cobranza', 'Caja\CobranzaController@revertir')->name('copiar_cobranza');
 
 Route::get('caja/leer_historia_cobranza/{cobranza_id}', 'Caja\CobranzaController@leerHistoriaCobranza')->name('leer_historia_cobranza');
 Route::get('caja/listar_una_cobranza/{id}', 'Caja\CobranzaController@listarUnaCobranza')->name('listar_una_cobranza');

@@ -39,6 +39,7 @@ use App\Support\Compras\PagoproveedorLiquidacionSupport;
 use App\Support\Compras\PagoproveedorEdicionCandadoSupport;
 use App\Support\Compras\PagoproveedorMedioCajaTesoreriaSupport;
 use App\Support\Compras\PagoproveedorOpaSobranteSupport;
+use App\Support\Compras\ProveedorAnticipoCuentaContableSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Compras\Retencion\PagoproveedorRetencionPersistenciaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
@@ -345,6 +346,17 @@ class PagoproveedorService
 
         $hayAplicaciones = $this->hayAplicacionConMonto($aplicaciones);
         $anticipo = $this->resolverImporteAnticipo($pago, $data, $aplicaciones, $hayAplicaciones);
+
+        // Retenciones antes que la OPA: el asiento sale de las grabadas, y la OPA tiene
+        // que ser el mismo sobrante que el asiento debita a anticipos.
+        $this->persistirRetenciones($pago, $data);
+
+        $asientoOperacion = null;
+        if ($pago->estado !== 'PRE CARGA') {
+            $asientoOperacion = $this->construirArraysAsientoDesdeOperacion($pago, $data);
+            $anticipo = $this->alinearSobranteConAsiento($pago, $anticipo, $asientoOperacion['sobrante_asiento']);
+        }
+
         if ($hayAplicaciones) {
             if ($pago->estado !== 'PRE CARGA') {
                 $this->sincronizarOpaDeSobrante($pago, $anticipo);
@@ -358,8 +370,6 @@ class PagoproveedorService
             );
             $this->marcarComoOpa($pago);
         }
-
-        $this->persistirRetenciones($pago, $data);
 
         $cajaMovimientoId = $this->persistirCajaMovimiento($pago, $data, $esAlta);
         $data['pagoproveedor_id'] = $pago->id;
@@ -378,12 +388,8 @@ class PagoproveedorService
                 ->update(['pagoproveedor_id' => $pago->id]);
         }
 
-        if ($pago->estado !== 'PRE CARGA') {
-            // El asiento del form puede quedar viejo (p.ej. se abrió antes de cargar caja).
-            // Salvo edición manual, se rearma desde deuda/medios/retenciones.
-            if (! $this->asientoFueEditadoManual($data)) {
-                $data = array_merge($data, $this->construirArraysAsientoDesdeOperacion($pago, $data));
-            }
+        if ($pago->estado !== 'PRE CARGA' && $asientoOperacion !== null) {
+            $data = $this->resolverAsientoAGrabar($pago, $data, $asientoOperacion);
             $this->assertHayMedioSiAsientoAcreditaTesoreria($pago, $data, $cajaMovimientoId);
             if (empty($data['cuentacontable_ids'])) {
                 throw new Exception('No se pudo armar el asiento contable de la OP (sin líneas).');
@@ -400,6 +406,173 @@ class PagoproveedorService
         return AsientoCargaManualSupport::fueEditadoManual(
             $data['carga_cuentacontable_manuales'] ?? []
         );
+    }
+
+    /**
+     * La OPA es el sobrante que contabiliza el asiento (medios + retenciones grabadas − aplicado).
+     * El form lo calcula con las retenciones de pantalla; si el servidor las recalculó distinto,
+     * manda el asiento y el monto de la OP se corre la misma diferencia.
+     */
+    private function alinearSobranteConAsiento(Pagoproveedor $pago, float $anticipoForm, float $sobranteAsiento): float
+    {
+        $anticipoForm = round(max(0.0, $anticipoForm), 2);
+        $sobranteAsiento = round(max(0.0, $sobranteAsiento), 2);
+        $diferencia = round($sobranteAsiento - $anticipoForm, 2);
+        if (abs($diferencia) < 0.01) {
+            return $anticipoForm;
+        }
+
+        $monto = round(abs((float) $pago->monto) + $diferencia, 2);
+        Log::info('pagoproveedor.sobrante.alineado_al_asiento', [
+            'pagoproveedor_id' => $pago->id,
+            'numero' => $pago->numerotransaccion,
+            'anticipo_form' => $anticipoForm,
+            'sobrante_asiento' => $sobranteAsiento,
+            'monto_anterior' => (float) $pago->monto,
+            'monto' => $monto,
+        ]);
+        $this->pagoproveedorRepository->update(['monto' => $monto], $pago->id);
+        $pago->monto = $monto;
+
+        return $sobranteAsiento;
+    }
+
+    /**
+     * Asiento que se graba. El armado de la operación, salvo edición manual real.
+     * La grilla de una OP ya grabada vuelve con las líneas marcadas manuales aunque nadie
+     * las toque: si son las mismas del asiento grabado y la operación cambió, se rearma.
+     * Una edición manual tiene que seguir contabilizando el sobrante en anticipos.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $asientoOperacion
+     * @return array<string, mixed>
+     */
+    private function resolverAsientoAGrabar(Pagoproveedor $pago, array $data, array $asientoOperacion): array
+    {
+        if (! $this->asientoFueEditadoManual($data)) {
+            return array_merge($data, $asientoOperacion);
+        }
+
+        $cuentaAnticipoId = (int) (ProveedorAnticipoCuentaContableSupport::cuentaAnticipoId((int) $pago->empresa_id) ?? 0);
+
+        if ($this->asientoFormIgualAlGrabado($pago, $data)) {
+            $mismoTotal = abs($this->totalDebePayload($data) - $this->totalDebePayload($asientoOperacion)) < 0.05;
+            $mismoAnticipo = $cuentaAnticipoId <= 0
+                || abs($this->netoCuentaPayload($data, $cuentaAnticipoId) - $this->netoCuentaPayload($asientoOperacion, $cuentaAnticipoId)) < 0.05;
+            if ($mismoTotal && $mismoAnticipo) {
+                return $data;
+            }
+
+            Log::info('pagoproveedor.asiento.rearmado_por_cambio_operacion', [
+                'pagoproveedor_id' => $pago->id,
+                'numero' => $pago->numerotransaccion,
+                'asiento_id' => $pago->asiento_id,
+            ]);
+
+            return array_merge($data, $asientoOperacion);
+        }
+
+        $this->assertSobranteContabilizado($pago, $data, $asientoOperacion, $cuentaAnticipoId);
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $asientoOperacion
+     */
+    private function assertSobranteContabilizado(
+        Pagoproveedor $pago,
+        array $data,
+        array $asientoOperacion,
+        int $cuentaAnticipoId,
+    ): void {
+        if ($cuentaAnticipoId <= 0) {
+            return;
+        }
+
+        $esperado = round($this->netoCuentaPayload($asientoOperacion, $cuentaAnticipoId), 2);
+        $cargado = round($this->netoCuentaPayload($data, $cuentaAnticipoId), 2);
+        if (abs($esperado - $cargado) < 0.05) {
+            return;
+        }
+
+        $cuenta = $this->cuentacontableRepository->find($cuentaAnticipoId);
+        $nombreCuenta = trim(($cuenta->codigo ?? '').' '.($cuenta->nombre ?? ''));
+        $fmt = static fn (float $n): string => number_format($n, 2, ',', '.');
+
+        throw new Exception(
+            'El asiento tiene que dejar '.$fmt($esperado).' neto al Debe de '.$nombreCuenta
+            .' (sobrante de '.$fmt((float) $asientoOperacion['sobrante_asiento'])
+            .' que queda como OPA a favor del proveedor). La grilla deja '.$fmt($cargado)
+            .'. Corrija el asiento o vacíe la grilla para que se rearme.'
+        );
+    }
+
+    /**
+     * Las líneas del form son las del asiento grabado, sin cambios.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function asientoFormIgualAlGrabado(Pagoproveedor $pago, array $data): bool
+    {
+        $asientoId = (int) ($pago->asiento_id ?? 0);
+        if ($asientoId <= 0) {
+            return false;
+        }
+
+        $grabado = [];
+        foreach ($this->asientoMovimientoRepository->leeAsientoMovimiento($asientoId) as $mov) {
+            $grabado[] = (int) $mov->cuentacontable_id.'|'.number_format(round((float) $mov->monto, 2), 2, '.', '');
+        }
+
+        $form = [];
+        foreach ($data['cuentacontable_ids'] ?? [] as $i => $cuentaId) {
+            $monto = round(
+                NumeroDecimalLocalSupport::aFloat($data['debeasientos'][$i] ?? 0)
+                - NumeroDecimalLocalSupport::aFloat($data['haberasientos'][$i] ?? 0),
+                2
+            );
+            if ((int) $cuentaId <= 0 || abs($monto) < 0.005) {
+                continue;
+            }
+            $form[] = (int) $cuentaId.'|'.number_format($monto, 2, '.', '');
+        }
+
+        sort($grabado);
+        sort($form);
+
+        return $grabado !== [] && $grabado === $form;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function netoCuentaPayload(array $payload, int $cuentaId): float
+    {
+        $neto = 0.0;
+        foreach ($payload['cuentacontable_ids'] ?? [] as $i => $id) {
+            if ((int) $id !== $cuentaId) {
+                continue;
+            }
+            $neto += NumeroDecimalLocalSupport::aFloat($payload['debeasientos'][$i] ?? 0)
+                - NumeroDecimalLocalSupport::aFloat($payload['haberasientos'][$i] ?? 0);
+        }
+
+        return $neto;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function totalDebePayload(array $payload): float
+    {
+        $total = 0.0;
+        foreach ($payload['debeasientos'] ?? [] as $debe) {
+            $total += NumeroDecimalLocalSupport::aFloat($debe);
+        }
+
+        return round($total, 2);
     }
 
     /**
@@ -824,6 +997,7 @@ class PagoproveedorService
             ?? ''
         );
 
+        $sobrante = null;
         $lineas = PagoproveedorAsientoArmadoSupport::armar(
             $datosCaja,
             [],
@@ -840,9 +1014,11 @@ class PagoproveedorService
             (string) ($pago->numerotransaccion ?? ''),
             (int) ($pago->moneda_id ?: 1),
             (float) ($pago->cotizacion ?: 1),
+            $sobrante,
         );
 
         $out = [
+            'sobrante_asiento' => (float) ($sobrante ?? 0),
             'cuentacontable_ids' => [],
             'centrocostoasiento_ids' => [],
             'monedaasiento_ids' => [],
@@ -1745,15 +1921,6 @@ class PagoproveedorService
                 $pago = $this->pagoproveedorRepository->findOrFail($id);
                 $this->registrarEstado($pago, 'CONFIRMADA', 'Confirmación de orden de pago');
 
-                // En PRE CARGA no se arma la OPA del sobrante: se arma al confirmar.
-                $aplicaciones = $this->aplicacionesFormularioDesdeData($data);
-                if (strtoupper((string) $pago->tipocomprobante) === 'OPP' && $this->hayAplicacionConMonto($aplicaciones)) {
-                    $this->sincronizarOpaDeSobrante(
-                        $pago,
-                        $this->resolverImporteAnticipo($pago, $data, $aplicaciones, true)
-                    );
-                }
-
                 // No pasar el monto de la OP como neto IIBB: un anticipo sin factura
                 // no tiene destino BA y eso inventaba retención CABA.
                 $this->persistirRetenciones($pago, array_merge($data, [
@@ -1764,8 +1931,24 @@ class PagoproveedorService
                 ]));
 
                 $pago = $pago->fresh();
+                $asientoOperacion = $this->construirArraysAsientoDesdeOperacion($pago, $data);
+
+                // En PRE CARGA no se arma la OPA del sobrante: se arma al confirmar,
+                // con el sobrante que contabiliza el asiento.
+                $aplicaciones = $this->aplicacionesFormularioDesdeData($data);
+                if (strtoupper((string) $pago->tipocomprobante) === 'OPP' && $this->hayAplicacionConMonto($aplicaciones)) {
+                    $this->sincronizarOpaDeSobrante(
+                        $pago,
+                        $this->alinearSobranteConAsiento(
+                            $pago,
+                            $this->resolverImporteAnticipo($pago, $data, $aplicaciones, true),
+                            $asientoOperacion['sobrante_asiento']
+                        )
+                    );
+                }
+
                 if (! $pago->asiento_id) {
-                    $data = array_merge($data, $this->construirArraysAsientoDesdeOperacion($pago, $data));
+                    $data = array_merge($data, $asientoOperacion);
                     if (empty($data['cuentacontable_ids'])) {
                         throw new Exception(
                             'No se pudo armar el asiento contable al confirmar la OP #'

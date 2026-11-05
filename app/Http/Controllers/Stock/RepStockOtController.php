@@ -43,12 +43,13 @@ class RepStockOtController extends Controller
         $medidasColumnas = [];
         $totalPares = 0.0;
         $totalFilas = 0;
+        $avisoNegativos = null;
 
         if ($consultado) {
             ini_set('memory_limit', '1024M');
             set_time_limit(300);
 
-            $todas = $this->filasConsulta($filtros);
+            $todas = $this->filasConsulta($filtros, $avisoNegativos);
             $visibles = ReporteResultadoTextoSupport::filtrarFilas(
                 $todas,
                 $filtros,
@@ -90,6 +91,7 @@ class RepStockOtController extends Controller
             'medidas_columnas' => $medidasColumnas,
             'total_pares' => $totalPares,
             'total_filas' => $totalFilas,
+            'aviso_negativos' => ($filtros['avisar_negativos'] ?? 'SI') === 'SI' ? $avisoNegativos : null,
             'subtitulo' => $this->subtitulo($filtros),
             'etiquetas' => $this->etiquetas($filtros),
             'estado_enum' => [
@@ -224,7 +226,7 @@ class RepStockOtController extends Controller
      * @param  array<string, mixed>  $filtros
      * @return list<array<string, mixed>>
      */
-    private function filasConsulta(array $filtros): array
+    private function filasConsulta(array $filtros, ?array &$avisoNegativos = null): array
     {
         $ret = generaRangoArticulo(
             $this->idRango($filtros['desdearticulo_id'] ?: '', 0),
@@ -245,7 +247,8 @@ class RepStockOtController extends Controller
             $filtros['estadoOt'],
             $filtros['apertura'],
             (int) $filtros['deposito_id'],
-            $filtros['ambito_deposito']
+            $filtros['ambito_deposito'],
+            $avisoNegativos
         );
         return is_array($filas) ? $filas : [];
     }

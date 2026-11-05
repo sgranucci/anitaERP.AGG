@@ -6,6 +6,7 @@ namespace App\Support\Compras\AnitaImport;
 
 use App\ApiAnita;
 use App\Support\Compras\PagosSabanaAnitaBridgeReader;
+use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -162,7 +163,7 @@ final class PagoproveedorAnitaImpresionBridgeReader
         $ibr = $this->listar(
             'compras',
             'retibrmov',
-            $tieneEmpresa ? self::RETIBRMOV_CAMPOS : self::RETIBRMOV_CAMPOS_MONO,
+            $this->camposRetibrmov($tieneEmpresa),
             $tieneEmpresa
                 ? ' WHERE retibr_empresa IN ('.$inEmp.') AND retibr_fecha'.$rango.' AND retibr_tipo IN '.$tipos
                 : ' WHERE retibr_fecha'.$rango.' AND retibr_tipo IN '.$tipos,
@@ -332,5 +333,18 @@ final class PagoproveedorAnitaImpresionBridgeReader
         ]);
 
         return $filas;
+    }
+
+    /**
+     * Ferli no tiene retibr_provincia ni retibr_empresa. Crown omite solo la empresa.
+     */
+    private function camposRetibrmov(bool $tieneEmpresa): string
+    {
+        $campos = $tieneEmpresa ? self::RETIBRMOV_CAMPOS : self::RETIBRMOV_CAMPOS_MONO;
+        if (! AnitaRetencionEsquemaSupport::retibrmovTieneProvincia()) {
+            $campos = str_replace(',retibr_provincia', '', $campos);
+        }
+
+        return $campos;
     }
 }

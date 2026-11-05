@@ -15,6 +15,8 @@ use InvalidArgumentException;
 
 final class CobranzaDescuentoNotaCreditoService
 {
+    public const CLAVE_COMPROBANTES_ANITA = '_cobranza_comprobantes_anita';
+
     public function __construct(
         private readonly FacturacionService $facturacionService,
         private readonly Cliente_CuentacorrienteRepositoryInterface $clienteCuentacorrienteRepository,
@@ -277,27 +279,6 @@ final class CobranzaDescuentoNotaCreditoService
     }
 
     /**
-     * @param  array<string, mixed>  $data
-     * @param  list<array<string, mixed>>  $descuentos
-     */
-    public function fusionarNotasCreditoEnComprobantes(array &$data, array $emitidos): void
-    {
-        foreach ($emitidos as $nc) {
-            $importe = (float) $nc['importe_calculado'];
-            $data['idcuentacorrientes'][] = (int) $nc['cliente_cuentacorriente_nc_id'];
-            $data['idventas'][] = (int) $nc['venta_nc_id'];
-            $data['codigocomprobantes'][] = (string) $nc['codigo_nc'];
-            $data['monedacomprobante_ids'][] = (int) $nc['moneda_id'];
-            $data['montoaplicadocomprobantes'][] = -abs($importe);
-            $data['cotizacioncomprobantes'][] = (float) $nc['cotizacion'];
-            $data['fechacomprobantes'][] = $data['fecha'] ?? date('Y-m-d');
-            $data['fechavencimientocomprobantes'][] = $data['fecha'] ?? date('Y-m-d');
-            $data['montocomprobantes'][] = abs($importe);
-            $data['saldocomprobantes'][] = 0;
-        }
-    }
-
-    /**
      * @param  list<array<string, mixed>>  $descuentos
      * @param  list<array<string, mixed>>  $emitidos
      */
@@ -361,9 +342,85 @@ final class CobranzaDescuentoNotaCreditoService
             );
         }
 
-        $this->fusionarNotasCreditoEnComprobantes($data, $emitidos);
+        $this->descontarNotasCreditoDelAplicado($data, $emitidos);
 
         return $emitidos;
+    }
+
+    /**
+     * La grilla trae el aplicado bruto (efectivo + descuento). La emisión ya aplicó
+     * la NCP a su factura: la cobranza aplica solo la diferencia, que es el efectivo.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<array<string, mixed>>  $emitidos
+     */
+    public function descontarNotasCreditoDelAplicado(array &$data, array $emitidos): void
+    {
+        if ($emitidos === []) {
+            return;
+        }
+
+        $data[self::CLAVE_COMPROBANTES_ANITA] = $this->comprobantesParaAnita($data, $emitidos);
+        $ccIds = array_map('intval', (array) ($data['idcuentacorrientes'] ?? []));
+
+        foreach ($emitidos as $nc) {
+            $ccOrigenId = (int) $nc['cliente_cuentacorriente_origen_id'];
+            $importe = round(abs((float) $nc['importe_calculado']), 2);
+            $indice = array_search($ccOrigenId, $ccIds, true);
+            if ($indice === false) {
+                throw new InvalidArgumentException(
+                    'La factura del descuento '.$nc['codigo_nc'].' no está entre los comprobantes de la cobranza.'
+                );
+            }
+
+            $aplicado = round((float) ($data['montoaplicadocomprobantes'][$indice] ?? 0), 2);
+            if ($aplicado + 0.005 < $importe) {
+                throw new InvalidArgumentException(
+                    'El descuento '.number_format($importe, 2, ',', '.').' supera el importe aplicado a la factura ('
+                    .number_format($aplicado, 2, ',', '.').').'
+                );
+            }
+
+            $data['montoaplicadocomprobantes'][$indice] = round($aplicado - $importe, 2);
+        }
+    }
+
+    /**
+     * Anita no aplica la NCP a la factura: la cancela el recibo. El COB lleva la
+     * factura por el bruto y la NCP en negativo, como lo graba Anita.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<array<string, mixed>>  $emitidos
+     * @return array<string, list<mixed>>
+     */
+    private function comprobantesParaAnita(array $data, array $emitidos): array
+    {
+        $claves = [
+            'idcuentacorrientes', 'idventas', 'codigocomprobantes', 'monedacomprobante_ids',
+            'montoaplicadocomprobantes', 'cotizacioncomprobantes', 'fechacomprobantes',
+            'fechavencimientocomprobantes', 'montocomprobantes', 'saldocomprobantes',
+        ];
+        $anita = [];
+        foreach ($claves as $clave) {
+            $anita[$clave] = array_values((array) ($data[$clave] ?? []));
+        }
+
+        $fecha = $data['fecha'] ?? date('Y-m-d');
+        foreach ($emitidos as $nc) {
+            $importe = round(abs((float) $nc['importe_calculado']), 2);
+            $anita['idcuentacorrientes'][] = (int) $nc['cliente_cuentacorriente_nc_id'];
+            $anita['idventas'][] = (int) $nc['venta_nc_id'];
+            $anita['codigocomprobantes'][] = (string) $nc['codigo_nc'];
+            $anita['monedacomprobante_ids'][] = (int) $nc['moneda_id'];
+            $anita['montoaplicadocomprobantes'][] = -$importe;
+            $anita['cotizacioncomprobantes'][] = (float) $nc['cotizacion'];
+            $anita['fechacomprobantes'][] = $fecha;
+            $anita['fechavencimientocomprobantes'][] = $fecha;
+            $anita['montocomprobantes'][] = $importe;
+            $anita['saldocomprobantes'][] = 0;
+        }
+
+        return $anita;
     }
 
     public static function debeEmitirNotasCredito(string $estado): bool

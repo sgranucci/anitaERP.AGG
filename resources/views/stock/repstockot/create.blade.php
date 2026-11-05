@@ -105,6 +105,36 @@
                         · <strong>Filas:</strong> {{ $total_filas ?? 0 }}
                         · <strong>Pares:</strong> {{ number_format((float) ($total_pares ?? 0), 0, ',', '.') }}
                     </p>
+                    @php
+                        $bucketsNegativos = (int) ($aviso_negativos['buckets'] ?? 0);
+                    @endphp
+                    @if ($bucketsNegativos > 0)
+                        <div class="alert alert-warning py-2 px-3 small mb-2">
+                            <i class="fa fa-exclamation-triangle"></i>
+                            <strong>{{ $bucketsNegativos }}</strong>
+                            {{ $bucketsNegativos === 1 ? 'OT o lote queda' : 'OT o lote quedan' }} con saldo negativo
+                            ({{ number_format((float) ($aviso_negativos['pares'] ?? 0), 0, ',', '.') }} pares).
+                            Es stock consumido sin su alta: no se lista acá porque no se puede entregar.
+                            Para verlo, consultá con apertura <strong>Movimientos</strong>.
+                            <a class="ml-1" data-toggle="collapse" href="#detalle-negativos-repstockot">Ver detalle</a>
+                            <div class="collapse mt-2" id="detalle-negativos-repstockot">
+                                <ul class="mb-0 pl-3">
+                                    @foreach ($aviso_negativos['detalle'] ?? [] as $neg)
+                                        <li>
+                                            OT/lote {{ $neg['lote'] }} · {{ $neg['sku'] }}
+                                            @if (($neg['combinacion'] ?? '') !== '')
+                                                /{{ $neg['combinacion'] }}
+                                            @endif
+                                            @if (($neg['deposito'] ?? '') !== '')
+                                                · dep. {{ $neg['deposito'] }}
+                                            @endif
+                                            · {{ number_format((float) $neg['pares'], 0, ',', '.') }} pares
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        </div>
+                    @endif
                     <div class="mb-2" id="bloque-export-repstockot">
                         @include('includes.exportar-tabla-queryparams', [
                             'ruta' => 'listar_repstockot',

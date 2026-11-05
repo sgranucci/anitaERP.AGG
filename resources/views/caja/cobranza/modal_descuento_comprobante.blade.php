@@ -10,7 +10,7 @@
             <div class="modal-body">
                 <p class="text-muted mb-2">
                     Comprobante: <strong id="descuento-modal-codigo"></strong>
-                    — Saldo aplicable: <strong id="descuento-modal-saldo"></strong>
+                    — Importe del comprobante: <strong id="descuento-modal-saldo"></strong>
                 </p>
                 <div class="form-group">
                     <label for="descuento_modal_tipo">Tipo de descuento</label>
@@ -31,6 +31,7 @@
                     Importe descuento: <strong id="descuento-modal-preview">0.00</strong>
                 </p>
                 <p class="small text-muted mt-2 mb-0">
+                    El descuento se calcula sobre este comprobante. El anticipo y el medio de pago no lo modifican.
                     La nota de crédito se emitirá en ARCA al confirmar la cobranza.
                 </p>
             </div>
