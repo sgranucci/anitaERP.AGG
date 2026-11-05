@@ -105,6 +105,11 @@
                             Pend.: {{ (int) ($resumenInforme['pendientes'] ?? 0) }},
                             Err.: {{ (int) ($resumenInforme['errores'] ?? 0) }}
                         </div>
+                        @if (! empty($actaDisponible))
+                            <div class="mt-1">
+                                <a class="text-primary" href="{{ route('arca_caea_acta', $registro->id) }}" target="_blank" rel="noopener">Acta de la presentación</a>
+                            </div>
+                        @endif
                         @if (! empty($resumenInforme['por_tipo_pv']))
                             <table class="table table-sm table-bordered mt-2 mb-0">
                                 <thead>

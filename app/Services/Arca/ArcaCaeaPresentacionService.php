@@ -12,8 +12,10 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Ventas\ArcaCaeaAnitaIvaVentasSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
 use App\Support\Ventas\ArcaCaeaAnitaVencaeConsultaSupport;
+use App\Support\Ventas\ArcaCaeaInformeActaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeAnitaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeVentaSupport;
+use App\Support\Ventas\ArcaCaeaInformeMailSupport;
 use App\Support\Ventas\ArcaCaeaInformeObservacionSupport;
 use App\Support\Ventas\ArcaCaeaSucursalesInformeSupport;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
@@ -896,6 +898,127 @@ class ArcaCaeaPresentacionService
         }
 
         return ['ok' => true, 'mensaje' => $msg, 'resumen' => $resumen, 'detalle' => $detalle];
+    }
+
+    /**
+     * Informa la quincena completa (lotes hasta vaciar pendientes), deja el acta en texto
+     * y devuelve el resultado agregado para el mail.
+     *
+     * @param  (callable(array<string, mixed>): void)|null  $alCerrarLote
+     * @return array{ok: bool, mensaje: string, resumen?: array<string, mixed>, detalle?: array<string, mixed>}
+     */
+    public function informarQuincenaCompleta(
+        ArcaCaea $registro,
+        ?int $usuarioId = null,
+        bool $soloErrores = false,
+        ?callable $alCerrarLote = null,
+    ): array {
+        $vaciar = (bool) config('arca.caea.informe_vaciar_pendientes', true);
+        $maxLotes = max(1, (int) config('arca.caea.informe_max_lotes_job', 50));
+
+        $informados = 0;
+        $erroresLote = 0;
+        $sincronizados = 0;
+        $omitidosHueco = 0;
+        $conObservaciones = 0;
+        $observaciones = [];
+        $lotes = 0;
+        $ultimo = null;
+        $okGlobal = true;
+
+        do {
+            $lotes++;
+            $resultado = $this->informarPeriodo(
+                $registro->fresh(['empresa']) ?? $registro,
+                $usuarioId,
+                $soloErrores,
+            );
+            $ultimo = $resultado;
+            $detalle = is_array($resultado['detalle'] ?? null) ? $resultado['detalle'] : [];
+
+            $informados += (int) ($detalle['informados'] ?? 0);
+            $erroresLote += (int) ($detalle['errores_lote'] ?? 0);
+            $sincronizados += (int) ($detalle['sincronizados_arca'] ?? 0);
+            $omitidosHueco += (int) ($detalle['omitidos_hueco_numeracion'] ?? 0);
+            $conObservaciones += (int) ($detalle['con_observaciones'] ?? 0);
+            foreach ($detalle['observaciones'] ?? [] as $filaObs) {
+                if (is_array($filaObs) && trim((string) ($filaObs['texto'] ?? '')) !== '') {
+                    $observaciones[] = $filaObs;
+                }
+            }
+
+            if ($alCerrarLote !== null) {
+                $alCerrarLote([
+                    'fase' => 'lote',
+                    'lotes' => $lotes,
+                    'informados' => $informados,
+                    'ok' => (bool) ($resultado['ok'] ?? false),
+                    'mensaje' => (string) ($resultado['mensaje'] ?? ''),
+                    'detalle' => $detalle,
+                    'resumen' => is_array($resultado['resumen'] ?? null) ? $resultado['resumen'] : [],
+                ]);
+            }
+
+            if (! ($resultado['ok'] ?? false)) {
+                $okGlobal = false;
+                break;
+            }
+
+            if ((int) ($detalle['errores_lote'] ?? 0) > 0) {
+                break;
+            }
+
+            $pendientes = (int) ($detalle['pendientes_restantes'] ?? 0);
+            $erroresRestantes = (int) ($detalle['errores_total'] ?? 0);
+            $quedan = $soloErrores ? $erroresRestantes > 0 : ($pendientes > 0 || $erroresRestantes > 0);
+
+            if (! $vaciar || ! $quedan || (int) ($detalle['informados'] ?? 0) === 0) {
+                break;
+            }
+        } while ($lotes < $maxLotes);
+
+        $detalleFinal = is_array($ultimo['detalle'] ?? null) ? $ultimo['detalle'] : [];
+        $detalleFinal['informados'] = $informados;
+        $detalleFinal['errores_lote'] = $erroresLote;
+        $detalleFinal['sincronizados_arca'] = $sincronizados;
+        $detalleFinal['omitidos_hueco_numeracion'] = $omitidosHueco;
+        $detalleFinal['con_observaciones'] = $conObservaciones;
+        $detalleFinal['observaciones'] = $observaciones;
+        $detalleFinal['lotes'] = $lotes;
+
+        $mensaje = (string) ($ultimo['mensaje'] ?? 'Presentación CAEA finalizada.');
+        if ($lotes > 1) {
+            $mensaje = trim($mensaje.' ('.$lotes.' lotes; informados acumulados: '.$informados.')');
+        }
+        if (ArcaCaeaAnitaVencaeConsultaSupport::bridgeNoResponde()) {
+            $detalleFinal['anita_no_disponible'] = true;
+            $mensaje = trim($mensaje.' Anita (vencae) no respondió: no se revisaron comprobantes que solo están en Informix.');
+        }
+
+        $resumenFinal = $this->actualizarResumenPeriodo($registro, $usuarioId, true);
+        $freno = ArcaCaeaInformeMailSupport::resolverFreno($detalleFinal, $resumenFinal, $mensaje);
+        if ($freno !== null) {
+            $detalleFinal['freno'] = $freno;
+        }
+        $ultimoInformado = ArcaCaeaInformeMailSupport::ultimoInformadoResumen($resumenFinal);
+        if ($ultimoInformado !== null) {
+            $detalleFinal['ultimo_informado'] = $ultimoInformado;
+        }
+        $cierre = ArcaCaeaInformeMailSupport::resolverCierreQuincena($registro, $detalleFinal, $resumenFinal);
+        if ($cierre !== null) {
+            $detalleFinal['cierre_quincena'] = $cierre;
+        }
+
+        $agregado = [
+            'ok' => $okGlobal && (bool) ($ultimo['ok'] ?? false),
+            'mensaje' => $mensaje,
+            'resumen' => $resumenFinal,
+            'detalle' => $detalleFinal,
+        ];
+
+        ArcaCaeaInformeActaSupport::grabar($registro->fresh(['empresa']) ?? $registro, $agregado);
+
+        return $agregado;
     }
 
     /**

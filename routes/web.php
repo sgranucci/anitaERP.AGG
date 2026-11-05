@@ -2676,6 +2676,7 @@ Route::post('ventas/factura/{id}/enviar-mail', 'Ventas\FacturaMailConfiguracionC
 
 Route::get('ventas/arca-caea', 'Ventas\ArcaCaeaController@index')->name('arca_caea');
 Route::get('ventas/arca-caea/{id}/estado-informe', 'Ventas\ArcaCaeaController@estadoInforme')->name('arca_caea_estado_informe');
+Route::get('ventas/arca-caea/{id}/acta', 'Ventas\ArcaCaeaController@acta')->name('arca_caea_acta');
 Route::get('ventas/arca-caea/{id}/proximos-manual', 'Ventas\ArcaCaeaController@proximosManual')->name('arca_caea_proximos_manual');
 Route::post('ventas/arca-caea/{id}/previsualizar-manual', 'Ventas\ArcaCaeaController@previsualizarManual')->name('arca_caea_previsualizar_manual');
 Route::post('ventas/arca-caea/{id}/informar-uno-manual', 'Ventas\ArcaCaeaController@informarUnoManual')->name('arca_caea_informar_uno_manual');

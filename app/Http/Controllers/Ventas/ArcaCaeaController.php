@@ -10,6 +10,7 @@ use App\Services\Arca\ArcaCaeaPresentacionManualService;
 use App\Services\Arca\ArcaCaeaPresentacionService;
 use App\Services\Arca\ArcaCaeaQuincenalOrquestadorService;
 use App\Support\Ventas\ArcaCaeaAnitaVencaeConsultaSupport;
+use App\Support\Ventas\ArcaCaeaInformeActaSupport;
 use App\Support\Ventas\ArcaCaeaInformeColaSupport;
 use App\Support\Ventas\ArcaCaeaInformeObservacionSupport;
 use App\Support\Ventas\ArcaCaeaInformeUiSupport;
@@ -135,6 +136,7 @@ class ArcaCaeaController extends Controller
             [(int) $registro->empresa_id],
             (int) $registro->id,
         );
+        $actaDisponible = ArcaCaeaInformeActaSupport::existe((int) $registro->id);
 
         if ($request->ajax()) {
             $filtrosQuery = $this->filtrosIndexParaQuery($this->resolverFiltrosIndex($request));
@@ -152,11 +154,26 @@ class ArcaCaeaController extends Controller
                 'erroresInforme',
                 'erroresAgrupados',
                 'observacionesCaea',
+                'actaDisponible',
                 'filtrosQuery',
             ));
         }
 
         return redirect()->route('arca_caea', $this->filtrosIndexDesdeRequest($request));
+    }
+
+    public function acta(int $id)
+    {
+        can('listar-arca-caea');
+
+        $registro = $this->resolverRegistroPermitido($id);
+        $registro->loadMissing('empresa');
+        $texto = ArcaCaeaInformeActaSupport::leer((int) $registro->id);
+
+        return view('ventas.arca_caea.acta', [
+            'registro' => $registro,
+            'texto' => $texto,
+        ]);
     }
 
     public function solicitar(Request $request)

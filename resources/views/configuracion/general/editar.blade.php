@@ -24,7 +24,7 @@ Configuración general del sistema
                 <div class="card-body">
                     <div class="alert alert-info py-2">
                         Estos valores mandan sobre los defaults de <code>config/</code> y <code>.env</code>.
-                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos, umbrales de Compras / Suscripciones, los días de tolerancia de la fecha de factura, el correo de consultas del proveedor, la cantidad recibida de la recepción de proveedor, el concepto y la sucursal del débito por cheque rechazado, y la cuenta del neto de la nota de crédito por pronto pago.
+                        Incluyen facturación (FCE MiPyME), la hora y los mails de la presentación CAEA, POS, Libro IVA Digital, aprobación de artículos, umbrales de Compras / Suscripciones, los días de tolerancia de la fecha de factura, el correo de consultas del proveedor, la cantidad recibida de la recepción de proveedor, el concepto y la sucursal del débito por cheque rechazado, y la cuenta del neto de la nota de crédito por pronto pago.
                     </div>
 
                     @foreach ($grupos as $nombreGrupo => $parametros)
@@ -205,6 +205,39 @@ Configuración general del sistema
                                             value="{{ old('parametros.'.$parametro['clave'], $parametro['valor']) }}"
                                             placeholder="consultas@empresa.com"
                                             autocomplete="off">
+                                        <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
+                                    </div>
+                                </div>
+                            @elseif ($parametro['tipo'] === 'hora')
+                                @php
+                                    $idCampo = 'param_'.$parametro['clave'];
+                                @endphp
+                                <div class="form-group row">
+                                    <label for="{{ $idCampo }}" class="col-lg-4 control-label text-right pr-2">{{ $parametro['etiqueta'] }}</label>
+                                    <div class="col-lg-3">
+                                        <input type="time"
+                                            class="form-control"
+                                            name="parametros[{{ $parametro['clave'] }}]"
+                                            id="{{ $idCampo }}"
+                                            required
+                                            value="{{ old('parametros.'.$parametro['clave'], $parametro['valor']) }}">
+                                        <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
+                                    </div>
+                                </div>
+                            @elseif ($parametro['tipo'] === 'emails')
+                                @php
+                                    $idCampo = 'param_'.$parametro['clave'];
+                                    $mailsValor = str_replace(',', "\n", (string) old('parametros.'.$parametro['clave'], $parametro['valor']));
+                                @endphp
+                                <div class="form-group row">
+                                    <label for="{{ $idCampo }}" class="col-lg-4 control-label text-right pr-2">{{ $parametro['etiqueta'] }}</label>
+                                    <div class="col-lg-7">
+                                        <textarea class="form-control"
+                                            name="parametros[{{ $parametro['clave'] }}]"
+                                            id="{{ $idCampo }}"
+                                            rows="3"
+                                            maxlength="255"
+                                            placeholder="un correo por línea">{{ $mailsValor }}</textarea>
                                         <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
                                     </div>
                                 </div>

@@ -241,6 +241,15 @@
                                                 <i class="fa fa-eye text-info"></i>
                                             </button>
                                         @endif
+                                        @if (\App\Support\Ventas\ArcaCaeaInformeActaSupport::existe((int) $r->id))
+                                            <a class="btn-accion-tabla tooltipsC"
+                                                title="Acta de la presentación"
+                                                href="{{ route('arca_caea_acta', $r->id) }}"
+                                                target="_blank"
+                                                rel="noopener">
+                                                <i class="fa fa-file-text-o text-primary"></i>
+                                            </a>
+                                        @endif
                                         @if (($puedeGrabarAnita ?? false) && $r->estaAutorizado())
                                             <form method="post"
                                                 action="{{ route('arca_caea_grabar_anita', $r->id) }}"

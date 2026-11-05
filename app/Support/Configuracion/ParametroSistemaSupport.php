@@ -54,6 +54,12 @@ final class ParametroSistemaSupport
      */
     public const CLAVE_MAIL_CONSULTA_PROVEEDOR = 'mail_consulta_proveedor';
 
+    /** Hora (HH:MM) de la presentación automática de CAEA. */
+    public const CLAVE_CAEA_PRESENTACION_HORA = 'caea_presentacion_hora';
+
+    /** Destinatarios del resultado de cada presentación CAEA, separados por coma. */
+    public const CLAVE_CAEA_PRESENTACION_MAILS = 'caea_presentacion_mails';
+
     /**
      * Días que la fecha impresa de la factura puede adelantarse a la de contabilización.
      */
@@ -93,6 +99,20 @@ final class ParametroSistemaSupport
                 'ayuda' => 'Cuenta cuyo CBU se envía a ARCA en FCE (dato adicional 21). Si queda vacía, cada empresa usa su cuenta en pesos de Banco Macro Gerli. F1 o lupa abren la consulta.',
                 'tipo' => 'cuentacaja',
                 'orden' => 30,
+            ],
+            self::CLAVE_CAEA_PRESENTACION_HORA => [
+                'grupo' => 'Facturación ARCA',
+                'etiqueta' => 'Hora de la presentación CAEA',
+                'ayuda' => 'El primer día hábil después del cierre de cada quincena (el 15, o el último día del mes) se presenta a esta hora. Hábil: lunes a viernes que no sea feriado.',
+                'tipo' => 'hora',
+                'orden' => 32,
+            ],
+            self::CLAVE_CAEA_PRESENTACION_MAILS => [
+                'grupo' => 'Facturación ARCA',
+                'etiqueta' => 'Mails del resultado CAEA',
+                'ayuda' => 'Reciben el resultado de cada presentación, la automática y la del botón. Uno por línea o separados por coma. Vacío: solo se avisa a quien apretó el botón.',
+                'tipo' => 'emails',
+                'orden' => 33,
             ],
             self::CLAVE_ARTICULO_APROBACION_ALTA => [
                 'grupo' => 'Aprobaciones / Stock',
@@ -419,6 +439,38 @@ final class ParametroSistemaSupport
         return $email;
     }
 
+    public static function caeaPresentacionHora(): string
+    {
+        $hora = self::texto(self::CLAVE_CAEA_PRESENTACION_HORA, '14:00');
+
+        return preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $hora) === 1 ? $hora : '14:00';
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function caeaPresentacionMails(): array
+    {
+        return self::separarMails(self::texto(self::CLAVE_CAEA_PRESENTACION_MAILS, ''));
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function separarMails(string $raw): array
+    {
+        $partes = preg_split('/[\s,;]+/', $raw) ?: [];
+        $out = [];
+        foreach ($partes as $parte) {
+            $mail = strtolower(trim((string) $parte));
+            if ($mail !== '' && filter_var($mail, FILTER_VALIDATE_EMAIL)) {
+                $out[$mail] = $mail;
+            }
+        }
+
+        return array_values($out);
+    }
+
     public static function suscripcionComprobanteDiaEscalamiento(): string
     {
         return self::texto(
@@ -485,6 +537,10 @@ final class ParametroSistemaSupport
                 $valor = self::normalizarBooleanGuardar($valorRaw) ? '1' : '0';
             } elseif ($def['tipo'] === 'email') {
                 $valor = strtolower(trim((string) $valorRaw));
+            } elseif ($def['tipo'] === 'hora') {
+                $valor = trim((string) $valorRaw);
+            } elseif ($def['tipo'] === 'emails') {
+                $valor = implode(',', self::separarMails((string) $valorRaw));
             } elseif ($def['tipo'] === 'select') {
                 $valor = trim((string) $valorRaw);
                 $ops = $def['opciones'] ?? [];
@@ -573,6 +629,8 @@ final class ParametroSistemaSupport
             self::CLAVE_PROVEEDOR_ALTA_CUENTACONTABLE_ID => '',
             self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB => '0',
             self::CLAVE_MAIL_CONSULTA_PROVEEDOR => '',
+            self::CLAVE_CAEA_PRESENTACION_HORA => '14:00',
+            self::CLAVE_CAEA_PRESENTACION_MAILS => '',
             self::CLAVE_COMPROBANTE_FECHA_TOLERANCIA_DIAS => (string) max(0, (int) config(
                 'comprobante_proveedor.fecha_comprobante_tolerancia_dias_contabilizacion',
                 5

@@ -103,6 +103,19 @@ class ValidacionConfiguracionGeneral extends FormRequest
                 'empresa' => 'required|integer|min:1|exists:empresa,id',
                 'boolean' => 'required|in:0,1',
                 'email' => 'nullable|email|max:255',
+                'hora' => ['required', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
+                'emails' => ['nullable', 'string', 'max:255', function (string $attribute, mixed $value, \Closure $fail): void {
+                    $raw = trim((string) $value);
+                    if ($raw === '') {
+                        return;
+                    }
+                    foreach (preg_split('/[\s,;]+/', $raw) ?: [] as $parte) {
+                        $mail = trim((string) $parte);
+                        if ($mail !== '' && filter_var($mail, FILTER_VALIDATE_EMAIL) === false) {
+                            $fail('«'.$mail.'» no es un correo válido.');
+                        }
+                    }
+                }],
                 'select' => 'required|in:'.implode(',', array_keys($def['opciones'] ?? [])),
                 default => 'required|numeric|min:0',
             };

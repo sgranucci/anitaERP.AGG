@@ -4,6 +4,7 @@ namespace App\Console;
 
 use App\Support\Compras\ComprobanteProveedorAnitaBridgeGate;
 use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\PercepcionIibbJurisdiccionEntregaSupport;
 use App\Support\Interbanking\InterbankingCalendarioSync;
@@ -225,6 +226,12 @@ class Kernel extends ConsoleKernel
             ->dailyAt('06:30')
             ->when(fn () => ! EntornoEmpresaSupport::esFerli()
                 && config('arca.caea.pedido_automatico', true));
+
+        $schedule->command('arca:presentar-caea-quincena')
+            ->dailyAt(ParametroSistemaSupport::caeaPresentacionHora())
+            ->withoutOverlapping(180)
+            ->appendOutputTo(storage_path('logs/arca-caea-presentacion.log'))
+            ->when(fn () => ! EntornoEmpresaSupport::esFerli());
 
         $schedule->command('arca:avisar-vencimiento-certificados')
             ->dailyAt((string) config('arca.certificado_aviso.hora', '08:10'))

@@ -8,7 +8,9 @@ use App\Mail\Ventas\ArcaCaeaInformeResultadoMail;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\ArcaCaea;
 use App\Services\Arca\ArcaCaeaPresentacionService;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Ventas\ArcaCaeaAnitaVencaeConsultaSupport;
+use App\Support\Ventas\ArcaCaeaInformeActaSupport;
 use App\Support\Ventas\ArcaCaeaInformeColaSupport;
 use App\Support\Ventas\ArcaCaeaInformeMailSupport;
 use App\Support\Ventas\ArcaCaeaInformeUiSupport;
@@ -121,107 +123,14 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
      */
     private function ejecutarPresentacion(ArcaCaeaPresentacionService $presentacion, ArcaCaea $registro): array
     {
-        $vaciar = (bool) config('arca.caea.informe_vaciar_pendientes', true);
-        $maxLotes = max(1, (int) config('arca.caea.informe_max_lotes_job', 50));
-
-        $informados = 0;
-        $erroresLote = 0;
-        $sincronizados = 0;
-        $omitidosHueco = 0;
-        $conObservaciones = 0;
-        $observaciones = [];
-        $lotes = 0;
-        $ultimo = null;
-        $okGlobal = true;
-
-        do {
-            $lotes++;
-            $resultado = $presentacion->informarPeriodo(
-                $registro->fresh(['empresa']) ?? $registro,
-                $this->usuarioId,
-                $this->soloErrores,
-            );
-            $ultimo = $resultado;
-            $detalle = is_array($resultado['detalle'] ?? null) ? $resultado['detalle'] : [];
-
-            $informados += (int) ($detalle['informados'] ?? 0);
-            $erroresLote += (int) ($detalle['errores_lote'] ?? 0);
-            $sincronizados += (int) ($detalle['sincronizados_arca'] ?? 0);
-            $omitidosHueco += (int) ($detalle['omitidos_hueco_numeracion'] ?? 0);
-            $conObservaciones += (int) ($detalle['con_observaciones'] ?? 0);
-            foreach ($detalle['observaciones'] ?? [] as $filaObs) {
-                if (is_array($filaObs) && trim((string) ($filaObs['texto'] ?? '')) !== '') {
-                    $observaciones[] = $filaObs;
-                }
-            }
-
-            $this->guardarProgreso($registro, [
-                'fase' => 'lote',
-                'lotes' => $lotes,
-                'informados' => $informados,
-                'ok' => (bool) ($resultado['ok'] ?? false),
-                'mensaje' => (string) ($resultado['mensaje'] ?? ''),
-                'detalle' => $detalle,
-                'resumen' => is_array($resultado['resumen'] ?? null) ? $resultado['resumen'] : [],
-            ]);
-
-            if (! ($resultado['ok'] ?? false)) {
-                $okGlobal = false;
-                break;
-            }
-
-            if ((int) ($detalle['errores_lote'] ?? 0) > 0) {
-                break;
-            }
-
-            $pendientes = (int) ($detalle['pendientes_restantes'] ?? 0);
-            $erroresRestantes = (int) ($detalle['errores_total'] ?? 0);
-            $quedan = $this->soloErrores ? $erroresRestantes > 0 : ($pendientes > 0 || $erroresRestantes > 0);
-
-            if (! $vaciar || ! $quedan || (int) ($detalle['informados'] ?? 0) === 0) {
-                break;
-            }
-        } while ($lotes < $maxLotes);
-
-        $detalleFinal = is_array($ultimo['detalle'] ?? null) ? $ultimo['detalle'] : [];
-        $detalleFinal['informados'] = $informados;
-        $detalleFinal['errores_lote'] = $erroresLote;
-        $detalleFinal['sincronizados_arca'] = $sincronizados;
-        $detalleFinal['omitidos_hueco_numeracion'] = $omitidosHueco;
-        $detalleFinal['con_observaciones'] = $conObservaciones;
-        $detalleFinal['observaciones'] = $observaciones;
-        $detalleFinal['lotes'] = $lotes;
-        if (ArcaCaeaAnitaVencaeConsultaSupport::bridgeNoResponde()) {
-            $detalleFinal['anita_no_disponible'] = true;
-            $mensaje = trim($mensaje.' Anita (vencae) no respondió: no se revisaron comprobantes que solo están en Informix.');
-        }
-
-        // Reconsultar ARCA al cerrar: el resumen del último lote suele traer ultimo_arca del inicio.
-        $resumenFinal = $presentacion->actualizarResumenPeriodo($registro, $this->usuarioId, true);
-        $mensaje = (string) ($ultimo['mensaje'] ?? 'Presentación CAEA finalizada.');
-        if ($lotes > 1) {
-            $mensaje = trim($mensaje.' ('.$lotes.' lotes; informados acumulados: '.$informados.')');
-        }
-
-        $freno = ArcaCaeaInformeMailSupport::resolverFreno($detalleFinal, $resumenFinal, $mensaje);
-        if ($freno !== null) {
-            $detalleFinal['freno'] = $freno;
-        }
-        $ultimoInformado = ArcaCaeaInformeMailSupport::ultimoInformadoResumen($resumenFinal);
-        if ($ultimoInformado !== null) {
-            $detalleFinal['ultimo_informado'] = $ultimoInformado;
-        }
-        $cierre = ArcaCaeaInformeMailSupport::resolverCierreQuincena($registro, $detalleFinal, $resumenFinal);
-        if ($cierre !== null) {
-            $detalleFinal['cierre_quincena'] = $cierre;
-        }
-
-        return [
-            'ok' => $okGlobal && (bool) ($ultimo['ok'] ?? false),
-            'mensaje' => $mensaje,
-            'resumen' => $resumenFinal,
-            'detalle' => $detalleFinal,
-        ];
+        return $presentacion->informarQuincenaCompleta(
+            $registro,
+            $this->usuarioId > 0 ? $this->usuarioId : null,
+            $this->soloErrores,
+            function (array $progreso) use ($registro): void {
+                $this->guardarProgreso($registro, $progreso);
+            },
+        );
     }
 
     /**
@@ -240,8 +149,13 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
         }
 
         $usuario = Usuario::query()->find($this->usuarioId);
-        $email = trim((string) ($usuario?->email ?? ''));
-        if ($usuario === null || $email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $emails = ParametroSistemaSupport::caeaPresentacionMails();
+        $emailUsuario = strtolower(trim((string) ($usuario?->email ?? '')));
+        if ($emailUsuario !== '' && filter_var($emailUsuario, FILTER_VALIDATE_EMAIL)) {
+            $emails[] = $emailUsuario;
+        }
+        $emails = array_values(array_unique($emails));
+        if ($emails === []) {
             Log::warning('arca.caea.informe.cola.sin_email', [
                 'arca_caea_id' => $registro->id,
                 'usuario_id' => $this->usuarioId,
@@ -278,18 +192,20 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
             'mensaje' => (string) ($resultado['mensaje'] ?? ''),
             'detalle' => $detalle,
             'resumen' => $resumen,
-            'usuario_nombre' => (string) ($usuario->nombre ?? $usuario->usuario ?? ''),
+            'usuario_nombre' => $usuario !== null
+                ? (string) ($usuario->nombre ?? $usuario->usuario ?? '')
+                : '',
             'origen_mail' => $origen,
         ];
 
         try {
-            Mail::to($email)->send(new ArcaCaeaInformeResultadoMail($payload));
+            Mail::to($emails)->send(new ArcaCaeaInformeResultadoMail($payload));
             Cache::put($mailKey, true, now()->addHours(6));
         } catch (Throwable $e) {
             Log::error('arca.caea.informe.cola.mail_fallo', [
                 'arca_caea_id' => $registro->id,
                 'usuario_id' => $this->usuarioId,
-                'email' => $email,
+                'email' => implode(',', $emails),
                 'origen' => $origen,
                 'msg' => $e->getMessage(),
             ]);
@@ -357,12 +273,14 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
                 $detalle['ultimo_informado'] = $ultimoInformado;
             }
 
-            $this->enviarMailResultado($registro, [
+            $fallo = [
                 'ok' => false,
                 'mensaje' => $mensaje,
                 'detalle' => $detalle,
                 'resumen' => $resumen,
-            ], 'failed');
+            ];
+            ArcaCaeaInformeActaSupport::grabar($registro, $fallo);
+            $this->enviarMailResultado($registro, $fallo, 'failed');
         } catch (Throwable $e) {
             Log::error('arca.caea.informe.cola.mail_fallo_failed', [
                 'arca_caea_id' => $this->arcaCaeaId,
