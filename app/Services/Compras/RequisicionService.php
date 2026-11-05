@@ -19,6 +19,7 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Presupuesto\CapexRepositoryInterface;
 use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Support\Compras\ArticuloCentrocostoCuentaSupport;
 use App\Support\Compras\RequisicionAnitaColisionSupport;
 use App\Support\Compras\RequisicionArticuloCatalogoSupport;
 use App\Support\Compras\RequisicionCapexCuentaPuenteSupport;
@@ -108,6 +109,7 @@ class RequisicionService
         try {
             $data['oficinacompra_id'] = $this->validaYCalculaOficinaCompraIdDesdeArticulos($data);
             RequisicionArticuloCatalogoSupport::validarPayload($data);
+            ArticuloCentrocostoCuentaSupport::validarPayload($data);
             if (! $modoProvisorio) {
                 $resolucionCc = $this->resolverCentrocostoArbolParaGrabacion($data);
                 if (($resolucionCc['mensaje'] ?? '') === 'seleccionar_centrocosto') {
@@ -257,6 +259,7 @@ class RequisicionService
             ValidacionPresupuestoPartidaCapexLineas::validar($payloadValidacion);
             RequisicionCapexCuentaPuenteSupport::validar($payloadValidacion);
             RequisicionArticuloCatalogoSupport::validarPayload($payloadValidacion);
+            ArticuloCentrocostoCuentaSupport::validarPayload($payloadValidacion);
         } catch (\RuntimeException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         } catch (\InvalidArgumentException $e) {
@@ -437,6 +440,7 @@ class RequisicionService
         }
 
         try {
+            ArticuloCentrocostoCuentaSupport::validarPayload($this->payloadValidacionLineasDesdeModelo($req));
             RequisicionCapexCuentaPuenteSupport::validar($this->payloadValidacionLineasDesdeModelo($req), true);
             $preview = $this->arbolaprobacionService->firmantesRetomeArbolRequisicion($req, $centrocostoArbolId);
         } catch (\RuntimeException $e) {
@@ -468,6 +472,7 @@ class RequisicionService
         }
 
         try {
+            ArticuloCentrocostoCuentaSupport::validarPayload($this->payloadValidacionLineasDesdeModelo($req));
             RequisicionCapexCuentaPuenteSupport::validar($this->payloadValidacionLineasDesdeModelo($req), true);
             RequisicionArticuloCatalogoSupport::validarPayload($this->payloadValidacionLineasDesdeModelo($req));
             $preview = $this->arbolaprobacionService->firmantesRetomeArbolRequisicion($req, $centrocostoArbolId);
@@ -733,6 +738,7 @@ class RequisicionService
         $data = $request->all();
         try {
             RequisicionArticuloCatalogoSupport::validarPayload($data);
+            ArticuloCentrocostoCuentaSupport::validarPayload($data);
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
@@ -988,7 +994,7 @@ class RequisicionService
         foreach ($requisicion->requisicion_articulos as $linea) {
             $payload['articulo_ids'][] = $linea->articulo_id;
             $payload['cantidades'][] = $linea->cantidad;
-            $payload['centrocostodestino_ids'][] = $linea->centrocosto_destino_id;
+            $payload['centrocostodestino_ids'][] = $linea->centrocostodestino_id;
             $payload['partidagasto_ids'][] = $linea->partidagasto_id;
             $payload['capex_ids'][] = $linea->capex_id;
         }

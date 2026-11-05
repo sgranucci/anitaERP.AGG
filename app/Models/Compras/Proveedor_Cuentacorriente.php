@@ -22,11 +22,14 @@ class Proveedor_Cuentacorriente extends Model implements Auditable
         'fecha', 'fechavencimiento', 'proveedor_id', 'total', 'moneda_id', 'cotizacion',
         'empresa_id', 'comprobante_proveedor_id', 'comprobante_proveedor_cuota_id',
         'pagoproveedor_id', 'leyenda',
+        'fecha_pago', 'urgente_pago',
     ];
 
     protected $casts = [
         'fecha' => 'date',
         'fechavencimiento' => 'date',
+        'fecha_pago' => 'date',
+        'urgente_pago' => 'boolean',
     ];
 
     public function proveedores()

@@ -50,7 +50,7 @@
 
 <div class="card card-outline card-info mt-1">
     <div class="card-header">
-        <h3 class="card-title">Proyección de pagos (estilo Anita l-proy) — forma/medio de pago de la OC/cuota</h3>
+        <h3 class="card-title">Deuda del lote — mismo detalle que la proyección (medio, leyenda, concepto)</h3>
     </div>
     <div class="card-body table-responsive p-0">
         <table class="table table-sm table-bordered table-hover" id="tabla-propuesta-lineas" style="font-size:12px;">
@@ -69,12 +69,17 @@
                     <th>N.Refer</th>
                     <th>M.Pago</th>
                     <th>Detalle pago</th>
+                    <th>Leyenda</th>
+                    <th>Concepto</th>
                     <th>Cta.egreso</th>
                     <th>Mon.</th>
                     <th class="text-right">Saldo</th>
                     <th class="text-right">Monto prop.</th>
                     <th>Bucket</th>
                     <th>OP</th>
+                    @if ($editableGrilla)
+                        <th>Quitar</th>
+                    @endif
                 </tr>
             </thead>
             <tbody>
@@ -107,6 +112,8 @@
                         </td>
                         <td><strong>{{ $p['medio_pago'] }}</strong></td>
                         <td>{{ $p['detalle_pago'] }}</td>
+                        <td>{{ $p['leyenda'] }}</td>
+                        <td>{{ $p['detalle_concepto'] }}</td>
                         <td style="min-width:140px;">
                             @if ($editableGrilla || $exclusionPostArbol)
                                 <select name="linea_cuentacaja_ids[]" class="form-control form-control-sm">
@@ -145,9 +152,16 @@
                                 <a href="{{ route('editar_pagoproveedor', $linea->pagoproveedor_id) }}" class="text-primary" target="_blank" rel="noopener">#{{ $linea->pagoproveedor_id }}</a>
                             @endif
                         </td>
+                        @if ($editableGrilla)
+                            <td class="text-center">
+                                @if (! $linea->pagoproveedor_id)
+                                    <input type="checkbox" name="quitar_linea_ids[]" value="{{ $linea->id }}" title="Quitar del lote al guardar">
+                                @endif
+                            </td>
+                        @endif
                     </tr>
                 @empty
-                    <tr><td colspan="19" class="text-center text-muted">Sin líneas. Rearme desde deuda o amplíe el rango de vencimientos.</td></tr>
+                    <tr><td colspan="22" class="text-center text-muted">Sin líneas. Rearme desde la programación o agregue deudas.</td></tr>
                 @endforelse
             </tbody>
         </table>

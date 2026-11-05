@@ -23,6 +23,7 @@ class ValidacionPropuestaPago extends FormRequest
             'caja_id' => 'nullable|integer|min:1',
             'cuentacaja_id' => 'nullable|integer|min:1',
             'chequera_id' => 'nullable|integer|min:1',
+            'tipo_lote' => 'nullable|in:URGENTE_TRF,CHEQUE,LEGACY_VENCIMIENTO',
         ];
     }
 }

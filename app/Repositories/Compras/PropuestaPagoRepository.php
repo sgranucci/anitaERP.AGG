@@ -47,6 +47,7 @@ class PropuestaPagoRepository implements PropuestaPagoRepositoryInterface
             'lineas.proveedor_cuentacorrientes.comprobante_proveedor_cuotas.ordencompra_comprobante_cuotas.formapagos',
             'lineas.comprobante_proveedores.tipotransaccion_compras',
             'lineas.comprobante_proveedores.condicionpagos',
+            'lineas.comprobante_proveedores.conceptogastos',
             'estados.usuarios',
         ])->find($id);
 
@@ -82,6 +83,9 @@ class PropuestaPagoRepository implements PropuestaPagoRepositoryInterface
         }
         if (! empty($filtros['fecha_hasta'])) {
             $query->whereDate('fecha', '<=', $filtros['fecha_hasta']);
+        }
+        if (! empty($filtros['tipo_lote'])) {
+            $query->where('tipo_lote', (string) $filtros['tipo_lote']);
         }
         if (! empty($filtros['busqueda'])) {
             $like = '%'.$filtros['busqueda'].'%';

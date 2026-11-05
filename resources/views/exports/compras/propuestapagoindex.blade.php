@@ -1,14 +1,15 @@
 @if (! empty($reservarFilaLogoExcel))
-<tr><td colspan="6"></td></tr>
+<tr><td colspan="7"></td></tr>
 @endif
 <tr>
-    <td colspan="6" style="font-weight:bold;font-size:14px;">Propuestas de pagos</td>
+    <td colspan="7" style="font-weight:bold;font-size:14px;">Propuestas de pagos</td>
 </tr>
 <table>
 <thead>
 <tr>
     <th>ID</th>
     <th>Fecha</th>
+    <th>Tipo</th>
     <th>Empresa</th>
     <th>Estado</th>
     <th>Monto</th>
@@ -20,6 +21,7 @@
 <tr>
     <td>{{ $fila->id }}</td>
     <td>{{ optional($fila->fecha)->format('d/m/Y') }}</td>
+    <td>{{ \App\Support\Compras\PropuestaPagoTipoLote::etiqueta($fila->tipo_lote ?? '') }}</td>
     <td>{{ $fila->nombreempresa ?? ($fila->empresas->nombre ?? '') }}</td>
     <td>{{ $fila->estado }}</td>
     <td>{{ number_format((float)$fila->monto_total, 2, ',', '.') }}</td>

@@ -53,6 +53,7 @@ use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
 use App\Support\Compras\RequisicionArticuloCatalogoSupport;
+use App\Support\Compras\ArticuloCentrocostoCuentaSupport;
 use App\Support\Compras\RequisicionCapexCuentaPuenteSupport;
 use App\Support\Stock\ArticuloCuentaCompraGastoSupport;
 use App\Support\Stock\ArticuloEstadoCanalSupport;
@@ -1905,6 +1906,8 @@ class ArticuloController extends Controller
             'nombre' => '',
             'tipo' => '',
             'exige_capex' => false,
+            'restringe_centrocosto' => false,
+            'centrocosto_ids' => [],
         ];
         if ($articulo_id <= 0 || $empresaId <= 0) {
             return response()->json($vacia);
@@ -1916,6 +1919,7 @@ class ArticuloController extends Controller
             return response()->json($vacia, 200, [], JSON_UNESCAPED_UNICODE);
         }
         $cuenta['exige_capex'] = RequisicionCapexCuentaPuenteSupport::cuentaExigeCapex($cuenta);
+        $cuenta = array_merge($cuenta, ArticuloCentrocostoCuentaSupport::datosRespuesta($cuenta));
 
         return response()->json($cuenta, 200, [], JSON_UNESCAPED_UNICODE);
     }

@@ -22,7 +22,7 @@
 <table class="data">
     <thead>
         <tr>
-            <th>ID</th><th>Fecha</th><th>Empresa</th><th>Estado</th><th>Monto</th><th>Autorizado</th><th>Detalle</th>
+            <th>ID</th><th>Fecha</th><th>Tipo</th><th>Empresa</th><th>Estado</th><th>Monto</th><th>Autorizado</th><th>Detalle</th>
         </tr>
     </thead>
     <tbody>
@@ -30,6 +30,7 @@
             <tr>
                 <td>{{ $fila->id }}</td>
                 <td>{{ optional($fila->fecha)->format('d/m/Y') }}</td>
+                <td>{{ \App\Support\Compras\PropuestaPagoTipoLote::etiqueta($fila->tipo_lote ?? '') }}</td>
                 <td>{{ $fila->empresas->nombre ?? '' }}</td>
                 <td>{{ $fila->estado }}</td>
                 <td style="text-align:right">{{ number_format((float)$fila->monto_total, 2, ',', '.') }}</td>

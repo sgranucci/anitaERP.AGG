@@ -158,7 +158,83 @@ $(function () {
 				}
 			});
 		}
+		ocValidarCentrocostoArticulo($tr, { avisar: true });
 	};
+
+	function ocLimpiarArticuloPorCentrocosto($tr, mensaje) {
+		$tr.find('.articulo_id').val('');
+		$tr.find('.codigoarticulo').val('');
+		$tr.find('.descripcionarticulo').val('');
+		$tr.removeData('oc-cuenta-cc');
+		ocLimpiarCantidadAlternativaHint($tr);
+		ocLimpiarPesoLinea($tr);
+		if (window.ArticuloProveedorOperativo) {
+			window.ArticuloProveedorOperativo.aplicarAFila($tr, null, null);
+		}
+		setTimeout(function () {
+			alert(mensaje);
+			$tr.find('.codigoarticulo').first().trigger('focus');
+		}, 0);
+	}
+
+	function ocValidarCentrocostoArticulo($tr, opciones) {
+		if (!$tr || !$tr.length || !window.ArticuloCentrocostoCuenta) {
+			return;
+		}
+		opciones = opciones || {};
+		var artId = parseInt($tr.find('.articulo_id').val(), 10) || 0;
+		var empId = parseInt($('#empresa_id').val(), 10) || 0;
+		if (!artId || !empId) {
+			$tr.removeData('oc-cuenta-cc');
+			return;
+		}
+		var token = String(Date.now()) + '-' + artId + '-' + empId;
+		$tr.attr('data-oc-cuenta-token', token);
+		window.ArticuloCentrocostoCuenta.consultar(artId, empId).done(function (resp) {
+			if ($tr.attr('data-oc-cuenta-token') !== token) {
+				return;
+			}
+			resp = resp || {};
+			$tr.data('oc-cuenta-cc', resp);
+			var $sel = $tr.find('select[name="centrocostodestino_ids[]"]');
+			if (window.ArticuloCentrocostoCuenta.permitido(resp, $sel.val())) {
+				return;
+			}
+			if (!opciones.avisar) {
+				return;
+			}
+			var $cod = $tr.find('.codigoarticulo').first();
+			if ($cod.prop('readonly') || $cod.prop('disabled')) {
+				return;
+			}
+			var sku = String($cod.val() || '').trim();
+			var ccTexto = $.trim($sel.find('option:selected').text());
+			ocLimpiarArticuloPorCentrocosto($tr, window.ArticuloCentrocostoCuenta.mensaje(resp, sku, ccTexto));
+		});
+	}
+
+	function ocMensajesCentrocostoInvalidos() {
+		if (!window.ArticuloCentrocostoCuenta) {
+			return [];
+		}
+		var faltan = [];
+		$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo').each(function () {
+			var $tr = $(this);
+			var artId = parseInt($tr.find('.articulo_id').val(), 10) || 0;
+			var cant = parseFloat($tr.find('.cantidad-linea').val()) || 0;
+			if (!artId || cant <= 0) {
+				return;
+			}
+			var payload = $tr.data('oc-cuenta-cc');
+			var $sel = $tr.find('select[name="centrocostodestino_ids[]"]');
+			if (!payload || window.ArticuloCentrocostoCuenta.permitido(payload, $sel.val())) {
+				return;
+			}
+			var sku = String($tr.find('.codigoarticulo').val() || '').trim();
+			faltan.push(window.ArticuloCentrocostoCuenta.mensaje(payload, sku, $.trim($sel.find('option:selected').text())));
+		});
+		return faltan;
+	}
 
 	function mostrarSolapa(sel) {
 		$('.oc-solapa').hide();
@@ -2405,6 +2481,28 @@ $(function () {
 	$(document).on('change', '#tabla-articulos-ordencompra .oc-moneda-linea', function () {
 		ocActualizarCotizacionLinea($(this).closest('tr.item-ordencompra-articulo'));
 	});
+	$(document).on('focusin', '#tabla-articulos-ordencompra select[name="centrocostodestino_ids[]"]', function () {
+		$(this).data('cc-antes', $(this).val());
+	});
+	$(document).on('change', '#tabla-articulos-ordencompra select[name="centrocostodestino_ids[]"]', function () {
+		var $sel = $(this);
+		var $tr = $sel.closest('tr.item-ordencompra-articulo');
+		var payload = $tr.data('oc-cuenta-cc');
+		var anterior = $sel.data('cc-antes');
+		if (!payload || !window.ArticuloCentrocostoCuenta || window.ArticuloCentrocostoCuenta.permitido(payload, $sel.val())) {
+			$sel.data('cc-antes', $sel.val());
+			return;
+		}
+		var textoIntentado = $.trim($sel.find('option:selected').text());
+		if (anterior) {
+			$sel.val(anterior);
+		}
+		var sku = String($tr.find('.codigoarticulo').val() || '').trim();
+		alert(window.ArticuloCentrocostoCuenta.mensaje(payload, sku, textoIntentado));
+	});
+	$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo').each(function () {
+		ocValidarCentrocostoArticulo($(this), { avisar: false });
+	});
 	ocScheduleTotales();
 	$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo').each(function () {
 		ocRefreshDetalleLineaBadge($(this));
@@ -2447,6 +2545,13 @@ $(function () {
 			alert('Debe indicar el proveedor de la orden de compra.');
 			ocMostrarSolapaDelElemento(document.getElementById('codigoproveedor') || document.getElementById('proveedor_id'));
 			$('#codigoproveedor').focus();
+			return false;
+		}
+		var avisosCc = ocMensajesCentrocostoInvalidos();
+		if (avisosCc.length) {
+			e.preventDefault();
+			e.stopPropagation();
+			alert(avisosCc.join('\n'));
 			return false;
 		}
 		try {

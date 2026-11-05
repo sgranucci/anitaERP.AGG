@@ -4,6 +4,7 @@ namespace App\Support\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Support\Contable\CuentaCentrocostoAsignadosSupport;
+use App\Support\Contable\CuentaCentrocostoHabilitadoSupport;
 use App\Support\Contable\MontoEsArSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -313,6 +314,13 @@ final class ComprobanteProveedorDebeGastoSupport
         foreach ($lineas as $linea) {
             $cuentaId = (int) $linea['cuentacontable_id'];
             $cc = (int) ($linea['centrocosto_id'] ?? 0);
+            if ($cc > 0) {
+                CuentaCentrocostoHabilitadoSupport::assertPares([[
+                    'cuentacontable_id' => $cuentaId,
+                    'centrocosto_id' => $cc,
+                    'etiqueta' => 'gasto',
+                ]], 'No se puede registrar la factura.');
+            }
             $out[] = [
                 'cuentacontable_id' => $cuentaId,
                 'importe' => round((float) $linea['importe'], 2),

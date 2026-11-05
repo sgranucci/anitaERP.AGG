@@ -8,6 +8,7 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
 use App\Support\Archivo\TextoUtf8Support;
 use App\Support\Contable\AsientoCentrocostoObligatorioSupport;
+use App\Support\Contable\CuentaCentrocostoHabilitadoSupport;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
 use App\Support\Contable\AsientoImportColumnasSupport;
 use Illuminate\Http\UploadedFile;
@@ -235,6 +236,16 @@ class AsientoImportPreviewService
             $advertencias[] = 'Hay '.$sinCentrocostoObligatorio
                 .' fila(s) de cuentas que manejan centro de costo y el Excel no lo informa. Esas imputaciones no se cargan.';
         }
+        $centroNoHabilitado = 0;
+        foreach ($filasOmitidas as $filaOmitida) {
+            if (($filaOmitida['motivo'] ?? '') === 'centrocosto_no_habilitado') {
+                $centroNoHabilitado++;
+            }
+        }
+        if ($centroNoHabilitado > 0) {
+            $advertencias[] = 'Hay '.$centroNoHabilitado
+                .' fila(s) con un centro de costo que la cuenta no tiene habilitado. Esas imputaciones no se cargan.';
+        }
 
         if ($filasOmitidas !== []) {
             $advertencias[] = $resumenOmitidas['resumen'];
@@ -458,6 +469,13 @@ class AsientoImportPreviewService
             }
             $base['centrocosto_id'] = (int) $cc->id;
             $base['centrocosto_nombre'] = (string) $cc->nombre;
+            $noHabilitado = CuentaCentrocostoHabilitadoSupport::mensaje((int) $cuenta->id, (int) $cc->id);
+            if ($noHabilitado !== null) {
+                $base['mensaje'] = $noHabilitado;
+                $base['motivo'] = 'centrocosto_no_habilitado';
+
+                return $base;
+            }
         } elseif (AsientoCentrocostoObligatorioSupport::maneja($cuenta->manejaccosto ?? null)) {
             $base['mensaje'] = 'La cuenta maneja centro de costo y el Excel no lo informa';
             $base['motivo'] = 'centrocosto_obligatorio';

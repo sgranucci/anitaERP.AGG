@@ -53,6 +53,23 @@ final class CuentaCentrocostoAsignadosSupport
         return 0;
     }
 
+    /**
+     * @return array{restringe: bool, ids: list<int>}
+     */
+    public static function restriccion(int $cuentaId): array
+    {
+        if ($cuentaId <= 0) {
+            return ['restringe' => false, 'ids' => []];
+        }
+
+        $datos = self::deCuenta($cuentaId);
+
+        return [
+            'restringe' => $datos['maneja'] && $datos['ids'] !== [],
+            'ids' => $datos['ids'],
+        ];
+    }
+
     public static function resolver(int $cuentaId, int $elegido, int $fallback): int
     {
         if ($cuentaId <= 0) {

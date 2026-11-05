@@ -48,6 +48,11 @@
                         title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>
+                    @if (can('programar-pagos-proveedor', false))
+                        <a href="{{ route('programar_pagos_proveedor') }}" class="btn btn-outline-light btn-sm ml-1">
+                            <i class="fa fa-calendar-plus"></i> Programar pagos
+                        </a>
+                    @endif
                 </div>
             </div>
 

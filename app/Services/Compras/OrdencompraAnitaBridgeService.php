@@ -157,8 +157,12 @@ class OrdencompraAnitaBridgeService
                 $this->actualizarPendmaep($oc, $ctx, $clave);
             }
 
+            $aplicadas = $this->cantidadesAplicadasPorInterno($backup['lineas'] ?? []);
+            $this->assertCantidadesAplicadasSiguenEnOc($oc, $clave, $aplicadas);
+
             $this->eliminarDetalle($clave);
             $this->grabarDetalle($oc, $ctx, $clave);
+            $this->restaurarCantidadesAplicadas($clave, $aplicadas);
             $estado['detalle_grabado'] = true;
 
             $this->grabarComprobantesCuotas($oc, $ctx, $clave);
@@ -938,6 +942,100 @@ class OrdencompraAnitaBridgeService
             ]),
             'whereArmado' => OrdencompraAnitaWhereSupport::pendmaep($clave),
         ], 'ordencompra pendmaep proveedor pad');
+    }
+
+    /**
+     * Cantidad recibida y facturada que Anita tenía antes de borrar el detalle, por nro. interno.
+     * El insert nuevo las graba en cero; hay que reponerlas después.
+     *
+     * @param  list<object>  $lineasBackup
+     * @return array<int, array{cantentr: float, cantfact: float}>
+     */
+    private function cantidadesAplicadasPorInterno(array $lineasBackup): array
+    {
+        $porInterno = [];
+        foreach ($lineasBackup as $linea) {
+            $nro = (int) ($linea->penvp_nro_interno ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            $cantentr = (float) ($linea->penvp_cantentr ?? 0);
+            $cantfact = (float) ($linea->penvp_cantfact ?? 0);
+            if ($cantentr <= 0.000001 && $cantfact <= 0.000001) {
+                continue;
+            }
+            if (! isset($porInterno[$nro])) {
+                $porInterno[$nro] = ['cantentr' => $cantentr, 'cantfact' => $cantfact];
+
+                continue;
+            }
+            $porInterno[$nro]['cantentr'] = max($porInterno[$nro]['cantentr'], $cantentr);
+            $porInterno[$nro]['cantfact'] = max($porInterno[$nro]['cantfact'], $cantfact);
+        }
+
+        return $porInterno;
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @param  array<int, array{cantentr: float, cantfact: float}>  $aplicadas
+     */
+    private function assertCantidadesAplicadasSiguenEnOc(Ordencompra $oc, array $clave, array $aplicadas): void
+    {
+        if ($aplicadas === []) {
+            return;
+        }
+
+        $internosOc = [];
+        foreach ($oc->ordencompra_articulos as $lineaOc) {
+            $nro = (int) ($lineaOc->penvp_nro_interno ?? 0);
+            if ($nro > 0) {
+                $internosOc[$nro] = true;
+            }
+        }
+
+        foreach ($aplicadas as $nroInterno => $cant) {
+            if (isset($internosOc[$nroInterno])) {
+                continue;
+            }
+            throw new \RuntimeException(
+                'La línea Anita '.$nroInterno.' de la OC #'.$clave['nro']
+                .' tiene cantidad recibida '.number_format($cant['cantentr'], 2, ',', '.')
+                .' y no está en la orden. No se regraba el detalle para no perder la recepción.'
+            );
+        }
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @param  array<int, array{cantentr: float, cantfact: float}>  $aplicadas
+     */
+    private function restaurarCantidadesAplicadas(array $clave, array $aplicadas): void
+    {
+        if ($aplicadas === []) {
+            return;
+        }
+
+        $api = new ApiAnita;
+        $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
+        foreach ($aplicadas as $nroInterno => $cant) {
+            $this->anitaEscritura($api, [
+                'acc' => 'update',
+                'sistema' => $sistema,
+                'tabla' => config('ordencompra_anita.tablas.linea'),
+                'valores' => RecepcionProveedorAnitaEscrituraSupport::pendmovpCantidadesAplicadasUpdateSet(
+                    $cant['cantentr'],
+                    $cant['cantfact']
+                ),
+                'whereArmado' => OrdencompraAnitaWhereSupport::pendmovp($clave)
+                    .' AND penvp_nro_interno='.(int) $nroInterno,
+            ], 'ordencompra pendmovp cantidades aplicadas '.$nroInterno);
+        }
+
+        Log::info('OrdencompraAnitaBridge: cantidades aplicadas conservadas', [
+            'numero_oc' => (int) $clave['nro'],
+            'lineas' => $aplicadas,
+        ]);
     }
 
     /**

@@ -181,6 +181,19 @@ return [
             ],
         ],
         [
+            'titulo' => '7.1 Programar pagos y lotes separados',
+            'parrafos' => [
+                'Antes de armar el lote, tesorería programa la deuda en Compras → Programar pagos (la misma deuda de la proyección).',
+                'Transferencias vencidas se marcan Urgente: entran al lote Urgentes del día, sin mezclarlas con cheques. Los cheques llevan Fecha de pago y entran solo al lote Cheques de esa fecha.',
+                'En la propuesta se ve el mismo detalle que la proyección (medio, leyenda, concepto). Puede quitar líneas al guardar, rearmar desde la programación o agregar deudas que todavía no están en el lote.',
+                'Una deuda que ya está en una propuesta abierta no se reprograma hasta sacarla de ese lote. El árbol, la ejecución de OP y el archivo bancario siguen igual.',
+            ],
+            'items' => [
+                'Urgentes = transferencias marcadas. Cheques = fecha de pago igual a la fecha del lote.',
+                'Las propuestas viejas, armadas por vencimiento, siguen funcionando como hasta ahora.',
+            ],
+        ],
+        [
             'titulo' => '8. Autorización de pagos (el corazón premium)',
             'captura_id' => 'pp_autorizacion',
             'herramientas_clave' => 'pp_aprobacion',

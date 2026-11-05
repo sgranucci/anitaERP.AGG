@@ -2,6 +2,8 @@
 
 namespace App\Support\Solicitudpago;
 
+use App\Support\Contable\CuentaCentrocostoHabilitadoSupport;
+
 /**
  * Líneas de asiento que realmente se graban en una solicitud de pago.
  * El cierre exige que esas líneas balanceen: una pierna con importe no se descarta en silencio.
@@ -111,6 +113,20 @@ final class SolicitudpagoAsientoCierreSupport
             $error = 'El asiento no balancea: Debe ('.number_format($totalDebe, 2, ',', '.').') '
                 .'debe ser igual a Haber ('.number_format($totalHaber, 2, ',', '.').'). '
                 .'No se puede cerrar la solicitud.';
+        }
+        if ($error === null && $lineas !== []) {
+            $pares = [];
+            foreach ($lineas as $i => $linea) {
+                $pares[] = [
+                    'cuentacontable_id' => (int) $linea['cuentacontable_id'],
+                    'centrocosto_id' => (int) ($linea['centrocosto_id'] ?? 0),
+                    'etiqueta' => 'Línea '.($i + 1),
+                ];
+            }
+            $mensajes = CuentaCentrocostoHabilitadoSupport::mensajes($pares);
+            if ($mensajes !== []) {
+                $error = 'No se puede registrar la solicitud de pago. '.implode(' ', $mensajes);
+            }
         }
 
         return [

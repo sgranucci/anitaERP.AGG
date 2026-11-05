@@ -17,6 +17,8 @@ use App\Support\Compras\PropuestaPagoAuditoriaSupport;
 use App\Support\Compras\PropuestaPagoConvenioBancarioSupport;
 use App\Support\Compras\PropuestaPagoListadoFiltros;
 use App\Support\Compras\PropuestaPagoLoteBancarioSupport;
+use App\Support\Compras\PropuestaPagoTipoLote;
+use App\Support\Compras\ProyeccionPagosProgramacionSupport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -103,13 +105,18 @@ class PropuestaPagoController extends Controller
         return $pdf->stream('propuesta_pago_'.$id.'.pdf');
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-propuesta-pago');
+        $tipo = strtoupper(trim((string) $request->query('tipo_lote', PropuestaPagoTipoLote::URGENTE_TRF)));
+        if (! in_array($tipo, [PropuestaPagoTipoLote::URGENTE_TRF, PropuestaPagoTipoLote::CHEQUE], true)) {
+            $tipo = PropuestaPagoTipoLote::URGENTE_TRF;
+        }
         $data = new PropuestaPago([
             'fecha' => date('Y-m-d'),
             'fecha_vencimiento_hasta' => date('Y-m-d', strtotime('+7 days')),
             'estado' => 'BORRADOR',
+            'tipo_lote' => $tipo,
         ]);
 
         return view('compras.propuesta_pago.crear', $this->datosFormulario($data));
@@ -128,12 +135,37 @@ class PropuestaPagoController extends Controller
             ->with('mensaje', 'Propuesta de pago creada. Revise líneas y envíe a aprobación.');
     }
 
-    public function editar(int $id)
+    public function editar(Request $request, int $id)
     {
         can('editar-propuesta-pago');
         $data = $this->propuestaPagoRepository->find($id);
+        $vars = $this->datosFormulario($data);
+        $editable = in_array((string) $data->estado, PropuestaPago::estadosEditables(), true);
+        $vars['candidatos'] = [];
+        $vars['texto_agregar'] = trim((string) $request->query('texto_agregar', ''));
+        if ($editable && $request->boolean('ver_disponibles')) {
+            $vars['candidatos'] = app(ProyeccionPagosProgramacionSupport::class)
+                ->candidatos($data, $vars['texto_agregar']);
+        }
 
-        return view('compras.propuesta_pago.editar', $this->datosFormulario($data));
+        return view('compras.propuesta_pago.editar', $vars);
+    }
+
+    public function agregarLineas(Request $request, int $id)
+    {
+        can('actualizar-propuesta-pago');
+        $ids = $request->input('cc_ids', []);
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+        $resultado = $this->propuestaPagoService->agregarLineas($id, $ids);
+        if (! $resultado['ok']) {
+            return back()->withErrors(['error' => $resultado['mensaje']]);
+        }
+
+        return redirect()
+            ->route('editar_propuesta_pago', $id)
+            ->with('mensaje', $resultado['mensaje']);
     }
 
     public function actualizar(ValidacionPropuestaPago $request, int $id)

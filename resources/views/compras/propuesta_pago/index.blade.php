@@ -26,9 +26,17 @@
                     <a href="{{ route('cash_position') }}" class="btn btn-outline-secondary btn-sm">
                         <i class="fa fa-chart-line"></i> Cash
                     </a>
+                    @if (can('programar-pagos-proveedor', false))
+                        <a href="{{ route('programar_pagos_proveedor') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa fa-calendar-plus"></i> Programar pagos
+                        </a>
+                    @endif
                     @if (can('crear-propuesta-pago', false))
-                        <a href="{{ route('crear_propuesta_pago') }}" class="btn btn-outline-secondary btn-sm">
-                            <i class="fa fa-fw fa-plus-circle"></i> Nueva propuesta
+                        <a href="{{ route('crear_propuesta_pago', ['tipo_lote' => 'URGENTE_TRF']) }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa fa-fw fa-plus-circle"></i> Urgentes
+                        </a>
+                        <a href="{{ route('crear_propuesta_pago', ['tipo_lote' => 'CHEQUE']) }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa fa-fw fa-plus-circle"></i> Cheques
                         </a>
                     @endif
                 </div>
@@ -59,6 +67,15 @@
                             </select>
                         </div>
                         <div class="form-group col-md-2">
+                            <label class="small">Tipo</label>
+                            <select name="tipo_lote" class="form-control form-control-sm">
+                                <option value="">Todos</option>
+                                <option value="URGENTE_TRF" @selected(($filtros['tipo_lote'] ?? '') === 'URGENTE_TRF')>Urgentes</option>
+                                <option value="CHEQUE" @selected(($filtros['tipo_lote'] ?? '') === 'CHEQUE')>Cheques</option>
+                                <option value="LEGACY_VENCIMIENTO" @selected(($filtros['tipo_lote'] ?? '') === 'LEGACY_VENCIMIENTO')>Por vencimiento</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-2">
                             <label class="small">Desde</label>
                             <input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ $filtros['fecha_desde'] ?? '' }}">
                         </div>
@@ -81,6 +98,7 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Fecha</th>
+                                <th>Tipo</th>
                                 <th>Empresa</th>
                                 <th>Venc. desde/hasta</th>
                                 <th class="text-right">Monto</th>
@@ -93,6 +111,10 @@
                                 <tr>
                                     <td>{{ $fila->id }}</td>
                                     <td>{{ optional($fila->fecha)->format('d/m/Y') }}</td>
+                                    <td>
+                                        @php $tipoEtiqueta = \App\Support\Compras\PropuestaPagoTipoLote::etiqueta($fila->tipo_lote ?? ''); @endphp
+                                        <span class="badge {{ ($fila->tipo_lote ?? '') === 'URGENTE_TRF' ? 'badge-danger' : (($fila->tipo_lote ?? '') === 'CHEQUE' ? 'badge-info' : 'badge-secondary') }}">{{ $tipoEtiqueta }}</span>
+                                    </td>
                                     <td>{{ $fila->empresas->nombre ?? '' }}</td>
                                     <td>
                                         {{ optional($fila->fecha_vencimiento_desde)->format('d/m/Y') }}
@@ -110,7 +132,7 @@
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="7" class="text-center text-muted">Sin propuestas</td></tr>
+                                <tr><td colspan="8" class="text-center text-muted">Sin propuestas</td></tr>
                             @endforelse
                         </tbody>
                     </table>

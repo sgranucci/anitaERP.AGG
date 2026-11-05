@@ -194,6 +194,8 @@ class PropuestaPagoLineaPresentacionSupport
             'detalle_pago' => $detallePago,
             'moneda' => (string) ($linea->monedas->abreviatura ?? ''),
             'bucket' => $bucket,
+            'leyenda' => (string) ($comp->leyenda ?? ''),
+            'detalle_concepto' => (string) ($comp?->conceptogastos->nombre ?? ''),
         ];
     }
 

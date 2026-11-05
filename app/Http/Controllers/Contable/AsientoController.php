@@ -23,6 +23,7 @@ use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCentrocostoObligatorioSupport;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
+use App\Support\Contable\CuentaCentrocostoHabilitadoSupport;
 use App\Support\Contable\CuentacontableInhabilitadaSupport;
 use App\Support\Contable\AsientoListadoFiltros;
 use App\Support\Contable\AsientoOrigenProcesoSupport;
@@ -270,6 +271,7 @@ class AsientoController extends Controller
         try {
             AsientoBalanceSupport::assertValidoParaCrudAsiento($data);
             AsientoCentrocostoObligatorioSupport::assertDesdePayload($data);
+            CuentaCentrocostoHabilitadoSupport::assertPayload($data, 'No se puede guardar el asiento.');
             CuentacontableInhabilitadaSupport::assertImputacionNueva(
                 is_array($cuentacontableIds) ? $cuentacontableIds : []
             );
@@ -405,6 +407,7 @@ class AsientoController extends Controller
         try {
             AsientoBalanceSupport::assertValidoParaCrudAsiento($dataRequest);
             AsientoCentrocostoObligatorioSupport::assertDesdePayload($dataRequest);
+            CuentaCentrocostoHabilitadoSupport::assertPayload($dataRequest, 'No se puede guardar el asiento.');
             $idsPrevios = Asiento_Movimiento::query()
                 ->where('asiento_id', $id)
                 ->pluck('cuentacontable_id')
@@ -604,6 +607,7 @@ class AsientoController extends Controller
         try {
             AsientoBalanceSupport::assertValidoParaCrudAsiento($payloadBalance);
             AsientoCentrocostoObligatorioSupport::assertDesdePayload($payloadBalance);
+            CuentaCentrocostoHabilitadoSupport::assertPayload($payloadBalance, 'No se puede guardar el asiento.');
         } catch (\InvalidArgumentException $e) {
             return ['errores' => $e->getMessage()];
         }

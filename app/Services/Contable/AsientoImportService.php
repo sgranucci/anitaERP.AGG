@@ -206,6 +206,7 @@ class AsientoImportService
         }
 
         $this->abortarSiFaltaCentrocostoObligatorio($filasOmitidas);
+        $this->abortarSiCentrocostoNoHabilitado($filasOmitidas);
 
         if (count($movimientos) < 2) {
             $lineas = ['Se necesitan al menos dos movimientos válidos para armar el asiento.'];
@@ -358,6 +359,38 @@ class AsientoImportService
         $resto = count($sinCentro) - count($muestra);
         if ($resto > 0) {
             $lineas[] = 'Hay '.$resto.' fila(s) más sin centro de costo.';
+        }
+
+        throw new \InvalidArgumentException(implode("\n", $lineas));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filasOmitidas
+     */
+    private function abortarSiCentrocostoNoHabilitado(array $filasOmitidas): void
+    {
+        $invalidos = [];
+        foreach ($filasOmitidas as $fila) {
+            if (($fila['motivo'] ?? '') === 'centrocosto_no_habilitado') {
+                $invalidos[] = $fila;
+            }
+        }
+
+        if ($invalidos === []) {
+            return;
+        }
+
+        $lineas = [
+            'No se importó el asiento: hay centros de costo que la cuenta contable no tiene habilitados.',
+        ];
+        $muestra = array_slice($invalidos, 0, 30);
+        foreach ($muestra as $fila) {
+            $lineas[] = $this->previewService->lineaErrorFila($fila);
+        }
+
+        $resto = count($invalidos) - count($muestra);
+        if ($resto > 0) {
+            $lineas[] = 'Hay '.$resto.' fila(s) más con un centro de costo no habilitado.';
         }
 
         throw new \InvalidArgumentException(implode("\n", $lineas));

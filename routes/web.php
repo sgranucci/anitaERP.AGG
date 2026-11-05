@@ -4274,6 +4274,7 @@ Route::get('compras/propuesta-pago/crear', 'Compras\PropuestaPagoController@crea
 Route::post('compras/propuesta-pago', 'Compras\PropuestaPagoController@guardar')->name('guardar_propuesta_pago');
 Route::get('compras/propuesta-pago/{id}/editar', 'Compras\PropuestaPagoController@editar')->name('editar_propuesta_pago');
 Route::put('compras/propuesta-pago/{id}', 'Compras\PropuestaPagoController@actualizar')->name('actualizar_propuesta_pago');
+Route::post('compras/propuesta-pago/{id}/agregar-lineas', 'Compras\PropuestaPagoController@agregarLineas')->name('agregar_lineas_propuesta_pago');
 Route::delete('compras/propuesta-pago/{id}', 'Compras\PropuestaPagoController@eliminar')->name('eliminar_propuesta_pago');
 
 Route::get('compras/programa-pago', 'Compras\ProgramaPagoController@index')->name('programa_pago');
@@ -4343,6 +4344,9 @@ Route::get('compras/requisicion-reporte', 'Compras\RequisicionReporteController@
 Route::get('compras/listar-requisicion-reporte/{formato?}', 'Compras\RequisicionReporteController@exportar')->name('listar_reporte_requisicion_compras');
 Route::get('compras/proyeccion-pagos', 'Compras\ProyeccionPagosReporteController@index')->name('reporte_proyeccion_pagos');
 Route::get('compras/listar-proyeccion-pagos/{formato?}', 'Compras\ProyeccionPagosReporteController@exportar')->name('listar_reporte_proyeccion_pagos');
+Route::get('compras/programar-pagos', 'Compras\ProyeccionPagosProgramacionController@index')->name('programar_pagos_proveedor');
+Route::post('compras/programar-pagos', 'Compras\ProyeccionPagosProgramacionController@grabar')->name('grabar_programar_pagos_proveedor');
+Route::get('compras/listar-programar-pagos/{formato?}', 'Compras\ProyeccionPagosProgramacionController@exportar')->name('listar_programar_pagos_proveedor');
 Route::get('compras/proveedor-cuentacorriente-reporte', 'Compras\ProveedorCuentacorrienteReporteController@index')->name('proveedor_cuentacorriente_reporte');
 Route::get('compras/listar-proveedor-cuentacorriente-reporte/{formato}', 'Compras\ProveedorCuentacorrienteReporteController@exportar')->name('listar_proveedor_cuentacorriente_reporte');
 Route::get('compras/pagos-sabana', 'Compras\PagosSabanaReporteController@index')->name('reporte_pagos_sabana');

@@ -13,6 +13,9 @@ use App\Support\Compras\PropuestaPagoInstrumentoSupport;
 use App\Support\Compras\PropuestaPagoLineaPresentacionSupport;
 use App\Support\Compras\PropuestaPagoLoteBancarioSupport;
 use App\Support\Compras\PropuestaPagoModoSupport;
+use App\Support\Compras\PropuestaPagoTipoLote;
+use App\Support\Compras\ProyeccionPagosProgramacionSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
 use Auth;
 use DB;
@@ -41,9 +44,18 @@ class PropuestaPagoService
                     throw new Exception('Debe indicar la empresa.');
                 }
 
+                $tipoLote = PropuestaPagoTipoLote::normalizar((string) ($data['tipo_lote'] ?? ''));
+                if (! in_array($tipoLote, [PropuestaPagoTipoLote::URGENTE_TRF, PropuestaPagoTipoLote::CHEQUE], true)) {
+                    throw new Exception('Indique el tipo de lote: Urgentes (transferencias) o Cheques.');
+                }
+                if (PropuestaPagoTipoLote::esProgramado($tipoLote) && ! ProyeccionPagosProgramacionSupport::columnasDisponibles()) {
+                    throw new Exception('Falta la programación de pagos en la deuda. Corra la migración de fecha de pago.');
+                }
+
                 $propuesta = $this->propuestaPagoRepository->create([
                     'empresa_id' => $empresaId,
                     'fecha' => $data['fecha'] ?? date('Y-m-d'),
+                    'tipo_lote' => $tipoLote,
                     'fecha_vencimiento_desde' => $data['fecha_vencimiento_desde'] ?? null,
                     'fecha_vencimiento_hasta' => $data['fecha_vencimiento_hasta'] ?? null,
                     'moneda_id' => ($data['moneda_id'] ?? null) ?: null,
@@ -113,8 +125,12 @@ class PropuestaPagoService
                     'estado' => 'BORRADOR',
                 ], $id);
 
+                $this->quitarLineas($id, (array) ($data['quitar_linea_ids'] ?? []));
+
                 if (! empty($data['rearmar_lineas'])) {
-                    PropuestaPagoLinea::query()->where('propuesta_pago_id', $id)->delete();
+                    EloquentAuditDeleteSupport::each(
+                        PropuestaPagoLinea::query()->where('propuesta_pago_id', $id)
+                    );
                     $propuesta = $this->propuestaPagoRepository->findOrFail($id);
                     $this->sincronizarLineasDesdeDeuda($propuesta, $data);
                 } else {
@@ -487,6 +503,7 @@ class PropuestaPagoService
             $nueva = $this->propuestaPagoRepository->create([
                 'empresa_id' => (int) $origen->empresa_id,
                 'fecha' => date('Y-m-d'),
+                'tipo_lote' => PropuestaPagoTipoLote::normalizar((string) ($origen->tipo_lote ?? '')),
                 'fecha_vencimiento_desde' => $origen->fecha_vencimiento_desde,
                 'fecha_vencimiento_hasta' => $origen->fecha_vencimiento_hasta,
                 'moneda_id' => $origen->moneda_id,
@@ -604,46 +621,173 @@ class PropuestaPagoService
             })
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
-        if ($desde) {
-            $query->where(function ($q) use ($desde) {
-                $q->whereNull('fechavencimiento')
-                    ->orWhereDate('fechavencimiento', '>=', $desde);
-            });
-        }
-        if ($hasta) {
-            $query->where(function ($q) use ($hasta) {
-                $q->whereNull('fechavencimiento')
-                    ->orWhereDate('fechavencimiento', '<=', $hasta);
-            });
+        $tipo = PropuestaPagoTipoLote::normalizar((string) ($propuesta->tipo_lote ?? ''));
+        $programado = PropuestaPagoTipoLote::esProgramado($tipo);
+
+        if ($programado) {
+            if (! ProyeccionPagosProgramacionSupport::columnasDisponibles()) {
+                throw new Exception('Falta la programación de pagos en la deuda.');
+            }
+            if ($tipo === PropuestaPagoTipoLote::URGENTE_TRF) {
+                $query->where('proveedor_cuentacorriente.urgente_pago', true);
+            } else {
+                $fechaLote = $propuesta->fecha ? $propuesta->fecha->format('Y-m-d') : date('Y-m-d');
+                $query->whereDate('proveedor_cuentacorriente.fecha_pago', $fechaLote);
+            }
+        } else {
+            if ($desde) {
+                $query->where(function ($q) use ($desde) {
+                    $q->whereNull('fechavencimiento')
+                        ->orWhereDate('fechavencimiento', '>=', $desde);
+                });
+            }
+            if ($hasta) {
+                $query->where(function ($q) use ($hasta) {
+                    $q->whereNull('fechavencimiento')
+                        ->orWhereDate('fechavencimiento', '<=', $hasta);
+                });
+            }
         }
 
         $deudas = $query->get();
+        $ocupados = ProyeccionPagosProgramacionSupport::mapaOcupados(
+            $deudas->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            (int) $propuesta->id
+        );
 
         foreach ($deudas as $cc) {
-            $aplicado = (float) ($cc->aplicado ?? 0);
-            $saldo = abs((float) $cc->total + $aplicado);
-            if ($saldo <= 0.0001) {
+            if (isset($ocupados[(int) $cc->id])) {
                 continue;
             }
-
-            $medio = PropuestaPagoLineaPresentacionSupport::resolverMedioDesdeCuentacorriente($cc);
-
-            PropuestaPagoLinea::query()->create([
-                'propuesta_pago_id' => $propuesta->id,
-                'proveedor_id' => (int) $cc->proveedor_id,
-                'proveedor_cuentacorriente_id' => (int) $cc->id,
-                'comprobante_proveedor_id' => $cc->comprobante_proveedor_id ?? null,
-                'ordencompra_id' => $medio['ordencompra_id'],
-                'fechavencimiento' => $cc->fechavencimiento,
-                'moneda_id' => (int) ($cc->moneda_id ?: 1),
-                'formapago_id' => $medio['formapago_id'],
-                'detalle_pago' => $medio['detalle_pago'] !== '' ? mb_substr($medio['detalle_pago'], 0, 255) : null,
-                'saldo_deuda' => round($saldo, 4),
-                'monto_propuesto' => round($saldo, 4),
-                'incluido' => true,
-                'estado_linea' => 'PENDIENTE',
-            ]);
+            $this->crearLineaDesdeDeuda($propuesta, $cc, $tipo);
         }
+    }
+
+    /**
+     * @param  list<int>  $ccIds
+     * @return array{ok: bool, mensaje: string, agregadas: int}
+     */
+    public function agregarLineas(int $propuestaId, array $ccIds): array
+    {
+        $ccIds = array_values(array_unique(array_filter(array_map('intval', $ccIds), fn (int $id) => $id > 0)));
+        if ($ccIds === []) {
+            return ['ok' => false, 'mensaje' => 'Seleccione al menos una deuda.', 'agregadas' => 0];
+        }
+
+        try {
+            $agregadas = DB::transaction(function () use ($propuestaId, $ccIds) {
+                $propuesta = PropuestaPago::query()->whereKey($propuestaId)->lockForUpdate()->first();
+                if ($propuesta === null) {
+                    throw new Exception('Propuesta no encontrada.');
+                }
+                if (! in_array((string) $propuesta->estado, PropuestaPago::estadosEditables(), true)) {
+                    throw new Exception('La propuesta no es editable en estado '.$propuesta->estado.'.');
+                }
+
+                $tipo = PropuestaPagoTipoLote::normalizar((string) $propuesta->tipo_lote);
+                $ya = PropuestaPagoLinea::query()
+                    ->where('propuesta_pago_id', $propuestaId)
+                    ->pluck('proveedor_cuentacorriente_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+                $ocupados = ProyeccionPagosProgramacionSupport::mapaOcupados($ccIds, $propuestaId);
+
+                $deudas = Proveedor_Cuentacorriente::query()
+                    ->with([
+                        'comprobante_proveedores',
+                        'comprobante_proveedor_cuotas.formapagos',
+                        'comprobante_proveedor_cuotas.ordencompra_comprobante_cuotas.formapagos',
+                        'comprobante_proveedor_cuotas.ordencompra_comprobante_cuotas.ordencompra_comprobantes',
+                        'monedas',
+                    ])
+                    ->select('proveedor_cuentacorriente.*')
+                    ->addSelect([
+                        'aplicado' => Proveedor_Cuentacorriente_Aplicacion::query()
+                            ->selectRaw('SUM(total)')
+                            ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
+                    ])
+                    ->where('empresa_id', (int) $propuesta->empresa_id)
+                    ->whereIn('id', $ccIds)
+                    ->whereNotNull('comprobante_proveedor_id')
+                    ->get();
+
+                $n = 0;
+                foreach ($deudas as $cc) {
+                    $ccId = (int) $cc->id;
+                    if (in_array($ccId, $ya, true) || isset($ocupados[$ccId])) {
+                        continue;
+                    }
+                    if ($this->crearLineaDesdeDeuda($propuesta, $cc, $tipo)) {
+                        $n++;
+                    }
+                }
+                $this->recalcularMontoTotal($propuestaId);
+
+                return $n;
+            });
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'mensaje' => $e->getMessage(), 'agregadas' => 0];
+        }
+
+        return [
+            'ok' => true,
+            'mensaje' => $agregadas > 0
+                ? 'Se agregaron '.$agregadas.' pago(s) a la propuesta.'
+                : 'Ninguna deuda coincidía con el lote o ya estaba incluida.',
+            'agregadas' => $agregadas,
+        ];
+    }
+
+    /**
+     * @param  list<int|string>  $lineaIds
+     */
+    private function quitarLineas(int $propuestaId, array $lineaIds): void
+    {
+        $ids = array_values(array_filter(array_map('intval', $lineaIds), fn (int $id) => $id > 0));
+        if ($ids === []) {
+            return;
+        }
+
+        EloquentAuditDeleteSupport::each(
+            PropuestaPagoLinea::query()
+                ->where('propuesta_pago_id', $propuestaId)
+                ->whereIn('id', $ids)
+                ->where(function ($q) {
+                    $q->whereNull('pagoproveedor_id')->orWhere('pagoproveedor_id', 0);
+                })
+        );
+    }
+
+    private function crearLineaDesdeDeuda(PropuestaPago $propuesta, Proveedor_Cuentacorriente $cc, string $tipo): bool
+    {
+        $aplicado = (float) ($cc->aplicado ?? 0);
+        $saldo = abs((float) $cc->total + $aplicado);
+        if ($saldo <= 0.0001) {
+            return false;
+        }
+
+        $medio = PropuestaPagoLineaPresentacionSupport::resolverMedioDesdeCuentacorriente($cc);
+        if (! PropuestaPagoTipoLote::admite($tipo, $medio['medio_pago'])) {
+            return false;
+        }
+
+        PropuestaPagoLinea::query()->create([
+            'propuesta_pago_id' => $propuesta->id,
+            'proveedor_id' => (int) $cc->proveedor_id,
+            'proveedor_cuentacorriente_id' => (int) $cc->id,
+            'comprobante_proveedor_id' => $cc->comprobante_proveedor_id ?? null,
+            'ordencompra_id' => $medio['ordencompra_id'],
+            'fechavencimiento' => $cc->fechavencimiento,
+            'moneda_id' => (int) ($cc->moneda_id ?: 1),
+            'formapago_id' => $medio['formapago_id'],
+            'detalle_pago' => $medio['detalle_pago'] !== '' ? mb_substr($medio['detalle_pago'], 0, 255) : null,
+            'saldo_deuda' => round($saldo, 4),
+            'monto_propuesto' => round($saldo, 4),
+            'incluido' => true,
+            'estado_linea' => 'PENDIENTE',
+        ]);
+
+        return true;
     }
 
     /**

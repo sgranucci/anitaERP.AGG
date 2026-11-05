@@ -19,6 +19,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Proyección de pagos a proveedores (equivalente Anita l-proy.c) leyendo solo anitaERP.
@@ -582,7 +583,16 @@ class ProyeccionPagosReporteService
                 'e.nombre as nombreempresa',
                 'mon.abreviatura as moneda_abreviatura',
                 DB::raw(SqlDialectSupport::coalesce('apl.aplicado', '0').' as aplicado'),
-            ])
+            ]);
+
+        if (Schema::hasColumn('proveedor_cuentacorriente', 'fecha_pago')) {
+            $query->addSelect([
+                'cc.fecha_pago as fecha_pago',
+                'cc.urgente_pago as urgente_pago',
+            ]);
+        }
+
+        $query
             ->where('cc.fecha', '<=', $fechaBase)
             // Mismo criterio que la deuda de proveedores, no el saldo de la ficha.
             // La ficha suma total + aplicaciones y deja abierto un documento ya cubierto
@@ -726,6 +736,9 @@ class ProyeccionPagosReporteService
             'detalle_concepto' => (string) ($concepto['conceptogasto_nombre'] ?? ''),
             'cuenta_concepto' => $this->textoCuentaConcepto($concepto),
             'leyenda' => (string) ($row->leyenda ?? ''),
+            'fecha_pago' => $row->fecha_pago ?? null,
+            'urgente' => ! empty($row->urgente_pago) ? 'SI' : '',
+            'urgente_del_dia' => ! empty($row->urgente_pago) ? 'SI' : '',
         ];
 
         foreach ($this->clavesTramos($tramos) as $clave) {
@@ -814,6 +827,9 @@ class ProyeccionPagosReporteService
             'detalle_concepto' => (string) ($concepto['conceptogasto_nombre'] ?? ''),
             'cuenta_concepto' => $this->textoCuentaConcepto($concepto),
             'leyenda' => '',
+            'fecha_pago' => null,
+            'urgente' => '',
+            'urgente_del_dia' => '',
         ];
 
         return [

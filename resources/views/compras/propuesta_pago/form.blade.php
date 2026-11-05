@@ -5,12 +5,41 @@
     'col_label' => 'col-lg-3 control-label text-right pr-2',
     'col_input' => 'col-lg-6',
 ])
+@php
+    $tipoLote = old('tipo_lote', $data->tipo_lote ?? \App\Support\Compras\PropuestaPagoTipoLote::URGENTE_TRF);
+    $esProgramada = \App\Support\Compras\PropuestaPagoTipoLote::esProgramado($tipoLote);
+    $yaExiste = isset($data->id) && $data->id;
+@endphp
+<div class="form-group row">
+    <label for="tipo_lote" class="col-lg-3 control-label text-right pr-2 requerido">Tipo de lote</label>
+    <div class="col-lg-4">
+        @if ($yaExiste)
+            <input type="text" class="form-control" readonly value="{{ \App\Support\Compras\PropuestaPagoTipoLote::etiqueta($tipoLote) }}">
+        @else
+            <select name="tipo_lote" id="tipo_lote" class="form-control" required>
+                <option value="URGENTE_TRF" @selected($tipoLote === 'URGENTE_TRF')>Urgentes (transferencias)</option>
+                <option value="CHEQUE" @selected($tipoLote === 'CHEQUE')>Cheques del día</option>
+            </select>
+        @endif
+        <small class="form-text text-muted">
+            @if ($tipoLote === 'CHEQUE')
+                Trae cheques con fecha de pago igual a la fecha del lote.
+            @elseif ($tipoLote === 'URGENTE_TRF')
+                Trae transferencias marcadas urgentes en Programar pagos.
+            @else
+                Propuesta anterior: se arma por rango de vencimiento.
+            @endif
+            <a href="{{ route('programar_pagos_proveedor') }}">Programar pagos</a>
+        </small>
+    </div>
+</div>
 <div class="form-group row">
     <label for="fecha" class="col-lg-3 control-label text-right pr-2 requerido">Fecha propuesta</label>
     <div class="col-lg-3">
         <input type="date" name="fecha" id="fecha" class="form-control" value="{{ old('fecha', optional($data->fecha)->format('Y-m-d') ?? date('Y-m-d')) }}" required>
     </div>
 </div>
+@if (! $esProgramada)
 <div class="form-group row">
     <label for="fecha_vencimiento_desde" class="col-lg-3 control-label text-right pr-2">Vencimiento desde</label>
     <div class="col-lg-3">
@@ -23,6 +52,7 @@
                value="{{ old('fecha_vencimiento_hasta', optional($data->fecha_vencimiento_hasta)->format('Y-m-d')) }}">
     </div>
 </div>
+@endif
 <div class="form-group row">
     <label for="detalle" class="col-lg-3 control-label text-right pr-2">Detalle</label>
     <div class="col-lg-8">
@@ -79,8 +109,14 @@
 @include('compras.propuesta_pago.partials.grilla_lineas')
 
 @if (isset($data->id) && $data->id && (! $data->lineas || $data->lineas->count() === 0))
-    <div class="alert alert-warning mt-3">No hay líneas de deuda en el rango de vencimientos. Guarde con «Rearmar líneas» o amplíe el rango.</div>
+    <div class="alert alert-warning mt-3">No hay líneas. Guarde con «Rearmar líneas» o programe la deuda y vuelva a armar el lote.</div>
     <input type="hidden" name="rearmar_lineas" value="1">
 @elseif (! isset($data->id) || ! $data->id)
-    <div class="alert alert-info mt-3">Al guardar se cargarán las deudas abiertas del rango de vencimiento indicado.</div>
+    <div class="alert alert-info mt-3">
+        @if ($esProgramada)
+            Al guardar se cargan las deudas ya programadas para este tipo de lote.
+        @else
+            Al guardar se cargarán las deudas abiertas del rango de vencimiento indicado.
+        @endif
+    </div>
 @endif

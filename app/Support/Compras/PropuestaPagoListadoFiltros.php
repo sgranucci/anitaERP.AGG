@@ -30,6 +30,7 @@ class PropuestaPagoListadoFiltros
             'estado' => trim((string) $request->input('estado', '')),
             'fecha_desde' => trim((string) $request->input('fecha_desde', '')),
             'fecha_hasta' => trim((string) $request->input('fecha_hasta', '')),
+            'tipo_lote' => self::tipoLote($request),
             'busqueda' => $valor,
             'valor' => $valor,
         ];
@@ -42,6 +43,7 @@ class PropuestaPagoListadoFiltros
             'estado' => '',
             'fecha_desde' => '',
             'fecha_hasta' => '',
+            'tipo_lote' => '',
             'busqueda' => '',
             'valor' => '',
         ];
@@ -53,6 +55,7 @@ class PropuestaPagoListadoFiltros
             || trim((string) ($filtros['estado'] ?? '')) !== ''
             || trim((string) ($filtros['fecha_desde'] ?? '')) !== ''
             || trim((string) ($filtros['fecha_hasta'] ?? '')) !== ''
+            || trim((string) ($filtros['tipo_lote'] ?? '')) !== ''
             || trim((string) ($filtros['busqueda'] ?? $filtros['valor'] ?? '')) !== '';
     }
 
@@ -74,10 +77,20 @@ class PropuestaPagoListadoFiltros
         if (trim((string) ($filtros['fecha_hasta'] ?? '')) !== '') {
             $params['fecha_hasta'] = $filtros['fecha_hasta'];
         }
+        if (trim((string) ($filtros['tipo_lote'] ?? '')) !== '') {
+            $params['tipo_lote'] = $filtros['tipo_lote'];
+        }
         if (trim((string) ($filtros['busqueda'] ?? $filtros['valor'] ?? '')) !== '') {
             $params['filtro_valor'] = $filtros['busqueda'] ?? $filtros['valor'];
         }
 
         return $params;
+    }
+
+    private static function tipoLote(Request $request): string
+    {
+        $tipo = strtoupper(trim((string) $request->input('tipo_lote', '')));
+
+        return in_array($tipo, PropuestaPagoTipoLote::todos(), true) ? $tipo : '';
     }
 }

@@ -507,6 +507,15 @@ final class RecepcionProveedorAnitaEscrituraSupport
         ]);
     }
 
+    /** Cantidad recibida y facturada que la línea ya tenía en Anita, antes de regrabar el detalle. */
+    public static function pendmovpCantidadesAplicadasUpdateSet(float $cantentr, float $cantfact): string
+    {
+        return self::updateSet([
+            'penvp_cantentr' => self::decimalSql($cantentr),
+            'penvp_cantfact' => self::decimalSql($cantfact),
+        ]);
+    }
+
     /** Cierre administrativo de línea OC en Anita (penvp_partida = -1). */
     public static function pendmovpCerrarLineaUpdateSet(float $cantidadOc): string
     {

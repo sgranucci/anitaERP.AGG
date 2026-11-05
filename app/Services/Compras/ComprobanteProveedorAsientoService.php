@@ -17,6 +17,7 @@ use App\Support\Compras\ComprobanteProveedorAsientoCuadreSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoDescripcionSupport;
 use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Contable\CuentaCentrocostoAsignadosSupport;
+use App\Support\Contable\CuentaCentrocostoHabilitadoSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorCuentaDebeNetoSupport;
@@ -573,6 +574,14 @@ class ComprobanteProveedorAsientoService
             // Si la cuenta no maneja centro, solo el único de la matriz.
             $conceptoIdLinea = (int) ($linea->concepto_ivacompra_id ?? 0);
             if ($esNetoSinReferencia && $cuentaId > 0) {
+                $ccElegido = (int) ($linea->centrocosto_id ?? 0);
+                if ($ccElegido > 0) {
+                    CuentaCentrocostoHabilitadoSupport::assertPares([[
+                        'cuentacontable_id' => $cuentaId,
+                        'centrocosto_id' => $ccElegido,
+                        'etiqueta' => 'concepto',
+                    ]], 'No se puede registrar la factura.');
+                }
                 $trozosCc = [[
                     'centrocosto_id' => CuentaCentrocostoAsignadosSupport::resolver(
                         $cuentaId,
@@ -1027,6 +1036,11 @@ class ComprobanteProveedorAsientoService
         }
 
         $totalHaber = round(array_sum(array_column($lineasHaber, 'importe')), 2);
+
+        CuentaCentrocostoHabilitadoSupport::assertPayload(
+            $payloadAsiento,
+            'No se puede registrar la factura.'
+        );
 
         return [
             'total_debe' => $totalDebe,

@@ -71,7 +71,7 @@
                         <div class="form-group row">
                             <div class="col-lg-9 offset-lg-3">
                                 <label class="mb-0">
-                                    <input type="checkbox" name="rearmar_lineas" value="1"> Rearmar líneas desde deuda (reemplaza la grilla)
+                                    <input type="checkbox" name="rearmar_lineas" value="1"> Rearmar líneas desde la programación (reemplaza la grilla)
                                 </label>
                             </div>
                         </div>
@@ -215,6 +215,56 @@
                 </div>
             @endif
         </div>
+        @if (! empty($editable))
+            <div class="card card-outline card-info mt-3">
+                <div class="card-header">
+                    <h3 class="card-title">Agregar pagos</h3>
+                </div>
+                <div class="card-body">
+                    <form method="get" action="{{ route('editar_propuesta_pago', $data->id) }}" class="form-inline mb-3">
+                        <input type="hidden" name="ver_disponibles" value="1">
+                        <input type="text" name="texto_agregar" class="form-control form-control-sm mr-2" value="{{ $texto_agregar ?? '' }}" placeholder="Proveedor o comprobante">
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Ver disponibles</button>
+                    </form>
+                    @if (! empty($candidatos))
+                        <form method="post" action="{{ route('agregar_lineas_propuesta_pago', $data->id) }}">
+                            @csrf
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered" style="font-size:12px;">
+                                    <thead style="background:#85C1E9;color:#17202A;">
+                                        <tr>
+                                            <th></th>
+                                            <th>Proveedor</th>
+                                            <th>Comprobante</th>
+                                            <th>F.Vto.</th>
+                                            <th>M.Pago</th>
+                                            <th>Leyenda</th>
+                                            <th class="text-right">Adeudado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($candidatos as $cand)
+                                            <tr>
+                                                <td><input type="checkbox" name="cc_ids[]" value="{{ $cand['id'] }}"></td>
+                                                <td>{{ $cand['proveedor_codigo'] }} {{ $cand['proveedor_nombre'] }}</td>
+                                                <td>{{ $cand['comprobante'] }}</td>
+                                                <td>{{ $cand['fecha_vto'] }}</td>
+                                                <td>{{ $cand['medio_pago'] }}</td>
+                                                <td>{{ $cand['leyenda'] }}</td>
+                                                <td class="text-right">{{ number_format((float) $cand['total_adeudado'], 2, ',', '.') }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm">Agregar seleccionados</button>
+                        </form>
+                    @elseif (request()->boolean('ver_disponibles'))
+                        <p class="text-muted mb-0">No hay deudas de este lote fuera de la propuesta.</p>
+                    @endif
+                </div>
+            </div>
+        @endif
     </div>
 </div>
 @endsection

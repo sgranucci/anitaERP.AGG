@@ -401,6 +401,7 @@
 			return;
 		}
 		if (!artId) {
+			$row.removeData('req-cuenta-cc');
 			$el.addClass('d-none').removeClass('is-vacia').text('').removeAttr('title');
 			return;
 		}
@@ -415,7 +416,46 @@
 		}
 		var texto = codigo && nombre ? (codigo + ' · ' + nombre) : (codigo || nombre);
 		var rotulo = tipo === 'GASTOS' ? 'Cuenta de gastos' : 'Cuenta de compras';
-		$el.removeClass('d-none is-vacia').text(texto).attr('title', rotulo + ' de la empresa: ' + texto);
+		var titulo = rotulo + ' de la empresa: ' + texto;
+		if (window.ArticuloCentrocostoCuenta && window.ArticuloCentrocostoCuenta.restringe(payload)) {
+			var permitidos = [];
+			var idsOk = window.ArticuloCentrocostoCuenta.idsPermitidos(payload);
+			$row.find('select[name="centrocostodestino_ids[]"] option').each(function () {
+				var idOpt = parseInt(this.value, 10) || 0;
+				if (idsOk.indexOf(idOpt) >= 0) {
+					permitidos.push($.trim($(this).text()));
+				}
+			});
+			if (permitidos.length) {
+				titulo += '. Centros de costo habilitados: ' + permitidos.join(', ');
+			}
+		}
+		$el.removeClass('d-none is-vacia').text(texto).attr('title', titulo);
+	}
+
+	function filaArticuloEditable($row) {
+		var $cod = $row.find('.codigoarticulo').first();
+		return $cod.length && !$cod.prop('readonly') && !$cod.prop('disabled');
+	}
+
+	function textoCentroSeleccionado($row) {
+		return $.trim($row.find('select[name="centrocostodestino_ids[]"] option:selected').text());
+	}
+
+	function rechazarArticuloPorCentrocosto($row, mensaje) {
+		$row.find('.articulo_id').val('');
+		$row.find('.codigoarticulo').val('');
+		$row.find('.descripcionarticulo').val('');
+		$row.removeData('req-cuenta-cc');
+		pintarCuentaArticulo($row, null);
+		$row.find('.codigoarticulo').trigger('change');
+		if (window.ArticuloProveedorOperativo && typeof window.ArticuloProveedorOperativo.aplicarAFila === 'function') {
+			window.ArticuloProveedorOperativo.aplicarAFila($row, null, null);
+		}
+		setTimeout(function () {
+			alert(mensaje);
+			$row.find('.codigoarticulo').first().trigger('focus');
+		}, 0);
 	}
 
 	function filaExigeCapexPuente($row) {
@@ -487,30 +527,95 @@
 			});
 	}
 
-	function cargarCuentaArticuloFila($row) {
+	function cargarCuentaArticuloFila($row, opciones) {
 		if (!$row || !$row.length) {
 			return;
 		}
+		opciones = opciones || {};
 		var artId = parseInt($row.find('.articulo_id').val(), 10) || 0;
 		var empId = parseInt($('#empresa_id').val(), 10) || 0;
 		if (!artId || !empId) {
+			$row.removeData('req-cuenta-cc');
 			pintarCuentaArticulo($row, null);
 			return;
 		}
 		var token = String(Date.now()) + '-' + artId + '-' + empId;
 		$row.attr('data-req-cuenta-token', token);
-		$.get(urlCuentaCompraGasto(artId), { empresa_id: empId })
-			.done(function (resp) {
-				if ($row.attr('data-req-cuenta-token') !== token) {
-					return;
-				}
-				pintarCuentaArticulo($row, resp || {});
-			});
+		var pedido = window.ArticuloCentrocostoCuenta
+			? window.ArticuloCentrocostoCuenta.consultar(artId, empId)
+			: $.get(urlCuentaCompraGasto(artId), { empresa_id: empId });
+		pedido.done(function (resp) {
+			if ($row.attr('data-req-cuenta-token') !== token) {
+				return;
+			}
+			resp = resp || {};
+			$row.data('req-cuenta-cc', resp);
+			var ccId = $row.find('select[name="centrocostodestino_ids[]"]').val();
+			if (opciones.avisar && filaArticuloEditable($row)
+				&& window.ArticuloCentrocostoCuenta
+				&& !window.ArticuloCentrocostoCuenta.permitido(resp, ccId)) {
+				var sku = String($row.find('.codigoarticulo').val() || '').trim();
+				rechazarArticuloPorCentrocosto(
+					$row,
+					window.ArticuloCentrocostoCuenta.mensaje(resp, sku, textoCentroSeleccionado($row))
+				);
+				return;
+			}
+			pintarCuentaArticulo($row, resp);
+		});
+	}
+
+	function centrocostoLineaPermitido($row, ccId) {
+		var payload = $row.data('req-cuenta-cc');
+		if (!payload || !window.ArticuloCentrocostoCuenta) {
+			return true;
+		}
+		return window.ArticuloCentrocostoCuenta.permitido(payload, ccId);
 	}
 
 	window.reqLimpiarCuentaArticulo = function ($row) {
 		pintarCuentaArticulo($row, null);
 	};
+
+	function registrarValidacionCentrocostoCuenta() {
+		$(SELECTOR_TABLA).find(SELECTOR_FILA).each(function () {
+			var $row = $(this);
+			if ((parseInt($row.find('.articulo_id').val(), 10) || 0) > 0) {
+				cargarCuentaArticuloFila($row, { avisar: false });
+			}
+		});
+
+		$(document)
+			.off('submit.reqCcCuenta', '#form-general')
+			.on('submit.reqCcCuenta', '#form-general', function (e) {
+				if (!window.ArticuloCentrocostoCuenta) {
+					return;
+				}
+				var faltan = [];
+				$(SELECTOR_TABLA).find(SELECTOR_FILA).each(function () {
+					var $row = $(this);
+					var cant = parseFloat($row.find('.cantidad-linea').val()) || 0;
+					var artId = parseInt($row.find('.articulo_id').val(), 10) || 0;
+					if (!artId || cant <= 0) {
+						return;
+					}
+					var payload = $row.data('req-cuenta-cc');
+					var ccId = $row.find('select[name="centrocostodestino_ids[]"]').val();
+					if (!payload || window.ArticuloCentrocostoCuenta.permitido(payload, ccId)) {
+						return;
+					}
+					var sku = String($row.find('.codigoarticulo').val() || '').trim();
+					faltan.push(window.ArticuloCentrocostoCuenta.mensaje(payload, sku, textoCentroSeleccionado($row)));
+				});
+				if (!faltan.length) {
+					return;
+				}
+				e.preventDefault();
+				e.stopImmediatePropagation();
+				alert(faltan.join('\n'));
+				return false;
+			});
+	}
 
 	function registrarCuentaArticulo() {
 		$(document)
@@ -529,7 +634,7 @@
 					return;
 				}
 				$(SELECTOR_TABLA).find(SELECTOR_FILA).each(function () {
-					cargarCuentaArticuloFila($(this));
+					cargarCuentaArticuloFila($(this), { avisar: filaArticuloEditable($(this)) });
 				});
 			});
 	}
@@ -542,7 +647,7 @@
 			pintarCuentaArticulo($row, null);
 			return;
 		}
-		cargarCuentaArticuloFila($row);
+		cargarCuentaArticuloFila($row, { avisar: true });
 		var sku = String(dataArticulo.sku || $row.find('.codigoarticulo').val() || '').trim();
 		if (!esPrimeraFila($row) && !filaCcManual($row)) {
 			aplicarPatronCcDestino($row);
@@ -575,19 +680,80 @@
 		aplicarPrecioUltimaCompra($row, sku, callback);
 	};
 
+	function avisarCentrosPropagadosNoHabilitados() {
+		if (!window.ArticuloCentrocostoCuenta) {
+			return;
+		}
+		var avisos = [];
+		$filas().each(function () {
+			var $row = $(this);
+			if (esPrimeraFila($row) || filaCcManual($row)) {
+				return;
+			}
+			var payload = $row.data('req-cuenta-cc');
+			var $sel = $row.find('select[name="centrocostodestino_ids[]"]');
+			if (!payload || window.ArticuloCentrocostoCuenta.permitido(payload, $sel.val())) {
+				$sel.data('cc-antes', $sel.val());
+				return;
+			}
+			var textoIntentado = textoCentroSeleccionado($row);
+			var anterior = $sel.data('cc-antes') || $sel.data('req-valor-anterior');
+			if (anterior) {
+				$sel.val(anterior);
+			}
+			$row.attr('data-req-cc-manual', '1');
+			var sku = String($row.find('.codigoarticulo').val() || '').trim();
+			avisos.push(window.ArticuloCentrocostoCuenta.mensaje(payload, sku, textoIntentado));
+		});
+		if (avisos.length) {
+			alert(avisos.join('\n'));
+		}
+	}
+
 	function registrarCambiosPatron() {
+		$(document)
+			.off('focus.reqCcAntes', SELECTOR_TABLA + ' select[name="centrocostodestino_ids[]"]')
+			.on('focus.reqCcAntes', SELECTOR_TABLA + ' select[name="centrocostodestino_ids[]"]', function () {
+				$(this).data('cc-antes', $(this).val());
+			});
+
 		$(document)
 			.off('change.reqPatronCc', SELECTOR_TABLA + ' ' + SELECTOR_FILA + ':first select[name="centrocostodestino_ids[]"]')
 			.on('change.reqPatronCc', SELECTOR_TABLA + ' ' + SELECTOR_FILA + ':first select[name="centrocostodestino_ids[]"]', function () {
-				var valorAnterior = $(this).data('req-valor-anterior');
-				$(this).data('req-valor-anterior', $(this).val());
+				var $sel = $(this);
+				var valorAnterior = $sel.data('req-valor-anterior');
+				if (!centrocostoLineaPermitido($sel.closest(SELECTOR_FILA), $sel.val())) {
+					var $rowCc = $sel.closest(SELECTOR_FILA);
+					var textoIntentado = textoCentroSeleccionado($rowCc);
+					if (valorAnterior) {
+						$sel.val(valorAnterior);
+					}
+					var skuCc = String($rowCc.find('.codigoarticulo').val() || '').trim();
+					alert(window.ArticuloCentrocostoCuenta.mensaje($rowCc.data('req-cuenta-cc'), skuCc, textoIntentado));
+					return;
+				}
+				$sel.data('req-valor-anterior', $sel.val());
 				propagarPatronCcDesdePrimera(valorAnterior);
+				avisarCentrosPropagadosNoHabilitados();
 			});
 
 		$(document)
 			.off('change.reqPatronCcManual', SELECTOR_TABLA + ' ' + SELECTOR_FILA + ':not(:first) select[name="centrocostodestino_ids[]"]')
 			.on('change.reqPatronCcManual', SELECTOR_TABLA + ' ' + SELECTOR_FILA + ':not(:first) select[name="centrocostodestino_ids[]"]', function () {
-				marcarCcManual($(this).closest(SELECTOR_FILA));
+				var $sel = $(this);
+				var $rowCc = $sel.closest(SELECTOR_FILA);
+				var anterior = $sel.data('cc-antes');
+				if (!centrocostoLineaPermitido($rowCc, $sel.val())) {
+					var textoIntentado = textoCentroSeleccionado($rowCc);
+					if (anterior) {
+						$sel.val(anterior);
+					}
+					var skuCc = String($rowCc.find('.codigoarticulo').val() || '').trim();
+					alert(window.ArticuloCentrocostoCuenta.mensaje($rowCc.data('req-cuenta-cc'), skuCc, textoIntentado));
+					return;
+				}
+				$sel.data('cc-antes', $sel.val());
+				marcarCcManual($rowCc);
 			});
 
 		$(document)
@@ -913,6 +1079,7 @@
 		registrarCambiosPatron();
 		registrarEventoArticuloCargado();
 		registrarCuentaArticulo();
+		registrarValidacionCentrocostoCuenta();
 		registrarCapexCuentaPuente();
 		registrarAtajosF1();
 		registrarEnterLineas();

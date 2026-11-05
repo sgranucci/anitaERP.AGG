@@ -34,6 +34,7 @@ class PropuestaPago extends Model implements Auditable
         'cuentacaja_id',
         'chequera_id',
         'monto_autorizado',
+        'tipo_lote',
     ];
 
     protected $casts = [

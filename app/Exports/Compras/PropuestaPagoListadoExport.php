@@ -22,7 +22,7 @@ class PropuestaPagoListadoExport implements FromView, ShouldAutoSize, WithColumn
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'F';
+    private const COL_ULTIMA = 'G';
 
     public function __construct(
         private PropuestaPagoRepositoryInterface $propuestaPagoRepository,
@@ -90,7 +90,7 @@ class PropuestaPagoListadoExport implements FromView, ShouldAutoSize, WithColumn
 
     public function columnWidths(): array
     {
-        return ['A' => 10, 'B' => 14, 'C' => 28, 'D' => 16, 'E' => 14, 'F' => 40];
+        return ['A' => 10, 'B' => 14, 'C' => 16, 'D' => 28, 'E' => 16, 'F' => 14, 'G' => 40];
     }
 
     public function title(): string

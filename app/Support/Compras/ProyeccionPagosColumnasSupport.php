@@ -80,6 +80,9 @@ final class ProyeccionPagosColumnasSupport
             self::col('concepto', 'N.Con.', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 9, anchoPdf: 2.2, ayuda: 'Código del concepto de cash flow (Anita concoper) con enlace al ABM.'),
             self::col('detalle_concepto', 'Detalle del concepto', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 26, anchoPdf: 5.4, ayuda: 'Concepto de cash flow: del pago, del comprobante, de la cuenta de gasto o el asignado al proveedor. El concepto IVA no se usa.'),
             self::col('leyenda', 'Leyenda', self::GRUPO_APROBACION, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 28, anchoPdf: 5.6),
+            self::col('fecha_pago', 'Fecha de pago', self::GRUPO_PAGO, self::TIPO_FECHA, soloDetalle: true, anchoExcel: 14, anchoPdf: 3.2, ayuda: 'Día programado para pagar (cheques y transferencias no urgentes).'),
+            self::col('urgente', 'Urgentes', self::GRUPO_PAGO, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 10, anchoPdf: 2.2, ayuda: 'SI = transferencia vencida que entra al lote Urgentes del día.'),
+            self::col('urgente_del_dia', 'Urgente del día', self::GRUPO_PAGO, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 14, anchoPdf: 2.6, ayuda: 'Misma marca que Urgentes: entra a la solapa de transferencias del lote.'),
             self::col('cuenta_concepto', 'Cuenta cash flow', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 30, anchoPdf: 6, ayuda: 'Cuenta contable que aporta el concepto de cash flow.'),
         ];
     }
@@ -188,6 +191,7 @@ final class ProyeccionPagosColumnasSupport
 
         $visibles = self::insertarOrdencompraSiCorresponde($visibles, $disponibles);
         $visibles = self::insertarAutorizanteSiCorresponde($visibles, $disponibles);
+        $visibles = self::insertarProgramacionSiCorresponde($visibles, $disponibles);
 
         return array_values($visibles);
     }
@@ -350,6 +354,36 @@ final class ProyeccionPagosColumnasSupport
         }
 
         return $salida;
+    }
+
+    /**
+     * Fecha de pago y urgentes se muestran aunque el operador tenga una vista guardada anterior.
+     *
+     * @param  array<string, array<string, mixed>>  $visibles
+     * @param  array<string, array<string, mixed>>  $disponibles
+     * @return array<string, array<string, mixed>>
+     */
+    private static function insertarProgramacionSiCorresponde(array $visibles, array $disponibles): array
+    {
+        foreach (['fecha_pago', 'urgente'] as $clave) {
+            if (! isset($disponibles[$clave]) || isset($visibles[$clave])) {
+                continue;
+            }
+            if (isset($visibles['leyenda'])) {
+                $salida = [];
+                foreach ($visibles as $k => $columna) {
+                    $salida[$k] = $columna;
+                    if ($k === 'leyenda') {
+                        $salida[$clave] = $disponibles[$clave];
+                    }
+                }
+                $visibles = $salida;
+            } else {
+                $visibles[$clave] = $disponibles[$clave];
+            }
+        }
+
+        return $visibles;
     }
 
     /**

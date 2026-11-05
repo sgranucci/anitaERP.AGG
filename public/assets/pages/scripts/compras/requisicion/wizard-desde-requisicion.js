@@ -988,11 +988,40 @@
 			lineas[idx].fechaentrega = $(this).val();
 		}
 	});
+	$(document).on('focusin', '#wizard-oc-tabla-articulos-body .wz-lin-cc-destino', function () {
+		$(this).data('cc-antes', $(this).val());
+	});
 	$(document).on('change', '#wizard-oc-tabla-articulos-body .wz-lin-cc-destino', function () {
-		var idx = parseInt($(this).closest('tr').data('linIdx'), 10);
+		var $sel = $(this);
+		var idx = parseInt($sel.closest('tr').data('linIdx'), 10);
+		var nuevo = parseInt($sel.val(), 10);
 		if (lineas[idx]) {
-			lineas[idx].centrocostodestino_id = parseInt($(this).val(), 10);
+			lineas[idx].centrocostodestino_id = nuevo;
 		}
+		if (!window.ArticuloCentrocostoCuenta || !lineas[idx] || !lineas[idx].articulo_id) {
+			$sel.data('cc-antes', $sel.val());
+			return;
+		}
+		var empId = parseInt($('#wz_empresa_id').val(), 10) || 0;
+		if (!empId) {
+			return;
+		}
+		var anterior = $sel.data('cc-antes');
+		var artId = lineas[idx].articulo_id;
+		window.ArticuloCentrocostoCuenta.consultar(artId, empId).done(function (resp) {
+			if (window.ArticuloCentrocostoCuenta.permitido(resp, $sel.val())) {
+				$sel.data('cc-antes', $sel.val());
+				return;
+			}
+			var textoIntentado = $.trim($sel.find('option:selected').text());
+			if (anterior) {
+				$sel.val(anterior);
+				if (lineas[idx]) {
+					lineas[idx].centrocostodestino_id = parseInt(anterior, 10) || lineas[idx].centrocostodestino_id;
+				}
+			}
+			alert(window.ArticuloCentrocostoCuenta.mensaje(resp, lineas[idx].sku || '', textoIntentado));
+		});
 	});
 
 	// ---------------------------------------------------------------------
