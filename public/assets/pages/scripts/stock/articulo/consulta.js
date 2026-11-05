@@ -557,6 +557,9 @@ function buscar_datos_articulo(consulta) {
     if ($('#consultaarticuloModal').data('articuloExcluirInsumoVenta')) {
         postData.excluir_insumo_venta = 1;
     }
+    if ($('#consultaarticuloModal').data('articuloExcluirSkuCompraAgg')) {
+        postData.excluir_sku_compra_agg = 1;
+    }
     if (consultaArticuloFiltrarDepositosUsuario()) {
         postData.filtrar_depositos_usuario = 1;
     }
@@ -704,6 +707,12 @@ function activa_eventos_consultaarticulo()
             $('#consultaarticuloModal').removeData('articuloExcluirInsumoVenta');
         }
 
+        if ($(this).closest('#tabla-articulos-ordencompra').length) {
+            $('#consultaarticuloModal').data('articuloExcluirSkuCompraAgg', 1);
+        } else {
+            $('#consultaarticuloModal').removeData('articuloExcluirSkuCompraAgg');
+        }
+
         var $ctxInsumo = $(this).closest('[data-articulo-solo-insumo-gastronomia="1"]');
         if ($ctxInsumo.length) {
             $('#consultaarticuloModal').data('articuloSoloInsumoGastronomia', 1);
@@ -769,6 +778,7 @@ function activa_eventos_consultaarticulo()
         $('#consultaarticuloModal').removeData('articuloSoloFacturable');
         $('#consultaarticuloModal').removeData('articuloSoloInsumoGastronomia');
         $('#consultaarticuloModal').removeData('articuloExcluirInsumoVenta');
+        $('#consultaarticuloModal').removeData('articuloExcluirSkuCompraAgg');
     });
 
     $('#consultaarticuloModal').off('shown.bs.modal.consultaArt').on('shown.bs.modal.consultaArt', function () {
@@ -959,15 +969,18 @@ function activa_eventos_consultaarticulo()
         if ($tr.closest('#tabla-articulos-requisicion').length) {
             extrasSku.push('excluir_insumo_venta=1');
         }
+        if ($tr.closest('#tabla-articulos-ordencompra').length) {
+            extrasSku.push('excluir_sku_compra_agg=1');
+        }
         let url_res = urlLeerArticuloPorSku(sku, extrasSku.join('&'));
 
         $.get(url_res, function (data) {
             if (!data || !data.id) {
-                if ($tr.closest('#tabla-articulos-requisicion').length && data && data.excluido) {
+                if ($tr.closest('#tabla-articulos-requisicion, #tabla-articulos-ordencompra').length && data && data.excluido) {
                     $tr.find('.articulo_id').val('');
                     $tr.find('.descripcionarticulo').val('');
                     $tr.find('.codigoarticulo, .codigoarticulolocal').val('');
-                    alert(data.mensaje || 'Ese artículo no se puede cargar en una requisición.');
+                    alert(data.mensaje || 'Ese artículo no se puede cargar.');
                     $tr.find('.codigoarticulo').first().trigger('change').trigger('focus');
                     return;
                 }

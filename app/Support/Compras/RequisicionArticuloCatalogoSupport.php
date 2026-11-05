@@ -38,6 +38,8 @@ final class RequisicionArticuloCatalogoSupport
      */
     public static function aplicarExclusion(Builder $query): void
     {
+        ArticuloSkuCompraAggSupport::aplicarExclusion($query);
+
         $insumoId = ArticuloUsoInsumoSupport::idUsoInsumo();
         if ($insumoId !== null && $insumoId > 0) {
             $query->where(function ($q) use ($insumoId) {
@@ -63,6 +65,11 @@ final class RequisicionArticuloCatalogoSupport
 
         $sku = trim((string) ($articulo->sku ?? ''));
         $etiqueta = $sku !== '' ? $sku : ('id '.(int) $articulo->id);
+
+        $mensajeSku = ArticuloSkuCompraAggSupport::mensaje($sku);
+        if ($mensajeSku !== null) {
+            return $mensajeSku;
+        }
 
         if (ArticuloUsoInsumoSupport::esUsoInsumo((int) ($articulo->usoarticulo_id ?? 0))) {
             return 'El artículo '.$etiqueta.' es un insumo y no se puede cargar en una requisición.';

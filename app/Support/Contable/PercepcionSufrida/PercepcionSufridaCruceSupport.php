@@ -7,9 +7,13 @@ namespace App\Support\Contable\PercepcionSufrida;
 /**
  * Cruza cada línea del mayor contra el reporte por comprobante e importe.
  * Lo que está en el reporte y no en el mayor no se lista ni se informa.
+ * El importe que sale en el archivo es el del mayor: unos centavos de diferencia
+ * con el concepto del comprobante no dejan la percepción afuera.
  */
 final class PercepcionSufridaCruceSupport
 {
+    /** Centavos de redondeo entre el asiento y el concepto del comprobante. */
+    private const TOLERANCIA_REDONDEO = 0.10;
     /**
      * @param  list<array<string, mixed>>  $mayor
      * @param  list<array<string, mixed>>  $reporte
@@ -69,8 +73,19 @@ final class PercepcionSufridaCruceSupport
                     $restantes = [];
                     continue;
                 }
+                $idxCercano = self::indiceDentroDeTolerancia($restantes, (float) ($lineaMayor['importe'] ?? 0));
+                if ($idxCercano !== null) {
+                    $cruzados[] = self::lineaCruzada($lineaMayor, $restantes[$idxCercano], true);
+                    unset($restantes[$idxCercano]);
+                    $restantes = array_values($restantes);
+                    continue;
+                }
                 $importeMayor = self::pesos($lineaMayor);
                 $reporteLinea = array_shift($restantes);
+                if ($reporteLinea === null && $porJurisdiccion && self::informableSinConcepto($lineaMayor)) {
+                    $cruzados[] = self::lineaInformadaDesdeMayor($lineaMayor);
+                    continue;
+                }
                 $importeReporte = $reporteLinea === null ? 0.0 : self::pesosDeParte($lineaMayor, $reporteLinea);
                 $diferencias[] = self::filaDiferencia($lineaMayor, $reporteLinea, $importeMayor, $importeReporte);
             }
@@ -145,13 +160,59 @@ final class PercepcionSufridaCruceSupport
     }
 
     /**
+     * Percepción del mayor con jurisdicción y CUIT, sin concepto en el comprobante.
+     * Entra al archivo por el importe contable (por ejemplo la anulación de un EGR).
+     *
+     * @param  array<string, mixed>  $mayor
+     */
+    private static function informableSinConcepto(array $mayor): bool
+    {
+        return (string) ($mayor['cuit'] ?? '') !== ''
+            && in_array((int) ($mayor['jurisdiccion'] ?? 0), [901, 902], true);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $pool
+     */
+    private static function indiceDentroDeTolerancia(array $pool, float $importe): ?int
+    {
+        $importe = round($importe, 2);
+        $mejor = null;
+        $distancia = self::TOLERANCIA_REDONDEO + 1;
+        foreach ($pool as $idx => $linea) {
+            $otro = round((float) ($linea['importe'] ?? 0), 2);
+            $delta = abs($otro - $importe);
+            if ($delta <= self::TOLERANCIA_REDONDEO && $delta < $distancia) {
+                $mejor = (int) $idx;
+                $distancia = $delta;
+            }
+        }
+
+        return $mejor;
+    }
+
+    /**
+     * @param  array<string, mixed>  $mayor
+     * @return array<string, mixed>
+     */
+    private static function lineaInformadaDesdeMayor(array $mayor): array
+    {
+        $pesos = self::pesos($mayor);
+        $mayor['importe'] = $pesos;
+        $mayor['importe_pesos'] = $pesos;
+        $mayor['importe_reporte'] = 0.0;
+
+        return $mayor;
+    }
+
+    /**
      * @param  array<string, mixed>  $mayor
      * @param  array<string, mixed>  $reporte
      * @return array<string, mixed>
      */
-    private static function lineaCruzada(array $mayor, array $reporte): array
+    private static function lineaCruzada(array $mayor, array $reporte, bool $importeDelMayor = false): array
     {
-        $pesos = self::pesosDeParte($mayor, $reporte);
+        $pesos = $importeDelMayor ? self::pesos($mayor) : self::pesosDeParte($mayor, $reporte);
 
         return array_merge($mayor, [
             'jurisdiccion' => (int) ($reporte['jurisdiccion'] ?? $mayor['jurisdiccion'] ?? 0),

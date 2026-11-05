@@ -28,6 +28,7 @@ use App\Services\Configuracion\ImpuestoService;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Configuracion\OcArbolTriggerDispatcherService;
 use App\Support\Compras\ArticuloCentrocostoCuentaSupport;
+use App\Support\Compras\ArticuloSkuCompraAggSupport;
 use App\Support\Compras\ContratoPeriodoServicioSupport;
 use App\Support\Compras\OrdencompraComprobanteEstados;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
@@ -399,6 +400,7 @@ class OrdencompraGestionService
 
         try {
             ArticuloCentrocostoCuentaSupport::validarPayload($payload);
+            ArticuloSkuCompraAggSupport::validarPayload($payload);
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
@@ -568,6 +570,7 @@ class OrdencompraGestionService
 
         try {
             ArticuloCentrocostoCuentaSupport::validarPayload($payload);
+            ArticuloSkuCompraAggSupport::validarPayload($payload);
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }

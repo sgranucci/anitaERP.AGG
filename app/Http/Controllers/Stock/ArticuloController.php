@@ -52,6 +52,7 @@ use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
+use App\Support\Compras\ArticuloSkuCompraAggSupport;
 use App\Support\Compras\RequisicionArticuloCatalogoSupport;
 use App\Support\Compras\ArticuloCentrocostoCuentaSupport;
 use App\Support\Compras\RequisicionCapexCuentaPuenteSupport;
@@ -1615,6 +1616,10 @@ class ArticuloController extends Controller
             RequisicionArticuloCatalogoSupport::aplicarExclusion($query);
         }
 
+        if (filter_var($request->input('excluir_sku_compra_agg'), FILTER_VALIDATE_BOOLEAN)) {
+            ArticuloSkuCompraAggSupport::aplicarExclusion($query);
+        }
+
         if (filter_var($request->input('filtrar_depositos_usuario'), FILTER_VALIDATE_BOOLEAN)) {
             \App\Support\Sala\RequisicionSalaArticuloCatalogoSupport::aplicarFiltroArticulo($query);
         }
@@ -1978,6 +1983,17 @@ class ArticuloController extends Controller
                     'id' => null,
                     'excluido' => true,
                     'mensaje' => $mensajeExclusion,
+                ], 200, [], JSON_UNESCAPED_UNICODE);
+            }
+        }
+
+        if ($articulo && filter_var($request->input('excluir_sku_compra_agg'), FILTER_VALIDATE_BOOLEAN)) {
+            $mensajeSku = ArticuloSkuCompraAggSupport::mensaje((string) ($articulo->sku ?? ''));
+            if ($mensajeSku !== null) {
+                return response()->json([
+                    'id' => null,
+                    'excluido' => true,
+                    'mensaje' => $mensajeSku,
                 ], 200, [], JSON_UNESCAPED_UNICODE);
             }
         }

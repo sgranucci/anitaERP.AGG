@@ -61,6 +61,7 @@ final class PercepcionSufridaErpReader
                 'p.codigo as proveedor_codigo',
                 'p.nombre as proveedor_nombre',
                 'p.nroinscripcion',
+                'cp.id as comprobante_id',
                 'cp.proveedor_nombre_eventual',
                 'cp.proveedor_documento_eventual',
                 'cp.identificacion_proveedor_cuit',
@@ -79,9 +80,17 @@ final class PercepcionSufridaErpReader
                 continue;
             }
             $tipo = strtoupper(substr(trim((string) ($fila->abreviatura ?: $fila->mov_tipo ?: $fila->cab_tipo ?: '')), 0, 3));
-            $letra = (string) ($fila->cp_letra ?: $fila->mov_letra ?: $fila->cab_letra ?: '');
-            $sucursal = (int) ($fila->cp_sucursal ?: $fila->mov_sucursal ?: $fila->cab_sucursal ?: 0);
-            $nro = (int) ($fila->numerocomprobante ?: $fila->mov_nro ?: $fila->cab_nro ?: 0);
+            // La sucursal 0 del comprobante (ICO bancario A0000) es válida.
+            // El operador ?: la trata como vacía y se queda con la sucursal del EGR.
+            if ((int) ($fila->comprobante_id ?? 0) > 0) {
+                $letra = (string) ($fila->cp_letra ?? '');
+                $sucursal = (int) ($fila->cp_sucursal ?? 0);
+                $nro = (int) ($fila->numerocomprobante ?? 0);
+            } else {
+                $letra = (string) ($fila->mov_letra ?: $fila->cab_letra ?: '');
+                $sucursal = (int) ($fila->mov_sucursal ?: $fila->cab_sucursal ?: 0);
+                $nro = (int) ($fila->mov_nro ?: $fila->cab_nro ?: 0);
+            }
             $emisor = self::emisorDelComprobante($fila);
             $out[] = PercepcionSufridaLineaSupport::armar([
                 'fecha' => substr((string) $fila->fecha, 0, 10),
@@ -100,7 +109,7 @@ final class PercepcionSufridaErpReader
             ]);
         }
 
-        return $out;
+        return $this->completarAnulacionesEgr($out, $empresaId, $cuenta);
     }
 
     /**
@@ -178,18 +187,7 @@ final class PercepcionSufridaErpReader
             }
             $jurisdiccion = 0;
             if ($tipoProceso === PercepcionSufridaCorteSupport::TIPO_IIBB) {
-                $provincia = new Provincia();
-                $provincia->nombre = (string) ($fila->provincia_nombre ?? '');
-                $provincia->codigo = (string) ($fila->provincia_codigo ?? '');
-                $provincia->jurisdiccion = (string) ($fila->jurisdiccion ?? '');
-                $provincia->codigoexterno = (string) ($fila->codigoexterno ?? '');
-                if (IngresosBrutosProvinciaAnitaSupport::esCaba($provincia)) {
-                    $jurisdiccion = 901;
-                } elseif (IngresosBrutosProvinciaAnitaSupport::esBuenosAires($provincia)) {
-                    $jurisdiccion = 902;
-                } else {
-                    $jurisdiccion = PercepcionSufridaLineaSupport::jurisdiccionDesdeTexto((string) ($fila->concepto ?? ''));
-                }
+                $jurisdiccion = self::jurisdiccionIibb($fila);
                 if (! in_array($jurisdiccion, [901, 902], true)) {
                     continue;
                 }
@@ -215,6 +213,119 @@ final class PercepcionSufridaErpReader
         }
 
         return $out;
+    }
+
+    /**
+     * Un EGR que anula a otro no trae el comprobante ni el CUIT. El agente y la
+     * jurisdicción son los del egreso anulado, que sí está ligado al ICO.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private function completarAnulacionesEgr(array $lineas, int $empresaId, int $cuenta): array
+    {
+        foreach ($lineas as $idx => $linea) {
+            if ((string) ($linea['cuit'] ?? '') !== '') {
+                continue;
+            }
+            if (preg_match('/\bANULA\s+EGR\s+(\d+)/i', (string) ($linea['descripcion'] ?? ''), $coincidencias) !== 1) {
+                continue;
+            }
+            $emisor = $this->emisorEgrAnulado(
+                $empresaId,
+                $cuenta,
+                (int) ($linea['sucursal'] ?? 0),
+                (int) $coincidencias[1],
+            );
+            if ($emisor === null || $emisor['cuit'] === '') {
+                continue;
+            }
+            $linea['cuit'] = $emisor['cuit'];
+            if ((string) ($linea['emisor'] ?? '') === '') {
+                $linea['emisor'] = $emisor['codigo'];
+            }
+            if ((string) ($linea['emisor_nombre'] ?? '') === '') {
+                $linea['emisor_nombre'] = $emisor['nombre'];
+            }
+            if ((int) ($linea['jurisdiccion'] ?? 0) === 0 && $emisor['jurisdiccion'] > 0) {
+                $linea['jurisdiccion'] = $emisor['jurisdiccion'];
+            }
+            $lineas[$idx] = $linea;
+        }
+
+        return $lineas;
+    }
+
+    /**
+     * @return array{codigo: string, nombre: string, cuit: string, jurisdiccion: int}|null
+     */
+    private function emisorEgrAnulado(int $empresaId, int $cuenta, int $sucursal, int $nro): ?array
+    {
+        if ($empresaId <= 0 || $cuenta <= 0 || $nro <= 0) {
+            return null;
+        }
+
+        $fila = DB::table('asiento as a')
+            ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
+            ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
+            ->join('comprobante_proveedor as cp', 'cp.id', '=', 'am.comprobante_proveedor_id')
+            ->leftJoin('proveedor as p', 'p.id', '=', 'cp.proveedor_id')
+            ->leftJoin('concepto_ivacompra as ci', 'ci.id', '=', 'am.concepto_ivacompra_id')
+            ->leftJoin('provincia as pr', 'pr.id', '=', 'ci.provincia_id')
+            ->where('a.empresa_id', $empresaId)
+            ->where('a.anita_tipo', 'EGR')
+            ->where('a.anita_nro', $nro)
+            ->when($sucursal > 0, function ($q) use ($sucursal) {
+                $q->where('a.anita_sucursal', $sucursal);
+            })
+            ->whereRaw('REPLACE(cc.codigo, "-", "") = ?', [(string) $cuenta])
+            ->orderByDesc('a.id')
+            ->first([
+                'p.codigo as proveedor_codigo',
+                'p.nombre as proveedor_nombre',
+                'p.nroinscripcion',
+                'cp.proveedor_nombre_eventual',
+                'cp.proveedor_documento_eventual',
+                'cp.identificacion_proveedor_cuit',
+                'ci.nombre as concepto',
+                'pr.nombre as provincia_nombre',
+                'pr.codigo as provincia_codigo',
+                'pr.jurisdiccion',
+                'pr.codigoexterno',
+            ]);
+
+        if ($fila === null && $sucursal > 0) {
+            return $this->emisorEgrAnulado($empresaId, $cuenta, 0, $nro);
+        }
+        if ($fila === null) {
+            return null;
+        }
+
+        $emisor = self::emisorDelComprobante($fila);
+
+        return [
+            'codigo' => $emisor['codigo'],
+            'nombre' => $emisor['nombre'],
+            'cuit' => $emisor['cuit'],
+            'jurisdiccion' => self::jurisdiccionIibb($fila),
+        ];
+    }
+
+    private static function jurisdiccionIibb(object $fila): int
+    {
+        $provincia = new Provincia();
+        $provincia->nombre = (string) ($fila->provincia_nombre ?? '');
+        $provincia->codigo = (string) ($fila->provincia_codigo ?? '');
+        $provincia->jurisdiccion = (string) ($fila->jurisdiccion ?? '');
+        $provincia->codigoexterno = (string) ($fila->codigoexterno ?? '');
+        if (IngresosBrutosProvinciaAnitaSupport::esCaba($provincia)) {
+            return 901;
+        }
+        if (IngresosBrutosProvinciaAnitaSupport::esBuenosAires($provincia)) {
+            return 902;
+        }
+
+        return PercepcionSufridaLineaSupport::jurisdiccionDesdeTexto((string) ($fila->concepto ?? ''));
     }
 
     /**
