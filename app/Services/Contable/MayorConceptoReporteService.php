@@ -9,6 +9,7 @@ use App\Support\Contable\MayorConcepto\MayorConceptoErpPlanoMotor;
 use App\Support\Contable\MayorConcepto\MayorConceptoLectorHibrido;
 use App\Support\Contable\MayorConcepto\MayorConceptoLectorInterface;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
+use App\Support\Contable\MayorConcepto\MayorConceptoOperacionVistaEnricher;
 use App\Support\Contable\MayorConcepto\MayorConceptoOrdencompraVistaEnricher;
 use App\Support\Contable\MayorConcepto\MayorConceptoPeriodoProcesador;
 use App\Support\Contable\MayorConcepto\MayorConceptoRuntimeSupport;
@@ -34,6 +35,7 @@ class MayorConceptoReporteService
         private readonly MayorConceptoAuditoriaSupport $auditoriaSupport,
         private readonly MayorConceptoConciliacionAsientoSupport $conciliacionAsientoSupport,
         private readonly MayorConceptoOrdencompraVistaEnricher $ordencompraVistaEnricher,
+        private readonly MayorConceptoOperacionVistaEnricher $operacionVistaEnricher,
     ) {}
 
     /**
@@ -1169,7 +1171,14 @@ class MayorConceptoReporteService
 
                 $nro = (int) ($fila['nro_asiento'] ?? 0);
                 $codigo = (int) ($fila['cuenta'] ?? 0);
-                $filas[$idx]['asiento_id'] = $nro > 0 ? (int) ($asientosPorNumero[$nro] ?? 0) : 0;
+                $motorId = (int) ($fila['asiento_id'] ?? 0);
+                $lookup = $nro > 0 ? (int) ($asientosPorNumero[$nro] ?? 0) : 0;
+                // El enlace de pantalla sigue el número de asiento. Si esa búsqueda no
+                // encuentra fila, se conserva el id que ya traía el motor.
+                $filas[$idx]['asiento_id'] = $lookup > 0 ? $lookup : $motorId;
+                if ($motorId > 0) {
+                    $filas[$idx]['asiento_operacion_id'] = $motorId;
+                }
                 $filas[$idx]['cuentacontable_id'] = $codigo > 0 ? (int) ($cuentasPorCodigo[$codigo] ?? 0) : 0;
             }
         }
@@ -1183,7 +1192,9 @@ class MayorConceptoReporteService
      */
     private function enriquecerOrdencompraIds(array $filas): array
     {
-        return $this->ordencompraVistaEnricher->enriquecer($filas, $this->bridgeReader());
+        $filas = $this->ordencompraVistaEnricher->enriquecer($filas, $this->bridgeReader());
+
+        return $this->operacionVistaEnricher->enriquecer($filas);
     }
 
     /**
