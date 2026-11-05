@@ -21,8 +21,29 @@ final class ArcaCaeaPresentacionCalendarioSupport
      */
     public static function quincenasDelDia(CarbonInterface $hoy, ?array $feriadosYmd = null): array
     {
+        $hoyYmd = Carbon::parse($hoy)->toDateString();
+
+        return array_values(array_map(
+            static fn (array $q): array => ['periodo' => $q['periodo'], 'orden' => $q['orden']],
+            array_filter(
+                self::quincenasParaPresentar($hoy, $feriadosYmd),
+                static fn (array $q): bool => $q['dia'] === $hoyYmd,
+            ),
+        ));
+    }
+
+    /**
+     * Quincenas de este mes y el anterior cuyo día de presentación ya llegó.
+     * La de hoy y las que se pasaron (el cron no corrió, o el día era feriado y nadie reintentó).
+     * La quincena todavía abierta no entra: su día hábil es posterior a hoy.
+     *
+     * @param  list<string>|null  $feriadosYmd  Y-m-d. null lee la tabla feriado.
+     * @return list<array{periodo: int, orden: int, dia: string}>
+     */
+    public static function quincenasParaPresentar(CarbonInterface $hoy, ?array $feriadosYmd = null): array
+    {
         $hoy = Carbon::parse($hoy)->startOfDay();
-        $feriados = $feriadosYmd ?? self::feriadosEntre($hoy->copy()->subDays(45), $hoy->copy()->addDay());
+        $feriados = $feriadosYmd ?? self::feriadosEntre($hoy->copy()->subDays(70), $hoy->copy()->addDay());
 
         $out = [];
         foreach ([-1, 0] as $offsetMes) {
@@ -31,11 +52,22 @@ final class ArcaCaeaPresentacionCalendarioSupport
             foreach ([1, 2] as $orden) {
                 $fin = CaeaQuincenaSupport::fechasQuincena($periodo, $orden)['hasta']->copy()->startOfDay();
                 $dia = self::primerDiaHabilSiguiente($fin, $feriados);
-                if ($dia->isSameDay($hoy)) {
-                    $out[] = ['periodo' => $periodo, 'orden' => $orden];
+                if ($dia->greaterThan($hoy)) {
+                    continue;
                 }
+                $out[] = [
+                    'periodo' => $periodo,
+                    'orden' => $orden,
+                    'dia' => $dia->toDateString(),
+                ];
             }
         }
+
+        usort(
+            $out,
+            static fn (array $a, array $b): int => [$a['dia'], $a['periodo'], $a['orden']]
+                <=> [$b['dia'], $b['periodo'], $b['orden']],
+        );
 
         return $out;
     }

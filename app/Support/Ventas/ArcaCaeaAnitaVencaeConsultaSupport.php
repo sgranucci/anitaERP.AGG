@@ -28,6 +28,16 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
     /** Tope de una lectura Anita en el job de informe. null = timeout del bridge. */
     private static ?int $timeoutProceso = null;
 
+    /**
+     * Índice de la única lectura de vencae de esta quincena.
+     * Clave: sucursal|tipo_afip|numero.
+     *
+     * @var array<string, array<string, mixed>>|null
+     */
+    private static ?array $indiceLecturaUnica = null;
+
+    private static ?string $lecturaUnicaClave = null;
+
     public static function resetCache(): void
     {
         self::$cachePorCaea = [];
@@ -36,6 +46,40 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
         self::$omitidaEnPantalla = false;
         self::$bridgeNoResponde = false;
         self::$timeoutProceso = null;
+        self::$indiceLecturaUnica = null;
+        self::$lecturaUnicaClave = null;
+    }
+
+    public static function lecturaUnicaActiva(): bool
+    {
+        return self::$indiceLecturaUnica !== null;
+    }
+
+    /**
+     * Una sola lectura de vencae para el CAEA de la quincena.
+     * Mientras esté activa, buscar un número no vuelve a pegarle al bridge.
+     *
+     * @param  list<int>  $sucursales
+     */
+    public static function activarLecturaUnica(string $nroCaea, array $sucursales, ?int $curlTimeout = null): void
+    {
+        $nroCaea = trim($nroCaea);
+        $sucursales = array_values(array_unique(array_filter(
+            array_map(static fn ($s): int => (int) $s, $sucursales),
+            static fn (int $s): bool => $s > 0,
+        )));
+        sort($sucursales);
+        $clave = $nroCaea.'|'.implode(',', $sucursales);
+        if (self::$lecturaUnicaClave === $clave && self::$indiceLecturaUnica !== null) {
+            return;
+        }
+
+        $indice = [];
+        foreach (self::listarPorCaeaIvaVentas($nroCaea, $sucursales, $curlTimeout) as $item) {
+            $indice[$item['sucursal'].'|'.$item['tipo_afip'].'|'.$item['numero']] = $item;
+        }
+        self::$indiceLecturaUnica = $indice;
+        self::$lecturaUnicaClave = $clave;
     }
 
     public static function fijarTimeoutProceso(?int $segundos): void
@@ -235,6 +279,12 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
             || ! ArcaCaeaSucursalesInformeSupport::esSucursalPermitida($sucursal)
         ) {
             return null;
+        }
+
+        if (self::$indiceLecturaUnica !== null) {
+            $item = self::$indiceLecturaUnica[$sucursal.'|'.$tipoAfip.'|'.$numero] ?? null;
+
+            return is_array($item) ? $item : null;
         }
 
         $where = ' WHERE venc_sucursal = '.$sucursal.' AND venc_nro = '.$numero;

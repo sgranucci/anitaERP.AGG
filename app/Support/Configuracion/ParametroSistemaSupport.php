@@ -103,7 +103,7 @@ final class ParametroSistemaSupport
             self::CLAVE_CAEA_PRESENTACION_HORA => [
                 'grupo' => 'Facturación ARCA',
                 'etiqueta' => 'Hora de la presentación CAEA',
-                'ayuda' => 'El primer día hábil después del cierre de cada quincena (el 15, o el último día del mes) se presenta a esta hora. Hábil: lunes a viernes que no sea feriado.',
+                'ayuda' => 'A esta hora se presenta la quincena cuyo día hábil es hoy, y también las de este mes y el anterior que quedaron sin presentar. El día hábil es el primer lunes a viernes, que no sea feriado, después del 15 o del último día del mes.',
                 'tipo' => 'hora',
                 'orden' => 32,
             ],

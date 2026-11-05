@@ -48,7 +48,7 @@ final class ArcaCaeaPresentacionCalendarioSupportTest extends TestCase
         self::assertSame([['periodo' => 202610, 'orden' => 2]], $quincenas);
     }
 
-    public function test_un_dia_intermedio_no_presenta(): void
+    public function test_un_dia_intermedio_no_es_el_dia_de_presentacion(): void
     {
         $quincenas = ArcaCaeaPresentacionCalendarioSupport::quincenasDelDia(
             Carbon::parse('2026-11-05'),
@@ -56,5 +56,32 @@ final class ArcaCaeaPresentacionCalendarioSupportTest extends TestCase
         );
 
         self::assertSame([], $quincenas);
+    }
+
+    public function test_un_dia_intermedio_recupera_las_quincenas_ya_vencidas_del_mes_y_el_anterior(): void
+    {
+        $quincenas = ArcaCaeaPresentacionCalendarioSupport::quincenasParaPresentar(
+            Carbon::parse('2026-11-05'),
+            [],
+        );
+
+        self::assertSame([
+            ['periodo' => 202610, 'orden' => 1, 'dia' => '2026-10-16'],
+            ['periodo' => 202610, 'orden' => 2, 'dia' => '2026-11-02'],
+        ], $quincenas);
+    }
+
+    public function test_la_quincena_abierta_no_se_presenta_antes_de_su_dia_habil(): void
+    {
+        $periodos = array_map(
+            static fn (array $q): string => $q['periodo'].'-'.$q['orden'],
+            ArcaCaeaPresentacionCalendarioSupport::quincenasParaPresentar(
+                Carbon::parse('2026-11-05'),
+                [],
+            ),
+        );
+
+        self::assertNotContains('202611-1', $periodos);
+        self::assertNotContains('202611-2', $periodos);
     }
 }

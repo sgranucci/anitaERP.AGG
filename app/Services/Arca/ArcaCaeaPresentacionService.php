@@ -695,6 +695,8 @@ class ArcaCaeaPresentacionService
         $limite = $limite ?? (int) config('arca.caea.informe_lote_max', 100);
         $limite = max(1, min(500, $limite));
 
+        $this->activarLecturaAnitaUnica($registro);
+
         try {
             $sync = $this->sincronizarInformadosDesdeArca($registro);
         } catch (\Throwable $e) {
@@ -915,6 +917,7 @@ class ArcaCaeaPresentacionService
     ): array {
         $vaciar = (bool) config('arca.caea.informe_vaciar_pendientes', true);
         $maxLotes = max(1, (int) config('arca.caea.informe_max_lotes_job', 50));
+        $this->activarLecturaAnitaUnica($registro);
 
         $informados = 0;
         $erroresLote = 0;
@@ -1740,6 +1743,18 @@ class ArcaCaeaPresentacionService
             array_map(static fn (Puntoventa $pv): int => (int) $pv->codigo, array_values($this->puntosVentaCaeaPorCodigo($empresaId))),
             static fn (int $codigo): bool => $codigo > 0,
         ));
+    }
+
+    /**
+     * Una lectura de vencae por CAEA. El resto de la presentación busca el número en memoria.
+     */
+    private function activarLecturaAnitaUnica(ArcaCaea $registro): void
+    {
+        ArcaCaeaAnitaVencaeConsultaSupport::activarLecturaUnica(
+            trim((string) $registro->nro_caea),
+            $this->sucursalesCaeaEmpresa((int) $registro->empresa_id),
+            $this->presupuestoAnitaPantalla,
+        );
     }
 
     /**

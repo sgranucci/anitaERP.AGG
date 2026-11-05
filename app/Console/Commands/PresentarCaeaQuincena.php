@@ -23,7 +23,7 @@ class PresentarCaeaQuincena extends Command
 {
     protected $signature = 'arca:presentar-caea-quincena {--fecha= : Fecha a evaluar (Y-m-d). Por defecto, hoy}';
 
-    protected $description = 'Presenta el CAEA el primer día hábil después del fin de cada quincena';
+    protected $description = 'Presenta el CAEA el día hábil de cada quincena y las de este mes y el anterior que quedaron sin presentar';
 
     public function handle(
         ArcaCaeaQuincenalOrquestadorService $orquestador,
@@ -34,9 +34,9 @@ class PresentarCaeaQuincena extends Command
             ? Carbon::parse((string) $fecha)->startOfDay()
             : now()->startOfDay();
 
-        $quincenas = ArcaCaeaPresentacionCalendarioSupport::quincenasDelDia($hoy);
+        $quincenas = ArcaCaeaPresentacionCalendarioSupport::quincenasParaPresentar($hoy);
         if ($quincenas === []) {
-            $this->info($hoy->format('d/m/Y').' no es día de presentación CAEA.');
+            $this->info($hoy->format('d/m/Y').' no hay quincenas CAEA para presentar.');
 
             return self::SUCCESS;
         }
@@ -57,6 +57,7 @@ class PresentarCaeaQuincena extends Command
                     (string) ($empresa->nombre ?? ''),
                     (int) $q['periodo'],
                     (int) $q['orden'],
+                    $q['dia'] === $hoy->toDateString(),
                 );
             }
         }
@@ -70,6 +71,7 @@ class PresentarCaeaQuincena extends Command
         string $empresaNombre,
         int $periodo,
         int $orden,
+        bool $esDiaDePresentacion,
     ): int {
         $etiqueta = CaeaQuincenaSupport::etiquetaQuincena($periodo, $orden);
         $registro = ArcaCaea::query()
@@ -80,6 +82,12 @@ class PresentarCaeaQuincena extends Command
             ->first();
 
         if ($registro === null || ! $registro->estaAutorizado()) {
+            if (! $esDiaDePresentacion) {
+                $this->line($empresaNombre.' — '.$etiqueta.': sin CAEA autorizado; no se recupera.');
+
+                return 0;
+            }
+
             $this->warn($empresaNombre.' — '.$etiqueta.': no hay CAEA autorizado.');
             Log::warning('arca.caea.presentacion.automatica.sin_caea', [
                 'empresa_id' => $empresaId,
@@ -99,7 +107,7 @@ class PresentarCaeaQuincena extends Command
             return 0;
         }
 
-        $this->info($empresaNombre.' — '.$etiqueta.': presentando.');
+        $this->info($empresaNombre.' — '.$etiqueta.($esDiaDePresentacion ? ': presentando.' : ': presentando (atrasada).'));
         ArcaCaeaAnitaVencaeConsultaSupport::resetCache();
         ArcaCaeaAnitaVencaeConsultaSupport::fijarTimeoutProceso(
             (int) config('arca.caea.informe_anita_timeout', 45),
