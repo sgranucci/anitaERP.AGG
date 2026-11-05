@@ -4,10 +4,27 @@ namespace App\Support\Caja;
 
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownSlot;
+use App\Models\Caja\TesoreriaCrownValor;
 use Illuminate\Support\Collection;
 
 final class TesoreriaCrownSlotSupport
 {
+    /**
+     * Billetes de pesos para el billetaje del stacker (a-recslot).
+     *
+     * @return Collection<int, TesoreriaCrownValor>
+     */
+    public static function billetesPesos(int $salaId): Collection
+    {
+        return TesoreriaCrownValor::query()
+            ->with('tipoValor')
+            ->where('sala_id', $salaId)
+            ->where('activo', true)
+            ->whereHas('tipoValor', fn ($q) => $q->where('codigo', 'ARS'))
+            ->orderByDesc('denominacion')
+            ->get();
+    }
+
     /**
      * @return Collection<int, TesoreriaCrownSlot>
      */

@@ -78,8 +78,8 @@ class TesoreriaCrownMesaAnitaImportService
         $avisos = [];
 
         $cabFicha = $this->consultar(
-            'fichmm_nro_oper,fichmm_tipo_oper,fichmm_mesajuego,fichmm_cajero,fichmm_hora',
-            'SELECT fichmm_nro_oper, fichmm_tipo_oper, fichmm_mesajuego, fichmm_cajero, fichmm_hora FROM fichammae WHERE fichmm_fecha = '.$fechaInt.' ORDER BY fichmm_mesajuego, fichmm_nro_oper'
+            'fichmm_nro_oper,fichmm_tipo_oper,fichmm_mesajuego,fichmm_cajero,fichmm_hora,fichmm_propina',
+            'SELECT fichmm_nro_oper, fichmm_tipo_oper, fichmm_mesajuego, fichmm_cajero, fichmm_hora, fichmm_propina FROM fichammae WHERE fichmm_fecha = '.$fechaInt.' ORDER BY fichmm_mesajuego, fichmm_nro_oper'
         );
         $numFicha = array_map(fn ($f) => (int) $f->fichmm_nro_oper, $cabFicha);
         $linFicha = $this->porOperacion($this->enLotes($numFicha, function (string $lista) {
@@ -134,7 +134,8 @@ class TesoreriaCrownMesaAnitaImportService
                 $fechaYmd,
                 'Anita fichammae '.$numero,
                 $lineas,
-                $mesaNro
+                $mesaNro,
+                $tipo === 'F' ? round((float) ($fila->fichmm_propina ?? 0), 2) : 0.0
             );
         }
 
@@ -282,6 +283,7 @@ class TesoreriaCrownMesaAnitaImportService
                     'numero' => $fila['numero'],
                     'estado' => TesoreriaCrownMesa::CONFIRMADO,
                     'comentario' => $fila['comentario'],
+                    'propina' => round((float) ($fila['propina'] ?? 0), 2),
                     'confirmado_at' => $fila['fecha'].' '.$fila['hora'].':00',
                 ]);
                 foreach ($fila['lineas'] as $linea) {
@@ -424,7 +426,8 @@ class TesoreriaCrownMesaAnitaImportService
         string $fechaYmd,
         string $comentario,
         array $lineas,
-        int $mesaNro
+        int $mesaNro,
+        float $propina = 0.0
     ): array {
         $banca = null;
         if ($juego !== null) {
@@ -452,6 +455,7 @@ class TesoreriaCrownMesaAnitaImportService
             'tipo' => $tipo,
             'tipo_nombre' => TesoreriaCrownMesaSupport::tipo($tipo),
             'numero' => $numero,
+            'propina' => round($propina, 2),
             'hora' => $hora,
             'comentario' => mb_substr($comentario, 0, 80),
             'lineas' => $detalle,

@@ -88,4 +88,29 @@ class TesoreriaCrownSlot extends Model implements Auditable
     {
         return self::ESTADOS[$estado] ?? $estado;
     }
+
+    public function esBorrador(): bool
+    {
+        return $this->estado === self::BORRADOR;
+    }
+
+    public function esDrop(): bool
+    {
+        return $this->tipo === self::DROP;
+    }
+
+    public function esRecuento(): bool
+    {
+        return ! $this->esDrop();
+    }
+
+    /** Tipos que se cargan a mano (a-recslot). El drop entra por importación. */
+    public static function tiposCarga(): array
+    {
+        return [
+            self::CONTADORA => self::TIPOS[self::CONTADORA],
+            self::MANUAL => self::TIPOS[self::MANUAL],
+            self::CORRECCION => self::TIPOS[self::CORRECCION],
+        ];
+    }
 }

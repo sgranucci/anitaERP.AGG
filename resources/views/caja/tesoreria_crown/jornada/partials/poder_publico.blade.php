@@ -4,7 +4,7 @@
 @endphp
 <div class="card card-outline card-info mb-3">
     <div class="card-header py-2">
-        <h3 class="card-title mb-0">Fichas en poder del público</h3>
+        <h3 class="card-title mb-0"><i class="fa fa-power-off"></i> Stock de fichas</h3>
     </div>
     <div class="card-body pb-2">
         <p class="text-muted small mb-2">La conversión final es la inicial más lo que movieron hoy las mesas y los cajeros. El poder público del día, el que entra al anexo, es esa diferencia por el valor de cada ficha. Un día negativo es ficha que volvió de la sala. <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel=poder&amp;recalcular=1">Recalcular</a></p>

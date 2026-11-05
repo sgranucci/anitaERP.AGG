@@ -524,6 +524,7 @@ function aplicarConceptoVentaEnFilaFactura($tr, data) {
         }
     }
     $tr.find('.precio').prop('readonly', false);
+    facturaSincronizarPrecioConcepto(false);
     aplicarPrecioConceptoSiVacio($tr, data.precio);
     if (tags.length && (!data.precio || parseFloat(data.precio) <= 0) && data.codigo) {
         completarPrecioConceptoDesdeServidor($tr, data.codigo);
@@ -820,6 +821,48 @@ function tipotransaccionIdParaConceptoVenta() {
     return parseInt($('#tipotransaccion_id').val() || '0', 10) || 0;
 }
 
+function facturaHayTildePrecioConcepto() {
+    return $('#factura_concepto_precio_neto').length > 0;
+}
+
+function facturaConceptoPrecioEsNeto() {
+    return facturaHayTildePrecioConcepto() && $('#factura_concepto_precio_neto').is(':checked');
+}
+
+function facturaSincronizarPrecioConcepto(recalcular) {
+    if (!facturaHayTildePrecioConcepto()) {
+        return;
+    }
+    var neto = facturaConceptoPrecioEsNeto();
+    $('#factura_concepto_precio_neto_valor').val(neto ? '1' : '0');
+    var incluye = neto ? 'N' : '1';
+    $('#itemspedido-table tr.item-factura, #itemspedido-table tr.item-pedido').each(function () {
+        var $tr = $(this);
+        if ($.trim($tr.find('.articulo_id').val() || '') !== '') {
+            return;
+        }
+        $tr.find('.incluyeimpuesto').val(incluye);
+    });
+    if (recalcular && typeof window.calculaFactura === 'function') {
+        window.calculaFactura();
+    }
+}
+
+window.facturaAlCambiarPrecioNeto = function () {
+    facturaSincronizarPrecioConcepto(true);
+    facturaRecordarPrecioConcepto();
+};
+
+function facturaRecordarPrecioConcepto() {
+    if (!facturaHayTildePrecioConcepto() || !window.FACTURA_URLS || !window.FACTURA_URLS.preferencias) {
+        return;
+    }
+    $.post(window.FACTURA_URLS.preferencias, {
+        _token: $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val() || '',
+        concepto_precio_neto: facturaConceptoPrecioEsNeto() ? 1 : 0
+    });
+}
+
 function aplicarPrecioConceptoSiVacio($tr, precio) {
     var valor = parseFloat(String(precio || '0').replace(',', '.'));
     if (!(valor > 0)) {
@@ -993,10 +1036,12 @@ function activa_eventos_consultaconceptoventa() {
         resolverPorCodigoConceptoVenta(codigo, $ctx.length ? $ctx : null, null, true);
     });
 
-    $(document).off('change.facturaPrecioConcepto').on('change.facturaPrecioConcepto', '#itemspedido-table .item-concepto-venta .precio', function () {
-        if (typeof calculaFactura === 'function') {
-            calculaFactura();
+    $(document).off('change.facturaPrecioConcepto').on('change.facturaPrecioConcepto', '#itemspedido-table .precio', function () {
+        var $tr = $(this).closest('tr');
+        if ($.trim($tr.find('.articulo_id').val() || '') !== '') {
+            return;
         }
+        facturaSincronizarPrecioConcepto(false);
     });
 
     $(document).off('input.facturaIvaTexto').on('input.facturaIvaTexto', '#itemspedido-table .precio, #itemspedido-table .descripcionarticulo, #itemspedido-table .cantidad, #itemspedido-table .kilo', function () {
@@ -1111,6 +1156,7 @@ $(function () {
         var $tr = $(this);
         facturaLineaModoConcepto($tr, true);
     });
+    facturaSincronizarPrecioConcepto(false);
     $('#tbody-tabla tr.item-factura, #tbody-tabla tr.item-pedido').each(function () {
         facturaRefreshLeyendaBadge($(this));
     });

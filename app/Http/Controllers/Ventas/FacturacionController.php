@@ -233,6 +233,7 @@ class FacturacionController extends Controller
         $tipotransacciondefault_id = $prefsFacturacion['tipotransaccion_id'];
         $puntoventadefault_id = $prefsFacturacion['puntoventa_id'];
         $puntoventaremitodefault_id = $prefsFacturacion['puntoventaremito_id'];
+        $conceptoPrecioNeto = (bool) ($prefsFacturacion['concepto_precio_neto'] ?? false);
 
         $data = new \stdClass();
         $layoutItemsPedido = facturaUsaLayoutItemsPedido();
@@ -263,7 +264,7 @@ class FacturacionController extends Controller
             'deposito_query', 'lote_query', 'cliente_query', 'vendedor_query', 'condicionventa_query',
             'transporte_query', 'formapago_query', 'incoterm_query', 'moneda_query', 'actividad_arca_query',
             'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query', 'impuesto_query',
-            'modoNc'));
+            'modoNc', 'conceptoPrecioNeto'));
     }
 
     public function preferencias(Request $request): JsonResponse
@@ -281,6 +282,7 @@ class FacturacionController extends Controller
             'tipotransaccion_id',
             'puntoventa_id',
             'puntoventaremito_id',
+            'concepto_precio_neto',
         ]));
 
         return response()->json(['ok' => true]);
@@ -606,6 +608,13 @@ class FacturacionController extends Controller
             $resultado['conceptostotales'] = LogisticaBierzoSupport::prepararConceptosTotalesParaImpresion(
                 $resultado['conceptostotales']
             );
+        }
+
+        if (is_array($resultado) && isset($resultado['conceptostotales']) && is_array($resultado['conceptostotales'])) {
+            $previewAsiento = $this->facturacionService->previewAsientoMostrador($resultado, $request->all());
+            if ($previewAsiento !== null) {
+                $resultado['asiento_manual'] = $previewAsiento;
+            }
         }
 
         return $resultado;

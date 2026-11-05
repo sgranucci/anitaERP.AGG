@@ -68,7 +68,7 @@
                             <th>Sala</th>
                             <th>Empresa</th>
                             <th>Activo</th>
-                            <th class="text-center" style="width:90px;">Acciones</th>
+                            <th class="text-left" style="width:90px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -80,7 +80,7 @@
                                 <td>{{ trim(($deposito->sala->codigo ?? '').' '.($deposito->sala->nombre ?? '')) }}</td>
                                 <td>{{ $deposito->empresa->nombre ?? '' }}</td>
                                 <td>{{ $deposito->activo ? 'Sí' : 'No' }}</td>
-                                <td class="text-center text-nowrap">
+                                <td class="text-left text-nowrap">
                                     @if (can('editar-tesoreria-crown-deposito', false))
                                         <a href="{{ route('editar_tesoreria_crown_deposito', $deposito->id) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>

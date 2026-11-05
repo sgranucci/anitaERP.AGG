@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Configuracion;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Storage;
@@ -13,6 +14,7 @@ use App\Repositories\Configuracion\UbicacionImpresoraRepositoryInterface;
 use App\Repositories\Configuracion\UsoSalidaImpresoraRepositoryInterface;
 use App\Support\Configuracion\SalidaParaProgramaSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 
@@ -82,14 +84,29 @@ class SalidaController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        can('editar-salidas');
+        $soloConsulta = $request->query('origen') === 'modal_consulta' || $request->query('vista') === 'consulta';
+        if ($soloConsulta) {
+            if (! can('listar-salidas', false) && ! can('editar-salidas', false)) {
+                abort(403, 'No tiene permiso para consultar la impresora.');
+            }
+        } else {
+            can('editar-salidas');
+        }
+
         $data = $this->repository->findOrFail($id);
         $ubicacion_impresora_query = $this->ubicacionImpresoraRepository->all();
         $uso_salida_impresora_query = $this->usoSalidaImpresoraRepository->all();
+        $puedeActualizar = can('actualizar-salidas', false);
 
-        return view('configuracion.salida.editar', compact('data', 'ubicacion_impresora_query', 'uso_salida_impresora_query'));
+        return view('configuracion.salida.editar', compact(
+            'data',
+            'ubicacion_impresora_query',
+            'uso_salida_impresora_query',
+            'soloConsulta',
+            'puedeActualizar'
+        ));
     }
 
     /**
@@ -104,7 +121,119 @@ class SalidaController extends Controller
         can('actualizar-salidas');
         $this->repository->update($request->all(), $id);
 
+        if ($request->input('vista') === 'consulta') {
+            return redirect()->route('editar_salida', [
+                'id' => $id,
+                'origen' => 'modal_consulta',
+                'vista' => 'consulta',
+            ])->with('mensaje', 'Salida actualizada con exito');
+        }
+
         return redirect('configuracion/salida')->with('mensaje', 'Salida actualizada con exito');
+    }
+
+    public function consultaSalida(Request $request): JsonResponse
+    {
+        if (! $this->puedeConsultarSalida()) {
+            abort(403);
+        }
+
+        $consulta = trim((string) $request->input('consulta', ''));
+        $query = Salida::query()
+            ->with(['ubicacionImpresora', 'usoSalidaImpresoras'])
+            ->orderBy('nombre');
+
+        if ($consulta !== '') {
+            $like = '%'.$consulta.'%';
+            $query->where(function ($q) use ($like) {
+                $q->where('nombre', 'like', $like)
+                    ->orWhere('comando', 'like', $like)
+                    ->orWhereHas('ubicacionImpresora', fn ($u) => $u->where('nombre', 'like', $like))
+                    ->orWhereHas('usoSalidaImpresoras', fn ($u) => $u->where('nombre', 'like', $like));
+            });
+        }
+
+        $filas = $query->limit(200)->get();
+        $puedeAbrirAbm = can('editar-salidas', false) || can('listar-salidas', false);
+
+        if ($filas->isEmpty()) {
+            return response()->json(['data' => '<tr><td colspan="5">Sin resultados</td></tr>']);
+        }
+
+        $html = '';
+        foreach ($filas as $salida) {
+            $descripcion = $this->descripcionSalida($salida);
+            $html .= '<tr>';
+            $html .= '<td class="id">'.e($salida->id).'</td>';
+            $html .= '<td class="nombre">'.e($salida->nombre).'</td>';
+            $html .= '<td class="descripcion">'.e($descripcion).'</td>';
+            $html .= '<td>'.e($salida->usos_etiqueta).'</td>';
+            $html .= '<td class="text-nowrap">';
+            $html .= '<a class="btn btn-warning btn-sm eligeconsultasalida">Elegir</a>';
+            if ($puedeAbrirAbm) {
+                $url = route('editar_salida', [
+                    'id' => $salida->id,
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ]);
+                $html .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+            }
+            $html .= '</td></tr>';
+        }
+
+        return response()->json(['data' => $html]);
+    }
+
+    public function resolverSalida(Request $request): JsonResponse
+    {
+        if (! $this->puedeConsultarSalida()) {
+            abort(403);
+        }
+
+        $nombre = trim((string) $request->input('nombre', ''));
+        if ($nombre === '') {
+            return response()->json(['error' => 'Nombre vacío'], 404);
+        }
+
+        $query = Salida::query()->with(['ubicacionImpresora', 'usoSalidaImpresoras']);
+        if (ctype_digit($nombre)) {
+            $salida = (clone $query)->whereKey((int) $nombre)->first();
+        } else {
+            $coincidencias = (clone $query)
+                ->whereRaw(SqlDialectSupport::lower('nombre').' = ?', [mb_strtolower($nombre)])
+                ->limit(2)
+                ->get();
+            $salida = $coincidencias->count() === 1 ? $coincidencias->first() : null;
+        }
+
+        if (! $salida) {
+            return response()->json(['error' => 'Impresora no encontrada'], 404);
+        }
+
+        return response()->json([
+            'id' => $salida->id,
+            'nombre' => $salida->nombre,
+            'descripcion' => $this->descripcionSalida($salida),
+        ]);
+    }
+
+    private function puedeConsultarSalida(): bool
+    {
+        return can('listar-salidas', false)
+            || can('editar-salidas', false)
+            || can('crear-configuracion-puntoventa-gastronomia', false)
+            || can('editar-configuracion-puntoventa-gastronomia', false)
+            || can('actualizar-configuracion-puntoventa-gastronomia', false);
+    }
+
+    private function descripcionSalida(Salida $salida): string
+    {
+        $ubicacion = trim((string) $salida->ubicacion);
+        if ($ubicacion !== '') {
+            return $ubicacion;
+        }
+
+        return trim((string) $salida->usos_etiqueta);
     }
 
         /**

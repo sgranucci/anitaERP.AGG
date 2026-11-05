@@ -15,9 +15,11 @@
 
         return route('ver_tesoreria_crown_jornada', $jornada->id).'?'.http_build_query($query);
     };
+    $puedeCrearSlot = $jornada->estaAbierta() && can('crear-tesoreria-crown-slot', false);
+    $puedeEliminarBorrador = $jornada->estaAbierta() && can('eliminar-borrador-tesoreria-crown-slot', false);
 @endphp
 
-<div class="d-flex flex-wrap mb-3">
+<div class="d-flex flex-wrap align-items-center mb-3">
     <div class="border rounded px-3 py-2 mr-2 mb-2">
         <div class="text-muted small">Drops</div>
         <strong>{{ $resumenSlots['drops'] }}</strong>
@@ -28,6 +30,11 @@
         <strong>{{ $resumenSlots['recuentos'] }}</strong>
         <span class="text-muted">· {{ $textoImporte((float) $resumenSlots['recuento_total']) }}</span>
     </div>
+    @if ($puedeCrearSlot)
+        <a href="{{ route('nueva_tesoreria_crown_slot', ['jornada_id' => $jornada->id]) }}" class="btn btn-primary btn-sm ml-auto mb-2">
+            <i class="fa fa-plus"></i> Nuevo recuento
+        </a>
+    @endif
 </div>
 
 <form method="get" action="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}" class="form-inline mb-3">
@@ -45,6 +52,9 @@
                 {{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($slotDetalle->numero) }}
                 · {{ $slotDetalle->maquina }} {{ $slotDetalle->maquina_nombre }}
             </h3>
+            <a href="{{ route('editar_tesoreria_crown_slot', $slotDetalle->id) }}" class="btn-accion-tabla tooltipsC mr-2" title="{{ $slotDetalle->esBorrador() ? 'Editar' : 'Consultar' }}">
+                <i class="fa fa-edit"></i>
+            </a>
             <a href="{{ $urlSlot() }}" class="small">Ver el día</a>
         </div>
         <div class="card-body p-0">
@@ -85,13 +95,14 @@
                 <th>Estado</th>
                 <th>Hora</th>
                 <th class="text-right">Total</th>
+                <th class="text-left" style="width:90px;">Acciones</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($slots as $fila)
                 <tr>
                     <td>
-                        <a class="text-primary" href="{{ $urlSlot((int) $fila->id) }}">
+                        <a class="text-primary" href="{{ route('editar_tesoreria_crown_slot', $fila->id) }}">
                             {{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($fila->numero) }}
                         </a>
                     </td>
@@ -101,10 +112,24 @@
                     <td>{{ \App\Models\Caja\TesoreriaCrownSlot::estado($fila->estado) }}</td>
                     <td>{{ $fila->hora }}</td>
                     <td class="text-right">{{ $textoImporte((float) $fila->total) }}</td>
+                    <td class="text-left text-nowrap">
+                        <a href="{{ route('editar_tesoreria_crown_slot', $fila->id) }}" class="btn-accion-tabla tooltipsC" title="{{ $fila->esBorrador() ? 'Editar' : 'Consultar' }}">
+                            <i class="fa fa-edit"></i>
+                        </a>
+                        @if ($puedeEliminarBorrador && $fila->esBorrador())
+                            <form method="POST" action="{{ route('eliminar_tesoreria_crown_slot', $fila->id) }}" class="d-inline" onsubmit="return confirm('¿Eliminar este borrador?');">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn-accion-tabla tooltipsC" title="Eliminar borrador">
+                                    <i class="fa fa-times-circle text-danger"></i>
+                                </button>
+                            </form>
+                        @endif
+                    </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7" class="text-muted">Esta jornada no tiene drop ni recuento de slots.</td>
+                    <td colspan="8" class="text-muted">Esta jornada no tiene drop ni recuento de slots.</td>
                 </tr>
             @endforelse
         </tbody>

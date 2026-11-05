@@ -69,13 +69,22 @@
                         'slots' => 'listar_slots_tesoreria_crown_jornada',
                         'poder' => 'listar_poder_publico_tesoreria_crown_jornada',
                         'anexo' => 'listar_anexo1_tesoreria_crown_jornada',
+                        'anexo2' => 'listar_anexo2_tesoreria_crown_jornada',
+                        'rescajero' => 'listar_rescajero_tesoreria_crown_jornada',
+                        'anexo3' => 'listar_anexo3_tesoreria_crown_jornada',
+                        'anexo7' => 'listar_anexo7_tesoreria_crown_jornada',
+                        'anexo8' => 'listar_anexo8_tesoreria_crown_jornada',
                         default => 'listar_cajeros_tesoreria_crown_jornada',
                     };
                     $exportDeskParams = ($panel ?? '') === 'cajeros'
                         ? array_merge($filtrosQuery ?? ['id' => $jornada->id, 'panel' => 'cajeros'], [
                             'columnas' => implode(',', $columnasVisibles ?? []),
                         ])
-                        : ['id' => $jornada->id];
+                        : (
+                            ($panel ?? '') === 'anexo'
+                                ? ['id' => $jornada->id, 'formato_anexo' => $anexoVariante ?? 'clasico']
+                                : ['id' => $jornada->id]
+                        );
                 }
             @endphp
             @include('caja.tesoreria_crown.partials.sala_chips', [
@@ -198,6 +207,16 @@
                         @include('caja.tesoreria_crown.jornada.partials.poder_publico')
                     @elseif ($panel === 'anexo')
                         @include('caja.tesoreria_crown.jornada.partials.anexo1')
+                    @elseif ($panel === 'anexo2')
+                        @include('caja.tesoreria_crown.jornada.partials.anexo2')
+                    @elseif ($panel === 'rescajero')
+                        @include('caja.tesoreria_crown.jornada.partials.rescajero')
+                    @elseif ($panel === 'anexo3')
+                        @include('caja.tesoreria_crown.jornada.partials.anexo3')
+                    @elseif ($panel === 'anexo7')
+                        @include('caja.tesoreria_crown.jornada.partials.anexo7')
+                    @elseif ($panel === 'anexo8')
+                        @include('caja.tesoreria_crown.jornada.partials.anexo8')
                     @else
                     @php
                         $muestraAcciones = $jornada->estaAbierta() || ($esAdministrador ?? false);
@@ -226,7 +245,7 @@
                                         @include('caja.tesoreria_crown.partials.workbench_th', ['key' => $keyColumna, 'rutaListado' => 'ver_tesoreria_crown_jornada'])
                                     @endforeach
                                     @if ($muestraAcciones)
-                                        <th class="text-center" style="width:110px;">Acciones</th>
+                                        <th class="text-left" style="width:110px;">Acciones</th>
                                     @endif
                                 </tr>
                             </thead>
@@ -264,7 +283,7 @@
                                             </td>
                                         @endforeach
                                         @if ($muestraAcciones)
-                                            <td class="text-center">
+                                            <td class="text-left text-nowrap">
                                                 @if ($jornada->estaAbierta() && ! $cajaCerrada && $fila->comprobantes->isEmpty() && $fila->cierres->isEmpty() && can('editar-tesoreria-crown-jornada', false))
                                                     <form action="{{ route('quitar_tesoreria_crown_asignacion', $fila->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Quitar esta asignación?');">
                                                         @csrf

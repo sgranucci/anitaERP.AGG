@@ -89,9 +89,10 @@ final class TesoreriaCrownAnexo1Calculo
         $bancarios = $v(200);
         $excedente = $v(100);
         $recargo = $v(330);
+        $apuestas = $v(331);
         $voucher = ['dia' => 0.0, 'mes' => 0.0, 'anio' => 0.0];
         $slotPoder = ['dia' => 0.0, 'mes' => 0.0, 'anio' => 0.0];
-        $otros = self::suma($online, $bingo, $torneo, $poderFila, $propina, $bancarios, $slotPoder, $voucher, $excedente, $recargo);
+        $otros = self::suma($online, $bingo, $torneo, $poderFila, $propina, $bancarios, $slotPoder, $voucher, $excedente, $recargo, $apuestas);
         $ingresos = self::suma($recaudacion, $otros);
 
         $egresos = self::suma($v(220), $v(110), $v(120), $v(230), $v(240), $v(250), $v(251), $v(252), $v(260), $v(270), $v(290), $v(300), $v(310));
@@ -125,6 +126,7 @@ final class TesoreriaCrownAnexo1Calculo
         $filas[] = self::lin('Movimientos bancarios y financieros', $bancarios);
         $filas[] = self::lin('Excedente de caja (anexo II)', $excedente);
         $filas[] = self::lin('Recargo financiero', $recargo);
+        $filas[] = self::lin('Apuestas deportivas', $apuestas);
         $filas[] = self::tot('Total otros ingresos', $otros);
         $filas[] = self::tot('Total ingresos', $ingresos);
         $filas[] = self::sec('EGRESOS');
@@ -179,6 +181,7 @@ final class TesoreriaCrownAnexo1Calculo
         $filas[] = self::lin('Movimientos bancarios y financieros', $sumaCod(25, 1, 41, 37, 29));
         $filas[] = self::lin('Excedente de bóveda', $sumaCod(17, 13));
         $filas[] = self::lin('Recargo financiero', $dia($efe['recargo']));
+        $filas[] = self::lin('Apuestas deportivas', $dia($efe['apuestas']));
         $filas[] = self::sec('EGRESOS');
         $filas[] = self::lin('Compras y gastos en efectivo y pagos de cuenta corriente (anexo VI)', $sumaCod(2));
         $filas[] = self::lin('Depósito efectivo', $sumaCod(3, 22));
@@ -282,13 +285,15 @@ final class TesoreriaCrownAnexo1Calculo
     }
 
     /**
-     * @return array{tarjetas: float, debito: float, qr: float, recargo: float}
+     * @return array{tarjetas: float, debito: float, qr: float, recargo: float, apuestas: float}
      */
     private static function efectivo(int $fecha): array
     {
+        // Informix acota identificadores a 18: efe_vta_apu_dep / efe_pago_apu_dep.
         $filas = self::consultar(
-            'tarj,deb,qr,rec',
-            'SELECT SUM(efe_tot_tarj), SUM(efe_tarjeta_debito), SUM(efe_total_qr), SUM(efe_recargo_fin) FROM efectivo WHERE efe_fecha = '.$fecha
+            'tarj,deb,qr,rec,vta,pago',
+            'SELECT SUM(efe_tot_tarj), SUM(efe_tarjeta_debito), SUM(efe_total_qr), SUM(efe_recargo_fin),'
+            .' SUM(efe_vta_apu_dep), SUM(efe_pago_apu_dep) FROM efectivo WHERE efe_fecha = '.$fecha
         );
         $fila = $filas[0] ?? null;
 
@@ -297,6 +302,7 @@ final class TesoreriaCrownAnexo1Calculo
             'debito' => (float) ($fila->deb ?? 0),
             'qr' => (float) ($fila->qr ?? 0),
             'recargo' => (float) ($fila->rec ?? 0),
+            'apuestas' => round((float) ($fila->vta ?? 0) - (float) ($fila->pago ?? 0), 2),
         ];
     }
 

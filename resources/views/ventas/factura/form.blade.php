@@ -573,6 +573,17 @@
 				<button type="button" id="nc-devolver-articulo" class="btn btn-outline-secondary btn-sm">Solo art&iacute;culo buscado</button>
 				<button type="button" id="nc-devolver-ninguno" class="btn btn-outline-secondary btn-sm">Ninguno</button>
 			</div>
+		@elseif (empty($flGeneraNotaDeDebito))
+			@php
+				$conceptoPrecioNetoMarcado = (string) old('concepto_precio_neto', ($conceptoPrecioNeto ?? false) ? '1' : '0') === '1';
+			@endphp
+			<div class="card-tools">
+				<input type="hidden" name="concepto_precio_neto" id="factura_concepto_precio_neto_valor" value="{{ $conceptoPrecioNetoMarcado ? '1' : '0' }}">
+				<div class="custom-control custom-checkbox mb-0" title="Tildado: el precio del renglón sin artículo es neto y el IVA se suma. Sin tildar: el precio ya incluye el IVA. Se recuerda para este usuario.">
+					<input type="checkbox" class="custom-control-input" id="factura_concepto_precio_neto" onchange="if (window.facturaAlCambiarPrecioNeto) { window.facturaAlCambiarPrecioNeto(); }" @checked($conceptoPrecioNetoMarcado)>
+					<label class="custom-control-label font-weight-normal" for="factura_concepto_precio_neto">Precio neto</label>
+				</div>
+			</div>
 		@endif
     </div>
     <div class="card-body">

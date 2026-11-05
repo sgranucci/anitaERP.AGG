@@ -1351,6 +1351,9 @@
 			$(".formasientoexterno").show();
 			$("#botonform2").addClass("active");
 			$("#botonform1").removeClass("active");
+			if (window.facturaAsientoMostradorLineas && typeof window.facturaPintarAsientoMostrador === 'function') {
+				window.facturaPintarAsientoMostrador(window.facturaAsientoMostradorLineas);
+			}
 
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
@@ -2933,6 +2936,9 @@
 				if (typeof window.aplicarTipoComprobanteSugerido === 'function') {
 					window.aplicarTipoComprobanteSugerido(data);
 				}
+				if (typeof window.facturaAplicarAsientoMostrador === 'function') {
+					window.facturaAplicarAsientoMostrador(data);
+				}
 			},
 			error :function( data ) {
 				if (seq !== calculaFacturaSeq) {
@@ -2953,6 +2959,131 @@
 
 		$("#tbody-tabla-total-factura").append(renglon);
     }
+
+	function facturaFmtImporteAsiento(n) {
+		var x = Number(n);
+		if (!isFinite(x) || Math.abs(x) < 0.005) {
+			return '';
+		}
+		if (window.AsientoMontosFormato && typeof AsientoMontosFormato.fmt === 'function') {
+			return AsientoMontosFormato.fmt(x);
+		}
+		return x.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	}
+
+	function facturaFilaAsientoNueva() {
+		var tpl = document.getElementById('template-renglon-cuenta-asiento');
+		if (tpl && tpl.content) {
+			var nodo = tpl.content.querySelector('tr');
+			if (nodo) {
+				return nodo.cloneNode(true);
+			}
+		}
+		var html = $('#template-renglon-cuenta-asiento').html() || '';
+		html = $.trim(html);
+		if (!html) {
+			return null;
+		}
+		var wrap = document.createElement('tbody');
+		wrap.innerHTML = html;
+		return wrap.firstElementChild;
+	}
+
+	function facturaPintarAsientoMostrador(lineas) {
+		var $tbody = $('#tbody-cuenta-asiento-table');
+		if (!$tbody.length || !facturaFilaAsientoNueva()) {
+			return;
+		}
+		var guardadas = {};
+		$tbody.find('tr.item-cuenta-asiento').each(function () {
+			var $tr = $(this);
+			var clave = $tr.attr('data-clave') || '';
+			if (!clave || $tr.find('.carga_cuentacontable_manual').val() !== 'S') {
+				return;
+			}
+			guardadas[clave] = {
+				id: $tr.find('.cuentacontable_id').val() || '',
+				codigo: $tr.find('.codigoasiento').val() || '',
+				nombre: $tr.find('.nombrecuentacontable').val() || '',
+				cc: $tr.find('.centrocostoasiento').val() || '',
+				ccTexto: $tr.find('.centrocostoasiento option:selected').text() || ''
+			};
+		});
+		$tbody.empty();
+		$.each(lineas || [], function (index, linea) {
+			var nodo = facturaFilaAsientoNueva();
+			if (!nodo) {
+				return;
+			}
+			$tbody.append(nodo);
+			var $tr = $(nodo);
+			var guardada = guardadas[linea.clave] || null;
+			var cuentaId = guardada && guardada.id ? guardada.id : (linea.cuentacontable_id || '');
+			var codigo = guardada && guardada.codigo ? guardada.codigo : (linea.codigo || '');
+			var nombre = guardada && guardada.nombre ? guardada.nombre : (linea.nombre || '');
+			$tr.attr('data-clave', linea.clave || '');
+			$tr.find('.iicuentacontable').val(index + 1);
+			$tr.find('.cuentacontable_id, .cuentacontable_id_previa').val(cuentaId);
+			$tr.find('.codigoasiento, .codigo_previo_cuentacontable').val(codigo);
+			$tr.find('.nombrecuentacontable').val(nombre);
+			$tr.find('.carga_cuentacontable_manual').val(guardada ? 'S' : 'N');
+			$tr.find('.observacionasiento').val(linea.observacion || '');
+			$tr.find('.debeasiento').val(facturaFmtImporteAsiento(linea.debe));
+			$tr.find('.haberasiento').val(facturaFmtImporteAsiento(linea.haber));
+			$tr.find('.cotizacionasiento').val('1,00');
+			var moneda = linea.moneda_id || $('#moneda_id').val() || '';
+			if (moneda) {
+				$tr.find('.monedaasiento').val(String(moneda));
+			}
+			var ccId = guardada && guardada.cc ? guardada.cc : (linea.centrocosto_id || '');
+			var ccTexto = guardada && guardada.ccTexto ? guardada.ccTexto : (linea.centrocosto_etiqueta || ccId);
+			if (ccId) {
+				$tr.find('.centrocostoasiento').html(
+					'<option value="' + ccId + '" selected>' + $('<div>').text(ccTexto).html() + '</option>'
+				);
+			}
+			if (!cuentaId && linea.editable) {
+				$tr.find('.codigoasiento').css('background', '#fff3cd').attr('title', 'Completá la cuenta de este neto');
+			}
+		});
+		if (window.AsientoMontosFormato && typeof AsientoMontosFormato.initEnContenedor === 'function') {
+			AsientoMontosFormato.initEnContenedor('#tbody-cuenta-asiento-table');
+		}
+		if (typeof window.sumaMontoAsiento === 'function') {
+			window.sumaMontoAsiento();
+		}
+	}
+	window.facturaPintarAsientoMostrador = facturaPintarAsientoMostrador;
+
+	window.facturaAplicarAsientoMostrador = function (data) {
+		if (!$('#asiento_mostrador_activo').length) {
+			return;
+		}
+		var info = data && data.asiento_manual;
+		var mostrar = !!(info && info.mostrar);
+		var $solapa = $('#solapa-asiento-mostrador');
+		if (!mostrar) {
+			$('#asiento_mostrador_activo').val('0');
+			window.facturaAsientoMostradorLineas = [];
+			$('#tbody-cuenta-asiento-table').empty();
+			$('#asiento-mostrador-aviso').hide().text('');
+			$solapa.addClass('d-none');
+			if ($('#botonform2').hasClass('active')) {
+				$('#botonform1').trigger('click');
+			}
+			return;
+		}
+		$solapa.removeClass('d-none');
+		$('#asiento_mostrador_activo').val('1');
+		window.facturaAsientoMostradorLineas = info.lineas || [];
+		facturaPintarAsientoMostrador(window.facturaAsientoMostradorLineas);
+		var $aviso = $('#asiento-mostrador-aviso');
+		if (info.aviso) {
+			$aviso.text(info.aviso).show();
+		} else {
+			$aviso.hide().text('');
+		}
+	};
 
 	function metaTipoFacturaMostrador() {
 		var $el = $('#tipotransaccion_id');

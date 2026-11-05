@@ -113,8 +113,10 @@ Route::get('configuracion/resolverusuario', 'Admin\UsuarioController@resolverUsu
 Route::get('configuracion/salida', 'Configuracion\SalidaController@index')->name('salida');
 Route::get('configuracion/salida/crear', 'Configuracion\SalidaController@crear')->name('crear_salida');
 Route::post('configuracion/salida', 'Configuracion\SalidaController@guardar')->name('guardar_salida');
-Route::get('configuracion/salida/{id}/editar', 'Configuracion\SalidaController@editar')->name('editar_salida');
-Route::put('configuracion/salida/{id}', 'Configuracion\SalidaController@actualizar')->name('actualizar_salida');
+Route::post('configuracion/consultasalida', 'Configuracion\SalidaController@consultaSalida')->name('consultar_salida_modal');
+Route::get('configuracion/resolversalida', 'Configuracion\SalidaController@resolverSalida')->name('resolver_salida');
+Route::get('configuracion/salida/{id}/editar', 'Configuracion\SalidaController@editar')->name('editar_salida')->middleware('modo.consulta');
+Route::put('configuracion/salida/{id}', 'Configuracion\SalidaController@actualizar')->name('actualizar_salida')->middleware('modo.consulta');
 Route::delete('configuracion/salida/{id}', 'Configuracion\SalidaController@eliminar')->name('eliminar_salida');
 Route::get('configuracion/ubicacion-impresora', 'Configuracion\UbicacionImpresoraController@index')->name('ubicacion_impresora');
 Route::get('configuracion/lista-ubicacion-impresora/{formato?}/{busqueda?}', 'Configuracion\UbicacionImpresoraController@listar')->name('lista_ubicacion_impresora');
@@ -2487,6 +2489,14 @@ Route::get('ventas/gastronomia-crown/api/opcionales-articulo/{articuloId}', 'Ven
 Route::post('ventas/gastronomia-crown/api/cuenta/{cuentaId}/linea/{lineaId}/opcionales', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiOpcionalesLinea')->name('gastronomia_crown_api_opcionales_linea');
 Route::get('ventas/gastronomia-crown/api/articulo/{articuloId}/receta', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiRecetaArticulo')->name('gastronomia_crown_api_receta_articulo');
 
+// Configuración de PC del POS Crown (mismo ítem de menú que Config. terminales gastronomía en AGG)
+Route::get('ventas/gastronomia-crown/configuracion-pc', 'Ventas\GastronomiaCrown\ConfiguracionPcGastronomiaCrownController@index')->name('consultar_configuracion_pc_gastronomia_crown');
+Route::get('ventas/gastronomia-crown/configuracion-pc/crear', 'Ventas\GastronomiaCrown\ConfiguracionPcGastronomiaCrownController@crear')->name('crear_configuracion_pc_gastronomia_crown');
+Route::post('ventas/gastronomia-crown/configuracion-pc', 'Ventas\GastronomiaCrown\ConfiguracionPcGastronomiaCrownController@guardar')->name('guardar_configuracion_pc_gastronomia_crown');
+Route::get('ventas/gastronomia-crown/configuracion-pc/{id}/editar', 'Ventas\GastronomiaCrown\ConfiguracionPcGastronomiaCrownController@editar')->name('editar_configuracion_pc_gastronomia_crown');
+Route::put('ventas/gastronomia-crown/configuracion-pc/{id}', 'Ventas\GastronomiaCrown\ConfiguracionPcGastronomiaCrownController@actualizar')->name('actualizar_configuracion_pc_gastronomia_crown');
+Route::delete('ventas/gastronomia-crown/configuracion-pc/{id}', 'Ventas\GastronomiaCrown\ConfiguracionPcGastronomiaCrownController@eliminar')->name('eliminar_configuracion_pc_gastronomia_crown');
+
 // KDS visual por sala (cocina)
 Route::get('ventas/gastronomia-crown/kds', 'Ventas\GastronomiaCrown\GastronomiaCrownKdsController@index')->name('gastronomia_crown_kds');
 Route::get('ventas/gastronomia-crown/kds/api/estado', 'Ventas\GastronomiaCrown\GastronomiaCrownKdsController@apiEstado')->name('gastronomia_crown_kds_api_estado');
@@ -3289,11 +3299,22 @@ Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/ajustar', 'Caja\Te
 Route::get('caja/tesoreria-crown/jornada/cajeros/listar/{formato?}', 'Caja\TesoreriaCrownJornadaController@listarCajeros')->name('listar_cajeros_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/jornada/mesas/listar/{formato?}', 'Caja\TesoreriaCrownJornadaController@listarMesas')->name('listar_mesas_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/slot', 'Caja\TesoreriaCrownSlotController@index')->name('tesoreria_crown_slot');
+Route::get('caja/tesoreria-crown/slot/crear', 'Caja\TesoreriaCrownSlotController@formulario')->name('nueva_tesoreria_crown_slot');
+Route::post('caja/tesoreria-crown/slot', 'Caja\TesoreriaCrownSlotController@crear')->name('crear_tesoreria_crown_slot');
+Route::get('caja/tesoreria-crown/slot/{id}', 'Caja\TesoreriaCrownSlotController@editar')->name('editar_tesoreria_crown_slot');
+Route::post('caja/tesoreria-crown/slot/{id}', 'Caja\TesoreriaCrownSlotController@guardar')->name('guardar_tesoreria_crown_slot');
+Route::post('caja/tesoreria-crown/slot/{id}/confirmar', 'Caja\TesoreriaCrownSlotController@confirmar')->name('confirmar_tesoreria_crown_slot');
+Route::delete('caja/tesoreria-crown/slot/{id}', 'Caja\TesoreriaCrownSlotController@eliminar')->name('eliminar_tesoreria_crown_slot');
 Route::get('caja/tesoreria-crown/jornada/slots/listar/{formato?}', 'Caja\TesoreriaCrownJornadaController@listarSlots')->name('listar_slots_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/poder', 'Caja\TesoreriaCrownPoderPublicoController@index')->name('tesoreria_crown_poder_publico');
 Route::get('caja/tesoreria-crown/jornada/poder-publico/listar/{formato?}', 'Caja\TesoreriaCrownJornadaController@listarPoderPublico')->name('listar_poder_publico_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/anexo', 'Caja\TesoreriaCrownAnexo1Controller@index')->name('tesoreria_crown_anexo1');
 Route::get('caja/tesoreria-crown/jornada/anexo/listar/{formato?}', 'Caja\TesoreriaCrownJornadaController@listarAnexo1')->name('listar_anexo1_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/anexo2/listar/{formato?}', 'Caja\TesoreriaCrownAnexoController@listarAnexo2')->name('listar_anexo2_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/rescajero/listar/{formato?}', 'Caja\TesoreriaCrownAnexoController@listarRescajero')->name('listar_rescajero_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/anexo3/listar/{formato?}', 'Caja\TesoreriaCrownAnexoController@listarAnexo3')->name('listar_anexo3_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/anexo7/listar/{formato?}', 'Caja\TesoreriaCrownAnexoController@listarAnexo7')->name('listar_anexo7_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/anexo8/listar/{formato?}', 'Caja\TesoreriaCrownAnexoController@listarAnexo8')->name('listar_anexo8_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/jornada/{id}', 'Caja\TesoreriaCrownJornadaController@ver')->name('ver_tesoreria_crown_jornada');
 
 Route::get('caja/tesoreria-crown/movimiento', 'Caja\TesoreriaCrownComprobanteController@index')->name('tesoreria_crown_movimiento');

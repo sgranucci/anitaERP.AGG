@@ -26,7 +26,12 @@ use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Models\Caja\TesoreriaCrownSlot;
 use App\Support\Caja\TesoreriaCrownMesaSupport;
 use App\Support\Caja\TesoreriaCrownAnexo1Calculo;
+use App\Support\Caja\TesoreriaCrownAnexo1NewCalculo;
+use App\Support\Caja\TesoreriaCrownAnexo2Calculo;
+use App\Support\Caja\TesoreriaCrownAnexo7Calculo;
+use App\Support\Caja\TesoreriaCrownAnexo8Calculo;
 use App\Support\Caja\TesoreriaCrownPoderPublicoCalculo;
+use App\Support\Caja\TesoreriaCrownResumenCajeroCalculo;
 use App\Support\Caja\TesoreriaCrownNumeradorSupport;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
 use App\Support\Caja\TesoreriaCrownSlotSupport;
@@ -539,46 +544,83 @@ class TesoreriaCrownJornadaController extends Controller
         can('listar-tesoreria-crown-anexo');
 
         $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
+        $variante = $this->anexoVariante($request);
         if ($formato === null || $formato === '') {
-            return redirect()->route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'anexo']);
+            return redirect()->route('ver_tesoreria_crown_jornada', [
+                'id' => $jornada->id,
+                'panel' => 'anexo',
+                'formato_anexo' => $variante,
+            ]);
         }
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
         $jornada->loadMissing('empresa');
-        $armado = $this->anexoDelDia($request, $jornada);
+        $armado = $this->anexoDelDia($request, $jornada, $variante);
         $filas = [];
-        foreach ($armado['filas'] as $fila) {
-            if ($fila['seccion']) {
-                $filas[] = [$fila['concepto'], '', '', ''];
+        if ($variante === 'nuevo') {
+            foreach ($armado['filas'] as $fila) {
+                if ($fila['seccion']) {
+                    $filas[] = [$fila['concepto'], '', '', '', ''];
 
-                continue;
+                    continue;
+                }
+                $filas[] = [
+                    $fila['concepto'],
+                    $fila['fecha'] ?? '',
+                    $fila['debito'] === null ? '' : (float) $fila['debito'],
+                    $fila['credito'] === null ? '' : (float) $fila['credito'],
+                    $fila['saldo'] === null ? '' : (float) $fila['saldo'],
+                ];
             }
-            $filas[] = [
-                $fila['concepto'],
-                $fila['dia'] === null ? '' : (float) $fila['dia'],
-                $fila['mes'] === null ? '' : (float) $fila['mes'],
-                $fila['anio'] === null ? '' : (float) $fila['anio'],
+            $columnas = [
+                ['label' => 'Concepto', 'ancho' => 48, 'wrap' => true],
+                ['label' => 'Fecha', 'ancho' => 14],
+                ['label' => 'Débito', 'ancho' => 16, 'numero' => true],
+                ['label' => 'Crédito', 'ancho' => 16, 'numero' => true],
+                ['label' => 'Saldo', 'ancho' => 16, 'numero' => true],
             ];
-        }
+            $subtituloExtra = 'Formato l-anexo1new.c';
+        } else {
+            foreach ($armado['filas'] as $fila) {
+                if ($fila['seccion']) {
+                    $filas[] = [$fila['concepto'], '', '', ''];
 
-        return $this->documentoListado((string) $formato, [
-            'titulo' => 'Anexo I '.$jornada->fecha->format('d/m/Y'),
-            'subtitulo' => $armado['cerrado']
-                ? 'Detalle grabado en Anita'
-                : 'Líneas calculadas de efectivo, bóveda y poder público',
-            'archivo' => 'anexo1_'.$jornada->fecha->format('Ymd'),
-            'titulo_corto' => 'Anexo I',
-            'columnas' => [
+                    continue;
+                }
+                $filas[] = [
+                    $fila['concepto'],
+                    $fila['dia'] === null ? '' : (float) $fila['dia'],
+                    $fila['mes'] === null ? '' : (float) $fila['mes'],
+                    $fila['anio'] === null ? '' : (float) $fila['anio'],
+                ];
+            }
+            $columnas = [
                 ['label' => 'Concepto', 'ancho' => 70, 'wrap' => true],
                 ['label' => 'Día', 'ancho' => 18, 'numero' => true],
                 ['label' => 'Mes', 'ancho' => 18, 'numero' => true],
                 ['label' => 'Anual', 'ancho' => 18, 'numero' => true],
-            ],
+            ];
+            $subtituloExtra = 'Formato l-anexo1.c';
+        }
+
+        return $this->documentoListado((string) $formato, [
+            'titulo' => 'Anexo I '.$jornada->fecha->format('d/m/Y'),
+            'subtitulo' => ($armado['cerrado']
+                ? 'Detalle grabado en Anita'
+                : 'Líneas calculadas de efectivo, bóveda y poder público')
+                .' · '.$subtituloExtra,
+            'archivo' => 'anexo1_'.$variante.'_'.$jornada->fecha->format('Ymd'),
+            'titulo_corto' => 'Anexo I',
+            'columnas' => $columnas,
             'filas' => $filas,
             'coleccion' => collect([(object) ['nombreempresa' => (string) ($jornada->empresa->nombre ?? '')]]),
-        ], 'ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'anexo']);
+        ], 'ver_tesoreria_crown_jornada', [
+            'id' => $jornada->id,
+            'panel' => 'anexo',
+            'formato_anexo' => $variante,
+        ]);
     }
 
     public function ver(Request $request, int $id)
@@ -595,7 +637,8 @@ class TesoreriaCrownJornadaController extends Controller
         $puedePoder = can('listar-tesoreria-crown-poder-publico', false);
         $puedeAnexo = can('listar-tesoreria-crown-anexo', false);
         $panel = (string) $request->query('panel', 'cajeros');
-        if (! in_array($panel, ['cajeros', 'mesas', 'boveda', 'slots', 'poder', 'anexo'], true)) {
+        $panelesAnexo = ['anexo', 'anexo2', 'rescajero', 'anexo3', 'anexo7', 'anexo8'];
+        if (! in_array($panel, array_merge(['cajeros', 'mesas', 'boveda', 'slots', 'poder'], $panelesAnexo), true)) {
             $panel = 'cajeros';
         }
         $tableroMesas = $puedeMesas
@@ -612,7 +655,7 @@ class TesoreriaCrownJornadaController extends Controller
                 fn (array $fila) => strtoupper((string) $fila['mesa']->codigo) === $mesaCodigo
             );
         }
-        if (($panel === 'mesas' && ! $puedeMesas) || ($panel === 'boveda' && ! $puedeBoveda) || ($panel === 'slots' && ! $puedeSlots) || ($panel === 'poder' && ! $puedePoder) || ($panel === 'anexo' && ! $puedeAnexo)) {
+        if (($panel === 'mesas' && ! $puedeMesas) || ($panel === 'boveda' && ! $puedeBoveda) || ($panel === 'slots' && ! $puedeSlots) || ($panel === 'poder' && ! $puedePoder) || (in_array($panel, $panelesAnexo, true) && ! $puedeAnexo)) {
             $panel = 'cajeros';
         }
         $poderPublico = null;
@@ -626,11 +669,44 @@ class TesoreriaCrownJornadaController extends Controller
         }
         $anexo = null;
         $anexoError = null;
+        $anexoVariante = $this->anexoVariante($request);
+        $anexo2 = $rescajero = $anexo3 = $anexo7 = $anexo8 = null;
+        $anexo2Error = $rescajeroError = $anexo3Error = $anexo7Error = $anexo8Error = null;
         if ($panel === 'anexo') {
             try {
-                $anexo = $this->anexoDelDia($request, $jornada);
+                $anexo = $this->anexoDelDia($request, $jornada, $anexoVariante);
             } catch (\RuntimeException $e) {
                 $anexoError = $e->getMessage();
+            }
+        } elseif ($panel === 'anexo2') {
+            try {
+                $anexo2 = $this->anexoCacheado($request, 'anexo2', $jornada, fn () => TesoreriaCrownAnexo2Calculo::deJornada($jornada));
+            } catch (\RuntimeException $e) {
+                $anexo2Error = $e->getMessage();
+            }
+        } elseif ($panel === 'rescajero') {
+            try {
+                $rescajero = $this->anexoCacheado($request, 'rescajero', $jornada, fn () => TesoreriaCrownResumenCajeroCalculo::deJornada($jornada));
+            } catch (\RuntimeException $e) {
+                $rescajeroError = $e->getMessage();
+            }
+        } elseif ($panel === 'anexo3') {
+            try {
+                $anexo3 = $this->anexoCacheado($request, 'anexo3', $jornada, fn () => TesoreriaCrownResumenCajeroCalculo::deJornada($jornada));
+            } catch (\RuntimeException $e) {
+                $anexo3Error = $e->getMessage();
+            }
+        } elseif ($panel === 'anexo7') {
+            try {
+                $anexo7 = $this->anexoCacheado($request, 'anexo7', $jornada, fn () => TesoreriaCrownAnexo7Calculo::deJornada($jornada));
+            } catch (\RuntimeException $e) {
+                $anexo7Error = $e->getMessage();
+            }
+        } elseif ($panel === 'anexo8') {
+            try {
+                $anexo8 = $this->anexoCacheado($request, 'anexo8', $jornada, fn () => TesoreriaCrownAnexo8Calculo::deJornada($jornada));
+            } catch (\RuntimeException $e) {
+                $anexo8Error = $e->getMessage();
             }
         }
         if ($panel === 'boveda') {
@@ -688,6 +764,17 @@ class TesoreriaCrownJornadaController extends Controller
             'poderError' => $poderError,
             'anexo' => $anexo,
             'anexoError' => $anexoError,
+            'anexoVariante' => $anexoVariante,
+            'anexo2' => $anexo2,
+            'anexo2Error' => $anexo2Error,
+            'rescajero' => $rescajero,
+            'rescajeroError' => $rescajeroError,
+            'anexo3' => $anexo3,
+            'anexo3Error' => $anexo3Error,
+            'anexo7' => $anexo7,
+            'anexo7Error' => $anexo7Error,
+            'anexo8' => $anexo8,
+            'anexo8Error' => $anexo8Error,
             'navSlots' => $puedeSlots
                 ? TesoreriaCrownSlot::query()->where('jornada_id', $jornada->id)->count()
                 : 0,
@@ -1142,16 +1229,43 @@ class TesoreriaCrownJornadaController extends Controller
         return $armado;
     }
 
-    private function anexoDelDia(Request $request, TesoreriaCrownJornada $jornada): array
+    private function anexoVariante(Request $request): string
     {
-        $clave = 'tc-anexo1-'.$jornada->fecha->format('Ymd');
+        return $request->input('formato_anexo') === 'nuevo' ? 'nuevo' : 'clasico';
+    }
+
+    private function anexoDelDia(Request $request, TesoreriaCrownJornada $jornada, ?string $variante = null): array
+    {
+        $variante = $variante ?? $this->anexoVariante($request);
+        $clave = 'tc-anexo1-'.$variante.'-'.$jornada->fecha->format('Ymd');
         if ($request->query('recalcular') !== '1') {
             $guardado = session($clave);
             if (is_array($guardado)) {
                 return $guardado;
             }
         }
-        $armado = TesoreriaCrownAnexo1Calculo::delDia($jornada->fecha->format('Y-m-d'));
+        $armado = $variante === 'nuevo'
+            ? TesoreriaCrownAnexo1NewCalculo::delDia($jornada->fecha->format('Y-m-d'))
+            : TesoreriaCrownAnexo1Calculo::delDia($jornada->fecha->format('Y-m-d'));
+        session([$clave => $armado]);
+
+        return $armado;
+    }
+
+    /**
+     * @param  callable(): array<string, mixed>  $armar
+     * @return array<string, mixed>
+     */
+    private function anexoCacheado(Request $request, string $clavePanel, TesoreriaCrownJornada $jornada, callable $armar): array
+    {
+        $clave = 'tc-'.$clavePanel.'-'.$jornada->fecha->format('Ymd');
+        if ($request->query('recalcular') !== '1') {
+            $guardado = session($clave);
+            if (is_array($guardado)) {
+                return $guardado;
+            }
+        }
+        $armado = $armar();
         session([$clave => $armado]);
 
         return $armado;

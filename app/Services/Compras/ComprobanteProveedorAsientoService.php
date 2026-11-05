@@ -1037,10 +1037,19 @@ class ComprobanteProveedorAsientoService
 
         $totalHaber = round(array_sum(array_column($lineasHaber, 'importe')), 2);
 
-        CuentaCentrocostoHabilitadoSupport::assertPayload(
-            $payloadAsiento,
-            'No se puede registrar la factura.'
-        );
+        $mensajesCentro = CuentaCentrocostoHabilitadoSupport::mensajesPayload($payloadAsiento);
+        if ($mensajesCentro !== []) {
+            $textoCentro = 'No se puede registrar la factura. '.implode(' ', $mensajesCentro);
+            if (! $permitirCuentasPendientes) {
+                throw new \InvalidArgumentException($textoCentro);
+            }
+            // Preview: la fila queda visible para elegir el centro (IVA y gasto).
+            // Al contabilizar se vuelve a exigir.
+            $avisosPreview[] = [
+                'tipo' => 'warning',
+                'mensaje' => $textoCentro.' Elegí un centro de costo habilitado en esa fila del asiento.',
+            ];
+        }
 
         return [
             'total_debe' => $totalDebe,

@@ -32,6 +32,13 @@
         recalcular();
         panel.addEventListener('input', recalcular);
     });
+    var primeraCantidad = document.querySelector('#form-mesa-crown input[data-denom]:not([disabled])');
+    if (primeraCantidad) {
+        window.setTimeout(function () {
+            primeraCantidad.focus();
+        }, 0);
+        return;
+    }
     var cajero = document.querySelector('.tc-cajero-codigo');
     if (cajero && cajero.value.trim() === '') {
         cajero.focus();
@@ -102,9 +109,20 @@
                                 <label for="comentario">Comentario</label>
                                 <input type="text" name="comentario" id="comentario" class="form-control" maxlength="80" value="{{ old('comentario', $movimiento->comentario) }}">
                             </div>
+                            @if ($movimiento->tipo === 'F')
+                                <div class="form-group col-md-3 mb-2">
+                                    <label for="propina">Propina</label>
+                                    <input type="number" name="propina" id="propina" class="form-control text-right" min="0" step="0.01" inputmode="decimal" value="{{ old('propina', $movimiento->propina) }}">
+                                </div>
+                            @endif
                         </div>
-                    @elseif ($movimiento->comentario)
-                        <p class="text-muted">{{ $movimiento->comentario }}</p>
+                    @elseif ($movimiento->comentario || ($movimiento->tipo === 'F' && abs((float) $movimiento->propina) > 0.001))
+                        <p class="text-muted">
+                            {{ $movimiento->comentario }}
+                            @if ($movimiento->tipo === 'F')
+                                · Propina {{ number_format((float) $movimiento->propina, 2, ',', '.') }}
+                            @endif
+                        </p>
                     @endif
                     <div class="row">
                         @foreach ($grupos as $grupo)

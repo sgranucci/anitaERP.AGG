@@ -298,6 +298,7 @@ class TesoreriaCrownMesaController extends Controller
                     'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $original->sala_id, 'M'),
                     'estado' => TesoreriaCrownMesa::CONFIRMADO,
                     'comentario' => 'Reversa de '.TesoreriaCrownNumeradorSupport::visible((int) $original->numero),
+                    'propina' => round((float) $original->propina * -1, 2),
                     'motivo' => $motivo,
                     'usuario_id' => $usuario->id,
                     'confirmado_at' => now(),
@@ -462,6 +463,7 @@ class TesoreriaCrownMesaController extends Controller
             'cajero_numero' => ['nullable', 'string', 'max:12'],
             'cantidad' => ['nullable', 'array'],
             'cantidad.*' => ['nullable', 'integer', 'min:0'],
+            'propina' => ['nullable', 'numeric', 'min:0'],
         ]);
     }
 
@@ -479,6 +481,9 @@ class TesoreriaCrownMesaController extends Controller
         DB::transaction(function () use ($movimiento, $datos, $cajero, $valoresSala) {
             $movimiento->comentario = $this->comentario($datos['comentario'] ?? null);
             $movimiento->cajero_crown_id = $cajero?->id;
+            $movimiento->propina = $movimiento->tipo === 'F'
+                ? round((float) ($datos['propina'] ?? 0), 2)
+                : 0;
             $movimiento->save();
             EloquentAuditDeleteSupport::each($movimiento->lineas()->getQuery());
             foreach ((array) ($datos['cantidad'] ?? []) as $valorId => $cantidad) {

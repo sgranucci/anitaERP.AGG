@@ -1103,3 +1103,5 @@ var totalHaberAsiento = 0;
 		$("#totaldebeasiento").val(formateaMontoTotalAsiento(totalDebeAsiento));
 		$("#totalhaberasiento").val(formateaMontoTotalAsiento(totalHaberAsiento));
 	}
+
+	window.sumaMontoAsiento = sumaMontoAsiento;

@@ -75,7 +75,7 @@
                                         <th>Cajero</th>
                                         <th>Banca</th>
                                         <th>Estado</th>
-                                        <th class="text-center" style="width:90px;">Acciones</th>
+                                        <th class="text-left" style="width:90px;">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -96,7 +96,7 @@
                                                     · reversado
                                                 @endif
                                             </td>
-                                            <td class="text-center text-nowrap">
+                                            <td class="text-left text-nowrap">
                                                 @include('caja.tesoreria_crown.mesa.partials.accion_fila', ['mov' => $mov, 'jornada' => $jornada])
                                             </td>
                                         </tr>

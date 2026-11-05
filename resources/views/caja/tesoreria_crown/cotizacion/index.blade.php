@@ -55,7 +55,7 @@
                             @foreach ($tipos as $tipo)
                                 <th colspan="2" class="text-center">{{ $tipo->codigo }}</th>
                             @endforeach
-                            <th rowspan="2" class="text-center" style="width:70px;">Acciones</th>
+                            <th rowspan="2" class="text-left" style="width:70px;">Acciones</th>
                         </tr>
                         <tr>
                             @foreach ($tipos as $tipo)
@@ -73,7 +73,7 @@
                                     <td class="text-right">{{ $tasas['compra'] === null ? '' : number_format((float) $tasas['compra'], 4, ',', '.') }}</td>
                                     <td class="text-right">{{ $tasas['venta'] === null ? '' : number_format((float) $tasas['venta'], 4, ',', '.') }}</td>
                                 @endforeach
-                                <td class="text-center">
+                                <td class="text-left text-nowrap">
                                     @if (can('editar-tesoreria-crown-cotizacion', false))
                                         <a href="{{ route('editar_tesoreria_crown_cotizacion', ['sala_id' => $sala->id, 'jornada' => $fila['jornada']]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>

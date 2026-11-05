@@ -33,7 +33,7 @@
                             <th>Código</th>
                             <th>Nombre</th>
                             <th>Activo</th>
-                            <th class="text-center" style="width:90px;">Acciones</th>
+                            <th class="text-left" style="width:90px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -42,7 +42,7 @@
                                 <td>{{ $tipo->codigo }}</td>
                                 <td>{{ $tipo->nombre }}</td>
                                 <td>{{ $tipo->activo ? 'Sí' : 'No' }}</td>
-                                <td class="text-center text-nowrap">
+                                <td class="text-left text-nowrap">
                                     @if (can('editar-tesoreria-crown-deposito', false))
                                         <a href="{{ route('editar_tesoreria_crown_tipo_deposito', $tipo->id) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>

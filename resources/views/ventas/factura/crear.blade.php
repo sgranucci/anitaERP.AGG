@@ -41,6 +41,9 @@
 @endif
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/concepto_venta/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/concepto_venta/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cuentacontable/consulta.js')) ?: time() }}" type="text/javascript"></script>
+@include('includes.contable.asiento_montos_formato_js')
+<script src="{{asset("assets/pages/scripts/contable/asiento/asiento_externo.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/asiento_externo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/vendedor/consulta.js")}}" type="text/javascript"></script>
@@ -93,9 +96,30 @@
             </div>
             <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="{{ ! empty($modoNc) ? 'nc' : 'factura' }}" data-sin-bloqueo-grabacion="1" data-factura-redirect="{{ route('factura') }}" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
                 @csrf
+                @include('includes.tabs-activas-estilos')
+                <div class="tabs-activas px-3 pt-2">
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#" id="botonform1" role="tab">
+                                <i class="fa fa-file-invoice"></i> Datos principales
+                            </a>
+                        </li>
+                        <li class="nav-item d-none" id="solapa-asiento-mostrador">
+                            <a class="nav-link" href="#" id="botonform2" role="tab">
+                                <i class="fa fa-copy"></i> Asiento contable
+                            </a>
+                        </li>
+                    </ul>
+                </div>
                 <div class="card-body">
                     @php $datos = ["funcion" => "crear", "layoutItemsPedido" => $layoutItemsPedido, "modoNc" => ! empty($modoNc)]; @endphp
                     @include('ventas.factura.form', $datos)
+                    <input type="hidden" name="asiento_mostrador_activo" id="asiento_mostrador_activo" value="0">
+                    <div class="alert alert-light border py-2 mb-2 formasientoexterno" style="display:none">
+                        Se asumen cliente, IVA y el concepto que ya tiene cuenta. Los netos sin cuenta se completan en esta solapa.
+                        <div id="asiento-mostrador-aviso" class="text-danger mt-1" style="display:none"></div>
+                    </div>
+                    @include('includes.contable.formasientoexterno')
                 </div>
                 <div class="card-footer">
                     <button type="button" onclick="subm()" class="btn btn-success factura-carga-bloqueable" data-padron-accion-factura="1">
@@ -108,5 +132,6 @@
 </div>
 @include('includes.compras.arca_apoc_validacion_modal')
 @include('includes.ventas.modalconsultatipotransaccion')
+@include('includes.contable.modalconsultacuentacontable')
 @include('includes.proceso-overlay-factura')
 @endsection

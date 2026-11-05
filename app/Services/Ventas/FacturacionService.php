@@ -109,7 +109,9 @@ use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Support\Ventas\AnitaComprobDescuentoSupport;
 use App\Support\Ventas\AnitaVengravCodigoTasaSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
+use App\Models\Contable\Centrocosto;
 use App\Support\Ventas\FacturaAsientoDescuentoPieSupport;
+use App\Support\Ventas\FacturaMostradorAsientoManualSupport;
 use App\Support\Ventas\Ferli\FacturaAsientoIvaPrecioFerliSupport;
 use App\Support\Ventas\FacturaBTotalesImpresionSupport;
 use App\Support\Ventas\FacturaPdfIdentificacionSupport;
@@ -3159,6 +3161,12 @@ class FacturacionService
 				$incluyeImpuesto = $incluyePorLista[$listaprecio_id];
 			}
 
+			// Renglón sin artículo (concepto o texto libre): el tilde dice si el importe tipeado es neto.
+			$lineaSinArticulo = (int) ($articulo_id ?? 0) <= 0;
+			if (! $esNcMostrador && $lineaSinArticulo && array_key_exists('concepto_precio_neto', $data)) {
+				$incluyeImpuesto = filter_var($data['concepto_precio_neto'], FILTER_VALIDATE_BOOLEAN) ? 'N' : '1';
+			}
+
 			// Lee el descuento por línea (grilla pedido) o descuento global
 			$descuentosLineaItem = $data['_descuentos_linea_item'] ?? null;
 			if (is_array($descuentosLineaItem) && array_key_exists($offItem, $descuentosLineaItem)) {
@@ -3998,12 +4006,24 @@ class FacturacionService
 						$data['opciones_emision'][FacturacionLocalCuentaVentaSupport::FLAG_CONTRAPARTIDA_CUENTA] = $cuentaNcLocalId;
 					}
 					if ($asientoContable === []) {
-						$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+						$asientoContable = $this->asientoContableMostrador(
+							$data,
+							$dataFactura,
+							$conceptosTotales,
+							(int) $empresa->id,
+							(float) $totalComprobante
+						);
 						$this->assertAsientoIvaPrecioFerli($dataFactura, $conceptosTotales, $asientoContable);
 					}
 				}
 				else {
-					$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+					$asientoContable = $this->asientoContableMostrador(
+						$data,
+						$dataFactura,
+						$conceptosTotales,
+						(int) $empresa->id,
+						(float) $totalComprobante
+					);
 					$this->assertAsientoIvaPrecioFerli($dataFactura, $conceptosTotales, $asientoContable);
 				}
 
@@ -8167,6 +8187,34 @@ class FacturacionService
 			return;
 		}
 
+		// Asiento ya con cliente (debe y haber): el control mira un solo lado,
+		// ventas + IVA, que es el que no puede pasar el total.
+		if ($this->asientoContableTieneMontosCruzados($asientoContable)) {
+			$positivos = 0.0;
+			$negativos = 0.0;
+			foreach ($asientoContable as $lin) {
+				$monto = (float) ($lin['monto'] ?? 0);
+				if ($monto > 0) {
+					$positivos += $monto;
+				} elseif ($monto < 0) {
+					$negativos += abs($monto);
+				}
+			}
+			$ladoPositivo = $positivos >= $negativos;
+			$unLado = [];
+			foreach ($asientoContable as $lin) {
+				$monto = (float) ($lin['monto'] ?? 0);
+				if ($ladoPositivo && $monto > 0) {
+					$unLado[] = $lin;
+				} elseif (! $ladoPositivo && $monto < 0) {
+					$copia = $lin;
+					$copia['monto'] = abs($monto);
+					$unLado[] = $copia;
+				}
+			}
+			$asientoContable = $unLado;
+		}
+
 		FacturaAsientoIvaPrecioFerliSupport::assertCierra($dataFactura, $conceptosTotales, $asientoContable);
 	}
 
@@ -9108,6 +9156,239 @@ class FacturacionService
 	}
 
 	/**
+	 * Solapa de asiento para factura de concepto o texto. La de artículos sigue el armado automático.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @param  list<array<string, mixed>>  $dataFactura
+	 * @param  list<array<string, mixed>>  $conceptosTotales
+	 * @return list<array<string, mixed>>
+	 */
+	private function asientoContableMostrador(array $data, array $dataFactura, array $conceptosTotales, int $empresaId, float $total): array
+	{
+		$manual = ! $this->esEmisionPos($data)
+			&& (int) ($data['venta_id'] ?? 0) <= 0
+			&& FacturaMostradorAsientoManualSupport::lleva($dataFactura);
+		$activo = (string) ($data['asiento_mostrador_activo'] ?? '0') === '1';
+
+		if ($manual && $activo) {
+			$publicado = FacturaMostradorAsientoManualSupport::desdeFormulario($data);
+			if (isset($publicado['error'])) {
+				throw new Exception($publicado['error']);
+			}
+			if ($publicado['lineas'] !== []) {
+				$lineas = [];
+				foreach ($publicado['lineas'] as $lin) {
+					$id = $this->resolverCuentaContableIdParaEmpresa((int) $lin['cuentacontable_id'], $empresaId);
+					if ($id <= 0) {
+						throw new Exception('La cuenta del asiento no corresponde a la empresa de la factura. Revisá la solapa Asiento contable.');
+					}
+					$lin['cuentacontable_id'] = $id;
+					$lineas[] = $lin;
+				}
+
+				return $lineas;
+			}
+		}
+
+		$asiento = self::armaContabilidad($dataFactura, $conceptosTotales, $empresaId, $total, $manual);
+		if ($manual) {
+			foreach ($asiento as $lin) {
+				if (abs((float) ($lin['monto'] ?? 0)) >= 0.01 && (int) ($lin['cuentacontable_id'] ?? 0) <= 0) {
+					throw new Exception(FacturaMostradorAsientoManualSupport::MENSAJE_NETO_PENDIENTE);
+				}
+			}
+		}
+
+		return $asiento;
+	}
+
+	/**
+	 * Líneas de la solapa: cliente, netos (pendientes si no hay cuenta) e impuestos asumidos.
+	 *
+	 * @param  array<string, mixed>  $calculo
+	 * @param  array<string, mixed>  $request
+	 * @return array{mostrar: bool, lineas: list<array<string, mixed>>, aviso?: string}|null
+	 */
+	public function previewAsientoMostrador(array $calculo, array $request): ?array
+	{
+		$dataFactura = $calculo['datosfactura'] ?? null;
+		if (! is_array($dataFactura)) {
+			return null;
+		}
+		if ($this->esEmisionPos($request) || (int) ($request['venta_id'] ?? 0) > 0) {
+			return ['mostrar' => false, 'lineas' => []];
+		}
+		if (! FacturaMostradorAsientoManualSupport::lleva($dataFactura)) {
+			return ['mostrar' => false, 'lineas' => []];
+		}
+
+		try {
+			$puntoventa = $this->puntoventaRepository->find((int) ($request['puntoventa_id'] ?? 0));
+			$empresaId = (int) ($puntoventa->empresa_id ?? 0);
+			if ($empresaId <= 0) {
+				return ['mostrar' => true, 'lineas' => [], 'aviso' => 'Elegí el punto de venta para armar el asiento.'];
+			}
+			$conceptos = is_array($calculo['conceptostotales'] ?? null) ? $calculo['conceptostotales'] : [];
+			$asiento = self::armaContabilidad(
+				$dataFactura,
+				$conceptos,
+				$empresaId,
+				(float) ($calculo['totalcomprobante'] ?? 0),
+				true
+			);
+			$cliente = $this->clienteQuery->traeClienteporId((int) ($request['cliente_id'] ?? 0));
+			$tipo = null;
+			$tipoId = (int) ($request['tipotransaccion_id'] ?? 0);
+			if ($tipoId > 0) {
+				try {
+					$tipo = $this->tipotransaccionRepository->find($tipoId);
+				} catch (\Throwable $e) {
+					$tipo = null;
+				}
+			}
+
+			return $this->lineasPreviewAsientoMostrador(
+				$asiento,
+				$cliente,
+				$empresaId,
+				$tipo && $tipo->esNotaCredito(),
+				(int) ($request['moneda_id'] ?? 0)
+			);
+		} catch (\Throwable $e) {
+			return ['mostrar' => true, 'lineas' => [], 'aviso' => $e->getMessage()];
+		}
+	}
+
+	/**
+	 * @param  list<array<string, mixed>>  $asiento
+	 * @return array{mostrar: bool, lineas: list<array<string, mixed>>, aviso?: string}
+	 */
+	private function lineasPreviewAsientoMostrador(array $asiento, mixed $cliente, int $empresaId, bool $esNc, int $monedaId): array
+	{
+		$otras = [];
+		$suma = 0.0;
+		$iNeto = 0;
+		$iConcepto = 0;
+		foreach ($asiento as $lin) {
+			$monto = round(abs((float) ($lin['monto'] ?? 0)), 2);
+			if ($monto < 0.009) {
+				continue;
+			}
+			$suma += $monto;
+			$origen = (string) ($lin['origen'] ?? 'concepto');
+			$clave = $origen === 'neto' ? 'neto:'.$iNeto++ : 'con:'.$iConcepto++;
+			$cuentaId = (int) ($lin['cuentacontable_id'] ?? 0);
+			$otras[] = [
+				'clave' => $clave,
+				'cuentacontable_id' => $cuentaId,
+				'centrocosto_id' => (int) ($lin['centrocosto_id'] ?? 0),
+				'debe' => $esNc ? $monto : 0.0,
+				'haber' => $esNc ? 0.0 : $monto,
+				'editable' => $cuentaId <= 0,
+				'observacion' => trim((string) ($lin['observacion'] ?? '')) ?: 'Neto',
+			];
+		}
+
+		$suma = round($suma, 2);
+		$lineas = [];
+		if ($suma >= 0.009) {
+			$cuentaCliente = $this->cuentaDeudoresFactura($cliente, $empresaId);
+			$clienteId = $cuentaCliente ? (int) $cuentaCliente->id : 0;
+			$lineas[] = [
+				'clave' => 'cliente',
+				'cuentacontable_id' => $clienteId,
+				'centrocosto_id' => 0,
+				'debe' => $esNc ? 0.0 : $suma,
+				'haber' => $esNc ? $suma : 0.0,
+				'editable' => $clienteId <= 0,
+				'observacion' => 'Clientes',
+			];
+		}
+		foreach ($otras as $lin) {
+			$lineas[] = $lin;
+		}
+
+		$ids = [];
+		$ccIds = [];
+		foreach ($lineas as $lin) {
+			if ((int) $lin['cuentacontable_id'] > 0) {
+				$ids[] = (int) $lin['cuentacontable_id'];
+			}
+			if ((int) $lin['centrocosto_id'] > 0) {
+				$ccIds[] = (int) $lin['centrocosto_id'];
+			}
+		}
+		$cuentas = [];
+		foreach (array_unique($ids) as $id) {
+			$cuenta = $this->cuentacontableRepository->findPorId($id);
+			if ($cuenta) {
+				$cuentas[$id] = $cuenta;
+			}
+		}
+		$centros = $ccIds === []
+			? collect()
+			: Centrocosto::query()->whereIn('id', array_unique($ccIds))->get(['id', 'codigo', 'nombre'])->keyBy('id');
+
+		$aviso = null;
+		foreach ($lineas as &$lin) {
+			$cuenta = $cuentas[(int) $lin['cuentacontable_id']] ?? null;
+			$lin['codigo'] = $cuenta ? (string) $cuenta->codigo : '';
+			$lin['nombre'] = $cuenta ? (string) $cuenta->nombre : '';
+			$lin['moneda_id'] = $monedaId > 0 ? $monedaId : (int) ($cuenta->moneda_id ?? 1);
+			$cc = $centros->get((int) $lin['centrocosto_id']);
+			$lin['centrocosto_etiqueta'] = $cc
+				? trim((string) $cc->codigo.' - '.(string) $cc->nombre)
+				: '';
+			if ((int) $lin['cuentacontable_id'] <= 0) {
+				$aviso = FacturaMostradorAsientoManualSupport::MENSAJE_NETO_PENDIENTE;
+			}
+		}
+		unset($lin);
+
+		$out = ['mostrar' => true, 'lineas' => $lineas];
+		if ($aviso !== null) {
+			$out['aviso'] = $aviso;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Impuesto o percepción sin cuenta, en la solapa del mostrador: el renglón queda para completarlo.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function lineaConceptoPendienteMostrador(int $empresaId, float $monto, string $observacion): array
+	{
+		$observacion = trim($observacion);
+
+		return [
+			'empresa_id' => $empresaId,
+			'cuentacontable_id' => 0,
+			'monto' => $monto,
+			'origen' => 'concepto',
+			'pendiente' => true,
+			'observacion' => $observacion !== '' ? $observacion : 'Impuesto',
+		];
+	}
+
+	private function cuentaDeudoresFactura(mixed $cliente, int $empresaId): ?object
+	{
+		$id = (int) ($cliente->cuentacontable_id ?? 0);
+		if ($id > 0) {
+			$resuelto = $this->resolverCuentaContableIdParaEmpresa($id, $empresaId);
+			if ($resuelto > 0) {
+				$cuenta = $this->cuentacontableRepository->findPorId($resuelto);
+				if ($cuenta) {
+					return $cuenta;
+				}
+			}
+		}
+
+		return $this->cuentacontableRepository->findPorCodigo($empresaId, config('cliente.DEUDORES_POR_VENTAS')) ?: null;
+	}
+
+	/**
 	 * Línea con importe y sin cuenta de venta (ni fallback de config).
 	 * Si se omite en silencio, el asiento llega a Anita con menos de dos piernas
 	 * y el CAE ya fue pedido.
@@ -9125,7 +9406,7 @@ class FacturacionService
 			.' no tiene cuenta contable de venta. Cárguela en el artículo y vuelva a facturar.';
 	}
 
-	public function armaContabilidad($dataFactura, $conceptostotales, $empresa_id, $total)
+	public function armaContabilidad($dataFactura, $conceptostotales, $empresa_id, $total, bool $netosSinArticuloPendientes = false)
 	{
 		$asientoContable = [];
 
@@ -9174,7 +9455,18 @@ class FacturacionService
 			}
 
 			if ($cuentaId <= 0 && abs((float) $subTotal) >= 0.01) {
-				throw new Exception('No se puede armar el asiento: no hay cuenta contable de venta para imputar el neto.');
+				if ($netosSinArticuloPendientes && FacturaMostradorAsientoManualSupport::lleva($dataFactura)) {
+					$asientoContable[] = [
+						'empresa_id' => $empresa_id,
+						'cuentacontable_id' => 0,
+						'monto' => $subTotal,
+						'origen' => 'neto',
+						'pendiente' => true,
+						'observacion' => 'Neto',
+					];
+				} else {
+					throw new Exception('No se puede armar el asiento: no hay cuenta contable de venta para imputar el neto.');
+				}
 			}
 
 			if ($cuentaId > 0)
@@ -9191,7 +9483,9 @@ class FacturacionService
 					$asientoContable[] = [
 										'empresa_id' => $empresa_id,
 										'cuentacontable_id' => $cuentaId,
-										'monto' => $subTotal
+										'monto' => $subTotal,
+										'origen' => 'neto',
+										'observacion' => 'Neto',
 									];
 				else
 					$asientoContable[$i]['monto'] += $subTotal;
@@ -9202,6 +9496,13 @@ class FacturacionService
 			foreach ($dataFactura as $item)
 			{
 				$monto = VentaImporteDosDecimalesSupport::redondear($item['cantidad'] * $item['precio']);
+				$obsLinea = trim((string) ($item['detalle'] ?? ''));
+				if ($obsLinea === '') {
+					$obsLinea = trim((string) ($item['descripcion'] ?? ''));
+				}
+				if ($obsLinea === '') {
+					$obsLinea = 'Neto';
+				}
 
 				if ($monto != 0)
 				{
@@ -9228,7 +9529,9 @@ class FacturacionService
 												'empresa_id' => $empresa_id,
 												'cuentacontable_id' => $cuentaId,
 												'centrocosto_id' => $ccItem > 0 ? $ccItem : null,
-												'monto' => $monto
+												'monto' => $monto,
+												'origen' => 'neto',
+												'observacion' => $obsLinea,
 											];
 						else
 							$asientoContable[$i]['monto'] += $monto;
@@ -9251,10 +9554,25 @@ class FacturacionService
 								$asientoContable[] = [
 													'empresa_id' => $empresa_id,
 													'cuentacontable_id' => $cuentacontable->id,
-													'monto' => $monto
+													'monto' => $monto,
+													'origen' => 'neto',
+													'observacion' => $obsLinea,
 												];
 							else
 								$asientoContable[$i]['monto'] += $monto;
+						}
+						elseif ($netosSinArticuloPendientes && (int) ($item['articulo_id'] ?? 0) <= 0)
+						{
+							$ccItem = (int) ($item['centrocosto_id'] ?? 0);
+							$asientoContable[] = [
+								'empresa_id' => $empresa_id,
+								'cuentacontable_id' => 0,
+								'centrocosto_id' => $ccItem > 0 ? $ccItem : null,
+								'monto' => $monto,
+								'origen' => 'neto',
+								'pendiente' => true,
+								'observacion' => $obsLinea,
+							];
 						}
 						else
 						{
@@ -9305,6 +9623,10 @@ class FacturacionService
 						}
 					}
 					if (! $cuenta) {
+						if ($netosSinArticuloPendientes) {
+							$asientoContable[] = $this->lineaConceptoPendienteMostrador($empresa_id, $total, (string) ($conc['concepto'] ?? 'PNC'));
+							continue;
+						}
 						throw new Exception('Falta la cuenta contable del régimen PNC (percepción no categorizado) para esta empresa.');
 					}
 				}
@@ -9323,26 +9645,30 @@ class FacturacionService
 						}
 					}
 					if (! $cuenta) {
+						if ($netosSinArticuloPendientes) {
+							$asientoContable[] = $this->lineaConceptoPendienteMostrador($empresa_id, $total, (string) ($conc['concepto'] ?? 'PIVA'));
+							continue;
+						}
 						throw new Exception('Falta la cuenta contable del régimen PIVA (percepción IVA RG 5329) para esta empresa.');
 					}
 				}
 				
-				// Iva
+				// Iva: grilla del impuesto, si no la cuenta automática de IVA débito fiscal.
 				if (strpos($conc['concepto'], 'Iva') !== false)
 				{
-					$cuentacontable = $this->impuesto_cuentacontableRepository->leePorImpuesto($conc['impuesto_id'], $empresa_id);
+					$cuentacontable = $this->impuesto_cuentacontableRepository->leePorImpuesto($conc['impuesto_id'] ?? 0, $empresa_id);
 
 					if (isset($cuentacontable[0]))
-						$cuenta = $cuentacontable[0]->cuentacontable_id;	
-					else {
-						$codigoIva = trim((string) config('facturacion.CUENTACONTABLE_IVA', ''));
-						if ($codigoIva !== '') {
-							$ccIva = $this->cuentacontableRepository->findPorCodigo($empresa_id, $codigoIva);
-							$cuenta = $ccIva ? $ccIva->id : 0;
+						$cuenta = $cuentacontable[0]->cuentacontable_id;
+					else
+						$cuenta = NotaCreditoIvaCuentaSupport::cuentaDebitoFiscalVentaId((int) $empresa_id);
+
+					if (! $cuenta) {
+						if ($netosSinArticuloPendientes) {
+							$asientoContable[] = $this->lineaConceptoPendienteMostrador($empresa_id, $total, (string) ($conc['concepto'] ?? 'IVA'));
+							continue;
 						}
-						if (! $cuenta) {
-							throw new Exception('Error en cuenta contable de impuesto '.$conc['impuesto_id']);
-						}
+						throw new Exception('Error en cuenta contable de impuesto '.($conc['impuesto_id'] ?? ''));
 					}
 				}
 
@@ -9365,6 +9691,10 @@ class FacturacionService
 						$codigoAbasto = (string) config('facturacion.CUENTACONTABLE_ABASTO', '302080000');
 						$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $codigoAbasto);
 						if (! $cuentacontable) {
+							if ($netosSinArticuloPendientes) {
+								$asientoContable[] = $this->lineaConceptoPendienteMostrador($empresa_id, $total, (string) ($conc['concepto'] ?? 'Abasto'));
+								continue;
+							}
 							throw new Exception('Falta la cuenta contable de abasto ('.$codigoAbasto.') para esta empresa.');
 						}
 						$cuenta = $cuentacontable->id;
@@ -9374,7 +9704,10 @@ class FacturacionService
 				if ($cuenta != '')
 					$asientoContable[] = ['empresa_id' => $empresa_id,
 									'cuentacontable_id' => $cuenta,
-									'monto' => $total];
+									'monto' => $total,
+									'origen' => 'concepto',
+									'observacion' => (string) ($conc['concepto'] ?? ''),
+								];
 			}
 		}
 		return $asientoContable;
@@ -10664,6 +10997,18 @@ class FacturacionService
 			$fceComprobanteReferenciado = trim((string) ($data->codigo ?? ''));
 		}
 
+		$conceptoPrecioNeto = (bool) (UsuarioPreferenciaFacturacionSupport::leer()['concepto_precio_neto'] ?? false);
+		if (empty($flGeneraNotaDeCredito) && ! $flGeneraNotaDeDebito) {
+			foreach ($data->venta_emisiones ?? [] as $emPref) {
+				if (! empty($emPref->articulo_id) || empty($emPref->concepto_venta_id)) {
+					continue;
+				}
+				$incPref = strtoupper(trim((string) ($emPref->incluyeimpuesto ?? '')));
+				$conceptoPrecioNeto = ($incPref === 'N' || $incPref === '2');
+				break;
+			}
+		}
+
         return view('ventas.factura.editar', compact('data', 
 			'mventa_query', 'modulo_query', 
 			'listaprecio_query', 
@@ -10675,7 +11020,7 @@ class FacturacionService
 			'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query', 'impuesto_query',
 			'ncOrigenEsFce', 'fceComprobanteReferenciado', 'fceAnulacion',
 			'ncPendientesPorEmision', 'articuloNcFiltro', 'articuloNcCodigo', 'articuloNcDescripcion',
-			'flGeneraNotaDeDebito', 'tipoNd')); 
+			'flGeneraNotaDeDebito', 'tipoNd', 'conceptoPrecioNeto')); 
 	}
 
 	/*

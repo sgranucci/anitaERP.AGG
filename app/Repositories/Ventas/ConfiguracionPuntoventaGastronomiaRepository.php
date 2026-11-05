@@ -21,6 +21,7 @@ class ConfiguracionPuntoventaGastronomiaRepository implements ConfiguracionPunto
         $query = $this->model
             ->with([
                 'empresa',
+                'sala',
                 'puntoventaCae',
                 'puntoventaCaea',
                 'ubicacion',
@@ -30,6 +31,7 @@ class ConfiguracionPuntoventaGastronomiaRepository implements ConfiguracionPunto
                 'depositoVenta',
                 'depositoInsumos',
                 'tipotransaccion',
+                'tipotransaccionNotaCredito',
                 'waitryMesa',
             ]);
 

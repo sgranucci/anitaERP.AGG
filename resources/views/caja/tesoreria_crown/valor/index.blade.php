@@ -64,7 +64,7 @@
                             <th class="text-right">Denominación</th>
                             <th>Controla stock</th>
                             <th>Activo</th>
-                            <th class="text-center" style="width:90px;">Acciones</th>
+                            <th class="text-left" style="width:90px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -76,7 +76,7 @@
                                 <td class="text-right">{{ number_format((float) $valor->denominacion, 2, ',', '.') }}</td>
                                 <td>{{ ($valor->tipoValor && $valor->tipoValor->controla_stock) ? 'Sí' : 'No' }}</td>
                                 <td>{{ $valor->activo ? 'Sí' : 'No' }}</td>
-                                <td class="text-center text-nowrap">
+                                <td class="text-left text-nowrap">
                                     @if (can('editar-tesoreria-crown-valor', false))
                                         <a href="{{ route('editar_tesoreria_crown_valor', $valor->id) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>

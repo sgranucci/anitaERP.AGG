@@ -18,6 +18,24 @@ final class CuentaCentrocostoHabilitadoSupport
      */
     public static function assertPayload(array $payload, string $proceso): void
     {
+        self::assertPares(self::paresDesdePayload($payload), $proceso);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return list<string>
+     */
+    public static function mensajesPayload(array $payload): array
+    {
+        return self::mensajes(self::paresDesdePayload($payload));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return list<array{cuentacontable_id: int, centrocosto_id: int, etiqueta: string}>
+     */
+    private static function paresDesdePayload(array $payload): array
+    {
         $cuentas = is_array($payload['cuentacontable_ids'] ?? null) ? $payload['cuentacontable_ids'] : [];
         $centros = is_array($payload['centrocosto_ids'] ?? null) ? $payload['centrocosto_ids'] : [];
         $debes = is_array($payload['debes'] ?? null) ? $payload['debes'] : [];
@@ -44,7 +62,7 @@ final class CuentaCentrocostoHabilitadoSupport
             ];
         }
 
-        self::assertPares($pares, $proceso);
+        return $pares;
     }
 
     /**

@@ -36,7 +36,7 @@
                             <th>Moneda de referencia</th>
                             <th>Cotización fija</th>
                             <th>Activo</th>
-                            <th class="text-center" style="width:90px;">Acciones</th>
+                            <th class="text-left" style="width:90px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -48,7 +48,7 @@
                                 <td>{{ $tipo->es_moneda_referencia ? 'Sí' : 'No' }}</td>
                                 <td>{{ $tipo->cotizacion_fija ? 'Sí' : 'No' }}</td>
                                 <td>{{ $tipo->activo ? 'Sí' : 'No' }}</td>
-                                <td class="text-center text-nowrap">
+                                <td class="text-left text-nowrap">
                                     @if (can('editar-tesoreria-crown-valor', false))
                                         <a href="{{ route('editar_tesoreria_crown_tipo_valor', $tipo->id) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>

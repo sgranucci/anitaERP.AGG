@@ -13,6 +13,7 @@ use App\Models\Ventas\GastronomiaCrown\GastroCrownCuentaLinea;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
+use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\GastronomiaCobranzaService;
 use App\Services\Ventas\Gastronomia\GastronomiaFacturacionService;
 use App\Services\Ventas\Gastronomia\GastronomiaFormulaConsumoService;
@@ -442,6 +443,15 @@ final class GastronomiaCrownFacturaEmisionService
                 (string) $payload['fechafactura'],
                 $monedaId,
                 (string) ($payload['fechajornada'] ?? $payload['fechafactura']),
+            );
+
+            VentaGastronomiaEmision::updateOrCreate(
+                ['venta_id' => $venta->id],
+                [
+                    'cuenta_gastronomia_id' => null,
+                    'identificador_pc' => (string) $cfg->identificador_pc,
+                    'configuracion_puntoventa_gastronomia_id' => $cfg->id,
+                ],
             );
 
             $cuenta->venta_id = (int) $venta->id;

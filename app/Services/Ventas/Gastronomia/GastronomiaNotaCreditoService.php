@@ -147,12 +147,8 @@ final class GastronomiaNotaCreditoService
             return ['ok' => false, 'error' => 'El tipo de transacción configurado para nota de crédito debe tener signo Resta.'];
         }
 
-        $cuenta = $emision->cuenta;
-        if (! $cuenta instanceof CuentaGastronomia) {
-            return ['ok' => false, 'error' => 'No se encontró la cuenta gastronómica asociada a la factura.'];
-        }
-
-        $cuenta->loadMissing('lineas');
+        $cuenta = $emision->cuenta instanceof CuentaGastronomia ? $emision->cuenta : null;
+        $cuenta?->loadMissing('lineas');
         $payload = $this->armarPayloadNotaCredito(
             $ventaOrigen,
             $tipoNcId,
@@ -186,11 +182,19 @@ final class GastronomiaNotaCreditoService
                 $vencaePendiente = null;
 
                 $profiler?->marcar('nc_emitir_comprobante_inicio');
-                $resultado = $this->facturacionGastronomiaService->emitirComprobante(
-                    $payload,
-                    $cuenta,
-                    $ajusteFiscal,
-                );
+                $resultado = $cuenta instanceof CuentaGastronomia
+                    ? $this->facturacionGastronomiaService->emitirComprobante(
+                        $payload,
+                        $cuenta,
+                        $ajusteFiscal,
+                    )
+                    : $this->facturacionGastronomiaService->emitirComprobanteSinCuentaGastronomia(
+                        $payload,
+                        (int) ($ventaOrigen->empresa_id ?: $cfg->empresa_id),
+                        trim((string) ($ventaOrigen->numerodocumento ?? '')) === ''
+                            || trim((string) $ventaOrigen->numerodocumento) === '0',
+                        $ajusteFiscal,
+                    );
                 $profiler?->marcar('nc_emitir_comprobante_fin');
 
                 if (! empty($resultado['error'])) {
@@ -249,7 +253,7 @@ final class GastronomiaNotaCreditoService
                 VentaGastronomiaEmision::updateOrCreate(
                     ['venta_id' => $ventaNc->id],
                     array_merge([
-                        'cuenta_gastronomia_id' => $cuenta->id,
+                        'cuenta_gastronomia_id' => $cuenta?->id,
                         'identificador_pc' => $identificadorPc,
                         'configuracion_puntoventa_gastronomia_id' => $cfg->id,
                         'venta_factura_origen_id' => $ventaFacturaId,
@@ -832,7 +836,7 @@ final class GastronomiaNotaCreditoService
     private function aplicarImpresionTicketTrasNotaCredito(
         array $resultado,
         ConfiguracionPuntoventaGastronomia $cfg,
-        CuentaGastronomia $cuenta,
+        ?CuentaGastronomia $cuenta,
     ): array {
         $ventaId = (int) ($resultado['venta_id'] ?? 0);
         if ($ventaId <= 0) {

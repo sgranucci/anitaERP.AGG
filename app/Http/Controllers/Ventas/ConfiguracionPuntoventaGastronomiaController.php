@@ -35,6 +35,10 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
 
     public function index()
     {
+        if ($redir = $this->redirigirSiCrown()) {
+            return $redir;
+        }
+
         can('listar-configuracion-puntoventa-gastronomia');
 
         $datas = $this->repository->all();
@@ -44,6 +48,10 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
 
     public function crear()
     {
+        if ($redir = $this->redirigirSiCrown('crear_configuracion_pc_gastronomia_crown')) {
+            return $redir;
+        }
+
         can('crear-configuracion-puntoventa-gastronomia');
 
         $data = new ConfiguracionPuntoventaGastronomia();
@@ -96,6 +104,10 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
 
     public function editar($id)
     {
+        if ($redir = $this->redirigirSiCrown('editar_configuracion_pc_gastronomia_crown', ['id' => $id])) {
+            return $redir;
+        }
+
         can('editar-configuracion-puntoventa-gastronomia');
 
         $data = $this->repository->findOrFail($id);
@@ -218,6 +230,15 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
                 ->values()
                 ->all(),
         ]);
+    }
+
+    private function redirigirSiCrown(string $ruta = 'consultar_configuracion_pc_gastronomia_crown', array $parametros = [])
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return null;
+        }
+
+        return redirect()->route($ruta, $parametros);
     }
 
     private function formatPuntoventaOptions($collection): array

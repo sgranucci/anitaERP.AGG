@@ -19,11 +19,14 @@ final class UsuarioPreferenciaFacturacionSupport
 
     public const COL_PV_REMITO = 'puntoventaremito_id';
 
+    /** Precio de concepto: true = neto (el IVA se suma); false = el importe ya incluye IVA. */
+    public const COL_PRECIO_NETO = 'factura_concepto_precio_neto';
+
     /** @var array<string, int|null> */
     private static array $idPorCodigoPv = [];
 
     /**
-     * @return array{tipotransaccion_id: int|null, puntoventa_id: int|null, puntoventaremito_id: int|null}
+     * @return array{tipotransaccion_id: int|null, puntoventa_id: int|null, puntoventaremito_id: int|null, concepto_precio_neto: bool}
      */
     public static function leer(?int $usuarioId = null): array
     {
@@ -33,21 +36,23 @@ final class UsuarioPreferenciaFacturacionSupport
             'puntoventa_id' => null,
             'puntoventaremito_id' => null,
         ];
+        $precioNeto = false;
         $login = null;
 
         if ($usuarioId > 0 && self::tieneColumnas()) {
-            $usuario = Usuario::query()->whereKey($usuarioId)->first([
-                'id',
-                'usuario',
-                self::COL_TIPO,
-                self::COL_PV,
-                self::COL_PV_REMITO,
-            ]);
+            $columnas = ['id', 'usuario', self::COL_TIPO, self::COL_PV, self::COL_PV_REMITO];
+            if (self::tieneColumnaPrecioNeto()) {
+                $columnas[] = self::COL_PRECIO_NETO;
+            }
+            $usuario = Usuario::query()->whereKey($usuarioId)->first($columnas);
             if ($usuario) {
                 $login = (string) ($usuario->usuario ?? '');
                 $desdeUsuario['tipotransaccion_id'] = self::idPositivo($usuario->{self::COL_TIPO} ?? null);
                 $desdeUsuario['puntoventa_id'] = self::idPositivo($usuario->{self::COL_PV} ?? null);
                 $desdeUsuario['puntoventaremito_id'] = self::idPositivo($usuario->{self::COL_PV_REMITO} ?? null);
+                if (self::tieneColumnaPrecioNeto()) {
+                    $precioNeto = (bool) ($usuario->{self::COL_PRECIO_NETO} ?? false);
+                }
             }
         }
 
@@ -78,6 +83,8 @@ final class UsuarioPreferenciaFacturacionSupport
                 }
             }
         }
+
+        $resuelto['concepto_precio_neto'] = $precioNeto;
 
         return $resuelto;
     }
@@ -127,6 +134,9 @@ final class UsuarioPreferenciaFacturacionSupport
         if ($pvRemito) {
             $update[self::COL_PV_REMITO] = $pvRemito;
         }
+        if (self::tieneColumnaPrecioNeto() && array_key_exists('concepto_precio_neto', $data)) {
+            $update[self::COL_PRECIO_NETO] = filter_var($data['concepto_precio_neto'], FILTER_VALIDATE_BOOLEAN);
+        }
         if ($update === []) {
             return;
         }
@@ -138,6 +148,13 @@ final class UsuarioPreferenciaFacturacionSupport
 
         $cambio = false;
         foreach ($update as $col => $valor) {
+            if ($col === self::COL_PRECIO_NETO) {
+                if ((bool) ($usuario->{$col} ?? false) !== (bool) $valor) {
+                    $usuario->{$col} = (bool) $valor;
+                    $cambio = true;
+                }
+                continue;
+            }
             if ((int) ($usuario->{$col} ?? 0) !== (int) $valor) {
                 $usuario->{$col} = $valor;
                 $cambio = true;
@@ -296,6 +313,11 @@ final class UsuarioPreferenciaFacturacionSupport
         return Schema::hasColumn('usuario', self::COL_TIPO)
             && Schema::hasColumn('usuario', self::COL_PV)
             && Schema::hasColumn('usuario', self::COL_PV_REMITO);
+    }
+
+    private static function tieneColumnaPrecioNeto(): bool
+    {
+        return Schema::hasColumn('usuario', self::COL_PRECIO_NETO);
     }
 
     private static function idPositivo(mixed $valor): ?int

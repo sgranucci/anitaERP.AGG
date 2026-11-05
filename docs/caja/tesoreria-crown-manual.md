@@ -236,15 +236,31 @@ La reserva es la de los cierres de ficha más las asignaciones iniciales posteri
 
 El 30/10/2026 el cálculo da −6.500, el mismo día, mes y acumulado que Anita tiene en `ppublico`.
 
-## Anexo I
+## Anexos
 
-Está en la jornada, solapa **Anexo I**. Sigue el orden de `l-anexo1.c`: ingresos, egresos y caja, con día, mes y anual.
+Están en la jornada, botón **Anexos** del escritorio (aparte de la carga). Pestañas: I, II, resumen de cajeros, III, VII y VIII. El permiso es `listar-tesoreria-crown-anexo`. Pdf, Excel y Csv salen de la barra de la sala. No graban en Anita.
 
-Si Anita cerró el día, el listado sale de `acumanexo1` y el poder público de `ppublico`. La caja final por variación es la que Anita grabó. Si el recálculo no cierra con esa cifra, la pantalla lo avisa.
+### Anexo I
 
-Octubre de 2026 no tiene ese detalle: Anita solo dejó la caja final. En esos días la solapa calcula lo que sí está en la base: poder público, recargo, tarjetas, débito, QR y los movimientos de bóveda (compras, depósitos, dólares, euros y otros egresos). No completa con cero la recaudación de mesas, slots, gastronomía ni hotel, porque esas líneas las arma otro programa y Anita no las grabó. La cuenta corriente de hotel tampoco está en la base SQL.
+Sigue `l-anexo1.c` (día / mes / anual) y `l-anexo1new.c` (débito / crédito / saldo). Incluye **apuestas deportivas** como ingreso (`efe_vta_apu_dep − efe_pago_apu_dep`, ítem 331 cuando Anita lo grabó).
 
-Pdf, Excel y Csv salen de la barra de la sala. La pantalla no graba en Anita.
+Si Anita cerró el día, el listado sale de `acumanexo1` y el poder público de `ppublico`. Octubre de 2026 solo dejó la caja final: el resto se calcula de efectivo, bóveda y poder público. No inventa recaudación de mesas, slots, gastronomía ni hotel.
+
+### Anexo II
+
+`l-resmesa.c`: por mesa, créditos, reposiciones, estado final, drop, recomposición de banca y resultado. Sale de los movimientos de mesa del ERP.
+
+### Resumen de cajeros y Anexo III
+
+`l-rescajero.c` y `l-anexo3new.c`: por caja, egresos/ingresos, fichas, cashless, voucher, online, apuestas (III) y diferencia. Parte del cierre de caja del ERP.
+
+### Anexo VII
+
+`l-anexo7.c`: fallos (diferencia negativa + fallo de mozo) y excedentes. Los anticipos de sueldos de Anita no están en el ERP: la columna queda en cero.
+
+### Anexo VIII
+
+`l-estboveda.c`: saldo de bóveda por denominación al cierre del día.
 
 ## Ajuste de auditoría
 

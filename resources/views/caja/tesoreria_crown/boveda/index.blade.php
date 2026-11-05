@@ -150,7 +150,7 @@
                                     @foreach ($columnasVisibles as $keyColumna)
                                         @include('caja.tesoreria_crown.partials.workbench_th', ['key' => $keyColumna, 'rutaListado' => 'tesoreria_crown_boveda'])
                                     @endforeach
-                                    <th class="text-center" style="width:120px;">Acciones</th>
+                                    <th class="text-left" style="width:120px;">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -161,7 +161,7 @@
                                                 @include('caja.tesoreria_crown.boveda.partials.workbench_celda', ['key' => $keyColumna])
                                             </td>
                                         @endforeach
-                                        <td class="text-center text-nowrap">
+                                        <td class="text-left text-nowrap">
                                             <a href="{{ route('editar_tesoreria_crown_boveda', $mov->id) }}" class="btn-accion-tabla tooltipsC" title="{{ $mov->esBorrador() ? 'Editar' : 'Consultar' }}">
                                                 <i class="fa fa-edit"></i>
                                             </a>

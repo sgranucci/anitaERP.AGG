@@ -7,12 +7,11 @@
 @endphp
 <div class="card card-outline card-info mb-3">
     <div class="card-header py-2">
-        <h3 class="card-title mb-0"><i class="fa fa-desktop"></i> Modo POS Crown (a-comandera)</h3>
+        <h3 class="card-title mb-0"><i class="fa fa-desktop"></i> Puesto POS Crown</h3>
     </div>
     <div class="card-body">
         <p class="text-muted small mb-3">
-            Perfil del puesto para el POS Crown. Equivale a los flags <code>-re/-rs/-sa/-co</code> y opciones de <code>confptovta</code>.
-            Solo aplica en entorno Crown.
+            Perfil del puesto del POS Crown: modo, comandas, sala, listas, salidas y facturación.
         </p>
         <div class="form-group row">
             <label for="modo_pos" class="{{ $lbl }} requerido">Modo de uso</label>
@@ -83,6 +82,19 @@
             </div>
         </div>
         <div class="form-group row">
+            <label for="listaprecio_id" class="{{ $lbl }} requerido">Lista de precios</label>
+            <div class="{{ $inp }}">
+                <select name="listaprecio_id" id="listaprecio_id" class="form-control" required>
+                    <option value="">Seleccione…</option>
+                    @foreach ($listaprecio_query as $lp)
+                        <option value="{{ $lp->id }}" {{ (int) old('listaprecio_id', $data->listaprecio_id ?? 0) === (int) $lp->id ? 'selected' : '' }}>
+                            {{ $lp->nombre }} @if ($lp->codigo)({{ $lp->codigo }})@endif
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+        <div class="form-group row">
             <label for="listaprecio_hotel_id" class="{{ $lbl }}">Lista precios hotel</label>
             <div class="{{ $inp }}">
                 <select name="listaprecio_hotel_id" id="listaprecio_hotel_id" class="form-control">
@@ -95,44 +107,136 @@
                 </select>
             </div>
         </div>
+        @php
+            $salidaElegida = function (string $campo) use ($data, $salida_query) {
+                $id = (int) old($campo, $data->{$campo} ?? 0);
+                if ($id <= 0) {
+                    return null;
+                }
+
+                return ($salida_query ?? collect())->firstWhere('id', $id);
+            };
+            $descSalida = function ($salida): string {
+                if ($salida === null) {
+                    return '';
+                }
+                $ubicacion = trim((string) ($salida->ubicacion ?? ''));
+
+                return $ubicacion !== '' ? $ubicacion : trim((string) ($salida->usos_etiqueta ?? ''));
+            };
+        @endphp
+        @include('configuracion.partials.campo_consulta_salida', [
+            'prefix' => 'comanda',
+            'label' => 'Salida de comandas',
+            'inputName' => 'salida_comanda_id',
+            'inputId' => 'salida_comanda_id',
+            'salidaId' => old('salida_comanda_id', $data->salida_comanda_id ?? ''),
+            'nombre' => optional($salidaElegida('salida_comanda_id'))->nombre ?? '',
+            'descripcion' => $descSalida($salidaElegida('salida_comanda_id')),
+            'required' => true,
+            'col_label' => $lbl,
+            'col_input' => $inp,
+        ])
+        @include('configuracion.partials.campo_consulta_salida', [
+            'prefix' => 'factura',
+            'label' => 'Salida de facturas',
+            'inputName' => 'salida_factura_id',
+            'inputId' => 'salida_factura_id',
+            'salidaId' => old('salida_factura_id', $data->salida_factura_id ?? ''),
+            'nombre' => optional($salidaElegida('salida_factura_id'))->nombre ?? '',
+            'descripcion' => $descSalida($salidaElegida('salida_factura_id')),
+            'required' => true,
+            'col_label' => $lbl,
+            'col_input' => $inp,
+        ])
+        @include('configuracion.partials.campo_consulta_salida', [
+            'prefix' => 'comanda_b',
+            'label' => 'Salida comanda B',
+            'inputName' => 'salida_comanda_b_id',
+            'inputId' => 'salida_comanda_b_id',
+            'salidaId' => old('salida_comanda_b_id', $data->salida_comanda_b_id ?? ''),
+            'nombre' => optional($salidaElegida('salida_comanda_b_id'))->nombre ?? '',
+            'descripcion' => $descSalida($salidaElegida('salida_comanda_b_id')),
+            'required' => false,
+            'col_label' => $lbl,
+            'col_input' => $inp,
+        ])
+        @include('configuracion.partials.campo_consulta_salida', [
+            'prefix' => 'comanda_k',
+            'label' => 'Salida comanda K',
+            'inputName' => 'salida_comanda_k_id',
+            'inputId' => 'salida_comanda_k_id',
+            'salidaId' => old('salida_comanda_k_id', $data->salida_comanda_k_id ?? ''),
+            'nombre' => optional($salidaElegida('salida_comanda_k_id'))->nombre ?? '',
+            'descripcion' => $descSalida($salidaElegida('salida_comanda_k_id')),
+            'required' => false,
+            'col_label' => $lbl,
+            'col_input' => $inp,
+        ])
+        @include('configuracion.partials.campo_consulta_salida', [
+            'prefix' => 'hotel',
+            'label' => 'Salida cargo hotel',
+            'inputName' => 'salida_hotel_id',
+            'inputId' => 'salida_hotel_id',
+            'salidaId' => old('salida_hotel_id', $data->salida_hotel_id ?? ''),
+            'nombre' => optional($salidaElegida('salida_hotel_id'))->nombre ?? '',
+            'descripcion' => $descSalida($salidaElegida('salida_hotel_id')),
+            'required' => false,
+            'col_label' => $lbl,
+            'col_input' => $inp,
+            'ayuda' => 'Impresión del cargo a habitación. La comanda principal es «Salida de comandas».',
+        ])
         <div class="form-group row">
-            <label for="salida_comanda_b_id" class="{{ $lbl }}">Salida comanda B</label>
+            <label for="puntoventa_cae_id" class="{{ $lbl }} requerido">Punto de venta electrónico</label>
             <div class="{{ $inp }}">
-                <select name="salida_comanda_b_id" id="salida_comanda_b_id" class="form-control">
-                    <option value="">—</option>
-                    @foreach ($salida_query as $salida)
-                        <option value="{{ $salida->id }}" {{ (int) old('salida_comanda_b_id', $data->salida_comanda_b_id ?? 0) === (int) $salida->id ? 'selected' : '' }}>
-                            {{ $salida->nombre }}
+                <select name="puntoventa_cae_id" id="puntoventa_cae_id" class="form-control" required>
+                    <option value="">Seleccione…</option>
+                    @foreach ($puntoventa_cae_query as $pv)
+                        <option value="{{ $pv->id }}" {{ (int) old('puntoventa_cae_id', $data->puntoventa_cae_id ?? 0) === (int) $pv->id ? 'selected' : '' }}>
+                            {{ $pv->codigo }} — {{ $pv->nombre }}
                         </option>
                     @endforeach
                 </select>
             </div>
         </div>
         <div class="form-group row">
-            <label for="salida_comanda_k_id" class="{{ $lbl }}">Salida comanda K</label>
+            <label for="puntoventa_caea_id" class="{{ $lbl }} requerido">Punto de venta CAEA</label>
             <div class="{{ $inp }}">
-                <select name="salida_comanda_k_id" id="salida_comanda_k_id" class="form-control">
-                    <option value="">—</option>
-                    @foreach ($salida_query as $salida)
-                        <option value="{{ $salida->id }}" {{ (int) old('salida_comanda_k_id', $data->salida_comanda_k_id ?? 0) === (int) $salida->id ? 'selected' : '' }}>
-                            {{ $salida->nombre }}
+                <select name="puntoventa_caea_id" id="puntoventa_caea_id" class="form-control" required>
+                    <option value="">Seleccione…</option>
+                    @foreach ($puntoventa_caea_query as $pv)
+                        <option value="{{ $pv->id }}" {{ (int) old('puntoventa_caea_id', $data->puntoventa_caea_id ?? 0) === (int) $pv->id ? 'selected' : '' }}>
+                            {{ $pv->codigo }} — {{ $pv->nombre }}
                         </option>
                     @endforeach
                 </select>
             </div>
         </div>
         <div class="form-group row">
-            <label for="salida_hotel_id" class="{{ $lbl }}">Salida cargo hotel</label>
+            <label for="tipotransaccion_id" class="{{ $lbl }} requerido">Tipo de factura</label>
             <div class="{{ $inp }}">
-                <select name="salida_hotel_id" id="salida_hotel_id" class="form-control">
-                    <option value="">—</option>
-                    @foreach ($salida_query as $salida)
-                        <option value="{{ $salida->id }}" {{ (int) old('salida_hotel_id', $data->salida_hotel_id ?? 0) === (int) $salida->id ? 'selected' : '' }}>
-                            {{ $salida->nombre }}
+                <select name="tipotransaccion_id" id="tipotransaccion_id" class="form-control" required>
+                    <option value="">Seleccione…</option>
+                    @foreach ($tipotransaccion_query as $tt)
+                        <option value="{{ $tt->id }}" {{ (int) old('tipotransaccion_id', $data->tipotransaccion_id ?? 0) === (int) $tt->id ? 'selected' : '' }}>
+                            {{ $tt->abreviatura }} — {{ $tt->nombre }}
                         </option>
                     @endforeach
                 </select>
-                <small class="form-text text-muted">Impresión / destino del cargo a habitación. Comanda principal = «Salida de comandas» (A).</small>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="tipotransaccion_nota_credito_id" class="{{ $lbl }} requerido">Tipo de nota de crédito</label>
+            <div class="{{ $inp }}">
+                <select name="tipotransaccion_nota_credito_id" id="tipotransaccion_nota_credito_id" class="form-control" required>
+                    <option value="">Seleccione…</option>
+                    @foreach ($tipotransaccion_nota_credito_query as $tt)
+                        <option value="{{ $tt->id }}" {{ (int) old('tipotransaccion_nota_credito_id', $data->tipotransaccion_nota_credito_id ?? 0) === (int) $tt->id ? 'selected' : '' }}>
+                            {{ $tt->abreviatura }} — {{ $tt->nombre }}
+                        </option>
+                    @endforeach
+                </select>
+                <small class="form-text text-muted">Lo usa el botón Revertir de comprobantes del día. El tipo tiene que tener signo Resta.</small>
             </div>
         </div>
 
