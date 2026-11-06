@@ -441,8 +441,19 @@
 @endif
 
 <hr class="my-3">
-<div class="d-flex justify-content-between align-items-center mb-2">
-    <h5 class="mb-0">Ítems</h5>
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap">
+    <div class="d-flex align-items-center flex-wrap">
+        <h5 class="mb-0 mr-3">Ítems</h5>
+        @if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo() && ! $soloLectura && ! ($modoDevolucion ?? false))
+        <div class="custom-control custom-checkbox mb-0">
+            <input type="checkbox" class="custom-control-input" id="rp_precargar_cantidades_oc">
+            <label class="custom-control-label" for="rp_precargar_cantidades_oc"
+                   title="Tildado: completa Cant. recibida con el pendiente de la orden (como en el resto de empresas). Destildado: deja en blanco para cargar a mano (comportamiento El Bierzo).">
+                Precargar cantidades pendientes de la OC
+            </label>
+        </div>
+        @endif
+    </div>
     @if(!$soloLectura && !($modoDevolucion ?? false) && $puedeAgregarArticuloExtra)
     <button type="button" class="btn btn-sm btn-outline-primary" id="btn-agregar-extra"
             title="Agrega un renglón que no está en la OC. Puede ir sin cargo (precio 0) y se puede sumar otro sin guardar.">

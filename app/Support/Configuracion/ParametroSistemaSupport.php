@@ -153,7 +153,7 @@ final class ParametroSistemaSupport
             self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => [
                 'grupo' => 'Recepción de proveedor',
                 'etiqueta' => 'No precargar cantidad recibida',
-                'ayuda' => 'Activo: al traer la orden de compra, la cantidad recibida arranca en blanco y hay que cargarla. Inactivo: se completa con el pendiente de la orden.',
+                'ayuda' => 'Activo: al traer la orden de compra, la cantidad recibida arranca en blanco y hay que cargarla. Inactivo: se completa con el pendiente de la orden. En El Bierzo la pantalla tiene además un tilde sobre la grilla para precargar el pendiente en una recepción puntual.',
                 'tipo' => 'boolean',
                 'orden' => 70,
             ],

@@ -184,7 +184,50 @@
     }
 
     function noPrecargarCantidadRecibida() {
-        return !!window.recepcionProveedorNoPrecargarCantidad && !esModoDevolucion();
+        if (esModoDevolucion()) {
+            return false;
+        }
+        // El Bierzo: tilde arriba de la grilla. Tildado = precargar pendiente (resto de empresas).
+        var $chk = $('#rp_precargar_cantidades_oc');
+        if ($chk.length) {
+            return !$chk.prop('checked');
+        }
+
+        return !!window.recepcionProveedorNoPrecargarCantidad;
+    }
+
+    /** Pendiente OC sin contar este remito (pedido − ya ingresado en COM confirmadas). */
+    function cantidadPendientePrecarga(item) {
+        var oc = parseFloat(item && item.cantidad_oc ? item.cantidad_oc : 0) || 0;
+        var ya = cantidadYaRecibidaOc(item);
+
+        return Math.max(0, oc - ya);
+    }
+
+    /**
+     * Ajusta cantidad recibida según el tilde Bierzo / parámetro de sistema.
+     * Solo líneas de OC (no EXTRA). Usado al traer la OC y al cambiar el tilde.
+     */
+    function aplicarPoliticaCantidadPrecarga(lineas) {
+        if (!lineas || !lineas.length) {
+            return lineas;
+        }
+        var vaciar = noPrecargarCantidadRecibida();
+        lineas.forEach(function (item) {
+            if (!lineaEsDeOc(item)) {
+                return;
+            }
+            if (vaciar) {
+                item.cantidad = null;
+                item.cantidad_stock = 0;
+                return;
+            }
+            var pend = cantidadPendientePrecarga(item);
+            item.cantidad = pend;
+            item.cantidad_stock = pend * coefEfectivo(item);
+        });
+
+        return lineas;
     }
 
     function cantidadRecibidaVacia(valor) {
@@ -2461,6 +2504,7 @@
                 }
                 sincronizarEmpresaDesdeOc(data);
                 actualizarAvisoDescuentoOc(data.descuento_ordencompra);
+                aplicarPoliticaCantidadPrecarga(data.lineas || []);
                 renderItems(data.lineas);
                 refrescarCotizacionesDia(null, true);
                 actualizarBotonConsultarOc();
@@ -2879,6 +2923,18 @@
 
         initCargaOcPorTeclado();
         $('#btn-agregar-extra').on('click', agregarLineaExtra);
+
+        // El Bierzo: tilde precarga pendiente OC ↔ cantidades en blanco.
+        $('#rp_precargar_cantidades_oc').on('change', function () {
+            if (!itemsActuales.length) {
+                return;
+            }
+            syncItemsDesdeDom();
+            aplicarPoliticaCantidadPrecarga(itemsActuales);
+            renderItems(itemsActuales);
+            actualizarTotalRecepcion();
+            actualizarCampoImpuestoInterno();
+        });
 
         $(document).on('click', '.btn-quitar-linea', function () {
             var idx = parseInt($(this).data('idx'), 10);
