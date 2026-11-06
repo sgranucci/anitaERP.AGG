@@ -129,7 +129,7 @@ final class ProgramaPagoAsignarChequesSupport
 
         $lineaIds = array_values(array_unique(array_map(static fn ($d) => $d['linea_id'], $demandas)));
 
-        return DB::transaction(function () use ($programa, $demandas, $lineaIds, $clavesMes, $lineaId) {
+        return DB::transaction(function () use ($programa, $demandas, $lineaIds, $clavesMes, $lineaId, $fechaEstimacion) {
             if ($lineaId !== null && $lineaId > 0) {
                 EloquentAuditDeleteSupport::each(
                     ProgramaPagoCheque::query()

@@ -38,6 +38,18 @@ final class OrdentrabajoEmisionTextoSupport
 
     public const PREFIJO_EMPAQUE = 'AVIOS DE EMPAQUE: ';
 
+    /**
+     * Apliques: 3 renglones. El primero reserva "APLIQUES: "; el resto usa el
+     * ancho completo del campo (mismo tope que material).
+     */
+    public const ANCHO_APLIQUE_LINEA1_MM = 156.0;
+
+    public const ANCHO_APLIQUE_LINEA2_MM = 156.0;
+
+    public const PREFIJO_APLIQUE = 'APLIQUES: ';
+
+    public const LINEAS_APLIQUE = 3;
+
     private const TAMANO_PT = 9.0;
 
     /**
@@ -86,6 +98,22 @@ final class OrdentrabajoEmisionTextoSupport
     }
 
     /**
+     * Tres renglones de apliques. El primero reserva el ancho de "APLIQUES: ".
+     *
+     * @return list<string>
+     */
+    public static function partirAplique(string $texto): array
+    {
+        $anchoCuerpo = self::ANCHO_APLIQUE_LINEA1_MM - self::anchoMm(self::PREFIJO_APLIQUE);
+        $anchos = [max(1.0, $anchoCuerpo)];
+        for ($i = 1; $i < self::LINEAS_APLIQUE; $i++) {
+            $anchos[] = self::ANCHO_APLIQUE_LINEA2_MM;
+        }
+
+        return self::partirConAnchos($texto, $anchos);
+    }
+
+    /**
      * @return list<string>
      */
     public static function partir(string $texto, int $lineas, float $anchoMm): array
@@ -113,7 +141,8 @@ final class OrdentrabajoEmisionTextoSupport
             }
             $corte = self::indiceCorte($texto, $anchoMm);
             $salida[] = rtrim(substr($texto, 0, $corte));
-            $texto = ltrim(substr($texto, $corte), " /");
+            // Quita "/" de materiales y "." de listas de piezas (1.2.3…|4.5).
+            $texto = ltrim(substr($texto, $corte), " ./");
         }
 
         return $salida;
@@ -163,6 +192,12 @@ final class OrdentrabajoEmisionTextoSupport
         $barra = strrpos($trozo, '/');
         if ($barra !== false && $barra > 0) {
             return $barra;
+        }
+
+        // Lista de piezas sin espacios (1.2.3.4.5.8.9.10…): cortar en el punto.
+        $punto = strrpos($trozo, '.');
+        if ($punto !== false && $punto > 0) {
+            return $punto;
         }
 
         return $fin;

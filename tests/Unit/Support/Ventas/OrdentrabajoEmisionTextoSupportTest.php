@@ -100,4 +100,56 @@ class OrdentrabajoEmisionTextoSupportTest extends TestCase
         self::assertStringStartsWith('PALABRA', $lineas[1]);
         self::assertLessThanOrEqual(80.0, OrdentrabajoEmisionTextoSupport::anchoMm($lineas[0]));
     }
+
+    public function test_lista_larga_de_piezas_de_la_ot_31432_entra_entera(): void
+    {
+        $texto = '1.2.3.4.5.8.9.10.11.12.13.14.15 SKIN.DESCARNE CINZA -2.24- P/6.7 WOLF CROCHET CINZA -0.99- P';
+        $lineas = OrdentrabajoEmisionTextoSupport::partirMaterial($texto);
+
+        self::assertSame(
+            '1.2.3.4.5.8.9.10.11.12.13.14.15 SKIN.DESCARNE CINZA -2.24- P',
+            $lineas[0]
+        );
+        self::assertSame('6.7 WOLF CROCHET CINZA -0.99- P', $lineas[1]);
+        self::assertSame('', $lineas[2]);
+        self::assertStringContainsString('10.11.12.13.14.15', $lineas[0]);
+        foreach ($lineas as $linea) {
+            self::assertLessThanOrEqual(
+                OrdentrabajoEmisionTextoSupport::ANCHO_MATERIAL_MM,
+                OrdentrabajoEmisionTextoSupport::anchoMm($linea)
+            );
+        }
+    }
+
+    public function test_lista_de_piezas_sin_espacio_corta_en_el_punto(): void
+    {
+        $piezas = '1.2.3.4.5.6.7.8.9.10.11.12.13.14.15.16.17.18.19.20.21.22.23.24.25.26.27.28.29.30';
+        $lineas = OrdentrabajoEmisionTextoSupport::partir($piezas, 2, 80.0);
+
+        self::assertMatchesRegularExpression('/^\d+(\.\d+)*$/', $lineas[0]);
+        self::assertMatchesRegularExpression('/^\d+(\.\d+)*$/', $lineas[1]);
+        self::assertSame($piezas, $lineas[0].'.'.$lineas[1]);
+        self::assertLessThanOrEqual(80.0, OrdentrabajoEmisionTextoSupport::anchoMm($lineas[0]));
+    }
+
+    public function test_apliques_largos_parten_sin_cortar_palabra(): void
+    {
+        $texto = 'ARGO.6.5 NIQUEL 48.00/ETIQUETA FRAGOL VISON 16.00/DIJE FRAGOLA NIQUEL 16.00/CADENA METALICA 16.00';
+        $lineas = OrdentrabajoEmisionTextoSupport::partirAplique($texto);
+
+        self::assertStringContainsString('ARGO.6.5 NIQUEL', $lineas[0]);
+        self::assertStringContainsString('CADENA METALICA', implode(' ', $lineas));
+        self::assertLessThanOrEqual(
+            OrdentrabajoEmisionTextoSupport::ANCHO_APLIQUE_LINEA1_MM,
+            OrdentrabajoEmisionTextoSupport::anchoMm(
+                OrdentrabajoEmisionTextoSupport::PREFIJO_APLIQUE.$lineas[0]
+            )
+        );
+        foreach (array_slice($lineas, 1) as $linea) {
+            self::assertLessThanOrEqual(
+                OrdentrabajoEmisionTextoSupport::ANCHO_APLIQUE_LINEA2_MM,
+                OrdentrabajoEmisionTextoSupport::anchoMm($linea)
+            );
+        }
+    }
 }

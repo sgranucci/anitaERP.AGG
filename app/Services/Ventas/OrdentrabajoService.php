@@ -1814,6 +1814,7 @@ class OrdentrabajoService
 		$mat = (string) ($doc['material_capellada_consumo'] ?? '');
 		$lineasMaterial = OrdentrabajoEmisionTextoSupport::partirMaterial($mat);
 		$aplique = (string) ($doc['aplique'] ?? '');
+		$lineasAplique = OrdentrabajoEmisionTextoSupport::partirAplique($aplique);
 		$forradoFondo = (string) ($doc['forrado_fondo_consumo'] ?? '');
 		$lineasForro = OrdentrabajoEmisionTextoSupport::partirForro($forradoFondo);
 		$forradoBase = (string) ($doc['forrado_base_consumo'] ?? '');
@@ -1852,9 +1853,12 @@ class OrdentrabajoService
 			'material2' => $lineasMaterial[0],
 			'material3' => $lineasMaterial[1],
 			'material4' => $lineasMaterial[2],
-			'aplique0' => $this->prefijoCampoOt('APLIQUES: ', substr($aplique, 0, 55)),
-			'aplique1' => substr($aplique, 55, 55),
-			'aplique2' => substr($aplique, 110, 55),
+			'aplique0' => $this->prefijoCampoOt(
+				OrdentrabajoEmisionTextoSupport::PREFIJO_APLIQUE,
+				$lineasAplique[0] ?? '',
+			),
+			'aplique1' => $lineasAplique[1] ?? '',
+			'aplique2' => $lineasAplique[2] ?? '',
 			'obs1' => substr($leyenda, 0, 30),
 			'obs2' => substr($leyenda, 30, 30),
 			'obs3' => substr($leyenda, 60, 30),
@@ -1936,7 +1940,9 @@ class OrdentrabajoService
 			str_starts_with($k, 'medida_') => 10.0,
 			$k === 'codigo', $k === 'tot_pares' => 25.0,
 			str_starts_with($k, 'titulo_') => 55.0,
-			str_starts_with($k, 'cliente'), str_starts_with($k, 'material'), str_starts_with($k, 'aplique') => 160.0,
+			str_starts_with($k, 'cliente'), str_starts_with($k, 'material') => 160.0,
+			$k === 'aplique0' => OrdentrabajoEmisionTextoSupport::ANCHO_APLIQUE_LINEA1_MM,
+			str_starts_with($k, 'aplique') => OrdentrabajoEmisionTextoSupport::ANCHO_APLIQUE_LINEA2_MM,
 			$k === 'forrado_fondo1' => OrdentrabajoEmisionTextoSupport::ANCHO_FORRO_LINEA1_MM,
 			$k === 'forrado_fondo2' => OrdentrabajoEmisionTextoSupport::ANCHO_FORRO_LINEA2_MM,
 			$k === 'empaque_fmt' => OrdentrabajoEmisionTextoSupport::ANCHO_EMPAQUE_MM,
@@ -2584,14 +2590,15 @@ class OrdentrabajoService
 				else
 					$d_forradobase = "tag @forrado_base------------------------------------------------@ ";
 				$reporte .= $d_forradobase.'{'.'FORRADO BASE: '.substr($forradoBaseConConsumo,0,60).'}'."\n";
+				$lineasAplique = OrdentrabajoEmisionTextoSupport::partirAplique($aplique);
 				$d_aplique[0] = "tag @aplique----------------------------------------------------------@ ";
-				$reporte .= $d_aplique[0].'{'.'APLIQUES: '.substr($aplique,0,55).'}'."\n";
+				$reporte .= $d_aplique[0].'{'.OrdentrabajoEmisionTextoSupport::PREFIJO_APLIQUE.($lineasAplique[0] ?? '').'}'."\n";
 
 				$d_aplique[1] = "tag @aplique2---------------------------------------------------------@ ";
-				$reporte .= $d_aplique[1].'{'.substr($aplique,55,55).'}'."\n";
+				$reporte .= $d_aplique[1].'{'.($lineasAplique[1] ?? '').'}'."\n";
 
 				$d_aplique[2] = "tag @aplique3---------------------------------------------------------@ ";
-				$reporte .= $d_aplique[2].'{'.substr($aplique,110,55).'}'."\n";
+				$reporte .= $d_aplique[2].'{'.($lineasAplique[2] ?? '').'}'."\n";
 
 				$d_avio = "tag @avio_empaque------------------------------------------------@ ";
 				$reporte .= $d_avio.'{'.substr($empaque,0,60).'}'."\n";
@@ -2988,7 +2995,10 @@ class OrdentrabajoService
 							($itemMaterial->consumo3*$this->tot_pares3) +
 							($itemMaterial->consumo4*$this->tot_pares4);
 						
-				$piezas = rtrim(substr($itemMaterial->piezas,0,15),' ');
+				// Piezas completas: un substr(0,15) cortaba listas largas
+				// (ej. 1.2.3.4.5.8.9.10.11.12.13.14.15 → 1.2.3.4.5.8.9.1).
+				// El wrap de la OT (partirMaterial) reparte el renglón.
+				$piezas = rtrim((string) $itemMaterial->piezas);
 
 				if ($strSalida)
 					$strSalida .= '/';
