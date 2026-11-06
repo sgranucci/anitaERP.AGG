@@ -36,9 +36,9 @@ class CurvaModuloPresentacionSupportTest extends TestCase
 
         self::assertFalse($r['coincide']);
         self::assertSame(1, $r['modulos']);
-        self::assertSame(12, $r['pares_modulo']);
-        self::assertSame(12, $r['total']);
-        self::assertSame([38 => 6, 39 => 4, 40 => 2], $r['medidas']);
+        self::assertSame(12.0, (float) $r['pares_modulo']);
+        self::assertSame(12.0, (float) $r['total']);
+        self::assertSame([38 => 6.0, 39 => 4.0, 40 => 2.0], $r['medidas']);
     }
 
     public function test_modulo_con_pares_repetidos_se_parte_por_la_curva_del_catalogo(): void
@@ -78,5 +78,26 @@ class CurvaModuloPresentacionSupportTest extends TestCase
         self::assertSame(1, $r['modulos']);
         self::assertSame($curva, $r['medidas']);
         self::assertSame(12, $r['total']);
+    }
+
+    public function test_con_talle_negativo_no_arma_modulo_y_usa_neto(): void
+    {
+        // Caso Stock por OT: positivos arman módulo 12, pero un 35 en −2 deja neto 10.
+        $r = S::presentar([
+            35 => -2,
+            36 => 1,
+            37 => 3,
+            38 => 3,
+            39 => 2,
+            40 => 2,
+            41 => 1,
+        ], $this->catalogo);
+
+        self::assertFalse($r['coincide']);
+        self::assertSame(1, $r['modulos']);
+        self::assertSame(10.0, (float) $r['pares_modulo']);
+        self::assertSame(10.0, (float) $r['total']);
+        self::assertSame(-2.0, (float) $r['medidas'][35]);
+        self::assertSame(1.0, (float) $r['medidas'][36]);
     }
 }

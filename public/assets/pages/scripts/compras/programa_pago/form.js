@@ -162,16 +162,6 @@
         $('#pp-progreso-texto').text(completos + ' OK / ' + total + ' · ' + pendientes + ' sin marcar');
     }
 
-    function fijarPieGrilla() {
-        var filasPie = document.querySelectorAll('#tabla-programa-pago tfoot tr');
-        var acumulado = 0;
-        var i;
-        for (i = filasPie.length - 1; i >= 0; i--) {
-            filasPie[i].style.setProperty('--pp-foot-bottom', acumulado + 'px');
-            acumulado += filasPie[i].getBoundingClientRect().height;
-        }
-    }
-
     function filaVisible() {
         var filasDom = document.querySelectorAll('#tbody-programa-pago tr');
         var i;
@@ -186,13 +176,13 @@
     function ajustarAltoGrilla() {
         var wrap = document.querySelector('.pp-matriz-wrap');
         var thead = document.querySelector('#tabla-programa-pago thead');
-        var tfoot = document.querySelector('#tabla-programa-pago tfoot');
         var filaEl = filaVisible();
         if (!wrap || !thead || !filaEl) {
             return;
         }
         var head = thead.getBoundingClientRect().height;
-        var foot = tfoot ? tfoot.getBoundingClientRect().height : 0;
+        // Los totales van al final del scroll: no restan alto al viewport de proveedores.
+        var foot = 0;
         var fila = filaEl.getBoundingClientRect().height;
         if (fila < 1) {
             return;
@@ -230,8 +220,7 @@
             wrap.style.maxHeight = wrap.style.height;
         }
         wrap.style.setProperty('--pp-head', head + 'px');
-        wrap.style.setProperty('--pp-foot', foot + 'px');
-        fijarPieGrilla();
+        wrap.style.setProperty('--pp-foot', '0px');
         if (focoLineaId) {
             posicionarEnLinea(focoLineaId);
         }
@@ -708,6 +697,10 @@
         if (cfg.mostrarResultadoAsignacion && $('#ppAsignacionChequesModal').length) {
             $('#ppAsignacionChequesModal').modal('show');
         }
+
+        $('#pp-collapse-agregar-proveedor').on('shown.bs.collapse', function () {
+            $('#codigoproveedor').trigger('focus');
+        });
 
         $('#form-agregar-proveedor-pp').on('submit', function (e) {
             var id = parseInt($('#proveedor_id').val() || '0', 10);

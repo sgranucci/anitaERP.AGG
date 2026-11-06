@@ -5,14 +5,14 @@
 
 @section('styles')
 <style>
-    /* El panel de programación queda en la página. Solo se desplaza el cuerpo de proveedores. */
+    /* Solo se desplaza el cuerpo de proveedores; los totales van al final del scroll (no fijos). */
     .pp-matriz-wrap {
         overflow: auto;
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
         border: 1px solid #dee2e6;
         border-radius: 4px;
-        max-height: 55vh;
+        max-height: 70vh;
     }
     .pp-matriz {
         margin-bottom: 0;
@@ -47,9 +47,6 @@
     .pp-matriz tfoot td {
         font-weight: 600;
         background: #f8f9fa;
-        position: sticky;
-        bottom: var(--pp-foot-bottom, 0px);
-        z-index: 3;
     }
     .pp-matriz tr.pp-fila-activa > td { background: #D6EAF8 !important; }
     .pp-matriz tr.pp-fila-pendiente .pp-col-proveedor { border-left: 4px solid #95a5a6; }
@@ -485,6 +482,11 @@ window.programaPagoCfg = {
                     <button type="submit" form="form-programa-pago" class="btn btn-success mr-2">
                         <i class="fa fa-save"></i> Guardar
                     </button>
+                    <button type="button" class="btn btn-outline-secondary mr-2" data-toggle="collapse"
+                            data-target="#pp-collapse-agregar-proveedor" aria-expanded="false"
+                            aria-controls="pp-collapse-agregar-proveedor">
+                        <i class="fa fa-plus"></i> Agregar proveedor
+                    </button>
                     <form action="{{ route('refrescar_saldos_programa_pago', $data->id) }}" method="POST" class="d-inline mr-2">
                         @csrf
                         <button type="submit" class="btn btn-outline-secondary" onclick="return confirm('¿Actualizar saldos y agregar proveedores nuevos con deuda?');">
@@ -528,6 +530,42 @@ window.programaPagoCfg = {
                     </form>
                 @endif
             </div>
+
+            @if ($puedeEditar)
+                <div id="pp-collapse-agregar-proveedor" class="collapse border-top">
+                    <div class="card-body py-2">
+                        <form method="POST" action="{{ route('agregar_proveedor_programa_pago', $data->id) }}" class="form-horizontal" id="form-agregar-proveedor-pp">
+                            @csrf
+                            <input type="hidden" name="empresa_id" id="empresa_id" value="{{ $data->empresa_id }}">
+                            <div class="form-group row mb-2">
+                                <label for="codigoproveedor" class="col-lg-3 control-label text-right pr-2 requerido">Proveedor</label>
+                                <div class="col-lg-7">
+                                    <div class="input-group">
+                                        <input type="hidden" name="proveedor_id" id="proveedor_id" class="proveedor_id" value="">
+                                        <input type="text" class="form-control form-control-sm codigoproveedor" id="codigoproveedor" name="codigoproveedor"
+                                               placeholder="Código" autocomplete="off" style="max-width:110px;">
+                                        <div class="input-group-append">
+                                            <button type="button" class="btn btn-info btn-sm consultaproveedor" title="Consultar (F1)"><i class="fa fa-search"></i></button>
+                                        </div>
+                                        <input type="text" class="form-control form-control-sm nombreproveedor" id="nombreproveedor" readonly
+                                               placeholder="Descripción" autocomplete="off">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group row mb-2">
+                                <label class="col-lg-3 control-label text-right pr-2">Observación</label>
+                                <div class="col-lg-7">
+                                    <input type="text" name="observacion" class="form-control form-control-sm" maxlength="500">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-outline-primary btn-sm">
+                                <i class="fa fa-plus"></i> Agregar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                @include('includes.compras.modalconsultaproveedor')
+            @endif
         </div>
 
         @if (count($chequesAsignados) > 0)
@@ -591,44 +629,6 @@ window.programaPagoCfg = {
             </div>
         @endif
 
-        @if ($puedeEditar)
-            <div class="card card-outline card-info mt-3">
-                <div class="card-header">
-                    <h3 class="card-title">Agregar proveedor</h3>
-                </div>
-                <div class="card-body">
-                    <form method="POST" action="{{ route('agregar_proveedor_programa_pago', $data->id) }}" class="form-horizontal" id="form-agregar-proveedor-pp">
-                        @csrf
-                        <input type="hidden" name="empresa_id" id="empresa_id" value="{{ $data->empresa_id }}">
-                        <div class="form-group row">
-                            <label for="codigoproveedor" class="col-lg-3 control-label text-right pr-2 requerido">Proveedor</label>
-                            <div class="col-lg-7">
-                                <div class="input-group">
-                                    <input type="hidden" name="proveedor_id" id="proveedor_id" class="proveedor_id" value="">
-                                    <input type="text" class="form-control codigoproveedor" id="codigoproveedor" name="codigoproveedor"
-                                           placeholder="Código" autocomplete="off" style="max-width:110px;">
-                                    <div class="input-group-append">
-                                        <button type="button" class="btn btn-info consultaproveedor" title="Consultar (F1)"><i class="fa fa-search"></i></button>
-                                    </div>
-                                    <input type="text" class="form-control nombreproveedor" id="nombreproveedor" readonly
-                                           placeholder="Descripción" autocomplete="off">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="form-group row">
-                            <label class="col-lg-3 control-label text-right pr-2">Observación</label>
-                            <div class="col-lg-7">
-                                <input type="text" name="observacion" class="form-control" maxlength="500">
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-outline-primary">
-                            <i class="fa fa-plus"></i> Agregar
-                        </button>
-                    </form>
-                </div>
-            </div>
-            @include('includes.compras.modalconsultaproveedor')
-        @endif
     </div>
 </div>
 

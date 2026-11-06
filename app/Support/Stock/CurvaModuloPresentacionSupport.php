@@ -13,6 +13,9 @@ use Illuminate\Support\Facades\DB;
  * de pares de algún módulo del catálogo (8, 12, etc.), también se muestra así.
  * Una curva que no arma ese tamaño (por ejemplo 6-4-2) queda con los talles reales y 1 módulo.
  * Entre varios módulos que dividen, gana el de mayor cantidad (el módulo chico).
+ *
+ * Si algún talle tiene saldo neto negativo, no se arma módulo: se muestran los talles
+ * firmados y PS/total = neto (evita «12 X 1» con Total 10).
  */
 final class CurvaModuloPresentacionSupport
 {
@@ -32,6 +35,22 @@ final class CurvaModuloPresentacionSupport
      */
     public static function presentar(array $cantidadesPorTalle, ?array $catalogo = null): array
     {
+        $firmados = self::sumarFirmados($cantidadesPorTalle);
+        if (self::tieneNegativos($firmados)) {
+            $totalNeto = 0.0;
+            foreach ($firmados as $cantidad) {
+                $totalNeto += (float) $cantidad;
+            }
+
+            return [
+                'medidas' => $firmados,
+                'pares_modulo' => $totalNeto,
+                'modulos' => abs($totalNeto) > 0.0001 ? 1 : 0,
+                'total' => $totalNeto,
+                'coincide' => false,
+            ];
+        }
+
         $reales = self::sumarPositivos($cantidadesPorTalle);
         $total = 0.0;
         foreach ($reales as $cantidad) {
@@ -205,7 +224,7 @@ final class CurvaModuloPresentacionSupport
      * @param  array<int|string, float|int>  $cantidades
      * @return array<int|string, float>
      */
-    private static function sumarPositivos(array $cantidades): array
+    private static function sumarFirmados(array $cantidades): array
     {
         $out = [];
         foreach ($cantidades as $talle => $cantidad) {
@@ -213,11 +232,42 @@ final class CurvaModuloPresentacionSupport
             if ($clave === '' || $clave === 0) {
                 continue;
             }
-            $n = (float) $cantidad;
-            if ($n <= 0.0001) {
-                continue;
+            $out[$clave] = (float) (($out[$clave] ?? 0) + (float) $cantidad);
+        }
+        foreach ($out as $clave => $cantidad) {
+            if (abs($cantidad) <= 0.0001) {
+                unset($out[$clave]);
             }
-            $out[$clave] = (float) (($out[$clave] ?? 0) + $n);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<int|string, float>  $cantidades
+     */
+    private static function tieneNegativos(array $cantidades): bool
+    {
+        foreach ($cantidades as $cantidad) {
+            if ((float) $cantidad < -0.0001) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<int|string, float|int>  $cantidades
+     * @return array<int|string, float>
+     */
+    private static function sumarPositivos(array $cantidades): array
+    {
+        $out = [];
+        foreach (self::sumarFirmados($cantidades) as $clave => $cantidad) {
+            if ($cantidad > 0.0001) {
+                $out[$clave] = $cantidad;
+            }
         }
 
         return $out;
