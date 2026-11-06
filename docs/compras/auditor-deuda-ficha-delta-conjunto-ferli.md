@@ -115,6 +115,7 @@ Asientos que quedaron en mayor (sin vínculo a comprobante / CC):
 ## Referencias
 
 - Comando: `php artisan compras:auditar-deuda-ficha-proveedor`
-- Support: `App\Support\Compras\ProveedorDeudaMayorDeltaSupport`
+- Support: `App\Support\Compras\ProveedorDeudaMayorDeltaSupport` (anticipos = solo OPA; FA/recepción aparte)
 - Mail: `resources/views/mails/compras/proveedor_cuentacorriente_deuda_ficha_auditor.blade.php`
 - Cron: diario ~07:50 (`compras.deuda_ficha_auditor`)
+- FA vs recepción: `php artisan compras:auditar-factura-anticipada-recepcion`

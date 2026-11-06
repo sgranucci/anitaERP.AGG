@@ -49,6 +49,8 @@
     · Expresión <strong>{{ $expresion }}</strong>
     · La deuda es la verdad: facturas impagas, notas de crédito sin aplicar y OPA sin aplicar.
     Aplicar una OPA a una factura debita una cuenta y acredita la otra por el mismo importe: el delta conjunto no se mueve.
+    Facturas anticipadas y recepciones no entran acá: las controla
+    <code>compras:auditar-factura-anticipada-recepcion</code>.
 </p>
 
 <h3 style="margin:16px 0 6px 0;">Resumen</h3>
@@ -84,8 +86,8 @@
 
 <h3 style="margin:18px 0 6px 0;">Delta conjunto</h3>
 <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
-    Suma del delta de proveedores y el de anticipos. Es el número que se controla.
-    Una aplicación, una factura anticipada o su recepción pueden mover una cuenta y compensarla en la otra.
+    Suma del delta de proveedores y el de anticipos (OPA). Es el número que se controla.
+    Una aplicación puede mover una cuenta y compensarla en la otra.
     @if (! empty($delta['hay_base_anterior']))
         Avisa si la variación pasa de {{ $fmt($delta['tolerancia'] ?? 1) }} respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
     @else
@@ -253,10 +255,11 @@
     @endif
 @endif
 
-<h3 style="margin:22px 0 6px 0;">Anticipos a proveedores</h3>
+<h3 style="margin:22px 0 6px 0;">Anticipos a proveedores (solo OPA)</h3>
 <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
-    La cuenta cuadra con las OPA imputadas ahí. El sobrante de una OPP también: el debe está en el asiento de la OPP y la OPA abierta es el crédito.
-    Aplicar esa OPA acredita esta cuenta y debita proveedores. El delta de esta fila puede cambiar; el conjunto no, si la otra cuenta se mueve por el mismo importe.
+    Deuda = OPA abiertas imputadas a anticipos (incluye sobrante de OPP).
+    Mayor = asientos de esa cuenta sin facturas anticipadas ni recepciones.
+    Aplicar esa OPA acredita esta cuenta y debita proveedores: el conjunto no se mueve si ambas piernas se compensan.
 </p>
 @if ($cuentasAnticipo === [])
     <p style="margin:0;">No hay saldo en la cuenta de anticipos.</p>
@@ -264,10 +267,8 @@
     <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
         <tr style="background:#85C1E9; color:#17202A;">
             <th align="left">Cuenta</th>
-            <th align="right">OP adelantadas</th>
-            <th align="right">Facturas anticipadas</th>
-            <th align="right">OPA + facturas</th>
-            <th align="right">Mayor</th>
+            <th align="right">OPA / OP adelantadas</th>
+            <th align="right">Mayor (sin FA/recep.)</th>
             <th align="right">Delta</th>
             <th align="right">Anterior</th>
             <th align="right">Variación</th>
@@ -279,9 +280,7 @@
                 @endif
             >
                 <td>{{ $c['codigo'] ?? '' }} {{ $c['nombre'] ?? '' }}</td>
-                <td align="right">{{ $fmt($c['opa'] ?? 0) }}</td>
-                <td align="right">{{ $fmt($c['facturas'] ?? 0) }}</td>
-                <td align="right">{{ $fmt($c['deuda'] ?? 0) }}</td>
+                <td align="right">{{ $fmt($c['opa'] ?? $c['deuda'] ?? 0) }}</td>
                 <td align="right">{{ $fmt($c['mayor'] ?? 0) }}</td>
                 <td align="right"><strong>{{ $fmt($c['delta'] ?? 0) }}</strong></td>
                 <td align="right">{{ $c['delta_anterior'] === null ? '—' : $fmt($c['delta_anterior']) }}</td>

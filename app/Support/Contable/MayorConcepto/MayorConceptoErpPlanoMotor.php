@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\DB;
  * factura. Si no hay COM, queda en la cuenta de la factura. Si no es proveedores,
  * queda en la contrapartida con el concepto de esa cuenta. Las OPP llevan
  * además el total de retenciones del pago, prorrateado con el mismo criterio.
+ *
+ * Cierre «Venta maquinas» (flag venta_maquinas_lineas_nativas): las cuentas
+ * por encima del límite salen con su Debe/Haber nativo; el cuadre con el mayor
+ * analítico es por neto (neto analítico + neto concepto = 0).
  */
 class MayorConceptoErpPlanoMotor
 {
@@ -25,6 +29,11 @@ class MayorConceptoErpPlanoMotor
     private const PROVEEDOR_HASTA = 212000000;
 
     private const TOLERANCIA = 0.02;
+
+    /** Cuentas 412010–412999: ventas máquinas / ruletas del cierre de rendición. */
+    private const VENTA_MAQUINAS_CUENTA_DESDE = 412010000;
+
+    private const VENTA_MAQUINAS_CUENTA_HASTA = 413000000;
 
     /**
      * @return array<string, mixed>
@@ -38,6 +47,7 @@ class MayorConceptoErpPlanoMotor
         MayorConceptoMonedaConverter $monedaConverter,
     ): array {
         $limite = (int) config('contable.mayor_concepto.limite_caja_banco', 112010008);
+        $ventaMaquinasNativas = $this->ventaMaquinasLineasNativasHabilitado();
         $asientos = $empresaId > 0
             ? $this->cargarAsientos($empresaId, $fechaDesdeYmd, $fechaHastaYmd, $monedaReporteId, $soloMonedaOrigen, $monedaConverter)
             : [];
@@ -55,7 +65,7 @@ class MayorConceptoErpPlanoMotor
         $asientosProveedor = array_keys($conProveedor);
         $gastos = $this->cargarGastosPorAsiento($empresaId, $asientosProveedor);
         $retenciones = $this->cargarRetencionesPorAsiento($empresaId, $asientosProveedor);
-        $clasificado = $this->clasificar($asientos, $gastos, $limite, $retenciones);
+        $clasificado = $this->clasificar($asientos, $gastos, $limite, $retenciones, $ventaMaquinasNativas);
         $lineas = $clasificado['lineas'];
         $analitico = $clasificado['analitico'];
         $auditoria = $this->auditar($analitico, $lineas);
@@ -69,6 +79,13 @@ class MayorConceptoErpPlanoMotor
             $retencionesTotal += (float) ($ln['retenciones'] ?? 0);
         }
 
+        $asientosVentaMaquinas = 0;
+        foreach ($analitico as $fila) {
+            if (! empty($fila['cuadre_neto'])) {
+                $asientosVentaMaquinas++;
+            }
+        }
+
         return [
             'parametros' => [
                 'empresa_id' => $empresaId,
@@ -80,6 +97,7 @@ class MayorConceptoErpPlanoMotor
                 'motor' => 'erp_plano_limite',
                 'fuente_etiqueta' => 'ERP — mayor por concepto sobre las patas hasta el límite',
                 'limite_caja_banco' => $limite,
+                'venta_maquinas_lineas_nativas' => $ventaMaquinasNativas,
             ],
             'secciones' => $this->agruparPorConcepto($lineas),
             'totales' => [
@@ -94,6 +112,7 @@ class MayorConceptoErpPlanoMotor
                 'asientos_erp' => count($asientos),
                 'asientos_con_pata_limite' => count($analitico),
                 'asientos_proveedor' => count($conProveedor),
+                'asientos_venta_maquinas_nativas' => $asientosVentaMaquinas,
                 'lineas' => count($lineas),
                 'motor' => 'erp_plano_limite',
             ],
@@ -109,8 +128,13 @@ class MayorConceptoErpPlanoMotor
      * @param  array<int, float>  $retencionesPorAsiento  total de retenciones de la OPP, por asiento
      * @return array{lineas: list<array<string, mixed>>, analitico: array<int, array<string, mixed>>}
      */
-    public function clasificar(array $asientos, array $gastosPorAsiento, int $limite, array $retencionesPorAsiento = []): array
-    {
+    public function clasificar(
+        array $asientos,
+        array $gastosPorAsiento,
+        int $limite,
+        array $retencionesPorAsiento = [],
+        bool $ventaMaquinasLineasNativas = false,
+    ): array {
         $lineas = [];
         $analitico = [];
 
@@ -136,71 +160,96 @@ class MayorConceptoErpPlanoMotor
             $debePlano = 0.0;
             $haberPlano = 0.0;
             $cuentasPlano = [];
+            $esVentaNativo = $ventaMaquinasLineasNativas && $this->esAsientoVentaMaquinas($asiento);
 
-            foreach ($patas as $indicePata => $pata) {
+            foreach ($patas as $pata) {
                 $importe = round((float) $pata['importe'], 2);
-                $esDebe = (bool) $pata['es_debe'];
-                if ($esDebe) {
+                if ((bool) $pata['es_debe']) {
                     $debePlano += $importe;
                 } else {
                     $haberPlano += $importe;
                 }
                 $cuentasPlano[$pata['cuenta_codigo']] = true;
-
-                $opuestas = [];
-                foreach ($movimientos as $indice => $otra) {
-                    if ($indice === $indicePata || (bool) $otra['es_debe'] === $esDebe || (float) $otra['importe'] < 0.005) {
-                        continue;
-                    }
-                    $opuestas[] = $otra;
-                }
-
-                $destino = $opuestas !== []
-                    ? $this->repartir($importe, $opuestas, 'importe')
-                    : [['peso_linea' => $importe, 'item' => $pata]];
-
-                foreach ($destino as $trozo) {
-                    $monto = round((float) $trozo['peso_linea'], 2);
-                    if ($monto < 0.005) {
-                        continue;
-                    }
-                    $contra = $trozo['item'];
-                    if ($this->esProveedor((int) $contra['cuenta'])) {
-                        $gastos = $gastosPorAsiento[$asientoId] ?? [];
-                        $sumaPesos = 0.0;
-                        foreach ($gastos as $gasto) {
-                            $sumaPesos += (float) ($gasto['peso'] ?? 0);
-                        }
-                        $fraccion = $gastos === [] ? null : ($gastos[0]['fraccion'] ?? null);
-                        if ($gastos === []) {
-                            $aRepartir = 0.0;
-                        } elseif ($fraccion !== null) {
-                            $aRepartir = round($monto * (float) $fraccion, 2);
-                        } else {
-                            $aRepartir = round(min($monto, $sumaPesos), 2);
-                        }
-                        $partesGasto = $aRepartir >= 0.005
-                            ? $this->repartir($aRepartir, $gastos, 'peso')
-                            : [];
-                        foreach ($partesGasto as $parte) {
-                            $linea = $this->linea($asiento, $pata, $parte['item'], (float) $parte['peso_linea'], $esDebe, true);
-                            $linea['lleva_retencion'] = true;
-                            $lineas[] = $linea;
-                        }
-                        $resto = round($monto - $aRepartir, 2);
-                        if ($resto >= 0.005) {
-                            $linea = $this->linea($asiento, $pata, $contra, $resto, $esDebe, false);
-                            $linea['lleva_retencion'] = true;
-                            $lineas[] = $linea;
-                        }
-                        continue;
-                    }
-
-                    $lineas[] = $this->linea($asiento, $pata, $contra, $monto, $esDebe, false);
-                }
             }
 
-            $this->asignarRetenciones($lineas, $inicioLineas, (float) ($retencionesPorAsiento[$asientoId] ?? 0));
+            if ($esVentaNativo) {
+                $pataRef = $this->pataDisponibilidadReferencia($patas);
+                foreach ($movimientos as $mov) {
+                    $cuenta = (int) ($mov['cuenta'] ?? 0);
+                    $importe = round((float) ($mov['importe'] ?? 0), 2);
+                    if ($cuenta <= 0 || $cuenta <= $limite || $importe < 0.005) {
+                        continue;
+                    }
+                    $lineas[] = $this->linea(
+                        $asiento,
+                        $pataRef,
+                        $mov,
+                        $importe,
+                        (bool) $mov['es_debe'],
+                        false,
+                        'Cuenta del cierre venta máquinas (lado nativo)',
+                    );
+                }
+            } else {
+                foreach ($patas as $indicePata => $pata) {
+                    $importe = round((float) $pata['importe'], 2);
+                    $esDebe = (bool) $pata['es_debe'];
+
+                    $opuestas = [];
+                    foreach ($movimientos as $indice => $otra) {
+                        if ($indice === $indicePata || (bool) $otra['es_debe'] === $esDebe || (float) $otra['importe'] < 0.005) {
+                            continue;
+                        }
+                        $opuestas[] = $otra;
+                    }
+
+                    $destino = $opuestas !== []
+                        ? $this->repartir($importe, $opuestas, 'importe')
+                        : [['peso_linea' => $importe, 'item' => $pata]];
+
+                    foreach ($destino as $trozo) {
+                        $monto = round((float) $trozo['peso_linea'], 2);
+                        if ($monto < 0.005) {
+                            continue;
+                        }
+                        $contra = $trozo['item'];
+                        if ($this->esProveedor((int) $contra['cuenta'])) {
+                            $gastos = $gastosPorAsiento[$asientoId] ?? [];
+                            $sumaPesos = 0.0;
+                            foreach ($gastos as $gasto) {
+                                $sumaPesos += (float) ($gasto['peso'] ?? 0);
+                            }
+                            $fraccion = $gastos === [] ? null : ($gastos[0]['fraccion'] ?? null);
+                            if ($gastos === []) {
+                                $aRepartir = 0.0;
+                            } elseif ($fraccion !== null) {
+                                $aRepartir = round($monto * (float) $fraccion, 2);
+                            } else {
+                                $aRepartir = round(min($monto, $sumaPesos), 2);
+                            }
+                            $partesGasto = $aRepartir >= 0.005
+                                ? $this->repartir($aRepartir, $gastos, 'peso')
+                                : [];
+                            foreach ($partesGasto as $parte) {
+                                $linea = $this->linea($asiento, $pata, $parte['item'], (float) $parte['peso_linea'], $esDebe, true);
+                                $linea['lleva_retencion'] = true;
+                                $lineas[] = $linea;
+                            }
+                            $resto = round($monto - $aRepartir, 2);
+                            if ($resto >= 0.005) {
+                                $linea = $this->linea($asiento, $pata, $contra, $resto, $esDebe, false);
+                                $linea['lleva_retencion'] = true;
+                                $lineas[] = $linea;
+                            }
+                            continue;
+                        }
+
+                        $lineas[] = $this->linea($asiento, $pata, $contra, $monto, $esDebe, false);
+                    }
+                }
+
+                $this->asignarRetenciones($lineas, $inicioLineas, (float) ($retencionesPorAsiento[$asientoId] ?? 0));
+            }
 
             $cuentas = array_keys($cuentasPlano);
             sort($cuentas);
@@ -212,15 +261,72 @@ class MayorConceptoErpPlanoMotor
                 'fecha_min' => (int) $asiento['fecha'],
                 'fecha_fmt' => $this->fmtFecha((int) $asiento['fecha']),
                 'cuentas' => $cuentas,
+                'cuadre_neto' => $esVentaNativo,
             ];
         }
 
         return ['lineas' => $lineas, 'analitico' => $analitico];
     }
 
+    public function ventaMaquinasLineasNativasHabilitado(): bool
+    {
+        return (bool) config('contable.mayor_concepto.venta_maquinas_lineas_nativas', true);
+    }
+
+    /**
+     * Cierre de rendición máquinas: ventas 412010–412999 o leyenda del asiento.
+     *
+     * @param  array<string, mixed>  $asiento
+     */
+    public function esAsientoVentaMaquinas(array $asiento): bool
+    {
+        foreach ($asiento['movimientos'] ?? [] as $mov) {
+            $cuenta = (int) ($mov['cuenta'] ?? 0);
+            if ($cuenta >= self::VENTA_MAQUINAS_CUENTA_DESDE && $cuenta < self::VENTA_MAQUINAS_CUENTA_HASTA) {
+                return true;
+            }
+        }
+
+        $texto = strtolower(
+            trim((string) ($asiento['observacion'] ?? ''))
+            .' '
+            .trim((string) ($asiento['tipo'] ?? ''))
+        );
+        $texto = str_replace(['á', 'é', 'í', 'ó', 'ú'], ['a', 'e', 'i', 'o', 'u'], $texto);
+
+        return str_contains($texto, 'venta maquinas')
+            || str_contains($texto, 'cierre rendicion maquinas');
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $patas
+     * @return array<string, mixed>
+     */
+    private function pataDisponibilidadReferencia(array $patas): array
+    {
+        $mejor = null;
+        $mejorImporte = -1.0;
+        foreach ($patas as $pata) {
+            $importe = (float) ($pata['importe'] ?? 0);
+            if ($importe > $mejorImporte) {
+                $mejor = $pata;
+                $mejorImporte = $importe;
+            }
+        }
+
+        return $mejor ?? [
+            'cuenta' => 0,
+            'cuenta_codigo' => '',
+            'descripcion' => '',
+            'cotizacion' => 1.0,
+            'nro_oc' => 0,
+        ];
+    }
+
     /**
      * Compara, asiento por asiento, el Debe y el Haber de las patas hasta el límite
-     * contra el Debe y el Haber del mayor por concepto.
+     * contra el Debe y el Haber del mayor por concepto. En cierre venta máquinas con
+     * líneas nativas el control es Neto analítico + Neto concepto = 0.
      *
      * @param  array<int, array<string, mixed>>  $analitico
      * @param  list<array<string, mixed>>  $lineas
@@ -256,6 +362,7 @@ class MayorConceptoErpPlanoMotor
 
         $filas = [];
         $descuadrados = 0;
+        $asientosNeto = 0;
         foreach ($ids as $id) {
             $a = $analitico[$id] ?? null;
             $c = $concepto[$id] ?? null;
@@ -263,9 +370,25 @@ class MayorConceptoErpPlanoMotor
             $haberA = round((float) ($a['haber'] ?? 0), 2);
             $debeC = round((float) ($c['debe'] ?? 0), 2);
             $haberC = round((float) ($c['haber'] ?? 0), 2);
+            $netoA = round($debeA - $haberA, 2);
+            $netoC = round($debeC - $haberC, 2);
             $dDebe = round($debeA - $debeC, 2);
             $dHaber = round($haberA - $haberC, 2);
-            $cuadra = abs($dDebe) < self::TOLERANCIA && abs($dHaber) < self::TOLERANCIA;
+            $cuadreNeto = ! empty($a['cuadre_neto']);
+            if ($cuadreNeto) {
+                $asientosNeto++;
+                $diferencia = round($netoA + $netoC, 2);
+                $cuadra = abs($diferencia) < self::TOLERANCIA;
+                $motivo = $cuadra
+                    ? ''
+                    : 'Venta máquinas (neto): analítico '.$netoA.' + concepto '.$netoC.' = '.$diferencia.'.';
+            } else {
+                $diferencia = round(abs($dDebe) + abs($dHaber), 2);
+                $cuadra = abs($dDebe) < self::TOLERANCIA && abs($dHaber) < self::TOLERANCIA;
+                $motivo = $cuadra
+                    ? ''
+                    : 'Debe plano '.$debeA.' / concepto '.$debeC.'; Haber plano '.$haberA.' / concepto '.$haberC.'.';
+            }
             if (! $cuadra) {
                 $descuadrados++;
             }
@@ -286,17 +409,16 @@ class MayorConceptoErpPlanoMotor
                 'haber_analitico' => $haberA,
                 'debe_concepto' => $debeC,
                 'haber_concepto' => $haberC,
-                'neto_analitico' => round($debeA - $haberA, 2),
-                'neto_concepto' => round($debeC - $haberC, 2),
-                'diferencia' => round(abs($dDebe) + abs($dHaber), 2),
+                'neto_analitico' => $netoA,
+                'neto_concepto' => $netoC,
+                'diferencia' => $diferencia,
                 'cuadra' => $cuadra,
+                'cuadre_neto' => $cuadreNeto,
                 'excepcion' => false,
                 'origen' => $a !== null && $c !== null
                     ? 'En ambos reportes'
                     : ($a !== null ? 'Solo en el mayor plano hasta el límite' : 'Solo en el mayor por concepto'),
-                'motivo' => $cuadra
-                    ? ''
-                    : 'Debe plano '.$debeA.' / concepto '.$debeC.'; Haber plano '.$haberA.' / concepto '.$haberC.'.',
+                'motivo' => $motivo,
             ];
         }
 
@@ -308,16 +430,19 @@ class MayorConceptoErpPlanoMotor
         return [
             'cuadra' => $descuadrados === 0,
             'tolerancia' => self::TOLERANCIA,
-            'regla' => 'El Debe y el Haber de cada asiento en el mayor por concepto igualan la pata hasta el límite',
+            'regla' => $asientosNeto > 0
+                ? 'Pata hasta el límite (columnas) y, en venta máquinas, Neto analítico + Neto concepto = 0'
+                : 'El Debe y el Haber de cada asiento en el mayor por concepto igualan la pata hasta el límite',
             'asientos_analizados' => $analizados,
             'asientos_cuadrados' => $analizados - $descuadrados,
             'asientos_descuadrados' => $descuadrados,
             'asientos_excepcion' => 0,
+            'asientos_cuadre_neto' => $asientosNeto,
             'porcentaje_cuadrado' => $analizados > 0 ? round(100 * ($analizados - $descuadrados) / $analizados, 1) : 100.0,
             'filas' => $filas,
             'filas_descuadradas' => $filasDescuadradas,
             'filas_cuadradas' => $filasCuadradas,
-            'nota' => 'Solo entran las cuentas menores o iguales al límite de caja/banco. El importe de esa pata no se cambia: se abre en las cuentas de gasto de la COM si la contrapartida es proveedores, y si no queda en la contrapartida con el concepto de esa cuenta.',
+            'nota' => 'Solo entran las cuentas menores o iguales al límite de caja/banco. El importe de esa pata no se cambia: se abre en las cuentas de gasto de la COM si la contrapartida es proveedores, y si no queda en la contrapartida con el concepto de esa cuenta. En cierre venta máquinas con líneas nativas el control es por neto contra el mayor analítico.',
         ];
     }
 
@@ -419,12 +544,23 @@ class MayorConceptoErpPlanoMotor
      * @param  array<string, mixed>  $destino
      * @return array<string, mixed>
      */
-    private function linea(array $asiento, array $pata, array $destino, float $importe, bool $esDebe, bool $desdeGasto): array
-    {
+    private function linea(
+        array $asiento,
+        array $pata,
+        array $destino,
+        float $importe,
+        bool $esDebe,
+        bool $desdeGasto,
+        ?string $origenForzado = null,
+    ): array {
         $importe = round($importe, 2);
         $debe = $esDebe ? $importe : 0.0;
         $haber = $esDebe ? 0.0 : $importe;
         $cuentaDisp = (int) $pata['cuenta'];
+        $descripcion = trim((string) ($destino['descripcion'] ?? ''));
+        if ($descripcion === '') {
+            $descripcion = (string) ($pata['descripcion'] ?? $asiento['observacion'] ?? '');
+        }
 
         return [
             'concepto_id' => (int) ($destino['concepto_id'] ?? 0),
@@ -446,19 +582,20 @@ class MayorConceptoErpPlanoMotor
                 (int) ($asiento['nro_comp'] ?? 0),
             ),
             'cheque' => '',
-            'nro_oc' => (int) ($pata['nro_oc'] ?? 0),
+            'nro_oc' => (int) ($pata['nro_oc'] ?? $destino['nro_oc'] ?? 0),
             'emisor' => (string) ($destino['emisor'] ?? $asiento['emisor'] ?? ''),
             'cuit' => (string) ($destino['cuit'] ?? ''),
-            'descripcion' => (string) ($pata['descripcion'] ?? $asiento['observacion'] ?? ''),
+            'descripcion' => $descripcion,
             'moneda_abrev' => (string) ($asiento['moneda_abrev'] ?? ''),
-            'cotizacion' => (float) ($pata['cotizacion'] ?? 0),
+            'cotizacion' => (float) ($destino['cotizacion'] ?? $pata['cotizacion'] ?? 0),
             'debe' => $debe,
             'haber' => $haber,
             'retenciones' => 0.0,
             'disp_debe' => $debe,
             'disp_haber' => $haber,
-            'origen' => (string) ($destino['origen_linea']
-                ?? ($desdeGasto ? 'Gasto del comprobante de compra' : 'Contrapartida de la pata hasta el límite')),
+            'origen' => $origenForzado
+                ?? (string) ($destino['origen_linea']
+                    ?? ($desdeGasto ? 'Gasto del comprobante de compra' : 'Contrapartida de la pata hasta el límite')),
             'desde_operacion_disponibilidad' => true,
             'empresa_id' => (int) ($asiento['empresa_id'] ?? 0),
         ];
