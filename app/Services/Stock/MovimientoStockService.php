@@ -12,6 +12,7 @@ use App\Models\Stock\Depmae;
 use App\Models\Stock\Talle;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Tipotransaccion_Stock;
+use App\Models\Ventas\Ordentrabajo;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\FacturacionAnitaGrabacionSupport;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
@@ -557,6 +558,16 @@ class MovimientoStockService
 							}
 						}
 					}
+					if (MovimientoStockFerliSupport::esCalzadosFerli() && (int) $combinacion > 0) {
+						$errorTalles = MovimientoStockFerliSupport::errorSiTallesNoSumanCantidad(
+							$i + 1,
+							(float) ($cantidades[$i] ?? 0),
+							array_column($dataTalle, 'cantidad')
+						);
+						if ($errorTalles !== null) {
+							throw new \Exception($errorTalles);
+						}
+					}
 					
 					$articulo_movimiento = $this->articulo_movimientoService->
 									guardaArticuloMovimiento('create',
@@ -967,7 +978,11 @@ class MovimientoStockService
 			}
 		}
 
-		$loteMensaje = $comoOt ? (string) $ordentrabajoIdConsumo : $loteDoc;
+		$loteMensaje = $loteDoc;
+		if ($comoOt) {
+			$codigoOt = trim((string) (Ordentrabajo::query()->whereKey($ordentrabajoIdConsumo)->value('codigo') ?? ''));
+			$loteMensaje = $codigoOt !== '' ? $codigoOt : (string) $ordentrabajoIdConsumo;
+		}
 		foreach ($grupos as $grupo) {
 			$error = PedidoPickingFerliSupport::errorSiEgresoBucketSuperaSaldo(
 				$grupo['articulo_id'],
@@ -1038,7 +1053,8 @@ class MovimientoStockService
 
 	/**
 	 * null = no hay bucket previo que controlar (número recién asignado).
-	 * Si el operador escribió un lote, se controla ese, no el correlativo de la TRA.
+	 * Se controla el lote que se graba en la línea: en una TRA Ferli es el lote
+	 * que escribió el operador (TransferenciaMercaderiaService ya lo puso en `lote`).
 	 *
 	 * @param  array<string, mixed>  $data
 	 */
@@ -1049,8 +1065,6 @@ class MovimientoStockService
 			if ($this->loteDocumentoEsAlta($loteForm)) {
 				return null;
 			}
-
-			return $loteForm;
 		}
 
 		return trim((string) ($data['lote'] ?? ''));

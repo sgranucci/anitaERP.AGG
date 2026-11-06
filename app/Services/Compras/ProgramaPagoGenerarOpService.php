@@ -57,15 +57,21 @@ class ProgramaPagoGenerarOpService
             ];
         }
 
-        $plan = ProgramaPagoOpPlanSupport::armar($programa, $lineaIds);
+        // Un plan por fecha de pago: las retenciones estimadas usan esa fecha (acumulados).
+        $idsPorFecha = [];
+        foreach ($pedidosPorLinea as $lineaId => $fecha) {
+            $idsPorFecha[$fecha][] = $lineaId;
+        }
         $aGenerar = [];
-        foreach ($plan as $fila) {
-            $lineaId = (int) $fila['linea_id'];
-            if (! isset($pedidosPorLinea[$lineaId]) || $fila['pagoproveedor_id']) {
-                continue;
+        foreach ($idsPorFecha as $fecha => $idsFecha) {
+            foreach (ProgramaPagoOpPlanSupport::armar($programa, $idsFecha, $fecha) as $fila) {
+                $lineaId = (int) $fila['linea_id'];
+                if (! isset($pedidosPorLinea[$lineaId]) || $fila['pagoproveedor_id']) {
+                    continue;
+                }
+                $fila['fecha'] = $fecha;
+                $aGenerar[] = $fila;
             }
-            $fila['fecha'] = $pedidosPorLinea[$lineaId];
-            $aGenerar[] = $fila;
         }
         if ($aGenerar === []) {
             return [
@@ -82,13 +88,16 @@ class ProgramaPagoGenerarOpService
                 break;
             }
         }
-        if ($necesitaCuenta && ! Cuentacaja::existeParaEmpresa($cuentacajaId, (int) $programa->empresa_id)) {
+        $cuentaOk = Cuentacaja::existeParaEmpresa($cuentacajaId, (int) $programa->empresa_id);
+        if ($necesitaCuenta && ! $cuentaOk) {
             return [
                 'generadas' => [],
                 'errores' => ['Elegí la cuenta de caja de la empresa desde la que sale la transferencia.'],
                 'avisos' => [],
             ];
         }
+        // Si la preview no pedía transferencia pero el cálculo real sí, hace falta cuenta cargada.
+        $cuentacajaId = $cuentaOk ? $cuentacajaId : 0;
 
         $generadas = [];
         $errores = [];
@@ -121,7 +130,7 @@ class ProgramaPagoGenerarOpService
                     (float) $fila['programado'],
                     $aplicaciones,
                     $chequeIds,
-                    $fila['necesita_cuenta'] ? $cuentacajaId : null,
+                    $cuentacajaId > 0 ? $cuentacajaId : null,
                     'Programa de pagos #'.$programa->id.' | '.trim($fila['codigo'].' '.$fila['nombre']),
                     true,
                 );

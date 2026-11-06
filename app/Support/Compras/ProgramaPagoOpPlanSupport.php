@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Arma, sin grabar, las órdenes de pago de los proveedores tildados.
- * Una OP por proveedor: suma todos los meses y la transferencia, y junta los cheques.
+ * Una OP por proveedor: junta cheques y TRANSF (medios = neto) y, si hay cheques,
+ * recupera el bruto (+ retenciones) para aplicar a la deuda.
  */
 final class ProgramaPagoOpPlanSupport
 {
@@ -55,18 +56,43 @@ final class ProgramaPagoOpPlanSupport
         $plan = [];
         $consumido = [];
         foreach ($lineas as $linea) {
-            $programado = 0.0;
+            $medios = 0.0;
             foreach ($linea->asignaciones as $asig) {
                 if (! in_array((string) $asig->clave, $claves, true)) {
                     continue;
                 }
-                $programado += (float) $asig->monto;
+                $medios += (float) $asig->monto;
             }
-            $programado = round(max(0, $programado), 2);
+            $medios = round(max(0, $medios), 2);
             $cheques = self::chequesDeColumna($linea->chequesAsignados->all());
             $sumaCheques = round(array_sum(array_column($cheques, 'monto')), 2);
-            if ($programado < 0.01 && $sumaCheques < 0.01) {
+            if ($medios < 0.01 && $sumaCheques < 0.01) {
                 continue;
+            }
+
+            $retenciones = 0.0;
+            $programado = $medios;
+            $neto = $medios;
+            $diferencia = 0.0;
+            if ($medios > 0.009) {
+                $est = ProgramaPagoRetencionEstimacionSupport::resolverBrutoNeto(
+                    (int) $programa->empresa_id,
+                    (int) $linea->proveedor_id,
+                    $medios,
+                    (float) $linea->saldo_adeudado,
+                    $fecha
+                );
+                $retenciones = (float) $est['retenciones'];
+                $programado = (float) $est['bruto'];
+                $neto = (float) $est['neto'];
+                if ($sumaCheques > 0.009) {
+                    // Transferencia = medios de la matriz (neto o bruto) menos cheques.
+                    // Si la fila aún está en bruto, el neto a cubrir con medios es $neto.
+                    $baseMedios = ! empty($est['ya_neto']) ? $medios : $neto;
+                    $diferencia = round(max(0, $baseMedios - $sumaCheques), 2);
+                } else {
+                    $diferencia = $neto;
+                }
             }
 
             $aplicaciones = $programado > 0.009
@@ -80,7 +106,6 @@ final class ProgramaPagoOpPlanSupport
                 : [];
             $aplicado = round(array_sum(array_column($aplicaciones, 'montoaplicado')), 2);
             $existente = $opsExistentes->get($linea->id);
-            $diferencia = round($programado - $sumaCheques, 2);
 
             $plan[] = [
                 'linea_id' => (int) $linea->id,
@@ -88,6 +113,9 @@ final class ProgramaPagoOpPlanSupport
                 'codigo' => (string) ($linea->proveedores->codigo ?? ''),
                 'nombre' => (string) ($linea->proveedores->nombre ?? ''),
                 'programado' => $programado,
+                'medios' => $medios,
+                'neto' => $neto,
+                'retenciones' => $retenciones,
                 'cheques' => $cheques,
                 'suma_cheques' => $sumaCheques,
                 'diferencia' => $diferencia,

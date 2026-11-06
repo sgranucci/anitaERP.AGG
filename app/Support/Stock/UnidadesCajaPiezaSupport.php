@@ -120,8 +120,8 @@ final class UnidadesCajaPiezaSupport
             }
 
             return true;
-        } catch (QueryException) {
-            // Connection refused / sin .env: asumir columnas ausentes.
+        } catch (QueryException|\RuntimeException) {
+            // Connection refused / sin .env / sin app booteada: asumir columnas ausentes.
             return false;
         }
     }

@@ -16,6 +16,7 @@ use App\Models\Stock\Talle;
 use App\Support\Database\DbContencionSupport;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\ArticuloMovimientoReferenciasSupport;
+use App\Support\Stock\OtBucketSaldoSupport;
 use App\Support\Stock\OtBucketStockSupport;
 use App\Support\Stock\OtListaEntregaSupport;
 use App\Support\Stock\ReporteStockOtDepositoAmbitoSupport;
@@ -365,6 +366,8 @@ class Articulo_MovimientoService
 
 		/** @var array<string, array<string, mixed>> $grupos */
 		$grupos = [];
+		/** @var array<string, float> $saldosBucket */
+		$saldosBucket = [];
 		$esMovimientos = $apertura === 'MOVIMIENTOS';
 
 		foreach ($data as $movimiento) {
@@ -375,6 +378,11 @@ class Articulo_MovimientoService
 				(string) ($movimiento['codigocombinacion'] ?? ''),
 				$claveAgrupacion,
 			]);
+			$claveBucketDeposito = $clave;
+			if (empty($movimiento['en_produccion_forzada'])) {
+				$saldosBucket[$claveBucketDeposito] = (float) ($saldosBucket[$claveBucketDeposito] ?? 0)
+					+ (float) ($movimiento['cantidad'] ?? 0);
+			}
 			if ($esMovimientos) {
 				$clave .= '|'.(int) ($movimiento['modulo_id'] ?? 0)
 					.'|'.(int) ($movimiento['ordentrabajo_id'] ?? 0)
@@ -411,6 +419,9 @@ class Articulo_MovimientoService
 					'deposito_nombre' => (string) ($movimiento['depositonombre'] ?? ''),
 					'medidas' => [],
 					'total_pares' => 0.0,
+					'_bucket_clave' => $bucket['clave'],
+					'_bucket_deposito' => $claveBucketDeposito,
+					'_forzada' => ! empty($movimiento['en_produccion_forzada']),
 					'_sort' => implode('|', [
 						(string) ($movimiento['nombrelinea'] ?? ''),
 						(string) ($movimiento['sku'] ?? ''),
@@ -434,9 +445,24 @@ class Articulo_MovimientoService
 			$grupos[$clave]['total_pares'] += $cant;
 		}
 
+		$otsBucket = [];
+		foreach ($grupos as $grupo) {
+			if (str_starts_with((string) $grupo['_bucket_clave'], 'OT:')) {
+				$otsBucket[] = (int) $grupo['ordentrabajo_id'];
+			}
+		}
+		$otsDeStock = OtBucketSaldoSupport::otsDeClienteStock($otsBucket);
+
 		$datas = [];
 		uasort($grupos, static fn ($a, $b) => strcmp((string) $a['_sort'], (string) $b['_sort']));
 		foreach ($grupos as $grupo) {
+			if (! $grupo['_forzada'] && ! OtBucketSaldoSupport::bucketVisibleEnStockPorOt(
+				(string) $grupo['_bucket_clave'],
+				$otsDeStock[(int) $grupo['ordentrabajo_id']] ?? false,
+				(float) ($saldosBucket[$grupo['_bucket_deposito']] ?? 0)
+			)) {
+				continue;
+			}
 			if (ReporteStockOtSituacionSupport::esSaldoNegativoOculto(
 				(float) $grupo['total_pares'],
 				$esMovimientos
@@ -614,9 +640,7 @@ class Articulo_MovimientoService
 
 		$filas = [];
 		foreach ($agrupados as $fila) {
-			if ($fila['saldo'] <= 0) {
-				continue;
-			}
+			// El saldo se mira por depósito: un negativo en un local no tapa los pares de fábrica.
 			foreach ($this->expandirFilaLotePorDeposito($fila, $filtraModuloId) as $porDeposito) {
 				$filas[] = $porDeposito;
 			}
@@ -687,11 +711,7 @@ class Articulo_MovimientoService
 		}
 
 		if ($positivos === []) {
-			if ($filtraModuloId && empty($fila['_modulos_ids'][$filtraModuloId])) {
-				return [];
-			}
-
-			return [$this->cerrarFilaLoteStock($fila, $fila['_modulos'] ?? [], $fila['_talles'] ?? [])];
+			return [];
 		}
 
 		$out = [];

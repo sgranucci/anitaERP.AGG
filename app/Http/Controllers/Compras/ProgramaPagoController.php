@@ -423,7 +423,7 @@ class ProgramaPagoController extends Controller
 
         $redirect = $this->redirectPrograma($id, $foco > 0 ? $foco : null)
             ->with('mensaje', $n > 0
-                ? "Se quitaron {$n} cheque(s) asignados. El monto programado no cambió."
+                ? "Se quitaron {$n} cheque(s) asignados. Los meses volvieron al saldo adeudado (sin TRANSF)."
                 : 'Ese proveedor no tenía cheques asignados.');
         if ($foco > 0) {
             $redirect->with('pp_foco_linea', $foco);
@@ -560,7 +560,8 @@ class ProgramaPagoController extends Controller
         }
 
         $lineaIds = array_map('intval', (array) $request->input('linea_ids', []));
-        $plan = ProgramaPagoOpPlanSupport::armar($programa, $lineaIds);
+        $fechaHoy = date('Y-m-d');
+        $plan = ProgramaPagoOpPlanSupport::armar($programa, $lineaIds, $fechaHoy);
         if ($plan === []) {
             return redirect()->route('editar_programa_pago', $id)
                 ->with('error', 'Tildá al menos un proveedor con montos programados.');
@@ -578,7 +579,7 @@ class ProgramaPagoController extends Controller
             'data' => $programa,
             'plan' => $plan,
             'necesitaCuenta' => $necesitaCuenta,
-            'fechaHoy' => date('Y-m-d'),
+            'fechaHoy' => $fechaHoy,
         ]);
     }
 
@@ -657,12 +658,16 @@ class ProgramaPagoController extends Controller
     private function textoAjustes(array $ajustes): string
     {
         if (count($ajustes) > 3) {
-            return ' Se alinearon '.count($ajustes).' proveedores a los cheques que tenían. Lo que no cubren quedó en transferencia.';
+            return ' Se alinearon '.count($ajustes).' proveedores a los cheques (neto de retenciones). Lo que falta a transferir quedó en TRANSF.';
         }
         $partes = [];
         foreach ($ajustes as $ajuste) {
             $transf = (float) ($ajuste['transf'] ?? 0);
+            $ret = (float) ($ajuste['retenciones'] ?? 0);
             $texto = trim((string) ($ajuste['proveedor'] ?? '')).': los meses quedaron iguales a los cheques';
+            if ($ret > 0.009) {
+                $texto .= '. Retenciones est. '.number_format($ret, 2, ',', '.');
+            }
             $texto .= $transf > 0.009
                 ? '. Transferencia '.number_format($transf, 2, ',', '.')
                 : '. Sin transferencia';

@@ -79,22 +79,12 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             ->leftJoin('depmae', 'depmae.id', 'articulo_movimiento.deposito_id')
             ->whereBetween('articulo.linea_id', [$desdelinea_id, $hastalinea_id])
             ->whereBetween('articulo.categoria_id', [$desdecategoria_id, $hastacategoria_id])
-            // Lotes importados (lote>0) o OT del cliente STOCK. OT de clientes comerciales, no.
+            // El filtro de OT del cliente STOCK va por bucket, en el servicio
+            // (OtBucketSaldoSupport::bucketVisibleEnStockPorOt): por fila deja afuera el
+            // alta de una OT comercial pero no su consumo con lote = código.
             ->where(function ($q) {
-                $clienteStockId = ReporteStockOtSituacionSupport::clienteStockId();
                 $q->where('articulo_movimiento.lote', '>', '0')
-                    ->orWhere(function ($qOt) use ($clienteStockId) {
-                        $qOt->where('articulo_movimiento.ordentrabajo_id', '>', 0)
-                            ->whereExists(function ($sub) use ($clienteStockId) {
-                                $sub->select(DB::raw('1'))
-                                    ->from('ordentrabajo_combinacion_talle as oct_stock')
-                                    ->whereColumn(
-                                        'oct_stock.ordentrabajo_id',
-                                        'articulo_movimiento.ordentrabajo_id'
-                                    )
-                                    ->where('oct_stock.cliente_id', $clienteStockId);
-                            });
-                    });
+                    ->orWhere('articulo_movimiento.ordentrabajo_id', '>', 0);
             });
 
         // Factura de otro cliente de la misma OT: sus pares ya se enviaron.

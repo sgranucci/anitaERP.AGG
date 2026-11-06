@@ -211,12 +211,29 @@ final class OtBucketStockSupport
         int $combinacionId,
         int $depositoId = 0
     ): string {
-        $otId = self::ordentrabajoIdDelBucket($lote, $ordentrabajoId, $articuloId, $combinacionId);
-        $base = $otId > 0
-            ? 'OT:'.$otId
-            : 'L:'.trim((string) $lote);
+        return self::claveBucket($lote, $ordentrabajoId, $articuloId, $combinacionId).'|D:'.$depositoId;
+    }
 
-        return $base.'|D:'.$depositoId;
+    /**
+     * Bucket (sin depósito) que recibe un movimiento con ese lote y esa OT.
+     */
+    public static function claveBucket(
+        mixed $lote,
+        int $ordentrabajoId,
+        int $articuloId,
+        int $combinacionId
+    ): string {
+        return self::claveDesdeOtResuelta(
+            $lote,
+            self::ordentrabajoIdDelBucket($lote, $ordentrabajoId, $articuloId, $combinacionId)
+        );
+    }
+
+    public static function claveDesdeOtResuelta(mixed $lote, int $otBucketId): string
+    {
+        return $otBucketId > 0
+            ? 'OT:'.$otBucketId
+            : 'L:'.trim((string) $lote);
     }
 
     private static function valor(array|object $fila, string $campo): mixed

@@ -441,6 +441,17 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(180)
             ->when(fn () => (bool) config('gastronomia.auditoria_anita_diaria.habilitada', true));
 
+        // Los errores de talles se miran solo desde ayer; el histórico ya está relevado.
+        $schedule->command('stock:control-ferli-ot', [
+            '--desde' => Carbon::yesterday()->toDateString(),
+            '--formato' => 'json',
+        ])
+            ->dailyAt('06:30')
+            ->runInBackground()
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/control-ferli-ot.log'))
+            ->when(fn () => EntornoEmpresaSupport::esFerli());
+
         $schedule->command('rendicion-gastronomia:auditoria-anita')
             ->dailyAt((string) config('rendicion_gastronomia_anita.auditoria_diaria.hora', '07:00'))
             ->withoutOverlapping(180)

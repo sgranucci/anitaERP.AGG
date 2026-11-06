@@ -28,6 +28,31 @@ final class MovimientoStockFerliSupport
         return EntornoEmpresaSupport::esFerli();
     }
 
+    /**
+     * Un renglón con combinación tiene que traer la numeración completa: Stock por OT,
+     * el picking y el saldo por talle leen solo `articulo_movimiento_talle`.
+     *
+     * @param  list<float|int|string|null>  $cantidadesTalle
+     */
+    public static function errorSiTallesNoSumanCantidad(int $numeroLinea, float $cantidad, array $cantidadesTalle): ?string
+    {
+        $sumaTalles = 0.0;
+        foreach ($cantidadesTalle as $cantTalle) {
+            $sumaTalles += abs((float) $cantTalle);
+        }
+        if (abs($sumaTalles - abs($cantidad)) <= 0.0001) {
+            return null;
+        }
+
+        $fmt = static fn (float $v): string => rtrim(rtrim(number_format($v, 2, ',', '.'), '0'), ',');
+        if ($sumaTalles <= 0.0001) {
+            return 'Línea '.$numeroLinea.': falta la numeración por talle ('.$fmt(abs($cantidad)).' pares sin talles).';
+        }
+
+        return 'Línea '.$numeroLinea.': la suma de talles ('.$fmt($sumaTalles).' pares) no coincide con la cantidad ('
+            .$fmt(abs($cantidad)).' pares).';
+    }
+
     public static function usaCanales(): bool
     {
         return self::esCalzadosFerli() && ArticuloEstadoCanalSupport::uiFerliActiva();

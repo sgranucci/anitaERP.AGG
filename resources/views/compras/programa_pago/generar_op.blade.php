@@ -42,20 +42,23 @@
                         La transferencia es lo que falta, sobre el total, después de retenciones.
                         Si los cheques superan ese neto, no se transfiere y el sobrante queda como anticipo.
                     </p>
-                    @if ($necesitaCuenta)
+                    @if ($pendientes > 0)
                         @include('caja.partials.campo_consulta_cuentacaja', [
                             'prefix' => 'ppgen',
                             'layout' => 'form_row',
                             'label' => 'Cuenta de la transferencia',
                             'inputName' => 'cuentacaja_id',
                             'inputId' => 'ppgen_cuentacaja_id',
-                            'required' => true,
+                            'required' => (bool) $necesitaCuenta,
                             'col_label' => 'col-lg-3 control-label text-right pr-2',
                             'col_input' => 'col-lg-6',
-                            'ayuda' => 'Sale de acá la diferencia de todas las OP de esta tanda que no cubren los cheques.',
+                            'ayuda' => $necesitaCuenta
+                                ? 'Sale de acá la diferencia (después de cheques y retenciones) de las OP de esta tanda.'
+                                : 'Opcional: por si al calcular retenciones reales queda algo a transferir.',
                         ])
-                    @else
-                        <p class="text-muted">Ninguna OP de esta tanda necesita transferencia. Los cheques cubren el programado.</p>
+                        @if (! $necesitaCuenta)
+                            <p class="text-muted small mb-2">En la preview los cheques cubren el neto. Igual conviene cargar cuenta por si las retenciones reales dejan un resto.</p>
+                        @endif
                     @endif
 
                     <div class="table-responsive">
@@ -65,9 +68,9 @@
                                     <th style="width:36px;"></th>
                                     <th>Proveedor</th>
                                     <th>Fecha</th>
-                                    <th class="text-right">Programado</th>
+                                    <th class="text-right">A aplicar</th>
                                     <th class="text-right">Cheques</th>
-                                    <th class="text-right">Diferencia</th>
+                                    <th class="text-right">Transferencia</th>
                                     <th>Detalle</th>
                                 </tr>
                             </thead>
@@ -108,10 +111,13 @@
                                             @else
                                                 Aplica {{ number_format($fila['aplicado'], 2, ',', '.') }}
                                                 en {{ $fila['comprobantes'] }} comprobante(s).
+                                                @if (($fila['retenciones'] ?? 0) > 0.009)
+                                                    Retenciones est. {{ number_format($fila['retenciones'], 2, ',', '.') }}.
+                                                @endif
                                                 @if ($fila['necesita_cuenta'])
                                                     Pide transferencia.
-                                                @elseif ($fila['suma_cheques'] > $fila['programado'] + 0.009)
-                                                    Los cheques superan lo programado.
+                                                @elseif ($fila['suma_cheques'] > ($fila['medios'] ?? $fila['programado']) + 0.009)
+                                                    Los cheques superan el neto a desembolsar.
                                                 @endif
                                             @endif
                                             @if (count($fila['cheques']) > 0)

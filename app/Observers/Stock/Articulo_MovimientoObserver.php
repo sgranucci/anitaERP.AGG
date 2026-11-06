@@ -7,6 +7,7 @@ use App\Models\Stock\Articulo_Saldo_Deposito;
 use App\Support\Database\DbContencionSupport;
 use App\Support\Database\TransaccionServidorSupport;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
+use App\Support\Stock\CorteReemplazoExcelFerliSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -79,6 +80,18 @@ class Articulo_MovimientoObserver
 
         $this->aplicarDelta($articuloAnt, $depositoAnt, $colorAnt, $talleAnt, -$cantidadAnt, $movimiento->fecha);
         $this->aplicarDelta($articuloNew, $depositoNew, $colorNew, $talleNew, $cantidadNew, $movimiento->fecha);
+    }
+
+    public function updating(Articulo_Movimiento $movimiento): void
+    {
+        if ($movimiento->isDirty(CorteReemplazoExcelFerliSupport::CAMPOS_BUCKET)) {
+            CorteReemplazoExcelFerliSupport::bloquearMovimiento($movimiento, 'modificar');
+        }
+    }
+
+    public function deleting(Articulo_Movimiento $movimiento): void
+    {
+        CorteReemplazoExcelFerliSupport::bloquearMovimiento($movimiento, 'borrar');
     }
 
     public function deleted(Articulo_Movimiento $movimiento): void

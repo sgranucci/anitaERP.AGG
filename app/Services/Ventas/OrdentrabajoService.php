@@ -31,6 +31,7 @@ use App\Support\Ventas\OrdentrabajoEmisionCopiaSupport;
 use App\Support\Ventas\OrdentrabajoEmisionPreimpresoLayout;
 use App\Support\Ventas\OrdentrabajoEmisionTextoSupport;
 use App\Support\Produccion\OrdentrabajoTareaFechaSupport;
+use App\Support\Stock\OtBucketSaldoSupport;
 use App\Support\Stock\OtListaEntregaSupport;
 use App\Models\Configuracion\Salida;
 use App\Models\Stock\Articulo;
@@ -454,6 +455,27 @@ class OrdentrabajoService
 								$stock = Self::controlaOtStock($ordentrabajo_stock_codigo, $articulo->id, $combinacion->id);
 
 								$deposito_id = $stock['deposito_id'];
+								// Regrabar no muda el consumo a otro depósito.
+								if ($funcion == 'update') {
+									$depositoPrevio = (int) (Articulo_Movimiento::query()
+										->where('pedido_combinacion_id', (int) $ids[$i])
+										->where('deposito_id', '>', 0)
+										->orderByDesc('id')
+										->value('deposito_id') ?? 0);
+									if ($depositoPrevio > 0) {
+										$deposito_id = $depositoPrevio;
+									}
+								}
+
+								$errorStock = PedidoPickingFerliSupport::errorSiConsumoOtStockSuperaSaldo(
+									(int) $ids[$i],
+									(string) $ordentrabajo_stock_codigo,
+									(float) $pedido_combinacion->cantidad,
+									(int) ($deposito_id ?? 0) > 0 ? (int) $deposito_id : null
+								);
+								if ($errorStock !== null) {
+									throw new Exception($errorStock);
+								}
 
 								Log::notice('OT Stock '.$ordentrabajo_id.' Lote '.$ordentrabajo_stock_codigo.' Deposito '.$deposito_id);
 							}
@@ -3527,7 +3549,6 @@ class OrdentrabajoService
 			} elseif ($estado === '-1') {
 				$estado = 1;
 			}
-			$saldo += $movimiento->cantidad;
 			$depMov = (int) ($movimiento->deposito_id ?? 0);
 			if ($depMov <= 0) {
 				continue;
@@ -3541,6 +3562,27 @@ class OrdentrabajoService
 			}
 		}
 
+		// El consumo sale de un solo depósito: el saldo que se informa es el de ese depósito,
+		// en el bucket que recibe el consumo (lote = código de la OT de stock).
+		$saldosPorDeposito = OtBucketSaldoSupport::saldosBucketPorDeposito(
+			(int) $articulo_id,
+			(int) $combinacion_id,
+			trim((string) $codigoOt),
+			0
+		);
+		$deposito_id = OtBucketSaldoSupport::depositoParaConsumir($saldosPorDeposito, (int) $deposito_id);
+		$saldo = (float) ($saldosPorDeposito[$deposito_id]['saldo'] ?? 0);
+
+		$depositos = [];
+		foreach ($saldosPorDeposito as $depId => $info) {
+			$depositos[] = [
+				'deposito_id' => (int) $depId,
+				'codigo' => (string) $info['codigo'],
+				'nombre' => (string) $info['nombre'],
+				'saldo' => (float) $info['saldo'],
+			];
+		}
+
 		$aviso = OtListaEntregaSupport::avisoDeIds(
 			array_values($otIds),
 			(int) $deposito_id,
@@ -3551,6 +3593,7 @@ class OrdentrabajoService
 			'estado' => $estado,
 			'saldo' => $saldo,
 			'deposito_id' => $deposito_id,
+			'depositos' => $depositos,
 			'ot_aviso' => $aviso,
 		];
 	}

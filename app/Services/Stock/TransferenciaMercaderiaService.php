@@ -38,6 +38,7 @@ use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
 use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
 use App\Support\Stock\TransferenciaMercaderiaLineaReversoSupport;
 use App\Support\Stock\TransferenciaMercaderiaLineaSupport;
+use App\Support\Stock\TransferenciaMercaderiaLoteBucketFerliSupport;
 use App\Support\Stock\TransferenciaMercaderiaPickeoSupport;
 use App\Support\Stock\TransferenciaMercaderiaSignoSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
@@ -653,11 +654,12 @@ class TransferenciaMercaderiaService
                         $this->persistirLineasTransferencia($transferencia, $lineasResueltas);
 
                         $payloadSalida = $this->armarPayloadMovimiento($lineasResueltas, 'salida');
+                        $loteMovimiento = TransferenciaMercaderiaLoteBucketFerliSupport::loteParaGrabar($lote, $cabecera);
                         $salida = $this->grabarMovimiento(
                             $tipoTransferencia->id,
                             $origenBienUso ? null : $depositoSalidaId,
                             $fecha,
-                            $lote,
+                            $loteMovimiento,
                             $codigoBase.'-S',
                             $origenBienUso
                                 ? 'Desasignación hacia '.$etiquetaDestino
@@ -677,7 +679,7 @@ class TransferenciaMercaderiaService
                                 $tipoTransferencia->id,
                                 $destinoBienUso ? null : $depositoEntradaId,
                                 $fecha,
-                                $lote,
+                                $loteMovimiento,
                                 $codigoBase.'-E',
                                 'Transferencia desde '.$etiquetaOrigen,
                                 $payloadEntrada,
@@ -785,7 +787,10 @@ class TransferenciaMercaderiaService
                 (int) $transferencia->tipotransaccion_stock_id,
                 $esDestinoBien ? null : (int) $transferencia->deposito_destino_id,
                 $transferencia->fecha?->format('Y-m-d') ?? now()->format('Y-m-d'),
-                (int) $transferencia->lote,
+                TransferenciaMercaderiaLoteBucketFerliSupport::loteDeMovimientoSalida(
+                    (int) $transferencia->movimientostock_salida_id,
+                    (int) $transferencia->lote
+                ),
                 $transferencia->codigo.'-E',
                 'Transferencia desde '.$etiquetaOrigen,
                 $payloadEntrada,
@@ -839,7 +844,10 @@ class TransferenciaMercaderiaService
                 (int) $transferencia->tipotransaccion_stock_id,
                 $esOrigenBien ? null : (int) $transferencia->deposito_origen_id,
                 now()->format('Y-m-d'),
-                (int) $transferencia->lote,
+                TransferenciaMercaderiaLoteBucketFerliSupport::loteDeMovimientoSalida(
+                    (int) $transferencia->movimientostock_salida_id,
+                    (int) $transferencia->lote
+                ),
                 $transferencia->codigo.'-RV',
                 'Reverso transferencia rechazada',
                 $payloadReverso,
@@ -2202,6 +2210,7 @@ class TransferenciaMercaderiaService
         $tipo = $transferencia->tipotransaccion_stock;
         $manejaContabilidad = TransferenciaMercaderiaAprobacionSupport::manejaContabilidad($tipo);
         $lote = (int) Carbon::now()->format('ymdHis');
+        $loteMovimiento = TransferenciaMercaderiaLoteBucketFerliSupport::loteDeMovimientoSalida((int) $salidaOriginal->id, $lote);
         $codigoReverso = $transferencia->codigo.'-REV-'.Carbon::now()->format('His');
 
         $etiquetaOrigenRev = $esDestinoBien
@@ -2216,6 +2225,7 @@ class TransferenciaMercaderiaService
             $reverso,
             $fechaOperacion,
             $lote,
+            $loteMovimiento,
             $codigoReverso,
             $esDestinoBien,
             $esOrigenBien,
@@ -2259,7 +2269,7 @@ class TransferenciaMercaderiaService
                 (int) $transferencia->tipotransaccion_stock_id,
                 $depositoQuitarId > 0 ? $depositoQuitarId : null,
                 $fechaOperacion,
-                $lote,
+                $loteMovimiento,
                 $codigoReverso.'-S',
                 'Reversión: salida desde '.$etiquetaOrigenRev,
                 $reverso['payload_quitar_destino'],
@@ -2277,7 +2287,7 @@ class TransferenciaMercaderiaService
                 (int) $transferencia->tipotransaccion_stock_id,
                 $depositoDevolverId > 0 ? $depositoDevolverId : null,
                 $fechaOperacion,
-                $lote,
+                $loteMovimiento,
                 $codigoReverso.'-E',
                 'Reversión: ingreso a '.$etiquetaDestinoRev,
                 $reverso['payload_devolver_origen'],

@@ -3,6 +3,8 @@
 namespace App\Support\Stock;
 
 use App\Models\Ventas\Pedido_Combinacion;
+use App\Support\Database\SqlDialectSupport;
+use App\Support\Ventas\PedidoPickingFerliSupport;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
@@ -55,44 +57,100 @@ final class OtClienteCompartidoStockSupport
     /**
      * Saca del saldo disponible el consumo de la factura de un compañero.
      * El picking y el alta a STOCK de la misma OT siguen contando.
+     *
+     * Solo el primer consumo del renglón: esos pares se fabricaron para el
+     * compañero y nunca entraron al stock. Si una NC (o quitar el picking) los
+     * devuelve, la devolución suma y el consumo siguiente vuelve a restar.
      */
     public static function excluirConsumoFacturaCompanero(EloquentBuilder|QueryBuilder $query, string $alias = 'articulo_movimiento'): void
+    {
+        self::validarAlias($alias);
+        $stockId = ReporteStockOtSituacionSupport::clienteStockId();
+
+        $query->whereNotExists(function ($sub) use ($alias, $stockId) {
+            self::restringirAConsumoDeCompanero($sub, $alias, $stockId);
+        });
+    }
+
+    /**
+     * Deja solo las devoluciones (NC o quitar picking) del consumo excluido de un compañero.
+     * Esos pares suman al saldo: el control de stock los lista para revisarlos.
+     */
+    public static function soloDevolucionDeConsumoCompanero(EloquentBuilder|QueryBuilder $query, string $alias = 'articulo_movimiento'): void
+    {
+        self::validarAlias($alias);
+        $stockId = ReporteStockOtSituacionSupport::clienteStockId();
+
+        // La devolución apunta al consumo por id en el concepto («… #161197»).
+        $idConsumoOrigen = SqlDialectSupport::castEntero(
+            SqlDialectSupport::parteDelimitada($alias.'.concepto', '#', 2)
+        );
+        $query->where(function ($prefijo) use ($alias) {
+            foreach (PedidoPickingFerliSupport::prefijosConceptoReversoConsumo() as $texto) {
+                $prefijo->orWhere($alias.'.concepto', 'like', $texto.'%');
+            }
+        })
+            ->whereExists(function ($sub) use ($stockId, $idConsumoOrigen) {
+                $sub->select(DB::raw('1'))
+                    ->from('articulo_movimiento as am_comp_orig')
+                    ->whereRaw('am_comp_orig.id = '.$idConsumoOrigen)
+                    ->whereExists(function ($consumo) use ($stockId) {
+                        self::restringirAConsumoDeCompanero($consumo, 'am_comp_orig', $stockId);
+                    });
+            });
+    }
+
+    private static function validarAlias(string $alias): void
     {
         if (! preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $alias)) {
             throw new \InvalidArgumentException('Alias de articulo_movimiento inválido.');
         }
+    }
 
-        $stockId = ReporteStockOtSituacionSupport::clienteStockId();
-
-        $query->whereNotExists(function ($sub) use ($alias, $stockId) {
-            $sub->select(DB::raw('1'))
-                ->from('pedido_combinacion as pc_comp')
-                ->whereColumn('pc_comp.id', $alias.'.pedido_combinacion_id')
-                ->whereColumn('pc_comp.ot_id', $alias.'.ordentrabajo_id')
-                ->where('pc_comp.ot_id', '>', 0)
-                ->where($alias.'.concepto', self::CONCEPTO_CONSUMO_OT)
-                ->where(function ($lote) use ($alias) {
-                    $lote->whereNull($alias.'.lote')
-                        ->orWhere($alias.'.lote', 0);
-                })
-                ->whereExists(function ($oct) use ($alias) {
-                    $oct->select(DB::raw('1'))
-                        ->from('ordentrabajo_combinacion_talle as oct_comp')
-                        ->join('pedido_combinacion_talle as pct_comp', 'pct_comp.id', '=', 'oct_comp.pedido_combinacion_talle_id')
-                        ->whereColumn('pct_comp.pedido_combinacion_id', 'pc_comp.id')
-                        ->whereColumn('oct_comp.ordentrabajo_id', $alias.'.ordentrabajo_id');
-                })
-                ->whereNotExists(function ($propio) use ($alias, $stockId) {
-                    $propio->select(DB::raw('1'))
-                        ->from('ordentrabajo_combinacion_talle as oct_prop')
-                        ->join('pedido_combinacion_talle as pct_prop', 'pct_prop.id', '=', 'oct_prop.pedido_combinacion_talle_id')
-                        ->whereColumn('pct_prop.pedido_combinacion_id', 'pc_comp.id')
-                        ->whereColumn('oct_prop.ordentrabajo_id', $alias.'.ordentrabajo_id')
-                        ->where(function ($motivo) use ($stockId) {
-                            $motivo->where('oct_prop.cliente_id', $stockId)
-                                ->orWhere('oct_prop.ordentrabajo_stock_id', '>', 0);
-                        });
-                });
-        });
+    /**
+     * Subconsulta que existe solo si el movimiento `$alias` es el consumo excluido de un compañero.
+     */
+    private static function restringirAConsumoDeCompanero($sub, string $alias, int $stockId): void
+    {
+        $sub->select(DB::raw('1'))
+            ->from('pedido_combinacion as pc_comp')
+            ->whereColumn('pc_comp.id', $alias.'.pedido_combinacion_id')
+            ->whereColumn('pc_comp.ot_id', $alias.'.ordentrabajo_id')
+            ->where('pc_comp.ot_id', '>', 0)
+            ->where($alias.'.concepto', self::CONCEPTO_CONSUMO_OT)
+            ->where(function ($lote) use ($alias) {
+                $lote->whereNull($alias.'.lote')
+                    ->orWhere($alias.'.lote', 0);
+            })
+            ->whereNotExists(function ($previo) use ($alias) {
+                $previo->select(DB::raw('1'))
+                    ->from('articulo_movimiento as am_comp_prev')
+                    ->whereColumn('am_comp_prev.pedido_combinacion_id', $alias.'.pedido_combinacion_id')
+                    ->whereColumn('am_comp_prev.ordentrabajo_id', $alias.'.ordentrabajo_id')
+                    ->where('am_comp_prev.concepto', self::CONCEPTO_CONSUMO_OT)
+                    ->where(function ($lote) {
+                        $lote->whereNull('am_comp_prev.lote')
+                            ->orWhere('am_comp_prev.lote', 0);
+                    })
+                    ->whereColumn('am_comp_prev.id', '<', $alias.'.id');
+            })
+            ->whereExists(function ($oct) use ($alias) {
+                $oct->select(DB::raw('1'))
+                    ->from('ordentrabajo_combinacion_talle as oct_comp')
+                    ->join('pedido_combinacion_talle as pct_comp', 'pct_comp.id', '=', 'oct_comp.pedido_combinacion_talle_id')
+                    ->whereColumn('pct_comp.pedido_combinacion_id', 'pc_comp.id')
+                    ->whereColumn('oct_comp.ordentrabajo_id', $alias.'.ordentrabajo_id');
+            })
+            ->whereNotExists(function ($propio) use ($alias, $stockId) {
+                $propio->select(DB::raw('1'))
+                    ->from('ordentrabajo_combinacion_talle as oct_prop')
+                    ->join('pedido_combinacion_talle as pct_prop', 'pct_prop.id', '=', 'oct_prop.pedido_combinacion_talle_id')
+                    ->whereColumn('pct_prop.pedido_combinacion_id', 'pc_comp.id')
+                    ->whereColumn('oct_prop.ordentrabajo_id', $alias.'.ordentrabajo_id')
+                    ->where(function ($motivo) use ($stockId) {
+                        $motivo->where('oct_prop.cliente_id', $stockId)
+                            ->orWhere('oct_prop.ordentrabajo_stock_id', '>', 0);
+                    });
+            });
     }
 }

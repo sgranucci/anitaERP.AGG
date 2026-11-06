@@ -274,11 +274,11 @@ window.programaPagoCfg = {
                                     Siguiente sin marcar
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-dark" id="pp-btn-asignar-cheques-activo"
-                                        title="Asigna CHT del mes dentro de ±{{ (int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100) }}%. Si no entra, propone cheques de meses posteriores para aceptar">
+                                        title="Asigna CHT al neto (programado − retenciones est.) ±{{ (int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100) }}%. El resto a transferir queda en TRANSF. Si no entra, propone cheques posteriores">
                                     <i class="fa fa-money-check"></i> Cheques (este)
                                 </button>
                                 <button type="button" class="btn btn-sm btn-dark" id="pp-btn-asignar-cheques-todos"
-                                        title="Asigna CHT a todos los programados. Si un mes no entra en ±{{ (int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100) }}%, propone cheques posteriores">
+                                        title="Asigna CHT al neto de retenciones de todos los programados ±{{ (int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100) }}%. Lo que falta a transferir va a TRANSF">
                                     <i class="fa fa-money-check-alt"></i> Cheques (todos programados)
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-danger" id="pp-btn-quitar-cheques-activo"

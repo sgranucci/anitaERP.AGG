@@ -8,6 +8,7 @@ use App\Models\Compras\ProgramaPagoAsignacion;
 use App\Models\Compras\ProgramaPagoCheque;
 use App\Models\Compras\ProgramaPagoLinea;
 use App\Support\Compras\ProgramaPagoMesesSupport;
+use App\Support\Compras\ProgramaPagoRetencionEstimacionSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -16,8 +17,9 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Asigna CHT diferidos en cartera a montos programados (tolerancia ±10%).
- * Si el mes no entra, busca en todos los meses posteriores y deja la propuesta para que el usuario la acepte.
+ * Asigna CHT diferidos en cartera al neto (programado − retenciones estimadas), tolerancia ±10%.
+ * Si el mes no entra, busca en meses posteriores y deja la propuesta para aceptar.
+ * Al alinear, TRANSF recibe solo la transferencia (neto − cheques).
  */
 final class ProgramaPagoAsignarChequesSupport
 {
@@ -48,15 +50,20 @@ final class ProgramaPagoAsignarChequesSupport
 
         $lineasQuery = ProgramaPagoLinea::query()
             ->where('programa_pago_id', $programa->id)
-            ->with(['asignaciones', 'proveedores:id,codigo,nombre']);
+            ->with(['asignaciones', 'chequesAsignados', 'proveedores:id,codigo,nombre']);
         if ($lineaId !== null && $lineaId > 0) {
             $lineasQuery->where('id', $lineaId);
         }
         /** @var Collection<int, ProgramaPagoLinea> $lineas */
         $lineas = $lineasQuery->orderBy('orden')->orderBy('id')->get();
 
+        $fechaEstimacion = optional($programa->fecha_base)->format('Y-m-d') ?: date('Y-m-d');
+        $netoPorLinea = self::netosObjetivoPorLinea($programa, $lineas, $clavesMes, $fechaEstimacion);
+
         $demandas = [];
         foreach ($lineas as $linea) {
+            $lineaId = (int) $linea->id;
+            $brutosMes = [];
             foreach ($linea->asignaciones as $asig) {
                 $clave = (string) $asig->clave;
                 if (! isset($clavesMes[$clave])) {
@@ -66,13 +73,32 @@ final class ProgramaPagoAsignarChequesSupport
                 if ($monto < 0.01) {
                     continue;
                 }
+                $brutosMes[$clave] = $monto;
+            }
+            if ($brutosMes === []) {
+                continue;
+            }
+            $infoNeto = $netoPorLinea[$lineaId] ?? [
+                'bruto' => round(array_sum($brutosMes), 2),
+                'retenciones' => 0.0,
+                'neto' => round(array_sum($brutosMes), 2),
+                'por_clave' => $brutosMes,
+            ];
+            foreach ($brutosMes as $clave => $montoBruto) {
+                $objetivo = round((float) ($infoNeto['por_clave'][$clave] ?? 0), 2);
+                if ($objetivo < 0.01) {
+                    continue;
+                }
                 $demandas[] = [
-                    'linea_id' => (int) $linea->id,
+                    'linea_id' => $lineaId,
                     'proveedor_id' => (int) $linea->proveedor_id,
                     'codigo' => (string) ($linea->proveedores->codigo ?? ''),
                     'nombre' => (string) ($linea->proveedores->nombre ?? ''),
                     'clave' => $clave,
-                    'monto_programado' => $monto,
+                    'monto_programado' => $montoBruto,
+                    'monto_objetivo' => $objetivo,
+                    'retenciones' => (float) ($infoNeto['retenciones'] ?? 0),
+                    'neto_linea' => (float) ($infoNeto['neto'] ?? $montoBruto),
                 ];
             }
         }
@@ -147,7 +173,9 @@ final class ProgramaPagoAsignarChequesSupport
             $pendientes = [];
 
             usort($demandas, static function ($a, $b) {
-                $cmp = $b['monto_programado'] <=> $a['monto_programado'];
+                $oa = (float) ($a['monto_objetivo'] ?? $a['monto_programado']);
+                $ob = (float) ($b['monto_objetivo'] ?? $b['monto_programado']);
+                $cmp = $ob <=> $oa;
                 if ($cmp !== 0) {
                     return $cmp;
                 }
@@ -157,7 +185,7 @@ final class ProgramaPagoAsignarChequesSupport
 
             foreach ($demandas as $demanda) {
                 $clave = $demanda['clave'];
-                $target = $demanda['monto_programado'];
+                $target = round((float) ($demanda['monto_objetivo'] ?? $demanda['monto_programado']), 2);
                 $pool = $poolPorMes[$clave] ?? [];
                 $elegidos = self::seleccionarCheques($target, $pool);
                 $suma = round(array_sum(array_map(static fn ($c) => $c['monto'], $elegidos)), 2);
@@ -195,7 +223,8 @@ final class ProgramaPagoAsignarChequesSupport
 
             foreach ($pendientes as $demanda) {
                 $clave = $demanda['clave'];
-                $target = $demanda['monto_programado'];
+                $target = round((float) ($demanda['monto_objetivo'] ?? $demanda['monto_programado']), 2);
+                $brutoCelda = round((float) $demanda['monto_programado'], 2);
                 $limite = Carbon::createFromFormat('Y-m', $clave)->addMonth()->startOfMonth();
                 $poolAdelante = array_values(array_filter(
                     $poolDesde,
@@ -208,6 +237,13 @@ final class ProgramaPagoAsignarChequesSupport
                     (float) $demanda['suma_mes'],
                     (int) $demanda['disponibles_mes']
                 );
+                if ((float) ($demanda['retenciones'] ?? 0) > 0.009) {
+                    $detalle .= ' Objetivo neto '
+                        .number_format($target, 2, ',', '.')
+                        .' (bruto '
+                        .number_format($brutoCelda, 2, ',', '.')
+                        .' − retenciones).';
+                }
                 $filaPropuesta = null;
                 if ($propuesta['cheques'] !== []) {
                     $detalle .= ' Propuesta sin grabar: del mes '
@@ -222,7 +258,8 @@ final class ProgramaPagoAsignarChequesSupport
                         'linea_id' => $demanda['linea_id'],
                         'clave' => $clave,
                         'proveedor' => trim($demanda['codigo'].' '.$demanda['nombre']),
-                        'monto_programado' => $target,
+                        'monto_programado' => $brutoCelda,
+                        'monto_objetivo' => $target,
                         'suma' => $propuesta['suma'],
                         'suma_mes' => $propuesta['suma_mes'],
                         'suma_adelante' => $propuesta['suma_adelante'],
@@ -244,7 +281,8 @@ final class ProgramaPagoAsignarChequesSupport
                     'proveedor' => trim($demanda['codigo'].' '.$demanda['nombre']),
                     'linea_id' => $demanda['linea_id'],
                     'clave' => $clave,
-                    'monto_programado' => $target,
+                    'monto_programado' => $brutoCelda,
+                    'monto_objetivo' => $target,
                     'monto_asignado' => 0.0,
                     'monto_propuesto' => $filaPropuesta['suma'] ?? 0.0,
                     'detalle' => $detalle,
@@ -259,7 +297,8 @@ final class ProgramaPagoAsignarChequesSupport
             $ajustes = self::alinearProgramado(
                 $programa,
                 array_values(array_unique(array_map(static fn ($d) => (int) $d['linea_id'], $demandas))),
-                $excluir
+                $excluir,
+                $fechaEstimacion
             );
 
             return [
@@ -675,19 +714,26 @@ final class ProgramaPagoAsignarChequesSupport
 
     /**
      * Mueve el programado de cada mes al total de cheques de ese mes.
-     * Lo que los cheques no cubren queda en TRANSF. El total del proveedor no cambia.
+     * Descuenta retenciones estimadas: TRANSF = neto − cheques (solo transferencia).
      * Las claves de $excluirPorLinea se dejan como están (propuestas todavía no aceptadas).
      *
      * @param  list<int>  $lineaIds
      * @param  array<int, list<string>>  $excluirPorLinea
-     * @return list<array{linea_id:int,proveedor:string,transf:float,antes:array<string,float>,despues:array<string,float>}>
+     * @return list<array{linea_id:int,proveedor:string,transf:float,retenciones:float,neto:float,antes:array<string,float>,despues:array<string,float>}>
      */
-    public static function alinearProgramado(ProgramaPago $programa, array $lineaIds, array $excluirPorLinea = []): array
-    {
+    public static function alinearProgramado(
+        ProgramaPago $programa,
+        array $lineaIds,
+        array $excluirPorLinea = [],
+        ?string $fechaEstimacion = null,
+    ): array {
         $lineaIds = array_values(array_unique(array_filter(array_map('intval', $lineaIds))));
         if ($lineaIds === []) {
             return [];
         }
+
+        $fechaEstimacion = $fechaEstimacion
+            ?: (optional($programa->fecha_base)->format('Y-m-d') ?: date('Y-m-d'));
 
         $lineas = ProgramaPagoLinea::query()
             ->where('programa_pago_id', $programa->id)
@@ -700,7 +746,9 @@ final class ProgramaPagoAsignarChequesSupport
             $ajuste = self::alinearLinea(
                 $linea,
                 (bool) $programa->incluye_transf,
-                $excluirPorLinea[(int) $linea->id] ?? []
+                $excluirPorLinea[(int) $linea->id] ?? [],
+                (int) $programa->empresa_id,
+                $fechaEstimacion
             );
             if ($ajuste !== null) {
                 $ajustes[] = $ajuste;
@@ -712,10 +760,15 @@ final class ProgramaPagoAsignarChequesSupport
 
     /**
      * @param  list<string>  $clavesExcluidas
-     * @return array{linea_id:int,proveedor:string,transf:float,antes:array<string,float>,despues:array<string,float>}|null
+     * @return array{linea_id:int,proveedor:string,transf:float,retenciones:float,neto:float,antes:array<string,float>,despues:array<string,float>}|null
      */
-    private static function alinearLinea(ProgramaPagoLinea $linea, bool $incluyeTransf, array $clavesExcluidas): ?array
-    {
+    private static function alinearLinea(
+        ProgramaPagoLinea $linea,
+        bool $incluyeTransf,
+        array $clavesExcluidas,
+        int $empresaId,
+        string $fechaEstimacion,
+    ): ?array {
         $excluir = [];
         foreach ($clavesExcluidas as $clave) {
             $excluir[(string) $clave] = true;
@@ -751,13 +804,24 @@ final class ProgramaPagoAsignarChequesSupport
             $bloqueado += $actual[$clave] ?? 0;
         }
         $bloqueado = round($bloqueado, 2);
-        $movable = round($total - $bloqueado, 2);
-        if ($movable < 0.01) {
+        if (round($total - $bloqueado, 2) < 0.01) {
             return null;
         }
 
+        $estimacion = ProgramaPagoRetencionEstimacionSupport::resolverBrutoNeto(
+            $empresaId,
+            (int) $linea->proveedor_id,
+            $total,
+            (float) $linea->saldo_adeudado,
+            $fechaEstimacion
+        );
+        $retenciones = (float) $estimacion['retenciones'];
+        $netoTotal = (float) $estimacion['neto'];
+        $movable = round(max(0, $netoTotal - $bloqueado), 2);
+
         $nuevos = [];
         foreach (array_keys($excluir) as $clave) {
+            // Propuestas pendientes: se dejan en bruto hasta aceptarlas.
             if (($actual[$clave] ?? 0) > 0.009) {
                 $nuevos[$clave] = $actual[$clave];
             }
@@ -838,9 +902,65 @@ final class ProgramaPagoAsignarChequesSupport
             'linea_id' => (int) $linea->id,
             'proveedor' => trim((string) (($linea->proveedores->codigo ?? '').' '.($linea->proveedores->nombre ?? ''))),
             'transf' => round((float) ($nuevos[$claveTransf] ?? 0), 2),
+            'retenciones' => $retenciones,
+            'neto' => $movable,
             'antes' => $actual,
             'despues' => $nuevos,
         ];
+    }
+
+    /**
+     * Estima retenciones sobre el total de la fila y reparte el neto en los meses
+     * (objetivos de CHT). Lo que no cubran los cheques irá a TRANSF al alinear.
+     *
+     * @param  Collection<int, ProgramaPagoLinea>  $lineas
+     * @param  array<string, bool>  $clavesMes
+     * @return array<int, array{bruto:float,retenciones:float,neto:float,por_clave:array<string,float>}>
+     */
+    private static function netosObjetivoPorLinea(
+        ProgramaPago $programa,
+        Collection $lineas,
+        array $clavesMes,
+        string $fechaEstimacion,
+    ): array {
+        $out = [];
+        foreach ($lineas as $linea) {
+            $brutosMes = [];
+            $totalFila = 0.0;
+            foreach ($linea->asignaciones as $asig) {
+                $monto = round((float) $asig->monto, 2);
+                if ($monto < 0.01) {
+                    continue;
+                }
+                $totalFila += $monto;
+                $clave = (string) $asig->clave;
+                if (isset($clavesMes[$clave])) {
+                    $brutosMes[$clave] = $monto;
+                }
+            }
+            $totalFila = round($totalFila, 2);
+            if ($brutosMes === [] || $totalFila < 0.01) {
+                continue;
+            }
+            $est = ProgramaPagoRetencionEstimacionSupport::resolverBrutoNeto(
+                (int) $programa->empresa_id,
+                (int) $linea->proveedor_id,
+                $totalFila,
+                (float) $linea->saldo_adeudado,
+                $fechaEstimacion
+            );
+            $out[(int) $linea->id] = [
+                'bruto' => (float) $est['bruto'],
+                'retenciones' => (float) $est['retenciones'],
+                'neto' => (float) $est['neto'],
+                'por_clave' => ProgramaPagoRetencionEstimacionSupport::repartirNetoPorClave(
+                    $brutosMes,
+                    (float) $est['neto']
+                ),
+            ];
+        }
+
+        return $out;
     }
 
     public static function desasignar(
@@ -872,7 +992,107 @@ final class ProgramaPagoAsignarChequesSupport
             throw new RuntimeException('No se indicó qué cheques quitar.');
         }
 
-        return EloquentAuditDeleteSupport::each($query);
+        $lineasAfectadas = (clone $query)
+            ->distinct()
+            ->pluck('programa_pago_linea_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn ($id) => $id > 0)
+            ->values()
+            ->all();
+
+        $n = EloquentAuditDeleteSupport::each($query);
+
+        // Al quitar cheques se vuelve al bruto del saldo (repartido en los meses).
+        if ($n > 0 && in_array($alcance, ['linea', 'todos', 'celda'], true)) {
+            self::restaurarProgramadoDesdeSaldo($programa, $lineasAfectadas);
+        } elseif ($n > 0 && $alcance === 'uno' && $lineasAfectadas !== []) {
+            $quedan = ProgramaPagoCheque::query()
+                ->whereIn('programa_pago_linea_id', $lineasAfectadas)
+                ->exists();
+            if (! $quedan) {
+                self::restaurarProgramadoDesdeSaldo($programa, $lineasAfectadas);
+            }
+        }
+
+        return $n;
+    }
+
+    /**
+     * Vuelve a repartir el saldo adeudado en los meses del programa y limpia TRANSF.
+     *
+     * @param  list<int>  $lineaIds
+     */
+    private static function restaurarProgramadoDesdeSaldo(ProgramaPago $programa, array $lineaIds): void
+    {
+        $lineaIds = array_values(array_unique(array_filter(array_map('intval', $lineaIds))));
+        if ($lineaIds === []) {
+            return;
+        }
+
+        $columnas = ProgramaPagoMesesSupport::columnas(
+            (string) $programa->anio_mes_inicio,
+            (int) $programa->cantidad_meses,
+            (bool) $programa->incluye_transf
+        );
+        $clavesMes = [];
+        foreach ($columnas as $col) {
+            if (($col['anio_mes'] ?? null) !== null) {
+                $clavesMes[] = (string) $col['clave'];
+            }
+        }
+        if ($clavesMes === []) {
+            return;
+        }
+
+        $claveTransf = ProgramaPagoMesesSupport::CLAVE_TRANSF;
+        $lineas = ProgramaPagoLinea::query()
+            ->where('programa_pago_id', $programa->id)
+            ->whereIn('id', $lineaIds)
+            ->with('asignaciones')
+            ->get();
+
+        foreach ($lineas as $linea) {
+            $saldo = round((float) $linea->saldo_adeudado, 2);
+            $mesesUsados = [];
+            foreach ($linea->asignaciones as $asig) {
+                $clave = (string) $asig->clave;
+                if (in_array($clave, $clavesMes, true) && (float) $asig->monto > 0.009) {
+                    $mesesUsados[] = $clave;
+                }
+            }
+            if ($mesesUsados === []) {
+                $mesesUsados = $clavesMes;
+            }
+            $mesesUsados = array_values(array_unique($mesesUsados));
+            $n = count($mesesUsados);
+            if ($n < 1 || $saldo < 0.01) {
+                continue;
+            }
+
+            $acum = 0.0;
+            foreach ($mesesUsados as $i => $clave) {
+                $monto = ($i === $n - 1)
+                    ? round(max(0, $saldo - $acum), 2)
+                    : round($saldo / $n, 2);
+                $acum = round($acum + $monto, 2);
+                ProgramaPagoAsignacion::query()->updateOrCreate(
+                    [
+                        'programa_pago_linea_id' => $linea->id,
+                        'clave' => $clave,
+                    ],
+                    ['monto' => $monto]
+                );
+            }
+
+            EloquentAuditDeleteSupport::each(
+                ProgramaPagoAsignacion::query()
+                    ->where('programa_pago_linea_id', $linea->id)
+                    ->where(function ($q) use ($mesesUsados, $claveTransf) {
+                        $q->where('clave', $claveTransf)
+                            ->orWhereNotIn('clave', $mesesUsados);
+                    })
+            );
+        }
     }
 
     /**

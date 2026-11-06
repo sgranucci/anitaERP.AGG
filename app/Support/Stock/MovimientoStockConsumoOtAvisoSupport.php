@@ -7,7 +7,6 @@ use App\Models\Stock\Combinacion;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Models\Ventas\Ordentrabajo;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Egreso manual Ferli: el campo «Lote de stock» graba articulo_movimiento.lote
@@ -287,32 +286,17 @@ final class MovimientoStockConsumoOtAvisoSupport
         int $ordentrabajoId,
         ?int $excluirMovimientoStockId
     ): float {
-        $q = DB::table('articulo_movimiento as am')
-            ->join('articulo_movimiento_talle as amt', 'amt.articulo_movimiento_id', '=', 'am.id')
-            ->where('am.articulo_id', $articuloId)
-            ->where('am.combinacion_id', $combinacionId)
-            ->where('am.deposito_id', $depositoId);
+        $bucket = OtBucketSaldoSupport::saldoBucket(
+            $articuloId,
+            $combinacionId,
+            $comoLote ? $lote : 0,
+            $comoLote ? 0 : $ordentrabajoId,
+            $depositoId,
+            0,
+            (int) ($excluirMovimientoStockId ?? 0)
+        );
 
-        if ($comoLote) {
-            $q->where('am.lote', $lote);
-        } else {
-            $q->where('am.ordentrabajo_id', $ordentrabajoId)
-                ->where(function ($w) {
-                    $w->whereNull('am.lote')
-                        ->orWhere('am.lote', '')
-                        ->orWhere('am.lote', '0')
-                        ->orWhere('am.lote', 0);
-                });
-        }
-
-        if ($excluirMovimientoStockId !== null && $excluirMovimientoStockId > 0) {
-            $q->where(function ($w) use ($excluirMovimientoStockId) {
-                $w->whereNull('am.movimientostock_id')
-                    ->orWhere('am.movimientostock_id', '<>', $excluirMovimientoStockId);
-            });
-        }
-
-        return (float) $q->sum('amt.cantidad');
+        return $bucket['saldo'];
     }
 
     /**
