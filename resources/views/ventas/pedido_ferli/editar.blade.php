@@ -9,8 +9,15 @@
     $politicaCliente = isset($pedido) && $pedido->clientes
         ? \App\Support\Ventas\ClientePoliticaComercialSupport::payload($pedido->clientes)
         : null;
+    $avisosCliente = isset($pedido) && $pedido->clientes
+        ? \App\Support\Ventas\ClienteAvisoSupport::payloadVigentes($pedido->clientes)
+        : [];
 @endphp
-@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'pedido', 'politicaCliente' => $politicaCliente])
+@include('includes.ventas.cliente_politica_contexto', [
+    'contextoPoliticaCliente' => 'pedido',
+    'politicaCliente' => $politicaCliente,
+    'avisosCliente' => $avisosCliente,
+])
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/crearferli.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crearferli.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/ordentrabajo/factura_cliente.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/ordentrabajo/factura_cliente.js')) ?: time() }}" type="text/javascript"></script>

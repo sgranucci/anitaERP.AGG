@@ -9,9 +9,16 @@ Editar pedido Interforming
     $politicaCliente = isset($pedido) && $pedido->clientes
         ? \App\Support\Ventas\ClientePoliticaComercialSupport::payload($pedido->clientes)
         : null;
+    $avisosCliente = isset($pedido) && $pedido->clientes
+        ? \App\Support\Ventas\ClienteAvisoSupport::payloadVigentes($pedido->clientes)
+        : [];
     $facturasPedido = \App\Support\Ventas\PedidoInterformingFacturacionSupport::facturasEmitidas($pedido);
 @endphp
-@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'pedido', 'politicaCliente' => $politicaCliente])
+@include('includes.ventas.cliente_politica_contexto', [
+    'contextoPoliticaCliente' => 'pedido',
+    'politicaCliente' => $politicaCliente,
+    'avisosCliente' => $avisosCliente,
+])
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/vendedor/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/transporte/consulta.js') }}" type="text/javascript"></script>

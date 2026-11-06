@@ -541,6 +541,7 @@ class ClienteController extends Controller
 
         $data = $cliente->toArray();
         $data['politica_comercial'] = ClientePoliticaComercialSupport::payload($cliente);
+        $data['avisos'] = ClienteAvisoSupport::payloadVigentes($cliente);
         $letra = '';
         if (! empty($cliente->condicioniva_id)) {
             $letra = strtoupper(trim((string) (

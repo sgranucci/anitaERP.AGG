@@ -765,8 +765,9 @@ function leeUnCliente(cliente_id, codigocliente, avisar)
                     clienteInvalidoAvisadoClave = '';
                     $('#codigocliente').removeAttr('data-cliente-invalido');
                     aplicarDatosClienteEnFormulario();
+                    window.__clienteAvisosIniciales = data.avisos || [];
                     if (window.clienteAvisos && typeof window.clienteAvisos.mostrar === 'function') {
-                        window.clienteAvisos.mostrar(avisosEval.avisos, data.id);
+                        window.clienteAvisos.mostrar(window.__clienteAvisosIniciales, data.id);
                     }
 
                     if (typeof window.validarPadronClientePostCarga === 'function') {

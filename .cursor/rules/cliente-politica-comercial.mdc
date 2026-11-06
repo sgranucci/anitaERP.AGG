@@ -27,7 +27,9 @@ No usar `scopeActivos()` para elegir cliente en un proceso. Cobranza lista a tod
 
 ## Aviso al cargar cliente en pedido
 
-En contexto `pedido`, `clientePoliticaComercial.setActual()` muestra el mismo cartel (motivo + leyenda) que al tildar ítem para facturar cuando hay tope **posterior** al pedido (`mensajes.boleta` o `mensajes.factura`: moroso / proforma). No avisa si `mensajes.pedido` (bloqueado: lo corta `consulta.js`). Banner bajo el cliente sigue aparte. Deduplica si `setActual` corre dos veces (init + `leercliente`).
+No usar `alert()` de política comercial al cargar el cliente. El cartel informativo va por el **módulo de avisos del cliente** (`ClienteAvisoSupport` / `clienteAvisos`, disparador `pedido`). En editar, pasar `avisosCliente` al partial `cliente_politica_contexto`.
+
+`setActual()` solo pinta el banner bajo el cliente (`Proforma — …` / `Moroso — …`). El tope al facturar o boletar sigue con `mensaje('factura'|'boleta')` y el corte de backend. Bloqueado lo corta `consulta.js` vía `permiteOperacion`.
 
 ## Backend
 

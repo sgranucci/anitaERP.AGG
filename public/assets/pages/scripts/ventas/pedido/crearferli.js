@@ -1483,6 +1483,11 @@
 		cadena.then(
 			function() {
 				ocultarOverlayFacturarPedidoFerli();
+				if (window.clienteAvisos
+					&& typeof window.clienteAvisos.antesDeFacturar === 'function'
+					&& !window.clienteAvisos.antesDeFacturar($('#cliente_id').val())) {
+					return;
+				}
 				$("#facturarOrdenTrabajoModal").modal('show');
 			},
 			function() {
@@ -1812,6 +1817,9 @@
 			$('#tiposuspension_id').val(tiposuspension_id);
 			if (data.politica_comercial && window.clientePoliticaComercial) {
 				window.clientePoliticaComercial.setActual(data.politica_comercial);
+			}
+			if (Object.prototype.hasOwnProperty.call(data, 'avisos')) {
+				window.__clienteAvisosIniciales = data.avisos || [];
 			}
 		});
     }

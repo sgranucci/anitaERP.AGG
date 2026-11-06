@@ -22,8 +22,15 @@
     $politicaCliente = isset($pedido) && $pedido->clientes
         ? \App\Support\Ventas\ClientePoliticaComercialSupport::payload($pedido->clientes)
         : null;
+    $avisosCliente = isset($pedido) && $pedido->clientes
+        ? \App\Support\Ventas\ClienteAvisoSupport::payloadVigentes($pedido->clientes)
+        : [];
 @endphp
-@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'pedido', 'politicaCliente' => $politicaCliente])
+@include('includes.ventas.cliente_politica_contexto', [
+    'contextoPoliticaCliente' => 'pedido',
+    'politicaCliente' => $politicaCliente,
+    'avisosCliente' => $avisosCliente,
+])
 <script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/transporte/consulta.js")}}" type="text/javascript"></script>

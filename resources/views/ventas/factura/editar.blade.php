@@ -26,8 +26,15 @@
     $politicaCliente = isset($data) && isset($data->clientes)
         ? \App\Support\Ventas\ClientePoliticaComercialSupport::payload($data->clientes)
         : null;
+    $avisosCliente = isset($data) && isset($data->clientes)
+        ? \App\Support\Ventas\ClienteAvisoSupport::payloadVigentes($data->clientes)
+        : [];
 @endphp
-@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'factura', 'politicaCliente' => $politicaCliente])
+@include('includes.ventas.cliente_politica_contexto', [
+    'contextoPoliticaCliente' => 'factura',
+    'politicaCliente' => $politicaCliente,
+    'avisosCliente' => $avisosCliente,
+])
 @include('includes.ventas.preferencias_facturacion_scripts')
 @include('includes.ventas.facturacion_circuito_scripts')
 <script src="{{ asset('assets/pages/scripts/ventas/tipotransaccion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tipotransaccion/consulta.js')) ?: time() }}" type="text/javascript"></script>

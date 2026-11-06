@@ -2285,6 +2285,13 @@
 			return;
 		}
 
+		if (window.modoEmisionPedido === 'factura'
+			&& window.clienteAvisos
+			&& typeof window.clienteAvisos.antesDeFacturar === 'function'
+			&& !window.clienteAvisos.antesDeFacturar(cliente_id)) {
+			return;
+		}
+
 		$("#facturarPedidoModal").modal('show');
 	}
 
@@ -3653,6 +3660,9 @@
 			$('#tiposuspension_id').val(tiposuspension_id);
 			if (data.politica_comercial && window.clientePoliticaComercial) {
 				window.clientePoliticaComercial.setActual(data.politica_comercial);
+			}
+			if (Object.prototype.hasOwnProperty.call(data, 'avisos')) {
+				window.__clienteAvisosIniciales = data.avisos || [];
 			}
 			window.facturacionLetraCliente = String(data.letra || '').toUpperCase();
 			if ($('#letra_cliente_factura').length) {

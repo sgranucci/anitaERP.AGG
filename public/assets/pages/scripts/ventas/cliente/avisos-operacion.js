@@ -33,8 +33,17 @@
         return DISPARADOR[normal] || null;
     }
 
-    function filtrar(lista) {
-        var disparador = disparadorPantalla();
+    function normalizarDisparador(valor) {
+        var codigo = String(valor || '').toLowerCase().trim();
+        if (!codigo) {
+            return null;
+        }
+        var normal = MAPA[codigo] || codigo;
+        return DISPARADOR[normal] || normal || null;
+    }
+
+    function filtrar(lista, disparadorOverride) {
+        var disparador = normalizarDisparador(disparadorOverride) || disparadorPantalla();
         if (!disparador) {
             return [];
         }
@@ -89,11 +98,12 @@
     }
 
     /**
-     * Decide si se puede seguir cargando el cliente.
+     * Decide si se puede seguir (cargar cliente o facturar).
      * Bloquear corta. Confirmar pregunta. El aviso de texto deja seguir.
+     * disparadorOverride: p. ej. 'factura' al facturar desde un pedido.
      */
-    function evaluar(lista) {
-        var avisos = filtrar(lista);
+    function evaluar(lista, disparadorOverride) {
+        var avisos = filtrar(lista, disparadorOverride);
         var bloqueos = [];
         var visibles = [];
         var i;
@@ -124,13 +134,14 @@
         return { seguir: true, mensaje: '', avisos: visibles };
     }
 
-    function mostrar(avisos, clienteId) {
-        var lista = filtrar(avisos);
+    function mostrar(avisos, clienteId, disparadorOverride) {
+        var disparador = normalizarDisparador(disparadorOverride) || disparadorPantalla();
+        var lista = filtrar(avisos, disparador);
         pintar(lista);
         if (!lista.length) {
             return;
         }
-        var clave = claveDe(clienteId, lista);
+        var clave = String(disparador || '') + ':' + claveDe(clienteId, lista);
         if (clave === ultimaClave) {
             return;
         }
@@ -143,11 +154,29 @@
         }, 0);
     }
 
+    /**
+     * Avisos de factura al emitir desde pedido (la pantalla sigue en contexto pedido).
+     * @return {boolean} false si hay que abortar la facturación
+     */
+    function antesDeFacturar(clienteId) {
+        var lista = window.__clienteAvisosIniciales || [];
+        var evaluacion = evaluar(lista, 'factura');
+        if (!evaluacion.seguir) {
+            window.alert(evaluacion.mensaje || 'No se puede facturar con este cliente.');
+            return false;
+        }
+        if (evaluacion.avisos && evaluacion.avisos.length) {
+            mostrar(lista, clienteId, 'factura');
+        }
+        return true;
+    }
+
     window.clienteAvisos = {
         disparadorPantalla: disparadorPantalla,
         filtrar: filtrar,
         evaluar: evaluar,
         mostrar: mostrar,
+        antesDeFacturar: antesDeFacturar,
         pintar: pintar,
         limpiar: limpiar
     };
