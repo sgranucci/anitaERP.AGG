@@ -124,7 +124,7 @@
                         <button type="button" class="btn btn-outline-primary btn-sm" id="btn-preview-alta-masiva">
                             <i class="fa fa-search"></i> Vista previa
                         </button>
-                        <button type="submit" class="btn btn-primary btn-sm" id="btn-grabar-alta-masiva" disabled>
+                        <button type="submit" class="btn btn-secondary btn-sm" id="btn-grabar-alta-masiva" title="Primero genere la vista previa sin errores.">
                             <i class="fa fa-save"></i> Grabar comprobante
                         </button>
                         <span class="text-muted small" id="alta-masiva-resumen"></span>
