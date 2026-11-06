@@ -428,21 +428,27 @@ final class ComprobanteProveedorImputacionApSupport
 
     /**
      * Comprobante de ingresos/egresos: no tiene cuenta corriente.
-     * Se compara el total de la factura contra el debe del asiento del movimiento
-     * que le corresponde (líneas vinculadas o mismo código de cuenta + importe).
-     * El ctamov de ese movimiento lo controla el mail de I/E.
+     * Suma el DEBE del asiento del movimiento por FK `comprobante_proveedor_id`
+     * (la escribe IngresoEgresoComprobanteIvaAsientoVinculoService).
+     * Fallback: mismo código de cuenta + importe (con tolerancia de centavos)
+     * solo para líneas aún sin vincular. El ctamov lo controla el mail de I/E.
      *
-     * El cruce por código e importe es en la moneda del renglón. La suma vuelve en pesos:
-     * si el asiento está en dólares, cada debe se multiplica por su cotización.
+     * La suma vuelve en pesos: si el asiento está en dólares, cada debe se
+     * multiplica por su cotización.
      *
      * @param  list<array{monto: float, codigo?: string, comprobante_proveedor_id?: int, moneda_id?: int, cotizacion?: mixed, fecha?: string|null}>  $lineasDebe
      * @param  list<array{monto: float, codigo?: string}>  $conceptos
      */
-    public static function importeDebeIngresoEgreso(int $comprobanteId, array $lineasDebe, array $conceptos): float
-    {
+    public static function importeDebeIngresoEgreso(
+        int $comprobanteId,
+        array $lineasDebe,
+        array $conceptos,
+        float $tolerancia = self::TOLERANCIA,
+    ): float {
         $suma = 0.0;
         $usadas = [];
 
+        // 1) Contrato: líneas ya vinculadas por FK al comprobante.
         foreach ($lineasDebe as $i => $linea) {
             $dueno = (int) ($linea['comprobante_proveedor_id'] ?? 0);
             if ($comprobanteId > 0 && $dueno === $comprobanteId) {
@@ -451,6 +457,8 @@ final class ComprobanteProveedorImputacionApSupport
             }
         }
 
+        // 2) Fallback para DEBE sin FK (vinculación pendiente / centavo de cuadre).
+        $tolerancia = max(0.0, round($tolerancia, 2));
         foreach ($conceptos as $concepto) {
             $codigo = trim((string) ($concepto['codigo'] ?? ''));
             $monto = round((float) ($concepto['monto'] ?? 0), 2);
@@ -458,6 +466,8 @@ final class ComprobanteProveedorImputacionApSupport
                 continue;
             }
 
+            $mejor = null;
+            $mejorDiff = null;
             foreach ($lineasDebe as $i => $linea) {
                 if (isset($usadas[$i])) {
                     continue;
@@ -468,14 +478,25 @@ final class ComprobanteProveedorImputacionApSupport
                 if (trim((string) ($linea['codigo'] ?? '')) !== $codigo) {
                     continue;
                 }
-                if (round((float) ($linea['monto'] ?? 0), 2) !== $monto) {
+                $diff = abs(round((float) ($linea['monto'] ?? 0), 2) - $monto);
+                if ($diff > $tolerancia + 0.00001) {
                     continue;
                 }
-
-                $suma += self::lineaIngresoEgresoEnPesos($linea);
-                $usadas[$i] = true;
-                break;
+                if ($mejorDiff === null || $diff < $mejorDiff) {
+                    $mejor = $i;
+                    $mejorDiff = $diff;
+                    if ($diff < 0.00001) {
+                        break;
+                    }
+                }
             }
+
+            if ($mejor === null) {
+                continue;
+            }
+
+            $suma += self::lineaIngresoEgresoEnPesos($lineasDebe[$mejor]);
+            $usadas[$mejor] = true;
         }
 
         return round($suma, 2);

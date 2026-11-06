@@ -31,7 +31,7 @@ return [
                     ['2. Confirmar', 'Abierto', 'No emite comprobante. Exige factura original, un motivo y al menos una línea «A devolver». Las líneas se pueden seguir corrigiendo.'],
                     ['3. Factura de reemplazo o solo devolución', 'Aguardando recepción', 'Con reemplazo: botón «Emitir FAC reemplazo (NCD)». Sin reemplazo: botón «Continuar sin reemplazo (reembolso)». Luego se registra la recepción y la NC de lo devuelto.'],
                     ['4. Recepción', 'Recibido', 'Cuando llega el par, se elige la disposición (reventa, deterioro o no recibido) y una observación. Todavía no mueve stock.'],
-                    ['5. Nota de crédito', 'NC emitida', 'Botón «Emitir NC de lo devuelto (NCD)». Solo las líneas «A devolver». Si el precio de la grilla es más alto que lo facturado, se acredita lo facturado. En un cambio del mismo artículo la factura de reemplazo ya salió a ese importe, así que el descuento no deja diferencia. El motivo define si ese par vuelve al stock vendible.'],
+                    ['5. Nota de crédito', 'NC emitida', 'Botón «Emitir NC de lo devuelto (NCD)». Solo las líneas «A devolver», al precio que se escribe junto al botón (arranca con el de la grilla). La nota no puede superar el total de la factura original. El motivo define si ese par vuelve al stock vendible.'],
                     ['6. Diferencia', 'Cerrado o Pendiente compensación', 'Compara el total de la factura de reemplazo con el total de la nota de crédito. Si son iguales, el legajo se cierra. Si no, queda pendiente y se cierra con un texto de cómo se compensó (efectivo, transferencia, etc.). Ese texto no genera otro comprobante.'],
                 ],
             ],
@@ -40,8 +40,8 @@ return [
             'titulo' => '3. Precios: lista, factura y cupón',
             'parrafos' => [
                 'La línea «A devolver» muestra el precio con el que se facturó ese par, ya con el cupón o el descuento de transferencia. La línea «Reemplazo» arranca con el precio vigente de la lista del local. No es un precio por talle de las listas 16/26 o 27/33: en la web el artículo tiene un precio único.',
-                'Si el reemplazo es el mismo artículo (otro talle o color), al emitir la factura nueva el precio baja al que ya se cobró. La nota de crédito acredita ese mismo importe. El descuento no se vuelve a cobrar y la diferencia queda en cero.',
-                'Si el reemplazo es otro artículo, se factura el precio cargado en esa línea. La diferencia es el cambio de producto, no el descuento del pedido original.',
+                'Por defecto manda el precio cargado en el legajo («Precio cargado en el legajo»): la factura de reemplazo sale al precio de la línea Reemplazo y la nota de crédito al precio de la línea «A devolver». El descuento del pedido muchas veces no queda separado en la factura (ya está dentro del precio), así que el operador escribe el precio que corresponde. Si se cambia un precio en la grilla, hay que guardar antes de facturar.',
+                'Las otras opciones calculan el precio solas. «Precio de la factura original menos el descuento» factura el reemplazo al mismo importe que se cobró el par devuelto, solo si es el mismo artículo (otro talle o color). Si el reemplazo es otro artículo, siempre se factura el precio de su línea.',
             ],
         ],
         [
@@ -64,7 +64,7 @@ return [
                 'caption' => 'Qué emite el legajo',
                 'headers' => ['Comprobante', 'Qué incluye', 'Importe'],
                 'rows' => [
-                    ['Factura de reemplazo', 'SINTONIA 03 talle 27 BLANCO-MULTI, al precio ya cobrado', '$ 46.182,27'],
+                    ['Factura de reemplazo', 'SINTONIA 03 talle 27 BLANCO-MULTI, al precio ya cobrado (escrito en la grilla o con la opción «menos el descuento»)', '$ 46.182,27'],
                     ['Nota de crédito', 'Solo SINTONIA 03 talle 26, al mismo importe', '$ 46.182,27'],
                     ['No entra', 'Easy Kids y el flete siguen facturados', '—'],
                     ['Diferencia', 'Sin diferencia: el cupón de ese par no se vuelve a cobrar', '$ 0'],

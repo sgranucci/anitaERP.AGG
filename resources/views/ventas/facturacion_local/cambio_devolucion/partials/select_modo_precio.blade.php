@@ -3,7 +3,7 @@
     $etiquetaPrecio = $etiquetaPrecio ?? 'Precio';
     $selectName = array_key_exists('selectName', get_defined_vars()) ? $selectName : 'modo_precio';
     $selectClass = $selectClass ?? '';
-    $modoSeleccionado = $modoSeleccionado ?? CambioDevolucionMarketplacePrecioSupport::MODO_NETO;
+    $modoSeleccionado = $modoSeleccionado ?? CambioDevolucionMarketplacePrecioSupport::MODO_GRILLA;
 @endphp
 <label class="mb-0 mr-1 small text-nowrap">{{ $etiquetaPrecio }}</label>
 <select @if ($selectName !== null && $selectName !== '') name="{{ $selectName }}" @endif

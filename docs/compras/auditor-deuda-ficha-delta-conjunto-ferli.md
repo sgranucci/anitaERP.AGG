@@ -12,17 +12,48 @@ El número que se controla es el **delta conjunto** = delta proveedores + delta 
 
 | Corte | Delta proveedores | Delta anticipos | **Delta conjunto** |
 |---|---:|---:|---:|
-| **04/11/2026** | 124.695.483,51 | 1.941.669,28 | **126.637.152,79** |
+| **06/11/2026** | 124.695.483,51 | 1.941.669,28 | **126.637.152,79** |
 
-Detalle por cuenta al 04/11/2026:
+Detalle por cuenta al 06/11/2026:
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211100001 PROVEEDORES | 151.378.716,14 | 98.411.544,85 | −52.967.171,29 |
+| 211100001 PROVEEDORES | 150.034.829,80 | 97.067.658,51 | −52.967.171,29 |
 | 211100002 PROVEEDORES DEL EXTERIOR | 0,00 | 177.662.654,80 | 177.662.654,80 |
-| 114110001 ANTICIPO PROVEEDORES | −671.463,66 | 1.270.205,62 | 1.941.669,28 |
+| 114110001 ANTICIPO PROVEEDORES | −1.460.002,68 | 481.666,60 | 1.941.669,28 |
 
-A partir del 05/11 el auditor debe comparar contra esta base. Si el conjunto no se mueve más de ±1,00, el mail queda en verde (ficha OK).
+Mismo **delta conjunto** que la base del 04/11/2026 (solo cambian deuda/mayor absolutos por la operatoria del día). A partir del 07/11 el auditor compara contra esta base. Si el conjunto no se mueve más de ±1,00, el mail queda en verde (ficha OK).
+
+---
+
+## Transitorio documentado: 05/11/2026 (revertido el 06/11)
+
+| | 04/11/2026 | 05/11/2026 | 06/11/2026 |
+|---|---:|---:|---:|
+| Delta proveedores | 124.695.483,51 | 124.708.920,88 | 124.695.483,51 |
+| Delta anticipos | 1.941.669,28 | 1.940.997,27 | 1.941.669,28 |
+| **Delta conjunto** | **126.637.152,79** | **126.649.918,15** | **126.637.152,79** |
+
+Variación 04→05: **+12.765,36** · 05→06: **−12.765,36** (vuelve a la base).  
+Ficha deuda vs ficha: **cuadrada** (0 diferencias). La alerta del mail del 06/11 fue solo por el día a día contra el 05/11.
+
+### Por cuenta (variación del delta)
+
+| Cuenta | 04→05 | 05→06 |
+|---|---:|---:|
+| 211100001 PROVEEDORES | +13.437,37 | −13.437,37 |
+| 114110001 ANTICIPO PROVEEDORES | −672,01 | +672,01 |
+| 211100002 PROVEEDORES DEL EXTERIOR | 0,00 | 0,00 |
+
+### Origen operativo (Monica)
+
+1. **+13.437,37 en proveedores** — OPP **46116** GO CUOTAS: el 04/11 a la tarde quedó OPA/pago de retención **13.437,37** en CC sin línea en el mayor; el 05/11 09:31 se agregaron Debe anticipos / Haber IIBB CABA (213100017) al asiento 180131. El cron del 05/11 (07:50) midió el hueco a mitad de camino.
+2. **−672,01 en anticipos** — corrección de IIBB al reemplazar OPP **46090**: un reemplazo intermedio llevó **148.359,56** en anticipos; el definitivo quedó en **147.687,55** (diferencia **672,01**). El snapshot del 05/11 tomó el intermedio; el del 06/11 ya el corregido.
+
+### Lectura
+
+- **No es descuadre de ficha** ni un salto nuevo del hueco estructural (exterior / FAM).
+- El conjunto del 06/11 se **acepta como base vigente** (mismo número que el 04/11).
 
 ---
 

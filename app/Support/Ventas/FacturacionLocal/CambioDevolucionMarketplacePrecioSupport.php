@@ -7,12 +7,16 @@ use App\Services\Ventas\FacturacionLocal\FacturacionLocalNotaCreditoService;
 /**
  * Precio de la nota de crédito y de la factura del par que se lleva.
  *
- * El operador elige uno de tres orígenes al emitir. El modo neto es el que
- * ya cobró la factura (con su descuento). Los otros dos acreditan o facturan
- * el precio lleno, de esa factura o el de lista vigente.
+ * Por defecto manda el precio que el operador cargó en la línea (modo grilla).
+ * El descuento del pedido no siempre llega a la factura (queda dentro del precio),
+ * así que el sistema no puede reconstruirlo solo.
+ * Los otros modos calculan el precio: neto es lo que ya cobró la factura,
+ * los dos llenos acreditan o facturan el precio de esa factura o el de lista vigente.
  */
 final class CambioDevolucionMarketplacePrecioSupport
 {
+    public const MODO_GRILLA = 'grilla';
+
     public const MODO_NETO = 'neto';
 
     public const MODO_LLENO_FACTURA = 'lleno_factura';
@@ -20,6 +24,7 @@ final class CambioDevolucionMarketplacePrecioSupport
     public const MODO_LLENO_ACTUAL = 'lleno_actual';
 
     public const MODOS = [
+        self::MODO_GRILLA => 'Precio cargado en el legajo',
         self::MODO_NETO => 'Precio de la factura original menos el descuento',
         self::MODO_LLENO_FACTURA => 'Precio lleno de esa factura',
         self::MODO_LLENO_ACTUAL => 'Precio lleno actual',
@@ -29,7 +34,21 @@ final class CambioDevolucionMarketplacePrecioSupport
     {
         $modo = trim((string) $modo);
 
-        return array_key_exists($modo, self::MODOS) ? $modo : self::MODO_NETO;
+        return array_key_exists($modo, self::MODOS) ? $modo : self::MODO_GRILLA;
+    }
+
+    public static function esGrilla(?string $modo): bool
+    {
+        return self::normalizar($modo) === self::MODO_GRILLA;
+    }
+
+    /**
+     * Solo los precios llenos pueden superar el total de la factura original.
+     * El precio cargado a mano respeta ese tope.
+     */
+    public static function omiteTopeFactura(?string $modo): bool
+    {
+        return in_array(self::normalizar($modo), [self::MODO_LLENO_FACTURA, self::MODO_LLENO_ACTUAL], true);
     }
 
     public static function etiqueta(?string $modo): string

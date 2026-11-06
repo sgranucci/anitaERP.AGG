@@ -97,9 +97,10 @@ final class CambioDevolucionMarketplaceNcService
     }
 
     /**
+     * @param  array<int|string, mixed>  $preciosCargados  Precio por id de línea «A devolver» (modo grilla).
      * @return array{ok:bool,error?:string,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string}
      */
-    public function emitirNcOriginal(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null): array
+    public function emitirNcOriginal(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null, array $preciosCargados = []): array
     {
         $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
         $cambio->loadMissing(['localVenta', 'ventaOriginal']);
@@ -122,7 +123,7 @@ final class CambioDevolucionMarketplaceNcService
         $cambio->loadMissing('lineas');
         $venta->loadMissing('venta_emisiones');
         try {
-            $aDevolver = $this->lineasADevolver($cambio, $venta, $modo);
+            $aDevolver = $this->lineasADevolver($cambio, $venta, $modo, $preciosCargados);
         } catch (\InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -152,7 +153,7 @@ final class CambioDevolucionMarketplaceNcService
                 'cantidades_por_emision' => $aDevolver['cantidades'],
                 'precios_por_emision' => $aDevolver['precios'],
                 'precios_finales' => CambioDevolucionMarketplacePrecioSupport::esPrecioFinal($modo),
-                'omitir_tope_factura' => CambioDevolucionMarketplacePrecioSupport::esPrecioFinal($modo),
+                'omitir_tope_factura' => CambioDevolucionMarketplacePrecioSupport::omiteTopeFactura($modo),
             ]
         );
 
@@ -187,12 +188,14 @@ final class CambioDevolucionMarketplaceNcService
 
     /**
      * Solo las líneas «A devolver».
+     * Modo grilla: el precio cargado por el operador, tal cual (el tope es el total de la factura).
      * Modo neto: un precio de grilla menor al facturado se acredita; por encima, lo cobrado.
      * Precio lleno: el unitario elegido, sin reaplicar el descuento de la factura.
      *
+     * @param  array<int|string, mixed>  $preciosCargados
      * @return array{ids:list<int>,cantidades:array<int,float>,precios:array<int,float>,precios_linea:array<int,float>,aviso:string}
      */
-    private function lineasADevolver(CambioDevolucionMarketplace $cambio, Venta $venta, string $modo): array
+    private function lineasADevolver(CambioDevolucionMarketplace $cambio, Venta $venta, string $modo, array $preciosCargados = []): array
     {
         $lineas = $cambio->lineas
             ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER)
@@ -225,7 +228,18 @@ final class CambioDevolucionMarketplaceNcService
             $cantidades[$emisionId] = round(($cantidades[$emisionId] ?? 0) + $cantidad, 4);
             $precioFacturado = round((float) ($emision->precio ?? 0), 4);
             $nombre = trim((string) ($emision->detalle ?: $linea->descripcion ?: 'ítem'));
-            if ($precioFinal) {
+            if ($modo === CambioDevolucionMarketplacePrecioSupport::MODO_GRILLA) {
+                $cargado = $preciosCargados[(int) $linea->id] ?? null;
+                $precio = round($cargado !== null && $cargado !== '' ? (float) $cargado : (float) ($linea->precio_unitario ?? 0), 4);
+                if ($precio <= 0) {
+                    throw new \InvalidArgumentException('Cargá el precio a acreditar de '.$nombre.'.');
+                }
+                if ($precioFacturado > 0 && $precio - $precioFacturado > 0.02) {
+                    $avisos[] = $nombre
+                        .': se acredita $ '.number_format($precio, 2, ',', '.')
+                        .', la factura lo cobró $ '.number_format($precioFacturado, 2, ',', '.');
+                }
+            } elseif ($precioFinal) {
                 $precioActual = null;
                 if ($modo === CambioDevolucionMarketplacePrecioSupport::MODO_LLENO_ACTUAL) {
                     $precioActual = $this->precioActualDeLinea($cambio, $linea);
@@ -262,7 +276,7 @@ final class CambioDevolucionMarketplaceNcService
 
         $aviso = '';
         if ($avisos !== []) {
-            $aviso = 'El precio del legajo superaba lo facturado en el renglón. '
+            $aviso = 'Precio del legajo por encima de lo facturado en el renglón. '
                 .implode('; ', $avisos).'.';
         }
 

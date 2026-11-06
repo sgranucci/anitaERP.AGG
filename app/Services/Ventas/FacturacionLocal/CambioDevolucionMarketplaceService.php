@@ -415,13 +415,14 @@ final class CambioDevolucionMarketplaceService
     }
 
     /**
+     * @param  array<int|string, mixed>  $preciosCargados  Precio por id de línea «A devolver» (modo grilla).
      * @return array{ok:bool,error?:string,cambio?:CambioDevolucionMarketplace,mensaje?:string}
      */
-    public function emitirNcOriginal(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null): array
+    public function emitirNcOriginal(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null, array $preciosCargados = []): array
     {
         $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
         $this->assertTransicion($cambio, CambioDevolucionMarketplaceEstadosSupport::NC_ORIGINAL);
-        $resultado = $this->ncService->emitirNcOriginal($cambio, $modo);
+        $resultado = $this->ncService->emitirNcOriginal($cambio, $modo, $preciosCargados);
         if (empty($resultado['ok'])) {
             return $resultado;
         }

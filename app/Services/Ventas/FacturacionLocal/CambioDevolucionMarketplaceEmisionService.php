@@ -163,8 +163,8 @@ final class CambioDevolucionMarketplaceEmisionService
     }
 
     /**
-     * El par que se lleva toma el precio de una línea «A devolver» todavía libre.
-     * Primero el mismo artículo; si el reemplazo es otro modelo, la siguiente línea a devolver.
+     * El par que se lleva toma el precio de una línea «A devolver» del mismo artículo todavía libre.
+     * Otro modelo no tiene par: su precio no tiene que ver con el del par devuelto.
      *
      * @param  \Illuminate\Support\Collection<int, CambioDevolucionMarketplaceLinea>  $devolver
      * @param  list<int>  $usados
@@ -172,11 +172,6 @@ final class CambioDevolucionMarketplaceEmisionService
     private function parDeDevolucion($devolver, CambioDevolucionMarketplaceLinea $reemplazo, array &$usados): ?CambioDevolucionMarketplaceLinea
     {
         $par = $this->devolverMismoArticulo($devolver, (int) $reemplazo->articulo_id, $usados);
-        if (! $par instanceof CambioDevolucionMarketplaceLinea) {
-            $par = $devolver->first(function (CambioDevolucionMarketplaceLinea $linea) use ($usados) {
-                return ! in_array((int) $linea->id, $usados, true);
-            });
-        }
         if ($par instanceof CambioDevolucionMarketplaceLinea) {
             $usados[] = (int) $par->id;
 
@@ -198,6 +193,16 @@ final class CambioDevolucionMarketplaceEmisionService
         $emisiones,
     ): array {
         $nombre = trim((string) ($linea->descripcion ?: $linea->articulo?->descripcion ?: 'el artículo'));
+        if ($modo === CambioDevolucionMarketplacePrecioSupport::MODO_GRILLA) {
+            $propio = round((float) $linea->precio_unitario, 4);
+
+            return [
+                'precio' => $propio > 0 ? $propio : 0,
+                'error' => $propio > 0 ? null : 'Cargá el precio de '.$nombre.' en la grilla y guardalo antes de facturar.',
+                'aviso' => '',
+            ];
+        }
+
         $precioActual = null;
         if ($modo === CambioDevolucionMarketplacePrecioSupport::MODO_LLENO_ACTUAL) {
             $precioActual = $this->precioActualDeLinea($cambio, $linea);
@@ -224,7 +229,7 @@ final class CambioDevolucionMarketplaceEmisionService
             return [
                 'precio' => $propio > 0 ? $propio : 0,
                 'error' => $propio > 0 ? null : 'La línea de reemplazo '.$nombre.' no tiene precio.',
-                'aviso' => $nombre.': sin par en la factura original, se usó el precio de la línea.',
+                'aviso' => $nombre.': no es el mismo artículo que se devuelve, se usó el precio de la línea.',
             ];
         }
 

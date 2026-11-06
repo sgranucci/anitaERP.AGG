@@ -421,6 +421,25 @@ class ComprobanteProveedorImputacionApSupportTest extends TestCase
         $this->assertSame([], $eval['alertas']);
     }
 
+    public function test_ingreso_egreso_prioriza_fk_y_tolera_centavo_en_fallback(): void
+    {
+        $lineas = [
+            ['monto' => 6559.13, 'codigo' => '114210001', 'comprobante_proveedor_id' => 32140],
+            ['monto' => 31233.97, 'codigo' => '513000012', 'comprobante_proveedor_id' => 0],
+        ];
+        $conceptos = [
+            ['monto' => 31233.96, 'codigo' => '513000012'],
+            ['monto' => 6559.13, 'codigo' => '114210001'],
+        ];
+
+        $asiento = ComprobanteProveedorImputacionApSupport::importeDebeIngresoEgreso(32140, $lineas, $conceptos);
+        $this->assertEqualsWithDelta(37793.10, $asiento, 0.001);
+
+        $eval = ComprobanteProveedorImputacionApSupport::evaluarIngresoEgreso(37793.10, $asiento, true);
+        $this->assertTrue($eval['ok']);
+        $this->assertSame([], $eval['alertas']);
+    }
+
     public function test_ingreso_egreso_no_toma_el_debe_de_otro_comprobante(): void
     {
         $lineas = [

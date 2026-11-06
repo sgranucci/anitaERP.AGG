@@ -36,4 +36,54 @@ class IngresoEgresoComprobanteIvaAsientoVinculoServiceTest extends TestCase
             10.0
         ));
     }
+
+    public function test_tolera_centavo_de_cuadre_del_asiento(): void
+    {
+        $pendientes = [
+            [
+                'cuenta_id' => 385,
+                'codigo' => '513000012',
+                'monto' => 31233.96,
+                'comprobante_proveedor_concepto_id' => 73932,
+            ],
+            [
+                'cuenta_id' => 96,
+                'codigo' => '114210001',
+                'monto' => 6559.13,
+                'comprobante_proveedor_concepto_id' => 73933,
+            ],
+        ];
+
+        $this->assertSame(0, IngresoEgresoComprobanteIvaAsientoVinculoService::indicePendiente(
+            $pendientes,
+            385,
+            '513000012',
+            31233.97
+        ));
+    }
+
+    public function test_no_empata_si_la_diferencia_supera_la_tolerancia(): void
+    {
+        $pendientes = [
+            ['cuenta_id' => 385, 'codigo' => '513000012', 'monto' => 100.0],
+        ];
+
+        $this->assertNull(IngresoEgresoComprobanteIvaAsientoVinculoService::indicePendiente(
+            $pendientes,
+            385,
+            '513000012',
+            100.10
+        ));
+    }
+
+    public function test_indice_por_concepto_id_respeta_la_fk(): void
+    {
+        $pendientes = [
+            ['comprobante_proveedor_concepto_id' => 10],
+            ['comprobante_proveedor_concepto_id' => 20],
+        ];
+
+        $this->assertSame(1, IngresoEgresoComprobanteIvaAsientoVinculoService::indicePendientePorConceptoId($pendientes, 20));
+        $this->assertNull(IngresoEgresoComprobanteIvaAsientoVinculoService::indicePendientePorConceptoId($pendientes, 99));
+    }
 }

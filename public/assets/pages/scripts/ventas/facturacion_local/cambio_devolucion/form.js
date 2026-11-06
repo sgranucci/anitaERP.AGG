@@ -845,4 +845,53 @@
             });
         });
     });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var form = document.querySelector('.cdm-form-emitir-nc');
+        if (!form) {
+            return;
+        }
+        var select = form.querySelector('[name=modo_precio]');
+        function refrescar() {
+            var grilla = !select || select.value === 'grilla';
+            form.querySelectorAll('.cdm-nc-precio-box').forEach(function (box) {
+                box.classList.toggle('d-none', !grilla);
+                var input = box.querySelector('.cdm-nc-precio');
+                if (input) {
+                    input.disabled = !grilla;
+                    input.required = grilla;
+                }
+            });
+        }
+        if (select) {
+            select.addEventListener('change', refrescar);
+        }
+        refrescar();
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var principal = document.getElementById('form-cambio-devolucion');
+        var formsFac = document.querySelectorAll('.cdm-form-emitir-fac');
+        if (!principal || !formsFac.length) {
+            return;
+        }
+        var sinGuardar = false;
+        function marcar(e) {
+            if (e.target && e.target.closest && e.target.closest('#cdm-lineas-table')) {
+                sinGuardar = true;
+            }
+        }
+        principal.addEventListener('input', marcar);
+        principal.addEventListener('change', marcar);
+        formsFac.forEach(function (f) {
+            f.addEventListener('submit', function (e) {
+                if (!sinGuardar) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                alert('Hay cambios en la grilla sin guardar. Guardá el legajo (Actualizar o Guardar reemplazo) antes de facturar: la factura sale con el precio guardado de cada línea.');
+            }, true);
+        });
+    });
 })();

@@ -240,8 +240,9 @@
     <div class="tab-pane fade" id="tab-lineas" role="tabpanel">
         <p class="text-muted small">
             Al elegir la factura se cargan las líneas a devolver con el artículo, el talle y el color o la combinación.
-            El precio inicial de «A devolver» es el de la factura, ya con el descuento.
-            El precio de la factura del par se elige junto a ese botón. El precio de la devolución (nota de crédito de lo devuelto) se elige en el pie: el de la factura original menos el descuento, el precio lleno de esa factura, o el precio lleno actual.
+            El precio inicial de «A devolver» es el de la factura, ya con el descuento. El del reemplazo es el de la lista vigente.
+            <strong>El precio de la grilla es el que se factura y se acredita</strong> (opción «Precio cargado en el legajo»): corregilo y guardá antes de facturar. El precio a acreditar se puede ajustar también al emitir la nota de crédito.
+            Las otras opciones calculan el precio solas: el de la factura original menos el descuento, el precio lleno de esa factura o el precio lleno actual. Solo copian el precio del par devuelto si el reemplazo es el mismo artículo.
             «Traer de la factura» vuelve a leer todos los artículos de la factura original para devolver todos o sumar alguno más.
             Si ya facturaste un reemplazo y sumaste otro par a devolver, usá Agregar reemplazo, Guardar reemplazo y Facturar el reemplazo agregado. La factura anterior queda.
             Si la factura del reemplazo se cargó mal, la nota de crédito de ese comprobante lo anula y se puede facturar de nuevo sin cerrar el legajo.

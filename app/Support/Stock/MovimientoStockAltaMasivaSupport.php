@@ -5,6 +5,7 @@ namespace App\Support\Stock;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Depmae;
+use App\Models\Stock\Modulo;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Tipotransaccion_Stock;
 use Illuminate\Http\UploadedFile;
@@ -99,8 +100,10 @@ final class MovimientoStockAltaMasivaSupport
         $combinaciones = [];
         $cantidades = [];
         $medidas = [];
+        $modulos = [];
         $precios = [];
         $precioCabecera = (float) str_replace(',', '.', (string) ($cabecera['precio'] ?? 0));
+        $moduloAbiertoId = self::moduloAbiertoId();
 
         foreach ($preview['lineas'] as $linea) {
             if (($linea['errores'] ?? []) !== [] || (int) ($linea['articulo_id'] ?? 0) <= 0) {
@@ -113,6 +116,8 @@ final class MovimientoStockAltaMasivaSupport
                 : null;
             $cantidades[] = (float) $linea['pares'];
             $medidas[] = json_encode($linea['medidas'], JSON_UNESCAPED_UNICODE);
+            // La curva del Excel es libre: sin módulo, la edición pide uno y al elegirlo blanquea los talles.
+            $modulos[] = ($linea['medidas'] ?? []) !== [] ? $moduloAbiertoId : null;
             $precios[] = $precioCabecera > 0 ? $precioCabecera : 0;
         }
 
@@ -137,7 +142,7 @@ final class MovimientoStockAltaMasivaSupport
             'cantidades' => $cantidades,
             'medidas' => $medidas,
             'precios' => $precios,
-            'modulos_id' => $nulos,
+            'modulos_id' => $modulos,
             'cajas' => $ceros,
             'piezas' => $ceros,
             'listasprecios_id' => $nulos,
@@ -151,6 +156,14 @@ final class MovimientoStockAltaMasivaSupport
             'sentidos' => $vacios,
             'loteimportacion_id' => null,
         ];
+    }
+
+    public static function moduloAbiertoId(): ?int
+    {
+        $id = Modulo::query()->where('codigo', '99')->value('id')
+            ?? Modulo::query()->where('nombre', 'like', '%abierto%')->orderBy('id')->value('id');
+
+        return $id !== null ? (int) $id : null;
     }
 
     public static function esParaLocales(): bool

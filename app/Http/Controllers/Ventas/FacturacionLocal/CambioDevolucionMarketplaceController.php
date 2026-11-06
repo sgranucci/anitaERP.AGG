@@ -322,9 +322,11 @@ class CambioDevolucionMarketplaceController extends Controller
         can('emitir-nc-cambio-devolucion-marketplace-facturacion-local');
 
         $modo = CambioDevolucionMarketplacePrecioSupport::normalizar((string) $request->input('modo_precio'));
+        $precios = $request->input('precio_devolver', []);
+        $precios = is_array($precios) ? $precios : [];
 
         try {
-            $resultado = $this->service->emitirNcOriginal(CambioDevolucionMarketplace::query()->findOrFail($id), $modo);
+            $resultado = $this->service->emitirNcOriginal(CambioDevolucionMarketplace::query()->findOrFail($id), $modo, $precios);
         } catch (InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }

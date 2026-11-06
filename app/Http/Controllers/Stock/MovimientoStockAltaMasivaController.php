@@ -8,7 +8,6 @@ use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Stock\MovimientoStockService;
 use App\Support\Stock\MovimientoStockAltaMasivaSupport;
-use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\MovimientoStockPreferenciasUsuario;
 use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Http\JsonResponse;
@@ -29,7 +28,8 @@ class MovimientoStockAltaMasivaController extends Controller
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $empresaId = (int) old('empresa_id', $empresaQuery->first()->id ?? 0);
-        $depositoId = (int) old('deposito_id', $this->depositoSugeridoId());
+        // No sugerir el último depósito usado: en el alta masiva el operador lo elige cada vez.
+        $depositoId = (int) old('deposito_id', 0);
         $deposito = $depositoId > 0 ? Depmae::query()->find($depositoId) : null;
         $tipoId = (int) old('tipotransaccion_stock_id', MovimientoStockPreferenciasUsuario::resolverTipoTransaccionDefaultId() ?? 0);
         $tipo = $tipoId > 0 ? Tipotransaccion_Stock::query()->find($tipoId) : null;
@@ -215,19 +215,5 @@ class MovimientoStockAltaMasivaController extends Controller
         }
 
         return UsuarioTipotransaccionStockAutorizado::tipotransaccionAutorizada((int) $tipo->id);
-    }
-
-    private function depositoSugeridoId(): int
-    {
-        $id = (int) (MovimientoStockPreferenciasUsuario::resolverDepositoDefaultId() ?? 0);
-        if ($id <= 0) {
-            return 0;
-        }
-        if (MovimientoStockAltaMasivaSupport::esParaLocales()
-            && ! MovimientoStockFerliSupport::depositoEsDeLocalVenta($id)) {
-            return 0;
-        }
-
-        return $id;
     }
 }
