@@ -131,7 +131,9 @@ return [
     | Auditor diario deuda vs ficha CC (compras:auditar-deuda-ficha-proveedor).
     | Un mail por empresa; el asunto lleva el nombre de la empresa.
     | Sin diferencias: mail verde «todo cuadrado». Con diferencias: detalle proveedor a proveedor.
-    | Además guarda el delta mayor − deuda y avisa si ese delta cambia de un día al otro.
+    | Además guarda el delta mayor − deuda (proveedores + OPA en anticipos) y avisa
+    | si ese delta cambia de un día al otro. Factura anticipada / recepción van al
+    | auditor factura_anticipada_recepcion_auditor.
     | No graba ajustes de ficha: solo informa. La verdad operativa es la deuda.
     | Solo las empresas de COMPRAS_DEUDA_FICHA_AUDITOR_EMPRESAS (default 1, 2 y 3).
     */
@@ -152,6 +154,31 @@ return [
         'empresas' => array_values(array_unique(array_filter(array_map(
             static fn ($id) => (int) $id,
             explode(',', (string) env('COMPRAS_DEUDA_FICHA_AUDITOR_EMPRESAS', '1,2,3'))
+        ), static fn (int $id) => $id > 0))),
+    ],
+
+    /*
+    | Auditor diario factura anticipada vs recepción en cuenta de anticipos
+    | (compras:auditar-factura-anticipada-recepcion).
+    | Alerta si la recepción acredita más que lo facturado anticipado por OC.
+    | No mezcla OPA: eso queda en deuda_ficha_auditor / delta conjunto.
+    */
+    'factura_anticipada_recepcion_auditor' => [
+        'habilitada' => filter_var(env('COMPRAS_FACTURA_ANTICIPADA_RECEPCION_AUDITOR_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('COMPRAS_FACTURA_ANTICIPADA_RECEPCION_AUDITOR_HORA', '07:52'),
+        'email' => env(
+            'COMPRAS_FACTURA_ANTICIPADA_RECEPCION_AUDITOR_EMAIL',
+            env('COMPRAS_DEUDA_FICHA_AUDITOR_EMAIL', env('COMPRAS_CC_CONCILIACION_EMAIL', env('MAIL_FROM_ADDRESS', '')))
+        ),
+        'tolerancia' => (float) env('COMPRAS_FACTURA_ANTICIPADA_RECEPCION_AUDITOR_TOLERANCIA', 1),
+        'limite_filas_mail' => max(10, (int) env('COMPRAS_FACTURA_ANTICIPADA_RECEPCION_AUDITOR_LIMITE_MAIL', 120)),
+        'mail_siempre' => filter_var(env('COMPRAS_FACTURA_ANTICIPADA_RECEPCION_AUDITOR_MAIL_SIEMPRE', true), FILTER_VALIDATE_BOOLEAN),
+        'empresas' => array_values(array_unique(array_filter(array_map(
+            static fn ($id) => (int) $id,
+            explode(',', (string) env(
+                'COMPRAS_FACTURA_ANTICIPADA_RECEPCION_AUDITOR_EMPRESAS',
+                env('COMPRAS_DEUDA_FICHA_AUDITOR_EMPRESAS', '1,2,3')
+            ))
         ), static fn (int $id) => $id > 0))),
     ],
 

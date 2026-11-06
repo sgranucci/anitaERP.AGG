@@ -3,48 +3,52 @@
 Bitácora del control diario `compras:auditar-deuda-ficha-proveedor`  
 Empresas **1 Biyemas, 2 Kandiko, 3 Rebisco** · expresión **origen** · tabla `proveedor_deuda_mayor_delta`
 
-El número que se controla es el **delta conjunto** = delta proveedores + delta anticipos  
+El número que se controla es el **delta conjunto** = delta proveedores + delta anticipos (OPA)  
 (`mayor − deuda` por cuenta, en pesos, signo del mayor).
+
+Desde 06/11/2026 el delta de anticipos **solo mira OPA** (mayor sin facturas anticipadas ni recepciones).  
+Factura anticipada vs recepción: `compras:auditar-factura-anticipada-recepcion`.
 
 ---
 
 ## Base vigente (aceptada)
 
-Corte **05/11/2026**. Ficha deuda vs ficha cuadrada en las tres (0 diferencias).  
-A partir del 06/11 el auditor compara contra esta base. Si el conjunto no se mueve más de ±1,00, el mail queda en verde.
+Corte **06/11/2026** · anticipos **solo OPA** (sin factura anticipada / recepción).  
+Ficha deuda vs ficha cuadrada en las tres (0 diferencias).  
+A partir del 07/11 el auditor compara contra esta base. Si el conjunto no se mueve más de ±1,00, el mail queda en verde.
 
-| Empresa | Delta proveedores | Delta anticipos | **Delta conjunto** |
+| Empresa | Delta proveedores | Delta anticipos (OPA) | **Delta conjunto** |
 |---|---:|---:|---:|
-| Biyemas | 407.510.558,72 | 200.184.577,02 | **607.695.135,74** |
-| Kandiko | −161.877.377,17 | 7.827.452,37 | **−154.049.924,80** |
-| Rebisco | −297.971.512,89 | −273.597,05 | **−298.245.109,94** |
+| Biyemas | 407.510.558,72 | 436.349.714,54 | **843.860.273,26** |
+| Kandiko | −161.877.377,17 | 6.680.138,63 | **−155.197.238,54** |
+| Rebisco | −297.971.512,89 | 38.874.018,07 | **−259.097.494,82** |
 
-### Biyemas — cuentas al 05/11/2026
+### Biyemas — cuentas al 06/11/2026
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211010001 PROVEEDORES MONEDA NACIONAL | −60.290.231,22 | 220.046.664,98 | 280.336.896,20 |
-| 211010011 PROVEEDORES MONEDA EXTRANJERA | 3.250.186.915,41 | 2.912.249.592,27 | −337.937.323,14 |
+| 211010001 PROVEEDORES MONEDA NACIONAL | −125.232.884,74 | 155.104.011,46 | 280.336.896,20 |
+| 211010011 PROVEEDORES MONEDA EXTRANJERA | 3.297.051.489,94 | 2.959.114.166,80 | −337.937.323,14 |
 | 216010003 DS. FINANC. REBISCO SA. | 583.254,23 | 513.877,69 | −69.376,54 |
 | 216030002 DS. COMER. INTERCO KAN CTE | 205.396,08 | 465.385.758,28 | 465.180.362,20 |
-| 114040001 ANTICIPOS A PROVEEDORES | −473.589.511,71 | −273.404.934,69 | 200.184.577,02 |
+| 114040001 ANTICIPOS A PROVEEDORES (OPA) | −86.530.179,99 | 349.819.534,55 | 436.349.714,54 |
 
-### Kandiko — cuentas al 05/11/2026
+### Kandiko — cuentas al 06/11/2026
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211010001 PROVEEDORES MONEDA NACIONAL | 36.804.923,38 | 36.310.638,95 | −494.284,43 |
-| 211010011 PROVEEDORES MONEDA EXTRANJERA | 2.657.006.269,59 | 2.495.623.176,55 | −161.383.093,04 |
+| 211010001 PROVEEDORES MONEDA NACIONAL | 36.624.450,55 | 36.130.166,12 | −494.284,43 |
+| 211010011 PROVEEDORES MONEDA EXTRANJERA | 1.019.635.959,49 | 858.252.866,45 | −161.383.093,04 |
 | 221010004 PROVEEDORES MON EXTR. NO CTES | 0,00 | 0,30 | 0,30 |
-| 114040001 ANTICIPOS A PROVEEDORES | −27.995.082,96 | −20.167.630,59 | 7.827.452,37 |
+| 114040001 ANTICIPOS A PROVEEDORES (OPA) | −1.860.550,00 | 4.819.588,63 | 6.680.138,63 |
 
-### Rebisco — cuentas al 05/11/2026
+### Rebisco — cuentas al 06/11/2026
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211010001 PROVEEDORES MONEDA NACIONAL | 70.016.648,13 | 61.096.767,04 | −8.919.881,09 |
-| 211010011 PROVEEDORES MONEDA EXTRANJERA | 1.670.867.520,60 | 1.381.815.888,80 | −289.051.631,80 |
-| 114040001 ANTICIPOS A PROVEEDORES | −99.792.339,15 | −100.065.936,20 | −273.597,05 |
+| 211010001 PROVEEDORES MONEDA NACIONAL | 78.842.405,18 | 69.922.524,09 | −8.919.881,09 |
+| 211010011 PROVEEDORES MONEDA EXTRANJERA | 1.670.942.277,30 | 1.381.890.645,50 | −289.051.631,80 |
+| 114040001 ANTICIPOS A PROVEEDORES (OPA) | −81.754.650,23 | −42.880.632,16 | 38.874.018,07 |
 
 ---
 
@@ -92,9 +96,27 @@ En anticipos de Biyemas el mayor y la deuda se corrieron ~4,65 millones y dejaro
 
 ---
 
+## Cambio de criterio: anticipos solo OPA (06/11/2026)
+
+Antes el delta de anticipos sumaba OPA + neto de facturas anticipadas (con tope de recepción).  
+Eso hizo saltar el conjunto el 06/11 a la mañana (−105.196,15) por el exceso de recepción de la OC 223491 (Bordes) al entrar dos FGA nuevas.
+
+Se cambió el criterio y se **aceptó como base** el corte 06/11 con anticipos solo OPA:
+- **Delta conjunto**: proveedores (facturas/NC/OPA) + anticipos **solo OPA**.
+- **Factura anticipada vs recepción**: auditor aparte; alerta si recepción > factura por OC.
+
+Variación del rebase 05/11 → 06/11 (solo cambio de criterio en anticipos; proveedores delta igual):
+
+| Empresa | Conjunto 05/11 (viejo) | Conjunto 06/11 (OPA) | Variación |
+|---|---:|---:|---:|
+| Biyemas | 607.695.135,74 | 843.860.273,26 | +236.165.137,52 |
+| Kandiko | −154.049.924,80 | −155.197.238,54 | −1.147.313,74 |
+| Rebisco | −298.245.109,94 | −259.097.494,82 | +39.147.615,12 |
+
 ## Referencias
 
 - Comando: `php artisan compras:auditar-deuda-ficha-proveedor`
 - Support: `App\Support\Compras\ProveedorDeudaMayorDeltaSupport`
 - Mail: `resources/views/mails/compras/proveedor_cuentacorriente_deuda_ficha_auditor.blade.php`
 - Cron: diario ~07:50 (`compras.deuda_ficha_auditor`)
+- FA vs recepción: `php artisan compras:auditar-factura-anticipada-recepcion` (~07:52)

@@ -9,7 +9,6 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
-use App\Support\Database\SqlDialectSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -19,22 +18,21 @@ use Illuminate\Support\Facades\DB;
  *
  * El aviso es la suma. Una aplicación debita una cuenta y acredita la otra por
  * el mismo importe, y baja la OPA y la factura: el delta conjunto no se mueve.
- * Lo mismo una factura anticipada y su recepción. El detalle por cuenta queda
- * para ver de dónde salió el número.
  *
  * Proveedores: facturas impagas, notas de crédito sin aplicar y OPA sin aplicar
  * que no están en anticipos. Entran las cuentas de rubro Pasivo del proveedor
  * (MN y ME) y las del plan configurado. Un banco o un gasto no entra.
  *
- * Anticipos: la cuenta configurada en `pago.anticipo_proveedor`, con las OPA
- * que debitaron esa cuenta y el neto de facturas anticipadas. Sin esa cuenta,
- * la OPA sigue en proveedores.
+ * Anticipos: solo deuda de OPA (y el sobrante de OPP) imputadas a
+ * `pago.anticipo_proveedor`. El mayor de esa cuenta excluye facturas anticipadas
+ * y recepciones: eso va al auditor aparte de factura anticipada vs recepción.
+ * Sin cuenta de anticipos, la OPA sigue en proveedores.
  */
 final class ProveedorDeudaMayorDeltaSupport
 {
     private const TABLA = 'proveedor_deuda_mayor_delta';
 
-    /** @var array<string, array<int, array<int, array{deuda: float, mayor: float, opa: float, facturas: float}>>> */
+    /** @var array<string, array<int, array<int, array{deuda: float, mayor: float, opa: float}>>> */
     private array $saldosPorFecha = [];
 
     /** @var array<int, int>|null empresa_id => cuentacontable_id de anticipos */
@@ -127,7 +125,6 @@ final class ProveedorDeudaMayorDeltaSupport
                 'nombre' => $nombre['nombre'],
                 'deuda' => $deuda,
                 'opa' => round((float) ($hoy[$cuentaId]['opa'] ?? 0), 2),
-                'facturas' => round((float) ($hoy[$cuentaId]['facturas'] ?? 0), 2),
                 'mayor' => $mayor,
                 'delta' => $delta,
                 'delta_anterior' => $deltaAnterior,
@@ -258,7 +255,7 @@ final class ProveedorDeudaMayorDeltaSupport
     }
 
     /**
-     * @return array<int, array<int, array{deuda: float, mayor: float, opa: float, facturas: float}>>
+     * @return array<int, array<int, array{deuda: float, mayor: float, opa: float}>>
      */
     private function saldos(string $fecha): array
     {
@@ -268,28 +265,24 @@ final class ProveedorDeudaMayorDeltaSupport
 
         $cuentaIds = $this->cuentasProveedor();
         $deudaCc = $this->deudaPorCuenta($fecha);
-        $deudaFa = $this->saldoFacturaAnticipadaEnAnticipo();
         $mayor = $this->mayorPorCuenta($cuentaIds);
 
         $porEmpresa = [];
-        $keys = array_unique(array_merge(array_keys($deudaCc), array_keys($deudaFa), array_keys($mayor)));
+        $keys = array_unique(array_merge(array_keys($deudaCc), array_keys($mayor)));
         foreach ($keys as $key) {
             [$empresaId, $cuentaId] = array_map('intval', explode('|', (string) $key));
             if ($empresaId <= 0 || $cuentaId <= 0 || ! isset($cuentaIds[$cuentaId])) {
                 continue;
             }
             $opa = round((float) ($deudaCc[$key] ?? 0), 2);
-            $facturas = round((float) ($deudaFa[$key] ?? 0), 2);
-            $deudaLocal = round($opa + $facturas, 2);
             $mayorLocal = round((float) ($mayor[$key] ?? 0), 2);
-            if (abs($deudaLocal) < 0.01 && abs($mayorLocal) < 0.01) {
+            if (abs($opa) < 0.01 && abs($mayorLocal) < 0.01) {
                 continue;
             }
             $porEmpresa[$empresaId][$cuentaId] = [
-                'deuda' => $deudaLocal,
+                'deuda' => $opa,
                 'mayor' => $mayorLocal,
                 'opa' => $opa,
-                'facturas' => $facturas,
             ];
         }
 
@@ -577,137 +570,9 @@ final class ProveedorDeudaMayorDeltaSupport
     }
 
     /**
-     * Neto de factura anticipada todavía en la cuenta de anticipos, con el signo
-     * del mayor. Incluye el débito del comprobante y el crédito de la recepción
-     * de esa orden, sin pasar el crédito por encima de lo facturado en el ERP.
-     *
-     * @return array<string, float> clave empresa|cuenta
-     */
-    private function saldoFacturaAnticipadaEnAnticipo(): array
-    {
-        $anticipoPorEmpresa = $this->cuentasAnticipoPorEmpresa();
-        $cuentaIds = array_values(array_unique($anticipoPorEmpresa));
-        if ($cuentaIds === []) {
-            return [];
-        }
-
-        $facturado = $this->montoFacturaAnticipadaPorOrden($cuentaIds);
-        $cerrado = $this->montoCierreRecepcionPorOrden($cuentaIds, array_keys($facturado));
-        $saldos = [];
-        foreach ($facturado as $key => $invoice) {
-            $recepcion = (float) ($cerrado[$key] ?? 0);
-            $credito = min(0.0, $recepcion);
-            $tope = min(0.0, -$invoice);
-            $explicado = round($invoice + max($credito, $tope), 2);
-            if (abs($explicado) < 0.005) {
-                continue;
-            }
-            $partes = explode('|', $key);
-            $empresaId = (int) ($partes[0] ?? 0);
-            $cuentaId = (int) ($partes[1] ?? 0);
-            if (($anticipoPorEmpresa[$empresaId] ?? 0) !== $cuentaId) {
-                continue;
-            }
-            $grupo = $empresaId.'|'.$cuentaId;
-            $saldos[$grupo] = round(($saldos[$grupo] ?? 0) + (-1 * $explicado), 2);
-        }
-
-        return $saldos;
-    }
-
-    /**
-     * @param  list<int>  $cuentaIds
-     * @return array<string, float> empresa|cuenta|ordencompra => suma de monto en pesos
-     */
-    private function montoFacturaAnticipadaPorOrden(array $cuentaIds): array
-    {
-        $monedaLocalId = ProveedorCuentacorrienteAplicacionLiquidacionSupport::monedaLocalId();
-        $filas = DB::table('asiento_movimiento as m')
-            ->join('asiento as a', 'a.id', '=', 'm.asiento_id')
-            ->join('comprobante_proveedor as cp', 'cp.id', '=', 'a.comprobante_proveedor_id')
-            ->join('ordencompra as oc', 'oc.id', '=', 'cp.ordencompra_id')
-            ->whereIn('m.cuentacontable_id', $cuentaIds)
-            ->where(function ($q) {
-                $q->whereNull('a.estado_aprobacion')
-                    ->orWhere('a.estado_aprobacion', '!=', Asiento::ESTADO_APROBACION_RECHAZADO);
-            })
-            ->where('cp.modo_carga', '!=', ComprobanteProveedorModoCarga::ASIGNA_RECEPCION)
-            ->whereRaw(SqlDialectSupport::lower('oc.tratamiento').' in (?, ?, ?)', ['anticipada', '2', 's'])
-            ->where(function ($q) {
-                $q->whereNull('oc.es_contrato')->orWhere('oc.es_contrato', 0);
-            })
-            ->selectRaw('a.empresa_id, m.cuentacontable_id, oc.id as ordencompra_id')
-            ->selectRaw(
-                'SUM(CASE WHEN COALESCE(m.moneda_id, ?) > ? THEN m.monto * COALESCE(NULLIF(m.cotizacion, 0), 1) ELSE m.monto END) as saldo_local',
-                [$monedaLocalId, $monedaLocalId]
-            )
-            ->groupBy('a.empresa_id', 'm.cuentacontable_id', 'oc.id')
-            ->get();
-
-        return $this->indexarMontoPorOrden($filas);
-    }
-
-    /**
-     * Crédito de la recepción sobre las mismas órdenes. El tope lo aplica el caller:
-     * un cierre mayor que la factura del ERP no se toma como explicado.
-     *
-     * @param  list<int>  $cuentaIds
-     * @param  list<string>  $clavesFacturado
-     * @return array<string, float>
-     */
-    private function montoCierreRecepcionPorOrden(array $cuentaIds, array $clavesFacturado): array
-    {
-        $ocIds = [];
-        foreach ($clavesFacturado as $clave) {
-            $partes = explode('|', (string) $clave);
-            $ocId = (int) ($partes[2] ?? 0);
-            if ($ocId > 0) {
-                $ocIds[$ocId] = true;
-            }
-        }
-        if ($ocIds === []) {
-            return [];
-        }
-
-        $monedaLocalId = ProveedorCuentacorrienteAplicacionLiquidacionSupport::monedaLocalId();
-        $filas = DB::table('asiento_movimiento as m')
-            ->join('asiento as a', 'a.id', '=', 'm.asiento_id')
-            ->join('recepcion_proveedor as r', 'r.id', '=', 'a.recepcionproveedor_id')
-            ->whereIn('m.cuentacontable_id', $cuentaIds)
-            ->whereIn('r.ordencompra_id', array_keys($ocIds))
-            ->where(function ($q) {
-                $q->whereNull('a.estado_aprobacion')
-                    ->orWhere('a.estado_aprobacion', '!=', Asiento::ESTADO_APROBACION_RECHAZADO);
-            })
-            ->selectRaw('a.empresa_id, m.cuentacontable_id, r.ordencompra_id as ordencompra_id')
-            ->selectRaw(
-                'SUM(CASE WHEN COALESCE(m.moneda_id, ?) > ? THEN m.monto * COALESCE(NULLIF(m.cotizacion, 0), 1) ELSE m.monto END) as saldo_local',
-                [$monedaLocalId, $monedaLocalId]
-            )
-            ->groupBy('a.empresa_id', 'm.cuentacontable_id', 'r.ordencompra_id')
-            ->get();
-
-        return $this->indexarMontoPorOrden($filas);
-    }
-
-    /**
-     * @param  iterable<int, object>  $filas
-     * @return array<string, float>
-     */
-    private function indexarMontoPorOrden(iterable $filas): array
-    {
-        $out = [];
-        foreach ($filas as $fila) {
-            $key = ((int) $fila->empresa_id).'|'.((int) $fila->cuentacontable_id).'|'.((int) $fila->ordencompra_id);
-            $out[$key] = round((float) $fila->saldo_local, 2);
-        }
-
-        return $out;
-    }
-
-    /**
-     * Mismo universo que el control de mayor: no corta por fecha, así un asiento
-     * con fecha futura no hace saltar el delta el día en que esa fecha llega.
+     * No corta por fecha: un asiento con fecha futura no hace saltar el delta el
+     * día en que esa fecha llega. En cuentas de anticipos se excluyen facturas
+     * anticipadas y recepciones (van al auditor de FA vs recepción).
      *
      * @param  array<int, true>  $cuentaIds
      * @return array<string, float>
@@ -718,14 +583,48 @@ final class ProveedorDeudaMayorDeltaSupport
             return [];
         }
 
+        $anticipoIds = array_values(array_unique(array_filter(
+            array_map('intval', $this->cuentasAnticipoPorEmpresa()),
+            static fn (int $id): bool => $id > 0
+        )));
+        $anticipoSet = array_fill_keys($anticipoIds, true);
+        $pasivoIds = [];
+        foreach (array_keys($cuentaIds) as $cuentaId) {
+            $cuentaId = (int) $cuentaId;
+            if ($cuentaId > 0 && ! isset($anticipoSet[$cuentaId])) {
+                $pasivoIds[] = $cuentaId;
+            }
+        }
+
+        return $this->sumarMayor($pasivoIds, false)
+            + $this->sumarMayor($anticipoIds, true);
+    }
+
+    /**
+     * @param  list<int>  $cuentaIds
+     * @return array<string, float>
+     */
+    private function sumarMayor(array $cuentaIds, bool $soloOpaAnticipo): array
+    {
+        $cuentaIds = array_values(array_filter(array_map('intval', $cuentaIds), static fn (int $id): bool => $id > 0));
+        if ($cuentaIds === []) {
+            return [];
+        }
+
         $monedaLocalId = ProveedorCuentacorrienteAplicacionLiquidacionSupport::monedaLocalId();
-        $filas = DB::table('asiento_movimiento as m')
+        $query = DB::table('asiento_movimiento as m')
             ->join('asiento as a', 'a.id', '=', 'm.asiento_id')
-            ->whereIn('m.cuentacontable_id', array_keys($cuentaIds))
+            ->whereIn('m.cuentacontable_id', $cuentaIds)
             ->where(function ($q) {
                 $q->whereNull('a.estado_aprobacion')
                     ->orWhere('a.estado_aprobacion', '!=', Asiento::ESTADO_APROBACION_RECHAZADO);
-            })
+            });
+        if ($soloOpaAnticipo) {
+            // Solo OPP/OPA y aplicaciones: sin Debe de factura anticipada ni Haber de recepción.
+            $query->whereNull('a.comprobante_proveedor_id')
+                ->whereNull('a.recepcionproveedor_id');
+        }
+        $filas = $query
             ->selectRaw('a.empresa_id, m.cuentacontable_id')
             ->selectRaw(
                 'SUM(CASE WHEN COALESCE(m.moneda_id, ?) > ? THEN m.monto * COALESCE(NULLIF(m.cotizacion, 0), 1)'

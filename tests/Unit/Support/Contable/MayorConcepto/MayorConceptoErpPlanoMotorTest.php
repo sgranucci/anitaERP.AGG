@@ -262,6 +262,78 @@ class MayorConceptoErpPlanoMotorTest extends TestCase
         $this->assertSame(10.0, $auditoria['filas_descuadradas'][0]['diferencia']);
     }
 
+    public function test_venta_maquinas_con_flag_emite_cuentas_fuera_del_limite_lado_nativo(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $asiento = $this->asiento(237290, 237290, [
+            $this->mov(111010001, 'CAJA PESOS', 53, 'MOVIMIENTOS COMPENSABLES', 501570.00, true),
+            $this->mov(111010001, 'CAJA PESOS', 53, 'MOVIMIENTOS COMPENSABLES', 62000.00, true),
+            $this->mov(111010004, 'CAJA PESOS EN TRANSITO', 0, 'SIN CLASIFICAR', 84975448.55, true),
+            $this->mov(111050028, 'CTA CTE MERCADO PAGO', 0, 'SIN CLASIFICAR', 640000.00, true),
+            $this->mov(113010011, 'TOTAL COIN MAQUINAS', 53, 'MOVIMIENTOS COMPENSABLES', 43063574.45, true),
+            $this->mov(113010011, 'TOTAL COIN MAQUINAS', 53, 'MOVIMIENTOS COMPENSABLES', 62000.00, false),
+            $this->mov(211010018, 'PARTID.PENDIENTES', 47, 'VENTA', 80814647.50, false),
+            $this->mov(412010001, 'VENTAS MAQUINAS', 47, 'VENTA', 32318172.04, false),
+            $this->mov(412020001, 'VENTAS RULETAS', 47, 'VENTA', 14121310.00, false),
+            $this->mov(521120010, 'IMPUESTO ESPECIFICO', 49, 'IMP.ESPECIFICO', 1924300.52, false),
+            $this->mov(521280004, 'DIFERENCIA DE CAJA', 12, 'GAMING SUPPLIES', 4720.00, true),
+            $this->mov(521280004, 'DIFERENCIA DE CAJA', 12, 'GAMING SUPPLIES', 6882.94, false),
+        ]);
+        $asiento['observacion'] = 'Cierre rendición máquinas — 01/10/2026 — PV FSL 14 — rend. 638 — Venta maquinas';
+        $asiento['tipo'] = '';
+
+        $clasificado = $motor->clasificar([$asiento], [], self::LIMITE, [], true);
+        $this->assertTrue($clasificado['analitico'][237290]['cuadre_neto']);
+        $this->assertEqualsWithDelta(86179018.55, $clasificado['analitico'][237290]['debe'], 0.001);
+        $this->assertEqualsWithDelta(0.0, $clasificado['analitico'][237290]['haber'], 0.001);
+
+        $debe = 0.0;
+        $haber = 0.0;
+        $porCuenta = [];
+        foreach ($clasificado['lineas'] as $ln) {
+            $this->assertGreaterThan(self::LIMITE, $ln['cuenta']);
+            $debe += $ln['debe'];
+            $haber += $ln['haber'];
+            $clave = $ln['cuenta'].'|'.($ln['debe'] > 0 ? 'D' : 'H');
+            $porCuenta[$clave] = ($porCuenta[$clave] ?? 0) + $ln['debe'] + $ln['haber'];
+        }
+
+        $this->assertEqualsWithDelta(43068294.45, $debe, 0.001);
+        $this->assertEqualsWithDelta(129247313.00, $haber, 0.001);
+        $this->assertEqualsWithDelta(43063574.45, $porCuenta['113010011|D'], 0.001);
+        $this->assertEqualsWithDelta(62000.00, $porCuenta['113010011|H'], 0.001);
+        $this->assertEqualsWithDelta(32318172.04, $porCuenta['412010001|H'], 0.001);
+        $this->assertEqualsWithDelta(14121310.00, $porCuenta['412020001|H'], 0.001);
+        $this->assertEqualsWithDelta(80814647.50, $porCuenta['211010018|H'], 0.001);
+        $this->assertEqualsWithDelta(1924300.52, $porCuenta['521120010|H'], 0.001);
+        $this->assertEqualsWithDelta(4720.00, $porCuenta['521280004|D'], 0.001);
+        $this->assertEqualsWithDelta(6882.94, $porCuenta['521280004|H'], 0.001);
+
+        $auditoria = $motor->auditar($clasificado['analitico'], $clasificado['lineas']);
+        $this->assertTrue($auditoria['cuadra']);
+        $this->assertSame(1, $auditoria['asientos_cuadre_neto']);
+        $this->assertEqualsWithDelta(0.0, $auditoria['filas'][0]['diferencia'], 0.001);
+    }
+
+    public function test_venta_maquinas_sin_flag_sigue_prorrateando_sobre_la_pata(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $asiento = $this->asiento(237291, 237291, [
+            $this->mov(111010001, 'CAJA PESOS', 53, 'MOVIMIENTOS COMPENSABLES', 1000.00, true),
+            $this->mov(113010011, 'TOTAL COIN', 53, 'MOVIMIENTOS COMPENSABLES', 400.00, true),
+            $this->mov(412010001, 'VENTAS MAQUINAS', 47, 'VENTA', 1400.00, false),
+        ]);
+        $asiento['observacion'] = 'Cierre rendición máquinas — Venta maquinas';
+
+        $clasificado = $motor->clasificar([$asiento], [], self::LIMITE, [], false);
+        $this->assertFalse($clasificado['analitico'][237291]['cuadre_neto']);
+        $this->assertCount(1, $clasificado['lineas']);
+        $this->assertSame(412010001, $clasificado['lineas'][0]['cuenta']);
+        $this->assertEqualsWithDelta(1000.0, $clasificado['lineas'][0]['debe'], 0.001);
+        $this->assertEqualsWithDelta(0.0, $clasificado['lineas'][0]['haber'], 0.001);
+        $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
+    }
+
     /**
      * @param  list<array<string, mixed>>  $movimientos
      * @return array<string, mixed>

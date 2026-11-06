@@ -18,7 +18,8 @@ use Throwable;
 /**
  * Auditor diario: deuda vs ficha y delta conjunto de proveedores + anticipos.
  * Cada cuenta se guarda por día. El mail avisa si se movió la suma de los dos
- * deltas. Una aplicación, o una factura anticipada y su recepción, no la mueven.
+ * deltas. Una aplicación no la mueve: debita una cuenta y acredita la otra.
+ * Anticipos solo mira OPA (sin factura anticipada / recepción: van a otro auditor).
  * No graba ajustes de ficha. La deuda es la verdad.
  */
 final class ProveedorCuentacorrienteDeudaFichaAuditorService
