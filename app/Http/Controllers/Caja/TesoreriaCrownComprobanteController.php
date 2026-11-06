@@ -591,6 +591,8 @@ class TesoreriaCrownComprobanteController extends Controller
                 'observacion' => 'Reversa del comprobante '.TesoreriaCrownNumeradorSupport::visible((int) $comprobante->numero),
                 'revierte_id' => $comprobante->id,
                 'creado_usuario_id' => $usuarioId,
+                'cotiz_dolar' => $comprobante->cotiz_dolar,
+                'cotiz_euro' => $comprobante->cotiz_euro,
             ]);
             foreach (TesoreriaCrownRendicionCampos::campos() as $clave => $meta) {
                 if ($meta['tipo'] === 'importe') {

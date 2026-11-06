@@ -29,7 +29,7 @@
     use App\Support\Caja\TesoreriaCrownCierreCalculo;
     use App\Support\Caja\TesoreriaCrownRendicionCampos;
     use App\Support\Configuracion\EmpresaLogoArchivo;
-    $cambiosDia = TesoreriaCrownCierreCalculo::cambiosDelDia((int) $comprobante->sala_id, $comprobante->jornada->fecha->format('Y-m-d'));
+    $cambiosDia = TesoreriaCrownCierreCalculo::cambiosParaComprobante($comprobante);
     $logo = EmpresaLogoArchivo::dataUriDesdeNombre($comprobante->empresa->nombre ?? null);
     $numero = TesoreriaCrownNumeradorSupport::visible($comprobante->numero);
 @endphp
@@ -123,10 +123,13 @@
                     $fechaJornada,
                     $grupos,
                     $cantidades,
+                    $comprobante,
                 );
+                $usaCotizComprobante = (float) ($comprobante->cotiz_dolar ?? 0) > 0
+                    || (float) ($comprobante->cotiz_euro ?? 0) > 0;
             @endphp
             <h2>Total en pesos</h2>
-            <p class="muted">Pesos al nominal. Dólares y euros al cambio de venta de la jornada {{ $comprobante->jornada->fecha->format('d/m/Y') }}. Las fichas no entran en este total.</p>
+            <p class="muted">Pesos al nominal. Dólares y euros al cambio {{ $usaCotizComprobante ? 'del comprobante' : 'de venta de la jornada' }} {{ $comprobante->jornada->fecha->format('d/m/Y') }}. Las fichas no entran en este total.</p>
             <table>
                 <tbody>
                     @foreach ($efectivoPesos['monedas'] as $monedaLinea)

@@ -855,6 +855,11 @@ class ComprobanteProveedorAsientoService
             throw new RuntimeException('No hay conceptos con monto para contabilizar.');
         }
 
+        // II sin CC propio: hereda el único centro del gasto de la misma cuenta
+        // (neto / debe_gasto). Sin selector o sin grabarlo en el concepto II, Contabilizar
+        // cortaba en «línea 1» aunque el neto ya tuviera centro.
+        $this->heredarCentrocostoImpuestoInternoDesdeGasto($lineasDebe);
+
         // La moneda de la OC solo elige la cuenta (proveedores MN vs ME), nunca los importes:
         // esos ya están en moneda de la factura (Anita filtra_moneda_oc).
         $resMoneda = ProveedorCuentaContableMonedaSupport::resolverMonedaParaCuentaProveedor($comprobante);
@@ -1441,6 +1446,45 @@ class ComprobanteProveedorAsientoService
         }
 
         return $pesos;
+    }
+
+    /**
+     * Impuesto interno sin centro: toma el único CC del gasto de la misma cuenta.
+     * Si el gasto está abierto en varios centros, no inventa: la UI pide elegir/prorratear.
+     *
+     * @param  list<array{cuentacontable_id?:int, centrocosto_id?:int, origen?:string}>  $lineasDebe
+     */
+    private function heredarCentrocostoImpuestoInternoDesdeGasto(array &$lineasDebe): void
+    {
+        /** @var array<int, array<int, true>> $ccsPorCuenta */
+        $ccsPorCuenta = [];
+        foreach ($lineasDebe as $linea) {
+            $origen = (string) ($linea['origen'] ?? '');
+            if (! in_array($origen, ['neto_manual', 'debe_gasto', 'contrato_manual'], true)) {
+                continue;
+            }
+            $cuentaId = (int) ($linea['cuentacontable_id'] ?? 0);
+            $ccId = (int) ($linea['centrocosto_id'] ?? 0);
+            if ($cuentaId <= 0 || $ccId <= 0) {
+                continue;
+            }
+            $ccsPorCuenta[$cuentaId][$ccId] = true;
+        }
+
+        foreach ($lineasDebe as &$linea) {
+            if ((string) ($linea['origen'] ?? '') !== 'impuesto_interno') {
+                continue;
+            }
+            if ((int) ($linea['centrocosto_id'] ?? 0) > 0) {
+                continue;
+            }
+            $cuentaId = (int) ($linea['cuentacontable_id'] ?? 0);
+            $ccs = array_keys($ccsPorCuenta[$cuentaId] ?? []);
+            if (count($ccs) === 1) {
+                $linea['centrocosto_id'] = $ccs[0];
+            }
+        }
+        unset($linea);
     }
 
     /**

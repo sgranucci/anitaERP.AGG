@@ -192,6 +192,7 @@ final class TesoreriaCrownFirmaSupport
             if ($comprobante->firmasCompletas()) {
                 $comprobante->estado = TesoreriaCrownComprobanteSupport::CONFORME;
                 $comprobante->qr_token = null;
+                TesoreriaCrownComprobanteSupport::sellarCotizacionVigente($comprobante);
             }
             $comprobante->save();
             if ($comprobante->estado === TesoreriaCrownComprobanteSupport::CONFORME) {

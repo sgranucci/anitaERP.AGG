@@ -176,9 +176,13 @@
                 $ivaUnaLinea = $origenLinea === 'impuesto'
                     && $conceptoLineaId > 0
                     && ($cantImpuestoPorConcepto[$conceptoLineaId] ?? 0) === 1;
+                // Impuesto interno usa la misma cuenta de gasto: sin selector Eli no puede
+                // cargar el CC y Contabilizar corta en la línea 1 aunque el neto sí lo tenga.
+                $iiConSelector = $origenLinea === 'impuesto_interno'
+                    && ! empty($linea['maneja_centrocosto']);
                 $muestraSelectorCentro = ! empty($preview['es_preview'])
                     && $cuentaLineaId > 0
-                    && ($editableCuenta || $ivaUnaLinea);
+                    && ($editableCuenta || $ivaUnaLinea || $iiConSelector);
                 $permiteProrratearCc = ! empty($preview['es_preview'])
                     && $cuentaLineaId > 0
                     && $conceptoLineaId > 0

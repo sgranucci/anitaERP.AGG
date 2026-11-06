@@ -194,7 +194,7 @@ final class TesoreriaCrownCierreCalculo
 
                 continue;
             }
-            $tasa = self::tasa($salaId, $fecha, (int) $tipo->id);
+            $tasa = self::tasaDocumento($doc, $fecha, $codigo, (int) $tipo->id);
             if ($tasa <= 0) {
                 $sinCotizacion[$codigo] = $codigo;
 
@@ -213,6 +213,25 @@ final class TesoreriaCrownCierreCalculo
             'efectivo' => $efectivo,
             'fichas' => $fichas,
         ];
+    }
+
+    /**
+     * Cotización del comprobante (efe_cotiz_*) si está grabada; si no, la vigente del día.
+     */
+    public static function tasaDocumento(
+        TesoreriaCrownComprobante $doc,
+        string $fecha,
+        string $codigoTipo,
+        int $tipoValorId
+    ): float {
+        if ($codigoTipo === 'USD' && (float) ($doc->cotiz_dolar ?? 0) > 0) {
+            return (float) $doc->cotiz_dolar;
+        }
+        if ($codigoTipo === 'EUR' && (float) ($doc->cotiz_euro ?? 0) > 0) {
+            return (float) $doc->cotiz_euro;
+        }
+
+        return self::cotizacionVenta((int) $doc->sala_id, $fecha, $tipoValorId)['tasa'];
     }
 
     /**
@@ -387,7 +406,7 @@ final class TesoreriaCrownCierreCalculo
                 $pesos = $origen;
                 $etiqueta = $cantidadTxt.' × '.$denomTxt.' '.$codigo;
             } else {
-                $tasa = self::tasa($salaId, $fecha, (int) $tipo->id);
+                $tasa = self::tasaDocumento($doc, $fecha, $codigo, (int) $tipo->id);
                 $pesos = $tasa > 0 ? $origen * $tasa : 0.0;
                 $etiqueta = $cantidadTxt.' × '.$denomTxt.' '.$codigo.' × '.number_format($tasa, 2, ',', '.');
             }
@@ -509,7 +528,8 @@ final class TesoreriaCrownCierreCalculo
 
     /**
      * Efectivo de la rendición expresado en pesos. Las fichas no entran:
-     * pesos al nominal, y cada moneda extranjera por la cotización de venta de la jornada.
+     * pesos al nominal, y cada moneda extranjera por la cotización del comprobante
+     * si está sellada, o la de venta vigente de la jornada.
      *
      * @param  list<array{codigo: string, titulo: string, filas: \Illuminate\Support\Collection}>  $grupos
      * @param  iterable<int|string, mixed>  $cantidades
@@ -528,8 +548,13 @@ final class TesoreriaCrownCierreCalculo
      *     }>
      * }
      */
-    public static function efectivoEnPesos(int $salaId, string $fecha, array $grupos, iterable $cantidades): array
-    {
+    public static function efectivoEnPesos(
+        int $salaId,
+        string $fecha,
+        array $grupos,
+        iterable $cantidades,
+        ?TesoreriaCrownComprobante $comprobante = null
+    ): array {
         $map = $cantidades instanceof \Illuminate\Support\Collection ? $cantidades->all() : (array) $cantidades;
         $monedas = [];
         $total = 0.0;
@@ -552,9 +577,16 @@ final class TesoreriaCrownCierreCalculo
             $origen = round($origen, 2);
             $extranjera = ! ($tipo->es_moneda_referencia || $tipo->cotizacion_fija);
             if ($extranjera) {
-                $cot = self::cotizacionVenta($salaId, $fecha, (int) $tipo->id);
-                $tasa = $cot['tasa'];
-                $fechaCot = $cot['fecha'];
+                if ($comprobante !== null) {
+                    $tasa = self::tasaDocumento($comprobante, $fecha, $codigo, (int) $tipo->id);
+                    $delDoc = ($codigo === 'USD' && (float) ($comprobante->cotiz_dolar ?? 0) > 0)
+                        || ($codigo === 'EUR' && (float) ($comprobante->cotiz_euro ?? 0) > 0);
+                    $fechaCot = $delDoc ? $fecha : self::cotizacionVenta($salaId, $fecha, (int) $tipo->id)['fecha'];
+                } else {
+                    $cot = self::cotizacionVenta($salaId, $fecha, (int) $tipo->id);
+                    $tasa = $cot['tasa'];
+                    $fechaCot = $cot['fecha'];
+                }
             } else {
                 $tasa = 1.0;
                 $fechaCot = $fecha;
@@ -623,7 +655,7 @@ final class TesoreriaCrownCierreCalculo
     /**
      * Dólar y euro de la sala, con la venta vigente a la fecha de la jornada.
      *
-     * @return list<array{codigo: string, tasa: float, fecha: ?string, exacta: bool}>
+     * @return list<array{codigo: string, tasa: float, fecha: ?string, exacta: bool, del_comprobante: bool}>
      */
     public static function cambiosDelDia(int $salaId, string $fecha): array
     {
@@ -641,8 +673,40 @@ final class TesoreriaCrownCierreCalculo
                 'tasa' => $cot['tasa'],
                 'fecha' => $cot['fecha'],
                 'exacta' => $cot['fecha'] === $fecha,
+                'del_comprobante' => false,
             ];
         }
+
+        return $cambios;
+    }
+
+    /**
+     * Cambios a mostrar en el comprobante: si ya tiene cotización sellada, esa;
+     * si no, la vigente del día (borrador / pendiente de firma).
+     *
+     * @return list<array{codigo: string, tasa: float, fecha: ?string, exacta: bool, del_comprobante: bool}>
+     */
+    public static function cambiosParaComprobante(TesoreriaCrownComprobante $comprobante): array
+    {
+        $comprobante->loadMissing('jornada');
+        $fecha = $comprobante->jornada?->fecha?->format('Y-m-d') ?? now()->format('Y-m-d');
+        $cambios = self::cambiosDelDia((int) $comprobante->sala_id, $fecha);
+        foreach ($cambios as &$cambio) {
+            $codigo = (string) $cambio['codigo'];
+            $tasaDoc = 0.0;
+            if ($codigo === 'USD') {
+                $tasaDoc = (float) ($comprobante->cotiz_dolar ?? 0);
+            } elseif ($codigo === 'EUR') {
+                $tasaDoc = (float) ($comprobante->cotiz_euro ?? 0);
+            }
+            if ($tasaDoc > 0) {
+                $cambio['tasa'] = $tasaDoc;
+                $cambio['fecha'] = $fecha;
+                $cambio['exacta'] = true;
+                $cambio['del_comprobante'] = true;
+            }
+        }
+        unset($cambio);
 
         return $cambios;
     }

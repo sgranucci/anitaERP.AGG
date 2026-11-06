@@ -3103,6 +3103,8 @@ $(function () {
             }
         }
         var conceptoMultiCc = conceptoId > 0 && filasConceptoPorId(conceptoId).length > 1;
+        var cuentaIdFila = parseInt($row.attr('data-cuenta-id') || '0', 10) || 0;
+        var origenFila = String($row.attr('data-origen') || '');
         $('.cp-asiento-centrocosto').each(function () {
             if (this === $sel.get(0)) {
                 return;
@@ -3112,8 +3114,27 @@ $(function () {
             var mismoConcepto = !conceptoMultiCc
                 && conceptoId > 0
                 && (parseInt($otra.attr('data-concepto-ivacompra-id') || '0', 10) || 0) === conceptoId;
-            if (mismoGasto || mismoConcepto) {
+            // Neto / gasto → impuesto interno de la misma cuenta (misma sala A&B).
+            var origenOtra = String($otra.attr('data-origen') || '');
+            var mismaCuentaIi = cuentaIdFila > 0
+                && (parseInt($otra.attr('data-cuenta-id') || '0', 10) || 0) === cuentaIdFila
+                && (
+                    (origenFila === 'neto_manual' || origenFila === 'debe_gasto')
+                    && origenOtra === 'impuesto_interno'
+                );
+            if (mismoGasto || mismoConcepto || mismaCuentaIi) {
                 $(this).val(cc > 0 ? String(cc) : '');
+                if (mismaCuentaIi) {
+                    var conceptoIi = parseInt($otra.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+                    if (conceptoIi > 0) {
+                        escribirCentrocostoConcepto(
+                            conceptoIi,
+                            cc,
+                            null,
+                            codigoCcDesdeTextoOpcion($(this).find('option:selected').text())
+                        );
+                    }
+                }
             }
         });
         if ($row.hasClass('cp-debe-gasto-row')) {

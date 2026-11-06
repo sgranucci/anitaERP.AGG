@@ -157,12 +157,13 @@
             $fechaJornada,
             $grupos,
             $cantidades,
+            $comprobante,
         );
     $monedasPesos = [];
     foreach ($efectivoPesos['monedas'] ?? [] as $monedaPesos) {
         $monedasPesos[$monedaPesos['codigo']] = $monedaPesos;
     }
-    $cambiosDia = \App\Support\Caja\TesoreriaCrownCierreCalculo::cambiosDelDia((int) $comprobante->sala_id, $fechaJornada);
+    $cambiosDia = \App\Support\Caja\TesoreriaCrownCierreCalculo::cambiosParaComprobante($comprobante);
     $totalFinal = $efectivoPesos
         ? \App\Support\Caja\TesoreriaCrownCierreCalculo::totalFinal(
             (float) $efectivoPesos['total'],
@@ -186,7 +187,7 @@
                 </h3>
                 <div class="card-tools d-flex align-items-center" style="gap:.35rem;">
                     @if ($cambiosDia !== [])
-                        <span class="small mr-1" style="opacity:.85;white-space:nowrap;" title="Cotización de venta de la jornada">
+                        <span class="small mr-1" style="opacity:.85;white-space:nowrap;" title="{{ collect($cambiosDia)->contains(fn ($c) => ! empty($c['del_comprobante'])) ? 'Cotización sellada en el comprobante' : 'Cotización de venta de la jornada' }}">
                             @foreach ($cambiosDia as $cambio)
                                 @if (! $loop->first)
                                     ·
@@ -197,7 +198,9 @@
                                         $decimalesCambio = abs($cambio['tasa'] - round($cambio['tasa'], 2)) < 0.0000001 ? 2 : 4;
                                     @endphp
                                     {{ number_format($cambio['tasa'], $decimalesCambio, ',', '.') }}
-                                    @if (! $cambio['exacta'] && $cambio['fecha'])
+                                    @if (! empty($cambio['del_comprobante']))
+                                        <span class="text-muted">(comp.)</span>
+                                    @elseif (! $cambio['exacta'] && $cambio['fecha'])
                                         ({{ \Carbon\Carbon::parse($cambio['fecha'])->format('d/m') }})
                                     @endif
                                 @else

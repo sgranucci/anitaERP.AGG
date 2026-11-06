@@ -51,6 +51,8 @@ class TesoreriaCrownComprobante extends Model implements Auditable
         'venta_voucher',
         'pago_voucher',
         'total_qr',
+        'cotiz_dolar',
+        'cotiz_euro',
         'observacion',
         'entrega_usuario_id',
         'entrega_at',
@@ -88,6 +90,8 @@ class TesoreriaCrownComprobante extends Model implements Auditable
         'venta_voucher' => 'decimal:2',
         'pago_voucher' => 'decimal:2',
         'total_qr' => 'decimal:2',
+        'cotiz_dolar' => 'decimal:4',
+        'cotiz_euro' => 'decimal:4',
     ];
 
     public function sala(): BelongsTo

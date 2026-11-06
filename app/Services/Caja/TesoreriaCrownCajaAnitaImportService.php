@@ -48,8 +48,8 @@ class TesoreriaCrownCajaAnitaImportService
         }
         $excepto = array_fill_keys($excepto, true);
         $efectivo = $this->consultar(
-            'efe_nro_oper,efe_tipo_oper,efe_caja,efe_cajero,efe_hora,efe_total_x,efe_fallo_mozo,efe_nro_z,efe_ult_ticket,efe_invitacion,efe_total_z,efe_tot_tarj,efe_nro_z_cash,efe_total_z_cash,efe_tot_parc_cash,efe_venta_online,efe_pago_online,efe_tarjeta_debito,efe_pago_voucher,efe_recargo_fin,efe_total_qr,efe_vta_apu_dep,efe_pago_apu_dep,efe_tk_inicial,efe_tk_final,efe_tot_carga,efe_tot_descarga',
-            'SELECT efe_nro_oper, efe_tipo_oper, efe_caja, efe_cajero, efe_hora, efe_total_x, efe_fallo_mozo, efe_nro_z, efe_ult_ticket, efe_invitacion, efe_total_z, efe_tot_tarj, efe_nro_z_cash, efe_total_z_cash, efe_tot_parc_cash, efe_venta_online, efe_pago_online, efe_tarjeta_debito, efe_pago_voucher, efe_recargo_fin, efe_total_qr, efe_vta_apu_dep, efe_pago_apu_dep, efe_tk_inicial, efe_tk_final, efe_tot_carga, efe_tot_descarga'
+            'efe_nro_oper,efe_tipo_oper,efe_caja,efe_cajero,efe_hora,efe_total_x,efe_fallo_mozo,efe_nro_z,efe_ult_ticket,efe_invitacion,efe_total_z,efe_tot_tarj,efe_nro_z_cash,efe_total_z_cash,efe_tot_parc_cash,efe_venta_online,efe_pago_online,efe_tarjeta_debito,efe_pago_voucher,efe_recargo_fin,efe_total_qr,efe_vta_apu_dep,efe_pago_apu_dep,efe_tk_inicial,efe_tk_final,efe_tot_carga,efe_tot_descarga,efe_cotiz_dolar,efe_cotiz_euro',
+            'SELECT efe_nro_oper, efe_tipo_oper, efe_caja, efe_cajero, efe_hora, efe_total_x, efe_fallo_mozo, efe_nro_z, efe_ult_ticket, efe_invitacion, efe_total_z, efe_tot_tarj, efe_nro_z_cash, efe_total_z_cash, efe_tot_parc_cash, efe_venta_online, efe_pago_online, efe_tarjeta_debito, efe_pago_voucher, efe_recargo_fin, efe_total_qr, efe_vta_apu_dep, efe_pago_apu_dep, efe_tk_inicial, efe_tk_final, efe_tot_carga, efe_tot_descarga, efe_cotiz_dolar, efe_cotiz_euro'
             .' FROM efectivo WHERE efe_fecha = '.$fechaInt.' AND efe_tipo_oper IN ("I","F") ORDER BY efe_caja, efe_nro_oper'
         );
         $porCaja = [];
@@ -383,7 +383,16 @@ class TesoreriaCrownCajaAnitaImportService
             'venta_voucher' => $tarea === 'R' ? 0 : round((float) $fila->efe_tot_descarga, 2),
             'pago_voucher' => round((float) $fila->efe_pago_voucher, 2),
             'total_qr' => round((float) $fila->efe_total_qr, 2),
+            'cotiz_dolar' => self::cotizacionOpcional($fila->efe_cotiz_dolar ?? null),
+            'cotiz_euro' => self::cotizacionOpcional($fila->efe_cotiz_euro ?? null),
         ];
+    }
+
+    private static function cotizacionOpcional(mixed $valor): ?float
+    {
+        $tasa = round((float) $valor, 4);
+
+        return $tasa > 0 ? $tasa : null;
     }
 
     /**

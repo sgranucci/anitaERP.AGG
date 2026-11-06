@@ -2,6 +2,7 @@
 
 namespace App\Support\Caja;
 
+use App\Models\Caja\TesoreriaCrownComprobante;
 use App\Models\Caja\TesoreriaCrownValor;
 use Illuminate\Support\Collection;
 
@@ -56,6 +57,38 @@ class TesoreriaCrownComprobanteSupport
     public static function estado(string $codigo): string
     {
         return self::ESTADOS[$codigo] ?? $codigo;
+    }
+
+    /**
+     * Congela dólar/euro vigentes de la jornada en el comprobante.
+     * No pisa una cotización ya grabada (import Anita o sello previo).
+     */
+    public static function sellarCotizacionVigente(TesoreriaCrownComprobante $comprobante): void
+    {
+        $comprobante->loadMissing('jornada');
+        $fecha = $comprobante->jornada?->fecha;
+        if ($fecha === null) {
+            return;
+        }
+        $fechaYmd = $fecha instanceof \DateTimeInterface
+            ? $fecha->format('Y-m-d')
+            : substr((string) $fecha, 0, 10);
+        if ($fechaYmd === '') {
+            return;
+        }
+        foreach (TesoreriaCrownCierreCalculo::cambiosDelDia((int) $comprobante->sala_id, $fechaYmd) as $cambio) {
+            $tasa = (float) ($cambio['tasa'] ?? 0);
+            if ($tasa <= 0) {
+                continue;
+            }
+            $codigo = (string) ($cambio['codigo'] ?? '');
+            if ($codigo === 'USD' && (float) ($comprobante->cotiz_dolar ?? 0) <= 0) {
+                $comprobante->cotiz_dolar = round($tasa, 4);
+            }
+            if ($codigo === 'EUR' && (float) ($comprobante->cotiz_euro ?? 0) <= 0) {
+                $comprobante->cotiz_euro = round($tasa, 4);
+            }
+        }
     }
 
     /**

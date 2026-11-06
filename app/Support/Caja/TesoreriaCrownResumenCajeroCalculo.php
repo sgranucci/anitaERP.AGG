@@ -312,9 +312,9 @@ final class TesoreriaCrownResumenCajeroCalculo
 
                 continue;
             }
-            $cot = TesoreriaCrownCierreCalculo::cotizacionVenta((int) $doc->sala_id, $fecha, (int) $tipo->id);
-            if ($cot['tasa'] > 0) {
-                $efectivo += $importe * $cot['tasa'];
+            $tasa = TesoreriaCrownCierreCalculo::tasaDocumento($doc, $fecha, $codigo, (int) $tipo->id);
+            if ($tasa > 0) {
+                $efectivo += $importe * $tasa;
             }
         }
 
