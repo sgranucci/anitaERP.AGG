@@ -38,13 +38,13 @@ class StockRecepcionProveedorIngresadaAvisoHandler implements ModuloAvisoDespach
         $emails = $this->moduloAvisoService->resolverEmailsDestinatarios($tipo, $filtro);
 
         if (! $rec->fl_laboratorio) {
-            $emailReq = RecepcionProveedorRequisicionEmailSupport::emailSolicitanteOc($rec);
+            $emailReq = RecepcionProveedorRequisicionEmailSupport::emailSolicitanteOcParaAviso($rec);
             if ($emailReq !== null && $emailReq !== '') {
                 $emails[] = strtolower($emailReq);
             }
         }
 
-        $emails = array_values(array_unique(array_filter($emails)));
+        $emails = RecepcionProveedorRequisicionEmailSupport::filtrarEmailsAviso($emails);
 
         if ($emails === []) {
             Log::info('RecepcionProveedorIngresada: sin destinatarios', ['recepcion_id' => $entityId]);

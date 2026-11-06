@@ -595,6 +595,7 @@ class ComprobanteProveedorAsientoService
                 $ccLinea = (int) ($linea->centrocosto_id ?? 0);
                 $yaRepartido = $conceptoIdLinea > 0 && count($conceptosCcDistintos[$conceptoIdLinea] ?? []) >= 2;
                 $pesosIva = [];
+                $inicialTipoIva = null;
                 if (strtoupper($tipoConcepto) === 'I' && ! $yaRepartido) {
                     $pesosIva = ComprobanteProveedorCentrocostoSupport::pesosIvaSinOc(
                         $pesosGastoIva,
@@ -603,6 +604,10 @@ class ComprobanteProveedorAsientoService
                     if (count($pesosIva) >= 2) {
                         $ccLinea = 0;
                     }
+                    $inicialTipoIva = ComprobanteProveedorCentrocostoSupport::inicialTipoIvaConceptoIva(
+                        $comprobante,
+                        $conceptoIdLinea
+                    );
                 }
                 $trozosCc = ComprobanteProveedorCentrocostoSupport::repartirImpuesto(
                     $cuentaId,
@@ -611,6 +616,7 @@ class ComprobanteProveedorAsientoService
                     $ccLinea,
                     $yaRepartido,
                     $pesosIva,
+                    $inicialTipoIva,
                 );
             }
             foreach ($trozosCc as $trozoCc) {

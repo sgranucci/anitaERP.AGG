@@ -34,7 +34,7 @@ class StockRecepcionProveedorEncuestaAvisoHandler implements ModuloAvisoDespacho
             'ordencompras.usuarios',
         ]);
 
-        $email = RecepcionProveedorRequisicionEmailSupport::emailSolicitanteOc($rec);
+        $email = RecepcionProveedorRequisicionEmailSupport::emailSolicitanteOcParaAviso($rec);
         if ($email === null || $email === '') {
             Log::info('RecepcionProveedorEncuesta: sin email destinatario', ['recepcion_id' => $entityId]);
 

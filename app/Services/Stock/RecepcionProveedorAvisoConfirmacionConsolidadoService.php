@@ -197,7 +197,9 @@ class RecepcionProveedorAvisoConfirmacionConsolidadoService
     ): array {
         // La encuesta nunca fue a la lista del ABM: siempre apuntó al solicitante de la OC.
         if ($codigo === self::CODIGO_ENCUESTA) {
-            return $emailSolicitante !== null ? [$emailSolicitante] : [];
+            return $emailSolicitante !== null
+                ? RecepcionProveedorRequisicionEmailSupport::filtrarEmailsAviso([$emailSolicitante])
+                : [];
         }
 
         $emails = $this->moduloAvisoService->resolverEmailsDestinatarios($tipo, $filtro);
@@ -207,12 +209,12 @@ class RecepcionProveedorAvisoConfirmacionConsolidadoService
             $emails[] = $emailSolicitante;
         }
 
-        return array_values(array_unique(array_filter($emails)));
+        return RecepcionProveedorRequisicionEmailSupport::filtrarEmailsAviso($emails);
     }
 
     private function emailSolicitante(Recepcion_Proveedor $recepcion): ?string
     {
-        $email = RecepcionProveedorRequisicionEmailSupport::emailSolicitanteOc($recepcion);
+        $email = RecepcionProveedorRequisicionEmailSupport::emailSolicitanteOcParaAviso($recepcion);
         if ($email === null || trim($email) === '') {
             return null;
         }

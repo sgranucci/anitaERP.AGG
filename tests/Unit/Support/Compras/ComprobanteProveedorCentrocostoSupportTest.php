@@ -156,4 +156,29 @@ class ComprobanteProveedorCentrocostoSupportTest extends TestCase
         $this->assertSame(10.0, round(array_sum(array_column($trozos, 'importe')), 2));
         $this->assertSame(3.34, $trozos[2]['importe']);
     }
+
+    public function test_iva_no_computable_no_reparte_a_centros_indirectos(): void
+    {
+        $pesos = [
+            5 => 48862.85,  // 89 No computable
+            6 => 70196.05,  // 90 Indirecto
+            9 => 68252.54,  // 93 No computable
+            12 => 39089.73, // 97 Indirecto
+            13 => 92101.48, // 98 Indirecto
+        ];
+        $tipos = [
+            5 => 'No computable',
+            6 => 'Indirecto',
+            9 => 'No computable',
+            12 => 'Indirecto',
+            13 => 'Indirecto',
+        ];
+
+        $filtrados = ComprobanteProveedorCentrocostoSupport::filtrarPesosPorTipoIvaConocido($pesos, $tipos, 'N');
+        $trozos = ComprobanteProveedorCentrocostoSupport::trozosImpuesto(true, 0, $filtrados, 24594.26);
+
+        $this->assertSame([5, 9], array_column($trozos, 'centrocosto_id'));
+        $this->assertSame(24594.26, round(array_sum(array_column($trozos, 'importe')), 2));
+        $this->assertNotContains(6, array_column($trozos, 'centrocosto_id'));
+    }
 }

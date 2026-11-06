@@ -97,6 +97,16 @@ return [
         FILTER_VALIDATE_BOOLEAN
     ),
 
+    /*
+    | Mails que no reciben avisos de confirmación de recepción (ingreso, encuesta y
+    | novedades consolidadas), aunque sean solicitante de la OC o estén en el ABM.
+    | Lista separada por coma. Vacío = sin exclusiones.
+    */
+    'avisos_excluir_emails' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('RECEPCION_PROVEEDOR_AVISOS_EXCLUIR_EMAILS', ''))
+    ))),
+
     'encuesta_id' => (int) env('RECEPCION_PROVEEDOR_ENCUESTA_ID', 1),
 
     /*

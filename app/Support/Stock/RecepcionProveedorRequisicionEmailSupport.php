@@ -29,4 +29,73 @@ final class RecepcionProveedorRequisicionEmailSupport
 
         return trim((string) (optional($oc->usuarios)->email ?? '')) ?: null;
     }
+
+    /**
+     * Solicitante de la OC para avisos de recepción (ingreso / encuesta).
+     * Respeta RECEPCION_PROVEEDOR_AVISOS_EXCLUIR_EMAILS.
+     */
+    public static function emailSolicitanteOcParaAviso(Recepcion_Proveedor $recepcion): ?string
+    {
+        $email = self::emailSolicitanteOc($recepcion);
+        if ($email === null || $email === '') {
+            return null;
+        }
+
+        return self::estaExcluidoDeAviso($email) ? null : $email;
+    }
+
+    /** @return list<string> */
+    public static function emailsExcluidosAviso(): array
+    {
+        $raw = config('recepcion_proveedor.avisos_excluir_emails', []);
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($raw as $email) {
+            $email = strtolower(trim((string) $email));
+            if ($email !== '') {
+                $out[] = $email;
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    public static function estaExcluidoDeAviso(string $email): bool
+    {
+        $email = strtolower(trim($email));
+        if ($email === '') {
+            return false;
+        }
+
+        return in_array($email, self::emailsExcluidosAviso(), true);
+    }
+
+    /**
+     * @param  list<string>  $emails
+     * @return list<string>
+     */
+    public static function filtrarEmailsAviso(array $emails): array
+    {
+        $excluidos = self::emailsExcluidosAviso();
+        if ($excluidos === []) {
+            return array_values(array_unique(array_filter(array_map(
+                static fn ($e) => strtolower(trim((string) $e)),
+                $emails
+            ))));
+        }
+
+        $out = [];
+        foreach ($emails as $email) {
+            $email = strtolower(trim((string) $email));
+            if ($email === '' || in_array($email, $excluidos, true)) {
+                continue;
+            }
+            $out[] = $email;
+        }
+
+        return array_values(array_unique($out));
+    }
 }
