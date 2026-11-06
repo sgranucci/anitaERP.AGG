@@ -254,6 +254,20 @@
                 $tratamientoValorActual = old('tratamiento', (isset($data) && $data) ? $data->tratamiento : 'NO ANTICIPADA');
                 $tratamientoBloqueado = !empty($tratamiento_bloqueado_por_movimientos) && !$soloLectura;
                 $tratamientoDisabled = $soloLectura || $tratamientoBloqueado;
+                $estadoOcActual = (isset($data) && $data) ? (string) ($data->estadoordencompra ?? '') : \App\Support\Compras\OrdencompraEstados::PENDIENTE;
+                $pctAnticipoValor = old('pct_anticipo', (isset($data) && $data) ? $data->pct_anticipo : null);
+                $pctYaCargado = $pctAnticipoValor !== null && $pctAnticipoValor !== '' && (float) $pctAnticipoValor > 0;
+                $estadoEditablePct = in_array($estadoOcActual, [
+                    \App\Support\Compras\OrdencompraEstados::PENDIENTE,
+                    \App\Support\Compras\OrdencompraEstados::SUSPENDIDA,
+                ], true);
+                $puedeCompletarPctAprobada = \App\Support\Compras\ComprobanteProveedorAnticipoPctSupport::puedeCompletarPctOcAprobada();
+                $ocAprobadaSinPct = $estadoOcActual === \App\Support\Compras\OrdencompraEstados::APROBADA && ! $pctYaCargado;
+                $pctAnticipoBloqueado = $soloLectura
+                    || ($pctYaCargado && ! $estadoEditablePct)
+                    || ($ocAprobadaSinPct && ! $puedeCompletarPctAprobada)
+                    || (! $estadoEditablePct && ! $ocAprobadaSinPct);
+                $esTratamientoAnticipada = \App\Support\Compras\OrdencompraTratamientoMovimientosSupport::esTratamientoAnticipado($tratamientoValorActual);
             @endphp
             <div class="form-group row">
                 <label for="tratamiento" class="col-lg-4 control-label text-right pr-2 requerido">Tratamiento</label>
@@ -285,6 +299,34 @@
                 <div class="col-lg-2">
                     <input type="text" id="numeroordencompra_show" class="form-control" readonly tabindex="-1" aria-readonly="true"
                         value="{{ (isset($data) && $data) ? $data->numeroordencompra : (isset($proximoNumeroordencompra) ? $proximoNumeroordencompra : '') }}">
+                </div>
+            </div>
+
+            <div class="form-group row js-oc-pct-anticipo-row" @if (!$esTratamientoAnticipada) style="display:none;" @endif>
+                <label for="pct_anticipo" class="col-lg-4 control-label text-right pr-2 requerido">% de anticipo</label>
+                <div class="col-lg-2">
+                    @if ($pctAnticipoBloqueado)
+                        <input type="hidden" name="pct_anticipo" value="{{ $pctAnticipoValor }}">
+                    @endif
+                    <input type="number" step="0.01" min="0.01" max="100"
+                        id="pct_anticipo"
+                        class="form-control"
+                        value="{{ $pctAnticipoValor !== null && $pctAnticipoValor !== '' ? $pctAnticipoValor : '' }}"
+                        placeholder="Ej. 50"
+                        @if (!$pctAnticipoBloqueado)
+                            name="pct_anticipo"
+                        @else
+                            readonly
+                        @endif
+                    >
+                    <small class="form-text text-muted">
+                        Solo aplica si el tratamiento es ANTICIPADA. Queda fijo al aprobar la OC.
+                        @if ($ocAprobadaSinPct && $puedeCompletarPctAprobada)
+                            OC aprobada sin %: Compras puede completarlo una sola vez.
+                        @elseif ($ocAprobadaSinPct)
+                            OC aprobada sin %: solo Compras puede completarlo.
+                        @endif
+                    </small>
                 </div>
             </div>
 

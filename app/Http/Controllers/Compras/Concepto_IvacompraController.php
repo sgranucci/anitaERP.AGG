@@ -300,6 +300,8 @@ class Concepto_IvacompraController extends Controller
             ?? ''
         ));
         $numeroOc = $numeroOc !== '' ? $numeroOc : null;
+        $letra = strtoupper(substr(trim((string) $request->input('letra', '')), 0, 1));
+        $letra = $letra !== '' ? $letra : null;
 
         if ($tipoId <= 0) {
             return response()->json([
@@ -311,14 +313,17 @@ class Concepto_IvacompraController extends Controller
         if (! ConceptoIvacompraConsultaSupport::tipoTieneConceptosConfigurados($tipoId, $numeroOc)) {
             return response()->json([
                 'data' => $this->htmlFilasConsultaConcepto(
-                    ConceptoIvacompraConsultaSupport::listarCatalogo($consulta)
+                    ConceptoIvacompraConsultaSupport::filtrarPorLetraComprobante(
+                        ConceptoIvacompraConsultaSupport::listarCatalogo($consulta),
+                        $letra
+                    )
                 ),
                 'sin_config' => true,
                 'catalogo' => true,
             ]);
         }
 
-        $conceptos = ConceptoIvacompraConsultaSupport::listarPorTipoTransaccion($tipoId, $consulta, $numeroOc);
+        $conceptos = ConceptoIvacompraConsultaSupport::listarPorTipoTransaccion($tipoId, $consulta, $numeroOc, $letra);
         if ($conceptos->isEmpty()) {
             return response()->json([
                 'data' => '<tr><td colspan="5" class="text-muted">Sin resultados</td></tr>',
@@ -361,10 +366,17 @@ class Concepto_IvacompraController extends Controller
             ?? ''
         ));
         $numeroOc = $numeroOc !== '' ? $numeroOc : null;
+        $letra = strtoupper(substr(trim((string) $request->input('letra', '')), 0, 1));
+        $letra = $letra !== '' ? $letra : null;
 
-        $concepto = ConceptoIvacompraConsultaSupport::resolverPorCodigoOId($tipoId, $valor, $numeroOc);
+        $concepto = ConceptoIvacompraConsultaSupport::resolverPorCodigoOId($tipoId, $valor, $numeroOc, $letra);
         if (! $concepto && ! ConceptoIvacompraConsultaSupport::tipoTieneConceptosConfigurados($tipoId, $numeroOc)) {
             $concepto = ConceptoIvacompraConsultaSupport::resolverCatalogo($valor);
+            if ($concepto && $letra !== null
+                && ConceptoIvacompraConsultaSupport::filtrarPorLetraComprobante(collect([$concepto]), $letra)->isEmpty()
+            ) {
+                $concepto = null;
+            }
         }
         if (! $concepto) {
             return response()->json([

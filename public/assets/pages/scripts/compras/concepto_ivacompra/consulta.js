@@ -30,6 +30,11 @@ function numeroOcConsultaConceptoIva() {
     return String($('#numeroordencompra').val() || $('input[name="numeroordencompra"]').val() || '').trim();
 }
 
+function letraConsultaConceptoIva() {
+    var v = String($('#letra').val() || $('#ie-cp-letra').val() || '').toUpperCase().trim().charAt(0);
+    return v || '';
+}
+
 function actualizarAvisoModalConceptoIva(tipoId) {
     var $aviso = $('#consultaconcepto_ivacompra-aviso');
     if (!$aviso.length) {
@@ -37,9 +42,17 @@ function actualizarAvisoModalConceptoIva(tipoId) {
     }
     if (tipoId > 0) {
         var oc = numeroOcConsultaConceptoIva();
+        var letra = letraConsultaConceptoIva();
+        var letraTxt = '';
+        if (letra === 'C') {
+            letraTxt = ' · letra C (monotributo / exento)';
+        } else if (letra) {
+            letraTxt = ' · letra ' + letra + ' (sin monotributo)';
+        }
         $aviso.text(
             'Filtrado por tipo de comprobante id ' + tipoId
             + (oc ? ' · OC ' + oc + ' (unión multi-CC si aplica)' : '')
+            + letraTxt
             + '.'
         );
     } else {
@@ -60,6 +73,10 @@ function buscar_datos_concepto_ivacompra(consulta) {
     var numeroOc = numeroOcConsultaConceptoIva();
     if (numeroOc) {
         data.numero_oc = numeroOc;
+    }
+    var letra = letraConsultaConceptoIva();
+    if (letra) {
+        data.letra = letra;
     }
 
     $.ajax({
@@ -137,6 +154,10 @@ function resolverConceptoIvacompraPorCodigo($input) {
     var numeroOcResolver = numeroOcConsultaConceptoIva();
     if (numeroOcResolver) {
         dataResolver.numero_oc = numeroOcResolver;
+    }
+    var letraResolver = letraConsultaConceptoIva();
+    if (letraResolver) {
+        dataResolver.letra = letraResolver;
     }
 
     $.ajax({

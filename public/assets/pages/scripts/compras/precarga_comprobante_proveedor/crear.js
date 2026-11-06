@@ -14,6 +14,9 @@
             actualizarTipoComprobante();
             filtrarConceptosPorTipo(true);
         });
+        $('#letra').on('change', function () {
+            filtrarConceptosPorTipo(true);
+        });
         $('#moneda_id').on('change', sincronizarCotizacionPorMoneda);
         $('#fechafactura').on('change', function () {
             if (parseInt($('#moneda_id').val() || '1', 10) > 1) {
@@ -96,6 +99,10 @@
         }
         if (reubicar && ids.length) {
             params['desde_ids[]'] = ids;
+        }
+        var letra = String($('#letra').val() || '').toUpperCase().trim().charAt(0);
+        if (letra) {
+            params.letra = letra;
         }
         var base = (typeof carpetaBase !== 'undefined' && carpetaBase) ? carpetaBase : '';
         $.getJSON(base + '/compras/tipotransaccion_compra/' + tipoId + '/conceptos-iva', params)

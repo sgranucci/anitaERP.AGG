@@ -320,6 +320,19 @@ class AsientoRepository implements AsientoRepositoryInterface
             throw new \InvalidArgumentException('Falta numeroasiento para sincronizar ctamov en Anita.');
         }
 
+        // Nativo Anita (FAC/COM/OP en subdiario/subhist): el mayor lee el detalle ahí.
+        // Reescribir ctamov con asi_mon_ref=-1 deja una copia ERP encima del subdiario y duplica.
+        $origenAnita = strtolower(trim((string) ($data['anita_origen'] ?? '')));
+        if (in_array($origenAnita, ['subdiario', 'subhist'], true)) {
+            Log::info('asiento_ctamov.omitido_origen_nativo_anita', [
+                'empresa_id' => (int) ($data['empresa_id'] ?? 0),
+                'numeroasiento' => (string) ($data['numeroasiento'] ?? ''),
+                'anita_origen' => $origenAnita,
+            ]);
+
+            return;
+        }
+
         $this->asignarPathSistema($data);
 
         // El alta de un circuito (factura, cobranza, etc.) trae alcance explícito y sigue

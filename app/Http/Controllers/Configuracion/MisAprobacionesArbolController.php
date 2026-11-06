@@ -560,6 +560,60 @@ class MisAprobacionesArbolController extends Controller
         return $this->redirectTrasAccion($request, 'La factura sigue en borrador. No se contabilizó.');
     }
 
+    public function verAnticipoDesvioFactura($id)
+    {
+        $this->asegurarAccesoBandeja();
+        $usuarioId = (int) (auth()->id() ?? 0);
+        if (! \App\Support\Compras\ComprobanteProveedorAnticipoPctSupport::esDestinatario($usuarioId)) {
+            abort(403);
+        }
+
+        $comprobante = \App\Models\Compras\Comprobante_Proveedor::query()->findOrFail((int) $id);
+        $datos = app(\App\Services\Compras\ComprobanteProveedorAnticipoDesvioAvisoService::class)
+            ->comprobantesImplicados($comprobante);
+        $fila = $datos['fila'];
+
+        return view('configuracion.mis_aprobaciones_arbol.anticipo_desvio_factura', $datos + [
+            'urlBandeja' => url('mis-aprobaciones?fuente=anticipo_desvio_factura'),
+            'urlAprobar' => url('mis-aprobaciones/anticipo-desvio-factura/'.$comprobante->id.'/aprobar'),
+            'urlRechazar' => url('mis-aprobaciones/anticipo-desvio-factura/'.$comprobante->id.'/rechazar'),
+            'pendiente' => $fila
+                && $fila->estado === \App\Models\Compras\Comprobante_Proveedor_Anticipo_Desvio::ESTADO_PENDIENTE,
+        ]);
+    }
+
+    public function aprobarAnticipoDesvioFactura(Request $request, $id)
+    {
+        $this->asegurarAccesoBandeja();
+
+        try {
+            app(\App\Services\Compras\ComprobanteProveedorAnticipoDesvioAvisoService::class)
+                ->aprobar((int) $id, (int) (auth()->id() ?? 0), (string) $request->input('motivo', ''));
+        } catch (\Throwable $e) {
+            return redirect()->to($this->urlRedirect($request))->with('error', $e->getMessage());
+        }
+
+        $this->userTaskBandejaService->invalidarContador();
+
+        return $this->redirectTrasAccion($request, 'Desvío de anticipo liberado y factura contabilizada.');
+    }
+
+    public function rechazarAnticipoDesvioFactura(Request $request, $id)
+    {
+        $this->asegurarAccesoBandeja();
+
+        try {
+            app(\App\Services\Compras\ComprobanteProveedorAnticipoDesvioAvisoService::class)
+                ->rechazar((int) $id, (int) (auth()->id() ?? 0), (string) $request->input('motivo', ''));
+        } catch (\Throwable $e) {
+            return redirect()->to($this->urlRedirect($request))->with('error', $e->getMessage());
+        }
+
+        $this->userTaskBandejaService->invalidarContador();
+
+        return $this->redirectTrasAccion($request, 'La factura sigue en borrador. No se contabilizó.');
+    }
+
     public function aprobarTransferencia(Request $request, $id)
     {
         can('aprobar-transferencia-mercaderia');

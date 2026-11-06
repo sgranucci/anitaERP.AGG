@@ -332,6 +332,13 @@ jQuery(function ($) {
                                         </select>
                                     </div>
                                 </div>
+                                <div class="form-group row mb-2 js-wz-pct-anticipo-row" style="display:none;">
+                                    <label class="col-lg-4 col-form-label requerido" for="wz_pct_anticipo">% de anticipo</label>
+                                    <div class="col-lg-8">
+                                        <input type="number" step="0.01" min="0.01" max="100" id="wz_pct_anticipo" class="form-control form-control-sm" placeholder="Ej. 50" value="{{ $wizardPlantilla['pct_anticipo'] ?? '' }}">
+                                        <small class="form-text text-muted">Solo si el tratamiento es ANTICIPADA.</small>
+                                    </div>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="form-group row mb-2">

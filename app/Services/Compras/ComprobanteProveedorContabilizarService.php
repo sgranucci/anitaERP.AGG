@@ -21,6 +21,7 @@ use App\Support\Compras\ComprobanteProveedorEscrituraLock;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorIngresoEgresoEdicionSupport;
+use App\Support\Compras\ComprobanteProveedorNetoCuentaIvaSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
@@ -253,6 +254,8 @@ class ComprobanteProveedorContabilizarService
 
         app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
             ->assertPuedeContabilizar($comprobante);
+        app(\App\Services\Compras\ComprobanteProveedorAnticipoDesvioAvisoService::class)
+            ->assertPuedeContabilizar($comprobante);
 
         app(ContratoValidacionAbonoService::class)->assertComprobanteContabilizable($comprobante);
 
@@ -261,6 +264,7 @@ class ComprobanteProveedorContabilizarService
         }
 
         $this->assertIvaDelTipo($comprobante);
+        ComprobanteProveedorNetoCuentaIvaSupport::assertComprobante($comprobante);
         $this->alinearIvaProrrateoDesdeOcSiCorresponde($comprobante);
 
         // Total desfasado de conceptos (ej. solo EXENTO con total=1): alinear y persistir
@@ -396,6 +400,8 @@ class ComprobanteProveedorContabilizarService
 
                 app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
                     ->marcarContabilizado($comprobante, 0);
+                app(\App\Services\Compras\ComprobanteProveedorAnticipoDesvioAvisoService::class)
+                    ->marcarContabilizado($comprobante);
 
                 return $comprobante->fresh();
             }
@@ -418,6 +424,8 @@ class ComprobanteProveedorContabilizarService
 
                 app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
                     ->marcarContabilizado($comprobante, (int) ($resultadoErp['asiento_id'] ?? 0));
+                app(\App\Services\Compras\ComprobanteProveedorAnticipoDesvioAvisoService::class)
+                    ->marcarContabilizado($comprobante);
 
                 return $comprobante->fresh();
             }
@@ -448,6 +456,8 @@ class ComprobanteProveedorContabilizarService
 
             app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
                 ->marcarContabilizado($comprobante, (int) ($resultadoErp['asiento_id'] ?? 0));
+            app(\App\Services\Compras\ComprobanteProveedorAnticipoDesvioAvisoService::class)
+                ->marcarContabilizado($comprobante);
 
             return $comprobante->fresh();
         } catch (Throwable $e) {

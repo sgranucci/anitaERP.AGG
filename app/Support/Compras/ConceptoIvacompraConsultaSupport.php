@@ -13,6 +13,9 @@ use Illuminate\Support\Collection;
  * Lista conceptos IVA compra del tipo de comprobante (pivot).
  * Tipos prorrateados (FPB/CPB/…): el F1 y la plantilla vacía listan la unión
  * de los finos de la OC. Si la precarga ya trae renglones, esos mandan.
+ *
+ * Letra del comprobante (A/B vs C): la plantilla y el F1 ocultan lo que no
+ * aplica — en C no aparecen gravados/IVA; en A/B no aparece monotributo.
  */
 final class ConceptoIvacompraConsultaSupport
 {
@@ -23,6 +26,7 @@ final class ConceptoIvacompraConsultaSupport
         int $tipotransaccionCompraId,
         ?string $consulta = null,
         ?string $numeroOc = null,
+        ?string $letra = null,
     ): Collection {
         if ($tipotransaccionCompraId <= 0) {
             return collect();
@@ -51,11 +55,58 @@ final class ConceptoIvacompraConsultaSupport
         }
 
         // Dedup por id (unión multi-fino puede repetir el mismo concepto).
-        return $query
+        $lista = $query
             ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))
             ->orderBy('nombre')
             ->get()
             ->unique('id')
+            ->values();
+
+        return self::filtrarPorLetraComprobante($lista, $letra);
+    }
+
+    /**
+     * Concepto de precio en factura C / monotributo (no discrimina IVA).
+     * Se identifica por nombre (portable entre entornos; el código Anita varía).
+     */
+    public static function esConceptoMonotributo(object $concepto): bool
+    {
+        $nombre = mb_strtolower(trim((string) ($concepto->nombre ?? '')));
+
+        return $nombre !== '' && str_contains($nombre, 'monotribut');
+    }
+
+    /**
+     * Filtra la plantilla / F1 según la letra del comprobante.
+     *
+     * - C: solo monotributo y exento/no gravado (sin gravados ni IVA).
+     * - A/B/otras: todo excepto monotributo.
+     * - Vacía: sin filtro (carga intermedia sin letra aún).
+     *
+     * @param  Collection<int, Concepto_Ivacompra>|Collection<int, object>  $lista
+     * @return Collection<int, Concepto_Ivacompra>|Collection<int, object>
+     */
+    public static function filtrarPorLetraComprobante(Collection $lista, ?string $letra): Collection
+    {
+        $letra = strtoupper(substr(trim((string) $letra), 0, 1));
+        if ($letra === '') {
+            return $lista->values();
+        }
+
+        if ($letra === 'C') {
+            return $lista->filter(static function (object $concepto): bool {
+                if (self::esConceptoMonotributo($concepto)) {
+                    return true;
+                }
+
+                return ComprobanteProveedorConceptoIvaTipos::esExento(
+                    (string) ($concepto->tipoconcepto ?? ''),
+                    (string) ($concepto->codigo ?? '')
+                );
+            })->values();
+        }
+
+        return $lista->reject(static fn (object $concepto): bool => self::esConceptoMonotributo($concepto))
             ->values();
     }
 
@@ -63,13 +114,14 @@ final class ConceptoIvacompraConsultaSupport
         int $tipotransaccionCompraId,
         string $valor,
         ?string $numeroOc = null,
+        ?string $letra = null,
     ): ?Concepto_Ivacompra {
         $valor = trim($valor);
         if ($tipotransaccionCompraId <= 0 || $valor === '') {
             return null;
         }
 
-        $lista = self::listarPorTipoTransaccion($tipotransaccionCompraId, null, $numeroOc);
+        $lista = self::listarPorTipoTransaccion($tipotransaccionCompraId, null, $numeroOc, $letra);
         if ($lista->isEmpty()) {
             return null;
         }
@@ -116,12 +168,13 @@ final class ConceptoIvacompraConsultaSupport
     public static function renglonesPlantillaParaTipo(
         int $tipotransaccionCompraId,
         ?string $numeroOc = null,
+        ?string $letra = null,
     ): Collection {
         if ($tipotransaccionCompraId <= 0) {
             return collect();
         }
 
-        $lista = self::listarPorTipoTransaccion($tipotransaccionCompraId, null, $numeroOc);
+        $lista = self::listarPorTipoTransaccion($tipotransaccionCompraId, null, $numeroOc, $letra);
         if ($lista->isEmpty()) {
             return collect();
         }

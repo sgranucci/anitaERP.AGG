@@ -153,10 +153,20 @@ class OrdencompraLegajoBandejaPaqueteService
             }
         }
 
+        $esAnticipada = \App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc);
+        $pctAnticipo = $esAnticipada
+            ? \App\Support\Compras\ComprobanteProveedorAnticipoPctSupport::pctAnticipoOc($oc)
+            : 0.0;
+        $importeAnticipoEsperado = ($esAnticipada && $pctAnticipo > 0)
+            ? \App\Support\Compras\ComprobanteProveedorAnticipoPctSupport::importeEsperado($oc)
+            : null;
+
         return [
             'ordencompra_id' => (int) $oc->id,
             'numero' => (string) $oc->numeroordencompra,
-            'es_anticipada' => \App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc),
+            'es_anticipada' => $esAnticipada,
+            'pct_anticipo' => $pctAnticipo,
+            'importe_anticipo_esperado' => $importeAnticipoEsperado,
             'permite_asignar_com' => ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado($oc),
             'mensaje_bloquea_com_anticipada' => ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado($oc)
                 ? null

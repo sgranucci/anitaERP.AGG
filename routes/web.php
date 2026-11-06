@@ -1152,6 +1152,9 @@ Route::middleware('auth')->group(function () {
     Route::get('mis-aprobaciones/diferencia-cambio-factura/{id}', 'Configuracion\MisAprobacionesArbolController@verDiferenciaCambioFactura')->name('ver_difcambio_factura_mis_aprobaciones');
     Route::post('mis-aprobaciones/diferencia-cambio-factura/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarDiferenciaCambioFactura')->name('aprobar_difcambio_factura_mis_aprobaciones');
     Route::post('mis-aprobaciones/diferencia-cambio-factura/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarDiferenciaCambioFactura')->name('rechazar_difcambio_factura_mis_aprobaciones');
+    Route::get('mis-aprobaciones/anticipo-desvio-factura/{id}', 'Configuracion\MisAprobacionesArbolController@verAnticipoDesvioFactura')->name('ver_anticipo_desvio_factura_mis_aprobaciones');
+    Route::post('mis-aprobaciones/anticipo-desvio-factura/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarAnticipoDesvioFactura')->name('aprobar_anticipo_desvio_factura_mis_aprobaciones');
+    Route::post('mis-aprobaciones/anticipo-desvio-factura/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarAnticipoDesvioFactura')->name('rechazar_anticipo_desvio_factura_mis_aprobaciones');
     Route::post('mis-aprobaciones/transferencia/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarTransferencia')->name('aprobar_transferencia_mis_aprobaciones');
     Route::post('mis-aprobaciones/transferencia/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarTransferencia')->name('rechazar_transferencia_mis_aprobaciones');
     Route::post('mis-aprobaciones/ingreso-proveedor/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarIngresoProveedor')->name('aprobar_ingreso_proveedor_mis_aprobaciones');
@@ -4263,6 +4266,8 @@ Route::put('compras/configuracion-comprobante-proveedor', 'Compras\Configuracion
 Route::post('compras/configuracion-comprobante-proveedor/tolerancias', 'Compras\ConfiguracionComprobanteProveedorController@guardarTolerancias')->name('guardar_tolerancias_comprobante_proveedor');
 Route::post('compras/configuracion-comprobante-proveedor/tolerancia-tc', 'Compras\ConfiguracionComprobanteProveedorController@guardarToleranciaTc')->name('guardar_tolerancia_tc_comprobante_proveedor');
 Route::post('compras/configuracion-comprobante-proveedor/destinatarios-tc', 'Compras\ConfiguracionComprobanteProveedorController@guardarDestinatariosTc')->name('guardar_destinatarios_tc_comprobante_proveedor');
+Route::post('compras/configuracion-comprobante-proveedor/tolerancia-anticipo', 'Compras\ConfiguracionComprobanteProveedorController@guardarToleranciaAnticipo')->name('guardar_tolerancia_anticipo_comprobante_proveedor');
+Route::post('compras/configuracion-comprobante-proveedor/destinatarios-anticipo', 'Compras\ConfiguracionComprobanteProveedorController@guardarDestinatariosAnticipo')->name('guardar_destinatarios_anticipo_comprobante_proveedor');
 
 Route::get('compras/pagoproveedor', 'Compras\PagoproveedorController@index')->name('pagoproveedor');
 Route::get('compras/listapagoproveedor/{formato?}/{busqueda?}', 'Compras\PagoproveedorController@listar')->name('lista_pagoproveedor');

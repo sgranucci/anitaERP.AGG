@@ -25,6 +25,7 @@ use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorDebeGastoSupport;
+use App\Support\Compras\ComprobanteProveedorNetoCuentaIvaSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ComprobanteProveedorVencimientoCondicionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
@@ -462,6 +463,7 @@ class ComprobanteProveedorPersistenciaService
         ]);
         app(ContratoValidacionAbonoService::class)->asegurarParaComprobante($comprobante);
         app(ComprobanteProveedorDiferenciaCambioAvisoService::class)->sincronizarBorrador($comprobante);
+        app(ComprobanteProveedorAnticipoDesvioAvisoService::class)->sincronizarBorrador($comprobante);
 
         return $comprobante;
     }
@@ -626,6 +628,7 @@ class ComprobanteProveedorPersistenciaService
         ]);
         app(ContratoValidacionAbonoService::class)->asegurarParaComprobante($comprobante);
         app(ComprobanteProveedorDiferenciaCambioAvisoService::class)->sincronizarBorrador($comprobante);
+        app(ComprobanteProveedorAnticipoDesvioAvisoService::class)->sincronizarBorrador($comprobante);
 
         return $comprobante;
     }
@@ -1013,6 +1016,16 @@ class ComprobanteProveedorPersistenciaService
                 }
             }
 
+            if ($cuentaDebeId > 0 && ComprobanteProveedorNetoCuentaIvaSupport::aplicaAConcepto(
+                (string) ($concepto->tipoconcepto ?? ''),
+                (string) ($concepto->codigo ?? '')
+            )) {
+                ComprobanteProveedorNetoCuentaIvaSupport::assertCuentaIdPermitidaParaNeto(
+                    $cuentaDebeId,
+                    'el neto «'.$concepto->nombre.'»'
+                );
+            }
+
             $this->conceptoRepository->create([
                 'comprobante_proveedor_id' => $comprobante->id,
                 'concepto_ivacompra_id' => $concepto->id,
@@ -1067,6 +1080,9 @@ class ComprobanteProveedorPersistenciaService
             return;
         }
         ComprobanteProveedorDebeGastoSupport::assertSumaCuadraConNeto($lineas, $neto);
+        ComprobanteProveedorNetoCuentaIvaSupport::assertCuentasDebeGasto(
+            array_map(static fn (array $l): int => (int) ($l['cuentacontable_id'] ?? 0), $lineas)
+        );
 
         foreach ($lineas as $linea) {
             Comprobante_Proveedor_Debe_Gasto::query()->create([

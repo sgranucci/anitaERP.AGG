@@ -12,6 +12,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
+use App\Support\Compras\ComprobanteProveedorAnticipoPctSupport;
 use App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
@@ -163,7 +164,7 @@ class ComprobanteProveedorControlesLegajoService
             && $modoCarga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
             $resultado['ok'] = false;
             $resultado['errores'][] = 'OC anticipada sin COM: use el modo «Factura contra orden de compra» (factura anticipada). '
-                .'Puede cargar más de una factura anticipada en el mismo legajo.';
+                .'Solo se admite una factura de anticipo; luego facture contra la recepción.';
 
             return $resultado;
         }
@@ -182,6 +183,36 @@ class ComprobanteProveedorControlesLegajoService
 
         if ($modoCarga !== ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
             $this->validarImputacionContratoSinRecepcion($resultado, $politica, $ordencompra, $conceptos);
+
+            if (($politica['es_anticipada'] ?? false)
+                && ($politica['permite_factura_anticipada'] ?? false)) {
+                $analisisAnticipo = ComprobanteProveedorAnticipoPctSupport::analizar(
+                    $ordencompra,
+                    $modoCarga,
+                    $total,
+                    $excluirComprobanteId,
+                );
+                foreach ($analisisAnticipo['errores'] as $errAnticipo) {
+                    $resultado['ok'] = false;
+                    $resultado['errores'][] = $errAnticipo;
+                }
+                foreach ($analisisAnticipo['avisos'] as $avisoAnticipo) {
+                    $resultado['avisos'][] = $avisoAnticipo;
+                }
+                if ($analisisAnticipo['requiere_aprobacion']) {
+                    $resultado['anticipo_desvio'] = $analisisAnticipo;
+                }
+
+                $tope = ComprobanteProveedorAnticipoPctSupport::controlarTopeTotalOc(
+                    $ordencompra,
+                    $total,
+                    $excluirComprobanteId,
+                );
+                if (! $tope['ok'] && $tope['error']) {
+                    $resultado['ok'] = false;
+                    $resultado['errores'][] = $tope['error'];
+                }
+            }
 
             return $resultado;
         }
@@ -293,6 +324,28 @@ class ComprobanteProveedorControlesLegajoService
         );
         if (! $resultado['ok']) {
             return $resultado;
+        }
+
+        if ($ocAnticipada) {
+            $topeOc = ComprobanteProveedorAnticipoPctSupport::controlarTopeTotalOc(
+                $ordencompra,
+                $importeFactura,
+                $excluirComprobanteId,
+            );
+            if (! $topeOc['ok'] && $topeOc['error']) {
+                $resultado['ok'] = false;
+                $resultado['errores'][] = $topeOc['error'];
+
+                return $resultado;
+            }
+            $residual = ComprobanteProveedorAnticipoPctSupport::residualTrasAnticipo(
+                $ordencompra,
+                $excluirComprobanteId,
+            );
+            $resultado['avisos'][] = sprintf(
+                'OC anticipada: residual contractual tras anticipo ≈ $%s (total OC − anticipo aplicado).',
+                number_format($residual, 2, ',', '.')
+            );
         }
 
         $detalle = $this->detalleDiferenciaImporteVsProvisionCom(

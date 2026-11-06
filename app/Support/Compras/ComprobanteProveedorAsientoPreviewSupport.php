@@ -542,6 +542,40 @@ final class ComprobanteProveedorAsientoPreviewSupport
                                 .($empresaId > 0 ? ' para la empresa del comprobante.' : '.')
                                 .' Configúrela en el maestro Conceptos IVA compra.'),
                     ];
+            } elseif (ComprobanteProveedorNetoCuentaIvaSupport::aplicaAConcepto($tipoConcepto, $codigoConcepto)) {
+                try {
+                    ComprobanteProveedorNetoCuentaIvaSupport::assertCuentaIdPermitidaParaNeto(
+                        $cuentaId,
+                        'el neto «'.$concepto->nombre.'»'
+                    );
+                } catch (\RuntimeException $e) {
+                    $avisos[] = [
+                        'tipo' => 'neto_cuenta_iva_credito',
+                        'concepto_ivacompra_id' => (int) $concepto->id,
+                        'nombre' => (string) $concepto->nombre,
+                        'mensaje' => $e->getMessage(),
+                    ];
+                }
+            }
+        }
+
+        foreach ($comprobante->comprobante_proveedor_debe_gastos ?? [] as $filaGasto) {
+            $cuentaGastoId = (int) ($filaGasto->cuentacontable_id ?? 0);
+            if ($cuentaGastoId <= 0) {
+                continue;
+            }
+            try {
+                ComprobanteProveedorNetoCuentaIvaSupport::assertCuentaIdPermitidaParaNeto(
+                    $cuentaGastoId,
+                    'el reparto de gasto'
+                );
+            } catch (\RuntimeException $e) {
+                $avisos[] = [
+                    'tipo' => 'debe_gasto_cuenta_iva_credito',
+                    'concepto_ivacompra_id' => 0,
+                    'nombre' => 'Reparto de gasto',
+                    'mensaje' => $e->getMessage(),
+                ];
             }
         }
 

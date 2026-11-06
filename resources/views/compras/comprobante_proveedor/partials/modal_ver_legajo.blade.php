@@ -10,7 +10,8 @@
             <div class="modal-body">
                 <div id="cp-legajo-anticipada-banner" class="alert alert-warning py-2 small d-none mb-3">
                     <i class="fa fa-clock-o"></i> <strong>Legajo anticipado</strong>
-                    — puede haber más de una factura (anticipo) en el mismo legajo.
+                    — solo se admite <strong>una</strong> factura de anticipo, por el % contractual de la OC (± tolerancia).
+                    <span id="cp-legajo-anticipada-pct-detalle"></span>
                 </div>
                 <div class="row">
                     <div class="col-md-6 mb-3">

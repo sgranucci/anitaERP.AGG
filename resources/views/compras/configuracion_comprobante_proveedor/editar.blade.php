@@ -104,7 +104,7 @@ Configuración comprobante proveedor
 
         <div class="card card-outline card-primary mt-3">
             <div class="card-header">
-                <h3 class="card-title">Destinatarios de la aprobación</h3>
+                <h3 class="card-title">Destinatarios de la aprobación (tipo de cambio)</h3>
                 <p class="text-muted mb-0 mt-1" style="font-size:12px;">
                     Reciben el correo y ven el trámite en Mis aprobaciones cuando la diferencia de tipo de cambio
                     supera la tolerancia. Es una lista para toda la instalación. F1 o la lupa eligen el usuario.
@@ -162,6 +162,103 @@ Configuración comprobante proveedor
                         <i class="fa fa-plus"></i> Agregar destinatario
                     </button>
                     <button type="submit" class="btn btn-success">Guardar destinatarios</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card card-outline card-primary mt-3">
+            <div class="card-header">
+                <h3 class="card-title">Tolerancia de % de anticipo</h3>
+                <p class="text-muted mb-0 mt-1" style="font-size:12px;">
+                    Una sola para toda la instalación. La OC anticipada declara un %; la factura de anticipo
+                    (una sola por OC) debe coincidir con total OC × ese %. Por encima de esta tolerancia la
+                    factura queda en borrador y pasa a Mis aprobaciones para liberación.
+                </p>
+            </div>
+            <form action="{{ route('guardar_tolerancia_anticipo_comprobante_proveedor') }}" method="POST" autocomplete="off">
+                @csrf
+                <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
+                <div class="card-body">
+                    @php
+                        $tolAnt = old('tolerancia_anticipo_pct', $toleranciaAnticipoPct ?? \App\Support\Compras\ComprobanteProveedorAnticipoPctSupport::TOLERANCIA_ANTICIPO_PCT_DEFAULT);
+                    @endphp
+                    <div class="form-group row mb-0">
+                        <label for="tolerancia_anticipo_pct" class="col-lg-3 control-label text-right pr-2">
+                            Tolerancia %
+                        </label>
+                        <div class="col-lg-2">
+                            <input type="number" step="0.01" min="0" max="100" required
+                                   class="form-control" id="tolerancia_anticipo_pct" name="tolerancia_anticipo_pct"
+                                   value="{{ is_numeric($tolAnt) ? $tolAnt : 1 }}">
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button type="submit" class="btn btn-success">Guardar tolerancia de anticipo</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card card-outline card-primary mt-3">
+            <div class="card-header">
+                <h3 class="card-title">Destinatarios de liberación de anticipo</h3>
+                <p class="text-muted mb-0 mt-1" style="font-size:12px;">
+                    Pueden liberar (o rechazar) una factura de anticipo fuera de tolerancia. Lista global.
+                    F1 o la lupa eligen el usuario.
+                </p>
+            </div>
+            <form action="{{ route('guardar_destinatarios_anticipo_comprobante_proveedor') }}" method="POST" id="form-destinatarios-anticipo" autocomplete="off">
+                @csrf
+                <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
+                <div class="card-body table-responsive p-0">
+                    <table class="table table-sm table-bordered mb-0" id="tabla-destinatarios-anticipo">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr>
+                                <th>Usuario</th>
+                                <th class="width40"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @php
+                                $filasDestAnt = old('destinatarios');
+                                if (! is_array($filasDestAnt)) {
+                                    $filasDestAnt = [];
+                                    foreach ($destinatariosAnticipo ?? [] as $usuarioDest) {
+                                        $filasDestAnt[] = [
+                                            'usuario_id' => $usuarioDest->id,
+                                            'usuario_codigo' => $usuarioDest->usuario,
+                                            'usuario_nombre' => $usuarioDest->nombre,
+                                        ];
+                                    }
+                                }
+                            @endphp
+                            @foreach ($filasDestAnt as $idx => $fila)
+                                <tr class="fila-destinatario-anticipo">
+                                    <td>
+                                        <div class="tm-usuario-campo d-flex flex-nowrap align-items-center" style="gap:4px;">
+                                            <input type="hidden" class="usuario_id_arbol" name="destinatarios[{{ $idx }}][usuario_id]" value="{{ $fila['usuario_id'] ?? '' }}">
+                                            <input type="text" class="usuario_codigo_arbol form-control form-control-sm" value="{{ $fila['usuario_codigo'] ?? '' }}" placeholder="C&oacute;d." autocomplete="off" style="width:8rem;flex-shrink:0;" title="Login o ID; Enter valida; F1 consulta">
+                                            <button type="button" title="Consulta usuarios (F1)" class="btn-accion-tabla consultausuario tooltipsC flex-shrink-0" data-omitir_filtro_empresa="1">
+                                                <i class="fa fa-search text-primary"></i>
+                                            </button>
+                                            <input type="text" class="nombreusuario form-control form-control-sm" value="{{ $fila['usuario_nombre'] ?? '' }}" readonly placeholder="Nombre" style="min-width:0;flex:1 1 auto;">
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn-accion-tabla js-quitar-destinatario-anticipo" title="Quitar">
+                                            <i class="fa fa-times-circle text-danger"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-footer">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-agregar-destinatario-anticipo">
+                        <i class="fa fa-plus"></i> Agregar destinatario
+                    </button>
+                    <button type="submit" class="btn btn-success">Guardar destinatarios de anticipo</button>
                 </div>
             </form>
         </div>
@@ -250,6 +347,25 @@ Configuración comprobante proveedor
         </td>
         <td>
             <button type="button" class="btn-accion-tabla js-quitar-destinatario-tc" title="Quitar">
+                <i class="fa fa-times-circle text-danger"></i>
+            </button>
+        </td>
+    </tr>
+</template>
+<template id="template-destinatario-anticipo">
+    <tr class="fila-destinatario-anticipo">
+        <td>
+            <div class="tm-usuario-campo d-flex flex-nowrap align-items-center" style="gap:4px;">
+                <input type="hidden" class="usuario_id_arbol" name="destinatarios[__IDX__][usuario_id]" value="">
+                <input type="text" class="usuario_codigo_arbol form-control form-control-sm" value="" placeholder="C&oacute;d." autocomplete="off" style="width:8rem;flex-shrink:0;" title="Login o ID; Enter valida; F1 consulta">
+                <button type="button" title="Consulta usuarios (F1)" class="btn-accion-tabla consultausuario tooltipsC flex-shrink-0" data-omitir_filtro_empresa="1">
+                    <i class="fa fa-search text-primary"></i>
+                </button>
+                <input type="text" class="nombreusuario form-control form-control-sm" value="" readonly placeholder="Nombre" style="min-width:0;flex:1 1 auto;">
+            </div>
+        </td>
+        <td>
+            <button type="button" class="btn-accion-tabla js-quitar-destinatario-anticipo" title="Quitar">
                 <i class="fa fa-times-circle text-danger"></i>
             </button>
         </td>

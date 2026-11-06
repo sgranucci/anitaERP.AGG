@@ -8,6 +8,7 @@ use App\Models\Compras\Configuracion_ComprobanteProveedorTolerancia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
+use App\Support\Compras\ComprobanteProveedorAnticipoPctSupport;
 use App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use Illuminate\Http\Request;
@@ -41,6 +42,8 @@ class ConfiguracionComprobanteProveedorController extends Controller
 
         $toleranciaTcPct = ComprobanteProveedorDiferenciaCambioSupport::toleranciaPct();
         $destinatariosTc = ComprobanteProveedorDiferenciaCambioSupport::destinatarios();
+        $toleranciaAnticipoPct = ComprobanteProveedorAnticipoPctSupport::toleranciaPct();
+        $destinatariosAnticipo = ComprobanteProveedorAnticipoPctSupport::destinatarios();
 
         return view('compras.configuracion_comprobante_proveedor.editar', compact(
             'empresa_query',
@@ -51,6 +54,8 @@ class ConfiguracionComprobanteProveedorController extends Controller
             'filasTolerancia',
             'toleranciaTcPct',
             'destinatariosTc',
+            'toleranciaAnticipoPct',
+            'destinatariosAnticipo',
         ));
     }
 
@@ -217,6 +222,49 @@ class ConfiguracionComprobanteProveedorController extends Controller
 
         return redirect(self::RUTA_INDEX.($empresaId > 0 ? '?empresa_id='.$empresaId : ''))
             ->with('mensaje', 'Destinatarios de la aprobación guardados.');
+    }
+
+    public function guardarToleranciaAnticipo(Request $request)
+    {
+        can('actualizar-configuracion-comprobante-proveedor');
+
+        $data = $request->validate([
+            'empresa_id' => 'nullable|integer',
+            'tolerancia_anticipo_pct' => 'required|numeric|min:0|max:100',
+        ]);
+
+        ComprobanteProveedorAnticipoPctSupport::guardarToleranciaPct((float) $data['tolerancia_anticipo_pct']);
+
+        $empresaId = (int) ($data['empresa_id'] ?? 0);
+
+        return redirect(self::RUTA_INDEX.($empresaId > 0 ? '?empresa_id='.$empresaId : ''))
+            ->with('mensaje', 'Tolerancia de anticipo guardada.');
+    }
+
+    public function guardarDestinatariosAnticipo(Request $request)
+    {
+        can('actualizar-configuracion-comprobante-proveedor');
+
+        $data = $request->validate([
+            'empresa_id' => 'nullable|integer',
+            'destinatarios' => 'nullable|array',
+            'destinatarios.*.usuario_id' => 'nullable|integer',
+        ]);
+
+        $ids = [];
+        foreach ($data['destinatarios'] ?? [] as $fila) {
+            $id = (int) ($fila['usuario_id'] ?? 0);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        ComprobanteProveedorAnticipoPctSupport::guardarDestinatarios($ids);
+
+        $empresaId = (int) ($data['empresa_id'] ?? 0);
+
+        return redirect(self::RUTA_INDEX.($empresaId > 0 ? '?empresa_id='.$empresaId : ''))
+            ->with('mensaje', 'Destinatarios de liberación de anticipo guardados.');
     }
 
     /**

@@ -3744,6 +3744,10 @@ $(function () {
         if (numeroOc) {
             params.numero_oc = numeroOc;
         }
+        var letra = String($('#letra').val() || '').toUpperCase().trim().charAt(0);
+        if (letra) {
+            params.letra = letra;
+        }
         if (previos.length) {
             params['desde_ids[]'] = previos.map(function (p) { return p.id; });
         }
@@ -3837,6 +3841,9 @@ $(function () {
                     }
                     enriquecerMetaGravadosDesdeFormulas();
                     if ($aviso.length) {
+                        var letraMsg = letra === 'C'
+                            ? ' Letra C: solo monotributo / exento (sin gravados ni IVA).'
+                            : (letra ? ' Letra ' + letra + ': sin compras monotributistas.' : '');
                         var msgOk = (res && res.plantilla_modo === 'fino')
                             ? 'La OC tiene un solo centro: se cargaron los conceptos de '
                                 + (res.plantilla_fino || 'ese tipo')
@@ -3847,11 +3854,11 @@ $(function () {
                                 ? 'Se cargaron los conceptos del tipo elegido.'
                                     + (movidos ? ' ' + movidos + ' monto(s) pasaron al concepto equivalente del tipo.' : '')
                                 : 'Conceptos del tipo de comprobante. Complete los montos.'));
-                        var html = '<i class="fa fa-check-circle"></i> ' + msgOk
+                        var html = '<i class="fa fa-check-circle"></i> ' + msgOk + letraMsg
                             + (agregados ? ' (' + agregados + ')' : '');
                         if (sobrantes.length) {
                             html += '<br><i class="fa fa-exclamation-triangle text-warning"></i> '
-                                + sobrantes.length + ' renglón(es) con monto no tienen equivalente en este tipo y quedaron al final. '
+                                + sobrantes.length + ' renglón(es) con monto no tienen equivalente en este tipo/letra y quedaron al final. '
                                 + 'Si son IVA, no se va a poder grabar: páselos al concepto del tipo.';
                         }
                         $aviso.removeClass('d-none').html(html);
@@ -4296,7 +4303,11 @@ $(function () {
             }
             var letra = letraDesdeProveedorJson(data);
             if (letra) {
+                var previa = String($letra.val() || '').toUpperCase().trim().charAt(0);
                 $letra.val(letra);
+                if (previa !== letra) {
+                    alCambiarLetraComprobante();
+                }
             }
         }
 
@@ -4311,11 +4322,24 @@ $(function () {
             }
         }
 
+        function alCambiarLetraComprobante() {
+            if (contabilizado) {
+                return;
+            }
+            var tipoId = parseInt(String($('#tipotransaccion_compra_id').val() || '0'), 10) || 0;
+            if (tipoId > 0) {
+                precargarConceptosPorTipo(tipoId, true);
+            }
+        }
+
         $('#letra')
-            .off('input.cpLetraMayuscula blur.cpLetraMayuscula')
+            .off('input.cpLetraMayuscula blur.cpLetraMayuscula change.cpLetraConceptos')
             .on('input.cpLetraMayuscula blur.cpLetraMayuscula', function () {
                 var v = String($(this).val() || '').toUpperCase().replace(/[^A-Z]/g, '').charAt(0);
                 $(this).val(v);
+            })
+            .on('change.cpLetraConceptos', function () {
+                alCambiarLetraComprobante();
             });
 
         function mostrarAvisoProveedorSuspendido(data) {
@@ -4898,6 +4922,25 @@ $(function () {
         $.getJSON(url).done(function (p) {
             if (p && p.es_anticipada) {
                 $('#cp-legajo-anticipada-banner').removeClass('d-none');
+                var detallePct = '';
+                if (p.pct_anticipo && Number(p.pct_anticipo) > 0) {
+                    detallePct = ' Anticipo esperado: '
+                        + Number(p.pct_anticipo).toFixed(2).replace('.', ',')
+                        + '%';
+                    if (p.importe_anticipo_esperado != null) {
+                        detallePct += ' ≈ $'
+                            + Number(p.importe_anticipo_esperado).toLocaleString('es-AR', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            });
+                    }
+                    detallePct += '.';
+                } else {
+                    detallePct = ' Falta cargar el % de anticipo en la OC.';
+                }
+                $('#cp-legajo-anticipada-pct-detalle').text(detallePct);
+            } else {
+                $('#cp-legajo-anticipada-pct-detalle').text('');
             }
             if (p && p.url_oc) {
                 $('#cp-legajo-abrir-oc').attr('href', p.url_oc).removeClass('d-none');

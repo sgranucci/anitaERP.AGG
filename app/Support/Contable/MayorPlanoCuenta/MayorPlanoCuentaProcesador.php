@@ -712,12 +712,26 @@ class MayorPlanoCuentaProcesador
         $movs = [];
         $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport;
 
-        // El filtro por módulo toma el detalle de ese subdiario. El ctamov de
-        // cierre (V/C/T y asi_mon_ref ≠ -1) duplica ese detalle. Las FAC del ERP
-        // (asi_mon_ref = -1) no están en subdiario: hay que sumarlas desde ctamov.
+        // El detalle nativo vive en subdiario. El ctamov de cierre (V/C/T y
+        // asi_mon_ref ≠ -1) y cualquier ctamov con el mismo nro_operacion
+        // (incluso asi_mon_ref = -1 mal empujado desde el ERP) duplican ese detalle.
+        // Las FAC nacidas en el ERP (asi_mon_ref = -1 sin línea de subdiario) sí entran.
         $omitirResumenCtamov = $this->soloTotalesModulo && $incluyeSubdiario && $subdiario !== [];
+        $nrosEnSubdiario = [];
+        if ($incluyeSubdiario) {
+            foreach ($subdiario as $lineaSub) {
+                $nroSub = (int) ($lineaSub->subd_nro_operacion ?? 0);
+                if ($nroSub > 0) {
+                    $nrosEnSubdiario[$nroSub] = true;
+                }
+            }
+        }
 
         foreach ($ctamov as $linea) {
+            $nroCtamov = (int) ($linea->ctav_nro_asiento ?? 0);
+            if ($nroCtamov > 0 && isset($nrosEnSubdiario[$nroCtamov])) {
+                continue;
+            }
             if ($omitirResumenCtamov && AnitaAsientoImportService::esAsientoResumenSubdiario($linea)) {
                 continue;
             }

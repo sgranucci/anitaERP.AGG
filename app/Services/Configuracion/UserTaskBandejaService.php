@@ -43,6 +43,8 @@ class UserTaskBandejaService
 
     public const FUENTE_DIFCAMBIO_FACTURA = 'difcambio_factura';
 
+    public const FUENTE_ANTICIPO_DESVIO_FACTURA = 'anticipo_desvio_factura';
+
     private const CACHE_COUNT_TTL_SECONDS = 20;
 
     /** @var array<string, string> */
@@ -54,6 +56,7 @@ class UserTaskBandejaService
         self::FUENTE_TRANSFERENCIA => 'Transferencias',
         self::FUENTE_INGRESO_PROVEEDOR => 'Ingreso proveedor',
         self::FUENTE_DIFCAMBIO_FACTURA => 'Diferencia de cambio en factura',
+        self::FUENTE_ANTICIPO_DESVIO_FACTURA => 'Desvío de anticipo en factura',
     ];
 
     /** @var list<string>|null */
@@ -152,6 +155,15 @@ class UserTaskBandejaService
         ) {
             $ids = $ids->merge(
                 \App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport::idsDestinatarios()
+            );
+        }
+        if (\Illuminate\Support\Facades\Schema::hasTable('comprobante_proveedor_anticipo_desvio')
+            && \App\Models\Compras\Comprobante_Proveedor_Anticipo_Desvio::query()
+                ->where('estado', \App\Models\Compras\Comprobante_Proveedor_Anticipo_Desvio::ESTADO_PENDIENTE)
+                ->exists()
+        ) {
+            $ids = $ids->merge(
+                \App\Support\Compras\ComprobanteProveedorAnticipoPctSupport::idsDestinatarios()
             );
         }
         if (Transferencia_Mercaderia::query()
@@ -280,6 +292,7 @@ class UserTaskBandejaService
                     $comprobanteId > 0 ? Prestamo::query()->find($comprobanteId) : null
                 ),
                 self::FUENTE_DIFCAMBIO_FACTURA => $this->contenidoDifcambioFactura($comprobanteId),
+                self::FUENTE_ANTICIPO_DESVIO_FACTURA => $this->contenidoAnticipoDesvioFactura($comprobanteId),
                 default => null,
             };
         } catch (\Throwable $e) {
@@ -343,6 +356,9 @@ class UserTaskBandejaService
         $uid = $usuarioId ?? (int) (auth()->id() ?? 0);
         if (\App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport::esDestinatario($uid)) {
             $out[] = self::FUENTE_DIFCAMBIO_FACTURA;
+        }
+        if (\App\Support\Compras\ComprobanteProveedorAnticipoPctSupport::esDestinatario($uid)) {
+            $out[] = self::FUENTE_ANTICIPO_DESVIO_FACTURA;
         }
 
         return $out;
@@ -628,6 +644,12 @@ class UserTaskBandejaService
                 && ($fuenteFiltro === '' || $fuenteFiltro === self::FUENTE_DIFCAMBIO_FACTURA)
             ) {
                 $items = $items->merge($this->listarDifcambioFactura());
+            }
+
+            if (in_array(self::FUENTE_ANTICIPO_DESVIO_FACTURA, $fuentes, true)
+                && ($fuenteFiltro === '' || $fuenteFiltro === self::FUENTE_ANTICIPO_DESVIO_FACTURA)
+            ) {
+                $items = $items->merge($this->listarAnticipoDesvioFactura());
             }
         }
 
@@ -928,6 +950,110 @@ class UserTaskBandejaService
                 'sort_ts' => $fecha->getTimestamp(),
             ];
         })->values();
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function listarAnticipoDesvioFactura(): Collection
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('comprobante_proveedor_anticipo_desvio')) {
+            return collect();
+        }
+
+        $filas = \App\Models\Compras\Comprobante_Proveedor_Anticipo_Desvio::query()
+            ->with(['comprobantes.proveedores', 'comprobantes.empresas', 'comprobantes.ordencompras'])
+            ->where('estado', \App\Models\Compras\Comprobante_Proveedor_Anticipo_Desvio::ESTADO_PENDIENTE)
+            ->orderByDesc('id')
+            ->get();
+
+        return $filas->map(function ($fila) {
+            $comprobante = $fila?->comprobantes;
+            $fecha = $fila?->created_at ? Carbon::parse($fila->created_at) : Carbon::now();
+            $dias = max(0, $fecha->copy()->startOfDay()->diffInDays(Carbon::now()->startOfDay()));
+            $sla = $this->slaGenerico($dias, $fecha);
+            $numero = $comprobante
+                ? trim((string) $comprobante->letra.' '.$comprobante->sucursal.'-'.$comprobante->numerocomprobante)
+                : '#'.$fila->comprobante_proveedor_id;
+            $id = (int) $fila->comprobante_proveedor_id;
+
+            return [
+                'fuente' => self::FUENTE_ANTICIPO_DESVIO_FACTURA,
+                'fuente_label' => self::FUENTES[self::FUENTE_ANTICIPO_DESVIO_FACTURA],
+                'task_key' => 'anticipo_desvio_factura:'.$id,
+                'tipo' => 'ANT',
+                'etiqueta_tipo' => 'Desvío anticipo',
+                'numero' => $numero,
+                'comprobante_id' => $id,
+                'nivel' => 1,
+                'monto' => abs((float) ($fila->importe_ingresado ?? 0)),
+                'moneda_abrev' => 'ARS',
+                'fecha_envio' => $fecha->toDateTimeString(),
+                'dias_pendiente' => $dias,
+                'urgencia' => $this->urgenciaPorDias($dias),
+                'documento_existe' => $comprobante !== null,
+                'puede_aprobar' => true,
+                'es_aviso_pago' => false,
+                'reemplazo_de' => null,
+                'es_reemplazo' => false,
+                'sla_label' => $sla['sla_label'],
+                'sla_estado' => $sla['sla_estado'],
+                'sla_fecha_limite' => $sla['sla_fecha_limite'],
+                'dias_para_vencer' => $sla['dias_para_vencer'],
+                'url_ver' => url('mis-aprobaciones/anticipo-desvio-factura/'.$id),
+                'url_aprobar' => url('mis-aprobaciones/anticipo-desvio-factura/'.$id.'/aprobar'),
+                'url_rechazar' => url('mis-aprobaciones/anticipo-desvio-factura/'.$id.'/rechazar'),
+                'url_reenviar' => null,
+                'url_descartar' => null,
+                'url_detalle' => url('mis-aprobaciones/detalle/anticipo_desvio_factura/'.$id),
+                'subtitulo' => trim((string) (optional($comprobante?->proveedores)->nombre ?? '')),
+                'proveedor' => (string) (optional($comprobante?->proveedores)->nombre ?? ''),
+                'detalle' => 'Anticipo vs % OC. Desvío '
+                    .number_format((float) ($fila->desvio_pct ?? 0), 2, ',', '.').'%.',
+                'acciones_inline' => false,
+                'muestra_reenviar' => false,
+                'muestra_descartar' => false,
+                'sort_ts' => $fecha->getTimestamp(),
+            ];
+        })->values();
+    }
+
+    private function contenidoAnticipoDesvioFactura(int $comprobanteId): ?array
+    {
+        $comprobante = \App\Models\Compras\Comprobante_Proveedor::query()->find($comprobanteId);
+        if (! $comprobante) {
+            return null;
+        }
+
+        $datos = app(\App\Services\Compras\ComprobanteProveedorAnticipoDesvioAvisoService::class)
+            ->comprobantesImplicados($comprobante);
+        $fila = $datos['fila'];
+        $renglones = [[
+            'titulo' => 'Factura '.$comprobante->letra.' '.$comprobante->sucursal.'-'.$comprobante->numerocomprobante,
+            'cantidad' => '',
+            'importe' => number_format((float) $comprobante->total, 2, ',', '.'),
+            'lineas' => [
+                'Esperado '.number_format((float) ($fila->importe_esperado ?? 0), 2, ',', '.'),
+                'Desvío '.number_format((float) ($fila->desvio_pct ?? 0), 2, ',', '.').'%',
+            ],
+        ]];
+        if ($comprobante->ordencompras) {
+            $renglones[] = [
+                'titulo' => 'OC '.$comprobante->ordencompras->numeroordencompra,
+                'cantidad' => '',
+                'importe' => '',
+                'lineas' => [
+                    '% anticipo '.number_format((float) ($comprobante->ordencompras->pct_anticipo ?? 0), 2, ',', '.').'%',
+                ],
+            ];
+        }
+
+        return [
+            'titulo' => 'Desvío de anticipo',
+            'subtitulo' => (string) (optional($comprobante->proveedores)->nombre ?? ''),
+            'renglones' => $renglones,
+            'url_ver' => url('mis-aprobaciones/anticipo-desvio-factura/'.$comprobanteId),
+        ];
     }
 
     private function contenidoDifcambioFactura(int $comprobanteId): ?array

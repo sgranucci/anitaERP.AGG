@@ -25,6 +25,7 @@ use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorCupoNcLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorDiferenciaCambioSupport;
 use App\Support\Compras\ComprobanteProveedorDebeGastoSupport;
+use App\Support\Compras\ComprobanteProveedorNetoCuentaIvaSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
 use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
@@ -550,6 +551,12 @@ class ComprobanteProveedorAsientoService
                     (int) $concepto->cuentacontableHaberIdParaEmpresa($empresaId > 0 ? $empresaId : null),
                 );
             }
+            if ($cuentaId > 0 && $esNetoSinReferencia && ! $permitirCuentasPendientes) {
+                ComprobanteProveedorNetoCuentaIvaSupport::assertCuentaIdPermitidaParaNeto(
+                    $cuentaId,
+                    'el neto «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'»'
+                );
+            }
             if ($cuentaId <= 0 && ! ($permitirCuentasPendientes && $esNetoSinReferencia)) {
                 if ($esImpuestoInterno) {
                     throw new RuntimeException(
@@ -841,6 +848,12 @@ class ComprobanteProveedorAsientoService
                 ComprobanteProveedorDebeGastoSupport::assertSumaCuadraConNeto(
                     $lineasRepartoGasto,
                     $netoImputable
+                );
+                ComprobanteProveedorNetoCuentaIvaSupport::assertCuentasDebeGasto(
+                    array_map(
+                        static fn (array $l): int => (int) ($l['cuentacontable_id'] ?? 0),
+                        $lineasRepartoGasto
+                    )
                 );
             }
             $lineasDebeGasto = ComprobanteProveedorDebeGastoSupport::aLineasDebeAsiento(

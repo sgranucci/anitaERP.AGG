@@ -843,6 +843,10 @@
 		if (pl.tratamiento) {
 			$('#wz_tratamiento').val(pl.tratamiento);
 		}
+		if (pl.pct_anticipo !== undefined && pl.pct_anticipo !== null && pl.pct_anticipo !== '') {
+			$('#wz_pct_anticipo').val(pl.pct_anticipo);
+		}
+		wzSincronizarPctAnticipo();
 		requisicionProveedorId = parseInt(pl.proveedor_id || 0, 10);
 
 		window.wzCentrocostos = [];
@@ -1761,6 +1765,13 @@
 			empresa_id: $('#wz_empresa_id').val(),
 			centrocosto_id: $('#wz_centrocosto_id').val(),
 			tratamiento: $('#wz_tratamiento').val(),
+			pct_anticipo: (function () {
+				var t = String($('#wz_tratamiento').val() || '').toUpperCase().trim();
+				if (t !== 'ANTICIPADA' && t !== '2' && t !== 'S') {
+					return '';
+				}
+				return $('#wz_pct_anticipo').val() || '';
+			})(),
 			detalle: $('#wz_detalle').val() || '',
 			descuento: $('#wz_descuento').val() || '',
 			descuento_tipo: $('#wz_descuento_tipo').val() || 'porcentaje',
@@ -2044,9 +2055,25 @@
 	window.wzBootOrdencompraWizard = bootOrdencompraWizard;
 	window.wzEnsureWizardHidratado = ensureWizardHidratado;
 
+	function wzSincronizarPctAnticipo() {
+		var valor = String($('#wz_tratamiento').val() || '').toUpperCase().trim();
+		var anticipada = valor === 'ANTICIPADA' || valor === '2' || valor === 'S';
+		$('.js-wz-pct-anticipo-row').toggle(anticipada);
+		var $pct = $('#wz_pct_anticipo');
+		if (!anticipada) {
+			$pct.val('');
+			$pct.prop('required', false);
+		} else {
+			$pct.prop('required', true);
+		}
+	}
+
 	$(function () {
 		bootOrdencompraWizard();
 		precargarHandlersConsultaProveedor();
+
+		$(document).on('change', '#wz_tratamiento', wzSincronizarPctAnticipo);
+		wzSincronizarPctAnticipo();
 
 		function wzActualizarAyudaDescuento() {
 			var tipo = $('#wz_descuento_tipo').val() || 'porcentaje';

@@ -35,8 +35,10 @@
         <h4 class="mb-2">Conceptos de IVA compra</h4>
         <p class="text-muted small mb-3">
             Agregue uno o más renglones. Código + Enter o <kbd>F1</kbd>/lupa para consultar.
-            En tipos normales se precarga la plantilla con <strong>todos</strong> los conceptos
-            asignados al tipo de comprobante. En prorrateadas multi-CC (FPB/CPB/…) la plantilla
+            En tipos normales se precarga la plantilla con los conceptos del tipo,
+            filtrados por la <strong>letra</strong> del comprobante: letra <strong>C</strong>
+            solo monotributo / exento; letras <strong>A/B</strong> gravados e IVA (sin
+            monotributo). En prorrateadas multi-CC (FPB/CPB/…) la plantilla
             es la unión de los finos de la OC (en $0 si la precarga no trajo montos). Si la
             precarga ya armó esos renglones, se conservan. El modal F1 lista la misma unión.
             En el monto, <kbd>Enter</kbd> valida coherencia y actualiza la vista previa del asiento.

@@ -29,6 +29,7 @@ use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Configuracion\OcArbolTriggerDispatcherService;
 use App\Support\Compras\ArticuloCentrocostoCuentaSupport;
 use App\Support\Compras\ArticuloSkuCompraAggSupport;
+use App\Support\Compras\ComprobanteProveedorAnticipoPctSupport;
 use App\Support\Compras\ContratoPeriodoServicioSupport;
 use App\Support\Compras\OrdencompraComprobanteEstados;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
@@ -380,6 +381,7 @@ class OrdencompraGestionService
         $payload = $request->all();
 
         try {
+            $this->assertPctAnticipoPayload($payload, null);
             $this->validarContratoImputacion($payload);
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
@@ -538,6 +540,11 @@ class OrdencompraGestionService
     {
         $existente = $this->ordencompraRepository->find($id);
         if (! in_array($existente->estadoordencompra, [OrdencompraEstados::PENDIENTE, OrdencompraEstados::SUSPENDIDA], true)) {
+            $completarPct = $this->intentarCompletarPctAnticipoAprobada($existente, $request->all());
+            if ($completarPct !== null) {
+                return $completarPct;
+            }
+
             return ['mensaje' => 'error', 'errores' => 'Solo se puede editar en estado PENDIENTE o SUSPENDIDA.'];
         }
         $contratoAnterior = $this->snapshotContratoSinCom($existente);
@@ -548,6 +555,7 @@ class OrdencompraGestionService
         }
         $payload = $request->all();
         try {
+            $this->assertPctAnticipoPayload($payload, $existente);
             $this->validarContratoImputacion($payload);
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
@@ -1302,6 +1310,103 @@ class OrdencompraGestionService
     }
 
     /**
+     * % de anticipo solo aplica con tratamiento ANTICIPADA.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolverPctAnticipoDesdePayload(array $payload): ?float
+    {
+        if (! OrdencompraTratamientoMovimientosSupport::esTratamientoAnticipado($payload['tratamiento'] ?? null)) {
+            return null;
+        }
+
+        $raw = $payload['pct_anticipo'] ?? null;
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        return round((float) $raw, 2);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function assertPctAnticipoPayload(array $payload, ?Ordencompra $existente = null): void
+    {
+        $anticipada = OrdencompraTratamientoMovimientosSupport::esTratamientoAnticipado($payload['tratamiento'] ?? null);
+        $pct = $this->resolverPctAnticipoDesdePayload($payload);
+
+        if ($anticipada && ($pct === null || $pct <= 0)) {
+            throw new \InvalidArgumentException(
+                'Si el tratamiento es ANTICIPADA debe indicar el % de anticipo (entre 0,01 y 100).'
+            );
+        }
+
+        if ($existente === null) {
+            return;
+        }
+
+        $estado = (string) ($existente->estadoordencompra ?? '');
+        $editableEstado = in_array($estado, [OrdencompraEstados::PENDIENTE, OrdencompraEstados::SUSPENDIDA], true);
+        $pctAnterior = $existente->pct_anticipo !== null ? (float) $existente->pct_anticipo : null;
+        $pctAnteriorSet = $pctAnterior !== null && $pctAnterior > 0;
+
+        if (! $editableEstado && $pctAnteriorSet) {
+            $nuevo = $pct ?? 0.0;
+            if (abs($nuevo - $pctAnterior) > 0.0001
+                || OrdencompraTratamientoMovimientosSupport::normalizar($existente->tratamiento ?? null)
+                    !== OrdencompraTratamientoMovimientosSupport::normalizar($payload['tratamiento'] ?? null)
+            ) {
+                throw new \InvalidArgumentException(
+                    'El % de anticipo queda fijo una vez aprobada la orden de compra.'
+                );
+            }
+        }
+    }
+
+    /**
+     * OC ya aprobada sin %: permite cargar el % una sola vez (legado).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array{mensaje: string, id?: int, errores?: string}|null
+     */
+    private function intentarCompletarPctAnticipoAprobada(Ordencompra $existente, array $payload): ?array
+    {
+        $estado = (string) ($existente->estadoordencompra ?? '');
+        if ($estado !== OrdencompraEstados::APROBADA) {
+            return null;
+        }
+        if (! OrdencompraTratamientoMovimientosSupport::esTratamientoAnticipado($existente->tratamiento ?? null)) {
+            return null;
+        }
+        $pctActual = $existente->pct_anticipo !== null ? (float) $existente->pct_anticipo : 0.0;
+        if ($pctActual > 0) {
+            return null;
+        }
+
+        if (! ComprobanteProveedorAnticipoPctSupport::puedeCompletarPctOcAprobada()) {
+            return [
+                'mensaje' => 'error',
+                'errores' => 'Solo Compras puede completar el % de anticipo en una OC ya aprobada.',
+            ];
+        }
+
+        $pctNuevo = $this->resolverPctAnticipoDesdePayload(array_merge($payload, [
+            'tratamiento' => $existente->tratamiento,
+        ]));
+        if ($pctNuevo === null || $pctNuevo <= 0) {
+            return [
+                'mensaje' => 'error',
+                'errores' => 'Indique el % de anticipo. En OC ya aprobada solo se puede completar si aún no estaba cargado.',
+            ];
+        }
+
+        $this->ordencompraRepository->update(['pct_anticipo' => $pctNuevo], (int) $existente->id);
+
+        return ['mensaje' => 'ok', 'id' => (int) $existente->id];
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      */
     private function armaCabeceraDesdeRequest(array $payload, string $estado, ?int $sectorId, int $creoUsuarioId): array
@@ -1317,6 +1422,7 @@ class OrdencompraGestionService
             'lugarentrega' => $payload['lugarentrega'] ?? null,
             'transporte_id' => ! empty($payload['transporte_id']) ? (int) $payload['transporte_id'] : null,
             'tratamiento' => $payload['tratamiento'],
+            'pct_anticipo' => $this->resolverPctAnticipoDesdePayload($payload),
             'proveedor_id' => ! empty($payload['proveedor_id']) ? (int) $payload['proveedor_id'] : null,
             'condicioncompra_id' => ! empty($payload['condicioncompra_id']) ? (int) $payload['condicioncompra_id'] : null,
             'condicionentrega_id' => ! empty($payload['condicionentrega_id']) ? (int) $payload['condicionentrega_id'] : null,
@@ -1569,6 +1675,7 @@ class OrdencompraGestionService
                 ? 'required|string'
                 : 'nullable|string',
             'tratamiento' => ['required', 'string', 'max:50', Rule::in(array_column(Ordencompra::$enumTratamientoCompra, 'nombre'))],
+            'pct_anticipo' => 'nullable|numeric|min:0.01|max:100',
             'requisicion_id' => 'nullable|integer|exists:requisicion,id',
             'proveedor_id' => 'required|integer|exists:proveedor,id',
             'transporte_id' => 'nullable|integer|exists:transporte,id',

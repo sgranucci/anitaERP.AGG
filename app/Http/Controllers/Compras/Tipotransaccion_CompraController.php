@@ -348,8 +348,14 @@ class Tipotransaccion_CompraController extends Controller
             ?? ''
         ));
         $numeroOc = $numeroOc !== '' ? $numeroOc : null;
+        $letra = strtoupper(substr(trim((string) (
+            $request->query('letra')
+            ?? $request->input('letra')
+            ?? ''
+        )), 0, 1));
+        $letra = $letra !== '' ? $letra : null;
 
-        $lista = ConceptoIvacompraConsultaSupport::listarPorTipoTransaccion($id, null, $numeroOc);
+        $lista = ConceptoIvacompraConsultaSupport::listarPorTipoTransaccion($id, null, $numeroOc, $letra);
 
         $tipo = Tipotransaccion_Compra::query()->find($id);
         $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));

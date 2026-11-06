@@ -43,7 +43,7 @@ class Ordencompra extends Model implements Auditable
         'fecha', 'fechaentrega', 'empresa_id', 'sala_id', 'numeroordencompra',
         'anita_tipo', 'anita_letra', 'anita_sucursal',
         'requisicion_id', 'centrocosto_id',
-        'comentario', 'nota_legajo', 'detalle', 'lugarentrega', 'transporte_id', 'tratamiento', 'proveedor_id',
+        'comentario', 'nota_legajo', 'detalle', 'lugarentrega', 'transporte_id', 'tratamiento', 'pct_anticipo', 'proveedor_id',
         'condicioncompra_id', 'condicionentrega_id', 'condicionpago_id', 'descuento', 'descuento_tipo', 'estadoordencompra', 'sector_legajocompra_id',
         'condiciones_contratacion', 'creousuario_id', 'solicitante_usuario_id',
         'es_contrato', 'es_suscripcion', 'suscripcion_nombre', 'suscripcion_proveedor_nombre',
@@ -60,6 +60,7 @@ class Ordencompra extends Model implements Auditable
     ];
 
     protected $casts = [
+        'pct_anticipo' => 'float',
         'es_contrato' => 'boolean',
         'es_suscripcion' => 'boolean',
         'suscripcion_borrador' => 'boolean',

@@ -237,9 +237,11 @@ class ComprobanteProveedorPrefillService
                 ?? $precarga->numeroordencompra
                 ?? ''
             );
+            $letraPlantilla = strtoupper(substr(trim((string) ($data->letra ?? '')), 0, 1));
             $conceptos = ConceptoIvacompraConsultaSupport::renglonesPlantillaParaTipo(
                 (int) $data->tipotransaccion_compra_id,
                 $numeroOc !== '' ? $numeroOc : null,
+                $letraPlantilla !== '' ? $letraPlantilla : null,
             );
         }
 

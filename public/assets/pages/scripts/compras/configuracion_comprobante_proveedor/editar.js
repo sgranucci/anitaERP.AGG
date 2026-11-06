@@ -183,5 +183,29 @@
             $(this).closest('tr').remove();
             reindexDestinatariosTc();
         });
+
+        function reindexDestinatariosAnticipo() {
+            $('#tabla-destinatarios-anticipo tbody tr.fila-destinatario-anticipo').each(function (idx) {
+                $(this).find('[name^="destinatarios["]').each(function () {
+                    var name = $(this).attr('name') || '';
+                    $(this).attr('name', name.replace(/destinatarios\[(?:\d+|__IDX__)]/, 'destinatarios[' + idx + ']'));
+                });
+            });
+        }
+
+        $('#btn-agregar-destinatario-anticipo').on('click', function () {
+            var tpl = document.getElementById('template-destinatario-anticipo');
+            if (!tpl) {
+                return;
+            }
+            var idx = $('#tabla-destinatarios-anticipo tbody tr.fila-destinatario-anticipo').length;
+            var html = tpl.innerHTML.replace(/__IDX__/g, String(idx));
+            $('#tabla-destinatarios-anticipo tbody').append(html);
+        });
+
+        $(document).on('click', '.js-quitar-destinatario-anticipo', function () {
+            $(this).closest('tr').remove();
+            reindexDestinatariosAnticipo();
+        });
     });
 })(jQuery);

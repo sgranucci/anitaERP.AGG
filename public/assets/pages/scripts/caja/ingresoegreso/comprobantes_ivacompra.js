@@ -848,7 +848,12 @@
         }
 
         mostrarAvisoTipoConceptos('<i class="fa fa-spinner fa-spin"></i> Cargando conceptos del tipo…', 'alert-info');
-        $.getJSON(urlConceptosPorTipo(id))
+        var params = {};
+        var letra = String($('#ie-cp-letra').val() || '').toUpperCase().trim().charAt(0);
+        if (letra) {
+            params.letra = letra;
+        }
+        $.getJSON(urlConceptosPorTipo(id), params)
             .done(function (res) {
                 if (seq !== precargaTipoSeq) {
                     return;

@@ -3307,6 +3307,29 @@ $(function () {
 	$(document).on('change', '#es_contrato, #es_suscripcion, #contrato_auto_renovable, input[name="contrato_requiere_recepcion"], input[name="contrato_imputacion_contable"], #contrato_requiere_validacion_abono, #contrato_exige_ingresos', ocSincronizarBloqueContrato);
 	ocSincronizarBloqueContrato();
 
+	function ocSincronizarPctAnticipo() {
+		var $sel = $('#tratamiento');
+		if (!$sel.length) {
+			return;
+		}
+		var valor = String($sel.val() || '').toUpperCase().trim();
+		var anticipada = valor === 'ANTICIPADA' || valor === '2' || valor === 'S';
+		var $row = $('.js-oc-pct-anticipo-row');
+		var $pct = $('#pct_anticipo');
+		$row.toggle(anticipada);
+		if (!anticipada) {
+			if ($pct.length && !$pct.prop('readonly')) {
+				$pct.val('');
+			}
+			$pct.prop('required', false);
+		} else {
+			$pct.prop('required', !$pct.prop('readonly'));
+		}
+	}
+
+	$(document).on('change', '#tratamiento', ocSincronizarPctAnticipo);
+	ocSincronizarPctAnticipo();
+
 	if (typeof activa_eventos_consultacentrocosto === 'function') {
 		activa_eventos_consultacentrocosto();
 	}
