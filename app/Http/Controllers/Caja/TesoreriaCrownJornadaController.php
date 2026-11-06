@@ -1237,7 +1237,7 @@ class TesoreriaCrownJornadaController extends Controller
     private function anexoDelDia(Request $request, TesoreriaCrownJornada $jornada, ?string $variante = null): array
     {
         $variante = $variante ?? $this->anexoVariante($request);
-        $clave = 'tc-anexo1-'.$variante.'-'.$jornada->fecha->format('Ymd');
+        $clave = 'tc-anexo1-jornada-'.$variante.'-'.$jornada->fecha->format('Ymd');
         if ($request->query('recalcular') !== '1') {
             $guardado = session($clave);
             if (is_array($guardado)) {
@@ -1245,8 +1245,8 @@ class TesoreriaCrownJornadaController extends Controller
             }
         }
         $armado = $variante === 'nuevo'
-            ? TesoreriaCrownAnexo1NewCalculo::delDia($jornada->fecha->format('Y-m-d'))
-            : TesoreriaCrownAnexo1Calculo::delDia($jornada->fecha->format('Y-m-d'));
+            ? TesoreriaCrownAnexo1NewCalculo::deJornada($jornada)
+            : TesoreriaCrownAnexo1Calculo::deJornada($jornada);
         session([$clave => $armado]);
 
         return $armado;

@@ -15,6 +15,19 @@
         'modo_carga',
         $data->modo_carga ?? ''
     ) === \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+    $ccIdsParaCodigo = collect($centrosConceptoOld)
+        ->map(static fn ($id) => (int) $id)
+        ->filter(static fn ($id) => $id > 0);
+    if (! $conceptosListaOld && ($conceptos ?? collect())->isNotEmpty()) {
+        $ccIdsParaCodigo = $ccIdsParaCodigo->merge(
+            collect($conceptos)->map(static fn ($r) => (int) ($r->centrocosto_id ?? 0))->filter(static fn ($id) => $id > 0)
+        );
+    }
+    $ccCodigosPorId = $ccIdsParaCodigo->isEmpty()
+        ? collect()
+        : \App\Models\Contable\Centrocosto::query()
+            ->whereIn('id', $ccIdsParaCodigo->unique()->values()->all())
+            ->pluck('codigo', 'id');
 @endphp
 
 <div class="row">
@@ -46,6 +59,7 @@
                 <thead style="background-color:#85C1E9;color:#17202A;">
                     <tr>
                         <th>Concepto</th>
+                        <th style="width:5.5rem;" title="Centro de costo del renglón (prorrateo)">CC</th>
                         <th style="width:9rem;" class="text-right">Monto</th>
                         <th style="width:2.5rem;"></th>
                     </tr>
@@ -76,10 +90,16 @@
                                         : (int) ($concepto->cuentacontabledebe_id ?? 0);
                                 }
                             @endphp
+                            @php
+                                $ccOldId = (int) ($centrosConceptoOld[$idx] ?? 0);
+                                $ccOldCodigo = $ccOldId > 0 ? (string) ($ccCodigosPorId[$ccOldId] ?? $ccOldId) : '';
+                            @endphp
                             <tr class="item-concepto">
                                 <td>
                                     <input type="hidden" name="concepto_ivacompra_ids[]" class="concepto_ivacompra_id" value="{{ $conceptoId ?: '' }}">
-                                    <input type="hidden" name="concepto_centrocosto_ids[]" class="cp-concepto-centrocosto" value="{{ (int) ($centrosConceptoOld[$idx] ?? 0) ?: '' }}">
+                                    <input type="hidden" name="concepto_centrocosto_ids[]" class="cp-concepto-centrocosto"
+                                           value="{{ $ccOldId ?: '' }}"
+                                           data-cc-codigo="{{ $ccOldCodigo }}">
                                     <div class="d-flex flex-wrap align-items-center">
                                         <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
                                             value="{{ $codigo }}" style="width:5.5rem;" autocomplete="off"
@@ -98,6 +118,10 @@
                                             'puedeAbrirAbmCuenta' => $puedeAbrirAbmCuenta,
                                         ])
                                     </div>
+                                </td>
+                                <td class="align-middle">
+                                    <span class="cp-concepto-cc-codigo small {{ $ccOldCodigo !== '' ? 'font-weight-bold' : 'text-muted' }}"
+                                          title="Centro de costo">{{ $ccOldCodigo !== '' ? $ccOldCodigo : '—' }}</span>
                                 </td>
                                 <td>
                                     <input type="text" inputmode="decimal" name="montos[]"
@@ -140,11 +164,19 @@
                                     );
                                 }
                             @endphp
+                            @php
+                                $ccRenglonId = (int) ($renglon->centrocosto_id ?? 0);
+                                $ccRenglonCodigo = $ccRenglonId > 0
+                                    ? (string) ($ccCodigosPorId[$ccRenglonId] ?? $ccRenglonId)
+                                    : '';
+                            @endphp
                             <tr class="item-concepto">
                                 <td>
                                     <input type="hidden" name="concepto_ivacompra_ids[]" class="concepto_ivacompra_id"
                                         value="{{ $renglon->concepto_ivacompra_id ?? '' }}">
-                                    <input type="hidden" name="concepto_centrocosto_ids[]" class="cp-concepto-centrocosto" value="{{ (int) ($renglon->centrocosto_id ?? 0) ?: '' }}">
+                                    <input type="hidden" name="concepto_centrocosto_ids[]" class="cp-concepto-centrocosto"
+                                           value="{{ $ccRenglonId ?: '' }}"
+                                           data-cc-codigo="{{ $ccRenglonCodigo }}">
                                     <div class="d-flex flex-wrap align-items-center">
                                         <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
                                             value="{{ $concepto->codigo ?? '' }}" style="width:5.5rem;" autocomplete="off"
@@ -163,6 +195,10 @@
                                             'puedeAbrirAbmCuenta' => $puedeAbrirAbmCuenta,
                                         ])
                                     </div>
+                                </td>
+                                <td class="align-middle">
+                                    <span class="cp-concepto-cc-codigo small {{ $ccRenglonCodigo !== '' ? 'font-weight-bold' : 'text-muted' }}"
+                                          title="Centro de costo">{{ $ccRenglonCodigo !== '' ? $ccRenglonCodigo : '—' }}</span>
                                 </td>
                                 <td>
                                     <input type="text" inputmode="decimal" name="montos[]"

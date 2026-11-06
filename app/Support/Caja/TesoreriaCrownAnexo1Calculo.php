@@ -3,21 +3,184 @@
 namespace App\Support\Caja;
 
 use App\ApiAnita;
+use App\Models\Caja\TesoreriaCrownJornada;
+use App\Models\Caja\TesoreriaCrownResultadoOnline;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
  * Anexo I como l-anexo1.c: columnas día, mes y anual.
  *
- * Si Anita grabó el detalle en acumanexo1, esas filas son el listado
- * (el C las escribe al cerrar el día). El poder público sale de ppublico,
- * que es la misma cifra que l-stockfichm.c. No se escribe nada en Anita.
+ * El día sale de la jornada (cajeros, mesas, bóveda). No se reconstruye
+ * con el join de efeboveda y rendmbill: ese cruce recorre todo el detalle
+ * de billetes y es lo que demoraba la pantalla.
  *
- * Si el día no tiene detalle, se calculan las líneas que salen de efectivo,
- * de la bóveda y del poder público. Las recaudaciones de juego, gastronomía
- * y hotel las arma l-resmesa y Anita no las dejó grabadas: no se inventan.
+ * El drop de mesa y la propina tipeada, cuando la jornada todavía no los
+ * tiene, se leen de efemesa y fichammae (una suma por fecha). La caja
+ * inicial y el poder público de fichas salen de la fila que Anita ya
+ * grabó (acumanexo1 101 y ppublico): no están en el stock importado.
+ * Tragamonedas sale del resultado online cargado en la sala (slot_r de
+ * administración central). Si ese día no está cargado, la línea queda en
+ * cero: resulol no está en la base SQL. El poder público de slot sigue
+ * el subtotal del anexo II, que tampoco está en la jornada.
  */
 final class TesoreriaCrownAnexo1Calculo
 {
+    /** @var array<int, array<int, float>> */
+    private static array $propinaPorMesa = [];
+    /**
+     * @return array{
+     *     filas: list<array{concepto: string, dia: ?float, mes: ?float, anio: ?float, total: bool, seccion: bool, informativo?: bool}>,
+     *     cerrado: bool,
+     *     avisos: list<string>
+     * }
+     */
+    public static function deJornada(TesoreriaCrownJornada $jornada): array
+    {
+        $fecha = $jornada->fecha->copy()->startOfDay();
+        $desdeMes = $fecha->copy()->startOfMonth();
+        $desdeAnio = $fecha->copy()->startOfYear();
+        $jornadas = TesoreriaCrownJornada::query()
+            ->where('sala_id', $jornada->sala_id)
+            ->whereDate('fecha', '>=', $desdeAnio->toDateString())
+            ->whereDate('fecha', '<=', $fecha->toDateString())
+            ->orderBy('fecha')
+            ->get();
+
+        $avisos = [];
+        $dias = [];
+        foreach ($jornadas as $una) {
+            $dias[] = [
+                'en_mes' => $una->fecha->greaterThanOrEqualTo($desdeMes),
+                'importes' => self::importesDia($una, $avisos),
+            ];
+        }
+
+        $sumar = function (string $clave, bool $mes) use ($dias): float {
+            $total = 0.0;
+            foreach ($dias as $dia) {
+                if ($mes && ! $dia['en_mes']) {
+                    continue;
+                }
+                $total += (float) ($dia['importes'][$clave] ?? 0);
+            }
+
+            return round($total, 2);
+        };
+
+        $ultimo = $dias === [] ? self::ceros() : $dias[array_key_last($dias)]['importes'];
+        $valor = function (string $clave) use ($sumar, $ultimo): array {
+            return [
+                'dia' => round((float) ($ultimo[$clave] ?? 0), 2),
+                'mes' => $sumar($clave, true),
+                'anio' => $sumar($clave, false),
+            ];
+        };
+
+        $poder = self::poderPublico($fecha->format('Ymd'), $avisos);
+        $inicial = self::cajaInicial($fecha->copy()->subDay()->format('Ymd'), $fecha->format('Ymd'), $avisos);
+
+        $sala = $valor('sala');
+        $ruleta = $valor('ruleta');
+        $slot = $valor('slot');
+        $juego = self::suma($sala, $ruleta, $slot);
+        $gastro = $valor('gastro');
+        $hotel = $valor('hotel');
+        $recaudacion = self::suma($juego, $gastro, $hotel);
+
+        $poderFila = $poder ?? ['dia' => 0.0, 'mes' => 0.0, 'anio' => 0.0];
+        $slotPoder = $valor('slot_poder');
+        $propina = $valor('propina');
+        $torneo = $valor('torneo');
+        $bingo = $valor('bingo');
+        $online = $valor('online');
+        $voucher = $valor('voucher');
+        $apuestas = $valor('apuestas');
+        $bancarios = $valor('bancarios');
+        $excedente = $valor('excedente');
+        $recargo = $valor('recargo');
+        $otros = self::suma($poderFila, $slotPoder, $propina, $torneo, $bingo, $online, $voucher, $apuestas, $bancarios, $excedente, $recargo);
+        $ingresos = self::suma($recaudacion, $otros);
+
+        $compras = $valor('compras');
+        $fallos = $valor('fallos');
+        $deposito = $valor('deposito');
+        $depositoPropina = $valor('deposito_propina');
+        $credito = $valor('credito');
+        $debito = $valor('debito');
+        $qr = $valor('qr');
+        $dolares = $valor('dolares');
+        $euros = $valor('euros');
+        $ctacte = $valor('ctacte');
+        $transferencia = $valor('transferencia');
+        $otrosEgresos = $valor('otros_egresos');
+        $egresos = self::suma($compras, $fallos, $deposito, $depositoPropina, $credito, $debito, $qr, $dolares, $euros, $ctacte, $transferencia, $otrosEgresos);
+        $variacion = self::resta($ingresos, $egresos);
+
+        $finalDia = $inicial['dia'] === null ? null : round($variacion['dia'] + $inicial['dia'], 2);
+        $finalMes = $inicial['mes'] === null ? null : round($variacion['mes'] + $inicial['mes'], 2);
+        $anexo8 = $valor('anexo8');
+
+        $filas = [];
+        $clientes = self::lin('Clientes', [
+            'dia' => (float) ($ultimo['clientes'] ?? 0),
+            'mes' => $sumar('clientes', true),
+            'anio' => $sumar('clientes', false),
+        ]);
+        $clientes['informativo'] = true;
+        $filas[] = $clientes;
+        $filas[] = self::sec('INGRESOS');
+        $filas[] = self::lin('Recaudación sala convencional (anexo II)', $sala);
+        $filas[] = self::lin('Recaudación ruleta electrónica (anexo II)', $ruleta);
+        $filas[] = self::lin('Recaudación máquinas tragamonedas (anexo II)', $slot);
+        $filas[] = self::tot('Total de recaudaciones por juego', $juego);
+        $filas[] = self::lin('Total ventas de gastronomía al contado (anexo III)', $gastro);
+        $filas[] = self::lin('Total ventas de hotelería al contado (anexo III)', $hotel);
+        $filas[] = self::tot('Total recaudación', $recaudacion);
+        $filas[] = self::lin('Fichas poder público (anexo II)', $poderFila);
+        $filas[] = self::lin('Fichas poder público slot (anexo II)', $slotPoder);
+        $filas[] = self::lin('Recaudación propina empleados (anexo II)', $propina);
+        $filas[] = self::lin('Torneos (anexo II)', $torneo);
+        $filas[] = self::lin('Bingo (anexo II)', $bingo);
+        $filas[] = self::lin('On-line', $online);
+        $filas[] = self::lin('Poder público voucher', $voucher);
+        $filas[] = self::lin('Apuesta deportiva', $apuestas);
+        $filas[] = self::lin('Movimientos bancarios y financieros', $bancarios);
+        $filas[] = self::lin('Excedente de caja (anexo II)', $excedente);
+        $filas[] = self::lin('Recargo financiero', $recargo);
+        $filas[] = self::tot('Total otros ingresos', $otros);
+        $filas[] = self::tot('Total ingresos', $ingresos);
+        $filas[] = self::sec('EGRESOS');
+        $filas[] = self::lin('Compras y gastos en efectivo y pagos de cuenta corriente (anexo VI)', $compras);
+        $filas[] = self::lin('Anticipos a cuenta de sueldo y fallos de caja (anexo VII)', $fallos);
+        $filas[] = self::lin('Depósito efectivo', $deposito);
+        $filas[] = self::lin('Depósito propina', $depositoPropina);
+        $filas[] = self::lin('Tarjetas de crédito', $credito);
+        $filas[] = self::lin('Tarjetas de débito', $debito);
+        $filas[] = self::lin('Total QR', $qr);
+        $filas[] = self::lin('Depósito dólares', $dolares);
+        $filas[] = self::lin('Depósito euros', $euros);
+        $filas[] = self::lin('Cuenta corriente hotel', $ctacte);
+        $filas[] = self::lin('Transferencia a cuenta hotel', $transferencia);
+        $filas[] = self::lin('Otros egresos', $otrosEgresos);
+        $filas[] = self::tot('Total egresos', $egresos);
+        $filas[] = self::tot('Variación de la caja', $variacion);
+        $filas[] = self::sec('CAJA');
+        $filas[] = self::lin('Caja inicial', $inicial);
+        $filas[] = self::lin('Caja final (por variación)', ['dia' => $finalDia, 'mes' => $finalMes, 'anio' => null]);
+        $filas[] = self::lin('Caja final (anexo VIII)', ['dia' => $anexo8['dia'], 'mes' => 0.0, 'anio' => null]);
+        $diferenciaDia = $finalDia === null ? null : round($anexo8['dia'] - $finalDia, 2);
+        $filas[] = self::tot('Diferencia', ['dia' => $diferenciaDia, 'mes' => 0.0, 'anio' => null]);
+
+        $avisos[] = 'La caja final del anexo VIII es el saldo de bóveda cargado en la jornada. Anita imprime el stock físico completo; si falta la apertura anterior, no cierra con ese listado.';
+
+        return [
+            'filas' => $filas,
+            'cerrado' => false,
+            'avisos' => array_values(array_unique($avisos)),
+        ];
+    }
+
     /**
      * @return array{
      *     filas: list<array{concepto: string, dia: ?float, mes: ?float, anio: ?float, total: bool, seccion: bool}>,
@@ -27,253 +190,390 @@ final class TesoreriaCrownAnexo1Calculo
      */
     public static function delDia(string $fechaYmd): array
     {
-        $fecha = (int) str_replace('-', '', $fechaYmd);
-        $items = self::items($fecha);
-        $poder = self::ppublico($fecha);
-        $ayer = (int) date('Ymd', strtotime($fechaYmd.' -1 day'));
-        $cajaAyer = self::item($ayer, 101);
-        $avisos = [];
-
-        if (isset($items[10])) {
+        $jornada = TesoreriaCrownJornada::query()
+            ->whereDate('fecha', $fechaYmd)
+            ->orderBy('id')
+            ->first();
+        if (! $jornada instanceof TesoreriaCrownJornada) {
             return [
-                'filas' => self::desdeAcumulado($fechaYmd, $items, $poder, $cajaAyer, $avisos),
-                'cerrado' => true,
-                'avisos' => $avisos,
+                'filas' => [],
+                'cerrado' => false,
+                'avisos' => ['No hay jornada de tesorería para el '.$fechaYmd.'.'],
             ];
         }
 
-        $ultimo = self::ultimoDetalle();
-        if ($ultimo !== null) {
-            $avisos[] = 'Anita no grabó el detalle del anexo para este día. El último detalle es del '
-                .substr((string) $ultimo, 6, 2).'/'.substr((string) $ultimo, 4, 2).'/'.substr((string) $ultimo, 0, 4)
-                .'. Las recaudaciones de juego, gastronomía, hotel, propina, torneos, bingo y los fallos salen de otros programas y no se completan con cero.';
-        }
-        $avisos[] = 'La cuenta corriente y la transferencia de hotel no están en la base SQL de Anita.';
-
-        return [
-            'filas' => self::desdeMovimientos($fecha, $fechaYmd, $poder, $cajaAyer, $items[101] ?? null),
-            'cerrado' => false,
-            'avisos' => $avisos,
-        ];
+        return self::deJornada($jornada);
     }
 
     /**
-     * @param  array<int, array{dia: float, mes: float, anio: float}>  $items
-     * @param  array{dia: float, mes: float, anio: float}|null  $poder
-     * @param  array{dia: float, mes: float, anio: float}|null  $cajaAyer
      * @param  list<string>  $avisos
-     * @return list<array{concepto: string, dia: ?float, mes: ?float, anio: ?float, total: bool, seccion: bool}>
+     * @return array<string, float>
      */
-    private static function desdeAcumulado(string $fechaYmd, array $items, ?array $poder, ?array $cajaAyer, array &$avisos): array
+    private static function importesDia(TesoreriaCrownJornada $jornada, array &$avisos): array
     {
-        $v = fn (int $item): array => $items[$item] ?? ['dia' => 0.0, 'mes' => 0.0, 'anio' => 0.0];
-        $poderFila = $poder ?? ['dia' => 0.0, 'mes' => 0.0, 'anio' => 0.0];
-        if ($poder === null) {
-            $avisos[] = 'Anita no tiene poder público grabado para este día.';
+        $out = self::ceros();
+        $fechaInt = (int) $jornada->fecha->format('Ymd');
+        $resumen = TesoreriaCrownResumenCajeroCalculo::deJornada($jornada);
+        $porTipo = [];
+        foreach ($resumen['grupos'] as $grupo) {
+            $porTipo[(string) $grupo['tipo']] = $grupo['totales'];
         }
-        if (($v(126)['dia'] ?? 0) != 0.0) {
-            $avisos[] = 'Anita tiene poder público de voucher grabado y el listado lo imprime en cero.';
-        }
-
-        $mesa = $v(10);
-        $ruleta = $v(20);
-        $slot = $v(70);
-        $gastro = $v(40);
-        $hotel = $v(60);
-        $juego = self::suma($mesa, $ruleta, $slot);
-        $recaudacion = self::suma($juego, $gastro, $hotel);
-        $propina = $v(30);
-        $torneo = $v(80);
-        $bingo = $v(90);
-        $online = $v(125);
-        $bancarios = $v(200);
-        $excedente = $v(100);
-        $recargo = $v(330);
-        $apuestas = $v(331);
-        $voucher = ['dia' => 0.0, 'mes' => 0.0, 'anio' => 0.0];
-        $slotPoder = ['dia' => 0.0, 'mes' => 0.0, 'anio' => 0.0];
-        $otros = self::suma($online, $bingo, $torneo, $poderFila, $propina, $bancarios, $slotPoder, $voucher, $excedente, $recargo, $apuestas);
-        $ingresos = self::suma($recaudacion, $otros);
-
-        $egresos = self::suma($v(220), $v(110), $v(120), $v(230), $v(240), $v(250), $v(251), $v(252), $v(260), $v(270), $v(290), $v(300), $v(310));
-        $variacion = self::resta($ingresos, $egresos);
-        $inicial = self::cajaInicial($fechaYmd, $cajaAyer);
-        $finalCalculada = self::suma($variacion, $inicial);
-        $finalAnita = $v(101);
-        if (abs($finalCalculada['dia'] - $finalAnita['dia']) > 1) {
-            $avisos[] = 'La caja final por variación da '.number_format($finalCalculada['dia'], 2, ',', '.')
-                .' y Anita tiene grabados '.number_format($finalAnita['dia'], 2, ',', '.').'.';
-        }
-        $anexo8 = $v(130);
-        $diferencia = self::resta($anexo8, $finalAnita);
-
-        $filas = [];
-        $filas[] = self::sec('INGRESOS');
-        $filas[] = self::lin('Clientes', $v(50));
-        $filas[] = self::lin('Recaudación sala convencional (anexo II)', $mesa);
-        $filas[] = self::lin('Recaudación ruleta electrónica (anexo II)', $ruleta);
-        $filas[] = self::lin('Recaudación máquinas tragamonedas (anexo II)', $slot);
-        $filas[] = self::tot('Total de recaudaciones por juego', $juego);
-        $filas[] = self::lin('Total ventas de gastronomía al contado (anexo III)', $gastro);
-        $filas[] = self::lin('Total ventas de hotelería al contado (anexo III)', $hotel);
-        $filas[] = self::tot('Total recaudación', $recaudacion);
-        $filas[] = self::lin('Fichas poder público (anexo II)', $poderFila);
-        $filas[] = self::lin('Recaudación propina empleados (anexo II)', $propina);
-        $filas[] = self::lin('Torneos (anexo II)', $torneo);
-        $filas[] = self::lin('Bingo (anexo II)', $bingo);
-        $filas[] = self::lin('On-line', $online);
-        $filas[] = self::lin('Poder público voucher', $voucher);
-        $filas[] = self::lin('Movimientos bancarios y financieros', $bancarios);
-        $filas[] = self::lin('Excedente de caja (anexo II)', $excedente);
-        $filas[] = self::lin('Recargo financiero', $recargo);
-        $filas[] = self::lin('Apuestas deportivas', $apuestas);
-        $filas[] = self::tot('Total otros ingresos', $otros);
-        $filas[] = self::tot('Total ingresos', $ingresos);
-        $filas[] = self::sec('EGRESOS');
-        $filas[] = self::lin('Compras y gastos en efectivo y pagos de cuenta corriente (anexo VI)', $v(220));
-        $filas[] = self::lin('Anticipos a cuenta de sueldo y fallos de caja (anexo VII)', self::suma($v(110), $v(120)));
-        $filas[] = self::lin('Depósito efectivo', $v(230));
-        $filas[] = self::lin('Depósito propina', $v(240));
-        $filas[] = self::lin('Tarjetas de crédito', $v(250));
-        $filas[] = self::lin('Tarjetas de débito', $v(251));
-        $filas[] = self::lin('Total QR', $v(252));
-        $filas[] = self::lin('Depósito dólares', $v(260));
-        $filas[] = self::lin('Depósito euros', $v(270));
-        $filas[] = self::lin('Cuenta corriente hotel', $v(290));
-        $filas[] = self::lin('Transferencia a cuenta hotel', $v(300));
-        $filas[] = self::lin('Otros egresos', $v(310));
-        $filas[] = self::tot('Total egresos', $egresos);
-        $filas[] = self::tot('Variación de la caja', $variacion);
-        $filas[] = self::sec('CAJA');
-        $filas[] = self::lin('Caja inicial', $inicial);
-        $filas[] = self::lin('Caja final (por variación)', $finalAnita);
-        $filas[] = self::lin('Caja final (anexo VIII)', $anexo8);
-        $filas[] = self::tot('Diferencia', $diferencia);
-
-        return $filas;
-    }
-
-    /**
-     * @param  array{dia: float, mes: float, anio: float}|null  $poder
-     * @param  array{dia: float, mes: float, anio: float}|null  $cajaAyer
-     * @param  array{dia: float, mes: float, anio: float}|null  $cajaHoy
-     * @return list<array{concepto: string, dia: ?float, mes: ?float, anio: ?float, total: bool, seccion: bool}>
-     */
-    private static function desdeMovimientos(int $fecha, string $fechaYmd, ?array $poder, ?array $cajaAyer, ?array $cajaHoy): array
-    {
-        $efe = self::efectivo($fecha);
-        $boveda = self::boveda($fecha);
-        $dolares = self::monedaExtranjera($fecha, 8, '2');
-        $euros = self::monedaExtranjera($fecha, 9, '3');
-        $sumaCod = function (int ...$codigos) use ($boveda): array {
-            $total = 0.0;
-            foreach ($codigos as $codigo) {
-                $total += $boveda[$codigo] ?? 0.0;
+        $ventaContado = function (string $tipo) use ($porTipo): float {
+            $tot = $porTipo[$tipo] ?? null;
+            if (! is_array($tot)) {
+                return 0.0;
             }
 
-            return ['dia' => $total, 'mes' => null, 'anio' => null];
+            return round((float) ($tot['resultado'] ?? 0) - (float) ($tot['diferencia'] ?? 0), 2);
         };
-        $dia = fn (float $importe): array => ['dia' => $importe, 'mes' => null, 'anio' => null];
+        $out['gastro'] = $ventaContado('G');
+        $out['hotel'] = $ventaContado('H');
 
-        $filas = [];
-        $filas[] = self::sec('INGRESOS');
-        $filas[] = self::lin('Fichas poder público (anexo II)', $poder ?? ['dia' => null, 'mes' => null, 'anio' => null]);
-        $filas[] = self::lin('Movimientos bancarios y financieros', $sumaCod(25, 1, 41, 37, 29));
-        $filas[] = self::lin('Excedente de bóveda', $sumaCod(17, 13));
-        $filas[] = self::lin('Recargo financiero', $dia($efe['recargo']));
-        $filas[] = self::lin('Apuestas deportivas', $dia($efe['apuestas']));
-        $filas[] = self::sec('EGRESOS');
-        $filas[] = self::lin('Compras y gastos en efectivo y pagos de cuenta corriente (anexo VI)', $sumaCod(2));
-        $filas[] = self::lin('Depósito efectivo', $sumaCod(3, 22));
-        $filas[] = self::lin('Depósito propina', $sumaCod(7, 24));
-        $filas[] = self::lin('Tarjetas de crédito', $dia($efe['tarjetas']));
-        $filas[] = self::lin('Tarjetas de débito', $dia($efe['debito']));
-        $filas[] = self::lin('Total QR', $dia($efe['qr']));
-        $filas[] = self::lin('Depósito dólares', $dia($dolares));
-        $filas[] = self::lin('Depósito euros', $dia($euros));
-        $filas[] = self::lin('Otros egresos', $sumaCod(14, 30));
-        $filas[] = self::sec('CAJA');
-        $filas[] = self::lin('Caja inicial', self::cajaInicial($fechaYmd, $cajaAyer));
-        if ($cajaHoy !== null) {
-            $filas[] = self::lin('Caja final grabada en Anita', $cajaHoy);
+        $propinaErp = round((float) DB::table('tesoreria_crown_mesa')
+            ->where('jornada_id', $jornada->id)
+            ->where('tipo', 'F')
+            ->where('estado', 'C')
+            ->whereNull('revierte_id')
+            ->sum('propina'), 2);
+        $propinaAnita = 0.0;
+        if (abs($propinaErp) < 0.001) {
+            $propinaAnita = self::propinaAnita($fechaInt, $avisos);
+        }
+        $out['propina'] = round((float) ($porTipo['E']['resultado'] ?? 0) + $propinaAnita, 2);
+
+        foreach ($resumen['filas'] as $fila) {
+            if (! empty($fila['propina'])) {
+                continue;
+            }
+            $dif = (float) ($fila['diferencia'] ?? 0);
+            if ($dif > 0.001) {
+                $out['excedente'] += $dif;
+            } elseif ($dif < -0.001) {
+                $out['fallos'] += abs($dif);
+            }
+            $out['online'] -= (float) ($fila['online'] ?? 0);
+            $out['credito'] += (float) ($fila['tarjeta_credito'] ?? 0);
+            $out['debito'] += (float) ($fila['tarjeta_debito'] ?? 0);
+            $out['qr'] += (float) ($fila['total_qr'] ?? 0);
+            $out['recargo'] += (float) ($fila['recargo_fin'] ?? 0);
+            $out['ctacte'] += (float) ($fila['ctacte'] ?? 0);
+            $out['apuestas'] += (float) ($fila['vta_apuesta'] ?? 0) - (float) ($fila['pago_apuesta'] ?? 0);
         }
 
-        return $filas;
-    }
+        $boveda = self::bovedaPesos($jornada);
+        $sumarCod = function (int ...$codigos) use ($boveda): float {
+            $total = 0.0;
+            foreach ($codigos as $codigo) {
+                $total += (float) ($boveda[$codigo] ?? 0);
+            }
 
-    /**
-     * @param  array{dia: float, mes: float, anio: float}|null  $cajaAyer
-     * @return array{dia: ?float, mes: ?float, anio: ?float}
-     */
-    private static function cajaInicial(string $fechaYmd, ?array $cajaAyer): array
-    {
-        if ($cajaAyer === null) {
-            return ['dia' => null, 'mes' => null, 'anio' => null];
-        }
-        $mes = $cajaAyer['mes'];
-        $anio = $cajaAyer['anio'];
-        if (substr($fechaYmd, 8, 2) === '01') {
-            $mes = $cajaAyer['dia'];
-        }
-        if (substr($fechaYmd, 5, 5) === '01-01') {
-            $mes = $cajaAyer['dia'];
-            $anio = $cajaAyer['dia'];
+            return round($total, 2);
+        };
+        $out['torneo'] = $sumarCod(37);
+        $out['bancarios'] = $sumarCod(25, 1, 41, 37, 29);
+        $out['excedente'] = round($out['excedente'] + $sumarCod(17, 13), 2);
+        $out['compras'] = $sumarCod(2);
+        $out['deposito'] = $sumarCod(3, 22);
+        $out['deposito_propina'] = $sumarCod(7, 24);
+        $out['credito'] = round($out['credito'] + $sumarCod(10), 2);
+        $out['otros_egresos'] = $sumarCod(14, 30);
+        $out['dolares'] = self::monedaExtranjera($jornada, 8, ['USD', 'DOL']);
+        $out['euros'] = self::monedaExtranjera($jornada, 9, ['EUR', 'EURO']);
+        $out['sala'] = self::salaConvencional($jornada, $fechaInt, $propinaAnita > 0, $avisos);
+        $out['clientes'] = self::clientes($fechaInt, $avisos);
+        $out['anexo8'] = (float) TesoreriaCrownAnexo8Calculo::deJornada($jornada)['total'];
+        $central = TesoreriaCrownResultadoOnline::deSalaFecha(
+            (int) $jornada->sala_id,
+            (string) $jornada->fecha?->format('Y-m-d')
+        );
+        if ($central) {
+            $tieneCasino = abs((float) $central->apostado) > 0.001
+                || abs((float) $central->pagado) > 0.001
+                || abs((float) $central->resultado) > 0.001;
+            if ($tieneCasino) {
+                $out['online'] = (float) $central->resultado;
+            }
+            if (abs((float) $central->slot_resultado) > 0.001) {
+                $out['slot'] = (float) $central->slot_resultado;
+            }
         }
 
-        return ['dia' => $cajaAyer['dia'], 'mes' => $mes, 'anio' => $anio];
-    }
-
-    /**
-     * @return array<int, array{dia: float, mes: float, anio: float}>
-     */
-    private static function items(int $fecha): array
-    {
-        $out = [];
-        foreach (self::consultar(
-            'item,diario,mensual,anual',
-            'SELECT acan1_item, acan1_diario, acan1_mensual, acan1_anual FROM acumanexo1 WHERE acan1_fecha = '.$fecha
-        ) as $fila) {
-            $out[(int) $fila->item] = [
-                'dia' => (float) $fila->diario,
-                'mes' => (float) $fila->mensual,
-                'anio' => (float) $fila->anual,
-            ];
+        foreach ($out as $clave => $importe) {
+            $out[$clave] = round((float) $importe, 2);
+        }
+        if ($central && abs((float) $out['online'] - (float) $central->resultado) < 0.001 && (abs((float) $central->apostado) > 0.001 || abs((float) $central->pagado) > 0.001 || abs((float) $central->resultado) > 0.001)) {
+            $avisos[] = 'On-line salió del resultado de casino online cargado para el día.';
+        }
+        if (abs($out['slot']) < 0.001 && abs($out['slot_poder']) < 0.001) {
+            $avisos[] = 'La recaudación de tragamonedas queda en cero: cargá el resultado de slots online del día. El poder público de slot también queda en cero.';
+        } elseif (abs($out['slot_poder']) < 0.001) {
+            $avisos[] = 'El poder público de slot queda en cero. Anita lo arma con el subtotal de slots del anexo II, que no está en la jornada.';
         }
 
         return $out;
     }
 
     /**
-     * @return array{dia: float, mes: float, anio: float}|null
+     * @return array<string, float>
      */
-    private static function item(int $fecha, int $codigo): ?array
+    private static function ceros(): array
     {
-        return self::items($fecha)[$codigo] ?? null;
-    }
-
-    private static function ultimoDetalle(): ?int
-    {
-        $filas = self::consultar(
-            'fecha',
-            'SELECT MAX(acan1_fecha) FROM acumanexo1 WHERE acan1_item = 10'
-        );
-        if ($filas === [] || $filas[0]->fecha === null || $filas[0]->fecha === '') {
-            return null;
-        }
-
-        return (int) $filas[0]->fecha;
+        return array_fill_keys([
+            'clientes', 'sala', 'ruleta', 'slot', 'gastro', 'hotel', 'slot_poder', 'propina',
+            'torneo', 'bingo', 'online', 'voucher', 'apuestas', 'bancarios', 'excedente', 'recargo',
+            'compras', 'fallos', 'deposito', 'deposito_propina', 'credito', 'debito', 'qr',
+            'dolares', 'euros', 'ctacte', 'transferencia', 'otros_egresos', 'anexo8',
+        ], 0.0);
     }
 
     /**
+     * l-resmesa: resultado = estado final + drop − habilitación − reposición + crédito − propina.
+     * El drop es efem_total_peso. Las mesas 27 y 28 no entran.
+     *
+     * @param  list<string>  $avisos
+     */
+    private static function salaConvencional(TesoreriaCrownJornada $jornada, int $fechaInt, bool $propinaDeAnita, array &$avisos): float
+    {
+        $filas = DB::table('tesoreria_crown_mesa as m')
+            ->join('tesoreria_crown_deposito as d', 'd.id', '=', 'm.deposito_id')
+            ->join('tesoreria_crown_mesa_linea as l', 'l.mesa_id', '=', 'm.id')
+            ->join('tesoreria_crown_valor as v', 'v.id', '=', 'l.valor_id')
+            ->where('m.jornada_id', $jornada->id)
+            ->where('m.estado', 'C')
+            ->whereNull('m.revierte_id')
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('tesoreria_crown_mesa as r')
+                    ->whereColumn('r.revierte_id', 'm.id');
+            })
+            ->groupBy('d.codigo', 'm.tipo')
+            ->get(['d.codigo as mesa', 'm.tipo', DB::raw('SUM(l.cantidad * v.denominacion) as monto')]);
+
+        $porMesa = [];
+        foreach ($filas as $fila) {
+            $nro = (int) preg_replace('/\D/', '', (string) $fila->mesa);
+            if ($nro === 27 || $nro === 28 || $nro === 0) {
+                continue;
+            }
+            $porMesa[$nro][(string) $fila->tipo] = (float) $fila->monto;
+        }
+        $drops = self::dropsAnita($fechaInt, $avisos);
+        $propinas = $propinaDeAnita ? self::propinasPorMesa($fechaInt, $avisos) : [];
+        if (! $propinaDeAnita) {
+            $locales = DB::table('tesoreria_crown_mesa as m')
+                ->join('tesoreria_crown_deposito as d', 'd.id', '=', 'm.deposito_id')
+                ->where('m.jornada_id', $jornada->id)
+                ->where('m.tipo', 'F')
+                ->where('m.estado', 'C')
+                ->whereNull('m.revierte_id')
+                ->groupBy('d.codigo')
+                ->get(['d.codigo as mesa', DB::raw('SUM(m.propina) as propina')]);
+            foreach ($locales as $fila) {
+                $propinas[(int) preg_replace('/\D/', '', (string) $fila->mesa)] = (float) $fila->propina;
+            }
+        }
+
+        $total = 0.0;
+        $mesas = array_unique(array_merge(array_keys($porMesa), array_keys($drops), array_keys($propinas)));
+        foreach ($mesas as $nro) {
+            if ($nro === 27 || $nro === 28) {
+                continue;
+            }
+            $mov = $porMesa[$nro] ?? [];
+            $total += (float) ($mov['F'] ?? 0)
+                + (float) ($drops[$nro] ?? 0)
+                - (float) ($mov['A'] ?? 0)
+                - (float) ($mov['R'] ?? 0)
+                + (float) ($mov['C'] ?? 0)
+                - (float) ($propinas[$nro] ?? 0);
+        }
+
+        return round($total, 2);
+    }
+
+    /**
+     * Pesos de bóveda por código de transacción. l-anexo1 suma el importe,
+     * sin aplicar el signo: ingresos y egresos se imprimen en positivo.
+     *
+     * @return array<int, float>
+     */
+    private static function bovedaPesos(TesoreriaCrownJornada $jornada): array
+    {
+        $filas = DB::table('tesoreria_crown_boveda as b')
+            ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
+            ->join('tesoreria_crown_boveda_linea as l', 'l.boveda_id', '=', 'b.id')
+            ->join('tesoreria_crown_valor as v', 'v.id', '=', 'l.valor_id')
+            ->leftJoin('tesoreria_crown_tipo_valor as tv', 'tv.id', '=', 'v.tipo_valor_id')
+            ->where('b.jornada_id', $jornada->id)
+            ->where('b.estado', 'C')
+            ->whereNull('b.revierte_id')
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('tesoreria_crown_boveda as r')
+                    ->whereColumn('r.revierte_id', 'b.id');
+            })
+            ->groupBy('t.codigo', 'tv.codigo')
+            ->get(['t.codigo as codigo', 'tv.codigo as moneda', DB::raw('SUM(l.cantidad * v.denominacion) as monto')]);
+
+        $out = [];
+        foreach ($filas as $fila) {
+            $moneda = strtoupper(trim((string) $fila->moneda));
+            if (in_array($moneda, ['USD', 'DOL', 'EUR', 'EURO'], true)) {
+                continue;
+            }
+            $codigo = (int) $fila->codigo;
+            $out[$codigo] = round(($out[$codigo] ?? 0) + (float) $fila->monto, 2);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<string>  $monedas
+     */
+    private static function monedaExtranjera(TesoreriaCrownJornada $jornada, int $codigo, array $monedas): float
+    {
+        $filas = DB::table('tesoreria_crown_boveda as b')
+            ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
+            ->join('tesoreria_crown_boveda_linea as l', 'l.boveda_id', '=', 'b.id')
+            ->join('tesoreria_crown_valor as v', 'v.id', '=', 'l.valor_id')
+            ->join('tesoreria_crown_tipo_valor as tv', 'tv.id', '=', 'v.tipo_valor_id')
+            ->where('b.jornada_id', $jornada->id)
+            ->where('b.estado', 'C')
+            ->whereNull('b.revierte_id')
+            ->where('t.codigo', $codigo)
+            ->whereIn('tv.codigo', $monedas)
+            ->groupBy('v.tipo_valor_id')
+            ->get(['v.tipo_valor_id', DB::raw('SUM(l.cantidad * v.denominacion) as monto')]);
+
+        $total = 0.0;
+        $fecha = $jornada->fecha->format('Y-m-d');
+        foreach ($filas as $fila) {
+            $cot = TesoreriaCrownCierreCalculo::cotizacionVenta((int) $jornada->sala_id, $fecha, (int) $fila->tipo_valor_id);
+            $tasa = (float) ($cot['tasa'] ?? 0);
+            if ($tasa <= 0) {
+                continue;
+            }
+            $total += (float) $fila->monto * $tasa;
+        }
+
+        return round($total, 2);
+    }
+
+    /**
+     * @param  list<string>  $avisos
+     * @return array<int, float>
+     */
+    private static function dropsAnita(int $fecha, array &$avisos): array
+    {
+        try {
+            $filas = self::consultar(
+                'mesa,tipo,monto',
+                'SELECT efem_mesajuego, efem_tipo_oper, SUM(efem_total_peso) FROM efemesa WHERE efem_fecha = '.$fecha.' GROUP BY efem_mesajuego, efem_tipo_oper'
+            );
+        } catch (RuntimeException $e) {
+            $avisos[] = 'No se pudo leer el drop de las mesas: '.$e->getMessage();
+
+            return [];
+        }
+        $out = [];
+        foreach ($filas as $fila) {
+            $nro = (int) $fila->mesa;
+            $tipo = strtoupper(trim((string) $fila->tipo));
+            $monto = (float) $fila->monto;
+            if ($tipo === 'I') {
+                $monto = -$monto;
+            } elseif ($tipo !== 'F') {
+                continue;
+            }
+            $out[$nro] = round(($out[$nro] ?? 0) + $monto, 2);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<string>  $avisos
+     */
+    private static function propinaAnita(int $fecha, array &$avisos): float
+    {
+        $porMesa = self::propinasPorMesa($fecha, $avisos);
+        if (abs(array_sum($porMesa)) > 0.001) {
+            $avisos[] = 'La propina tipeada en el estado final no está en la jornada. Se tomó de Anita.';
+        }
+
+        return round(array_sum($porMesa), 2);
+    }
+
+    /**
+     * @param  list<string>  $avisos
+     * @return array<int, float>
+     */
+    private static function propinasPorMesa(int $fecha, array &$avisos): array
+    {
+        if (isset(self::$propinaPorMesa[$fecha])) {
+            return self::$propinaPorMesa[$fecha];
+        }
+        try {
+            $filas = self::consultar(
+                'mesa,propina',
+                'SELECT fichmm_mesajuego, SUM(fichmm_propina) FROM fichammae WHERE fichmm_fecha = '.$fecha.' AND fichmm_tipo_oper = "F" GROUP BY fichmm_mesajuego'
+            );
+        } catch (RuntimeException $e) {
+            $avisos[] = 'No se pudo leer la propina de las mesas: '.$e->getMessage();
+            self::$propinaPorMesa[$fecha] = [];
+
+            return [];
+        }
+        $out = [];
+        foreach ($filas as $fila) {
+            $out[(int) $fila->mesa] = (float) $fila->propina;
+        }
+        self::$propinaPorMesa[$fecha] = $out;
+
+        return $out;
+    }
+
+    /**
+     * @param  list<string>  $avisos
+     */
+    private static function clientes(int $fecha, array &$avisos): float
+    {
+        try {
+            $filas = self::consultar(
+                'cantidad',
+                'SELECT SUM(ingr_cantidad) FROM ingreso WHERE ingr_fecha = '.$fecha
+            );
+        } catch (RuntimeException $e) {
+            $avisos[] = 'No se pudo leer la cantidad de clientes: '.$e->getMessage();
+
+            return 0.0;
+        }
+
+        return round((float) ($filas[0]->cantidad ?? 0), 2);
+    }
+
+    /**
+     * La fila del día ya trae día, mes y acumulado como los imprime el listado.
+     *
+     * @param  list<string>  $avisos
      * @return array{dia: float, mes: float, anio: float}|null
      */
-    private static function ppublico(int $fecha): ?array
+    private static function poderPublico(string $fechaYmd, array &$avisos): ?array
     {
-        $filas = self::consultar(
-            'dia,mes,acum',
-            'SELECT ppub_ppublico, ppub_ppublico_mes, ppub_ppublico_acum FROM ppublico WHERE ppub_fecha = '.$fecha
-        );
+        try {
+            $filas = self::consultar(
+                'dia,mes,acum',
+                'SELECT ppub_ppublico, ppub_ppublico_mes, ppub_ppublico_acum FROM ppublico WHERE ppub_fecha = '.(int) $fechaYmd
+            );
+        } catch (RuntimeException $e) {
+            $avisos[] = 'No se pudo leer el poder público: '.$e->getMessage();
+
+            return null;
+        }
         if ($filas === []) {
+            $avisos[] = 'Anita no tiene poder público grabado para este día.';
+
             return null;
         }
 
@@ -285,93 +585,62 @@ final class TesoreriaCrownAnexo1Calculo
     }
 
     /**
-     * @return array{tarjetas: float, debito: float, qr: float, recargo: float, apuestas: float}
+     * @param  list<string>  $avisos
+     * @return array{dia: ?float, mes: ?float, anio: ?float}
      */
-    private static function efectivo(int $fecha): array
+    private static function cajaInicial(string $ayerYmd, string $fechaYmd, array &$avisos): array
     {
-        // Informix acota identificadores a 18: efe_vta_apu_dep / efe_pago_apu_dep.
-        $filas = self::consultar(
-            'tarj,deb,qr,rec,vta,pago',
-            'SELECT SUM(efe_tot_tarj), SUM(efe_tarjeta_debito), SUM(efe_total_qr), SUM(efe_recargo_fin),'
-            .' SUM(efe_vta_apu_dep), SUM(efe_pago_apu_dep) FROM efectivo WHERE efe_fecha = '.$fecha
-        );
-        $fila = $filas[0] ?? null;
+        try {
+            $filas = self::consultar(
+                'dia,mes,anio',
+                'SELECT acan1_diario, acan1_mensual, acan1_anual FROM acumanexo1 WHERE acan1_fecha = '.(int) $ayerYmd.' AND acan1_item = 101'
+            );
+        } catch (RuntimeException $e) {
+            $avisos[] = 'No se pudo leer la caja inicial: '.$e->getMessage();
 
-        return [
-            'tarjetas' => (float) ($fila->tarj ?? 0),
-            'debito' => (float) ($fila->deb ?? 0),
-            'qr' => (float) ($fila->qr ?? 0),
-            'recargo' => (float) ($fila->rec ?? 0),
-            'apuestas' => round((float) ($fila->vta ?? 0) - (float) ($fila->pago ?? 0), 2),
-        ];
-    }
+            return ['dia' => null, 'mes' => null, 'anio' => null];
+        }
+        if ($filas === []) {
+            $avisos[] = 'Anita no tiene caja final del día anterior.';
 
-    /**
-     * Pesos de bóveda por código de transacción. l-anexo1.c lee_efeboveda
-     * suma cantidad por valor de rendmbill con origen bóveda.
-     *
-     * @return array<int, float>
-     */
-    private static function boveda(int $fecha): array
-    {
-        $out = [];
-        foreach (self::consultar(
-            'cod,monto',
-            'SELECT e.efeb_cod_trans, SUM(r.renmb_cantidad * r.renmb_valor) FROM efeboveda e, rendmbill r WHERE e.efeb_fecha = '.$fecha.' AND r.renmb_nro_oper = e.efeb_nro_oper AND r.renmb_origen = "B" AND r.renmb_cod_mon = "1" GROUP BY e.efeb_cod_trans'
-        ) as $fila) {
-            $out[(int) $fila->cod] = (float) $fila->monto;
+            return ['dia' => null, 'mes' => null, 'anio' => null];
+        }
+        $dia = (float) $filas[0]->dia;
+        $mes = (float) $filas[0]->mes;
+        if (substr($fechaYmd, 8, 2) === '01') {
+            $mes = $dia;
         }
 
-        return $out;
+        return ['dia' => $dia, 'mes' => $mes, 'anio' => null];
     }
 
     /**
-     * Depósito de dólares (código 8, moneda 2) o euros (código 9, moneda 3),
-     * como lee_monextr: monto por cotización, con el signo de la transacción.
-     */
-    private static function monedaExtranjera(int $fecha, int $codigo, string $moneda): float
-    {
-        $filas = self::consultar(
-            'monto',
-            'SELECT SUM(m.monev_monto * m.monev_cotizacion) FROM efeboveda e, monemov m WHERE e.efeb_fecha = '.$fecha.' AND e.efeb_cod_trans = '.$codigo.' AND m.monev_id = e.efeb_nro_oper AND m.monev_origen = "B" AND m.monev_cod_mon = "'.$moneda.'"'
-        );
-        $monto = (float) ($filas[0]->monto ?? 0);
-        $signo = self::consultar(
-            'signo',
-            'SELECT transm_signo FROM transmae WHERE transm_codigo = '.$codigo
-        );
-        $marca = trim((string) ($signo[0]->signo ?? '0'));
-
-        return $marca === '0' ? $monto : -$monto;
-    }
-
-    /**
-     * @param  array{dia: float, mes: float, anio: float}  ...$partes
+     * @param  array{dia: float, mes: float, anio: ?float}  ...$partes
      * @return array{dia: float, mes: float, anio: float}
      */
     private static function suma(array ...$partes): array
     {
         $dia = $mes = $anio = 0.0;
         foreach ($partes as $parte) {
-            $dia += $parte['dia'];
-            $mes += $parte['mes'];
-            $anio += $parte['anio'];
+            $dia += (float) ($parte['dia'] ?? 0);
+            $mes += (float) ($parte['mes'] ?? 0);
+            $anio += (float) ($parte['anio'] ?? 0);
         }
 
-        return ['dia' => $dia, 'mes' => $mes, 'anio' => $anio];
+        return ['dia' => round($dia, 2), 'mes' => round($mes, 2), 'anio' => round($anio, 2)];
     }
 
     /**
-     * @param  array{dia: float, mes: float, anio: float}  $a
-     * @param  array{dia: float, mes: float, anio: float}  $b
+     * @param  array{dia: float, mes: float, anio: ?float}  $a
+     * @param  array{dia: float, mes: float, anio: ?float}  $b
      * @return array{dia: float, mes: float, anio: float}
      */
     private static function resta(array $a, array $b): array
     {
         return [
-            'dia' => $a['dia'] - $b['dia'],
-            'mes' => $a['mes'] - $b['mes'],
-            'anio' => $a['anio'] - $b['anio'],
+            'dia' => round((float) $a['dia'] - (float) $b['dia'], 2),
+            'mes' => round((float) $a['mes'] - (float) $b['mes'], 2),
+            'anio' => round((float) ($a['anio'] ?? 0) - (float) ($b['anio'] ?? 0), 2),
         ];
     }
 
@@ -392,7 +661,7 @@ final class TesoreriaCrownAnexo1Calculo
     }
 
     /**
-     * @param  array{dia: float, mes: float, anio: float}  $valores
+     * @param  array{dia: float, mes: float, anio: ?float}  $valores
      * @return array{concepto: string, dia: ?float, mes: ?float, anio: ?float, total: bool, seccion: bool}
      */
     private static function tot(string $concepto, array $valores): array

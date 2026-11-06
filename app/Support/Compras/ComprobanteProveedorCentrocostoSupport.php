@@ -109,6 +109,8 @@ final class ComprobanteProveedorCentrocostoSupport
      * Sin OC prorrateada, el IVA sigue las cuentas de gasto.
      * Varias (Agregar cuenta): se abre en la misma proporción.
      * Una sola: se usa si el renglón de IVA todavía no tiene centro propio.
+     * Si el gasto no aporta centros, queda vacío: el IVA puede abrirse igual con la
+     * herramienta «Prorratear CC» (varios renglones del mismo concepto con CC distinto).
      *
      * @param  array<int, float>  $pesosGasto
      * @return array<int, float>

@@ -1858,19 +1858,476 @@ $(function () {
         return parseInt($sel.val() || '0', 10) || 0;
     }
 
-    function escribirCentrocostoConcepto(conceptoId, ccId) {
+    function codigoCcDesdeTextoOpcion(texto) {
+        var t = String(texto || '').trim();
+        if (!t || t.indexOf('—') === 0 || t.indexOf('Seleccione') >= 0) {
+            return '';
+        }
+        // "210 — Nombre" o "210-Nombre" o solo "210"
+        var m = t.match(/^(\S+)/);
+        return m ? m[1] : t;
+    }
+
+    function pintarCodigoCcConcepto($row, ccId, codigo) {
+        if (!$row || !$row.length) {
+            return;
+        }
+        ccId = parseInt(ccId || '0', 10) || 0;
+        codigo = String(codigo || '').trim();
+        var $hidden = $row.find('.cp-concepto-centrocosto');
+        var $label = $row.find('.cp-concepto-cc-codigo');
+        $hidden.val(ccId > 0 ? String(ccId) : '');
+        $hidden.attr('data-cc-codigo', codigo);
+        if (!$label.length) {
+            return;
+        }
+        if (ccId > 0 && codigo !== '') {
+            $label.text(codigo).removeClass('text-muted').addClass('font-weight-bold');
+        } else if (ccId > 0) {
+            $label.text(String(ccId)).removeClass('text-muted').addClass('font-weight-bold');
+        } else {
+            $label.text('—').removeClass('font-weight-bold').addClass('text-muted');
+        }
+    }
+
+    function escribirCentrocostoConcepto(conceptoId, ccId, $soloFila, codigoCc) {
         conceptoId = parseInt(conceptoId, 10) || 0;
         if (conceptoId <= 0) {
             return;
         }
-        $('#tbody-concepto-table tr.item-concepto').each(function () {
+        var $filas = $soloFila && $soloFila.length
+            ? $soloFila
+            : $('#tbody-concepto-table tr.item-concepto');
+        $filas.each(function () {
             var id = parseInt($(this).find('.concepto_ivacompra_id').val() || '0', 10) || 0;
             if (id !== conceptoId) {
                 return;
             }
-            $(this).find('.cp-concepto-centrocosto').val(ccId > 0 ? String(ccId) : '');
+            pintarCodigoCcConcepto($(this), ccId, codigoCc || '');
         });
     }
+
+    /** Estado del modal «Prorratear cuenta por CC». */
+    var cpProrratearCtx = {
+        conceptoId: 0,
+        cuentaId: 0,
+        importeTotal: 0,
+        centrosDisponibles: [],
+        etiquetaCuenta: '',
+        etiquetaConcepto: ''
+    };
+
+    function formatearMontoProrrateo(n) {
+        return formatearMontoConcepto(n);
+    }
+
+    function prorratearAutoActivo() {
+        return $('#cp-prorratear-auto').is(':checked');
+    }
+
+    function filasConceptoPorId(conceptoId) {
+        conceptoId = parseInt(conceptoId, 10) || 0;
+        return $('#tbody-concepto-table tr.item-concepto').filter(function () {
+            return (parseInt($(this).find('.concepto_ivacompra_id').val() || '0', 10) || 0) === conceptoId;
+        });
+    }
+
+    function importeTotalConcepto(conceptoId) {
+        var suma = 0;
+        filasConceptoPorId(conceptoId).each(function () {
+            suma += parseMonto($(this).find('.monto').val() || '0');
+        });
+        return Math.round(suma * 100) / 100;
+    }
+
+    function llenarSelectCcProrrateo($sel, elegido) {
+        elegido = parseInt(elegido || '0', 10) || 0;
+        var lista = cpProrratearCtx.centrosDisponibles || [];
+        $sel.empty();
+        if (lista.length !== 1) {
+            $sel.append('<option value="">— Seleccione CC —</option>');
+        }
+        $.each(lista, function (_, value) {
+            var id = parseInt(value.id, 10) || 0;
+            if (id <= 0) {
+                return;
+            }
+            var texto = $.trim((value.codigo || '') + (value.nombre ? ' — ' + value.nombre : ''));
+            var $opt = $('<option/>').val(String(id)).text(texto || String(id));
+            if (id === elegido) {
+                $opt.prop('selected', true);
+            }
+            $sel.append($opt);
+        });
+        if (elegido > 0 && $sel.find('option[value="' + elegido + '"]').length === 0) {
+            $sel.append($('<option/>').val(String(elegido)).text('#' + elegido).prop('selected', true));
+        }
+        if (elegido > 0) {
+            $sel.val(String(elegido));
+        }
+    }
+
+    function agregarFilaProrrateo(ccId, importe) {
+        var tpl = document.getElementById('cp-prorratear-template-fila');
+        if (!tpl || !tpl.content) {
+            return $();
+        }
+        var $row = $(tpl.content.cloneNode(true));
+        llenarSelectCcProrrateo($row.find('.cp-prorratear-cc'), ccId || 0);
+        var $imp = $row.find('.cp-prorratear-importe');
+        if (importe !== undefined && importe !== null && String(importe) !== '') {
+            $imp.val(formatearMontoProrrateo(parseFloat(importe) || 0));
+        }
+        if (prorratearAutoActivo()) {
+            $imp.prop('readonly', true);
+        }
+        $('#cp-prorratear-tbody').append($row);
+        formatearInputMontoEn($('#cp-prorratear-tbody tr.cp-prorratear-fila').last());
+        return $('#cp-prorratear-tbody tr.cp-prorratear-fila').last();
+    }
+
+    function leerTrozosProrrateoModal() {
+        var trozos = [];
+        var vistos = {};
+        $('#cp-prorratear-tbody tr.cp-prorratear-fila').each(function () {
+            var $sel = $(this).find('.cp-prorratear-cc');
+            var cc = parseInt($sel.val() || '0', 10) || 0;
+            var importe = Math.round(Math.abs(parseMonto($(this).find('.cp-prorratear-importe').val() || '0')) * 100) / 100;
+            if (cc <= 0) {
+                return;
+            }
+            if (vistos[cc]) {
+                trozos._duplicado = true;
+                return;
+            }
+            vistos[cc] = true;
+            trozos.push({
+                centrocosto_id: cc,
+                importe: importe,
+                codigo: codigoCcDesdeTextoOpcion($sel.find('option:selected').text())
+            });
+        });
+        return trozos;
+    }
+
+    function actualizarAvisoProrrateoModal() {
+        var total = Math.round(Math.abs(cpProrratearCtx.importeTotal || 0) * 100) / 100;
+        var trozos = leerTrozosProrrateoModal();
+        var suma = 0;
+        trozos.forEach(function (t) {
+            suma += t.importe;
+        });
+        suma = Math.round(suma * 100) / 100;
+        $('#cp-prorratear-suma').text(formatearMontoProrrateo(suma));
+        var $aviso = $('#cp-prorratear-aviso');
+        var diff = Math.round((suma - total) * 100) / 100;
+        if (trozos._duplicado) {
+            $aviso.removeClass('text-success text-muted').addClass('text-danger')
+                .text('Hay centros de costo repetidos.');
+            return false;
+        }
+        if (trozos.length === 0) {
+            $aviso.removeClass('text-success text-danger').addClass('text-muted')
+                .text('Elija al menos un centro de costo.');
+            return false;
+        }
+        if (Math.abs(diff) > 0.009) {
+            $aviso.removeClass('text-success text-muted').addClass('text-danger')
+                .text('La suma (' + formatearMontoProrrateo(suma) + ') debe igualar '
+                    + formatearMontoProrrateo(total) + '.');
+            return false;
+        }
+        $aviso.removeClass('text-danger text-muted').addClass('text-success')
+            .text('Suma correcta.');
+        return true;
+    }
+
+    function repartirIgualProrrateoModal() {
+        if (!prorratearAutoActivo()) {
+            actualizarAvisoProrrateoModal();
+            return;
+        }
+        var total = Math.round(Math.abs(cpProrratearCtx.importeTotal || 0) * 100) / 100;
+        var $filas = $('#cp-prorratear-tbody tr.cp-prorratear-fila').filter(function () {
+            return (parseInt($(this).find('.cp-prorratear-cc').val() || '0', 10) || 0) > 0;
+        });
+        var n = $filas.length;
+        if (n <= 0) {
+            actualizarAvisoProrrateoModal();
+            return;
+        }
+        var base = Math.floor((total * 100) / n) / 100;
+        var asignado = 0;
+        $filas.each(function (i) {
+            var parte;
+            if (i === n - 1) {
+                parte = Math.round((total - asignado) * 100) / 100;
+            } else {
+                parte = base;
+                asignado = Math.round((asignado + parte) * 100) / 100;
+            }
+            $(this).find('.cp-prorratear-importe').val(formatearMontoProrrateo(parte));
+        });
+        // Filas sin CC quedan en 0 si auto.
+        $('#cp-prorratear-tbody tr.cp-prorratear-fila').each(function () {
+            if ((parseInt($(this).find('.cp-prorratear-cc').val() || '0', 10) || 0) <= 0) {
+                $(this).find('.cp-prorratear-importe').val(formatearMontoProrrateo(0));
+            }
+        });
+        actualizarAvisoProrrateoModal();
+    }
+
+    function sincronizarReadonlyImportesProrrateo() {
+        var auto = prorratearAutoActivo();
+        $('#cp-prorratear-tbody .cp-prorratear-importe').prop('readonly', auto);
+        if (auto) {
+            repartirIgualProrrateoModal();
+        } else {
+            actualizarAvisoProrrateoModal();
+        }
+    }
+
+    function cargarCentrosCuentaProrrateo(cuentaId) {
+        var diferido = $.Deferred();
+        cuentaId = parseInt(cuentaId || '0', 10) || 0;
+        if (cuentaId <= 0) {
+            diferido.resolve([]);
+            return diferido.promise();
+        }
+        var base = typeof window.carpetaBase !== 'undefined' ? window.carpetaBase : '';
+        $.get(base + '/contable/cuentacontable/leercuentacontablecentrocosto/' + cuentaId)
+            .done(function (data) {
+                var lista = [];
+                if ($.isArray(data)) {
+                    lista = data;
+                } else if (data && $.isArray(data.data)) {
+                    lista = data.data;
+                } else if (data && $.isArray(data.centros)) {
+                    lista = data.centros;
+                }
+                var reales = [];
+                $.each(lista, function (_, value) {
+                    var id = parseInt(value && value.id ? value.id : '0', 10) || 0;
+                    if (id > 0) {
+                        reales.push({
+                            id: id,
+                            codigo: String((value && value.codigo) || ''),
+                            nombre: String((value && value.nombre) || '')
+                        });
+                    }
+                });
+                diferido.resolve(reales);
+            })
+            .fail(function () {
+                diferido.resolve([]);
+            });
+        return diferido.promise();
+    }
+
+    function abrirModalProrratearCuenta(opts) {
+        opts = opts || {};
+        var conceptoId = parseInt(opts.conceptoId || '0', 10) || 0;
+        var cuentaId = parseInt(opts.cuentaId || '0', 10) || 0;
+        if (conceptoId <= 0 || cuentaId <= 0 || contabilizado) {
+            return;
+        }
+        var total = importeTotalConcepto(conceptoId);
+        if (Math.abs(total) < 0.0001) {
+            // Fallback: suma de líneas del asiento con ese concepto.
+            var sumaAsiento = 0;
+            targetsPreviewAsiento().find('tr[data-concepto-ivacompra-id="' + conceptoId + '"]').each(function () {
+                var $tds = $(this).children('td');
+                sumaAsiento += Math.abs(parseMonto(String($tds.eq(2).text() || '').trim()));
+            });
+            total = Math.round(sumaAsiento * 100) / 100;
+        }
+        if (Math.abs(total) < 0.0001) {
+            alert('No hay importe para prorratear en este concepto.');
+            return;
+        }
+
+        var meta = conceptosMeta[conceptoId] || {};
+        var $primera = filasConceptoPorId(conceptoId).first();
+        var codigoConcepto = String(($primera.find('.codigo_concepto_ivacompra').val() || meta.codigo || '')).trim();
+        var nombreConcepto = String(($primera.find('.nombre_concepto_ivacompra').val() || meta.nombre || '')).trim();
+
+        cpProrratearCtx = {
+            conceptoId: conceptoId,
+            cuentaId: cuentaId,
+            importeTotal: total,
+            centrosDisponibles: [],
+            etiquetaCuenta: $.trim((opts.cuentaCodigo || '') + (opts.cuentaNombre ? ' — ' + opts.cuentaNombre : '')),
+            etiquetaConcepto: $.trim((codigoConcepto ? codigoConcepto + ' ' : '') + nombreConcepto
+                + (opts.observacion ? ' · ' + opts.observacion : ''))
+        };
+
+        $('#cp-prorratear-cuenta-label').text(cpProrratearCtx.etiquetaCuenta || ('Cuenta #' + cuentaId));
+        $('#cp-prorratear-concepto-label').text(cpProrratearCtx.etiquetaConcepto || ('Concepto #' + conceptoId));
+        $('#cp-prorratear-importe-label').text(formatearMontoProrrateo(total));
+        $('#cp-prorratear-tbody').empty();
+        $('#cp-prorratear-aviso').removeClass('text-danger text-success').addClass('text-muted').text('');
+        $('#cp-prorratear-sin-cc').addClass('d-none');
+        $('#cp-prorratear-auto').prop('checked', true);
+        $('#cp-prorratear-n').val('5');
+
+        cargarCentrosCuentaProrrateo(cuentaId).done(function (centros) {
+            cpProrratearCtx.centrosDisponibles = centros || [];
+            if (!cpProrratearCtx.centrosDisponibles.length) {
+                $('#cp-prorratear-sin-cc').removeClass('d-none');
+            }
+
+            var existentes = [];
+            filasConceptoPorId(conceptoId).each(function () {
+                var cc = parseInt($(this).find('.cp-concepto-centrocosto').val() || '0', 10) || 0;
+                var monto = Math.round(Math.abs(parseMonto($(this).find('.monto').val() || '0')) * 100) / 100;
+                if (cc > 0 || monto > 0) {
+                    existentes.push({ centrocosto_id: cc, importe: monto });
+                }
+            });
+
+            if (existentes.length >= 2) {
+                $('#cp-prorratear-auto').prop('checked', false);
+                existentes.forEach(function (t) {
+                    agregarFilaProrrateo(t.centrocosto_id, t.importe);
+                });
+                sincronizarReadonlyImportesProrrateo();
+            } else {
+                var ccInicial = existentes.length === 1 ? (existentes[0].centrocosto_id || 0) : 0;
+                var nDefault = Math.min(5, Math.max(2, cpProrratearCtx.centrosDisponibles.length || 5));
+                $('#cp-prorratear-n').val(String(nDefault));
+                for (var i = 0; i < nDefault; i++) {
+                    agregarFilaProrrateo(i === 0 ? ccInicial : 0, '');
+                }
+                sincronizarReadonlyImportesProrrateo();
+            }
+
+            $('#cp-prorratear-cuenta-modal').modal('show');
+        });
+    }
+
+    function aplicarProrrateoCuentaAlAsiento() {
+        if (!actualizarAvisoProrrateoModal()) {
+            alert('Corrija los importes o los centros de costo antes de aplicar.');
+            return;
+        }
+        var trozos = leerTrozosProrrateoModal();
+        if (!trozos.length || trozos._duplicado) {
+            return;
+        }
+        var conceptoId = cpProrratearCtx.conceptoId;
+        var $existentes = filasConceptoPorId(conceptoId);
+        if (!$existentes.length) {
+            alert('No se encontraron renglones del concepto en la solapa Conceptos.');
+            return;
+        }
+
+        var $plantilla = $existentes.first();
+        var codigo = String($plantilla.find('.codigo_concepto_ivacompra').val() || '');
+        var nombre = String($plantilla.find('.nombre_concepto_ivacompra').val() || '');
+        var cuentaDebeId = parseInt($plantilla.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
+        var cuentaDebeCodigo = String($plantilla.find('.cp-celda-cuenta-debe .codigocuentacontable').val() || '');
+        var cuentaDebeNombre = String($plantilla.find('.cp-celda-cuenta-debe .nombrecuentacontable').val() || '');
+        var meta = $.extend({}, conceptosMeta[conceptoId] || {}, {
+            id: conceptoId,
+            codigo: codigo,
+            nombre: nombre,
+            cuenta_debe_id: cuentaDebeId || (conceptosMeta[conceptoId] && conceptosMeta[conceptoId].cuenta_debe_id) || 0,
+            cuenta_debe_codigo: cuentaDebeCodigo,
+            cuenta_debe_nombre: cuentaDebeNombre
+        });
+
+        $existentes.remove();
+        trozos.forEach(function (t) {
+            agregarFilaConcepto(meta, t.importe);
+            var $nueva = $('#tbody-concepto-table tr.item-concepto').last();
+            escribirCentrocostoConcepto(conceptoId, t.centrocosto_id, $nueva, t.codigo || '');
+            if (cuentaDebeId > 0) {
+                $nueva.find('.cp-celda-cuenta-debe .cuentacontable_id').val(String(cuentaDebeId));
+                $nueva.find('.cp-celda-cuenta-debe .codigocuentacontable').val(cuentaDebeCodigo);
+                $nueva.find('.cp-celda-cuenta-debe .nombrecuentacontable').val(cuentaDebeNombre);
+            }
+        });
+        actualizarColumnaCuentaDebe();
+        marcarAvisosConceptosLocales();
+        $('#cp-prorratear-cuenta-modal').modal('hide');
+        mostrarSolapa('#cp-solapa-asiento-contable');
+        window.refrescarPreviewAsiento(true);
+    }
+
+    $(document).on('click', '.cp-prorratear-cuenta', function (e) {
+        e.preventDefault();
+        var $btn = $(this);
+        abrirModalProrratearCuenta({
+            conceptoId: parseInt($btn.attr('data-concepto-ivacompra-id') || '0', 10) || 0,
+            cuentaId: parseInt($btn.attr('data-cuenta-id') || '0', 10) || 0,
+            cuentaCodigo: String($btn.attr('data-cuenta-codigo') || ''),
+            cuentaNombre: String($btn.attr('data-cuenta-nombre') || ''),
+            observacion: String($btn.attr('data-observacion') || '')
+        });
+    });
+
+    $(document).on('click', '#cp-prorratear-agregar-fila', function (e) {
+        e.preventDefault();
+        agregarFilaProrrateo(0, '');
+        sincronizarReadonlyImportesProrrateo();
+    });
+
+    $(document).on('click', '#cp-prorratear-preparar-n', function (e) {
+        e.preventDefault();
+        var n = parseInt($('#cp-prorratear-n').val() || '0', 10) || 0;
+        if (n < 1) {
+            n = 1;
+        }
+        if (n > 30) {
+            n = 30;
+        }
+        $('#cp-prorratear-n').val(String(n));
+        var previos = leerTrozosProrrateoModal().filter(function (t) {
+            return t.centrocosto_id > 0;
+        });
+        $('#cp-prorratear-tbody').empty();
+        for (var i = 0; i < n; i++) {
+            var prev = previos[i] || {};
+            agregarFilaProrrateo(prev.centrocosto_id || 0, prorratearAutoActivo() ? '' : (prev.importe || ''));
+        }
+        sincronizarReadonlyImportesProrrateo();
+    });
+
+    $(document).on('click', '.cp-prorratear-quitar', function (e) {
+        e.preventDefault();
+        var $tbody = $('#cp-prorratear-tbody');
+        if ($tbody.find('tr.cp-prorratear-fila').length <= 1) {
+            $(this).closest('tr').find('.cp-prorratear-cc').val('');
+            $(this).closest('tr').find('.cp-prorratear-importe').val('');
+            sincronizarReadonlyImportesProrrateo();
+            return;
+        }
+        $(this).closest('tr').remove();
+        sincronizarReadonlyImportesProrrateo();
+    });
+
+    $(document).on('change', '#cp-prorratear-auto', function () {
+        sincronizarReadonlyImportesProrrateo();
+    });
+
+    $(document).on('change', '#cp-prorratear-tbody .cp-prorratear-cc', function () {
+        if (prorratearAutoActivo()) {
+            repartirIgualProrrateoModal();
+        } else {
+            actualizarAvisoProrrateoModal();
+        }
+    });
+
+    $(document).on('input change blur', '#cp-prorratear-tbody .cp-prorratear-importe', function () {
+        if (!prorratearAutoActivo()) {
+            actualizarAvisoProrrateoModal();
+        }
+    });
+
+    $(document).on('click', '#cp-prorratear-aplicar', function (e) {
+        e.preventDefault();
+        aplicarProrrateoCuentaAlAsiento();
+    });
 
     function filaPideAbrirCentroCosto($row, pedido) {
         if (!pedido || !$row || !$row.length || !$row.is(':visible')) {
@@ -1897,7 +2354,9 @@ $(function () {
             var ccYa = parseInt($ya.attr('data-cc-actual') || '0', 10) || 0;
             var conceptoYa = parseInt($filaYa.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
             if (conceptoYa > 0 && ccYa > 0) {
-                escribirCentrocostoConcepto(conceptoYa, ccYa);
+                var codigoYa = codigoCcDesdeTextoOpcion($ya.find('option:selected').text())
+                    || String($ya.find('option[value="' + ccYa + '"]').text() || '');
+                escribirCentrocostoConcepto(conceptoYa, ccYa, null, codigoCcDesdeTextoOpcion(codigoYa));
             }
         });
         $('.cp-asiento-centrocosto').each(function () {
@@ -1912,8 +2371,9 @@ $(function () {
                 }
                 var esIva = String($row.attr('data-origen') || '') === 'impuesto';
                 var conceptoId = parseInt($row.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+                var codigoRes = codigoCcDesdeTextoOpcion($sel.find('option:selected').text());
                 if (!esIva && conceptoId > 0 && res.id > 0) {
-                    escribirCentrocostoConcepto(conceptoId, res.id);
+                    escribirCentrocostoConcepto(conceptoId, res.id, null, codigoRes);
                 }
                 if (!esIva && res.auto && res.id > 0 && res.id !== actual) {
                     var claveAuto = String(cuentaId) + ':' + String(res.id);
@@ -1926,7 +2386,12 @@ $(function () {
                         sincronizarDebeGastoHiddenDesdeTabla();
                     }
                     if (!esIva && conceptoId > 0) {
-                        escribirCentrocostoConcepto(conceptoId, res.id);
+                        escribirCentrocostoConcepto(
+                            conceptoId,
+                            res.id,
+                            null,
+                            codigoCcDesdeTextoOpcion($sel.find('option:selected').text())
+                        );
                     }
                     window.refrescarPreviewAsiento(true);
                     return;
@@ -2623,15 +3088,30 @@ $(function () {
         var idx = parseInt($row.attr('data-debe-gasto-idx') || '0', 10) || 0;
         cpCcAbrir = null;
         if (conceptoId > 0) {
-            escribirCentrocostoConcepto(conceptoId, cc);
+            var codigoCcSel = codigoCcDesdeTextoOpcion($sel.find('option:selected').text());
+            var $filasConc = filasConceptoPorId(conceptoId);
+            if ($filasConc.length <= 1) {
+                escribirCentrocostoConcepto(conceptoId, cc, null, codigoCcSel);
+            } else {
+                // Concepto ya abierto en varios CC: actualizar solo el renglón alineado.
+                var $asientoMismo = targetsPreviewAsiento()
+                    .find('tr[data-concepto-ivacompra-id="' + conceptoId + '"]');
+                var idxConc = $asientoMismo.index($row);
+                if (idxConc >= 0 && idxConc < $filasConc.length) {
+                    escribirCentrocostoConcepto(conceptoId, cc, $filasConc.eq(idxConc), codigoCcSel);
+                }
+            }
         }
+        var conceptoMultiCc = conceptoId > 0 && filasConceptoPorId(conceptoId).length > 1;
         $('.cp-asiento-centrocosto').each(function () {
             if (this === $sel.get(0)) {
                 return;
             }
             var $otra = $(this).closest('tr');
             var mismoGasto = idx > 0 && (parseInt($otra.attr('data-debe-gasto-idx') || '0', 10) || 0) === idx;
-            var mismoConcepto = conceptoId > 0 && (parseInt($otra.attr('data-concepto-ivacompra-id') || '0', 10) || 0) === conceptoId;
+            var mismoConcepto = !conceptoMultiCc
+                && conceptoId > 0
+                && (parseInt($otra.attr('data-concepto-ivacompra-id') || '0', 10) || 0) === conceptoId;
             if (mismoGasto || mismoConcepto) {
                 $(this).val(cc > 0 ? String(cc) : '');
             }

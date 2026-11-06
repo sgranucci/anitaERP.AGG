@@ -1,0 +1,439 @@
+<?php
+
+namespace App\Http\Controllers\Caja;
+
+use App\Http\Controllers\Controller;
+use App\Models\Caja\TesoreriaCrownResultadoOnline;
+use App\Models\Configuracion\Sala;
+use App\Support\Caja\TesoreriaCrownAcceso;
+use App\Support\Caja\TesoreriaCrownListadoDocumento;
+use App\Support\Caja\TesoreriaCrownResultadoOnlineListadoColumnas;
+use App\Support\Caja\TesoreriaCrownResultadoOnlineListadoFiltros;
+use App\Support\Caja\TesoreriaCrownSalaSupport;
+use App\Support\Caja\TesoreriaCrownWorkbenchSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoCortesSupport;
+use App\Support\Listado\ListadoVistaSupport;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+
+class TesoreriaCrownResultadoOnlineController extends Controller
+{
+    public function index(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-resultado-online');
+
+        $salas = TesoreriaCrownSalaSupport::salas();
+        $sala = TesoreriaCrownSalaSupport::pedida($request, $salas);
+        $armado = $this->workbench($request, $sala ? (int) $sala->id : 0);
+        if ($armado instanceof \Illuminate\Http\RedirectResponse) {
+            return $armado;
+        }
+        $consulta = $this->consulta($armado['filtros']);
+        $cortes = ListadoCortesSupport::calcular(
+            clone $consulta,
+            (array) ($armado['filtros']['agrupar'] ?? []),
+            TesoreriaCrownResultadoOnlineListadoFiltros::camposOrdenables(),
+            'tesoreria_crown_resultado_online.id',
+            [TesoreriaCrownResultadoOnlineListadoColumnas::class, 'valorCelda'],
+            null,
+            $armado['etiquetasColumnas'] ?? [],
+            [
+                ['key' => 'resultado', 'column' => 'tesoreria_crown_resultado_online.resultado', 'label' => 'Resultado'],
+                ['key' => 'slot_resultado', 'column' => 'tesoreria_crown_resultado_online.slot_resultado', 'label' => 'Slots'],
+            ]
+        );
+        $filas = (clone $consulta)->paginate(15)->appends($armado['filtrosQuery']);
+
+        return view('caja.tesoreria_crown.resultado_online.index', array_merge($armado, [
+            'salas' => $salas,
+            'sala' => $sala,
+            'filas' => $filas,
+            'cortes' => $cortes,
+            'grafico' => $this->grafico(clone $consulta),
+            'tieneCriterios' => TesoreriaCrownResultadoOnlineListadoFiltros::tieneCriteriosAplicados($armado['filtros']),
+        ]));
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-resultado-online');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $salas = TesoreriaCrownSalaSupport::salas();
+        $sala = TesoreriaCrownSalaSupport::pedida($request, $salas);
+        $vista = $this->workbench($request, (int) ($sala->id ?? 0));
+        if ($vista instanceof \Illuminate\Http\RedirectResponse) {
+            return $vista;
+        }
+        $filtros = $vista['filtros'];
+        if (is_string($busqueda) && $busqueda !== '') {
+            $filtros['valor'] = $busqueda;
+        }
+        $coleccion = $this->consulta($filtros)->get();
+        foreach ($coleccion as $fila) {
+            $fila->nombreempresa = $fila->empresa->nombre ?? '';
+        }
+        $claves = $vista['columnasVisibles'] ?? [];
+        if ($claves === []) {
+            $claves = array_keys(array_filter(
+                TesoreriaCrownResultadoOnlineListadoColumnas::COLUMNAS,
+                fn (array $meta) => ! empty($meta['default'])
+            ));
+        }
+        $etiquetas = $vista['etiquetasColumnas'] ?? [];
+        $columnas = [];
+        foreach ($claves as $clave) {
+            $columnas[] = [
+                'label' => $etiquetas[$clave] ?? TesoreriaCrownResultadoOnlineListadoColumnas::COLUMNAS[$clave]['label'],
+                'ancho' => $clave === 'fecha' ? 14 : 16,
+                'numero' => TesoreriaCrownResultadoOnlineListadoColumnas::esNumero($clave),
+                'texto' => $clave === 'fecha',
+            ];
+        }
+        $respuesta = TesoreriaCrownListadoDocumento::responder((string) $formato, [
+            'titulo' => 'Resultado online',
+            'subtitulo' => $this->subtitulo($filtros, $sala),
+            'archivo' => 'resultado_online_crown',
+            'titulo_corto' => 'Resultado online',
+            'columnas' => $columnas,
+            'filas' => $coleccion->map(function (TesoreriaCrownResultadoOnline $fila) use ($claves) {
+                $celda = [];
+                foreach ($claves as $clave) {
+                    $celda[] = $clave === 'fecha'
+                        ? $fila->fecha?->format('d/m/Y')
+                        : (in_array($clave, ['attendance', 'cantidad_slots'], true)
+                            ? (int) $fila->{$clave}
+                            : (float) $fila->{$clave});
+                }
+
+                return $celda;
+            })->all(),
+            'coleccion' => $coleccion,
+        ]);
+        if ($respuesta) {
+            return $respuesta;
+        }
+
+        return redirect()->route(
+            'tesoreria_crown_resultado_online',
+            TesoreriaCrownResultadoOnlineListadoFiltros::paraQueryString($filtros)
+        );
+    }
+
+    public function crear(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('crear-tesoreria-crown-resultado-online');
+        $sala = $this->salaPedida($request);
+
+        return view('caja.tesoreria_crown.resultado_online.form', [
+            'sala' => $sala,
+            'fila' => new TesoreriaCrownResultadoOnline([
+                'sala_id' => $sala->id,
+                'empresa_id' => $sala->empresa_id,
+                'fecha' => now()->toDateString(),
+            ]),
+            'edicion' => false,
+        ]);
+    }
+
+    public function editar(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('editar-tesoreria-crown-resultado-online');
+        $fila = $this->filaEnAlcance((int) $request->input('id'));
+
+        return view('caja.tesoreria_crown.resultado_online.form', [
+            'sala' => $fila->sala,
+            'fila' => $fila,
+            'edicion' => true,
+        ]);
+    }
+
+    public function guardar(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        $id = (int) $request->input('id', 0);
+        can($id > 0 ? 'actualizar-tesoreria-crown-resultado-online' : 'crear-tesoreria-crown-resultado-online');
+        $sala = $id > 0
+            ? $this->filaEnAlcance($id)->sala
+            : $this->salaPedida($request);
+        $datos = $this->datos($request, $sala, $id);
+        if ($id > 0) {
+            $fila = $this->filaEnAlcance($id);
+            $fila->update($datos);
+            $fila->refresh();
+        } else {
+            $fila = TesoreriaCrownResultadoOnline::query()->create($datos);
+        }
+
+        return redirect()
+            ->route('tesoreria_crown_resultado_online', ['sala_id' => $sala->id])
+            ->with('mensaje', 'Resultado online del '.$fila->fecha->format('d/m/Y').' guardado.');
+    }
+
+    public function eliminar(int $id)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('eliminar-tesoreria-crown-resultado-online');
+        $fila = $this->filaEnAlcance($id);
+        $salaId = (int) $fila->sala_id;
+        $fecha = $fila->fecha?->format('d/m/Y') ?? '';
+        $fila->delete();
+
+        return redirect()
+            ->route('tesoreria_crown_resultado_online', ['sala_id' => $salaId])
+            ->with('mensaje', 'Se eliminó el resultado online del '.$fecha.'.');
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-resultado-online');
+        $sala = TesoreriaCrownSalaSupport::pedida($request, TesoreriaCrownSalaSupport::salas());
+
+        return TesoreriaCrownWorkbenchSupport::preview(
+            $request,
+            TesoreriaCrownResultadoOnlineListadoColumnas::catalogoActivo(),
+            fn (Request $req) => $this->filtrosDe($req, $sala ? (int) $sala->id : 0),
+            TesoreriaCrownResultadoOnlineListadoColumnas::RECURSO,
+            fn (array $filtros) => $this->consulta($filtros),
+            [TesoreriaCrownResultadoOnlineListadoColumnas::class, 'valorCelda'],
+            [TesoreriaCrownResultadoOnlineListadoFiltros::class, 'camposOrdenables'],
+        );
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-resultado-online');
+
+        return TesoreriaCrownWorkbenchSupport::guardarVista(
+            $request,
+            TesoreriaCrownResultadoOnlineListadoColumnas::RECURSO,
+            'tesoreria_crown_resultado_online',
+            TesoreriaCrownResultadoOnlineListadoColumnas::catalogoActivo(),
+            fn (Request $req) => $this->filtrosDe($req, (int) $request->input('sala_id', 0)),
+            [TesoreriaCrownResultadoOnlineListadoFiltros::class, 'paraQueryString'],
+        );
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-resultado-online');
+        $ok = ListadoVistaSupport::eliminar($id, TesoreriaCrownResultadoOnlineListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('tesoreria_crown_resultado_online', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'mensaje-error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-resultado-online');
+
+        return TesoreriaCrownWorkbenchSupport::guardarColumnas(
+            $request,
+            TesoreriaCrownResultadoOnlineListadoColumnas::RECURSO,
+            'tesoreria_crown_resultado_online',
+            TesoreriaCrownResultadoOnlineListadoColumnas::catalogoActivo(),
+            fn (Request $req) => $this->filtrosDe($req, (int) $request->input('sala_id', 0)),
+            [TesoreriaCrownResultadoOnlineListadoFiltros::class, 'paraQueryString'],
+        );
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-resultado-online');
+        $etiquetas = $request->input('etiquetas', []);
+        ListadoColumnaEtiquetaSupport::guardar(
+            TesoreriaCrownResultadoOnlineListadoColumnas::RECURSO,
+            is_array($etiquetas) ? $etiquetas : [],
+            array_keys(TesoreriaCrownResultadoOnlineListadoColumnas::catalogoActivo())
+        );
+
+        return redirect()->route('tesoreria_crown_resultado_online', $request->query())
+            ->with('mensaje', 'Etiquetas actualizadas.');
+    }
+
+    /**
+     * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
+     */
+    private function workbench(Request $request, int $salaId): array|\Illuminate\Http\RedirectResponse
+    {
+        return TesoreriaCrownWorkbenchSupport::preparar(
+            $request,
+            TesoreriaCrownResultadoOnlineListadoColumnas::RECURSO,
+            'tesoreria_crown_resultado_online',
+            TesoreriaCrownResultadoOnlineListadoColumnas::catalogoActivo(),
+            fn (Request $req) => $this->filtrosDe($req, $salaId),
+            [TesoreriaCrownResultadoOnlineListadoFiltros::class, 'camposOrdenables'],
+            [TesoreriaCrownResultadoOnlineListadoFiltros::class, 'camposQbe'],
+            [TesoreriaCrownResultadoOnlineListadoFiltros::class, 'normalizarOperador'],
+            [TesoreriaCrownResultadoOnlineListadoFiltros::class, 'paraQueryString'],
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function filtrosDe(Request $request, int $salaId): array
+    {
+        $filtros = TesoreriaCrownResultadoOnlineListadoFiltros::resolverDesdeRequest($request);
+        $filtros['sala_id'] = $salaId;
+
+        return $filtros;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return Builder<TesoreriaCrownResultadoOnline>
+     */
+    private function consulta(array $filtros): Builder
+    {
+        $query = TesoreriaCrownResultadoOnline::query()->with(['sala', 'empresa']);
+        TesoreriaCrownResultadoOnlineListadoFiltros::aplicar($query, $filtros);
+
+        return $query;
+    }
+
+    /**
+     * @param  Builder<TesoreriaCrownResultadoOnline>  $query
+     * @return array{labels: list<string>, montos: list<float>, cantidades: list<int>, total: int}
+     */
+    private function grafico(Builder $query): array
+    {
+        $filas = (clone $query)
+            ->reorder()
+            ->orderBy('tesoreria_crown_resultado_online.fecha')
+            ->get(['tesoreria_crown_resultado_online.fecha', 'tesoreria_crown_resultado_online.resultado']);
+        $grupos = [];
+        foreach ($filas as $fila) {
+            $periodo = $fila->fecha?->format('m/Y') ?? '';
+            if (! isset($grupos[$periodo])) {
+                $grupos[$periodo] = ['monto' => 0.0, 'cantidad' => 0];
+            }
+            $grupos[$periodo]['monto'] += (float) $fila->resultado;
+            $grupos[$periodo]['cantidad']++;
+        }
+
+        return [
+            'labels' => array_keys($grupos),
+            'montos' => array_map(fn (array $grupo) => round($grupo['monto'], 2), array_values($grupos)),
+            'cantidades' => array_column(array_values($grupos), 'cantidad'),
+            'total' => $filas->count(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function subtitulo(array $filtros, ?Sala $sala): string
+    {
+        $partes = [];
+        if ($sala) {
+            $partes[] = $sala->codigo.' — '.$sala->nombre;
+        }
+        if (trim((string) ($filtros['fecha_desde'] ?? '')) !== '') {
+            $partes[] = 'desde '.$filtros['fecha_desde'];
+        }
+        if (trim((string) ($filtros['fecha_hasta'] ?? '')) !== '') {
+            $partes[] = 'hasta '.$filtros['fecha_hasta'];
+        }
+
+        return $partes === [] ? 'Todas las fechas de la sala' : implode(' · ', $partes);
+    }
+
+    private function salaPedida(Request $request): Sala
+    {
+        $sala = TesoreriaCrownSalaSupport::pedida($request, TesoreriaCrownSalaSupport::salas());
+        if (! $sala) {
+            abort(404);
+        }
+
+        return $sala;
+    }
+
+    private function filaEnAlcance(int $id): TesoreriaCrownResultadoOnline
+    {
+        $fila = TesoreriaCrownResultadoOnline::query()->with('sala')->find($id);
+        if (! $fila || ! $fila->sala) {
+            abort(404);
+        }
+        $salas = TesoreriaCrownSalaSupport::salas();
+        if (! $salas->firstWhere('id', (int) $fila->sala_id)) {
+            abort(404);
+        }
+
+        return $fila;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function datos(Request $request, Sala $sala, int $id): array
+    {
+        $request->merge([
+            'attendance' => (int) $request->input('attendance', 0),
+            'cantidad_slots' => (int) $request->input('cantidad_slots', 0),
+        ]);
+        $request->validate([
+            'fecha' => [
+                'required',
+                'date',
+                Rule::unique('tesoreria_crown_resultado_online', 'fecha')
+                    ->where(fn ($q) => $q->where('sala_id', $sala->id))
+                    ->ignore($id),
+            ],
+            'attendance' => ['nullable', 'integer', 'min:0'],
+            'cantidad_slots' => ['nullable', 'integer', 'min:0'],
+        ]);
+        $apostado = $this->importe($request->input('apostado'));
+        $pagado = $this->importe($request->input('pagado'));
+        $coinIn = $this->importe($request->input('coin_in'));
+        $coinOut = $this->importe($request->input('coin_out'));
+        $pagoManual = $this->importe($request->input('pago_manual'));
+        $resultado = round($apostado - $pagado, 2);
+        $slot = round($coinIn - $coinOut - $pagoManual, 2);
+
+        return [
+            'empresa_id' => (int) $sala->empresa_id,
+            'sala_id' => (int) $sala->id,
+            'fecha' => $request->input('fecha'),
+            'attendance' => (int) $request->input('attendance', 0),
+            'apostado' => $apostado,
+            'pagado' => $pagado,
+            'drop' => $this->importe($request->input('drop')),
+            'resultado' => $resultado,
+            'porcentaje' => abs($apostado) < 0.0001 ? 0 : round($resultado / $apostado * 100, 4),
+            'poder_publico' => $this->importe($request->input('poder_publico')),
+            'coin_in' => $coinIn,
+            'coin_out' => $coinOut,
+            'pago_manual' => $pagoManual,
+            'cantidad_slots' => (int) $request->input('cantidad_slots', 0),
+            'slot_resultado' => $slot,
+            'usuario_id' => auth()->id() ? (int) auth()->id() : null,
+        ];
+    }
+
+    private function importe(mixed $valor): float
+    {
+        $texto = trim((string) $valor);
+        if (str_contains($texto, ',') && str_contains($texto, '.')) {
+            $texto = str_replace('.', '', $texto);
+            $texto = str_replace(',', '.', $texto);
+        } elseif (str_contains($texto, ',')) {
+            $texto = str_replace(',', '.', $texto);
+        }
+
+        return round((float) $texto, 2);
+    }
+}

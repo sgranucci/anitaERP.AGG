@@ -2,7 +2,7 @@
     <tr class="item-concepto">
         <td>
             <input type="hidden" name="concepto_ivacompra_ids[]" class="concepto_ivacompra_id" value="">
-            <input type="hidden" name="concepto_centrocosto_ids[]" class="cp-concepto-centrocosto" value="">
+            <input type="hidden" name="concepto_centrocosto_ids[]" class="cp-concepto-centrocosto" value="" data-cc-codigo="">
             <div class="d-flex flex-wrap align-items-center">
                 <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
                     value="" style="width:5.5rem;" autocomplete="off"
@@ -20,6 +20,9 @@
                     'puedeAbrirAbmCuenta' => can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false),
                 ])
             </div>
+        </td>
+        <td class="align-middle">
+            <span class="cp-concepto-cc-codigo small text-muted" title="Centro de costo">—</span>
         </td>
         <td>
             <input type="text" inputmode="decimal" name="montos[]" class="form-control form-control-sm monto js-monto-ar text-right" value="" />

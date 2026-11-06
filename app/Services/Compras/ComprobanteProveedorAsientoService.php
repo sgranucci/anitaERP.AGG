@@ -569,9 +569,10 @@ class ComprobanteProveedorAsientoService
 
             // Impuesto / IVA: si la cuenta maneja centro, el de la OC (partido si está prorrateada).
             // Sin OC, el IVA sigue las cuentas de gasto: una sola hereda ese centro; varias
-            // (Agregar cuenta) lo abren en la misma proporción. Si el renglón de IVA ya tiene
-            // centro, ese manda mientras el gasto no esté abierto en más de uno.
-            // Si la cuenta no maneja centro, solo el único de la matriz.
+            // (Agregar cuenta) lo abren en la misma proporción. Si el concepto ya vino abierto
+            // en ≥2 centros (herramienta «Prorratear CC» o precarga multi-CC), se respeta
+            // cada renglón aunque el neto no tenga centro. Si la cuenta no maneja centro,
+            // solo el único de la matriz.
             $conceptoIdLinea = (int) ($linea->concepto_ivacompra_id ?? 0);
             if ($esNetoSinReferencia && $cuentaId > 0) {
                 $ccElegido = (int) ($linea->centrocosto_id ?? 0);
@@ -1343,6 +1344,8 @@ class ComprobanteProveedorAsientoService
                 'cuenta_nombre' => $cuentaNombre,
                 'centrocosto_id' => $ccId,
                 'centrocosto_codigo' => $ccCodigo,
+                'maneja_centrocosto' => $cuentaId > 0
+                    && ComprobanteProveedorCentrocostoSupport::cuentaManejaCentrocosto($cuentaId),
                 'debe' => $debe > 0 ? $debe : null,
                 'haber' => $haber > 0 ? $haber : null,
                 'observacion' => (string) ($observaciones[$i] ?? ''),

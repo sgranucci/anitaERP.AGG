@@ -3,6 +3,7 @@
 namespace App\Services\Ventas\GastronomiaCrown;
 
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Formula_Articulo;
 use App\Models\Stock\SubcategoriaAreaComanda;
 use App\Models\Ventas\AreaComandaGastronomia;
 use App\Models\Ventas\Cliente;
@@ -16,6 +17,9 @@ use App\Models\Ventas\GastronomiaCrown\GastroCrownCuentaLinea;
 use App\Models\Ventas\MesaGastronomia;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Support\Stock\ArticuloSeleccionOperativaSupport;
+use App\Support\Stock\FormulaArticuloSubformulaPosSupport;
+use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
+use App\Support\Ventas\GastronomiaSkuCatalogoSupport;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownKdsPreparaSupport;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPosModos;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPrintSupport;
@@ -132,6 +136,7 @@ final class GastronomiaCrownPosService
      */
     public function resolverArticuloPorSku(ConfiguracionPuntoventaGastronomia $cfg, string $sku): ?Articulo
     {
+        $sku = $this->normalizarSkuCatalogo($sku);
         $articulo = $this->catalogoService->buscarArticuloCatalogoPorSku($cfg, $sku);
         if ($articulo) {
             return $articulo;
@@ -279,6 +284,29 @@ final class GastronomiaCrownPosService
             .' → área '.($linea->area_comanda_gastronomia_id ?: 'sin')
             .' · '.($linea->prepara ? 'prepara' : 'no prepara')
         );
+    }
+
+    public function actualizarCantidadLinea(
+        GastroCrownCuenta $cuenta,
+        GastroCrownCuentaLinea $linea,
+        float $cantidad,
+    ): void {
+        if ((int) $linea->gastro_crown_cuenta_id !== (int) $cuenta->id) {
+            throw new InvalidArgumentException('La línea no pertenece a la cuenta.');
+        }
+        if ($linea->es_separador) {
+            throw new InvalidArgumentException('El separador no tiene cantidad.');
+        }
+        if ($linea->fired_at) {
+            throw new InvalidArgumentException('Ítem ya comandado: no se puede cambiar la cantidad.');
+        }
+        if ($cantidad < 0.001) {
+            throw new InvalidArgumentException('La cantidad no puede ser menor al mínimo permitido.');
+        }
+
+        $linea->cantidad = $cantidad;
+        $linea->save();
+        $this->eventoCuenta($cuenta, 'cantidad', 'Línea '.$linea->id.' → '.$cantidad);
     }
 
     public function cambiarListaPrecio(GastroCrownCuenta $cuenta, int $listaPrecioId): void
@@ -517,6 +545,7 @@ final class GastronomiaCrownPosService
      */
     public function buscarArticuloParaPos(ConfiguracionPuntoventaGastronomia $cfg, string $sku): ?array
     {
+        $sku = $this->normalizarSkuCatalogo($sku);
         $articulo = $this->catalogoService->buscarArticuloCatalogoPorSku($cfg, $sku);
         if (! $articulo) {
             $articulo = Articulo::query()
@@ -769,9 +798,11 @@ final class GastronomiaCrownPosService
     {
         $cuenta->loadMissing(['lineas.areaComanda', 'mesa', 'mozo', 'cliente']);
         $totales = $this->totalesCuenta($cuenta);
+        $detalleOpcionales = $this->detalleOpcionalesPorLinea($cuenta->lineas);
         $lineas = [];
         foreach ($cuenta->lineas as $l) {
             $imp = (float) $l->cantidad * (float) $l->precio - (float) $l->descuento_importe;
+            $opcDetalle = $detalleOpcionales[(int) $l->id] ?? [];
             $lineas[] = [
                 'id' => $l->id,
                 'orden' => $l->orden,
@@ -792,7 +823,8 @@ final class GastronomiaCrownPosService
                 'comanda_id' => $l->gastro_crown_comanda_id,
                 'articulo_id' => $l->articulo_id ? (int) $l->articulo_id : null,
                 'opcionales' => $l->opcionales_json,
-                'tiene_opcionales' => $l->opcionales_json !== [],
+                'opcionales_detalle' => $opcDetalle,
+                'tiene_opcionales' => $opcDetalle !== [],
             ];
         }
 
@@ -826,6 +858,88 @@ final class GastronomiaCrownPosService
             'venta_id' => $cuenta->venta_id ? (int) $cuenta->venta_id : null,
             'lineas' => $lineas,
         ];
+    }
+
+    /**
+     * Los 4 dígitos del POS de AGG se arman como prefijo + sufijo (V + 0123).
+     * Un SKU ya completo se deja igual.
+     */
+    private function normalizarSkuCatalogo(string $sku): string
+    {
+        $sku = trim($sku);
+        if ($sku === '' || ! preg_match('/^\d+$/', $sku)) {
+            return $sku;
+        }
+        if (GastronomiaSkuCatalogoSupport::digitosSufijo() <= 0) {
+            return $sku;
+        }
+
+        $armado = GastronomiaSkuCatalogoSupport::skuDesdeSufijoDigitos($sku);
+
+        return $armado !== '' ? $armado : $sku;
+    }
+
+    /**
+     * @param  iterable<int, GastroCrownCuentaLinea>  $lineas
+     * @return array<int, list<array{orden: string, sku: ?string, descripcion: ?string}>>
+     */
+    private function detalleOpcionalesPorLinea(iterable $lineas): array
+    {
+        $idsArticulo = [];
+        $idsFormula = [];
+        foreach ($lineas as $linea) {
+            foreach ($linea->opcionales_json as $valor) {
+                $decoded = GastronomiaFormulaOpcionalSeleccion::decodificar($valor);
+                if ($decoded === null) {
+                    continue;
+                }
+                if ($decoded['tipo'] === 'articulo') {
+                    $idsArticulo[$decoded['id']] = true;
+                } else {
+                    $idsFormula[$decoded['id']] = true;
+                }
+            }
+        }
+
+        $articulos = $idsArticulo === []
+            ? collect()
+            : Articulo::query()->whereIn('id', array_keys($idsArticulo))->get(['id', 'sku', 'descripcion'])->keyBy('id');
+        $formulas = $idsFormula === []
+            ? collect()
+            : Formula_Articulo::query()->with('articulos')->whereIn('id', array_keys($idsFormula))->get()->keyBy('id');
+
+        $out = [];
+        foreach ($lineas as $linea) {
+            $detalle = [];
+            foreach ($linea->opcionales_json as $orden => $valor) {
+                $decoded = GastronomiaFormulaOpcionalSeleccion::decodificar($valor);
+                if ($decoded === null) {
+                    continue;
+                }
+                if ($decoded['tipo'] === 'articulo') {
+                    $art = $articulos->get($decoded['id']);
+                    $detalle[] = [
+                        'orden' => (string) $orden,
+                        'sku' => $art->sku ?? null,
+                        'descripcion' => $art->descripcion ?? null,
+                    ];
+                } else {
+                    $etiqueta = FormulaArticuloSubformulaPosSupport::etiquetaOpcional(
+                        $formulas->get($decoded['id']),
+                        $decoded['id'],
+                    );
+                    $detalle[] = [
+                        'orden' => (string) $orden,
+                        'sku' => $etiqueta['sku'] ?? null,
+                        'descripcion' => $etiqueta['descripcion'] ?? null,
+                    ];
+                }
+            }
+            usort($detalle, fn (array $a, array $b): int => strnatcmp($a['orden'], $b['orden']));
+            $out[(int) $linea->id] = $detalle;
+        }
+
+        return $out;
     }
 
     private function resolverAreaComandaId(Articulo $articulo): ?int

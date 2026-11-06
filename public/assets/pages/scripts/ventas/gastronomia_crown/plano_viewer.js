@@ -104,7 +104,7 @@
                 width: nodo.w,
                 align: 'center',
                 text: '',
-                fontSize: 13,
+                fontSize: 16,
                 fontStyle: 'bold',
                 fill: COLORES.libre.texto,
                 listening: false
@@ -115,7 +115,7 @@
                 width: nodo.w,
                 align: 'center',
                 text: '',
-                fontSize: 10,
+                fontSize: 13,
                 fill: COLORES.libre.texto,
                 listening: false
             });
@@ -187,7 +187,7 @@
             ref.texto.fill(colores.texto);
             ref.sub.fill(colores.texto);
             ref.texto.text(mesa ? (mesa.codigo || ('#' + mesaId)) : ('#' + mesaId));
-            ref.sub.text(mesa && mesa.ocupada ? 'ocupada' : '');
+            ref.sub.text(mesa && mesa.ocupada ? ('Cta #' + (mesa.cuenta_abierta_id || '')) : '');
         });
 
         inst.capa.batchDraw();

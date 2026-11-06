@@ -32,17 +32,12 @@
             @if ($variante === 'nuevo')
                 Formato de <code>l-anexo1new.c</code>: concepto, fecha, débito, crédito y saldo corrido.
             @else
-                Formato de <code>l-anexo1.c</code>: concepto con día, mes y anual (incluye apuestas deportivas como ingreso).
-            @endif
-            @if ($anexo !== null && $anexo['cerrado'])
-                Este día Anita lo dejó grabado.
-            @else
-                De este día Anita solo dejó la caja final. El resto sale de efectivo, bóveda y poder público.
+                Formato de <code>l-anexo1.c</code>: concepto con día, mes y anual. Se arma con la jornada.
             @endif
             <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel=anexo&amp;formato_anexo={{ $variante }}&amp;recalcular=1">Recalcular</a>
         </p>
         @if ($anexo === null)
-            <div class="alert alert-warning mb-0">No se pudo leer Anita. {{ $anexoError }}</div>
+            <div class="alert alert-warning mb-0">No se pudo armar el anexo. {{ $anexoError }}</div>
         @else
             @foreach ($anexo['avisos'] as $aviso)
                 <div class="alert alert-warning py-2">{{ $aviso }}</div>

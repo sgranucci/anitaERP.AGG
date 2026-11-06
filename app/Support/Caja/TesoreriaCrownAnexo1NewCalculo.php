@@ -19,9 +19,30 @@ final class TesoreriaCrownAnexo1NewCalculo
      *     variante: string
      * }
      */
+    public static function deJornada(\App\Models\Caja\TesoreriaCrownJornada $jornada): array
+    {
+        return self::desdeClasico(
+            TesoreriaCrownAnexo1Calculo::deJornada($jornada),
+            $jornada->fecha->format('Y-m-d')
+        );
+    }
+
     public static function delDia(string $fechaYmd): array
     {
-        $clasico = TesoreriaCrownAnexo1Calculo::delDia($fechaYmd);
+        return self::desdeClasico(TesoreriaCrownAnexo1Calculo::delDia($fechaYmd), $fechaYmd);
+    }
+
+    /**
+     * @param  array{filas: list<array<string, mixed>>, cerrado: bool, avisos: list<string>}  $clasico
+     * @return array{
+     *     filas: list<array{concepto: string, fecha: ?string, debito: ?float, credito: ?float, saldo: ?float, total: bool, seccion: bool}>,
+     *     cerrado: bool,
+     *     avisos: list<string>,
+     *     variante: string
+     * }
+     */
+    private static function desdeClasico(array $clasico, string $fechaYmd): array
+    {
         $fechaVisible = substr($fechaYmd, 8, 2).'/'.substr($fechaYmd, 5, 2).'/'.substr($fechaYmd, 0, 4);
         $saldo = 0.0;
         $seccion = '';
@@ -44,6 +65,19 @@ final class TesoreriaCrownAnexo1NewCalculo
             }
 
             $importe = $fila['dia'];
+            if (! empty($fila['informativo'])) {
+                $filas[] = [
+                    'concepto' => $fila['concepto'],
+                    'fecha' => $fechaVisible,
+                    'debito' => $importe,
+                    'credito' => null,
+                    'saldo' => round($saldo, 2),
+                    'total' => false,
+                    'seccion' => false,
+                ];
+
+                continue;
+            }
             if ($importe === null || $importe === '') {
                 continue;
             }

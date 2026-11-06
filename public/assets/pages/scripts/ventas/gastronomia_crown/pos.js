@@ -81,7 +81,10 @@
         var $el = $('#gc-estado-cuenta');
         if (!estado.cuenta) {
             $el.removeClass('alert-success alert-warning').addClass('alert-secondary')
-                .text('Seleccione una mesa o cuenta para comenzar.');
+                .text(cfg.usaMesas
+                    ? 'Tocá una mesa libre para abrir su cuenta, o + para una cuenta sin mesa.'
+                    : 'Tocá + para abrir una cuenta, o elegí una de la lista.');
+            pintarTituloDetalle();
             return;
         }
         var c = estado.cuenta;
@@ -111,6 +114,45 @@
             txt += ' · Obs: ' + c.observacion;
         }
         $el.removeClass('alert-secondary alert-warning').addClass('alert-success').text(txt);
+        pintarTituloDetalle();
+    }
+
+    function pintarTituloDetalle() {
+        var $t = $('#gc-detalle-titulo');
+        if (!$t.length) {
+            return;
+        }
+        if (!estado.cuenta) {
+            $t.text('Detalle');
+            return;
+        }
+        var c = estado.cuenta;
+        var txt = 'Cuenta #' + c.id;
+        if (c.mesa) {
+            txt += ' — ' + c.mesa;
+        }
+        $t.text(txt);
+    }
+
+    function textoCantidad(n) {
+        var x = Number(n);
+        if (!isFinite(x)) {
+            return '';
+        }
+        if (Math.abs(x - Math.round(x)) < 0.0001) {
+            return String(Math.round(x));
+        }
+        return String(x);
+    }
+
+    function sufijoVisible(sku) {
+        var pref = String(cfg.skuPrefijo || '').toUpperCase();
+        var n = parseInt(cfg.skuDigitos, 10) || 0;
+        sku = String(sku || '').toUpperCase();
+        if (n > 0 && pref && sku.indexOf(pref) === 0) {
+            return sku.substring(pref.length);
+        }
+        return sku;
     }
 
     function pintarTotales() {
@@ -155,13 +197,27 @@
             if (estado.lineaSeleccionadaId === l.id) {
                 cls.push('seleccionada');
             }
+            var cantTxt = textoCantidad(l.cantidad);
+            var qtyHtml = l.fired
+                ? cantTxt
+                : '<button type="button" class="gc-qty-btn" data-dir="-1" title="Menos">−</button>'
+                    + '<span class="gc-qty-n">' + cantTxt + '</span>'
+                    + '<button type="button" class="gc-qty-btn" data-dir="1" title="Más">+</button>';
+            var opcPartes = [];
+            (l.opcionales_detalle || []).forEach(function (d) {
+                var t = (d && (d.descripcion || d.sku)) ? String(d.descripcion || d.sku) : '';
+                if (t) {
+                    opcPartes.push($('<div>').text(t).html());
+                }
+            });
             html += '<tr class="' + cls.join(' ') + '" data-linea-id="' + l.id + '">'
-                + '<td><input type="checkbox" class="gc-marca-linea"' + (l.marcado ? ' checked' : '') + '></td>'
-                + '<td>' + l.cantidad + '</td>'
-                + '<td>' + $('<div>').text(l.descripcion || l.sku || '').html()
+                + '<td class="text-center"><input type="checkbox" class="gc-marca-linea" title="Marcar ítem"'
+                + (l.marcado ? ' checked' : '') + '></td>'
+                + '<td class="text-nowrap">' + qtyHtml + '</td>'
+                + '<td><span class="gc-linea-desc">' + $('<div>').text(l.descripcion || l.sku || '').html() + '</span>'
+                + (opcPartes.length ? '<br><small class="text-muted">+ ' + opcPartes.join(' · ') + '</small>' : '')
                 + (l.observacion ? '<br><small class="text-muted">' + $('<div>').text(l.observacion).html() + '</small>' : '')
                 + (l.area ? ' <span class="badge badge-info" title="KDS">' + $('<div>').text(l.area_codigo || l.area).html() + '</span>' : '')
-                + (l.tiene_opcionales ? ' <span class="badge badge-success" title="Opcionales elegidos">opc</span>' : '')
                 + (l.prepara === false ? ' <span class="badge badge-secondary">no prepara</span>' : '')
                 + (l.fired ? ' <span class="badge badge-dark">marcha</span>' : '')
                 + '</td>'
@@ -289,6 +345,9 @@
                 montarVisor(p);
             }
         });
+        pintarCuentasAbiertas(Object.keys(estado.mesasPorId).map(function (id) {
+            return estado.mesasPorId[id];
+        }));
     }
 
     function planoPorId(planoId) {
@@ -380,7 +439,7 @@
             $panel.html('<div class="text-muted small p-2">No hay mesas para este filtro.</div>');
             return;
         }
-        var html = '';
+        var html = '<div class="gc-cuentas-ayuda">Verde: tocá para abrir la cuenta. Ocupada: tocá para seguirla.</div>';
         mesas.forEach(function (m) {
             var label = (m.codigo ? m.codigo + ' — ' : '') + (m.nombre || '');
             html += '<button type="button" class="btn btn-sm btn-outline-secondary gc-mesa-btn'
@@ -388,10 +447,39 @@
                 + (estado.cuentaId && m.cuenta_abierta_id === estado.cuentaId ? ' activa' : '')
                 + '" data-mesa-id="' + m.id + '" data-cuenta-id="' + (m.cuenta_abierta_id || '') + '">'
                 + '<strong>' + $('<div>').text(label).html() + '</strong>'
-                + (m.ocupada ? ' <span class="badge badge-warning">ocupada</span>' : '')
+                + (m.ocupada
+                    ? ' <span class="badge badge-warning">cuenta #' + m.cuenta_abierta_id + '</span>'
+                    : ' <span class="badge badge-success">libre</span>')
                 + '</button>';
         });
         $panel.html(html);
+        pintarCuentasAbiertas(mesas);
+    }
+
+    function pintarCuentasAbiertas(mesas) {
+        var $box = $('#gc-panel-cuentas');
+        if (!$box.length) {
+            return;
+        }
+        var abiertas = (mesas || []).filter(function (m) {
+            return m && m.cuenta_abierta_id;
+        });
+        var html = '<div class="gc-cuentas-titulo">Cuentas abiertas</div>';
+        if (!abiertas.length) {
+            html += '<div class="text-muted small">Ninguna todavía. Tocá una mesa libre.</div>';
+            $box.html(html);
+            return;
+        }
+        abiertas.forEach(function (m) {
+            var label = (m.codigo ? m.codigo + ' — ' : '') + (m.nombre || 'Mesa');
+            html += '<button type="button" class="btn btn-sm btn-outline-secondary gc-mesa-btn'
+                + (estado.cuentaId && m.cuenta_abierta_id === estado.cuentaId ? ' activa' : '')
+                + '" data-cuenta-id="' + m.cuenta_abierta_id + '">'
+                + '<strong>#' + m.cuenta_abierta_id + '</strong> '
+                + $('<div>').text(label).html()
+                + '</button>';
+        });
+        $box.html(html);
     }
 
     function renderCuentas(cuentas) {
@@ -434,6 +522,8 @@
                 }
                 aplicarCuenta(resp.cuenta);
                 cargarMesasOCuentas();
+                var mesaTxt = resp.cuenta && resp.cuenta.mesa ? ' — ' + resp.cuenta.mesa : '';
+                toast('Cuenta #' + resp.cuenta.id + mesaTxt, 'success');
             })
             .fail(function (xhr) {
                 toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'Error al abrir mesa', 'error');
@@ -579,6 +669,7 @@
                     + ' data-orden="' + $('<div>').text(orden).html() + '"'
                     + ' data-valor="' + $('<div>').text(valor).html() + '">'
                     + (idx < 9 ? '<span class="gc-opc-atajo">' + (idx + 1) + '</span>' : '')
+                    + (valor && valor === elegido ? '<i class="fa fa-check gc-opc-check"></i>' : '')
                     + '<div class="gc-opc-sku">' + $('<div>').text(o.sku || '').html() + '</div>'
                     + '<div class="gc-opc-desc">' + $('<div>').text(o.descripcion || '').html() + '</div>'
                     + '</div>';
@@ -941,29 +1032,12 @@
     }
 
     function consultarArticulo() {
-        var sku = $.trim($('#gc-codigo-articulo').val());
-        if (!sku) {
-            sku = window.prompt('Código / SKU a consultar:', '') || '';
-        }
-        sku = $.trim(sku);
-        if (!sku) {
+        var $btn = $('#gc-campo-articulo .consultaarticulo');
+        if (!$btn.length) {
             return;
         }
-        $.getJSON(cfg.urls.articulo, { sku: sku })
-            .done(function (resp) {
-                if (!resp.ok || !resp.articulo) {
-                    toast('Artículo no encontrado', 'warning');
-                    return;
-                }
-                var a = resp.articulo;
-                $('#gc-codigo-articulo').val(a.sku);
-                $('#gc-desc-articulo').val(a.descripcion + ' · ' + money(a.precio));
-                toast(a.sku + ' — ' + a.descripcion + ' · ' + money(a.precio), 'info');
-            })
-            .fail(function (xhr) {
-                var r = xhr.responseJSON || {};
-                toast(r.mensaje || r.error || 'Artículo no encontrado', 'error');
-            });
+        $('#gc-campo-articulo .codigoarticulo').val($.trim($('#gc-codigo-articulo').val()));
+        $btn.trigger('click');
     }
 
     function descuentoMesa() {
@@ -1036,6 +1110,20 @@
             });
     }
 
+    function abrirCobranza() {
+        if (!requiereCuenta() || estado.busy) {
+            return;
+        }
+        if (cfg.soloMarcha) {
+            toast('Este puesto es solo marcha.', 'warning');
+            return;
+        }
+        var c = estado.cuenta;
+        $('#gc-cobro-cuenta').text('Cuenta #' + c.id + (c.mesa ? ' — ' + c.mesa : ''));
+        $('#gc-cobro-total').text(money(c.total || 0));
+        $('#gc-modal-cobrar').modal('show');
+    }
+
     function cobrar(tipo) {
         if (!requiereCuenta() || estado.busy) {
             return;
@@ -1088,10 +1176,6 @@
             label = 'Efectivo';
         } else if (tipo === 'factura_sola') {
             label = 'Factura sola';
-        }
-
-        if (!window.confirm('¿Cobrar ' + label + ' por ' + money(total) + '?\nSe emite la factura electrónica en ARCA.')) {
-            return;
         }
 
         estado.busy = true;
@@ -1170,7 +1254,7 @@
                 obsMesa();
                 break;
             case 'cobrar':
-                cobrar('efectivo');
+                abrirCobranza();
                 break;
             case 'anular_mesa':
                 anularMesa();
@@ -1184,7 +1268,7 @@
         if ($(e.target).is('textarea')) {
             return;
         }
-        if ($('#gc-modal-opcionales').hasClass('show')) {
+        if ($('#gc-modal-opcionales').hasClass('show') || $('#consultaarticuloModal').hasClass('show') || $('#gc-modal-cobrar').hasClass('show')) {
             return;
         }
         var key = e.key;
@@ -1241,10 +1325,46 @@
 
         $(document).on('keydown.gcPos', onHotkey);
 
+        if (typeof window.activa_eventos_consultaarticulo === 'function') {
+            window.activa_eventos_consultaarticulo();
+        }
+
+        $('#gc-campo-articulo .consultaarticulo').on('click', function () {
+            $('#gc-campo-articulo .codigoarticulo').val($.trim($('#gc-codigo-articulo').val()));
+        });
+
+        $(document).on('click', '#consultaarticuloModal .eligeconsultaarticulo', function () {
+            var $fila = $(this).closest('tr');
+            var sku = $.trim($fila.find('.sku').text());
+            var nombre = $.trim($fila.find('.descripcion').text());
+            if (sku) {
+                $('#gc-codigo-articulo').val(sufijoVisible(sku));
+            }
+            if (nombre) {
+                $('#gc-desc-articulo').val(nombre);
+            }
+        });
+
+        var alElegirArticuloPrevio = window.onArticuloSeleccionado;
+        window.onArticuloSeleccionado = function (data, ctx) {
+            if (typeof alElegirArticuloPrevio === 'function') {
+                alElegirArticuloPrevio(data, ctx);
+            }
+            if (!$('#gc-campo-articulo').length || !data || !data.sku) {
+                return;
+            }
+            $('#gc-codigo-articulo').val(sufijoVisible(data.sku));
+            if (data.descripcion) {
+                $('#gc-desc-articulo').val(data.descripcion);
+            }
+            $('#gc-codigo-articulo').trigger('blur');
+            $('#gc-codigo-articulo').trigger('focus');
+        };
+
         $('#gc-btn-refresh-mesas').on('click', cargarMesasOCuentas);
         $('#gc-btn-nueva-cuenta').on('click', abrirCuentaLibre);
 
-        $('#gc-panel-mesas').on('click', '.gc-mesa-btn', function () {
+        $('#gc-panel-mesas, #gc-panel-cuentas').on('click', '.gc-mesa-btn', function () {
             var $b = $(this);
             var cuentaId = $b.data('cuenta-id') || null;
             var mesaId = $b.data('mesa-id') || null;
@@ -1286,18 +1406,58 @@
         });
 
         $('#gc-codigo-articulo').on('keydown', function (e) {
+            if (e.key === '+' || e.key === 'Add') {
+                e.preventDefault();
+                var n = window.prompt('Cantidad a agregar:', $('#gc-cantidad').val() || '1');
+                if (n === null) {
+                    return;
+                }
+                var q = parseFloat(String(n).replace(',', '.'));
+                if (!(q >= 0.001)) {
+                    toast('La cantidad no puede ser menor al mínimo permitido.', 'warning');
+                    return;
+                }
+                $('#gc-cantidad').val(q);
+                agregarLinea();
+                return;
+            }
             if (e.key === 'Enter') {
                 e.preventDefault();
+                $('#gc-cantidad').val(1);
                 agregarLinea();
             }
         });
 
         $('#gc-tabla-lineas').on('click', 'tr[data-linea-id]', function (e) {
-            if ($(e.target).closest('.gc-marca-linea, .gc-void-linea, .gc-destino-linea').length) {
+            if ($(e.target).closest('.gc-marca-linea, .gc-void-linea, .gc-destino-linea, .gc-qty-btn').length) {
                 return;
             }
             estado.lineaSeleccionadaId = parseInt($(this).data('linea-id'), 10) || null;
             pintarLineas();
+        });
+
+        $('#gc-tabla-lineas').on('click', '.gc-qty-btn', function (e) {
+            e.stopPropagation();
+            var id = parseInt($(this).closest('tr').data('linea-id'), 10) || 0;
+            var dir = parseInt($(this).data('dir'), 10) || 0;
+            var linea = (estado.cuenta && estado.cuenta.lineas || []).find(function (l) { return l.id === id; });
+            if (!linea || !estado.cuentaId) {
+                return;
+            }
+            var next = (Number(linea.cantidad) || 0) + dir;
+            if (!(next >= 0.001)) {
+                toast('La cantidad no puede ser menor al mínimo permitido.', 'warning');
+                return;
+            }
+            post(urlCuenta(cfg.urls.agregarLinea, estado.cuentaId, 'linea/' + id + '/cantidad'), { cantidad: next })
+                .done(function (resp) {
+                    if (resp.ok) {
+                        aplicarCuenta(resp.cuenta);
+                    }
+                })
+                .fail(function (xhr) {
+                    toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'No se pudo cambiar la cantidad', 'error');
+                });
         });
 
         $('#gc-tabla-lineas').on('click', '.gc-destino-linea', function (e) {
@@ -1360,11 +1520,16 @@
         });
 
         $('#gc-btn-f1').on('click', consultarArticulo);
-        $('#gc-btn-f2').on('click', function () { cobrar('hotel'); });
-        $('#gc-btn-f5').on('click', function () { cobrar('efectivo'); });
+        $('#gc-btn-f2').on('click', abrirCobranza);
+        $('#gc-btn-f5').on('click', abrirCobranza);
+        $('#gc-modal-cobrar').on('click', '[data-cobro]', function () {
+            var tipo = $(this).data('cobro');
+            $('#gc-modal-cobrar').modal('hide');
+            cobrar(tipo);
+        });
         $('#gc-btn-f6').on('click', voidLineaSeleccionada);
-        $('#gc-btn-f8').on('click', function () { cobrar('interna'); });
-        $('#gc-btn-f9').on('click', function () { cobrar('factura_sola'); });
+        $('#gc-btn-f8').on('click', abrirCobranza);
+        $('#gc-btn-f9').on('click', abrirCobranza);
         $('#gc-btn-f10').on('click', descuentoMesa);
         $('#gc-btn-f11').on('click', obsItem);
         $('#gc-btn-f12').on('click', function () { marcha('normal', false); });

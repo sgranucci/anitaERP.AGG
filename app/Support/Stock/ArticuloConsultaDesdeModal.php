@@ -42,6 +42,7 @@ class ArticuloConsultaDesdeModal
             || can('actualizar-orden-produccion', false)
             || can('listar-orden-produccion', false)
             || can('usar-proceso-facturacion-gastronomia', false)
+            || can('usar-pos-gastronomia-crown', false)
             || can('crear-precios', false)
             || can('editar-precios', false)
             || can('listar-precios', false)

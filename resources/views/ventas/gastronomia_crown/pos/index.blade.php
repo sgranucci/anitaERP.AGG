@@ -6,6 +6,8 @@
 @php
     $planos = $planos ?? [];
     $hayPlanos = count($planos) > 0;
+    $skuPrefijo = \App\Support\Ventas\GastronomiaSkuCatalogoSupport::prefijo();
+    $skuDigitos = \App\Support\Ventas\GastronomiaSkuCatalogoSupport::digitosSufijo();
 @endphp
 
 @section('styles')
@@ -54,12 +56,15 @@
         habilitaGst: @json((bool) $config->habilita_canje_gst),
         politicaComanda: @json($config->politica_comanda),
         listaprecioId: {{ (int) ($config->listaprecio_id ?: 0) }},
+        skuPrefijo: @json($skuPrefijo),
+        skuDigitos: {{ (int) $skuDigitos }},
     };
 </script>
 @if ($hayPlanos)
 <script src="https://cdn.jsdelivr.net/npm/konva@9/konva.min.js"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia_crown/plano_viewer.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia_crown/plano_viewer.js')) }}"></script>
 @endif
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia_crown/pos.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia_crown/pos.js')) }}"></script>
 @endsection
 
@@ -174,13 +179,16 @@
                     @php
                         $tituloPanelMesas = $usaMesas ? ($hayPlanos ? 'Planos' : 'Mesas') : 'Cuentas';
                     @endphp
-                    <h3 class="card-title mb-0">{{ $tituloPanelMesas }}</h3>
+                    <h3 class="card-title mb-0">
+                        {{ $tituloPanelMesas }}
+                        @if ($usaMesas)
+                            <small class="d-block text-muted font-weight-normal">Mesa libre abre su cuenta. El + abre una cuenta sin mesa.</small>
+                        @endif
+                    </h3>
                     <div class="card-tools">
-                        @unless ($usaMesas)
-                            <button type="button" class="btn btn-tool text-primary" id="gc-btn-nueva-cuenta" title="Nueva cuenta">
-                                <i class="fa fa-plus"></i>
-                            </button>
-                        @endunless
+                        <button type="button" class="btn btn-tool text-primary" id="gc-btn-nueva-cuenta" title="Nueva cuenta">
+                            <i class="fa fa-plus"></i>
+                        </button>
                         <button type="button" class="btn btn-tool" id="gc-btn-refresh-mesas" title="Actualizar">
                             <i class="fa fa-sync-alt"></i>
                         </button>
@@ -189,26 +197,53 @@
                 <div class="card-body p-2 gc-panel-scroll" id="gc-panel-mesas">
                     <div class="text-muted small p-2">Cargando…</div>
                 </div>
+                @if ($usaMesas)
+                    <div class="card-footer p-2" id="gc-panel-cuentas"></div>
+                @endif
             </div>
         </div>
-        <div class="col-lg-5 col-md-8 mb-2">
+        <div class="col-lg-4 col-md-8 mb-2">
             <div class="card card-outline card-primary gc-panel h-100">
                 <div class="card-header py-2">
                     <h3 class="card-title mb-0">Carga</h3>
                 </div>
                 <div class="card-body">
                     <div class="form-row align-items-end">
-                        <div class="form-group col-md-3 mb-2">
-                            <label class="small mb-1" for="gc-codigo-articulo">Código (Enter) · F1 consulta</label>
-                            <input type="text" id="gc-codigo-articulo" class="form-control form-control-lg"
-                                   autocomplete="off" placeholder="SKU / código">
+                        <div class="form-group col-md-4 mb-2 tm-articulo-campo" id="gc-campo-articulo" data-articulo-solo-facturable="1">
+                            <label class="small mb-1" for="gc-codigo-articulo">Código · Enter suma 1 · + cantidad · F1</label>
+                            <input type="hidden" class="articulo_id" value="">
+                            <input type="hidden" class="codigoarticulo" value="">
+                            <input type="hidden" id="gc-cantidad" value="1">
+                            <div class="input-group">
+                                @if ($skuDigitos > 0)
+                                    <div class="input-group-prepend">
+                                        <span class="input-group-text">{{ $skuPrefijo }}</span>
+                                    </div>
+                                @endif
+                                @if ($skuDigitos > 0)
+                                    <input type="text" id="gc-codigo-articulo" class="form-control form-control-lg"
+                                           autocomplete="off" inputmode="numeric"
+                                           maxlength="{{ (int) $skuDigitos }}"
+                                           placeholder="{{ (int) $skuDigitos }} dígitos">
+                                @else
+                                    <input type="text" id="gc-codigo-articulo" class="form-control form-control-lg"
+                                           autocomplete="off" placeholder="SKU / código">
+                                @endif
+                                <div class="input-group-append">
+                                    <button type="button"
+                                            class="btn btn-outline-secondary consultaarticulo"
+                                            data-solo-facturable="1"
+                                            data-sku-prefijo-filtro="{{ $skuPrefijo }}"
+                                            data-sku-digitos-filtro="{{ (int) $skuDigitos }}"
+                                            data-listaprecio-id="{{ (int) ($config->listaprecio_id ?: 0) }}"
+                                            data-listaprecio-nombre="{{ optional($config->listaprecio)->nombre }}"
+                                            title="Consulta art&iacute;culos (F1)">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group col-md-2 mb-2">
-                            <label class="small mb-1" for="gc-cantidad">Cant.</label>
-                            <input type="number" id="gc-cantidad" class="form-control form-control-lg"
-                                   value="1" min="0.001" step="0.001">
-                        </div>
-                        <div class="form-group col-md-3 mb-2">
+                        <div class="form-group col-md-6 mb-2">
                             <label class="small mb-1" for="gc-area-kds">KDS destino</label>
                             <select id="gc-area-kds" class="form-control form-control-lg">
                                 <option value="">Auto (subcategoría)</option>
@@ -221,21 +256,25 @@
                                 <label class="custom-control-label" for="gc-prepara" id="gc-prepara-label">Sí</label>
                             </div>
                         </div>
-                        <div class="form-group col-md-2 mb-2">
-                            <label class="small mb-1" for="gc-desc-articulo">Descripción</label>
-                            <input type="text" id="gc-desc-articulo" class="form-control" readonly>
-                        </div>
+                    </div>
+                    <div class="form-group mb-2">
+                        <label class="small mb-1" for="gc-desc-articulo">Descripción del ítem</label>
+                        <input type="text" id="gc-desc-articulo" class="form-control form-control-lg descripcionarticulo" readonly>
                     </div>
                     <div class="alert alert-secondary py-2 small mb-0" id="gc-estado-cuenta">
-                        Seleccione una mesa o cuenta para comenzar.
+                        @if ($usaMesas)
+                            Tocá una mesa libre para abrir su cuenta, o + para una cuenta sin mesa.
+                        @else
+                            Tocá + para abrir una cuenta, o elegí una de la lista.
+                        @endif
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-lg-4 mb-2" id="gc-col-detalle">
+        <div class="col-lg-5 mb-2" id="gc-col-detalle">
             <div class="card card-outline card-info gc-panel h-100">
                 <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap">
-                    <h3 class="card-title mb-0">Detalle</h3>
+                    <h3 class="card-title mb-0" id="gc-detalle-titulo">Detalle</h3>
                     <div class="text-right">
                         <div class="small text-muted" id="gc-subtotal-cuenta" style="display:none;"></div>
                         <strong id="gc-total-cuenta">$ 0,00</strong>
@@ -294,6 +333,36 @@
                         Siguiente <i class="fa fa-arrow-right"></i>
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+@include('includes.stock.modalconsultaarticulo')
+
+<div class="modal fade" id="gc-modal-cobrar" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">Cobrar</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-1" id="gc-cobro-cuenta">Cuenta</div>
+                <div class="h4 mb-3" id="gc-cobro-total">$ 0,00</div>
+                <p class="small text-muted mb-2">Se emite la factura electrónica. Elegí el medio.</p>
+                <div class="d-flex flex-wrap" style="gap: 0.4rem;">
+                    <button type="button" class="btn btn-sm btn-success" data-cobro="efectivo">Efectivo (F5)</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" data-cobro="interna">Interna / GST</button>
+                    @if ($usaMesas)
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-cobro="factura_sola">Factura sola</button>
+                    @endif
+                    @if ($config->habilita_hotel)
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-cobro="hotel">Hotel</button>
+                    @endif
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
             </div>
         </div>
     </div>

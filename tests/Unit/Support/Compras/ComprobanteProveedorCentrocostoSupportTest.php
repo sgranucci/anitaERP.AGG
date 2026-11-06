@@ -134,6 +134,21 @@ class ComprobanteProveedorCentrocostoSupportTest extends TestCase
         $this->assertSame([], ComprobanteProveedorCentrocostoSupport::pesosIvaSinOc([210 => 100.0], 88));
     }
 
+    public function test_iva_sin_centros_de_gasto_queda_vacio_para_prorrateo_manual(): void
+    {
+        $this->assertSame([], ComprobanteProveedorCentrocostoSupport::pesosIvaSinOc([], 0));
+        $this->assertSame([], ComprobanteProveedorCentrocostoSupport::pesosIvaSinOc([0 => 100.0], 0));
+    }
+
+    public function test_concepto_repartido_manual_respeta_cada_centro_sin_pesos_de_gasto(): void
+    {
+        $trozoA = ComprobanteProveedorCentrocostoSupport::trozosImpuesto(true, 0, [], 40.0, 11, true);
+        $trozoB = ComprobanteProveedorCentrocostoSupport::trozosImpuesto(true, 0, [], 60.0, 22, true);
+
+        $this->assertSame([['centrocosto_id' => 11, 'importe' => 40.0]], $trozoA);
+        $this->assertSame([['centrocosto_id' => 22, 'importe' => 60.0]], $trozoB);
+    }
+
     public function test_el_ultimo_centro_absorbe_el_redondeo(): void
     {
         $trozos = ComprobanteProveedorCentrocostoSupport::repartirImporte(10.0, [1 => 1, 2 => 1, 3 => 1]);

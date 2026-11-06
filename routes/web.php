@@ -2471,6 +2471,7 @@ Route::post('ventas/gastronomia-crown/api/abrir-cuenta', 'Ventas\GastronomiaCrow
 Route::get('ventas/gastronomia-crown/api/cuenta/{id}', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiCuentaVer')->name('gastronomia_crown_api_cuenta_ver');
 Route::post('ventas/gastronomia-crown/api/cuenta/{id}/linea', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiAgregarLinea')->name('gastronomia_crown_api_agregar_linea');
 Route::post('ventas/gastronomia-crown/api/cuenta/{cuentaId}/linea/{lineaId}/marcar', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiMarcarLinea')->name('gastronomia_crown_api_marcar_linea');
+Route::post('ventas/gastronomia-crown/api/cuenta/{cuentaId}/linea/{lineaId}/cantidad', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiCantidadLinea')->name('gastronomia_crown_api_cantidad_linea');
 Route::post('ventas/gastronomia-crown/api/cuenta/{cuentaId}/linea/{lineaId}/observacion', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiObservacionLinea')->name('gastronomia_crown_api_obs_linea');
 Route::post('ventas/gastronomia-crown/api/cuenta/{cuentaId}/linea/{lineaId}/void', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiVoidLinea')->name('gastronomia_crown_api_void_linea');
 Route::post('ventas/gastronomia-crown/api/cuenta/{id}/separador', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiSeparador')->name('gastronomia_crown_api_separador');
@@ -3239,6 +3240,18 @@ Route::get('caja/tesoreria-crown/cotizacion/crear', 'Caja\TesoreriaCrownCotizaci
 Route::get('caja/tesoreria-crown/cotizacion/editar', 'Caja\TesoreriaCrownCotizacionController@editar')->name('editar_tesoreria_crown_cotizacion');
 Route::get('caja/tesoreria-crown/cotizacion/listar/{formato?}/{busqueda?}', 'Caja\TesoreriaCrownCotizacionController@listar')->name('listar_tesoreria_crown_cotizacion');
 Route::post('caja/tesoreria-crown/cotizacion', 'Caja\TesoreriaCrownCotizacionController@guardar')->name('guardar_tesoreria_crown_cotizacion');
+
+Route::get('caja/tesoreria-crown/resultado-online', 'Caja\TesoreriaCrownResultadoOnlineController@index')->name('tesoreria_crown_resultado_online');
+Route::get('caja/tesoreria-crown/resultado-online/crear', 'Caja\TesoreriaCrownResultadoOnlineController@crear')->name('crear_tesoreria_crown_resultado_online');
+Route::get('caja/tesoreria-crown/resultado-online/editar', 'Caja\TesoreriaCrownResultadoOnlineController@editar')->name('editar_tesoreria_crown_resultado_online');
+Route::get('caja/tesoreria-crown/resultado-online/listar/{formato?}/{busqueda?}', 'Caja\TesoreriaCrownResultadoOnlineController@listar')->name('listar_tesoreria_crown_resultado_online');
+Route::post('caja/tesoreria-crown/resultado-online', 'Caja\TesoreriaCrownResultadoOnlineController@guardar')->name('guardar_tesoreria_crown_resultado_online');
+Route::delete('caja/tesoreria-crown/resultado-online/{id}', 'Caja\TesoreriaCrownResultadoOnlineController@eliminar')->name('eliminar_tesoreria_crown_resultado_online');
+Route::post('caja/tesoreria-crown/resultado-online/workbench/vista', 'Caja\TesoreriaCrownResultadoOnlineController@guardarVistaListado')->name('guardar_vista_tesoreria_crown_resultado_online');
+Route::delete('caja/tesoreria-crown/resultado-online/workbench/vista/{id}', 'Caja\TesoreriaCrownResultadoOnlineController@eliminarVistaListado')->name('eliminar_vista_tesoreria_crown_resultado_online');
+Route::post('caja/tesoreria-crown/resultado-online/workbench/columnas', 'Caja\TesoreriaCrownResultadoOnlineController@guardarColumnasListado')->name('guardar_columnas_tesoreria_crown_resultado_online');
+Route::post('caja/tesoreria-crown/resultado-online/workbench/etiquetas', 'Caja\TesoreriaCrownResultadoOnlineController@guardarEtiquetasListado')->name('guardar_etiquetas_tesoreria_crown_resultado_online');
+Route::post('caja/tesoreria-crown/resultado-online/workbench/preview', 'Caja\TesoreriaCrownResultadoOnlineController@previewWorkbench')->name('preview_tesoreria_crown_resultado_online');
 
 Route::get('caja/tesoreria-crown/jornada', 'Caja\TesoreriaCrownJornadaController@index')->name('tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/jornada/listar/{formato?}/{busqueda?}', 'Caja\TesoreriaCrownJornadaController@listar')->name('listar_tesoreria_crown_jornada');

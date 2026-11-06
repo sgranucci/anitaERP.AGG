@@ -75,12 +75,20 @@
         ({{ number_format($netoImputableGasto, 2, ',', '.') }}).
         Por defecto no recalcula el prorrateo (cada importe queda como se carga, para abrir por centro de costo).
         Tilde <strong>Recalcular prorrateo</strong> si quiere que el neto se reparta solo entre las cuentas.
-        Si la cuenta de IVA pide centro de costo, toma el de las cuentas de gasto.
-        Al abrir el gasto con <strong>+ Agregar cuenta de gasto</strong>, el IVA se parte en la misma proporción.
-        Con una sola línea de IVA puede cambiar el centro en esa fila.
+        Si la cuenta de IVA pide centro de costo y el gasto ya tiene centros, el IVA hereda esa proporción.
+        Con <strong>Prorratear CC</strong> puede abrir el IVA (u otro concepto) en N centros aunque el neto no tenga CC.
+        Con una sola línea de IVA también puede cambiar el centro en esa fila.
     </span>
     @elseif(collect($preview['lineas'] ?? [])->contains(fn ($l) => ! empty($l['editable_cuenta'])))
-    <span class="d-block small mt-1">La cuenta de un neto se precarga en los otros netos vacíos. Si una línea necesita otra cuenta, cámbiela en esa fila.</span>
+    <span class="d-block small mt-1">
+        La cuenta de un neto se precarga en los otros netos vacíos. Si una línea necesita otra cuenta, cámbiela en esa fila.
+        Use <strong>Prorratear CC</strong> para abrir IVA u otros conceptos en varios centros de costo.
+    </span>
+    @else
+    <span class="d-block small mt-1">
+        Use <strong>Prorratear CC</strong> en una línea de concepto (IVA, percepción, etc.) para repartirla
+        en varios centros de costo, aunque el neto no maneje centro.
+    </span>
     @endif
 </div>
 @else
@@ -123,8 +131,8 @@
                 <th class="text-right">Debe</th>
                 <th class="text-right">Haber</th>
                 <th>Observación</th>
-                @if($permiteRepartoGasto)
-                <th style="width:3rem;"></th>
+                @if(! empty($preview['es_preview']))
+                <th style="width:3.5rem;"></th>
                 @endif
             </tr>
         </thead>
@@ -132,18 +140,25 @@
             @php
                 $idxDebeGasto = 0;
                 $cantImpuestoPorConcepto = [];
-                foreach ($preview['lineas'] ?? [] as $lineaConteo) {
-                    if ((string) ($lineaConteo['origen'] ?? '') !== 'impuesto') {
-                        continue;
-                    }
+                $primerIdxProrrateoConcepto = [];
+                foreach ($preview['lineas'] ?? [] as $idxConteo => $lineaConteo) {
+                    $origenConteo = (string) ($lineaConteo['origen'] ?? '');
                     $conceptoConteo = (int) ($lineaConteo['concepto_ivacompra_id'] ?? 0);
                     if ($conceptoConteo <= 0) {
                         continue;
                     }
-                    $cantImpuestoPorConcepto[$conceptoConteo] = ($cantImpuestoPorConcepto[$conceptoConteo] ?? 0) + 1;
+                    if ($origenConteo === 'impuesto') {
+                        $cantImpuestoPorConcepto[$conceptoConteo] = ($cantImpuestoPorConcepto[$conceptoConteo] ?? 0) + 1;
+                    }
+                    if (in_array($origenConteo, ['impuesto', 'neto_manual', 'impuesto_interno'], true)
+                        && ! isset($primerIdxProrrateoConcepto[$conceptoConteo])
+                    ) {
+                        $primerIdxProrrateoConcepto[$conceptoConteo] = $idxConteo;
+                    }
                 }
+                $colspanAsiento = ! empty($preview['es_preview']) ? 6 : 5;
             @endphp
-            @forelse(($preview['lineas'] ?? []) as $linea)
+            @forelse(($preview['lineas'] ?? []) as $idxLinea => $linea)
             @php
                 $origenLinea = (string) ($linea['origen'] ?? '');
                 // Solo origen debe_gasto es reparto multi-cuenta. neto_manual NO lleva
@@ -164,10 +179,17 @@
                 $muestraSelectorCentro = ! empty($preview['es_preview'])
                     && $cuentaLineaId > 0
                     && ($editableCuenta || $ivaUnaLinea);
+                $permiteProrratearCc = ! empty($preview['es_preview'])
+                    && $cuentaLineaId > 0
+                    && $conceptoLineaId > 0
+                    && ! empty($linea['maneja_centrocosto'])
+                    && in_array($origenLinea, ['impuesto', 'neto_manual', 'impuesto_interno'], true)
+                    && ($primerIdxProrrateoConcepto[$conceptoLineaId] ?? null) === $idxLinea;
             @endphp
             <tr class="{{ $editableCuenta ? 'cp-asiento-linea-editable' : '' }}{{ $esDebeGasto ? ' cp-debe-gasto-row' : '' }}"
                 data-origen="{{ $origenLinea }}"
                 @if($conceptoLineaId > 0) data-concepto-ivacompra-id="{{ $conceptoLineaId }}" @endif
+                @if($cuentaLineaId > 0) data-cuenta-id="{{ $cuentaLineaId }}" @endif
                 @if($esDebeGasto) data-debe-gasto="1" data-debe-gasto-idx="{{ $debeGastoIdx }}" @endif>
                 <td>
                     @if($editableCuenta)
@@ -223,9 +245,21 @@
                     @endif
                 </td>
                 <td>{{ $linea['observacion'] ?? '' }}</td>
-                @if($permiteRepartoGasto)
-                <td class="text-center align-middle">
-                    @if($esDebeGasto && $cantDebeGastoUi > 1)
+                @if(! empty($preview['es_preview']))
+                <td class="text-center align-middle text-nowrap">
+                    @if($permiteProrratearCc)
+                    <button type="button"
+                            class="btn-accion-tabla cp-prorratear-cuenta tooltipsC"
+                            title="Prorratear esta cuenta en varios centros de costo"
+                            data-concepto-ivacompra-id="{{ $conceptoLineaId }}"
+                            data-cuenta-id="{{ $cuentaLineaId }}"
+                            data-cuenta-codigo="{{ $linea['cuenta_codigo'] ?? '' }}"
+                            data-cuenta-nombre="{{ $linea['cuenta_nombre'] ?? '' }}"
+                            data-observacion="{{ $linea['observacion'] ?? '' }}">
+                        <i class="fa fa-pie-chart text-primary"></i>
+                    </button>
+                    @endif
+                    @if($permiteRepartoGasto && $esDebeGasto && $cantDebeGastoUi > 1)
                     <button type="button" class="btn-accion-tabla cp-debe-gasto-quitar tooltipsC" title="Quitar cuenta de gasto">
                         <i class="fa fa-times-circle text-danger"></i>
                     </button>
@@ -235,7 +269,7 @@
             </tr>
             @empty
             <tr>
-                <td colspan="{{ $permiteRepartoGasto ? 6 : 5 }}" class="text-center text-muted">Sin líneas de asiento para mostrar.</td>
+                <td colspan="{{ $colspanAsiento }}" class="text-center text-muted">Sin líneas de asiento para mostrar.</td>
             </tr>
             @endforelse
         </tbody>
@@ -245,12 +279,12 @@
                 <td colspan="2" class="text-right">Totales</td>
                 <td class="text-right cp-asiento-total-debe">{{ number_format((float) ($preview['total_debe'] ?? 0), 2, ',', '.') }}</td>
                 <td class="text-right cp-asiento-total-haber">{{ number_format((float) ($preview['total_haber'] ?? 0), 2, ',', '.') }}</td>
-                <td @if($permiteRepartoGasto) colspan="2" @endif></td>
+                <td @if(! empty($preview['es_preview'])) colspan="2" @endif></td>
             </tr>
             @if(! empty($preview['es_preview']) && isset($preview['total_comprobante']))
             <tr>
                 <td colspan="2" class="text-right text-muted">Total comprobante</td>
-                <td colspan="{{ $permiteRepartoGasto ? 4 : 3 }}" class="text-muted">{{ number_format((float) $preview['total_comprobante'], 2, ',', '.') }}</td>
+                <td colspan="{{ ! empty($preview['es_preview']) ? 4 : 3 }}" class="text-muted">{{ number_format((float) $preview['total_comprobante'], 2, ',', '.') }}</td>
             </tr>
             @endif
         </tfoot>
@@ -258,16 +292,23 @@
     </table>
 </div>
 
-@if($permiteRepartoGasto)
-<div class="mt-2 mb-1">
+@if(! empty($preview['es_preview']))
+<div class="mt-2 mb-1 d-flex flex-wrap align-items-center" style="gap:8px;">
+    @if($permiteRepartoGasto)
     <button type="button" class="btn btn-outline-primary btn-sm" id="cp-debe-gasto-agregar">
         <i class="fa fa-plus"></i> Agregar cuenta de gasto
     </button>
-    <label class="small mb-0 ml-3 align-middle font-weight-normal" title="Destildado: no reparte el neto entre las cuentas. La suma no puede superarlo.">
+    <label class="small mb-0 align-middle font-weight-normal" title="Destildado: no reparte el neto entre las cuentas. La suma no puede superarlo.">
         <input type="checkbox" class="cp-debe-gasto-recalcular-prorrateo align-middle mr-1">
         Recalcular prorrateo
     </label>
-    <span class="small text-muted ml-2" id="cp-debe-gasto-aviso-suma"></span>
+    <span class="small text-muted" id="cp-debe-gasto-aviso-suma"></span>
+    @endif
+    <span class="small text-muted ml-auto">
+        <i class="fa fa-pie-chart text-primary"></i>
+        Prorratear CC (solo en conceptos cuya cuenta maneja centro): abre IVA u otros en N centros,
+        también si el neto no tiene CC.
+    </span>
 </div>
 @endif
 @endif

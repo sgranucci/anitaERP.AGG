@@ -546,6 +546,32 @@ class GastronomiaCrownPosController extends Controller
         return response()->json(['ok' => true, 'cuenta' => $this->posService->serializarCuenta($cuenta)]);
     }
 
+    public function apiCantidadLinea(Request $request, int $cuentaId, int $lineaId): JsonResponse
+    {
+        $this->assertCrown();
+        can('usar-pos-gastronomia-crown');
+
+        $request->validate([
+            'cantidad' => 'required|numeric|min:0.001',
+        ]);
+
+        $config = $this->requireCfg($request);
+        if ($config instanceof JsonResponse) {
+            return $config;
+        }
+
+        try {
+            $cuenta = $this->posService->cuentaAbierta($cuentaId, (int) $config->empresa_id);
+            $linea = $this->lineaDeCuenta($cuenta, $lineaId);
+            $this->posService->actualizarCantidadLinea($cuenta, $linea, (float) $request->input('cantidad'));
+            $cuenta = $this->posService->cuentaAbierta($cuentaId, (int) $config->empresa_id);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'cuenta' => $this->posService->serializarCuenta($cuenta)]);
+    }
+
     public function apiMarcarLinea(Request $request, int $cuentaId, int $lineaId): JsonResponse
     {
         $this->assertCrown();

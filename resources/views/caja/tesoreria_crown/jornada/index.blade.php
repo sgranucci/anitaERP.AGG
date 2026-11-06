@@ -34,6 +34,11 @@
             <div class="card-header lw-header d-flex flex-wrap align-items-center justify-content-between">
                 <h3 class="card-title mb-0">Jornadas</h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center" style="gap:.4rem;">
+                    @if (can('listar-tesoreria-crown-resultado-online', false))
+                        <a href="{{ route('tesoreria_crown_resultado_online', ['sala_id' => $sala->id ?? '']) }}" class="btn btn-light btn-sm">
+                            <i class="fa fa-line-chart"></i> Resultado online
+                        </a>
+                    @endif
                     @if (! $abierta && $sala && can('crear-tesoreria-crown-jornada', false))
                         <button type="button" class="btn btn-light btn-sm" data-toggle="collapse" data-target="#panel-abrir-jornada" aria-expanded="false">
                             <i class="fa fa-plus-circle"></i> Abrir jornada
