@@ -44,7 +44,9 @@ use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
+use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Compras\TipotransaccionCompraAsientoSupport;
 use App\Support\Compras\OrdencompraComprobanteEstados;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
@@ -89,7 +91,38 @@ class ComprobanteProveedorPersistenciaService
         private ComprobanteProveedorControlesLegajoService $controlesLegajo,
         private ComprobanteProveedorComplianceValidacionService $complianceValidacion,
         private ComprobanteProveedorContabilizarService $contabilizarService,
+        private ComprobanteProveedorAsientoService $asientoService,
     ) {}
+
+    /**
+     * CC inválido no puede quedar en borrador: el operador lo ve al guardar.
+     */
+    private function assertCentrosCostoHabilitadosAlGrabar(Comprobante_Proveedor $comprobante): void
+    {
+        $comprobante->loadMissing([
+            'tipotransaccion_compras',
+            'comprobante_proveedor_conceptos.concepto_ivacompras',
+            'comprobante_proveedor_debe_gastos',
+            'ordencompras.ordencompra_articulos.articulos.articulo_cuentacontables',
+            'comprobante_proveedor_recepciones.recepcion_proveedores',
+            'proveedores',
+        ]);
+
+        if (! TipotransaccionCompraAsientoSupport::generaDesdeComprobante($comprobante)) {
+            return;
+        }
+
+        $this->asientoService->assertCentrosCostoHabilitados($comprobante);
+
+        // Si había un rechazo ERP previo y ahora el asiento cierra, limpiar el aviso.
+        if (ComprobanteProveedorAnitaSyncEstado::esErrorErp($comprobante->anita_sync_estado ?? null)) {
+            $comprobante->forceFill([
+                'anita_sync_estado' => null,
+                'anita_sync_error' => null,
+                'anita_sync_at' => null,
+            ])->save();
+        }
+    }
 
     /** @var list<string> */
     private array $avisosConceptosTipo = [];
@@ -441,6 +474,7 @@ class ComprobanteProveedorPersistenciaService
             $this->sincronizarCuotas($request, $comprobante);
             $this->sincronizarRecepciones($request, $comprobante);
             ComprobanteProveedorConceptogastoResolverSupport::resolverYPersistir($comprobante);
+            $this->assertCentrosCostoHabilitadosAlGrabar($comprobante->fresh() ?? $comprobante);
             $this->registrarEstadoInicial($comprobante);
             $this->vincularArchivoPrecarga($comprobante);
             $this->marcarPrecargaGenerada(
@@ -600,6 +634,7 @@ class ComprobanteProveedorPersistenciaService
             $this->sincronizarCuotas($request, $comprobante);
             $this->sincronizarRecepciones($request, $comprobante);
             ComprobanteProveedorConceptogastoResolverSupport::resolverYPersistir($comprobante);
+            $this->assertCentrosCostoHabilitadosAlGrabar($comprobante->fresh() ?? $comprobante);
             $this->archivoRepository->sincronizarDesdeRequest($request, $id);
             app(ComprobanteProveedorScanManualService::class)->publicarPrimerAdjunto($comprobante, $request);
             $this->marcarPrecargaGenerada(
@@ -845,6 +880,7 @@ class ComprobanteProveedorPersistenciaService
 
         $this->persistirCuotasDesdeArray($comprobante, $prefill['cuotas']);
         $this->vincularRecepcionesDesdePrefill($comprobante, $prefill);
+        $this->assertCentrosCostoHabilitadosAlGrabar($comprobante->fresh() ?? $comprobante);
         $this->registrarEstadoInicial($comprobante);
         $this->vincularArchivoPrecarga($comprobante);
         $this->marcarPrecargaGenerada($precargaId);

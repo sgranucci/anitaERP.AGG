@@ -37,6 +37,7 @@ use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
+use App\Support\Compras\TipotransaccionCompraAsientoSupport;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
@@ -47,6 +48,7 @@ use App\Support\Database\TransaccionServidorSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 class ComprobanteProveedorAsientoService
 {
@@ -81,6 +83,26 @@ class ComprobanteProveedorAsientoService
      *     payload_anita: array<string, mixed>
      * }
      */
+    /**
+     * Valida la matriz cuenta↔CC del asiento previsto.
+     * Se usa al guardar borrador: otros errores de preview (COM faltante, etc.)
+     * no bloquean el alta; el CC inválido sí.
+     */
+    public function assertCentrosCostoHabilitados(Comprobante_Proveedor $comprobante): void
+    {
+        if (! TipotransaccionCompraAsientoSupport::generaDesdeComprobante($comprobante)) {
+            return;
+        }
+
+        try {
+            $this->armarPreview($comprobante, true);
+        } catch (\InvalidArgumentException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            // Borrador incompleto u otras validaciones: no frenar el guardado acá.
+        }
+    }
+
     public function generarAsientoErp(Comprobante_Proveedor $comprobante): array
     {
         if (! \App\Support\Compras\TipotransaccionCompraAsientoSupport::generaDesdeComprobante($comprobante)) {
@@ -588,7 +610,7 @@ class ComprobanteProveedorAsientoService
                         'cuentacontable_id' => $cuentaId,
                         'centrocosto_id' => $ccElegido,
                         'etiqueta' => 'concepto',
-                    ]], 'No se puede registrar la factura.');
+                    ]], 'No se puede grabar el comprobante.');
                 }
                 $trozosCc = [[
                     'centrocosto_id' => CuentaCentrocostoAsignadosSupport::resolver(
@@ -1064,16 +1086,11 @@ class ComprobanteProveedorAsientoService
 
         $mensajesCentro = CuentaCentrocostoHabilitadoSupport::mensajesPayload($payloadAsiento);
         if ($mensajesCentro !== []) {
-            $textoCentro = 'No se puede registrar la factura. '.implode(' ', $mensajesCentro);
-            if (! $permitirCuentasPendientes) {
-                throw new \InvalidArgumentException($textoCentro);
-            }
-            // Preview: la fila queda visible para elegir el centro (IVA y gasto).
-            // Al contabilizar se vuelve a exigir.
-            $avisosPreview[] = [
-                'tipo' => 'warning',
-                'mensaje' => $textoCentro.' Elegí un centro de costo habilitado en esa fila del asiento.',
-            ];
+            // Siempre corta: alta/borrador, preview y contabilizar. El CC inválido no
+            // puede quedar grabado “para corregir después”.
+            throw new \InvalidArgumentException(
+                'No se puede grabar el comprobante. '.implode(' ', $mensajesCentro)
+            );
         }
 
         return [

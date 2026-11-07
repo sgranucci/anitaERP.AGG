@@ -25,7 +25,10 @@ final class ComprobanteProveedorEstados
     /** Filtro de listado: todas las facturas. */
     public const FILTRO_TODOS = 'todos';
 
-    /** Filtro virtual: anita_sync_estado = ERROR (el estado del comprobante puede ser BORRADOR). */
+    /**
+     * Filtro virtual: anita_sync_estado = ERROR o ERROR_ERP
+     * (fallo Anita o rechazo ERP; el estado del comprobante puede ser BORRADOR).
+     */
     public const FILTRO_ERROR_ANITA = 'ERROR_ANITA';
 
     /** @return list<string> */
@@ -69,7 +72,7 @@ final class ComprobanteProveedorEstados
             self::CONTABILIZADO => 'Contabilizado',
             self::ANULADO => 'Anulado',
             self::ERROR_SYNC => 'Error sync',
-            self::FILTRO_ERROR_ANITA => 'No se contabilizó',
+            self::FILTRO_ERROR_ANITA => 'Error sync / rechazo ERP',
             default => trim((string) $estado) !== '' ? (string) $estado : '—',
         };
     }

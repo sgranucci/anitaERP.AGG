@@ -1,11 +1,17 @@
-@if (($data->anita_sync_estado ?? '') === \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::ERROR
-    && filled($data->anita_sync_error ?? null))
+@php
+    $syncEstadoHist = (string) ($data->anita_sync_estado ?? '');
+    $esErrorAnitaHist = \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::esErrorAnita($syncEstadoHist);
+    $esErrorErpHist = \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::esErrorErp($syncEstadoHist);
+@endphp
+@if (($esErrorAnitaHist || $esErrorErpHist) && filled($data->anita_sync_error ?? null))
 <div class="alert alert-danger mb-3">
     <strong>
-        @if (($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
+        @if ($esErrorErpHist)
+            Último rechazo del ERP
+        @elseif (($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
             Último error al sincronizar Anita
         @else
-            Último error al contabilizar
+            Último error al contabilizar (Anita)
         @endif
     </strong>
     <div>{{ $data->anita_sync_error }}</div>

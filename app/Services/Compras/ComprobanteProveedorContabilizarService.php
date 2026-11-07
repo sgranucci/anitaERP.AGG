@@ -461,6 +461,12 @@ class ComprobanteProveedorContabilizarService
 
             return $comprobante->fresh();
         } catch (Throwable $e) {
+            // numeroAsientoAnita solo se setea tras commit ERP exitoso; si está null el
+            // corte fue validación/asiento ERP (no Anita).
+            $esFalloAnita = $numeroAsientoAnita !== null
+                || $anitaNroInternoEscrito !== null
+                || $ctamovEscrito;
+
             $this->compensarAnitaTrasFallo(
                 $comprobante,
                 $numeroAsientoAnita,
@@ -479,17 +485,23 @@ class ComprobanteProveedorContabilizarService
             $comprobante->refresh();
             $comprobante->forceFill([
                 'anita_nro_interno' => null,
-                'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::ERROR,
+                'anita_sync_estado' => $esFalloAnita
+                    ? ComprobanteProveedorAnitaSyncEstado::ERROR
+                    : ComprobanteProveedorAnitaSyncEstado::ERROR_ERP,
                 'anita_sync_error' => $e->getMessage(),
                 'anita_sync_at' => now(),
             ])->save();
+
+            $prefijoObs = $esFalloAnita
+                ? 'Contabilización revertida (Anita): '
+                : 'Contabilización rechazada (ERP): ';
 
             Comprobante_Proveedor_Estado::query()->create([
                 'comprobante_proveedor_id' => $comprobante->id,
                 'fecha' => now()->format('Y-m-d'),
                 'estado' => ComprobanteProveedorEstados::BORRADOR,
                 'usuario_id' => Auth::id(),
-                'observacion' => 'Contabilización revertida: '.mb_substr($e->getMessage(), 0, 450),
+                'observacion' => $prefijoObs.mb_substr($e->getMessage(), 0, 450),
             ]);
 
             throw $e;

@@ -69,18 +69,21 @@
         @break
     @case ('estado')
         @php
-            $errorAnita = ($data->anita_sync_estado ?? '') === ComprobanteProveedorAnitaSyncEstado::ERROR;
-            $pendienteAnita = ($data->anita_sync_estado ?? '') === ComprobanteProveedorAnitaSyncEstado::PENDIENTE;
+            $syncEstadoCelda = (string) ($data->anita_sync_estado ?? '');
+            $errorSyncPersistente = ComprobanteProveedorAnitaSyncEstado::esErrorPersistente($syncEstadoCelda);
+            $pendienteAnita = $syncEstadoCelda === ComprobanteProveedorAnitaSyncEstado::PENDIENTE;
             $badgeEstado = ComprobanteProveedorEstados::badge($data->estado ?? '');
-            $badgeError = $errorAnita ? ComprobanteProveedorEstados::badge($data->estado ?? '', true) : null;
+            $labelErrorSync = $errorSyncPersistente
+                ? ComprobanteProveedorAnitaSyncEstado::etiquetaBadge($syncEstadoCelda, $data->estado ?? '')
+                : '';
         @endphp
         <td>
             <span class="{{ $badgeEstado['class'] }}">{{ $badgeEstado['label'] }}</span>
             @if ((int) ($data->bloqueado_pago ?? 0) === 1)
                 <span class="badge badge-light border ml-1" title="{{ $data->bloqueado_pago_motivo ?: 'Fuera del circuito de pago y de la proyección' }}">Fuera de pago</span>
             @endif
-            @if ($badgeError)
-                <span class="{{ $badgeError['class'] }}" title="{{ $data->anita_sync_error }}">{{ $badgeError['label'] }}</span>
+            @if ($errorSyncPersistente)
+                <span class="badge badge-danger" title="{{ $data->anita_sync_error }}">{{ $labelErrorSync }}</span>
             @elseif ($pendienteAnita)
                 <span class="badge badge-warning ml-1" title="Se graba en Anita en el barrido de las 13 y las 16">Anita pendiente</span>
             @endif

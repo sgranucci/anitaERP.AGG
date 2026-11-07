@@ -319,7 +319,7 @@ final class ComprobanteProveedorDebeGastoSupport
                     'cuentacontable_id' => $cuentaId,
                     'centrocosto_id' => $cc,
                     'etiqueta' => 'gasto',
-                ]], 'No se puede registrar la factura.');
+                ]], 'No se puede grabar el comprobante.');
             }
             $out[] = [
                 'cuentacontable_id' => $cuentaId,

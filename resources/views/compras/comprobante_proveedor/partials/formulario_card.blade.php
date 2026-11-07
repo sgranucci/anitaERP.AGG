@@ -80,13 +80,9 @@
                             $badgeEstadoForm = \App\Support\Compras\ComprobanteProveedorEstados::badge($data->estado ?? '');
                         @endphp
                         <span class="{{ $badgeEstadoForm['class'] }} ml-2">{{ $badgeEstadoForm['label'] }}</span>
-                        @if ($syncAnita === \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::ERROR)
+                        @if (\App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::esErrorPersistente($syncAnita))
                         <span class="badge badge-danger ml-1" title="{{ $data->anita_sync_error }}">
-                            @if (($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
-                                Error Anita
-                            @else
-                                No se contabilizó
-                            @endif
+                            {{ \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::etiquetaBadge($syncAnita, $data->estado ?? '') }}
                         </span>
                         @elseif ($syncAnita === \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::PENDIENTE)
                         <span class="badge badge-warning ml-1" title="Se graba en Anita a las {{ $textoHorasBridge }}">Anita pendiente</span>

@@ -442,7 +442,10 @@ class ComprobanteProveedorListadoFiltros
 
         $estado = (string) ($filtros['estado'] ?? ComprobanteProveedorEstados::FILTRO_TODOS);
         if ($estado === ComprobanteProveedorEstados::FILTRO_ERROR_ANITA) {
-            $query->where('comprobante_proveedor.anita_sync_estado', ComprobanteProveedorAnitaSyncEstado::ERROR);
+            $query->whereIn('comprobante_proveedor.anita_sync_estado', [
+                ComprobanteProveedorAnitaSyncEstado::ERROR,
+                ComprobanteProveedorAnitaSyncEstado::ERROR_ERP,
+            ]);
         } elseif ($estado !== '' && $estado !== ComprobanteProveedorEstados::FILTRO_TODOS) {
             $query->where('comprobante_proveedor.estado', $estado);
         }
