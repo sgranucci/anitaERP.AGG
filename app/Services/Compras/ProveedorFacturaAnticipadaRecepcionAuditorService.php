@@ -48,6 +48,7 @@ final class ProveedorFacturaAnticipadaRecepcionAuditorService
             $detalle = $this->support->auditar($tolerancia, (int) $empresa->id);
             $desvios = array_values($detalle['desvios'] ?? []);
             $pendientes = array_values($detalle['pendientes'] ?? []);
+            $diffCotizacion = array_values($detalle['diff_cotizacion'] ?? []);
             $requiereAlerta = $desvios !== [];
             $paquete = [
                 'fecha' => $fecha,
@@ -59,10 +60,13 @@ final class ProveedorFacturaAnticipadaRecepcionAuditorService
                 'ordenes_total' => (int) ($detalle['ordenes_total'] ?? 0),
                 'desvios_total' => count($desvios),
                 'pendientes_total' => count($pendientes),
+                'diff_cotizacion_total' => count($diffCotizacion),
                 'desvios' => array_slice($desvios, 0, $limite),
                 'desvios_truncados' => max(0, count($desvios) - $limite),
                 'pendientes' => array_slice($pendientes, 0, min(20, $limite)),
                 'pendientes_truncados' => max(0, count($pendientes) - min(20, $limite)),
+                'diff_cotizacion' => array_slice($diffCotizacion, 0, min(20, $limite)),
+                'diff_cotizacion_truncados' => max(0, count($diffCotizacion) - min(20, $limite)),
                 'exceso_recepcion' => round(array_sum(array_map(
                     static fn (array $f): float => (float) ($f['exceso_recepcion'] ?? 0),
                     $desvios

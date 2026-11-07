@@ -614,6 +614,7 @@ class OrdencompraGestionService
                 $id,
                 $existente->tratamiento ?? null,
                 $cab['tratamiento'] ?? null,
+                (int) ($existente->numeroordencompra ?? 0),
             );
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];

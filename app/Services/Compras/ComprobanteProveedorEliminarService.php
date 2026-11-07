@@ -15,10 +15,13 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorAnitaBridgeGate;
 use App\Support\Compras\ComprobanteProveedorEscrituraLock;
+use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
+use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Contable\AsientoEloquentDeleteSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use App\Support\Stock\RecepcionProveedorEstados;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -201,6 +204,34 @@ class ComprobanteProveedorEliminarService
     private function assertPuedeBorrar(Comprobante_Proveedor $comprobante): void
     {
         ComprobanteProveedorPagoSupport::assertSinPagosAplicados((int) $comprobante->id, 'borrar');
+        $this->assertFacturaAnticipadaSinComConfirmada($comprobante);
+    }
+
+    /**
+     * La COM confirmada de una OC anticipada ya acreditó anticipos contra esta factura:
+     * borrarla deja el haber de la recepción sin su debe (exceso en la cuenta de anticipos).
+     */
+    private function assertFacturaAnticipadaSinComConfirmada(Comprobante_Proveedor $comprobante): void
+    {
+        $comprobante->loadMissing('ordencompras');
+        $oc = $comprobante->ordencompras;
+        if ($oc === null || ! ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante)) {
+            return;
+        }
+
+        $hayComConfirmada = Recepcion_Proveedor::query()
+            ->where('ordencompra_id', (int) $oc->id)
+            ->where('estado', RecepcionProveedorEstados::CONFIRMADA)
+            ->exists();
+        if (! $hayComConfirmada) {
+            return;
+        }
+
+        throw new RuntimeException(
+            'No se puede borrar la factura anticipada: la OC #'.(int) ($oc->numeroordencompra ?? 0)
+            .' ya tiene una recepción confirmada que aplicó el anticipo. '
+            .'Revierta la recepción primero, o descontabilice la factura para corregirla.'
+        );
     }
 
     private function eliminarPrecargaSiCorresponde(int $precargaId): void

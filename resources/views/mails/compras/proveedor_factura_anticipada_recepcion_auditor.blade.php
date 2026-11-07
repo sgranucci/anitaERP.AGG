@@ -33,6 +33,8 @@
     Control <strong>factura anticipada vs recepción</strong> en la cuenta de anticipos.
     Por cada OC se suma el Debe de facturas anticipadas y el Haber de recepciones.
     Si la recepción acredita más de lo facturado, es desvío.
+    Si FA y COM están en la misma moneda extranjera y el importe en ME cierra, la diferencia
+    en pesos por cotización se informa y no alerta.
     El pendiente (factura sin recepción completa) se informa y no alerta.
     Las OPA no entran: las mira el auditor de deuda vs ficha / delta conjunto.
 </p>
@@ -62,6 +64,10 @@
     <tr>
         <td>Pendientes de recepción (info)</td>
         <td align="right">{{ (int) ($informe['pendientes_total'] ?? 0) }}</td>
+    </tr>
+    <tr>
+        <td>Diff. cotización ME (info, sin alerta)</td>
+        <td align="right">{{ (int) ($informe['diff_cotizacion_total'] ?? 0) }}</td>
     </tr>
     <tr>
         <td>Tolerancia</td>
@@ -98,6 +104,39 @@
     @if ((int) ($informe['desvios_truncados'] ?? 0) > 0)
         <p style="margin:8px 0 0 0; color:#666; font-size:12px;">
             Se omitieron {{ (int) $informe['desvios_truncados'] }} fila(s) por límite de mail.
+        </p>
+    @endif
+@endif
+
+@php
+    $diffCotizacion = $informe['diff_cotizacion'] ?? [];
+@endphp
+@if ($diffCotizacion !== [])
+    <h3 style="margin:18px 0 6px 0;">Diff. cotización ME (sin alerta)</h3>
+    <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
+        Misma moneda extranjera: el importe en ME cierra; la diferencia en pesos es solo cotización.
+    </p>
+    <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
+        <tr style="background:#FCF3CF; color:#17202A;">
+            <th align="left">OC</th>
+            <th align="right">Factura ME</th>
+            <th align="right">Recepción ME</th>
+            <th align="right">Neto ME</th>
+            <th align="right">Exceso pesos</th>
+        </tr>
+        @foreach ($diffCotizacion as $fila)
+            <tr>
+                <td>{{ $fila['numeroordencompra'] ?? $fila['ordencompra_id'] ?? '' }}</td>
+                <td align="right">{{ $fmt($fila['factura_me'] ?? 0) }}</td>
+                <td align="right">{{ $fmt($fila['recepcion_me'] ?? 0) }}</td>
+                <td align="right">{{ $fmt($fila['neto_me'] ?? 0) }}</td>
+                <td align="right">{{ $fmt($fila['exceso_pesos'] ?? 0) }}</td>
+            </tr>
+        @endforeach
+    </table>
+    @if ((int) ($informe['diff_cotizacion_truncados'] ?? 0) > 0)
+        <p style="margin:8px 0 0 0; color:#666; font-size:12px;">
+            Se omitieron {{ (int) $informe['diff_cotizacion_truncados'] }} fila(s) por límite de mail.
         </p>
     @endif
 @endif

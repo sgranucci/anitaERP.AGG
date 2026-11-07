@@ -7,53 +7,26 @@ use PHPUnit\Framework\TestCase;
 
 class OrdencompraTratamientoMovimientosSupportTest extends TestCase
 {
-    public function test_permite_pasar_a_anticipada_con_anticipo_sin_com_y_una_recepcion(): void
+    public function test_reconoce_las_variantes_de_anticipada(): void
     {
-        $this->assertTrue(OrdencompraTratamientoMovimientosSupport::permitePasarAAnticipada(
-            'NO ANTICIPADA',
-            'ANTICIPADA',
-            1,
-            1,
-        ));
+        $this->assertTrue(OrdencompraTratamientoMovimientosSupport::esTratamientoAnticipado('ANTICIPADA'));
+        $this->assertTrue(OrdencompraTratamientoMovimientosSupport::esTratamientoAnticipado(' anticipada '));
+        $this->assertTrue(OrdencompraTratamientoMovimientosSupport::esTratamientoAnticipado('2'));
+        $this->assertTrue(OrdencompraTratamientoMovimientosSupport::esTratamientoAnticipado('S'));
     }
 
-    public function test_permite_pasar_a_anticipada_sin_recepcion_si_el_anticipo_ya_esta_contabilizado(): void
+    public function test_no_anticipada_no_se_confunde_con_anticipada(): void
     {
-        $this->assertTrue(OrdencompraTratamientoMovimientosSupport::permitePasarAAnticipada(
-            'NO ANTICIPADA',
-            'ANTICIPADA',
-            0,
-            1,
-        ));
+        $this->assertFalse(OrdencompraTratamientoMovimientosSupport::esTratamientoAnticipado('NO ANTICIPADA'));
+        $this->assertFalse(OrdencompraTratamientoMovimientosSupport::esTratamientoAnticipado('1'));
+        $this->assertFalse(OrdencompraTratamientoMovimientosSupport::esTratamientoAnticipado(null));
     }
 
-    public function test_no_permite_volver_a_no_anticipada(): void
+    public function test_misma_variante_de_tratamiento_no_es_un_cambio(): void
     {
-        $this->assertFalse(OrdencompraTratamientoMovimientosSupport::permitePasarAAnticipada(
-            'ANTICIPADA',
-            'NO ANTICIPADA',
-            1,
-            1,
-        ));
-    }
+        OrdencompraTratamientoMovimientosSupport::assertPuedeCambiarTratamiento(0, 'ANTICIPADA', 'S');
+        OrdencompraTratamientoMovimientosSupport::assertPuedeCambiarTratamiento(0, 'NO ANTICIPADA', '1');
 
-    public function test_no_permite_con_varias_recepciones(): void
-    {
-        $this->assertFalse(OrdencompraTratamientoMovimientosSupport::permitePasarAAnticipada(
-            'NO ANTICIPADA',
-            'ANTICIPADA',
-            2,
-            1,
-        ));
-    }
-
-    public function test_no_permite_si_no_hay_anticipo_contabilizado_sin_com(): void
-    {
-        $this->assertFalse(OrdencompraTratamientoMovimientosSupport::permitePasarAAnticipada(
-            'NO ANTICIPADA',
-            'ANTICIPADA',
-            1,
-            0,
-        ));
+        $this->addToAssertionCount(2);
     }
 }

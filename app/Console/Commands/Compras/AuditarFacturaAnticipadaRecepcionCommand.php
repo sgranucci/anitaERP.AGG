@@ -45,11 +45,12 @@ class AuditarFacturaAnticipadaRecepcionCommand extends Command
 
         foreach ($salida['empresas'] ?? [] as $emp) {
             $this->table(
-                ['Empresa', 'Órdenes', 'Desvíos', 'Pendientes', 'Exceso recepción', 'Mail'],
+                ['Empresa', 'Órdenes', 'Desvíos', 'Diff cotiz.', 'Pendientes', 'Exceso recepción', 'Mail'],
                 [[
                     (string) ($emp['empresa_nombre'] ?? $emp['empresa_id'] ?? ''),
                     (string) ($emp['ordenes_total'] ?? 0),
                     (string) ($emp['desvios_total'] ?? 0),
+                    (string) ($emp['diff_cotizacion_total'] ?? 0),
                     (string) ($emp['pendientes_total'] ?? 0),
                     number_format((float) ($emp['exceso_recepcion'] ?? 0), 2, ',', '.'),
                     ! empty($emp['mail_enviado'])
@@ -65,6 +66,15 @@ class AuditarFacturaAnticipadaRecepcionCommand extends Command
                     number_format((float) ($fila['factura'] ?? 0), 2, ',', '.'),
                     number_format((float) ($fila['recepcion'] ?? 0), 2, ',', '.'),
                     number_format((float) ($fila['exceso_recepcion'] ?? 0), 2, ',', '.'),
+                ));
+            }
+            foreach (array_slice($emp['diff_cotizacion'] ?? [], 0, 10) as $fila) {
+                $this->line(sprintf(
+                    '  (cotiz.) OC %s | ME fact %s / rec %s | pesos exceso %s',
+                    (string) ($fila['numeroordencompra'] ?? $fila['ordencompra_id'] ?? '?'),
+                    number_format((float) ($fila['factura_me'] ?? 0), 2, ',', '.'),
+                    number_format((float) ($fila['recepcion_me'] ?? 0), 2, ',', '.'),
+                    number_format((float) ($fila['exceso_pesos'] ?? 0), 2, ',', '.'),
                 ));
             }
         }

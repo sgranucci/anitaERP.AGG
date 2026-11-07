@@ -5,7 +5,10 @@ namespace App\Services\Stock;
 use App\ApiAnita;
 use App\Models\Compras\Ordencompra;
 use App\Models\Configuracion\Moneda;
+use App\Support\Compras\ComprobanteProveedorAnticipoPctSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
+use App\Support\Compras\OrdencompraAplicpedAnitaSupport;
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Contable\Tipoasiento;
@@ -74,8 +77,58 @@ class RecepcionProveedorAsientoService
             return;
         }
 
+        $this->assertOcAnticipadaConFacturaAnticipadaCargada($recepcion);
+
         $preview = $this->armarPreviewAsiento($recepcion);
         RecepcionProveedorCuadreContableSupport::assertPreview($preview);
+    }
+
+    /**
+     * OC anticipada: no confirmar COM si el legajo no tiene ninguna factura anticipada contabilizada.
+     * No mira saldo de anticipos: varias COM son válidas; si el anticipo ya se consumió,
+     * el remanente de la recepción sigue yendo a provisión (armarHaberAnticipada).
+     * Una FA en borrador o pendiente de aprobación no cuenta: todavía no debitó anticipos.
+     */
+    public function assertOcAnticipadaConFacturaAnticipadaCargada(Recepcion_Proveedor $recepcion): void
+    {
+        $recepcion->loadMissing(['ordencompras']);
+        $oc = $recepcion->ordencompras;
+        if ($oc === null || ! ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc)) {
+            return;
+        }
+
+        if ($recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION) {
+            return;
+        }
+
+        $ocId = (int) $oc->id;
+        $nroOc = (int) ($oc->numeroordencompra ?? 0);
+        if ($ocId <= 0) {
+            return;
+        }
+
+        $anticipadas = ComprobanteProveedorAnticipoPctSupport::otrasAnticipadasSinCom($ocId);
+        foreach ($anticipadas as $fa) {
+            if (strtoupper(trim($fa['estado'])) === ComprobanteProveedorEstados::CONTABILIZADO) {
+                return;
+            }
+        }
+
+        if (OrdencompraAplicpedAnitaSupport::tieneFacturaAnticipada($nroOc)) {
+            return;
+        }
+
+        if ($anticipadas !== []) {
+            throw new \RuntimeException(
+                "OC anticipada #{$nroOc}: la factura anticipada del legajo todavía no está contabilizada. "
+                .'Contabilícela antes de confirmar la recepción.'
+            );
+        }
+
+        throw new \RuntimeException(
+            "OC anticipada #{$nroOc}: no hay factura anticipada cargada en el legajo. "
+            .'Cargue y contabilice la factura anticipada antes de confirmar la recepción.'
+        );
     }
 
     /**
@@ -91,6 +144,7 @@ class RecepcionProveedorAsientoService
             return null;
         }
 
+        $this->assertOcAnticipadaConFacturaAnticipadaCargada($recepcion);
         $this->prepararContabilidadAntesDeGenerar($recepcion);
 
         $preview = $this->armarPreviewAsiento($recepcion);
