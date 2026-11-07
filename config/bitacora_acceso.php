@@ -18,6 +18,15 @@ return [
     /** Meses a retener filas antes de la purga agendada. */
     'retencion_meses' => max(1, (int) env('BITACORA_ACCESO_RETENCION_MESES', 12)),
 
+    /**
+     * Purga agendada (bitacora-acceso:purge): DELETE … LIMIT por tanda.
+     * Lotes chicos evitan llenar /tmp y un binlog monstruo en un solo DELETE.
+     */
+    'purga' => [
+        'lote' => max(100, (int) env('BITACORA_ACCESO_PURGA_LOTE', 50000)),
+        'pausa_ms' => max(0, (int) env('BITACORA_ACCESO_PURGA_PAUSA_MS', 50)),
+    ],
+
     /** Capturar memoria pico PHP del request (memory_get_peak_usage). */
     'registrar_memoria' => filter_var(env('BITACORA_ACCESO_REGISTRAR_MEMORIA', true), FILTER_VALIDATE_BOOLEAN),
 
